@@ -23,6 +23,7 @@ import PluginActivityPanel from './PluginActivityPanel.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
+import PluginSourceBadge from './PluginSourceBadge.vue'
 
 const { t } = useI18n()
 
@@ -508,6 +509,8 @@ watch(installed, () => void refreshPacks())
             <div class="ext-card-title">
               <span class="ext-id" v-truncate>{{ reveal(p.id) }}</span>
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
+              <!-- K2: the Host's source only; none (an unknown channel) shows no badge. -->
+              <PluginSourceBadge v-if="p.source" :source="p.source" :expires-at="p.expiresAt" />
               <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                 {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}
               </span>

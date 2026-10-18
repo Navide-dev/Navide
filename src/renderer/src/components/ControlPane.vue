@@ -42,6 +42,7 @@ import FolderIcon from './FolderIcon.vue'
 import ExplorerPane from './ExplorerPane.vue'
 import GitPluginHostSlot from './GitPluginHostSlot.vue'
 import PluginRegionHost, { type PluginRegionContribution } from './PluginRegionHost.vue'
+import { chromeSourceMark, pluginSourceLabel } from '../lib/pluginSourceMark'
 import { readLegacyPlansPreferenceProjection } from '../editor/plansPreferences'
 import { PLANS_STORAGE_RECOVERY_REASON } from '../../../shared/plansRecovery'
 import type { BackendStatus, useBackend } from '../composables/useBackend'
@@ -1527,6 +1528,11 @@ const plansPluginTab = computed(() => pluginTabs.value.find((entry) => entry.plu
 const genericPluginTabs = computed(() => pluginTabs.value.filter((entry) =>
   entry.pluginId !== 'navide.git' && entry.pluginId !== 'navide.plans'
 ))
+/** K2: a local or test package names its source on its sidebar tab. */
+function pluginTabLabel(entry: PluginRegionContribution): string {
+  const mark = chromeSourceMark(entry.source)
+  return mark ? `${entry.title} · ${pluginSourceLabel(i18n.global.t, mark)}` : entry.title
+}
 
 async function projectPlansPreferencesBeforePrepare(): Promise<void> {
   const activeWorkspace = props.workspace || workspacePath.value || ''
@@ -3181,7 +3187,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :key="pluginTab.tabId"
         class="rail-btn"
         :class="{ active: sidebarTab === pluginTab.tabId }"
-        :title="pluginTab.title"
+        :title="pluginTabLabel(pluginTab)"
         @click="selectSidebarTab(pluginTab.tabId)"
       >
         <span
@@ -3201,6 +3207,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         />
         <span v-else class="plugin-tab-fallback" aria-hidden="true">◇</span>
         <span class="rail-label">{{ pluginTab.title }}</span>
+        <span v-if="chromeSourceMark(pluginTab.source)" class="plugin-tab-source-mark" aria-hidden="true"></span>
       </button>
     </div>
 
@@ -3248,7 +3255,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :key="pluginTab.tabId"
         :class="['tab-btn', 'plugin-tab-btn', { active: sidebarTab === pluginTab.tabId }]"
         :data-plugin-contribution="pluginTab.contributionKey"
-        :title="pluginTab.title"
+        :title="pluginTabLabel(pluginTab)"
         @click="selectSidebarTab(pluginTab.tabId)"
       >
         <span
@@ -3267,6 +3274,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           @error="markPluginIconFailed(pluginTab)"
         />
         <span v-else class="plugin-tab-fallback" aria-hidden="true">◇</span>
+        <span v-if="chromeSourceMark(pluginTab.source)" class="plugin-tab-source-mark" aria-hidden="true"></span>
       </button>
       <span class="tab-spacer"></span>
       <button class="tab-collapse" :title="$t('layout.collapse')" @click="emit('update:collapsed', true)">‹</button>
@@ -4765,6 +4773,15 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
   color: var(--text-on-emphasis);
   border-radius: 999px;
   padding: 0 3px;
+}
+.plugin-tab-source-mark {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--trust-unsigned-fg);
 }
 .git-badge {
   position: absolute;

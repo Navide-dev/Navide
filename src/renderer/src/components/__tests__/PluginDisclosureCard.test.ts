@@ -181,3 +181,34 @@ describe('PluginDisclosureCard invisible characters', () => {
     expect(text).toContain('key\\u{2066}x')
   })
 })
+
+// Card K2 (DX report §10.4), RULE ZERO: the "Source and review" row is the only
+// thing a marketplace source adds. The baseline file was written by main's card
+// before the row existed; `<!--v-if-->` placeholders are not rendered and are
+// left out of the comparison.
+describe('PluginDisclosureCard source row (K2)', () => {
+  const MAIN_BASELINE = './__snapshots__/PluginDisclosureCard.main-baseline.html'
+  const strip = (html: string): string => html.replace(/<!--v-if-->/g, '').replace(/^[ \t]*\n/gm, '')
+  const cases = (): Array<[string, Record<string, unknown>]> => [
+    ['verified card', { disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), registry: REGISTRY, verified: true }],
+    ['listing card', { disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), registry: REGISTRY, verified: false }],
+    ['no disclosure', { disclosure: null, scan: null, registry: null, verified: true }],
+  ]
+  const baseline = (): string => cases().map(([name, props]) => `<!-- ${name} -->\n${strip(render(props).html())}`).join('\n')
+
+  it('renders exactly what main rendered when no source is given', async () => {
+    await expect(baseline()).toMatchFileSnapshot(MAIN_BASELINE)
+  })
+
+  it('adds only one "Reviewed" row for a marketplace source; the rest of the DOM is main\'s', async () => {
+    const html = cases().map(([name, props]) => {
+      const wrapper = render({ ...props, source: 'marketplace' })
+      const rows = wrapper.findAll('.nv-source-row')
+      expect(rows).toHaveLength(1)
+      expect(rows[0].text()).toBe('Source and review Reviewed')
+      rows[0].element.remove()
+      return `<!-- ${name} -->\n${strip(wrapper.html())}`
+    }).join('\n')
+    await expect(html).toMatchFileSnapshot(MAIN_BASELINE)
+  })
+})

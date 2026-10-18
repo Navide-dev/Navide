@@ -9,6 +9,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { PluginActivityReport } from '../../../shared/pluginActivity'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { ScanReport } from '../../../shared/pluginDisclosureScan'
+import type { PluginSource } from '../../../shared/pluginSource'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
@@ -19,6 +20,9 @@ interface Entry {
   version: string
   disclosure: ManifestDisclosure | null
   scan: ScanReport | null
+  /** The Host's source; absent (unknown channel) shows no source row, never a guess. */
+  source?: PluginSource
+  expiresAt?: string
   report: PluginActivityReport | null
   reportError: string
 }
@@ -102,7 +106,15 @@ onBeforeUnmount(stopPolling)
     <article v-for="entry in entries" :key="entry.id" class="nv-overview-entry" :data-id="entry.id">
       <h3 class="nv-overview-name">{{ reveal(entry.id) }} <span class="nv-overview-muted">{{ reveal(entry.version) }}</span></h3>
       <p v-if="growing.has(entry.id)" class="nv-overview-growing" role="status">{{ $t('pluginActivity.live.queueGrowing') }}</p>
-      <PluginDisclosureCard :disclosure="entry.disclosure" :scan="entry.scan" :registry="null" :verified="true" />
+      <PluginDisclosureCard
+        :disclosure="entry.disclosure"
+        :scan="entry.scan"
+        :registry="null"
+        :verified="true"
+        :source="entry.source"
+        :expires-at="entry.expiresAt"
+        :publisher="entry.id.split('.')[0]"
+      />
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>
       <h4>{{ $t('pluginActivity.overview.activity') }}</h4>
       <template v-if="entry.report">

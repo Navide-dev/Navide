@@ -10,6 +10,7 @@ import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import PluginAgentToolsList from './PluginAgentToolsList.vue'
+import PluginSourceBadge from './PluginSourceBadge.vue'
 
 defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
 const emit = defineEmits<{ confirmPublisher: []; confirmRisk: []; cancel: [] }>()
@@ -121,6 +122,15 @@ function capabilityHint(cap: string): string {
         <PluginAgentToolsList
           v-if="step === 'risk' && pending.prepared.agentTools?.length"
           :tools="pending.prepared.agentTools"
+        />
+        <!-- K2: only the source the Host names, from the signed channel; none
+             shows no row and is never guessed from the version. -->
+        <PluginSourceBadge
+          v-if="pending.prepared.source"
+          row
+          class="ext-trust-source"
+          :source="pending.prepared.source"
+          :publisher="pending.prepared.publisherId"
         />
         <p class="ext-trust-tier">
           <span

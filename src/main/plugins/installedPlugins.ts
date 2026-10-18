@@ -37,6 +37,7 @@ import {
 } from './pluginInstallPaths'
 import { PluginActivationSelector } from './pluginActivationSelector'
 import { copyManifestPermissionsSummary, type ManifestPermissionsSummary } from '../../shared/executionPolicy'
+import type { PluginSource } from '../../shared/pluginSource'
 
 export {
   assertManifestFiles,
@@ -217,6 +218,8 @@ export interface PluginActivationCatalogEntry {
   views: PluginViewLaunchDescriptor[]
   backend?: PluginBackendActivation
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  /** Source and review state; see `shared/pluginSource.ts`. */
+  source?: PluginSource
   artifactDigest?: string
 }
 
@@ -347,6 +350,8 @@ export interface InstalledPluginPackageSummary {
   packageVersion?: string
   manifestPermissions?: ManifestPermissionsSummary
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  /** Source and review state; see `shared/pluginSource.ts`. */
+  source?: PluginSource
   warning?: string
   /** The v2 manifest's `engines.navide`, verbatim, when it declares one. */
   enginesNavide?: string
