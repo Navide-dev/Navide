@@ -101,6 +101,9 @@ async def test_answer_is_void_when_the_prompt_changed(env: Env, monkeypatch) -> 
         return None
 
     monkeypatch.setattr(env.m, "_check_awaiting", hold)
+    # The void answer spawns a follow-up that re-posts the prompt and retires the
+    # pane's requests, the second one below included. Hold it too.
+    monkeypatch.setattr(env.m, "_follow_up", hold)
     env.fake.prompt = "Bash command\n\n  npm run deploy\n\nDo you want to proceed?"
     await env.inbound(f"yes {rid}")
     assert env.fake.answers == []
