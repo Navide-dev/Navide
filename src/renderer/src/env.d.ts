@@ -15,7 +15,6 @@ type PluginManifestDisclosure = import('../../shared/pluginDisclosure').Manifest
 type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
 type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
-type PluginSource = import('../../shared/pluginSource').PluginSource
 type PluginActivityReport = import('../../shared/pluginActivity').PluginActivityReport
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
