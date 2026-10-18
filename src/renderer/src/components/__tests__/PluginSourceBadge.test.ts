@@ -108,6 +108,10 @@ describe('PluginTrustDialog source row (K2)', () => {
     const local = at({ trustTier: 'unsigned', source: 'local-unsigned' }).get('.nv-source-row')
     expect(local.attributes('data-source')).toBe('local-unsigned')
     expect(local.text()).toContain('Self-declared: acme')
+    // The source K1's prepareInstall reads from the verified envelope, as worded in zh-TW.
+    i18n.global.locale.value = 'zh-TW'
+    expect(at({ source: 'marketplace' }).get('.nv-source-badge').text()).toBe('已審核')
+    expect(at({ source: 'prerelease', version: '2.0.0-beta.1' }).get('.nv-source-badge').text()).toBe('預覽版（已審核）')
   })
 
   it('never reads as reviewed from the version alone (a testplace build versioned 1.0.0)', () => {

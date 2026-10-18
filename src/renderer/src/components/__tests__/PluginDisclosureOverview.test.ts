@@ -133,6 +133,10 @@ describe('PluginDisclosureOverview source row (K2)', () => {
     expect(wrapper.find('[data-id="nerdtechnic.devmap"] .nv-source-row').exists()).toBe(false)
     expect(wrapper.get('[data-id="acme.pre"] .nv-source-row').attributes('data-source')).toBe('prerelease')
     expect(wrapper.find('[data-id="acme.beta"] .nv-source-row').exists()).toBe(false)
+    // Without a Host source nothing reads as reviewed (a pre-release or testplace build included).
+    for (const id of ['nerdtechnic.devmap', 'acme.beta']) {
+      expect(wrapper.get(`[data-id="${id}"]`).text()).not.toMatch(/Reviewed|reviewed/)
+    }
     expect(wrapper.get('[data-id="acme.mkt"] .nv-source-row').text()).toBe('Source and review Reviewed')
     expect(wrapper.get('[data-id="acme.tp"] .nv-source-row').text()).toBe('Source and review Test build, no human review, expires 2027-01-17')
   })

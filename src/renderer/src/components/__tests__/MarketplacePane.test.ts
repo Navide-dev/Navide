@@ -2349,6 +2349,32 @@ describe('MarketplacePane pre-release install (K5)', () => {
     expect((wrapper.get('.mkt-prerelease-toggle input').element as HTMLInputElement).checked).toBe(true)
   })
 
+  it('shows the Host source of a pre-release install in the trust dialog', async () => {
+    const versions = versionRows([{ version: '0.1.0-alpha.1', channel: 'pre-release' }])
+    const offDetail = { latest_version: '0.1.0-alpha.1', latest_prerelease_version: '0.1.0-alpha.1', latest_installable_version: null, gets_prereleases: false, versions }
+    mockPlugins({
+      marketplaceDetail: vi
+        .fn()
+        .mockResolvedValueOnce(demoDetail(offDetail))
+        .mockResolvedValue(demoDetail({ ...offDetail, latest_installable_version: '0.1.0-alpha.1', gets_prereleases: true })),
+      setPrerelease: vi.fn().mockResolvedValue({ id: 'acme.demo', enabled: true }),
+      // The source K1's prepareInstall derives from the signed envelope channel.
+      prepareInstall: vi.fn().mockResolvedValue({
+        id: 'acme.demo', version: '0.1.0-alpha.1', trustTier: 'signed-verified', sensitive: [], containsBackendExecutable: false,
+        requiresConfirmation: true, requiresRiskConfirmation: true, publisherId: 'acme', source: 'prerelease',
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.mkt-actions .mkt-install-prerelease').trigger('click')
+    await flushPromises()
+    const row = wrapper.get('.ext-trust-source')
+    expect(row.attributes('data-source')).toBe('prerelease')
+    expect(row.text()).toBe('Source and review Pre-release (reviewed)')
+  })
+
   it('does not install when turning the switch on fails', async () => {
     const versions = versionRows([{ version: '0.1.0-alpha.1', channel: 'pre-release' }])
     const api = mockPlugins({

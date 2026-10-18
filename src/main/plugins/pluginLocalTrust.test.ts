@@ -1,5 +1,6 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
 import {
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -112,6 +113,19 @@ describe('local trust record', () => {
     expect(Object.keys(record.fileDigests)).toEqual(['frontend/index.html', 'manifest.json'])
     expect(record.contentDigest).toMatch(/^[0-9a-f]{64}$/)
     if (process.platform !== 'win32') expect(statSync(recordPath).mode & 0o777).toBe(0o600)
+  })
+
+  it('writes the record as a fresh owner-only file, never through a planted temporary symlink', () => {
+    if (process.platform === 'win32') return
+    const victim = join(root, 'victim.txt')
+    writeFileSync(victim, 'untouched', { mode: 0o644 })
+    mkdirSync(join(root, 'records'), { recursive: true })
+    symlinkSync(victim, `${recordPath}.tmp`)
+    consent()
+    expect(readFileSync(victim, 'utf8')).toBe('untouched')
+    expect(lstatSync(recordPath).isSymbolicLink()).toBe(false)
+    expect(statSync(recordPath).mode & 0o777).toBe(0o600)
+    expect(readLocalTrustRecord(recordPath).id).toBe('acme.local')
   })
 
   it('allows the consented content and reports that the takedown list was checked', () => {

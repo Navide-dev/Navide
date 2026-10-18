@@ -1637,6 +1637,14 @@ export function registerPluginIpc(
       const disclosureDiff = updateDisclosureDiff(result)
       // Declared agent tools, for the trust dialog; absent when there are none.
       const agentTools = isManifestV2(result.manifest) ? computeDisclosure(result.manifest).agentTools : []
+      // From the envelope verifyRegistryPackageTrust just verified, never a file.
+      const source = result.registryEvidence
+        ? pluginSourceFromLegacyProvenance(
+            'official-registry',
+            isPrereleaseVersion(result.version),
+            result.registryEvidence.receipt.envelope.channel
+          )
+        : undefined
       return {
         id: result.id,
         version: result.version,
@@ -1657,6 +1665,7 @@ export function registerPluginIpc(
         disclosure: result.disclosure ?? null,
         scan: result.scan ?? null,
         registry: result.registryFacts,
+        ...(source ? { source } : {}),
       }
     }
   )

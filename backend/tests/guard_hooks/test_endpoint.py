@@ -210,6 +210,29 @@ def test_normalise(vendor, payload, expected) -> None:
     assert guard_hooks.normalise(vendor, payload) == expected
 
 
+@pytest.mark.parametrize("vendor,payload,expected", [
+    ("claude", {"tool_name": "Read", "tool_input": {"file_path": "src/a.py", "paths": ["~/.ssh/id_rsa"]}},
+     [("read", {"path": "src/a.py"}), ("read", {"path": "~/.ssh/id_rsa"})]),
+    ("copilot", {"toolName": "view", "toolArgs": {"path": ["README.md", "~/.ssh/id_rsa"]}},
+     [("read", {"path": "README.md"}), ("read", {"path": "~/.ssh/id_rsa"})]),
+    ("claude", {"tool_name": "Edit", "tool_input": {"file_path": "a.py", "paths": ["b.py"], "filePath": "c.py"}},
+     [("write", {"path": "a.py"}), ("write", {"path": "c.py"}), ("write", {"path": "b.py"})]),
+])
+def test_normalise_yields_every_path(vendor, payload, expected) -> None:
+    assert guard_hooks.normalise(vendor, payload) == expected
+
+
+@pytest.mark.parametrize("vendor,payload", [
+    ("claude", {"tool_name": "Read", "tool_input": {"file_path": "src/a.py", "paths": ["~/.ssh/id_rsa"]}}),
+    ("qwen", {"tool_name": "read_file", "tool_input": {"path": "src/a.py", "paths": ["~/.aws/credentials"]}}),
+    ("copilot", {"toolName": "view", "toolArgs": {"path": ["README.md", "~/.ssh/id_rsa"]}}),
+    ("claude", {"tool_name": "Edit", "tool_input": {"file_path": "src/a.py", "paths": ["~/.ssh/config"]}}),
+])
+def test_real_guard_checks_every_path_through_the_hook(vendor, payload) -> None:
+    decision = guard_hooks.decide(vendor, payload, pane_id="p-paths", cwd="/tmp/ws", workspace="/tmp/ws")
+    assert decision.action == "ask", decision
+
+
 def test_strictest_decision_wins_across_patched_files(guard) -> None:
     guard.answer = lambda **kw: FakeDecision("ask" if "ci.yml" in kw["tool_input"]["path"] else "allow")
     decision = guard_hooks.decide("codex", {"tool_name": "apply_patch", "tool_input": {"command":
