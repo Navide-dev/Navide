@@ -115,7 +115,7 @@ onBeforeUnmount(stopPolling)
       <p v-else-if="entry.reportError" class="nv-overview-muted">{{ $t('pluginActivity.unavailable', { error: entry.reportError }) }}</p>
       <details class="nv-overview-details" @toggle="onToggle(entry.id, $event)">
         <summary>{{ $t('pluginActivity.tab') }}</summary>
-        <PluginActivityPanel v-if="open.has(entry.id)" :plugin-id="entry.id" :poll-ms="props.pollMs" />
+        <PluginActivityPanel v-if="open.has(entry.id)" :plugin-id="entry.id" :poll-ms="props.pollMs" :paused="props.paused" />
       </details>
     </article>
   </div>
