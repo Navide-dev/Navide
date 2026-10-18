@@ -300,6 +300,19 @@ export function verifyInstalledPackage(
   return verifyLocalPackage(pluginDir, expectedPackageId, source.recordPath, source.trust, source.source)
 }
 
+/** The release channel in an installed package's retained Registry envelope,
+ * for labelling only; trust decisions verify the envelope themselves. A
+ * receipt without one, or one that cannot be read, yields undefined, which
+ * keeps the version-number reading every receipt had before channels. */
+export function readRegistryReceiptChannel(pluginDir: string): string | undefined {
+  try {
+    const channel = (parseReceipt(pluginDir).envelope as { channel?: unknown }).channel
+    return typeof channel === 'string' ? channel : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function hasCoherentRegistryEvidence(pluginDir: string, expectedPackageId: string): boolean {
   try {
     if (existsSync(join(pluginDir, PLUGIN_QUARANTINE_MARKER))) return false
