@@ -32,6 +32,11 @@ const card = ref<HTMLElement | null>(null)
 const cancelButton = ref<HTMLButtonElement | null>(null)
 useDialogFocus(card, () => cancelButton.value)
 
+/** K5: SemVer pre-release suffix (build metadata is not one); pre-releases are reviewed too. */
+function isPrerelease(version: string): boolean {
+  return version.split('+', 1)[0].includes('-')
+}
+
 /** One line on what a sensitive capability lets the extension do. */
 function capabilityHint(cap: string): string {
   const key = `settings.extensions.trust.capability.${cap}`
@@ -129,7 +134,7 @@ function capabilityHint(cap: string): string {
           v-if="pending.prepared.trustTier === 'signed-verified'"
           row
           class="ext-trust-source"
-          source="marketplace"
+          :source="isPrerelease(pending.prepared.version) ? 'prerelease' : 'marketplace'"
           :publisher="pending.prepared.publisherId"
         />
         <p class="ext-trust-tier">

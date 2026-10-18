@@ -5001,6 +5001,26 @@ describe('Pre-release channel (Phase 4)', () => {
     })
   })
 
+  // K5 RULE ZERO: the renderer's "Install pre-release" only calls the existing
+  // switch and installs an explicit version, so with the switch off the main
+  // process answers exactly as on main.
+  it('keeps the switch-off candidates and the per-extension scope unchanged (K5)', async () => {
+    serve([{ version: '0.1.0-alpha.1', target: 'universal', yanked: false }])
+    registerWith('1.2.0')
+    const detail = async (name: string) =>
+      (await handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name })) as Record<string, unknown>
+    // A Navide plugin with only a pre-release has no switch-off candidate.
+    expect(await detail('other')).toMatchObject({ latest_installable_version: null, gets_prereleases: false })
+    // Build metadata does not make a version a pre-release.
+    serve([{ version: '1.3.0+build.7', target: 'universal', yanked: false }])
+    expect(await detail('other')).toMatchObject({ latest_installable_version: '1.3.0+build.7' })
+    // Turning one switch on leaves every other Navide plugin off.
+    serve(VERSIONS)
+    expect(await setPrerelease('acme.demo', true)).toEqual({ id: 'acme.demo', enabled: true })
+    expect(await detail('other')).toMatchObject({ latest_installable_version: '1.3.0', gets_prereleases: false })
+    expect(await detail('demo')).toMatchObject({ latest_installable_version: '1.3.1-beta.2', gets_prereleases: true })
+  })
+
   it('validates the switch arguments', async () => {
     registerWith('1.2.0')
     await expect(setPrerelease('../evil', true)).rejects.toThrow('invalid plugin id')

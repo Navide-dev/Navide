@@ -2265,3 +2265,146 @@ describe('MarketplacePane source badge (K2)', () => {
     expect(wrapper.get('.mkt-detail-title .nv-source-badge').attributes('data-source')).toBe('prerelease')
   })
 })
+
+// Card K5: install a pre-release from the detail page of a Navide plugin that
+// is not installed yet, and mark pre-releases on results and the detail page.
+describe('MarketplacePane pre-release install (K5)', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  const versionRows = (rows: Array<{ version: string; channel: 'stable' | 'pre-release' }>) =>
+    rows.map((row) => ({
+      published_at: '2026-10-01T00:00:00Z',
+      target: 'universal',
+      yanked: false,
+      trust_tier: 'signed-verified',
+      capabilities: [],
+      sensitive_capabilities: [],
+      download_count: 0,
+      installable: true,
+      ...row,
+    }))
+
+  it('installs a Navide plugin that only has a pre-release from its detail page', async () => {
+    const versions = versionRows([{ version: '0.1.0-alpha.1', channel: 'pre-release' }])
+    const offDetail = { latest_version: '0.1.0-alpha.1', latest_prerelease_version: '0.1.0-alpha.1', latest_installable_version: null, gets_prereleases: false, versions }
+    const api = mockPlugins({
+      marketplaceDetail: vi
+        .fn()
+        .mockResolvedValueOnce(demoDetail(offDetail))
+        .mockResolvedValue(demoDetail({ ...offDetail, latest_installable_version: '0.1.0-alpha.1', gets_prereleases: true })),
+      setPrerelease: vi.fn().mockResolvedValue({ id: 'acme.demo', enabled: true }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    const button = wrapper.get('.mkt-actions .mkt-install-prerelease')
+    expect(button.text()).toBe('Install 0.1.0-alpha.1 (pre-release)')
+    await button.trigger('click')
+    await flushPromises()
+    expect(api.setPrerelease).toHaveBeenCalledTimes(1)
+    expect(api.setPrerelease).toHaveBeenCalledWith('acme.demo', true)
+    expect(api.prepareInstall).toHaveBeenCalledWith({ namespace: 'acme', name: 'demo', version: '0.1.0-alpha.1' })
+  })
+
+  it('installs the stable version by default and the pre-release only on request, turning on only this switch', async () => {
+    const versions = versionRows([
+      { version: '2.5.0-beta.1', channel: 'pre-release' },
+      { version: '2.4.0', channel: 'stable' },
+    ])
+    const offDetail = { latest_version: '2.4.0', latest_prerelease_version: '2.5.0-beta.1', latest_installable_version: '2.4.0', gets_prereleases: false, versions }
+    const api = mockPlugins({ marketplaceDetail: vi.fn().mockResolvedValue(demoDetail(offDetail)) })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    // Default: Install takes the stable version and leaves the switch alone.
+    expect(wrapper.get('.mkt-actions .ext-install').text()).toBe('Install')
+    await wrapper.get('.mkt-actions .ext-install').trigger('click')
+    await flushPromises()
+    expect(api.prepareInstall).toHaveBeenLastCalledWith({ namespace: 'acme', name: 'demo', version: '2.4.0' })
+    expect(api.setPrerelease).not.toHaveBeenCalled()
+    wrapper.unmount()
+
+    const onRequest = mockPlugins({
+      marketplaceDetail: vi
+        .fn()
+        .mockResolvedValueOnce(demoDetail(offDetail))
+        .mockResolvedValue(demoDetail({ ...offDetail, latest_installable_version: '2.5.0-beta.1', gets_prereleases: true })),
+      setPrerelease: vi.fn().mockResolvedValue({ id: 'acme.demo', enabled: true }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.mkt-actions .mkt-install-prerelease').trigger('click')
+    await flushPromises()
+    // Only this Navide plugin's switch is turned on, and only on.
+    expect(onRequest.setPrerelease.mock.calls).toEqual([['acme.demo', true]])
+    expect(onRequest.prepareInstall).toHaveBeenCalledWith({ namespace: 'acme', name: 'demo', version: '2.5.0-beta.1' })
+    expect((wrapper.get('.mkt-prerelease-toggle input').element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('does not install when turning the switch on fails', async () => {
+    const versions = versionRows([{ version: '0.1.0-alpha.1', channel: 'pre-release' }])
+    const api = mockPlugins({
+      marketplaceDetail: vi.fn().mockResolvedValue(
+        demoDetail({ latest_version: '0.1.0-alpha.1', latest_prerelease_version: '0.1.0-alpha.1', latest_installable_version: null, gets_prereleases: false, versions })
+      ),
+      setPrerelease: vi.fn().mockRejectedValue(new Error('store locked')),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.mkt-actions .mkt-install-prerelease').trigger('click')
+    await flushPromises()
+    expect(api.prepareInstall).not.toHaveBeenCalled()
+  })
+
+  it('marks results and the detail page that have a pre-release', async () => {
+    const row = (name: string, extra: Record<string, unknown>) => ({
+      namespace: 'acme', name, identity: `acme.${name}`, display_name: name, description: null, categories: [],
+      download_count: 0, rating_average: 0, featured: false, trust_tier: 'signed-verified', ...extra,
+    })
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [
+          row('stable', { latest_version: '1.0.0', latest_prerelease_version: null }),
+          row('both', { latest_version: '1.0.0', latest_prerelease_version: '1.1.0-beta.1' }),
+          row('preonly', { latest_version: '0.1.0-alpha.1', latest_prerelease_version: '0.1.0-alpha.1' }),
+          row('unsigned', { trust_tier: 'unsigned', latest_version: '1.0.0', latest_prerelease_version: '1.1.0-beta.1' }),
+        ],
+        total: 4, offset: 0, limit: 20,
+      }),
+      marketplaceDetail: vi.fn().mockResolvedValue(
+        demoDetail({
+          latest_version: '2.4.0',
+          latest_prerelease_version: '2.5.0-beta.1',
+          latest_installable_version: '2.4.0',
+          versions: versionRows([
+            { version: '2.5.0-beta.1', channel: 'pre-release' },
+            { version: '2.4.0', channel: 'stable' },
+          ]),
+        })
+      ),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    const sources = (id: string) =>
+      wrapper!.findAll(`[data-id="${id}"] .nv-source-badge`).map((badge) => badge.attributes('data-source'))
+    expect(sources('acme.stable')).toEqual(['marketplace'])
+    expect(sources('acme.both')).toEqual(['marketplace', 'prerelease'])
+    expect(sources('acme.preonly')).toEqual(['prerelease'])
+    expect(sources('acme.unsigned')).toEqual([])
+    await wrapper.get('[data-id="acme.both"]').trigger('click')
+    await flushPromises()
+    expect(
+      wrapper.findAll('.mkt-detail-title .nv-source-badge').map((badge) => badge.attributes('data-source'))
+    ).toEqual(['marketplace', 'prerelease'])
+  })
+})
