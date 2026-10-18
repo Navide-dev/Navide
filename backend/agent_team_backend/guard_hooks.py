@@ -146,11 +146,15 @@ def normalise(vendor: str, payload: dict[str, Any]) -> list[tuple[str, dict[str,
         return [(_WRITE, {"path": p.strip()}) for p in paths] or [(name, args)]
     if lower in _SHELL_TOOLS:
         return [(_SHELL, {"command": _command_text(args.get("command"))})]
-    path = next((str(args[k]) for k in _PATH_KEYS if args.get(k)), "")
-    if path and lower in _WRITE_TOOLS:
-        return [(_WRITE, {"path": path})]
-    if path and lower in _READ_TOOLS:
-        return [(_READ, {"path": path})]
+    # Every path field, and every item of a list-valued one, is graded on its own.
+    paths = [
+        str(p) for k in (*_PATH_KEYS, "paths") if args.get(k)
+        for p in (args[k] if isinstance(args[k], list) else [args[k]]) if p
+    ]
+    if paths and lower in _WRITE_TOOLS:
+        return [(_WRITE, {"path": p}) for p in paths]
+    if paths and lower in _READ_TOOLS:
+        return [(_READ, {"path": p}) for p in paths]
     return [(name, args)]
 
 
