@@ -476,6 +476,20 @@ export function serializeRenderedBuffer(
   return lines.join('\n')
 }
 
+/** Every row of the visible screen, top to bottom, frame and blank rows kept.
+ *  Unlike serializeRenderedBuffer it drops nothing off the bottom: the
+ *  collapsed-paste submit check locates the input box by its frame, closing
+ *  edge included, and a box taller than a fixed tail window must still be
+ *  found. READ-ONLY. */
+export function serializeVisibleScreen(term: import('@xterm/xterm').Terminal): string {
+  const buffer = term.buffer.active
+  const lines: string[] = []
+  for (let r = 0; r < term.rows; r++) {
+    lines.push(buffer.getLine(buffer.baseY + r)?.translateToString(true) ?? '')
+  }
+  return lines.join('\n')
+}
+
 interface UseTerminalOptions {
   workspacePath?: string
   onClear?: () => void
@@ -1209,6 +1223,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  wherever it happened to leave the cursor. */
   function readScreenTail(maxLines: number): string {
     return serializeRenderedBuffer(term, maxLines, 'viewport-bottom')
+  }
+
+  /** The whole visible screen with its frame rows — see serializeVisibleScreen. */
+  function readVisibleScreen(): string {
+    return serializeVisibleScreen(term)
   }
 
   /** Cursor-row text up to the cursor column. Used by the pane-drop handler
@@ -3465,6 +3484,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     flushPendingClean,
     readRenderedText,
     readScreenTail,
+    readVisibleScreen,
     readLineBeforeCursor,
     updateXtermTheme,
     isAltBuffer,

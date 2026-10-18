@@ -2611,6 +2611,12 @@ async function deliverAgentMessage(
   // that it is reported unconfirmed, not failed: the text and its Enter did go
   // out, and a sender told "failed" resends work that may already be running.
   // Its user record arriving later still confirms it (messaging.confirmDelivery).
+  // Enter went out on a collapsed paste nothing on screen could judge: not a
+  // delivery. Its user record arriving later still confirms it.
+  if (outcome.submit === 'unconfirmed') {
+    paneRefs[paneId]?.clearDeliveredPending?.()
+    return { unconfirmed: true }
+  }
   if (unconfirmed && !injectionVerified(outcome.echo ?? null, outcome.submit ?? null)) {
     if (!(await cliSignalSince(paneId, typedAt, RESUME_CONSUME_WAIT_MS))) {
       paneRefs[paneId]?.clearDeliveredPending?.()
@@ -4423,6 +4429,12 @@ async function injectText(
     ? (paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined)
     : undefined
   const screenTail = (): string => (readScreen ? readScreen(SUBMIT_SCREEN_LINES) : '')
+  // The collapsed-paste check alone reads the whole screen, frame rows kept —
+  // see submitEvidence. The other two verdicts keep the narrow tail read.
+  const readVisible = paneId !== undefined
+    ? (paneRefs[paneId]?.readVisibleScreen as (() => string) | undefined)
+    : undefined
+  const visibleScreen = (): string | undefined => readVisible?.()
   // Whether the composer is holding our tail RIGHT NOW decides which signal we
   // can trust below, so sample it before pressing Enter.
   const tailWasOnScreen = !!tail && normalizeForMatch(screenTail()).includes(tail)
@@ -4474,21 +4486,31 @@ async function injectText(
     // Poll instead of one flat sleep: a fast agent clears the composer in a few
     // hundred ms, and waiting the full gap on every attempt costs seconds.
     const deadline = Date.now() + SUBMIT_CONFIRM_MS
-    let landed = false
-    while (Date.now() < deadline && !landed) {
+    let how: SubmitEvidence | null = null
+    while (Date.now() < deadline) {
       await sleep(200)
       if (shouldAbort?.()) return false
-      const how = submitEvidence({
+      how = submitEvidence({
         tailWasOnScreen,
         tail,
         screen: screenTail(),
         grownBy: cleanBytes() - before,
-        baseline
+        baseline,
+        visibleScreen: visibleScreen(),
       })
-      landed = how !== null
-      if (landed && evidence) evidence.submit = how
+      // 'unconfirmed' keeps watching: the box may still come into view.
+      if (how !== null && how !== 'unconfirmed') break
     }
-    if (landed) return true
+    // A collapsed paste with no box in sight: press Enter once more rather
+    // than call it sent, then report it unconfirmed, never as a success.
+    if (how === 'unconfirmed' && attempt === 1) {
+      console.warn('[injectText] collapsed paste on screen but no input box found — resending Enter once')
+      continue
+    }
+    if (how !== null) {
+      if (evidence) evidence.submit = how
+      return true
+    }
     if (attempt < MAX_SUBMITS) {
       console.warn(
         `[injectText] input box still holds the text ${SUBMIT_CONFIRM_MS}ms after Enter ` +
