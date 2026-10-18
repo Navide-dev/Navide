@@ -681,6 +681,42 @@ async def test_blocking_records_a_local_copy_as_well(link, monkeypatch) -> None:
     assert device_trust.is_blocked(None, member_id="", device_id="dev-both") is False
 
 
+async def test_a_block_written_through_the_editor_is_kept_locally(link) -> None:
+    """The editor writes the whole document, block list included. A block made
+    there has to reach the local copy just as one made with p2p.trust.block
+    does, or a server that withdraws the document lifts it."""
+    trust_store.load()
+    link.policy = {"version": 1, "default": "deny", "rules": []}
+
+    reply = await _call(
+        "p2p.policy.set",
+        {"policy": {"version": 1, "default": "deny", "rules": [],
+                    "blocked": [{"deviceId": "dev-editor", "memberId": ""}]}},
+    )
+
+    assert reply["ok"] is True
+    assert device_trust.is_blocked(None, member_id="", device_id="dev-editor") is True
+
+
+async def test_a_block_dropped_through_the_editor_is_lifted_locally(link) -> None:
+    """And the other direction, or a device unblocked in the editor stays
+    refused here with nothing on screen to explain it."""
+    trust_store.load()
+    trust_store.note_blocked("dev-lifted", "")
+    link.policy = {
+        "version": 1, "default": "deny", "rules": [],
+        "blocked": [{"deviceId": "dev-lifted", "memberId": ""}],
+    }
+
+    reply = await _call(
+        "p2p.policy.set",
+        {"policy": {"version": 1, "default": "deny", "rules": [], "blocked": []}},
+    )
+
+    assert reply["ok"] is True
+    assert device_trust.is_blocked(None, member_id="", device_id="dev-lifted") is False
+
+
 # ---- the second check on the six ---------------------------------------------
 #
 # ws_auth answers "may you open this socket". Everything past it may send

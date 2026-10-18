@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n'
 import { ipcErrorMessage } from '../composables/usePluginInstallFlow'
 import { usePluginInventory } from '../composables/usePluginInventory'
 import MarketplaceIcon from './MarketplaceIcon.vue'
+import PluginAgentToolsList from './PluginAgentToolsList.vue'
 
 const { t } = useI18n()
 const overview = ref<NativeBackendOverview | null>(null)
@@ -78,6 +79,32 @@ watch(installed, refresh)
       />
       {{ $t('settings.extensions.nativeBackends.enable') }}
     </label>
+    <template v-if="overview.agentTools && api()?.setAgentTools">
+      <label class="native-backends-switch">
+        <input
+          type="checkbox"
+          class="nv-check"
+          data-agent-tools-switch="enabled"
+          :checked="overview.agentTools.enabled"
+          :disabled="busy"
+          @change="run(() => api()!.setAgentTools!({ enabled: ($event.target as HTMLInputElement).checked }))"
+        />
+        {{ $t('settings.extensions.nativeBackends.agentTools.enable') }}
+      </label>
+      <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.agentTools.description') }}</p>
+      <label class="native-backends-switch">
+        <input
+          type="checkbox"
+          class="nv-check"
+          data-agent-tools-switch="externalCallers"
+          :checked="overview.agentTools.externalCallers"
+          :disabled="busy || !overview.agentTools.enabled"
+          @change="run(() => api()!.setAgentTools!({ externalCallers: ($event.target as HTMLInputElement).checked }))"
+        />
+        {{ $t('settings.extensions.nativeBackends.agentTools.externalCallers') }}
+      </label>
+      <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.agentTools.externalCallersDisclosure') }}</p>
+    </template>
     <p v-if="overview.plugins.length === 0" class="native-backends-empty">
       {{ $t('settings.extensions.nativeBackends.empty') }}
     </p>
@@ -99,6 +126,11 @@ watch(installed, refresh)
           <span class="ext-requires">{{ row.pluginId }} · {{ row.packageVersion }}</span>
         </span>
         <span class="ext-badge native-backend-status" :class="`native-backend-status--${row.status}`" role="status">{{ statusText(row) }}</span>
+        <span
+          v-if="row.shell === 'allowlist'"
+          class="ext-badge native-backend-shell"
+          :title="$t('settings.extensions.nativeBackends.shellRiskDetail')"
+        >{{ $t('settings.extensions.nativeBackends.shellRisk') }}</span>
         <button
           v-if="row.status === 'needs-consent' || row.status === 'stopped-after-crashes'"
           class="nv-btn nv-btn--sm"
@@ -120,6 +152,9 @@ watch(installed, refresh)
           }}
         </button>
         <div class="ext-permission-details">
+          <span v-if="row.shell === 'allowlist'" class="native-backend-shell-detail">
+            {{ $t('settings.extensions.nativeBackends.shellRiskDetail') }}
+          </span>
           <span v-if="row.changedSinceConsent">{{ $t('settings.extensions.nativeBackends.changed') }}</span>
           <span v-if="row.reason && row.status !== 'needs-consent'">{{ row.reason }}</span>
           <span v-if="row.lastViolation">
@@ -139,6 +174,7 @@ watch(installed, refresh)
               {{ $t('settings.extensions.nativeBackends.revoke') }}
             </button>
           </span>
+          <PluginAgentToolsList v-if="row.agentTools?.length" :tools="row.agentTools" />
         </div>
       </li>
     </ul>
@@ -270,6 +306,10 @@ watch(installed, refresh)
 }
 .native-backend-status--needs-consent,
 .native-backend-status--sandbox-unavailable,
+.native-backend-shell {
+  background: var(--risk-subtle);
+  color: var(--risk-fg);
+}
 .native-backend-status--shell-not-allowed {
   background: var(--risk-subtle);
   color: var(--risk-fg);

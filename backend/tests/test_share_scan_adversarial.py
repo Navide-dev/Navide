@@ -468,6 +468,7 @@ def _best_of(runs: int, text: str) -> float:
     return best
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("name", sorted(_BACKSLASH_RUNS))
 def test_a_run_of_backslashes_scans_in_linear_time(name: str) -> None:
     """B7-1: the doubled-backslash quote branches (B5-1) could start at every

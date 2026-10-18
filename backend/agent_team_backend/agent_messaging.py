@@ -479,8 +479,10 @@ def unregister(pane_id: str, owner: Any = None) -> bool:
     if _PANES.pop(pane_id, None) is not None:
         _remember_forgotten(pane_id)
     _OWNERS.pop(pane_id, None)
+    former = former_ids(pane_id)
     _forget_aliases_to(pane_id)
     _notify_pane("unregister", pane_id)
+    _release_caller_tokens([pane_id, *former])
     return True
 
 
@@ -526,9 +528,31 @@ def purge_expired() -> list[str]:
         _PANES.pop(pane_id, None)
         _remember_forgotten(pane_id)
         _OWNERS.pop(pane_id, None)
+        former = former_ids(pane_id)
         _forget_aliases_to(pane_id)
         _notify_pane("unregister", pane_id)
+        _release_caller_tokens([pane_id, *former])
     return expired
+
+
+def names_pane(pane_id: str) -> bool:
+    """Whether ``pane_id`` is still a registered pane (online or not) or an
+    alias of one. No purge: asked from inside the registry's own removals."""
+    return pane_id in _PANES or pane_id in _ALIASES
+
+
+def _release_caller_tokens(pane_ids: list[str]) -> None:
+    """Let /plan-mcp revoke the caller tokens of ids nothing names any more."""
+    try:
+        from .mcp_server import wiring
+    except Exception:  # noqa: BLE001 — the registry must never break over it
+        log.exception("agent_messaging: could not load MCP wiring")
+        return
+    for pane_id in pane_ids:
+        try:
+            wiring.release_pane_token(pane_id)
+        except Exception:  # noqa: BLE001
+            log.exception("agent_messaging: releasing pane %s token failed", pane_id)
 
 
 def get(pane_id: str) -> RegisteredPane | None:
@@ -762,9 +786,18 @@ def resolve(from_pane_id: str, to: str) -> ResolveResult:
     device, rest = _split_device_segment(target)
     if device:
         if not is_local_device(device):
-            return _unknown_device(device, target)
+            # Local first, here too (M4): a UUID-shaped folder is common on this
+            # platform (`/var/folders/…/T/<uuid>/`, app containers, worktrees),
+            # and `<uuid>/proj/reviewer` naming a pane that exists on this
+            # machine must not leave it.
+            local = _resolve_here(from_pane_id, target)
+            return local if local.pane is not None else _unknown_device(device, target)
         target = rest
+    return _resolve_here(from_pane_id, target)
 
+
+def _resolve_here(from_pane_id: str, target: str) -> ResolveResult:
+    """`resolve` for a target with no device segment left in it."""
     purge_expired()
     sender = _PANES.get(from_pane_id)
 

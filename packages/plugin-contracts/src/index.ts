@@ -121,6 +121,13 @@ export type PluginManifestV2 = {
     methods?: string[]
     /** Package-local events this backend may publish. */
     events?: string[]
+    /** Tools an agent may call through the core navide MCP server once the
+     *  user consents. This parser applies what the manifest schema expresses;
+     *  the rules it cannot (name prefix derived from the id, reserved names,
+     *  method listed in `methods`, unique names, integers only in
+     *  `inputSchema`, the 1 MiB cap) are applied by the Host and the Registry
+     *  (docs/en-US/plugin-agent-tools-contract.md section 2). */
+    agentTools?: PluginManifestV2AgentTool[]
   }
   /** Extension Pack members (package ids). A pack carries no runtime surface
    *  and no permissions of its own: every member is installed, verified and
@@ -129,6 +136,17 @@ export type PluginManifestV2 = {
   /** Legacy fields are intentionally unavailable on a v2 manifest. */
   requires?: never
   entry?: never
+}
+
+/** One `backend.agentTools` entry (contract section 2.1). */
+export type PluginManifestV2AgentTool = {
+  name: string
+  method: string
+  risk: 'read' | 'write'
+  title: string
+  description: string
+  inputSchema: Record<string, unknown>
+  timeoutMs?: number
 }
 
 export type PluginContractErrorCode =
@@ -591,7 +609,7 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
 
 function parseBackend(value: unknown): PluginManifestV2['backend'] {
   const backend = assertObject(value, 'manifest backend')
-  assertOnlyKeys(backend, ['entry', 'protocolVersion', 'activation', 'methods', 'events'], 'manifest backend')
+  assertOnlyKeys(backend, ['entry', 'protocolVersion', 'activation', 'methods', 'events', 'agentTools'], 'manifest backend')
   const entry = safePath(required(backend, 'entry', 'manifest backend'), 'manifest backend.entry')
   const filename = entry.slice(entry.lastIndexOf('/') + 1).toLowerCase()
   const extension = filename.slice(filename.lastIndexOf('.'))
@@ -606,18 +624,63 @@ function parseBackend(value: unknown): PluginManifestV2['backend'] {
   const events = backend.events === undefined
     ? undefined
     : backendNameList(backend.events, 'manifest backend.events', MAX_BACKEND_EVENTS)
+  const agentTools = backend.agentTools === undefined ? undefined : agentToolList(backend.agentTools)
   return {
     entry,
     protocolVersion: 1,
     activation: 'startup',
     ...(methods ? { methods } : {}),
     ...(events ? { events } : {}),
+    ...(agentTools ? { agentTools } : {}),
   }
+}
+
+const AGENT_TOOL_KEYS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema', 'timeoutMs'] as const
+const AGENT_TOOL_NAME_PATTERN = /^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$/
+// The Host backend supervisor's method-name rule (isMethodName in
+// src/main/plugins/pluginBackendSupervisor.ts): stricter than the manifest
+// schema's backend name pattern, and what activation enforces.
+const AGENT_TOOL_METHOD_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/
+// eslint-disable-next-line no-control-regex
+const AGENT_TOOL_TEXT_PATTERN = /^[^\u0000-\u001f\u007f-\u009f\u2028\u2029<>]+$/
+
+/** The `agentTool` definition of plugin-manifest-v2.schema.json; returns copies. */
+function agentToolList(value: unknown): PluginManifestV2AgentTool[] {
+  if (!Array.isArray(value) || value.length === 0) fail('manifest backend.agentTools must be a non-empty array')
+  return value.map((raw, index) => {
+    const label = `manifest backend.agentTools[${index}]`
+    const tool = assertObject(raw, label)
+    assertOnlyKeys(tool, AGENT_TOOL_KEYS, label)
+    for (const key of AGENT_TOOL_KEYS.slice(0, 6)) required(tool, key, label)
+    if (typeof tool.name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(tool.name)) fail(`${label}.name is invalid`)
+    if (typeof tool.method !== 'string' || tool.method.length > 128 || !AGENT_TOOL_METHOD_PATTERN.test(tool.method)) {
+      fail(`${label}.method must be a lower-case backend method name (a-z, 0-9, _ and dots), as the Host accepts`)
+    }
+    if (tool.risk !== 'read' && tool.risk !== 'write') fail(`${label}.risk must be 'read' or 'write'`)
+    for (const key of ['title', 'description'] as const) {
+      const text = tool[key]
+      if (typeof text !== 'string' || !AGENT_TOOL_TEXT_PATTERN.test(text)) {
+        fail(`${label}.${key} must be non-empty plain text without control characters or < >`)
+      }
+    }
+    const schema = tool.inputSchema
+    if (!isRecord(schema) || schema.type !== 'object') fail(`${label}.inputSchema must be a JSON Schema of type 'object'`)
+    if (tool.timeoutMs !== undefined) {
+      const timeout = tool.timeoutMs
+      if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 1 || timeout > 120_000) {
+        fail(`${label}.timeoutMs must be an integer from 1 to 120000`)
+      }
+    }
+    return structuredClone(tool) as PluginManifestV2AgentTool
+  })
 }
 
 /** Most package-local methods / events one backend may declare. */
 export const MAX_BACKEND_METHODS = 64
 export const MAX_BACKEND_EVENTS = 32
+// Main's rule, unchanged: an installed package without agent tools loads as
+// before. agentTools[].method has the stricter AGENT_TOOL_METHOD_PATTERN.
+// Pinned by pluginBackendNameRule.test.ts.
 const BACKEND_NAME_PATTERN = /^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/
 
 function backendNameList(value: unknown, label: string, maxItems: number): string[] {
@@ -939,7 +1002,12 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
   'aiCli.redrawSession': Record<string, never>
   'aiCli.interruptSession': Record<string, never>
   'aiCli.stopSession': Record<string, never>
-  'shell.run': { exitCode: number; stdout: string; stderr: string }
+  /** stdout and stderr are cut at 8000 characters each; `truncated` and the
+   *  full UTF-8 sizes say so (`stderrBytes` only when stderr was cut). */
+  'shell.run': {
+    exitCode: number; stdout: string; stderr: string
+    truncated?: boolean; stdoutBytes?: number; stderrBytes?: number
+  }
   'storage.get': StorageGetResult
   'storage.set': null
   'storage.delete': boolean

@@ -7,9 +7,10 @@ import { useGit } from '../composables/useGit'
 import { createHostGitTransport } from '../composables/hostGitTransport'
 import { createHostGitCredentialPort } from '../composables/hostSurfacePorts'
 import { revealPath } from '../composables/hostShell'
-import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 
 import { usePreview } from '../preview/usePreview'
+import { isMiniIdeOnlyOpenBlocked, useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 
 const props = defineProps<{
   workspacePath: string
@@ -230,9 +231,9 @@ async function copyPathsSelected(): Promise<void> {
   const text = [...selectedKeys.value].map(rel => absPath(rel)).join('\n')
   try {
     await navigator.clipboard.writeText(text)
-    toast(`Copied ${selectedKeys.value.size} path(s)`, { type: 'success' })
+    toast(i18n.global.t('editorWindow.paths-copied', { count: selectedKeys.value.size }), { type: 'success' })
   } catch {
-    toast('Copy failed', { type: 'error' })
+    toast(i18n.global.t('editorWindow.copy-failed'), { type: 'error' })
   }
 }
 
@@ -283,6 +284,8 @@ function openInEditor(entry: FsEntry): void {
 
 // ── Open a folder in an editor ───────────────────────────────────────────────
 const { editorTargets, loadEditorTargets } = useEditorTargets()
+// Read for its subscription: keeps the disabled-Mini-IDE state current.
+useDisabledBuiltins()
 
 // The pane also runs inside the editor window's file tree; hosts without the
 // bridge simply don't get the folder-open items.
@@ -437,9 +440,9 @@ async function reveal(entry: FsEntry): Promise<void> {
 async function copyPath(entry: FsEntry): Promise<void> {
   try {
     await navigator.clipboard.writeText(absPath(entry.rel_path))
-    toast('Path copied', { type: 'success' })
+    toast(i18n.global.t('editorWindow.path-copied'), { type: 'success' })
   } catch {
-    toast('Copy failed', { type: 'error' })
+    toast(i18n.global.t('editorWindow.copy-failed'), { type: 'error' })
   }
 }
 
@@ -789,7 +792,12 @@ defineExpose({ revealFile, focusTree })
           <button v-if="!ctx.entry.is_dir" class="exp-ctx-item" @click="openInEditor(ctx.entry!); closeCtx()">{{ $t('action.open-in-editor') }}</button>
           <button v-if="!ctx.entry.is_dir && props.onAskAiAboutFile" class="exp-ctx-item" @click="props.onAskAiAboutFile!(ctx.entry!.rel_path); closeCtx()">{{ $t('action.ask-ai-about-file') }}</button>
           <template v-if="ctx.entry.is_dir && canOpenFolderInEditor()">
-            <button class="exp-ctx-item" @click="openFolderInEditor(ctx.entry!); closeCtx()">{{ $t('action.open-in-default-editor') }}</button>
+            <button
+              class="exp-ctx-item"
+              :disabled="isMiniIdeOnlyOpenBlocked()"
+              :title="isMiniIdeOnlyOpenBlocked() ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' }) : undefined"
+              @click="openFolderInEditor(ctx.entry!); closeCtx()"
+            >{{ $t('action.open-in-default-editor') }}</button>
             <div class="exp-ctx-item has-sub">
               <span>{{ $t('action.open-with') }}</span><span class="exp-ctx-caret">▸</span>
               <div class="exp-ctx-submenu">
@@ -797,6 +805,8 @@ defineExpose({ revealFile, focusTree })
                   v-for="target in editorTargets"
                   :key="target.id"
                   class="exp-ctx-item"
+                  :disabled="isMiniIdeOnlyOpenBlocked(target.id)"
+                  :title="isMiniIdeOnlyOpenBlocked(target.id) ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' }) : undefined"
                   @click="openFolderInEditor(ctx!.entry!, target.id); closeCtx()"
                 >{{ $t(target.labelKey) }}</button>
               </div>

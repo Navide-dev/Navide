@@ -44,6 +44,73 @@ def test_menu_command(body: str, identity: str, want: bool) -> None:
     assert qm.is_menu_command(body, identity) is want
 
 
+@pytest.mark.parametrize("body,identity,want", [
+    ("<@U123> /pending", "", "/pending"),
+    ("<@!42> stop", "", "stop"),
+    ("@navide_bot /cancel", "@navide_bot", "/cancel"),
+    ("@Navide_Bot stop", "@navide_bot", "stop"),
+    ("@other_bot stop", "@navide_bot", "@other_bot stop"),
+    ("@navide_botx stop", "@navide_bot", "@navide_botx stop"),
+    ("  stop  ", "", "stop"),
+])
+def test_strip_mention(body: str, identity: str, want: str) -> None:
+    assert qm.strip_mention(body, identity) == want
+
+
+@pytest.mark.parametrize("body,identity,want", [
+    ("/menu 3", "", 3),
+    ("/menu@navide_bot 12", "@navide_bot", 12),
+    ("<@U123> /menu 2", "", 2),
+    ("/menu@other_bot 2", "@navide_bot", None),
+    ("/menu", "", None),
+    ("/menu two", "", None),
+    ("/menu 0", "", None),
+])
+def test_menu_pick(body: str, identity: str, want: int | None) -> None:
+    assert qm.menu_pick(body, identity) == want
+
+
+@pytest.mark.parametrize("body,identity,want", [
+    ("/prompts 3", "", ("p", 3)),
+    ("/skills 12", "", ("s", 12)),
+    ("/Prompts@navide_bot 2", "@navide_bot", ("p", 2)),
+    ("<@U123> /skills 1", "", ("s", 1)),
+    ("/prompts@other_bot 2", "@navide_bot", None),
+    ("/prompts", "", None),
+    ("/skills two", "", None),
+    ("/skills 0", "", None),
+    ("/menu 2", "", None),
+    ("/mcp 2", "", None),
+])
+def test_scoped_pick(body: str, identity: str, want: tuple[str, int] | None) -> None:
+    assert qm.scoped_pick(body, identity) == want
+
+
+def test_a_scoped_text_menu_names_its_own_pick_command() -> None:
+    menus = qm.QuickMenus()
+    for scope, key in (("p", "pick_hint_p"), ("s", "pick_hint_s")):
+        menu = menus.create(platform="matrix", location_key="m", pane_id="pane-1", pane_title="api",
+                            agent_key="claude", lang="zh-TW",
+                            prompts=[{"id": "a", "name": "A"}] if scope == "p" else [],
+                            skills=["deploy"] if scope == "s" else [], scope=scope)
+        assert menus.render_text(menu).splitlines()[-1] == qm.text("zh-TW", key)
+    for lang in qm.STRINGS:
+        assert "/prompts" in qm.text(lang, "pick_hint_p") and "/skills" in qm.text(lang, "pick_hint_s")
+        assert all(c in qm.text(lang, "menu_moved") for c in ("/prompts", "/skills", "/mcp"))
+
+
+def test_text_menu_numbers_every_item_across_pages() -> None:
+    menus = qm.QuickMenus()
+    menu = _menu(menus, prompts=12, skills=["deploy"])
+    body = menus.render_text(menu)
+    lines = body.splitlines()
+    assert "1. 💬" in body and "13. 🧩 deploy" in lines
+    assert lines[-1] == qm.text("zh-TW", "pick_hint")
+    assert menus.pick(menu.location_key, 13).key == "deploy"
+    assert menus.pick(menu.location_key, 14) is None
+    assert menus.pick("elsewhere", 1) is None
+
+
 def test_callback_data_fits_every_platform_and_round_trips() -> None:
     menus = qm.QuickMenus()
     menu = _menu(menus, prompts=1, skills=["deploy"])
@@ -183,3 +250,13 @@ def test_paging_back_and_forth_does_not_pile_up_tokens() -> None:
     # The page on screen still works.
     kind, token = qm.parse_callback(rows[0][0][1])
     assert menus.press(kind, token, "telegram:default:-100:50") is not None
+
+
+def test_menu_scope_reads_menu_prompts_and_skills() -> None:
+    assert qm.menu_scope("/menu") == "all"
+    assert qm.menu_scope("/start") == "all"
+    assert qm.menu_scope("/prompts") == "p"
+    assert qm.menu_scope("/skills@navide_bot", "@navide_bot") == "s"
+    assert qm.menu_scope("/skills@other_bot", "@navide_bot") is None
+    assert qm.menu_scope("/prompts 2") is None
+    assert qm.menu_scope("prompts") is None

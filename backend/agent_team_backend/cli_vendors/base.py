@@ -234,6 +234,15 @@ class McpWiring:
     # The flag also accepts a path, so a spawn that cannot use a per-spawn
     # document can be handed a config file instead.
     flag_accepts_path: bool = False
+    # How the flag names a config file ("" for a bare path, "@" for copilot's
+    # `@path`); None when it takes inline JSON only. A pane's document carries
+    # its credential, and argv is readable by every account through `ps`, so
+    # a CLI that can read a file is handed a 0600 one instead.
+    flag_file_prefix: str | None = None
+    # A second override naming the environment variable the CLI reads its
+    # bearer credential from, as a format template over {name} and {env} —
+    # for a CLI whose flag carries a URL rather than a document (codex).
+    flag_token_env_value: str = ""
 
     # --- whole config document in an environment variable ---
     config_env: str = ""

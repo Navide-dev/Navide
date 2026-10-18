@@ -79,6 +79,15 @@ def _assistant_text(msg: dict) -> str:
     return join_text_blocks(msg.get("content"), "text")
 
 
+def _has_pasted_images(content: object) -> bool:
+    """A prompt with pasted images: a content list of text and image blocks, as
+    opposed to tool results (which may hold images too) and injected text lists."""
+    if not isinstance(content, list):
+        return False
+    types = {b.get("type") for b in content if isinstance(b, dict)}
+    return "image" in types and "tool_result" not in types
+
+
 # Claude's tool for putting a multiple-choice question to the user. The turn
 # pauses on it with stop_reason=tool_use, so no turn_complete is emitted and
 # the pane would otherwise just fall silent and drift to idle.
@@ -191,8 +200,8 @@ def first_user_prompts(path: Path, limit: int = 2) -> list[str]:
                 rec = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if rec.get("type") != "user":
-                continue
+            if rec.get("type") != "user" or rec.get("isMeta"):
+                continue  # isMeta: Claude Code's own notes (an image Read's size line)
             msg = rec.get("message")
             if not isinstance(msg, dict):
                 continue
@@ -619,11 +628,16 @@ class ClaudeLogReader(LogReader):
                         # record but nobody typed it, and an idle compaction has
                         # no turn after it: as prompt text it opened a chat run
                         # that never ended.
-                        if rtype == "user" and not rec.get("isCompactSummary"):
+                        # An isMeta record is Claude Code's own note, such as the
+                        # size line after the agent Reads an image; posted as the
+                        # user's prompt it read "你：[Image: original ...]".
+                        if rtype == "user" and not rec.get("isCompactSummary") and not rec.get("isMeta"):
                             msg = rec.get("message")
                             content = msg.get("content") if isinstance(msg, dict) else None
                             if isinstance(content, str):
                                 text = user_prompt_text(content)
+                            elif _has_pasted_images(content):
+                                text = user_prompt_text(join_text_blocks(content, "text"))
                         out.append(ActivityEvent(
                             vendor="claude",
                             event_type="agent_active",
@@ -1442,6 +1456,7 @@ SPEC = VendorSpec(
         ),
         flag="--mcp-config",
         flag_accepts_path=True,
+        flag_file_prefix="",
     ),
     # An `asyncRewake` hook: it runs in the background, and exiting 2 wakes the
     # agent with its stderr shown as a system reminder — even when the session

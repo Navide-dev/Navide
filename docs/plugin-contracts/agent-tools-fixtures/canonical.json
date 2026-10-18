@@ -1,0 +1,15 @@
+{
+  "$comment": "canonicalContractJson(value): sorted keys, no whitespace, every non-ASCII character escaped as \\uXXXX, integers only. expected null means the value must be refused (CanonicalJsonError / TypeError). disclosureCase pins the canonical spelling of one computed disclosure; disclosureDigestExpected is the lowercase hex SHA-256 of that spelling (the disclosure envelope's disclosureDigest, contract section 3.5).",
+  "values": [
+    { "value": { "b": 1, "a": [2, "é", true, null, false] }, "expected": "{\"a\":[2,\"\\u00e9\",true,null,false],\"b\":1}" },
+    { "value": { "integral": 1.0, "negative": -30000, "zero": 0 }, "expected": "{\"integral\":1,\"negative\":-30000,\"zero\":0}" },
+    { "value": { "nested": { "z": "😀", "y": "tab\t\"q\" \\ /" } }, "expected": "{\"nested\":{\"y\":\"tab\\t\\\"q\\\" \\\\ /\",\"z\":\"\\ud83d\\ude00\"}}" },
+    { "value": { "max": 9007199254740991 }, "expected": "{\"max\":9007199254740991}" },
+    { "value": { "fraction": 0.5 }, "expected": null },
+    { "value": { "huge": 1e300 }, "expected": null },
+    { "value": { "unsafe": 9007199254740993 }, "expected": null }
+  ],
+  "disclosureCase": "ui-only",
+  "disclosureExpected": "{\"agentTools\":[],\"dataLocations\":{\"backendDataDirectory\":false,\"hostStorage\":true,\"projectWrites\":\"none\"},\"nativeBackend\":null,\"network\":\"none\",\"permissions\":{\"scopes\":null,\"shell\":null,\"system\":[\"ui\"]},\"plugin\":{\"id\":\"acme.views\",\"publisher\":\"acme\",\"version\":\"1.0.0\"},\"risk\":{\"level\":\"low\",\"reasons\":[{\"key\":\"system.ui\",\"level\":\"low\"}]},\"schemaVersion\":1,\"summary\":{\"clauses\":[{\"key\":\"ui\",\"params\":{}}],\"template\":\"plugin-disclosure.summary.v1\"}}",
+  "disclosureDigestExpected": "bc99b029fde29b90b98974814c6696bba75a1f3c690679144bf3bba994e6eaa0"
+}

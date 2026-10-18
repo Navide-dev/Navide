@@ -71,6 +71,37 @@ def cold_start_s(argv: list[str]) -> float:
     return _cold_start_s[exe]
 
 
+def warm(argv: list[str], attempt_s: float, attempts: int = 2) -> None:
+    """Start the interpreter in `argv` doing nothing, and record that as its
+    cold start (`cold_start_s`), before any hook test needs it.
+
+    A start that has not exited after `attempt_s` is killed and started again.
+    On the Windows x64 runner `powershell.exe -Command "exit 0"` once
+    stayed up for over two minutes, though the same shard had started it fine
+    seconds before; `cold_start_s` waited for it (300 s) inside one test's
+    120 s pytest-timeout. A start that hangs every time still fails here.
+    """
+    exe = argv[0]
+    for attempt in range(1, attempts + 1):
+        if exe in _cold_start_s:
+            return
+        started = time.perf_counter()
+        try:
+            subprocess.run([*argv[:-1], "exit 0"], stdin=subprocess.DEVNULL, capture_output=True, timeout=attempt_s)
+        except subprocess.TimeoutExpired:
+            if attempt == attempts:
+                raise
+            continue
+        _cold_start_s[exe] = time.perf_counter() - started
+
+
+def warm_powershell(attempt_s: float) -> None:
+    """`warm` for the PowerShell `shell_argv` picks, when there is one."""
+    exe = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if exe is not None:
+        warm([exe, "-NoProfile", "-NonInteractive", "-Command", "exit 0"], attempt_s)
+
+
 def hang_ceiling(argv: list[str], budget_s: float) -> float:
     """A hang detector for one hook run: `budget_s` for the hook's own work,
     plus room for the interpreter to cold-start a few times over. Not an

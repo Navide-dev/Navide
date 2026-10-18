@@ -10,6 +10,7 @@ import {
   splitMatchAtRowStarts,
   type WrappedLineGroup,
 } from './terminalLinks'
+import { isMacPlatform } from './shared/keybindings/parseKey'
 
 const _EXCL = `[^\\x00<>?\\s!\`&*()'"\\\\;]`
 const _PATH_CHAR_RE = new RegExp(_EXCL)
@@ -66,6 +67,10 @@ export function getWrappedLineGroup(term: Terminal, bufferRow: number): WrappedL
     const cur = lineTextAt(r)
     const prev = lineTextAt(r - 1)
     if (!cur || !prev) return false
+    // A row that repeats the previous row's last token (`ls src/a.ts` then
+    // `src/a.ts`) is command output, not the second half of a wrapped path.
+    const prevTail = prev.match(/\S+$/)?.[0]
+    if (prevTail && prevTail === cur.trimStart().match(/^\S+/)?.[0]) return false
     return (
       _PATH_CHAR_RE.test(prev[prev.length - 1]) &&
       _PATH_CHAR_RE.test(cur[leadingWs(cur)]) &&
@@ -211,6 +216,15 @@ function buildFileLinkProvider(term: Terminal, isCmdHeld: () => boolean): import
   }
 }
 
+/** Cmd on macOS; Ctrl elsewhere, where the OS takes Win/Super+click (Meta still accepted). */
+export function isTerminalLinkModifier(event: { metaKey: boolean; ctrlKey: boolean }): boolean {
+  return event.metaKey || (!isMacPlatform() && event.ctrlKey)
+}
+
+export function isTerminalLinkModifierKey(key: string): boolean {
+  return key === 'Meta' || (!isMacPlatform() && key === 'Control')
+}
+
 export interface InstalledTerminalLinks {
   handler: (event: MouseEvent) => void
   dispose(): void
@@ -220,7 +234,7 @@ export function installTerminalLinks(options: TerminalLinkInteractionOptions): I
   const { terminal: term, element: el } = options
   const provider = term.registerLinkProvider(buildFileLinkProvider(term, options.isCmdHeld))
   const handler = (event: MouseEvent): void => {
-    if (!event.metaKey || event.button !== 0) return
+    if (!isTerminalLinkModifier(event) || event.button !== 0) return
     const xtermScreen = el.querySelector('.xterm-screen')
     if (!xtermScreen) return
     const rect = xtermScreen.getBoundingClientRect()
@@ -270,7 +284,7 @@ export function installTerminalLinks(options: TerminalLinkInteractionOptions): I
       void options.openPlan({ relPath: planRel, workspacePath })
       return
     }
-    const basename = filepath.split('/').filter(Boolean).pop() ?? filepath
+    const basename = filepath.split(/[\\/]/).filter(Boolean).pop() ?? filepath
     options.openFilePicker({ query: basename, line: lineNum, sessionId: options.sessionId?.(), candidates: cands, fallback: chosen })
   }
   return { handler, dispose: () => provider.dispose() }

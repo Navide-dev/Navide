@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { AgentToolsResultHelperState } from '../shared/pluginAgentTools'
 import { normalizePlatformId } from '../shared/osplat'
 import type {
   UpdateActionResult,
@@ -12,6 +13,13 @@ import type {
   PackageVersionGrantSummary,
 } from '../shared/executionPolicy'
 import type { LegacyPlansPreferenceProjection } from '../shared/plansPreferences'
+import type {
+  DisclosureDiff as PluginDisclosureDiff,
+  ManifestDisclosure as PluginManifestDisclosure,
+  RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
+} from '../shared/pluginDisclosure'
+import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
+import type { PluginActivityReport } from '../shared/pluginActivity'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
@@ -97,6 +105,29 @@ function isPlansBackendStopped(payload: unknown): payload is PlansBackendStopped
   )
 }
 
+/** An agent disabled or enabled a Navide plugin (B2-c), as the Host reports it. */
+export interface PluginAgentActionNotice {
+  action: 'disable' | 'enable'
+  pluginId: string
+  pluginVersion: string
+  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
+}
+
+function isPluginAgentActionNotice(payload: unknown): payload is PluginAgentActionNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  const requester = record.requester as Record<string, unknown> | null
+  const nullableString = (value: unknown): boolean => value === null || typeof value === 'string'
+  return (
+    (record.action === 'disable' || record.action === 'enable') &&
+    typeof record.pluginId === 'string' &&
+    typeof record.pluginVersion === 'string' &&
+    typeof requester === 'object' && requester !== null &&
+    ['pane', 'external', 'host'].includes(String(requester.callerKind)) &&
+    nullableString(requester.paneId) && nullableString(requester.paneName) && nullableString(requester.workspace)
+  )
+}
+
 function isPlansRecoveryChanged(payload: unknown): payload is PlansRecoveryChanged {
   return (
     typeof payload === 'object' &&
@@ -151,6 +182,48 @@ export interface FactoryPluginSummary {
   optedOut: boolean
 }
 
+interface BackendUsageCount {
+  current: number
+  peak: number
+}
+
+interface BackendQueueUsage {
+  frames: number
+  bytes: number
+  peakFrames: number
+  peakBytes: number
+}
+
+/** Backend resources the Host holds now and at the most (none capped): children, per-view subscriptions and child usage, per-plugin calls. */
+export interface BackendResourceUsage {
+  /** The core backend's agent tool result helper process. */
+  backend?: { resultHelper: AgentToolsResultHelperState }
+  children: BackendUsageCount & { retained: number }
+  views: Array<{
+    pluginId: string
+    instanceId: string
+    subscriptions: BackendUsageCount
+    child: {
+      subscriptions: BackendUsageCount
+      bridgeRequests: BackendUsageCount
+      outputQueue: { requests: BackendQueueUsage; notifications: BackendQueueUsage }
+      droppedNotifications: number
+      droppedResultPieces: number
+      stdoutPending: { bytes: number; peakBytes: number }
+    } | null
+  }>
+  plugins: BackendCallConcurrency[]
+}
+
+/** In-flight backend calls of one plugin: now, and the most at once since the Host started;
+ *  plus the Host event notifications its children dropped because their event backlog was full. */
+export interface BackendCallConcurrency {
+  pluginId: string
+  current: number
+  peak: number
+  droppedNotifications: number
+}
+
 export interface MarketplaceExtension {
   namespace: string
   name: string
@@ -183,6 +256,13 @@ export interface MarketplaceExtension {
   extension_pack?: string[] | null
   /** Trust tier of the latest version ('signed-verified' or 'unsigned'). */
   trust_tier?: string | null
+  /** Plan B D1 list card: the latest version's manifest disclosure and scan
+   *  report as the Registry listed them, kept by the main process only when
+   *  well formed and naming this item; unverified display data. */
+  disclosure?: PluginManifestDisclosure | null
+  scan?: PluginScanReport | null
+  /** D-f: the highest risk level across the latest version's platforms. */
+  listRisk?: { level: 'low' | 'medium' | 'high' | 'highest'; variesByPlatform: boolean } | null
 }
 
 export interface PackMemberSummary {
@@ -219,15 +299,30 @@ export interface NativeBackendStatusRow {
     | 'stopped-after-crashes'
     | 'unavailable'
   reason?: string
+  /** Declared agent tools; absent when none. `collidesWith`: the plugin id
+   *  that holds the same name, so this tool stays offline. */
+  agentTools?: Array<{
+    name: string
+    title: string
+    description: string
+    risk: 'read' | 'write'
+    timeoutMs: number
+    method: string
+    inputSchema: Record<string, unknown>
+    collidesWith?: string
+    sharedWith?: string[]
+  }>
   changedSinceConsent: boolean
   canWriteWorkspace: boolean
   workspaceWrite: string[]
-  lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk'
+  lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+  shell?: 'allowlist' | 'full'
 }
 
 export interface NativeBackendOverview {
   enabled: boolean
   plugins: NativeBackendStatusRow[]
+  agentTools?: { enabled: boolean; externalCallers: boolean }
 }
 
 export interface InstalledPackRecord {
@@ -269,6 +364,11 @@ export interface MarketplaceVersionInfo {
   compatible?: boolean | null
   min_navide_version?: string | null
   channel?: 'stable' | 'pre-release'
+  /** Contract 3.4/3.8, as the Registry sent them: display data that nothing
+   *  has verified yet (prepareInstall verifies the signed disclosure). */
+  disclosure?: PluginManifestDisclosure | null
+  scan?: PluginScanReport | null
+  registry?: PluginRegistryDisclosureFacts | null
 }
 
 export interface MarketplaceExtensionDetail extends MarketplaceExtension {
@@ -291,12 +391,43 @@ export interface MarketplaceExtensionDetail extends MarketplaceExtension {
   readme: string | null
 }
 
+export interface BackendResourceNoticeView {
+  id: string
+  pluginId: string
+  name: string
+  packageVersion: string
+  item: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+  usage: number
+  threshold: number
+  at: number
+}
+
+type ResourceItemValues = Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+
+export interface BackendResourceStatusView {
+  pluginId: string
+  name: string
+  packageVersion: string
+  usage: ResourceItemValues
+  thresholds: ResourceItemValues
+  levels: ResourceItemValues
+  waiting: Array<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'>
+}
+
+export interface PluginRescanNotice {
+  id: string
+  version: string
+  added: Array<{ kind: string; key: string }>
+}
+
 export interface PluginUpdateInfo {
   id: string
   namespace: string
   name: string
   installedVersion: string
   latestVersion: string
+  /** Plan B D2 badge, from the Registry's unverified listing. */
+  permissionChange?: 'more' | 'same'
 }
 
 export interface MarketplaceListResponse {
@@ -312,10 +443,30 @@ export interface PreparedInstallSummary {
   trustTier: 'signed-verified' | 'unsigned'
   sensitive: string[]
   containsBackendExecutable: boolean
+  /** Declared agent tools (sorted, timeouts defaulted); absent when none. */
+  agentTools?: Array<{
+    name: string
+    method: string
+    risk: 'read' | 'write'
+    title: string
+    description: string
+    timeoutMs: number
+    inputSchema: Record<string, unknown>
+  }>
   requiresConfirmation: boolean
   publisherId: string
   requiresPublisherTrust: boolean
   requiresRiskConfirmation: boolean
+  /** Plan B D2: what this update changes, computed by the Host from the
+   *  installed and the downloaded manifests; null for a first install. */
+  disclosureDiff?: PluginDisclosureDiff | null
+  /** Verified against the package and the Registry signature; null when the
+   *  version carries no disclosure. */
+  disclosure?: PluginManifestDisclosure | null
+  /** Registry-signed scan report (digest verified); null when none. */
+  scan?: PluginScanReport | null
+  /** Unsigned Registry facts, never verified. */
+  registry?: PluginRegistryDisclosureFacts | null
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []
@@ -395,6 +546,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }
     ipcRenderer.on('plans:backendStopped', listener)
     return () => ipcRenderer.removeListener('plans:backendStopped', listener)
+  },
+  // An agent disabled or enabled a Navide plugin (B2-c): who, and the undo.
+  onPluginAgentAction: (cb: (notice: PluginAgentActionNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginAgentActionNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:agentAction', listener)
+    return () => ipcRenderer.removeListener('plugins:agentAction', listener)
   },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))
@@ -1007,6 +1166,26 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listInstalled'),
     listFactoryPackages: (): Promise<FactoryPluginSummary[]> =>
       ipcRenderer.invoke('plugins:listFactoryPackages'),
+    backendCallConcurrency: (): Promise<BackendCallConcurrency[]> =>
+      ipcRenderer.invoke('plugins:backendCallConcurrency'),
+    /** D-f: one installed plugin's activity report (read only). */
+    activityReport: (id: string): Promise<
+      { ok: true; report: PluginActivityReport } | { ok: false; error: string }
+    > => ipcRenderer.invoke('plugins:activityReport', { id }),
+    /** D-f: installed Registry packages' disclosures and install-time scans. */
+    installedDisclosures: (): Promise<Array<{
+      id: string
+      version: string
+      disclosure: PluginManifestDisclosure | null
+      scan: PluginScanReport | null
+    }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
+    backendResourceUsage: (): Promise<BackendResourceUsage> =>
+      ipcRenderer.invoke('plugins:backendResourceUsage'),
+    disabledBuiltins: (): Promise<string[]> => ipcRenderer.invoke('plugins:disabledBuiltins'),
+    disabledStoreStatus: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
+      ipcRenderer.invoke('plugins:disabledStoreStatus'),
+    resetDisabledStore: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
+      ipcRenderer.invoke('plugins:resetDisabledStore'),
     listContributions: (): Promise<Array<{
       pluginId: string
       packageVersion: string | null
@@ -1065,6 +1244,18 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.on('plugins:updatesChanged', listener)
       return () => ipcRenderer.removeListener('plugins:updatesChanged', listener)
     },
+    /** The core backend's agent tool result helper changed state. */
+    onResultHelperState: (handler: (state: AgentToolsResultHelperState) => void): (() => void) => {
+      const listener = (_event: unknown, state: AgentToolsResultHelperState): void => handler(state)
+      ipcRenderer.on('plugins:resultHelperState', listener)
+      return () => ipcRenderer.removeListener('plugins:resultHelperState', listener)
+    },
+    /** D-f: rescans of installed versions that found new items (notice only). */
+    onRescanNotices: (handler: (notices: PluginRescanNotice[]) => void): (() => void) => {
+      const listener = (_event: unknown, notices: PluginRescanNotice[]): void => handler(notices)
+      ipcRenderer.on('plugins:rescanNotices', listener)
+      return () => ipcRenderer.removeListener('plugins:rescanNotices', listener)
+    },
     prepareInstall: (args: {
       namespace: string
       name: string
@@ -1087,10 +1278,15 @@ contextBridge.exposeInMainWorld('agentTeam', {
       restoredInstances: number
       skippedDestroyedHostWindows: number
     }> => ipcRenderer.invoke('plugins:rollback', { id }),
-    remove: (id: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('plugins:remove', { id }),
+    remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('plugins:remove', nativeBackendData === undefined ? { id } : { id, nativeBackendData }),
+    nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
+      ipcRenderer.invoke('plugins:nativeBackendData', { id }),
+    installedDisclosure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:installedDisclosure', { id }),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
+    setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
+      ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
     marketplacePackMembers: (members: string[]): Promise<PackMemberSummary[]> =>
       ipcRenderer.invoke('plugins:marketplacePackMembers', { members }),
     preparePack: (args: { namespace: string; name: string }): Promise<PreparedPackSummary> =>
@@ -1112,6 +1308,21 @@ contextBridge.exposeInMainWorld('agentTeam', {
         ipcRenderer.invoke('plugins:nativeBackends:setDisabled', { id, disabled }),
       revokeWorkspaceWrite: (id: string, workspacePath: string): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:revokeWorkspaceWrite', { id, workspacePath }),
+      setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean }): Promise<NativeBackendOverview> =>
+        ipcRenderer.invoke('plugins:nativeBackends:setAgentTools', change),
+      /** Watchdog option C: unanswered resource notices (contract 5.2). */
+      resourceNotices: (): Promise<BackendResourceNoticeView[]> =>
+        ipcRenderer.invoke('plugins:nativeBackends:resourceNotices'),
+      /** Each running third-party backend's usage against its thresholds. */
+      resourceStatus: (): Promise<BackendResourceStatusView[]> =>
+        ipcRenderer.invoke('plugins:nativeBackends:resourceStatus'),
+      answerResourceNotice: (id: string, choice: 'terminate' | 'continue'): Promise<boolean> =>
+        ipcRenderer.invoke('plugins:nativeBackends:answerResourceNotice', { id, choice }),
+      onResourceNoticesChanged: (handler: () => void): (() => void) => {
+        const listener = (): void => handler()
+        ipcRenderer.on('plugins:nativeBackends:resourceNoticesChanged', listener)
+        return () => ipcRenderer.removeListener('plugins:nativeBackends:resourceNoticesChanged', listener)
+      },
     },
   },
 })

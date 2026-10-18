@@ -926,7 +926,7 @@
       "visibility": "public",
       "permission": { "id": "shell", "scope": "workspace" },
       "params": { "type": "object", "additionalProperties": false, "required": ["command"], "properties": { "command": { "type": "string", "minLength": 1 } } },
-      "result": { "type": "object", "additionalProperties": false, "required": ["exitCode", "stdout", "stderr"], "properties": { "exitCode": { "type": "integer" }, "stdout": { "type": "string" }, "stderr": { "type": "string" } } },
+      "result": { "type": "object", "additionalProperties": false, "required": ["exitCode", "stdout", "stderr"], "properties": { "exitCode": { "type": "integer" }, "stdout": { "type": "string" }, "stderr": { "type": "string" }, "truncated": { "type": "boolean" }, "stdoutBytes": { "type": "integer", "minimum": 0 }, "stderrBytes": { "type": "integer", "minimum": 0 } } },
       "errors": ["CAPABILITY_DENIED", "INVALID_ARGUMENT", "WORKSPACE_SCOPE_VIOLATION", "USER_CANCELLED", "BACKEND_UNAVAILABLE", "INTERNAL_ERROR"]
     },
     {

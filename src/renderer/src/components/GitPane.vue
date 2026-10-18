@@ -73,7 +73,7 @@ function openBranchDiffTab(base = 'main'): void {
 }
 
 const {
-  gitStatus, statusError, statusLoaded, loadStatus, discoveredRepos, discoverySkipped, discoverRepositories, showIgnored, gitLog, gitBranches, gitStashes, gitRemotes, gitTags,
+  gitStatus, statusError, logError, commitDetailError, statusLoaded, loadStatus, discoveredRepos, discoverySkipped, discoverRepositories, showIgnored, gitLog, gitBranches, gitStashes, gitRemotes, gitTags,
   gitWorktrees, gitConfig, gitConfigAllowedKeys,
   isLoadingStatus, isCommitting, isGenerating, isInitializing,
   syncOutput, syncError, gitError, clearGitError,
@@ -531,7 +531,7 @@ async function doAbort(): Promise<void> {
   const op = opInProgress.value
   if (!op) return
   const r = await abortOperation(op)
-  if (!r.ok) notifyToast(r.error || 'Abort failed', { type: 'error' })
+  if (!r.ok) notifyToast(r.error || t('git.abort-failed'), { type: 'error' })
 }
 
 // ── Auto-detect and pre-fill commit message once all conflicts are resolved ────
@@ -687,7 +687,7 @@ async function runAutoCommit(): Promise<void> {
     autoCommitStep.value = 'checking'
     const lint = await checkStaged()
     if (!lint.ok) {
-      notifyToast(`Auto Commit aborted: ${lint.errorCount} lint error(s) detected`, { type: 'error' })
+      notifyToast(t('git.auto-commit-lint-aborted', { count: lint.errorCount }), { type: 'error' })
       return
     }
 
@@ -701,7 +701,7 @@ async function runAutoCommit(): Promise<void> {
     if (!autoCommit.value || isCommitting.value) return
     autoCommitStep.value = 'committing'
     const cr = await commit(r.message, false)
-    if (cr.ok) notifyToast(`Auto-committed: ${r.message}`, { type: 'success' })
+    if (cr.ok) notifyToast(t('git.auto-commit-done', { message: r.message }), { type: 'success' })
   } finally {
     autoCommitRunning.value = false
     autoCommitStep.value = ''
@@ -783,7 +783,7 @@ async function runRemote(op: Exclude<typeof remoteBusy.value, ''>, fn: () => Pro
           ? `\n\n${t('git.account.credential-invalid')}`
           : ''
       void notifyAlert(remoteError.value + hint, { title: `${label} failed` })
-    } else notifyToast(`${label} done`, { type: 'success' })
+    } else notifyToast(t(`git.remote-op-done.${op}`), { type: 'success' })
   } finally {
     remoteBusy.value = ''
   }
@@ -901,7 +901,7 @@ async function doCompareBranch(branch: string): Promise<void> {
   const current = gitStatus.value?.branch; if (!current) return
   const r = await compareBranches(branch, current)
   if (r.ok) compareResult.value = { stat: r.stat, files: r.files }
-  else { comparingBranch.value = ''; notifyToast(r.error || 'compare failed', { type: 'error' }) }
+  else { comparingBranch.value = ''; notifyToast(r.error || t('label.compare-failed'), { type: 'error' }) }
 }
 
 const rebaseError = ref(''), rebaseOutput = ref('')
@@ -994,7 +994,7 @@ async function doMergeIntoAndPush(target: string): Promise<void> {
 
 async function doConflictAbort(): Promise<void> {
   const r = await abortOperation('merge')
-  if (!r.ok) notifyToast(r.error || 'Abort failed', { type: 'error' })
+  if (!r.ok) notifyToast(r.error || t('git.abort-failed'), { type: 'error' })
   showMergeConflictModal.value = false
   mergeConflictFiles.value = []
   mergeConflictContext.value = ''
@@ -2300,6 +2300,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <div class="spacer" />
         </div>
         <div v-if="historyExpanded" class="card-body">
+        <div v-if="logError" class="read-error" role="alert">{{ $t('git.read-failed', { reason: logError }) }}</div>
         <div v-if="!latestLog.length" class="empty-msg">{{ $t('label.no-commits-yet') }}</div>
         <div v-else class="commit-list">
           <div v-for="(c, gi) in latestLog" :key="c.hash">
@@ -2334,6 +2335,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
             </div>
             <div v-if="expandedCommitHash === c.hash" class="commit-detail">
               <div v-if="commitDetailLoading" class="loading-text">Loading…</div>
+              <div v-else-if="!commitDetailData && commitDetailError" class="read-error" role="alert">{{ $t('git.read-failed', { reason: commitDetailError }) }}</div>
               <template v-else-if="commitDetailData">
                 <div class="cd-body">{{ commitDetailData.message }}</div>
                 <div class="cd-row"><span class="cd-key">Author</span><span>{{ commitDetailData.author_name }} &lt;{{ commitDetailData.author_email }}&gt;</span></div>
@@ -2800,6 +2802,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
 .ok-text  { color: var(--success-fg); font-size: var(--font-2xs); margin: 0; padding: 2px 4px; }
 .loading-text { color: var(--text-muted); font-size: var(--font-3xs); padding: 3px 8px; }
 .empty-msg { color: var(--text-muted); font-size: var(--font-2xs); font-style: italic; padding: 3px 20px 6px; }
+/* A read that failed: the reason, beside whatever the list still shows. */
+.read-error { color: var(--danger-fg); font-size: var(--font-2xs); padding: 3px 20px 6px; overflow-wrap: anywhere; }
 .w-full { width: 100%; }
 .spinner { display: inline-block; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

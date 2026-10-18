@@ -260,6 +260,7 @@ function createGuardStore(backend: Backend) {
     useNotify().toast(t(key, { reason: ev.reason || t(`guard.level.${ev.level}`) }), {
       type: ev.action === 'ask' ? 'info' : 'error',
       duration: 8000,
+      variant: 'security',
     })
   }
 

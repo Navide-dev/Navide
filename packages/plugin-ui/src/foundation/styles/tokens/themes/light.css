@@ -51,6 +51,16 @@
   --success-muted: #aceebb;
   --success-subtle: #dafbe1;
 
+  /* Toast variants */
+  --toast-external-bg: #a40e26;
+  --toast-external-fg: #ffffff;
+  --toast-channel-accent: #a40e26;
+  --toast-channel-fg: #ffffff;
+  --toast-security-border: #cf222e;
+  --toast-security-bg: #fff1f0;
+  --toast-workspace-accent: #8250df;
+  --toast-workspace-bg: #f5f0ff;
+
   /* Danger (red) */
   --danger-fg: #cf222e;      /* ~5.1:1 */
   --danger-bright: #a40e26;

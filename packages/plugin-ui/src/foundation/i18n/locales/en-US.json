@@ -1,5 +1,6 @@
 {
   "convenience": {
+    "switch-back-failed": "Couldn't switch back: {detail}",
     "notice": {
       "wrote": "Wrote {target} under the convenience feature \"{feature}\" you allowed, so that {purpose}",
       "repair-note": "This put back or repaired what Navide wrote earlier.",
@@ -164,6 +165,26 @@
     "restore": "Restore"
   },
   "editorWindow": {
+    "paths-copied": "Copied {count} path(s)",
+    "path-copied": "Path copied",
+    "copy-failed": "Copy failed",
+    "replaced-occurrences": "Replaced {count} occurrence(s)",
+    "search-stale": "Content has changed, please search again",
+    "ai-terminal-starting": "AI terminal is starting — retry in a moment",
+    "ai-terminal-not-started": "Start the AI terminal first, then retry",
+    "json-syntax-error": "JSON syntax error: {message}",
+    "file-outside-workspace": "File is outside this workspace",
+    "no-indented-lines": "No indented lines detected",
+    "indentation-tabs": "Detected indentation: Tabs",
+    "indentation-spaces-size": "Detected indentation: {size} Spaces",
+    "indentation-spaces": "Detected indentation: Spaces",
+    "no-quick-fixes": "No quick fixes available",
+    "create-file-failed": "Failed to create file",
+    "saved": "Saved",
+    "ai-rewrite-discarded": "Document changed — AI rewrite discarded",
+    "encoding-switch-failed": "Encoding switch failed",
+    "no-completion": "No completion available",
+    "reopen-encoding-failed": "Failed to re-open with encoding",
     "close-editor": "Close Editor",
     "close-editor-dirty": "{count} file(s) have unsaved changes. Close the editor anyway?",
     "close-file": "Close File",
@@ -334,6 +355,13 @@
     }
   },
   "msg": {
+    "external-toast-remote-title": "Remote device · {device}",
+    "external-toast-remote-body": "Instruction from {from} delivered to “{target}”",
+    "external-toast-channel-title": "External channel · {platform} · {sender}",
+    "external-toast-channel-platform-title": "External channel · {platform}",
+    "external-toast-channel-body": "Message from {from} delivered to “{target}”",
+    "workspace-toast-title": "Other workspace · {name}",
+    "cross-workspace-unknown-sender": "unknown",
     "panel-title": "Inter-CLI Messages",
     "pause": "Pause delivery",
     "resume": "Resume delivery",
@@ -436,6 +464,24 @@
     "setting-label": "Show a confirmation reminder before closing"
   },
   "git": {
+    "abort-failed": "Abort failed",
+    "cherry-pick-failed": "Cherry-pick failed",
+    "revert-failed": "Revert failed",
+    "commit-id-copied": "Commit ID copied",
+    "commit-message-copied": "Commit message copied",
+    "conflict-write-failed": "Write failed",
+    "conflict-stage-failed": "Stage failed",
+    "conflict-apply-failed": "Apply failed",
+    "conflicts-resolved-file": "{name} conflicts resolved",
+    "patch-apply-failed": "Failed to apply patch",
+    "remote-op-done": {
+      "fetch": "Fetch done",
+      "pull": "Pull done",
+      "push": "Push done",
+      "sync": "Sync done",
+      "publish": "Publish done"
+    },
+    "read-failed": "Read failed: {reason}",
     "account": {
       "selector-title": "Account for this workspace",
       "unbound": "No account",
@@ -726,7 +772,7 @@
       "clipboard-send-failed": "Only part of the paste reached {pane} — the rest was lost on the way",
       "clipboard-send-failed-all": "The paste never reached {pane} — {chars} characters were lost on the way",
       "open-file-failed": "Could not open {file} — the editor did not respond",
-      "idle-reclaimed": "Reclaimed {count} idle CLI pane(s) to free memory — click one to resume it",
+      "idle-reclaimed": "Reclaimed {count} idle CLI pane(s) to free memory — click the “Click to resume” card in a pane to bring it back",
       "click-to-resume": "Click to resume",
       "interrupted-at-launch": "Working at restart",
       "interrupted-at-launch-tooltip": "This pane was working when Navide restarted, and its turn was cut off. It was not resumed automatically (over the automatic-resume limit, or the resume failed). Click to resume it.",
@@ -784,7 +830,15 @@
       "loop-stalled-notify-body": "The agent repeated itself for several turns without moving forward (it may be waiting on something) — the loop has stopped so it stops burning quota",
       "loop-capped-notify-title": "Loop stopped — continue limit reached",
       "loop-capped-notify-body": "The loop sent its maximum number of continue prompts without the agent reporting the task done — restart it if the work is still on track",
+      "loop-inject-failed-notify-title": "Loop stopped — continue could not be sent",
+      "loop-inject-failed-notify-body": "The continue prompt failed to reach the agent 3 times in a row (the input box did not accept it) — the loop has stopped; check the pane and restart it",
+      "loop-interrupted-notify-title": "Loop stopped — interrupted",
+      "loop-interrupted-notify-body": "You interrupted the agent, so the loop has stopped instead of sending another continue — restart it when you want it to keep going",
       "login-expired-badge": "⚠ Login expired",
+      "exit-fault-badge": "⚠ Exited (code {code})",
+      "exit-fault-tooltip": "The CLI ended with exit code {code}. It may have crashed; the code is also recorded in the error ledger.",
+      "stuck-badge": "⏳ No activity {minutes}+ min",
+      "stuck-tooltip": "This turn has shown no log activity and no output for over {minutes} minutes. The CLI may be stuck; nothing was interrupted.",
       "usage-limit-badge": "⛔ back {time}",
       "usage-limit-badge-unknown": "⛔ out of quota",
       "usage-limit-tooltip": "This CLI is out of quota — expected back at {time}. Click to dismiss",
@@ -951,6 +1005,8 @@
     "minimize-selected": "Minimize selected",
     "mute": "Mute notifications",
     "unmute": "Unmute notifications",
+    "fit-width": "Fit to pane width",
+    "fit-width-title": "Use the pane's full width. Older output above may re-wrap a few lines.",
     "restore-selected": "Restore selected",
     "reclaim-selected": "Reclaim selected ({count})",
     "reclaim-selected-title": "Free memory from eligible selected CLIs; panes stay as click-to-resume placeholders. Busy or focused panes, unsent input, and sessions that cannot resume are skipped.",
@@ -962,6 +1018,7 @@
     "remove-with-children": "Remove all {count} panes",
     "remove-with-children-title": "Close this pane together with every agent it spawned",
     "run-pipeline": "▶ Run pipeline",
+    "or-run-pipeline": "or run the pipeline ▶",
     "reset": "Reset",
     "wipe-restart": "↺ Wipe & restart",
     "export": "💾 Export",
@@ -1470,6 +1527,10 @@
           "title": "Navide Marketplace",
           "summary": "Search the Navide plugin registry and install a Navide plugin, with publisher trust and capability confirmation."
         },
+        "disclosureOverview": {
+          "title": "Disclosure overview",
+          "summary": "Every installed Navide plugin's disclosure, risk, recent activity and unusual items"
+        },
         "help-mcp": {
           "title": "How Navide uses MCP",
           "summary": "The two directions MCP is used in: tools Navide offers CLI agents, and external servers Navide reads docs from."
@@ -1644,10 +1705,28 @@
     },
     "extensions": {
       "devUnpacked": "Unsigned local folder — Developer Mode only",
+      "agentTools": {
+        "heading": "Tools agents can call ({count})",
+        "read": "Declared read-only",
+        "write": "Declared as changing data",
+        "timeout": "Times out after {seconds} s",
+        "dataFlow": "What these tools return is shown to the agent, which may pass it on elsewhere.",
+        "collision": "Not available to agents: {heldBy}, allowed earlier, already uses this name.",
+        "method": "Calls {method}",
+        "inputSchema": "Input schema (what the agent sends)",
+        "sharedWith": "{others} also declares this name; that tool stays offline.",
+        "total": "{count} tools; their text and input schemas total {size}."
+      },
       "nativeBackends": {
         "title": "Native backends",
-        "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access; it can read only the workspaces you open with it, and change files only where you allow. Nothing native runs until you turn the switch below on.",
+        "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. Nothing native runs until you turn the switch below on.",
         "enable": "Allow third-party Navide plugins to run native backends",
+        "agentTools": {
+          "enable": "Let agents call tools from third-party Navide plugins",
+          "description": "Off by default. When on, agents in your panes can call the tools a third-party Navide plugin declares, once you have allowed that Navide plugin. A tool that changes files asks you once per workspace. With this off, Navide behaves as if no Navide plugin had tools.",
+          "externalCallers": "Let external MCP clients call them too",
+          "externalCallersDisclosure": "External programs share a single token, so the record of a call can only say \"an external client\", not which program it was. The Host credential is treated the same way."
+        },
         "empty": "No installed Navide plugin has a native backend.",
         "allow": "Allow",
         "disable": "Disable",
@@ -1660,15 +1739,18 @@
           "memory": "memory",
           "cpu": "CPU",
           "processes": "process",
-          "disk": "disk"
+          "disk": "disk",
+          "stdoutPending": "stdout waiting for a line break"
         },
+        "shellRisk": "High risk: runs git, gh and glab",
+        "shellRiskDetail": "Through git, gh and glab it can contact network hosts and send workspace data, and read and change workspace files without the separate file-change permission. Commands already started when you disable it or revoke its permission run to completion (up to about 30 seconds).",
         "status": {
           "ready": "Allowed",
           "disabledGlobally": "Off (setting is off)",
           "disabled": "Disabled",
           "needsConsent": "Needs your permission",
           "sandboxUnavailable": "Cannot run safely on this system",
-          "shellNotAllowed": "Blocked: also requests shell access",
+          "shellNotAllowed": "Blocked: requests full shell access",
           "stoppedAfterCrashes": "Stopped after repeated failures",
           "unavailable": "Unavailable"
         }
@@ -1683,6 +1765,17 @@
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
       "restartPlugin": "Restart Navide plugin",
+      "disable": "Disable",
+      "enable": "Enable",
+      "builtinDisabledTooltip": "Navide plugin {name} is disabled. Enable it in Settings → Extensions.",
+      "builtinDisabledNote": "Disabled: its views, windows and agent tools are off. Its permissions and stored data are kept; Enable turns everything back on.",
+      "builtinDataDeletedEarlier": "An earlier version of Navide removed this Navide plugin and deleted its stored data then. Enable starts it with empty data.",
+      "disabledStoreRestored": "Restored from backup: the Navide plugin Disabled switches were damaged and were rebuilt from their backup copy.",
+      "disabledStoreUnreadable": "The Navide plugin Disabled switches cannot be read, and neither can their backup. To be safe, Plans, Git and Mini-IDE are treated as disabled. The damaged files are kept. Reset starts every switch from enabled.",
+      "disabledStoreReset": "Reset switches",
+      "builtinSwitchBusy": "Applying… Navide first lets current work finish, which can take about half a minute for Plans.",
+      "disabledBadge": "Disabled",
+      "disabledNote": "Disabled: its views and backend do not run. Its files, permissions and stored data are kept.",
       "rollback": {
         "toBundled": "Roll back to bundled",
         "toVersion": "Roll back to {version}",
@@ -1706,6 +1799,7 @@
       "sensitive": "sensitive",
       "empty": "No Navide plugins installed.",
       "permissionDetails": "Permissions and grants",
+      "permissionDetailsWithActivity": "Permissions, grants and activity",
       "plansRiskNote": "This Navide plugin has its own backend program, which runs with your user permissions and has no sandbox. It works on plan documents in the current project, starting from the Git repository root found above it (including repositories nested inside): the plan and report folders under .agent-team, .claude, .cursor and docs at any depth, .plans at the root, and their .history (read only). Its backend reads and writes them directly; deletes and renames still go through Navide.",
       "searchPlaceholder": "Search Navide plugins",
       "search": "Search",
@@ -1746,6 +1840,8 @@
         "unavailableDetail": "Version {version} is not published for this platform ({host}); available for: {targets}.",
         "uninstallConfirmTitle": "Uninstall Navide plugin?",
         "uninstallConfirmBody": "{name} will be removed from this device. You can install it again from the Navide Marketplace.",
+        "uninstallConfirmBodyWithData": "{name} will be removed from this device. Its native backend also stored {size} of private data on this device, at the location below. Navide deletes this data too unless you choose to keep it.",
+        "uninstallKeepNativeData": "Keep this data so a reinstall can use it again",
         "updatesCount": "Updates available: {count}",
         "retry": "Retry",
         "featured": "Featured",
@@ -1829,6 +1925,8 @@
         }
       },
       "getPrereleases": "Get pre-releases",
+      "getPrereleasesFailed": "Could not change Get pre-releases: {error}",
+      "inventoryRefreshFailed": "Could not reload the installed Navide plugins: {error}",
       "incompatibleInstalled": "Needs Navide ≥ {version}",
       "incompatibleReason": "This version declares it needs Navide {version} or newer. It stays enabled, but may not work until you update Navide.",
       "pack": {
@@ -1923,6 +2021,8 @@
       "readback-hint": "When a pane marked 🔊 finishes or needs your answer, a short notice is spoken with the system voice (for example \"Navide is done\"). Click 🔊 in a pane's title bar to mark it. Speech is synthesized on this computer; nothing is downloaded.",
       "readback-voice": "Voice",
       "readback-voice-hint": "Auto picks the best system voice for the interface language, preferring Premium voices. Better voices can be downloaded in System Settings › Accessibility › Spoken Content.",
+      "readback-voice-hint-windows": "Auto picks the best system voice for the interface language. More voices can be added in Settings › Time & language › Speech.",
+      "readback-voice-hint-other-os": "Auto picks the best system voice for the interface language. Install more voices in your operating system's speech settings.",
       "readback-voice-none": "No system voice matches the interface language; the system default voice will be used.",
       "readback-voice-auto": "Auto (interface language)",
       "readback-rate": "Speed",
@@ -2154,7 +2254,7 @@
         "general": "General",
         "accountsAgents": "Accounts & Agents",
         "integration": "Agent Assets",
-        "navidePlugins": "Navide Plugins",
+        "navidePlugins": "Navide Services",
         "system": "System"
       },
       "general": "General",
@@ -2177,6 +2277,7 @@
       "analyzer": "Analyzer",
       "extensions": "Navide Plugins",
       "marketplace": "Navide Marketplace",
+      "disclosureOverview": "Disclosure overview",
       "executionPolicy": "Execution Policy",
       "statusBadges": "Status badges",
       "voice": "Voice Input",
@@ -2344,6 +2445,10 @@
             "marketplace": {
               "what": "Searching the Navide plugin registry and installing from it",
               "more": "section 4 of this page"
+            },
+            "disclosureOverview": {
+              "what": "Each Navide plugin installed from the Navide Marketplace: its disclosure card, risk level, recent activity and unusual items on one page.",
+              "more": "Records only: nothing here changes what a Navide plugin may do. Each Navide plugin's full activity is also under its row on the Navide Plugins page."
             },
             "shortcuts": {
               "what": "Rebinding shortcuts, import and export",
@@ -2620,7 +2725,7 @@
           "p7": "Installing takes <strong>up to two confirmations</strong>, each shown only when needed, and nothing is written to disk before them: if the publisher is not trusted yet, \"trust the publisher\" comes first — the screen says plainly that <em>a valid signature only proves the package was not tampered with, not that you are willing to run this publisher's code</em>; if the package carries a risk that needs confirming, \"confirm the Navide plugin's permissions\" follows, listing the sensitive capabilities it asks for and warning specifically when it ships a native backend executable. When neither applies, it installs straight away.",
           "extRollback": "When the host has a package to go back to, the row gains \"{toBundled}\" or \"{toVersion}\": after a confirmation it rolls back to the package it displaced, and \"{restart}\" finishes the switch. A refused or failed rollback shows the host's own reason, translated, and a failed one restores the views it took down.",
           "extPrerelease": "Each Navide plugin's row has a \"{prerelease}\" box, so pre-releases are opted into per Navide plugin; the Navide Marketplace's version list marks which versions are pre-releases and can install one directly.",
-          "extNative": "<strong>{native}</strong>: a third-party Navide plugin may ship its own backend program, which never runs by default. Turn on \"{nativeEnable}\", then press \"{allow}\" for that exact version of the Navide plugin. It runs in a sandbox with no network (Seatbelt on macOS, bubblewrap on Linux), can read only the workspace opened with it and write only where you allow; any change to the program or its permissions asks again. Windows is not supported yet.",
+          "extNative": "<strong>{native}</strong>: a third-party Navide plugin may ship its own backend program, which never runs by default. Turn on \"{nativeEnable}\", then press \"{allow}\" for that exact version of the Navide plugin. It runs in a sandbox with no network of its own (Seatbelt on macOS, bubblewrap on Linux), can read only the workspace opened with it and write only where you allow; a Navide plugin that also runs git, gh and glab commands (shown as high risk) can, through them, contact network hosts, send workspace data and change workspace files, and commands it already started finish even after you disable it; any change to the program or its permissions asks again. Windows is not supported yet.",
           "marketplace": "The \"{marketplace}\" tab: search, filter by category, sort by downloads, last update or rating, hide incompatible entries, with up to three \"{featured}\" at the top. A detail page has the README, changelog and version list, with permissions and compatibility beside them; ratings are read-only here — rating or reporting a Navide plugin happens on the registry website after signing in. An entry badged \"{pack}\" installs a whole set with \"{packInstall}\"; removing a pack never removes a member another installed pack still uses. A <code>navide://</code> link only opens the Navide plugin's detail page; pressing Install is always left to you.",
           "mirror": "<strong>The download mirror</strong>: every release's files are published twice, on the GitHub Release and on <code>dl.navide.dev</code> — the same bytes, with sha256 sums to check them against. <strong>The mirror is the default update source</strong>: the app points its feed at <code>dl.navide.dev</code> on startup, and GitHub is the fallback. It falls back only on a <strong>network-shaped failure</strong> (unreachable host, timeout, 5xx/429), and once it has, it <strong>stays on GitHub for the rest of the session</strong> — only a restart goes back to the mirror. <strong>A 404 or a signature/checksum error never triggers the fallback</strong> — both hosts carry the same files, so it would fail the same way, and reporting the failure as it is helps more than hiding it.",
           "policyIntro": "The <strong>execution policy</strong> decides what a Navide plugin's backend may execute. It is <strong>not a tab of its own</strong>: it is the block at the top of the Navide Plugins page, with its own scope badge (per user and per workspace) and policy file path. The top of it shows the <em>effective policy</em> — its source, its mode, and its status: <em>active</em>, <em>stale</em>, <em>unavailable</em> or <em>corrupt</em>.",
@@ -2706,8 +2811,8 @@
           "h6": "Sync (keeping several machines the same)",
           "p11": "The first block on Settings ▸ Navide Cloud is called Sync. <strong>It is not a separate tab</strong> — it is the top section of this one page. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
           "sync": {
-            "scopes": "<strong>Four scopes can be turned on</strong>: <em>Prompts</em> (prompt skills and the loop prompt), <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only), and <em>Memory</em> (global instruction files such as <code>~/.claude/CLAUDE.md</code>; the ones inside a project stay with git).",
-            "credentials": "The <strong>Credentials</strong> row is <strong>listed but disabled</strong>, and its line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move.",
+            "scopes": "<strong>Six rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
+            "credentials": "<em>Memory</em>, <em>Credentials &amp; keys</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory or Credentials switch an older build left on can still be turned off.",
             "states": "Two states are spelled out under the block: <em>not connected</em> (scopes you turned on catch up once the link is back) and <em>this device has no sync key yet</em> (nothing is uploaded until it has one). There is also a <em>Sync now</em> button, enabled only while connected.",
             "key": "<strong>The sync key is shown as the first 8 characters of its id</strong>, never as the key itself. <em>Rotate key</em> takes <strong>two clicks</strong>: the first turns it into <em>Rotate now</em> and adds a <em>Cancel</em> beside it. Rotating retires the current key, re-seals every synced record under a new one, and hands the new key to your other devices the next time they exchange keys — it is the move for a key you think has leaked.",
             "legacy": "<em>Adopt for this account</em> appears only when this device holds a sync key from before accounts were bound <em>and</em> this account has no key yet. It is a one-time choice: without adopting it you cannot read what was synced under that key, and minting a fresh key instead would leave those records permanently unreadable.",
@@ -4943,7 +5048,7 @@
         },
         "s1": {
           "title": "Direction 1: the tools Navide gives CLI agents",
-          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>62</strong> of them today (56 core, plus the 6 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
+          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>63</strong> of them today (56 core, plus the 7 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
           "h1": "Plan documents",
           "planTools": {
             "plan_list": "List every plan in this workspace, with its stage and todo progress",
@@ -4951,7 +5056,8 @@
             "plan_create": "Create a new plan (starting as a draft)",
             "plan_update_stage": "Advance the stage: Draft → In Review → Approved → In Progress → Done",
             "plan_update_todo": "Update the status of a single todo",
-            "plan_add_note": "Record a finding or a decision"
+            "plan_add_note": "Record a finding or a decision",
+            "plan_add_todo": "Add a todo to an existing plan"
           },
           "note1": "Plans are HTML the agent writes with these tools; you read and approve them in Navide's Plans view. The agent only starts writing code once the stage has advanced to \"Approved\".",
           "h2": "Workspace, pipeline orchestration and settings",
@@ -7070,6 +7176,10 @@
         "salvaged": "{device} was recovered from a damaged pairing record. Its key is kept, but it needs your approval again",
         "sig2-missing": "{device} sent a message without its time signature — a server that does not pass it on, or something on the way removed it. It was delivered",
         "sig2-unusable": "{device} sent a message whose time signature did not check out, or was dated too far from this machine's clock. It was delivered on the older signature; check both machines' clocks",
+        "sig2-refused-missing": "{device} sent a message without its time signature, and it was refused: that device signs one, so something on the way removed it",
+        "sig2-refused-unusable": "{device} sent a message whose time signature did not check out, and it was refused",
+        "sig2-refused-clock-ahead": "A message from {device} was refused for clock skew: that machine's clock is {minutes} minutes ahead of this one. Check both machines' clocks",
+        "sig2-refused-clock-behind": "A message from {device} was refused for clock skew: that machine's clock is {minutes} minutes behind this one, or the message was held back on the way. Check both machines' clocks",
         "full": "Pairing limit reached: {device} could not be paired. Update Navide to add more devices.",
         "sending": "Confirming…",
         "start": "Pair",
@@ -8023,16 +8133,14 @@
     "missing": "⚠ missing",
     "already-open": "● open",
     "tagline": "Drive Claude Code · Codex · Antigravity CLI together",
-    "open-workspace": "📂 Open Workspace",
-    "recent": "🕓 Recent",
+    "open-workspace": "Open Workspace",
+    "recent": "Recent",
     "no-recent-workspaces": "No recent workspaces yet. Click <strong>Browse…</strong> to open a project folder.",
     "restart-title": "↺ Start pipeline over from Stage 01?",
     "restart-preserved": "Existing pipeline.log is preserved (events keep appending). The stage records in the project database (navide.db) will be reset to pending.",
     "pin": "Pin",
     "unpin": "Unpin",
-    "two-ways-title": "Two ways to drive the team",
-    "two-ways-pipeline": "— drive all {count} SDLC stages end-to-end. Each stage spawns the recommended CLI + role and receives a tailored kickoff prompt.",
-    "two-ways-grid": "— spawn one agent at any role/stage you want, ad-hoc.",
+    "empty-stage-lead": "Open an agent to start working in this tab. Pick its CLI and role in the sidebar.",
     "set-workspace-pipeline": "Set workspace + (for pipeline) task description on the left first.",
     "init-no-gitignore": "Initialize (without .gitignore)",
     "init-in-folder": "Initialize in a specific folder…",
@@ -8378,7 +8486,7 @@
       "grid-toolbar": "Grid layout",
       "grid-custom-columns": "Custom columns",
       "grid-custom-rows": "Custom rows",
-      "titlebar-settings": "Settings (⌘,)",
+      "titlebar-settings": "Settings ({key})",
       "drag-reorder": "Drag to reorder or click to focus",
       "docked-in-sidebar": "Docked in sidebar",
       "stage-manager-tooltip": "Stage manager — controls flow and decides ---STAGE-DONE---",
@@ -8596,13 +8704,13 @@
     "release-notes": "Release notes",
     "error": "Update error: {message}",
     "unsupported": "Automatic updates aren't available in this build.",
-    "new-version-toast": "Agent-Team v{version} is available",
+    "new-version-toast": "Navide v{version} is available",
     "major-update-title": "Update available",
-    "major-update-body": "Agent-Team v{version} is available (you're on v{current}). Download it now?",
+    "major-update-body": "Navide v{version} is available (you're on v{current}). Download it now?",
     "download-now": "Download update",
     "later": "Later",
     "restart-confirm-title": "Restart to install update?",
-    "restart-confirm-body": "Agent-Team v{version} is downloaded. The app will close and reopen to finish installing. Restart now?"
+    "restart-confirm-body": "Navide v{version} is downloaded. The app will close and reopen to finish installing. Restart now?"
   },
   "announce": {
     "title": "Announcements",
@@ -8744,6 +8852,14 @@
     "duration-hours": "{count}h",
     "duration-minutes": "{count}m"
   },
+  "notifyBar": {
+    "tooltip-on": "System notifications on",
+    "tooltip-off": "System notifications off",
+    "sound-off": "Notification sound off",
+    "open-settings": "Notification settings",
+    "close": "Close",
+    "permission-line": "{label}: {status}"
+  },
   "time": {
     "ago-just-now": "Just now",
     "ago-minutes": "{count} minute ago | {count} minutes ago",
@@ -8836,6 +8952,7 @@
     "note": "An empty name falls back to the built-in translation. Colours resolve through theme tokens, so a choice stays readable in every theme."
   },
   "preview": {
+    "copy-failed": "Copy failed",
     "binary-file": "Binary file",
     "cannot-display-text": "This file type cannot be displayed as text.",
     "open-externally": "Open externally",
@@ -9090,6 +9207,41 @@
     "signin": "Sign in to {label}",
     "signin-hint": "This opens a pane that runs the sign-in for you. Most CLIs then open your browser; finish there and come back.",
     "dont-ask": "Stop asking about {label}"
+  },
+  "plugin-request": {
+    "kicker": "Navide plugin request",
+    "title": {
+      "install": "Install the Navide plugin {plugin} {version}?",
+      "update": "Update the Navide plugin {plugin} from {from} to {version}?",
+      "rollback": "Roll the Navide plugin {plugin} back from {from} to {version}?",
+      "remove": "Remove the Navide plugin {plugin}?",
+      "enable": "Enable the Navide plugin {plugin} again?"
+    },
+    "desc": "An agent asked for this change. Nothing changes until you approve it here; the agent cannot approve it for you.",
+    "queue": "{count} pending",
+    "requester": "Requested by",
+    "workspace": "Workspace",
+    "expires": "Expires at",
+    "caller-unknown": "Unknown caller",
+    "disabled-by": "Disabled by",
+    "disabled-by-user": "You",
+    "disabled-at": "Disabled at",
+    "not-recorded": "Not recorded",
+    "reason": "Reason, written by the agent",
+    "diff": "What changes from the installed version",
+    "card": "What this version declares (from the Navide Marketplace, not verified yet)",
+    "no-card": "The Navide Marketplace has no disclosure for this version. The package itself is verified when it is downloaded, before anything is installed.",
+    "expired": "This request expired.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "applying": "Applying…",
+    "dismiss": "Dismiss",
+    "completed": "Done: {plugin}",
+    "completed-late": "{plugin}: done. Another window had marked this request interrupted while this one reconnected; the record now shows what really happened.",
+    "finished-late": "Another window had marked this request interrupted while this one reconnected; the record now shows this result instead.",
+    "failed": "Not done: {error}",
+    "not-appliable": "This version of Navide cannot carry out this kind of request yet; you can reject it.",
+    "unavailable": "Navide plugin actions are not available in this window."
   },
   "skill-approval": {
     "kicker": "Skill install request",
@@ -9771,6 +9923,13 @@
     "memory": "Memory",
     "machine-share": "{percent} of this machine",
     "machine-share-unknown": "share unknown",
+    "result-helper": "Navide plugin result helper",
+    "result-helper-idle": "Not started",
+    "result-helper-ready": "Running",
+    "result-helper-unavailable": "Unavailable",
+    "result-helper-detail-idle": "Starts with the first large Navide plugin result",
+    "result-helper-detail-ready": "Handles large Navide plugin results outside the backend",
+    "result-helper-detail-unavailable": "{error}. Results over 1 MiB are refused until it can start",
     "busiest": "Busiest CLI",
     "open-window": "Open Resource Manager",
     "reclaim-action": "Reclaim {count} now",
@@ -10205,7 +10364,10 @@
       "disconnect-label": "Disconnect {pane} from {channel}",
       "go-to": "Go to {pane}",
       "auto-child": "Auto sub-topic",
-      "auto-child-hint": "Created automatically for a child pane. Disconnecting the parent pane closes it too."
+      "auto-child-hint": "Created automatically for a child pane. Disconnecting the parent pane closes it too.",
+      "unnamed-pane": "Unnamed pane",
+      "pane-closed": "Closed",
+      "chat-id": "chat {id}"
     }
   },
   "guard": {
@@ -10213,7 +10375,7 @@
     "unavailable": "Navide Guard is not available from this backend yet. Restart Navide after updating.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off."
+      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off. Terminal command protection, and the check on an agent answering a prompt through MCP, are not affected by this switch either."
     },
     "counts": {
       "critical": "Critical {n}",
@@ -10248,7 +10410,8 @@
       "local": "Local",
       "relay": "Chat app",
       "remote": "Remote",
-      "agent": "Other agent"
+      "agent": "Other agent",
+      "plugin": "Navide plugin tool"
     },
     "vendors": {
       "title": "Which CLIs Guard can block",
@@ -10406,6 +10569,7 @@
       "text-missing": "text no longer in the message log",
       "text-none": "no message text recorded",
       "explain": "Its High and Critical actions need your confirmation on this computer. Clear the mark only if you have checked what it was sent.",
+      "explain-off": "Navide Guard is off, so nothing is asked for confirmation now. The mark is kept and applies again when you turn Guard back on.",
       "clear": "Clear",
       "no-hook-warning": "Navide Guard cannot block this CLI, and it runs without permission prompts. Be careful giving it commands from a chat room."
     },
@@ -10823,7 +10987,8 @@
       "budget": "Today's run limit is reached",
       "workspace_gone": "The workspace folder no longer exists",
       "workspace_not_open": "No window had this workspace open at the time; it catches up the next time it opens",
-      "not_git": "Not a git repo; ran as propose-only"
+      "not_git": "Not a git repo; ran as propose-only",
+      "over_budget": "Passed 1.5× its token budget; interrupted and ended"
     },
     "notice": {
       "started": "Self-evolution started · {workspace}",
@@ -10848,7 +11013,7 @@
         "result": "See result"
       },
       "over_budget": "Self-evolution over budget · {workspace}",
-      "over-budget-body": "This run passed 1.5× its token budget; Navide sent one interrupt."
+      "over-budget-body": "This run passed 1.5× its token budget (context re-read from cache not counted). Navide interrupted it, ended the run and reclaims its pane."
     }
   },
   "recentWorkspaces": {
@@ -10861,7 +11026,11 @@
     "limit-title": "Recent workspaces limit",
     "limit-hint": "Recent keeps every workspace you open until you remove it. This is only a storage safety bound: when it is reached the oldest entries go first, and open or pinned workspaces are never removed.",
     "limit-off": "No limit",
-    "limit-on": "Keep up to"
+    "limit-on": "Keep up to",
+    "state-completed": "completed",
+    "state-running": "running",
+    "state-aborted": "aborted",
+    "folder-not-found": "Folder not found"
   },
   "account-follow": {
     "switch-title": "Switched to {account} — move these panes too?",
@@ -10895,5 +11064,319 @@
     "unpin-body": "Making a pane follow reopens it on the current login and picks up its conversation. Wait for these to finish, or skip them this time. Idle panes switch now.",
     "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",
     "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
+  },
+  "pluginActivity": {
+    "title": "Activity",
+    "resources": {
+      "heading": "Resources (live)",
+      "row": "{item}: {usage} of {threshold}",
+      "over": "over the threshold",
+      "waiting": "waiting for your choice",
+      "kept": "kept running; next notice above {level}",
+      "item": {
+        "memory": "Memory",
+        "cpu": "CPU",
+        "processes": "Processes",
+        "disk": "Data folder",
+        "stdoutPending": "Stdout waiting for a line break"
+      }
+    },
+    "source": {
+      "broker": "Navide capability",
+      "shell": "shell command",
+      "agentTool": "agent tool"
+    },
+    "kind": {
+      "system": "Permission",
+      "shell": "Shell",
+      "backendMethod": "Native backend method",
+      "agentTool": "Agent tool"
+    },
+    "reason": {
+      "undeclared": "not declared"
+    },
+    "tab": "Activity",
+    "openOverview": "View in Disclosure overview",
+    "loading": "Loading activity…",
+    "notSupported": "this Navide cannot read activity yet",
+    "unavailable": "Activity is not available right now: {error}",
+    "window": "Records of the last 7 days, kept on this device.",
+    "totals": "{calls} calls, {denied} refused, {errors} errors",
+    "unknownSize": "unknown",
+    "marker": {
+      "denied": "path or command not kept: the call was refused",
+      "failed": "path or command not kept: the call failed",
+      "missing": "path not kept: nothing usable was there",
+      "unknown": "not a Navide capability"
+    },
+    "empty": "Nothing recorded.",
+    "live": {
+      "heading": "Now (live)",
+      "inFlight": "Calls in progress: {current} (at most {peak} at once since Navide started)",
+      "historicalPeak": "Most calls at once in the records: {count} (last 7 days)",
+      "boundViews": "Views bound to a backend: {count} (not the number of running processes)",
+      "queue": "Waiting to be sent to the backend: {requestFrames} requests ({requestBytes}), {eventFrames} events ({eventBytes})",
+      "queueGrowing": "This Navide plugin's backend is not reading; Navide's memory keeps growing.",
+      "dropped": "Event notifications dropped: {count}"
+    },
+    "undeclared": {
+      "heading": "Used but not declared (refused by Navide)",
+      "item": "{address} ({source}) in {workspace}: {count} times, last {date}",
+      "reasons": "Reasons: {reasons}"
+    },
+    "unused": {
+      "heading": "Declared but not used in 30 days",
+      "never": "never used",
+      "last": "last used {date}"
+    },
+    "anomalies": {
+      "heading": "Unusual (marked only, nothing is blocked)"
+    },
+    "anomaly": {
+      "volumeSpike": "{date}: {count} calls, more than 10 times the 7-day average ({baseline})",
+      "writeToolNewWorkspace": "The writing tool {tool} was used in {workspace} for the first time ({date})",
+      "undeclaredDenied": "{count} undeclared uses refused in {workspace} (last {date})"
+    },
+    "tools": {
+      "heading": "Which agent called which tools",
+      "row": "{date} {caller} → {tool} ({risk}): {outcome}, {duration} ms, arguments {args}, result {result}",
+      "ok": "succeeded",
+      "failed": "failed ({code})",
+      "crossWorkspace": "Across workspaces: {from} → {to}",
+      "totalSize": "Arguments {args} and results {result} in total; {unknown} sizes are unknown and not counted"
+    },
+    "caller": {
+      "pane": "pane “{name}”",
+      "external": "an external client",
+      "host": "Navide"
+    },
+    "risk": {
+      "read": "read-only",
+      "write": "writing"
+    },
+    "outcome": {
+      "allowed": "allowed",
+      "denied": "refused",
+      "error": "error"
+    },
+    "files": {
+      "heading": "Files read and written",
+      "item": "{path} · {address} · {count} times · {outcome} · {date}"
+    },
+    "commands": {
+      "heading": "Commands run",
+      "item": "{command} · {count} times · {outcome} · {date}"
+    },
+    "trend": {
+      "heading": "Calls per day"
+    },
+    "agentActions": {
+      "heading": "Changes agents made to this Navide plugin",
+      "item": "{date} {caller}: {action} ({version})",
+      "notRecorded": "This version of Navide does not record this yet."
+    },
+    "overview": {
+      "title": "Disclosure overview",
+      "intro": "Every Navide plugin installed from the Navide Marketplace: what it declares, its risk level, recent activity and anything unusual, on one page. Records only; nothing here changes what a Navide plugin may do.",
+      "empty": "No Navide plugin from the Navide Marketplace is installed.",
+      "installedScan": "Scan verified at install",
+      "noScanRecord": "No scan was recorded at install.",
+      "activity": "Recent activity",
+      "undeclaredCount": "{count} undeclared uses refused",
+      "anomalyCount": "{count} unusual items"
+    }
+  },
+  "backendResource": {
+    "title": "A Navide plugin's backend is over a resource threshold",
+    "body": "{name} ({id} {version}): {item} is {usage}, over its threshold of {threshold}.",
+    "keepsRunning": "It keeps running until you choose.",
+    "again": "If you keep it running, Navide tells you again only when this goes past twice the current level. That only decides when you are told; nothing is limited.",
+    "stop": "Stop",
+    "continue": "Keep running",
+    "cores": "{count} cores",
+    "item": {
+      "memory": "memory",
+      "cpu": "CPU",
+      "processes": "the number of processes",
+      "disk": "its data folder",
+      "stdoutPending": "output waiting for a line break"
+    }
+  },
+  "pluginDisclosure": {
+    "diff": {
+      "heading": "What this update changes",
+      "versions": "Installed {from} → update to {to}; only the differences are listed.",
+      "risk": "Risk level: {from} → {to}",
+      "none": "No permission was added or removed.",
+      "added": "New",
+      "removed": "Removed",
+      "unchanged": "Unchanged ({count})",
+      "fullCard": "Full disclosure card",
+      "badgeMore": "More permissions",
+      "badgeSame": "Same permissions",
+      "badgeTitle": "From the Navide Registry's data, not yet verified; before updating, Navide compares again against the downloaded package.",
+      "item": {
+        "system": "Permission: {key}",
+        "shell": "Shell mode: {key}",
+        "shellExecutable": "Can run: {key}",
+        "fsScopeRoot": "File scope: {key}",
+        "fsScopeRead": "Can read: {key}",
+        "fsScopeWrite": "Can write: {key}",
+        "nativeBackend": "Ships native code",
+        "backendMethod": "Native code method: {key}",
+        "backendEvent": "Native code event: {key}",
+        "network": "Can reach remote hosts through commands",
+        "agentTool": "Agent tool: {key}"
+      }
+    },
+    "title": "Disclosure",
+    "riskLabel": "Risk level: {level}",
+    "variesByPlatform": "(varies by platform; the highest is shown)",
+    "rescanNotice": "A Navide Registry rescan of {name} {version} found {count} new items (not yet verified). See Settings → Navide Plugins → Disclosure overview.",
+    "resultHelperUnavailable": "Navide could not start the helper that delivers large Navide plugin results ({error}). Results over 1 MiB are refused until it can; Navide retries in about a minute. See Resource Manager.",
+    "risk": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "highest": "Highest"
+    },
+    "undeclaredHeading": "Found by the scan but not declared",
+    "undeclaredIntro": "The code does things this Navide plugin does not declare. Navide refuses these calls when it runs, but the declaration and the code disagree.",
+    "undeclared": {
+      "shell": "Runs {key}, but declares no shell permission",
+      "shellDynamic": "Builds commands at run time, but declares no shell permission",
+      "shellExecutable": "Runs {key}, but its declared shell scope is only git, gh and glab",
+      "system": "Uses {key}, but does not declare that permission",
+      "fsScopeWrite": "Writes {key}, outside its declared write scope",
+      "fsScopeRead": "Reads {key}, outside its declared read scope"
+    },
+    "notSeenHeading": "Declared, not found by the static scan",
+    "notSeen": {
+      "shell": "shell ({key})",
+      "system": "{key}"
+    },
+    "scanHeading": "What the publish-time scan found",
+    "declaredHeading": "What this Navide plugin declares",
+    "registryHeading": "Navide Registry records (unsigned)",
+    "provenance": {
+      "unverified": "Provided by the Navide Registry, not yet verified; before installing, Navide verifies the signature and compares it with the package.",
+      "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid.",
+      "verifiedNoScan": "Verified: the disclosure matches the downloaded package. This version has no system scan."
+    },
+    "noDisclosure": "This version was published without disclosure data.",
+    "signedByRegistry": "The scan was run and signed by the Navide Registry.",
+    "scannedByRegistry": "The scan was run by the Navide Registry.",
+    "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
+    "summary": {
+      "nativeBackend": "Ships native code (runs in a sandbox)",
+      "files": {
+        "read": "Reads files in your project",
+        "readWrite": "Reads and writes files in your project"
+      },
+      "shell": {
+        "allowlist": "Runs commands: {executables}",
+        "full": "Runs any command"
+      },
+      "networkViaShell": "Can reach remote hosts through those commands",
+      "aiCli": "Controls AI CLI sessions",
+      "ui": "Shows its own views",
+      "agentTools": "Offers tools agents can call ({read} read-only, {write} writing)",
+      "network": "Can use the network",
+      "noPermissions": "Declares no permissions"
+    },
+    "scan": {
+      "shell": {
+        "remoteWrite": "This Navide plugin runs {commands}, which can send project data to a remote.",
+        "other": "This Navide plugin runs {commands}, which can send data anywhere.",
+        "unknownSubcommand": "This Navide plugin runs {commands}; Navide's table does not know this subcommand, so treat it as possibly reaching a remote.",
+        "remoteRead": "This Navide plugin runs {commands}, which connects to a remote with your sign-in to read data.",
+        "localWrite": "This Navide plugin runs {commands}, which changes your local repository.",
+        "local": "This Navide plugin runs {commands}, which reads your local repository's state.",
+        "dynamic": "{count} command(s) are built at run time; a static scan cannot fully tell what they run."
+      },
+      "files": {
+        "write": "This Navide plugin writes {paths} ({dynamic} more path(s) are decided at run time).",
+        "read": "This Navide plugin reads {paths}."
+      },
+      "network": {
+        "hosts": "These addresses appear in the code: {hosts}. Neither the Navide plugin frame nor native code can reach the network directly; the addresses may be opened in a browser or passed to commands such as git or gh."
+      },
+      "code": {
+        "eval": {
+          "frontend": "The view code builds and runs code at run time ({count} place(s)); the Navide plugin frame's security policy blocks such calls.",
+          "backend": "The native code shows signs of building and running code at run time ({count} place(s))."
+        },
+        "obfuscated": "The code shows signs of obfuscation ({signals}); the scan may be incomplete."
+      },
+      "native": {
+        "summary": "Native code {path} ({format}, {arch}) links: {libraries}.",
+        "unscannable": "Native code {path} {reason}; the code inside could not be scanned this time."
+      },
+      "coverage": {
+        "base": "Scanned by the Navide Registry at publish (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list.",
+        "incomplete": "Scan incomplete: {reasons}."
+      },
+      "notFound": {
+        "shell": "The static scan found no commands.",
+        "network": "The static scan found no addresses.",
+        "files": "The static scan found no file paths.",
+        "dynamicCode": "The static scan found no code built at run time."
+      },
+      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration."
+    },
+    "incompleteReason": {
+      "timedOut": "the scan ran out of time",
+      "truncated": "content exceeded the scan limits",
+      "obfuscated": "the code is obfuscated",
+      "packed": "native code is packed",
+      "embeddedRuntime": "native code embeds a runtime",
+      "scannerError": "the scanner failed on part of the package",
+      "tooComplex": "part of the package is too complex to scan"
+    },
+    "unscannableReason": {
+      "packed": "is packed ({detail})",
+      "embeddedRuntime": "embeds a {detail} runtime"
+    },
+    "registry": {
+      "domainVerified": "The Navide Registry records that the publisher controls {domain} (checked {date})",
+      "domainNotVerified": "Publisher domain not verified",
+      "signedClaim": "The Navide Registry records that this version is signed (key {keyId})",
+      "unsigned": "The Navide Registry records no signature for this version",
+      "reviewApproved": "Reviewed and approved by a person ({date})",
+      "review": {
+        "not-required": "Published automatically, not reviewed by a person",
+        "pending": "Waiting for review",
+        "rejected": "Rejected in review",
+        "approved": "Reviewed and approved by a person"
+      },
+      "nativeInspected": "Native code inspected by the reviewer",
+      "nativeNotInspected": "Native code not inspected by a person",
+      "secret": {
+        "clean": "Secret scan: nothing found",
+        "not-run": "Secret scan: not run",
+        "findings": "Secret scan: findings"
+      },
+      "secretFindings": "Secret scan: {count} possible secret(s), confirmed by the reviewer",
+      "similar": "Name is similar to another Navide plugin"
+    }
+  },
+  "plugin-agent": {
+    "notice": {
+      "disabled": "{caller} disabled the Navide plugin {plugin}",
+      "enabled": "{caller} enabled the Navide plugin {plugin}",
+      "version": "Version {version}. Its files, grants and data are kept.",
+      "undo-failed": "Could not undo: {error}",
+      "undo-stale": "Nothing was undone: the Navide plugin was changed since."
+    },
+    "caller": {
+      "pane": "Agent pane “{pane}”",
+      "pane-unknown": "An agent pane",
+      "external": "An external MCP client",
+      "host": "Navide Host"
+    },
+    "button": {
+      "enable": "Enable again",
+      "disable": "Disable again"
+    }
   }
 }

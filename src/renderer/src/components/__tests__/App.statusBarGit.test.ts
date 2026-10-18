@@ -77,6 +77,17 @@ describe('the branch pill follows the workspace', () => {
     expect(appSource.slice(sp, appSource.indexOf('}', sp))).toContain('-webkit-app-region: drag')
   })
 
+  it('lets Windows/Linux drag the window by the identity block, keeping only its content as the hover zone', () => {
+    // VM acceptance (0.2.22): with drawn window controls the 70% no-drag block
+    // left only two thin spacers to move the window by.
+    expect(appSource).toContain(":root[data-window-controls='drawn'] .titlebar-id { -webkit-app-region: drag; }")
+    expect(appSource).toContain(":root[data-window-controls='drawn'] .titlebar-id > * { -webkit-app-region: no-drag; }")
+    // The hover zone's children are siblings with no gap between them, so
+    // the pointer can travel from the path to either button without leaving it.
+    const at = appSource.indexOf('.titlebar-id {')
+    expect(appSource.slice(at, appSource.indexOf('}', at))).not.toContain('gap')
+  })
+
   it('opens the real path, not the shortened one', () => {
     // The bar shows ~/… — handing that to the OS would open a folder named
     // "~" if anything at all.

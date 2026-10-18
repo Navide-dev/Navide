@@ -165,7 +165,10 @@ async def test_a_full_record_recovers_by_unpairing_and_not_by_starting_over(kc):
         return link
 
     link = await sign_in("tok-new")
-    assert link._trust_locked and link._trust_locked_code == "full"
+    # The lock is set after the hello, once adoption returns from its thread:
+    # wait for it rather than for a fixed time a loaded runner can outlast.
+    await _until(lambda: bool(link._trust_locked), timeout=5)
+    assert link._trust_locked_code == "full"
     await link.stop()
     with pytest.raises(trust_store.TrustStoreNotLocked):
         trust_store.rebuild_locked_store()

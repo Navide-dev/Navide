@@ -7,8 +7,9 @@
 // material remains `unsigned` only on the legacy v1 compatibility path.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { generateKeyPairSync, sign as edSign } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
+import { backendCallAddress } from './pluginActivity'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { sha256Hex } from './pluginVerify'
@@ -28,9 +29,15 @@ import { defaultInstallerDeps, type InstallerTrustConfig } from './pluginInstall
 import { backendEntryOnDisk, type PluginActivationCatalogEntry } from './installedPlugins'
 import { projectBackendPluginActivationCatalog } from './pluginBackendActivationCatalog'
 import { makeZip } from './zipFixture'
+import { canonicalContractJson, computeDisclosure } from '../../shared/pluginDisclosure'
 import { readZipEntries } from './pluginPackage'
+import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
+import { PluginDisabledStore } from './pluginDisabledStore'
+import { PluginDisableSourceStore } from './pluginDisableSource'
+import { PluginPublisherTrustStore } from './pluginPublisherTrust'
+import { PluginPrereleaseStore } from './pluginPrereleaseStore'
 import { immutablePluginPackageDir, PluginActivationSelector } from './pluginActivationSelector'
 
 const { handlers, browserWindowFromWebContents } = vi.hoisted(() => ({
@@ -71,6 +78,7 @@ import { app as electronApp } from 'electron'
 import {
   MARKETPLACE_ICON_MAX_BYTES,
   OFFICIAL_MARKETPLACE_URL,
+  declaredForActivity,
   isTrustedPluginManagementSender,
   registerPluginIpc,
   resolveConfiguredMarketplace,
@@ -151,7 +159,10 @@ function buildReservedPkg(): { bytes: Uint8Array; digest: string } {
 // installer's wire check and the on-disk check pass on whichever host runs it.
 const BACKEND_ENTRY_ON_DISK = backendEntryOnDisk('backend/entry')
 
-function buildBackendPkg(version = '1.0.0'): { bytes: Uint8Array; digest: string } {
+function buildBackendPkg(
+  version = '1.0.0',
+  backendFields: Record<string, unknown> = {}
+): { bytes: Uint8Array; digest: string } {
   const manifest = JSON.stringify({
     schemaVersion: 2,
     apiVersion: '^1.0.0',
@@ -161,7 +172,7 @@ function buildBackendPkg(version = '1.0.0'): { bytes: Uint8Array; digest: string
     publisher: 'acme',
     permissions: {},
     marketplace: { description: 'Demo backend', license: 'MIT' },
-    backend: { entry: 'backend/entry', protocolVersion: 1, activation: 'startup' },
+    backend: { entry: 'backend/entry', protocolVersion: 1, activation: 'startup', ...backendFields },
   })
   const entry = { data: Buffer.from([0x7f, 0x45, 0x4c, 0x46]), unixMode: 0o100755 }
   const zip = makeZip([
@@ -505,6 +516,7 @@ describe('plugin management sender authorization', () => {
       ['plugins:prepareInstall', { namespace: 'acme', name: 'demo' }],
       ['plugins:commitInstall', { id: 'acme.demo', confirmed: true }],
       ['plugins:remove', { id: 'acme.demo' }],
+      ['plugins:setDisabled', { id: 'acme.demo', disabled: true }],
     ]
     try {
       for (const [channel, args] of calls) {
@@ -576,6 +588,32 @@ describe('plugins:remove boundary validation', () => {
     }
   })
 
+  it('forgets the removed plugin\'s activity first-seen rows, and only after a removal succeeds (D-e L4)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-remove-forget-'))
+    mkdirSync(join(root, 'acme.demo'), { recursive: true })
+    mkdirSync(join(root, 'acme.kept'), { recursive: true })
+    const manager = new FrontendPluginManager()
+    vi.spyOn(manager, 'preparePluginRemoval').mockImplementation(() => {})
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementation(() => {})
+    const forget = vi.spyOn(manager, 'forgetPluginActivity').mockImplementation(() => {})
+    let failCleanup = false
+    const cleanupPluginStorage = vi.fn(async () => {
+      if (failCleanup) throw new Error('storage busy')
+    })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, { cleanupPluginStorage })
+      const removeHandler = handlers.get('plugins:remove')!
+      failCleanup = true
+      await expect(removeHandler(null, { id: 'acme.kept' })).rejects.toThrow(/storage busy/)
+      expect(forget).not.toHaveBeenCalled()
+      failCleanup = false
+      await expect(removeHandler(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(forget).toHaveBeenCalledExactlyOnceWith('acme.demo')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('removes a valid direct-child id and clears its activation state', async () => {
     const root = mkdtempSync(join(tmpdir(), 'navide-remove-valid-'))
     const installedDir = join(root, 'acme.demo')
@@ -620,17 +658,18 @@ describe('plugins:remove boundary validation', () => {
       .mockImplementation(() => undefined)
     const onFactoryPackageRemoved = vi.fn()
     try {
+      // The generic factory path; the built-ins themselves are never removed.
       registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
         cleanupPluginStorage: vi.fn(async () => undefined),
-        factoryPackageIds: ['navide.git'],
+        factoryPackageIds: ['acme.factory'],
         onFactoryPackageRemoved,
       })
       const removeHandler = handlers.get('plugins:remove')
       if (!removeHandler) throw new Error('remove handler not registered')
 
-      await expect(removeHandler(null, { id: 'navide.git' })).resolves.toEqual({ ok: true })
-      expect(onFactoryPackageRemoved).toHaveBeenCalledWith('navide.git')
-      expect(removeInstalledPlugin).toHaveBeenCalledWith('navide.git', {
+      await expect(removeHandler(null, { id: 'acme.factory' })).resolves.toEqual({ ok: true })
+      expect(onFactoryPackageRemoved).toHaveBeenCalledWith('acme.factory')
+      expect(removeInstalledPlugin).toHaveBeenCalledWith('acme.factory', {
         restoreBuiltin: false,
       })
     } finally {
@@ -646,7 +685,7 @@ describe('plugins:remove boundary validation', () => {
       registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
         restoreFactoryPackage,
         listFactoryPackages: () => [
-          { id: 'navide.git', version: '0.1.0', active: false, optedOut: true },
+          { id: 'acme.factory', version: '0.1.0', active: false, optedOut: true },
         ],
       })
       const listHandler = handlers.get('plugins:listFactoryPackages')
@@ -654,10 +693,52 @@ describe('plugins:remove boundary validation', () => {
       if (!listHandler || !restoreHandler) throw new Error('factory handlers not registered')
 
       expect(listHandler(null)).toEqual([
-        { id: 'navide.git', version: '0.1.0', active: false, optedOut: true },
+        { id: 'acme.factory', version: '0.1.0', active: false, optedOut: true },
       ])
-      await expect(restoreHandler(null, { id: 'navide.git' })).resolves.toEqual({ ok: true })
-      expect(restoreFactoryPackage).toHaveBeenCalledWith('navide.git')
+      await expect(restoreHandler(null, { id: 'acme.factory' })).resolves.toEqual({ ok: true })
+      expect(restoreFactoryPackage).toHaveBeenCalledWith('acme.factory')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('discloses current and peak in-flight backend calls to an authorized renderer only', () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-backend-concurrency-'))
+    const manager = new FrontendPluginManager()
+    const concurrency = [{ pluginId: 'navide.plans', current: 3, peak: 512, droppedNotifications: 7 }]
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        backendCallConcurrency: () => concurrency,
+      })
+      const handler = handlers.get('plugins:backendCallConcurrency')
+      if (!handler) throw new Error('concurrency handler not registered')
+      expect(handler(null)).toEqual(concurrency)
+
+      registerPluginIpc(manager, root, () => false, TRUST_CONFIG, undefined, {
+        backendCallConcurrency: () => concurrency,
+      })
+      expect(() => handlers.get('plugins:backendCallConcurrency')?.(null)).toThrow()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('discloses backend resource usage to an authorized renderer only', () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-backend-usage-'))
+    const manager = new FrontendPluginManager()
+    const usage = {
+      children: { current: 2, peak: 40, retained: 0 },
+      views: [],
+      plugins: [{ pluginId: 'navide.plans', current: 0, peak: 9, droppedNotifications: 0 }],
+    }
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, { backendResourceUsage: () => usage })
+      const handler = handlers.get('plugins:backendResourceUsage')
+      if (!handler) throw new Error('usage handler not registered')
+      expect(handler(null)).toEqual(usage)
+
+      registerPluginIpc(manager, root, () => false, TRUST_CONFIG, undefined, { backendResourceUsage: () => usage })
+      expect(() => handlers.get('plugins:backendResourceUsage')?.(null)).toThrow()
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
@@ -751,6 +832,51 @@ describe('plugins:remove boundary validation', () => {
       expect(existsSync(installedDir)).toBe(true)
     } finally {
       rmrf.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('makes a reinstall after removal ask for capability consent again', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', { shell: 'full' })
+    const root = mkdtempSync(join(tmpdir(), 'navide-remove-reinstall-consent-'))
+    const manager = new FrontendPluginManager()
+    const cleanupPluginStorage = vi.fn(async () => undefined)
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        cleanupPluginStorage,
+        ...TEST_PREFLIGHT_OPTIONS,
+      })
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+      const remove = handlers.get('plugins:remove')!
+      const grants = new PluginCapabilityGrantStore(root)
+
+      installFetch(signedDetail(digest), bytes, digest)
+      await prepare(null, { namespace: 'acme', name: 'demo' })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+      expect(grants.get('acme.demo', '1.0.0')).toMatchObject({ shell: 'full', highRiskShellConfirmed: true })
+
+      await expect(remove(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(cleanupPluginStorage).toHaveBeenCalledWith('acme.demo')
+      expect(grants.get('acme.demo', '1.0.0')).toBeNull()
+      expect(new PluginActivationSelector(root).read('acme.demo')).toBeNull()
+      expect(existsSync(join(root, 'acme.demo'))).toBe(false)
+
+      // The same version again: nothing from the first install may stand in
+      // for the user's answer.
+      installFetch(signedDetail(digest), bytes, digest)
+      await prepare(null, { namespace: 'acme', name: 'demo' })
+      await expect(commit(null, { id: 'acme.demo', publisherConfirmed: true })).rejects.toThrow(
+        /capability and backend risk confirmation/
+      )
+      expect(grants.get('acme.demo', '1.0.0')).toBeNull()
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      expect(grants.get('acme.demo', '1.0.0')).toBeNull()
+      await restart(null, { id: 'acme.demo' })
+      expect(grants.get('acme.demo', '1.0.0')).toMatchObject({ shell: 'full', highRiskShellConfirmed: true })
+    } finally {
       rmSync(root, { recursive: true, force: true })
     }
   })
@@ -850,6 +976,133 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  /** Sign the contract 3.5 disclosure envelope onto every version row. */
+  function withDisclosure(detail: WireDetail, manifest: Record<string, unknown>, scanBody?: Record<string, unknown>): WireDetail {
+    const disclosure = computeDisclosure(manifest as never)
+    const rows = detail.versions.map((row) => {
+      const scan = scanBody
+        ? { ...scanBody, artifactDigest: row.registry_envelope.artifactDigest, target: row.registry_envelope.target }
+        : null
+      const envelope = {
+        schemaVersion: 1,
+        artifactDigest: row.registry_envelope.artifactDigest,
+        packageId: row.registry_envelope.packageId,
+        version: row.registry_envelope.version,
+        target: row.registry_envelope.target,
+        keyId: row.registry_envelope.keyId,
+        signedAt: row.registry_envelope.signedAt,
+        disclosureDigest: createHash('sha256').update(canonicalContractJson(disclosure), 'utf8').digest('hex'),
+        scanDigest: scan ? createHash('sha256').update(canonicalContractJson(scan), 'utf8').digest('hex') : null,
+      }
+      return {
+        ...row,
+        disclosure,
+        disclosure_envelope: envelope,
+        disclosure_signature: signCanonical(envelope, registrySigner.privateKey),
+        scan,
+        registry: { review: { status: 'not-required', reviewedAt: null, nativeCodeInspected: null } },
+      }
+    })
+    return { ...detail, versions: rows }
+  }
+
+  async function prepareFromApprovedRegistry(detail: WireDetail, bytes: Uint8Array, digest: string): Promise<unknown> {
+    installFetch(detail, bytes, digest)
+    const root = mkdtempSync(join(tmpdir(), 'navide-disclosure-registry-'))
+    const approvalFile = join(root, 'root-approval.json')
+    writeFileSync(approvalFile, JSON.stringify({
+      schemaVersion: 1,
+      registryUrl: 'https://registry.acme.test',
+      rootPublicKeyPem: registryRoot.pubPem,
+      confirmedFingerprint: registryRootFingerprint(registryRoot.pubPem),
+    }))
+    process.env['AGENT_TEAM_MARKETPLACE_URL'] = 'https://registry.acme.test'
+    process.env['AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE'] = approvalFile
+    try {
+      registerPluginIpc(new FrontendPluginManager(), '/plugins', () => true, TRUST_CONFIG)
+      const handler = handlers.get('plugins:prepareInstall')
+      if (!handler) throw new Error('prepareInstall handler not registered')
+      return await handler(null, { namespace: 'acme', name: 'demo' })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }
+
+  const DISCLOSED_PERMISSIONS = { system: ['fs'], scopes: { fs: { root: 'workspace', read: ['README.md'] } } }
+  const disclosedManifest = {
+    schemaVersion: 2, id: 'acme.demo', version: '1.0.0', publisher: 'acme', permissions: DISCLOSED_PERMISSIONS,
+  }
+
+  it('carries the signed disclosure, scan and registry facts through prepareInstall', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    await expect(prepareFromApprovedRegistry(withDisclosure(signedDetail(digest), disclosedManifest), bytes, digest))
+      .resolves.toMatchObject({
+        disclosure: computeDisclosure(disclosedManifest as never),
+        scan: null,
+        registry: { review: { status: 'not-required' } },
+      })
+  })
+
+  it('D-f: records the install-time scan, notes a rescan that found new items once, and forgets it on remove', async () => {
+    const scanCases = (JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/scan-cases.json'), 'utf8')) as {
+      cases: Array<{ name: string; scan: Record<string, unknown> }>
+    }).cases
+    const scanNamed = (name: string) => scanCases.find((entry) => entry.name === name)!.scan
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-rescan-'))
+    const manager = new FrontendPluginManager()
+    try {
+      const controller = registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS,
+        cleanupPluginStorage: async () => undefined,
+      })
+      installFetch(withDisclosure(signedDetail(digest), disclosedManifest, scanNamed('nothing-found')), bytes, digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      const file = join(root, '.navide-install-scans.json')
+      expect(JSON.parse(readFileSync(file, 'utf8')).plugins['acme.demo']['1.0.0'].scan.scanner.id).toBe('navide-static-scan')
+
+      // The same answer the update check already fetches; nothing new yet.
+      await controller.checkUpdates()
+      expect(controller.takeRescanNotices()).toEqual([])
+
+      installFetch(withDisclosure(signedDetail(digest), disclosedManifest, scanNamed('ui-only-runs-git-push-undeclared')), bytes, digest)
+      const fetchCount = () => vi.mocked(global.fetch).mock.calls.length
+      await controller.checkUpdates()
+      const requests = fetchCount()
+      const [notice] = controller.takeRescanNotices()
+      expect(notice).toMatchObject({ id: 'acme.demo', version: '1.0.0' })
+      expect(notice.added.length).toBeGreaterThan(0)
+      // No request of its own: one detail fetch per check, as before.
+      expect(requests).toBe(1)
+      await controller.checkUpdates()
+      expect(controller.takeRescanNotices()).toEqual([])
+      // A notice no window received is put back for the next publish.
+      controller.restoreRescanNotices([notice])
+      expect(controller.takeRescanNotices()).toEqual([notice])
+
+      await handlers.get('plugins:remove')!(null, { id: 'acme.demo' })
+      expect(JSON.parse(readFileSync(file, 'utf8')).plugins['acme.demo']).toBeUndefined()
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses the install when the signed disclosure does not match the package (DISCLOSURE_MISMATCH)', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    const narrower = { ...disclosedManifest, permissions: {} }
+    await expect(prepareFromApprovedRegistry(withDisclosure(signedDetail(digest), narrower), bytes, digest))
+      .rejects.toMatchObject({ code: 'DISCLOSURE_MISMATCH' })
+  })
+
+  it('installs a version without disclosure fields as before', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    await expect(prepareFromApprovedRegistry(signedDetail(digest), bytes, digest))
+      .resolves.toMatchObject({ trustTier: 'signed-verified', disclosure: null, scan: null, registry: null })
   })
 
   it('uses an approved self-hosted root for the default local Registry profile', () => {
@@ -1244,6 +1497,44 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  it('hands the declared agent tools to the trust dialog, and nothing when none are declared', async () => {
+    const write = {
+      name: 'demo_set', method: 'demo.set', risk: 'write', title: 'Set', description: 'Set the demo value.',
+      timeoutMs: 5000, inputSchema: { type: 'object' },
+    }
+    const read = { name: 'demo_get', method: 'demo.get', risk: 'read', title: 'Get', description: 'Get it.', inputSchema: { type: 'object' } }
+    const withTools = buildBackendPkg('1.0.0', { methods: ['demo.get', 'demo.set'], agentTools: [write, read] })
+    installFetch(signedDetail(withTools.digest), withTools.bytes, withTools.digest)
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-agent-tools-'))
+    try {
+      const prepared = (await register(root, new FrontendPluginManager())(null, { namespace: 'acme', name: 'demo' })) as {
+        agentTools?: Array<{ name: string; timeoutMs: number }>
+        requiresRiskConfirmation: boolean
+      }
+      expect(prepared.agentTools).toEqual([
+        { ...read, timeoutMs: 30000 },
+        write,
+      ])
+      expect(prepared.requiresRiskConfirmation).toBe(true)
+
+      const plain = buildBackendPkg('1.0.0', { methods: ['demo.get'] })
+      installFetch(signedDetail(plain.digest), plain.bytes, plain.digest)
+      const without = (await register(root, new FrontendPluginManager())(null, { namespace: 'acme', name: 'demo' })) as object
+      expect(without).not.toHaveProperty('agentTools')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses at prepareInstall a package whose agent tools break a contract rule', async () => {
+    const bad = buildBackendPkg('1.0.0', {
+      methods: ['demo.get'],
+      agentTools: [{ name: 'other_get', method: 'demo.get', risk: 'read', title: 'Get', description: 'Get it.', inputSchema: { type: 'object' } }],
+    })
+    installFetch(signedDetail(bad.digest), bad.bytes, bad.digest)
+    await expect(register()(null, { namespace: 'acme', name: 'demo' })).rejects.toThrow(/AGENT_TOOL_PREFIX_MISMATCH/)
+  })
+
   it('records full-shell approval only after explicit risk confirmation', async () => {
     const { bytes, digest } = buildPkg('acme.demo', 'acme', { shell: 'full' })
     installFetch(signedDetail(digest), bytes, digest)
@@ -1334,6 +1625,284 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  // User ruling 2026-10-17 (D-d option B): an update asks exactly as on main;
+  // the diff is shown, never used to skip the confirmation.
+  it('D-d: an update that adds nothing still asks for the risk confirmation, as on main, and reports the diff', async () => {
+    const first = buildPkg('acme.demo', 'acme', { shell: 'full' }, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', { shell: 'full' }, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-update-diff-same-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      const fresh = await prepare(null, { namespace: 'acme', name: 'demo' })
+      // A first install has nothing to compare against and asks as before.
+      expect(fresh).toMatchObject({ requiresRiskConfirmation: true, disclosureDiff: null })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+
+      installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
+      const update = await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
+      expect(update).toMatchObject({
+        requiresPublisherTrust: false,
+        requiresRiskConfirmation: true,
+        disclosureDiff: {
+          from: { id: 'acme.demo', version: '1.0.0' },
+          to: { id: 'acme.demo', version: '1.0.1' },
+          added: [],
+          removed: [],
+          widened: false,
+        },
+      })
+      await expect(commit(null, { id: 'acme.demo' })).rejects.toThrow(/risk confirmation/)
+      await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
+      await expect(commit(null, { id: 'acme.demo', riskConfirmed: true })).resolves.toMatchObject({ restartRequired: true })
+      await restart(null, { id: 'acme.demo' })
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.1')).toMatchObject({
+        packageVersion: '1.0.1',
+        shell: 'full',
+        highRiskShellConfirmed: true,
+      })
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('B2: plugins:installedDisclosure answers the active version\'s disclosure, null when there is none', async () => {
+    const first = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-installed-disclosure-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const installedDisclosure = handlers.get('plugins:installedDisclosure')!
+      expect(await installedDisclosure(null, { id: 'acme.demo' })).toBeNull()  // not installed
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      expect(await installedDisclosure(null, { id: 'acme.demo' })).toEqual(computeDisclosure({
+        schemaVersion: 2, id: 'acme.demo', version: '1.0.0', publisher: 'acme', permissions: { shell: 'allowlist' },
+      } as never))
+      await expect(installedDisclosure(null, { id: '../acme.demo' })).rejects.toThrow(/invalid plugin id/)
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('D-d: an update that adds a permission still asks, and reports only what changed', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-update-diff-wider-'))
+    const manager = new FrontendPluginManager()
+    try {
+      const controller = registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      await prepare(null, { namespace: 'acme', name: 'demo' })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+
+      // The update badge reads the Registry's listing; no disclosure, no badge.
+      const listed = signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1')
+      installFetch(listed, second.bytes, second.digest)
+      expect(await controller.checkUpdates()).toEqual([
+        { id: 'acme.demo', namespace: 'acme', name: 'demo', installedVersion: '1.0.0', latestVersion: '1.0.1' },
+      ])
+      const disclosed = (permissions: Record<string, unknown>) => computeDisclosure({
+        schemaVersion: 2, id: 'acme.demo', version: '1.0.1', publisher: 'acme', permissions,
+      } as never)
+      ;(listed.versions[0] as Record<string, unknown>).disclosure = disclosed({ shell: 'allowlist' })
+      expect(await controller.checkUpdates()).toMatchObject([{ latestVersion: '1.0.1', permissionChange: 'more' }])
+      ;(listed.versions[0] as Record<string, unknown>).disclosure = disclosed({})
+      expect(await controller.checkUpdates()).toMatchObject([{ latestVersion: '1.0.1', permissionChange: 'same' }])
+
+      installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
+      const update = await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' }) as {
+        requiresRiskConfirmation: boolean
+        disclosureDiff: { added: unknown[] }
+      }
+      expect(update.requiresRiskConfirmation).toBe(true)
+      expect(update.disclosureDiff).toMatchObject({ removed: [], widened: true })
+      expect(update.disclosureDiff.added).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'shell', key: 'allowlist' }),
+      ]))
+      await expect(commit(null, { id: 'acme.demo' })).rejects.toThrow(/risk confirmation/)
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('D-f: asks the backend for the activity report with the declared items, and checks the answer', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-activity-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+
+      const fixture = JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/activity-report.json'), 'utf8')).valid
+      const ask = vi.spyOn(manager, 'requestPluginActivityReport').mockResolvedValue(fixture)
+      const report = handlers.get('plugins:activityReport')!
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true, report: fixture })
+      expect(ask).toHaveBeenCalledWith({
+        plugin_id: 'acme.demo',
+        declared: expect.arrayContaining([{ kind: 'shell', key: 'allowlist' }]),
+        installedAt: expect.any(Number),
+      })
+
+      ask.mockResolvedValue({ ...fixture, schemaVersion: 2 })
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: false, error: 'the activity report was malformed' })
+      ask.mockRejectedValue(new Error('Navide Host session is not ready'))
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: false, error: 'Navide Host session is not ready' })
+      await expect(report(null, { id: 'acme.other' })).resolves.toMatchObject({ ok: false })
+      expect(ask).toHaveBeenCalledTimes(3)
+
+      expect(handlers.get('plugins:installedDisclosures')!(null)).toEqual([
+        expect.objectContaining({ id: 'acme.demo', version: '1.0.0', disclosure: expect.objectContaining({ network: 'via-shell' }), scan: null }),
+      ])
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // A frontend's calls to its own backend (plugin:backend:call) are recorded
+  // in plugin_activity as source "backend", address "backend.<method>" (#374),
+  // so each declared method is offered under that address. (Before, #371 left
+  // them out: unrecorded, they could only ever read "declared but not used".)
+  it('D-f: declares backend methods as backend.<method>, the address their calls are recorded under', () => {
+    const disclosure = computeDisclosure({
+      schemaVersion: 2, id: 'acme.indexer', version: '1.0.0', publisher: 'acme',
+      permissions: { system: ['fs'], shell: 'allowlist' },
+      backend: { entry: 'backend/bin', methods: ['index', 'search'], events: [] },
+    } as never)
+    expect(disclosure.nativeBackend?.methods).toEqual(['index', 'search'])
+    const declared = declaredForActivity(disclosure)
+    expect(declared.filter((item) => item.kind === 'backendMethod')).toEqual([
+      { kind: 'backendMethod', key: 'backend.index' },
+      { kind: 'backendMethod', key: 'backend.search' },
+    ])
+    expect(declared).toEqual(expect.arrayContaining([{ kind: 'system', key: 'fs' }, { kind: 'shell', key: 'allowlist' }]))
+  })
+
+  it('D-f: a recorded backend call has exactly the address its declared method is keyed by', () => {
+    const disclosure = computeDisclosure({
+      schemaVersion: 2, id: 'acme.indexer', version: '1.0.0', publisher: 'acme',
+      permissions: { system: ['fs'] },
+      backend: { entry: 'backend/bin', methods: ['fs.read', 'index'], events: [] },
+    } as never)
+    const declared = declaredForActivity(disclosure).filter((item) => item.kind === 'backendMethod').map((item) => item.key)
+    // The Host records a call under backendCallAddress(method); the backend
+    // matches backendMethod by address == key (contract 5.1).
+    expect(declared).toEqual(['fs.read', 'index'].map(backendCallAddress))
+    expect(declared).toEqual(['backend.fs.read', 'backend.index'])
+  })
+
+  // #373 follow-up (N2): installedAt is when the id was installed since its
+  // last removal; updates and rollbacks keep it, and without one the request
+  // carries none and still succeeds.
+  it('sends installedAt from the fresh install, kept by update and rollback, renewed by a reinstall', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', {}, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-installed-at-'))
+    const manager = new FrontendPluginManager()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS,
+        cleanupPluginStorage: async () => undefined,
+      })
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+      const report = handlers.get('plugins:activityReport')!
+      const ask = vi.spyOn(manager, 'requestPluginActivityReport').mockResolvedValue(
+        JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/activity-report.json'), 'utf8')).valid,
+      )
+      const sentInstalledAt = async () => {
+        await expect(report(null, { id: 'acme.demo' })).resolves.toMatchObject({ ok: true })
+        return (ask.mock.calls.at(-1)![0] as { installedAt?: number }).installedAt
+      }
+      const install = async (pkg: { bytes: Uint8Array; digest: string }, version: string, at: number) => {
+        vi.setSystemTime(at)
+        installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', version), pkg.bytes, pkg.digest)
+        await prepare(null, { namespace: 'acme', name: 'demo', version })
+        await commit(null, { id: 'acme.demo', publisherConfirmed: true })
+        await restart(null, { id: 'acme.demo' })
+      }
+
+      await install(first, '1.0.0', 1_000_000)
+      expect(await sentInstalledAt()).toBe(1_000_000)
+      await install(second, '1.0.1', 2_000_000)
+      expect(await sentInstalledAt()).toBe(1_000_000)
+      vi.setSystemTime(3_000_000)
+      await handlers.get('plugins:rollback')!(null, { id: 'acme.demo' })
+      expect(await sentInstalledAt()).toBe(1_000_000)
+
+      await handlers.get('plugins:remove')!(null, { id: 'acme.demo' })
+      await install(first, '1.0.0', 4_000_000)
+      expect(await sentInstalledAt()).toBe(4_000_000)
+
+      // Installed before this was recorded: no field, and the request succeeds.
+      const file = join(root, '.navide-install-scans.json')
+      const state = JSON.parse(readFileSync(file, 'utf8'))
+      delete state.installedAt['acme.demo']
+      writeFileSync(file, JSON.stringify(state))
+      expect(await sentInstalledAt()).toBeUndefined()
+      expect(ask.mock.calls.at(-1)![0]).not.toHaveProperty('installedAt')
+      // A later update does not invent one either.
+      await install(second, '1.0.1', 5_000_000)
+      expect(await sentInstalledAt()).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // Review LOW1 on #380: a fresh install's time is recorded when the
+  // candidate becomes active, not when it is staged.
+  it('records installedAt only once a fresh install is activated', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-installed-at-activate-'))
+    const manager = new FrontendPluginManager()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      vi.setSystemTime(1_000_000)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
+      vi.setSystemTime(2_000_000)
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBe(2_000_000)
+    } finally {
+      vi.useRealTimers()
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('D-f: the activity IPC refuses an unauthorized sender', async () => {
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => false, TRUST_CONFIG)
+    await expect(Promise.resolve().then(() => handlers.get('plugins:activityReport')!(null, { id: 'acme.demo' }))).rejects.toThrow()
+    expect(() => handlers.get('plugins:installedDisclosures')!(null)).toThrow()
   })
 
   it('stages an immutable replacement without touching the active runtime until restart', async () => {
@@ -1452,6 +2021,8 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
       await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
       await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true })
+      // Review MED-1 on #380: an update over a legacy layout is not a fresh install.
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(manager.getDescriptor('acme.demo')?.packageVersion).toBe('1.0.0')
       expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
         candidate: { packageVersion: '1.0.1' },
@@ -1465,6 +2036,7 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await expect(handlers.get('plugins:restart')!(null, { id: 'acme.demo' })).resolves.toMatchObject({
         packageVersion: '1.0.1',
       })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
         active: { packageVersion: '1.0.1' },
         previous: { packageVersion: '1.0.0', artifactDigest: first.digest },
@@ -1565,10 +2137,13 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
       await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
       await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      // Review MED-1 on #380: an update over a backend-only legacy install is not fresh.
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
 
       await expect(handlers.get('plugins:restart')!(null, { id: 'acme.demo' })).resolves.toMatchObject({
         packageVersion: '1.0.1',
       })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(manager.hasBackendActivation('acme.demo', '1.0.0')).toBe(false)
       expect(manager.hasBackendActivation('acme.demo', '1.0.1')).toBe(true)
       expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
@@ -1618,6 +2193,8 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       const discard = handlers.get('plugins:discardCandidate')
       expect(discard).toBeTypeOf('function')
       await expect(discard!(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      // Review LOW1 on #380: a staged, then discarded, candidate records nothing.
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(new PluginActivationSelector(root).read('acme.demo')).toBeNull()
       expect(manager.getDescriptor('acme.demo')).toMatchObject({ packageVersion: '1.0.0', packageDir: legacyDir })
       await expect(handlers.get('plugins:restart')!(null, { id: 'acme.demo' })).rejects.toThrow(/no staged candidate/)
@@ -3774,6 +4351,11 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
               registry_envelope: { a: 1 },
               registry_signature: 'x',
               package_digest: 'd',
+              disclosure: { schemaVersion: 1, plugin: { id: 'acme.demo' } },
+              disclosure_envelope: { a: 2 },
+              disclosure_signature: 'y',
+              scan: { schemaVersion: 1 },
+              registry: { publisher: { verifiedDomain: 'acme.example' } },
             },
           ],
         },
@@ -3791,6 +4373,12 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
     expect(detail).not.toHaveProperty('trust_metadata_signature')
     expect(detail.versions[0]).not.toHaveProperty('registry_envelope')
     expect(detail.versions[0]).not.toHaveProperty('registry_signature')
+    // Contract 3.5: display data is carried; the signed envelopes stay main-side.
+    expect(detail.versions[0]).not.toHaveProperty('disclosure_envelope')
+    expect(detail.versions[0]).not.toHaveProperty('disclosure_signature')
+    expect(detail.versions[0].disclosure).toEqual({ schemaVersion: 1, plugin: { id: 'acme.demo' } })
+    expect(detail.versions[0].scan).toEqual({ schemaVersion: 1 })
+    expect(detail.versions[0].registry).toEqual({ publisher: { verifiedDomain: 'acme.example' } })
     expect(detail.versions[0].capabilities).toEqual(['fs'])
     expect(detail.versions[0].installable).toBe(true)
     expect(detail.latest_installable_version).toBe('1.1.0')
@@ -3838,8 +4426,11 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
       ],
     } as unknown as FrontendPluginManager
     registerPluginIpc(manager, '/plugins', () => true, TRUST_CONFIG)
-    const updates = await handlers.get('plugins:checkUpdates')!(null)
-    expect(updates).toEqual([
+    // acme.offline did not answer: the check rejects naming it (a deliberate
+    // change, so an unreachable Registry no longer reads as "no updates"),
+    // and the updates found for the others are still kept.
+    await expect(handlers.get('plugins:checkUpdates')!(null)).rejects.toThrow(/acme\.offline \(network down\)/)
+    expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual([
       { id: 'acme.old', namespace: 'acme', name: 'old', installedVersion: '1.0.0', latestVersion: '1.2.0' },
       { id: 'acme.split', namespace: 'acme', name: 'split', installedVersion: '1.0.0', latestVersion: '2.0.0' },
     ])
@@ -3864,6 +4455,57 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
     respond({})
     expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual(updates)
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('keeps the last known updates when the Registry is unreachable', async () => {
+    respond({
+      [`${BASE}/acme/old`]: { body: { versions: [{ version: '1.2.0', target: 'universal', yanked: false }] } },
+    })
+    const manager = {
+      listInstalledPackages: () => [
+        { id: 'acme.old', requires: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ],
+    } as unknown as FrontendPluginManager
+    const controller = registerPluginIpc(manager, '/plugins', () => true, TRUST_CONFIG)
+    const found = await controller.checkUpdates()
+    expect(found).toHaveLength(1)
+
+    respond({ [`${BASE}/acme/old`]: { status: 503 } })
+    await expect(controller.checkUpdates()).rejects.toThrow(/acme\.old \(HTTP 503\)/)
+    expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual(found)
+
+    respond({ [`${BASE}/acme/old`]: new Error('network down') })
+    await expect(handlers.get('plugins:checkUpdates')!(null)).rejects.toThrow(/acme\.old \(network down\)/)
+    expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual(found)
+  })
+
+  it('updates the packages that answered and keeps the last answer for the ones that failed', async () => {
+    const row = (version: string) => ({ version, target: 'universal', yanked: false })
+    respond({
+      [`${BASE}/acme/a`]: { body: { versions: [row('1.2.0')] } },
+      [`${BASE}/acme/b`]: { body: { versions: [row('2.1.0')] } },
+    })
+    const manager = {
+      listInstalledPackages: () => [
+        { id: 'acme.a', requires: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+        { id: 'acme.b', requires: [], packageVersion: '2.0.0', provenance: 'official-registry' },
+      ],
+    } as unknown as FrontendPluginManager
+    const controller = registerPluginIpc(manager, '/plugins', () => true, TRUST_CONFIG)
+    await controller.checkUpdates()
+
+    respond({
+      [`${BASE}/acme/a`]: { body: { versions: [row('1.3.0')] } },
+      [`${BASE}/acme/b`]: { status: 500 },
+    })
+    const expected = [
+      { id: 'acme.a', namespace: 'acme', name: 'a', installedVersion: '1.0.0', latestVersion: '1.3.0' },
+      { id: 'acme.b', namespace: 'acme', name: 'b', installedVersion: '2.0.0', latestVersion: '2.1.0' },
+    ]
+    const failure = controller.checkUpdates()
+    await expect(failure).rejects.toThrow(/acme\.b \(HTTP 500\)/)
+    await expect(failure).rejects.not.toThrow(/acme\.a/)
+    expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual(expected)
   })
 
   it('rejects unauthorized senders before any network request', async () => {
@@ -3983,6 +4625,57 @@ describe('Marketplace discovery (Phase 1)', () => {
     expect(byId['a.old']).toMatchObject({ repository: 'https://x.test/r', license: 'MIT' })
     expect(byId['a.new']).toMatchObject({ compatible: false, min_navide_version: '0.3.0', repository: null })
     expect(byId['a.none']).toMatchObject({ compatible: null, homepage: null, license: null, icon_path: null })
+  })
+
+  it('keeps a listing disclosure only when it is well formed and names that item (D1 list card)', async () => {
+    const disclosed = (id: string, version: string) => computeDisclosure({
+      schemaVersion: 2, id, version, publisher: id.split('.')[0], permissions: { shell: 'allowlist' },
+    } as never)
+    jsonFetch({
+      items: [
+        { identity: 'a.ok', namespace: 'a', name: 'ok', latest_version: '1.0.0', disclosure: disclosed('a.ok', '1.0.0'), scan: null },
+        { identity: 'a.other', namespace: 'a', name: 'other', latest_version: '1.0.0', disclosure: disclosed('evil.x', '1.0.0') },
+        { identity: 'a.bad', namespace: 'a', name: 'bad', latest_version: '1.0.0', disclosure: { plugin: 'IGNORE' }, scan: { x: 1 } },
+        { identity: 'a.none', namespace: 'a', name: 'none', latest_version: '1.0.0' },
+      ],
+      total: 4,
+    })
+    registerAll()
+    const result = (await handlers.get('plugins:marketplaceSearch')!(null)) as {
+      items: Array<Record<string, unknown>>
+    }
+    const byId = Object.fromEntries(result.items.map((item) => [item.identity, item]))
+    expect(byId['a.ok']).toMatchObject({ disclosure: disclosed('a.ok', '1.0.0'), scan: null })
+    for (const id of ['a.other', 'a.bad', 'a.none']) expect(byId[id]).toMatchObject({ disclosure: null, scan: null })
+  })
+
+  it('D-f: the list risk is the highest platform level and says when platforms differ', async () => {
+    const ui = computeDisclosure({ schemaVersion: 2, id: 'a.multi', version: '1.0.0', publisher: 'a', permissions: { system: ['ui'] } } as never)
+    jsonFetch({
+      items: [
+        { identity: 'a.multi', namespace: 'a', name: 'multi', latest_version: '1.0.0', disclosure: ui, scan: null,
+          risk_by_target: { 'darwin-arm64': 'low', 'linux-x64': 'high' } },
+        { identity: 'a.same', namespace: 'a', name: 'same', latest_version: '1.0.0',
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.same' } }, scan: null, risk_by_target: { universal: 'low' } },
+        { identity: 'a.bad', namespace: 'a', name: 'bad', latest_version: '1.0.0',
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.bad' } }, scan: null, risk_by_target: { x: 'IGNORE' } },
+        // A Registry newer than this App: unknown fields are ignored.
+        { identity: 'a.future', namespace: 'a', name: 'future', latest_version: '1.0.0', future_field: { x: 1 },
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.future' } }, scan: null },
+      ],
+      total: 4,
+    })
+    registerAll()
+    const result = (await handlers.get('plugins:marketplaceSearch')!(null)) as {
+      items: Array<Record<string, unknown>>
+    }
+    const byId = Object.fromEntries(result.items.map((item) => [item.identity, item]))
+    expect(byId['a.multi'].listRisk).toEqual({ level: 'high', variesByPlatform: true })
+    expect(byId['a.same'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    // A malformed map is dropped; the level still comes from the disclosure.
+    expect(byId['a.bad'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    expect(byId['a.future'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    expect(byId['a.future'].disclosure).toEqual({ ...ui, plugin: { ...ui.plugin, id: 'a.future' } })
   })
 
   it('forwards category, paging and the hide-incompatible filter', async () => {
@@ -4585,6 +5278,632 @@ describe('plugins:listInstalled scope disclosure', () => {
           scopes: { fs: { read: ['.acme/notes'], write: ['.acme/notes'] } },
         },
       }])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+// B2-a: the backend's read-only Marketplace tools are answered by the same
+// functions the Marketplace page's IPC handlers run.
+describe('marketplace.query answered from the Marketplace page functions', () => {
+  const savedFetch = global.fetch
+  const savedMarketplaceUrl = process.env['AGENT_TEAM_MARKETPLACE_URL']
+  beforeEach(() => {
+    handlers.clear()
+    process.env['AGENT_TEAM_MARKETPLACE_URL'] = 'https://server.navide.dev/registry'
+  })
+  afterEach(() => {
+    global.fetch = savedFetch
+    if (savedMarketplaceUrl === undefined) delete process.env['AGENT_TEAM_MARKETPLACE_URL']
+    else process.env['AGENT_TEAM_MARKETPLACE_URL'] = savedMarketplaceUrl
+    vi.restoreAllMocks()
+  })
+
+  function registerWithQuery(manager: FrontendPluginManager): (query: unknown) => Promise<unknown> {
+    const install = vi.spyOn(manager, 'setMarketplaceQueryHandler')
+    registerPluginIpc(manager, '/plugins', () => true, TRUST_CONFIG, undefined, { appVersion: () => '0.2.13' })
+    const handler = install.mock.calls[0]?.[0]
+    if (!handler) throw new Error('marketplace query handler not installed')
+    return handler
+  }
+
+  it('searches through the same Registry request the Marketplace page sends', async () => {
+    const fetchMock = vi.fn(async (_url: unknown) => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return { items: [{ namespace: 'acme', name: 'demo', latest_version: '1.0.0', trust_tier: 'signed-verified' }], total: 1 }
+      },
+    }))
+    global.fetch = fetchMock as unknown as typeof fetch
+    const query = registerWithQuery(new FrontendPluginManager())
+    const page = handlers.get('plugins:marketplaceSearch')!
+
+    await page(null, 'git', undefined, { limit: 20 })
+    const answer = await query({ kind: 'search', text: 'git', limit: 20 })
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]))
+    expect(urls).toEqual([
+      'https://server.navide.dev/registry/api/extensions?q=git&limit=20',
+      'https://server.navide.dev/registry/api/extensions?q=git&limit=20',
+    ])
+    expect(answer).toEqual({
+      ok: true,
+      result: { kind: 'search', nextCursor: null, items: [expect.objectContaining({ id: 'acme.demo', signed: true, risk: null })] },
+    })
+  })
+
+  it('reports a Registry 404 on detail as NOT_FOUND, while the page still gets the same error text', async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 404, async json() { return {} } })) as unknown as typeof fetch
+    const query = registerWithQuery(new FrontendPluginManager())
+    await expect(handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name: 'none' }))
+      .rejects.toThrow('marketplace detail failed: HTTP 404')
+    expect(await query({ kind: 'detail', id: 'acme.none' })).toEqual({
+      ok: false, error: 'marketplace detail failed: HTTP 404', error_code: 'NOT_FOUND',
+    })
+  })
+
+  it('lists the same inventory as the Extensions page, with the native backend flag', async () => {
+    const manager = new FrontendPluginManager()
+    const query = registerWithQuery(manager)
+    manager.registerInstalledPackage({ id: 'acme.notes', requires: ['fs'], packageVersion: '1.0.0', hasBackend: true })
+    manager.registerInstalledPackage({ id: 'acme.plain', requires: [], packageVersion: '2.0.0' })
+
+    const page = (handlers.get('plugins:listInstalled')!(null) as Array<{ id: string }>).map((row) => row.id)
+    const answer = await query({ kind: 'installed' }) as { ok: true; result: { items: Array<Record<string, unknown>> } }
+
+    expect(answer.result.items.map((item) => item.id)).toEqual(page)
+    expect(answer.result.items).toEqual(expect.arrayContaining([
+      { id: 'acme.notes', version: '1.0.0', enabled: true, quarantined: false, hasBackend: true, agentTools: [] },
+      { id: 'acme.plain', version: '2.0.0', enabled: true, quarantined: false, hasBackend: false, agentTools: [] },
+    ]))
+  })
+})
+
+describe('plugins:setDisabled', () => {
+  const coldStartSource = (root: string) => ({
+    provenance: 'official-registry' as const,
+    trust: {
+      pinnedRootKey: registryRoot.pubPem,
+      snapshot: readRegistryTrustSnapshot(root),
+      registryAuthority: 'self-hosted' as const,
+      now: FIXED_NOW,
+    },
+  })
+
+  async function installVersion(version: string, pkg = buildPkg('acme.demo', 'acme', {}, version)): Promise<void> {
+    installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', version), pkg.bytes, pkg.digest)
+    await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo', version })
+    await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+    await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+  }
+
+  function setup(prefix: string) {
+    const root = mkdtempSync(join(tmpdir(), prefix))
+    const manager = new FrontendPluginManager()
+    const changes: Array<{ pluginId: string; activation?: PluginActivationCatalogEntry }> = []
+    // The Host installs this resolver before its first package load.
+    manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      ...TEST_PREFLIGHT_OPTIONS,
+      cleanupPluginStorage: async () => undefined,
+      onActivationChange: (change) => changes.push(change),
+    })
+    return { root, manager, changes, setDisabled: handlers.get('plugins:setDisabled')!, list: handlers.get('plugins:listInstalled')! }
+  }
+
+  it('disables a package without removing its files, grant or selection, and enables it with the same grant', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const { root, manager, changes, setDisabled, list } = setup('navide-plugin-disable-')
+    try {
+      await installVersion('1.0.0', first)
+      const grant = new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')
+      expect(grant).not.toBeNull()
+      expect(list(null)).toMatchObject([{ id: 'acme.demo', disabled: false }])
+      changes.length = 0
+
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: true }))
+        .resolves.toEqual({ id: 'acme.demo', disabled: true })
+      expect(manager.getDescriptor('acme.demo')).toBeUndefined()
+      expect(manager.listContributionCatalog().some((entry) => entry.pluginId === 'acme.demo')).toBe(false)
+      expect(changes).toEqual([{ pluginId: 'acme.demo' }])
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')).toEqual(grant)
+      expect(existsSync(immutablePluginPackageDir(root, 'acme.demo', '1.0.0', 'universal'))).toBe(true)
+      expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
+        active: { packageVersion: '1.0.0', artifactDigest: first.digest },
+      })
+      expect(list(null)).toMatchObject([{ id: 'acme.demo', packageVersion: '1.0.0', disabled: true }])
+      changes.length = 0
+
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: false }))
+        .resolves.toEqual({ id: 'acme.demo', disabled: false })
+      expect(manager.getDescriptor('acme.demo')?.packageVersion).toBe('1.0.0')
+      expect(manager.listContributionCatalog().some((entry) => entry.pluginId === 'acme.demo')).toBe(true)
+      expect(changes).toMatchObject([{
+        pluginId: 'acme.demo',
+        activation: { packageVersion: '1.0.0', artifactDigest: first.digest },
+      }])
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')).toEqual(grant)
+      expect(list(null)).toMatchObject([{ id: 'acme.demo', disabled: false }])
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // B2-c option B: who disabled a package decides whether an agent may enable it.
+  it('lets an agent enable only what an agent disabled; the user\'s switch and its answers stay as on main', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-disable-source-'))
+    const manager = new FrontendPluginManager()
+    manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    let agentAction: ((request: unknown) => Promise<unknown>) | null = null
+    vi.spyOn(manager, 'setPluginAgentActionHandler').mockImplementation((handler) => { agentAction = handler })
+    const notices: unknown[] = []
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      ...TEST_PREFLIGHT_OPTIONS,
+      cleanupPluginStorage: async () => undefined,
+      onPluginAgentAction: (notice) => notices.push(notice),
+    })
+    const setDisabled = handlers.get('plugins:setDisabled')!
+    const requester = { paneId: 'p-41', paneName: 'dev', workspace: '/w', callerKind: 'pane' }
+    const agent = (action: 'disable' | 'enable') =>
+      agentAction!({ request_id: 'pa:1', action, plugin_id: 'acme.demo', requester })
+    const sourceFile = join(root, '.navide-disabled-source.json')
+    try {
+      await installVersion('1.0.0')
+      // The user's own switch: same answers as on main; recorded as the user.
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: true })).resolves.toEqual({ id: 'acme.demo', disabled: true })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'user', agent: null })
+      // The user disabled it: an agent's enable changes nothing and asks for approval.
+      await expect(agent('enable')).resolves.toMatchObject({
+        ok: false, error_code: 'APPROVAL_REQUIRED', pluginVersion: '1.0.0', disabled: { by: 'user' },
+      })
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(true)
+      expect(notices).toEqual([])
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: false })).resolves.toEqual({ id: 'acme.demo', disabled: false })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toBeUndefined()
+
+      // An agent disabled it: the agent may enable it again at once.
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, disabled: true, changed: true })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({
+        by: 'agent', agent: { callerKind: 'pane', paneId: 'p-41', paneName: 'dev' },
+      })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: true, disabled: false, changed: true })
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(false)
+      expect(notices).toHaveLength(2)
+
+      // Disabled before sources were recorded (no entry): read as the user.
+      new PluginDisabledStore(root).add('acme.demo')
+      rmSync(sourceFile, { force: true })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED', disabled: { by: 'user', at: null } })
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // Review of #385 (MED-1): an agent's entry must never outlive the disable it describes.
+  it('trusts an agent\'s entry only while the Disabled list is as it left it, and forgets it on removal', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-disable-source-fail-'))
+    const manager = new FrontendPluginManager()
+    manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    let agentAction: ((request: unknown) => Promise<unknown>) | null = null
+    vi.spyOn(manager, 'setPluginAgentActionHandler').mockImplementation((handler) => { agentAction = handler })
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      ...TEST_PREFLIGHT_OPTIONS,
+      cleanupPluginStorage: async () => undefined,
+    })
+    const setDisabled = handlers.get('plugins:setDisabled')!
+    const requester = { paneId: 'p-41', paneName: 'dev', workspace: '/w', callerKind: 'pane' }
+    const agent = (action: 'disable' | 'enable') =>
+      agentAction!({ request_id: 'pa:1', action, plugin_id: 'acme.demo', requester })
+    const sourceFile = join(root, '.navide-disabled-source.json')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      await installVersion('1.0.0')
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, changed: true })
+      // The user's switch works, but neither write of who did it lands: the
+      // agent's entry is left behind in the file.
+      const set = vi.spyOn(PluginDisableSourceStore.prototype, 'set').mockImplementation(() => { throw new Error('disk full') })
+      const remove = vi.spyOn(PluginDisableSourceStore.prototype, 'remove').mockImplementation(() => { throw new Error('disk full') })
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: false })).resolves.toEqual({ id: 'acme.demo', disabled: false })
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: true })).resolves.toEqual({ id: 'acme.demo', disabled: true })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'agent' })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED', disabled: { by: 'user' } })
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(true)
+      set.mockRestore()
+      remove.mockRestore()
+      await setDisabled(null, { id: 'acme.demo', disabled: false })
+
+      // An older Navide (which does not know the source file) enables and
+      // disables it again: the agent's entry is left, but the list changed.
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, changed: true })
+      new PluginDisabledStore(root).remove('acme.demo')
+      new PluginDisabledStore(root).add('acme.demo')
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'agent' })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED', disabled: { by: 'user', at: null } })
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(true)
+      await setDisabled(null, { id: 'acme.demo', disabled: false })
+
+      // The ordinary path still works: what an agent disabled, it enables at once.
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, changed: true })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: true, disabled: false, changed: true })
+
+      // Removing the package drops its entry, so a reinstall starts with none.
+      await agent('disable')
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'agent' })
+      await expect(handlers.get('plugins:remove')!(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toBeUndefined()
+      await installVersion('1.0.0')
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toBeUndefined()
+
+      // LOW-1: an agent's disable of a package the user disabled changes
+      // nothing, so the user's entry stays and an agent still cannot enable it.
+      await setDisabled(null, { id: 'acme.demo', disabled: true })
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, changed: false })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'user' })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED', disabled: { by: 'user' } })
+    } finally {
+      warn.mockRestore()
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a disabled package unloaded on a cold start while still verifying it', async () => {
+    const { root, manager, setDisabled } = setup('navide-plugin-disable-cold-')
+    try {
+      await installVersion('1.0.0')
+      await setDisabled(null, { id: 'acme.demo', disabled: true })
+
+      const reloaded = new FrontendPluginManager()
+      reloaded.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+      const loaded = reloaded.loadInstalledPlugins(root, coldStartSource(root))
+      expect(loaded.errors).toEqual([])
+      expect(loaded.loaded).not.toContain('acme.demo')
+      expect(loaded.activationCatalog.map((entry) => entry.pluginId)).not.toContain('acme.demo')
+      expect(reloaded.getDescriptor('acme.demo')).toBeUndefined()
+      expect(reloaded.listInstalledPackages()).toMatchObject([{ id: 'acme.demo', packageVersion: '1.0.0' }])
+
+      // A disabled package is not exempt from integrity verification.
+      writeFileSync(
+        join(immutablePluginPackageDir(root, 'acme.demo', '1.0.0', 'universal'), REGISTRY_ARTIFACT_NAME),
+        'tampered',
+      )
+      const tampered = new FrontendPluginManager()
+      tampered.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+      const quarantined = tampered.loadInstalledPlugins(root, coldStartSource(root))
+      expect(quarantined.errors.join(' ')).toMatch(/quarantined/)
+      expect(tampered.listInstalledPackages()).toEqual([])
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a disabled package disabled through an update and a rollback', async () => {
+    const { root, manager, changes, setDisabled, list } = setup('navide-plugin-disable-update-')
+    try {
+      await installVersion('1.0.0')
+      await setDisabled(null, { id: 'acme.demo', disabled: true })
+      changes.length = 0
+
+      await installVersion('1.0.1')
+      expect(manager.getDescriptor('acme.demo')).toBeUndefined()
+      expect(changes.every((change) => change.activation === undefined)).toBe(true)
+      expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
+        active: { packageVersion: '1.0.1' },
+        previous: { packageVersion: '1.0.0' },
+      })
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.1')).not.toBeNull()
+      expect(list(null)).toMatchObject([{
+        id: 'acme.demo',
+        packageVersion: '1.0.1',
+        disabled: true,
+        rollbackKind: 'previous',
+        rollbackToVersion: '1.0.0',
+      }])
+
+      await expect(handlers.get('plugins:rollback')!(null, { id: 'acme.demo' }))
+        .resolves.toMatchObject({ id: 'acme.demo', packageVersion: '1.0.0' })
+      expect(manager.getDescriptor('acme.demo')).toBeUndefined()
+      expect(changes.every((change) => change.activation === undefined)).toBe(true)
+      expect(list(null)).toMatchObject([{ id: 'acme.demo', packageVersion: '1.0.0', disabled: true }])
+
+      await setDisabled(null, { id: 'acme.demo', disabled: false })
+      expect(manager.getDescriptor('acme.demo')?.packageVersion).toBe('1.0.0')
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('removes a disabled package and forgets that it was disabled', async () => {
+    const { root, manager, setDisabled, list } = setup('navide-plugin-disable-remove-')
+    try {
+      await installVersion('1.0.0')
+      await setDisabled(null, { id: 'acme.demo', disabled: true })
+      await expect(handlers.get('plugins:remove')!(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(list(null)).toEqual([])
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(false)
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses first-party ids, packages that are not installed and malformed requests', async () => {
+    const { root, manager, setDisabled } = setup('navide-plugin-disable-refuse-')
+    try {
+      // A `navide.` id that is not one of the three built-ins stays refused.
+      await expect(setDisabled(null, { id: 'navide.other', disabled: true })).rejects.toThrow(/first-party/)
+      // A built-in needs the Host side of the switch, which this setup lacks.
+      await expect(setDisabled(null, { id: 'navide.git', disabled: true })).rejects.toThrow(/unavailable/)
+      await expect(setDisabled(null, { id: 'acme.missing', disabled: true })).rejects.toThrow(/not an installed/)
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: 'yes' })).rejects.toThrow(/invalid/)
+      await expect(setDisabled(null, { id: '../escape', disabled: true })).rejects.toThrow(/invalid plugin id/)
+      expect(new PluginDisabledStore(root).has('navide.git')).toBe(false)
+      expect(new PluginDisabledStore(root).has('acme.missing')).toBe(false)
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('plugins:remove native backend data choice', () => {
+  // The sandboxed native backend keeps its private data in
+  // <nativeBackendDataRoot>/<pluginId>/. The remove dialog asks whether to
+  // keep it; a caller that does not say keeps it, exactly as before.
+  function setup(prefix: string) {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), prefix)))
+    const root = join(base, 'plugins')
+    const dataRoot = join(base, 'plugin-native-backends', 'data')
+    mkdirSync(join(root, 'acme.demo'), { recursive: true })
+    const dataDir = join(dataRoot, 'acme.demo')
+    mkdirSync(join(dataDir, 'tmp'), { recursive: true })
+    writeFileSync(join(dataDir, 'state.db'), 'x'.repeat(42))
+    mkdirSync(join(dataRoot, 'acme.other'), { recursive: true })
+    const manager = new FrontendPluginManager()
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementation(() => undefined)
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: async () => undefined,
+      nativeBackendDataRoot: dataRoot,
+    })
+    const remove = handlers.get('plugins:remove')
+    const inspect = handlers.get('plugins:nativeBackendData')
+    if (!remove || !inspect) throw new Error('handlers not registered')
+    return { base, root, dataRoot, dataDir, remove, inspect }
+  }
+
+  it('reports the size and location of the backend data before removal', async () => {
+    const { base, dataDir, inspect } = setup('navide-native-data-inspect-')
+    try {
+      await expect(inspect(null, { id: 'acme.demo' })).resolves.toEqual({ exists: true, bytes: 42, path: dataDir })
+      await expect(inspect(null, { id: 'acme.none' })).resolves.toMatchObject({ exists: false, bytes: 0 })
+      await expect(inspect(null, { id: '../outside' })).rejects.toThrow(/invalid plugin id/)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('deletes the backend data directory when the user chose delete', async () => {
+    const { base, dataRoot, dataDir, remove } = setup('navide-native-data-delete-')
+    try {
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'delete' })).resolves.toEqual({ ok: true })
+      expect(existsSync(dataDir)).toBe(false)
+      expect(existsSync(join(dataRoot, 'acme.other'))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the backend data directory when the user chose keep', async () => {
+    const { base, root, dataDir, remove } = setup('navide-native-data-keep-')
+    try {
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'keep' })).resolves.toEqual({ ok: true })
+      expect(existsSync(join(root, 'acme.demo'))).toBe(false)
+      expect(existsSync(join(dataDir, 'state.db'))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the backend data directory when the caller does not choose (compatibility)', async () => {
+    const { base, root, dataDir, remove } = setup('navide-native-data-omitted-')
+    try {
+      await expect(remove(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(existsSync(join(root, 'acme.demo'))).toBe(false)
+      expect(existsSync(join(dataDir, 'state.db'))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses an unknown choice before removing anything', async () => {
+    const { base, root, dataDir, remove } = setup('navide-native-data-bad-choice-')
+    try {
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'wipe' })).rejects.toThrow(/invalid native backend data choice/)
+      expect(existsSync(join(root, 'acme.demo'))).toBe(true)
+      expect(existsSync(dataDir)).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a symlinked data directory and keeps the package and the link target', async () => {
+    const { base, root, dataDir, remove } = setup('navide-native-data-symlink-')
+    try {
+      rmSync(dataDir, { recursive: true, force: true })
+      const workspace = join(base, 'workspace')
+      mkdirSync(workspace)
+      writeFileSync(join(workspace, 'project.txt'), 'user file')
+      symlinkSync(workspace, dataDir)
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'delete' })).rejects.toThrow(/symbolic link/)
+      expect(existsSync(join(workspace, 'project.txt'))).toBe(true)
+      expect(existsSync(join(root, 'acme.demo'))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps publisher trust and the pre-release opt-in after removal', async () => {
+    const { base, root, remove } = setup('navide-native-data-kept-prefs-')
+    try {
+      // registerPluginIpc reads both stores from these files on every call.
+      new PluginPublisherTrustStore(join(root, '.navide-publisher-trust.json')).trust('acme', 'acme.demo')
+      new PluginPrereleaseStore(root).set('acme.demo', true)
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'delete' })).resolves.toEqual({ ok: true })
+      expect(new PluginPublisherTrustStore(join(root, '.navide-publisher-trust.json')).isTrusted('acme', 'acme.demo')).toBe(true)
+      expect(new PluginPrereleaseStore(root).has('acme.demo')).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('built-in Plans, Git and Mini-IDE: disabled, never removed', () => {
+  const BUILTINS = ['navide.plans', 'navide.git', 'navide.mini-ide'] as const
+
+  function setup(prefix: string, hostSwitch?: (id: string, disabled: boolean) => Promise<void> | void) {
+    const root = mkdtempSync(join(tmpdir(), prefix))
+    const manager = new FrontendPluginManager()
+    manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    const cleanupPluginStorage = vi.fn(async () => undefined)
+    const onFactoryPackageRemoved = vi.fn()
+    const restoreFactoryPackage = vi.fn(async () => undefined)
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage,
+      factoryPackageIds: ['navide.git', 'navide.mini-ide'],
+      onFactoryPackageRemoved,
+      restoreFactoryPackage,
+      ...(hostSwitch ? { setBuiltinDisabled: hostSwitch } : {}),
+    })
+    return { root, manager, cleanupPluginStorage, onFactoryPackageRemoved, restoreFactoryPackage }
+  }
+
+  it('refuses to remove or restore any built-in, keeping its files, storage and grant', async () => {
+    const { root, cleanupPluginStorage, onFactoryPackageRemoved, restoreFactoryPackage } = setup('navide-builtin-remove-')
+    try {
+      for (const id of BUILTINS) {
+        mkdirSync(join(root, id), { recursive: true })
+        new PluginCapabilityGrantStore(root).set(id, { packageVersion: '1.0.0', system: [], storage: true })
+        await expect(handlers.get('plugins:remove')!(null, { id })).rejects.toThrow(/cannot be removed/)
+        await expect(handlers.get('plugins:remove')!(null, { id, nativeBackendData: 'delete' }))
+          .rejects.toThrow(/cannot be removed/)
+        await expect(handlers.get('plugins:restoreFactoryPackage')!(null, { id })).rejects.toThrow(/cannot be removed/)
+        expect(existsSync(join(root, id))).toBe(true)
+        expect(new PluginCapabilityGrantStore(root).get(id, '1.0.0')).not.toBeNull()
+      }
+      expect(cleanupPluginStorage).not.toHaveBeenCalled()
+      expect(onFactoryPackageRemoved).not.toHaveBeenCalled()
+      expect(restoreFactoryPackage).not.toHaveBeenCalled()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('disables and enables each built-in through the Host, durably, without touching storage or grants', async () => {
+    const calls: Array<[string, boolean]> = []
+    const { root, manager, cleanupPluginStorage } = setup('navide-builtin-disable-', (id, disabled) => {
+      calls.push([id, disabled])
+    })
+    try {
+      for (const id of BUILTINS) {
+        new PluginCapabilityGrantStore(root).set(id, { packageVersion: '1.0.0', system: [], storage: true })
+        await expect(handlers.get('plugins:setDisabled')!(null, { id, disabled: true }))
+          .resolves.toEqual({ id, disabled: true })
+        // As a restart sees it: a fresh store over the same root.
+        expect(new PluginDisabledStore(root).has(id)).toBe(true)
+        expect(manager.isBuiltinPluginDisabled(id)).toBe(true)
+        // A second Disable is a no-op.
+        await handlers.get('plugins:setDisabled')!(null, { id, disabled: true })
+      }
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([...BUILTINS].sort())
+      for (const id of BUILTINS) {
+        await expect(handlers.get('plugins:setDisabled')!(null, { id, disabled: false }))
+          .resolves.toEqual({ id, disabled: false })
+        expect(new PluginDisabledStore(root).has(id)).toBe(false)
+        expect(new PluginCapabilityGrantStore(root).get(id, '1.0.0')).not.toBeNull()
+      }
+      expect(calls).toEqual([...BUILTINS.map((id) => [id, true]), ...BUILTINS.map((id) => [id, false])])
+      expect(cleanupPluginStorage).not.toHaveBeenCalled()
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('fails closed for the built-ins when the store and its backup are unreadable, until a one-click reset', async () => {
+    const calls: Array<[string, boolean]> = []
+    const { root, manager } = setup('navide-builtin-unreadable-', (id, disabled) => { calls.push([id, disabled]) })
+    const reset = vi.fn()
+    // Re-register with the reset hook (setup registers without it).
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: vi.fn(async () => undefined),
+      setBuiltinDisabled: (id, disabled) => { calls.push([id, disabled]) },
+      onBuiltinSwitchReset: reset,
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      writeFileSync(join(root, '.navide-disabled-plugins.json'), '{torn')
+      writeFileSync(join(root, '.navide-disabled-plugins.json.bak'), '{torn too')
+      expect(handlers.get('plugins:disabledStoreStatus')!(null)).toEqual({ status: 'unreadable' })
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([...BUILTINS].sort())
+      expect(manager.isBuiltinPluginDisabled('navide.plans')).toBe(true)
+      // Enabling cannot silently rewrite the damaged store.
+      await expect(handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: false }))
+        .rejects.toThrow(/unreadable/)
+      expect(readFileSync(join(root, '.navide-disabled-plugins.json'), 'utf8')).toBe('{torn')
+
+      await expect(handlers.get('plugins:resetDisabledStore')!(null)).resolves.toEqual({ status: 'ok' })
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
+      expect(reset).toHaveBeenCalledTimes(1)
+      // The Host finishes enabling each built-in the reset brought back (Git's forced legacy registration).
+      expect(reset).toHaveBeenCalledWith([...BUILTINS])
+      expect(calls).toEqual([])
+    } finally {
+      warn.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('runs the built-in switch and the reset inside the Host hold, so a store check cannot interleave', async () => {
+    const { root, manager } = setup('navide-builtin-hold-')
+    const events: string[] = []
+    const hold = async <T>(task: () => Promise<T>): Promise<T> => {
+      events.push('hold')
+      try { return await task() } finally { events.push('release') }
+    }
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: vi.fn(async () => undefined),
+      setBuiltinDisabled: (id, disabled) => { events.push(`switch ${id} ${disabled}`) },
+      onBuiltinSwitchReset: () => { events.push('reset') },
+      holdBuiltinSwitch: hold,
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      await handlers.get('plugins:setDisabled')!(null, { id: 'navide.plans', disabled: true })
+      writeFileSync(join(root, '.navide-disabled-plugins.json'), '{torn')
+      writeFileSync(join(root, '.navide-disabled-plugins.json.bak'), '{torn too')
+      await expect(handlers.get('plugins:resetDisabledStore')!(null)).resolves.toEqual({ status: 'ok' })
+      expect(events).toEqual(['hold', 'switch navide.plans true', 'release', 'hold', 'reset', 'release'])
+    } finally {
+      warn.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('stays disabled when the Host cannot enable it', async () => {
+    const { root } = setup('navide-builtin-enable-fail-', (_id, disabled) => {
+      if (!disabled) throw new Error('bundled package missing')
+    })
+    try {
+      await handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: true })
+      await expect(handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: false }))
+        .rejects.toThrow(/bundled package missing/)
+      expect(new PluginDisabledStore(root).has('navide.git')).toBe(true)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

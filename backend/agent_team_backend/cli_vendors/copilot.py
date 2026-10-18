@@ -1524,6 +1524,7 @@ SPEC = VendorSpec(
             entry=(("type", "http"), ("url", McpValue.URL)),
         ),
         flag="--additional-mcp-config",
+        flag_file_prefix="@",
         # Quoted: the inline JSON we inject always carries `"navide"`, while a
         # bare `navide` would also match unrelated argv such as `~/navide-web`.
         already_wired='"{name}"',

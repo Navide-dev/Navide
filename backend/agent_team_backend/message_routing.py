@@ -72,9 +72,11 @@ def route(from_pane_id: str, to: str) -> Routed:
     The order is the load-bearing part, and it is the order ``cli_send`` already
     used:
 
-    1. An explicit device segment that is not this machine goes remote without
-       consulting the local registry — a UUID-shaped first segment of a
-       three-segment address is unambiguous.
+    1. An explicit device segment that is not this machine goes remote — unless
+       the whole address names a pane here, read as a workspace path with a
+       UUID-shaped folder in it. Local wins in this step too (M4): such
+       folders are common on macOS, and a message for a pane on this machine
+       must never leave it.
     2. Otherwise the local resolver answers. **Local addressing wins**: a target
        that resolves on this machine never reaches step 3, so naming a laptop
        after a folder can never redirect an address that works today.
@@ -91,6 +93,8 @@ def route(from_pane_id: str, to: str) -> Routed:
         # addressing existed rather than inventing a failure for a feature this
         # machine was never set up for.
         unreachable = agent_messaging.resolve(from_pane_id, to)
+        if unreachable.pane is not None:
+            return Routed(pane=unreachable.pane, cross_workspace=unreachable.cross_workspace)
         return Routed(
             remote=address,
             error=unreachable.error or "",

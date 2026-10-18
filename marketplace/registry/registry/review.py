@@ -12,11 +12,12 @@ review-required, so their publishes are approved at submission as before.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session, select, update
 
+from .disclosure import sign_disclosure
 from .discovery import PACK_CATEGORY, pack_members
 from .manifest import manifest_capabilities
 from .models import Extension, ExtensionVersion, Publisher
@@ -185,9 +186,13 @@ def approve(
     artifacts: Sequence[str],
     acknowledge_secret_findings: bool = False,
     inspected_native_backend: bool = False,
+    rescan: Callable[[ExtensionVersion], dict | None] | None = None,
 ) -> list[ExtensionVersion]:
     """Sign and publish the pending artifacts of `extension@version`, which
-    must be exactly `artifacts` (the package digests the reviewer saw)."""
+    must be exactly `artifacts` (the package digests the reviewer saw).
+    `rescan` scans a row's stored package with the current scanner (contract
+    3.8: the report signed is the one made at approval); without it the
+    submission's report is signed."""
     rows = _reviewed_rows(session, extension, version, artifacts)
     publisher = session.get(Publisher, extension.publisher_id)
     publisher_id = publisher.name if publisher else extension.namespace
@@ -229,6 +234,15 @@ def approve(
             )
         ).all()
     ]
+    # Rescan before anything is claimed: a stored package that no longer
+    # matches its digest is refused here, not halfway through signing.
+    scans = {}
+    if rescan is not None:
+        for row in rows:
+            scans[row.id] = rescan(row)
+            report = scans[row.id]
+            if report is not None and report.get("artifactDigest") != row.package_digest:
+                raise ReviewError("stored package does not match its digest; it cannot be approved")
     now = _now()
     # Claim first: only rows this decision moved out of pending get signed.
     _claim(session, rows, APPROVED, reviewed_at=now, reviewed_by=reviewer)
@@ -242,6 +256,11 @@ def approve(
         )
         row.registry_envelope = envelope
         row.registry_signature = signature
+        if rescan is not None:
+            row.scan = scans[row.id]
+        row.disclosure, row.disclosure_envelope, row.disclosure_signature = (
+            sign_disclosure(signer, row.manifest or {}, envelope, row.scan)
+        )
         row.trust_tier = compute_trust_tier(signed=True)
         row.review_status = APPROVED
         row.reviewed_at = now

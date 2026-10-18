@@ -24,6 +24,13 @@ from agent_team_backend.mcp_server import server as mcp
 from .test_share_links import FakeLinks, _plan
 
 SHARE_TOOLS = ["share_create", "share_list", "share_revoke"]
+#: Core tools registered after the share tools: plan B's read-only Marketplace tools (B2-a).
+MARKETPLACE_TOOLS = ["marketplace_search", "marketplace_detail", "plugins_list_installed"]
+#: Core tools registered after those: plan B's Marketplace requests, disable and enable (B2-c).
+MARKETPLACE_REQUEST_TOOLS = [
+    "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
+    "plugins_request_remove", "marketplace_request_status", "plugins_disable", "plugins_enable",
+]
 #: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills).
 PLUGIN_PREFIXES = ("plan_", "skills_")
 BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"
@@ -43,9 +50,10 @@ def test_the_existing_tools_are_exactly_mains_and_the_share_tools_come_after() -
     # onto the same server; those are left out by their known prefixes, and
     # anything else that is not main's must make this fail.
     tools = [t for t in _tools() if t["name"] in core or not t["name"].startswith(PLUGIN_PREFIXES)]
-    existing = [t for t in tools if t["name"] not in SHARE_TOOLS]
+    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS
+    existing = [t for t in tools if t["name"] not in added]
     assert json.loads(json.dumps(existing, sort_keys=True)) == baseline
-    assert [t["name"] for t in tools[-3:]] == SHARE_TOOLS
+    assert [t["name"] for t in tools[-len(added):]] == added
 
 
 @pytest.mark.parametrize("name", SHARE_TOOLS)

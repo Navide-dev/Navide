@@ -10,6 +10,11 @@ import { OwnerOnlyJsonPersistence } from './ownerOnlyJsonPersistence'
  * A consent is valid only for the exact binary and permission set it was
  * given for, so a new version that changes either needs a new consent.
  * Anything unreadable reads as "nothing allowed".
+ *
+ * It also keeps the two agent-tool switches (plan B, DB8 and DB4), both off
+ * by default: "let agents call tools from third-party Navide plugins", and
+ * "external MCP clients may call them too". They are written only once the
+ * user changes one, so a profile that never did keeps its file as on main.
  */
 
 export interface NativeBackendConsent {
@@ -19,17 +24,45 @@ export interface NativeBackendConsent {
   grantedAt: string
 }
 
+/** DB3: workspaces where the user allowed agent write-risk tools of one
+ * package version under one consent. A new version or consent drops it. */
+export interface AgentToolWriteGrant {
+  packageVersion: string
+  consentGrantedAt: string
+  workspaces: string[]
+}
+
 export interface NativeBackendPluginRecord {
   consent?: NativeBackendConsent
   disabled?: boolean
   /** Canonical workspace paths where workspace writes are allowed. */
   workspaceWrite?: string[]
+  /** When the user first allowed a version of the package that declares
+   * agent tools (ISO 8601, unique across packages): the DB1 name-collision
+   * order for a name without its own time below. Cleared when a version
+   * declares no tools, and on uninstall. */
+  agentToolsSince?: string
+  /** Per tool name, when the user first allowed a version declaring it (ISO
+   * 8601, unique across packages): a name added by an update ranks from that
+   * update's consent, so it cannot take over a name another package already
+   * holds. Names the package no longer declares are dropped. */
+  agentToolNamesSince?: Record<string, string>
+  /** DB3 agent write-tool confirmations; separate from `workspaceWrite`. */
+  agentToolWrite?: AgentToolWriteGrant
+}
+
+export interface AgentToolSwitches {
+  /** DB8: agents may call consented third-party agent tools. */
+  enabled: boolean
+  /** DB4: external MCP clients (and the Host credential) may call them too. */
+  externalCallers: boolean
 }
 
 export interface NativeBackendState {
   schemaVersion: 1
   enabled: boolean
   plugins: Record<string, NativeBackendPluginRecord>
+  agentTools?: AgentToolSwitches
 }
 
 const FILE_NAME = 'native-backends.json'
@@ -55,6 +88,14 @@ function parseConsent(value: unknown): NativeBackendConsent | undefined {
   return { binarySha256, permissionsKey, packageVersion, grantedAt }
 }
 
+function parseAgentToolWrite(value: unknown): AgentToolWriteGrant | undefined {
+  if (!isRecord(value)) return undefined
+  const { packageVersion, consentGrantedAt, workspaces } = value
+  if (typeof packageVersion !== 'string' || typeof consentGrantedAt !== 'string' || !Array.isArray(workspaces)) return undefined
+  const paths = [...new Set(workspaces.filter((path): path is string => typeof path === 'string'))].sort()
+  return paths.length > 0 ? { packageVersion, consentGrantedAt, workspaces: paths } : undefined
+}
+
 function parseState(value: unknown): NativeBackendState {
   if (!isRecord(value) || value.schemaVersion !== 1 || !isRecord(value.plugins)) return emptyState()
   const plugins: Record<string, NativeBackendPluginRecord> = {}
@@ -68,9 +109,21 @@ function parseState(value: unknown): NativeBackendState {
       const paths = raw.workspaceWrite.filter((path): path is string => typeof path === 'string')
       if (paths.length > 0) record.workspaceWrite = [...new Set(paths)]
     }
+    const agentToolWrite = parseAgentToolWrite(raw.agentToolWrite)
+    if (agentToolWrite) record.agentToolWrite = agentToolWrite
+    if (typeof raw.agentToolsSince === 'string') record.agentToolsSince = raw.agentToolsSince
+    if (isRecord(raw.agentToolNamesSince)) {
+      const names = Object.entries(raw.agentToolNamesSince).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      )
+      if (names.length > 0) record.agentToolNamesSince = Object.fromEntries(names)
+    }
     plugins[pluginId] = record
   }
-  return { schemaVersion: 1, enabled: value.enabled === true, plugins }
+  const agentTools = isRecord(value.agentTools)
+    ? { enabled: value.agentTools.enabled === true, externalCallers: value.agentTools.externalCallers === true }
+    : undefined
+  return { schemaVersion: 1, enabled: value.enabled === true, plugins, ...(agentTools ? { agentTools } : {}) }
 }
 
 export class NativeBackendStore {
@@ -130,12 +183,63 @@ export class NativeBackendStore {
     this.save({ ...this.state, enabled }, !enabled)
   }
 
+  agentToolSwitches(): AgentToolSwitches {
+    return { enabled: this.state.agentTools?.enabled === true, externalCallers: this.state.agentTools?.externalCallers === true }
+  }
+
+  /** Turning a switch off takes effect in memory even when the save fails. */
+  setAgentToolSwitches(change: Partial<AgentToolSwitches>): void {
+    const current = this.agentToolSwitches()
+    const next = { ...current, ...change }
+    // DB4 never outlives DB8: turning agents off also turns external clients
+    // off, so turning agents on again never silently re-enables them.
+    if (change.enabled === false) next.externalCallers = false
+    const restricting = (current.enabled && !next.enabled) || (current.externalCallers && !next.externalCallers)
+    this.save({ ...this.state, agentTools: next }, restricting)
+  }
+
   record(pluginId: string): NativeBackendPluginRecord {
     return structuredClone(this.state.plugins[pluginId] ?? {})
   }
 
   grantConsent(pluginId: string, consent: Omit<NativeBackendConsent, 'grantedAt'>, now = new Date()): void {
-    this.update(pluginId, (record) => ({ ...record, consent: { ...consent, grantedAt: now.toISOString() } }))
+    this.update(pluginId, (record) => {
+      // A new consent asks the agent write-tool questions again (DB3).
+      delete record.agentToolWrite
+      return { ...record, consent: { ...consent, grantedAt: now.toISOString() } }
+    })
+  }
+
+  /** DB3: the user allowed agent write-risk tools of this exact package version,
+   * under the consent granted at `consentGrantedAt`, in `workspacePath`. */
+  allowsAgentToolWrite(pluginId: string, packageVersion: string, consentGrantedAt: string, workspacePath: string): boolean {
+    const grant = this.state.plugins[pluginId]?.agentToolWrite
+    return Boolean(
+      grant &&
+      grant.packageVersion === packageVersion &&
+      grant.consentGrantedAt === consentGrantedAt &&
+      grant.workspaces.includes(workspacePath),
+    )
+  }
+
+  setAgentToolWrite(pluginId: string, packageVersion: string, consentGrantedAt: string, workspacePath: string): void {
+    this.update(pluginId, (record) => {
+      const current = record.agentToolWrite
+      const same = current?.packageVersion === packageVersion && current.consentGrantedAt === consentGrantedAt
+      const workspaces = new Set(same ? current!.workspaces : [])
+      workspaces.add(workspacePath)
+      record.agentToolWrite = { packageVersion, consentGrantedAt, workspaces: [...workspaces].sort() }
+      return record
+    })
+  }
+
+  /** Drop every DB3 confirmation of the package (update, disable, removal). */
+  forgetAgentToolWrites(pluginId: string): void {
+    if (!this.state.plugins[pluginId]?.agentToolWrite) return
+    this.update(pluginId, (record) => {
+      delete record.agentToolWrite
+      return record
+    }, true)
   }
 
   revokeConsent(pluginId: string): void {
@@ -147,8 +251,10 @@ export class NativeBackendStore {
 
   setDisabled(pluginId: string, disabled: boolean): void {
     this.update(pluginId, (record) => {
-      if (disabled) record.disabled = true
-      else delete record.disabled
+      if (disabled) {
+        record.disabled = true
+        delete record.agentToolWrite
+      } else delete record.disabled
       return record
     }, disabled)
   }
@@ -164,6 +270,45 @@ export class NativeBackendStore {
       else paths.delete(workspacePath)
       if (paths.size > 0) record.workspaceWrite = [...paths].sort()
       else delete record.workspaceWrite
+      return record
+    })
+  }
+
+  /** Record the first consent to a tool-declaring version, and for each of
+   * `names` (the consented tool set) the first consent that declared it;
+   * names no longer declared are dropped. Times already recorded are kept, so
+   * an unchanged set saves nothing. Every new time is strictly later than
+   * every recorded one, so two packages never tie however fast they are
+   * allowed. */
+  noteAgentToolsSince(pluginId: string, now = new Date(), names: readonly string[] = []): void {
+    const current = this.state.plugins[pluginId]
+    const known = current?.agentToolNamesSince ?? {}
+    const added = names.filter((name) => known[name] === undefined)
+    const dropped = Object.keys(known).some((name) => !names.includes(name))
+    if (current?.agentToolsSince !== undefined && added.length === 0 && !dropped) return
+    let at = now.getTime()
+    for (const record of Object.values(this.state.plugins)) {
+      for (const recorded of [record.agentToolsSince, ...Object.values(record.agentToolNamesSince ?? {})]) {
+        const since = recorded === undefined ? Number.NaN : Date.parse(recorded)
+        if (since >= at) at = since + 1
+      }
+    }
+    const stamp = new Date(at).toISOString()
+    this.update(pluginId, (record) => {
+      const namesSince = Object.fromEntries(names.map((name) => [name, known[name] ?? stamp]))
+      if (names.length > 0) record.agentToolNamesSince = namesSince
+      else delete record.agentToolNamesSince
+      return { ...record, agentToolsSince: record.agentToolsSince ?? stamp }
+    })
+  }
+
+  /** The package declares no tools any more: it gives up its DB1 place. */
+  clearAgentToolsSince(pluginId: string): void {
+    const current = this.state.plugins[pluginId]
+    if (current?.agentToolsSince === undefined && current?.agentToolNamesSince === undefined) return
+    this.update(pluginId, (record) => {
+      delete record.agentToolsSince
+      delete record.agentToolNamesSince
       return record
     })
   }

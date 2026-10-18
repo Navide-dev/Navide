@@ -25,8 +25,9 @@ import {
   setUsageRefreshSec,
   usageRefreshSec,
 } from '../composables/useUsage'
-import { systemNotifyEnabled, setSystemNotifyEnabled } from '../composables/useSystemNotify'
-import { notifySoundEnabled, setNotifySoundEnabled } from '../composables/useSoundNotify'
+import { setSystemNotifyEnabled } from '../composables/useSystemNotify'
+import { setNotifySoundEnabled } from '../composables/useSoundNotify'
+import { notifySoundOn, systemNotifyOn } from '../composables/useNotifyPrefs'
 import { usePermissions } from '../composables/usePermissions'
 import {
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
@@ -58,6 +59,7 @@ import {
   formatCustomCommand,
   type DetectedEditor,
 } from '../lib/defaultEditor'
+import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 import { useCliAgentPrefs } from '../composables/useCliAgentPrefs'
 import { useOnboarding } from '../composables/useOnboarding'
 import {
@@ -124,6 +126,7 @@ import CrossPlatformHelp from './CrossPlatformHelp.vue'
 import ExtensionsPane from './ExtensionsPane.vue'
 import ExecutionPolicyPane from './ExecutionPolicyPane.vue'
 import MarketplacePane from './MarketplacePane.vue'
+import PluginDisclosureOverview from './PluginDisclosureOverview.vue'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import LayoutSettingsPane from '../layout/LayoutSettingsPane.vue'
 import McpPane from './McpPane.vue'
@@ -242,7 +245,7 @@ const reclaimNowSize = computed(() => formatBytes(props.reclaimableNowBytes ?? 0
 /** Active high-risk credential findings, shown as the nav badge. */
 const credentialsHighCount = ref(0)
 
-type Tab = 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'accounts' | 'extensions' | 'marketplace' | 'keybindings' | 'channels' | 'security' | 'help'
+type Tab = 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help'
 
 /** Topics inside the Help tab — read-only reference material, no settings. */
 type HelpTopic =
@@ -283,6 +286,10 @@ const activeTab = ref<Tab>(props.initialTab ?? 'general')
 // The CLI Extensions page scans every CLI's files, so it mounts on first visit
 // and stays mounted after that.
 const visitedCliExtensions = ref(activeTab.value === 'cliExtensions')
+// D-f: the disclosure overview reads every plugin's activity, so it mounts
+// only once its page is first opened (opening Settings reads nothing).
+const visitedDisclosureOverview = ref(activeTab.value === 'disclosureOverview')
+watch(activeTab, (tab) => { if (tab === 'disclosureOverview') visitedDisclosureOverview.value = true })
 watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.value = true })
 // initialTab is only read once at mount by the ref initializer above; when the
 // modal is already open and a new tab is requested (e.g. the ui.settings.open
@@ -908,7 +915,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     tab: 'cross-device',
     section: 'general-p2p',
     title: t('settings.search.item.general-p2p.title'),
-    group: t('settings.nav.group.accountsAgents'),
+    group: t('settings.nav.group.navidePlugins'),
     summary: t('settings.search.item.general-p2p.summary'),
     keywords: 'navide cloud p2p cross device remote server url access token navide-server connect link relay 雲端 跨裝置 遠端 伺服器 網址 權杖 連線 傳訊',
   },
@@ -917,7 +924,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     tab: 'cross-device',
     section: 'general-p2p-policy',
     title: t('settings.search.item.general-p2p-policy.title'),
-    group: t('settings.nav.group.accountsAgents'),
+    group: t('settings.nav.group.navidePlugins'),
     summary: t('settings.search.item.general-p2p-policy.summary'),
     keywords: 'navide cloud policy permission authorization allow rule deny default pane cross device remote rejected 雲端 政策 權限 授權 允許 規則 拒絕 跨裝置 被擋',
   },
@@ -1106,6 +1113,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     group: t('settings.nav.group.navidePlugins'),
     summary: t('settings.search.item.marketplace.summary'),
     keywords: 'marketplace extension extensions plugin plugins registry search browse install publisher signed unsigned trust 市集 擴充 擴充功能 外掛 搜尋 瀏覽 安裝 發佈者 簽章 信任 Navide 市集 拡張機能 プラグイン マーケットプレイス',
+  },
+  {
+    id: 'disclosure-overview',
+    tab: 'disclosureOverview',
+    section: 'disclosureOverview',
+    title: t('settings.search.item.disclosureOverview.title'),
+    group: t('settings.nav.group.navidePlugins'),
+    summary: t('settings.search.item.disclosureOverview.summary'),
+    keywords: 'disclosure overview activity risk permission permissions undeclared anomaly audit plugin plugins 揭露 總覽 活動 風險 權限 沒宣告 異常 稽核 外掛 Navide 外掛 開示 一覧 アクティビティ リスク 権限 プラグイン',
   },
   {
     id: 'help-mcp',
@@ -1409,12 +1425,13 @@ function onResumeInterruptedOnLaunchChange(): void {
 }
 
 // Background notifications for CLI done / needs-input: the OS notification and
-// the sound are separate toggles so either can be muted on its own.
-const systemNotifyEnabledModel = ref(systemNotifyEnabled())
+// the sound are separate toggles so either can be muted on its own. The models
+// are the shared refs the status-bar bell also shows, so both stay in step.
+const systemNotifyEnabledModel = systemNotifyOn
 function onSystemNotifyEnabledChange(): void {
   setSystemNotifyEnabled(systemNotifyEnabledModel.value)
 }
-const notifySoundEnabledModel = ref(notifySoundEnabled())
+const notifySoundEnabledModel = notifySoundOn
 function onNotifySoundEnabledChange(): void {
   setNotifySoundEnabled(notifySoundEnabledModel.value)
 }
@@ -1469,6 +1486,10 @@ async function loadDetectedEditors(refresh = false): Promise<void> {
     detectingEditors.value = false
   }
 }
+
+// A disabled Mini-IDE cannot be the default editor; the option says why.
+const disabledBuiltins = useDisabledBuiltins()
+const miniIdeDisabled = computed(() => disabledBuiltins.disabled.value.has('navide.mini-ide'))
 
 function isEditorAvailable(id: string): boolean {
   return detectedEditors.value.some((editor) => editor.id === id && editor.available)
@@ -1577,6 +1598,7 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
   // Browsing the registry reads nothing of the user's, so this page has no
   // scope badge; the entry exists because the map covers every nav page.
   marketplace: { scope: '', storage: 'mainProcess' },
+  disclosureOverview: { scope: '', storage: 'mainProcess' },
   keybindings: { scope: 'user', storage: 'mainProcess' },
   // Platform config is in navide.db; tokens are in the credential vault.
   channels: { scope: 'user', storage: 'safeStorage' },
@@ -2620,13 +2642,6 @@ watch(activeTab, (tab) => {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h10.8v7.2H7l-3 2.4v-2.4H2.6Z"/><path d="M5.4 6.2h5.2M5.4 8.2h3.2"/></svg>
                 </template>
               </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.crossDevice')" :active="activeTab === 'cross-device'" @select="activeTab = 'cross-device'">
-                <template #icon>
-                  <!-- The same mark as the titlebar and the page header: this
-                       row is how most people will first reach Navide Cloud. -->
-                  <NavideCloudMark variant="solid" class="nvc-nav-mark" />
-                </template>
-              </SettingsNavItem>
             </div>
 
             <div class="s-nav-group">
@@ -2665,6 +2680,13 @@ watch(activeTab, (tab) => {
 
             <div class="s-nav-group">
               <div class="s-nav-group-title">{{ $t('settings.nav.group.navidePlugins') }}</div>
+              <SettingsNavItem :label="$t('settings.nav.crossDevice')" :active="activeTab === 'cross-device'" @select="activeTab = 'cross-device'">
+                <template #icon>
+                  <!-- The same mark as the titlebar and the page header: this
+                       row is how most people will first reach Navide Cloud. -->
+                  <NavideCloudMark variant="solid" class="nvc-nav-mark" />
+                </template>
+              </SettingsNavItem>
               <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :badge="pluginUpdates.count.value" @select="activeTab = 'extensions'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
@@ -2673,6 +2695,11 @@ watch(activeTab, (tab) => {
               <SettingsNavItem :label="$t('settings.nav.marketplace')" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.4h10.8l-.8 7.1a1.2 1.2 0 0 1-1.2 1.1H4.6a1.2 1.2 0 0 1-1.2-1.1L2.6 5.4Z"/><path d="M5.8 7.2V4.6a2.2 2.2 0 0 1 4.4 0v2.6"/></svg>
+                </template>
+              </SettingsNavItem>
+              <SettingsNavItem :label="$t('settings.nav.disclosureOverview')" :active="activeTab === 'disclosureOverview'" @select="activeTab = 'disclosureOverview'">
+                <template #icon>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8 13 3.7v4c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5v-4L8 1.8Z"/><path d="M5.6 6.6h4.8M5.6 9h3.2"/></svg>
                 </template>
               </SettingsNavItem>
             </div>
@@ -3673,7 +3700,11 @@ watch(activeTab, (tab) => {
                   <div class="row-g gap">
                     <span v-if="selectedEditorCommand" class="s-ctrl-label">{{ selectedEditorCommand }}</span>
                     <select :value="defaultEditorModel" @change="onDefaultEditorChange(($event.target as HTMLSelectElement).value)">
-                      <option value="mini-ide">{{ $t('label.editor-mini-ide') }}</option>
+                      <option
+                        value="mini-ide"
+                        :disabled="miniIdeDisabled"
+                        :title="miniIdeDisabled ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' }) : undefined"
+                      >{{ $t('label.editor-mini-ide') }}</option>
                       <option value="system">{{ $t('label.editor-system') }}</option>
                       <option
                         v-for="id in DETECTABLE_EDITOR_IDS"
@@ -4491,7 +4522,7 @@ watch(activeTab, (tab) => {
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" />
             </section>
-            <ExtensionsPane />
+            <ExtensionsPane @open-disclosure-overview="activeTab = 'disclosureOverview'" />
           </div>
         </div>
 
@@ -4500,6 +4531,14 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.marketplace') }}</h1>
           <div class="marketplace-scroll">
             <MarketplacePane />
+          </div>
+        </div>
+
+        <!-- ── DISCLOSURE OVERVIEW (plan B D5, D-f) ───────────────────────── -->
+        <div v-show="activeTab === 'disclosureOverview'" class="s-body s-body--bleed marketplace-body" data-settings-section="disclosureOverview">
+          <h1 class="s-page-title">{{ $t('settings.nav.disclosureOverview') }}</h1>
+          <div class="marketplace-scroll">
+            <PluginDisclosureOverview v-if="visitedDisclosureOverview" />
           </div>
         </div>
 

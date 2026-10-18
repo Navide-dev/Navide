@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "pluginId": "nerdtechnic.devmap",
+  "generatedAt": 1792108800000,
+  "window": {
+    "from": 1791504000000,
+    "to": 1792108800000
+  },
+  "totals": {
+    "calls": 3,
+    "denied": 1,
+    "errors": 0
+  },
+  "historicalPeakConcurrency": 2,
+  "undeclaredSince": 1789516800000,
+  "toolCalls": [
+    {
+      "id": 3,
+      "at": 1792105200000,
+      "callerKind": "pane",
+      "paneId": "p-41",
+      "paneName": "dev",
+      "callerWorkspace": "/Users/me/new",
+      "targetWorkspace": "/Users/me/new",
+      "crossWorkspace": false,
+      "pluginVersion": "0.2.0",
+      "tool": "devmap_set_status",
+      "risk": "write",
+      "outcome": "ok",
+      "errorCode": "",
+      "durationMs": 41,
+      "argsBytes": 33,
+      "resultBytes": 212
+    },
+    {
+      "id": 2,
+      "at": 1791936000000,
+      "callerKind": "pane",
+      "paneId": "p-41",
+      "paneName": "dev",
+      "callerWorkspace": "/Users/me/project",
+      "targetWorkspace": "/Users/me/project",
+      "crossWorkspace": false,
+      "pluginVersion": "0.2.0",
+      "tool": "devmap_read",
+      "risk": "read",
+      "outcome": "ok",
+      "errorCode": "",
+      "durationMs": 1000,
+      "argsBytes": 33,
+      "resultBytes": 212
+    },
+    {
+      "id": 1,
+      "at": 1791936000000,
+      "callerKind": "pane",
+      "paneId": "p-41",
+      "paneName": "dev",
+      "callerWorkspace": "/Users/me/project",
+      "targetWorkspace": "/Users/me/project",
+      "crossWorkspace": false,
+      "pluginVersion": "0.2.0",
+      "tool": "devmap_set_status",
+      "risk": "write",
+      "outcome": "ok",
+      "errorCode": "",
+      "durationMs": 1000,
+      "argsBytes": 33,
+      "resultBytes": -1
+    }
+  ],
+  "files": [
+    {
+      "path": "docs/devmap.md",
+      "address": "fs.readFile",
+      "workspace": "/Users/me/project",
+      "outcome": "allowed",
+      "count": 1,
+      "lastAt": 1791936000000
+    }
+  ],
+  "commands": [
+    {
+      "command": "git status",
+      "workspace": "/Users/me/project",
+      "outcome": "allowed",
+      "count": 1,
+      "lastAt": 1791936000000
+    }
+  ],
+  "daily": [
+    {
+      "day": "2026-10-14",
+      "calls": 2,
+      "denied": 0,
+      "errors": 0
+    },
+    {
+      "day": "2026-10-15",
+      "calls": 1,
+      "denied": 1,
+      "errors": 0
+    }
+  ],
+  "declaredUnused": [
+    {
+      "kind": "system",
+      "key": "ui",
+      "lastUsedAt": null
+    }
+  ],
+  "undeclared": [
+    {
+      "source": "broker",
+      "address": "net.fetch",
+      "workspace": "/Users/me/project",
+      "count": 1,
+      "lastAt": 1792022400000,
+      "reasons": [
+        {
+          "reason": "undeclared",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "anomalies": [
+    {
+      "kind": "writeToolNewWorkspace",
+      "at": 1792105200000,
+      "workspace": "/Users/me/new",
+      "tool": "devmap_set_status",
+      "count": null,
+      "baseline": null
+    },
+    {
+      "kind": "undeclaredDenied",
+      "at": 1792022400000,
+      "workspace": "/Users/me/project",
+      "tool": null,
+      "count": 1,
+      "baseline": null
+    }
+  ],
+  "agentActions": [
+    {
+      "at": 1792022400000,
+      "action": "disable",
+      "callerKind": "pane",
+      "paneId": "p-41",
+      "paneName": "dev",
+      "workspace": "/Users/me/project",
+      "version": "0.2.0"
+    }
+  ],
+  "backendCalls": {
+    "methods": [
+      {
+        "address": "backend.devmap.block.import",
+        "outcome": "allowed",
+        "count": 1200,
+        "lastAt": 1792022400000
+      },
+      {
+        "address": "backend.devmap.block.import",
+        "outcome": "cancelled",
+        "count": 2,
+        "lastAt": 1792022400000
+      },
+      {
+        "address": "backend.devmap.block.import",
+        "outcome": "error",
+        "count": 1,
+        "lastAt": 1792022400000
+      }
+    ],
+    "daily": [
+      {
+        "day": "2026-10-15",
+        "calls": 1203,
+        "denied": 0,
+        "errors": 1,
+        "cancelled": 2
+      }
+    ]
+  }
+}

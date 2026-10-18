@@ -33,9 +33,10 @@ describe('Windows release gates', () => {
     const gate = gates.steps.find((step) => step.name === 'Run Windows release gates')!
     const commands = gate.run!.trim().split('\n').map((line) => line.trim())
     // The whole tree, narrowed by nothing but the shard: no -k, paths or deselects.
+    // --locked only refuses a stale uv.lock; it selects no tests.
     expect(commands).toEqual([
-      'uv --project backend run ruff check backend',
-      'uv --project backend run pytest backend/tests --shard ${{ matrix.shard }}',
+      'uv --project backend run --locked ruff check backend',
+      'uv --project backend run --locked pytest backend/tests --shard ${{ matrix.shard }}',
     ])
     expect(gates.steps.find((step) => step.uses?.startsWith('actions/setup-python@'))?.with?.['python-version'])
       .toBe(packaging.x64.steps.find((step) => step.uses?.startsWith('actions/setup-python@'))?.with?.['python-version'])

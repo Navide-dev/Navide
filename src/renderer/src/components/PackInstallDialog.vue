@@ -5,15 +5,17 @@
 // owns the state and every IPC call.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
 import type { PackInstallFlow } from '../composables/usePackInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
+import PluginAgentToolsList from './PluginAgentToolsList.vue'
 
 const props = defineProps<{ flow: PackInstallFlow }>()
 
 const pack = computed(() => props.flow.pack.value)
 const prepared = computed(() => props.flow.memberPrepared.value)
 const member = computed(() => props.flow.currentMember.value)
-const label = computed(() => pack.value?.display_name || pack.value?.id || '')
+const label = computed(() => reveal(pack.value?.display_name || pack.value?.id || ''))
 
 // Esc never bypasses the flow: it must not reach the settings modal (which
 // closes on any Escape nobody handled; this capture listener runs first).
@@ -50,7 +52,7 @@ function resultTone(result: string | undefined): 'success' | 'muted' | 'danger' 
 }
 
 function memberLabel(m: PackMemberSummary): string {
-  return m.display_name ? `${m.display_name} (${m.id})` : m.id
+  return reveal(m.display_name ? `${m.display_name} (${m.id})` : m.id)
 }
 
 // Step bar: done (installed/skipped/failed), current, or still to come.
@@ -95,9 +97,9 @@ function stepState(m: PackMemberSummary): 'current' | 'done' | 'skipped' | 'fail
               :data-status="m.status"
             >
               <div class="pack-member-main">
-                <span class="pack-member-name" v-truncate>{{ m.display_name || m.id }}</span>
+                <span class="pack-member-name" v-truncate>{{ reveal(m.display_name || m.id) }}</span>
                 <span class="pack-muted pack-member-id" v-truncate>
-                  {{ m.version ? `${m.id} · ${m.version}` : m.id }}
+                  {{ reveal(m.version ? `${m.id} · ${m.version}` : m.id) }}
                 </span>
               </div>
               <div class="pack-member-caps">
@@ -149,7 +151,7 @@ function stepState(m: PackMemberSummary): 'current' | 'done' | 'skipped' | 'fail
               :title="m.id"
             >
               <span class="pack-step-mark">{{ stepState(m) === 'done' ? '✓' : index + 1 }}</span>
-              <span class="pack-step-label" v-truncate>{{ m.id }}</span>
+              <span class="pack-step-label" v-truncate>{{ reveal(m.id) }}</span>
             </li>
           </ol>
           <p v-if="!prepared" class="nv-loading">{{ $t('settings.extensions.pack.verifying') }}</p>
@@ -158,22 +160,23 @@ function stepState(m: PackMemberSummary): 'current' | 'done' | 'skipped' | 'fail
               <strong>{{ memberLabel(member) }}</strong> <span class="pack-muted">{{ prepared.version }}</span>
             </p>
             <p v-if="flow.memberStep.value === 'publisher'" class="pack-publisher-risk pack-callout">
-              {{ $t('settings.extensions.trust.publisherRisk', { publisher: prepared.publisherId, id: prepared.id }) }}
+              {{ $t('settings.extensions.trust.publisherRisk', { publisher: reveal(prepared.publisherId), id: reveal(prepared.id) }) }}
             </p>
             <template v-else>
               <p v-if="prepared.containsBackendExecutable" class="pack-backend-risk pack-callout">
-                {{ $t('settings.extensions.trust.backendRisk', { name: prepared.id }) }}
+                {{ $t('settings.extensions.trust.backendRisk', { name: reveal(prepared.id) }) }}
               </p>
               <p v-if="prepared.sensitive.length" class="pack-sensitive">
-                {{ $t('settings.extensions.trust.sensitiveRisk', { name: prepared.id, capabilities: prepared.sensitive.join(', ') }) }}
+                {{ $t('settings.extensions.trust.sensitiveRisk', { name: reveal(prepared.id), capabilities: prepared.sensitive.join(', ') }) }}
               </p>
               <p v-if="prepared.sensitive.length" class="pack-sensitive-caps">
                 <span v-for="cap in prepared.sensitive" :key="cap" class="pack-cap pack-cap--sensitive">
                   {{ cap }} · {{ $t('settings.extensions.sensitive') }}
                 </span>
               </p>
+              <PluginAgentToolsList v-if="prepared.agentTools?.length" :tools="prepared.agentTools" />
               <p v-if="!prepared.containsBackendExecutable && !prepared.sensitive.length" class="pack-plain">
-                {{ $t('settings.extensions.pack.noSensitive', { name: prepared.id }) }}
+                {{ $t('settings.extensions.pack.noSensitive', { name: reveal(prepared.id) }) }}
               </p>
             </template>
             <p class="pack-trust">
@@ -181,7 +184,7 @@ function stepState(m: PackMemberSummary): 'current' | 'done' | 'skipped' | 'fail
                 {{ $t('settings.extensions.trust.signed') }}
               </span>
               <span v-else class="pack-badge pack-badge--neutral">{{ $t('settings.extensions.trust.unsigned') }}</span>
-              <span class="pack-muted">{{ $t('settings.extensions.marketplace.publisher') }}: {{ prepared.publisherId }}</span>
+              <span class="pack-muted">{{ $t('settings.extensions.marketplace.publisher') }}: {{ reveal(prepared.publisherId) }}</span>
             </p>
           </template>
           <p class="pack-note">{{ $t('settings.extensions.pack.partialNote') }}</p>
@@ -226,8 +229,8 @@ function stepState(m: PackMemberSummary): 'current' | 'done' | 'skipped' | 'fail
           <ul class="pack-members">
             <li v-for="m in pack.members" :key="m.id" class="pack-member pack-member--result" :data-member="m.id">
               <span class="pack-member-main">
-                <span class="pack-member-name" v-truncate>{{ m.display_name || m.id }}</span>
-                <span v-if="m.display_name" class="pack-muted pack-member-id" v-truncate>{{ m.id }}</span>
+                <span class="pack-member-name" v-truncate>{{ reveal(m.display_name || m.id) }}</span>
+                <span v-if="m.display_name" class="pack-muted pack-member-id" v-truncate>{{ reveal(m.id) }}</span>
               </span>
               <span
                 class="pack-result"

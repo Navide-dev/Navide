@@ -10,6 +10,11 @@ type DeepLinkApi = import('../../shared/deepLink').DeepLinkApi
 type ManifestPermissionsSummary = import('../../shared/executionPolicy').ManifestPermissionsSummary
 type PackageVersionGrantSummary = import('../../shared/executionPolicy').PackageVersionGrantSummary
 type LegacyPlansPreferenceProjection = import('../../shared/plansPreferences').LegacyPlansPreferenceProjection
+type PluginManifestDisclosure = import('../../shared/pluginDisclosure').ManifestDisclosure
+type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
+type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
+type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
+type PluginActivityReport = import('../../shared/pluginActivity').PluginActivityReport
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
 
@@ -88,6 +93,12 @@ declare global {
       onGitRecoveryChanged: (cb: (change: GitRecoveryChanged) => void) => () => void
       onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void) => () => void
       onPlansBackendStopped: (cb: (stopped: { workspacePath: string }) => void) => () => void
+      onPluginAgentAction?: (cb: (notice: {
+        action: 'disable' | 'enable'
+        pluginId: string
+        pluginVersion: string
+        requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
+      }) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
       onSystemResumed: (cb: () => void) => () => void
       setRecentWorkspaces: (list: { path: string; name: string; exists: boolean }[]) => void
@@ -370,6 +381,39 @@ declare global {
       plugins?: {
         listInstalled: () => Promise<InstalledPluginSummary[]>
         listFactoryPackages: () => Promise<FactoryPluginSummary[]>
+        /** Current and peak in-flight backend calls per plugin (never capped) and dropped Host event notifications. */
+        backendCallConcurrency?: () => Promise<Array<{ pluginId: string; current: number; peak: number; droppedNotifications: number }>>
+        /** D-f: one installed plugin's activity report (read only). */
+        activityReport?: (id: string) => Promise<{ ok: true; report: PluginActivityReport } | { ok: false; error: string }>
+        /** D-f: installed Registry packages' disclosures and install-time scans. */
+        installedDisclosures?: () => Promise<Array<{
+          id: string
+          version: string
+          disclosure: PluginManifestDisclosure | null
+          scan: PluginScanReport | null
+        }>>
+        /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped). */
+        backendResourceUsage?: () => Promise<{
+          backend?: { resultHelper: { state: 'idle' | 'ready' | 'unavailable'; lastError: string; since: number } }
+          children: { current: number; peak: number; retained: number }
+          views: Array<{
+            pluginId: string
+            instanceId: string
+            subscriptions: { current: number; peak: number }
+            child: {
+              subscriptions: { current: number; peak: number }
+              bridgeRequests: { current: number; peak: number }
+              outputQueue: Record<'requests' | 'notifications', { frames: number; bytes: number; peakFrames: number; peakBytes: number }>
+              droppedNotifications: number
+              droppedResultPieces: number
+              stdoutPending: { bytes: number; peakBytes: number }
+            } | null
+          }>
+          plugins: Array<{ pluginId: string; current: number; peak: number; droppedNotifications: number }>
+        }>
+        disabledBuiltins?: () => Promise<string[]>
+        disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
+        resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null
@@ -418,6 +462,10 @@ declare global {
         checkUpdates: () => Promise<PluginUpdateInfo[]>
         pendingUpdates: () => Promise<PluginUpdateInfo[]>
         onUpdatesChanged: (handler: (updates: PluginUpdateInfo[]) => void) => () => void
+        onRescanNotices?: (handler: (notices: PluginRescanNotice[]) => void) => () => void
+        onResultHelperState?: (
+          handler: (state: { state: 'idle' | 'ready' | 'unavailable'; lastError: string; since: number }) => void,
+        ) => () => void
         prepareInstall: (args: {
           namespace: string
           name: string
@@ -439,9 +487,13 @@ declare global {
           restoredInstances: number
           skippedDestroyedHostWindows: number
         }>
-        remove: (id: string) => Promise<{ ok: boolean }>
+        remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<{ ok: boolean }>
+        nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
+        /** The installed version's disclosure (Manifest v2), or null. */
+        installedDisclosure?: (id: string) => Promise<import('../../shared/pluginDisclosure').ManifestDisclosure | null>
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
+        setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
         marketplacePackMembers: (members: string[]) => Promise<PackMemberSummary[]>
         preparePack: (args: { namespace: string; name: string }) => Promise<PreparedPackSummary>
         finishPack: (id: string) => Promise<{ recorded: boolean; pack?: InstalledPackRecord }>
@@ -453,9 +505,36 @@ declare global {
           allow: (id: string) => Promise<NativeBackendOverview>
           setDisabled: (id: string, disabled: boolean) => Promise<NativeBackendOverview>
           revokeWorkspaceWrite: (id: string, workspacePath: string) => Promise<NativeBackendOverview>
+          setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean }) => Promise<NativeBackendOverview>
+          /** Watchdog option C: unanswered resource notices (contract 5.2). */
+          resourceNotices?: () => Promise<BackendResourceNoticeView[]>
+          resourceStatus?: () => Promise<BackendResourceStatusView[]>
+          answerResourceNotice?: (id: string, choice: 'terminate' | 'continue') => Promise<boolean>
+          onResourceNoticesChanged?: (handler: () => void) => () => void
         }
       }
     }
+  }
+
+  interface BackendResourceStatusView {
+    pluginId: string
+    name: string
+    packageVersion: string
+    usage: Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+    thresholds: Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+    levels: Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+    waiting: Array<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'>
+  }
+
+  interface BackendResourceNoticeView {
+    id: string
+    pluginId: string
+    name: string
+    packageVersion: string
+    item: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+    usage: number
+    threshold: number
+    at: number
   }
 
   interface InstalledPluginSummary {
@@ -476,6 +555,8 @@ declare global {
     engineCompatible?: boolean
     /** Per-extension "Get pre-releases" switch (Registry installs only). */
     getsPrereleases?: boolean
+    /** The user's "Disabled" switch; absent on rows it does not apply to. */
+    disabled?: boolean
   }
 
   interface FactoryPluginSummary {
@@ -483,6 +564,10 @@ declare global {
     version: string | null
     active: boolean
     optedOut: boolean
+    /** The user's Disabled switch for this built-in. */
+    disabled?: boolean
+    /** An earlier version removed it and deleted its data; now Disabled. */
+    dataDeletedByEarlierRemoval?: boolean
   }
 
   interface MarketplaceExtension {
@@ -517,6 +602,13 @@ declare global {
     extension_pack?: string[] | null
     /** Trust tier of the latest version ('signed-verified' or 'unsigned'). */
     trust_tier?: string | null
+    /** Plan B D1 list card: the latest version's manifest disclosure and scan
+     *  report as the Registry listed them, kept by the main process only when
+     *  well formed and naming this item; unverified display data. */
+    disclosure?: PluginManifestDisclosure | null
+    scan?: PluginScanReport | null
+    /** D-f: the highest risk level across the latest version's platforms. */
+    listRisk?: { level: 'low' | 'medium' | 'high' | 'highest'; variesByPlatform: boolean } | null
   }
 
   interface PackMemberSummary {
@@ -553,15 +645,31 @@ declare global {
       | 'stopped-after-crashes'
       | 'unavailable'
     reason?: string
+    /** Declared agent tools; absent when none. `collidesWith`: the plugin id
+     *  that holds the same name, so this tool stays offline. */
+    agentTools?: Array<{
+      name: string
+      title: string
+      description: string
+      risk: 'read' | 'write'
+      timeoutMs: number
+      method: string
+      inputSchema: Record<string, unknown>
+      collidesWith?: string
+      sharedWith?: string[]
+    }>
     changedSinceConsent: boolean
     canWriteWorkspace: boolean
     workspaceWrite: string[]
-    lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk'
+    lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+    shell?: 'allowlist' | 'full'
   }
 
   interface NativeBackendOverview {
     enabled: boolean
     plugins: NativeBackendStatusRow[]
+    /** Plan B: agent-tool switches (DB8, DB4); absent on an older Host. */
+    agentTools?: { enabled: boolean; externalCallers: boolean }
   }
 
   interface InstalledPackRecord {
@@ -595,6 +703,11 @@ declare global {
     compatible?: boolean | null
     min_navide_version?: string | null
     channel?: 'stable' | 'pre-release'
+    /** Contract 3.4/3.8, as the Registry sent them: display data that nothing
+     *  has verified yet (prepareInstall verifies the signed disclosure). */
+    disclosure?: PluginManifestDisclosure | null
+    scan?: PluginScanReport | null
+    registry?: PluginRegistryDisclosureFacts | null
   }
 
   interface MarketplaceExtensionDetail extends MarketplaceExtension {
@@ -617,12 +730,20 @@ declare global {
     readme: string | null
   }
 
+  interface PluginRescanNotice {
+    id: string
+    version: string
+    added: Array<{ kind: string; key: string }>
+  }
+
   interface PluginUpdateInfo {
     id: string
     namespace: string
     name: string
     installedVersion: string
     latestVersion: string
+    /** Plan B D2 badge, from the Registry's unverified listing. */
+    permissionChange?: 'more' | 'same'
   }
 
   interface MarketplaceListResponse {
@@ -638,10 +759,30 @@ declare global {
     trustTier: 'signed-verified' | 'unsigned'
     sensitive: string[]
     containsBackendExecutable: boolean
+    /** Declared agent tools (sorted, timeouts defaulted); absent when none. */
+    agentTools?: Array<{
+      name: string
+      method: string
+      risk: 'read' | 'write'
+      title: string
+      description: string
+      timeoutMs: number
+      inputSchema: Record<string, unknown>
+    }>
     requiresConfirmation: boolean
     publisherId: string
     requiresPublisherTrust: boolean
     requiresRiskConfirmation: boolean
+    /** Plan B D2: what this update changes, computed by the Host from the
+     *  installed and the downloaded manifests; null for a first install. */
+    disclosureDiff?: PluginDisclosureDiff | null
+    /** Verified against the package and the Registry signature; null when the
+     *  version carries no disclosure. */
+    disclosure?: PluginManifestDisclosure | null
+    /** Registry-signed scan report (digest verified); null when none. */
+    scan?: PluginScanReport | null
+    /** Unsigned Registry facts, never verified. */
+    registry?: PluginRegistryDisclosureFacts | null
   }
 }
 

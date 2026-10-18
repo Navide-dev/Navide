@@ -12,6 +12,7 @@ Navide は **Local-first** ですが、常に完全オフラインという意�
 - Application Data Directory 内の Role、Pipeline、Recent Workspace、UI Setting、Analyzer Setting、AI Provider Setting
 - Application Data Directory 内の Host 管理 Plugin Storage Partition。認証済みの Plugin/Package ごとに分離され、Workspace Scope では認証済み Workspace ごとに分離されます。Navide や Plugin Registry へ送信されません
 - Local CLI Log から得た Token Attribution と Deduplication Metadata
+- Local の `navide.db` 内の、サードパーティ Navide Plugin の Activity Log（`plugin_activity`）：Plugin、`namespace.method`、時刻、Workspace、許可／拒否／失敗、Workspace 相対の File Path（Workspace 外の Path は `<outside-workspace>` のみ。File の内容は保存しません）、Shell 呼び出しは実行ファイルと Subcommand のみ。詳細は 7 日間、その後は日ごとの件数のみ 90 日間保持します。同梱の Plans、Git、Mini-IDE は記録しません。この端末の外へは送信されません
 - 任意の AI Provider API Key。制限された File Permission（対応 System では `0600`）で保護された Local Settings File に保存
 
 Navide は Project Telemetry Service を運営せず、Navide Account を必要としません。
@@ -127,3 +128,11 @@ GitHub public skill の準備では、repository、ref と通常の接続 metada
 準備した bytes は backend メモリに保持され、15 分後または再起動時に失効します。有効なパッケージは最大 8 件で、メモリには別に最大 8 件の軽量な完了記録を保持します。インストールは確認済み snapshot を使用し、元のファイルを再読込せず既存の共有 Skills ルートに書き込みます。スクリプトや plugin hooks は実行しません。記録が残っている間の再送は元の結果だけを返し、再書き込みしません。記録は元の preview の期限で失効するか、それより先に破棄される場合があります。その後の再送は missing/expired を返し、再インストールしません。Inspect／prepare は skill の文章、ファイル情報、出所パスを要求した coding agent に返すため、CLI 自身のデータポリシーに従いモデルプロバイダーへ送られる可能性があります。パッケージに秘密情報を含めないでください。
 
 Skills sync が有効なら、条件を満たす内容と配信設定を既存フローでペアリング済みデバイスへ同期できます。選んだパッケージは Skills 内容 export と同じ上限（64 ファイル、各 256 KiB、合計 512 KiB）を使用しますが、上限内であることは同期完了を保証しません。Backend が生成した source、digest、時刻の記録はローカルの Navide marker に残り、編集や再起動後も保持されます。Export／Skills sync には含まれません。
+
+### MCP による Navide マーケットプレイスの照会
+
+`marketplace_search` と `marketplace_detail` は、Navide マーケットプレイスのページと同じリクエスト（検索テキスト、カテゴリ、ページ、またはパッケージ名）を Navide アプリから設定済みの Registry に送らせます。`plugins_list_installed` は外部に何も送らず、ローカルの一覧を読むだけです。3 つとも結果（公開されている掲載データと、インストール済み Navide プラグインの id・バージョン・状態）を要求元の coding agent に返し、その CLI のデータポリシーに従って、設定されたモデルプロバイダーがそれを受け取る場合があります。
+
+### MCP による Navide マーケットプレイスへの依頼
+
+`marketplace_request_install`、`_update`、`_rollback` を使うと、Navide アプリは `marketplace_detail` と同じ方法でパッケージを照会します。依頼ツールはすべてローカルのインベントリを読みます。依頼は、依頼した pane の名前とワークスペース、エージェントの理由とともに、判断されるか期限切れになるまでバックエンドのメモリに保持され、Navide のウィンドウでユーザーに表示されます。`plugins_disable` と `plugins_enable` は外部に何も送りません。依頼、判断、無効化、有効化はすべて navide.db にローカルで記録され（`plugin_agent_actions`：プラグイン、操作、呼び出し元の種類、pane ID、pane 名、ワークスペース、結果）、30 日間保持され、その後は最新の 10,000 行が残ります。

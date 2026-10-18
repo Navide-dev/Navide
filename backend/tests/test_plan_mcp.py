@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 from agent_team_backend import agent_messaging
 from agent_team_backend import app as backend_app
 from agent_team_backend.app import app
+from agent_team_backend.plan_index import resolve_plan_root
 from agent_team_backend.plugins.builtin.navide_plans.plan_meta import parse_plan_meta
 from agent_team_backend.plugins import wiring as plugin_wiring
 from agent_team_backend.mcp_server import server as plan_mcp, auth as plan_mcp_auth, wiring as plan_mcp_wiring
@@ -688,6 +690,36 @@ async def test_plan_create_does_not_warn_when_a_pane_matches(
     assert "warning" not in result.structuredContent
 
 
+async def test_plan_create_from_a_git_subfolder_pane_lands_in_the_view_root_without_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pane working in a subfolder of a repository: the plan lands in the git
+    root, which is the root the Plan view resolves that same workspace to — so
+    the pane's own workspace does use it and no "no pane uses" warning fires."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    subfolder = repo / "MVP"
+    subfolder.mkdir()
+    fake = _FakeTerminalService([_fake_session("s1", cwd=str(subfolder))])
+    monkeypatch.setattr(backend_app, "get_terminals", lambda: fake)
+    result = await _call(
+        "plan_create",
+        {
+            "workspace_path": str(subfolder),
+            "name": "Subfolder Plan",
+            "overview": "",
+            "todos": ["Task"],
+        },
+    )
+    assert not result.isError
+    assert resolve_plan_root(str(subfolder)) == str(repo.resolve())
+    created = repo / result.structuredContent["rel_path"]
+    assert created.is_file()
+    assert created.parent == (repo / ".agent-team" / "plans")
+    assert not (subfolder / ".agent-team").exists()
+    assert "warning" not in result.structuredContent
+
+
 # ── workspace defaults to the calling pane's own ────────────────────────────
 
 
@@ -701,7 +733,7 @@ def clean_registry() -> Any:
 def _pane_ctx(pane_id: str = "pa") -> SimpleNamespace:
     """A Context carrying a live pane's credential, the way a wired CLI spawn
     does (plan_mcp_wiring.plan_mcp_url)."""
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )
@@ -842,8 +874,10 @@ async def test_mounted_endpoint_serves_mcp(workspace: Path) -> None:
     try:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            # Every Navide CLI's URL carries a credential, checked before the
+            # body is read (review M2); the host one is the fallback wiring's.
             resp = await client.post(
-                "/plan-mcp",
+                f"/plan-mcp?client=host&t={plan_mcp_auth.internal_token()}",
                 json={
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -1016,3 +1050,373 @@ async def test_plan_list_locally_lists_a_document_it_cannot_read(workspace: Path
     assert ".agent-team/plans/binary.html" in by_path
     read = await _call("plan_read", {"workspace_path": str(workspace), "rel_path": "huge.html"})
     assert len(read.structuredContent["html"]) == 6 * 1024 * 1024 + len("<html></html>")
+
+
+# ── plan_add_todo ───────────────────────────────────────────────────────────
+
+
+def _row_ids(html: str) -> list[str]:
+    return re.findall(r'<li\b[^>]*data-todo-id="([^"]+)"', html)
+
+
+async def _add_todo(workspace: Path, **args: Any) -> _ToolResult:
+    return await _call("plan_add_todo", {"workspace_path": str(workspace), "rel_path": "alpha.html", **args})
+
+
+async def test_plan_add_todo_appends_to_the_island_and_the_visible_list(workspace: Path) -> None:
+    result = await _add_todo(workspace, content="Third <step>")
+    assert not result.isError, result.content[0].text
+    assert result.structuredContent == {"id": "t3", "content": "Third <step>", "status": "pending"}
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+    todos = parse_plan_meta(html)["todos"]
+    assert [t["id"] for t in todos] == ["t1", "t2", "t3"]
+    assert todos[2] == {"id": "t3", "content": "Third <step>", "status": "pending"}
+    assert _row_ids(html) == ["t1", "t2", "t3"]
+    row = re.search(r'<li data-status="pending" data-todo-id="t3">[\s\S]*?</li>', html).group(0)
+    assert '<span class="st">pending</span>' in row
+    assert "Third &lt;step&gt;" in row
+    # Appended inside the same list, not after it.
+    assert html.index('data-todo-id="t3"') < html.index("</ul>")
+
+
+async def test_plan_add_todo_inserts_after_the_named_todo(workspace: Path) -> None:
+    result = await _add_todo(workspace, content="In between", id="mid-step", after="t1")
+    assert not result.isError, result.content[0].text
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1", "mid-step", "t2"]
+    assert _row_ids(html) == ["t1", "mid-step", "t2"]
+
+
+async def test_plan_add_todo_auto_ids_never_reuse_or_renumber(workspace: Path) -> None:
+    await _add_todo(workspace, content="Named", id="named")
+    first = await _add_todo(workspace, content="Auto one")
+    second = await _add_todo(workspace, content="Auto two", after="t1")
+    assert first.structuredContent["id"] == "t3"
+    assert second.structuredContent["id"] == "t4"
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1", "t4", "t2", "named", "t3"]
+    assert _row_ids(html) == ["t1", "t4", "t2", "named", "t3"]
+
+
+@pytest.mark.parametrize(
+    ("args", "needle"),
+    [
+        ({"id": "t1"}, "duplicate todo id"),
+        ({"id": "Bad_Id"}, "invalid todo id"),
+        ({"after": "nope"}, "unknown todo id"),
+        ({"status": "blocked"}, "invalid status"),
+        ({"owner": "robot"}, "invalid todo owner"),
+        ({"content": "   "}, "empty"),
+    ],
+)
+async def test_plan_add_todo_refusals_leave_the_file_untouched(
+    workspace: Path, args: dict[str, str], needle: str
+) -> None:
+    target = _plans_dir(workspace) / "alpha.html"
+    before = target.read_bytes()
+    result = await _add_todo(workspace, **{"content": "New", **args})
+    assert result.isError
+    assert needle in result.content[0].text
+    assert target.read_bytes() == before
+
+
+async def test_plan_add_todo_unknown_after_lists_the_valid_ids(workspace: Path) -> None:
+    result = await _add_todo(workspace, content="New", after="nope")
+    assert result.isError
+    assert "t1" in result.content[0].text and "t2" in result.content[0].text
+
+
+async def test_plan_add_todo_owner_and_status_are_stored_like_plan_create(workspace: Path) -> None:
+    user = await _add_todo(workspace, content="Verify on a real machine", owner="user", status="in-progress")
+    agent = await _add_todo(workspace, content="Agent work", owner="agent")
+    assert user.structuredContent == {
+        "id": "t3", "content": "Verify on a real machine", "status": "in-progress", "owner": "user",
+    }
+    assert agent.structuredContent == {"id": "t4", "content": "Agent work", "status": "pending"}
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+    todos = {t["id"]: t for t in parse_plan_meta(html)["todos"]}
+    assert todos["t3"]["owner"] == "user"
+    assert "owner" not in todos["t4"]
+    assert '<li data-status="in-progress" data-todo-id="t3">' in html
+
+
+async def test_plan_add_todo_refuses_a_write_that_raced_it(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = _plans_dir(workspace) / "alpha.html"
+    original = plan_tools._load_plan_for_write  # noqa: SLF001
+
+    def load_then_race(*args: Any) -> Any:
+        loaded = original(*args)
+        target.write_text(target.read_text(encoding="utf-8") + "<!-- raced -->", encoding="utf-8")
+        stat = target.stat()
+        os.utime(target, (stat.st_atime, stat.st_mtime + 5))
+        return loaded
+
+    monkeypatch.setattr(plan_tools, "_load_plan_for_write", load_then_race)
+    result = await _add_todo(workspace, content="Lost update")
+    assert result.isError
+    assert "conflict" in result.content[0].text
+    html = target.read_text(encoding="utf-8")
+    assert html.endswith("<!-- raced -->")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1", "t2"]
+
+
+async def test_plan_add_todo_fills_an_empty_todo_list(workspace: Path) -> None:
+    result = await _call(
+        "plan_add_todo", {"workspace_path": str(workspace), "rel_path": "beta.html", "content": "First"}
+    )
+    assert not result.isError, result.content[0].text
+    assert "warning" not in result.structuredContent
+    html = (_plans_dir(workspace) / "beta.html").read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1"]
+    assert _row_ids(html) == ["t1"]
+    assert html.index('data-todo-id="t1"') < html.index("</ul>")
+
+
+async def test_plan_add_todo_without_todo_markup_writes_the_island_and_warns(workspace: Path) -> None:
+    meta = {"schemaVersion": 1, "name": "Bare", "stage": "draft", "overview": "", "todos": [], "reviewNotes": []}
+    target = _plans_dir(workspace) / "bare.html"
+    target.write_text(
+        f'<script type="application/json" id="plan-meta">\n{json.dumps(meta)}\n</script>\n<p>prose</p>\n',
+        encoding="utf-8",
+    )
+    result = await _call(
+        "plan_add_todo", {"workspace_path": str(workspace), "rel_path": "bare.html", "content": "Only in meta"}
+    )
+    assert not result.isError, result.content[0].text
+    assert result.structuredContent["id"] == "t1"
+    assert "not inserted" in result.structuredContent["warning"]
+    html = target.read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1"]
+    assert _row_ids(html) == []
+
+
+async def test_plan_add_todo_warns_when_the_after_row_is_missing_from_the_markup(workspace: Path) -> None:
+    target = _plans_dir(workspace) / "alpha.html"
+    target.write_text(
+        re.sub(r'<li data-status="done" data-todo-id="t1">[\s\S]*?</li>', "", target.read_text(encoding="utf-8")),
+        encoding="utf-8",
+    )
+    result = await _add_todo(workspace, content="After a hidden row", after="t1")
+    assert not result.isError, result.content[0].text
+    assert "warning" in result.structuredContent
+    html = target.read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1", "t3", "t2"]
+    assert _row_ids(html) == ["t2"]
+
+
+async def test_plan_add_todo_routes_through_the_host(monkeypatch: pytest.MonkeyPatch, workspace: Path) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def route(plugin_id: str, workspace_path: str, request: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        calls.append((request["name"], request["args"]))
+        return {"ok": True, "result": {"id": "t3", "content": "Hosted", "status": "pending"}}
+
+    monkeypatch.setattr(plan_mcp, "request_host_agent_workspace_backend", route)
+    target = _plans_dir(workspace) / "alpha.html"
+    before = target.read_bytes()
+    result = await _add_todo(workspace, content="Hosted", after="t1")
+    assert result.structuredContent == {"id": "t3", "content": "Hosted", "status": "pending"}
+    assert calls == [(
+        "plans.add_todo",
+        {"rel_path": "alpha.html", "content": "Hosted", "id": "", "owner": "", "status": "pending", "after": "t1"},
+    )]
+    assert target.read_bytes() == before
+
+
+async def test_plan_add_todo_explains_a_host_refusal_with_the_valid_ids(
+    monkeypatch: pytest.MonkeyPatch, workspace: Path
+) -> None:
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+
+    async def route(plugin_id: str, workspace_path: str, request: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        if request["name"] == "plans.read":
+            return {"ok": True, "result": {"rel_path": "alpha.html", "meta": parse_plan_meta(html), "html": html}}
+        return {"ok": False, "error": {"code": "INVALID_ARGUMENT", "message": "Plugin request failed."}}
+
+    monkeypatch.setattr(plan_mcp, "request_host_agent_workspace_backend", route)
+    result = await _add_todo(workspace, content="New", after="nope")
+    assert result.isError
+    text = result.content[0].text
+    assert "unknown todo id" in text and "t1" in text and "t2" in text
+
+
+# ── no request body limit on /mcp (agent-tools contract 4.4, A1) ────────────
+
+
+async def test_a_10_mib_plan_add_note_crosses_the_mcp_endpoint_while_other_calls_stay_fast(
+    workspace: Path,
+) -> None:
+    import asyncio
+    import time
+
+    import httpx
+
+    from agent_team_backend.mcp_server import auth as plan_mcp_auth
+
+    # The plan tools are installed onto the core server by the Plans plugin at
+    # App start; install the missing ones for this test and take them off after.
+    tools = plan_mcp.server._tool_manager._tools  # noqa: SLF001
+    added = [tool for tool in plan_tools.PLAN_TOOLS if tool.__name__ not in tools]
+    for tool in added:
+        plan_mcp.server.tool()(tool)
+    await plan_mcp.startup()
+    try:
+        url = f"/?client=host&t={plan_mcp_auth.internal_token()}"
+        headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
+        text = "note 中文 😀 " * (10 * 1_048_576 // 16)
+
+        def call(request_id: int, name: str, arguments: dict) -> dict:
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            }
+
+        transport = httpx.ASGITransport(app=plan_mcp.asgi_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test", timeout=120) as client:
+            big = asyncio.create_task(client.post(url, headers=headers, json=call(
+                1, "plan_add_note", {"workspace_path": str(workspace), "rel_path": "beta.html", "text": text},
+            )))
+            latencies: list[float] = []
+            while not big.done():
+                started = time.perf_counter()
+                small = await client.post(url, headers=headers, json=call(
+                    2, "plan_list", {"workspace_path": str(workspace)},
+                ))
+                latencies.append(time.perf_counter() - started)
+                assert small.status_code == 200
+            response = await big
+        # The SDK refused bodies over 4 MiB with 413 before.
+        assert response.status_code == 200, response.text[:300]
+        body = response.json()
+        assert "error" not in body, str(body)[:300]
+        assert body["result"]["isError"] is False, str(body)[:300]
+        notes = parse_plan_meta((_plans_dir(workspace) / "beta.html").read_text(encoding="utf-8"))["reviewNotes"]
+        assert notes[-1]["text"] == text.strip()  # the tool trims the note
+        assert latencies, "no small call ran during the large one"
+    finally:
+        await plan_mcp.shutdown()
+        for tool in added:
+            tools.pop(tool.__name__, None)
+
+
+def _mcp_scope(query: str, headers: list[tuple[bytes, bytes]] | None = None) -> dict[str, Any]:
+    return {
+        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST", "scheme": "http",
+        "path": "/", "raw_path": b"/", "root_path": "", "query_string": query.encode(),
+        "headers": [(b"content-type", b"application/json"), (b"content-length", str(6 * 1_048_576).encode())]
+        + (headers or []),
+        "client": ("127.0.0.1", 50000), "server": ("127.0.0.1", 8000),
+    }
+
+
+@pytest.mark.parametrize(
+    ("query", "headers"),
+    [
+        ("", None),
+        ("client=host", None),
+        ("client=host&t=wrong", None),
+        ("client=host", [(b"authorization", b"Bearer wrong")]),
+        ("client=external&t=wrong", None),
+        ("client=external&t={external}", None),
+        ("pane=p-gate", None),
+        ("pane=p-gate&t=wrong", None),
+        ("pane=p-unwired&t={pane}", None),
+    ],
+    ids=["none", "host-no-token", "host-wrong", "host-wrong-bearer", "external-wrong",
+         "external-disabled", "pane-no-token", "pane-wrong", "pane-other-token"],
+)
+async def test_a_request_without_a_valid_credential_is_refused_before_its_body_is_read(
+    monkeypatch: pytest.MonkeyPatch, clean_registry: Any, query: str, headers: list[tuple[bytes, bytes]] | None,
+) -> None:
+    """Review M2 on main 8b477cbcd: bodies have no size limit (A1), so the
+    credential is checked first and an unauthenticated body is never read."""
+    monkeypatch.setattr(plan_mcp_auth, "external_enabled", lambda: False)
+    monkeypatch.setattr(plan_mcp_wiring, "_PANE_TOKENS", {})
+    agent_messaging.register("p-gate", "gate", "/ws/project")
+    query = query.format(external=plan_mcp_auth.external_token(), pane=plan_mcp_wiring.caller_token("p-gate"))
+
+    async def receive() -> dict[str, Any]:
+        raise AssertionError("the body of an unauthenticated request was read")
+
+    sent: list[dict[str, Any]] = []
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    await plan_mcp.startup()
+    try:
+        await plan_mcp.asgi_app(_mcp_scope(query, headers), receive, send)
+    finally:
+        await plan_mcp.shutdown()
+    assert sent[0]["type"] == "http.response.start" and sent[0]["status"] == 401
+    assert b"".join(message.get("body", b"") for message in sent[1:])
+
+
+async def test_every_credential_a_navide_cli_carries_still_reaches_the_tools(
+    monkeypatch: pytest.MonkeyPatch, clean_registry: Any,
+) -> None:
+    """Review M2: the check before the body accepts exactly what the tool
+    calls accept: the pane token in the query (claude, gemini-style config
+    documents) or as a bearer header (codex, NAVIDE_MCP_TOKEN), the host
+    token either way, and the external token while external access is on."""
+    monkeypatch.setattr(plan_mcp_auth, "external_enabled", lambda: True)
+    monkeypatch.setattr(plan_mcp_wiring, "_PANE_TOKENS", {})
+    agent_messaging.register("p-gate", "gate", "/ws/project")
+    pane_token = plan_mcp_wiring.caller_token("p-gate")
+    unregistered_token = plan_mcp_wiring.caller_token("p-not-registered")
+    cases = {
+        "pane-query": (plan_mcp_wiring.plan_mcp_url(1, "p-gate").split("?", 1)[1], {}),
+        "pane-bearer": (plan_mcp_wiring.plan_mcp_url(1, "p-gate", with_token=False).split("?", 1)[1],
+                        {"authorization": f"Bearer {pane_token}"}),
+        "host-query": (plan_mcp_wiring.plan_mcp_url(1).split("?", 1)[1], {}),
+        "host-bearer": (plan_mcp_wiring.plan_mcp_url(1, with_token=False).split("?", 1)[1],
+                        {"authorization": f"Bearer {plan_mcp_auth.internal_token()}"}),
+        "external-query": (f"client=external&t={plan_mcp_auth.external_token()}", {}),
+        "external-bearer": ("client=external", {"authorization": f"Bearer {plan_mcp_auth.external_token()}"}),
+        # A valid token for a pane the registry does not know yet keeps its
+        # tool-level explanation rather than a 401.
+        "pane-unregistered": (f"pane=p-not-registered&t={unregistered_token}", {}),
+    }
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    await plan_mcp.startup()
+    try:
+        transport = httpx.ASGITransport(app=plan_mcp.asgi_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test", timeout=30) as client:
+            for name, (query, extra) in cases.items():
+                headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"} | extra
+                response = await client.post(f"/?{query}", headers=headers, json=body)
+                assert response.status_code == 200, (name, response.status_code, response.text[:200])
+                assert response.json()["result"]["tools"], name
+    finally:
+        await plan_mcp.shutdown()
+
+
+async def test_a_tool_call_over_the_mcp_endpoint_sees_its_request_body_size(workspace: Path) -> None:
+    """The agent tool proxy skips its size walk for a small request (contract
+    4.4, A2): the body size must reach the tool call made by that request."""
+    from agent_team_backend.mcp_server import auth as plan_mcp_auth
+
+    async def zz_body_size() -> int:
+        seen = plan_mcp._request_body_bytes.get()  # noqa: SLF001
+        return -1 if seen is None else seen[0]
+
+    plan_mcp.server.tool()(zz_body_size)
+    await plan_mcp.startup()
+    try:
+        url = f"/?client=host&t={plan_mcp_auth.internal_token()}"
+        headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "zz_body_size", "arguments": {}}})
+        transport = httpx.ASGITransport(app=plan_mcp.asgi_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test", timeout=30) as client:
+            response = await client.post(url, headers=headers, content=body)
+        assert response.status_code == 200, response.text[:300]
+        result = response.json()["result"]
+        assert result["isError"] is False
+        assert json.loads(result["content"][0]["text"]) == len(body.encode())
+    finally:
+        await plan_mcp.shutdown()
+        plan_mcp.server._tool_manager._tools.pop("zz_body_size", None)  # noqa: SLF001

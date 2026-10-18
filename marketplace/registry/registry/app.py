@@ -20,6 +20,10 @@ from . import review
 from .blocklist import db_blocklists
 from .db import create_db_engine
 from .dns_verify import TxtResolver, doh_txt_resolver
+from .disclosure import registry_facts, sign_disclosure
+from .static_scan import run_scan
+from .plugin_contract.disclosure_contract import CanonicalJsonError
+from .plugin_contract.disclosure_scan_contract import card_risk_level
 from .discovery import (
     CATEGORIES,
     PACK_CATEGORY,
@@ -274,7 +278,9 @@ def _pack_conflict(repo: RegistryRepository, manifest: object) -> str | None:
 
 
 def _version_info(
-    row: ExtensionVersion, navide_version: str | None = None
+    row: ExtensionVersion,
+    navide_version: str | None = None,
+    publisher: Publisher | None = None,
 ) -> VersionInfo:
     capabilities = manifest_capabilities(row.manifest)
     requirement = engine_requirement(row.manifest)
@@ -295,6 +301,11 @@ def _version_info(
         min_navide_version=min_navide_version(requirement),
         compatible=engine_compatible(requirement, navide_version),
         channel=version_channel(row.version),
+        disclosure=row.disclosure,
+        disclosure_envelope=row.disclosure_envelope,
+        disclosure_signature=row.disclosure_signature,
+        scan=row.scan,
+        registry=registry_facts(row, publisher),
     )
 
 
@@ -358,6 +369,13 @@ def _summary(
             if latest_row is not None
             else None
         ),
+        disclosure=latest_row.disclosure if latest_row is not None else None,
+        scan=latest_row.scan if latest_row is not None else None,
+        risk_by_target={
+            v.target: card_risk_level(v.disclosure, v.scan)
+            for v in versions
+            if v.version == latest and not v.yanked and v.disclosure
+        } or None,
     )
 
 
@@ -549,11 +567,17 @@ def _register_routes(app: FastAPI) -> None:
         if conflict is not None:
             raise HTTPException(status_code=409, detail=conflict)
 
+        # Contract 3.8 / DS4: scan synchronously, within the time budget, before
+        # anything is signed. A pending submission keeps its (unsigned) report
+        # for the reviewer; approval scans again and signs that report.
+        scan = run_scan(data, artifact_digest=loaded.digest, target=target,
+                        manifest=manifest.model_dump(exclude_none=True))
         if publisher.review_required:
             # Review before publish (D3): a self-claimed namespace's upload
             # waits unsigned and invisible until an admin approves it, which
             # is when the registry signs it (review.approve).
             registry_envelope, registry_signature = {}, None
+            disclosure = disclosure_envelope = disclosure_signature = None
             trust_tier = compute_trust_tier(signed=False)
             review_status = review.PENDING
             review_report = review.submission_report(
@@ -578,6 +602,15 @@ def _register_routes(app: FastAPI) -> None:
                 )
             except ValueError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
+            try:
+                disclosure, disclosure_envelope, disclosure_signature = sign_disclosure(
+                    state.trust_signer,
+                    manifest.model_dump(exclude_none=True),
+                    registry_envelope,
+                    scan,
+                )
+            except CanonicalJsonError as exc:
+                raise HTTPException(status_code=400, detail=f"manifest cannot be disclosed: {exc}") from exc
             # Publisher signatures authenticate a submission only. Client-facing
             # integrity is established by the registry signature created above.
             trust_tier = compute_trust_tier(signed=True)
@@ -600,6 +633,10 @@ def _register_routes(app: FastAPI) -> None:
             assets=[(a.path, a.size, a.content_type) for a in loaded.assets],
             review_status=review_status,
             review_report=review_report,
+            disclosure=disclosure,
+            disclosure_envelope=disclosure_envelope,
+            disclosure_signature=disclosure_signature,
+            scan=scan,
         )
         return PublishResponse(
             namespace=namespace,
@@ -681,7 +718,7 @@ def _register_routes(app: FastAPI) -> None:
             publisher=publisher_name,
             trust_metadata=trust_metadata,
             trust_metadata_signature=trust_metadata_signature,
-            versions=[_version_info(v, navide_version) for v in ordered],
+            versions=[_version_info(v, navide_version, publisher) for v in ordered],
             has_changelog=latest_row is not None
             and any(
                 a.path.lower() in CHANGELOG_NAMES

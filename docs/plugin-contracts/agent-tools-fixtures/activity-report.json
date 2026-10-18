@@ -1,0 +1,318 @@
+{
+  "description": "Plan B D-f: PluginActivityReport, the answer to plugins.activity.report (contract section 5.1). 'valid' parses to itself; each 'invalid' case is the valid report with one change (patch = top-level fields, path/value = one nested field) and must be refused whole.",
+  "valid": {
+    "schemaVersion": 1,
+    "pluginId": "nerdtechnic.devmap",
+    "generatedAt": 1792800000000,
+    "window": {
+      "from": 1792195200000,
+      "to": 1792800000000
+    },
+    "totals": {
+      "calls": 42,
+      "denied": 3,
+      "errors": 1
+    },
+    "historicalPeakConcurrency": 2,
+    "undeclaredSince": 1790208000000,
+    "toolCalls": [
+      {
+        "id": 12,
+        "at": 1792799940000,
+        "callerKind": "pane",
+        "paneId": "p-41",
+        "paneName": "dev",
+        "callerWorkspace": "/Users/me/project",
+        "targetWorkspace": "/Users/me/project",
+        "crossWorkspace": false,
+        "pluginVersion": "0.2.0",
+        "tool": "devmap_read",
+        "risk": "read",
+        "outcome": "ok",
+        "errorCode": "",
+        "durationMs": 120,
+        "argsBytes": 14,
+        "resultBytes": 2048
+      },
+      {
+        "id": 11,
+        "at": 1792799880000,
+        "callerKind": "pane",
+        "paneId": "p-42",
+        "paneName": "review",
+        "callerWorkspace": "/Users/me/other",
+        "targetWorkspace": "/Users/me/project",
+        "crossWorkspace": true,
+        "pluginVersion": "0.2.0",
+        "tool": "devmap_write",
+        "risk": "write",
+        "outcome": "error",
+        "errorCode": "PLUGIN_TOOL_TIMEOUT",
+        "durationMs": 30000,
+        "argsBytes": -1,
+        "resultBytes": -1
+      },
+      {
+        "id": 10,
+        "at": 1792799820000,
+        "callerKind": "external",
+        "paneId": "",
+        "paneName": "",
+        "callerWorkspace": "",
+        "targetWorkspace": "/Users/me/project",
+        "crossWorkspace": false,
+        "pluginVersion": "0.2.0",
+        "tool": "devmap_read",
+        "risk": "read",
+        "outcome": "ok",
+        "errorCode": "",
+        "durationMs": 80,
+        "argsBytes": 2,
+        "resultBytes": 0
+      }
+    ],
+    "files": [
+      {
+        "path": "docs/devmap.md",
+        "address": "fs.readFile",
+        "workspace": "/Users/me/project",
+        "outcome": "allowed",
+        "count": 9,
+        "lastAt": 1792799940000
+      },
+      {
+        "path": "javascript:alert(1)",
+        "address": "fs.readFile",
+        "workspace": "/Users/me/project",
+        "outcome": "denied",
+        "count": 1,
+        "lastAt": 1792799910000
+      },
+      {
+        "path": "mailto:someone@example.com",
+        "address": "fs.writeFile",
+        "workspace": "/Users/me/project",
+        "outcome": "error",
+        "count": 1,
+        "lastAt": 1792799905000
+      }
+    ],
+    "commands": [
+      {
+        "command": "git status",
+        "workspace": "/Users/me/project",
+        "outcome": "allowed",
+        "count": 5,
+        "lastAt": 1792799930000
+      },
+      {
+        "command": "git push",
+        "workspace": "/Users/me/project",
+        "outcome": "denied",
+        "count": 1,
+        "lastAt": 1792799920000
+      }
+    ],
+    "daily": [
+      {
+        "day": "2026-10-10",
+        "calls": 3,
+        "denied": 0,
+        "errors": 0
+      },
+      {
+        "day": "2026-10-11",
+        "calls": 4,
+        "denied": 0,
+        "errors": 0
+      },
+      {
+        "day": "2026-10-12",
+        "calls": 2,
+        "denied": 0,
+        "errors": 0
+      },
+      {
+        "day": "2026-10-13",
+        "calls": 5,
+        "denied": 0,
+        "errors": 0
+      },
+      {
+        "day": "2026-10-14",
+        "calls": 3,
+        "denied": 0,
+        "errors": 0
+      },
+      {
+        "day": "2026-10-15",
+        "calls": 4,
+        "denied": 0,
+        "errors": 0
+      },
+      {
+        "day": "2026-10-16",
+        "calls": 21,
+        "denied": 0,
+        "errors": 0
+      }
+    ],
+    "declaredUnused": [
+      {
+        "kind": "system",
+        "key": "aiCli",
+        "lastUsedAt": null
+      },
+      {
+        "kind": "agentTool",
+        "key": "devmap_reset",
+        "lastUsedAt": 1789344000000
+      }
+    ],
+    "undeclared": [
+      {
+        "source": "shell",
+        "address": "shell.run",
+        "workspace": "/Users/me/project",
+        "count": 3,
+        "lastAt": 1792799920000,
+        "reasons": [
+          {
+            "reason": "undeclared",
+            "count": 2
+          },
+          {
+            "reason": "EXECUTION_POLICY_DENIED",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "anomalies": [
+      {
+        "kind": "volumeSpike",
+        "at": 1792796400000,
+        "workspace": "/Users/me/project",
+        "tool": null,
+        "count": 21,
+        "baseline": 2.1
+      },
+      {
+        "kind": "writeToolNewWorkspace",
+        "at": 1792799880000,
+        "workspace": "/Users/me/other",
+        "tool": "devmap_write",
+        "count": null,
+        "baseline": null
+      },
+      {
+        "kind": "undeclaredDenied",
+        "at": 1792799920000,
+        "workspace": "/Users/me/project",
+        "tool": null,
+        "count": 3,
+        "baseline": null
+      }
+    ],
+    "agentActions": null,
+    "backendCalls": {
+      "methods": [
+        {
+          "address": "backend.devmap.block.import",
+          "outcome": "allowed",
+          "count": 1200,
+          "lastAt": 1792108740000
+        }
+      ],
+      "daily": [
+        {
+          "day": "2026-10-15",
+          "calls": 1201,
+          "denied": 0,
+          "errors": 1,
+          "cancelled": 0
+        }
+      ]
+    }
+  },
+  "invalid": [
+    {
+      "name": "schema-version-2",
+      "patch": {
+        "schemaVersion": 2
+      }
+    },
+    {
+      "name": "negative-bytes-other-than-unknown",
+      "path": [
+        "toolCalls",
+        0,
+        "resultBytes"
+      ],
+      "value": -2
+    },
+    {
+      "name": "fractional-count",
+      "path": [
+        "files",
+        0,
+        "count"
+      ],
+      "value": 1.5
+    },
+    {
+      "name": "unknown-outcome",
+      "path": [
+        "commands",
+        0,
+        "outcome"
+      ],
+      "value": "maybe"
+    },
+    {
+      "name": "undeclared-without-reasons",
+      "path": [
+        "undeclared",
+        0,
+        "reasons"
+      ],
+      "value": null
+    },
+    {
+      "name": "missing-historical-peak",
+      "patch": {
+        "historicalPeakConcurrency": null
+      }
+    },
+    {
+      "name": "backend-call-unknown-outcome",
+      "path": [
+        "backendCalls",
+        "methods",
+        0,
+        "outcome"
+      ],
+      "value": "maybe"
+    },
+    {
+      "name": "backend-call-address-without-prefix",
+      "path": [
+        "backendCalls",
+        "methods",
+        0,
+        "address"
+      ],
+      "value": "devmap.block.import"
+    },
+    {
+      "name": "backend-call-fractional-count",
+      "path": [
+        "backendCalls",
+        "daily",
+        0,
+        "cancelled"
+      ],
+      "value": 1.5
+    }
+  ]
+}

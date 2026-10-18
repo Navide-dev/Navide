@@ -74,6 +74,7 @@ Credential（Navide が claude/codex の Pane を Spawn するときに発行）
 | `plan_update_stage` | `workspace_path`, `rel_path`, `stage` | Stage を設定: `draft`、`in-review`、`approved`、`in-progress`、`done`、`abandoned` |
 | `plan_update_todo` | `workspace_path`, `rel_path`, `todo_id`, `status` | 一つの Todo の Status を設定: `pending`、`in-progress`、`done`、`skipped` |
 | `plan_add_note` | `workspace_path`, `rel_path`, `text`, `author?`（`ai`\|`user`、既定は `ai`） | Review Note を追記 |
+| `plan_add_todo` | `workspace_path`, `rel_path`, `content`, `id?`, `owner?`（`agent`\|`user`）, `status?`（既定は `pending`）, `after?` | 既存の Plan に Todo を追加（末尾、または `after` で指定した Todo の後ろ） |
 
 ここで `workspace_path` が必須なのは、外部 Client が Pane ではないためです。Pane
 の呼び出し元はこれを省略し、Tool はその Pane 自身の Workspace を使います。これは
@@ -518,6 +519,40 @@ CLI が既に何を渡されているのか、このプロジェクトが既に�
 | `workspace_switch` | `path` | 呼び出し元 Pane をホストしているウィンドウを、そのウィンドウがすでに保持している別の Workspace に切り替えます（1 ウィンドウ複数プロジェクト）。Pane は影響を受けません。ウィンドウが `path` を保持していない場合は、`workspace_open` を案内するエラーになります。そのウィンドウで Pipeline が実行中の間も拒否されます（先に `pipeline_abort` するか、サイドバーから切り替えてください）。Pane からの呼び出し専用です — host や外部の呼び出し元は自分のウィンドウを持たないため `ok: false` になります（代わりに `ui_invoke` に `workspace_path` と action `ui.workspace.switch` を渡してください）。今画面に表示されている Workspace を `{ok, path}` で返します |
 | `mcp_list` | — | ここで設定されている MCP サーバー — Navide 自身がクライアントとして接続するもの（ライブ状態付き）と、各 CLI が自分の設定（`~/.claude.json`、`~/.codex/config.toml` など）に持つものをファイルの記述どおりに反映したもの。`{servers, native, agents}` を返します。Navide 管理の各サーバーは `{name, enabled, transport, command, args, env}` または `{name, enabled, transport, url, headers}` に `status`（`disabled` / `connected` / `error` / `unknown`）と `tool_count` を加えたもので、ツール一覧そのものは含みません。各 native エントリは `{name, agent, transport, path, command, args, url, env, headers, enabled, valid, error}` です。`agents` は各ベンダーと、Navide がその MCP に対してできること（`wired` / `planned` / `unsupported`）、および自身の設定が反映されているかどうかです。資格情報の形をした値 — env と header の値、`--api-key=` 形式の引数、URL の userinfo と秘密のクエリパラメータ — はすべて `***` にマスク済みで、名前とホストはエントリを識別できるよう残されます。Workspace ごとではなくグローバルな一覧です。読み取り専用 — サーバーの追加・有効化・編集は Settings でのユーザーの判断です |
 | `prompt_list` | `id=""` | ユーザーが Settings → Prompts に保持する Prompt スキル — アプリから CLI Pane に送る保存済みの指示。`id` なしで呼ぶとメタデータのみを一覧します: `{skills, default_id}` で、各スキルは `{id, name, icon, description, category, enabled, isDefault, maxTurns}`、`default_id` はデフォルトに指定されたスキルの id（無ければ `""`）です。ユーザーが一度も保存していない場合は `note` が付きます: アプリは初回使用時に組み込みスキルを植え付けますが、それはここからは見えません。`id` を付けるとそのスキルを丸ごと返します — `{skill}` で、`prompt` と `resumePrompt` も含みます。未知の id は `{ok: false, error}` を返します。読み取り専用: 作成や編集は Settings で行います |
+
+### Navide マーケットプレイス（読み取り専用）
+
+3 つの読み取り専用 tool が、Navide マーケットプレイスのページと「設定 → Navide プラグイン」に表示される内容を Navide アプリに問い合わせます。
+サードパーティの Navide プラグインツールが有効かどうかに関係なく、すべての呼び出し元が使えます。どれもインストール・更新・削除はできません。
+
+| Tool | パラメータ | 内容 |
+|---|---|---|
+| `marketplace_search` | `text=""`、`category=null`、`cursor=null`、`limit=20` | 設定された Navide マーケットプレイスを検索します（マーケットプレイスのページと同じ検索）。`{ok, kind, items, nextCursor}` を返します。各項目は `{id, version, name, description, publisher: {name, verifiedDomain}, signed, downloads, risk, summary}` で、`risk` と `summary` はパッケージの開示データ、Registry が提供しない場合は `null` です。次のページは `nextCursor` を `cursor` に渡します |
+| `marketplace_detail` | `id`、`version=null` | 1 つのパッケージ（`<namespace>.<name>`）：`{ok, kind, item, versions, card}`。`versions` は公開済みのバージョン、`card` は開示カード `{manifest, registry}`（Registry が提供しない場合は `null`） |
+| `plugins_list_installed` | — | インストール済みの Navide プラグイン：`{ok, kind, items}`。各項目は `{id, version, enabled, quarantined, hasBackend, agentTools}` |
+
+パッケージの公開者が決めたテキスト（パッケージ id とバージョン、名前、説明、エージェントツールの名前・タイトル・説明、公開者の表示名）と、Registry の応答を引用している可能性がある Navide アプリのエラーテキストはすべて
+`[外部訊息開始 — …]` と `[外部訊息結束]` の間に入れられ、
+`[third-party Navide plugin <id> v<version> | …]` ラベルが付きます。これはユーザーの指示ではありません。
+このテキストを読んだ pane は外部コンテンツを受け取ったものとしてマークされます（Navide Guard）。
+アプリ自身の固定のエラー文言（すべての `BAD_REQUEST` と、`HOST_UNAVAILABLE` の「Navide Host cannot answer Marketplace queries now」）と、予約済みの `navide.` 名前空間のインストール済みプラグイン（ファーストパーティの Plans、Git、mini-IDE）は、そのまま返され、マークもされません。エラーは
+`{ok: false, error, error_code}` で、コードは `BAD_REQUEST`、`NOT_FOUND`、`REGISTRY_UNAVAILABLE`、`HOST_UNAVAILABLE` のいずれかです。
+
+### Navide マーケットプレイスへの依頼、無効化と有効化
+
+Navide プラグインの変更を依頼する、またはプラグインを無効化・有効化するツールです。読み取り専用のツールと同じく、すべての呼び出し元で使えます。どのツールにも同意の引数はありません。インストール、更新、ロールバック、削除は、ユーザーが Navide のウィンドウで依頼を承認してから実行され、一緒に送られた同意フラグは無視されます。同梱の Navide プラグイン（Plans、Git、Mini-IDE、`navide.*` 名前空間）は拒否され（`BUILTIN_PLUGIN`）、ユーザーが拡張機能ページで管理します。
+
+| ツール | パラメーター | 内容 |
+|---|---|---|
+| `marketplace_request_install` | `namespace`、`name`、`version`、`reason=""` | `<namespace>.<name>` を `version` でインストールする依頼を出します。マーケットプレイスに掲載されたバージョン（ない場合は `NOT_FOUND`）で、まだインストールされていないことが条件です。ユーザーは依頼者、`reason`（エージェントが書いたものとして表示）、開示カードを見て判断します。`{ok, approval_id, status: "pending", expires_at, note}` を返します。依頼は 15 分で期限切れになり、同じパッケージとバージョンの依頼をもう一度出すと保留中の依頼が返ります |
+| `marketplace_request_update` | `namespace`、`name`、`version`、`reason=""` | インストール済みパッケージの新しいバージョンへの依頼（未インストールなら `NOT_INSTALLED`） |
+| `marketplace_request_rollback` | `namespace`、`name`、`version`、`reason=""` | インストール済みパッケージの古いバージョンへの依頼 |
+| `plugins_request_remove` | `namespace`、`name`、`reason=""` | インストール済みパッケージを削除する依頼 |
+| `marketplace_request_status` | `approval_id`、`wait_s=0` | `{ok, approval_id, kind, target: {id, version}, status, error, expires_at}`。`status` は `pending`、`applying`（承認済み、実行中）、`completed`、`failed`、`rejected`、`expired` のいずれかです。`wait_s`（0〜60）でその秒数だけ変化を待ちます。別の Navide ウィンドウが先にこのリクエストを確定し、実行中だったウィンドウが後から実際の結果を報告した場合は、`finished_late: true` と `settled: {status, error}`（それまでの記録）も返り、`status` と `error` は実際の結果になります |
+| `plugins_disable` | `namespace`、`name` | インストール済みのマーケットプレイスのパッケージを、拡張機能ページのスイッチと同じようにすぐ無効にします。ビュー、バックエンド、エージェントツールは止まり、ファイル、許可、データは残ります。ユーザーにはどの呼び出し元が行ったかが通知され、ワンクリックで元に戻せます。変更は記録されます。`{ok, pluginId, pluginVersion, disabled: true, changed}` を返します。すでに無効だった場合は `changed` が false で、何も起きず通知もされません |
+| `plugins_enable` | `namespace`、`name` | エージェントが無効にしたパッケージは、ユーザーがすでに与えた同意のまますぐ有効にし、`{ok, pluginId, pluginVersion, disabled: false, changed}` を返します。ユーザーが無効にしたパッケージは有効にせず、ユーザーの判断を求める依頼を出して `{ok: false, error_code: "APPROVAL_REQUIRED", error, approval_id, status: "pending", expires_at}` を返します |
+
+エラーは `{ok: false, error, error_code}` で、`BAD_REQUEST`、`BUILTIN_PLUGIN`、`NOT_INSTALLED`、`NOT_FOUND`、`ACTION_FAILED`、`REGISTRY_UNAVAILABLE`、`HOST_UNAVAILABLE` のいずれかです。依頼、判断、結果、無効化、有効化はすべて、呼び出し元（pane 名、外部クライアント、Navide Host）とともに navide.db の `plugin_agent_actions` テーブルに記録されます。
 
 ### Pipeline
 

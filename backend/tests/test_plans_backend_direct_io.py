@@ -831,3 +831,128 @@ def test_a_paged_entry_without_its_meta_still_carries_its_archived_at(
     # Agents' un-paged list is unchanged: no such key on any entry.
     for entry in _value(_call(backend_process, host, "plans.list", {})):
         assert "archivedAt" not in entry
+
+
+# ── plans.add_todo ───────────────────────────────────────────────────────────
+
+
+def _todo_doc(todos: list[dict[str, Any]], rows: str | None = None) -> str:
+    meta = {"schemaVersion": 1, "name": "Todos", "overview": "", "stage": "draft", "todos": todos, "reviewNotes": []}
+    if rows is None:
+        rows = "\n".join(
+            f'        <li data-status="{t["status"]}" data-todo-id="{t["id"]}"><span class="st">{t["status"]}</span>'
+            f' {t["content"]}</li>'
+            for t in todos
+        )
+        rows = f'      <ul class="todos">\n{rows}\n      </ul>\n'
+    return (
+        "<!doctype html><html><body>\n"
+        f'<script type="application/json" id="plan-meta">\n{json.dumps(meta)}\n</script>\n'
+        '<span class="pill draft">draft</span>\n'
+        f"{rows}"
+        "</body></html>\n"
+    )
+
+
+_TWO_TODOS = [
+    {"id": "t1", "content": "First", "status": "done"},
+    {"id": "t2", "content": "Second", "status": "pending"},
+]
+
+
+def _island(text: str) -> dict[str, Any]:
+    return json.loads(re.search(r'id="plan-meta">([\s\S]*?)</script>', text).group(1))
+
+
+def _rows(text: str) -> list[str]:
+    return re.findall(r'<li\b[^>]*data-todo-id="([^"]+)"', text)
+
+
+def _todo_target(tmp_path: Path, document: str, name: str = "todos_dddddd.html") -> tuple[Path, _RootOnlyHost, str]:
+    mine = _workspace(tmp_path, "mine")
+    target = mine / ".agent-team" / "plans" / name
+    target.write_text(document, encoding="utf-8")
+    return target, _RootOnlyHost({"instance-1": mine}), f".agent-team/plans/{name}"
+
+
+def test_agent_add_todo_appends_to_the_island_and_the_visible_list(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    target, host, rel_path = _todo_target(tmp_path, _todo_doc(_TWO_TODOS))
+    added = _value(_call(backend_process, host, "plans.add_todo", {"rel_path": rel_path, "content": "Third <step>"}))
+    assert added == {"id": "t3", "content": "Third <step>", "status": "pending"}
+    text = target.read_text(encoding="utf-8")
+    assert [t["id"] for t in _island(text)["todos"]] == ["t1", "t2", "t3"]
+    assert _rows(text) == ["t1", "t2", "t3"]
+    assert '<li data-status="pending" data-todo-id="t3"><span class="st">pending</span>' in text
+    assert "Third &lt;step&gt;" in text
+    assert text.index('data-todo-id="t3"') < text.index("</ul>")
+
+
+def test_agent_add_todo_inserts_after_the_named_todo_and_stores_the_owner(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    target, host, rel_path = _todo_target(tmp_path, _todo_doc(_TWO_TODOS))
+    added = _value(_call(backend_process, host, "plans.add_todo", {
+        "rel_path": rel_path, "content": "Verify", "id": "verify", "owner": "user", "status": "in-progress",
+        "after": "t1",
+    }))
+    assert added == {"id": "verify", "content": "Verify", "status": "in-progress", "owner": "user"}
+    auto = _value(_call(backend_process, host, "plans.add_todo", {"rel_path": rel_path, "content": "Auto", "owner": "agent"}))
+    assert auto == {"id": "t3", "content": "Auto", "status": "pending"}
+    text = target.read_text(encoding="utf-8")
+    assert [t["id"] for t in _island(text)["todos"]] == ["t1", "verify", "t2", "t3"]
+    assert _rows(text) == ["t1", "verify", "t2", "t3"]
+    assert '<li data-status="in-progress" data-todo-id="verify">' in text
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"content": "Dup", "id": "t1"},
+        {"content": "Bad", "id": "Bad_Id"},
+        {"content": "Lost", "after": "nope"},
+        {"content": "Odd", "status": "blocked"},
+        {"content": "Odd", "owner": "robot"},
+        {"content": "   "},
+    ],
+)
+def test_agent_add_todo_refusals_leave_the_document_untouched(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path, arguments: dict[str, Any]
+) -> None:
+    target, host, rel_path = _todo_target(tmp_path, _todo_doc(_TWO_TODOS))
+    before = target.read_bytes()
+    response = _call(backend_process, host, "plans.add_todo", {"rel_path": rel_path, **arguments})
+    assert _error_code(response) == "INVALID_ARGUMENT"
+    assert target.read_bytes() == before
+
+
+def test_agent_add_todo_fills_an_empty_list_and_warns_without_one(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    target, host, rel_path = _todo_target(tmp_path, _todo_doc([], rows='<ul class="todos">\n</ul>\n'))
+    added = _value(_call(backend_process, host, "plans.add_todo", {"rel_path": rel_path, "content": "First"}))
+    assert added == {"id": "t1", "content": "First", "status": "pending"}
+    assert _rows(target.read_text(encoding="utf-8")) == ["t1"]
+
+    bare = target.with_name("bare_eeeeee.html")
+    bare.write_text(_todo_doc([], rows="<p>prose</p>\n"), encoding="utf-8")
+    warned = _value(_call(backend_process, host, "plans.add_todo", {
+        "rel_path": ".agent-team/plans/bare_eeeeee.html", "content": "Only in meta",
+    }))
+    assert warned["id"] == "t1" and "not inserted" in warned["warning"]
+    text = bare.read_text(encoding="utf-8")
+    assert [t["id"] for t in _island(text)["todos"]] == ["t1"]
+    assert _rows(text) == []
+
+
+def test_agent_add_todo_appends_to_markdown_frontmatter(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    document = "---\nname: Legacy\ntodos:\n- id: t1\n  content: First\n  status: done\n---\n\n# Body\n"
+    target, host, rel_path = _todo_target(tmp_path, document, name="legacy.plan.md")
+    added = _value(_call(backend_process, host, "plans.add_todo", {"rel_path": rel_path, "content": "Second"}))
+    assert added == {"id": "t2", "content": "Second", "status": "pending"}
+    text = target.read_text(encoding="utf-8")
+    assert "id: t2" in text and "content: Second" in text
+    assert text.endswith("# Body\n")

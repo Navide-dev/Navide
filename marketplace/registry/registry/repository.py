@@ -288,6 +288,10 @@ class RegistryRepository:
         assets: list[tuple[str, int, str]],
         review_status: str = APPROVED,
         review_report: dict | None = None,
+        disclosure: dict | None = None,
+        disclosure_envelope: dict | None = None,
+        disclosure_signature: str | None = None,
+        scan: dict | None = None,
     ) -> ExtensionVersion:
         record = ExtensionVersion(
             extension_id=extension.id,
@@ -302,6 +306,10 @@ class RegistryRepository:
             trust_tier=trust_tier,
             review_status=review_status,
             review_report=review_report or {},
+            disclosure=disclosure,
+            disclosure_envelope=disclosure_envelope,
+            disclosure_signature=disclosure_signature,
+            scan=scan,
         )
         self.session.add(record)
         self.session.commit()

@@ -1,6 +1,7 @@
 import { execFile, spawnSync } from 'node:child_process'
 import { lstatSync, readdirSync } from 'node:fs'
 import { lstat, readdir } from 'node:fs/promises'
+import { totalmem } from 'node:os'
 import { basename, join } from 'node:path'
 import { isMac } from '../../shared/osplat'
 
@@ -227,7 +228,15 @@ export function killSandboxProcessesSync(
   return victims
 }
 
-export type ResourceViolation = 'memory' | 'cpu' | 'processes' | 'disk'
+/** `stdoutPending` (stdout a child sent without a newline yet) is noticed in
+ *  notify mode only; the automatic stop never produces it. */
+export type ResourceViolation = 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+
+/** Review M2 on #375 (contract 5.2): the stdoutPending threshold is the
+ *  smaller of 256 MiB and an eighth of the machine's memory. */
+export function defaultStdoutPendingThreshold(totalMemoryBytes: number = totalmem()): number {
+  return Math.min(256 * 1024 * 1024, Math.floor(totalMemoryBytes / 8))
+}
 
 export interface ResourceWatchdogDeps {
   listProcesses(): Promise<ProcessSample[]>
@@ -349,6 +358,41 @@ export interface BackendResourceWatch {
   dispose(): void
   /** Run one sample now (tests and the first check after spawn). */
   sample(): Promise<ResourceViolation | null>
+  /** Notify mode, the user chose Stop: the stop that used to happen on its
+   *  own (whole tree killed, `onViolation`, watching ends). */
+  terminate(item: ResourceViolation): Promise<ResourceViolation>
+  /** Notify mode, the user chose Keep running: the item's notice level
+   *  becomes twice the larger of the level and the latest usage, and stays
+   *  there until this watch ends (contract 5.2). Returns the new level. */
+  keepRunning(item: ResourceViolation): number
+  /** Notify mode: the latest usage against the thresholds, for the activity page. */
+  status?(): BackendResourceStatus
+}
+
+/** Units as in `ResourceExceeded`. `levels` differ from `thresholds` only
+ *  after Keep running; `waiting` are the items announced and not answered. */
+export interface BackendResourceStatus {
+  usage: Record<ResourceViolation, number>
+  thresholds: Record<ResourceViolation, number>
+  levels: Record<ResourceViolation, number>
+  waiting: ResourceViolation[]
+}
+
+/** Over a threshold in notify mode (contract 5.2). Units: memory and disk in
+ *  bytes, processes a count, cpu in cores (sustained for `cpuKillAfterMs`). */
+export interface ResourceExceeded {
+  item: ResourceViolation
+  usage: number
+  threshold: number
+}
+
+/** Plan B watchdog option C: tell, do not stop. Without it the watch stops
+ *  the backend on its own, as before. */
+export interface ResourceNotifyMode {
+  onExceeded: (exceeded: ResourceExceeded) => void
+  /** The backend's stdout waiting for a newline, in bytes (#375's
+   *  `stdoutPending.bytes`); absent, the item reads 0 and is never noticed. */
+  stdoutPending?: { bytes: () => number; threshold: number }
 }
 
 /**
@@ -363,6 +407,7 @@ export function watchBackendResources(
   limits: BackendResourceLimits = DEFAULT_BACKEND_RESOURCE_LIMITS,
   deps: ResourceWatchdogDeps = createHostWatchdogDeps(),
   identity?: SandboxIdentity,
+  notify?: ResourceNotifyMode,
 ): BackendResourceWatch {
   let disposed = false
   let sampling = false
@@ -375,6 +420,30 @@ export function watchBackendResources(
   // monotonic max keeps the delta from going negative.
   const handle = deps.setInterval(() => void watch.sample(), limits.sampleIntervalMs)
 
+  // Notify mode: each item's notice level, its latest usage, the items
+  // announced and not yet answered, and the last tree (for Stop).
+  const stdoutPendingThreshold = notify?.stdoutPending?.threshold ?? defaultStdoutPendingThreshold()
+  const thresholds: Record<ResourceViolation, number> = {
+    memory: limits.maxRssBytes,
+    cpu: limits.maxCpuCores,
+    processes: limits.maxProcesses,
+    disk: limits.maxDataBytes,
+    stdoutPending: stdoutPendingThreshold,
+  }
+  const levels: Record<ResourceViolation, number> = { ...thresholds }
+  const latest: Record<ResourceViolation, number> = { memory: 0, cpu: 0, processes: 0, disk: 0, stdoutPending: 0 }
+  const pending = new Set<ResourceViolation>()
+  let lastTree: readonly ProcessSample[] = []
+  const exceed = (item: ResourceViolation, usage: number): void => {
+    if (pending.has(item)) return
+    pending.add(item)
+    try {
+      notify!.onExceeded({ item, usage, threshold: levels[item] })
+    } catch {
+      // A reporting failure must not change what the backend does.
+    }
+  }
+
   const violate = (violation: ResourceViolation, tree: readonly ProcessSample[]): ResourceViolation => {
     watch.dispose()
     for (const process of [...tree].reverse()) deps.kill(process.pid)
@@ -386,11 +455,93 @@ export function watchBackendResources(
     return violation
   }
 
+  /** Notify mode: the same measurements against each item's notice level;
+   *  over one, the user is told once per notice and nothing is stopped. */
+  const sampleNotifying = async (tree: readonly ProcessSample[]): Promise<null> => {
+    lastTree = tree
+    latest.processes = tree.length
+    if (tree.length > levels.processes) exceed('processes', tree.length)
+    const rss = tree.reduce((sum, process) => sum + process.rssBytes, 0)
+    latest.memory = rss
+    rssStrikes = rss > levels.memory ? rssStrikes + 1 : 0
+    if (rssStrikes >= limits.rssStrikes) exceed('memory', rss)
+
+    const now = deps.now()
+    const cpuMs = tree.reduce((sum, process) => sum + process.cpuMs, 0)
+    if (lastCpu && now > lastCpu.atMs) {
+      const cores = Math.max(0, cpuMs - lastCpu.cpuMs) / (now - lastCpu.atMs)
+      latest.cpu = cores
+      if (cores >= levels.cpu) {
+        cpuOverSince ??= lastCpu.atMs
+        if (now - cpuOverSince >= limits.cpuKillAfterMs) exceed('cpu', cores)
+      } else {
+        cpuOverSince = null
+      }
+    }
+    lastCpu = { atMs: now, cpuMs: Math.max(cpuMs, lastCpu?.cpuMs ?? 0) }
+
+    if (samples % limits.dataSampleEvery === 1 || limits.dataSampleEvery <= 1) {
+      const bytes = await deps.dataDirBytes(dataDir)
+      latest.disk = bytes
+      if (bytes > levels.disk) exceed('disk', bytes)
+    }
+    if (notify?.stdoutPending) {
+      let pendingBytes = 0
+      try {
+        pendingBytes = notify.stdoutPending.bytes()
+      } catch {
+        // Unreadable reads as nothing pending.
+      }
+      latest.stdoutPending = pendingBytes
+      if (pendingBytes > levels.stdoutPending) exceed('stdoutPending', pendingBytes)
+    }
+    return null
+  }
+
   const watch: BackendResourceWatch = {
     dispose() {
       if (disposed) return
       disposed = true
       deps.clearInterval(handle)
+    },
+    async terminate(item) {
+      if (disposed) return item
+      // List the tree again so a process started since the last sample is
+      // stopped too (review LOW1 on #386); the last sample only if listing
+      // fails. A listing without the tree means the backend is gone: like
+      // main, nothing is killed, since its pids may belong to others now (N1).
+      let tree = lastTree
+      try {
+        const listing = await deps.listProcesses()
+        const candidates = identity ? escapeCandidates(listing, identity) : []
+        const escaped = identity && candidates.length > 0 && deps.confirmImages
+          ? await deps.confirmImages(candidates, identity)
+          : new Set<number>()
+        tree = sandboxProcessTree(listing, rootPid, escaped)
+      } catch {
+        // Keep the last sampled tree.
+      }
+      if (disposed) return item
+      if (tree.length === 0) {
+        watch.dispose()
+        return item
+      }
+      return violate(item, tree)
+    },
+    status() {
+      return {
+        usage: { ...latest },
+        thresholds: { ...thresholds },
+        levels: { ...levels },
+        waiting: [...pending],
+      }
+    },
+    keepRunning(item) {
+      levels[item] = 2 * Math.max(levels[item], latest[item])
+      pending.delete(item)
+      if (item === 'memory') rssStrikes = 0
+      if (item === 'cpu') cpuOverSince = null
+      return levels[item]
     },
     async sample() {
       if (disposed || sampling) return null
@@ -405,6 +556,7 @@ export function watchBackendResources(
         const tree = sandboxProcessTree(listing, rootPid, escaped)
         if (disposed || tree.length === 0) return null
         samples += 1
+        if (notify) return await sampleNotifying(tree)
         if (tree.length > limits.maxProcesses) return violate('processes', tree)
         const rss = tree.reduce((sum, process) => sum + process.rssBytes, 0)
         rssStrikes = rss > limits.maxRssBytes ? rssStrikes + 1 : 0

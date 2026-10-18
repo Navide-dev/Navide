@@ -65,6 +65,7 @@ import { asAgentPush, normalizePreviewTarget } from './preview/previewTarget'
 import { usePreview } from './preview/usePreview'
 import { usePreviewLog } from './preview/usePreviewLog'
 import NotificationHost from './components/NotificationHost.vue'
+import BackendResourceNotices from './components/BackendResourceNotices.vue'
 import Welcome from './components/Welcome.vue'
 import { agentUsesBracketedPaste } from '@navide/plugin-shell'
 import { useNotify, useTheme } from '@navide/plugin-ui/foundation'
@@ -73,8 +74,9 @@ import { useAgentMessaging, encodeReason, isBroadcastTarget, NOTICE_SENDER, rawR
 import type { MessageReason, PushOutcome, RouteResult } from './composables/useAgentMessaging'
 import { createMessageLogPersistence } from './composables/useMessageLogPersistence'
 import type { ParsedAgentMessage } from './lib/agentMessaging'
+import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { VENDORS_WITHOUT_TURN_END, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -165,7 +167,7 @@ import {
   CLI_PASTE_LINE_CAP
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
-import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
+import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -195,7 +197,9 @@ import {
   submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
 import { terminalMultilineRefusal } from './lib/terminalInput'
-import { recordDiagnostic, readDiagnostics, currentDiagnosticSeq } from './lib/uiDiagnostics'
+import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
+import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
+import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { quickClassify } from './lib/quick-classify'
@@ -340,12 +344,26 @@ import {
   screenShowsHookTrustPrompt
 } from './lib/sessionMarkerTurn'
 import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
-import { executeCommand, initKeybindingsPort, useKeybindings, registerCommand, setContext } from '@navide/plugin-ui/shared'
+import { executeCommand, formatKeySpec, initKeybindingsPort, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
-import { releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
-import type { ConvenienceAnnouncementAction, EvolveAnnouncementAction } from './composables/useAnnouncements'
+import {
+  pluginAgentNoticeTitle,
+  pluginAgentUndoApplies,
+  releaseAnnouncementId,
+  useAnnouncements,
+  type SchedulerDisabledNotice,
+} from './composables/useAnnouncements'
+import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
+import { PLUGIN_APPROVAL_RECOVER_EVENT } from '../../shared/pluginAgentTools'
+import type {
+  ConvenienceAnnouncementAction,
+  EvolveAnnouncementAction,
+  PluginAgentAnnouncementAction,
+} from './composables/useAnnouncements'
 import { useEvolve } from './composables/useEvolve'
 import { useShareNotices } from './composables/useShareNotices'
+import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
+import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import {
   useQuotaFailover,
@@ -383,6 +401,9 @@ import {
 import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
+import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } from './composables/useNotifyPrefs'
+import { usePermissions } from './composables/usePermissions'
+import { useDisabledBuiltins } from './composables/useDisabledBuiltins'
 import { plansBackendStoppedNotice } from './composables/plansBackendStoppedNotice'
 import navideMark from './assets/navide-mark.png'
 
@@ -412,6 +433,7 @@ const CoachMark = defineAsyncComponent(() => import('./components/CoachMark.vue'
 const CliHealthGuide = defineAsyncComponent(() => import('./components/CliHealthGuide.vue'))
 const CliInstallDialog = defineAsyncComponent(() => import('./components/CliInstallDialog.vue'))
 const SkillInstallApprovalDialog = defineAsyncComponent(() => import('./components/SkillInstallApprovalDialog.vue'))
+const PluginAgentRequestDialog = defineAsyncComponent(() => import('./components/PluginAgentRequestDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
@@ -419,8 +441,16 @@ const PipelineManagerModal = defineAsyncComponent(() => import('./components/Pip
 const AnnouncementsPanel = defineAsyncComponent(() => import('./components/AnnouncementsPanel.vue'))
 const EvolvePanel = defineAsyncComponent(() => import('./components/EvolvePanel.vue'))
 const ClockPanel = defineAsyncComponent(() => import('./components/ClockPanel.vue'))
+const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.vue'))
 
 const backend = useBackend()
+// Warn and error diagnostics also go to the backend's on-disk error ledger,
+// which outlives a reload and is what ui_diagnostics returns as `persisted`.
+setDiagnosticSink((entry) => {
+  backend
+    .send('diagnostics.record', { level: entry.level, code: entry.code, message: entry.message, paneId: entry.paneId })
+    .catch(() => { /* best effort: the ring buffer still has it */ })
+})
 const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to the ws: reconciles + flushes queued writes once
 // connected, and applies ui.settings_changed broadcasts from other windows.
@@ -884,10 +914,47 @@ function replayWelcomeTour(): void {
 }
 // Announcements centre: the status-bar feed of release notes + updater news.
 const announcements = useAnnouncements()
+// Agent Navide plugin requests (B2-c): a request a restart left `applying` is
+// settled once, on this window's first connection, from the installed packages.
+const pluginAgentRequests = usePluginAgentRequests(backend)
+let pluginAgentRequestsRecovered = false
+watch(() => backend.status.value, (status) => {
+  if (status !== 'connected' || pluginAgentRequestsRecovered) return
+  pluginAgentRequestsRecovered = true
+  void pluginAgentRequests.recover().catch((error: unknown) => {
+    console.warn('[plugins] could not settle interrupted agent plugin requests', error)
+  })
+}, { immediate: true })
+// And when a main window went away while carrying out approved requests
+// (review-370 R1): the backend names them, and recover() settles whatever is
+// still unclaimed after its grace.
+backend.on(PLUGIN_APPROVAL_RECOVER_EVENT, () => {
+  void pluginAgentRequests.recover().catch((error: unknown) => {
+    console.warn('[plugins] could not settle agent plugin requests a closed window left', error)
+  })
+})
 const quotaFailover = useQuotaFailover()
 // Status-bar popovers (backend / announcements / clock) share one open id, so
 // opening any of them closes whichever was showing.
 const { openPopover, toggle: togglePopover, close: closePopover } = useStatusBarPopover()
+
+// Status-bar notifications bell: the two Settings → Notifications toggles,
+// shared with that page through useNotifyPrefs. The permission status is the
+// last test result main keeps (see usePermissions), re-read when the popover
+// opens; a denial earns the bell a warning dot.
+const notifyPermissions = usePermissions()
+void notifyPermissions.refresh()
+watch(openPopover, (id) => {
+  if (id === 'notify') void notifyPermissions.refresh()
+})
+const notifyPermissionDenied = computed(() => notifyPermissions.statuses.value.notifications === 'denied')
+const notifyBarTitle = computed(() =>
+  [
+    i18n.global.t(systemNotifyOn.value ? 'notifyBar.tooltip-on' : 'notifyBar.tooltip-off'),
+    notifySoundOn.value ? '' : i18n.global.t('notifyBar.sound-off'),
+    notifyPermissionDenied.value ? i18n.global.t('settings.general.notify-permission-status.denied') : '',
+  ].filter(Boolean).join(' · ')
+)
 watch(
   onboardingComplete,
   (value) => {
@@ -1699,6 +1766,13 @@ interface ActivePane {
    *  expired-login message (see lib/cliLoginExpired); cleared once the login
    *  command is re-sent via the badge click. Not persisted to PaneRecord. */
   loginExpired?: boolean
+  /** Runtime-only: the agent CLI's last exit, when it was a non-zero one (see
+   *  lib/paneExitFault). The title-bar badge shows it while the pane is dead.
+   *  Not persisted. */
+  exitFault?: PaneExitFault | null
+  /** Runtime-only: when this pane went quiet mid-turn (see lib/paneStuck), or
+   *  null while it is not stuck. Shown as a title-bar badge. Not persisted. */
+  stuckSince?: number | null
   /** Runtime-only quota-exhausted state, set when the pane's CLI printed its
    *  "hit your limit" message (see lib/cliUsageLimit). `usageLimitAt` is when
    *  it was seen — the loop reads it as an edge, so it must change on every
@@ -3861,6 +3935,7 @@ onMounted(() => {
     void refreshTerminalPrompts()
     messaging.pump()
     pollAwaitingPanes()
+    pollStuckPanes()
     syncPaneBusy()
   }, 1000)
   void refreshRemoteMessagingTargets()
@@ -3907,6 +3982,46 @@ onUnmounted(() => {
 // never reports — so a miss there is not evidence the wait ended and must not
 // clear what the hook raised.
 const AWAITING_SCREEN_LINES = 25
+
+/** Flag a pane whose turn is in flight but whose log and screen have both been
+ *  quiet past the threshold, and record it once per episode. Reminder only:
+ *  nothing is interrupted or restarted. */
+function pollStuckPanes(): void {
+  const now = Date.now()
+  for (const pane of panes.value) {
+    if (!pane.realized || pane.agentKey === TERMINAL_AGENT_KEY) continue
+    // Contained per pane, like pollAwaitingPanes: a badge must never take the
+    // messaging pump down with it.
+    try {
+      const ref = paneRefs[pane.id]
+      const status = ref?.displayStatus as string | undefined
+      const lastActive = paneLastActiveAt.get(pane.id) ?? 0
+      const since = status === 'running' || status === 'idle'
+        ? paneStuckSince({
+          turnInFlight: isTurnInFlight(lastActive, paneTurnCompleteAt.get(pane.id) ?? 0, now, {
+            inferEndFromSilence: VENDORS_WITHOUT_TURN_END.has(pane.agentKey),
+          }),
+          lastLogActivityAt: lastActive,
+          lastOutputAt: Number(ref?.lastActivityAt ?? 0),
+          now,
+        })
+        : null
+      if (since != null && pane.stuckSince == null) {
+        pane.stuckSince = since
+        recordDiagnostic({
+          level: 'warn',
+          code: 'pane.stuck',
+          message: `${pane.agentKey} has been mid-turn with no activity for ${Math.round((now - since) / 60_000)} min`,
+          paneId: pane.id,
+        })
+      } else if (since == null && pane.stuckSince != null) {
+        pane.stuckSince = null
+      }
+    } catch {
+      /* leave this pane's badge as-is and carry on with the rest */
+    }
+  }
+}
 
 function pollAwaitingPanes(): void {
   for (const pane of panes.value) {
@@ -4927,10 +5042,17 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   watcher.continuing = true
   await acquireInjectionSlot()
   let ok = false
+  // The turn this continue wakes can end before injectPane returns; arming at
+  // the return would place armedAt after that turn's own signals and the loop
+  // would wait on a turn that already happened. Stamp once the slot is held,
+  // right before the inject (so time queued for the slot never counts), and arm
+  // with it only once the inject lands (a failed one keeps the old arm).
+  let armAt = 0
   try {
     // Cancelled / restarted while queued on the semaphore? Abort before the
     // inject so no stray "繼續" lands in a CLI whose loop was just turned off.
     if (loopGen.get(paneId) !== gen || !pane.loopActive || held()) return
+    armAt = Date.now()
     ok = await injectPane(
       paneId,
       withLoopDoneInstruction(loopResumeTextFor(paneId)),
@@ -4945,12 +5067,21 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   // Loop turned off / restarted while the injection was in flight — don't arm.
   if (loopGen.get(paneId) !== gen || !pane.loopActive) return
   if (!ok) {
+    // A quota hold that cancelled the inject is not a failure to count.
+    if (!held()) {
+      watcher.injectFailures = loopInjectFailures(watcher.injectFailures, false)
+      if (watcher.injectFailures >= LOOP_INJECT_FAIL_LIMIT) {
+        stopLoopSpinning(paneId, 'inject-failed')
+        return
+      }
+    }
     console.warn(`[loop] pane ${paneId}: continue injection failed — will retry next turn`)
     return
   }
+  watcher.injectFailures = loopInjectFailures(watcher.injectFailures, true)
   pane.loopTurnCount = (pane.loopTurnCount ?? 0) + 1
   // Fresh turn started: re-arm and refresh the pre-limit estimate window.
-  armLoopTurn(paneId)
+  armLoopTurn(paneId, armAt)
   // Hold the next continue for the current stall tier (0 while productive), and
   // count this one against the hard cap.
   watcher.continues += 1
@@ -5034,7 +5165,7 @@ function noteLoopWait(paneId: string, text: string, timestamp: string): boolean 
 /** The loop is spinning without finishing — it repeated itself past the stall
  *  limit, or burned through the continue cap. Stop it (same teardown as the
  *  done path) and ask for attention instead of injecting another continue. */
-function stopLoopSpinning(paneId: string, reason: 'stalled' | 'capped'): void {
+function stopLoopSpinning(paneId: string, reason: 'stalled' | 'capped' | 'inject-failed' | 'interrupted'): void {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || !pane.loopActive) return
   console.warn(`[loop] pane ${paneId}: loop stopped — ${reason}`)
@@ -5080,10 +5211,10 @@ function stopLoopComplete(paneId: string, reason: 'done-marker' | 'turn-cap' = '
 
 /** Set the turn-complete arm time on a pane's loop watcher (no-op if the
  *  watcher is gone). Only a turn_complete after this instant is judged. */
-function armLoopTurn(paneId: string): void {
+function armLoopTurn(paneId: string, at: number = Date.now()): void {
   const watcher = loopLimitWatchers.get(paneId)
   if (!watcher) return
-  watcher.armedAt = Date.now()
+  watcher.armedAt = at
   // Per-TURN counter: what the next turn does with tools says nothing about
   // what the last one did. toolSignalsSeen is per-PANE and deliberately kept.
   watcher.toolUsesThisTurn = 0
@@ -5165,6 +5296,9 @@ interface LoopLimitWatcher {
   /** The tool judgement already ran on this armed turn's text (or the turn
    *  was honoured as a LOOP_WAIT), so a later empty copy adds nothing. */
   toolJudged: boolean
+  /** Consecutive continue injections that failed (0 after any success) —
+   *  LOOP_INJECT_FAIL_LIMIT of them stop the loop. */
+  injectFailures: number
   /** Consecutive turns that ended with LOOP_WAIT_MARKER (0 after any other). */
   consecutive: number
   /** Time this run has already granted to LOOP_WAIT holds, bounded by
@@ -5209,6 +5343,7 @@ function startLoopLimitWatcher(paneId: string): void {
     toolSignalsSeen: false,
     emptyCharged: false,
     toolJudged: false,
+    injectFailures: 0,
     consecutive: 0,
     totalWaitedMs: 0,
   }
@@ -6029,6 +6164,7 @@ let stopPluginContributionChanges: (() => void) | null = null
 let stopGitRecoveryChanged: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
+let stopPluginAgentAction: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
   stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
@@ -6044,6 +6180,12 @@ onMounted(() => {
   stopPlansBackendStopped = window.agentTeam?.onPlansBackendStopped?.(({ workspacePath }) => {
     notifyRestore.toast(plansBackendStoppedNotice(workspacePath), { type: 'error' })
   }) ?? null
+  // An agent disabled or enabled a Navide plugin (B2-c): say who at once, and
+  // keep a row with the undo in the announcements centre.
+  stopPluginAgentAction = window.agentTeam?.onPluginAgentAction?.((notice) => {
+    announcements.notePluginAgentNotice(notice)
+    notifyRestore.toast(pluginAgentNoticeTitle(notice), { type: 'info' })
+  }) ?? null
   void refreshPluginContributions()
   stopPluginContributionChanges = window.agentTeam?.plugins?.onContributionsChanged?.(() => {
     void refreshPluginContributions()
@@ -6058,6 +6200,8 @@ onUnmounted(() => {
   stopPlansRecoveryChanged = null
   stopPlansBackendStopped?.()
   stopPlansBackendStopped = null
+  stopPluginAgentAction?.()
+  stopPluginAgentAction = null
   stopPluginContributionChanges?.()
   stopPluginContributionChanges = null
 })
@@ -8787,11 +8931,19 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
  *
  *  The UI callers ignore this; ui.pane.interrupt reports it, because
  *  "nothing was sent" and "it was sent and the agent kept going" are different
- *  answers and an MCP caller cannot tell them apart otherwise. */
-async function onInterrupt(paneId: string): Promise<boolean> {
+ *  answers and an MCP caller cannot tell them apart otherwise.
+ *
+ *  `keepLoop` is for interrupts not aimed at this one pane (batch, evolve):
+ *  they leave its loop running. */
+async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): Promise<boolean> {
   if (!panes.value.find((p) => p.id === paneId)?.realized) return false
   const ref = paneRefs[paneId]
   if (!ref?.sessionId) return false
+  // An explicit interrupt of this pane (user or agent) stops its loop too —
+  // otherwise the interrupted turn's end reads as a finished turn and the loop
+  // answers it with a continue. Stopped before the interrupt so an in-flight
+  // continue aborts.
+  if (!opts.keepLoop && panes.value.find((p) => p.id === paneId)?.loopActive) stopLoopSpinning(paneId, 'interrupted')
   try {
     const issued = await ref.interrupt()
     persistPaneStopped(paneId, true)
@@ -8817,7 +8969,7 @@ async function onKillAll(paneIds?: readonly string[]): Promise<void> {
 
 // ── Batch actions on the multi-select set (right-click a selected pane) ───────
 async function batchInterrupt(ids: string[]): Promise<void> {
-  for (const id of ids) await onInterrupt(id)
+  for (const id of ids) await onInterrupt(id, { keepLoop: true })
 }
 
 function batchMinimize(ids: string[]): void {
@@ -9113,7 +9265,7 @@ watch(currentWorkspace, (workspacePath) => {
 // alone is not enough: asking for the tab you are already on leaves the prop
 // unchanged, so the modal's watcher never fires and the request is dropped.
 const settingsTabRequest = ref(0)
-const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions'>('general')
+const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications'>('general')
 // Needed to retarget an already-open modal: initialTab is only honoured on mount
 // and by its own watcher, so re-issuing the same tab is a no-op without this.
 const settingsModalRef = ref<{
@@ -9682,24 +9834,43 @@ registerCommand('workbench.action.closeModal', () => {
 registerCommand('workbench.action.openKeyboardShortcuts', () => {
   openSettingsAt('keybindings')
 })
-registerCommand('workbench.action.findInFiles', async () => {
+// Commands of a built-in Navide plugin the user disabled decline: the key
+// passes through, and an agent's ui_invoke is told why.
+const disabledBuiltins = useDisabledBuiltins()
+function disabledBuiltinError(pluginId: string, name: string): Error | null {
+  return disabledBuiltins.isDisabled(pluginId)
+    ? new Error(`Navide plugin ${name} is disabled. Enable it in Settings → Extensions.`)
+    : null
+}
+registerCommand('workbench.action.findInFiles', () => {
+  if (disabledBuiltins.isDisabled('navide.mini-ide')) return false
+  return findInFiles()
+})
+async function findInFiles(): Promise<void> {
   const api = (window as Window & { agentTeam?: { openEditorWindow?: (args: { workspace_path: string; sidebar: 'search' }) => Promise<{ ok: boolean }> } }).agentTeam
   if (currentWorkspace.value && api?.openEditorWindow) {
     await api.openEditorWindow({ workspace_path: currentWorkspace.value, sidebar: 'search' })
   }
+}
+registerCommand('workbench.action.openMiniIDE', () => {
+  if (disabledBuiltins.isDisabled('navide.mini-ide')) return false
+  return (async () => {
+    if (currentWorkspace.value) {
+      await window.agentTeam?.openEditorWindow({ workspace_path: currentWorkspace.value })
+    }
+  })()
 })
-registerCommand('workbench.action.openMiniIDE', async () => {
-  if (currentWorkspace.value) {
-    await window.agentTeam?.openEditorWindow({ workspace_path: currentWorkspace.value })
-  }
+registerCommand('workbench.action.openGitWindow', () => {
+  if (disabledBuiltins.isDisabled('navide.git')) return false
+  return (async () => {
+    if (currentWorkspace.value) {
+      await window.agentTeam?.openGitWindow?.({ workspace_path: currentWorkspace.value })
+    }
+  })()
 })
-registerCommand('workbench.action.openGitWindow', async () => {
-  if (currentWorkspace.value) {
-    await window.agentTeam?.openGitWindow?.({ workspace_path: currentWorkspace.value })
-  }
-})
-registerCommand('workbench.action.openPlans', async (args) => {
-  await openPlansTarget(args)
+registerCommand('workbench.action.openPlans', (args) => {
+  if (disabledBuiltins.isDisabled('navide.plans')) return false
+  return openPlansTarget(args)
 })
 registerCommand('workbench.action.rebuildFocusedPane', async () => {
   if (effectiveFocusPaneId.value) await rebuildPaneViaResume(effectiveFocusPaneId.value)
@@ -10171,7 +10342,7 @@ watch(currentWorkspace, (_next, prev) => {
 registerCommand('ui.diagnostics.read', (args) => {
   const a = (args as { sinceSeq?: number; paneId?: string; limit?: number } | undefined) ?? {}
   const entries = readDiagnostics({ sinceSeq: a.sinceSeq, paneId: a.paneId || undefined, limit: a.limit })
-  return { entries, nextSeq: currentDiagnosticSeq() }
+  return { entries, nextSeq: diagnosticsNextSeq(entries, a.limit) }
 })
 registerCommand('ui.tab.switch', (args) => {
   const tabId = (args as { tabId?: string } | undefined)?.tabId
@@ -10194,10 +10365,15 @@ registerCommand('ui.preview.show', (args) => {
 registerCommand('workbench.action.focusPreview', () => {
   preview.focus()
 })
-registerCommand('ui.window.openPlans', (args) => openPlansTarget(args))
+registerCommand('ui.window.openPlans', (args) => {
+  const disabled = disabledBuiltinError('navide.plans', 'Plans')
+  return disabled ? Promise.reject(disabled) : openPlansTarget(args)
+})
 registerCommand('ui.window.openResourceManager', () => { openResourceManager() })
 registerCommand('ui.window.openTurnStats', () => { openTurnStats() })
 registerCommand('ui.window.openGit', async () => {
+  const disabled = disabledBuiltinError('navide.git', 'Git')
+  if (disabled) throw disabled
   if (!currentWorkspace.value) return
   await window.agentTeam?.openGitWindow?.({ workspace_path: currentWorkspace.value })
 })
@@ -14132,7 +14308,7 @@ backend.on('agent.activity', (raw) => {
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
     // the resume prompt again (runs before the poll's turn-complete continue).
-    if (ev.text && turnEndsWithSentinel(ev.text, LOOP_DONE_MARKER)) {
+    if (ev.text && turnEndsWithLoopDone(ev.text, LOOP_DONE_MARKER)) {
       stopLoopOnDoneMarker(ev.pane_id, ev.timestamp ?? '')
     }
     // Unattended loop: judge whether this turn actually moved the task forward.
@@ -14409,17 +14585,16 @@ backend.on('agent_msg.deliver', (raw) => {
     kind: ev.kind === 'ack' ? 'ack' : undefined,
     // Chat channel / remote device: fenced as external content, not the user's.
     external: isExternalDelivery(ev),
+    // An MCP caller with no pane: a MSG reply to it would bounce (hasReplyRoute).
+    noReplyRoute: !hasReplyRoute(ev),
   })
-  if (!accepted || !ev.cross_workspace) return
-  // The instruction came from another project — say so, since nothing else in
-  // this window would show where it originated.
+  if (!accepted) return
+  // Say where the instruction came from — another machine, a chat channel or
+  // another project — since nothing else in this window would show it.
+  // deliveryToast stays silent for a delivery from this workspace.
   const target = panes.value.find((p) => p.id === ev.target_pane_id)
-  notifyRestore.toast(
-    i18n.global.t('msg.cross-workspace-toast', {
-      from: ev.from_display || 'unknown',
-      target: target?.messagingName ?? '',
-    }),
-  )
+  const toast = deliveryToast(ev, target?.messagingName ?? '')
+  if (toast) notifyRestore.toast(toast.message, toast.opts)
 })
 
 // Spawn request ids this window has already acted on, newest last. The
@@ -14564,6 +14739,9 @@ backend.on('scheduler.job_disabled', (raw) => {
 const evolve = useEvolve(backend)
 // Share-link created/opened events become announcements (none without Navide Cloud).
 useShareNotices(backend)
+// Plan B D-f: a Registry rescan of an installed plugin found new items (notice only).
+usePluginRescanNotices()
+usePluginResultHelperNotice()
 function onEvolveAction(action: EvolveAnnouncementAction): void {
   closePopover()
   const paneId = action.paneId
@@ -14573,7 +14751,7 @@ function onEvolveAction(action: EvolveAnnouncementAction): void {
       if (paneId) void focusPaneFromNotification(paneId)
       break
     case 'evolve-interrupt':
-      if (paneId) void onInterrupt(paneId)
+      if (paneId) void onInterrupt(paneId, { keepLoop: true })
       break
     case 'evolve-reclaim':
       if (paneId) void reclaimPaneFromMenu(paneId)
@@ -14588,6 +14766,25 @@ function onEvolveAction(action: EvolveAnnouncementAction): void {
 const convenience = useConvenience(backend, {
   agentLabel: (agentKey) => agentSpecs.find((s) => s.agentKey === agentKey)?.label ?? agentKey,
 })
+/** The undo on an "an agent disabled / enabled a Navide plugin" row: the
+ *  user's own Extensions switch, set back (B2-c). */
+async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise<void> {
+  try {
+    // Only what the agent did: if the user changed it since, leave it be.
+    const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (!pluginAgentUndoApplies(action, installed)) {
+      notifyRestore.toast(i18n.global.t('plugin-agent.notice.undo-stale'), { type: 'info' })
+      return
+    }
+    await window.agentTeam?.plugins?.setDisabled?.(action.pluginId, action.disable)
+  } catch (error) {
+    notifyRestore.toast(
+      i18n.global.t('plugin-agent.notice.undo-failed', { error: error instanceof Error ? error.message : String(error) }),
+      { type: 'error' },
+    )
+  }
+}
+
 async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promise<void> {
   switch (action.kind) {
     case 'convenience-overview':
@@ -14612,7 +14809,7 @@ async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promi
         restoreLive: { liveFingerprint: action.liveFingerprint },
       })
       if (res.ok) announcements.markRead(action.rowId)
-      else if (res.message) notifyRestore.toast(res.message, { type: 'error' })
+      else if (res.message) notifyRestore.toast(i18n.global.t('convenience.switch-back-failed', { detail: res.message }), { type: 'error' })
       break
     }
   }
@@ -14701,6 +14898,17 @@ backend.on('terminal.exit', (raw) => {
   // command). Only a probe that missed it too makes the 127 a verdict.
   if (ev.exit_code === 127 && pane.agentKey !== 'terminal' && ev.startup_probe?.reason === 'not_found') {
     void promptCliInstall(pane.agentKey, pane.agentLabel, pane.id)
+  }
+  // Any other non-zero exit of an agent CLI used to look exactly like the user
+  // quitting it. Keep the code for the title-bar badge, and record it.
+  pane.exitFault = paneExitFault(ev.exit_code, pane.agentKey, ev.startup_probe?.reason)
+  if (pane.exitFault) {
+    recordDiagnostic({
+      level: 'error',
+      code: 'pane.exit',
+      message: `${pane.agentKey} exited with code ${pane.exitFault.code}`,
+      paneId: pane.id,
+    })
   }
 })
 
@@ -14996,10 +15204,12 @@ function relaunchAfterInstall(depId: string): void {
 window.addEventListener('error', (e) => {
   const where = e.filename ? ` (${e.filename.split('/').pop()}:${e.lineno})` : ''
   pipelineLog(`❌ exception: ${e.message}${where}`)
+  recordDiagnostic({ level: 'error', code: 'window.error', message: `${e.message}${where}` })
 })
 window.addEventListener('unhandledrejection', (e) => {
   const reason = e.reason instanceof Error ? e.reason.message : String(e.reason)
   pipelineLog(`❌ unhandled rejection: ${reason}`)
+  recordDiagnostic({ level: 'error', code: 'window.unhandledrejection', message: reason })
 })
 
 // How a slot was judged finished — recorded for history.jsonl auditing so a
@@ -19422,6 +19632,9 @@ function openTurnStats(): void {
 // raises an open request with the pane id and pointer coords.
 const paneCtxMenu = ref<{ paneId: string; x: number; y: number } | null>(null)
 const paneCtxMenuEl = ref<HTMLElement | null>(null)
+// Whether the right-clicked pane is held narrower than its container by the
+// layout-mode cols cap (see lockCols). Offers "Fit to pane width" when true.
+const paneCtxColsCapped = ref(false)
 
 const paneCtxView = computed<ActivePaneView | null>(() =>
   paneCtxMenu.value ? paneViews.value.find((v) => v.id === paneCtxMenu.value!.paneId) ?? null : null
@@ -19528,6 +19741,8 @@ async function mentionPaneInFocusedPane(paneId: string): Promise<void> {
 function openPaneCtxMenu(e: MouseEvent, paneId: string): void {
   e.preventDefault()
   paneCtxMenu.value = { paneId, x: e.clientX, y: e.clientY }
+  // The cap is not reactive, so read it once as the menu opens.
+  paneCtxColsCapped.value = !!paneRefs[paneId]?.isColsCapped?.()
   // Flip/clamp into the viewport once the menu has rendered, so items near the
   // bottom/right edge aren't clipped by the window.
   void nextTick(() => {
@@ -20721,6 +20936,7 @@ function paneIsCommander(p: ActivePane): boolean {
   />
   <!-- An agent's skills_install waits here for the user's approval. -->
   <SkillInstallApprovalDialog :backend="backend" />
+  <PluginAgentRequestDialog :backend="backend" />
   <RestoreScopeModal
     v-if="showRestoreScopeModal"
     :open="showRestoreScopeModal"
@@ -20907,7 +21123,7 @@ function paneIsCommander(p: ActivePane): boolean {
         <NavideCloudMark variant="solid" class="titlebar-account-mark" />
         <span v-if="p2pAccountLabel" class="titlebar-account-dot" :class="p2pAccountDotClass"></span>
       </button>
-      <button class="titlebar-gear" @mousedown.stop @click="showSettings = true" :title="$t('label.titlebar-settings')">
+      <button class="titlebar-gear" @mousedown.stop @click="showSettings = true" :title="$t('label.titlebar-settings', { key: formatKeySpec(settingsKeySpec()) })">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -21297,15 +21513,26 @@ function paneIsCommander(p: ActivePane): boolean {
             <br />{{ $t('hint.pipeline-starting-log') }}
           </p>
         </div>
-        <div v-else class="empty-card">
-          <h2>{{ $t('label.two-ways-title') }}</h2>
-          <p>
-            <strong>▶ {{ $t('action.run-pipeline') }}</strong> {{ $t('label.two-ways-pipeline', { count: stagesApi.stages.value.length }) }}
-          </p>
-          <p>
-            <strong>{{ $t('action.add-to-grid') }}</strong> {{ $t('label.two-ways-grid') }}
-          </p>
-          <p class="muted">{{ $t('label.set-workspace-pipeline') }}</p>
+        <!-- One sentence and one way forward. The button only surfaces the
+             sidebar's Agents tab, where the spawn card already lives — the same
+             programmatic entry Cmd+1 uses — so nothing spawns from here. -->
+        <div v-else class="empty-card empty-card--idle">
+          <img class="empty-mark" :src="navideMark" alt="" />
+          <p class="empty-lead">{{ $t('label.empty-stage-lead') }}</p>
+          <button type="button" class="empty-primary" @click="controlPaneRef?.selectSidebarTab('agents')">
+            {{ $t('action.add-to-grid') }}
+          </button>
+          <!-- The sidebar's own Run button, guard and all: disabled exactly
+               when that one is, and it calls the same startPipeline. -->
+          <button
+            type="button"
+            class="empty-secondary"
+            :disabled="!controlPaneRef?.canRunPipeline"
+            :title="controlPaneRef?.canRunPipeline ? undefined : $t('label.set-workspace-pipeline')"
+            @click="controlPaneRef?.startPipeline()"
+          >
+            {{ $t('action.or-run-pipeline') }}
+          </button>
         </div>
       </div>
       <div v-else class="grid" ref="gridRef" data-tour="pane-stage" :style="gridStyle">
@@ -21414,6 +21641,8 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-wait-until="p.loopWaitUntil"
           :loop-estimate-reset-at="p.loopEstimateResetAt"
           :login-expired="p.loginExpired"
+          :exit-code="p.exitFault?.code ?? null"
+          :stuck-since="p.stuckSince ?? null"
           :muted="isPaneMuted(p.id)"
           :readback-available="readbackOffered"
           :readback="isPaneReadback(p.id)"
@@ -21913,6 +22142,12 @@ function paneIsCommander(p: ActivePane): boolean {
         <div class="pane-ctx-item" @click="startRenamePane(paneCtxMenu!.paneId)">{{ $t('action.rename') }}</div>
         <div class="pane-ctx-item" @click="togglePaneMuted(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ paneCtxView?.isMuted ? $t('action.unmute') : $t('action.mute') }}</div>
         <div
+          v-if="paneCtxColsCapped"
+          class="pane-ctx-item"
+          :title="$t('action.fit-width-title')"
+          @click="paneRefs[paneCtxMenu!.paneId]?.unlockCols?.(); closePaneCtxMenu()"
+        >{{ $t('action.fit-width') }}</div>
+        <div
           class="pane-ctx-item"
           :class="{ disabled: !ctxMentionAddress }"
           :title="$t('action.send-message-title')"
@@ -22017,6 +22252,8 @@ function paneIsCommander(p: ActivePane): boolean {
       />
     </div>
     <NotificationHost />
+    <!-- Plan B watchdog option C: Stop / Keep running for an over-threshold Navide plugin backend. -->
+    <BackendResourceNotices />
     <WhatsNewModal
       v-if="whatsNewEntry"
       :entry="whatsNewEntry"
@@ -22157,6 +22394,33 @@ function paneIsCommander(p: ActivePane): boolean {
           <span class="sb-reconnect-dismiss" :title="$t('restore.dismiss')" @click="dismissReconnectBanner">✕</span>
         </span>
         <span
+          class="sb-item sb-clickable sb-notify"
+          :class="{ 'sb-off': !systemNotifyOn, 'sb-warn': notifyPermissionDenied }"
+          role="button"
+          tabindex="0"
+          :title="notifyBarTitle"
+          :aria-label="notifyBarTitle"
+          @click="togglePopover('notify')"
+          @keydown.enter="togglePopover('notify')"
+        >
+          <span v-if="notifyPermissionDenied" class="sb-dot" />
+          <svg v-if="systemNotifyOn" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+          </svg>
+          <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/>
+            <path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+            <path d="m2 2 20 20"/>
+          </svg>
+          <svg v-if="!notifySoundOn" class="sb-notify-sound-off" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 5 6 9H2v6h4l5 4V5z"/>
+            <line x1="22" y1="9" x2="16" y2="15"/>
+            <line x1="16" y1="9" x2="22" y2="15"/>
+          </svg>
+        </span>
+        <span
           class="sb-item sb-clickable sb-announce"
           :class="{ 'sb-announce-unread': announcements.unreadCount.value > 0 }"
           role="button"
@@ -22222,6 +22486,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @tour="startAnnouncementTour"
       @evolve-action="onEvolveAction"
       @convenience-action="(action) => void onConvenienceAction(action)"
+      @plugin-agent-action="(action) => void onPluginAgentUndo(action)"
     />
 
     <!-- Workspace self-evolution panel (opened from the sidebar heading and
@@ -22232,6 +22497,18 @@ function paneIsCommander(p: ActivePane): boolean {
       :workspace="evolve.panelWorkspace.value"
       :agent-specs="enabledAgentSpecs"
       @close="evolve.closePanel()"
+    />
+
+    <!-- Notifications popover -->
+    <NotifyPanel
+      v-if="openPopover === 'notify'"
+      :system-notify="systemNotifyOn"
+      :notify-sound="notifySoundOn"
+      :permission-status="notifyPermissions.statuses.value.notifications"
+      @update:system-notify="setSystemNotifyOn"
+      @update:notify-sound="setNotifySoundOn"
+      @open-settings="closePopover(); openSettingsAt('notifications')"
+      @close="closePopover()"
     />
 
     <!-- Clock popover -->
@@ -22513,6 +22790,15 @@ function paneIsCommander(p: ActivePane): boolean {
 }
 .titlebar-id:hover .titlebar-reveal { display: flex; }
 .titlebar-reveal:hover { color: var(--text-bright); }
+/* Windows/Linux draw their own window controls and have no title text of the
+   OS's to grab, so the 70% block above was most of what could move the window
+   — and none of it could. There the block drags, and only what it shows (the
+   name or path and the two hover buttons) opts out: hovering the name still
+   swaps in the path and buttons, which line up edge to edge, so the pointer
+   stays inside the zone while moving to either button. macOS keeps the whole
+   block as its hover zone. */
+:root[data-window-controls='drawn'] .titlebar-id { -webkit-app-region: drag; }
+:root[data-window-controls='drawn'] .titlebar-id > * { -webkit-app-region: no-drag; }
 /* Fills the bar between the traffic lights and the gear, and stays draggable
    so the empty stretch still moves the window. */
 .titlebar-spacer {
@@ -23580,6 +23866,65 @@ function paneIsCommander(p: ActivePane): boolean {
   font-size: var(--font-2xs);
   line-height: 1.7;
 }
+.empty-card--idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 420px;
+  border: none;
+  background: transparent;
+}
+.empty-mark {
+  width: 48px;
+  height: 48px;
+}
+.empty-card--idle .empty-lead {
+  margin: 0;
+  text-align: center;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  text-wrap: balance;
+}
+.empty-primary {
+  padding: 8px 18px;
+  border: 1px solid var(--accent-emphasis);
+  border-radius: var(--radius-control);
+  background: var(--accent-emphasis);
+  color: var(--text-on-emphasis);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.empty-primary:hover {
+  background: var(--accent-focus);
+  border-color: var(--accent-focus);
+}
+.empty-primary:focus-visible {
+  outline: 2px solid var(--accent-emphasis);
+  outline-offset: 2px;
+}
+.empty-secondary {
+  margin-top: -6px;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: var(--accent-fg);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+.empty-secondary:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.empty-secondary:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+.empty-secondary:focus-visible {
+  outline: 2px solid var(--accent-emphasis);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
 /* The stage keeps its panes through a switch, so this covers them rather than
    replacing them. Opaque: a translucent wash over another project's terminals
    reads as a glitch, not as loading. */
@@ -23726,6 +24071,10 @@ function paneIsCommander(p: ActivePane): boolean {
 }
 .sb-url { color: var(--text-muted); font-size: var(--font-3xs); }
 .sb-clock { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.sb-notify.sb-off { color: var(--text-muted); }
+.sb-notify.sb-off:hover { color: var(--text-bright); }
+.sb-notify-sound-off { color: var(--text-muted); }
+.sb-notify.sb-warn .sb-dot { background: var(--attention-fg); }
 .sb-version { color: var(--text-muted); margin-left: 4px; }
 .sb-announce-unread .sb-version { color: inherit; }
 .sb-orphans { color: var(--danger, #C0392B); cursor: pointer; font-weight: 600; }

@@ -290,6 +290,8 @@ export {
   extractPlanDocRelPath,
   htmlReportRoute,
   installTerminalLinks,
+  isTerminalLinkModifier,
+  isTerminalLinkModifierKey,
   strColToCellCol,
   splitTerminalLinkSuffix,
   visualWidth,

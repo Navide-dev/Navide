@@ -108,7 +108,8 @@ class FakeBotApi:
         if method in self.handlers:
             return {"ok": True, "result": self.handlers[method](params)}
         if method == "getMe":
-            me: dict[str, Any] = {"id": int(self.token.split(":")[0]), "is_bot": True, "username": self.username}
+            me: dict[str, Any] = {"id": int(self.token.split(":")[0]), "is_bot": True, "first_name": "Navide",
+                                  "username": self.username}
             if self.can_manage_bots is not None:
                 me["can_manage_bots"] = self.can_manage_bots
             return {"ok": True, "result": me}

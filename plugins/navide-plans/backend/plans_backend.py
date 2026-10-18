@@ -119,6 +119,12 @@ _bridge_watch_origins: set[str] = set()
 # same value twice a millisecond apart (Windows ticks every ~15.6 ms) cannot
 # order a caller against a scan that started beside it.
 _list_flights: dict[Any, dict[str, Any]] = {}
+# The last flight each instance finished cleanly, held only while callers of
+# that instance are still in _list_plans_single_flight: one that arrived before
+# it started may wake after it ended and must still share it. The count is of
+# those callers; the last one out drops both entries, so no result outlives them.
+_list_finished: dict[Any, dict[str, Any]] = {}
+_list_callers: dict[Any, int] = {}
 _list_generation = 0
 
 SERVER_INFO = {"name": "navide.plans", "version": "0.1.0"}
@@ -1264,41 +1270,56 @@ def _list_plans_single_flight(origin: dict[str, Any]) -> list[dict[str, Any]]:
     key = origin["instance"]
     with _state_lock:
         arrived_after = _list_generation
-    while True:
-        with _state_lock:
-            flight = _list_flights.get(key)
-            leader = flight is None
-            if leader:
-                _list_generation += 1
-                flight = _list_flights[key] = {
-                    "done": threading.Event(),
-                    "generation": _list_generation,
-                    "result": None,
-                    "error": None,
-                }
-        assert flight is not None
-        if not leader:
-            flight["done"].wait()
-            if flight["generation"] <= arrived_after:
-                continue
-            error = flight["error"]
-            # A leader cancelled by its own caller says nothing about ours:
-            # take the next flight instead of reporting its cancellation.
-            if isinstance(error, BridgeFailure) and error.code == "USER_CANCELLED":
-                continue
-            if error is not None:
-                raise error
-            return flight["result"]
-        try:
-            flight["result"] = _list_plans(origin)
-        except BaseException as error:
-            flight["error"] = error
-            raise
-        finally:
+        _list_callers[key] = _list_callers.get(key, 0) + 1
+    try:
+        while True:
             with _state_lock:
-                _list_flights.pop(key, None)
-            flight["done"].set()
-        return flight["result"]
+                flight = _list_flights.get(key)
+                finished = _list_finished.get(key)
+                # A scan that started after this caller arrived and has already
+                # ended is as fresh as one it could still join.
+                if flight is None and finished is not None and finished["generation"] > arrived_after:
+                    return finished["result"]
+                leader = flight is None
+                if leader:
+                    _list_generation += 1
+                    flight = _list_flights[key] = {
+                        "done": threading.Event(),
+                        "generation": _list_generation,
+                        "result": None,
+                        "error": None,
+                    }
+            assert flight is not None
+            if not leader:
+                flight["done"].wait()
+                if flight["generation"] <= arrived_after:
+                    continue
+                error = flight["error"]
+                # A leader cancelled by its own caller says nothing about ours:
+                # take the next flight instead of reporting its cancellation.
+                if isinstance(error, BridgeFailure) and error.code == "USER_CANCELLED":
+                    continue
+                if error is not None:
+                    raise error
+                return flight["result"]
+            try:
+                flight["result"] = _list_plans(origin)
+            except BaseException as error:
+                flight["error"] = error
+                raise
+            finally:
+                with _state_lock:
+                    _list_flights.pop(key, None)
+                    if flight["error"] is None:
+                        _list_finished[key] = flight
+                flight["done"].set()
+            return flight["result"]
+    finally:
+        with _state_lock:
+            _list_callers[key] -= 1
+            if not _list_callers[key]:
+                del _list_callers[key]
+                _list_finished.pop(key, None)
 
 
 def _encoded_size(value: Any) -> int:
@@ -1542,6 +1563,89 @@ def _add_note(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, An
     notes.append(note)
     _write(origin, rel_path, _write_meta_for_path(rel_path, content, meta), mtime)
     return note
+
+
+_AUTO_TODO_ID_RE = re.compile(r"t(\d+)$")
+_TODO_ROW_RE = re.compile(r"<li\b[^>]*\bdata-todo-id=[\"']([^\"']*)[\"'][^>]*>[\s\S]*?</li>", re.IGNORECASE)
+_EMPTY_TODO_LIST_RE = re.compile(
+    r"(<ul\b[^>]*\bclass=[\"'][^\"']*\btodos\b[^\"']*[\"'][^>]*>)((?:\s|<!--[\s\S]*?-->)*)(</ul>)",
+    re.IGNORECASE,
+)
+_TODO_MARKUP_WARNING = (
+    "the todo was added to plan-meta, but its visible row was not inserted: "
+    "no todo list (or no row for `after`) was found in the document"
+)
+
+
+def _insert_todo_row(content: str, todo: dict[str, str], after: str) -> str | None:
+    """Insert the todo's visible row after ``after``'s row or the last row.
+
+    An empty todo list gets it as its first row; None when there is nowhere
+    to put it. Rows use the same shape plans.create writes.
+    """
+    row = (
+        f'<li data-status="{todo["status"]}" data-todo-id="{html_escape(todo["id"])}">'
+        f'<span class="st">{todo["status"]}</span> <span>{html_escape(todo["content"])}</span></li>'
+    )
+    rows = list(_TODO_ROW_RE.finditer(content))
+    anchor = next((m for m in rows if m.group(1) == after), None) if after else (rows[-1] if rows else None)
+    if anchor is not None:
+        line_start = content.rfind("\n", 0, anchor.start()) + 1
+        indent = content[line_start:anchor.start()]
+        indent = indent if not indent.strip() else ""
+        return f"{content[:anchor.end()]}\n{indent}{row}{content[anchor.end():]}"
+    if after or rows:
+        return None
+    empty = _EMPTY_TODO_LIST_RE.search(content)
+    if empty is None:
+        return None
+    return f"{content[:empty.end(2)]}{row}\n{content[empty.start(3):]}"
+
+
+def _add_todo(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    text = arguments.get("content")
+    todo_id = arguments.get("id", "")
+    owner = arguments.get("owner", "")
+    status = arguments.get("status", "pending")
+    after = arguments.get("after", "")
+    if (
+        not isinstance(text, str)
+        or not text.strip()
+        or not isinstance(todo_id, str)
+        or not isinstance(after, str)
+        or status not in TODO_STATUSES
+        or owner not in {"", *TODO_OWNERS}
+    ):
+        raise BridgeFailure("INVALID_ARGUMENT")
+    todo_id, after = todo_id.strip(), after.strip()
+    rel_path, content, meta, mtime = _load_for_write(origin, arguments.get("rel_path"))
+    todos = meta["todos"]
+    ids = [todo.get("id") for todo in todos if _is_record(todo)]
+    # A visible row's id is taken too, so the new todo never gets a second row.
+    taken = ids + (_TODO_ROW_RE.findall(content) if rel_path.endswith(".html") else [])
+    if todo_id and (TODO_ID_RE.fullmatch(todo_id) is None or todo_id in taken):
+        raise BridgeFailure("INVALID_ARGUMENT")
+    if after and after not in ids:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    if not todo_id:
+        numbers = [int(m.group(1)) for m in map(_AUTO_TODO_ID_RE.fullmatch, map(str, taken)) if m]
+        todo_id = f"t{max(numbers, default=0) + 1}"
+    todo = {"id": todo_id, "content": text.strip(), "status": status}
+    if owner == "user":
+        todo["owner"] = owner
+    index = len(todos)
+    if after:
+        index = next(i + 1 for i, item in enumerate(todos) if _is_record(item) and item.get("id") == after)
+    todos.insert(index, todo)
+    result: dict[str, Any] = dict(todo)
+    if rel_path.endswith(".html"):
+        inserted = _insert_todo_row(content, todo, after)
+        if inserted is None:
+            result["warning"] = _TODO_MARKUP_WARNING
+        else:
+            content = inserted
+    _write(origin, rel_path, _write_meta_for_path(rel_path, content, meta), mtime)
+    return result
 
 
 def _manual_review_note(origin: dict[str, Any], arguments: dict[str, Any], action: str) -> dict[str, Any]:
@@ -1912,6 +2016,9 @@ def _handle(frame: Any) -> None:
             if not _is_record(root) or not isinstance(root.get("root"), str):
                 raise BridgeFailure("PROTOCOL_ERROR")
             result = {"ok": True, "root": root["root"]}
+        # "plans.list_docs" is accepted as an alias of plans.list. Nothing in
+        # this repo sends it to the child today (the legacy renderer's
+        # plans.list_docs goes to the core backend); kept, not removed.
         elif name in {"plans.list", "plans.list_docs"}:
             if arguments and set(arguments) != {"offset"}:
                 raise BridgeFailure("INVALID_ARGUMENT")
@@ -1942,6 +2049,8 @@ def _handle(frame: Any) -> None:
             result = _update_todo(origin, arguments)
         elif name == "plans.add_note":
             result = _add_note(origin, arguments)
+        elif name == "plans.add_todo":
+            result = _add_todo(origin, arguments)
         elif name == "plans.review_note_add":
             result = _manual_review_note(origin, arguments, "add")
         elif name == "plans.review_note_edit":

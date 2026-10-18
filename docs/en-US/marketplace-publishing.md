@@ -88,6 +88,17 @@ shows one. Every file the package contains must be listed in
 `artifact-files.json` — the packager never zips a directory recursively, so
 source files, keys and `node_modules` cannot slip in.
 
+> **Every view must report that it has mounted.** Navide waits 10 seconds
+> after a view's HTML loads; at install and update time a view that has not
+> reported ready fails the package. The scaffold's `main.js` reports ready
+> itself with `window.nav.ready()`, the call
+> `createPluginViewRuntimeClient().ready()` makes, so it installs as written.
+> Once a view has a build step, bundle it with `@navide/plugin-sdk` and call
+> `createPluginViewRuntimeClient().ready()` after mounting instead; the SDK
+> factories are described under
+> [SDK interface](plugin-development-v2.md#sdk-interface). Navide never calls a
+> `definePlugin` activation function.
+
 ## 2. Validate and package
 
 ```bash
@@ -123,8 +134,11 @@ See FORMAT.md, "Targets and backend entry".
 A backend runs in Navide only inside the OS sandbox, after the user allows it,
 and only answers the methods and events it declares. Publishing one also needs
 an administrator to allow your namespace for native backends, a verified
-publisher domain, `engines.navide` of at least `>=0.2.14`, a non-empty
-`backend.methods`, and no `shell` permission. See
+publisher domain, `engines.navide` of at least `>=0.2.14`, and a non-empty
+`backend.methods`. A backend package may also declare `shell: "allowlist"`
+(shown to users as high risk, including that git/gh/glab can contact network
+hosts and send workspace data); it then needs `engines.navide` of at least
+`>=0.2.25`. `shell: "full"` is not available with a backend. See
 [plugin-development-v2.md](plugin-development-v2.md), "Third-party backends".
 
 `dev-backend` runs your built backend the same way, so what works here works
@@ -194,6 +208,12 @@ listed at once; a namespace claimed on the Marketplace is reviewed first
 (section 5). To install from the local Registry in a development build of
 Navide, point the app at it as described under **Registry endpoints** in the
 [Plugin development guide](plugin-development.md#packaging-and-publishing).
+
+This is the way to try a package inside Navide before publishing. There is no
+`navide-plugin dev` command, and Developer Mode (`AGENT_TEAM_PLUGIN_DEV_PATH`)
+writes no capability grant, so it cannot open a Manifest v2 view and refuses a
+backend. A Registry install grants the declared permissions and storage for
+that exact version when you choose **Restart Plugin**.
 
 ## 4. Publish to the Marketplace
 

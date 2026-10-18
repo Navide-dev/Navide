@@ -3,8 +3,8 @@
 Every /plan-mcp tool call must carry one of three credential kinds (see
 plan_mcp._resolve_caller):
 
-- pane: ``?pane=<id>&t=<per-run caller token>`` — plan_mcp_wiring.caller_token(),
-  unrelated to this module.
+- pane: ``?pane=<id>&t=<that pane's token>`` — plan_mcp_wiring.caller_token(id),
+  minted per pane at spawn, unrelated to this module.
 - host: ``?client=host&t=<internal token>`` — this backend's own CLI wiring
   (the fallback claude config, and any wired command where the pane id was
   not known at spawn time) so a backend-owned config is never mistaken for
@@ -41,14 +41,31 @@ def auth_path() -> Path:
     return app_data_dir() / AUTH_FILENAME
 
 
+# The file as it was last hardened (see _harden).
+_hardened: tuple[Any, ...] | None = None
+
+
+def _identity(path: Path) -> tuple[Any, ...]:
+    """What changes when the file is rewritten, recreated or has its mode changed."""
+    st = path.stat()
+    return (str(path), st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_mode)
+
+
 def _harden(path: Path) -> None:
     """Tighten a file left group/world readable by an older version.
 
     os.replace carries the temp file's mode over, so anything this module
     writes is already 0600 — this only catches files from before that.
+    Done once per file as it stands: every read used to repeat it, which on
+    Windows is an icacls process per credential check (review MED-1 on
+    #399). A file rewritten, recreated or given another mode is done again.
     """
+    global _hardened
     try:
+        if _identity(path) == _hardened:
+            return
         secret_files.harden_file(path)
+        _hardened = _identity(path)
     except OSError:
         pass
 

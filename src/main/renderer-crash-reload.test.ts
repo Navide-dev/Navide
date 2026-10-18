@@ -89,3 +89,16 @@ describe('watchRendererCrashes', () => {
     expect(log).toHaveBeenCalledWith('[main] renderer responsive again kind=main')
   })
 })
+
+describe('watchRendererCrashes — fault hook', () => {
+  it('reports a renderer that died, not one that exited cleanly', () => {
+    const win = fakeWindow()
+    const fault = vi.fn()
+    watchRendererCrashes(win, { kind: 'plans', log: vi.fn(), fault })
+    win.gone('clean-exit', 0)
+    expect(fault).not.toHaveBeenCalled()
+    win.gone('crashed', 11)
+    expect(fault).toHaveBeenCalledTimes(1)
+    expect(fault).toHaveBeenCalledWith(expect.stringContaining('kind=plans reason=crashed exitCode=11'))
+  })
+})

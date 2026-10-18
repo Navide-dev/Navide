@@ -217,6 +217,15 @@ export function useGit(
   let acceptedForce: { sequence: number; workspace: string } | null = null
   const showIgnored = ref(false)
   const gitLog = ref<GitCommit[]>([])
+  /** Why the last history read failed ('' when it worked). The list keeps its
+   *  previous contents either way; the panel shows this beside it. */
+  const logError = ref('')
+  /** Why the last showCommit() failed ('' when it worked). */
+  const commitDetailError = ref('')
+  function readFailure(resp: { error?: { message?: string } | null; payload?: unknown }): string {
+    const payloadError = (resp.payload as { error?: unknown } | null)?.error
+    return resp.error?.message || (typeof payloadError === 'string' ? payloadError : '') || 'unknown error'
+  }
   // History view scope (SourceTree-style): 'all' shows every branch's commits as
   // a multi-lane DAG, 'current' shows only HEAD's ancestry. logLimit grows via
   // loadMoreLog() to page through history without breaking the graph.
@@ -368,11 +377,14 @@ export function useGit(
       })
       if (resp.ok && resp.payload && workspacePath() === ws && logScope.value === scope) {
         gitLog.value = resp.payload.commits ?? []
+        logError.value = ''
         return true
       }
+      if (!resp.ok && workspacePath() === ws) logError.value = readFailure(resp)
       return false
-    } catch {
+    } catch (error) {
       // transient WS error — loading flag reset in finally
+      if (workspacePath() === ws) logError.value = error instanceof Error ? error.message : String(error)
       return false
     } finally {
       if (workspacePath() === ws && logScope.value === scope) isLoadingLog.value = false
@@ -503,9 +515,14 @@ export function useGit(
     if (!ws) return null
     try {
       const resp = await send<GitCommitDetail & { ok: boolean; error?: string }>('git.show_commit', { workspace_path: ws, commit_hash })
-      if (resp.ok && resp.payload?.ok) return resp.payload as GitCommitDetail
-    } catch {
+      if (resp.ok && resp.payload?.ok) {
+        commitDetailError.value = ''
+        return resp.payload as GitCommitDetail
+      }
+      commitDetailError.value = readFailure(resp)
+    } catch (error) {
       // network / timeout — caller shows no detail
+      commitDetailError.value = error instanceof Error ? error.message : String(error)
     }
     return null
   }
@@ -1749,7 +1766,7 @@ export function useGit(
 
   return {
     // state
-    gitStatus, statusError, statusLoaded, discoveredRepos, discoverySkipped, showIgnored, gitLog, gitBranches, gitStashes, gitRemotes, gitTags,
+    gitStatus, statusError, logError, commitDetailError, statusLoaded, discoveredRepos, discoverySkipped, showIgnored, gitLog, gitBranches, gitStashes, gitRemotes, gitTags,
     gitWorktrees, gitConfig,
     logScope, logOrder, logLimit, canLoadMoreLog,
     isLoadingStatus, isLoadingLog, isInitializing,

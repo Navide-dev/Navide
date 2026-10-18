@@ -225,14 +225,15 @@ _RUN_OUTPUT_LIMIT = 8000
 def _validate_workspace_cwd(ws_path: str | None) -> "Path | None":
     """Resolve and validate a ``terminal.run`` cwd against known workspaces.
 
-    ``None``/empty passes through as None (inherit the backend's cwd).
-    Otherwise the resolved path must be a registered workspace root (per
+    A cwd is required: ``None``/empty used to pass through and run the
+    command in the backend's own cwd, past this check (d1). The resolved
+    path must be a registered workspace root (per
     ``app.attribution.existing_workspace_roots()``) or a subdirectory of one,
     and an existing directory. Mirrors the shell.run WS handler's validation;
     TODO(Phase 2): share one code path via an extracted ShellService.
     """
     if not ws_path:
-        return None
+        raise CapabilityError("workspace path is required")
     from pathlib import Path
 
     from .. import app

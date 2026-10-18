@@ -34,6 +34,7 @@ import { buildPlanRuntimeScript, buildTodoStatusRuntime, createPlanRuntimeMessag
 interface TodoSummary {
   total: number
   by_status: Record<string, number>
+  awaiting_user?: number
 }
 
 interface PlanTodo {
@@ -93,7 +94,9 @@ type GroupMode = 'flat' | 'stage'
 
 const params = new URLSearchParams(window.location.search)
 const workspacePath = params.get('workspace_path') ?? ''
-const initialRelPath = params.get('rel_path') ?? ''
+// Plan rel_paths are '/'-separated; a Windows Host may hand over '\\' ones.
+const toPlanRelPath = (path: string): string => path.replace(/\\/g, '/')
+const initialRelPath = toPlanRelPath(params.get('rel_path') ?? '')
 const initialFilePath = params.get('filepath') ?? ''
 // What the window title calls this workspace: the alias the user gave it,
 // resolved by the Host and passed as `workspace_display_name`, else the folder
@@ -412,7 +415,10 @@ function planProgress(plan: PlanSummary): { done: number; total: number } {
  *  the retained HTML parser so both carriers count the same way. */
 function planAwaiting(plan: PlanSummary): number {
   const todos = plan.meta?.todos
-  return todos ? htmlPlanAwaitingUser(todos as unknown as RetainedTodo[]) : 0
+  if (todos) return htmlPlanAwaitingUser(todos as unknown as RetainedTodo[])
+  // An entry too big for one list page arrives without meta; the backend's
+  // todo summary still carries the count.
+  return plan.todos?.awaiting_user ?? 0
 }
 
 function progressRatio(plan: PlanSummary): number {
@@ -1211,7 +1217,7 @@ function receiveTarget(target: Record<string, string>): void {
     openHtmlPreview(htmlTarget)
     return
   }
-  if (target.rel_path) void openPlan(target.rel_path)
+  if (target.rel_path) void openPlan(toPlanRelPath(target.rel_path))
 }
 
 async function beginRename(): Promise<void> {

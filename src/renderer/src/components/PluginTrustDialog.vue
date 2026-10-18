@@ -6,6 +6,10 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PendingInstall } from '../composables/usePluginInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
+import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
+import PluginDisclosureCard from './PluginDisclosureCard.vue'
+import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
+import PluginAgentToolsList from './PluginAgentToolsList.vue'
 
 defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
 const emit = defineEmits<{ confirmPublisher: []; confirmRisk: []; cancel: [] }>()
@@ -60,7 +64,7 @@ function capabilityHint(cap: string): string {
         <div class="nv-dialog-heading">
           <h4 v-if="step === 'publisher'" id="ext-trust-title" class="nv-dialog-title">{{ $t('settings.extensions.trust.publisherTitle') }}</h4>
           <h4 v-else id="ext-trust-title" class="nv-dialog-title">{{ $t('settings.extensions.trust.permissionsTitle') }}</h4>
-          <p class="nv-dialog-subtitle"><code>{{ pending.prepared.id }}</code> · {{ pending.prepared.version }}</p>
+          <p class="nv-dialog-subtitle"><code>{{ reveal(pending.prepared.id) }}</code> · {{ reveal(pending.prepared.version) }}</p>
         </div>
       </div>
       <div id="ext-trust-desc" class="nv-dialog-body">
@@ -72,12 +76,16 @@ function capabilityHint(cap: string): string {
               pending.prepared.trustTier === 'signed-verified'
                 ? 'settings.extensions.trust.publisherRisk'
                 : 'settings.extensions.trust.publisherRiskUnsigned',
-              { publisher: pending.prepared.publisherId, id: pending.prepared.id }
+              { publisher: reveal(pending.prepared.publisherId), id: reveal(pending.prepared.id) }
             )
           }}
         </p>
+        <!-- Plan B D2: an update also shows what it changes (the Host's diff of
+             the installed and the downloaded manifests); the full card folds.
+             The confirmation itself is asked exactly as before (option B). -->
+        <PluginDisclosureDiff v-if="step === 'risk' && pending.prepared.disclosureDiff" :diff="pending.prepared.disclosureDiff" />
         <p v-if="step === 'risk' && pending.prepared.containsBackendExecutable" class="ext-backend-risk ext-risk-callout">
-          {{ $t('settings.extensions.trust.backendRisk', { name: pending.label }) }}
+          {{ $t('settings.extensions.trust.backendRisk', { name: reveal(pending.label) }) }}
         </p>
         <template v-if="step === 'risk' && pending.prepared.sensitive.length">
           <h5 class="ext-cap-heading">{{ $t('settings.extensions.trust.sensitiveHeading') }}</h5>
@@ -88,6 +96,32 @@ function capabilityHint(cap: string): string {
             </li>
           </ul>
         </template>
+        <!-- Plan B D1: the verified disclosure of exactly this package. -->
+        <details
+          v-if="step === 'risk' && pending.prepared.disclosureDiff && pending.prepared.disclosure !== undefined"
+          class="ext-trust-full-card"
+        >
+          <summary>{{ $t('pluginDisclosure.diff.fullCard') }}</summary>
+          <PluginDisclosureCard
+            class="ext-trust-disclosure"
+            :disclosure="pending.prepared.disclosure"
+            :scan="pending.prepared.scan ?? null"
+            :registry="pending.prepared.registry ?? null"
+            :verified="true"
+          />
+        </details>
+        <PluginDisclosureCard
+          v-else-if="step === 'risk' && pending.prepared.disclosure !== undefined"
+          class="ext-trust-disclosure"
+          :disclosure="pending.prepared.disclosure"
+          :scan="pending.prepared.scan ?? null"
+          :registry="pending.prepared.registry ?? null"
+          :verified="true"
+        />
+        <PluginAgentToolsList
+          v-if="step === 'risk' && pending.prepared.agentTools?.length"
+          :tools="pending.prepared.agentTools"
+        />
         <p class="ext-trust-tier">
           <span
             v-if="pending.prepared.trustTier === 'signed-verified'"

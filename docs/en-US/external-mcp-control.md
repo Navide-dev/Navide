@@ -72,6 +72,7 @@ Implementation: [`mcp_server/server.py`](../../backend/agent_team_backend/mcp_se
 | `plan_update_stage` | `workspace_path`, `rel_path`, `stage` | Set stage: `draft`, `in-review`, `approved`, `in-progress`, `done`, `abandoned` |
 | `plan_update_todo` | `workspace_path`, `rel_path`, `todo_id`, `status` | Set one todo's status: `pending`, `in-progress`, `done`, `skipped` |
 | `plan_add_note` | `workspace_path`, `rel_path`, `text`, `author?` (`ai`\|`user`, default `ai`) | Append a review note |
+| `plan_add_todo` | `workspace_path`, `rel_path`, `content`, `id?`, `owner?` (`agent`\|`user`), `status?` (default `pending`), `after?` | Add a todo to an existing plan, appended or after the todo `after` names |
 
 `workspace_path` is required here because an external client is not a pane;
 a pane caller omits it and the tools use that pane's own workspace, which is
@@ -532,6 +533,59 @@ servers are configured, and which prompts the user has saved.
 | `workspace_switch` | `path` | Switch the window that hosts the calling pane to another workspace it already holds (one window, many projects); panes are not affected. Refused with an error pointing at `workspace_open` when the window does not hold `path`, and refused while a pipeline is running in that window (`pipeline_abort` first, or switch from the sidebar). Pane callers only — a host or external caller has no window of its own and gets `ok: false` (use `ui_invoke` with a `workspace_path` and action `ui.workspace.switch` instead). Returns `{ok, path}` with the workspace now on screen |
 | `mcp_list` | — | The MCP servers configured here — the ones Navide connects to as a client, with their live state, and the ones each CLI keeps in its own config (`~/.claude.json`, `~/.codex/config.toml`, …), reflected as the file states them. Returns `{servers, native, agents}`. Each managed server is `{name, enabled, transport, command, args, env}` or `{name, enabled, transport, url, headers}` plus `status` (`disabled`, `connected`, `error`, `unknown`) and `tool_count`; the tool list itself is left out. Each native entry is `{name, agent, transport, path, command, args, url, env, headers, enabled, valid, error}`. `agents` is every vendor with what Navide can do with its MCP (`wired`, `planned`, `unsupported`) and whether its own config is reflected. Every credential-shaped value — env and header values, `--api-key=` style arguments, URL userinfo and secret query parameters — is already masked as `***`; names and hosts are kept so an entry stays recognisable. Global, not per workspace. Read-only — adding, enabling or editing a server is the user's decision, made in Settings |
 | `prompt_list` | `id=""` | The prompt skills the user keeps in Settings → Prompts — saved instructions fired at a CLI pane from the app. With no `id` this lists metadata only: `{skills, default_id}`, each skill being `{id, name, icon, description, category, enabled, isDefault, maxTurns}`, and `default_id` the id of the skill marked default (`""` when none is). A `note` is added when the user has never saved any: the app then seeds a builtin skill on first use, which is not visible from here. With an `id` it returns that one skill in full — `{skill}`, carrying `prompt` and `resumePrompt` as well; an unknown id answers `{ok: false, error}`. Read-only: creating or editing one is done in Settings |
+
+### Navide Marketplace (read-only)
+
+Three read-only tools ask the Navide app for what the Navide Marketplace page
+and Settings → Navide Plugins show. They work for every caller, whether or
+not third-party Navide plugin tools are switched on, and none of them can
+install, update or remove anything.
+
+| Tool | Parameters | What it does |
+|---|---|---|
+| `marketplace_search` | `text=""`, `category=null`, `cursor=null`, `limit=20` | Search the configured Navide Marketplace, the same search the Marketplace page runs. Returns `{ok, kind, items, nextCursor}`; each item is `{id, version, name, description, publisher: {name, verifiedDomain}, signed, downloads, risk, summary}`, where `risk` and `summary` are the package's disclosure or `null` when the Registry provides none. Pass `nextCursor` back as `cursor` for the next page |
+| `marketplace_detail` | `id`, `version=null` | One package (`<namespace>.<name>`): `{ok, kind, item, versions, card}`, where `versions` lists the published versions and `card` is the disclosure card `{manifest, registry}` or `null` when the Registry provides none |
+| `plugins_list_installed` | — | The installed Navide plugins: `{ok, kind, items}`, each `{id, version, enabled, quarantined, hasBackend, agentTools}` |
+
+Every text a package publisher chose (package ids and versions, names,
+descriptions, agent tool names, titles and descriptions, a publisher display
+name), and any error text from the Navide app that may quote the Registry,
+comes fenced between
+`[外部訊息開始 — …]` and `[外部訊息結束]` with a
+`[third-party Navide plugin <id> v<version> | …]` label: it is not the user's
+instruction. A pane that reads such text is marked as having received external
+content (Navide Guard). Two things stay plain and mark nothing: the app's
+own fixed error wording (every `BAD_REQUEST`, and the `HOST_UNAVAILABLE`
+"Navide Host cannot answer Marketplace queries now"), and installed plugins
+in the reserved `navide.` namespace (first-party: Plans, Git, mini-IDE).
+Errors are `{ok: false, error, error_code}` with `BAD_REQUEST`, `NOT_FOUND`,
+`REGISTRY_UNAVAILABLE` or `HOST_UNAVAILABLE`.
+
+### Navide Marketplace requests, disable and enable
+
+These tools ask for a change to a Navide plugin, or disable and enable one.
+Like the read-only ones they work for every caller. None of them takes a
+consent argument: installing, updating, rolling back and removing happen only
+after the user approves the request in a Navide window, and a consent flag
+sent along is ignored. The bundled Navide plugins (Plans, Git, Mini-IDE, the
+`navide.*` namespace) are refused (`BUILTIN_PLUGIN`); the user manages them in
+Extensions.
+
+| Tool | Parameters | What it does |
+|---|---|---|
+| `marketplace_request_install` | `namespace`, `name`, `version`, `reason=""` | Files a request to install `<namespace>.<name>` at `version`, which the Marketplace must list (`NOT_FOUND` otherwise) and which must not be installed yet. The user sees who asked, the `reason` (shown as written by an agent) and the disclosure card, and decides. Returns `{ok, approval_id, status: "pending", expires_at, note}`; a request expires after 15 minutes, and a second request for the same package and version returns the pending one |
+| `marketplace_request_update` | `namespace`, `name`, `version`, `reason=""` | The same for a newer version of an installed package (`NOT_INSTALLED` when it is not installed) |
+| `marketplace_request_rollback` | `namespace`, `name`, `version`, `reason=""` | The same for an older version of an installed package |
+| `plugins_request_remove` | `namespace`, `name`, `reason=""` | Files a request to remove an installed package |
+| `marketplace_request_status` | `approval_id`, `wait_s=0` | `{ok, approval_id, kind, target: {id, version}, status, error, expires_at}`; `status` is `pending`, `applying` (approved, being carried out), `completed`, `failed`, `rejected` or `expired`. `wait_s` (0-60) waits that long for it to move on. When another Navide window had settled the request first and the window carrying it out reported afterwards, it also returns `finished_late: true` and `settled: {status, error}` (what had been recorded before); `status` and `error` are then the actual result |
+| `plugins_disable` | `namespace`, `name` | Disables an installed Marketplace package at once, as the user's Extensions switch does: its views, backend and agent tools stop, its files, grants and data stay. The user is told which caller did it, with a one-click undo, and the change is recorded. Returns `{ok, pluginId, pluginVersion, disabled: true, changed}`; when it was already disabled, `changed` is false, nothing happens and nobody is told |
+| `plugins_enable` | `namespace`, `name` | Enables a package an agent disabled at once, under the consent the user already gave, and returns `{ok, pluginId, pluginVersion, disabled: false, changed}`. A package the user disabled is not enabled: a request is filed for the user's decision and the answer is `{ok: false, error_code: "APPROVAL_REQUIRED", error, approval_id, status: "pending", expires_at}` |
+
+Errors are `{ok: false, error, error_code}` with `BAD_REQUEST`,
+`BUILTIN_PLUGIN`, `NOT_INSTALLED`, `NOT_FOUND`, `ACTION_FAILED`,
+`REGISTRY_UNAVAILABLE` or `HOST_UNAVAILABLE`. Every request, decision,
+result, disable and enable is recorded with the caller (pane name, external
+client or Navide Host) in the `plugin_agent_actions` table of navide.db.
 
 ### Pipelines
 

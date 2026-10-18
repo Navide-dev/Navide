@@ -91,7 +91,7 @@ def test_backend_port_absent_or_garbage(tmp_path: Path) -> None:
 def test_plan_mcp_url_with_pane_id_carries_the_pane_credential() -> None:
     url = plan_mcp_wiring.plan_mcp_url(4567, "pane-1")
     assert url == (
-        f"http://127.0.0.1:4567/plan-mcp?pane=pane-1&t={plan_mcp_wiring.caller_token()}"
+        f"http://127.0.0.1:4567/plan-mcp?pane=pane-1&t={plan_mcp_wiring.caller_token('pane-1')}"
     )
 
 
@@ -184,11 +184,18 @@ def test_wire_codex_second_run_is_noop() -> None:
 # ---- wire_command: copilot ----
 
 
-def test_wire_copilot_appends_inline_config() -> None:
+def _config_file(wired: str) -> dict[str, Any]:
+    """The config document a wired command names by path (``@path`` or bare)."""
+    value = osplat.terminal_backend.parse_command(wired)[-1].removeprefix("@")
+    return json.loads(Path(value).read_text(encoding="utf-8"))
+
+
+def test_wire_copilot_appends_config_file() -> None:
     wired = plan_mcp_wiring.wire_command("copilot", "copilot --allow-all-tools", 4567)
-    inline = plan_mcp_wiring.config_json("copilot", 4567)
-    assert wired == f"copilot --allow-all-tools --additional-mcp-config {osplat.paths.quote_arg(inline)}"
-    assert "client=host" in wired
+    path = plan_mcp_wiring.write_spawn_config("copilot", 4567)
+    assert wired == f"copilot --allow-all-tools --additional-mcp-config {osplat.paths.quote_arg(f'@{path}')}"
+    assert _config_file(wired) == json.loads(plan_mcp_wiring.config_json("copilot", 4567))
+    assert "client=host" in json.dumps(_config_file(wired))
 
 
 def test_wire_copilot_shell_wrapper_and_pane_credential() -> None:
@@ -196,7 +203,8 @@ def test_wire_copilot_shell_wrapper_and_pane_credential() -> None:
     wired = plan_mcp_wiring.wire_command("copilot", command, 4567, pane_id="p1")
     assert wired[:2] == ["/bin/zsh", "-ilc"]
     assert wired[2].startswith("copilot --additional-mcp-config ")
-    assert "pane=p1" in wired[2] and "client=host" not in wired[2]
+    url = _config_file(wired[2])["mcpServers"]["navide"]["url"]
+    assert "pane=p1" in url and "client=host" not in url
     assert command[2] == "copilot"  # input untouched
 
 
@@ -221,17 +229,17 @@ def test_wire_copilot_keeps_user_additional_config() -> None:
     command = "copilot --additional-mcp-config @/home/user/servers.json"
     wired = plan_mcp_wiring.wire_command("copilot", command, 4567)
     assert wired.startswith(command + " --additional-mcp-config ")
-    assert plan_mcp_wiring.SERVER_NAME in wired
+    assert plan_mcp_wiring.SERVER_NAME in _config_file(wired)["mcpServers"]
 
 
 # ---- wire_command: qwen ----
 
 
-def test_wire_qwen_appends_inline_config_with_http_url() -> None:
+def test_wire_qwen_appends_config_file_with_http_url() -> None:
     wired = plan_mcp_wiring.wire_command("qwen", "qwen --yolo", 4567, pane_id="p1")
-    inline = plan_mcp_wiring.config_json("qwen", 4567, "p1")
-    assert wired == f"qwen --yolo --mcp-config {osplat.paths.quote_arg(inline)}"
-    entry = json.loads(inline)["mcpServers"][plan_mcp_wiring.SERVER_NAME]
+    path = plan_mcp_wiring.write_spawn_config("qwen", 4567, "p1")
+    assert wired == f"qwen --yolo --mcp-config {osplat.paths.quote_arg(str(path))}"
+    entry = _config_file(wired)["mcpServers"][plan_mcp_wiring.SERVER_NAME]
     # qwen has no "type" discriminator: httpUrl is streamable HTTP, while a
     # plain "url" would be read as SSE.
     assert entry == {"httpUrl": plan_mcp_wiring.plan_mcp_url(4567, "p1")}
@@ -243,7 +251,7 @@ def test_wire_qwen_shell_wrapper_and_host_credential() -> None:
     wired = plan_mcp_wiring.wire_command("qwen", command, 4567)
     assert wired[:2] == ["/bin/zsh", "-ilc"]
     assert wired[2].startswith("qwen --mcp-config ")
-    assert "client=host" in wired[2]
+    assert "client=host" in _config_file(wired[2])["mcpServers"]["navide"]["httpUrl"]
     assert command[2] == "qwen"  # input untouched
 
 
@@ -654,15 +662,16 @@ async def test_terminal_create_wires_claude_pane(
         plugin_wiring.shutdown(app.plugin_host)
 
     # The endpoint is shared by every pane, so the URL carries the pane id (and
-    # the caller token) — which means claude gets the config inline rather than
-    # as a path, so no per-pane file is left behind.
+    # the caller token) — in a 0600 per-pane file, never in the command line.
     created = session.terminals.created[0]  # type: ignore[attr-defined]
-    inline = plan_mcp_wiring.config_json("claude", 4567, "pane-1")
+    path = plan_mcp_wiring.write_spawn_config("claude", 4567, "pane-1")
     assert created["command"][2] == (
-        f"claude --dangerously-skip-permissions --mcp-config {osplat.paths.quote_arg(inline)}"
+        f"claude --dangerously-skip-permissions --mcp-config {osplat.paths.quote_arg(str(path))}"
     )
-    assert "pane=pane-1" in inline
-    assert plan_mcp_wiring.caller_token() in inline
+    url = _config_file(created["command"][2])["mcpServers"]["navide"]["url"]
+    assert "pane=pane-1" in url
+    assert plan_mcp_wiring.caller_token("pane-1") in url
+    assert plan_mcp_wiring.caller_token("pane-1") not in created["command"][2]
 
 
 @pytest.mark.asyncio

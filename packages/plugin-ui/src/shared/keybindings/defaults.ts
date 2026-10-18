@@ -1,4 +1,17 @@
 import type { KeybindingRule } from './types'
+import { isMacPlatform } from './parseKey'
+
+// The key that opens sidebar tab `n` and the one that opens Settings, as this
+// platform binds them. macOS keeps ⌘N and ⌘,. Off macOS ⌘ is the Win/Super key,
+// which the OS keeps for itself, and Ctrl+digit already selects a CLI type
+// (controlPane.selectCliType1..9), so the sidebar takes Ctrl+Alt+digit there
+// and Settings takes Ctrl+, — the key the menu's CmdOrCtrl+, already answers.
+export function sidebarTabKeySpec(n: number, mac = isMacPlatform()): string {
+  return mac ? `cmd+${n}` : `ctrl+alt+${n}`
+}
+export function settingsKeySpec(mac = isMacPlatform()): string {
+  return mac ? 'cmd+,' : 'ctrl+,'
+}
 
 // Default keybinding rules.
 // - Commands with no registered handler are no-ops: executeCommand returns false,
@@ -238,6 +251,14 @@ export const defaults: KeybindingRule[] = [
   { key: 'cmd+3', command: 'controlPane.selectSidebarTab3', when: 'paneStage && !editorOpen' },
   { key: 'cmd+4', command: 'controlPane.selectSidebarTab4', when: 'paneStage && !editorOpen' },
   { key: 'cmd+5', command: 'controlPane.selectSidebarTab5', when: 'paneStage && !editorOpen' },
+  // Off macOS only, added beside the ⌘ rules above (which stay as they were):
+  // see sidebarTabKeySpec. Ctrl+Alt is AltGr on Windows; a digit that AltGr
+  // turns into a character (German ², Polish ...) is typed, not taken — see
+  // eventKeyMatches in parseKey.ts.
+  ...(isMacPlatform() ? [] : [1, 2, 3, 4, 5].map((n): KeybindingRule => ({
+    key: sidebarTabKeySpec(n, false), command: `controlPane.selectSidebarTab${n}`, when: 'paneStage && !editorOpen',
+  }))),
+  ...(isMacPlatform() ? [] : [{ key: settingsKeySpec(false), command: 'workbench.action.openSettings' }]),
 
   // ── Editor tabs ──────────────────────────────────────────────────────────────
   { key: 'ctrl+tab',       command: 'workbench.action.openNextEditor' },

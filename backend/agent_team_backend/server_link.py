@@ -199,10 +199,10 @@ MESSAGE_MEMORY_TTL_S = 3600.0
 SIG2_MAX_AGE_S = 55 * 60
 SIG2_MAX_AHEAD_S = 5 * 60
 #: Whether a device that has signed v2 is refused when a message of its arrives
-#: without sig2. Off in 0.2.20 (plan 797ad7, Q4: v1 is refused from 0.2.21): a
-#: server rolled back to a release without sig2, or a relay stripping it, would
-#: otherwise cut that device off. Logged and noticed meanwhile.
-REFUSE_V1_FROM_V2_PEERS = False
+#: without a usable sig2. Off in 0.2.20–0.2.22 (plan 797ad7, Q4), where it was
+#: taken on v1 and noticed; on from 0.2.23. A device never marked ``sigV2`` is
+#: decided on v1 either way.
+REFUSE_V1_FROM_V2_PEERS = True
 
 #: How long a message this device relayed may go unanswered before it asks the
 #: server what became of it, and how often it asks again after that. The
@@ -247,6 +247,10 @@ _ACK_STATES = ("delivered", "failed", "rejected")
 POLICY_SIGNATURE_FIELD = "_sig"
 
 LINK_ENCRYPTION_FAILED = "p2p-encryption-failed"
+#: Refused because the text is a pairing frame, or the address is the pairing
+#: pane. Pairing goes out only through _send_pair_frame, behind the p2p.pair.*
+#: confirmation; the message channel signing one would bypass it (M5).
+LINK_PAIRING_REFUSED = "p2p-pairing-refused"
 #: Refused because this machine cannot read its own trust record. Distinct from
 #: an encryption failure: nothing is wrong with the message, this machine is
 #: simply not in a state where it can tell one sender from another.
@@ -654,6 +658,23 @@ def _panel_window(
     if window_kind:
         keys["windowKind"] = window_kind
     return keys
+
+
+def _keep_blocks_locally(policy: Any) -> None:
+    """Copy a verified policy's block list into this machine's own copy.
+
+    The local copy is what still refuses a device when the server stops
+    serving the policy (see device_trust.is_blocked), and a block that only the
+    policy held — one written before that copy existed — was lifted by exactly
+    that. Only ever adds: the document is one this machine signed, and a block
+    is lifted where it is lifted, by p2p.trust.unblock or the policy editor.
+    Blocking (Keychain); the caller is already off the event loop.
+    """
+    for entry in device_trust.blocked_entries(policy):
+        try:
+            trust_store.note_blocked(entry["deviceId"], entry["memberId"])
+        except Exception as err:  # noqa: BLE001 - held in memory by note_blocked
+            log.warning("could not keep a local copy of a policy block: %s", err)
 
 
 def _reason_key(reason: str) -> str:
@@ -2223,6 +2244,7 @@ class ServerLink:
             return None
         trust_store.note_policy_seq(self._device_id, offered)
         trust_store.clear_policy_notice()
+        _keep_blocks_locally(document)
         return document
 
     def policy_snapshot(self) -> dict[str, Any]:
@@ -2959,6 +2981,25 @@ class ServerLink:
             return self._unavailable()
         if self._trust_locked:
             return self._trust_refusal()
+        # Signed with this machine's key, a pairing frame sent from here is
+        # one the far side acts on — a `pair-revoked` unpairs it — and this
+        # channel is open to anything holding the ws token: cli_send, a plugin.
+        if (
+            device_pairing.parse(text) is not None
+            or str(to.get("workspace") or "") == PAIRING_WORKSPACE
+            or str(to.get("paneName") or "") == PAIRING_PANE
+        ):
+            log.warning("refusing to send a pairing frame or to the pairing pane as a message")
+            return {
+                "ok": False,
+                "error": {
+                    "code": LINK_PAIRING_REFUSED,
+                    "message": (
+                        "pairing is not sent as a message; use the pairing flow in "
+                        "Navide's account window"
+                    ),
+                },
+            }
         to_device = str(to.get("deviceId") or "")
         try:
             body = await self._sealed_for(to_device, text)
@@ -3139,13 +3180,22 @@ class ServerLink:
         # Checked after the claim rather than before: the claim is what makes
         # the check race-free, and a key already in the ledger is simply left
         # marked handled in memory too.
-        if await asyncio.to_thread(trust_store.has_seen_message, msg_key):
-            return False
-        # Recorded on the claim rather than after delivery: a message that got
-        # this far has been handed to the delivery path, and re-running that
-        # path is the thing being prevented.
+        #
+        # Only checked here, not recorded: see _remember_inbound.
+        return not await asyncio.to_thread(trust_store.has_seen_message, msg_key)
+
+    async def _remember_inbound(self, msg_key: str) -> None:
+        """Persist a claimed key, once its signature has verified.
+
+        The ledger is bounded and evicts the oldest key first, so every key in
+        it pushes a delivered one closer to the edge. Recording on the claim let
+        a relay push a ledger's worth of messages that fail their signature —
+        each refused, none reaching a pane — and then replay a delivered message
+        whose key they had flushed out (D2). A key goes in only once a key the
+        relay cannot mint has vouched for it, and still before the delivery
+        path runs, which is what re-running is prevented for.
+        """
         await asyncio.to_thread(trust_store.note_seen_message, msg_key)
-        return True
 
     async def _authenticate_sender(
         self, data: dict[str, Any], *, msg_key: str, device_id: str, member_id: str
@@ -3217,6 +3267,17 @@ class ServerLink:
             )
             return None
 
+        def v1_verifies() -> bool:
+            return device_signing.verify_message(
+                signature,
+                public_key_b64=key,
+                msg_key=msg_key,
+                from_device=device_id,
+                to_device=self._device_id,
+                kind=kind,
+                body=body,
+            )
+
         signature_v2 = str(data.get("sig2") or "")
         v2_verified = False
         if signature_v2:
@@ -3233,10 +3294,17 @@ class ServerLink:
                 body=body,
             )
             age = None if sent_at is None else time.time() - sent_at
+            cause, minutes = "unusable", None
             if sent_at is None:
                 problem = "its v2 signature does not verify"
             elif age > SIG2_MAX_AGE_S or age < -SIG2_MAX_AHEAD_S:
-                problem = f"sent {int(-age)}s from now, outside the window"
+                # The signature verified; only its time is out. A sender dated
+                # ahead has a fast clock; one dated behind has a slow clock, or
+                # the message was held back on the way.
+                direction = "behind" if age > 0 else "ahead"
+                cause, minutes = f"clock-{direction}", round(abs(age) / 60)
+                problem = (f"clock skew: sender is {minutes} minutes {direction} "
+                           f"(sent {int(-age)}s from now, outside the window)")
             else:
                 problem = ""
             if not problem:
@@ -3247,8 +3315,12 @@ class ServerLink:
                         await asyncio.to_thread(trust_store.note_signs_v2, device_id)
                     except Exception as err:  # noqa: BLE001 - asked again with the next one
                         log.warning("could not record that %s signs v2 (%s)", device_id, err)
-            elif REFUSE_V1_FROM_V2_PEERS:
+            elif REFUSE_V1_FROM_V2_PEERS and pin.get("sigV2"):
                 log.warning("refusing message %s: %s", msg_key, problem)
+                # Noticed only when the device itself sent it — a verifying sig2
+                # (the clock causes) or v1 — or a relay could leave one at will.
+                if minutes is not None or v1_verifies():
+                    await asyncio.to_thread(trust_store.note_sig2_refused, device_id, cause, minutes=minutes)
                 return None
             else:
                 # 0.2.20 (review B4-1): a clock that is off puts every message of
@@ -3264,16 +3336,10 @@ class ServerLink:
             # This device has signed v2 before, so a message without it had it
             # removed on the way — or is older than the device's switch to it.
             log.warning("refusing message %s: %s signs v2 and this carries none", msg_key, device_id)
+            if v1_verifies():
+                await asyncio.to_thread(trust_store.note_sig2_refused, device_id, "missing")
             return None
-        elif not device_signing.verify_message(
-            signature,
-            public_key_b64=key,
-            msg_key=msg_key,
-            from_device=device_id,
-            to_device=self._device_id,
-            kind=kind,
-            body=body,
-        ):
+        elif not v1_verifies():
             log.warning("refusing message %s: its signature does not verify", msg_key)
             return None
         elif not signature_v2 and pin.get("sigV2"):
@@ -3639,6 +3705,12 @@ class ServerLink:
             log.warning("refusing a %s from %s: its signature does not verify", kind, device_id)
             await self._ack(msg_key, "rejected", reason=REASON_UNAUTHENTICATED)
             return
+        # Into the replay ledger only when a key the relay cannot mint vouched
+        # for the frame: the first frame of an exchange verifies against a key
+        # it carries itself, which anyone can make as many of as they like —
+        # and an unanswered replay of one only shows a code nobody confirms.
+        if str((pin or {}).get("signKey") or "") or (existing.their_key if existing else ""):
+            await self._remember_inbound(msg_key)
 
         name = self._device_name_for(device_id)
         # Their encryption key, from the frame and only the frame. It is
@@ -4008,6 +4080,7 @@ class ServerLink:
             )
             await self._ack(msg_key, "rejected", reason=reason)
             return
+        await self._remember_inbound(msg_key)
         await self._ensure_policy()
         # Three rings, not one condition: your own machines are one trust
         # domain and never consult the rules, a blocked device is refused ahead

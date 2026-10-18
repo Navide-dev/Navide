@@ -14,6 +14,14 @@ Depending on enabled features, Navide stores:
   these are keyed by authenticated plugin/package and, for workspace scope, by
   authenticated workspace, and are not sent to Navide or plugin registries
 - Token-attribution and deduplication metadata derived from local CLI logs
+- An activity log of what third-party Navide plugins asked the Host for, in the
+  local `navide.db` (`plugin_activity`): the plugin, the `namespace.method`, the
+  time, the workspace, whether it was allowed, refused or failed, a
+  workspace-relative file path (a path outside the workspace is only
+  `<outside-workspace>`; file contents are never stored) and, for shell calls,
+  the executable and subcommand only. Detail rows are kept 7 days, then only
+  per-day counts for 90 days. The bundled Plans, Git and Mini-IDE are not
+  logged. It never leaves this machine
 - Optional AI provider API keys in a local settings file protected with restrictive file permissions (`0600` on supported systems)
 
 Navide does not operate a project telemetry service and does not require a Navide account.
@@ -170,3 +178,11 @@ Preparing a public GitHub skill sends its repository and ref, plus normal connec
 Prepared bytes stay in backend memory and become unusable after 15 minutes or backend restart. At most eight packages may be active, with up to eight lightweight completed retry receipts held separately in memory. Installation uses the reviewed snapshot without rereading its source, writes to the existing shared Skills root, and never executes scripts or plugin hooks. A retained receipt lets a retry return the original result without another write; it expires at the original preview deadline or may be evicted earlier. Retry after expiry or eviction returns missing/expired without reinstalling. Inspection and preparation return skill text, file information and source paths to the requesting coding agent; its configured model provider may receive those results under the CLI's own data policy. Avoid secrets in skill packages.
 
 Skills sync, when enabled, can carry eligible installed content and delivery settings to paired devices through the existing flow. The selected package uses the same limits as Skills content export: 64 files, 256 KiB per file and 512 KiB total. These limits do not guarantee that synchronization completed. Backend-generated source, digest and timestamp records are stored in a local Navide marker, survive local edits and restart, and are excluded from export and Skills sync.
+
+### Navide Marketplace queries through MCP
+
+`marketplace_search` and `marketplace_detail` make the Navide app send the same request the Navide Marketplace page sends to the configured Registry: the search text, category and page, or the package name. `plugins_list_installed` sends nothing out; it reads the local inventory. All three return their answer (public listing data, and the ids, versions and states of the installed Navide plugins) to the requesting coding agent, and its configured model provider may receive it under the CLI's own data policy.
+
+### Navide Marketplace requests through MCP
+
+`marketplace_request_install`, `_update` and `_rollback` make the Navide app look the package up the same way `marketplace_detail` does, and all request tools read the local inventory. The request, with the requesting pane's name and workspace and the agent's reason, stays in backend memory until it is decided or expires, and is shown to the user in a Navide window. `plugins_disable` and `plugins_enable` send nothing out. Every request, decision, disable and enable is recorded locally in navide.db (`plugin_agent_actions`: the plugin, the action, the caller's kind, pane id, pane name and workspace, the outcome) and kept 30 days, then the newest 10,000 rows.

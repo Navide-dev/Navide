@@ -47,12 +47,16 @@ class Bridge:
         self.delivered: list[dict[str, Any]] = []
         self.gate: asyncio.Event | None = None
         self.counter = 0
+        self.final: dict[str, dict[str, Any]] = {}
 
     def has_window(self) -> bool:
         return self.window
 
     def still_queued(self, msg_key: str | None) -> bool:
         return bool(msg_key) and msg_key in self.queued
+
+    def message_outcome(self, msg_key: str | None) -> dict[str, Any] | None:
+        return self.final.get(msg_key or "")
 
     async def budget_limited(self, action: dict[str, Any]) -> bool:
         return self.limited
@@ -690,3 +694,64 @@ async def test_run_now_works_on_a_once_job(env) -> None:
     # A manual run is not its slot: the job stays armed for its moment.
     assert row["enabled"] is True and row["state"]["next_run_at"] == job["schedule"]["at_ms"]
     assert len(env["bridge"].delivered) == 1
+
+
+# ── a run whose message was still queued ──────────────────────────────────
+
+
+async def _queued_run(env) -> tuple[SchedulerService, dict]:
+    service = env["make"]()
+    job = await create(service)
+    env["bridge"].outcomes.append({"status": "ok", "detail": "queued (mid-turn)", "msg_key": "kq"})
+    env["bridge"].queued.add("kq")
+    env["clock"].advance_ms(2 * MINUTE)
+    await service.tick()
+    await settle(service)
+    return service, job
+
+
+async def test_a_queued_run_says_so_until_its_message_settles(env) -> None:
+    service, job = await _queued_run(env)
+    env["bridge"].final["kq"] = {"status": "queued", "reason": None}
+    listed = (await service.runs(job["id"]))["runs"]
+    assert (listed[0]["status"], listed[0]["detail"]) == ("ok", "queued (mid-turn)")
+
+
+async def test_a_queued_message_that_then_failed_turns_its_run_into_an_error(env) -> None:
+    service, job = await _queued_run(env)
+    env["bridge"].queued.discard("kq")
+    env["bridge"].final["kq"] = {"status": "failed", "reason": "target closed"}
+    listed = (await service.runs(job["id"]))["runs"]
+    assert (listed[0]["status"], listed[0]["reason"]) == ("error", "failed")
+    assert listed[0]["detail"] == "queued (mid-turn), then failed: target closed"
+    # Resolved once: reading again changes nothing.
+    assert (await service.runs(job["id"]))["runs"] == listed
+
+
+async def test_a_queued_message_that_was_delivered_stays_ok_and_says_so(env) -> None:
+    service, job = await _queued_run(env)
+    env["bridge"].queued.discard("kq")
+    env["bridge"].final["kq"] = {"status": "delivered", "reason": None}
+    listed = (await service.runs(job["id"]))["runs"]
+    assert (listed[0]["status"], listed[0]["detail"]) == ("ok", "queued (mid-turn), then delivered")
+
+
+async def test_a_queued_message_no_longer_tracked_is_disclosed(env) -> None:
+    service, job = await _queued_run(env)
+    env["bridge"].queued.discard("kq")
+    listed = (await service.runs(job["id"]))["runs"]
+    assert listed[0]["detail"] == "queued (mid-turn), outcome no longer tracked"
+
+
+async def test_the_next_fire_resolves_the_queued_run_before_its_own(env) -> None:
+    service, job = await _queued_run(env)
+    env["bridge"].queued.discard("kq")
+    env["bridge"].final["kq"] = {"status": "rejected", "reason": "policy"}
+    env["clock"].advance_ms(2 * MINUTE)
+    await service.tick()
+    await settle(service)
+    rows = await service.store.list_runs(job["id"], 5)
+    assert [(r["status"], r["detail"]) for r in rows] == [
+        ("ok", "delivered"),
+        ("error", "queued (mid-turn), then rejected: policy"),
+    ]

@@ -49,7 +49,7 @@ import type { DisplayStatus } from '@navide/terminal'
 import type { Role, RoleKey } from '../data/roles'
 import type { Stage, StageId } from '../data/stages'
 import type { Issue, IssueDetail, IssueProvider, IssueHandlerMode } from '../composables/useIssues'
-import { onSettingsChanged, registerCommand, settingsGet, settingsSet } from '@navide/plugin-ui/shared'
+import { formatKeySpec, onSettingsChanged, registerCommand, settingsGet, settingsKeySpec, settingsSet, sidebarTabKeySpec } from '@navide/plugin-ui/shared'
 import { useUpdater } from '../composables/useUpdater'
 import { i18n } from '@navide/plugin-ui/foundation'
 import { useNotify } from '@navide/plugin-ui/foundation'
@@ -75,6 +75,7 @@ import {
   supportsModel,
 } from '@navide/plugin-shell'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
+import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 
 /** CLIs YOLO mode actually affects: the ones declaring a bypass flag. Derived,
  *  because the hand-written hint here listed three while eight qualified. */
@@ -1442,8 +1443,6 @@ onUnmounted(() => {
   if (workspaceDebounce !== null) window.clearTimeout(workspaceDebounce)
 })
 
-defineExpose({ openPipelineDetail, showResumeError, selectSidebarTab })
-
 const manualAgentSpecs = computed(() =>
   props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal')
 )
@@ -1694,12 +1693,22 @@ function typingInTextField(): boolean {
   return !isXterm && (tag === 'INPUT' || tag === 'TEXTAREA' || !!el?.isContentEditable)
 }
 
+// A built-in Navide plugin the user disabled takes its tab with it. The layout
+// keeps the view, so Enable puts the tab back where it was.
+const disabledBuiltins = useDisabledBuiltins()
+const BUILTIN_TAB_PLUGINS: Partial<Record<SidebarTab, string>> = { git: 'navide.git', plans: 'navide.plans' }
+function isTabOfDisabledPlugin(tab: SidebarTab): boolean {
+  const pluginId = BUILTIN_TAB_PLUGINS[tab]
+  return pluginId !== undefined && disabledBuiltins.isDisabled(pluginId)
+}
+
 for (let i = 1; i <= SIDEBAR_TABS.length; i++) {
   registerCommand(`controlPane.selectSidebarTab${i}`, () => {
     // Decline rather than no-op: returning false keeps the dispatcher from
     // calling preventDefault(), so the keystroke still reaches the text field
     // and anything else listening. The old raw listener behaved this way.
     if (typingInTextField()) return false
+    if (isTabOfDisabledPlugin(SIDEBAR_TABS[i - 1])) return false
     selectSidebarTab(SIDEBAR_TABS[i - 1])
   })
 }
@@ -1709,6 +1718,7 @@ for (let i = 1; i <= SIDEBAR_TABS.length; i++) {
 registerCommand('workbench.action.focusExplorer', () => selectSidebarTab('explorer'))
 registerCommand('workbench.action.focusPipeline', () => selectSidebarTab('pipeline'))
 registerCommand('workbench.action.focusSourceControl', () => {
+  if (disabledBuiltins.isDisabled('navide.git')) return false
   if (legacyGitRecovery.value) {
     selectSidebarTab('git')
     return
@@ -1800,10 +1810,12 @@ const RAIL_TABS: { id: SidebarTab; icon?: string; label: string; shortcut: strin
 // Ordered by the slot, not by the table above: moving a view also reorders it.
 const visibleTabs = computed(() => {
   const assigned = props.views
-  if (!assigned) return RAIL_TABS
-  return assigned
-    .map((id) => RAIL_TABS.find((t) => t.id === id))
-    .filter((t): t is typeof RAIL_TABS[number] => !!t)
+  const tabs = !assigned
+    ? RAIL_TABS
+    : assigned
+      .map((id) => RAIL_TABS.find((t) => t.id === id))
+      .filter((t): t is typeof RAIL_TABS[number] => !!t)
+  return disabledBuiltins.disabled.value.size === 0 ? tabs : tabs.filter((t) => !isTabOfDisabledPlugin(t.id))
 })
 
 // Membership as a set, for the panels that stay mounted regardless of which
@@ -2799,6 +2811,11 @@ function startPipeline(): void {
   backToList()
 }
 
+// Down here rather than at the top of setup: canRunPipeline is a const declared
+// above this line. startPipeline/canRunPipeline let the empty stage's "or run
+// the pipeline" link drive the sidebar's own Run button, guard included.
+defineExpose({ openPipelineDetail, showResumeError, selectSidebarTab, startPipeline, canRunPipeline })
+
 const statusColor = computed(() => {
   switch (props.backendStatus) {
     case 'connected':
@@ -3201,8 +3218,8 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :data-legacy-git-tab="t.id === 'git' && legacyGitRecovery ? '' : undefined"
         :data-plugin-contribution="t.id === 'git' && !legacyGitRecovery ? gitPluginTab?.contributionKey : undefined"
         :title="t.id === 'git' && gitPluginTab
-          ? `${gitPluginTab.title} (⌘4)`
-          : `${$t(t.label)} (⌘${t.shortcut})`"
+          ? `${gitPluginTab.title} (${formatKeySpec(sidebarTabKeySpec(4))})`
+          : `${$t(t.label)} (${formatKeySpec(sidebarTabKeySpec(Number(t.shortcut)))})`"
         @click="selectSidebarTab(t.id)"
       >
         <template v-if="t.id === 'git' && !legacyGitRecovery && gitPluginTab">
@@ -4387,7 +4404,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               <button class="link" @click="previewOpen = !previewOpen">
                 {{ previewOpen ? '▾' : '▸' }} {{ currentRole.label }} system prompt
               </button>
-              <button class="link tiny" @click="emit('open-settings')" :title="$t('action.settings') + ' (⌘,)'">
+              <button class="link tiny" @click="emit('open-settings')" :title="`${$t('action.settings')} (${formatKeySpec(settingsKeySpec())})`">
                 ⚙ {{ $t('action.settings') }}
               </button>
             </div>

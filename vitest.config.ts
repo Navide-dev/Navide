@@ -16,6 +16,16 @@ const artifactTests = [
   'src/main/plugins/pluginBackendHost.test.ts',
   'src/main/plugins/pluginBackendSupervisor.test.ts',
 ]
+// Each builds a whole package against packed artifacts (27–113 s on CI). Run
+// side by side they starve the runner until a worker misses vitest's fixed
+// 60 s RPC deadline ("Timeout calling onTaskUpdate"), so they take turns in
+// one fork while the rest of the artifacts project runs in parallel.
+const heavyArtifactTests = [
+  'plugins/navide-mini-ide/tests/packageBoundary.test.ts',
+  'plugins/navide-plans/tests/packageBoundary.test.ts',
+  'plugins/navide-git/tests/compositionBoundary.test.ts',
+  'src/main/plugins/pluginExternalWorkspace.test.ts',
+]
 const excludedTests = ['**/node_modules/**', '**/dist/**', '**/out/**', '**/coverage/**', 'e2e/**']
 export default defineConfig({
   // Mirrors electron.vite.config.ts: <webview> carries in-window plugin
@@ -42,6 +52,17 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // Bun-only: recover the calling file for relative vi.mock ids. Inert on Node.
+    setupFiles: ['./tests/support/bunMockImporterAnchor.ts'],
+    // Bun-only: exact mock IDs from EditorPane, resolved without a stack
+    // importer. Node resolves them from the calling file, so no alias there.
+    ...(process.versions.bun ? {
+      alias: [
+        { find: /^\.\/view\/EditorViewMonaco\.vue$/, replacement: resolve(__dirname, 'packages/plugin-ui/src/editor/view/EditorViewMonaco.vue') },
+        { find: /^\.\.\/foundation$/, replacement: resolve(__dirname, 'packages/plugin-ui/src/foundation/index.ts') },
+        { find: /^\.\.\/shared$/, replacement: resolve(__dirname, 'packages/plugin-ui/src/shared/index.ts') },
+      ],
+    } : {}),
     globals: false,
     // Empty unless a Navide pane carries a worker cap (Settings → Resource limits).
     ...testWorkerCap(process.env),
@@ -49,8 +70,13 @@ export default defineConfig({
       { extends: true, test: { name: 'unit', include: allTests, exclude: [...excludedTests, ...cliTests, ...artifactTests] } },
       { extends: true, test: { name: 'cli', include: cliTests, exclude: excludedTests } },
       { extends: true, test: {
-        name: 'artifacts', include: artifactTests, exclude: excludedTests,
+        name: 'artifacts', include: artifactTests, exclude: [...excludedTests, ...heavyArtifactTests],
         globalSetup: ['tests/support/publicPackagesSetup.ts'],
+      } },
+      { extends: true, test: {
+        name: 'artifacts-heavy', include: heavyArtifactTests, exclude: excludedTests,
+        globalSetup: ['tests/support/publicPackagesSetup.ts'],
+        poolOptions: { forks: { singleFork: true } },
       } },
     ],
     server: {

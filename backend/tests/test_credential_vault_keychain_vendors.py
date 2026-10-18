@@ -43,7 +43,10 @@ class FakeSecurity:
             value = self.items.get((service, account))
             return (0, security_g_output(value)) if value is not None else (44, "")
         if cmd == "add-generic-password":
-            self.items[(service, account)] = tokens[tokens.index("-w") + 1]
+            if "-X" in tokens:
+                self.items[(service, account)] = bytes.fromhex(tokens[tokens.index("-X") + 1]).decode()
+            else:
+                self.items[(service, account)] = tokens[tokens.index("-w") + 1]
             return 0, ""
         if cmd == "delete-generic-password":
             if account is None:

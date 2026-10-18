@@ -29,6 +29,7 @@ import {
 import { sharePlanToGit } from '../composables/planShare'
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { writePlanDragPayload } from '../lib/planDrag'
+import { recordDiagnostic } from '../lib/uiDiagnostics'
 import {
   isLegacyPlansRecoveryRuntime,
   readLegacyPlansPreferenceProjection,
@@ -137,7 +138,15 @@ async function loadPlans(): Promise<void> {
           workspace_path: planRoot.value,
           rel_path: doc.rel_path,
         })
-        if (!read.payload?.ok) return null
+        if (!read.payload?.ok) {
+          // Still left out of the list, but no longer without a trace.
+          recordDiagnostic({
+            level: 'warn',
+            code: 'plans.read_failed',
+            message: `${doc.rel_path}: ${read.payload?.error || read.error?.message || 'unreadable'}`,
+          })
+          return null
+        }
         const meta = resolvePlanStore(doc.rel_path).parseMeta(read.payload.content ?? '')
         // The read's own mtime, not the scan's: it is the one that matches the
         // bytes this meta was parsed from.

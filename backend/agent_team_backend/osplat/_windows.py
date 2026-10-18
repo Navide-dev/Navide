@@ -474,6 +474,28 @@ class WindowsProcessTree:
         # No process groups: the "group" is the subtree rooted at gid.
         self.kill_tree(gid, force=force)
 
+    def contain(self, pid: int) -> None:
+        job = _create_kill_on_close_job()
+        try:
+            _assign_to_job(job, pid)
+        except OSError:
+            _kernel32().CloseHandle(job)
+            raise
+        _register_job(pid, job)
+
+    def end_contained(self, pid: int) -> None:
+        with _jobs_lock:
+            entry = _jobs.pop(pid, None)
+        if entry is not None:
+            # KILL_ON_JOB_CLOSE: closing the last handle ends every process
+            # in the job, the root's or not, the root alive or not.
+            _kernel32().CloseHandle(entry[0])
+            return
+        try:
+            self.kill_tree(pid, force=True)
+        except OSError:
+            pass
+
     def kill_tree(self, pid: int, *, force: bool) -> None:
         if _terminate_job(pid):
             return

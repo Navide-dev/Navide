@@ -67,9 +67,13 @@ function senderWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null 
   return win && !win.isDestroyed() ? win : null
 }
 
-function publishMaximized(win: BrowserWindow): void {
+const lastPublished = new WeakMap<BrowserWindow, boolean>()
+
+function publishMaximized(win: BrowserWindow, onlyIfChanged = false): void {
   if (win.isDestroyed()) return
   const state = win.isMaximized()
+  if (onlyIfChanged && lastPublished.get(win) === state) return
+  lastPublished.set(win, state)
   if (!win.webContents.isDestroyed()) {
     win.webContents.send(MAXIMIZE_CHANGED, state)
   }
@@ -122,5 +126,15 @@ export function installWindowControls(): void {
     // this the button keeps the icon it had before the transition.
     win.on('enter-full-screen', onChange)
     win.on('leave-full-screen', onChange)
+    if (isMac()) return
+    // Linux window managers can restore a window (drag off the top, Super+Down,
+    // leaving a tile) without an `unmaximize`, and an X11 maximize settles
+    // after the call returns — so the button could keep "Restore" on a window
+    // that no longer is. Re-check on the events that do arrive, sending only
+    // when the answer changed.
+    const recheck = (): void => publishMaximized(win, true)
+    win.on('resize', recheck)
+    win.on('restore', recheck)
+    win.on('focus', recheck)
   })
 }

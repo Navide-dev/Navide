@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import {
   parseConflicts, buildResolved, countConflicts, hasConflicts,
   type FileSection, type ConflictChoice,
@@ -184,7 +184,7 @@ async function applyAndStage(): Promise<void> {
     const resolved = buildResolved(sections.value, choices.value, manualEdits.value)
     const writeResp = await props.fileAccess.writeFile(props.workspacePath, props.filepath, resolved)
     if (!writeResp.ok) {
-      notify.toast(writeResp.error || 'Write failed', { type: 'error' })
+      notify.toast(writeResp.error || i18n.global.t('git.conflict-write-failed'), { type: 'error' })
       return
     }
     const stageResp = await props.gitTransport.send<{ ok: boolean; error?: string }>(
@@ -192,13 +192,13 @@ async function applyAndStage(): Promise<void> {
       { workspace_path: props.workspacePath, files: [props.filepath] },
     )
     if (!(stageResp.ok && stageResp.payload?.ok)) {
-      notify.toast(stageResp.payload?.error || 'Stage failed', { type: 'error' })
+      notify.toast(stageResp.payload?.error || i18n.global.t('git.conflict-stage-failed'), { type: 'error' })
       return
     }
-    notify.toast(`${props.name} conflicts resolved`, { type: 'success' })
+    notify.toast(i18n.global.t('git.conflicts-resolved-file', { name: props.name }), { type: 'success' })
     emit('resolved')
   } catch (e) {
-    notify.toast(e instanceof Error ? e.message : 'Apply failed', { type: 'error' })
+    notify.toast(e instanceof Error ? e.message : i18n.global.t('git.conflict-apply-failed'), { type: 'error' })
   } finally {
     applying.value = false
   }

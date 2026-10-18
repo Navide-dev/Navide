@@ -356,6 +356,22 @@ export function isExternalDelivery(ev: { origin?: string; from_pane_id?: string;
   return CHANNEL_SENDER_RE.test(ev.from_display ?? '')
 }
 
+/**
+ * Whether a MSG block can reach this delivery's sender: a pane (local or in
+ * another workspace), a chat channel (posted to the bound chat) or a remote
+ * device. An MCP caller with no pane behind it — the backend names it "a host
+ * client" or "an external client" — has no inbox, so a reply addressed to it
+ * bounces as an unknown target. It reads the pane's final output instead
+ * (cli_send_and_wait, cli_read_log).
+ */
+export function hasReplyRoute(ev: { origin?: string; from_pane_id?: string; from_display?: string }): boolean {
+  return !!ev.from_pane_id || isExternalDelivery(ev)
+}
+
+/** The reply hint for a sender hasReplyRoute() says no MSG block can reach. */
+export const LAST_OUTPUT_REPLY_HINT =
+  '（呼叫方沒有回信管道，不要用 MSG 區塊回覆：直接把回覆輸出在這個回合的最後；呼叫方會讀取你的最後輸出）'
+
 /** Break any boundary line a sender wrote into its own body, so forwarded text
  *  cannot close the external block early and pose as the user after it. */
 function neutralizeExternalBoundary(content: string): string {
@@ -391,13 +407,15 @@ function neutralizeExternalBoundary(content: string): string {
 export function renderEnvelope(
   sender: string,
   content: string,
-  opts: { includeReplyHint?: boolean; correlationId?: string; external?: boolean } = {},
+  opts: { includeReplyHint?: boolean; correlationId?: string; external?: boolean; noReplyRoute?: boolean } = {},
 ): string {
   const body = sanitizeMessageContent(content)
   const lines = opts.external
     ? [`${MSG_ENVELOPE_PREFIX} ${sender}`, EXTERNAL_CONTENT_START, neutralizeExternalBoundary(body), EXTERNAL_CONTENT_END]
     : [`${MSG_ENVELOPE_PREFIX} ${sender}`, body]
-  if (opts.includeReplyHint !== false) {
+  if (opts.includeReplyHint !== false && opts.noReplyRoute) {
+    lines.push(LAST_OUTPUT_REPLY_HINT)
+  } else if (opts.includeReplyHint !== false) {
     const head = opts.correlationId
       ? `to: ${sender} re: ${opts.correlationId}`
       : `to: ${sender}`

@@ -24,7 +24,8 @@ import { convenienceText } from '../lib/convenienceText'
  * popover read the same feed without prop drilling.
  */
 
-export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience'
+export type AnnouncementKind =
+  | 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience' | 'plugin-agent'
 /** The button an update row offers, when its status affords one. */
 export type AnnouncementAction = 'download' | 'install'
 
@@ -65,12 +66,17 @@ export type ConvenienceAnnouncementAction =
   | { kind: 'convenience-switch-back'; rowId: string; agentKey: string; slotId: string; label: string; liveFingerprint: string }
   | { kind: 'convenience-upgrade-ack' }
 
+/** The undo on a "an agent disabled / enabled a Navide plugin" row (B2-c):
+ *  the user's own Extensions switch, set back. */
+export type PluginAgentAnnouncementAction = { kind: 'plugin-agent-undo'; pluginId: string; disable: boolean }
+
 export type AnnouncementActionSpec =
   | { kind: AnnouncementAction }
   | QuotaAnnouncementAction
   | ReleaseTourAction
   | EvolveAnnouncementAction
   | ConvenienceAnnouncementAction
+  | PluginAgentAnnouncementAction
 
 export interface Announcement {
   /** Stable across renders: `release:<version>`, `update:<version>`,
@@ -364,7 +370,7 @@ export type EvolveNoticeKind =
   | 'skipped'
   | 'fallback_auto'
   | 'not_git'
-  /** Passed 1.5× the token budget; Navide pressed interrupt once. */
+  /** Passed 1.5× the token budget (cache reads left out); Navide interrupted and ended the run. */
   | 'over_budget'
 
 /** What the backend's `evolve.notice` broadcast carries. */
@@ -529,6 +535,65 @@ function shareItems(): Announcement[] {
 function noteShareNotice(notice: ShareNotice, at: number = Date.now()): void {
   if (!notice?.linkId) return
   shareNotices.value = [{ notice, at }, ...shareNotices.value].slice(0, MAX_SHARE_NOTICES)
+}
+
+// ── Agent plugin actions (B2-c) ─────────────────────────────────────────────
+
+/** An agent disabled or enabled a Navide plugin, as the Host reported it. */
+export interface PluginAgentNotice {
+  action: 'disable' | 'enable'
+  pluginId: string
+  pluginVersion: string
+  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
+}
+
+/** Notices this window heard, newest first. Not persisted: the activity page
+ *  (plugin_agent_actions) is the record. */
+const pluginAgentNotices = ref<{ notice: PluginAgentNotice; at: number }[]>([])
+
+/** Who did it, for the row and the toast: the pane's name, or the kind of caller. */
+export function pluginAgentCaller(requester: PluginAgentNotice['requester']): string {
+  const t = i18n.global.t
+  if (requester.callerKind === 'external') return t('plugin-agent.caller.external')
+  if (requester.callerKind === 'host') return t('plugin-agent.caller.host')
+  return requester.paneName ? t('plugin-agent.caller.pane', { pane: requester.paneName }) : t('plugin-agent.caller.pane-unknown')
+}
+
+/** One line naming the caller, what it did and the plugin. */
+export function pluginAgentNoticeTitle(notice: PluginAgentNotice): string {
+  return i18n.global.t(`plugin-agent.notice.${notice.action === 'disable' ? 'disabled' : 'enabled'}`, {
+    caller: pluginAgentCaller(notice.requester),
+    plugin: notice.pluginId,
+  })
+}
+
+function pluginAgentItems(): Announcement[] {
+  return pluginAgentNotices.value.map(({ notice, at }) => ({
+    id: `plugin-agent:${notice.action}:${notice.pluginId}:${at}`,
+    kind: 'plugin-agent' as const,
+    title: pluginAgentNoticeTitle(notice),
+    highlights: [i18n.global.t('plugin-agent.notice.version', { version: notice.pluginVersion })],
+    createdAt: at,
+    read: false,
+    actions: [{ kind: 'plugin-agent-undo' as const, pluginId: notice.pluginId, disable: notice.action === 'enable' }],
+  }))
+}
+
+/** Whether the undo still sets back what the agent did: the package is still
+ *  in the state the agent left it in (the user has not changed it since). */
+export function pluginAgentUndoApplies(
+  action: PluginAgentAnnouncementAction,
+  installed: ReadonlyArray<{ id: string; disabled?: boolean }>,
+): boolean {
+  const current = installed.find((pkg) => pkg.id === action.pluginId)
+  // The undo enables when the agent disabled, and the other way round.
+  return current !== undefined && current.disabled === !action.disable
+}
+
+/** Record that an agent disabled or enabled a Navide plugin. */
+function notePluginAgentNotice(notice: PluginAgentNotice, at: number = Date.now()): void {
+  if (!notice?.pluginId) return
+  pluginAgentNotices.value = [{ notice, at }, ...pluginAgentNotices.value]
 }
 
 // ── Convenience features ────────────────────────────────────────────────────
@@ -993,6 +1058,7 @@ const items: ComputedRef<Announcement[]> = computed(() => {
   const seen = new Set(readIds.value)
   const merged = [
     ...convenienceItems(seen),
+    ...pluginAgentItems(),
     ...shareItems(),
     ...evolveItems(),
     ...schedulerItems(),
@@ -1069,6 +1135,11 @@ export function __resetShareAnnouncementsForTest(): void {
   shareNotices.value = []
 }
 
+/** Test-only: forget every agent plugin notice (the module is a singleton). */
+export function __resetPluginAgentAnnouncementsForTest(): void {
+  pluginAgentNotices.value = []
+}
+
 /** Test-only: forget the convenience snapshot (the module is a singleton). */
 export function __resetConvenienceAnnouncementsForTest(): void {
   convenienceState.value = null
@@ -1092,6 +1163,7 @@ export function useAnnouncements() {
     noteSchedulerDisabled,
     noteEvolveNotice,
     noteShareNotice,
+    notePluginAgentNotice,
     noteConvenience,
     setConvenienceAgentLabel,
     noteQuotaIncident,

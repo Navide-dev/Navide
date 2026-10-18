@@ -37,6 +37,7 @@ from agent_team_backend import (
 
 from .test_server_link import (  # noqa: F401 - broadcasts is a fixture
     ALLOW_ALL_POLICY,
+    CONNECT_TIMEOUT_S,
     _CONFIRM_KEY,
     _confirmation,
     _ws_session,
@@ -1808,6 +1809,45 @@ def test_a_block_survives_a_policy_that_will_not_verify() -> None:
     assert device_trust.is_blocked(None, member_id="", device_id="dev-fine") is False
 
 
+def test_a_block_only_the_policy_holds_survives_the_policy_being_withdrawn() -> None:
+    """A block that exists only in the signed policy — written before the local
+    copy existed, or by an editor that never wrote one — must still refuse the
+    device once the server stops serving that policy. Verifying the document is
+    what copies its block list here."""
+    trust_store.load()
+    link = _trust_link()
+    policy = {
+        "version": 1, "default": "deny", "rules": [],
+        "blocked": [{"deviceId": "dev-policy-only", "memberId": ""},
+                    {"deviceId": "", "memberId": "m-policy-only"}],
+    }
+    signature = device_signing.sign_policy(device_id=link._device_id, seq=0, document=policy)
+    signed = {**policy, server_link.POLICY_SIGNATURE_FIELD: {"seq": 0, "sig": signature}}
+
+    assert link._verified_policy(signed) == policy
+
+    assert device_trust.is_blocked(None, member_id="", device_id="dev-policy-only") is True
+    assert device_trust.is_blocked(None, member_id="m-policy-only", device_id="other") is True
+    assert device_trust.ring(
+        None, member_id="", device_id="dev-policy-only", own_device=True
+    ) == device_trust.RING_BLOCKED
+
+
+def test_an_unverified_policy_adds_nothing_to_the_local_copy() -> None:
+    """Only a document this machine signed may add a block here; anything else
+    would let the server fill this machine's block list."""
+    trust_store.load()
+    link = _trust_link()
+    forged = {
+        "version": 1, "default": "deny", "rules": [],
+        "blocked": [{"deviceId": "dev-forged", "memberId": ""}],
+        server_link.POLICY_SIGNATURE_FIELD: {"seq": 0, "sig": "bm9wZQ=="},
+    }
+
+    assert link._verified_policy(forged) is None
+    assert device_trust.is_blocked(None, member_id="", device_id="dev-forged") is False
+
+
 def test_a_locally_blocked_device_stays_off_the_pending_card_with_no_policy() -> None:
     """The other surface the same refusal has to reach. Without this the device
     reappears on the "waiting for you to vouch" card the moment the policy stops
@@ -3229,7 +3269,9 @@ async def test_the_replacement_is_tried_once_and_not_in_a_loop(tmp_path, monkeyp
     )
     task = asyncio.create_task(link._run())
     try:
-        await _until(lambda: bool(server.opened and len(server.opened[0].hellos) >= 2))
+        # The hellos wait on the first key writes, which go through DPAPI on
+        # Windows: see CONNECT_TIMEOUT_S.
+        await _until(lambda: bool(server.opened and len(server.opened[0].hellos) >= 2), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.05)
 
         assert len(server.opened[0].hellos) == 2, "one retry, not a loop"
@@ -3266,7 +3308,8 @@ async def test_a_conflict_that_survives_the_retry_says_what_it_is(tmp_path, monk
     )
     task = asyncio.create_task(link._run())
     try:
-        await _until(lambda: bool(link.terminated_reason))
+        # Reached through the hello: see CONNECT_TIMEOUT_S.
+        await _until(lambda: bool(link.terminated_reason), timeout=CONNECT_TIMEOUT_S)
 
         assert "already registered to another account" in link.terminated_reason
         # It used to read as a credential problem, which is where people looked.
@@ -3309,7 +3352,8 @@ async def test_an_id_the_server_refused_is_never_recorded(tmp_path, monkeypatch)
     )
     task = asyncio.create_task(link._run())
     try:
-        await _until(lambda: bool(link.terminated_reason))
+        # Reached through the hello: see CONNECT_TIMEOUT_S.
+        await _until(lambda: bool(link.terminated_reason), timeout=CONNECT_TIMEOUT_S)
 
         doc = json.loads(device_identity.device_identity_path().read_text(encoding="utf-8"))
         assert "m1" not in doc.get("nodes", {}), doc

@@ -8,14 +8,15 @@ base64 and would refuse anything else there — and Navide-Server forwards it.
 Receiving: no sig2 is exactly the v1 path; a sig2 is checked against the pinned
 key and its send time against a window inside the ledger's TTL; the first one
 that verifies marks the pin. In 0.2.20 a marked device's message without a sig2
-is still taken (Q4: v1 is refused from 0.2.21 on) — a server rolled back to one
-without sig2, or a relay stripping it, must not cut a device off — and leaves a
-log line and one notice. The refusal is there behind REFUSE_V1_FROM_V2_PEERS.
+was still taken (Q4) and left a log line and one notice; from 0.2.23
+REFUSE_V1_FROM_V2_PEERS is on and a marked device's message without a usable
+sig2 is refused. A device never marked is decided on v1 as before.
 """
 
 from __future__ import annotations
 
 import base64
+import logging
 import time
 
 import pytest
@@ -123,9 +124,11 @@ def _sig2_missing_notices() -> list:
             if n["kind"] == trust_store.NOTICE_PAIRING and n.get("pairing") == "sig2-missing"]
 
 
-async def test_a_server_rolled_back_to_one_without_sig2_cuts_no_device_off(broadcasts):
-    """After a v2 message marked the pin, the server goes back to a release that
-    drops sig2: the next message arrives with v1 only, and is delivered."""
+async def test_a_server_rolled_back_to_one_without_sig2_cuts_no_device_off(broadcasts, monkeypatch):
+    """With the switch off: after a v2 message marked the pin, the server goes
+    back to a release that drops sig2: the next message arrives with v1 only,
+    and is delivered."""
+    monkeypatch.setattr(server_link, "REFUSE_V1_FROM_V2_PEERS", False)
     delivered, acks = await _two(_pending_v2("pa:mcp:before"), _pending("pa:mcp:after"), broadcasts)
     assert trust_store.pin_for(PEER.device_id).get("sigV2") is True
     assert [d["payload"]["msg_key"] for d in delivered] == ["pa:mcp:before", "pa:mcp:after"]
@@ -133,7 +136,8 @@ async def test_a_server_rolled_back_to_one_without_sig2_cuts_no_device_off(broad
     assert [n["deviceId"] for n in _sig2_missing_notices()] == [PEER.device_id]
 
 
-async def test_a_relay_stripping_sig2_does_not_stop_delivery(broadcasts):
+async def test_with_the_switch_off_a_relay_stripping_sig2_does_not_stop_delivery(broadcasts, monkeypatch):
+    monkeypatch.setattr(server_link, "REFUSE_V1_FROM_V2_PEERS", False)
     trust_store.note_signs_v2(PEER.device_id)
     stripped = _pending_v2("pa:mcp:stripped")
     stripped.pop("sig2")
@@ -143,21 +147,89 @@ async def test_a_relay_stripping_sig2_does_not_stop_delivery(broadcasts):
     assert len(_sig2_missing_notices()) == 1
 
 
-async def test_one_notice_per_device_not_one_per_message(broadcasts):
+async def test_one_notice_per_device_not_one_per_message(broadcasts, monkeypatch, caplog):
+    """A downgrade is noticed once per device, but every one of them is logged
+    and counted, so a device that keeps arriving without sig2 can be seen."""
+    monkeypatch.setattr(server_link, "REFUSE_V1_FROM_V2_PEERS", False)
     trust_store.note_signs_v2(PEER.device_id)
-    await _two(_pending("pa:mcp:one"), _pending("pa:mcp:two"), broadcasts)
+    with caplog.at_level(logging.WARNING, logger=trust_store.log.name):
+        delivered, _acks = await _two(_pending("pa:mcp:one"), _pending("pa:mcp:two"), broadcasts)
+    assert [d["payload"]["msg_key"] for d in delivered] == ["pa:mcp:one", "pa:mcp:two"]
     assert len(_sig2_missing_notices()) == 1
+    assert trust_store.sig2_downgrade_count(PEER.device_id, "sig2-missing") == 2
+    counted = [r for r in caplog.records
+               if "v2 signature" in r.getMessage() and PEER.device_id in r.getMessage()
+               and r.name == trust_store.log.name]
+    assert [r.getMessage().rsplit("#", 1)[-1] for r in counted] == ["1)", "2)"]
 
 
-async def test_the_refusal_waits_behind_its_switch(broadcasts, monkeypatch):
-    """0.2.21 turns it on: then a marked device's message without sig2 is refused."""
-    assert server_link.REFUSE_V1_FROM_V2_PEERS is False
-    monkeypatch.setattr(server_link, "REFUSE_V1_FROM_V2_PEERS", True)
+async def test_an_unusable_sig2_is_counted_every_time_and_noticed_once(broadcasts):
+    """A device never marked whose clock is off: every message is delivered on
+    v1, each is counted, one notice."""
+    await _two(_stale_v2("pa:mcp:u1"), _stale_v2("pa:mcp:u2"), broadcasts)
+    assert len(_sig2_unusable_notices()) == 1
+    assert trust_store.sig2_downgrade_count(PEER.device_id, "sig2-unusable") == 2
+
+
+def test_the_refusal_is_on():
+    """0.2.23 (plan 797ad7, Q4): a marked device's v1-only message is refused."""
+    assert server_link.REFUSE_V1_FROM_V2_PEERS is True
+
+
+def _refused_notices(pairing: str) -> list:
+    return [n for n in trust_store.notices()
+            if n["kind"] == trust_store.NOTICE_PAIRING and n.get("pairing") == pairing]
+
+
+async def test_a_marked_device_with_a_verifying_sig2_is_delivered(broadcasts):
+    trust_store.note_signs_v2(PEER.device_id)
+    delivered, acks = await _receive(_pending_v2("pa:mcp:marked-ok"), broadcasts)
+    assert [d["payload"]["msg_key"] for d in delivered] == ["pa:mcp:marked-ok"]
+    assert acks == []
+    assert not any(str(n.get("pairing", "")).startswith("sig2-") for n in trust_store.notices())
+
+
+async def test_a_marked_device_with_sig2_stripped_is_refused(broadcasts):
     trust_store.note_signs_v2(PEER.device_id)
     delivered, acks = await _receive(_pending("pa:mcp:stripped"), broadcasts)
     assert delivered == []
     assert acks and acks[0]["state"] == "rejected"
     assert acks[0]["reason"] == server_link.REASON_UNAUTHENTICATED
+    assert [n["deviceId"] for n in _refused_notices("sig2-refused-missing")] == [PEER.device_id]
+    assert _sig2_missing_notices() == []  # that one says "delivered"
+    assert trust_store.sig2_downgrade_count(PEER.device_id, "sig2-refused-missing") == 1
+
+
+@pytest.mark.parametrize(
+    ("make", "direction", "minutes"),
+    [
+        (lambda k: _pending_v2(k, sent_at=int(time.time()) - 70 * 60), "behind", 70),
+        (lambda k: _pending_v2(k, sent_at=int(time.time()) + 12 * 60), "ahead", 12),
+    ],
+    ids=["behind", "ahead"],
+)
+async def test_a_marked_device_outside_the_window_is_refused_for_clock_skew(
+    make, direction, minutes, broadcasts, caplog
+):
+    trust_store.note_signs_v2(PEER.device_id)
+    with caplog.at_level(logging.WARNING, logger=server_link.log.name):
+        delivered, acks = await _receive(make("pa:mcp:skewed"), broadcasts)
+    assert delivered == []
+    assert acks and acks[0]["state"] == "rejected"
+    reason = f"clock skew: sender is {minutes} minutes {direction}"
+    assert any("refusing message pa:mcp:skewed" in r.getMessage() and reason in r.getMessage()
+               for r in caplog.records)
+    [notice] = _refused_notices(f"sig2-refused-clock-{direction}")
+    assert notice["deviceId"] == PEER.device_id
+    assert notice["minutes"] == minutes
+    assert _sig2_unusable_notices() == []
+
+
+async def test_a_marked_device_with_a_forged_sig2_is_refused_as_unusable(broadcasts):
+    trust_store.note_signs_v2(PEER.device_id)
+    delivered, acks = await _receive(_forged_v2("pa:mcp:forged"), broadcasts)
+    assert delivered == [] and acks and acks[0]["state"] == "rejected"
+    assert [n["deviceId"] for n in _refused_notices("sig2-refused-unusable")] == [PEER.device_id]
 
 
 def _sig2_unusable_notices() -> list:
@@ -205,11 +277,20 @@ async def test_an_unusable_sig2_with_a_v1_that_does_not_verify_is_still_refused(
 
 
 @pytest.mark.parametrize("make", [_stale_v2, _ahead_v2, _forged_v2], ids=["behind", "ahead", "forged"])
-async def test_with_the_switch_on_an_unusable_sig2_is_refused(make, broadcasts, monkeypatch):
-    monkeypatch.setattr(server_link, "REFUSE_V1_FROM_V2_PEERS", True)
+async def test_with_the_switch_on_an_unusable_sig2_from_a_marked_device_is_refused(make, broadcasts):
+    trust_store.note_signs_v2(PEER.device_id)
     delivered, acks = await _receive(make("pa:mcp:unusable"), broadcasts)
     assert delivered == [] and acks and acks[0]["state"] == "rejected"
+
+
+async def test_a_device_never_marked_sending_v1_only_is_still_delivered(broadcasts):
+    """Old peers: the switch only reaches a device that has proven it signs v2."""
+    assert server_link.REFUSE_V1_FROM_V2_PEERS is True
+    delivered, acks = await _two(_pending("pa:mcp:old-1"), _pending("pa:mcp:old-2"), broadcasts)
+    assert [d["payload"]["msg_key"] for d in delivered] == ["pa:mcp:old-1", "pa:mcp:old-2"]
+    assert acks == []
     assert not trust_store.pin_for(PEER.device_id).get("sigV2")
+    assert not any(str(n.get("pairing", "")).startswith("sig2-") for n in trust_store.notices())
 
 
 async def test_an_outgoing_message_carries_v1_unchanged_and_a_v2_beside_it():
@@ -233,3 +314,17 @@ async def test_an_outgoing_message_carries_v1_unchanged_and_a_v2_beside_it():
         assert sent_at is not None and before <= sent_at <= int(time.time())
     finally:
         await link.stop()
+
+
+@pytest.mark.parametrize("strip", [True, False], ids=["no-sig2", "forged-sig2"])
+async def test_a_refusal_the_device_did_not_sign_leaves_no_notice(strip, broadcasts):
+    """A relay can strip or forge sig2 at will; only a refusal whose v1 still
+    verifies — the device really sent it — is noticed and counted."""
+    trust_store.note_signs_v2(PEER.device_id)
+    payload = _forged_v2("pa:mcp:relay")
+    if strip:
+        payload.pop("sig2")
+    payload["sig"] = payload["sig"][:-4] + "AAA="
+    delivered, acks = await _receive(payload, broadcasts)
+    assert delivered == [] and acks and acks[0]["state"] == "rejected"
+    assert not any(str(n.get("pairing", "")).startswith("sig2-") for n in trust_store.notices())

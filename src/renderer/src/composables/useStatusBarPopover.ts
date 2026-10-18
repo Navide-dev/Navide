@@ -1,7 +1,7 @@
 import { ref, type Ref } from 'vue'
 
 /** Ids of the popovers anchored to the status bar. */
-export type StatusBarPopoverId = 'backend' | 'announcements' | 'clock' | 'resource'
+export type StatusBarPopoverId = 'backend' | 'announcements' | 'clock' | 'resource' | 'notify'
 
 /**
  * One open-popover id instead of one boolean per popover: independent booleans

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import type { EditorPort, EditorWriteRequest } from './port'
-import { useNotify } from '../foundation'
+import { i18n, useNotify } from '../foundation'
 import { setContext } from '../shared'
 import EditorViewMonaco from './view/EditorViewMonaco.vue'
 import { languageForFile, normalizeLanguage } from './languageDetect'
@@ -282,7 +282,7 @@ async function save(opts: { force?: boolean } = {}): Promise<void> {
     if (p.mtime !== undefined) fileMtime.value = p.mtime
     // Only clear dirty when no further edits landed while the request was in-flight.
     if (content.value === preContent) dirty.value = false
-    toast('Saved', { type: 'success' })
+    toast(i18n.global.t('editorWindow.saved'), { type: 'success' })
   } catch (err) {
     void alert(err instanceof Error ? err.message : 'Save failed', { title: 'Save error' })
   }
@@ -316,7 +316,7 @@ let cmdkBaseContent: string | null = null
 watch(content, () => {
   if (proposal.value) {
     proposal.value = null
-    toast('Document changed — AI rewrite discarded', { type: 'info' })
+    toast(i18n.global.t('editorWindow.ai-rewrite-discarded'), { type: 'info' })
   }
 })
 
@@ -411,7 +411,7 @@ async function submitCmdK(): Promise<void> {
     // The document may have been edited during the async rewrite — the captured
     // range no longer points at the selected code, so abort instead of proposing.
     if (content.value !== cmdkBaseContent) {
-      toast('Document changed — AI rewrite discarded', { type: 'info' })
+      toast(i18n.global.t('editorWindow.ai-rewrite-discarded'), { type: 'info' })
       cmdk.value.open = false
       return
     }
@@ -836,7 +836,7 @@ async function requestGhost(): Promise<void> {
       editorRef.value?.setGhost(result.text)
       editorRef.value?.focus()
     } else {
-      toast(result.error || 'No completion available', { type: 'info' })
+      toast(result.error || i18n.global.t('editorWindow.no-completion'), { type: 'info' })
     }
   } catch {
     // ignore — timeout or WS close; ghostBusy is reset in finally
@@ -1010,9 +1010,9 @@ async function reopenWithEncoding(enc: string): Promise<void> {
       eol.value = detectEOL(result.content)
       dirty.value = false
     } else {
-      toast(result.error ?? 'Failed to re-open with encoding', { type: 'error' })
+      toast(result.error ?? i18n.global.t('editorWindow.reopen-encoding-failed'), { type: 'error' })
     }
-  } catch { toast('Encoding switch failed', { type: 'error' }) }
+  } catch { toast(i18n.global.t('editorWindow.encoding-switch-failed'), { type: 'error' }) }
 }
 function setIndent(size: number, spaces: boolean): void {
   editorTabSize.value = size

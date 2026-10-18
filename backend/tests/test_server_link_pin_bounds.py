@@ -140,6 +140,13 @@ async def next_connection(server, n_before):
     await _until(lambda: len(server.opened) > n_before and bool(server.opened[-1].syncs), timeout=5)
 
 
+async def confirm_refused(server):
+    """The latest connection sent its confirm and the refusal cleared .next.
+    The forget before it writes the record (a slow fsync on Windows)."""
+    await _until(lambda: bool(server.opened) and any(m.get("type") == "auth.token.confirm" for m in server.opened[-1].sent)
+                 and server_link.next_access_token() == "", timeout=10)
+
+
 class FixedTokenServer(TokenServer):
     """Offers one given token on every rotation and refuses its confirm."""
 
@@ -174,15 +181,12 @@ async def test_refused_confirm_does_not_grow_own_members(kc):
     assert await link.start()
     try:
         for _ in range(12):
-            await asyncio.sleep(0.03)
+            await confirm_refused(server)
             counts.append(len(owners()))
             n = len(server.opened)
             await server.opened[-1].close()
             await next_connection(server, n)
-        # The last connection's refused confirm, through to .next cleared: the
-        # forget before it writes the record (a slow fsync on Windows).
-        await _until(lambda: any(m.get("type") == "auth.token.confirm" for m in server.opened[-1].sent)
-                     and server_link.next_access_token() == "", timeout=10)
+        await confirm_refused(server)
         counts.append(len(owners()))
     finally:
         await link.stop()
@@ -222,11 +226,24 @@ async def test_lost_confirm_answer_still_promotes_after_its_pin_was_forgotten(kc
     trust_store.load()
     server_link.set_access_token(CONFIG.token)
     ts = TokenServer(legacy=True, confirm="lost-after-apply")
-    server = FakeServer(responder=ts.responder, count=16)
+    # Ordered by an event, not a deadline. The reconnect waits a second, and
+    # the promotion before the second connection's first sessions.sync makes
+    # several trust record writes through worker threads, which a loaded
+    # Windows runner stretched past the five seconds this used to allow. A
+    # link that never gets there is still caught, by pytest-timeout.
+    resynced = asyncio.Event()
+
+    def responder(conn, message):
+        reply = ts.responder(conn, message)
+        if message.get("type") == "sessions.sync" and conn is not server.opened[0]:
+            resynced.set()
+        return reply
+
+    server = FakeServer(responder=responder, count=16)
     link = real_link(server)
     assert await link.start()
     try:
-        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[-1].syncs), timeout=5)
+        await resynced.wait()
         await _until(lambda: server_link.access_token().startswith("nvd_rotated") and server_link.next_access_token() == "")
         await asyncio.sleep(0.05)
         assert link._trust_locked == ""

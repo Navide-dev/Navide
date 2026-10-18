@@ -148,6 +148,16 @@ class PosixProcessTree:
     def kill_group(self, gid: int, *, force: bool) -> None:
         os.killpg(gid, _signal_for(force))
 
+    def contain(self, pid: int) -> None:
+        # Started with start_new_session: its session is the tree.
+        return None
+
+    def end_contained(self, pid: int) -> None:
+        try:
+            os.killpg(pid, _signal_for(True))
+        except (ProcessLookupError, PermissionError):
+            pass
+
     def kill_tree(self, pid: int, *, force: bool) -> None:
         """Group kill plus each descendant individually: the descendants are
         snapshotted first because a dead root's grandchildren reparent and

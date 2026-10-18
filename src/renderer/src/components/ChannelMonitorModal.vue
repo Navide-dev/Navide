@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch } from 'vue'
 import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
-import type { ChannelBinding, ChannelsStore } from '../composables/useChannels'
+import type { ChannelBinding, ChannelOverviewBinding, ChannelsStore } from '../composables/useChannels'
+import { formatChannelIdentity } from '../lib/channelIdentity'
 
 /**
  * In-app overlay listing every pane↔channel link with its live status. Rows
@@ -23,7 +24,11 @@ const t = i18n.global.t
 
 interface Row {
   binding: ChannelBinding
+  /** The caller's name for the pane, as the disconnect request has always sent it. */
+  paneName: string
   pane: string
+  /** The backend's pane registry reports the pane closed (an orphan binding). */
+  closed: boolean
   channel: string
   status: string
   tone: 'ok' | 'warn' | 'err' | 'idle'
@@ -32,6 +37,41 @@ interface Row {
 interface Group extends Row {
   /** Topics the backend auto-created for this pane's descendants; they go with its binding. */
   children: Row[]
+}
+
+const overviewKey = (b: ChannelBinding) => `${b.platform}\u0000${b.account}\u0000${b.pane_id}`
+const chatKey = (b: ChannelBinding) => `${b.platform}\u0000${b.account}\u0000${b.chat_id}`
+
+// The overview names panes from every window (this window's list only has its own)
+// and carries each chat's title, so a row can show both ends of its link.
+const overview = computed(() => {
+  const bindings = new Map<string, ChannelOverviewBinding>()
+  const chatTitles = new Map<string, string>()
+  for (const bot of props.store.overview.value) {
+    for (const chat of bot.chats) {
+      for (const b of chat.bindings) {
+        bindings.set(overviewKey(b), b)
+        // A group the backend has no name for is stored under its id as the title.
+        if (chat.title && chat.title !== chat.chat_id) chatTitles.set(chatKey(b), chat.title)
+      }
+    }
+  }
+  return { bindings, chatTitles }
+})
+
+function paneText(binding: ChannelBinding, local: string): { pane: string; closed: boolean } {
+  const known = overview.value.bindings.get(overviewKey(binding))
+  const closed = known ? !known.pane.exists : false
+  const name = (local && local !== binding.pane_id ? local : '') || known?.pane.name || binding.title
+  return { pane: name || t('channels.monitor.unnamed-pane'), closed }
+}
+
+function channelText(binding: ChannelBinding, state: ReturnType<ChannelsStore['accountState']>): string {
+  const chat = overview.value.chatTitles.get(chatKey(binding)) || t('channels.monitor.chat-id', { id: binding.chat_id })
+  // The title is the topic's name only when the link is to a topic; otherwise it is
+  // just the pane name copied at bind time, which the first line already shows.
+  const topic = binding.thread_id && binding.title ? binding.title : ''
+  return formatChannelIdentity(binding, { t, state, chat, extra: [topic] }, 'full')
 }
 
 function toRow(binding: ChannelBinding): Row {
@@ -46,11 +86,12 @@ function toRow(binding: ChannelBinding): Row {
     status = t(`channels.lifecycle.${lifecycle}`)
     tone = lifecycle === 'ready' ? 'ok' : lifecycle === 'blocked' ? 'err' : lifecycle === 'stopped' ? 'idle' : 'warn'
   }
-  const platformName = t(`channels.platform.${binding.platform}`)
+  const paneName = props.paneLabel(binding.pane_id)
   return {
     binding,
-    pane: props.paneLabel(binding.pane_id),
-    channel: binding.title ? `${platformName} · ${binding.title}` : platformName,
+    paneName,
+    ...paneText(binding, paneName),
+    channel: channelText(binding, state),
     status,
     tone,
   }
@@ -87,6 +128,7 @@ function onKeyDown(e: KeyboardEvent): void {
 watch(
   () => props.open,
   (open) => {
+    if (open) void props.store.loadOverview()
     if (open) window.addEventListener('keydown', onKeyDown)
     else window.removeEventListener('keydown', onKeyDown)
   },
@@ -95,7 +137,7 @@ watch(
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 function disconnect(row: Row): void {
-  void props.store.unbind(row.binding.pane_id, row.pane)
+  void props.store.unbind(row.binding.pane_id, row.paneName)
 }
 </script>
 
@@ -136,7 +178,10 @@ function disconnect(row: Row): void {
             >
               <span class="cmon-dot" :class="row.tone"></span>
               <span class="cmon-text">
-                <span class="cmon-pane" v-truncate>{{ row.pane }}</span>
+                <span class="cmon-pane-line">
+                  <span class="cmon-pane" v-truncate>{{ row.pane }}</span>
+                  <span v-if="row.closed" class="cmon-closed">{{ t('channels.monitor.pane-closed') }}</span>
+                </span>
                 <span class="cmon-channel" v-truncate>{{ row.channel }}</span>
               </span>
               <span class="cmon-status" :class="row.tone">{{ row.status }}</span>
@@ -160,7 +205,10 @@ function disconnect(row: Row): void {
               >
                 <span class="cmon-dot" :class="child.tone"></span>
                 <span class="cmon-text">
-                  <span class="cmon-pane" v-truncate>{{ child.pane }}</span>
+                  <span class="cmon-pane-line">
+                    <span class="cmon-pane" v-truncate>{{ child.pane }}</span>
+                    <span v-if="child.closed" class="cmon-closed">{{ t('channels.monitor.pane-closed') }}</span>
+                  </span>
                   <span class="cmon-channel" v-truncate>{{ child.channel }}</span>
                 </span>
                 <span class="cmon-auto" :title="t('channels.monitor.auto-child-hint')">{{ t('channels.monitor.auto-child') }}</span>
@@ -274,6 +322,15 @@ function disconnect(row: Row): void {
 .cmon-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .cmon-pane, .cmon-channel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmon-channel { color: var(--text-secondary); font-size: 12px; }
+.cmon-pane-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cmon-closed {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
 .cmon-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--text-secondary); }
 .cmon-dot.ok { background: var(--success-fg); }
 .cmon-dot.warn { background: var(--attention-fg); }
