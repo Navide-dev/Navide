@@ -15,6 +15,9 @@ import { REGISTRY_RECEIPT_NAME, type InstalledTrustDecision } from './pluginInst
 import { readLocalTrustRecord, verifyLocalPackage, type PluginLocalTrustContext } from './pluginLocalTrust'
 import { parseManifestJson } from './pluginManifest'
 import type { PluginSource } from '../../shared/pluginSource'
+import { revealUnsafeLineText } from '../../shared/pluginAgentTools'
+import { nativeBackendConsentText, type NativeBackendConsentPrompt } from './pluginThirdPartyBackends'
+import type { SupportedLocale } from '../hostLocale'
 
 /** Consent records live beside, never inside, the plugins root: every child
  * of the root is scanned as a package, and a file inside a package would
@@ -110,4 +113,18 @@ const LOCAL_SOURCE_CONSENT_LINE: Record<string, string> = {
 export function localSourceConsentLine(source: PluginSource | undefined, locale: string): string {
   if (source !== 'local-unsigned') return ''
   return LOCAL_SOURCE_CONSENT_LINE[locale] ?? LOCAL_SOURCE_CONSENT_LINE['en-US']
+}
+
+/** The native backend consent dialog's text with the package's own name made
+ * safe for a dialog line, and, for an unreviewed package, the source line
+ * leading both the message and the detail (MED-2 / MED-3 on #425). */
+export function nativeBackendConsentDialog(
+  prompt: NativeBackendConsentPrompt,
+  locale: SupportedLocale,
+  source: PluginSource | undefined,
+): ReturnType<typeof nativeBackendConsentText> {
+  const text = nativeBackendConsentText({ ...prompt, name: revealUnsafeLineText(prompt.name) }, locale)
+  const sourceLine = localSourceConsentLine(source, locale)
+  if (!sourceLine) return text
+  return { ...text, message: `${sourceLine}\n${text.message}`, detail: `${sourceLine}\n\n${text.detail}` }
 }

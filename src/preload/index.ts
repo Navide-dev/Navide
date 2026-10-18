@@ -489,7 +489,7 @@ export interface PreparedInstallSummary {
   /** D7: the replaced package's native backend data will be set aside. */
   backendDataSetAside?: boolean
   /** D7: data set aside earlier from the incoming source, which the user may take back. */
-  reattachableBackendData?: string
+  reattachableBackendData?: true
   /** MED-1 on #425: false when the takedown list could not be checked. */
   takedownChecked?: boolean
 }

@@ -190,6 +190,31 @@ describe('local trust record', () => {
     expect(decision.action === 'blocked' && decision.reason).toMatch(/taken down by Navide/)
   })
 
+  it('disables a taken-down publisher named by either the id namespace or the declared publisher', () => {
+    // A Manifest v1 file may declare a publisher that differs from its id
+    // namespace (v2 refuses that at parse time); neither spelling may slip
+    // past a publisher takedown.
+    const mismatchedDir = join(root, 'acme.mismatched')
+    const mismatchedRecord = join(root, 'records', 'acme.mismatched.json')
+    mkdirSync(mismatchedDir, { recursive: true })
+    writeFileSync(
+      join(mismatchedDir, 'manifest.json'),
+      JSON.stringify({ id: 'acme.mismatched', version: '1.0.0', publisher: 'other', requires: [], entry: 'index.html' })
+    )
+    writeFileSync(join(mismatchedDir, 'index.html'), '<!doctype html>')
+    consent(mismatchedDir, mismatchedRecord)
+    for (const blocked of ['acme', 'other']) {
+      expect(
+        verifyLocalPackage(
+          mismatchedDir,
+          'acme.mismatched',
+          mismatchedRecord,
+          context({ ...metadata, blockedPublishers: [blocked] })
+        )
+      ).toMatchObject({ action: 'blocked', code: 'LOCAL_PUBLISHER_BLOCKED' })
+    }
+  })
+
   it('disables a taken-down package id, for every version or only the listed one', () => {
     consent()
     expect(

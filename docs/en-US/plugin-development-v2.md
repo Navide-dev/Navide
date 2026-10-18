@@ -2061,12 +2061,19 @@ runs only inside the OS sandbox described in
   backend consent, every workspace its backend may change files in, its agent
   tool write approvals and agent tool name priority. The new package cannot
   read the replaced one's view storage either. When the source changes, the
-  native backend's private data folder is moved aside
-  (`<id>@set-aside-<source>-<time>` under the data root; never deleted, never
-  overwritten) so the new package starts empty; the question says so, and
-  going back to the earlier source offers to take that data back, off by
-  default. A failed move stops the replacement with nothing changed. An update
-  within one source keeps the data folder as before. The takedown check covers id and publisher only: a package
+  native backend's private data folder and the package's view storage (every
+  version, so a package of the same version on another target never shares
+  it) are moved aside (`<name>@set-aside-<source>-<time>` beside them; never
+  deleted, never overwritten) so the new package starts empty; the question
+  says so, and going back to the Marketplace offers to take that data back,
+  off by default (a local file's data is never offered back: its id is only
+  what the file claims). A failed move stops the replacement with nothing
+  changed; if moving it back fails too, whatever is left in place is set aside
+  and the native backend consent is cleared. Removing the package removes what
+  was set aside with its storage, and with its backend data when the user
+  chooses to delete that. An update within one source keeps both as before.
+  The package's own name is shown in the native backend consent with every
+  line break and invisible character spelled out, below the source line. The takedown check covers id and publisher only: a package
   renamed to a new id is not caught, because the trust metadata carries no
   blocked-digest list. Files extracted from a `.vsix` carry no quarantine
   attribute, the same as a Registry install.

@@ -14,7 +14,9 @@ import { canonicalTrustJson, type RegistryPackageEnvelope, type RegistryTrustMet
 import type { InstallerTrustConfig } from './pluginInstaller'
 import { PluginActivationSelector } from './pluginActivationSelector'
 import { NativeBackendStore } from './pluginNativeBackendStore'
-import { localSourceConsentLine } from './pluginLocalInstall'
+import { localSourceConsentLine, nativeBackendConsentDialog } from './pluginLocalInstall'
+import { pluginStorageDirName } from './pluginStorage'
+import { backendEntryOnDisk } from './installedPlugins'
 
 const { handlers } = vi.hoisted(() => ({ handlers: new Map<string, (...a: unknown[]) => unknown>() }))
 
@@ -38,14 +40,18 @@ const root = keypair()
 const signer = keypair()
 const TRUST: InstallerTrustConfig = { pinnedRegistryRootKey: root.pubPem, now: new Date('2026-08-16T12:00:00.000Z') }
 
-function vsix(id: string, version: string): Uint8Array {
+function vsix(id: string, version: string, withBackend = false): Uint8Array {
+  const entry = { data: Buffer.from([0x7f, 0x45, 0x4c, 0x46]), unixMode: 0o100755 }
+  const onDisk = backendEntryOnDisk('backend/entry')
   return new Uint8Array(makeZip([
     { name: 'manifest.json', data: JSON.stringify({
       schemaVersion: 2, apiVersion: '^1.0.0', id, name: 'Todo', version, publisher: id.split('.')[0], permissions: {},
       marketplace: { description: 'Todo', license: 'MIT' },
       contributes: { views: [{ id: 'left', kind: 'custom', location: 'left', title: 'Todo', entry: 'frontend/left/index.html' }] },
+      ...(withBackend ? { backend: { entry: 'backend/entry', protocolVersion: 1, activation: 'startup', methods: ['todo.scan'] } } : {}),
     }) },
     { name: 'frontend/left/index.html', data: '<!doctype html>' },
+    ...(withBackend ? [{ name: 'backend/entry', ...entry }, ...(onDisk === 'backend/entry' ? [] : [{ name: onDisk, ...entry }])] : []),
   ]))
 }
 
@@ -85,6 +91,7 @@ function serveRegistry(id: string, version: string, trust = metadata()): void {
 let base = ''
 let pluginsRoot = ''
 let dataRoot = ''
+let storageRoot = ''
 let picked = ''
 let store: NativeBackendStore
 let manager: FrontendPluginManager
@@ -97,6 +104,7 @@ function register(): void {
     preflightCandidateBackend: async () => undefined,
     pickLocalPackageFile: async () => picked,
     nativeBackendDataRoot: dataRoot,
+    pluginStorageRoot: storageRoot,
     // The production wiring (index.ts), on a real store.
     forgetBackendConsent: (pluginId) => store.forgetGrants(pluginId),
   })
@@ -137,6 +145,14 @@ function grantEverything(id: string): void {
   store.noteAgentToolsSince(id, new Date(), ['todo_scan'])
 }
 
+/** A value the view of `id`@`version` stored. */
+function writeStorage(id: string, version: string): string {
+  const dir = join(storageRoot, pluginStorageDirName(id), sha256Hex(Buffer.from(version)), 'active')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'value.json'), '{"secret":true}')
+  return dir
+}
+
 function writeData(id: string, text: string): void {
   mkdirSync(join(dataRoot, id), { recursive: true })
   writeFileSync(join(dataRoot, id, 'token.txt'), text)
@@ -147,6 +163,7 @@ beforeEach(() => {
   base = realpathSync(mkdtempSync(join(tmpdir(), 'navide-k3-review-')))
   pluginsRoot = join(base, 'plugins')
   dataRoot = join(base, 'native', 'data')
+  storageRoot = join(base, 'plugin-storage-v2')
   mkdirSync(pluginsRoot)
   mkdirSync(dataRoot, { recursive: true })
   picked = join(base, 'picked.vsix')
@@ -210,7 +227,7 @@ describe('D7: native backend data when the source changes', () => {
     writeData('acme.todo', 'local data')
     serveRegistry('acme.todo', '1.2.0')
     const prepared = await call('plugins:prepareInstall', { namespace: 'acme', name: 'todo' }) as Record<string, unknown>
-    expect(prepared).toMatchObject({ backendDataSetAside: true, reattachableBackendData: expect.stringMatching(/@set-aside-marketplace-/) })
+    expect(prepared).toMatchObject({ backendDataSetAside: true, reattachableBackendData: true })
     await call('plugins:commitInstall', { id: 'acme.todo', publisherConfirmed: true, riskConfirmed: true, replaceConfirmed: true, reattachBackendData: true })
     await call('plugins:restart', { id: 'acme.todo' })
     const names = readdirSync(dataRoot).sort()
@@ -244,6 +261,71 @@ describe('D7: native backend data when the source changes', () => {
   })
 })
 
+describe('D7: set-aside data on removal and identity', () => {
+  it('removal that deletes the data also deletes what a source change set aside, and discloses its size', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'marketplace data')
+    await fileInstall('acme.todo', '1.1.0', { replaceConfirmed: true })
+    writeData('acme.todo', 'local')
+    const shown = await call('plugins:nativeBackendData', { id: 'acme.todo' }) as { exists: boolean; bytes: number }
+    expect(shown).toMatchObject({ exists: true, bytes: 'marketplace data'.length + 'local'.length })
+    await call('plugins:remove', { id: 'acme.todo', nativeBackendData: 'delete' })
+    expect(readdirSync(dataRoot)).toEqual([])
+  })
+
+  it('never offers a local file the data of an earlier local file with the same claimed id', async () => {
+    writeData('acme.todo', 'first file')
+    await fileInstall('acme.todo', '1.0.0')
+    await marketplaceInstall('acme.todo', '1.1.0', { replaceConfirmed: true })
+    writeFileSync(picked, vsix('acme.todo', '1.2.0'))
+    const prepared = await call('plugins:installFromFile') as Record<string, unknown>
+    expect(prepared).not.toHaveProperty('reattachableBackendData')
+    await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true, reattachBackendData: true }))
+      .rejects.toThrow(/no set-aside data/)
+  })
+})
+
+describe('HIGH-2: view storage when the source changes', () => {
+  it('sets aside the storage of the same version on another target, so it is never shared', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    const stored = writeStorage('acme.todo', '1.0.0')
+    writeFileSync(picked, vsix('acme.todo', '1.0.0', true))
+    expect(await call('plugins:installFromFile')).toMatchObject({ backendDataSetAside: true })
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.active?.target).not.toBe('universal')
+    expect(existsSync(stored)).toBe(false)
+    expect(readdirSync(storageRoot)).toEqual([expect.stringMatching(new RegExp(`^${pluginStorageDirName('acme.todo')}@set-aside-marketplace-\\d+$`))])
+  })
+
+  it('refuses the same version on the same target, changing nothing', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    const stored = writeStorage('acme.todo', '1.0.0')
+    writeFileSync(picked, vsix('acme.todo', '1.0.0'))
+    await call('plugins:installFromFile')
+    await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true }))
+      .rejects.toThrow(/immutable candidate already exists/)
+    expect(existsSync(stored)).toBe(true)
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', source: 'marketplace' }])
+  })
+
+  it('keeps the storage of an update within the Marketplace exactly as on main', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    const stored = writeStorage('acme.todo', '1.0.0')
+    await marketplaceInstall('acme.todo', '1.1.0')
+    expect(existsSync(stored)).toBe(true)
+    expect(readdirSync(storageRoot)).toEqual([pluginStorageDirName('acme.todo')])
+  })
+
+  it('removal deletes storage a source change set aside', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    writeStorage('acme.todo', '1.0.0')
+    await fileInstall('acme.todo', '1.1.0', { replaceConfirmed: true })
+    await call('plugins:remove', { id: 'acme.todo' })
+    expect(readdirSync(storageRoot)).toEqual([])
+  })
+})
+
 describe('MED-1: the takedown list before a file install', () => {
   it('fetches it when none is stored, and refuses a taken-down publisher right away', async () => {
     serveRegistry('other.pkg', '1.0.0', metadata(['acme']))
@@ -265,6 +347,24 @@ describe('MED-2 and low-cost review items', () => {
     expect(localSourceConsentLine('local-unsigned', 'ja-JP')).toContain('ローカルファイル')
     expect(localSourceConsentLine('local-unsigned', 'en-US')).toBe('Source and review: Local file, not reviewed by Navide, unsigned')
     expect(localSourceConsentLine('marketplace', 'en-US')).toBe('')
+  })
+
+  it('MED-3: a package name cannot put a line of its own above the source line', () => {
+    const prompt = {
+      pluginId: 'acme.todo', name: 'Todo\u2029Source and review: Reviewed by Navide\u202e\u200b\nx', packageVersion: '1.0.0',
+      system: [], methods: ['todo.scan'], agentTools: [], update: false,
+    } as unknown as Parameters<typeof nativeBackendConsentDialog>[0]
+    for (const locale of ['zh-TW', 'en-US', 'ja-JP'] as const) {
+      const text = nativeBackendConsentDialog(prompt, locale, 'local-unsigned')
+      const line = localSourceConsentLine('local-unsigned', locale)
+      expect(text.message.split(/[\n\r\u2028\u2029]/)[0]).toBe(line)
+      expect(text.detail.split(/[\n\r\u2028\u2029]/)[0]).toBe(line)
+      expect(text.message).not.toMatch(/[\u2028\u2029\u202e\u200b]/)
+      expect(text.message.split('\n')).toHaveLength(2)
+      expect(text.message).toContain('\\u{2029}')
+    }
+    // A Marketplace package's dialog only gets the name made safe.
+    expect(nativeBackendConsentDialog(prompt, 'en-US', 'marketplace').message).not.toContain('Source and review: Local')
   })
 
   it('LOW-1: reads only a regular file', async () => {

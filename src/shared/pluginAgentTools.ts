@@ -156,6 +156,16 @@ export function revealInvisibleText(text: string): string {
   return text.replace(INVISIBLE_TEXT, (char) => `\\u{${char.codePointAt(0)!.toString(16)}}`)
 }
 
+/** `revealInvisibleText`, and also every control character and the two
+ *  Unicode line and paragraph separators: for package text placed in a native
+ *  dialog line, where a line break could forge a line of the Host's own
+ *  (card K3, MED-3 on #425). */
+const UNSAFE_LINE_TEXT = new RegExp(`[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029${INVISIBLE_CHARACTERS}]`, 'gu')
+
+export function revealUnsafeLineText(text: string): string {
+  return text.replace(UNSAFE_LINE_TEXT, (char) => `\\u{${char.codePointAt(0)!.toString(16)}}`)
+}
+
 /** `revealInvisibleText` for a value shown as is: a string is spelled out,
  *  anything else (a missing field) is returned unchanged. */
 export function revealInvisibleValue<T>(value: T): T {

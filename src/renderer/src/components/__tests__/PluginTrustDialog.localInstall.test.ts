@@ -131,7 +131,7 @@ describe('PluginTrustDialog for a file install (K3)', () => {
     const dialog = render('replace', {
       replaces: { version: '0.9.0', source: 'marketplace' },
       backendDataSetAside: true,
-      reattachableBackendData: 'acme.todo@set-aside-local-unsigned-1',
+      reattachableBackendData: true,
     })
     expect(dialog.get('.ext-replace-data').text()).toBe(i18n.global.t('settings.extensions.localInstall.replaceDataSetAside'))
     const box = dialog.get('.ext-replace-reattach-input').element as HTMLInputElement

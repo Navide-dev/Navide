@@ -56,8 +56,11 @@ function sizeOf(dir: string): number {
 export function inspectNativeBackendData(dataRoot: string, pluginId: string): NativeBackendDataInfo {
   const path = dataDirFor(dataRoot, pluginId)
   const stat = lstatOrNull(path)
-  if (!stat || !stat.isDirectory()) return { exists: false, bytes: 0, path }
-  return { exists: true, bytes: sizeOf(path), path }
+  // Data a source change set aside is the plugin's too, and goes with it.
+  const setAside = setAsideNames(dataRoot, pluginId).map((name) => join(resolve(dataRoot), name))
+  if ((!stat || !stat.isDirectory()) && setAside.length === 0) return { exists: false, bytes: 0, path }
+  const own = stat?.isDirectory() ? sizeOf(path) : 0
+  return { exists: true, bytes: setAside.reduce((total, dir) => total + sizeOf(dir), own), path }
 }
 
 /** Delete the plugin's data directory. A missing directory is a no-op; a
@@ -69,16 +72,30 @@ export function removeNativeBackendData(dataRoot: string, pluginId: string): voi
   if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
     throw new Error('refusing to delete native backend data: the data root is a symbolic link or not a directory')
   }
-  const stat = lstatOrNull(path)
-  if (!stat) return
-  if (stat.isSymbolicLink()) {
-    throw new Error('refusing to delete native backend data: the data directory is a symbolic link')
+  for (const dir of [path, ...setAsideNames(dataRoot, pluginId).map((name) => join(resolve(dataRoot), name))]) {
+    const stat = lstatOrNull(dir)
+    if (!stat) continue
+    if (stat.isSymbolicLink()) {
+      throw new Error('refusing to delete native backend data: the data directory is a symbolic link')
+    }
+    if (!stat.isDirectory()) {
+      throw new Error('refusing to delete native backend data: the data path is not a directory')
+    }
+    // rmSync unlinks symlinks found inside the tree; it does not follow them.
+    rmSync(dir, { recursive: true, force: true })
   }
-  if (!stat.isDirectory()) {
-    throw new Error('refusing to delete native backend data: the data path is not a directory')
+}
+
+/** Every data directory set aside for this plugin (card K3, D7). */
+function setAsideNames(dataRoot: string, pluginId: string): string[] {
+  let entries: string[]
+  try {
+    entries = readdirSync(resolve(dataRoot))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
   }
-  // rmSync unlinks symlinks found inside the tree; it does not follow them.
-  rmSync(path, { recursive: true, force: true })
+  return entries.filter((name) => SET_ASIDE_RE.exec(name)?.[1] === pluginId)
 }
 
 /** Card K3 (D7): which source a set-aside data directory belonged to. */

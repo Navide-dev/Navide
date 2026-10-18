@@ -13,7 +13,7 @@
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { backendCallAddress } from './pluginActivity'
-import { readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
   prepareInstall,
@@ -47,6 +47,7 @@ import { parseManifestJson } from './pluginManifestJson'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import {
+  readRegistryReceiptChannel,
   readRegistryTrustSnapshot,
   discoverInstalledRegistryPackageIds,
   verifyInstalledRegistryPackage,
@@ -115,6 +116,7 @@ import {
 import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
 import { pluginSourceFromLegacyProvenance, type PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
+import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
 import { createLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
 import { canonicalArchivePath } from './pluginPathPolicy'
@@ -271,15 +273,20 @@ export function isPrereleaseVersion(version: string): boolean {
 }
 
 /** Source and review state of an installed package: its own `source` when a
- * loader set one, else read from the legacy provenance it carries. */
-function installedSource(summary: {
-  provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
-  source?: PluginSource
-  packageVersion?: string
-}): PluginSource | undefined {
+ * loader set one, else read from the legacy provenance it carries and, for a
+ * Registry install, the channel in its signed envelope. */
+function installedSource(
+  summary: {
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+    source?: PluginSource
+    packageVersion?: string
+  },
+  registryChannel?: string
+): PluginSource | undefined {
   return summary.source ?? pluginSourceFromLegacyProvenance(
     summary.provenance,
-    summary.packageVersion !== undefined && isPrereleaseVersion(summary.packageVersion)
+    summary.packageVersion !== undefined && isPrereleaseVersion(summary.packageVersion),
+    registryChannel
   )
 }
 
@@ -522,6 +529,9 @@ export interface PluginIpcOptions {
   /** Card K3 (D7): drop the native backend consent and the agent tool write
    * answers of a package whose source changed, so nothing carries over. */
   forgetBackendConsent?: (pluginId: string) => void
+  /** `<userData>/plugin-storage-v2`: view storage, set aside with the native
+   * backend data when a package's source changes (card K3, D7). */
+  pluginStorageRoot?: string
   /** Card K4: the Host's own folder dialog, parented to the window that
    * asked. Absent, loading from a folder is unavailable. */
   pickDeveloperFolder?: (event: IpcMainInvokeEvent) => Promise<string | null>
@@ -627,32 +637,59 @@ export function registerPluginIpc(
   const preparedLocal = new Map<string, PreparedInstall>()
   // D7: a set-aside native backend data directory the user chose to take back
   // when this id returns to that source; applied at its restart, never assumed.
-  const pendingReattach = new Map<string, string>()
-  /** D7: what replacing `id` with `incoming` does to its native backend data:
-   * whether it is set aside (only when the source changes) and which earlier
-   * set-aside directory of `incoming`'s source the user may take back. */
+  const pendingReattach = new Set<string>()
+  /** D7: every per-plugin data location a change of source sets aside: the
+   * native backend's private folder and the view storage (all versions, so a
+   * package of the same version but another target never shares it). */
+  const dataPlaces = (id: string): Array<{ root: string; name: string }> => [
+    ...(options.nativeBackendDataRoot ? [{ root: options.nativeBackendDataRoot, name: id }] : []),
+    ...(options.pluginStorageRoot ? [{ root: options.pluginStorageRoot, name: pluginStorageDirName(id) }] : []),
+  ]
+  /** D7: what replacing `id` with `incoming` does to its data: whether some is
+   * set aside (only when the source changes) and whether data set aside from
+   * `incoming` earlier may be taken back. */
   const backendDataOnReplace = (id: string, incoming: 'marketplace' | 'local-unsigned') => {
-    const root = options.nativeBackendDataRoot
     const installed = manager.listInstalledPackages().find((pkg) => pkg.id === id)
-    if (!root || !installed) return {}
+    if (!installed) return {}
     const current = installed.source === 'local-unsigned' ? 'local-unsigned' : 'marketplace'
     if (current === incoming) return {}
-    const reattachable = latestSetAsideNativeBackendData(root, id, incoming)
+    const places = dataPlaces(id)
+    // Only data of a Marketplace package can be taken back: its id is the
+    // Registry's, while a local file's id is only what the file claims.
+    const reattachable = incoming === 'marketplace' &&
+      places.some((place) => latestSetAsideNativeBackendData(place.root, place.name, 'marketplace') !== null)
     return {
-      ...(inspectNativeBackendData(root, id).exists ? { backendDataSetAside: true } : {}),
-      ...(reattachable ? { reattachableBackendData: reattachable } : {}),
+      ...(places.some((place) => existsSync(join(place.root, place.name))) ? { backendDataSetAside: true } : {}),
+      ...(reattachable ? { reattachableBackendData: true } : {}),
     }
   }
   const rememberReattach = (id: string, incoming: 'marketplace' | 'local-unsigned', wanted: unknown): void => {
     pendingReattach.delete(id)
     if (wanted !== true) return
-    const offered = backendDataOnReplace(id, incoming).reattachableBackendData
-    if (!offered) throw new Error(`there is no set-aside data of ${id} to take back`)
-    pendingReattach.set(id, offered)
+    if (backendDataOnReplace(id, incoming).reattachableBackendData !== true) {
+      throw new Error(`there is no set-aside data of ${id} to take back`)
+    }
+    pendingReattach.add(id)
   }
   const activeTransactions = new Set<string>()
   const capabilityGrants = new PluginCapabilityGrantStore(pluginsRoot)
   const lifecycleSelector = new PluginActivationSelector(pluginsRoot)
+  /** The signed envelope channel of the active Registry package, read from
+   * the receipt beside the package that load-time verification checked. */
+  const activeRegistryChannel = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): string | undefined => {
+    if (summary.provenance !== 'official-registry') return undefined
+    try {
+      const active = lifecycleSelector.read(summary.id)?.active
+      return readRegistryReceiptChannel(
+        active ? lifecycleSelector.packageDir(summary.id, active) : join(pluginsRoot, summary.id)
+      )
+    } catch {
+      return undefined
+    }
+  }
   // Plan B D2 (D-d): what an update changes, computed by the Host from the
   // active version's installed manifest and the verified package's own
   // manifest, never from Registry data. Null when there is nothing to
@@ -873,7 +910,7 @@ export function registerPluginIpc(
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
       ...(() => {
-        const source = installedSource(summary)
+        const source = installedSource(summary, activeRegistryChannel(summary))
         return source ? { source } : {}
       })(),
       ...(summary.warning ? { warning: summary.warning } : {}),
@@ -915,7 +952,7 @@ export function registerPluginIpc(
       const pkg = installed.get(entry.pluginId)
       // Only the selected package's own record may label its views.
       const source = pkg && pkg.packageVersion === (entry.packageVersion ?? undefined)
-        ? installedSource(pkg)
+        ? installedSource(pkg, activeRegistryChannel(pkg))
         : undefined
       return {
         ...entry,
@@ -2468,15 +2505,33 @@ export function registerPluginIpc(
     const replacedSource = installedSummary?.source === 'local-unsigned' ? 'local-unsigned' as const : 'marketplace' as const
     const sourceChanged = installedSummary !== undefined && !isFactory &&
       (replacedSource === 'local-unsigned') !== localCandidate
-    const dataRoot = options.nativeBackendDataRoot
-    let dataSetAside: string | null = null
-    let dataReattached: string | null = null
-    const undoDataMove = (): void => {
-      if (!dataRoot) return
-      if (dataReattached) returnReattachedNativeBackendData(dataRoot, id, dataReattached)
-      dataReattached = null
-      if (dataSetAside) reattachNativeBackendData(dataRoot, id, dataSetAside)
-      dataSetAside = null
+    const incomingSource = localCandidate ? 'local-unsigned' as const : 'marketplace' as const
+    const moved: Array<{ root: string; name: string; setAside: string | null; reattached: string | null }> = []
+    /** Put every data location back as it was before this restart. Never
+     * throws: each failure is returned, and whatever is then at a live path
+     * is set aside so the package rolled back to never gets the new source's
+     * data (review of cd04b987d). */
+    const undoDataMove = (): unknown[] => {
+      const errors: unknown[] = []
+      for (const place of moved.splice(0).reverse()) {
+        try {
+          if (place.reattached) returnReattachedNativeBackendData(place.root, place.name, place.reattached)
+          if (place.setAside) {
+            // A backend of the new source that already started may have made
+            // a folder of its own: that one is set aside too, never merged.
+            if (existsSync(join(place.root, place.name))) setAsideNativeBackendData(place.root, place.name, incomingSource)
+            reattachNativeBackendData(place.root, place.name, place.setAside)
+          }
+        } catch (error) {
+          errors.push(error)
+          try {
+            if (existsSync(join(place.root, place.name))) setAsideNativeBackendData(place.root, place.name, incomingSource)
+          } catch (isolationError) {
+            errors.push(isolationError)
+          }
+        }
+      }
+      return errors
     }
     const finishSourceReplacement = (): void => {
       if (!sourceReplaced) return
@@ -2569,13 +2624,17 @@ export function registerPluginIpc(
       }
       // D7: with the old backend stopped, set its data aside before cutover.
       // A failed move stops the restart here; nothing has been promoted yet.
-      if (sourceChanged && dataRoot) {
-        dataSetAside = setAsideNativeBackendData(dataRoot, id, replacedSource)
-        const reattach = pendingReattach.get(id)
-        pendingReattach.delete(id)
-        if (reattach) {
-          reattachNativeBackendData(dataRoot, id, reattach)
-          dataReattached = reattach
+      if (sourceChanged) {
+        const reattach = pendingReattach.delete(id)
+        for (const place of dataPlaces(id)) {
+          const entry: (typeof moved)[number] = { ...place, setAside: null, reattached: null }
+          moved.push(entry)
+          entry.setAside = setAsideNativeBackendData(place.root, place.name, replacedSource)
+          const back = reattach ? latestSetAsideNativeBackendData(place.root, place.name, 'marketplace') : null
+          if (back) {
+            reattachNativeBackendData(place.root, place.name, back)
+            entry.reattached = back
+          }
         }
       }
       // The old runtime may take time to drain. Re-check the exact candidate
@@ -2649,11 +2708,19 @@ export function registerPluginIpc(
       options.onPackageInstalled?.(id)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
-      try {
-        undoDataMove()
-      } catch (moveError) {
-        if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-        throw new AggregateError([error, moveError], 'Plugin restart failed and its native backend data could not be put back.')
+      // A failed data move back is reported with the restart's own error,
+      // after the package rollback below has run, never instead of it.
+      // The data move back and the package rollback below never depend on
+      // each other: both run, and every failure is reported (LOW-7).
+      const moveErrors = undoDataMove()
+      if (moveErrors.length > 0 && sourceChanged) {
+        // Fail closed until the user sorts the data out: no backend of this
+        // id runs again on an earlier consent.
+        try {
+          options.forgetBackendConsent?.(id)
+        } catch (forgetError) {
+          moveErrors.push(forgetError)
+        }
       }
       if (promoted) {
         try {
@@ -2731,7 +2798,19 @@ export function registerPluginIpc(
           }
         } catch (rollbackError) {
           if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-          throw new AggregateError([error, rollbackError], 'Plugin restart and rollback failed.')
+          // Fail closed: a source-changing candidate left promoted keeps none
+          // of the replaced package's native backend permissions.
+          if (sourceReplaced) {
+            try {
+              options.forgetBackendConsent?.(id)
+            } catch {
+              // The rollback failure stays the reported error.
+            }
+          }
+          throw new AggregateError(
+            [error, rollbackError, ...moveErrors],
+            'Plugin restart and rollback failed.',
+          )
         }
       }
       if (!promoted) {
@@ -2759,10 +2838,13 @@ export function registerPluginIpc(
           }
         } catch (recoveryError) {
           if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-          throw new AggregateError([error, recoveryError], 'Plugin restart recovery failed.')
+          throw new AggregateError([error, recoveryError, ...moveErrors], 'Plugin restart recovery failed.')
         }
       }
       if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
+      if (moveErrors.length > 0) {
+        throw new AggregateError([error, ...moveErrors], 'Plugin restart failed and its data could not be put back.')
+      }
       throw error
     } finally {
       activeTransactions.delete(id)
@@ -3088,6 +3170,8 @@ export function registerPluginIpc(
       // the package and restore its approved backend tuple for this session.
       try {
         await cleanupPluginStorage(id)
+        // Storage a source change set aside goes with the plugin's storage.
+        if (options.pluginStorageRoot) removeNativeBackendData(options.pluginStorageRoot, pluginStorageDirName(id))
         // The backend child was stopped with the runtime above. Deleting its
         // data here keeps a refused deletion on the same fail-closed path:
         // the package stays installed and its backend registration returns.
