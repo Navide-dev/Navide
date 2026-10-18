@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { generateKeyPairSync, sign as edSign } from 'node:crypto'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { makeZip } from './zipFixture'
@@ -84,6 +84,7 @@ let pluginsRoot = ''
 let folder = ''
 let activations: Array<{ pluginId: string; activation?: PluginActivationCatalogEntry }>
 let pickFolder: ReturnType<typeof vi.fn>
+let dataRoot = ''
 
 function register(authorize: () => boolean = () => true, manager = new FrontendPluginManager()) {
   const controller = registerPluginIpc(manager, pluginsRoot, authorize, TRUST_CONFIG, undefined, {
@@ -92,6 +93,7 @@ function register(authorize: () => boolean = () => true, manager = new FrontendP
     preflightCandidateBackend: async () => undefined,
     onActivationChange: (change) => activations.push(change),
     pickDeveloperFolder: pickFolder,
+    nativeBackendDataRoot: dataRoot,
   })
   return { manager, controller }
 }
@@ -100,6 +102,37 @@ const call = (channel: string, args?: unknown) => {
   const handler = handlers.get(channel)
   if (!handler) throw new Error(`${channel} is not registered`)
   return handler(null, args)
+}
+
+/** A Marketplace install of `id` 0.1.0 from a self-hosted test Registry. */
+async function marketplaceInstall(id: string, version = '0.1.0'): Promise<void> {
+  const bytes = new Uint8Array(makeZip([
+    { name: 'manifest.json', data: JSON.stringify({ ...manifest(id, {}, false), version }) },
+    { name: 'frontend/left/index.html', data: '<!doctype html>' },
+  ]))
+  const digest = sha256Hex(bytes)
+  const [namespace, name] = id.split('.')
+  const envelope: RegistryPackageEnvelope = {
+    schemaVersion: 1, artifactDigest: digest, packageId: id, version, target: 'universal',
+    publisherId: namespace, keyId: 'k1', signedAt: '2026-08-16T11:00:00.000Z',
+  }
+  const metadata: RegistryTrustMetadata = {
+    schemaVersion: 1, registryProfile: 'self-hosted-dev', rootFingerprint: `sha256:${'1'.repeat(64)}`,
+    generatedAt: '2026-08-16T10:00:00.000Z', expiresAt: '2026-08-17T10:00:00.000Z',
+    signers: [{ keyId: 'k1', publicKey: registrySigner.pubPem, status: 'active', notBefore: '2026-08-01T00:00:00.000Z', notAfter: '2026-09-01T00:00:00.000Z' }],
+    blockedPublishers: [], blockedPackages: [],
+  }
+  const detail = {
+    latest_version: version, trust_metadata: metadata, trust_metadata_signature: signCanonical(metadata, registryRoot.privateKey),
+    versions: [{ version, package_digest: digest, target: 'universal', registry_envelope: envelope,
+      registry_signature: signCanonical(envelope, registrySigner.privateKey), trust_tier: 'signed-verified', yanked: false }],
+  }
+  global.fetch = vi.fn(async (url: unknown) => String(url).endsWith('/download')
+    ? { ok: true, status: 200, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), headers: { get: () => digest } }
+    : { ok: true, status: 200, json: async () => detail }) as unknown as typeof fetch
+  await call('plugins:prepareInstall', { namespace, name })
+  await call('plugins:commitInstall', { id, publisherConfirmed: true, riskConfirmed: true })
+  await call('plugins:restart', { id })
 }
 
 async function loadFolder(): Promise<void> {
@@ -117,6 +150,8 @@ beforeEach(() => {
   mkdirSync(pluginsRoot)
   writeFolder(folder)
   pickFolder = vi.fn(async () => folder)
+  dataRoot = join(base, 'native-data')
+  mkdirSync(dataRoot)
   activations = []
   delete process.env['AGENT_TEAM_PLUGIN_DEV']
 })
@@ -268,6 +303,85 @@ describe('loading a developer folder', () => {
     await expect(call('plugins:installFromFile')).rejects.toThrow(/developer folder; remove that folder/)
   })
 
+  it('takes no data an earlier package of the id kept, keeps its own across reloads, and leaves its own as local', async () => {
+    mkdirSync(join(dataRoot, 'acme.devtodo'))
+    writeFileSync(join(dataRoot, 'acme.devtodo', 'secret'), 'M-secret')
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    expect(readdirSync(dataRoot)).toEqual([expect.stringMatching(/^acme\.devtodo@set-aside-marketplace-\d+$/)])
+    mkdirSync(join(dataRoot, 'acme.devtodo'))
+    writeFileSync(join(dataRoot, 'acme.devtodo', 'own'), 'dev')
+    await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })
+    expect(readFileSync(join(dataRoot, 'acme.devtodo', 'own'), 'utf8')).toBe('dev')
+    await call('plugins:removeDeveloperFolder', { id: 'acme.devtodo' })
+    expect(JSON.parse(readFileSync(join(dataRoot, 'acme.devtodo@kept-source.json'), 'utf8'))).toEqual({ schemaVersion: 1, source: 'local-unsigned' })
+  })
+
+  it.each(['another developer folder', 'a file install', 'a Marketplace install', 'removal through plugins:remove'])(
+    'LOW-11: data a developer folder left is set aside before %s takes the id',
+    async (next) => {
+      register()
+      await call('plugins:setDeveloperMode', { enabled: true })
+      await loadFolder()
+      mkdirSync(join(dataRoot, 'acme.devtodo'))
+      writeFileSync(join(dataRoot, 'acme.devtodo', 'own'), 'D-secret')
+      if (next === 'removal through plugins:remove') {
+        // The agent's plugins_request_remove goes through this handler too.
+        await call('plugins:remove', { id: 'acme.devtodo' })
+        expect(JSON.parse(readFileSync(join(dataRoot, 'acme.devtodo@kept-source.json'), 'utf8')))
+          .toEqual({ schemaVersion: 1, source: 'local-unsigned' })
+        return
+      }
+      await call('plugins:removeDeveloperFolder', { id: 'acme.devtodo' })
+      const setAside = /^acme\.devtodo@set-aside-local-unsigned-\d+$/
+      if (next === 'another developer folder') {
+        const other = join(base, 'other-dev')
+        writeFolder(other)
+        pickFolder.mockResolvedValue(other)
+        await loadFolder()
+      } else if (next === 'a file install') {
+        const picked = join(base, 'next.vsix')
+        writeFileSync(picked, makeZip([
+          { name: 'manifest.json', data: JSON.stringify(manifest('acme.devtodo', {}, false)) },
+          { name: 'frontend/left/index.html', data: '<!doctype html>' },
+        ]))
+        handlers.clear()
+        registerPluginIpc(new FrontendPluginManager(), pluginsRoot, () => true, TRUST_CONFIG, undefined, {
+          cleanupPluginStorage: async () => undefined,
+          preflightCandidateFrontend: async () => undefined,
+          pickLocalPackageFile: async () => picked,
+          nativeBackendDataRoot: dataRoot,
+        })
+        await call('plugins:installFromFile')
+        await call('plugins:commitLocalInstall', { id: 'acme.devtodo', riskConfirmed: true })
+        await call('plugins:restart', { id: 'acme.devtodo' })
+      } else {
+        await marketplaceInstall('acme.devtodo')
+      }
+      expect(readdirSync(dataRoot).filter((name) => setAside.test(name))).toHaveLength(1)
+      expect(existsSync(join(dataRoot, 'acme.devtodo', 'own'))).toBe(false)
+    },
+  )
+
+  it('an install of an id a consented folder holds is refused while Developer Mode is off', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    await call('plugins:setDeveloperMode', { enabled: false })
+    const picked = join(base, 'picked2.vsix')
+    writeFileSync(picked, makeZip([
+      { name: 'manifest.json', data: JSON.stringify(manifest('acme.devtodo', {}, false)) },
+      { name: 'frontend/left/index.html', data: '<!doctype html>' },
+    ]))
+    handlers.clear()
+    registerPluginIpc(new FrontendPluginManager(), pluginsRoot, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: async () => undefined,
+      pickLocalPackageFile: async () => picked,
+    })
+    await expect(call('plugins:installFromFile')).rejects.toThrow(/developer folder; remove that folder/)
+  })
+
   it('removing a developer folder forgets its consent and never touches the folder', async () => {
     register()
     await call('plugins:setDeveloperMode', { enabled: true })
@@ -275,6 +389,19 @@ describe('loading a developer folder', () => {
     await call('plugins:removeDeveloperFolder', { id: 'acme.devtodo' })
     expect(call('plugins:developerMode')).toMatchObject({ folders: [] })
     expect(readFileSync(join(folder, 'manifest.json'), 'utf8')).toContain('acme.devtodo')
+  })
+})
+
+describe('LOW-11: only Registry-verified sources hand kept data on (RULE ZERO)', () => {
+  it.each(['0.1.0', '0.2.0-beta.1'])('a Marketplace %s reinstall after a removal that kept the data reuses it', async (version) => {
+    register()
+    await marketplaceInstall('acme.hosted', version)
+    mkdirSync(join(dataRoot, 'acme.hosted'))
+    writeFileSync(join(dataRoot, 'acme.hosted', 'kept'), 'M')
+    await call('plugins:remove', { id: 'acme.hosted' })
+    await marketplaceInstall('acme.hosted', version)
+    expect(readdirSync(dataRoot)).toEqual(['acme.hosted'])
+    expect(readFileSync(join(dataRoot, 'acme.hosted', 'kept'), 'utf8')).toBe('M')
   })
 })
 

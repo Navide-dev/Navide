@@ -2036,7 +2036,12 @@ runs only inside the OS sandbox described in
   the time; the dialog and a banner say so, and every launch reminds the user
   while the switch is on. Anything that can write the folder can change the
   code that runs; the sandbox bounds what it can do. Turning the switch off
-  unloads every developer folder.
+  unloads every developer folder. A developer folder's id is only what its
+  manifest claims, so its backend data is treated as local: the first load of
+  an id sets aside data an earlier package of it kept, removing the folder
+  keeps its data recorded as local, and no later install of the id (another
+  folder, a file or the Marketplace) takes it over. Kept data is reused only by
+  a Registry-verified id (Marketplace or pre-release).
 - **Install from a file** (Settings → Navide Plugins → **Install from .vsix
   file…**) works in packaged builds too, without Developer Mode. The main
   process opens its own file dialog over the main window and reads the picked

@@ -642,6 +642,18 @@ export function registerPluginIpc(
   // D7: a set-aside native backend data directory the user chose to take back
   // when this id returns to that source; applied at its restart, never assumed.
   const pendingReattach = new Set<string>()
+  /** Review LOW-11: whose data an installed package's data is. Only a
+   * Registry-verified id (Marketplace, pre-release, or a Registry install
+   * that carries no source) may hand its data on; every other source, a
+   * developer folder and any unknown value included, is treated as local. */
+  const dataSourceOf = (pkg: { source?: PluginSource; provenance?: string } | undefined): 'marketplace' | 'local-unsigned' =>
+    pkg !== undefined && (
+      pkg.source === 'marketplace' ||
+      pkg.source === 'prerelease' ||
+      (pkg.source === undefined && pkg.provenance === 'official-registry')
+    )
+      ? 'marketplace'
+      : 'local-unsigned'
   /** D7: every per-plugin data location a change of source sets aside: the
    * native backend's private folder and the view storage (all versions, so a
    * package of the same version but another target never shares it). */
@@ -662,7 +674,7 @@ export function registerPluginIpc(
       // local file: its id is only what each file claims.
       return kept !== null && (kept === 'local-unsigned' || kept !== incoming) ? { backendDataSetAside: true } : {}
     }
-    const current = installed.source === 'local-unsigned' ? 'local-unsigned' : 'marketplace'
+    const current = dataSourceOf(installed)
     if (current === incoming && current !== 'local-unsigned') return {}
     const places = dataPlaces(id)
     // Only data of a Marketplace package can be taken back: its id is the
@@ -842,7 +854,10 @@ export function registerPluginIpc(
   // Card K4: a developer folder holding an id is removed before anything else
   // installs that id, so no install replaces it without the D7 rules.
   const assertNoDeveloperFolder = (id: string): void => {
-    if (manager.listInstalledPackages().some((pkg) => pkg.id === id && pkg.provenance === 'developer-local-unpacked')) {
+    // A consented folder counts while Developer Mode is off and it is unloaded:
+    // its backend data is the developer's and goes to no other install.
+    if (developerMode.folder(id) ||
+        manager.listInstalledPackages().some((pkg) => pkg.id === id && pkg.provenance === 'developer-local-unpacked')) {
       throw new Error(`${id} is loaded from a developer folder; remove that folder in Developer Mode first`)
     }
   }
@@ -2412,6 +2427,17 @@ export function registerPluginIpc(
       throw new Error(`the permissions or backend of ${id} changed; choose the folder again`)
     }
     await unloadDeveloperFolder(id)
+    // The first load of an id takes no data an earlier package of it kept
+    // (review HIGH-3 / MED-4 on #425): a developer folder's id is only what
+    // its manifest claims. A reload of the same folder keeps its own data.
+    const dataRoot = options.nativeBackendDataRoot
+    if (!developerMode.folder(id) && dataRoot) {
+      const kept = keptNativeBackendDataSource(dataRoot, id)
+      if (kept !== null) {
+        setAsideNativeBackendData(dataRoot, id, kept)
+        forgetKeptNativeBackendDataSource(dataRoot, id)
+      }
+    }
     developerMode.consent({
       path: pending.dir,
       pluginId: id,
@@ -2445,6 +2471,11 @@ export function registerPluginIpc(
     assertAuthorized(event)
     const id = typeof args?.id === 'string' ? args.id : ''
     await unloadDeveloperFolder(id)
+    // Its backend data stays, recorded as local, so no later install of the
+    // id takes it over.
+    if (developerMode.folder(id) && options.nativeBackendDataRoot) {
+      recordKeptNativeBackendDataSource(options.nativeBackendDataRoot, id, 'local-unsigned')
+    }
     developerMode.forget(id)
     return developerModeState()
   })
@@ -2524,7 +2555,7 @@ export function registerPluginIpc(
     const sourceReplaced = localCandidate || installedSummary?.source === 'local-unsigned'
     // D7: the native backend data moves aside only when the source changes
     // (Marketplace ↔ local file); an update within one source keeps it as on main.
-    const replacedSource = installedSummary?.source === 'local-unsigned' ? 'local-unsigned' as const : 'marketplace' as const
+    const replacedSource = dataSourceOf(installedSummary)
     const sourceChanged = installedSummary !== undefined && !isFactory &&
       (replacedSource === 'local-unsigned') !== localCandidate
     // MED-4: one local file replacing another hands over no data either.
@@ -3202,9 +3233,7 @@ export function registerPluginIpc(
     // new renderer calls from being admitted while cleanup is in progress.
     const previousVersion = installedPackageVersion(manager, pluginsRoot, id)
     const previousBackend = previousVersion ? manager.getBackendActivation(id, previousVersion) : undefined
-    const removedSource = manager.listInstalledPackages().find((pkg) => pkg.id === id)?.source === 'local-unsigned'
-      ? 'local-unsigned' as const
-      : 'marketplace' as const
+    const removedSource = dataSourceOf(manager.listInstalledPackages().find((pkg) => pkg.id === id))
     const pending = prepared.get(id)
     activeTransactions.add(id)
     try {
