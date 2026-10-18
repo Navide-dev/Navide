@@ -472,6 +472,9 @@ export interface PreparedInstallSummary {
   scan?: PluginScanReport | null
   /** Unsigned Registry facts, never verified. */
   registry?: PluginRegistryDisclosureFacts | null
+  /** Source and review state from the verified Registry envelope; absent for
+   *  a channel this App does not know. */
+  source?: PluginSource
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []

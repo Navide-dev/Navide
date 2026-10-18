@@ -244,7 +244,8 @@ function signedDetail(
   digest: string,
   packageId = 'acme.demo',
   publisherId = 'acme',
-  version = '1.0.0'
+  version = '1.0.0',
+  envelopeExtra: Pick<RegistryPackageEnvelope, 'channel' | 'expiresAt'> = {}
 ): WireDetail {
   const registryEnvelope: RegistryPackageEnvelope = {
     schemaVersion: 1,
@@ -255,6 +256,7 @@ function signedDetail(
     publisherId,
     keyId: 'registry-test-1',
     signedAt: '2026-08-16T11:00:00.000Z',
+    ...envelopeExtra,
   }
   const trustMetadata: RegistryTrustMetadata = {
     schemaVersion: 1,
@@ -1034,6 +1036,35 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
   const disclosedManifest = {
     schemaVersion: 2, id: 'acme.demo', version: '1.0.0', publisher: 'acme', permissions: DISCLOSED_PERMISSIONS,
   }
+
+  it('carries the source from the verified envelope channel through prepareInstall', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-prepare-source-'))
+    try {
+      registerPluginIpc(new FrontendPluginManager(), root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const prepare = handlers.get('plugins:prepareInstall')!
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      const baseline = (await prepare(null, { namespace: 'acme', name: 'demo' })) as Record<string, unknown>
+      // An envelope without a channel keeps the version-number reading.
+      expect(baseline.source).toBe('marketplace')
+      const { source: _baselineSource, ...mainFields } = baseline
+      const cases: Array<[Pick<RegistryPackageEnvelope, 'channel' | 'expiresAt'>, string]> = [
+        [{ channel: 'stable' }, 'marketplace'],
+        [{ channel: 'pre-release' }, 'prerelease'],
+        [{ channel: 'testplace', expiresAt: '2099-01-01T00:00:00.000Z' }, 'testplace'],
+      ]
+      for (const [extra, expected] of cases) {
+        installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0', extra), pkg.bytes, pkg.digest)
+        const result = (await prepare(null, { namespace: 'acme', name: 'demo' })) as Record<string, unknown>
+        expect(result.source).toBe(expected)
+        // Every other field is what main returns for the same package.
+        const { source: _source, ...rest } = result
+        expect(rest).toEqual(mainFields)
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 
   it('carries the signed disclosure, scan and registry facts through prepareInstall', async () => {
     const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
