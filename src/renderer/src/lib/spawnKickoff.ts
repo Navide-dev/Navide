@@ -61,6 +61,9 @@ export function kickoffAttemptOutcome(input: KickoffAttemptInput): KickoffAttemp
   // stays 'unverified' rather than becoming a failure — the same reason a
   // cli_send resend is the wrong cure for it.
   if (input.composerHolds()) return { outcome: 'unverified', next: 'stop', retriedOut: false }
+  // Enter went out and nothing could say it took. A blank composer then most
+  // likely means it did, and a retype would run the task twice.
+  if (input.submit === 'unconfirmed') return { outcome: 'unverified', next: 'stop', retriedOut: false }
   if (input.attempt >= input.maxAttempts) {
     return { outcome: 'failed', next: 'stop', retriedOut: true }
   }

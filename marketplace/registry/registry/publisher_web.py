@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from . import cloud_auth, ratings, reports, review
+from .app import _require_admin_token as require_admin_token
 from .blocklist import BlocklistError, add_entry, db_entries, remove_entry, removed_list
 from .dns_verify import DomainError, record_host, record_value
 from .models import Extension, ExtensionVersion, Publisher
@@ -126,9 +127,7 @@ def _check_csrf(request: Request, viewer: cloud_auth.Viewer, token: str) -> None
 
 
 def _require_admin_token(request: Request, presented: str | None) -> None:
-    configured = _settings(request).admin_token
-    if not configured or presented is None or not cloud_auth.constant_time_equal(configured, presented):
-        raise HTTPException(status_code=401, detail="invalid admin token")
+    require_admin_token(_settings(request), presented, honor_open_admin=False)
 
 
 def _session(request: Request) -> Session:
