@@ -6,7 +6,8 @@ import type { SubmitEvidence } from '../injectEcho'
 import { AGENT_SPECS } from '../../platform/plugin-shell/agents'
 import { kickoffAttemptOutcome } from '../spawnKickoff'
 import {
-  confirmWeakSubmit, extraEnterAllowed, shouldWatchTurn, SUBMIT_TURN_CONFIRM_MS, TURN_START_SIGNAL,
+  blockingDialogShown, confirmWeakSubmit, extraEnterAllowed, shouldWatchTurn, SUBMIT_TURN_CONFIRM_MS,
+  TURN_START_SIGNAL,
 } from '../submitTurnConfirm'
 
 /** A fake clock: sleep advances it, nothing really waits. */
@@ -195,9 +196,79 @@ describe('injectText never presses an extra Enter it cannot justify', () => {
 
   it('stops resending Enter once a dialog is on screen', () => {
     expect(fn).toContain('if (attempt > 1 && dialogShown()) {')
+    expect(fn).toContain('blockingDialogShown({')
+    expect(fn).not.toContain("displayStatus === 'awaiting'")
   })
 
   it('decides the turn watch per vendor and per mid-turn', () => {
     expect(fn).toContain('watchTurn: shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter })')
+  })
+})
+
+describe('blockingDialogShown', () => {
+  const rule = '────────────────────────────────────────'
+  const box = (composer: string, below: string[] = ['  ? for shortcuts']) =>
+    ['⏺ Done. Want me to continue?', rule, composer, rule, ...below].join('\n')
+
+  // A turn that ended on a question leaves the CLI at its ordinary prompt;
+  // the message gate lets such a pane through on purpose (parkedOnQuestion).
+  it('is false for an awaiting pane whose turn only ended on a question', () => {
+    expect(blockingDialogShown({ awaitingKind: 'question', agentKey: 'claude', screen: box('❯ [Pasted text #1 +20 lines]') })).toBe(false)
+  })
+
+  it('is true for a permission prompt', () => {
+    expect(blockingDialogShown({ awaitingKind: 'permission', agentKey: 'claude', screen: box('❯ ') })).toBe(true)
+  })
+
+  // Our own unsent message may quote a dialog's wording; text inside the box,
+  // or in the transcript above it, is not a dialog.
+  it('ignores dialog wording inside the framed composer', () => {
+    const screen = box('❯ pick "No, and tell Claude what to do differently" — Press enter to confirm or esc to go back')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen })).toBe(false)
+  })
+
+  it('ignores dialog wording in the transcript above the box', () => {
+    const screen = ['• Would you like to run the following command?', rule, '› ', rule].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'codex', screen })).toBe(false)
+  })
+
+  it('reads dialog wording drawn below the box', () => {
+    const screen = box('❯ ', ['Press enter to confirm or esc to go back'])
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen })).toBe(true)
+  })
+
+  // A dialog that replaced the box leaves no frame to scope by.
+  it('reads the whole screen when there is no box', () => {
+    const screen = ['Do you want to proceed?', '❯ 1. Yes', '  3. No, and tell Claude what to do differently (esc)'].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen })).toBe(true)
+  })
+})
+
+describe('the extra Enter under each awaiting kind', () => {
+  const rule = '────────────────────────────────────────'
+  const held = [rule, '❯ [Pasted text #1 +20 lines]', rule].join('\n')
+  const run = async (awaitingKind: 'question' | 'permission') => {
+    let t = 0
+    let enters = 0
+    await confirmWeakSubmit({
+      how: 'growth',
+      watchTurn: true,
+      dialogShown: () => blockingDialogShown({ awaitingKind, agentKey: 'claude', screen: held }),
+      turnStarted: () => false,
+      collapsedHeld: () => true,
+      pressEnter: async () => { enters++; return true },
+      aborted: () => false,
+      sleep: async (ms) => { t += ms },
+      now: () => t,
+    })
+    return enters
+  }
+
+  it('still presses the one extra Enter on a pane parked on a question, like main', async () => {
+    expect(await run('question')).toBe(1)
+  })
+
+  it('never presses Enter on a permission prompt', async () => {
+    expect(await run('permission')).toBe(0)
   })
 })

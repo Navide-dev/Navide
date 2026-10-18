@@ -11,7 +11,9 @@
  * box, or the CLI's own queue hint appear, is returned untouched and at once.
  */
 
-import type { SubmitEvidence } from './injectEcho'
+import { matchAwaitingInput } from './cliAwaitingInput'
+import { BOX_ONLY_LINE_RE, type SubmitEvidence } from './injectEcho'
+import { screenShowsBlockingDialog } from './sessionMarkerTurn'
 
 /** How long to watch for the new turn after a growth-only submit. */
 export const SUBMIT_TURN_CONFIRM_MS = 12_000
@@ -55,6 +57,36 @@ export function shouldWatchTurn(input: { agentKey: string | undefined; midTurn: 
  *  a permission or confirm dialog picks its default option. */
 export function extraEnterAllowed(framedHeld: boolean | null, dialogShown: boolean): boolean {
   return framedHeld === true && !dialogShown
+}
+
+/** Is a dialog that would take an Enter as its answer on screen?
+ *
+ *  `awaitingKind` 'permission' is one by definition. 'question' is NOT: the
+ *  turn ended on a question and the CLI is back at its ordinary prompt — the
+ *  message gate lets such a pane through on purpose (parkedOnQuestion).
+ *
+ *  The text patterns are read only below the input box when its frame can be
+ *  located: our own unsent message inside the box, or the transcript above
+ *  it, may quote a dialog's wording without any dialog being up. With no
+ *  frame — a dialog drawn in place of the box — the whole screen is read. */
+export function blockingDialogShown(input: {
+  awaitingKind: string | null | undefined
+  agentKey: string | undefined
+  screen: string
+}): boolean {
+  if (input.awaitingKind === 'permission') return true
+  const lines = input.screen.split('\n')
+  let close = -1
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (BOX_ONLY_LINE_RE.test(lines[i])) { close = i; break }
+  }
+  let open = -1
+  for (let i = close - 1; i >= 0; i--) {
+    if (BOX_ONLY_LINE_RE.test(lines[i])) { open = i; break }
+  }
+  const region = open >= 0 ? lines.slice(close + 1).join('\n') : input.screen
+  return screenShowsBlockingDialog(region)
+    || (!!input.agentKey && matchAwaitingInput(input.agentKey, region))
 }
 
 /** 'turn' once the CLI starts a new turn inside the window, 'unconfirmed'

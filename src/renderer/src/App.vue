@@ -196,7 +196,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, runKickoffAttempts,
   submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
-import { confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
+import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
@@ -4484,12 +4484,12 @@ async function injectText(
   const midTurnAtEnter = paneId !== undefined
     && (paneLastActiveAt.get(paneId) ?? 0) > (paneTurnCompleteAt.get(paneId) ?? 0)
   // A permission / confirm dialog, where Enter would pick the default option.
-  const dialogShown = (): boolean => {
-    if (paneId === undefined) return false
-    if (paneRefs[paneId]?.displayStatus === 'awaiting') return true
-    const screen = visibleScreen() ?? screenTail()
-    return screenShowsBlockingDialog(screen) || (!!agentKey && matchAwaitingInput(agentKey, screen))
-  }
+  // Not a turn that merely ended on a question — see blockingDialogShown.
+  const dialogShown = (): boolean => paneId !== undefined && blockingDialogShown({
+    awaitingKind: paneRefs[paneId]?.awaitingKind as string | null | undefined,
+    agentKey,
+    screen: visibleScreen() ?? screenTail(),
+  })
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
     // Never press a resent Enter into a dialog. Our earlier Enter most likely
