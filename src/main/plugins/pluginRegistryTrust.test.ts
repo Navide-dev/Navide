@@ -227,3 +227,54 @@ describe('canonical registry trust JSON', () => {
     )
   })
 })
+
+describe('verifyRegistryPackageTrust release channel', () => {
+  function codeOf(run: () => unknown): string | undefined {
+    try {
+      run()
+    } catch (error) {
+      return (error as { code?: string }).code
+    }
+    return undefined
+  }
+
+  it('verifies an envelope without channel fields exactly as before', () => {
+    const plain = envelope()
+    expect(Object.keys(plain)).toHaveLength(8)
+    expect(verify(plain)).toEqual({ publisherId: 'acme', keyId: 'registry-2026' })
+  })
+
+  it('accepts a testplace envelope before its signed expiry', () => {
+    const testplace = envelope({ channel: 'testplace', expiresAt: '2026-11-14T11:00:00Z' })
+    expect(verify(testplace)).toEqual({ publisherId: 'acme', keyId: 'registry-2026' })
+  })
+
+  it('refuses an expired testplace envelope with TESTPLACE_EXPIRED', () => {
+    const testplace = envelope({ channel: 'testplace', expiresAt: '2026-08-16T11:59:59Z' })
+    expect(codeOf(() => verify(testplace))).toBe('TESTPLACE_EXPIRED')
+  })
+
+  it('refuses a channel it does not know (fail closed)', () => {
+    for (const channel of ['nightly', 'Testplace', '']) {
+      expect(codeOf(() => verify(envelope({ channel })))).toBe('CHANNEL_UNSUPPORTED')
+    }
+  })
+
+  it('refuses a testplace envelope without an expiry and an expiry without testplace', () => {
+    expect(codeOf(() => verify(envelope({ channel: 'testplace' })))).toBe('CHANNEL_UNSUPPORTED')
+    expect(codeOf(() => verify(envelope({ expiresAt: '2026-11-14T11:00:00Z' })))).toBe(
+      'CHANNEL_UNSUPPORTED'
+    )
+    expect(
+      codeOf(() => verify(envelope({ channel: 'testplace', expiresAt: 'not-a-time' })))
+    ).toBe('TRUST_METADATA_INVALID')
+  })
+
+  it('does not let a changed expiry pass the registry signature', () => {
+    const signed = envelope({ channel: 'testplace', expiresAt: '2026-08-16T11:59:59Z' })
+    const extended = { ...signed, expiresAt: '2099-01-01T00:00:00Z' }
+    expect(codeOf(() => verify(extended, trust(), signature(signed)))).toBe(
+      'REGISTRY_SIGNATURE_INVALID'
+    )
+  })
+})

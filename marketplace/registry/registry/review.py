@@ -253,6 +253,8 @@ def approve(
             version=row.version,
             target=row.target,
             publisher_id=publisher_id,
+            channel=row.channel,
+            expires_at=_aware(row.expires_at) if row.expires_at else None,
         )
         row.registry_envelope = envelope
         row.registry_signature = signature

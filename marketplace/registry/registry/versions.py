@@ -113,6 +113,12 @@ def latest_version(versions: list[str]) -> str | None:
 
 STABLE_CHANNEL = "stable"
 PRERELEASE_CHANNEL = "pre-release"
+TESTPLACE_CHANNEL = "testplace"
+"""Invite-only test builds (0.2.27). Never derived from the version: a row is
+testplace only when stored so, and every public read excludes it."""
+VERSION_CHANNELS = (STABLE_CHANNEL, PRERELEASE_CHANNEL, TESTPLACE_CHANNEL)
+TESTPLACE_VALIDITY_DAYS = 90
+"""How long a testplace version stays installable (D4, like TestFlight)."""
 
 
 def version_channel(version: str) -> str:
