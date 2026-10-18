@@ -27,7 +27,7 @@ describe('SettingsModal nav groups', () => {
       { title: 'general', tabs: ['general', 'appearance', 'language', 'statusBadges', 'layout', 'notifications', 'voice'] },
       { title: 'accountsAgents', tabs: ['accounts', 'cliAgents', 'analyzer', 'security', 'channels'] },
       { title: 'integration', tabs: ['mcp', 'skills', 'prompts', 'memory', 'credentials', 'cliExtensions'] },
-      { title: 'navidePlugins', tabs: ['cross-device', 'extensions', 'marketplace', 'disclosureOverview'] },
+      { title: 'navidePlugins', tabs: ['cross-device', 'extensions', 'marketplace'] },
       { title: 'system', tabs: ['keybindings', 'updates', 'help'] },
     ])
   })
@@ -37,7 +37,7 @@ describe('SettingsModal nav groups', () => {
   })
 
   it('files the search hits of the moved pages under the new group', () => {
-    for (const tab of ['cross-device', 'extensions', 'marketplace', 'disclosureOverview']) {
+    for (const tab of ['cross-device', 'extensions', 'marketplace']) {
       const entries = [...source.matchAll(new RegExp(`tab: '${tab}',[\\s\\S]*?group: t\\('settings\\.nav\\.group\\.(\\w+)'\\)`, 'g'))]
       expect(entries.length).toBeGreaterThan(0)
       for (const entry of entries) expect(entry[1]).toBe('navidePlugins')
@@ -56,7 +56,7 @@ describe('SettingsModal nav groups', () => {
     const start = helpSource.indexOf('const tabs: TabRow[] = [')
     const table = helpSource.slice(start, helpSource.indexOf('\n]', start))
     const helpKeys = [...table.matchAll(/navKey: '([\w.-]+)'/g)].map((m) => m[1])
-    expect(navLabelKeys()).toHaveLength(25)
+    expect(navLabelKeys()).toHaveLength(24)
     expect(helpKeys).toEqual(navLabelKeys())
   })
 })
