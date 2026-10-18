@@ -2440,16 +2440,12 @@
               "more": "section 3 of this page"
             },
             "extensions": {
-              "what": "The execution policy Navide plugins run under, plus the bundled and installed Navide plugins",
+              "what": "The execution policy Navide plugins run under, plus the bundled and installed Navide plugins; at the bottom, the disclosure overview of every Navide plugin installed from the Navide Marketplace (records only, it changes nothing a Navide plugin may do)",
               "more": "section 4 of this page"
             },
             "marketplace": {
               "what": "Searching the Navide plugin registry and installing from it",
               "more": "section 4 of this page"
-            },
-            "disclosureOverview": {
-              "what": "Each Navide plugin installed from the Navide Marketplace: its disclosure card, risk level, recent activity and unusual items on one page.",
-              "more": "Records only: nothing here changes what a Navide plugin may do. Each Navide plugin's full activity is also under its row on the Navide Plugins page."
             },
             "shortcuts": {
               "what": "Rebinding shortcuts, import and export",
@@ -8541,6 +8537,7 @@
     "statusbar-note": "its popovers go with it"
   },
   "error": {
+    "pipeline-start-refused": "The pipeline did not start: {reason}",
     "workspace-create-exists": "An item named “{name}” is already there. Pick another name.",
     "workspace-create-denied": "No permission to create a folder at {path}.",
     "workspace-create-failed": "Could not create the workspace folder at {path}.",

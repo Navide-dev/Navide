@@ -4,7 +4,7 @@ import base64
 import hashlib
 import json
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -20,7 +20,9 @@ from registry.signing import (
     generate_keypair,
     load_or_create_private_key,
     public_key_fingerprint,
+    sign_json,
 )
+from registry.versions import TESTPLACE_VALIDITY_DAYS
 from tests.conftest import SignedEnv
 from tests.fixtures import build_package
 
@@ -313,3 +315,107 @@ def test_rotating_and_revoked_signers_are_published_in_root_signed_metadata(
         ("registry-2026-01", "rotating"),
         ("registry-compromised", "revoked"),
     ]
+
+
+def _fixed_signer() -> RegistryTrustSigner:
+    signer_private, signer_public = generate_keypair()
+    root_private, root_public = generate_keypair()
+    return RegistryTrustSigner(
+        signer_private_key=signer_private,
+        signer_public_key=signer_public,
+        root_private_key=root_private,
+        root_fingerprint=public_key_fingerprint(root_public),
+        registry_profile="official",
+        key_id="registry-2026-01",
+        status="active",
+        not_before=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        not_after=datetime(2027, 1, 1, tzinfo=timezone.utc),
+        metadata_ttl=timedelta(hours=24),
+        trusted_signers=(),
+        blocked_publishers=(),
+        blocked_packages=(),
+    )
+
+
+_SIGNED_AT = datetime(2026, 10, 19, 1, 2, 3, 456789, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize(
+    ("version", "channel"),
+    [("1.0.0", None), ("1.0.0", "stable"), ("1.1.0-beta.1", "pre-release")],
+)
+def test_stable_and_prerelease_envelopes_are_byte_identical_to_main(
+    version: str, channel: str | None
+) -> None:
+    signer = _fixed_signer()
+    kwargs = {} if channel is None else {"channel": channel}
+    envelope, signature = signer.sign_envelope(
+        artifact_digest="a" * 64,
+        package_id="acme.hello",
+        version=version,
+        target="universal",
+        publisher_id="acme",
+        now=_SIGNED_AT,
+        **kwargs,
+    )
+    # The exact bytes main signs (8 fields, no channel or expiresAt), so a
+    # released App keeps verifying every stable and pre-release version.
+    main_bytes = (
+        '{"artifactDigest":"' + "a" * 64 + '","keyId":"registry-2026-01",'
+        '"packageId":"acme.hello","publisherId":"acme","schemaVersion":1,'
+        '"signedAt":"2026-10-19T01:02:03Z","target":"universal","version":"'
+        + version
+        + '"}'
+    ).encode("utf-8")
+    assert canonical_json(envelope) == main_bytes
+    assert signature == sign_json(signer.signer_private_key, json.loads(main_bytes))
+
+
+def test_testplace_envelope_signs_channel_and_expiry() -> None:
+    signer = _fixed_signer()
+    expires_at = _SIGNED_AT + timedelta(days=TESTPLACE_VALIDITY_DAYS)
+    envelope, signature = signer.sign_envelope(
+        artifact_digest="a" * 64,
+        package_id="acme.hello",
+        version="1.0.0",
+        target="universal",
+        publisher_id="acme",
+        now=_SIGNED_AT,
+        channel="testplace",
+        expires_at=expires_at,
+    )
+    assert envelope["channel"] == "testplace"
+    assert envelope["expiresAt"] == "2027-01-17T01:02:03Z"
+    _verify(signer.signer_public_key, envelope, signature)
+    tampered = {**envelope, "expiresAt": "2099-01-01T00:00:00Z"}
+    with pytest.raises(Exception):
+        _verify(signer.signer_public_key, tampered, signature)
+
+
+def test_testplace_validity_is_ninety_days() -> None:
+    assert TESTPLACE_VALIDITY_DAYS == 90
+
+
+@pytest.mark.parametrize(
+    ("channel", "expires_at"),
+    [
+        ("testplace", None),
+        ("stable", _SIGNED_AT),
+        ("pre-release", _SIGNED_AT),
+        ("nightly", None),
+    ],
+)
+def test_envelope_channel_and_expiry_must_agree(
+    channel: str, expires_at: datetime | None
+) -> None:
+    with pytest.raises(ValueError):
+        _fixed_signer().sign_envelope(
+            artifact_digest="a" * 64,
+            package_id="acme.hello",
+            version="1.0.0",
+            target="universal",
+            publisher_id="acme",
+            now=_SIGNED_AT,
+            channel=channel,
+            expires_at=expires_at,
+        )

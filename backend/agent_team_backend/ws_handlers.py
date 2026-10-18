@@ -11158,6 +11158,40 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
     )
 
 
+@handler("pipeline.reset")
+async def pipeline_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The backend leg of pipeline_reset: the renderer kills the panes, this
+    returns the stored run to idle so it stops answering pipeline_status and
+    survives no restart (#417). Run history (log, run directory) is kept."""
+    from . import app
+
+    project = app.project_store.reset_pipeline(payload["workspace_path"])
+    if project is not None:
+        log.info("pipeline reset: %s is idle again", project.workspace_path)
+        _mirror_pipeline_state(project)
+    await session.send_json(
+        make_response(msg_id, msg_type, app._project_payload(project) if project is not None else {"project": None})
+    )
+
+
+@handler("pipeline.start_refused")
+async def pipeline_start_refused(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The renderer refused a start before it reached pipeline.start. Recorded
+    in the backend log and the workspace's pipeline.log (outside any run, so
+    not the last run's file), since a refusal used to leave no trace (#417)."""
+    from . import app
+
+    ws_path = payload["workspace_path"]
+    reason = str(payload.get("reason", ""))
+    pipeline_id = str(payload.get("pipeline_id", ""))
+    log.warning("pipeline start refused in %s (pipeline %s): %s", ws_path, pipeline_id or "?", reason)
+    app.project_store.append_event(
+        ws_path,
+        {"event": "pipeline_start_refused", "pipeline_id": pipeline_id, "reason": reason},
+    )
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
 @handler("pipeline.node_states")
 async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """The renderer engine reports per-graph-node run state; stored on the

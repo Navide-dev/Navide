@@ -626,3 +626,26 @@ describe.skipIf(!REGISTRY_AVAILABLE)('real Registry → App install pipeline', (
     expect(tree(h.root)).toEqual(before)
   })
 })
+
+describe('released App and testplace envelopes', () => {
+  it('a v0.2.24 App refuses a testplace envelope, so it can never install one', () => {
+    const stable = {
+      schemaVersion: 1,
+      artifactDigest: 'a'.repeat(64),
+      packageId: 'acme.demo',
+      version: '1.0.0',
+      target: 'universal',
+      publisherId: 'acme',
+      keyId: 'registry-2026',
+      signedAt: '2026-10-19T00:00:00Z',
+    }
+    expect(() => v0224AssertRegistryPackageEnvelopeShape(stable)).not.toThrow()
+    expect(() =>
+      v0224AssertRegistryPackageEnvelopeShape({
+        ...stable,
+        channel: 'testplace',
+        expiresAt: '2027-01-17T00:00:00Z',
+      })
+    ).toThrow(/unknown fields channel, expiresAt/)
+  })
+})
