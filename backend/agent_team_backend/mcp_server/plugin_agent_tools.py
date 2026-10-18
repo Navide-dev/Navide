@@ -48,6 +48,7 @@ import functools
 import itertools
 import json
 import logging
+import os
 import re
 import time
 import unicodedata
@@ -801,10 +802,20 @@ def _open_workspace(requested: Any) -> str | None:
     """``requested`` as a workspace a Navide window has open, or None."""
     from agent_team_backend import agent_messaging
 
-    if not isinstance(requested, str) or not requested.startswith("/"):
+    if not isinstance(requested, str) or not os.path.isabs(requested):
         return None
     wanted = agent_messaging._normalize_workspace(requested)  # noqa: SLF001
-    return wanted if wanted in agent_messaging.workspaces() else None
+    # Windows folds case and slash direction (`c:/users/x/` names `C:\Users\x`).
+    # On POSIX `normcase` is the identity and `sep` is "/", so the key is
+    # `wanted` itself: the exact match this always was. The window's own
+    # spelling is what goes on to the plugin.
+    def key(path: str) -> str:
+        return agent_messaging._normalize_workspace(os.path.normcase(path).replace(os.path.sep, "/"))  # noqa: SLF001
+
+    for workspace in agent_messaging.workspaces():
+        if key(workspace) == key(wanted):
+            return workspace
+    return None
 
 
 # Reasons a transfer or a timeout carries back to the agent (contract 4.4),
