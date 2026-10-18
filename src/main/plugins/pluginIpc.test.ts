@@ -1930,6 +1930,23 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
           source: 'marketplace',
         }))
       )
+      // The Registry-signed envelope's channel decides the source, so a
+      // testplace version is never shown as a reviewed Marketplace release.
+      const selection = new PluginActivationSelector(root).read('acme.demo')?.active
+      const packageDir = selection
+        ? new PluginActivationSelector(root).packageDir('acme.demo', selection)
+        : join(root, 'acme.demo')
+      const receiptPath = join(packageDir, REGISTRY_RECEIPT_NAME)
+      const receipt = JSON.parse(readFileSync(receiptPath, 'utf8')) as { envelope: Record<string, unknown> }
+      receipt.envelope.channel = 'testplace'
+      receipt.envelope.expiresAt = '2027-01-01T00:00:00.000Z'
+      writeFileSync(receiptPath, JSON.stringify(receipt))
+      expect(handlers.get('plugins:listInstalled')!(null)).toMatchObject([
+        { id: 'acme.demo', provenance: 'official-registry', source: 'testplace' },
+      ])
+      expect(await handlers.get('plugins:listContributions')!(null)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ pluginId: 'acme.demo', source: 'testplace' })])
+      )
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

@@ -46,6 +46,7 @@ import { parseManifestJson } from './pluginManifestJson'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import {
+  readRegistryReceiptChannel,
   readRegistryTrustSnapshot,
   discoverInstalledRegistryPackageIds,
   verifyInstalledRegistryPackage,
@@ -251,15 +252,20 @@ export function isPrereleaseVersion(version: string): boolean {
 }
 
 /** Source and review state of an installed package: its own `source` when a
- * loader set one, else read from the legacy provenance it carries. */
-function installedSource(summary: {
-  provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
-  source?: PluginSource
-  packageVersion?: string
-}): PluginSource | undefined {
+ * loader set one, else read from the legacy provenance it carries and, for a
+ * Registry install, the channel in its signed envelope. */
+function installedSource(
+  summary: {
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+    source?: PluginSource
+    packageVersion?: string
+  },
+  registryChannel?: string
+): PluginSource | undefined {
   return summary.source ?? pluginSourceFromLegacyProvenance(
     summary.provenance,
-    summary.packageVersion !== undefined && isPrereleaseVersion(summary.packageVersion)
+    summary.packageVersion !== undefined && isPrereleaseVersion(summary.packageVersion),
+    registryChannel
   )
 }
 
@@ -628,6 +634,22 @@ export function registerPluginIpc(
   const activeTransactions = new Set<string>()
   const capabilityGrants = new PluginCapabilityGrantStore(pluginsRoot)
   const lifecycleSelector = new PluginActivationSelector(pluginsRoot)
+  /** The signed envelope channel of the active Registry package, read from
+   * the receipt beside the package that load-time verification checked. */
+  const activeRegistryChannel = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): string | undefined => {
+    if (summary.provenance !== 'official-registry') return undefined
+    try {
+      const active = lifecycleSelector.read(summary.id)?.active
+      return readRegistryReceiptChannel(
+        active ? lifecycleSelector.packageDir(summary.id, active) : join(pluginsRoot, summary.id)
+      )
+    } catch {
+      return undefined
+    }
+  }
   // Plan B D2 (D-d): what an update changes, computed by the Host from the
   // active version's installed manifest and the verified package's own
   // manifest, never from Registry data. Null when there is nothing to
@@ -848,7 +870,7 @@ export function registerPluginIpc(
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
       ...(() => {
-        const source = installedSource(summary)
+        const source = installedSource(summary, activeRegistryChannel(summary))
         return source ? { source } : {}
       })(),
       ...(summary.warning ? { warning: summary.warning } : {}),
@@ -890,7 +912,7 @@ export function registerPluginIpc(
       const pkg = installed.get(entry.pluginId)
       // Only the selected package's own record may label its views.
       const source = pkg && pkg.packageVersion === (entry.packageVersion ?? undefined)
-        ? installedSource(pkg)
+        ? installedSource(pkg, activeRegistryChannel(pkg))
         : undefined
       return {
         ...entry,
