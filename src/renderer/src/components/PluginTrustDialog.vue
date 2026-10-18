@@ -2,7 +2,7 @@
 // The publisher-trust / capability-risk confirmation shown between a verified
 // prepareInstall and its commit. Presentation only: usePluginInstallFlow owns
 // the pending package and decides which step is showing.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PendingInstall } from '../composables/usePluginInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
@@ -11,10 +11,8 @@ import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import PluginAgentToolsList from './PluginAgentToolsList.vue'
 import PluginSourceBadge from './PluginSourceBadge.vue'
-import type { PluginSource } from '../../../shared/pluginSource'
-import { registrySourceOfVersion } from '../lib/pluginSourceMark'
 
-const props = defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
+defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
 const emit = defineEmits<{ confirmPublisher: []; confirmRisk: []; cancel: [] }>()
 const { t, te } = useI18n()
 
@@ -28,14 +26,6 @@ function onKeydown(event: KeyboardEvent): void {
 }
 onMounted(() => window.addEventListener('keydown', onKeydown, true))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
-
-/** K2: the Host's own source when it sends one; else only a Registry-signed
- *  package has a source, read from its version. */
-const source = computed<PluginSource | undefined>(() => {
-  const prepared = props.pending.prepared
-  if (prepared.source) return prepared.source
-  return prepared.trustTier === 'signed-verified' ? registrySourceOfVersion(prepared.version) : undefined
-})
 
 // Focus starts on Cancel: the safe answer to a security question.
 const card = ref<HTMLElement | null>(null)
@@ -133,13 +123,13 @@ function capabilityHint(cap: string): string {
           v-if="step === 'risk' && pending.prepared.agentTools?.length"
           :tools="pending.prepared.agentTools"
         />
-        <!-- K2: only a Registry-signed package reads as reviewed; an unsigned
-             one without a Host source keeps the unsigned badge below and no row. -->
+        <!-- K2: only the source the Host names, from the signed channel; none
+             shows no row and is never guessed from the version. -->
         <PluginSourceBadge
-          v-if="source"
+          v-if="pending.prepared.source"
           row
           class="ext-trust-source"
-          :source="source"
+          :source="pending.prepared.source"
           :publisher="pending.prepared.publisherId"
         />
         <p class="ext-trust-tier">

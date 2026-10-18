@@ -19,10 +19,3 @@ export function pluginSourceLabel(
 export function chromeSourceMark(source: PluginSource | undefined): PluginSource | null {
   return source && source !== 'marketplace' && source !== 'factory-bundled' ? source : null
 }
-
-/** Source of a Registry-signed package known only by its version, by the
- *  Host's rule (`isPrereleaseVersion` in pluginIpc.ts): a SemVer pre-release
- *  suffix is a pre-release; build metadata is not. */
-export function registrySourceOfVersion(version: string): PluginSource {
-  return version.split('+', 1)[0].includes('-') ? 'prerelease' : 'marketplace'
-}
