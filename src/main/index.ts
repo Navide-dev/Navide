@@ -58,7 +58,8 @@ import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/fr
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
-import { agentApprovalSourceNote, localSourceConsentLine } from './plugins/pluginLocalInstall'
+import { agentApprovalSourceNote, nativeBackendConsentDialog } from './plugins/pluginLocalInstall'
+import { revealUnsafeLineText } from '../shared/pluginAgentTools'
 import {
   BackendPluginError,
   PluginBackendSupervisor,
@@ -189,7 +190,6 @@ import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import {
   isThirdPartyLaunchSpec,
-  nativeBackendConsentText,
   thirdPartyBackendLaunchSpec,
   type ThirdPartyLaunchSpec,
   ThirdPartyBackendController,
@@ -1257,20 +1257,18 @@ function nativeBackendDialogParent(): BrowserWindow | null {
 }
 
 async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): Promise<boolean> {
-  // Plan B D-g: in the user's language, with the methods it serves.
-  const locale = currentUiLocale()
-  const { title, message, detail, buttons } = nativeBackendConsentText(prompt, locale)
-  // Card K3 (MED-2 on #425): an unreviewed package says so on the first line
-  // of the detail, before anything the package itself supplied.
-  const sourceLine = localSourceConsentLine(
+  // Plan B D-g: in the user's language, with the methods it serves. Card K3:
+  // an unreviewed package's source leads the text (nativeBackendConsentDialog).
+  const { title, message, detail, buttons } = nativeBackendConsentDialog(
+    prompt,
+    currentUiLocale(),
     frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
-    locale,
   )
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title,
     message,
-    detail: sourceLine ? `${sourceLine}\n\n${detail}` : detail,
+    detail,
     buttons,
     defaultId: 0,
     cancelId: 0,
@@ -1303,7 +1301,13 @@ async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Prom
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Agent wants to change files',
-    message: `An agent asked to use "${prompt.tool.title}" (${prompt.tool.name}) of ${prompt.name} ${prompt.packageVersion}, which changes files. Allow agents to do this in this workspace?`,
+    message: [
+      // Card K3: the source first, then package text with nothing hidden in it.
+      agentApprovalSourceNote(
+        frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
+      ),
+      `An agent asked to use "${revealUnsafeLineText(prompt.tool.title)}" (${revealUnsafeLineText(prompt.tool.name)}) of ${revealUnsafeLineText(prompt.name)} ${revealUnsafeLineText(prompt.packageVersion)}, which changes files. Allow agents to do this in this workspace?`,
+    ].filter(Boolean).join('\n'),
     detail: [
       // Card K3: an unreviewed package's tool says where it came from.
       agentApprovalSourceNote(
@@ -1809,6 +1813,7 @@ const pluginTrustRefresh = registerPluginIpc(
     },
     forgetBackendConsent: (pluginId) => nativeBackendStore.forgetGrants(pluginId),
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
+    pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),
     cleanupPluginStorage: async (pluginId) => {
       await pluginStorageStore.cleanupPlugin(pluginId)
       nativeBackendStore.forget(pluginId)
