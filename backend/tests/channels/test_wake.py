@@ -420,3 +420,12 @@ async def test_seam_passes_on_a_window_that_would_not_resume(seam) -> None:
 async def test_seam_opens_a_pane_onto_the_session_when_the_window_holds_none(seam) -> None:
     assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "spawned-1"}
     assert seam.spawns == [("claude", "api", "", "/ws", "sess-1")]
+
+
+async def test_seam_refuses_a_conversation_whose_pane_was_closed(seam) -> None:
+    # A close whose unbind never reached the backend leaves the binding; closing a pane is
+    # the user's word, so its conversation is not brought back.
+    seam.records[0].spawn_status = "removed"
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": False, "code": "no-record", "started": False}
+    assert seam.spawns == [] and seam.opened_ws == []

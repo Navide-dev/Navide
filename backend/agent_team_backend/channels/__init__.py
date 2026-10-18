@@ -277,14 +277,16 @@ def _host_ctx() -> Any:
 
 
 def _wake_record(workspace_path: str, session_id: str) -> Any | None:
-    """The newest pane record of the workspace that held this conversation, or None."""
+    """The newest pane record of the workspace that held this conversation, or None; None
+    too when that pane was closed (a close is the user's word, even if its unbind was lost)."""
     from .. import app
 
     project = app.project_store.peek(workspace_path)
     if project is None:
         return None
-    return next((r for r in reversed(project.panes)
-                 if (getattr(r, "session_id", "") or "").strip() == session_id and getattr(r, "agent", "")), None)
+    record = next((r for r in reversed(project.panes)
+                   if (getattr(r, "session_id", "") or "").strip() == session_id and getattr(r, "agent", "")), None)
+    return None if record is None or getattr(record, "spawn_status", "") == "removed" else record
 
 
 def _registered_pane(pane_id: str, workspace_path: str, session_id: str) -> Any | None:
