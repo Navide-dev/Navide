@@ -1905,6 +1905,16 @@
         "prereleaseAvailable": "pre-release {version} available"
       },
       "developerMode": {
+        "errors": {
+          "holdsId": "{id} is loaded from a developer folder; remove that folder in Developer Mode first.",
+          "anotherFolder": "{id} is already loaded from another developer folder; remove that folder first.",
+          "idInstalled": "{id} is installed; remove it before loading a developer folder with the same id.",
+          "modeOff": "Turn on Developer Mode first.",
+          "v2Only": "Developer Mode loads Manifest v2 folders only.",
+          "reservedId": "A developer folder cannot use the reserved id {id}.",
+          "changed": "The permissions or backend of {id} changed; choose the folder again.",
+          "takenDown": "{id} was taken down by Navide and cannot be loaded from a folder. ({detail})"
+        },
         "title": "Developer Mode",
         "switch": "Turn on Developer Mode",
         "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded.",

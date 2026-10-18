@@ -443,7 +443,7 @@ export interface MarketplaceListResponse {
 /** Card K4: the Developer Mode switch and the developer folders consented to. */
 export interface DeveloperModeState {
   enabled: boolean
-  folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean }>
+  folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
 }
 
 export interface PreparedInstallSummary {

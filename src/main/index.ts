@@ -61,6 +61,7 @@ import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/fr
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
+import { localTakedownDecision } from './plugins/pluginLocalTrust'
 import { agentApprovalSourceNote, nativeBackendConsentDialog } from './plugins/pluginLocalInstall'
 import { revealUnsafeLineText } from '../shared/pluginAgentTools'
 import {
@@ -1008,6 +1009,25 @@ function currentInstalledRegistryTrust() {
     officialRegistryUrl: marketplace.trust.officialRegistryUrl,
     expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
     now: marketplace.trust.now,
+  }
+}
+
+/** Why a developer folder is taken down by Navide, or null (card K4). */
+function developerFolderTakedown(packageDir: string): string | null {
+  try {
+    const manifest = JSON.parse(readFileSync(join(packageDir, 'manifest.json'), 'utf8')) as Record<string, unknown>
+    const decision = localTakedownDecision(
+      {
+        id: String(manifest.id),
+        version: String(manifest.version),
+        ...(typeof manifest.publisher === 'string' ? { publisher: manifest.publisher } : {}),
+      },
+      currentInstalledRegistryTrust(),
+    )
+    return decision.action === 'blocked' ? decision.reason : null
+  } catch {
+    // An unreadable manifest is refused by the loader itself.
+    return null
   }
 }
 
@@ -5676,7 +5696,11 @@ app.whenReady().then(async () => {
       }
     }
     const explicitPackageDir = process.env['AGENT_TEAM_PLUGIN_DEV_PATH']
-    if (explicitPackageDir !== undefined) {
+    // Review MED-1 on #428: the root-signed takedown list applies here too.
+    const explicitTakedown = explicitPackageDir === undefined ? null : developerFolderTakedown(explicitPackageDir)
+    if (explicitTakedown) {
+      console.warn(`[main] AGENT_TEAM_PLUGIN_DEV_PATH was not loaded: ${explicitTakedown}`)
+    } else if (explicitPackageDir !== undefined) {
       const explicitResult = frontendPluginManager.loadExplicitDeveloperPlugin(explicitPackageDir)
       if (!explicitResult.loaded) {
         console.warn(

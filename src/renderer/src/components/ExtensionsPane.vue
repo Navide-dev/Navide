@@ -23,6 +23,7 @@ import PluginActivityPanel from './PluginActivityPanel.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
+import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 import PluginSourceBadge from './PluginSourceBadge.vue'
 import type { PluginSource } from '../../../shared/pluginSource'
 
@@ -166,7 +167,7 @@ function pluginErrorMessage(err: unknown): string {
     const text = t(`settings.extensions.rollback.errors.${key}`, { id: groups?.id ?? '' })
     return groups?.detail ? `${text} (${groups.detail})` : text
   }
-  return message
+  return localizeDeveloperModeError(message, t)
 }
 
 async function remove(id: string): Promise<void> {
@@ -795,7 +796,8 @@ watch(installed, () => void refreshPacks())
         <li v-for="folder in unloadedFolders" :key="folder.pluginId" class="ext-devmode-folder ext-card">
           <span class="ext-id" v-truncate>{{ reveal(folder.pluginId) }}</span>
           <code class="ext-devmode-path">{{ reveal(folder.path) }}</code>
-          <span class="ext-badge ext-dev-warning">{{ $t('settings.extensions.developerMode.needsConsent') }}</span>
+          <span v-if="folder.unavailable" class="ext-badge ext-dev-warning ext-devmode-unavailable">{{ localizeDeveloperModeError(folder.unavailable, t) }}</span>
+          <span v-else class="ext-badge ext-dev-warning">{{ $t('settings.extensions.developerMode.needsConsent') }}</span>
           <button class="ext-devmode-reload nv-btn nv-btn--sm" :disabled="busy || updateFlow.busy.value" @click="updateFlow.reloadDeveloperPlugin(folder.pluginId)">
             {{ $t('settings.extensions.developerMode.reload') }}
           </button>

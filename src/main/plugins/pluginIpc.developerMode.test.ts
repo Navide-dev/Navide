@@ -427,6 +427,51 @@ describe('loading a developer folder', () => {
   })
 })
 
+describe('review of #428', () => {
+  function writeTakedown(blockedPublishers: string[]): void {
+    const metadata: RegistryTrustMetadata = {
+      schemaVersion: 1, registryProfile: 'self-hosted-dev', rootFingerprint: `sha256:${'1'.repeat(64)}`,
+      generatedAt: '2026-08-16T10:00:00.000Z', expiresAt: '2026-08-17T10:00:00.000Z',
+      signers: [{ keyId: 'k1', publicKey: registrySigner.pubPem, status: 'active', notBefore: '2026-08-01T00:00:00.000Z', notAfter: '2026-09-01T00:00:00.000Z' }],
+      blockedPublishers, blockedPackages: [],
+    }
+    writeFileSync(join(pluginsRoot, '.navide-registry-trust.json'), JSON.stringify({
+      schemaVersion: 1, metadata, metadataSignature: signCanonical(metadata, registryRoot.privateKey),
+    }))
+  }
+
+  it('MED-1: a developer folder of a taken-down publisher is refused at load, and at the next start', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    expect(await call('plugins:loadFromFolder')).toMatchObject({ takedownChecked: false })
+    await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
+    writeTakedown(['acme'])
+    handlers.clear()
+    const restarted = register()
+    await restarted.controller.loadDeveloperFolders()
+    expect(restarted.manager.listInstalledPackages()).toEqual([])
+    expect(call('plugins:developerMode')).toMatchObject({
+      folders: [{ pluginId: 'acme.devtodo', loaded: false, unavailable: expect.stringMatching(/^DEVELOPER_FOLDER_TAKEN_DOWN \[acme\.devtodo\]: taken down by Navide/) }],
+    })
+    await expect(call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).rejects.toThrow(/taken down by Navide/)
+    await call('plugins:removeDeveloperFolder', { id: 'acme.devtodo' })
+    await expect(call('plugins:loadFromFolder')).rejects.toThrow(/taken down by Navide/)
+  })
+
+  it('LOW-1: removing it through plugins:remove (an agent request too) forgets the folder, which is never touched', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    await call('plugins:remove', { id: 'acme.devtodo' })
+    expect(new PluginDeveloperModeStore(pluginsRoot).folders()).toEqual([])
+    handlers.clear()
+    const restarted = register()
+    await restarted.controller.loadDeveloperFolders()
+    expect(restarted.manager.listInstalledPackages()).toEqual([])
+    expect(readFileSync(join(folder, 'manifest.json'), 'utf8')).toContain('acme.devtodo')
+  })
+})
+
 describe('LOW-11: only Registry-verified sources hand kept data on (RULE ZERO)', () => {
   it.each(['0.1.0', '0.2.0-beta.1'])('a Marketplace %s reinstall after a removal that kept the data reuses it', async (version) => {
     register()

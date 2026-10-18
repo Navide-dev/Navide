@@ -122,7 +122,7 @@ import { pluginSourceFromLegacyProvenance, type PluginSource } from '../../share
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
-import { createLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import { createLocalTrustRecord, localTakedownDecision, writeLocalTrustRecord } from './pluginLocalTrust'
 import { canonicalArchivePath } from './pluginPathPolicy'
 import {
   forgetLocalTrustRecords,
@@ -858,7 +858,7 @@ export function registerPluginIpc(
     // its backend data is the developer's and goes to no other install.
     if (developerMode.folder(id) ||
         manager.listInstalledPackages().some((pkg) => pkg.id === id && pkg.provenance === 'developer-local-unpacked')) {
-      throw new Error(`${id} is loaded from a developer folder; remove that folder in Developer Mode first`)
+      throw new Error(`DEVELOPER_FOLDER_HOLDS_ID [${id}]: ${id} is loaded from a developer folder; remove that folder in Developer Mode first`)
     }
   }
   // A file install committed but not restarted yet (review LOW-6).
@@ -2289,10 +2289,19 @@ export function registerPluginIpc(
     if (scanned.error) throw new Error(scanned.error)
     const manifest = parseInstalledManifest(parseManifestJson(readFileSync(join(dir, 'manifest.json'), 'utf8')))
     if (!isManifestV2(manifest) || !scanned.activation) {
-      throw new Error('Developer Mode loads Manifest v2 folders only')
+      throw new Error('DEVELOPER_FOLDER_V2_ONLY: Developer Mode loads Manifest v2 folders only')
     }
     if (isReservedPluginId(manifest.id)) {
-      throw new Error(`Developer Mode cannot claim reserved plugin id '${manifest.id}'`)
+      throw new Error(`DEVELOPER_FOLDER_RESERVED_ID [${manifest.id}]: Developer Mode cannot claim reserved plugin id '${manifest.id}'`)
+    }
+    // Review MED-1 on #428: the root-signed takedown list applies to a
+    // folder as to a file, on every load, reload and start.
+    const takedown = localTakedownDecision(manifest, {
+      pinnedRootKey: resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey,
+      snapshot: readRegistryTrustSnapshot(pluginsRoot),
+    })
+    if (takedown.action === 'blocked') {
+      throw new Error(`DEVELOPER_FOLDER_TAKEN_DOWN [${manifest.id}]: ${takedown.reason}`)
     }
     const disclosure = computeDisclosure(manifest as unknown as DisclosureManifestInput)
     const permissionsDigest = developerPermissionsDigest(manifest)
@@ -2316,6 +2325,7 @@ export function registerPluginIpc(
         registry: null,
         source: 'developer-unpacked',
         folder: dir,
+        takedownChecked: takedown.blocklistChecked,
       },
     }
   }
@@ -2325,11 +2335,11 @@ export function registerPluginIpc(
   const assertFolderIdFree = (pluginId: string, dir?: string): void => {
     const prior = developerMode.folder(pluginId)
     if (dir !== undefined && prior && resolve(prior.path) !== resolve(dir)) {
-      throw new Error(`${pluginId} is loaded from another developer folder (${prior.path}); remove that folder first`)
+      throw new Error(`ANOTHER_DEVELOPER_FOLDER [${pluginId}]: ${pluginId} is loaded from another developer folder (${prior.path}); remove that folder first`)
     }
     const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
     if ((installed && installed.provenance !== 'developer-local-unpacked') || lifecycleSelector.read(pluginId)) {
-      throw new Error(`${pluginId} is installed; remove it before loading a developer folder with the same id`)
+      throw new Error(`DEVELOPER_FOLDER_ID_INSTALLED [${pluginId}]: ${pluginId} is installed; remove it before loading a developer folder with the same id`)
     }
   }
 
@@ -2381,6 +2391,14 @@ export function registerPluginIpc(
       loaded: manager.listInstalledPackages().some(
         (pkg) => pkg.id === folder.pluginId && pkg.provenance === 'developer-local-unpacked',
       ),
+      ...(() => {
+        try {
+          describeFolder(folder.path)
+          return {}
+        } catch (error) {
+          return { unavailable: errorText(error) }
+        }
+      })(),
     })),
   })
 
@@ -2407,7 +2425,7 @@ export function registerPluginIpc(
 
   ipcMain.handle('plugins:loadFromFolder', async (event) => {
     assertAuthorized(event)
-    if (!developerModeOn()) throw new Error('turn on Developer Mode to load a Navide plugin from a folder')
+    if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
     const pickFolder = options.pickDeveloperFolder
     if (!pickFolder) throw new Error('loading from a folder is unavailable')
     const dir = await pickFolder(event)
@@ -2420,7 +2438,7 @@ export function registerPluginIpc(
 
   ipcMain.handle('plugins:commitFolderLoad', async (event, args: { id?: unknown; riskConfirmed?: unknown } | null) => {
     assertAuthorized(event)
-    if (!developerModeOn()) throw new Error('turn on Developer Mode to load a Navide plugin from a folder')
+    if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
     const id = typeof args?.id === 'string' ? args.id : ''
     const pending = preparedFolders.get(id)
     if (!pending) throw new Error(`no prepared developer folder for ${id}; choose the folder again`)
@@ -2430,7 +2448,7 @@ export function registerPluginIpc(
     // change while the dialog was open asks again.
     const described = describeFolder(pending.dir)
     if (described.pluginId !== id || described.permissionsDigest !== pending.permissionsDigest) {
-      throw new Error(`the permissions or backend of ${id} changed; choose the folder again`)
+      throw new Error(`DEVELOPER_FOLDER_CHANGED [${id}]: the permissions or backend of ${id} changed; choose the folder again`)
     }
     assertFolderIdFree(id, pending.dir)
     // No install prepared for this id before the folder took it may commit.
@@ -2460,7 +2478,7 @@ export function registerPluginIpc(
 
   ipcMain.handle('plugins:reloadDeveloperPlugin', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
-    if (!developerModeOn()) throw new Error('turn on Developer Mode to reload a developer folder')
+    if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to reload a developer folder')
     const id = typeof args?.id === 'string' ? args.id : ''
     const consent = developerMode.folder(id)
     if (!consent) throw new Error(`${id} is not a developer folder`)
@@ -3277,6 +3295,10 @@ export function registerPluginIpc(
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
       forgetLocalTrustRecords(pluginsRoot, id)
+      // Review LOW-1 on #428: removing a developer folder's plugin (also by an
+      // agent's request) forgets its consent, so the next start does not load
+      // it again. The folder itself is never touched.
+      developerMode.forget(id)
       // HIGH-3: kept data remembers whose it is, so only an install of the
       // same source takes it over. If that cannot be recorded, the data is
       // set aside instead of being left for any later install of the id.

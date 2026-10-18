@@ -1905,6 +1905,16 @@
         "prereleaseAvailable": "有預覽版 {version}"
       },
       "developerMode": {
+        "errors": {
+          "holdsId": "{id} 目前由開發者資料夾載入；請先在開發者模式移除那個資料夾。",
+          "anotherFolder": "{id} 已經從另一個開發者資料夾載入；請先移除那個資料夾。",
+          "idInstalled": "{id} 已經安裝；請先移除，再用同一個 id 載入開發者資料夾。",
+          "modeOff": "請先開啟開發者模式。",
+          "v2Only": "開發者模式只能載入 Manifest v2 的資料夾。",
+          "reservedId": "開發者資料夾不能使用保留的 id {id}。",
+          "changed": "{id} 的權限或後端已經變更，請重新選擇資料夾。",
+          "takenDown": "{id} 已被 Navide 下架，無法從資料夾載入。（{detail}）"
+        },
         "title": "開發者模式",
         "switch": "開啟開發者模式",
         "hint": "開啟後可以從你選的資料夾載入 Navide 外掛來開發與測試，也會套用自架 Registry 的設定（AGENT_TEAM_MARKETPLACE_URL）。只有在這個設定頁可以切換，每次變更都會記錄。",

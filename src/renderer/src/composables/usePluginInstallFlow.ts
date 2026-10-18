@@ -4,6 +4,7 @@ import { useNotify } from '@navide/plugin-ui/foundation'
 import { usePluginInventory } from './usePluginInventory'
 import { usePluginUpdates } from './usePluginUpdates'
 import { formatBytes } from '../lib/formatBytes'
+import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 
 // The verified install flow shared by the Marketplace (install/update) and the
 // Extensions page (update): prepare → optional publisher/risk confirmation →
@@ -44,7 +45,7 @@ export function usePluginInstallFlow() {
   }
 
   function fail(err: unknown): void {
-    error.value = ipcErrorMessage(err)
+    error.value = localizeDeveloperModeError(ipcErrorMessage(err), t)
   }
 
   async function commit(

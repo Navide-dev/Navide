@@ -826,7 +826,7 @@ declare global {
   /** Card K4: the Developer Mode switch and the developer folders consented to. */
   interface DeveloperModeState {
     enabled: boolean
-    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean }>
+    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
   }
 }
 
