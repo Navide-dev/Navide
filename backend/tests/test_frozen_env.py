@@ -9,6 +9,7 @@ directory and every spawn inherited it.
 from __future__ import annotations
 
 import ast
+import os
 import sys
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def frozen(monkeypatch):
 
 
 def test_restores_the_original_value_when_the_bootloader_saved_one(frozen):
-    env = {"LD_LIBRARY_PATH": f"{MEI}:/opt/lib", "LD_LIBRARY_PATH_ORIG": "/opt/lib"}
+    env = {"LD_LIBRARY_PATH": f"{MEI}{os.pathsep}/opt/lib", "LD_LIBRARY_PATH_ORIG": "/opt/lib"}
     frozen_env.restore_bundled_library_path(env)
     assert env["LD_LIBRARY_PATH"] == "/opt/lib"
 
