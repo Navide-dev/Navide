@@ -294,27 +294,51 @@ def _expand_braces(text: str) -> list[str]:
     return [text]
 
 
-def _glob_reaches(globs: list[str], store: list[str], directory: bool) -> bool:
-    """Whether glob segments can match ``store`` (a file) or a name below it (a directory)."""
-    memo: dict[tuple[int, int], bool] = {}
+#: File names that hold secrets inside a store directory (e.g. ~/.ssh/id_rsa).
+_SECRET_NAMES = tuple(_fold(n) for n in (
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials", "config", ".netrc", "auth.json",
+    "hosts.yml", ".credentials.json", "login.keychain-db",
+))
 
-    def reach(i: int, j: int) -> bool:
+
+def _names(seg: str, name: str) -> bool:
+    """A glob segment that matches ``name`` and is anchored by more than a
+    leading ``*`` sweep: '.s?h' names .ssh, '*' and '*.md' only sweep it."""
+    return not seg.startswith("*") and bool(set(seg) - set("*?")) and fnmatch.fnmatchcase(name, seg)
+
+
+def _glob_reaches(globs: list[str], store: list[str], directory: bool) -> int:
+    """Whether glob segments can match ``store`` (a file) or a name below it
+    (a directory): 2 when a segment names the store or a secret file in it,
+    1 when it is only reached through ``**`` or a ``*`` sweep, 0 when not."""
+    memo: dict[tuple[int, int], int] = {}
+
+    def reach(i: int, j: int) -> int:
         if (i, j) not in memo:
             if j == len(store):
-                memo[i, j] = i < len(globs) if directory else all(g == "**" for g in globs[i:])
+                if not directory:
+                    memo[i, j] = int(all(g == "**" for g in globs[i:]))
+                elif i == len(globs):
+                    memo[i, j] = 0
+                else:
+                    memo[i, j] = 2 if any(_names(globs[-1], n) for n in _SECRET_NAMES) else 1
             elif i == len(globs):
-                memo[i, j] = False
+                memo[i, j] = 0
             elif globs[i] == "**":
-                memo[i, j] = reach(i + 1, j) or reach(i, j + 1)
+                memo[i, j] = max(reach(i + 1, j), reach(i, j + 1))
+            elif not fnmatch.fnmatchcase(store[j], globs[i]):
+                memo[i, j] = 0
             else:
-                memo[i, j] = fnmatch.fnmatchcase(store[j], globs[i]) and reach(i + 1, j + 1)
+                r = reach(i + 1, j + 1)
+                memo[i, j] = 2 if r and j == len(store) - 1 and _names(globs[i], store[j]) else r
         return memo[i, j]
 
     return reach(0, 0)
 
 
-def _stores_reached(path: str, ctx: _Ctx) -> list[str]:
-    """Secret stores below a glob's literal base that its wildcards can expand into."""
+def _stores_reached(path: str, ctx: _Ctx) -> list[tuple[str, bool]]:
+    """Secret stores below a glob's literal base that its wildcards can expand
+    into, as (store, named): see _glob_reaches."""
     base = _glob_base(path)
     if base == path:
         return []
@@ -325,10 +349,33 @@ def _stores_reached(path: str, ctx: _Ctx) -> list[str]:
     for h in _homes(ctx):
         for store, directory in _STORE_PATHS:
             full = h + "/" + store
-            if full != base and _inside(base, full) and _glob_reaches(
-                    globs, [s for s in full[len(base):].split("/") if s], directory):
-                out.append(full)
+            if full != base and _inside(base, full):
+                r = _glob_reaches(globs, [s for s in full[len(base):].split("/") if s], directory)
+                if r:
+                    out.append((full, r == 2))
     return out
+
+
+def _glob_dialect(pattern: str) -> str:
+    """The ripgrep / picomatch glob as fnmatch reads it: ``[^x]`` negates like
+    ``[!x]`` and a backslash escapes the next character (POSIX only: on
+    Windows it is the path separator)."""
+    out = []
+    i = 0
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\" and not _WINDOWS and i + 1 < len(pattern):
+            n = pattern[i + 1]
+            out.append(f"[{n}]" if n in "*?[{},!^" else n)
+            i += 2
+            continue
+        if c == "[" and pattern[i + 1:i + 2] == "^":
+            out.append("[!")
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
 
 
 def _is_dotenv(path: str) -> bool:
@@ -1346,10 +1393,13 @@ def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:
         roots += [r for r in (root if isinstance(root, list) else [root]) if isinstance(r, str) and r]
     # Glob's pattern and Grep's glob filter are paths under root (or absolute).
     sub = tool_input.get("pattern" if name in GLOB_TOOLS else "glob")
-    sub = sub if isinstance(sub, str) and sub else None
+    sub = _glob_dialect(sub) if isinstance(sub, str) and sub else None
     raws = list(roots)
     if sub:
         absolute = sub.startswith(("/", "~")) or _isabs(sub) or any(sub.startswith(t) for t in _HOME_TOKENS)
+        if name in GREP_TOOLS and not absolute and "/" not in sub:
+            # ripgrep matches a glob without '/' against the file name at any depth.
+            sub = "**/" + sub
         raws += [sub] if absolute or not roots else [posixpath.join(r, sub) for r in roots]
     # A {a,b} brace is checked as each path it expands to; wildcards that can
     # expand into a store below the literal base count as naming that store.
@@ -1357,8 +1407,9 @@ def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:
         path = _resolve(raw, ctx)
         if path is not None:
             _check_path(acc, path, ctx, write=False, list_only=name in GLOB_TOOLS)
-            for store in _stores_reached(path, ctx):
-                _check_path(acc, store, ctx, write=False, list_only=name in GLOB_TOOLS)
+            for store, named in _stores_reached(path, ctx):
+                # Reached only through a sweep: graded like listing it (high), not reading it.
+                _check_path(acc, store, ctx, write=False, list_only=name in GLOB_TOOLS or not named)
 
 
 _TOOL_CALL_RE = re.compile(r"\b[A-Z][A-Za-z]*\((.+)\)\s*$")

@@ -308,7 +308,6 @@ def test_qwen_and_copilot_search_tools_check_credential_paths(tool, tool_input, 
     ("grep_search", {"pattern": "~/.ssh/id_rsa", "path": "."}),
     ("glob", {"pattern": "**/*.py", "path": "~/Documents"}),
     ("grep", {"pattern": "TODO", "paths": "src"}),
-    ("grep", {"pattern": "TODO", "paths": ["src", "~/.claude"], "glob": "*.md"}),
     ("rg", {"pattern": "TODO", "paths": [".", "/tmp/x"]}),
     ("rg", {"pattern": "~/.aws/credentials", "paths": "."}),
     ("glob", {"pattern": "**/.env", "paths": []}),
@@ -332,7 +331,6 @@ def test_search_with_path_and_paths_checks_every_root(tool, tool_input, level, r
 
 @pytest.mark.parametrize("tool, tool_input", [
     ("grep", {"pattern": "TODO", "path": "src", "paths": "docs"}),
-    ("rg", {"pattern": "TODO", "path": ".", "paths": ["src", "~/.claude"], "glob": "*.md"}),
     ("glob", {"pattern": "**/*.py", "path": "src", "paths": ["~/Documents", "/tmp/x"]}),
     ("glob", {"pattern": "**/*.ts", "path": "", "paths": []}),
 ])
@@ -352,7 +350,16 @@ def test_search_with_path_and_paths_unchanged_off_credential_paths(tool, tool_in
     ("glob", {"pattern": "**/*.ts", "paths": ["src", "~"]}, "high", "credential-path-list"),
     # `*` directly under home names the file store ~/.netrc, as Glob ~/.netrc does.
     ("Glob", {"pattern": "*", "path": "~"}, "high", "credential-path-list"),
-    ("Grep", {"pattern": "x", "path": "~", "glob": "*"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "*"}, "high", "credential-path-list"),
+    # Glob dialect: [^x] negates like [!x]; a backslash escapes the next character.
+    ("Glob", {"pattern": "~/.[^a]sh/*"}, "high", "credential-path-list"),
+    ("Glob", {"pattern": "~/\\.ssh/*"}, "high", "credential-path-list"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": ".ss[^x]/*"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "\\.ssh/*"}, "critical", "credential-access"),
+    # A grep glob without '/' matches a file name at any depth, like ripgrep's --glob.
+    ("Grep", {"pattern": "x", "path": "~", "glob": "id_rsa"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "id_*"}, "critical", "credential-access"),
+    ("rg", {"pattern": "x", "paths": ["src", "~"], "glob": "credentials"}, "critical", "credential-access"),
     ("Grep", {"pattern": "x", "path": "~", "glob": "{.ssh,.aws}/*"}, "critical", "credential-access"),
     ("Grep", {"pattern": "x", "path": "~", "glob": ".s?h/*"}, "critical", "credential-access"),
     ("Grep", {"pattern": "x", "path": "~", "glob": "**/.ssh/**"}, "critical", "credential-access"),
@@ -388,13 +395,35 @@ def test_search_globs_expanding_into_a_store(tool, tool_input, level, rule):
     ("Glob", {"pattern": "/tmp/**/*"}),
     ("Grep", {"pattern": "TODO", "path": ".", "glob": "**/*.py"}),
     ("Grep", {"pattern": "TODO", "path": WS, "glob": "{src,tests}/**"}),
-    ("Grep", {"pattern": "TODO", "path": "~", "glob": "*.md"}),
-    ("Grep", {"pattern": "TODO", "path": "~/.claude", "glob": "*.md"}),
+    ("Grep", {"pattern": "TODO", "path": "src", "glob": "*.md"}),
+    ("Grep", {"pattern": "TODO", "path": "~/Documents", "glob": "*.md"}),
     ("rg", {"pattern": "TODO", "paths": ["src", "~/.config/nvim"], "glob": "**/*.lua"}),
     ("Glob", {"pattern": "src/{a,b"}),
 ])
 def test_ordinary_search_globs_unchanged(tool, tool_input):
     assert classify(tool, tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
+
+
+# A grep glob that reaches a store only through a `**` or bare `*` sweep is
+# graded high (allowed locally, audited), not critical: main asked nothing for
+# these, and a critical would add a local prompt.
+@pytest.mark.parametrize("tool, tool_input", [
+    ("Grep", {"pattern": "TODO", "path": "~/.claude", "glob": "**/*.md"}),
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "**/*.md"}),
+    ("Grep", {"pattern": "TODO", "path": "~/.config", "glob": "**/*.toml"}),
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "*"}),
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "*.md"}),
+    ("Grep", {"pattern": "TODO", "path": "~/.claude", "glob": "*.md"}),
+    ("grep", {"pattern": "TODO", "paths": ["src", "~/.claude"], "glob": "*.md"}),
+    ("rg", {"pattern": "TODO", "path": ".", "paths": ["src", "~/.claude"], "glob": "*.md"}),
+])
+def test_grep_sweeps_into_a_store_are_high_not_critical(tool, tool_input):
+    v = classify(tool, tool_input, cwd=WS, workspace=WS)
+    assert (v.level, v.rule_ids) == ("high", ("credential-path-list",)), (tool_input, v)
+
+
+def test_grep_root_without_a_glob_is_unchanged():
+    assert classify("Grep", {"pattern": "x", "path": "~"}, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
 
 
 # File tools: every path field is checked, including `paths` and list values.
