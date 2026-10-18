@@ -13,7 +13,10 @@
 // running — both when applied after attach and when the guest is created
 // inside an already-hidden subtree — which is what lets a hidden Git tab keep
 // its changes badge current.
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { PluginSource } from '../../../shared/pluginSource'
+import { chromeSourceMark } from '../lib/pluginSourceMark'
+import PluginSourceBadge from './PluginSourceBadge.vue'
 
 export interface PluginRegionContribution {
   pluginId: string
@@ -27,6 +30,8 @@ export interface PluginRegionContribution {
   kind: 'custom'
   location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
   manifestOrder: number
+  /** Source and review state of the contributing package (K1). */
+  source?: PluginSource
 }
 
 const props = defineProps<{
@@ -39,6 +44,7 @@ const props = defineProps<{
 
 const src = ref<string | null>(null)
 const error = ref<string | null>(null)
+const sourceMark = computed(() => chromeSourceMark(props.contribution.source))
 let generation = 0
 let themeObserver: MutationObserver | null = null
 /** True once a Host-side instance may exist for this contribution key. */
@@ -163,8 +169,14 @@ onBeforeUnmount(() => {
   <div
     v-show="visible"
     class="plugin-region-host"
+    :class="{ 'plugin-region-host--marked': sourceMark }"
     :data-plugin-contribution="contribution.contributionKey"
   >
+    <!-- K2: a persistent source strip in Navide's own chrome, above the guest. -->
+    <div v-if="sourceMark" class="plugin-region-host__source">
+      <span class="plugin-region-host__title" v-text="contribution.title" />
+      <PluginSourceBadge :source="sourceMark" />
+    </div>
     <div v-if="error" class="plugin-region-host__error" role="status">
       {{ contribution.title }} unavailable
     </div>
@@ -189,6 +201,36 @@ onBeforeUnmount(() => {
   display: flex;
   width: 100%;
   height: 100%;
+}
+
+.plugin-region-host--marked {
+  display: flex;
+  flex-direction: column;
+}
+
+.plugin-region-host--marked > .plugin-region-host__view,
+.plugin-region-host--marked > .plugin-region-host__error {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.plugin-region-host__source {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: var(--font-2xs);
+}
+
+.plugin-region-host__title {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .plugin-region-host__error {

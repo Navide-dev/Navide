@@ -2017,6 +2017,24 @@ runs only inside the OS sandbox described in
   local Registry works (see
   [Publishing to the Navide Marketplace](marketplace-publishing.md)).
   Manifest v1 packages need no grant.
+- A package installed from a local file or folder is trusted through a local
+  trust record, not the Registry root: the record holds the package id and
+  version, the SHA-256 of every file in the installed copy, an overall content
+  digest, and the time the user consented. Every load re-hashes the installed
+  copy, never the file or folder the user picked, and refuses any added,
+  removed, changed, or symlinked file. The Registry authority rule does not
+  apply, so local and Marketplace installs never quarantine each other. The
+  `navide.` namespace is refused, and the root-signed takedown list
+  (`blockedPublishers`, `blockedPackages`) disables a matching local package
+  by its manifest id and publisher; without root-signed metadata the takedown
+  check is reported as not done. The record lives in the user's data folder,
+  so anyone who can write there can forge it, the same exposure as the
+  Registry receipt. It is evidence of consent, not a verification by Navide.
+  The installed-package `source` field (`marketplace`, `prerelease`,
+  `testplace`, `local-signed`, `local-unsigned`, `developer-unpacked`,
+  `factory-bundled`) is reported beside the legacy `provenance` field, which
+  keeps its original three values because older Navide releases refuse any
+  other.
 
 The package archive signature covers the manifest, frontend, backend, assets,
 and their digests. Each OS/architecture artifact is signed independently.

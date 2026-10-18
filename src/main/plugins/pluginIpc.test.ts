@@ -1905,6 +1905,36 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     expect(() => handlers.get('plugins:installedDisclosures')!(null)).toThrow()
   })
 
+  it('lists a Marketplace install with its legacy provenance unchanged and a marketplace source', async () => {
+    const stable = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    installFetch(signedDetail(stable.digest, 'acme.demo', 'acme', '1.0.0'), stable.bytes, stable.digest)
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-source-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      expect(handlers.get('plugins:listInstalled')!(null)).toMatchObject([
+        { id: 'acme.demo', provenance: 'official-registry', source: 'marketplace' },
+      ])
+      // The view contribution payload gains only `source`; every other field
+      // is the projection main sends.
+      const catalog = manager.listContributionCatalog()
+      expect(catalog.length).toBeGreaterThan(0)
+      expect(await handlers.get('plugins:listContributions')!(null)).toEqual(
+        catalog.map(({ iconFile: _iconFile, ...entry }) => ({
+          ...entry,
+          icon: null,
+          iconMonochrome: false,
+          source: 'marketplace',
+        }))
+      )
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('stages an immutable replacement without touching the active runtime until restart', async () => {
     const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
     installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)

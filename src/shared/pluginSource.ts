@@ -43,3 +43,21 @@ export type LegacyPluginProvenance = 'official-registry' | 'developer-local-unpa
 /** Sources whose trust comes from a user's consent to a content digest
  * (`pluginLocalTrust.ts`), not from the Registry root key. */
 export type LocalPluginSource = Extract<PluginSource, 'local-signed' | 'local-unsigned'>
+
+/** Read a legacy provenance value as a source. A Registry install is a
+ * pre-release when its version carries a SemVer pre-release suffix. */
+export function pluginSourceFromLegacyProvenance(
+  provenance: LegacyPluginProvenance | undefined,
+  isPrerelease: boolean
+): PluginSource | undefined {
+  switch (provenance) {
+    case 'official-registry':
+      return isPrerelease ? 'prerelease' : 'marketplace'
+    case 'developer-local-unpacked':
+      return 'developer-unpacked'
+    case 'factory-bundled':
+      return 'factory-bundled'
+    default:
+      return undefined
+  }
+}

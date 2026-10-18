@@ -1203,6 +1203,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       kind: 'custom'
       location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
       manifestOrder: number
+      /** Source and review state of the package that contributes this view. */
+      source?: PluginSource
     }>> => ipcRenderer.invoke('plugins:listContributions'),
     hostThemeChanged: (theme: string): void =>
       ipcRenderer.send('plugins:hostThemeChanged', theme),
