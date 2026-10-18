@@ -777,6 +777,42 @@ export function createPluginViewRuntimeClient(): PluginViewRuntimeClient {
   })
 }
 
+// Standalone forms of the stateless PluginViewRuntimeClient methods. A bundler
+// keeps only the ones a view imports; the client object keeps every method.
+
+/** Same as `createPluginViewRuntimeClient().ready()`. */
+export function viewReady(): void {
+  runtimeViewBridge().ready()
+}
+
+/** Same as `createPluginViewRuntimeClient().hide()`. */
+export function hideView(): void {
+  runtimeViewBridge().hideSelf()
+}
+
+/** Same as `createPluginViewRuntimeClient().openContributionWindow()`. */
+export function openContributionWindow(params: Params<'ui.openPluginWindow'>): Promise<Result<'ui.openPluginWindow'>> {
+  return createPluginCapabilityClient().capabilities.invoke('ui.openPluginWindow', params)
+}
+
+/** Same as `createPluginViewRuntimeClient().onOpenTarget()`. */
+export function onOpenTarget(listener: (target: Record<string, string>) => void): Disposable {
+  if (typeof listener !== 'function') {
+    throw new PluginError('INVALID_ARGUMENT', 'Plugin target listener is invalid.')
+  }
+  return Object.freeze({ dispose: runtimeViewBridge().onOpenTarget(listener) })
+}
+
+/** Same as `createPluginViewRuntimeClient().onBackendStatus()`. */
+export function onBackendStatus(listener: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void): Disposable {
+  return Object.freeze({ dispose: runtimeCapabilityBridge().on('nav.backend_status', payload => {
+    const status = (payload as { status?: unknown } | null)?.status
+    if (status === 'connecting' || status === 'connected' || status === 'disconnected' || status === 'error') {
+      listener(status)
+    }
+  }) })
+}
+
 function publicMethodAddress(method: PublicMethod): { namespace: string; name: string } {
   const separator = method.indexOf('.')
   if (separator < 1 || separator === method.length - 1) {
