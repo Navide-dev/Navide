@@ -1781,6 +1781,22 @@ const pluginTrustRefresh = registerPluginIpc(
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
     preflightCandidateFrontend,
     preflightCandidateBackend,
+    // Card K3: the only source of a local package path is this dialog, opened
+    // over the main window that asked (never a detached or plugin window).
+    pickLocalPackageFile: async (event) => {
+      const parent = BrowserWindow.fromWebContents(event.sender)
+      if (!parent || parent.isDestroyed() || !mainWindows.has(parent) || detachedWindowIds.has(parent.id)) return null
+      const picked = await dialog.showOpenDialog(parent, {
+        properties: ['openFile'],
+        filters: [{ name: 'Navide plugin package', extensions: ['vsix'] }],
+      })
+      return picked.canceled ? null : picked.filePaths[0] ?? null
+    },
+    forgetBackendConsent: (pluginId) => {
+      nativeBackendStore.revokeConsent(pluginId)
+      nativeBackendStore.forgetAgentToolWrites(pluginId)
+      nativeBackendStore.clearAgentToolsSince(pluginId)
+    },
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     cleanupPluginStorage: async (pluginId) => {
       await pluginStorageStore.cleanupPlugin(pluginId)

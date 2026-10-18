@@ -81,6 +81,7 @@ import {
   verifyInstalledRegistryPackage,
   type InstalledRegistryTrustContext,
 } from './pluginInstalledTrust'
+import { verifyLocalInstalledPackage } from './pluginLocalInstall'
 import { legacyCapabilityPolicy, type PluginCapabilityPolicy } from './pluginPermissions'
 import {
   createWsClient,
@@ -12644,11 +12645,9 @@ export class FrontendPluginManager {
           lifecycleSelector.recoverInterruptedActivation(record.pluginId)
           continue
         }
-        const decision = verifyInstalledRegistryPackage(
-          lifecycleSelector.packageDir(record.pluginId, recoveredSelection),
-          record.pluginId,
-          source.trust,
-        )
+        const recoveredDir = lifecycleSelector.packageDir(record.pluginId, recoveredSelection)
+        const decision = verifyLocalInstalledPackage(root, recoveredDir, record.pluginId, source.trust) ??
+          verifyInstalledRegistryPackage(recoveredDir, record.pluginId, source.trust)
         if (
           decision.action === 'quarantine' ||
           decision.artifactDigest !== recoveredSelection.artifactDigest
@@ -12695,7 +12694,10 @@ export class FrontendPluginManager {
           )
           continue
         }
-        const decision = verifyInstalledRegistryPackage(scanned.dir, pluginId, source.trust)
+        // Card K3: a package installed from a file is verified against the
+        // user's consent record; it has no Registry receipt to verify.
+        const localDecision = verifyLocalInstalledPackage(root, scanned.dir, pluginId, source.trust)
+        const decision = localDecision ?? verifyInstalledRegistryPackage(scanned.dir, pluginId, source.trust)
         if (decision.action === 'quarantine') {
           errors.push(`${scanned.dir}: quarantined: ${decision.reason ?? 'trust verification failed'}`)
           continue
@@ -12708,10 +12710,18 @@ export class FrontendPluginManager {
           errors.push(`${scanned.dir}: active artifact digest does not match the durable lifecycle selector`)
           continue
         }
-        scanned.packageSummary.provenance = 'official-registry'
-        if (scanned.activation) {
-          scanned.activation.provenance = 'official-registry'
-          scanned.activation.artifactDigest = decision.artifactDigest
+        if (localDecision) {
+          scanned.packageSummary.source = 'local-unsigned'
+          if (scanned.activation) {
+            scanned.activation.source = 'local-unsigned'
+            scanned.activation.artifactDigest = decision.artifactDigest
+          }
+        } else {
+          scanned.packageSummary.provenance = 'official-registry'
+          if (scanned.activation) {
+            scanned.activation.provenance = 'official-registry'
+            scanned.activation.artifactDigest = decision.artifactDigest
+          }
         }
       } else if (source?.provenance === 'developer-local-unpacked') {
         if (isReservedPluginId(pluginId)) {
@@ -12818,7 +12828,8 @@ export class FrontendPluginManager {
       const pluginId = scanned.activation?.pluginId ?? scanned.descriptor?.id
       if (!pluginId) continue
       if (includePluginIds && !includePluginIds.has(pluginId)) continue
-      const decision = verifyInstalledRegistryPackage(scanned.dir, pluginId, trust)
+      const decision = verifyLocalInstalledPackage(root, scanned.dir, pluginId, trust) ??
+        verifyInstalledRegistryPackage(scanned.dir, pluginId, trust)
       if (
         decision.action === 'allow' &&
         isReservedPluginId(pluginId) &&

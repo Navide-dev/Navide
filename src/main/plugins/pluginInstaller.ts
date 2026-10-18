@@ -31,6 +31,7 @@ import {
   assertOfficialPublisher,
   isOfficialPluginId,
   resolveOfficialPublisherKey,
+  sha256Hex,
   PluginVerifyError,
   TRUST_SIGNED,
   type TrustTier,
@@ -39,6 +40,7 @@ import {
   RegistryTrustError,
   verifyRegistryDisclosure,
   verifyRegistryPackageTrust,
+  verifyRegistryTrustMetadata,
   type RegistryAuthority,
   type RegistryPackageEnvelope,
   type RegistryTrustMetadata,
@@ -73,6 +75,7 @@ import {
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
 import type { ScanReport } from '../../shared/pluginDisclosureScan'
+import type { LocalPluginSource } from '../../shared/pluginSource'
 import type { PluginLaunchDescriptor } from './frontendPluginManager'
 import { UNIVERSAL_PLUGIN_TARGET, currentPluginHostTarget } from './pluginTarget'
 import {
@@ -182,6 +185,12 @@ export interface PreparedInstall {
   /** The Registry-signed scan report (contract 3.8); null when the version
    * has none. Informational: it never decides the install. */
   scan?: ScanReport | null
+  /** Set only by prepareLocalInstall: a package the user picked from a file,
+   * trusted by the user's consent to its content and never by the Registry. */
+  source?: LocalPluginSource
+  /** The Host target a local package is staged under; Registry packages take
+   * theirs from the signed receipt instead. */
+  localTarget?: string
 }
 
 export class InstallError extends Error {
@@ -520,6 +529,109 @@ export async function prepareInstall(
   }
 }
 
+export interface LocalInstallTrust {
+  /** The Host-owned root pin the takedown list must be signed by. */
+  pinnedRegistryRootKey: string | null
+  /** The last Registry trust metadata this Host stored, if any. */
+  trustSnapshot: RegistryTrustSnapshot | null
+  /** Host-derived exact target a native backend must have been built for. */
+  expectedTarget?: string
+}
+
+/** The takedown list, when the pinned root signed it. An expired list still
+ * applies: a takedown does not lapse because the Host went offline. */
+function signedTakedownList(trust: LocalInstallTrust): RegistryTrustMetadata | null {
+  const snapshot = trust.trustSnapshot
+  if (!snapshot) return null
+  try {
+    // Checked as of its own generation time, so expiry is not a reason to
+    // ignore it; shape and the root signature are still verified.
+    verifyRegistryTrustMetadata(
+      snapshot.metadata,
+      snapshot.metadataSignature,
+      trust.pinnedRegistryRootKey,
+      new Date(snapshot.metadata.generatedAt),
+    )
+    return snapshot.metadata
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Verify a `.vsix` the user picked from a file (DX report A1, card K3)
+ * WITHOUT writing anything. `bytes` is the one copy read right after the file
+ * dialog; every later step uses it, never the path. The archive goes through
+ * the same zip checks, manifest schema and backend executable rules as a
+ * Registry install. What it does not get is Registry evidence: there is no
+ * signature and no review, so the package is `local-unsigned` and the user's
+ * consent is always required.
+ */
+export function prepareLocalInstall(bytes: Uint8Array, trust: LocalInstallTrust): PreparedInstall {
+  const entries = readZipEntries(bytes)
+  assertSafeArchiveEntries(entries)
+  const manifest = parseInstalledManifest(readManifestFromEntries(entries))
+  assertManifestFiles(
+    manifest,
+    entries
+      .filter((entry) => entry.type === 'regular')
+      .map((entry) => canonicalEntryPath(entry))
+  )
+  if (!isManifestV2(manifest)) {
+    throw new InstallError(`plugin '${manifest.id}' is a Manifest v1 package; only Manifest v2 installs from a file`)
+  }
+  if (isOfficialPluginId(manifest.id)) {
+    throw new PluginVerifyError(
+      'NOT_OFFICIAL',
+      `plugin '${manifest.id}' claims the official 'navide.' namespace; it cannot be installed from a file`
+    )
+  }
+  // The same identity rule a Registry package meets, so the publisher a
+  // takedown names cannot be dodged by a mismatched namespace.
+  if (manifest.publisher !== manifest.id.split('.')[0]) {
+    throw new InstallError(`plugin '${manifest.id}' has no valid publisher identity`)
+  }
+  const backendEntry = assertBackendExecutable(manifest, entries)
+  const takedown = signedTakedownList(trust)
+  if (takedown?.blockedPublishers.includes(manifest.publisher)) {
+    throw new InstallError(`publisher '${manifest.publisher}' was taken down by Navide; '${manifest.id}' cannot be installed`)
+  }
+  if (takedown?.blockedPackages.some((blocked) =>
+    blocked.packageId === manifest.id && (blocked.version === undefined || blocked.version === manifest.version))) {
+    throw new InstallError(`plugin '${manifest.id}' ${manifest.version} was taken down by Navide and cannot be installed`)
+  }
+  const digest = sha256Hex(bytes)
+  const packageVerification = verifyPackage({
+    bytes,
+    expectedDigest: digest,
+    signature: null,
+    publicKey: null,
+    requires: manifestCapabilities(manifest),
+  })
+  return {
+    id: manifest.id,
+    version: manifest.version,
+    publisherId: manifest.publisher,
+    manifest,
+    entries,
+    trustTier: packageVerification.trustTier,
+    sensitive: packageVerification.sensitive,
+    containsBackendExecutable: backendEntry !== undefined,
+    // Unreviewed code always asks, whatever it declares.
+    requiresConfirmation: true,
+    official: false,
+    digest,
+    signature: null,
+    provenance: 'developer-local-unpacked',
+    disclosure: computeDisclosure(manifest as unknown as DisclosureManifestInput),
+    scan: null,
+    source: 'local-unsigned',
+    // A native executable is built for one platform; without a backend the
+    // package is the same everywhere.
+    localTarget: backendEntry !== undefined ? trust.expectedTarget ?? currentPluginHostTarget() : UNIVERSAL_PLUGIN_TARGET,
+  }
+}
+
 /**
  * Write a prepared, verified package into `<pluginsRoot>/<id>/`, replacing any
  * previous install of the same id (so update reuses this path). The archive is
@@ -604,7 +716,10 @@ export function stageInstallCandidate(
   })
   if (smuggledHostFile) throw new InstallError(`package must not contain ${smuggledHostFile.path}`)
   const backendEntry = assertBackendExecutable(prepared.manifest, prepared.entries)
-  const target = prepared.registryEvidence?.receipt.target
+  // Only a local package may stage without Registry target evidence; it has
+  // no receipt, and its trust is the user's consent recorded after staging.
+  const target = prepared.registryEvidence?.receipt.target ??
+    (prepared.source !== undefined && prepared.registryEvidence === undefined ? prepared.localTarget : undefined)
   if (!target) {
     throw new InstallError('immutable candidate staging requires Registry target evidence')
   }

@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
   prepareInstall,
+  prepareLocalInstall,
   stageInstallCandidate,
   commitInstallTransaction,
   removePlugin,
@@ -102,6 +103,14 @@ import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/plug
 import type { PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { rescanFinding } from './pluginRescanNotice'
+import { createLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import {
+  forgetLocalTrustRecords,
+  isLocalInstalledPackage,
+  localTrustRecordPath,
+  promoteLocalCandidateRecord,
+  verifyLocalInstalledPackage,
+} from './pluginLocalInstall'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -458,6 +467,14 @@ export interface PluginIpcOptions {
   preflightCandidateFrontend?: (descriptor: PluginLaunchDescriptor) => Promise<void>
   /** Host-only standalone backend health check with no production bridge route. */
   preflightCandidateBackend?: (activation: PluginActivationCatalogEntry) => Promise<void>
+  /** Card K3: the Host's own file dialog, parented to the window that asked.
+   * The path it returns is the only path a local install ever reads; nothing
+   * the renderer sends is used as a path. Absent, installing from a file is
+   * unavailable. */
+  pickLocalPackageFile?: (event: IpcMainInvokeEvent) => Promise<string | null>
+  /** Card K3 (D7): drop the native backend consent and the agent tool write
+   * answers of a package whose source changed, so nothing carries over. */
+  forgetBackendConsent?: (pluginId: string) => void
   /** The running Navide release that `engines.navide` is checked against. */
   appVersion?: () => string
   /** An agent disabled or enabled an installed Marketplace package (B2-c):
@@ -555,6 +572,9 @@ export function registerPluginIpc(
 ): PluginTrustRefreshController {
   // Packages verified by prepareInstall, awaiting a commit, keyed by plugin id.
   const prepared = new Map<string, { pkg: PreparedInstall }>()
+  // Local packages awaiting consent (card K3). Kept apart from Registry
+  // prepares so commitInstall can never commit one, nor the reverse.
+  const preparedLocal = new Map<string, PreparedInstall>()
   const activeTransactions = new Set<string>()
   const capabilityGrants = new PluginCapabilityGrantStore(pluginsRoot)
   const lifecycleSelector = new PluginActivationSelector(pluginsRoot)
@@ -643,6 +663,14 @@ export function registerPluginIpc(
     pluginId: string,
     trustConfig: InstallerTrustConfig
   ): InstalledTrustDecision =>
+    // A local install (no Registry receipt, a consent record for this exact
+    // id and version) is verified against that record; everything else takes
+    // the Registry path exactly as before.
+    verifyLocalInstalledPackage(pluginsRoot, pluginDir, pluginId, {
+      pinnedRootKey: trustConfig.pinnedRegistryRootKey,
+      snapshot: readRegistryTrustSnapshot(pluginsRoot),
+      now: trustConfig.now,
+    }) ??
     (
       options.verifyCommittedInstall ??
       ((dir: string, id: string, config: InstallerTrustConfig) =>
@@ -682,6 +710,12 @@ export function registerPluginIpc(
     if (!selected.previousGrant) return null
     return { kind: 'previous', version: selected.previous.packageVersion }
   }
+
+  // The installed package when it came from a local file (card K3).
+  const installedLocalPackage = (id: unknown) =>
+    typeof id === 'string'
+      ? manager.listInstalledPackages().find((pkg) => pkg.id === id && pkg.source === 'local-unsigned')
+      : undefined
 
   // The installed inventory, shared by the Extensions page and the agent's
   // read-only `plugins_list_installed` (marketplace.query, B2-a).
@@ -1589,6 +1623,11 @@ export function registerPluginIpc(
         disclosure: result.disclosure ?? null,
         scan: result.scan ?? null,
         registry: result.registryFacts,
+        // D7: a Marketplace install over a local one asks first.
+        ...(() => {
+          const local = installedLocalPackage(result.id)
+          return local ? { replacesLocal: { version: local.packageVersion ?? null } } : {}
+        })(),
       }
     }
   )
@@ -1742,9 +1781,13 @@ export function registerPluginIpc(
     'plugins:commitInstall',
     async (
       event,
-      args: { id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean }
+      args: { id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean }
     ) => {
       assertAuthorized(event)
+      // D7: never replace a local install with the Marketplace version unasked.
+      if (installedLocalPackage(args.id) && args.replaceConfirmed !== true) {
+        throw new Error(`replacing the local file version of ${args.id} requires confirmation`)
+      }
       if (activeTransactions.has(args.id)) {
         throw new Error(`plugin transaction already in progress for ${args.id}`)
       }
@@ -1851,6 +1894,156 @@ export function registerPluginIpc(
     }
   )
 
+  // DX report A1 (card K3): install a `.vsix` the user picked in this window.
+  // The file comes only from the Host's own dialog; the call takes no
+  // arguments, so neither a plugin, an agent nor the environment can name
+  // one. The file is read once, here; every later step uses those bytes.
+  ipcMain.handle('plugins:installFromFile', async (event) => {
+    assertAuthorized(event)
+    const pickFile = options.pickLocalPackageFile
+    if (!pickFile) throw new Error('installing from a file is unavailable')
+    const path = await pickFile(event)
+    if (!path) return null
+    const bytes = new Uint8Array(readFileSync(path))
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const pkg = prepareLocalInstall(bytes, {
+      pinnedRegistryRootKey: marketplace.trust.pinnedRegistryRootKey,
+      trustSnapshot: readRegistryTrustSnapshot(pluginsRoot),
+      expectedTarget: marketplace.trust.expectedTarget,
+    })
+    if (isManifestV2(pkg.manifest) && pkg.manifest.extensionPack) {
+      throw new Error(`${pkg.id} is an extension pack; packs install only from the Marketplace`)
+    }
+    assertEngineCompatible(pkg.id, pkg.version, pkg.manifest, hostAppVersion())
+    preparedLocal.set(pkg.id, pkg)
+    const replaced = manager.listInstalledPackages().find((item) => item.id === pkg.id)
+    const agentTools = isManifestV2(pkg.manifest) ? computeDisclosure(pkg.manifest).agentTools : []
+    return {
+      id: pkg.id,
+      version: pkg.version,
+      trustTier: pkg.trustTier,
+      sensitive: pkg.sensitive,
+      containsBackendExecutable: pkg.containsBackendExecutable,
+      ...(agentTools.length > 0 ? { agentTools } : {}),
+      requiresConfirmation: true,
+      publisherId: pkg.publisherId,
+      requiresPublisherTrust: false,
+      requiresRiskConfirmation: true,
+      disclosureDiff: updateDisclosureDiff(pkg),
+      disclosure: pkg.disclosure ?? null,
+      scan: null,
+      registry: null,
+      source: pkg.source,
+      digest: pkg.digest,
+      ...(replaced
+        ? {
+            replaces: {
+              version: replaced.packageVersion ?? null,
+              source: replaced.source === 'local-unsigned' ? 'local-unsigned' : 'marketplace',
+            },
+          }
+        : {}),
+    }
+  })
+
+  ipcMain.handle(
+    'plugins:commitLocalInstall',
+    async (event, args: { id?: unknown; riskConfirmed?: unknown; replaceConfirmed?: unknown } | null) => {
+      assertAuthorized(event)
+      const id = typeof args?.id === 'string' ? args.id : ''
+      const pkg = preparedLocal.get(id)
+      if (!pkg) throw new Error(`no prepared local install for ${id}; choose the file again`)
+      if (activeTransactions.has(id)) {
+        throw new Error(`plugin transaction already in progress for ${id}`)
+      }
+      // Unreviewed code: consent is always required, whatever it declares.
+      if (args?.riskConfirmed !== true) {
+        throw new Error(`consent is required to install ${id} from a file`)
+      }
+      // D7: replacing an installed package of the same id is asked first.
+      const installedNow = manager.listInstalledPackages().some((item) => item.id === id) ||
+        lifecycleSelector.read(id)?.active !== undefined
+      if (installedNow && args?.replaceConfirmed !== true) {
+        throw new Error(`replacing the installed ${id} with the file version requires confirmation`)
+      }
+      const commitTrust = resolveConfiguredMarketplace(trust).trust
+      activeTransactions.add(id)
+      preparedLocal.delete(id)
+      const candidateRecord = localTrustRecordPath(pluginsRoot, id, 'candidate')
+      try {
+        const staged = stageInstallCandidate(pkg, pluginsRoot)
+        const scanned = loadPluginDir(staged.candidateDir)
+        if (scanned.error) throw new Error(`staged candidate is invalid: ${scanned.error}`)
+        if (!scanned.activation || !scanned.packageSummary) {
+          throw new Error('immutable activation requires a Manifest v2 candidate')
+        }
+        // The consent covers exactly the copy just written under the plugins
+        // root, never the file the user picked (which may change later).
+        writeLocalTrustRecord(
+          candidateRecord,
+          createLocalTrustRecord(staged.candidateDir, { source: 'file', consentedAt: new Date().toISOString() }),
+        )
+        const decision = verifyCommittedInstall(staged.candidateDir, id, commitTrust)
+        if (decision.action === 'quarantine') {
+          throw new Error(`staged candidate refused: ${decision.reason}`)
+        }
+        const activation: PluginActivationCatalogEntry = {
+          ...scanned.activation,
+          source: 'local-unsigned',
+          artifactDigest: decision.artifactDigest,
+        }
+        if (scanned.descriptor) {
+          if (!options.preflightCandidateFrontend) {
+            throw new Error('candidate frontend preflight is unavailable')
+          }
+          await options.preflightCandidateFrontend(scanned.descriptor)
+        }
+        if (activation.backend) {
+          if (!options.preflightCandidateBackend) {
+            throw new Error('candidate backend preflight is unavailable')
+          }
+          await options.preflightCandidateBackend(activation)
+        }
+        const candidate: PluginPackageSelection = {
+          packageVersion: pkg.version,
+          target: staged.target,
+          artifactDigest: decision.artifactDigest,
+        }
+        // The same version-bound grant a Registry candidate gets; it only
+        // takes effect when the user restarts the package.
+        let candidateGrant: HostCapabilityGrant
+        if (scanned.descriptor) {
+          const policy = scanned.descriptor.capabilityPolicy
+          if (!policy || policy.kind !== 'manifest-v2') {
+            throw new Error('invalid Manifest v2 capability policy')
+          }
+          candidateGrant = {
+            packageVersion: candidate.packageVersion,
+            system: [...policy.system],
+            ...(policy.shell ? { shell: policy.shell } : {}),
+            ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
+            storage: true,
+          }
+        } else {
+          candidateGrant = { packageVersion: candidate.packageVersion, system: [], storage: true }
+        }
+        lifecycleSelector.stageCandidate(id, candidate, {
+          candidateGrant: { selection: candidate, grant: candidateGrant },
+        })
+        return { id, requires: scanned.packageSummary.requires, restartRequired: true }
+      } catch (error) {
+        try {
+          forgetLocalTrustRecords(pluginsRoot, id, ['candidate'])
+        } catch {
+          // The install failure stays the reported error.
+        }
+        throw error
+      } finally {
+        activeTransactions.delete(id)
+      }
+    }
+  )
+
   ipcMain.handle('plugins:restart', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
@@ -1874,14 +2067,29 @@ export function registerPluginIpc(
     if (scanned.error || !scanned.activation || !scanned.packageSummary) {
       throw new Error(`staged candidate is invalid${scanned.error ? `: ${scanned.error}` : ''}`)
     }
+    // Card K3: a candidate installed from a file carries its local source,
+    // never the Registry provenance or the official registration.
+    const localCandidate = isLocalInstalledPackage(pluginsRoot, candidateDir, id)
+    const candidateSource = localCandidate
+      ? { source: 'local-unsigned' as const }
+      : { provenance: 'official-registry' as const }
     const activation: PluginActivationCatalogEntry = {
       ...scanned.activation,
-      provenance: 'official-registry',
+      ...candidateSource,
       artifactDigest: currentTrust.artifactDigest,
     }
     const previousDescriptor = manager.getDescriptor(id)
     const installedSummary = manager.listInstalledPackages().find((item) => item.id === id)
     const isFactory = installedSummary?.provenance === 'factory-bundled'
+    // D7: a change to or from a local source keeps nothing of the replaced
+    // package's consent: grant, rollback grant, backend and agent tool answers.
+    const sourceReplaced = localCandidate || installedSummary?.source === 'local-unsigned'
+    const finishSourceReplacement = (): void => {
+      if (!sourceReplaced) return
+      lifecycleSelector.forgetPrevious(id)
+      options.forgetBackendConsent?.(id)
+      if (!localCandidate) forgetLocalTrustRecords(pluginsRoot, id)
+    }
     const legacyDir = join(pluginsRoot, id)
     // A v0.2.9 backend-only install has neither a descriptor nor a selector
     // record; its installed summary still names the version living at the
@@ -1986,9 +2194,11 @@ export function registerPluginIpc(
       }
       const selected = lifecycleSelector.activateCandidate(id)
       promoted = true
-      const summary = { ...scanned.packageSummary, provenance: 'official-registry' as const }
+      if (localCandidate) promoteLocalCandidateRecord(pluginsRoot, id)
+      const summary = { ...scanned.packageSummary, ...candidateSource }
+      const registration = localCandidate ? {} : { official: true }
       if (scanned.descriptor) {
-        manager.registerInstalledPackage(summary, scanned.descriptor, { official: true })
+        manager.registerInstalledPackage(summary, scanned.descriptor, registration)
         capabilityGrants.set(id, promotedGrant)
         manager.setPluginStorageSnapshotSelection(id, {
           activeVersion: selected.active!.packageVersion,
@@ -1997,7 +2207,7 @@ export function registerPluginIpc(
       } else {
         // Backend-only packages have no frontend descriptor, but they still
         // need a version-bound grant for their next update or rollback.
-        manager.registerInstalledPackage(summary, undefined, { official: true }, candidateDir)
+        manager.registerInstalledPackage(summary, undefined, registration, candidateDir)
         capabilityGrants.set(id, promotedGrant)
         manager.setPluginStorageSnapshotSelection(id, {
           activeVersion: selected.active!.packageVersion,
@@ -2016,6 +2226,7 @@ export function registerPluginIpc(
         )
         manager.completePackageRestart(restartTransaction)
         lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+        finishSourceReplacement()
         if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
         return {
@@ -2026,6 +2237,7 @@ export function registerPluginIpc(
         }
       }
       lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+      finishSourceReplacement()
       if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
@@ -2153,6 +2365,7 @@ export function registerPluginIpc(
       throw new Error(`plugin transaction already in progress for ${id}`)
     }
     lifecycleSelector.discardCandidate(id)
+    forgetLocalTrustRecords(pluginsRoot, id, ['candidate'])
     return { ok: true }
   })
 
@@ -2483,6 +2696,7 @@ export function registerPluginIpc(
       capabilityGrants.remove(id)
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
+      forgetLocalTrustRecords(pluginsRoot, id)
       disabledPlugins.remove(id)
       // A reinstalled package starts with no record of who disabled it.
       recordDisableSource(id, null)
