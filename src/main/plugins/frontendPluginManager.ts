@@ -6680,6 +6680,13 @@ export class FrontendPluginManager {
     throw new Error(`unsupported public capability '${plan.address}'`)
   }
 
+  /** Card K4: audit one change of the Developer Mode switch in the plugin
+   *  activity log, under the Host's own event identity. Best effort like every
+   *  activity row: sent with the next batch over the Host session. */
+  recordDeveloperModeChange(enabled: boolean, appVersion: string): void {
+    this.activityRecorder.recordHostEvent(enabled ? 'developerMode.on' : 'developerMode.off', appVersion)
+  }
+
   /** D-e: a removed plugin's first-seen activity rows go (`plugin.activity.forget`),
    *  so a reinstall's first writes in a workspace are flagged again. Best effort:
    *  with no Host session it is skipped, and removal never waits for it. */
@@ -11502,11 +11509,15 @@ export class FrontendPluginManager {
    * Load exactly one Host-selected frontend package for Developer
    * Mode. This intentionally reads the selected directory only; it never
    * scans a parent directory or turns an arbitrary package tree into a
-   * registry-like inventory. Backend contributions remain fail-closed.
+   * registry-like inventory. Backend contributions remain fail-closed, except
+   * for a folder the user picked in Settings with Developer Mode on (card K4,
+   * `allowBackend`): its backend then goes through the same sandboxed
+   * third-party admission and native backend consent as any other.
    */
   loadExplicitDeveloperPlugin(
     packageDir: string | undefined,
-    optedIn = process.env['AGENT_TEAM_PLUGIN_DEV'] === '1'
+    optedIn = process.env['AGENT_TEAM_PLUGIN_DEV'] === '1',
+    options: { allowBackend?: boolean } = {},
   ): { loaded: true; pluginId: string } | { loaded: false; error: string } {
     if (!optedIn) {
       return { loaded: false, error: 'Developer Mode explicit package loading requires opt-in' }
@@ -11525,7 +11536,7 @@ export class FrontendPluginManager {
         error: 'Developer Mode requires a valid frontend package',
       }
     }
-    if (activation?.backend) {
+    if (activation?.backend && options.allowBackend !== true) {
       return { loaded: false, error: 'Developer Mode cannot load backend contributions' }
     }
     if (!descriptor) {

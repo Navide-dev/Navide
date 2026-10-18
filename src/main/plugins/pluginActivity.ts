@@ -22,6 +22,7 @@
 
 import { PLUGIN_ACTIVITY_RECORD_MESSAGE } from '../../shared/pluginAgentTools'
 import {
+  HOST_EVENT_SOURCE_PLUGIN_ID,
   isKnownCapabilityAddress,
   isUndeclaredDenial,
   isUndispatched,
@@ -112,6 +113,22 @@ export interface BackendCallActivityRow {
   count: number
 }
 
+/** Card K4: a Host setting the user changed that governs which Navide
+ *  plugins may run, filed under the Host's own event identity (never a
+ *  plugin id). Only the Host builds these, through `recordHostEvent`. */
+export interface HostEventActivityRow {
+  at: number
+  plugin_id: typeof HOST_EVENT_SOURCE_PLUGIN_ID
+  plugin_version: string
+  workspace: ''
+  source: 'host'
+  address: HostEventAddress
+  outcome: 'allowed'
+  count: 1
+}
+
+export type HostEventAddress = 'developerMode.on' | 'developerMode.off'
+
 /** Broker refusals: the call never ran. Anything else that is not ok failed. */
 const DENIED_CODES: ReadonlySet<string> = new Set([
   'CAP_DENIED',
@@ -180,7 +197,7 @@ export function backendCallAddress(method: string): string {
 
 export type PluginActivitySend = (
   type: string,
-  payload: { rows: Array<PluginActivityRow | BackendCallActivityRow> },
+  payload: { rows: Array<PluginActivityRow | BackendCallActivityRow | HostEventActivityRow> },
 ) => Promise<unknown> | unknown
 
 /** Counts rows per key and sends them to the backend about once a second. */
@@ -189,6 +206,8 @@ export class PluginActivityRecorder {
   private queue = new Map<string, PluginActivityRow>()
   /** Backend calls of this batch, counted per key (one map lookup per call). */
   private backendCalls = new Map<string, BackendCallActivityRow>()
+  /** Host events of this batch, one row each (never counted together). */
+  private hostEvents: HostEventActivityRow[] = []
   private timer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
@@ -198,6 +217,8 @@ export class PluginActivityRecorder {
 
   /** Count one row into this batch's row for its key and minute; never throws. */
   record(row: PluginActivityRow): void {
+    // A plugin call is never a Host event, whatever a caller put in it.
+    if ((row.source as string) === 'host') return
     const minute = row.at - (row.at % 60_000)
     const key = `${minute}\u0000${row.plugin_id}\u0000${row.plugin_version}\u0000${row.workspace}\u0000${row.source}`
       + `\u0000${row.address}\u0000${row.outcome}\u0000${row.denied_reason ?? ''}\u0000${row.fs_path ?? ''}`
@@ -222,6 +243,15 @@ export class PluginActivityRecorder {
     this.schedule()
   }
 
+  /** Card K4: one Host event (the Developer Mode switch); never throws. */
+  recordHostEvent(address: HostEventAddress, appVersion: string, at: number = Date.now()): void {
+    this.hostEvents.push({
+      at, plugin_id: HOST_EVENT_SOURCE_PLUGIN_ID, plugin_version: appVersion, workspace: '',
+      source: 'host', address, outcome: 'allowed', count: 1,
+    })
+    this.schedule()
+  }
+
   private schedule(): void {
     if (this.timer === null) {
       this.timer = setTimeout(() => { void this.flush() }, this.intervalMs)
@@ -235,9 +265,12 @@ export class PluginActivityRecorder {
       clearTimeout(this.timer)
       this.timer = null
     }
-    const rows: Array<PluginActivityRow | BackendCallActivityRow> = [...this.queue.values(), ...this.backendCalls.values()]
+    const rows: Array<PluginActivityRow | BackendCallActivityRow | HostEventActivityRow> = [
+      ...this.queue.values(), ...this.backendCalls.values(), ...this.hostEvents,
+    ]
     this.queue = new Map()
     this.backendCalls = new Map()
+    this.hostEvents = []
     if (rows.length === 0) return
     try {
       const send = this.send()
@@ -249,6 +282,6 @@ export class PluginActivityRecorder {
 
   /** Rows waiting to be sent (diagnostics and tests). */
   get pending(): number {
-    return this.queue.size + this.backendCalls.size
+    return this.queue.size + this.backendCalls.size + this.hostEvents.length
   }
 }

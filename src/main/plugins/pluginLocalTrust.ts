@@ -212,6 +212,44 @@ function rootSignedTakedownList(
   }
 }
 
+/** The root-signed takedown check for a package that has no Registry
+ * evidence: a local file, or a developer folder (card K4). Its id namespace
+ * and declared publisher are both checked, since nothing vouches for either. */
+export function localTakedownDecision(
+  manifest: { id: string; version: string; publisher?: string },
+  trust: PluginLocalTrustContext
+): Extract<PluginLocalTrustDecision, { action: 'blocked' }> | { action: 'allow'; blocklistChecked: boolean } {
+  const takedown = rootSignedTakedownList(trust)
+  if (!takedown) return { action: 'allow', blocklistChecked: false }
+  // A Manifest v1 file may declare a publisher other than its id
+  // namespace, and nothing local vouches for either, so both are checked.
+  const publisherIds = [manifest.id.split('.')[0], ...(manifest.publisher ? [manifest.publisher] : [])]
+  const blockedPublisher = publisherIds.find((publisherId) =>
+    takedown.blockedPublishers.includes(publisherId)
+  )
+  if (blockedPublisher !== undefined) {
+    return {
+      action: 'blocked',
+      code: 'LOCAL_PUBLISHER_BLOCKED',
+      reason: `taken down by Navide: publisher '${blockedPublisher}' is blocked`,
+    }
+  }
+  if (
+    takedown.blockedPackages.some(
+      (blocked) =>
+        blocked.packageId === manifest.id &&
+        (blocked.version === undefined || blocked.version === manifest.version)
+    )
+  ) {
+    return {
+      action: 'blocked',
+      code: 'LOCAL_PACKAGE_BLOCKED',
+      reason: `taken down by Navide: package '${manifest.id}@${manifest.version}' is blocked`,
+    }
+  }
+  return { action: 'allow', blocklistChecked: true }
+}
+
 /**
  * Fail-closed load-time verifier for a locally installed package. The Registry
  * authority rule does not apply here, so a local install and a Marketplace
@@ -282,40 +320,13 @@ export function verifyLocalPackage(
       )
     }
 
-    const takedown = rootSignedTakedownList(trust)
-    if (takedown) {
-      // A Manifest v1 file may declare a publisher other than its id
-      // namespace, and nothing local vouches for either, so both are checked.
-      const publisherIds = [manifest.id.split('.')[0], ...(manifest.publisher ? [manifest.publisher] : [])]
-      const blockedPublisher = publisherIds.find((publisherId) =>
-        takedown.blockedPublishers.includes(publisherId)
-      )
-      if (blockedPublisher !== undefined) {
-        return {
-          action: 'blocked',
-          code: 'LOCAL_PUBLISHER_BLOCKED',
-          reason: `taken down by Navide: publisher '${blockedPublisher}' is blocked`,
-        }
-      }
-      if (
-        takedown.blockedPackages.some(
-          (blocked) =>
-            blocked.packageId === manifest.id &&
-            (blocked.version === undefined || blocked.version === manifest.version)
-        )
-      ) {
-        return {
-          action: 'blocked',
-          code: 'LOCAL_PACKAGE_BLOCKED',
-          reason: `taken down by Navide: package '${manifest.id}@${manifest.version}' is blocked`,
-        }
-      }
-    }
+    const takedown = localTakedownDecision(manifest, trust)
+    if (takedown.action === 'blocked') return takedown
     return {
       action: 'allow',
       source,
       contentDigest: record.contentDigest,
-      blocklistChecked: takedown !== null,
+      blocklistChecked: takedown.blocklistChecked,
     }
   } catch (error) {
     if (error instanceof LocalTrustError) {

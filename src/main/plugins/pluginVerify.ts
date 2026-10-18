@@ -137,12 +137,21 @@ export function isOfficialPluginId(id: string): boolean {
   return id.startsWith(OFFICIAL_PLUGIN_PREFIX)
 }
 
+/** Card K4 (D6): a packaged build never takes the official key from the
+ * environment, Developer Mode or not; the Host turns the override off at
+ * startup. A key that signs `navide.` packages is not a developer setting. */
+let officialKeyOverrideAllowed = true
+
+export function disableOfficialKeyOverride(): void {
+  officialKeyOverrideAllowed = false
+}
+
 /** Resolve the effective pinned official key (env override → build constant),
  *  or null when neither is configured. */
 export function resolveOfficialPublisherKey(
   env: Record<string, string | undefined> = process.env
 ): string | null {
-  const override = env['AGENT_TEAM_OFFICIAL_PLUGIN_KEY']?.trim()
+  const override = officialKeyOverrideAllowed ? env['AGENT_TEAM_OFFICIAL_PLUGIN_KEY']?.trim() : undefined
   const pem = override || OFFICIAL_PUBLISHER_KEY_PEM
   return pem ? pem : null
 }

@@ -487,6 +487,16 @@ declare global {
           id: string,
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
         ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        developerMode?: () => Promise<DeveloperModeState>
+        setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
+        loadFromFolder?: () => Promise<PreparedInstallSummary | null>
+        commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean }) => Promise<DeveloperModeState>
+        reloadDeveloperPlugin?: (id: string) => Promise<
+          | { reloaded: true; requiresConsent: false }
+          | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
+        >
+        removeDeveloperFolder?: (id: string) => Promise<DeveloperModeState>
+        selfHostedQuarantine?: () => Promise<Array<{ id: string; version: string | null }>>
         restart: (id: string) => Promise<{
           id: string
           packageVersion: string
@@ -817,6 +827,14 @@ declare global {
     reattachableBackendData?: true
     /** MED-1 on #425: false when the takedown list could not be checked. */
     takedownChecked?: boolean
+    /** Card K4: the developer folder this summary was read from. */
+    folder?: string
+  }
+
+  /** Card K4: the Developer Mode switch and the developer folders consented to. */
+  interface DeveloperModeState {
+    enabled: boolean
+    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
   }
 }
 

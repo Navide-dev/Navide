@@ -36,7 +36,10 @@ import {
   isTrustedPluginManagementSender,
   registerPluginIpc,
   resolveConfiguredMarketplace,
+  setMarketplaceOverridesAllowed,
 } from './plugins/pluginIpc'
+import { developerFolderBackendDigest, PluginDeveloperModeStore } from './plugins/pluginDeveloperModeStore'
+import { disableOfficialKeyOverride } from './plugins/pluginVerify'
 import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
 import { contributionIcon } from './plugins/pluginContributionIcon'
@@ -58,6 +61,7 @@ import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/fr
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
+import { localTakedownDecision } from './plugins/pluginLocalTrust'
 import { agentApprovalSourceNote, nativeBackendConsentDialog } from './plugins/pluginLocalInstall'
 import { revealUnsafeLineText } from '../shared/pluginAgentTools'
 import {
@@ -191,6 +195,7 @@ import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import {
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
+  packageContentDigest,
   type ThirdPartyLaunchSpec,
   ThirdPartyBackendController,
   type AgentToolWritePrompt,
@@ -968,6 +973,12 @@ app.whenReady().then(() => {
 // Extensions view: install/update/remove third-party plugins. Verified packages
 // are written under userData/plugins and scanned back on next launch.
 const pluginsRoot = (): string => join(app.getPath('userData'), 'plugins')
+// Card K4 (D6): a packaged build honors the self-hosted Registry overrides only
+// while the user's Developer Mode switch is on, and never takes the official
+// publisher key from the environment. Set before anything resolves either.
+const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot())
+setMarketplaceOverridesAllowed(() => !app.isPackaged || pluginDeveloperModeStore.isEnabled())
+if (app.isPackaged) disableOfficialKeyOverride()
 let installedRegistryRootKey: string | null = null
 let installedRegistryAuthority: 'official' | 'self-hosted' = 'self-hosted'
 let installedOfficialRegistryUrl: string | undefined
@@ -998,6 +1009,25 @@ function currentInstalledRegistryTrust() {
     officialRegistryUrl: marketplace.trust.officialRegistryUrl,
     expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
     now: marketplace.trust.now,
+  }
+}
+
+/** Why a developer folder is taken down by Navide, or null (card K4). */
+function developerFolderTakedown(packageDir: string): string | null {
+  try {
+    const manifest = JSON.parse(readFileSync(join(packageDir, 'manifest.json'), 'utf8')) as Record<string, unknown>
+    const decision = localTakedownDecision(
+      {
+        id: String(manifest.id),
+        version: String(manifest.version),
+        ...(typeof manifest.publisher === 'string' ? { publisher: manifest.publisher } : {}),
+      },
+      currentInstalledRegistryTrust(),
+    )
+    return decision.action === 'blocked' ? decision.reason : null
+  } catch {
+    // An unreadable manifest is refused by the loader itself.
+    return null
   }
 }
 
@@ -1207,6 +1237,12 @@ const nativeBackendStore = new NativeBackendStore(nativeBackendRoot)
 let agentToolsHost: PluginAgentToolsHost | null = null
 const thirdPartyBackends = new ThirdPartyBackendController({
   store: nativeBackendStore,
+  // Card K4: a developer folder's consent is bound to the folder and its
+  // declared permissions and backend, not to content that changes as the
+  // developer works; every other package binds to its exact content.
+  digestBackend: (spec) =>
+    Promise.resolve(developerFolderBackendDigest(pluginDeveloperModeStore.folders(), spec))
+      .then((digest) => digest ?? packageContentDigest(spec.packageDir)),
   dataRoot: join(nativeBackendRoot, 'data'),
   filesystemPort: () => frontendPluginManager.createWorkspaceFilesystemPort(),
   shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
@@ -1811,6 +1847,12 @@ const pluginTrustRefresh = registerPluginIpc(
       })
       return picked.canceled ? null : picked.filePaths[0] ?? null
     },
+    pickDeveloperFolder: async (event) => {
+      const parent = BrowserWindow.fromWebContents(event.sender)
+      if (!parent || parent.isDestroyed() || !mainWindows.has(parent) || detachedWindowIds.has(parent.id)) return null
+      const picked = await dialog.showOpenDialog(parent, { properties: ['openDirectory'] })
+      return picked.canceled ? null : picked.filePaths[0] ?? null
+    },
     forgetBackendConsent: (pluginId) => nativeBackendStore.forgetGrants(pluginId),
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),
@@ -2004,6 +2046,8 @@ const pluginTrustRefresh = registerPluginIpc(
     holdBuiltinSwitch: (task) => builtinSwitchReconciler.hold(task),
   }
 )
+// Card K4: the developer folders the user consented to, when Developer Mode is on.
+void pluginTrustRefresh.loadDeveloperFolders()
 /** The Host side of a built-in's Disabled switch: drain and close it, or bring
  *  it back. Used by the Extensions switch and by a store change the switch did
  *  not make (see builtinSwitchReconciler). */
@@ -5652,7 +5696,11 @@ app.whenReady().then(async () => {
       }
     }
     const explicitPackageDir = process.env['AGENT_TEAM_PLUGIN_DEV_PATH']
-    if (explicitPackageDir !== undefined) {
+    // Review MED-1 on #428: the root-signed takedown list applies here too.
+    const explicitTakedown = explicitPackageDir === undefined ? null : developerFolderTakedown(explicitPackageDir)
+    if (explicitTakedown) {
+      console.warn(`[main] AGENT_TEAM_PLUGIN_DEV_PATH was not loaded: ${explicitTakedown}`)
+    } else if (explicitPackageDir !== undefined) {
       const explicitResult = frontendPluginManager.loadExplicitDeveloperPlugin(explicitPackageDir)
       if (!explicitResult.loaded) {
         console.warn(
