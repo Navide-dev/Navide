@@ -100,7 +100,7 @@ import {
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
 import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
-import type { PluginSource } from '../../shared/pluginSource'
+import { pluginSourceFromLegacyProvenance, type PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { rescanFinding } from './pluginRescanNotice'
 import { createLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
@@ -238,6 +238,19 @@ function newestInstallableVersion(
 /** SemVer prerelease suffix ⇒ pre-release channel (build metadata is not one). */
 export function isPrereleaseVersion(version: string): boolean {
   return version.split('+', 1)[0].includes('-')
+}
+
+/** Source and review state of an installed package: its own `source` when a
+ * loader set one, else read from the legacy provenance it carries. */
+function installedSource(summary: {
+  provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  source?: PluginSource
+  packageVersion?: string
+}): PluginSource | undefined {
+  return summary.source ?? pluginSourceFromLegacyProvenance(
+    summary.provenance,
+    summary.packageVersion !== undefined && isPrereleaseVersion(summary.packageVersion)
+  )
 }
 
 /** The list card's disclosure and scan (plan B D1) from a Registry listing
@@ -728,6 +741,7 @@ export function registerPluginIpc(
         packageVersion?: string
         manifestPermissions?: ManifestPermissionsSummary
         provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+        source?: PluginSource
         warning?: string
         enginesNavide?: string
       }
@@ -791,6 +805,10 @@ export function registerPluginIpc(
           }
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
+      ...(() => {
+        const source = installedSource(summary)
+        return source ? { source } : {}
+      })(),
       ...(summary.warning ? { warning: summary.warning } : {}),
       ...(candidate ? { pendingCandidateVersion: candidate.packageVersion } : {}),
       ...(() => {
@@ -824,14 +842,21 @@ export function registerPluginIpc(
 
   ipcMain.handle('plugins:listContributions', (event) => {
     assertAuthorized(event)
+    const installed = new Map(manager.listInstalledPackages().map((pkg) => [pkg.id, pkg] as const))
     return manager.listContributionCatalog().map(({ iconFile, ...entry }) => {
       const icon = iconFile ? options.resolveContributionIcon?.(iconFile) ?? null : null
+      const pkg = installed.get(entry.pluginId)
+      // Only the selected package's own record may label its views.
+      const source = pkg && pkg.packageVersion === (entry.packageVersion ?? undefined)
+        ? installedSource(pkg)
+        : undefined
       return {
         ...entry,
         icon: icon?.url ?? null,
         // A silhouette is painted in the current text colour by the renderer,
         // so it follows the theme the way the built-in SVG icons do.
         iconMonochrome: icon?.monochrome ?? false,
+        ...(source ? { source } : {}),
       }
     })
   })
