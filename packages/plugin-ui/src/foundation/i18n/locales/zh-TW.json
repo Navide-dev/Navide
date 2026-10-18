@@ -5157,6 +5157,7 @@
             "cli_reclaim_agent": "回收做完的 pane：CLI 行程結束、pane 留成可點擊接續的卡片，等同狀態列的「立即回收」；忙碌、被聚焦或無法接續的 pane 會附理由拒絕，早於 v0.2.16 的視窗回 reclaim-unsupported",
             "cli_message_log": "自己收送過的訊息歷史；訊息一旦送達就從 inbox_summary 與 pending_incoming 消失，這裡是唯一還查得到的地方",
             "cli_usage": "各家 CLI 還剩多少額度；派工前先看，否則訊息會送達到一個已經用完額度的 CLI 手上",
+            "cli_failover_state": "Navide 的額度用完自動切換目前狀態：政策、進行中的事件、自動切換預算還剩幾次，以及哪家廠商因切換做到一半而被擋住、要等使用者處理。唯讀；帳號只以 slot 表示，不含 email",
             "cli_token_stats": "這個工作區目前的 token 用量",
             "cli_list_sessions": "這個工作區還留得住、可以接續的 CLI 對話有哪些——對話比 pane 活得久，pane 關掉、App 重開、pane 重建過，紀錄都還在磁碟上。每一列會說它還接不接得起來，以及當初擁有它的 pane 是不是還開著：還開著的別去接，那會分岔或弄壞它，直接傳訊給那個 pane 就好",
             "cli_place_pane": "搬動一個 pane：換分頁群組、或改掛在另一個 pane 底下（等同你在側欄拖放，走同一組寫入路徑，所以重開也還在原位）。兩半各自獨立，回傳會說哪一半成功了。不會動到那個 pane 的 CLI——不送訊息、不中斷、不重啟。只能搬本機的 pane",

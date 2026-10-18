@@ -30,6 +30,7 @@
     "cli_check_message",
     "cli_close_agent",
     "cli_extensions_list",
+    "cli_failover_state",
     "cli_get_status",
     "cli_inbox_summary",
     "cli_interrupt",

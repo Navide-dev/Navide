@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- MCP: a read-only `cli_failover_state` tool lets an agent see what Navide's quota failover is doing: the policy, open incidents, how many automatic switches each account pool has left, and which vendor is blocked by a half-finished switch until the user resolves it. It reads only that in-memory state: nothing is refreshed or switched, no credential or Keychain item is read, accounts are named by slot id, and the live login's identity, fingerprint and raw error text are never returned.
+
 ## [0.2.25] — 2026-10-18 — signed release
 
 ### Added
