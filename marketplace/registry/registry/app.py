@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import urllib.parse
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -14,6 +15,7 @@ from sqlalchemy import Engine
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from sqlmodel import Session
 
+from . import cloud_auth
 from .auth import PublisherIdentity, get_publisher_identity
 from .config import VERIFIER_ACCEPTING, Settings, load_settings
 from . import review
@@ -72,6 +74,8 @@ from .trust import compute_trust_tier, sensitive_capabilities
 from .versions import latest_prerelease_version, latest_stable_version, version_channel
 from .web import CHANGELOG_NAMES, SAFE_ASSET_TYPES, changelog_text, readme_text
 
+_log = logging.getLogger(__name__)
+
 
 @dataclass
 class RegistryState:
@@ -96,10 +100,38 @@ def _make_verifier(settings: Settings) -> SignatureVerifier:
     return Ed25519SignatureVerifier()
 
 
+def _admin_token_configured(settings: Settings) -> bool:
+    return bool(settings.admin_token and settings.admin_token.strip())
+
+
+def _require_admin_token(settings: Settings, presented: str | None) -> None:
+    """Fail closed: no configured admin token refuses every X-Admin-Token call."""
+    if not _admin_token_configured(settings):
+        if settings.allow_open_admin:
+            return
+        _log.warning(
+            "refused admin request: REGISTRY_ADMIN_TOKEN is not set "
+            "(set it, or REGISTRY_ALLOW_OPEN_ADMIN=1 for a local dev registry)"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="admin endpoints are disabled: REGISTRY_ADMIN_TOKEN is not set",
+        )
+    if presented is None or not cloud_auth.constant_time_equal(
+        settings.admin_token, presented
+    ):
+        raise HTTPException(status_code=401, detail="invalid admin token")
+
+
 def create_app(
     settings: Settings | None = None, *, txt_resolver: TxtResolver | None = None
 ) -> FastAPI:
     settings = settings or load_settings()
+    if settings.allow_open_admin and not _admin_token_configured(settings):
+        _log.warning(
+            "REGISTRY_ALLOW_OPEN_ADMIN is on and no admin token is set: "
+            "admin endpoints accept unauthenticated calls (local dev only)"
+        )
     engine = create_db_engine(settings.db_path)
     state = RegistryState(
         engine=engine,
@@ -441,12 +473,10 @@ def _register_routes(app: FastAPI) -> None:
     ) -> PublisherRegisterResponse:
         """Register/update a publisher's Ed25519 public key and bearer token.
 
-        Admin-gated: when `admin_token` is configured it must be presented via
-        `X-Admin-Token`; left unset the endpoint is open (dev).
+        Admin-gated by `X-Admin-Token`; refused while no admin token is
+        configured unless `allow_open_admin` opts a dev registry out.
         """
-        settings: Settings = request.app.state.registry.settings
-        if settings.admin_token is not None and x_admin_token != settings.admin_token:
-            raise HTTPException(status_code=401, detail="invalid admin token")
+        _require_admin_token(request.app.state.registry.settings, x_admin_token)
         publisher = repo.register_publisher(
             name=body.name,
             public_key=body.public_key,
@@ -890,9 +920,7 @@ def _register_routes(app: FastAPI) -> None:
         repo: RegistryRepository = Depends(_repo),
     ) -> FeaturedResponse:
         """Admin-gated curation flag (same `X-Admin-Token` gate as publishers)."""
-        settings: Settings = request.app.state.registry.settings
-        if settings.admin_token is not None and x_admin_token != settings.admin_token:
-            raise HTTPException(status_code=401, detail="invalid admin token")
+        _require_admin_token(request.app.state.registry.settings, x_admin_token)
         extension = repo.get_extension(namespace, name)
         if extension is None:
             raise HTTPException(status_code=404, detail="extension not found")
