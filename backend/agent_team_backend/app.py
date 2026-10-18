@@ -34,6 +34,7 @@ from . import guard_hooks
 from .guard import runtime as guard_runtime
 from . import ws_auth
 from . import error_ledger
+from . import launch_id
 from . import loop_watchdog
 from . import mem_probe
 from . import osplat
@@ -2274,6 +2275,9 @@ async def _reclaim_orphan_codex_homes() -> None:
 @app.on_event("startup")
 async def _start_log_watcher() -> None:
     _sanitize_inherited_cli_env()
+    # Before any client connects: every spawn record stamps this launch, and the
+    # renderer's 'auto' resume scope compares against the one before it.
+    launch_id.rotate(ui_settings_store)
     if tokens_store.has_quota_changes():
         _schedule_tokens_broadcast("")
 

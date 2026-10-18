@@ -3663,6 +3663,7 @@ watch(activeTab, (tab) => {
                     <option value="page">{{ $t('settings.appearance.restore-scope-page') }}</option>
                     <option value="tab">{{ $t('settings.appearance.restore-scope-tab') }}</option>
                     <option value="all">{{ $t('settings.appearance.restore-scope-all') }}</option>
+                    <option value="auto">{{ $t('settings.appearance.restore-scope-auto') }}</option>
                   </select>
                 </template>
               </SettingRow>
