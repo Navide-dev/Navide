@@ -123,14 +123,14 @@ describe('required CI gate', () => {
       expect(job.steps.some((step) => step.uses?.startsWith('actions/upload-artifact@') && step.if === 'always()')).toBe(true)
     }
     expect(workflow.jobs.backend.strategy?.matrix.include.filter((entry) => entry.platform === 'Windows')
-      .map((entry) => entry.shard)).toEqual(['1/4', '2/4', '3/4', '4/4'])
+      .map((entry) => entry.shard)).toEqual(['1/5', '2/5', '3/5', '4/5', '5/5'])
   })
 
   it('preserves platform time budgets and best-effort Windows diagnostics', () => {
     const backend = workflow.jobs.backend
     expect(backend['timeout-minutes']).toBe('${{ matrix.timeout }}')
     expect(backend.strategy?.matrix.include.map(({ platform, timeout }) => [platform, timeout]))
-      .toEqual([['macOS', 25], ['Linux', 25], ['Windows', 45], ['Windows', 45], ['Windows', 45], ['Windows', 45]])
+      .toEqual([['macOS', 25], ['Linux', 25], ['Windows', 45], ['Windows', 45], ['Windows', 45], ['Windows', 45], ['Windows', 45]])
     const diagnostic = backend.steps.find((step) => step.name === 'Report the backend test log')!
     expect(diagnostic.if).toContain('always()')
     expect(diagnostic.if).toContain("runner.os == 'Windows'")

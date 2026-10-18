@@ -77,4 +77,39 @@ describe('PluginDisclosureOverview (D5, D-f)', () => {
     expect(names[0]).toBe('acme.\\u{202e}quiet 1.0.0\\u{200b}')
     expect(names[1]).toBe('acme.plain 2.0.0')
   })
+
+  // #415 review MED-2: an open activity panel stops polling with the overview.
+  it('stops the open activity panel polling while paused and resumes it after', async () => {
+    vi.useFakeTimers()
+    try {
+      const backendCallConcurrency = vi.fn(async () => [])
+      ;(window as unknown as Record<string, unknown>).agentTeam = {
+        plugins: {
+          installedDisclosures: vi.fn().mockResolvedValue([{ id: 'acme.one', version: '1.0.0', disclosure: null, scan: null }]),
+          activityReport: vi.fn(async () => ({ ok: true, report })),
+          backendCallConcurrency,
+          backendResourceUsage: vi.fn(async () => null),
+        },
+      }
+      wrapper = mount(PluginDisclosureOverview, { global: { plugins: [i18n] } })
+      await flushPromises()
+      const details = wrapper.get('.nv-overview-details').element as HTMLDetailsElement
+      details.open = true
+      await wrapper.get('.nv-overview-details').trigger('toggle')
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(backendCallConcurrency).toHaveBeenCalledTimes(2)
+
+      await wrapper.setProps({ paused: true })
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(backendCallConcurrency).toHaveBeenCalledTimes(2)
+
+      await wrapper.setProps({ paused: false })
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(backendCallConcurrency.mock.calls.length).toBeGreaterThan(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

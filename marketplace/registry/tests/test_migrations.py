@@ -235,3 +235,54 @@ def test_failed_migration_rolls_back_and_is_not_recorded(
     monkeypatch.undo()
     create_db_engine(path)
     assert _unique_sets(path) == {("extension_id", "version", "target")}
+
+
+def test_migration_10_backfills_channel_from_semver(tmp_path: Path) -> None:
+    path = tmp_path / "registry.db"
+    _create(path, HEAD_SCHEMA)
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "INSERT INTO extension VALUES (1, 1, 'navide', 'skills', "
+            "'navide.skills', 'Skills', 'desc', '[]', 0, 0, 0, 0, "
+            "'2026-09-01 00:00:00', '2026-09-01 00:00:00')"
+        )
+        for row_id, version in ((1, "1.0.0"), (2, "1.1.0-beta.1"), (3, "1.1.0+build.7")):
+            db.execute(
+                "INSERT INTO extension_version VALUES (?, 1, ?, '{}', 'abc', 'k', "
+                "NULL, 'universal', '{}', NULL, 'unsigned', 0, 0, "
+                "'2026-09-01 00:00:00')",
+                (row_id, version),
+            )
+
+    engine = create_db_engine(path)
+
+    assert applied_migrations(engine)[10] == "version-channel-expiry"
+    with sqlite3.connect(path) as db:
+        assert db.execute(
+            "SELECT version, channel, expires_at FROM extension_version ORDER BY id"
+        ).fetchall() == [
+            ("1.0.0", "stable", None),
+            ("1.1.0-beta.1", "pre-release", None),
+            ("1.1.0+build.7", "stable", None),
+        ]
+        indexes = {row[1] for row in db.execute("PRAGMA index_list(extension_version)")}
+    assert "ix_extension_version_channel" in indexes
+
+    # Running the step again (a half-recorded run) changes nothing.
+    step = next(step for number, _, step in MIGRATIONS if number == 10)
+    with sqlite3.connect(path) as db:
+        step(db)
+        assert db.execute(
+            "SELECT channel FROM extension_version ORDER BY id"
+        ).fetchall() == [("stable",), ("pre-release",), ("stable",)]
+    assert run_migrations(engine) == []
+
+
+def test_migration_10_on_a_fresh_database(tmp_path: Path) -> None:
+    path = tmp_path / "registry.db"
+    engine = create_db_engine(path)
+    assert applied_migrations(engine)[10] == "version-channel-expiry"
+    with sqlite3.connect(path) as db:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(extension_version)")}
+    assert {"channel", "expires_at"} <= columns
+    assert run_migrations(engine) == []

@@ -19,6 +19,7 @@ from .models import (
     ExtensionVersion,
     Publisher,
 )
+from .versions import TESTPLACE_CHANNEL, version_channel
 
 APPROVED = "approved"
 """Only approved versions are public (review.py owns the state machine)."""
@@ -92,11 +93,12 @@ class RegistryRepository:
 
     def _public_filter(self):
         """Predicate for extensions public reads may show: at least one
-        approved version, and not removed through the blocklist."""
+        approved non-testplace version, and not removed through the blocklist."""
         approved = set(
             self.session.exec(
                 select(ExtensionVersion.extension_id).where(
-                    ExtensionVersion.review_status == APPROVED
+                    ExtensionVersion.review_status == APPROVED,
+                    ExtensionVersion.channel != TESTPLACE_CHANNEL,
                 )
             ).all()
         )
@@ -251,13 +253,17 @@ class RegistryRepository:
         self, extension_id: int, version: str, *, public_only: bool = True
     ) -> list[ExtensionVersion]:
         """Every target's artifact of one version, ordered by target; only
-        approved ones unless `public_only` is False (publish conflicts, yank)."""
+        approved non-testplace ones unless `public_only` is False (publish
+        conflicts, yank)."""
         statement = select(ExtensionVersion).where(
             ExtensionVersion.extension_id == extension_id,
             ExtensionVersion.version == version,
         )
         if public_only:
-            statement = statement.where(ExtensionVersion.review_status == APPROVED)
+            statement = statement.where(
+                ExtensionVersion.review_status == APPROVED,
+                ExtensionVersion.channel != TESTPLACE_CHANNEL,
+            )
         return list(
             self.session.exec(statement.order_by(ExtensionVersion.target)).all()
         )
@@ -269,7 +275,10 @@ class RegistryRepository:
             ExtensionVersion.extension_id == extension_id
         )
         if public_only:
-            statement = statement.where(ExtensionVersion.review_status == APPROVED)
+            statement = statement.where(
+                ExtensionVersion.review_status == APPROVED,
+                ExtensionVersion.channel != TESTPLACE_CHANNEL,
+            )
         return list(self.session.exec(statement).all())
 
     def add_version(
@@ -304,6 +313,7 @@ class RegistryRepository:
             registry_envelope=registry_envelope,
             registry_signature=registry_signature,
             trust_tier=trust_tier,
+            channel=version_channel(version),
             review_status=review_status,
             review_report=review_report or {},
             disclosure=disclosure,

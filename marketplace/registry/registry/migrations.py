@@ -28,6 +28,8 @@ from typing import Callable
 
 from sqlalchemy import Engine
 
+from .versions import version_channel
+
 MIGRATIONS_TABLE = "schema_migrations"
 
 
@@ -309,6 +311,31 @@ def _add_version_disclosure(connection: sqlite3.Connection) -> None:
             connection.execute(f"ALTER TABLE extension_version ADD COLUMN {column} {ddl}")
 
 
+def _add_version_channel_expiry(connection: sqlite3.Connection) -> None:
+    """Release channel and testplace expiry; every existing row gets the
+    channel its SemVer implies and no expiry."""
+    columns = _columns(connection, "extension_version")
+    if "channel" not in columns:
+        connection.execute(
+            "ALTER TABLE extension_version ADD COLUMN channel VARCHAR "
+            "NOT NULL DEFAULT 'stable'"
+        )
+    if "expires_at" not in columns:
+        connection.execute("ALTER TABLE extension_version ADD COLUMN expires_at DATETIME")
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_extension_version_channel "
+        "ON extension_version (channel)"
+    )
+    rows = connection.execute(
+        "SELECT id, version FROM extension_version WHERE channel != 'testplace'"
+    ).fetchall()
+    for row_id, version in rows:
+        connection.execute(
+            "UPDATE extension_version SET channel = ? WHERE id = ?",
+            (version_channel(version), row_id),
+        )
+
+
 MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = (
     (1, "discovery-columns", _add_discovery_columns),
     (2, "registry-signing-columns", _add_registry_signing_columns),
@@ -319,6 +346,7 @@ MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = 
     (7, "extension-reports", _extension_reports),
     (8, "publisher-native-backend", _add_publisher_native_backend),
     (9, "version-disclosure", _add_version_disclosure),
+    (10, "version-channel-expiry", _add_version_channel_expiry),
 )
 
 
