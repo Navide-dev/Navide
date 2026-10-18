@@ -287,9 +287,36 @@ const activeTab = ref<Tab>(props.initialTab ?? 'general')
 // and stays mounted after that.
 const visitedCliExtensions = ref(activeTab.value === 'cliExtensions')
 // D-f: the disclosure overview reads every plugin's activity, so it mounts
-// only once its page is first opened (opening Settings reads nothing).
+// only once its section of the Navide Plugins page first scrolls into view or
+// a link to it is followed (opening Settings, or that page, reads nothing),
+// and it polls only while the section is in view.
 const visitedDisclosureOverview = ref(activeTab.value === 'disclosureOverview')
-watch(activeTab, (tab) => { if (tab === 'disclosureOverview') visitedDisclosureOverview.value = true })
+const disclosureOverviewInView = ref(false)
+const disclosureOverviewSection = ref<HTMLElement | null>(null)
+let disclosureOverviewObserver: IntersectionObserver | null = null
+onMounted(() => {
+  if (!disclosureOverviewSection.value || typeof IntersectionObserver === 'undefined') return
+  disclosureOverviewObserver = new IntersectionObserver((entries) => {
+    disclosureOverviewInView.value = entries.some((entry) => entry.isIntersecting)
+    if (disclosureOverviewInView.value) visitedDisclosureOverview.value = true
+  })
+  disclosureOverviewObserver.observe(disclosureOverviewSection.value)
+})
+onBeforeUnmount(() => disclosureOverviewObserver?.disconnect())
+// The overview is a section of the Navide Plugins page now; the old tab id
+// stays accepted (initialTab, setTab, setSection, the plugin row's link) and
+// lands on that page, scrolled to the section.
+watch(activeTab, async (tab) => {
+  if (tab !== 'disclosureOverview') return
+  visitedDisclosureOverview.value = true
+  activeTab.value = 'extensions'
+  await nextTick()
+  requestAnimationFrame(() => {
+    document
+      .querySelector<HTMLElement>('[data-settings-section="disclosureOverview"]')
+      ?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  })
+}, { immediate: true })
 watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.value = true })
 // initialTab is only read once at mount by the ref initializer above; when the
 // modal is already open and a new tab is requested (e.g. the ui.settings.open
@@ -1116,7 +1143,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
   },
   {
     id: 'disclosure-overview',
-    tab: 'disclosureOverview',
+    tab: 'extensions',
     section: 'disclosureOverview',
     title: t('settings.search.item.disclosureOverview.title'),
     group: t('settings.nav.group.navidePlugins'),
@@ -1556,8 +1583,9 @@ const settingsBundleSummary = ref('')
 const settingsBundleError = ref('')
 
 /** Tabs that actually hold settings. `help` is read-only reference material, so
- *  it has no scope badge and no settings file to reveal. */
-type SettingsTab = Exclude<Tab, 'help'>
+ *  it has no scope badge and no settings file to reveal. `disclosureOverview`
+ *  is only an alias that lands on the Navide Plugins page. */
+type SettingsTab = Exclude<Tab, 'help' | 'disclosureOverview'>
 
 // The scope is stored as a key, not as prose: the badge is resolved through
 // `scopeLabel()` at render time so it follows a language switch.
@@ -1598,7 +1626,6 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
   // Browsing the registry reads nothing of the user's, so this page has no
   // scope badge; the entry exists because the map covers every nav page.
   marketplace: { scope: '', storage: 'mainProcess' },
-  disclosureOverview: { scope: '', storage: 'mainProcess' },
   keybindings: { scope: 'user', storage: 'mainProcess' },
   // Platform config is in navide.db; tokens are in the credential vault.
   channels: { scope: 'user', storage: 'safeStorage' },
@@ -2695,11 +2722,6 @@ watch(activeTab, (tab) => {
               <SettingsNavItem :label="$t('settings.nav.marketplace')" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.4h10.8l-.8 7.1a1.2 1.2 0 0 1-1.2 1.1H4.6a1.2 1.2 0 0 1-1.2-1.1L2.6 5.4Z"/><path d="M5.8 7.2V4.6a2.2 2.2 0 0 1 4.4 0v2.6"/></svg>
-                </template>
-              </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.disclosureOverview')" :active="activeTab === 'disclosureOverview'" @select="activeTab = 'disclosureOverview'">
-                <template #icon>
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8 13 3.7v4c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5v-4L8 1.8Z"/><path d="M5.6 6.6h4.8M5.6 9h3.2"/></svg>
                 </template>
               </SettingsNavItem>
             </div>
@@ -4524,6 +4546,11 @@ watch(activeTab, (tab) => {
               <ExecutionPolicyPane :workspace-path="props.workspacePath" />
             </section>
             <ExtensionsPane @open-disclosure-overview="activeTab = 'disclosureOverview'" />
+            <!-- Plan B D5, D-f: records only, it changes nothing a Navide plugin may do. -->
+            <section ref="disclosureOverviewSection" class="ext-policy-block" data-settings-section="disclosureOverview">
+              <h2 class="ext-policy-block-title">{{ $t('settings.nav.disclosureOverview') }}</h2>
+              <PluginDisclosureOverview v-if="visitedDisclosureOverview" :paused="!disclosureOverviewInView" />
+            </section>
           </div>
         </div>
 
@@ -4532,14 +4559,6 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.marketplace') }}</h1>
           <div class="marketplace-scroll">
             <MarketplacePane />
-          </div>
-        </div>
-
-        <!-- ── DISCLOSURE OVERVIEW (plan B D5, D-f) ───────────────────────── -->
-        <div v-show="activeTab === 'disclosureOverview'" class="s-body s-body--bleed marketplace-body" data-settings-section="disclosureOverview">
-          <h1 class="s-page-title">{{ $t('settings.nav.disclosureOverview') }}</h1>
-          <div class="marketplace-scroll">
-            <PluginDisclosureOverview v-if="visitedDisclosureOverview" />
           </div>
         </div>
 

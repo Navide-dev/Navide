@@ -2440,16 +2440,12 @@
               "more": "本頁第 3 章"
             },
             "extensions": {
-              "what": "Navide 外掛執行時套用的執行政策，以及隨附與已安裝的 Navide 外掛",
+              "what": "Navide 外掛執行時套用的執行政策，以及隨附與已安裝的 Navide 外掛；頁面最下方是揭露總覽，列出所有從 Navide 市集安裝的 Navide 外掛（只是紀錄，不會改變 Navide 外掛能做的事）",
               "more": "本頁第 4 章"
             },
             "marketplace": {
               "what": "搜尋 Navide 外掛登錄庫並從中安裝",
               "more": "本頁第 4 章"
-            },
-            "disclosureOverview": {
-              "what": "所有從 Navide 市集安裝的 Navide 外掛：揭露卡、風險等級、最近活動和異常，集中在同一頁。",
-              "more": "只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。每個 Navide 外掛完整的活動，也可以在「Navide 外掛」頁該 Navide 外掛的那一列打開。"
             },
             "shortcuts": {
               "what": "快捷鍵改綁、匯入匯出",
