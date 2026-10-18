@@ -1161,7 +1161,7 @@ def _devmap_tool(monkeypatch) -> dict[str, Any]:
     ],
 )
 async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop(monkeypatch, shape) -> None:
-    from tests.test_agent_tool_chunked_transport import _longest_loop_slice
+    from tests.test_agent_tool_chunked_transport import _least_longest_loop_slice
 
     import gc
 
@@ -1177,11 +1177,38 @@ async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loo
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
     del value
     gc.collect()
-    result, longest = await _longest_loop_slice(monkeypatch, proxy.call("devmap_read", {}, None))
+    result, longest = await _least_longest_loop_slice(
+        monkeypatch, lambda: proxy.call("devmap_read", {}, None), LOOP_SLICE_BUDGET_S
+    )
     assert result.isError is False
     # Character for character what the in-process wrap gives (same function, in the helper).
     assert result.content[0].text == expected
     assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+
+
+async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(monkeypatch) -> None:
+    """The control for the check above: a result parsed and wrapped in one
+    step on the loop, as before the helper, fails it on every attempt. A
+    tenth of the 10 MiB keeps the three attempts cheap: one still holds the
+    loop for hundreds of milliseconds (the 10 MiB one, seconds)."""
+    from agent_team_backend.agent_tool_result_worker import strict_loads
+    from tests.test_agent_tool_chunked_transport import _least_longest_loop_slice
+
+    import gc
+
+    entry = _devmap_tool(monkeypatch)
+    _pieces_host(monkeypatch, agent_tool_payload_text({"rows": [{"k": i, "v": "abcdefgh中"} for i in range(34_500)]}))
+
+    async def on_the_loop(entry: dict[str, Any], pieces: list[str]) -> str:
+        return proxy.wrap_result(entry, strict_loads("".join(pieces)))
+
+    monkeypatch.setattr(proxy._result_worker, "wrap", on_the_loop)  # noqa: SLF001
+    gc.collect()
+    result, longest = await _least_longest_loop_slice(
+        monkeypatch, lambda: proxy.call("devmap_read", {}, None), LOOP_SLICE_BUDGET_S
+    )
+    assert result.isError is False
+    assert longest >= LOOP_SLICE_BUDGET_S, f"a whole-result parse on the loop read as {longest * 1000:.1f} ms"
 
 
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400"])
