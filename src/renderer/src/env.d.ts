@@ -14,6 +14,7 @@ type PluginManifestDisclosure = import('../../shared/pluginDisclosure').Manifest
 type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
 type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
+type PluginSource = import('../../shared/pluginSource').PluginSource
 type PluginActivityReport = import('../../shared/pluginActivity').PluginActivityReport
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
@@ -391,6 +392,8 @@ declare global {
           version: string
           disclosure: PluginManifestDisclosure | null
           scan: PluginScanReport | null
+          /** Source and review state; see `shared/pluginSource.ts`. */
+          source?: PluginSource
         }>>
         /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped). */
         backendResourceUsage?: () => Promise<{
@@ -545,6 +548,8 @@ declare global {
     manifestPermissions?: ManifestPermissionsSummary
     packageVersionGrant?: PackageVersionGrantSummary | null
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+    /** Source and review state; see `shared/pluginSource.ts`. */
+    source?: PluginSource
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'

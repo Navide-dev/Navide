@@ -321,6 +321,18 @@ version number, once used, cannot be reused).
 All targets of one version are decided together. If you upload another target
 while a version waits, the reviewer reloads and decides on the full set.
 
+### How Navide labels the source
+
+Navide shows where every installed Navide plugin came from, as a badge in the
+installed list and on Marketplace results and detail pages, and as a fixed
+**Source and review** row on every disclosure card. Only a Registry-signed
+version reads as reviewed (**Reviewed**, or **Pre-release (reviewed)**). A
+package installed from a local file or a developer folder is labelled as
+such, its scan line reads "Not scanned (only Navide plugins installed from the
+Navide Marketplace are scanned by Navide)", and an unsigned one shows its
+publisher as **Self-declared**. No source is ever called verified or safe on
+these labels.
+
 ## 6. Pre-releases
 
 A version with a SemVer pre-release suffix is a pre-release:
