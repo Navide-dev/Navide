@@ -99,6 +99,7 @@ import {
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
 import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
+import type { PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { rescanFinding } from './pluginRescanNotice'
 
@@ -163,6 +164,8 @@ interface InstalledSummary {
   manifestPermissions?: ManifestPermissionsSummary
   packageVersionGrant?: PackageVersionGrantSummary | null
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  /** Source and review state; see `shared/pluginSource.ts`. */
+  source?: PluginSource
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'

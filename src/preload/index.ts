@@ -24,6 +24,7 @@ import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
+import type { PluginSource } from '../shared/pluginSource'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
 export interface ClearElectronCachesOptions {
@@ -163,6 +164,8 @@ export interface InstalledPluginSummary {
   manifestPermissions?: ManifestPermissionsSummary
   packageVersionGrant?: PackageVersionGrantSummary | null
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  /** Source and review state; see `shared/pluginSource.ts`. */
+  source?: PluginSource
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
