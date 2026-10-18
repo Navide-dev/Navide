@@ -752,6 +752,10 @@ async def test_a_key_change_is_announced_to_the_windows(broadcasts, monkeypatch)
         seen.append(event)
 
     monkeypatch.setattr(app, "broadcast", capture)
+    # The pane the message is for: without it the message is refused before
+    # any notice goes out, and the test passed only after an earlier one left
+    # a "p1" registered in this process.
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
     _already_paired()
     server = FakeServer()
     link = await _connected(server)
