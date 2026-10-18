@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { joinedRealizeOutcome, paneOpenAnswer } from '../paneOpenAnswer'
+import { joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere } from '../paneOpenAnswer'
 
 describe('joinedRealizeOutcome', () => {
   it('turns a restore that opened fresh into a refusal for a caller that requires the saved conversation', () => {
@@ -36,5 +36,30 @@ describe('paneOpenAnswer', () => {
   it('leaves other callers exactly as before, fresh included', () => {
     expect(paneOpenAnswer({ paneId: 'p2', reason: 'fresh', realized: true, requireResume: false,
       launchedSessionId: '' })).toEqual({ realized: true, reason: 'fresh', paneId: 'p2', launchedSessionId: '' })
+  })
+})
+
+describe('sessionHeldElsewhere', () => {
+  const placeholder = { id: 'bound', agentKey: 'claude', sessionId: 'sess-1', realized: false, restoring: false }
+  const other = (over: Partial<typeof placeholder>) => ({ ...placeholder, id: 'other', ...over })
+
+  it('finds another pane running the session', () => {
+    expect(sessionHeldElsewhere([placeholder, other({ realized: true })], 'bound', 'claude', 'sess-1', new Set())).toBe(true)
+  })
+
+  it('finds another pane the window is restoring onto the session right now', () => {
+    // A cold restore registers it as a placeholder and realizes it seconds later.
+    expect(sessionHeldElsewhere([placeholder, other({ restoring: true })], 'bound', 'claude', 'sess-1', new Set())).toBe(true)
+  })
+
+  it('finds another pane queued in the cold restore that has not started yet', () => {
+    expect(sessionHeldElsewhere([placeholder, other({})], 'bound', 'claude', 'sess-1', new Set(['other']))).toBe(true)
+  })
+
+  it('ignores the pane itself, an idle placeholder, another CLI and an empty session', () => {
+    expect(sessionHeldElsewhere([{ ...placeholder, realized: true }], 'bound', 'claude', 'sess-1', new Set(['bound']))).toBe(false)
+    expect(sessionHeldElsewhere([placeholder, other({})], 'bound', 'claude', 'sess-1', new Set())).toBe(false)
+    expect(sessionHeldElsewhere([placeholder, other({ realized: true, agentKey: 'codex' })], 'bound', 'claude', 'sess-1', new Set())).toBe(false)
+    expect(sessionHeldElsewhere([placeholder, other({ realized: true, sessionId: '' })], 'bound', 'claude', '', new Set())).toBe(false)
   })
 })

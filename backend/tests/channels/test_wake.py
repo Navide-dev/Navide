@@ -640,3 +640,53 @@ async def test_a_lost_list_waits_for_its_bot_and_is_then_deleted(env: Env) -> No
     await restarted.wait_idle()
     await _until(lambda: notice in env.tg.texts())
     assert env.store.kept_previews() == {} and env.store.lost_previews() == {}
+
+
+async def test_a_lost_list_is_kept_when_its_notice_fails_and_told_on_the_next_start(env: Env) -> None:
+    # Review LOW-10: _notice swallows a send failure; the previews must stay until told.
+    _wakeable(env)
+    await env.inbound("kept before the restart")
+    factory = env.m._factory_for
+    await env.m.stop()
+    restarted = mgr_mod.ChannelManager(env.store, env.fake.seams(), factory_for=factory, clock=env.clock)
+    env.m = restarted
+
+    async def down(*_a, **_kw):
+        raise RuntimeError("platform down")
+
+    real_send = restarted.mirror.send
+    restarted.mirror.send = down
+    await restarted.start()
+    await restarted.wait_idle()
+    assert env.store.lost_previews() == {"telegram:default:-100:50": ["kept before the restart"]}
+    restarted.mirror.send = real_send
+    assert (await restarted.set_enabled("telegram", False))["ok"]
+    assert (await restarted.set_enabled("telegram", True))["ok"]
+    await restarted.wait_idle()
+    notice = _zh("not_sent_restart", count=1, items="「kept before the restart」")
+    await _until(lambda: notice in env.tg.texts())
+    assert env.store.lost_previews() == {}
+
+
+async def test_unbinding_the_chat_forgets_its_previews(env: Env) -> None:
+    # Review LOW-10: previews do not outlive the binding they were kept for.
+    _wakeable(env)
+    await env.inbound("kept")
+    env.store.set_lost_previews({"telegram:default:-100:50": ["from before"]})
+    await env.m.unbind("pane-1")
+    assert env.store.lost_previews() == {} and env.store.kept_previews() == {}
+
+
+async def test_removing_the_bot_forgets_its_previews(env: Env) -> None:
+    env.store.set_lost_previews({"telegram:default:-100:50": ["from before"], "slack:default:C1:": ["other"]})
+    assert (await env.m.remove("telegram"))["ok"]
+    assert env.store.lost_previews() == {"slack:default:C1:": ["other"]}
+
+
+async def test_seam_passes_on_the_window_finding_the_session_open_elsewhere(seam) -> None:
+    # Review MED-3: the window checks, in the same tick it starts the restore, that no other
+    # pane runs, restores or is queued to restore the same session.
+    seam.registry["old-1"] = SimpleNamespace(pane_id="old-1", realized=False)
+    seam.placeholder = {"ok": False, "reason": "session-open-elsewhere"}
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": False, "code": "session-open-elsewhere", "started": True}

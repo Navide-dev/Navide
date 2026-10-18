@@ -77,6 +77,23 @@ describe('performRealizeRestoredPane', () => {
     expect(fn('performRealizeRestoredPane')).toContain("launched.launchedSessionId = isResume ? effectiveResumeId : ''")
   })
 
+  it('refuses a second pane onto a session another pane runs, restores or is queued to restore', () => {
+    // Checked before `restoring` is set, with no await in between: the renderer is single
+    // threaded, so a cold restore cannot slip in between the check and the claim. The rule
+    // itself is unit-tested in lib/__tests__/paneOpenAnswer.test.ts.
+    const body = fn('performRealizeRestoredPane')
+    const guard = body.indexOf("return 'session-open-elsewhere'")
+    expect(guard).toBeGreaterThan(-1)
+    expect(guard).toBeLessThan(body.indexOf('placeholder.restoring = true'))
+    expect(body.slice(guard, body.indexOf('placeholder.restoring = true'))).not.toContain('await ')
+  })
+
+  it('marks the panes a cold restore has queued, until each one is done', () => {
+    const body = fn('advanceRestoreSession')
+    expect(body).toContain('for (const id of ids) scheduledRestoreIds.add(id)')
+    expect(body).toContain('scheduledRestoreIds.delete(')
+  })
+
   it('never repoints the saved conversation for a caller that requires it', () => {
     expect(fn('performRealizeRestoredPane')).toContain(
       'if (ghostConfirmed && supportsGhostReconnect(saved.agent) && !opts?.requireResume)')

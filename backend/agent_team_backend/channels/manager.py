@@ -1039,6 +1039,7 @@ class ChannelManager:
                 self.store.remove_platform(platform)
             else:
                 self.store.remove_account(platform, account)
+            self._forget_lost(f"{platform}:" if account is None else f"{platform}:{account}:", prefix=True)
             for pane_id, p in list(self._pending.items()):
                 if p.loc.platform == platform and (account is None or p.loc.account == account):
                     self._drop_pending(pane_id)
@@ -1177,6 +1178,9 @@ class ChannelManager:
         removed = self.store.unbind(pane_id)
         self._drop_pending(pane_id)
         if removed:
+            # What was kept for the chat's wake goes with the binding it was kept for.
+            self._set_kept(removed.location().key(), [])
+            self._forget_lost(removed.location().key())
             await self.mirror.release_children(pane_id)
             await self._changed()
             # Tell the chat it is no longer connected; off the request path so the
@@ -1769,16 +1773,20 @@ class ChannelManager:
             text = wake.text(lang, "not_sent_restart", count=len(previews), items=wake.quoted(previews))
 
             async def tell(adapter: Any = adapter, loc: Location = loc, text: str = text) -> None:
-                await self._notice(adapter, loc, text)
-                self._forget_lost(loc.key())
+                # Kept when the notice did not go: the bot's next start tries again.
+                if await self._notice(adapter, loc, text):
+                    self._forget_lost(loc.key())
 
             self._enqueue(loc.key(), tell)
 
-    def _forget_lost(self, key: str) -> None:
+    def _forget_lost(self, key: str, *, prefix: bool = False) -> None:
+        """Delete the lost previews of location ``key`` (with ``prefix``, of every location
+        whose key starts with it: a whole bot or platform)."""
         try:
             lost = self.store.lost_previews()
-            if lost.pop(key, None) is not None:
-                self.store.set_lost_previews(lost)
+            kept = {k: v for k, v in lost.items() if not (k.startswith(key) if prefix else k == key)}
+            if kept != lost:
+                self.store.set_lost_previews(kept)
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: forgetting the lost kept messages of %s failed: %s", key, exc)
 
@@ -2755,11 +2763,14 @@ class ChannelManager:
         if current.task is None or current.task.done():
             current.task = self._spawn(self._while_running(pane_id, current))
 
-    async def _notice(self, adapter: ChannelAdapter, loc: Location, text: str) -> None:
+    async def _notice(self, adapter: ChannelAdapter, loc: Location, text: str) -> bool:
+        """Post ``text`` to ``loc``; False (logged) when it did not go."""
         try:
             await self.mirror.send(loc, text)
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: notice to %s failed: %s", loc.key(), exc)
+            return False
+        return True
 
     async def _while_running(self, pane_id: str, pending: _Pending) -> None:
         """Typing every 4s, one status message edited in place, awaiting notices."""

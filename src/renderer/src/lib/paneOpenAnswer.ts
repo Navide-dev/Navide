@@ -31,3 +31,28 @@ export function paneOpenAnswer(opts: {
   const realized = opts.realized && (!opts.requireResume || RESUMED_OUTCOMES.has(reason))
   return { realized, reason, paneId: opts.paneId, launchedSessionId: opts.launchedSessionId ?? null }
 }
+
+/** A pane as far as "who runs which conversation" goes: a realized pane's own session, or
+ *  the session a placeholder would be restored onto (normalized either way). */
+export interface SessionHolder {
+  id: string
+  agentKey: string
+  sessionId: string
+  realized: boolean
+  restoring: boolean
+}
+
+/** Whether a pane other than `paneId` runs, is being restored onto, or is queued in this
+ *  cold restore (`scheduled`) for the same conversation: opening `paneId` onto it too would
+ *  put a second CLI on one session. */
+export function sessionHeldElsewhere(
+  holders: readonly SessionHolder[],
+  paneId: string,
+  agentKey: string,
+  sessionId: string,
+  scheduled: ReadonlySet<string>,
+): boolean {
+  if (!sessionId) return false
+  return holders.some((h) => h.id !== paneId && h.agentKey === agentKey && h.sessionId === sessionId
+    && (h.realized || h.restoring || scheduled.has(h.id)))
+}

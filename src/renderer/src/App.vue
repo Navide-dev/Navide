@@ -283,7 +283,7 @@ import {
   type RestoreSessionTrigger,
   type WorkspaceRestoreSession,
 } from './lib/resumeBehavior'
-import { joinedRealizeOutcome, paneOpenAnswer } from './lib/paneOpenAnswer'
+import { joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere, type SessionHolder } from './lib/paneOpenAnswer'
 import { flushSettingsOnExit, initSettingsBackend, onSettingsChanged, settingsGet, settingsRemove, settingsSet } from '@navide/plugin-ui/shared'
 import { cliPermissionKey, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
 import { chooseLaunchCommand, cliCommandKey, cliEnvKey, spawnEnvOverride, type LaunchCommandSource } from '@navide/plugin-shell'
@@ -12249,6 +12249,25 @@ function deferredPaneStillCurrent(
 // waits for the same restore attempt instead of treating an in-flight restore as
 // an immediate no-op.
 const restoringPanePromises = new Map<string, Promise<RealizeOutcome>>()
+/** Placeholders a cold restore has queued and not finished yet (advanceRestoreSession). */
+const scheduledRestoreIds = new Set<string>()
+/** `${agent}:${session}` of conversations a chat's wake (requireResume) has opened. */
+const wakeHeldSessions = new Set<string>()
+
+function sessionHolders(): SessionHolder[] {
+  return panes.value.map((p) => {
+    const agentKey = p.deferredRestore?.saved.agent ?? p.agentKey
+    return {
+      id: p.id,
+      agentKey,
+      sessionId: p.realized
+        ? paneResumeSessionId(p)
+        : normalizeResumeSessionId(agentKey, (p.deferredRestore?.saved.session_id ?? '').trim()),
+      realized: p.realized === true,
+      restoring: p.restoring === true,
+    }
+  })
+}
 
 async function restoreSessionDecision(
   session: RestoreSession,
@@ -12323,6 +12342,10 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
     : []
   const interruptedKids = interrupted.length > 0 ? interruptedChildren(session.workspacePath) : []
   const ids = [...new Set([...scopeIds, ...interrupted])]
+  // Queued until each one is done: a wake checks these as well as the panes restoring now.
+  for (const id of ids) scheduledRestoreIds.add(id)
+  const realizeScheduled = (paneId: string) =>
+    realizeRestoredPane(paneId, true).finally(() => scheduledRestoreIds.delete(paneId))
   const reconnectStart = reconnectedCount.value
   // Starting a workspace fresh is the one batch nothing caps. Fresh spawns are
   // deliberately exempt from the resume semaphore — throttling them would stall
@@ -12338,16 +12361,16 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // ceiling of 2 would just make their own setting slower.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
   if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, realizeScheduled)
   } else if (decision === 'resume' && session.scope === 'auto') {
     // Auto brings back every pane live at the last close: same ceiling as 'all'.
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, realizeScheduled)
   } else if (interrupted.length > 0) {
     // The interrupted panes ride on top of the scope's pick: same ceiling as
     // an 'all' restore, so a relaunch never starts more than two at once.
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, realizeScheduled)
   } else {
-    await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))
+    await Promise.all(ids.map(realizeScheduled))
   }
   const reconnected = reconnectedCount.value - reconnectStart
   if (reconnected > 0) {
@@ -12428,6 +12451,7 @@ type RealizeOutcome =
   | 'session-unavailable'
   | 'fresh-refused'
   | 'resume-unavailable'
+  | 'session-open-elsewhere'
   | 'error'
 
 /** Realize one cold-restore record after explicit user activation.
@@ -12497,6 +12521,18 @@ async function performRealizeRestoredPane(
   }
   const session = workspaceRestoreSession(batch.workspacePath)
   const sessionId = normalizeResumeSessionId(saved.agent, (saved.session_id ?? '').trim())
+  // One conversation, one CLI. A chat's wake is refused while another pane runs, is being
+  // restored onto, or is queued in a cold restore for the same session; a restore is refused
+  // while a pane a wake opened holds it. Checked and claimed (restoring) in one tick: the
+  // renderer is single threaded, so nothing slips in between.
+  const sessionKey = `${saved.agent}:${sessionId}`
+  const heldElsewhere = (scheduled: ReadonlySet<string>) =>
+    sessionHeldElsewhere(sessionHolders(), paneId, saved.agent, sessionId, scheduled)
+  if (opts?.requireResume ? heldElsewhere(scheduledRestoreIds)
+    : wakeHeldSessions.has(sessionKey) && heldElsewhere(new Set())) {
+    return 'session-open-elsewhere'
+  }
+  if (opts?.requireResume && sessionId) wakeHeldSessions.add(sessionKey)
   placeholder.restoring = true
   syncViews()
 

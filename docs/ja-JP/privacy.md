@@ -13,6 +13,7 @@ Navide は **Local-first** ですが、常に完全オフラインという意�
 - Application Data Directory 内の Host 管理 Plugin Storage Partition。認証済みの Plugin/Package ごとに分離され、Workspace Scope では認証済み Workspace ごとに分離されます。Navide や Plugin Registry へ送信されません
 - Local CLI Log から得た Token Attribution と Deduplication Metadata
 - Local の `navide.db` 内の、サードパーティ Navide Plugin の Activity Log（`plugin_activity`）：Plugin、`namespace.method`、時刻、Workspace、許可／拒否／失敗、Workspace 相対の File Path（Workspace 外の Path は `<outside-workspace>` のみ。File の内容は保存しません）、Shell 呼び出しは実行ファイルと Subcommand のみ。詳細は 7 日間、その後は日ごとの件数のみ 90 日間保持します。同梱の Plans、Git、Mini-IDE は記録しません。この端末の外へは送信されません
+- Local の `navide.db` 内の、pane がオフラインの間に届いたチャットメッセージのプレビュー（`channels.wake_kept`、再起動をまたぐ場合は `channels.wake_lost`）：バインドされたチャットから pane がオフラインの間に届いた各メッセージの先頭 40 文字で、送られなかったメッセージをチャットに伝えるために使います。マスクせずにそのまま保存するため、メッセージの先頭に機密があればそれも保存されます。メッセージが pane に送られた時、またはチャットに伝えた時点で削除し、チャットのバインド解除や bot の削除時にも削除します。bot が無効の間は、再び起動するまで保持します。この端末の外へは送信されません
 - 任意の AI Provider API Key。制限された File Permission（対応 System では `0600`）で保護された Local Settings File に保存
 
 Navide は Project Telemetry Service を運営せず、Navide Account を必要としません。
