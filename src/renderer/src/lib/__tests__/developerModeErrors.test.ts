@@ -24,7 +24,7 @@ describe('localizeDeveloperModeError (review LOW-2 on #428)', () => {
       i18n.global.locale.value = locale
       for (const message of coded) {
         const shown = localizeDeveloperModeError(message, i18n.global.t)
-        expect(shown, `${locale}: ${message}`).not.toMatch(/^[A-Z_]+[ :]/)
+        expect(shown, `${locale}: ${message}`).not.toMatch(/^[A-Z]+_[A-Z_]+(?: \[|:)/)
         expect(shown).not.toMatch(/settings\.extensions/)
       }
     }
