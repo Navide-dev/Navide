@@ -1267,6 +1267,36 @@ async def test_the_helper_starts_with_the_first_result_in_pieces_and_not_before(
     proxy._result_worker.stop()  # noqa: SLF001
 
 
+async def test_an_idle_helper_exits_after_its_window_and_the_next_large_result_starts_a_new_one(monkeypatch) -> None:
+    import asyncio
+
+    from agent_team_backend import agent_tool_result_worker as worker
+
+    proxy._result_worker.stop()  # noqa: SLF001
+    proxy._result_worker._start_failed = None  # noqa: SLF001
+    monkeypatch.setattr(worker, "IDLE_EXIT_S", 0.5)
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    first = proxy._result_worker._process  # noqa: SLF001
+    assert first is not None
+    # Within the window the same helper answers: no new start.
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    assert proxy._result_worker._process is first  # noqa: SLF001
+    # Idle past the window: stopped, so what the result left in its memory is gone.
+    await asyncio.sleep(1.0)
+    assert proxy._result_worker._process is None  # noqa: SLF001
+    assert proxy._result_worker.state == "idle"  # noqa: SLF001
+    assert await asyncio.wait_for(first.wait(), 10) == 0
+    # The next large result starts a new helper and reads the same.
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    second = proxy._result_worker._process  # noqa: SLF001
+    assert second is not None and second is not first
+    assert proxy._result_worker.state == "ready"  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+
+
 async def test_a_helper_that_is_still_working_is_waited_for(monkeypatch) -> None:
     from agent_team_backend import agent_tool_result_worker as worker
 
