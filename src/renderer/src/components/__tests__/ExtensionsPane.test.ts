@@ -1254,7 +1254,7 @@ describe('ExtensionsPane source badge (K2)', () => {
         { id: 'acme.registry', requires: [], sensitive: [], provenance: 'official-registry' },
         { id: 'acme.folder', requires: [], sensitive: [], provenance: 'developer-local-unpacked' },
         { id: 'acme.file', requires: [], sensitive: [], source: 'local-unsigned' },
-        { id: 'acme.test', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace' },
+        { id: 'acme.test', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2027-01-17T00:00:00Z' },
         { id: 'acme.unknown', requires: [], sensitive: [] },
       ]),
     })
@@ -1266,6 +1266,7 @@ describe('ExtensionsPane source badge (K2)', () => {
     expect(source('acme.folder').exists()).toBe(false)
     expect(source('acme.file').attributes('data-source')).toBe('local-unsigned')
     expect(source('acme.test').attributes('data-source')).toBe('testplace')
+    expect(source('acme.test').text()).toContain('2027-01-17')
     expect(source('acme.unknown').exists()).toBe(false)
   })
 })

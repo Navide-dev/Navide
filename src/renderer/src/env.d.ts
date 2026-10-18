@@ -394,6 +394,8 @@ declare global {
           scan: PluginScanReport | null
           /** Source and review state; see `shared/pluginSource.ts`. */
           source?: PluginSource
+          /** Test build expiry (ISO-8601), from the signed envelope; testplace only. */
+          expiresAt?: string
         }>>
         /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped). */
         backendResourceUsage?: () => Promise<{
@@ -552,6 +554,8 @@ declare global {
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
     /** Source and review state; see `shared/pluginSource.ts`. */
     source?: PluginSource
+    /** Test build expiry (ISO-8601), from the signed envelope; testplace only. */
+    expiresAt?: string
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'

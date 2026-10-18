@@ -21,6 +21,7 @@ interface Entry {
   scan: ScanReport | null
   /** The Host's source; absent (unknown channel) shows no source row, never a guess. */
   source?: PluginSource
+  expiresAt?: string
   report: PluginActivityReport | null
   reportError: string
 }
@@ -99,6 +100,7 @@ onBeforeUnmount(() => {
         :registry="null"
         :verified="true"
         :source="entry.source"
+        :expires-at="entry.expiresAt"
         :publisher="entry.id.split('.')[0]"
       />
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>
