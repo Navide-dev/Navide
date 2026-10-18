@@ -4,17 +4,20 @@
 // exact content digest at a point in time. Load-time verification compares
 // every file in the installed copy against that record.
 //
-// Threat level: the record lives in userData. Anyone who can write userData
-// can forge it, exactly as they can forge a Registry receipt's surroundings.
-// It is not stronger than the Registry path and must never be described as
-// "verified".
+// Threat level: weaker than a Registry receipt. A receipt cannot be forged
+// without a Registry signing key; this record is an unsigned file in userData
+// that any unsandboxed process running as the same user (an agent CLI
+// included) can write to match altered content. It protects against the
+// installed copy changing after consent, not against same-user processes. A
+// plugin backend inside its sandbox and plugin frames cannot write it. It must
+// never be described as "verified".
 //
 // The record is stored outside the package directory, at a path the caller
 // chooses, so the package copy holds author files only and every extra file
 // counts as modified content.
 
-import { createHash } from 'node:crypto'
-import { lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import { chmodSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { LocalPluginSource } from '../../shared/pluginSource'
 import type { RegistryTrustSnapshot } from './pluginInstalledTrust'
@@ -181,11 +184,14 @@ export function createLocalTrustRecord(
   }
 }
 
-/** Persist a record atomically, owner-only. */
+/** Persist a record atomically, owner-only. The temporary file is created
+ * fresh (`wx`), so a file or symlink planted at that name fails the write
+ * instead of redirecting it. */
 export function writeLocalTrustRecord(path: string, record: PluginLocalTrustRecord): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-  const temporary = `${path}.tmp`
-  writeFileSync(temporary, JSON.stringify(record, null, 2), { mode: 0o600 })
+  const temporary = `${path}.${randomUUID()}.tmp`
+  writeFileSync(temporary, JSON.stringify(record, null, 2), { mode: 0o600, flag: 'wx' })
+  chmodSync(temporary, 0o600)
   renameSync(temporary, path)
 }
 
