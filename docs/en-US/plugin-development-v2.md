@@ -2073,6 +2073,12 @@ runs only inside the OS sandbox described in
   and the native backend consent is cleared. Removing the package removes what
   was set aside with its storage, and with its backend data when the user
   chooses to delete that. An update within one source keeps both as before.
+  Backend data a removal keeps records its source beside the folder
+  (`<id>@kept-source.json`, owner-only, outside the backend's sandbox): a
+  later install of the same id and source takes it over as before, one of the
+  other source finds it set aside instead. Data kept by a release without the
+  record counts as Marketplace data, the only kind that could run a
+  third-party backend before file installs existed.
   The package's own name is shown in the native backend consent with every
   line break and invisible character spelled out, below the source line. The takedown check covers id and publisher only: a package
   renamed to a new id is not caught, because the trust metadata carries no
