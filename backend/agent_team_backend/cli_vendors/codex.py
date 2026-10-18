@@ -1851,13 +1851,11 @@ def _android_network_env() -> dict[str, str]:
 
     if not osplat.paths.needs_loopback_dns_proxy():
         return {}
-    import certifi
-
     from .. import loopback_connect_proxy
 
     return {
         "HTTPS_PROXY": loopback_connect_proxy.proxy_url(),
-        "SSL_CERT_FILE": certifi.where(),
+        "SSL_CERT_FILE": loopback_connect_proxy.ca_bundle_path(),
         "TMPDIR": tempfile.gettempdir(),
     }
 

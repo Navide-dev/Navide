@@ -134,6 +134,14 @@ def proxy_url() -> str:
     return f"http://{_USER}:{_token}@127.0.0.1:{ensure_started()}"
 
 
+def ca_bundle_path() -> str:
+    """SSL_CERT_FILE value for a CLI spawn: certifi's bundle. Kept app-side
+    because vendor modules may not import third-party packages."""
+    import certifi
+
+    return certifi.where()
+
+
 def bound_address() -> tuple[str, int] | None:
     return _address
 
