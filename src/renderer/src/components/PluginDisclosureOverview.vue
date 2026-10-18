@@ -20,9 +20,9 @@ interface Entry {
   version: string
   disclosure: ManifestDisclosure | null
   scan: ScanReport | null
-  /** Absent from a Host that predates K1; every package listed here is a
-   *  Registry install, so that reads as `marketplace`. */
+  /** The Host's source; absent (unknown channel) shows no source row, never a guess. */
   source?: PluginSource
+  expiresAt?: string
   report: PluginActivityReport | null
   reportError: string
 }
@@ -111,7 +111,8 @@ onBeforeUnmount(stopPolling)
         :scan="entry.scan"
         :registry="null"
         :verified="true"
-        :source="entry.source ?? 'marketplace'"
+        :source="entry.source"
+        :expires-at="entry.expiresAt"
         :publisher="entry.id.split('.')[0]"
       />
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>

@@ -24,7 +24,7 @@ import { workspaceAliasKey } from './lib/workspaceAlias'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
-import { chromeSourceMark } from './lib/pluginSourceMark'
+import { chromeSourceMark, pluginSourceLabel } from './lib/pluginSourceMark'
 import { subtreeSignals } from './lib/paneSubtreeStatus'
 import { closeAdvisoriesFor } from './lib/paneCloseAdvisories'
 import { interruptAdvisoriesFor } from './lib/paneInterruptAdvisories'
@@ -1155,7 +1155,7 @@ const windowPluginContributions = computed(() =>
 /** K2: a local or test package names its source on its title-bar button. */
 function titlebarPluginLabel(contribution: PluginRegionContribution): string {
   const mark = chromeSourceMark(contribution.source)
-  return mark ? `${contribution.title} · ${i18n.global.t(`pluginDisclosure.source.${mark}`, { date: '' })}` : contribution.title
+  return mark ? `${contribution.title} · ${pluginSourceLabel(i18n.global.t, mark)}` : contribution.title
 }
 
 // The titlebar shows these as icons, matching the gear beside them. A plugin

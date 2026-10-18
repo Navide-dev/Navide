@@ -51,6 +51,10 @@ IDLE_S = 30.0
 STOP_GRACE_S = 2.0
 #: Seconds after a failed start before the next start is tried (each try forks).
 RETRY_START_S = 60.0
+#: Seconds a helper may sit idle after a request before it is stopped: what
+#: a large result left in its memory goes with it, and the next large result
+#: starts a new one. A time window, not a limit on work.
+IDLE_EXIT_S = 60.0
 #: Seconds a new helper has to say it is ready: a onefile build unpacks
 #: itself on every start, which a virus scan can slow down; as IDLE_S.
 READY_S = 30.0
@@ -217,6 +221,7 @@ class ResultWorker:
         self._lock: asyncio.Lock | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._start_failed: tuple[float, str] | None = None
+        self._idle_exit: asyncio.TimerHandle | None = None
         self.state = "idle"
         self.last_error = ""
         self.since = int(time.time() * 1000)
@@ -328,6 +333,18 @@ class ResultWorker:
             await asyncio.sleep(0)
         return "".join(parts)
 
+    def _schedule_idle_exit(self) -> None:
+        """Stop the helper once it has been idle for IDLE_EXIT_S."""
+        if self._process is None or self._loop is None:
+            return
+        self._idle_exit = self._loop.call_later(IDLE_EXIT_S, self._exit_idle)
+
+    def _exit_idle(self) -> None:
+        self._idle_exit = None
+        if self._lock is not None and self._lock.locked():
+            return  # a request is in progress; it schedules the next check
+        self.stop()
+
     def stop(self) -> None:
         """End the helper; the next request starts a new one.
 
@@ -335,6 +352,9 @@ class ResultWorker:
         itself (a onefile bootloader then removes what it unpacked); after
         STOP_GRACE_S its whole process tree is killed, whatever it is doing,
         and also when it has exited (what it started may still run)."""
+        if self._idle_exit is not None:
+            self._idle_exit.cancel()
+            self._idle_exit = None
         process, self._process = self._process, None
         if process is None:
             return
@@ -363,42 +383,51 @@ class ResultWorker:
         self._bind()
         assert self._lock is not None
         async with self._lock:
+            if self._idle_exit is not None:
+                self._idle_exit.cancel()
+                self._idle_exit = None
             try:
-                process = await self._started()
-                assert process.stdin is not None and process.stdout is not None
-                header = json.dumps({"entry": entry}).encode()
-                process.stdin.write(len(header).to_bytes(8, "big") + header)
-                encoded: list[bytes] = []
-                for piece in pieces:
-                    encoded.append(piece.encode("utf-8", "surrogatepass"))
-                    await asyncio.sleep(0)
-                process.stdin.write(sum(len(part) for part in encoded).to_bytes(8, "big"))
-                for part in encoded:
-                    process.stdin.write(part)
-                    await asyncio.wait_for(process.stdin.drain(), IDLE_S)
-                answer = json.loads(await self._frame(process.stdout))
-                if not answer.get("ok"):
-                    if answer.get("reason") == "json":
-                        raise InvalidResult
-                    raise ResultWorkerError("crashed", f"the helper reported {answer.get('reason')}")
-                text = await self._text_frame(process.stdout)
-            except (InvalidResult, ResultWorkerUnavailable):
-                raise
-            except BaseException as error:
-                # A request cut short leaves the pipes mid-frame: start over next time.
-                if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
-                    failure = ResultWorkerError("timeout", f"nothing for {IDLE_S:g} s")
-                elif isinstance(error, ResultWorkerError):
-                    failure = error
-                elif isinstance(error, Exception):
-                    failure = ResultWorkerError("crashed", f"{type(error).__name__}: {error}")
-                else:
-                    self.stop()
-                    raise
-                # A ready helper that fails is this request's failure: the next
-                # request starts a new helper at once.
+                return await self._wrap_locked(entry, pieces)
+            finally:
+                self._schedule_idle_exit()
+
+    async def _wrap_locked(self, entry: dict[str, Any], pieces: list[str]) -> str:
+        try:
+            process = await self._started()
+            assert process.stdin is not None and process.stdout is not None
+            header = json.dumps({"entry": entry}).encode()
+            process.stdin.write(len(header).to_bytes(8, "big") + header)
+            encoded: list[bytes] = []
+            for piece in pieces:
+                encoded.append(piece.encode("utf-8", "surrogatepass"))
+                await asyncio.sleep(0)
+            process.stdin.write(sum(len(part) for part in encoded).to_bytes(8, "big"))
+            for part in encoded:
+                process.stdin.write(part)
+                await asyncio.wait_for(process.stdin.drain(), IDLE_S)
+            answer = json.loads(await self._frame(process.stdout))
+            if not answer.get("ok"):
+                if answer.get("reason") == "json":
+                    raise InvalidResult
+                raise ResultWorkerError("crashed", f"the helper reported {answer.get('reason')}")
+            text = await self._text_frame(process.stdout)
+        except (InvalidResult, ResultWorkerUnavailable):
+            raise
+        except BaseException as error:
+            # A request cut short leaves the pipes mid-frame: start over next time.
+            if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
+                failure = ResultWorkerError("timeout", f"nothing for {IDLE_S:g} s")
+            elif isinstance(error, ResultWorkerError):
+                failure = error
+            elif isinstance(error, Exception):
+                failure = ResultWorkerError("crashed", f"{type(error).__name__}: {error}")
+            else:
                 self.stop()
-                raise failure from error
+                raise
+            # A ready helper that fails is this request's failure: the next
+            # request starts a new helper at once.
+            self.stop()
+            raise failure from error
         return text
 
 

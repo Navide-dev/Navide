@@ -24,7 +24,6 @@ import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import PluginSourceBadge from './PluginSourceBadge.vue'
-import type { PluginSource } from '../../../shared/pluginSource'
 
 const { t } = useI18n()
 
@@ -42,15 +41,6 @@ const factoryRows = computed(() => factoryPackages.value.map((factoryPackage) =>
 const nonFactoryInstalled = computed(() =>
   installed.value.filter((plugin) => plugin.provenance !== 'factory-bundled')
 )
-
-/** K2 source badge. A Host that predates K1 sends only the legacy provenance;
- *  without either the row shows no badge. */
-function sourceOf(plugin: InstalledPluginSummary): PluginSource | undefined {
-  if (plugin.source) return plugin.source
-  if (plugin.provenance === 'official-registry') return 'marketplace'
-  if (plugin.provenance === 'developer-local-unpacked') return 'developer-unpacked'
-  return undefined
-}
 const busy = ref(false)
 const error = ref('')
 // A failed inventory read, shown apart from the action error it may follow.
@@ -528,7 +518,8 @@ watch(installed, () => void refreshPacks())
             <div class="ext-card-title">
               <span class="ext-id" v-truncate>{{ reveal(p.id) }}</span>
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
-              <PluginSourceBadge v-if="sourceOf(p)" :source="sourceOf(p)!" />
+              <!-- K2: the Host's source only; none (an unknown channel) shows no badge. -->
+              <PluginSourceBadge v-if="p.source" :source="p.source" :expires-at="p.expiresAt" />
               <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                 {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}
               </span>

@@ -74,9 +74,12 @@ describe('PluginSourceBadge (K2)', () => {
     }
   })
 
-  it('prints a test build expiry as YYYY-MM-DD', () => {
+  it('prints a test build expiry as YYYY-MM-DD, and says when it is unknown', () => {
     i18n.global.locale.value = 'zh-TW'
     expect(render({ source: 'testplace', expiresAt: '2026-12-31T08:00:00Z' }).text()).toBe('測試版，沒有人工審核，2026-12-31 到期')
+    for (const expiresAt of [undefined, null, '']) {
+      expect(render({ source: 'testplace', expiresAt }).text()).toBe('測試版，沒有人工審核，到期日不明')
+    }
   })
 })
 
@@ -89,15 +92,36 @@ describe('PluginTrustDialog source row (K2)', () => {
     },
   })
 
-  it('shows "Reviewed" only for a Registry-signed package, on both steps', () => {
+  const at = (prepared: Record<string, unknown>, step: 'publisher' | 'risk' = 'risk') => {
+    const base = pending('signed-verified')
+    return mount(PluginTrustDialog, { props: { pending: { ...base, prepared: { ...base.prepared, ...prepared } }, step } as never, global: { plugins: [i18n] } })
+  }
+
+  it('shows the row only for the source the Host names, on both steps', () => {
     i18n.global.locale.value = 'en-US'
     for (const step of ['publisher', 'risk'] as const) {
-      const signed = mount(PluginTrustDialog, { props: { pending: pending('signed-verified'), step } as never, global: { plugins: [i18n] } })
-      expect(signed.get('.nv-source-row').text()).toBe('Source and review Reviewed')
-      signed.unmount()
-      const unsigned = mount(PluginTrustDialog, { props: { pending: pending('unsigned'), step } as never, global: { plugins: [i18n] } })
-      expect(unsigned.find('.nv-source-row').exists()).toBe(false)
-      unsigned.unmount()
+      expect(at({ source: 'marketplace' }, step).get('.nv-source-row').text()).toBe('Source and review Reviewed')
+      expect(at({}, step).find('.nv-source-row').exists()).toBe(false)
+      expect(at({ trustTier: 'unsigned' }, step).find('.nv-source-row').exists()).toBe(false)
+    }
+    expect(at({ source: 'prerelease', version: '2.0.0-beta.1' }).get('.nv-source-row').attributes('data-source')).toBe('prerelease')
+    const local = at({ trustTier: 'unsigned', source: 'local-unsigned' }).get('.nv-source-row')
+    expect(local.attributes('data-source')).toBe('local-unsigned')
+    expect(local.text()).toContain('Self-declared: acme')
+    // The source K1's prepareInstall reads from the verified envelope, as worded in zh-TW.
+    i18n.global.locale.value = 'zh-TW'
+    expect(at({ source: 'marketplace' }).get('.nv-source-badge').text()).toBe('已審核')
+    expect(at({ source: 'prerelease', version: '2.0.0-beta.1' }).get('.nv-source-badge').text()).toBe('預覽版（已審核）')
+  })
+
+  it('never reads as reviewed from the version alone (a testplace build versioned 1.0.0)', () => {
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      for (const version of ['1.0.0', '2.0.0-beta.1']) {
+        const dialog = at({ version })
+        expect(dialog.find('.nv-source-row').exists(), `${locale} ${version}`).toBe(false)
+        expect(dialog.text()).not.toMatch(/Reviewed|reviewed|已審核|審査済み/)
+      }
     }
   })
 })

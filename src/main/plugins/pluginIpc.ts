@@ -47,6 +47,7 @@ import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import {
   readRegistryReceiptChannel,
+  readRegistryReceiptExpiresAt,
   readRegistryTrustSnapshot,
   discoverInstalledRegistryPackageIds,
   verifyInstalledRegistryPackage,
@@ -191,6 +192,8 @@ interface InstalledSummary {
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
   /** Source and review state; see `shared/pluginSource.ts`. */
   source?: PluginSource
+  /** Registry-signed expiry; present only when `source` is `testplace`. */
+  expiresAt?: string
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -660,19 +663,37 @@ export function registerPluginIpc(
   const lifecycleSelector = new PluginActivationSelector(pluginsRoot)
   /** The signed envelope channel of the active Registry package, read from
    * the receipt beside the package that load-time verification checked. */
-  const activeRegistryChannel = (summary: {
+  const activeRegistryPackageDir = (summary: {
     id: string
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
   }): string | undefined => {
     if (summary.provenance !== 'official-registry') return undefined
     try {
       const active = lifecycleSelector.read(summary.id)?.active
-      return readRegistryReceiptChannel(
-        active ? lifecycleSelector.packageDir(summary.id, active) : join(pluginsRoot, summary.id)
-      )
+      return active ? lifecycleSelector.packageDir(summary.id, active) : join(pluginsRoot, summary.id)
     } catch {
       return undefined
     }
+  }
+  const activeRegistryChannel = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): string | undefined => {
+    const dir = activeRegistryPackageDir(summary)
+    return dir === undefined ? undefined : readRegistryReceiptChannel(dir)
+  }
+  /** `source`, plus the signed testplace expiry when the source is testplace. */
+  const sourceFields = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+    source?: PluginSource
+    packageVersion?: string
+  }): { source?: PluginSource; expiresAt?: string } => {
+    const source = installedSource(summary, activeRegistryChannel(summary))
+    if (!source) return {}
+    const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined
+    const expiresAt = dir === undefined ? undefined : readRegistryReceiptExpiresAt(dir)
+    return expiresAt === undefined ? { source } : { source, expiresAt }
   }
   // Plan B D2 (D-d): what an update changes, computed by the Host from the
   // active version's installed manifest and the verified package's own
@@ -902,10 +923,7 @@ export function registerPluginIpc(
           }
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
-      ...(() => {
-        const source = installedSource(summary, activeRegistryChannel(summary))
-        return source ? { source } : {}
-      })(),
+      ...sourceFields(summary),
       ...(summary.warning ? { warning: summary.warning } : {}),
       ...(candidate ? { pendingCandidateVersion: candidate.packageVersion } : {}),
       ...(() => {
@@ -1004,6 +1022,8 @@ export function registerPluginIpc(
     version: string
     disclosure: ManifestDisclosure | null
     scan: ScanReport | null
+    source?: PluginSource
+    expiresAt?: string
   }> => {
     assertAuthorized(event)
     return manager.listInstalledPackages()
@@ -1013,6 +1033,7 @@ export function registerPluginIpc(
         version: pkg.packageVersion!,
         disclosure: activeDisclosure(pkg.id),
         scan: installScans.get(pkg.id, pkg.packageVersion!),
+        ...sourceFields(pkg),
       }))
   })
 
@@ -1725,6 +1746,14 @@ export function registerPluginIpc(
       const disclosureDiff = updateDisclosureDiff(result)
       // Declared agent tools, for the trust dialog; absent when there are none.
       const agentTools = isManifestV2(result.manifest) ? computeDisclosure(result.manifest).agentTools : []
+      // From the envelope verifyRegistryPackageTrust just verified, never a file.
+      const source = result.registryEvidence
+        ? pluginSourceFromLegacyProvenance(
+            'official-registry',
+            isPrereleaseVersion(result.version),
+            result.registryEvidence.receipt.envelope.channel
+          )
+        : undefined
       return {
         id: result.id,
         version: result.version,
@@ -1745,6 +1774,7 @@ export function registerPluginIpc(
         disclosure: result.disclosure ?? null,
         scan: result.scan ?? null,
         registry: result.registryFacts,
+        ...(source ? { source } : {}),
         // D7: a Marketplace install over a local one asks first.
         ...(() => {
           const local = installedLocalPackage(result.id)

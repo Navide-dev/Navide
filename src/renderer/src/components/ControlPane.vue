@@ -42,7 +42,7 @@ import FolderIcon from './FolderIcon.vue'
 import ExplorerPane from './ExplorerPane.vue'
 import GitPluginHostSlot from './GitPluginHostSlot.vue'
 import PluginRegionHost, { type PluginRegionContribution } from './PluginRegionHost.vue'
-import { chromeSourceMark } from '../lib/pluginSourceMark'
+import { chromeSourceMark, pluginSourceLabel } from '../lib/pluginSourceMark'
 import { readLegacyPlansPreferenceProjection } from '../editor/plansPreferences'
 import { PLANS_STORAGE_RECOVERY_REASON } from '../../../shared/plansRecovery'
 import type { BackendStatus, useBackend } from '../composables/useBackend'
@@ -1531,7 +1531,7 @@ const genericPluginTabs = computed(() => pluginTabs.value.filter((entry) =>
 /** K2: a local or test package names its source on its sidebar tab. */
 function pluginTabLabel(entry: PluginRegionContribution): string {
   const mark = chromeSourceMark(entry.source)
-  return mark ? `${entry.title} · ${i18n.global.t(`pluginDisclosure.source.${mark}`, { date: '' })}` : entry.title
+  return mark ? `${entry.title} · ${pluginSourceLabel(i18n.global.t, mark)}` : entry.title
 }
 
 async function projectPlansPreferencesBeforePrepare(): Promise<void> {
