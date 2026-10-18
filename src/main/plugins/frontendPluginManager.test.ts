@@ -10593,6 +10593,39 @@ describe('first-party Git private bridge', () => {
     expect(socket.sent).toHaveLength(1)
   })
 
+  it('passes on the shell.run cut disclosure as the broker sent it, and nothing else changes', async () => {
+    const { mgr, view } = await openGitView()
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+    mgr.setBackendWsUrl('ws://public-shell-run-truncation-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const answer = async (reqId: string, payload: Record<string, unknown>) => {
+      const operation = publicCall(view, 'shell', 'run', { command: 'git log' }, reqId)
+      await vi.waitFor(() => expect(socket.sent.length).toBeGreaterThan(0))
+      const request = JSON.parse(socket.sent.at(-1)!) as { id: string; type: string }
+      expect(request.type).toBe('shell.run')
+      socket.sent.length = 0
+      socket.receive({ id: request.id, type: request.type, ok: true, payload, error: null, timestamp: '' })
+      return operation
+    }
+
+    await expect(answer('cut', {
+      ok: true, output: 'o'.repeat(8000), stdout: 'o'.repeat(8000), stderr: 'e'.repeat(8000), exit_code: 0,
+      truncated: true, stdoutBytes: 9000, stderrBytes: 12000,
+    })).resolves.toEqual({
+      reqId: 'cut', ok: true,
+      result: { exitCode: 0, stdout: 'o'.repeat(8000), stderr: 'e'.repeat(8000), truncated: true, stdoutBytes: 9000, stderrBytes: 12000 },
+    })
+    await expect(answer('whole', {
+      ok: true, output: 'abc\n', stdout: 'abc\n', stderr: '', exit_code: 0, truncated: false, stdoutBytes: 4,
+    })).resolves.toEqual({
+      reqId: 'whole', ok: true, result: { exitCode: 0, stdout: 'abc\n', stderr: '', truncated: false, stdoutBytes: 4 },
+    })
+    // A broker that sends no disclosure gives exactly the old result.
+    await expect(answer('old', { ok: true, output: 'abc\n', stdout: 'abc\n', stderr: '', exit_code: 0 }))
+      .resolves.toEqual({ reqId: 'old', ok: true, result: { exitCode: 0, stdout: 'abc\n', stderr: '' } })
+  })
+
   it('denies an agent public Git plan before opening a backend connection', async () => {
     const { mgr, view, instanceId } = await openGitView()
     const socketsBefore = wsMock.FakeNodeWebSocket.instances.length
@@ -15428,6 +15461,10 @@ describe('third-party backend shell broker (real package bridge, port and grant 
       answer = { ok: true, stdout: '', stderr: 'fatal', exit_code: 128 }
       await expect(admission.bridgeDispatcher.dispatch(request('git rev-parse nope'), context(handle.instanceId)))
         .resolves.toEqual({ exitCode: 128, stdout: '', stderr: 'fatal' })
+      // The broker's cut disclosure reaches a native backend as sent.
+      answer = { ok: true, stdout: 'a'.repeat(8000), stderr: '', exit_code: 0, truncated: true, stdoutBytes: 8001 }
+      await expect(admission.bridgeDispatcher.dispatch(request('git log'), context(handle.instanceId)))
+        .resolves.toEqual({ exitCode: 0, stdout: 'a'.repeat(8000), stderr: '', truncated: true, stdoutBytes: 8001 })
 
       // Another instance, another root, or an agent initiator is refused.
       service.mockClear()

@@ -7619,6 +7619,21 @@ async def issues_public(session: "Session", msg_id: str, msg_type: str, payload:
 # - This is a local-only Electron app; the WebSocket server binds to
 #   localhost only, reducing (but not eliminating) external attack surface.
 _SHELL_RUN_TIMEOUT_S = 30
+# Each text field of a shell.run response carries at most this many characters
+# (unchanged). What was cut is disclosed with ``truncated`` and the full UTF-8
+# size (``stdoutBytes``; ``stderrBytes`` when stderr was cut too).
+_SHELL_RUN_OUTPUT_CHARS = 8000
+
+
+def _shell_run_truncation(stdout: str, stderr: str = "") -> dict:
+    """``truncated`` plus the full sizes of what shell.run cut at 8000 characters."""
+    fields: dict = {
+        "truncated": len(stdout) > _SHELL_RUN_OUTPUT_CHARS or len(stderr) > _SHELL_RUN_OUTPUT_CHARS,
+        "stdoutBytes": len(stdout.encode("utf-8", "replace")),
+    }
+    if len(stderr) > _SHELL_RUN_OUTPUT_CHARS:
+        fields["stderrBytes"] = len(stderr.encode("utf-8", "replace"))
+    return fields
 
 
 @handler("shell.run")
@@ -7664,6 +7679,7 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
             "stdout": stdout[:8000],
             "stderr": stderr[:8000],
             "exit_code": rc,
+            **_shell_run_truncation(stdout, stderr),
         }))
         return
     if not cmd:
@@ -7699,6 +7715,7 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
                     output = stdout.decode("utf-8", errors="replace")
                     await session.send_json(make_response(msg_id, msg_type, {
                         "ok": True, "output": output[:8000], "exit_code": proc.returncode,
+                        **_shell_run_truncation(output),
                     }))
                 except asyncio.TimeoutError:
                     from .ai_chat_cli_engine import _terminate_proc_tree

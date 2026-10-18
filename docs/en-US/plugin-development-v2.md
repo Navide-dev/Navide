@@ -402,8 +402,9 @@ through the same shell broker as a view's `shell.run` in `allowlist` mode: only
 workspace the view is bound to, with credential/auth subcommands, `-c`/`-C` and
 the other overrides refused (the Host shell executable allowlist in
 "Host-managed storage partitions" below). The
-answer is `{exitCode, stdout, stderr}`; a refused command is the bridge error
-`CAPABILITY_DENIED`. The Host checks on every call that the package declares
+answer is `{exitCode, stdout, stderr, truncated, stdoutBytes, stderrBytes?}`,
+the same as a view's `shell.run` (see "`shell.run` output size" below); a
+refused command is the bridge error `CAPABILITY_DENIED`. The Host checks on every call that the package declares
 `shell: "allowlist"`, that the user's capability grant for this package version
 has the same shell mode, that the call comes from a live binding of this
 version at its bound workspace root. Today only user-initiated calls are
@@ -1360,6 +1361,37 @@ are not Manifest v2 permissions.
 | `system:ui` | `ui.openExternal` | `plugin` (HTTP/HTTPS web links; Host user-gesture gate) |
 | `system:aiCli` | `aiCli.listProfiles`, `startSession`, `resumeSession`, `cancelStart`, `reattachSession`, `sendInput`, `resizeSession`, `redrawSession`, `interruptSession`, `stopSession`, `output`, `exited` | `workspace` |
 | `shell` | `shell.run` | `workspace` |
+
+**`shell.run` output size.** The Host shell broker returns at most 8000
+characters of `stdout` and of `stderr` each; the rest is not returned. This
+limit is unchanged. Since 0.2.25 the result says when that happened:
+
+- `truncated` and `stdoutBytes` are present on every result. `truncated` is
+  `true` when `stdout` or `stderr` was cut, and `false` when both fit in 8000
+  characters.
+- `stdoutBytes` is the size in UTF-8 bytes of the whole `stdout` text before
+  the cut. `stderrBytes` is the same for `stderr`, present only when `stderr`
+  was cut.
+- That text is the output **after** the broker decoded it as UTF-8 with
+  invalid bytes replaced (U+FFFD, 3 bytes each) and, for `gh` and `glab`,
+  after credentials were redacted. It is not the raw byte count of what the
+  command wrote: 8001 raw `0xFF` bytes give `stdoutBytes: 24003`. On the
+  legacy `terminal.run` branch (Manifest v1, `output` only) `stderr` is merged
+  into `stdout`, so its `stdoutBytes` counts both.
+- The two units differ on purpose: what is kept is the first 8000
+  **characters** (Unicode code points), while the sizes are UTF-8 **bytes**.
+  For example 8001 `é` come back as 8000 `é`, with `truncated: true` and
+  `stdoutBytes: 16002`.
+- To compare a size with what you received, measure the received string with
+  `new TextEncoder().encode(stdout).length`, not with `stdout.length`.
+  JavaScript's `.length` counts UTF-16 code units: for 8001 emoji (such as
+  `😀`), the 8000 kept give `stdout.length` 16000, while `stdoutBytes` is
+  32004.
+
+`exitCode`, `stdout` and `stderr` are exactly what they were before. A plugin
+that needs the whole output asks for less at a time (for example `git log -n`,
+a path filter). Whether the limit is lifted is the user's decision and not part
+of this change.
 
 The table shows representative entries; `capabilities-v1.json` lists all of
 them (for example `fs.writeFile`, `fs.rename` and many more `ui.*` and

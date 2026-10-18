@@ -1002,7 +1002,12 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
   'aiCli.redrawSession': Record<string, never>
   'aiCli.interruptSession': Record<string, never>
   'aiCli.stopSession': Record<string, never>
-  'shell.run': { exitCode: number; stdout: string; stderr: string }
+  /** stdout and stderr are cut at 8000 characters each; `truncated` and the
+   *  full UTF-8 sizes say so (`stderrBytes` only when stderr was cut). */
+  'shell.run': {
+    exitCode: number; stdout: string; stderr: string
+    truncated?: boolean; stdoutBytes?: number; stderrBytes?: number
+  }
   'storage.get': StorageGetResult
   'storage.set': null
   'storage.delete': boolean

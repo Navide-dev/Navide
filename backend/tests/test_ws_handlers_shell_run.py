@@ -74,7 +74,10 @@ async def test_allowlist_keeps_cwd_within_registered_workspace(tmp_path: Path, m
         "host_mode": "allowlist", "workspace_path": str(tmp_path.parent), "command": "git status",
     })
 
-    assert payload == {"ok": True, "output": "clean", "stdout": "clean", "stderr": "", "exit_code": 0}
+    assert payload == {
+        "ok": True, "output": "clean", "stdout": "clean", "stderr": "", "exit_code": 0,
+        "truncated": False, "stdoutBytes": 5,
+    }
     assert calls == [(["git", "status"], str(child.resolve()), 30.0)]
     assert outside == {"ok": False, "error": "workspace path not registered"}
 
@@ -203,6 +206,82 @@ async def test_allowlist_truncates_output_and_preserves_nonzero_envelope(
         "stdout": "o" * 8000,
         "stderr": "e" * 8000,
         "exit_code": 23,
+        "truncated": True,
+        "stdoutBytes": 9000,
+        "stderrBytes": 9000,
+    }
+
+
+def _fake_output(monkeypatch: pytest.MonkeyPatch, stdout: str, stderr: str) -> None:
+    async def fake_run(
+        _argv: list[str], _cwd: str, *, timeout: float, workspace_root: str | None = None
+    ) -> tuple[int, str, str]:
+        return 0, stdout, stderr
+
+    monkeypatch.setattr(ws_handlers, "run_public_allowlisted_text", fake_run)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("stdout", "stderr", "disclosed"), [
+    # Cut at 8000 characters; the sizes are the full output's UTF-8 bytes.
+    ("é" * 8001, "", {"truncated": True, "stdoutBytes": 16002}),
+    ("o" * 10, "è" * 9000, {"truncated": True, "stdoutBytes": 10, "stderrBytes": 18000}),
+    ("o" * 9000, "e" * 9000, {"truncated": True, "stdoutBytes": 9000, "stderrBytes": 9000}),
+# Short ids: a parameter's text in the test id goes into PYTEST_CURRENT_TEST,
+# which Windows refuses above 32767 characters.
+], ids=["stdout-multibyte", "stderr-only-multibyte", "both"])
+async def test_allowlist_discloses_what_the_8000_character_cut_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stdout: str, stderr: str, disclosed: dict[str, Any],
+) -> None:
+    monkeypatch.setattr(app.attribution, "known_workspaces", lambda: [str(tmp_path)])
+    _fake_output(monkeypatch, stdout, stderr)
+
+    payload = await _run(_session(), {
+        "host_mode": "allowlist", "workspace_path": str(tmp_path), "command": "git log",
+    })
+
+    # The existing fields are what they always were; only the disclosure is new.
+    assert payload == {
+        "ok": True, "output": stdout[:8000], "stdout": stdout[:8000], "stderr": stderr[:8000], "exit_code": 0,
+        **disclosed,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("stdout", "stderr"), [("", ""), ("o" * 8000, "e" * 8000), ("ü" * 8000, "")],
+                         ids=["empty", "exactly-8000", "multibyte-8000"])
+async def test_allowlist_output_within_8000_characters_is_unchanged_and_not_truncated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stdout: str, stderr: str,
+) -> None:
+    monkeypatch.setattr(app.attribution, "known_workspaces", lambda: [str(tmp_path)])
+    _fake_output(monkeypatch, stdout, stderr)
+
+    payload = await _run(_session(), {
+        "host_mode": "allowlist", "workspace_path": str(tmp_path), "command": "git log",
+    })
+
+    main_shape = {"ok": True, "output": stdout, "stdout": stdout, "stderr": stderr, "exit_code": 0}
+    assert {k: v for k, v in payload.items() if k not in {"truncated", "stdoutBytes"}} == main_shape
+    assert payload["truncated"] is False
+    assert payload["stdoutBytes"] == len(stdout.encode("utf-8"))
+    assert "stderrBytes" not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX sh and printf")
+@pytest.mark.parametrize(("count", "truncated"), [(9000, True), (8000, False)])
+async def test_legacy_shell_run_discloses_its_cut_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, count: int, truncated: bool,
+) -> None:
+    monkeypatch.setattr(app.attribution, "known_workspaces", lambda: [str(tmp_path)])
+
+    payload = await _run(_session(), {
+        "workspace_path": str(tmp_path), "command": f"printf '%{count}s' '' | tr ' ' a",
+    })
+
+    assert payload == {
+        "ok": True, "output": "a" * min(count, 8000), "exit_code": 0,
+        "truncated": truncated, "stdoutBytes": count,
     }
 
 
@@ -224,6 +303,7 @@ async def test_allowlist_timeout_and_executor_error_keep_the_response_shape(
 
     assert timeout_payload == {
         "ok": True, "output": "", "stdout": "", "stderr": "git timed out", "exit_code": 128,
+        "truncated": False, "stdoutBytes": 0,
     }
 
     async def missing_binary(
@@ -237,6 +317,7 @@ async def test_allowlist_timeout_and_executor_error_keep_the_response_shape(
     })
     assert error_payload == {
         "ok": True, "output": "", "stdout": "", "stderr": "git not found", "exit_code": 127,
+        "truncated": False, "stdoutBytes": 0,
     }
 
 
