@@ -53,7 +53,7 @@ describe('SettingsModal disclosure overview on the Navide Plugins page', () => {
         cliProfilesApi: api(),
         stagesApi: api(),
         analyzerApi: api(),
-        ...(initialTab ? { initialTab } : {}),
+        ...(initialTab ? { initialTab: initialTab as never } : {}),
       },
       global: { plugins: [i18n], stubs: { teleport: false } },
     })
