@@ -2242,11 +2242,12 @@
       "resume-behavior-never": "一律開新對話",
       "resume-behavior-ask": "每次詢問",
       "restore-scope": "恢復範圍",
-      "restore-scope-hint": "選擇「總是恢復」時，可自動開啟單一 CLI、目前的 Grid 頁面、目前分頁，或全部 CLI（一次兩個依序啟動）。",
+      "restore-scope-hint": "選擇「總是恢復」時，可自動開啟單一 CLI、目前的 Grid 頁面、目前分頁、全部 CLI，或「自動」：只恢復上次關閉 Navide 時仍在執行的 CLI（全部 CLI 與自動都一次兩個依序啟動）。",
       "restore-scope-single": "單一 CLI",
       "restore-scope-page": "目前 Grid 頁面",
       "restore-scope-tab": "目前分頁",
       "restore-scope-all": "全部 CLI",
+      "restore-scope-auto": "自動",
       "resume-concurrency": "同時恢復上限",
       "resume-concurrency-hint": "開啟工作區或還原版面時，最多可同時恢復幾個 CLI pane，其餘依序排隊。若一次恢復太多 pane 導致「terminal.create timeout」錯誤，就把這個值調小（1–10）。",
       "resume-concurrency-label": "同時恢復數上限"
@@ -2475,16 +2476,12 @@
               "more": "本頁第 3 章"
             },
             "extensions": {
-              "what": "Navide 外掛執行時套用的執行政策，以及隨附與已安裝的 Navide 外掛",
+              "what": "Navide 外掛執行時套用的執行政策，以及隨附與已安裝的 Navide 外掛；頁面最下方是揭露總覽，列出所有從 Navide 市集安裝的 Navide 外掛（只是紀錄，不會改變 Navide 外掛能做的事）",
               "more": "本頁第 4 章"
             },
             "marketplace": {
               "what": "搜尋 Navide 外掛登錄庫並從中安裝",
               "more": "本頁第 4 章"
-            },
-            "disclosureOverview": {
-              "what": "所有從 Navide 市集安裝的 Navide 外掛：揭露卡、風險等級、最近活動和異常，集中在同一頁。",
-              "more": "只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。每個 Navide 外掛完整的活動，也可以在「Navide 外掛」頁該 Navide 外掛的那一列打開。"
             },
             "shortcuts": {
               "what": "快捷鍵改綁、匯入匯出",
@@ -2535,7 +2532,7 @@
               "fallback": "Always"
             },
             "resumeScope": {
-              "desc": "接續範圍：單一 CLI／目前 Grid 頁面／目前分頁／全部 CLI。",
+              "desc": "接續範圍：單一 CLI／目前 Grid 頁面／目前分頁／全部 CLI／自動（只接續上次關閉 Navide 時仍在執行的 CLI）。",
               "fallback": "單一 CLI"
             },
             "resumeAfterRestart": {
@@ -8576,6 +8573,7 @@
     "statusbar-note": "狀態列上的資訊窗會一起消失"
   },
   "error": {
+    "pipeline-start-refused": "流程沒有啟動：{reason}",
     "workspace-create-exists": "該位置已有名為「{name}」的項目，請換個名稱。",
     "workspace-create-denied": "沒有權限在 {path} 建立資料夾。",
     "workspace-create-failed": "無法在 {path} 建立工作區資料夾。",

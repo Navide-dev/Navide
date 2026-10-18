@@ -59,6 +59,11 @@ export function extraEnterAllowed(framedHeld: boolean | null, dialogShown: boole
   return framedHeld === true && !dialogShown
 }
 
+/** A frameless composer's prompt row, and a menu's cursor row (a numbered
+ *  option) that uses the same glyph. */
+const PROMPT_ROW_RE = /^\s*[›>❯]/
+const OPTION_ROW_RE = /^\s*[›>❯]\s*\d+[.)]/
+
 /** Is a dialog that would take an Enter as its answer on screen?
  *
  *  `awaitingKind` 'permission' is one by definition. 'question' is NOT: the
@@ -68,13 +73,21 @@ export function extraEnterAllowed(framedHeld: boolean | null, dialogShown: boole
  *  The text patterns are read only below the input box when its frame can be
  *  located: our own unsent message inside the box, or the transcript above
  *  it, may quote a dialog's wording without any dialog being up. With no
- *  frame — a dialog drawn in place of the box — the whole screen is read. */
+ *  frame (codex), the composer is the last prompt row and what wraps below
+ *  it, and only the rows above it are read — unless that row is a numbered
+ *  option, the cursor of a menu drawn in the composer's place, or a dialog
+ *  pattern matches below it (aider prints its Y/N question under the
+ *  submitted "> message" row, with no prompt row of its own); then, as with
+ *  no prompt row at all, the whole screen is read. Safety first: a wrapped
+ *  message quoting a dialog below its prompt row reads as a dialog too. */
 export function blockingDialogShown(input: {
   awaitingKind: string | null | undefined
   agentKey: string | undefined
   screen: string
 }): boolean {
   if (input.awaitingKind === 'permission') return true
+  const matches = (text: string): boolean => screenShowsBlockingDialog(text)
+    || (!!input.agentKey && matchAwaitingInput(input.agentKey, text))
   const lines = input.screen.split('\n')
   let close = -1
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -84,9 +97,19 @@ export function blockingDialogShown(input: {
   for (let i = close - 1; i >= 0; i--) {
     if (BOX_ONLY_LINE_RE.test(lines[i])) { open = i; break }
   }
-  const region = open >= 0 ? lines.slice(close + 1).join('\n') : input.screen
-  return screenShowsBlockingDialog(region)
-    || (!!input.agentKey && matchAwaitingInput(input.agentKey, region))
+  let region = input.screen
+  if (open >= 0) {
+    region = lines.slice(close + 1).join('\n')
+  } else {
+    let prompt = -1
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (PROMPT_ROW_RE.test(lines[i])) { prompt = i; break }
+    }
+    if (prompt >= 0 && !OPTION_ROW_RE.test(lines[prompt]) && !matches(lines.slice(prompt + 1).join('\n'))) {
+      region = lines.slice(0, prompt).join('\n')
+    }
+  }
+  return matches(region)
 }
 
 /** 'turn' once the CLI starts a new turn inside the window, 'unconfirmed'

@@ -2242,11 +2242,12 @@
       "resume-behavior-never": "常に新しく開始",
       "resume-behavior-ask": "毎回確認",
       "restore-scope": "再開する範囲",
-      "restore-scope-hint": "常に再開する場合に、1 つの CLI、現在のグリッドページ、選択中のタブ、すべての CLI から選びます（順番に 2 つずつ起動）。",
+      "restore-scope-hint": "常に再開する場合に、1 つの CLI、現在のグリッドページ、選択中のタブ、すべての CLI、または自動（前回 Navide を閉じたときに実行中だった CLI のみ）から選びます（すべての CLI と自動は順番に 2 つずつ起動）。",
       "restore-scope-single": "1 つの CLI",
       "restore-scope-page": "現在のグリッドページ",
       "restore-scope-tab": "選択中のタブ",
       "restore-scope-all": "すべての CLI",
+      "restore-scope-auto": "自動",
       "resume-concurrency": "同時再開の上限",
       "resume-concurrency-hint": "ワークスペースを開くときやレイアウトを復元するときに、同時に再開できる CLI ペインの数です。残りは待機します。多数のペインを同時に再開して「terminal.create timeout」エラーが発生する場合は、この値を下げてください（1～10）。",
       "resume-concurrency-label": "最大同時再開数"
@@ -2475,16 +2476,12 @@
               "more": "このページのセクション 3"
             },
             "extensions": {
-              "what": "Navide プラグインに適用する実行ポリシー、同梱およびインストール済みの Navide プラグイン",
+              "what": "Navide プラグインに適用する実行ポリシー、同梱およびインストール済みの Navide プラグイン。ページ下部には、Navide マーケットプレイスからインストールした各 Navide プラグインの開示の一覧があります（記録のみで、Navide プラグインができることは変わりません）",
               "more": "このページのセクション 4"
             },
             "marketplace": {
               "what": "Navide プラグインレジストリの検索とインストール",
               "more": "このページのセクション 4"
-            },
-            "disclosureOverview": {
-              "what": "Navide マーケットプレイスからインストールした各 Navide プラグインの開示カード、リスク、最近のアクティビティ、異常を 1 ページにまとめます。",
-              "more": "記録のみで、Navide プラグインができることは変わりません。各 Navide プラグインの詳しいアクティビティは「Navide プラグイン」ページのその行からも開けます。"
             },
             "shortcuts": {
               "what": "ショートカットの割り当て変更、インポートとエクスポート",
@@ -2535,7 +2532,7 @@
               "fallback": "常に再開"
             },
             "resumeScope": {
-              "desc": "再開する範囲：1 つの CLI / 現在のグリッドページ / アクティブなタブ / すべての CLI。",
+              "desc": "再開する範囲：1 つの CLI / 現在のグリッドページ / アクティブなタブ / すべての CLI / 自動（前回 Navide を閉じたときに実行中だった CLI のみ）。",
               "fallback": "1 つの CLI"
             },
             "resumeAfterRestart": {
@@ -8576,6 +8573,7 @@
     "statusbar-note": "関連するポップオーバーも一緒に非表示になります"
   },
   "error": {
+    "pipeline-start-refused": "パイプラインは開始されませんでした：{reason}",
     "workspace-create-exists": "「{name}」という名前の項目がすでにあります。別の名前を選んでください。",
     "workspace-create-denied": "{path} にフォルダーを作成する権限がありません。",
     "workspace-create-failed": "{path} にワークスペースフォルダーを作成できませんでした。",

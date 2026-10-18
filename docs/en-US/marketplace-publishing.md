@@ -355,6 +355,17 @@ published, and Navide installs it only for users who turn on **Get
 pre-releases** for your extension. Build metadata (`1.0.0+build.7`) does not make a
 version a pre-release.
 
+A publish may name its channel with `?channel=stable` or
+`?channel=pre-release`; it must match the version (`400` otherwise). Leaving
+it out derives the channel from the version as above. `?channel=testplace`
+(invite-only test builds that expire after 90 days) is answered with
+`409 TESTPLACE_NOT_OPEN` until Testplace opens in Navide 0.2.27. Public
+listings, details and downloads never include a testplace version. Its
+Registry envelope carries `channel` and `expiresAt` inside the signature, so
+an App released before Testplace refuses it, and a current App refuses it
+after it expires (`TESTPLACE_EXPIRED`) or when the channel is one it does not
+know (`CHANNEL_UNSUPPORTED`).
+
 ## 7. Extension packs
 
 An Extension Pack installs a set of plugins together. It is a manifest with
