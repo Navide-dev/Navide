@@ -60,8 +60,11 @@ RESUME_CALLBACK = "nv4:resume"
 PROMPTS_CALLBACK = "nv4:prompts"
 SKILLS_CALLBACK = "nv4:skills"
 MCP_CALLBACK = "nv4:mcp"
+WAKE_CALLBACK = "nv4:wake"
+WAKE_WORDS = {"/wake"}
 _CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume",
-                      PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp"}
+                      PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp",
+                      WAKE_CALLBACK: "/wake"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -113,6 +116,8 @@ MSG_CANCEL_UNSURE = "；{n} 則視窗沒有回應，可能仍會送進 pane"
 MSG_RESUMED = "▶️ 已恢復，排隊中的訊息會繼續送進 pane"
 MSG_NOT_STOPPED = "pane 沒有停住，不需要恢復"
 RESUME_BUTTONS = [("▶️ 繼續", RESUME_CALLBACK)]
+# A pane that is not online but can be woken onto its own conversation.
+WAKE_BUTTONS = [("▶️ 喚醒", WAKE_CALLBACK)]
 # /menu and a bare /start point to the three commands that replaced the quick menu.
 MENU_MOVED_BUTTONS = [("💬 Prompts", PROMPTS_CALLBACK), ("🧩 Skills", SKILLS_CALLBACK), ("🔌 MCP", MCP_CALLBACK)]
 # Where a platform has no buttons, the reply names the commands they stand for.
@@ -235,6 +240,15 @@ class Seams:
     navide_mcp: Callable[[], Awaitable[list[dict[str, Any]]]] = lambda: _no_rows()
     # server name -> its tool names; [] when not running, None when tools/list timed out
     navide_mcp_tools: Callable[[str], Awaitable[list[str] | None]] = lambda _name: _no_tools()
+    # pane_id -> {workspace_path, session_id} of an online pane, what a later wake resumes;
+    # {} when unknown. Blocking (reads the workspace's pane records)
+    wake_target: Callable[[str], dict[str, str]] = lambda _pane_id: {}
+    # () -> whether any Navide window is connected
+    windows_open: Callable[[], bool] = lambda: True
+    # (pane_id, workspace_path, session_id) -> {ok, pane_id} with the pane back on that same
+    # conversation, or {ok: False, code, started, detail?, agent?}; never a fresh conversation.
+    # `started` is False when it was refused before anything was opened
+    wake: Callable[[str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_wake()
 
 
 async def _no_limit() -> dict[str, Any]:
@@ -251,6 +265,10 @@ async def _no_rows() -> list[dict[str, Any]]:
 
 async def _no_tools() -> list[str] | None:
     return []
+
+
+async def _no_wake() -> dict[str, Any]:
+    return {"ok": False, "code": "no-window", "started": False}
 
 
 async def _no_resume() -> dict[str, Any]:
@@ -402,6 +420,9 @@ class ChannelManager:
         self._awaiting_shown: dict[str, _Shown] = {}
         self._awaiting_busy: set[str] = set()  # panes whose prompt is being read or relayed
         self._turn_source: dict[str, str] = {}
+        self._wake_limits = wake.WakeLimits(clock=clock)
+        # location -> (kept at, message): what reached a pane that was not online, for its wake
+        self._wake_kept: dict[str, list[tuple[float, InboundMessage]]] = {}
         self.mirror = Mirror(self)
 
     # --- lifecycle --------------------------------------------------------------
@@ -1137,6 +1158,7 @@ class ChannelManager:
         previous = next((b for b in self.store.bindings() if b.pane_id == pane_id), None)
         level = level or (previous.verbosity if previous else DEFAULT_VERBOSITY)
         binding = self.store.bind(pane_id, loc, verbosity=level)
+        await self._remember_wake_target(binding, pane_id)
         if previous is not None and previous.location().key() != loc.key():
             # Moved to another chat: child topics left in the old one would keep
             # posting there and let its members drive the children.
@@ -1517,6 +1539,7 @@ class ChannelManager:
             return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
             return
+        wake_pressed = msg.callback_data == WAKE_CALLBACK
         if msg.callback_data in _CALLBACK_COMMANDS:
             # Then on through the binding checks below, as if the command had been typed.
             msg = dataclasses.replace(msg, text=_CALLBACK_COMMANDS[msg.callback_data], callback_data="")
@@ -1558,10 +1581,19 @@ class ChannelManager:
             return
         pane_id = await self._resolve_after_startup(binding.pane_id)
         if not pane_id:
-            await self._reply(msg, await self._offline_text())  # binding kept: it may come back
+            await self._offline(msg, binding)  # binding kept: it may come back
             return
         if pane_id != binding.pane_id:
             self.store.rename_pane(binding.pane_id, pane_id)
+        await self._remember_wake_target(binding, pane_id)
+        kept = self._wake_kept.pop(binding.location().key(), [])
+        if wake_pressed:
+            # A wake button from before the pane came back: it is online, so the kept
+            # messages go in now.
+            lang = prompt_skills.language(await self._ui_settings())
+            await self._reply(msg, wake.text(lang, "already_online"))
+            await self._deliver_kept(kept, binding, pane_id)
+            return
         # "<@bot> stop" or "@bot /cancel" is the command, addressed to the bot.
         command = quick_menu.strip_mention(msg.text, self._identity(msg))
         if _is_stop_word(command):
@@ -1576,6 +1608,82 @@ class ChannelManager:
         if await self.mirror.handle_inbound(msg, binding, pane_id):
             return
         await self._debounced_deliver(msg, binding, pane_id)
+
+    async def _remember_wake_target(self, binding: Binding, pane_id: str) -> None:
+        """Keep the online pane's workspace and conversation on its binding, for a later wake."""
+        try:
+            target = await asyncio.to_thread(self._seams.wake_target, pane_id)
+        except Exception as exc:  # noqa: BLE001 — the message still goes in without it
+            log.warning("channels: reading the wake target of %s failed: %s", pane_id, exc)
+            return
+        workspace_path = str(target.get("workspace_path") or "")
+        session_id = str(target.get("session_id") or "")
+        if not workspace_path or not session_id:
+            return  # nothing known yet (a pane before its first turn): keep what is stored
+        if (workspace_path, session_id) != (binding.workspace_path, binding.session_id):
+            self.store.set_wake_target(pane_id, workspace_path, session_id)
+
+    async def _offline(self, msg: InboundMessage, binding: Binding) -> None:
+        """A message for a bound pane that is not online.
+
+        A binding without a stored workspace and conversation (one made before waking
+        existed, not seen online since) is only told, as before. Otherwise the chat can wake
+        the pane onto its own conversation, and what it sent is kept for that wake."""
+        lang = prompt_skills.language(await self._ui_settings())
+        if not binding.workspace_path or not binding.session_id:
+            await self._reply(msg, wake.text(lang, "offline"))
+            return
+        if not self._seams.windows_open():
+            await self._reply(msg, wake.text(lang, "no_window"))
+            return
+        command = quick_menu.strip_mention(msg.text, self._identity(msg))
+        if _command_word(command) in WAKE_WORDS:
+            await self._wake(msg, binding, lang)
+            return
+        word = _command_word(command)
+        if _is_stop_word(command) or word in CANCEL_WORDS or word in RESUME_WORDS:
+            await self._reply(msg, wake.text(lang, "offline_wake_nothing_kept"), buttons=WAKE_BUTTONS)
+            return
+        key = binding.location().key()
+        kept = [k for k in self._wake_kept.get(key, []) if self._clock() - k[0] < wake.STASH_TTL_S]
+        kept.append((self._clock(), msg))
+        self._wake_kept[key] = kept[-wake.STASH_MAX:]
+        await self._reply(msg, wake.text(lang, "offline_wake"), buttons=WAKE_BUTTONS)
+
+    async def _wake(self, msg: InboundMessage, binding: Binding, lang: str) -> None:
+        key = binding.location().key()
+        refusal = self._wake_limits.refusal(key, lang)
+        if refusal:
+            await self._reply(msg, refusal)
+            return
+        self._wake_limits.begin(key)
+        result: dict[str, Any] = {}
+        try:
+            await self._reply(msg, wake.text(lang, "waking"))
+            try:
+                result = await self._seams.wake(binding.pane_id, binding.workspace_path, binding.session_id)
+            except Exception as exc:  # noqa: BLE001 — answered as a failed wake
+                log.warning("channels: waking %s failed: %s", binding.pane_id, exc)
+                result = {"ok": False, "code": "error", "started": True}
+        finally:
+            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)))
+        if not result.get("ok"):
+            await self._reply(msg, wake.outcome_text(lang, result))
+            return
+        pane_id = str(result.get("pane_id") or binding.pane_id)
+        if pane_id != binding.pane_id:
+            self.store.rename_pane(binding.pane_id, pane_id)
+            await self._changed()
+        current = self._binding_for(msg) or binding
+        kept = [k for k in self._wake_kept.pop(key, []) if self._clock() - k[0] < wake.STASH_TTL_S]
+        await self._reply(msg, wake.text(lang, "woke_sent", count=len(kept)) if kept else wake.text(lang, "woke"))
+        await self._deliver_kept(kept, current, pane_id)
+
+    async def _deliver_kept(self, kept: list[tuple[float, InboundMessage]], binding: Binding,
+                            pane_id: str) -> None:
+        for kept_at, kept_msg in kept:
+            if self._clock() - kept_at < wake.STASH_TTL_S:
+                await self._deliver(kept_msg, binding, pane_id)
 
     async def _resolve_after_startup(self, pane_id: str) -> str:
         """The pane's current id; during the startup grace an unknown pane is waited for."""

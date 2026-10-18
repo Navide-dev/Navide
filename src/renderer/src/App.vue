@@ -10156,12 +10156,12 @@ registerCommand('ui.pane.place', async (args) => {
 // restarted. The restored pane gets a fresh runtime id (the old one becomes
 // an alias), so the answer carries the id it is known by now.
 registerCommand('ui.pane.open', async (args) => {
-  const paneId = (args as { paneId?: string } | undefined)?.paneId
+  const { paneId, requireResume } = (args as { paneId?: string; requireResume?: boolean } | undefined) ?? {}
   if (!paneId) throw new Error(`ui.pane.open requires ${PANE_ID_HINT}`)
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) throw new Error(`unknown pane ${paneId}`)
   if (pane.realized) return { realized: true, reason: 'already-open', paneId }
-  const reason = await realizeRestoredPane(paneId, false, { explicit: true })
+  const reason = await realizeRestoredPane(paneId, false, { explicit: true, requireResume: requireResume === true })
   const opened = panes.value.find((p) => p.id === paneId || p.formerPaneIds?.includes(paneId))
   return { realized: opened?.realized === true, reason, paneId: opened?.id ?? paneId }
 })
@@ -12342,16 +12342,20 @@ type RealizeOutcome =
   | 'cancelled'
   | 'superseded'
   | 'session-unavailable'
+  | 'fresh-refused'
+  | 'resume-unavailable'
   | 'error'
 
 /** Realize one cold-restore record after explicit user activation.
  *  `opts.explicit`: the caller named this one pane (ui.pane.open), so the
  *  restore decision is taken by explicitRestoreDecision instead of the
- *  workspace-wide question. */
+ *  workspace-wide question. `opts.requireResume`: open only onto the saved
+ *  conversation; where it would start a fresh one the pane stays a
+ *  placeholder ('fresh-refused' / 'resume-unavailable'). */
 async function realizeRestoredPane(
   paneId: string,
   aggregateReconnect = false,
-  opts?: { explicit?: boolean },
+  opts?: { explicit?: boolean; requireResume?: boolean },
 ): Promise<RealizeOutcome> {
   const pending = restoringPanePromises.get(paneId)
   if (pending) return pending
@@ -12371,7 +12375,7 @@ async function realizeRestoredPane(
 async function performRealizeRestoredPane(
   paneId: string,
   aggregateReconnect = false,
-  opts?: { explicit?: boolean },
+  opts?: { explicit?: boolean; requireResume?: boolean },
 ): Promise<RealizeOutcome> {
   const placeholder = panes.value.find((p) => p.id === paneId)
   const deferred = placeholder?.deferredRestore
@@ -12472,6 +12476,8 @@ async function performRealizeRestoredPane(
         reconnectId = ''
       }
     }
+    // A chat's wake asks for the pane's own conversation or nothing.
+    if (opts?.requireResume && !resumeCmd) return forceFresh ? 'fresh-refused' : 'resume-unavailable'
     if (ghostConfirmed && !reconnectId) {
       wasDisconnected = supportsGhostReconnect(saved.agent)
       pipelineLog(`⚠ ${saved.agent}: previous conversation ${sessionId} not found at ${batch.workspacePath}; opened a fresh one`)

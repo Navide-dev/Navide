@@ -37,7 +37,13 @@ describe('ui.pane.open', () => {
   it('opens the placeholder through the explicit restore path', () => {
     // explicit is what keeps ask mode from raising the modal for a pane an
     // agent named by id.
-    expect(command('ui.pane.open')).toContain('realizeRestoredPane(paneId, false, { explicit: true })')
+    expect(command('ui.pane.open')).toContain('realizeRestoredPane(paneId, false, { explicit: true, requireResume')
+  })
+
+  it('passes requireResume through only when the caller asked for it', () => {
+    // A chat's wake must come back on the pane's own conversation; every other
+    // caller keeps the old behavior, a fresh session included.
+    expect(command('ui.pane.open')).toContain('requireResume: requireResume === true')
   })
 
   it('answers an already-open pane without restarting it', () => {
@@ -67,5 +73,14 @@ describe('performRealizeRestoredPane', () => {
     // A bare `return` would hand ui.pane.open undefined for a reason.
     expect(body).not.toMatch(/\breturn\n/)
     expect(body).toContain("return forceFresh ? 'fresh' : 'opened'")
+  })
+
+  it('with requireResume, leaves the pane closed rather than start a fresh session', () => {
+    const body = fn('performRealizeRestoredPane')
+    const refusal = body.indexOf("if (opts?.requireResume && !resumeCmd) return forceFresh ? 'fresh-refused' : 'resume-unavailable'")
+    expect(refusal).toBeGreaterThan(-1)
+    // Before the fresh-session toast and before anything is spawned.
+    expect(refusal).toBeLessThan(body.indexOf("i18n.global.t('restore.session-not-found'"))
+    expect(refusal).toBeLessThan(body.indexOf('await spawnRestoredPane('))
   })
 })

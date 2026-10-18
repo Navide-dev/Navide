@@ -9,12 +9,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from types import SimpleNamespace
 from typing import Any
 
 from . import relay
 from .manager import ChannelManager, Seams
 
 log = logging.getLogger(__name__)
+
+# How long a woken workspace's window gets to register the pane after it answers.
+WAKE_PANE_WAIT_S = 10.0
+WAKE_PANE_POLL_S = 0.5
 
 _manager: ChannelManager | None = None
 _start_task: asyncio.Task[None] | None = None
@@ -233,6 +238,25 @@ def default_seams() -> Seams:
 
         await asyncio.to_thread(app.credential_vault.write_app_secret, name, secret)
 
+    def wake_target(pane_id: str) -> dict[str, str]:
+        from .. import app
+
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {}
+        project = app.project_store.peek(pane.workspace_path)
+        record = next((r for r in project.panes if r.pane_id == pane.pane_id), None) if project else None
+        return {"workspace_path": pane.workspace_path,
+                "session_id": (getattr(record, "session_id", "") or "").strip()}
+
+    def windows_open() -> bool:
+        from .. import app
+
+        return bool(app.live_main_window_ids())
+
+    async def wake(pane_id: str, workspace_path: str, session_id: str) -> dict[str, Any]:
+        return await wake_pane(pane_id, workspace_path, session_id)
+
     return Seams(
         deliver=deliver, await_verdict=await_verdict, interrupt=interrupt, pane_state=pane_state,
         awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, resolve_pane=resolve_pane, broadcast=broadcast,
@@ -240,7 +264,93 @@ def default_seams() -> Seams:
         pane_directory=pane_directory, inherit_taint=inherit_taint,
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
         agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
+        wake_target=wake_target, windows_open=windows_open, wake=wake,
     )
+
+
+def _host_ctx() -> Any:
+    """The credential this backend's own calls into the MCP tools carry (as evolve_service)."""
+    from ..mcp_server import auth
+
+    params = {"client": "host", "t": auth.internal_token()}
+    return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
+
+
+def _wake_record(workspace_path: str, session_id: str) -> Any | None:
+    """The newest pane record of the workspace that held this conversation, or None."""
+    from .. import app
+
+    project = app.project_store.peek(workspace_path)
+    if project is None:
+        return None
+    return next((r for r in reversed(project.panes)
+                 if (getattr(r, "session_id", "") or "").strip() == session_id and getattr(r, "agent", "")), None)
+
+
+def _registered_pane(pane_id: str, workspace_path: str, session_id: str) -> Any | None:
+    """The registered pane behind the binding: its id (or an alias), else the live record
+    that holds the same conversation."""
+    from .. import agent_messaging, app
+
+    entry = agent_messaging.current(pane_id)
+    if entry is not None:
+        return entry
+    project = app.project_store.peek(workspace_path)
+    for record in reversed(project.panes if project else []):
+        if (getattr(record, "session_id", "") or "").strip() == session_id \
+                and getattr(record, "spawn_status", "") != "removed":
+            entry = agent_messaging.current(record.pane_id)
+            if entry is not None:
+                return entry
+    return None
+
+
+async def wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict[str, Any]:
+    """Bring a pane that is not online back onto its own conversation (the chat's wake).
+
+    Refused before anything opens, with ``started`` False: no Navide window, no record of
+    the conversation, a conversation the CLI cannot resume, or a CLI out of quota (the
+    cached reading only). Then the workspace's window is opened if needed and the pane is
+    opened in place, or, when the window no longer holds it, a pane is opened onto the same
+    session. Never a fresh conversation: the window is asked to refuse one."""
+    from .. import app, quota_failover
+    from ..mcp_server import server as mcp
+
+    if not app.live_main_window_ids():
+        return {"ok": False, "code": "no-window", "started": False}
+    record = await asyncio.to_thread(_wake_record, workspace_path, session_id)
+    if record is None:
+        return {"ok": False, "code": "no-record", "started": False}
+    agent_key = str(record.agent)
+    refusal = await asyncio.to_thread(mcp._refuse_unresumable_session, agent_key, workspace_path, session_id)
+    if refusal:
+        return {"ok": False, "code": str(refusal.get("error_code") or "no-record"), "started": False}
+    if quota_failover.snapshot_exhausted(await mcp._cached_usage_snapshot(agent_key)):
+        return {"ok": False, "code": "quota", "agent": agent_key, "started": False}
+    if not await mcp._probe_window(workspace_path, mcp._WINDOW_PROBE_TIMEOUT_S):
+        opened = await mcp.workspace_open(workspace_path, _host_ctx())
+        if not opened.get("ok") or not opened.get("ready"):
+            return {"ok": False, "code": "window-not-ready", "started": True}
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + WAKE_PANE_WAIT_S
+    entry = _registered_pane(pane_id, workspace_path, session_id)
+    while entry is None and loop.time() < deadline:
+        await asyncio.sleep(WAKE_PANE_POLL_S)
+        entry = _registered_pane(pane_id, workspace_path, session_id)
+    if entry is not None:
+        if entry.realized:
+            return {"ok": True, "pane_id": entry.pane_id}
+        opened = await mcp._open_placeholder(entry, require_resume=True)
+        if not opened["ok"]:
+            return {"ok": False, "code": str(opened.get("reason") or ""), "started": True}
+        return {"ok": True, "pane_id": opened["pane"].pane_id}
+    name = (getattr(record, "custom_name", "") or getattr(record, "auto_name", "") or agent_key).strip()
+    spawned = await mcp.cli_open_agent(agent_key, name, "", _host_ctx(),
+                                       workspace_path=workspace_path, session_id=session_id)
+    if not spawned.get("ok") or not spawned.get("pane_id"):
+        return {"ok": False, "code": str(spawned.get("error_code") or "open-failed"), "started": True,
+                "detail": str(spawned.get("error") or "")}
+    return {"ok": True, "pane_id": str(spawned["pane_id"])}
 
 
 async def start() -> None:
