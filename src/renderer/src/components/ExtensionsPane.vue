@@ -472,6 +472,15 @@ watch(installed, () => void refreshPacks())
       <h3 class="ext-section-title">
         {{ $t('settings.extensions.installed') }}
         <span class="ext-section-count">{{ packs.length + nonFactoryInstalled.length }}</span>
+        <!-- Card K3: the user's own action in this window; the main process
+             opens the file dialog, so no path ever comes from here. -->
+        <button
+          class="ext-install-file nv-btn nv-btn--sm"
+          :disabled="busy || updateFlow.busy.value"
+          @click="updateFlow.installFromFile()"
+        >
+          {{ $t('settings.extensions.localInstall.button') }}
+        </button>
       </h3>
       <!-- Updates are for installed packages; with none installed the line
            would contradict the empty list below it. -->
@@ -513,6 +522,10 @@ watch(installed, () => void refreshPacks())
               </span>
               <span v-else-if="updatesById.get(p.id)" class="ext-badge ext-update-badge">
                 {{ $t('settings.extensions.marketplace.updateAvailableVersion', { version: updatesById.get(p.id)?.latestVersion ?? '' }) }}
+              </span>
+              <!-- Card K3: placeholder until the shared source badge (K2) lands. -->
+              <span v-if="p.source === 'local-unsigned'" class="ext-badge ext-local-badge" :title="$t('settings.extensions.localInstall.badgeTitle')">
+                {{ $t('settings.extensions.localInstall.badge') }}
               </span>
               <span v-if="p.disabled" class="ext-badge ext-disabled-badge" :title="$t('settings.extensions.disabledNote')">
                 {{ $t('settings.extensions.disabledBadge') }}
@@ -615,6 +628,15 @@ watch(installed, () => void refreshPacks())
             >
               {{ $t('settings.extensions.restartPlugin') }}
             </button>
+            <!-- D7: back to the Marketplace version; the install flow asks first. -->
+            <button
+              v-if="p.source === 'local-unsigned' && !p.pendingCandidateVersion"
+              class="ext-back-to-marketplace nv-btn nv-btn--sm"
+              :disabled="busy || updateFlow.busy.value"
+              @click="updateFlow.install(idParts(p.id).namespace, idParts(p.id).name)"
+            >
+              {{ $t('settings.extensions.localInstall.backToMarketplace') }}
+            </button>
             <button
               v-if="p.rollbackKind"
               class="ext-rollback nv-btn nv-btn--sm"
@@ -671,6 +693,7 @@ watch(installed, () => void refreshPacks())
       v-if="updateFlow.pendingConfirm.value"
       :pending="updateFlow.pendingConfirm.value"
       :step="updateFlow.pendingStep.value"
+      @confirm-replace="updateFlow.confirmReplace"
       @confirm-publisher="updateFlow.confirmPublisher"
       @confirm-risk="updateFlow.confirmRisk"
       @cancel="updateFlow.cancel"
@@ -710,6 +733,9 @@ watch(installed, () => void refreshPacks())
   color: var(--text-bright);
   font-size: var(--font-md);
   font-weight: 650;
+}
+.ext-install-file {
+  margin-left: auto;
 }
 .ext-section-title::before {
   content: '';
@@ -935,7 +961,8 @@ watch(installed, () => void refreshPacks())
   white-space: nowrap;
 }
 .ext-badge.ext-sensitive,
-.ext-badge.ext-dev-warning {
+.ext-badge.ext-dev-warning,
+.ext-badge.ext-local-badge {
   color: var(--risk-fg);
   background: var(--risk-subtle);
 }

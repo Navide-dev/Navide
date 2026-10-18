@@ -476,7 +476,12 @@ declare global {
         }) => Promise<PreparedInstallSummary>
         commitInstall: (
           id: string,
-          approval?: { publisherConfirmed?: boolean; riskConfirmed?: boolean }
+          approval?: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean }
+        ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        installFromFile?: () => Promise<PreparedInstallSummary | null>
+        commitLocalInstall?: (
+          id: string,
+          approval: { riskConfirmed: boolean; replaceConfirmed?: boolean }
         ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
         restart: (id: string) => Promise<{
           id: string
@@ -786,6 +791,14 @@ declare global {
     scan?: PluginScanReport | null
     /** Unsigned Registry facts, never verified. */
     registry?: PluginRegistryDisclosureFacts | null
+    /** Card K3: the package's source; `local-unsigned` for a file install. */
+    source?: PluginSource
+    /** Card K3: sha256 of the picked file, shown in the consent dialog. */
+    digest?: string
+    /** Card K3 (D7): the installed package of the same id a file install replaces. */
+    replaces?: { version: string | null; source: 'marketplace' | 'local-unsigned' }
+    /** Card K3 (D7): the local file install a Marketplace install replaces. */
+    replacesLocal?: { version: string | null }
   }
 }
 

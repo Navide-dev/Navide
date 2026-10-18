@@ -11480,6 +11480,7 @@ export class FrontendPluginManager {
         ? { manifestPermissions: copyManifestPermissionsSummary(summary.manifestPermissions) }
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
+      ...(summary.source ? { source: summary.source } : {}),
       ...(summary.warning ? { warning: summary.warning } : {}),
     }))
   }
@@ -11641,6 +11642,7 @@ export class FrontendPluginManager {
         ? { manifestPermissions: copyManifestPermissionsSummary(summary.manifestPermissions) }
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
+      ...(summary.source ? { source: summary.source } : {}),
       ...(summary.warning ? { warning: summary.warning } : {}),
       ...(summary.hasBackend ? { hasBackend: true as const } : {}),
     })

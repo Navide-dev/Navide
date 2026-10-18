@@ -2,17 +2,24 @@
 // The publisher-trust / capability-risk confirmation shown between a verified
 // prepareInstall and its commit. Presentation only: usePluginInstallFlow owns
 // the pending package and decides which step is showing.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { PendingInstall } from '../composables/usePluginInstallFlow'
+import type { InstallStep, PendingInstall } from '../composables/usePluginInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
 import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import PluginAgentToolsList from './PluginAgentToolsList.vue'
 
-defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
-const emit = defineEmits<{ confirmPublisher: []; confirmRisk: []; cancel: [] }>()
+const props = defineProps<{ pending: PendingInstall; step: InstallStep | null }>()
+const emit = defineEmits<{ confirmReplace: []; confirmPublisher: []; confirmRisk: []; cancel: [] }>()
+
+// Card K3: a package picked from a file has no Registry review or signature.
+// Its warning is fixed text, and consent takes an explicit acknowledgement so
+// it cannot be clicked through like a Marketplace install.
+const local = computed(() => props.pending.prepared.source === 'local-unsigned')
+const acknowledged = ref(false)
+watch(() => [props.pending.prepared.id, props.step], () => { acknowledged.value = false })
 const { t, te } = useI18n()
 
 // Esc cancels this confirmation only; it must not reach the settings modal,
@@ -62,12 +69,44 @@ function capabilityHint(cap: string): string {
           </svg>
         </span>
         <div class="nv-dialog-heading">
-          <h4 v-if="step === 'publisher'" id="ext-trust-title" class="nv-dialog-title">{{ $t('settings.extensions.trust.publisherTitle') }}</h4>
+          <h4 v-if="step === 'replace'" id="ext-trust-title" class="nv-dialog-title">{{ $t('settings.extensions.localInstall.replaceTitle') }}</h4>
+          <h4 v-else-if="step === 'publisher'" id="ext-trust-title" class="nv-dialog-title">{{ $t('settings.extensions.trust.publisherTitle') }}</h4>
           <h4 v-else id="ext-trust-title" class="nv-dialog-title">{{ $t('settings.extensions.trust.permissionsTitle') }}</h4>
           <p class="nv-dialog-subtitle"><code>{{ reveal(pending.prepared.id) }}</code> · {{ reveal(pending.prepared.version) }}</p>
         </div>
       </div>
       <div id="ext-trust-desc" class="nv-dialog-body">
+        <!-- D7: replacing an installed package of the same id is asked first. -->
+        <template v-if="step === 'replace'">
+          <p v-if="pending.prepared.replaces?.source === 'marketplace'" class="ext-replace-question">
+            {{ $t('settings.extensions.localInstall.replaceMarketplace', { id: reveal(pending.prepared.id), version: reveal(pending.prepared.replaces.version ?? '') }) }}
+          </p>
+          <p v-else-if="pending.prepared.replaces" class="ext-replace-question">
+            {{ $t('settings.extensions.localInstall.replaceLocal', { id: reveal(pending.prepared.id), version: reveal(pending.prepared.replaces.version ?? '') }) }}
+          </p>
+          <p v-else-if="pending.prepared.replacesLocal" class="ext-replace-question">
+            {{ $t('settings.extensions.localInstall.replaceWithMarketplace', { id: reveal(pending.prepared.id), version: reveal(pending.prepared.version) }) }}
+          </p>
+          <p class="ext-replace-reset">{{ $t('settings.extensions.localInstall.replaceResets') }}</p>
+        </template>
+        <!-- Card K3: what a file install is, always above everything else. -->
+        <template v-if="step === 'risk' && local">
+          <p class="ext-local-warning ext-risk-callout" role="note">{{ $t('settings.extensions.localInstall.warning') }}</p>
+          <dl class="ext-local-facts">
+            <dt>{{ $t('settings.extensions.localInstall.sourceLabel') }}</dt>
+            <dd>{{ $t('settings.extensions.localInstall.source') }}</dd>
+            <dt>{{ $t('settings.extensions.localInstall.publisherLabel') }}</dt>
+            <dd>{{ $t('settings.extensions.localInstall.publisherClaimed', { publisher: reveal(pending.prepared.publisherId) }) }}</dd>
+            <dt>{{ $t('settings.extensions.localInstall.signatureLabel') }}</dt>
+            <dd>{{ $t('settings.extensions.localInstall.signature') }}</dd>
+            <dt>{{ $t('settings.extensions.localInstall.scanLabel') }}</dt>
+            <dd>{{ $t('settings.extensions.localInstall.scan') }}</dd>
+            <template v-if="pending.prepared.digest">
+              <dt>{{ $t('settings.extensions.localInstall.digestLabel') }}</dt>
+              <dd><code class="ext-local-digest">{{ pending.prepared.digest }}</code></dd>
+            </template>
+          </dl>
+        </template>
         <!-- An unsigned package cannot lean on the Registry signature the
              signed wording mentions, so it gets its own sentence. -->
         <p v-if="step === 'publisher'" class="ext-publisher-risk">
@@ -107,7 +146,8 @@ function capabilityHint(cap: string): string {
             :disclosure="pending.prepared.disclosure"
             :scan="pending.prepared.scan ?? null"
             :registry="pending.prepared.registry ?? null"
-            :verified="true"
+            :verified="!local"
+            :local-source="local"
           />
         </details>
         <PluginDisclosureCard
@@ -116,13 +156,18 @@ function capabilityHint(cap: string): string {
           :disclosure="pending.prepared.disclosure"
           :scan="pending.prepared.scan ?? null"
           :registry="pending.prepared.registry ?? null"
-          :verified="true"
+          :verified="!local"
+          :local-source="local"
         />
         <PluginAgentToolsList
           v-if="step === 'risk' && pending.prepared.agentTools?.length"
           :tools="pending.prepared.agentTools"
         />
-        <p class="ext-trust-tier">
+        <label v-if="step === 'risk' && local" class="ext-local-ack">
+          <input v-model="acknowledged" type="checkbox" class="ext-local-ack-input" />
+          {{ $t('settings.extensions.localInstall.acknowledge') }}
+        </label>
+        <p v-if="step !== 'replace'" class="ext-trust-tier">
           <span
             v-if="pending.prepared.trustTier === 'signed-verified'"
             class="ext-trust-badge ext-verified"
@@ -139,13 +184,25 @@ function capabilityHint(cap: string): string {
           {{ $t('settings.extensions.trust.cancel') }}
         </button>
         <button
-          v-if="step === 'publisher'"
+          v-if="step === 'replace'"
+          class="ext-confirm-replace nv-btn nv-btn--primary"
+          @click="$emit('confirmReplace')"
+        >
+          {{ $t('settings.extensions.localInstall.confirmReplace') }}
+        </button>
+        <button
+          v-else-if="step === 'publisher'"
           class="ext-confirm-publisher nv-btn nv-btn--primary"
           @click="$emit('confirmPublisher')"
         >
           {{ $t('settings.extensions.trust.confirmPublisher') }}
         </button>
-        <button v-else class="ext-confirm-risk nv-btn nv-btn--primary" @click="$emit('confirmRisk')">
+        <button
+          v-else
+          class="ext-confirm-risk nv-btn nv-btn--primary"
+          :disabled="local && !acknowledged"
+          @click="$emit('confirmRisk')"
+        >
           {{ $t('settings.extensions.trust.confirmInstall') }}
         </button>
       </div>
@@ -228,6 +285,31 @@ function capabilityHint(cap: string): string {
 .ext-trust-badge.ext-unsigned::before {
   content: '⚠';
   margin-right: 4px;
+}
+.ext-local-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-xs);
+}
+.ext-local-facts dt {
+  color: var(--text-secondary);
+}
+.ext-local-facts dd {
+  margin: 0;
+}
+.ext-local-digest {
+  font-family: var(--font-mono);
+  font-size: var(--font-2xs);
+  overflow-wrap: anywhere;
+}
+.ext-local-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  font-size: var(--font-xs);
 }
 .nv-dialog-subtitle code {
   font-family: var(--font-mono);
