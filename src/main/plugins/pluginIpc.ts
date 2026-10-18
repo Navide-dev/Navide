@@ -13,7 +13,7 @@
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { backendCallAddress } from './pluginActivity'
-import { readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
   prepareInstall,
@@ -610,7 +610,9 @@ export function registerPluginIpc(
     if (!root || !installed) return {}
     const current = installed.source === 'local-unsigned' ? 'local-unsigned' : 'marketplace'
     if (current === incoming) return {}
-    const reattachable = latestSetAsideNativeBackendData(root, id, incoming)
+    // Only data of a Marketplace package can be taken back: its id is the
+    // Registry's, while a local file's id is only what the file claims.
+    const reattachable = incoming === 'marketplace' ? latestSetAsideNativeBackendData(root, id, incoming) : null
     return {
       ...(inspectNativeBackendData(root, id).exists ? { backendDataSetAside: true } : {}),
       ...(reattachable ? { reattachableBackendData: reattachable } : {}),
@@ -2217,7 +2219,14 @@ export function registerPluginIpc(
       if (!dataRoot) return
       if (dataReattached) returnReattachedNativeBackendData(dataRoot, id, dataReattached)
       dataReattached = null
-      if (dataSetAside) reattachNativeBackendData(dataRoot, id, dataSetAside)
+      if (dataSetAside) {
+        // A backend of the new source that already started may have made a
+        // data folder of its own: that one is set aside too, never merged.
+        if (existsSync(join(dataRoot, id))) {
+          setAsideNativeBackendData(dataRoot, id, localCandidate ? 'local-unsigned' : 'marketplace')
+        }
+        reattachNativeBackendData(dataRoot, id, dataSetAside)
+      }
       dataSetAside = null
     }
     const finishSourceReplacement = (): void => {
@@ -2391,11 +2400,13 @@ export function registerPluginIpc(
       options.onPackageInstalled?.(id)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
+      // A failed data move back is reported with the restart's own error,
+      // after the package rollback below has run, never instead of it.
+      let moveError: unknown = null
       try {
         undoDataMove()
-      } catch (moveError) {
-        if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-        throw new AggregateError([error, moveError], 'Plugin restart failed and its native backend data could not be put back.')
+      } catch (undoError) {
+        moveError = undoError
       }
       if (promoted) {
         try {
@@ -2473,7 +2484,19 @@ export function registerPluginIpc(
           }
         } catch (rollbackError) {
           if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-          throw new AggregateError([error, rollbackError], 'Plugin restart and rollback failed.')
+          // Fail closed: a source-changing candidate left promoted keeps none
+          // of the replaced package's native backend permissions.
+          if (sourceReplaced) {
+            try {
+              options.forgetBackendConsent?.(id)
+            } catch {
+              // The rollback failure stays the reported error.
+            }
+          }
+          throw new AggregateError(
+            [error, rollbackError, ...(moveError ? [moveError] : [])],
+            'Plugin restart and rollback failed.',
+          )
         }
       }
       if (!promoted) {
@@ -2501,10 +2524,13 @@ export function registerPluginIpc(
           }
         } catch (recoveryError) {
           if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-          throw new AggregateError([error, recoveryError], 'Plugin restart recovery failed.')
+          throw new AggregateError([error, recoveryError, ...(moveError ? [moveError] : [])], 'Plugin restart recovery failed.')
         }
       }
       if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
+      if (moveError) {
+        throw new AggregateError([error, moveError], 'Plugin restart failed and its native backend data could not be put back.')
+      }
       throw error
     } finally {
       activeTransactions.delete(id)

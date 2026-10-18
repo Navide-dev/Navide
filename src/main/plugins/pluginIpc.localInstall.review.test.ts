@@ -244,6 +244,30 @@ describe('D7: native backend data when the source changes', () => {
   })
 })
 
+describe('D7: set-aside data on removal and identity', () => {
+  it('removal that deletes the data also deletes what a source change set aside, and discloses its size', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'marketplace data')
+    await fileInstall('acme.todo', '1.1.0', { replaceConfirmed: true })
+    writeData('acme.todo', 'local')
+    const shown = await call('plugins:nativeBackendData', { id: 'acme.todo' }) as { exists: boolean; bytes: number }
+    expect(shown).toMatchObject({ exists: true, bytes: 'marketplace data'.length + 'local'.length })
+    await call('plugins:remove', { id: 'acme.todo', nativeBackendData: 'delete' })
+    expect(readdirSync(dataRoot)).toEqual([])
+  })
+
+  it('never offers a local file the data of an earlier local file with the same claimed id', async () => {
+    writeData('acme.todo', 'first file')
+    await fileInstall('acme.todo', '1.0.0')
+    await marketplaceInstall('acme.todo', '1.1.0', { replaceConfirmed: true })
+    writeFileSync(picked, vsix('acme.todo', '1.2.0'))
+    const prepared = await call('plugins:installFromFile') as Record<string, unknown>
+    expect(prepared).not.toHaveProperty('reattachableBackendData')
+    await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true, reattachBackendData: true }))
+      .rejects.toThrow(/no set-aside data/)
+  })
+})
+
 describe('MED-1: the takedown list before a file install', () => {
   it('fetches it when none is stored, and refuses a taken-down publisher right away', async () => {
     serveRegistry('other.pkg', '1.0.0', metadata(['acme']))
