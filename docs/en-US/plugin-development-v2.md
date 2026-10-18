@@ -2056,7 +2056,11 @@ runs only inside the OS sandbox described in
   Backend data a removal keeps records its source beside the folder
   (`<id>@kept-source.json`, owner-only, outside the backend's sandbox): a
   later install of the same id and source takes it over as before, one of the
-  other source finds it set aside instead. Data kept by a release without the
+  other source finds it set aside instead. Data a local file kept is never
+  handed on, not even to another local file claiming the same id, and one
+  local file replacing another hands over none either; only a Registry-verified
+  id takes kept data over. Deleting or forging the record takes write access to
+  the user's data folder, the same exposure as the local trust record. Data kept by a release without the
   record counts as Marketplace data, the only kind that could run a
   third-party backend before file installs existed.
   The package's own name is shown in the native backend consent with every

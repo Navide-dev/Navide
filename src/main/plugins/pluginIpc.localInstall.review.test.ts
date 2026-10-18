@@ -379,6 +379,41 @@ describe('HIGH-3: data a removal kept', () => {
     expect(readdirSync(join(dataRoot, 'acme.todo'))).toEqual(['token.txt'])
   })
 
+  it('Q15: data a local file kept never reaches another local file claiming the id', async () => {
+    await fileInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'A-secret')
+    await call('plugins:remove', { id: 'acme.todo' })
+    writeFileSync(picked, vsix('acme.todo', '6.6.6'))
+    expect(await call('plugins:installFromFile')).toMatchObject({ backendDataSetAside: true })
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect(existsSync(join(dataRoot, 'acme.todo'))).toBe(false)
+    expect(readdirSync(dataRoot)).toEqual([expect.stringMatching(setAside('local-unsigned'))])
+  })
+
+  it('one local file replacing another hands over no data, and offers none back', async () => {
+    await fileInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'A-secret')
+    writeFileSync(picked, vsix('acme.todo', '2.0.0'))
+    const prepared = await call('plugins:installFromFile') as Record<string, unknown>
+    expect(prepared).toMatchObject({ backendDataSetAside: true })
+    expect(prepared).not.toHaveProperty('reattachableBackendData')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect(existsSync(join(dataRoot, 'acme.todo'))).toBe(false)
+  })
+
+  it('applies a recorded source even when another install path took the id in between', async () => {
+    // As a Manifest v1 Marketplace install would leave it: the record of data
+    // a local file left behind, under an installed Marketplace package.
+    await marketplaceInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'L-planted')
+    writeFileSync(join(dataRoot, 'acme.todo@kept-source.json'), JSON.stringify({ schemaVersion: 1, source: 'local-unsigned' }))
+    await marketplaceInstall('acme.todo', '1.1.0')
+    expect(existsSync(join(dataRoot, 'acme.todo'))).toBe(false)
+    expect(readdirSync(dataRoot)).toEqual([expect.stringMatching(setAside('local-unsigned'))])
+  })
+
   it('LOW-9: a set-aside entry that is a symlink is never followed for the removal size', async () => {
     await marketplaceInstall('acme.todo', '1.0.0')
     mkdirSync(join(base, 'outside'))
