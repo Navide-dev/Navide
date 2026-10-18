@@ -364,6 +364,41 @@ describe('loading a developer folder', () => {
     },
   )
 
+  it('refuses a second folder claiming an id another consented folder holds', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const other = join(base, 'impostor')
+    writeFolder(other)
+    pickFolder.mockResolvedValue(other)
+    await expect(call('plugins:loadFromFolder')).rejects.toThrow(/another developer folder/)
+    expect(new PluginDeveloperModeStore(pluginsRoot).folder('acme.devtodo')?.path).toBe(folder)
+  })
+
+  it('an install prepared before a folder took the id cannot commit or restart afterwards', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    const picked = join(base, 'early.vsix')
+    writeFileSync(picked, makeZip([
+      { name: 'manifest.json', data: JSON.stringify(manifest('acme.devtodo', {}, false)) },
+      { name: 'frontend/left/index.html', data: '<!doctype html>' },
+    ]))
+    handlers.clear()
+    const manager = new FrontendPluginManager()
+    registerPluginIpc(manager, pluginsRoot, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: async () => undefined,
+      preflightCandidateFrontend: async () => undefined,
+      pickLocalPackageFile: async () => picked,
+      pickDeveloperFolder: pickFolder,
+      nativeBackendDataRoot: dataRoot,
+    })
+    await call('plugins:installFromFile')
+    await loadFolder()
+    await expect(call('plugins:commitLocalInstall', { id: 'acme.devtodo', riskConfirmed: true })).rejects.toThrow(/no prepared local install|developer folder/)
+    await expect(call('plugins:restart', { id: 'acme.devtodo' })).rejects.toThrow(/developer folder/)
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo', source: 'developer-unpacked' }])
+  })
+
   it('an install of an id a consented folder holds is refused while Developer Mode is off', async () => {
     register()
     await call('plugins:setDeveloperMode', { enabled: true })

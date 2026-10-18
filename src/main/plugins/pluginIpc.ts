@@ -1953,6 +1953,7 @@ export function registerPluginIpc(
       args: { id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
     ) => {
       assertAuthorized(event)
+      assertNoDeveloperFolder(args.id)
       // D7: never replace a local install with the Marketplace version unasked.
       if (installedLocalPackage(args.id) && args.replaceConfirmed !== true) {
         throw new Error(`replacing the local file version of ${args.id} requires confirmation`)
@@ -2167,6 +2168,7 @@ export function registerPluginIpc(
       const id = typeof args?.id === 'string' ? args.id : ''
       const pkg = preparedLocal.get(id)
       if (!pkg) throw new Error(`no prepared local install for ${id}; choose the file again`)
+      assertNoDeveloperFolder(id)
       if (activeTransactions.has(id)) {
         throw new Error(`plugin transaction already in progress for ${id}`)
       }
@@ -2320,7 +2322,11 @@ export function registerPluginIpc(
 
   /** A developer folder may not take an id something else installed holds:
    * the grant and the package registration are per id. */
-  const assertFolderIdFree = (pluginId: string): void => {
+  const assertFolderIdFree = (pluginId: string, dir?: string): void => {
+    const prior = developerMode.folder(pluginId)
+    if (dir !== undefined && prior && resolve(prior.path) !== resolve(dir)) {
+      throw new Error(`${pluginId} is loaded from another developer folder (${prior.path}); remove that folder first`)
+    }
     const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
     if ((installed && installed.provenance !== 'developer-local-unpacked') || lifecycleSelector.read(pluginId)) {
       throw new Error(`${pluginId} is installed; remove it before loading a developer folder with the same id`)
@@ -2407,7 +2413,7 @@ export function registerPluginIpc(
     const dir = await pickFolder(event)
     if (!dir) return null
     const described = describeFolder(dir)
-    assertFolderIdFree(described.pluginId)
+    assertFolderIdFree(described.pluginId, dir)
     preparedFolders.set(described.pluginId, { dir, permissionsDigest: described.permissionsDigest })
     return described.summary
   })
@@ -2426,6 +2432,10 @@ export function registerPluginIpc(
     if (described.pluginId !== id || described.permissionsDigest !== pending.permissionsDigest) {
       throw new Error(`the permissions or backend of ${id} changed; choose the folder again`)
     }
+    assertFolderIdFree(id, pending.dir)
+    // No install prepared for this id before the folder took it may commit.
+    prepared.delete(id)
+    preparedLocal.delete(id)
     await unloadDeveloperFolder(id)
     // The first load of an id takes no data an earlier package of it kept
     // (review HIGH-3 / MED-4 on #425): a developer folder's id is only what
@@ -2516,6 +2526,7 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:restart', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    assertNoDeveloperFolder(id)
     if (activeTransactions.has(id)) {
       throw new Error(`plugin transaction already in progress for ${id}`)
     }
