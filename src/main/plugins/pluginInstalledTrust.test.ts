@@ -17,11 +17,15 @@ import {
   REGISTRY_TRUST_SNAPSHOT_NAME,
   assertRegistryTrustSnapshotDoesNotRollback,
   discoverInstalledRegistryPackageIds,
+  readRegistryReceiptChannel,
+  readRegistryReceiptExpiresAt,
   readRegistryTrustSnapshot,
   registryReceiptFromEvidence,
+  verifyInstalledPackage,
   verifyInstalledRegistryPackage,
   type InstalledRegistryTrustContext,
 } from './pluginInstalledTrust'
+import { createLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
 import {
   canonicalTrustJson,
   type RegistryPackageEnvelope,
@@ -357,5 +361,134 @@ describe('verifyInstalledRegistryPackage', () => {
   it('does not discover a package after its directory is missing', () => {
     rmSync(pluginDir, { recursive: true, force: true })
     expect(discoverInstalledRegistryPackageIds(root)).toEqual([])
+  })
+
+  describe('with a local install beside the Marketplace install', () => {
+    let localDir: string
+    let recordPath: string
+
+    beforeEach(() => {
+      localDir = join(root, 'acme.local')
+      recordPath = join(root, 'local-trust-records', 'acme.local.json')
+      mkdirSync(join(localDir, 'frontend'), { recursive: true })
+      writeFileSync(
+        join(localDir, 'manifest.json'),
+        readFileSync(join(pluginDir, 'manifest.json'), 'utf8').replace('"acme.demo"', '"acme.local"')
+      )
+      writeFileSync(join(localDir, 'frontend', 'index.html'), '<!doctype html>')
+      writeLocalTrustRecord(
+        recordPath,
+        createLocalTrustRecord(localDir, { source: 'file', consentedAt: '2026-08-16T11:30:00.000Z' })
+      )
+    })
+
+    const local = (trust: InstalledRegistryTrustContext) =>
+      ({ source: 'local-unsigned', recordPath, trust }) as const
+
+    it('gives a Marketplace package exactly the decision main gives it', () => {
+      const officialAuthority: InstalledRegistryTrustContext = {
+        ...context(),
+        registryAuthority: 'official',
+        officialRegistryUrl: 'https://server.navide.dev/registry',
+      }
+      const contexts: InstalledRegistryTrustContext[] = [
+        context(),
+        context({ ...metadata, blockedPublishers: ['acme'] }),
+        officialAuthority,
+        { pinnedRootKey: rootPem, snapshot: null, now },
+      ]
+      for (const trust of contexts) {
+        expect(
+          verifyInstalledPackage(pluginDir, 'acme.demo', { provenance: 'official-registry', trust })
+        ).toEqual(verifyInstalledRegistryPackage(pluginDir, 'acme.demo', trust))
+      }
+      expect(
+        verifyInstalledPackage(pluginDir, 'acme.demo', { provenance: 'official-registry', trust: context() })
+      ).toEqual({ action: 'allow', artifactDigest: sha256Hex(archive), target: 'universal' })
+      expect(
+        verifyInstalledPackage(pluginDir, 'acme.demo', {
+          provenance: 'official-registry',
+          trust: officialAuthority,
+        })
+      ).toEqual({
+        action: 'quarantine',
+        reason: 'Registry authority does not match the current Host configuration',
+      })
+    })
+
+    it('loads both side by side without quarantining either', () => {
+      expect(
+        verifyInstalledPackage(pluginDir, 'acme.demo', { provenance: 'official-registry', trust: context() })
+      ).toMatchObject({ action: 'allow' })
+      expect(verifyInstalledPackage(localDir, 'acme.local', local(context()))).toMatchObject({
+        action: 'allow',
+        source: 'local-unsigned',
+      })
+    })
+
+    it('does not apply the Registry authority rule to a local install', () => {
+      expect(
+        verifyInstalledPackage(localDir, 'acme.local', local({
+          ...context(),
+          registryAuthority: 'official',
+          officialRegistryUrl: 'https://server.navide.dev/registry',
+        }))
+      ).toMatchObject({ action: 'allow', blocklistChecked: true })
+    })
+
+    it('applies the Registry takedown list to a local install', () => {
+      expect(
+        verifyInstalledPackage(localDir, 'acme.local', local(context({ ...metadata, blockedPublishers: ['acme'] })))
+      ).toMatchObject({ action: 'blocked', code: 'LOCAL_PUBLISHER_BLOCKED' })
+    })
+
+    it('is never loaded or discovered by the Registry path an older App runs', () => {
+      expect(verifyInstalledRegistryPackage(localDir, 'acme.local', context())).toMatchObject({
+        action: 'quarantine',
+      })
+      expect(discoverInstalledRegistryPackageIds(root)).toEqual(['acme.demo'])
+    })
+  })
+
+  it('reads the release channel from the retained Registry envelope', () => {
+    // A receipt written before channels existed carries none.
+    expect(readRegistryReceiptChannel(pluginDir)).toBeUndefined()
+    const receiptPath = join(pluginDir, REGISTRY_RECEIPT_NAME)
+    const receipt = JSON.parse(readFileSync(receiptPath, 'utf8')) as { envelope: Record<string, unknown> }
+    receipt.envelope.channel = 'testplace'
+    writeFileSync(receiptPath, JSON.stringify(receipt))
+    expect(readRegistryReceiptChannel(pluginDir)).toBe('testplace')
+    expect(readRegistryReceiptExpiresAt(pluginDir)).toBeUndefined()
+    receipt.envelope.expiresAt = '2027-01-01T00:00:00.000Z'
+    writeFileSync(receiptPath, JSON.stringify(receipt))
+    expect(readRegistryReceiptExpiresAt(pluginDir)).toBe('2027-01-01T00:00:00.000Z')
+    rmSync(receiptPath)
+    expect(readRegistryReceiptChannel(pluginDir)).toBeUndefined()
+    expect(readRegistryReceiptExpiresAt(pluginDir)).toBeUndefined()
+  })
+
+  it('keeps the legacy provenance value in every Registry receipt, which older Apps require', () => {
+    expect(
+      registryReceiptFromEvidence({
+        packageId: 'acme.demo',
+        version: '1.0.0',
+        publisherId: 'acme',
+        target: 'universal',
+        artifactDigest: sha256Hex(archive),
+        envelope,
+        envelopeSignature: signed(envelope),
+      }).provenance
+    ).toBe('official-registry')
+    // The receipt parser is exact: a new source value written here would
+    // quarantine the package in every App that reads it.
+    const receiptPath = join(pluginDir, REGISTRY_RECEIPT_NAME)
+    writeFileSync(
+      receiptPath,
+      readFileSync(receiptPath, 'utf8').replace('"provenance":"official-registry"', '"provenance":"marketplace"')
+    )
+    expect(verifyInstalledRegistryPackage(pluginDir, 'acme.demo', context())).toEqual({
+      action: 'quarantine',
+      reason: `malformed ${REGISTRY_RECEIPT_NAME}`,
+    })
   })
 })

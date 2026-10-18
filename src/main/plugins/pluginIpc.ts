@@ -45,6 +45,8 @@ import { parseManifestJson } from './pluginManifestJson'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import {
+  readRegistryReceiptChannel,
+  readRegistryReceiptExpiresAt,
   readRegistryTrustSnapshot,
   discoverInstalledRegistryPackageIds,
   verifyInstalledRegistryPackage,
@@ -99,6 +101,7 @@ import {
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
 import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
+import { pluginSourceFromLegacyProvenance, type PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { rescanFinding } from './pluginRescanNotice'
 
@@ -163,6 +166,10 @@ interface InstalledSummary {
   manifestPermissions?: ManifestPermissionsSummary
   packageVersionGrant?: PackageVersionGrantSummary | null
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  /** Source and review state; see `shared/pluginSource.ts`. */
+  source?: PluginSource
+  /** Registry-signed expiry; present only when `source` is `testplace`. */
+  expiresAt?: string
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -226,6 +233,24 @@ function newestInstallableVersion(
 /** SemVer prerelease suffix ⇒ pre-release channel (build metadata is not one). */
 export function isPrereleaseVersion(version: string): boolean {
   return version.split('+', 1)[0].includes('-')
+}
+
+/** Source and review state of an installed package: its own `source` when a
+ * loader set one, else read from the legacy provenance it carries and, for a
+ * Registry install, the channel in its signed envelope. */
+function installedSource(
+  summary: {
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+    source?: PluginSource
+    packageVersion?: string
+  },
+  registryChannel?: string
+): PluginSource | undefined {
+  return summary.source ?? pluginSourceFromLegacyProvenance(
+    summary.provenance,
+    summary.packageVersion !== undefined && isPrereleaseVersion(summary.packageVersion),
+    registryChannel
+  )
 }
 
 /** The list card's disclosure and scan (plan B D1) from a Registry listing
@@ -555,6 +580,40 @@ export function registerPluginIpc(
   const activeTransactions = new Set<string>()
   const capabilityGrants = new PluginCapabilityGrantStore(pluginsRoot)
   const lifecycleSelector = new PluginActivationSelector(pluginsRoot)
+  /** The signed envelope channel of the active Registry package, read from
+   * the receipt beside the package that load-time verification checked. */
+  const activeRegistryPackageDir = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): string | undefined => {
+    if (summary.provenance !== 'official-registry') return undefined
+    try {
+      const active = lifecycleSelector.read(summary.id)?.active
+      return active ? lifecycleSelector.packageDir(summary.id, active) : join(pluginsRoot, summary.id)
+    } catch {
+      return undefined
+    }
+  }
+  const activeRegistryChannel = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): string | undefined => {
+    const dir = activeRegistryPackageDir(summary)
+    return dir === undefined ? undefined : readRegistryReceiptChannel(dir)
+  }
+  /** `source`, plus the signed testplace expiry when the source is testplace. */
+  const sourceFields = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+    source?: PluginSource
+    packageVersion?: string
+  }): { source?: PluginSource; expiresAt?: string } => {
+    const source = installedSource(summary, activeRegistryChannel(summary))
+    if (!source) return {}
+    const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined
+    const expiresAt = dir === undefined ? undefined : readRegistryReceiptExpiresAt(dir)
+    return expiresAt === undefined ? { source } : { source, expiresAt }
+  }
   // Plan B D2 (D-d): what an update changes, computed by the Host from the
   // active version's installed manifest and the verified package's own
   // manifest, never from Registry data. Null when there is nothing to
@@ -691,6 +750,7 @@ export function registerPluginIpc(
         packageVersion?: string
         manifestPermissions?: ManifestPermissionsSummary
         provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+        source?: PluginSource
         warning?: string
         enginesNavide?: string
       }
@@ -754,6 +814,7 @@ export function registerPluginIpc(
           }
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
+      ...sourceFields(summary),
       ...(summary.warning ? { warning: summary.warning } : {}),
       ...(candidate ? { pendingCandidateVersion: candidate.packageVersion } : {}),
       ...(() => {
@@ -787,14 +848,21 @@ export function registerPluginIpc(
 
   ipcMain.handle('plugins:listContributions', (event) => {
     assertAuthorized(event)
+    const installed = new Map(manager.listInstalledPackages().map((pkg) => [pkg.id, pkg] as const))
     return manager.listContributionCatalog().map(({ iconFile, ...entry }) => {
       const icon = iconFile ? options.resolveContributionIcon?.(iconFile) ?? null : null
+      const pkg = installed.get(entry.pluginId)
+      // Only the selected package's own record may label its views.
+      const source = pkg && pkg.packageVersion === (entry.packageVersion ?? undefined)
+        ? installedSource(pkg, activeRegistryChannel(pkg))
+        : undefined
       return {
         ...entry,
         icon: icon?.url ?? null,
         // A silhouette is painted in the current text colour by the renderer,
         // so it follows the theme the way the built-in SVG icons do.
         iconMonochrome: icon?.monochrome ?? false,
+        ...(source ? { source } : {}),
       }
     })
   })
@@ -845,6 +913,8 @@ export function registerPluginIpc(
     version: string
     disclosure: ManifestDisclosure | null
     scan: ScanReport | null
+    source?: PluginSource
+    expiresAt?: string
   }> => {
     assertAuthorized(event)
     return manager.listInstalledPackages()
@@ -854,6 +924,7 @@ export function registerPluginIpc(
         version: pkg.packageVersion!,
         disclosure: activeDisclosure(pkg.id),
         scan: installScans.get(pkg.id, pkg.packageVersion!),
+        ...sourceFields(pkg),
       }))
   })
 
@@ -1566,6 +1637,14 @@ export function registerPluginIpc(
       const disclosureDiff = updateDisclosureDiff(result)
       // Declared agent tools, for the trust dialog; absent when there are none.
       const agentTools = isManifestV2(result.manifest) ? computeDisclosure(result.manifest).agentTools : []
+      // From the envelope verifyRegistryPackageTrust just verified, never a file.
+      const source = result.registryEvidence
+        ? pluginSourceFromLegacyProvenance(
+            'official-registry',
+            isPrereleaseVersion(result.version),
+            result.registryEvidence.receipt.envelope.channel
+          )
+        : undefined
       return {
         id: result.id,
         version: result.version,
@@ -1586,6 +1665,7 @@ export function registerPluginIpc(
         disclosure: result.disclosure ?? null,
         scan: result.scan ?? null,
         registry: result.registryFacts,
+        ...(source ? { source } : {}),
       }
     }
   )

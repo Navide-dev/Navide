@@ -24,6 +24,7 @@ import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
+import type { PluginSource } from '../shared/pluginSource'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
 export interface ClearElectronCachesOptions {
@@ -163,6 +164,10 @@ export interface InstalledPluginSummary {
   manifestPermissions?: ManifestPermissionsSummary
   packageVersionGrant?: PackageVersionGrantSummary | null
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  /** Source and review state; see `shared/pluginSource.ts`. */
+  source?: PluginSource
+  /** Registry-signed expiry; present only when `source` is `testplace`. */
+  expiresAt?: string
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -467,6 +472,9 @@ export interface PreparedInstallSummary {
   scan?: PluginScanReport | null
   /** Unsigned Registry facts, never verified. */
   registry?: PluginRegistryDisclosureFacts | null
+  /** Source and review state from the verified Registry envelope; absent for
+   *  a channel this App does not know. */
+  source?: PluginSource
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []
@@ -1178,6 +1186,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
       version: string
       disclosure: PluginManifestDisclosure | null
       scan: PluginScanReport | null
+      /** Source and review state; see `shared/pluginSource.ts`. */
+      source?: PluginSource
+      /** Registry-signed expiry; present only when `source` is `testplace`. */
+      expiresAt?: string
     }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
     backendResourceUsage: (): Promise<BackendResourceUsage> =>
       ipcRenderer.invoke('plugins:backendResourceUsage'),
@@ -1198,6 +1210,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       kind: 'custom'
       location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
       manifestOrder: number
+      /** Source and review state of the package that contributes this view. */
+      source?: PluginSource
     }>> => ipcRenderer.invoke('plugins:listContributions'),
     hostThemeChanged: (theme: string): void =>
       ipcRenderer.send('plugins:hostThemeChanged', theme),
