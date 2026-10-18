@@ -48,7 +48,7 @@ import logging
 import re
 import time
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -178,11 +178,19 @@ def next_run_after(schedule: dict[str, Any], after_ms: int) -> int | None:
 
 
 def _day_start_ms(schedule: dict[str, Any], now_ms: int) -> int:
-    """Local midnight of ``now_ms`` in the job's zone (system zone for every)."""
+    """Local midnight of ``now_ms`` in the job's zone (system zone for every).
+
+    Built from the calendar date of ``now_ms`` with that day's own UTC offset,
+    so a DST switch later in the day does not move the day's start. Without a
+    zone the naive local datetime resolves through the system zone rules.
+    """
     tz = schedule.get("tz")
-    zone = _zone(str(tz)) if tz else datetime.now().astimezone().tzinfo or timezone.utc
-    local = datetime.fromtimestamp(now_ms / 1000, zone)
-    return int(local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
+    if tz:
+        zone = _zone(str(tz))
+        day = datetime.fromtimestamp(now_ms / 1000, zone).date()
+        return int(datetime(day.year, day.month, day.day, tzinfo=zone).timestamp() * 1000)
+    day = datetime.fromtimestamp(now_ms / 1000).date()
+    return int(datetime(day.year, day.month, day.day).timestamp() * 1000)
 
 
 # ── the one validator (WS scheduler.upsert and MCP scheduler_upsert) ────────

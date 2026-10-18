@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import os
+import time
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from agent_team_backend.scheduler import JobInvalid, next_run_after, normalize_job
+from agent_team_backend.scheduler import JobInvalid, _day_start_ms, next_run_after, normalize_job
 
 TPE = ZoneInfo("Asia/Taipei")
 NY = ZoneInfo("America/New_York")
@@ -80,6 +82,77 @@ def test_daily_in_the_spring_forward_gap_still_fires_that_day() -> None:
     sched = {"kind": "daily", "at": "02:30", "tz": "America/New_York"}
     slot = next_run_after(sched, ms(datetime(2026, 3, 8, 0, 0, tzinfo=NY)))
     assert local(slot, NY).date().isoformat() == "2026-03-08"
+
+
+LHI = ZoneInfo("Australia/Lord_Howe")
+
+# (zone, wall-clock point, the UTC instant of that local day's 00:00).
+# New York springs forward 2026-03-08 02:00 EST -> 03:00 EDT and falls back
+# 2026-11-01 02:00 EDT -> 01:00 EST; Lord Howe moves by 30 minutes, forward
+# 2026-10-04 02:00 -> 02:30 (+10:30 -> +11) and back 2026-04-05 02:00 -> 01:30.
+_DAY_START_CASES = [
+    ("America/New_York", datetime(2026, 3, 8, 0, 30), datetime(2026, 3, 8, 5, 0)),
+    ("America/New_York", datetime(2026, 3, 8, 1, 30), datetime(2026, 3, 8, 5, 0)),
+    ("America/New_York", datetime(2026, 3, 8, 1, 59), datetime(2026, 3, 8, 5, 0)),
+    ("America/New_York", datetime(2026, 3, 8, 3, 0), datetime(2026, 3, 8, 5, 0)),
+    ("America/New_York", datetime(2026, 3, 8, 3, 59), datetime(2026, 3, 8, 5, 0)),
+    ("America/New_York", datetime(2026, 3, 8, 23, 59), datetime(2026, 3, 8, 5, 0)),
+    ("America/New_York", datetime(2026, 3, 7, 23, 30), datetime(2026, 3, 7, 5, 0)),
+    ("America/New_York", datetime(2026, 11, 1, 0, 30), datetime(2026, 11, 1, 4, 0)),
+    ("America/New_York", datetime(2026, 11, 1, 1, 30), datetime(2026, 11, 1, 4, 0)),
+    ("America/New_York", datetime(2026, 11, 1, 1, 30, fold=1), datetime(2026, 11, 1, 4, 0)),
+    ("America/New_York", datetime(2026, 11, 1, 2, 30), datetime(2026, 11, 1, 4, 0)),
+    ("America/New_York", datetime(2026, 11, 1, 23, 30), datetime(2026, 11, 1, 4, 0)),
+    ("America/New_York", datetime(2026, 11, 2, 0, 30), datetime(2026, 11, 2, 5, 0)),
+    ("Asia/Taipei", datetime(2026, 3, 8, 0, 30), datetime(2026, 3, 7, 16, 0)),
+    ("Asia/Taipei", datetime(2026, 11, 1, 23, 59), datetime(2026, 10, 31, 16, 0)),
+    ("Australia/Lord_Howe", datetime(2026, 10, 4, 1, 30), datetime(2026, 10, 3, 13, 30)),
+    ("Australia/Lord_Howe", datetime(2026, 10, 4, 2, 45), datetime(2026, 10, 3, 13, 30)),
+    ("Australia/Lord_Howe", datetime(2026, 10, 4, 23, 45), datetime(2026, 10, 3, 13, 30)),
+    ("Australia/Lord_Howe", datetime(2026, 4, 5, 1, 45), datetime(2026, 4, 4, 13, 0)),
+    ("Australia/Lord_Howe", datetime(2026, 4, 5, 1, 45, fold=1), datetime(2026, 4, 4, 13, 0)),
+    ("Australia/Lord_Howe", datetime(2026, 4, 5, 2, 30), datetime(2026, 4, 4, 13, 0)),
+    ("Australia/Lord_Howe", datetime(2026, 4, 5, 23, 45), datetime(2026, 4, 4, 13, 0)),
+]
+
+
+def _utc_ms(naive: datetime) -> int:
+    return ms(naive.replace(tzinfo=timezone.utc))
+
+
+@pytest.mark.parametrize("zone,wall,midnight_utc", _DAY_START_CASES)
+def test_day_start_is_local_midnight_of_the_jobs_zone(zone, wall, midnight_utc) -> None:
+    sched = {"kind": "daily", "at": "09:00", "tz": zone}
+    now = ms(wall.replace(tzinfo=ZoneInfo(zone)))
+    assert _day_start_ms(sched, now) == _utc_ms(midnight_utc)
+
+
+@pytest.fixture
+def system_zone(monkeypatch):
+    """Point the process local zone at ``name`` for one test."""
+    if not hasattr(time, "tzset"):
+        pytest.skip("time.tzset is POSIX-only")
+
+    def use(name: str) -> None:
+        monkeypatch.setenv("TZ", name)
+        time.tzset()
+
+    yield use
+    monkeypatch.undo()
+    time.tzset()
+
+
+@pytest.mark.parametrize("zone,wall,midnight_utc", _DAY_START_CASES)
+def test_day_start_without_a_zone_is_system_local_midnight(system_zone, zone, wall, midnight_utc) -> None:
+    # every and once jobs carry no zone: their day is the machine's local day,
+    # with that day's own UTC offset rather than the offset in force right now.
+    system_zone(zone)
+    now = ms(wall.replace(tzinfo=ZoneInfo(zone)))
+    for sched in (
+        {"kind": "every", "every_ms": 60_000, "anchor_ms": 0},
+        {"kind": "once", "at_ms": now},
+    ):
+        assert _day_start_ms(sched, now) == _utc_ms(midnight_utc), os.environ["TZ"]
 
 
 def test_resave_does_not_advance_an_overdue_next_run() -> None:
