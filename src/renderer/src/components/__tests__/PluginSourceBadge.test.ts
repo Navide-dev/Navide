@@ -125,3 +125,43 @@ describe('PluginTrustDialog source row (K2)', () => {
     }
   })
 })
+
+describe('Pre-release source row (K5)', () => {
+  const pending = (version: string, source?: PluginSource) => ({
+    label: 'acme.demo',
+    prepared: {
+      id: 'acme.demo', version, trustTier: 'signed-verified', sensitive: [], containsBackendExecutable: false,
+      requiresConfirmation: true, publisherId: 'acme', requiresPublisherTrust: false, requiresRiskConfirmation: true,
+      ...(source ? { source } : {}),
+    },
+  })
+  const unreviewed = /not reviewed|unreviewed|未審核|未經.*審核|審査なし|審査を受けていません/i
+
+  it('words a pre-release install as reviewed in every locale', () => {
+    const shown: Record<string, string> = {}
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      const dialog = mount(PluginTrustDialog, { props: { pending: pending('2.5.0-beta.1', 'prerelease'), step: 'risk' } as never, global: { plugins: [i18n] } })
+      const row = dialog.get('.nv-source-row')
+      expect(row.attributes('data-source')).toBe('prerelease')
+      expect(row.text(), locale).not.toMatch(unreviewed)
+      shown[locale] = row.text()
+      dialog.unmount()
+    }
+    expect(shown).toMatchSnapshot()
+  })
+
+  it('never reads the source from the version number', () => {
+    i18n.global.locale.value = 'en-US'
+    // A Host that sends no source gets no row, whatever the version looks like.
+    for (const version of ['2.5.0-beta.1', '2.4.0']) {
+      const dialog = mount(PluginTrustDialog, { props: { pending: pending(version), step: 'risk' } as never, global: { plugins: [i18n] } })
+      expect(dialog.find('.nv-source-row').exists(), version).toBe(false)
+      dialog.unmount()
+    }
+    // A Host source wins over a pre-release-looking version.
+    const stable = mount(PluginTrustDialog, { props: { pending: pending('2.5.0-beta.1', 'marketplace'), step: 'risk' } as never, global: { plugins: [i18n] } })
+    expect(stable.get('.nv-source-row').attributes('data-source')).toBe('marketplace')
+    stable.unmount()
+  })
+})
