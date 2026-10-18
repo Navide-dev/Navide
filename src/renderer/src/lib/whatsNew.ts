@@ -170,9 +170,9 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Navide Guard：認証情報の場所（~/.ssh や ~/.aws など）に触れる検索もチェックするようになりました。Claude の Grep と Glob、Qwen Code と Copilot CLI の検索も対象で、検索パスが複数あるときはすべてをチェックします。設定で Guard をオフにすると、Guard の通知や確認は表示されなくなり、作業の邪魔をしません。',
       },
       {
-        'zh-TW': 'Telegram：原本的 /menu 改成三個指令，/prompts 開 Prompt 技能、/skills 開技能、/mcp 列出 MCP 伺服器。傳 /menu 會提示你改用這三個指令，並附上對應的按鈕。',
-        'en-US': 'Telegram: the old /menu becomes three commands: /prompts opens your Prompts, /skills your skills, and /mcp lists your MCP servers. Sending /menu points you to these three, with a button for each.',
-        'ja-JP': 'Telegram：これまでの /menu は 3 つのコマンドに分かれました。/prompts でプロンプト、/skills でスキルを開き、/mcp で MCP サーバーを一覧します。/menu を送ると、この 3 つを使うよう案内し、それぞれのボタンを表示します。',
+        'zh-TW': 'Telegram：原本的 /menu 改成三個指令，/prompts 開 Prompt、/skills 開技能、/mcp 列出 MCP 伺服器（只能查看）。傳 /menu 會提示你改用這三個指令，並附上對應的按鈕。',
+        'en-US': 'Telegram: the old /menu becomes three commands: /prompts opens your Prompts, /skills your skills, and /mcp lists your MCP servers (view only). Sending /menu points you to these three, with a button for each.',
+        'ja-JP': 'Telegram：これまでの /menu は 3 つのコマンドに分かれました。/prompts でプロンプト、/skills でスキルを開き、/mcp で MCP サーバーを一覧します（閲覧のみ）。/menu を送ると、この 3 つを使うよう案内し、それぞれのボタンを表示します。',
       },
       {
         'zh-TW': '介面縮放：在「設定 → 外觀」調好的介面縮放，重開 Navide 後會保留，不會再回到 100%。',
