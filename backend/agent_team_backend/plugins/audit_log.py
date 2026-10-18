@@ -117,7 +117,10 @@ OTHER = "other"
 CALLER_KINDS = ("pane", "external", "host")
 TOOL_CALL_OUTCOMES = ("ok", "error")
 TOOL_RISKS = ("read", "write")
-ACTIVITY_SOURCES = ("broker", "shell", "agentTool")
+#: ``host``: a Host setting the user changed that governs which Navide plugins
+#: may run (card K4: the Developer Mode switch), filed under the Host's own
+#: event identity ``host``, never a plugin id.
+ACTIVITY_SOURCES = ("broker", "shell", "agentTool", "host")
 ACTIVITY_OUTCOMES = ("allowed", "denied", "error")
 #: The contract's call error codes plus the codes the backend produces itself:
 #: two transport codes (contract 4.2), ``result_helper_failed`` (a result in

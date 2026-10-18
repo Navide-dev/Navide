@@ -1904,6 +1904,24 @@
         },
         "prereleaseAvailable": "有預覽版 {version}"
       },
+      "developerMode": {
+        "title": "開發者模式",
+        "switch": "開啟開發者模式",
+        "hint": "開啟後可以從你選的資料夾載入 Navide 外掛來開發與測試，也會套用自架 Registry 的設定（AGENT_TEAM_MARKETPLACE_URL）。只有在這個設定頁可以切換，每次變更都會記錄。",
+        "banner": "開發者模式已開啟，從資料夾載入的 Navide 外掛沒有經過審核。",
+        "reminder": "開發者模式已開啟：從資料夾載入的 Navide 外掛沒有經過審核。不用時請到「設定 → Navide 外掛」關閉。",
+        "reminderClose": "知道了",
+        "confirmTitle": "開啟開發者模式？",
+        "confirmBody": "開發者模式會讓你從資料夾載入未經 Navide 審核的 Navide 外掛，資料夾內容隨時可能被改掉。只在你自己開發或測試時開啟。",
+        "confirmOn": "開啟",
+        "loadFolder": "從資料夾載入…",
+        "reload": "重新載入",
+        "removeFolder": "移除",
+        "needsConsent": "權限或後端已變更，需要重新同意",
+        "folderWarning": "這個 Navide 外掛直接從你選的資料夾載入，沒有經過 Navide 審核，也沒有簽章。資料夾內容隨時可能變動，Navide 不做內容比對：只有權限或後端宣告改變時才會再問你。",
+        "folderLabel": "資料夾",
+        "selfHostedQuarantine": "{id} {version} 來自自架 Registry，目前沒有載入。請開啟開發者模式，或改從 Navide 市集安裝。"
+      },
       "localInstall": {
         "button": "從檔案安裝 .vsix…",
         "backToMarketplace": "換回 Navide 市集版本",

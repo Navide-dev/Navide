@@ -440,6 +440,12 @@ export interface MarketplaceListResponse {
   limit: number
 }
 
+/** Card K4: the Developer Mode switch and the developer folders consented to. */
+export interface DeveloperModeState {
+  enabled: boolean
+  folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean }>
+}
+
 export interface PreparedInstallSummary {
   id: string
   version: string
@@ -478,6 +484,8 @@ export interface PreparedInstallSummary {
   replaces?: { version: string | null; source: 'marketplace' | 'local-unsigned' }
   /** Card K3 (D7): the local file install a Marketplace install replaces. */
   replacesLocal?: { version: string | null }
+  /** Card K4: the developer folder this summary was read from. */
+  folder?: string
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []
@@ -1286,6 +1294,21 @@ contextBridge.exposeInMainWorld('agentTeam', {
       approval: { riskConfirmed: boolean; replaceConfirmed?: boolean }
     ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
+    /** Card K4: the Developer Mode switch and the developer folders. The main
+     *  process owns the switch; it opens its own folder dialog. */
+    developerMode: (): Promise<DeveloperModeState> => ipcRenderer.invoke('plugins:developerMode'),
+    setDeveloperMode: (enabled: boolean): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:setDeveloperMode', { enabled }),
+    loadFromFolder: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:loadFromFolder'),
+    commitFolderLoad: (id: string, approval: { riskConfirmed: boolean }): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:commitFolderLoad', { id, ...approval }),
+    reloadDeveloperPlugin: (id: string): Promise<
+      { reloaded: true; requiresConsent: false } | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
+    > => ipcRenderer.invoke('plugins:reloadDeveloperPlugin', { id }),
+    removeDeveloperFolder: (id: string): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:removeDeveloperFolder', { id }),
+    selfHostedQuarantine: (): Promise<Array<{ id: string; version: string | null }>> =>
+      ipcRenderer.invoke('plugins:selfHostedQuarantine'),
     restart: (id: string): Promise<{
       id: string
       packageVersion: string

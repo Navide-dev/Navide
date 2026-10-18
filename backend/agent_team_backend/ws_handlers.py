@@ -417,6 +417,38 @@ _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "
 _HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
 #: Calls into a plugin's own backend, counted by the Host per batch.
 _BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
+#: Card K4: the one Host event a row may report, the Developer Mode switch. It
+#: is filed under the Host's own event identity, which no plugin can hold.
+_HOST_EVENT_PLUGIN_ID = "host"
+_HOST_EVENT_ADDRESSES = frozenset(("developerMode.on", "developerMode.off"))
+
+
+def _host_event_row(app: Any, row: dict) -> str | None:
+    """Record one Host event row; the skip reason when it is not recorded.
+
+    Exact fields (``at`` optional, Unix ms), the Host's own identity, no
+    workspace, a known address, ``allowed`` and a count of one.
+    """
+    if set(row) - {"at"} != _BACKEND_CALL_ROW_FIELDS:
+        return "malformed"
+    if (
+        row["plugin_id"] != _HOST_EVENT_PLUGIN_ID
+        or not isinstance(row["plugin_version"], str)
+        or row["workspace"] != ""
+        or row["address"] not in _HOST_EVENT_ADDRESSES
+        or row["outcome"] != "allowed"
+        or row["count"] != 1
+        or isinstance(row["count"], bool)
+    ):
+        return "malformed"
+    at = row.get("at")
+    if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
+        return "bad at"
+    recorded = app.plugin_audit_log.record_activity(
+        plugin_id=_HOST_EVENT_PLUGIN_ID, plugin_version=row["plugin_version"], source="host",
+        address=row["address"], outcome="allowed", at_ms=at,
+    )
+    return None if recorded else "refused"
 
 
 def _backend_call_row(app: Any, row: dict) -> str | None:
@@ -455,7 +487,8 @@ async def plugin_activity_record(
     Rows with source ``backend`` (calls into a plugin's own backend, counted)
     go to the per-minute counts instead. The ``backend.`` address prefix and
     the source must agree: a backend row with another address, or another row
-    with a ``backend.`` address, is skipped.
+    with a ``backend.`` address, is skipped. A ``host`` row (card K4: the
+    Developer Mode switch) must be exactly the Host's own event shape.
     """
     from . import app
 
@@ -476,6 +509,13 @@ async def plugin_activity_record(
     for row in rows:
         if isinstance(row, dict) and row.get("source") == "backend":
             reason = _backend_call_row(app, row)
+            if reason is None:
+                accepted += 1
+            else:
+                skipped[reason] += 1
+            continue
+        if isinstance(row, dict) and row.get("source") == "host":
+            reason = _host_event_row(app, row)
             if reason is None:
                 accepted += 1
             else:

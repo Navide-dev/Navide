@@ -207,14 +207,18 @@ A publisher created with the admin token is trusted, so its versions are
 listed at once; a namespace claimed on the Marketplace is reviewed first
 (section 5). To install from the local Registry in a development build of
 Navide, point the app at it as described under **Registry endpoints** in the
-[Plugin development guide](plugin-development.md#packaging-and-publishing).
+[Plugin development guide](plugin-development.md#packaging-and-publishing). A
+packaged build honors those settings only while Developer Mode is on
+(Settings → Navide Plugins); with it off it uses the Navide Marketplace.
 
-This is one way to try a package inside Navide before publishing; the other is
+This is one way to try a package inside Navide before publishing; the others are
 Settings → Navide Plugins → **Install from .vsix file…**, which works in any
 build and installs the file you pick as an unreviewed local package (it never
-updates automatically). There is no `navide-plugin dev` command, and Developer
-Mode (`AGENT_TEAM_PLUGIN_DEV_PATH`) writes no capability grant, so it cannot
-open a Manifest v2 view and refuses a backend. A Registry or file install
+updates automatically), and Developer Mode → **Load from folder…**, which runs
+your working folder with its view and backend and reloads it as you edit. There
+is no `navide-plugin dev` command, and the development-build variable
+`AGENT_TEAM_PLUGIN_DEV_PATH` writes no capability grant, so it cannot open a
+Manifest v2 view and refuses a backend. A Registry or file install
 grants the declared permissions and storage for that exact version when you
 choose **Restart Plugin**.
 

@@ -1904,6 +1904,24 @@
         },
         "prereleaseAvailable": "プレリリース {version} あり"
       },
+      "developerMode": {
+        "title": "開発者モード",
+        "switch": "開発者モードをオンにする",
+        "hint": "オンにすると、選んだフォルダーから Navide プラグインを読み込んで開発・テストでき、自前の Registry の設定（AGENT_TEAM_MARKETPLACE_URL）も適用されます。この設定画面でのみ切り替えられ、変更はすべて記録されます。",
+        "banner": "開発者モードがオンです。フォルダーから読み込んだ Navide プラグインは審査されていません。",
+        "reminder": "開発者モードがオンです：フォルダーから読み込んだ Navide プラグインは審査されていません。不要になったら「設定 → Navide プラグイン」でオフにしてください。",
+        "reminderClose": "了解",
+        "confirmTitle": "開発者モードをオンにしますか？",
+        "confirmBody": "開発者モードでは、Navide の審査を受けていない Navide プラグインをフォルダーから読み込めます。フォルダーの内容はいつでも変わる可能性があります。自分で開発・テストするときだけオンにしてください。",
+        "confirmOn": "オンにする",
+        "loadFolder": "フォルダーから読み込む…",
+        "reload": "再読み込み",
+        "removeFolder": "削除",
+        "needsConsent": "権限またはバックエンドが変わりました。もう一度同意が必要です",
+        "folderWarning": "この Navide プラグインは選んだフォルダーから直接読み込まれます。Navide の審査を受けておらず、署名もありません。フォルダーの内容はいつでも変わる可能性があり、Navide は内容を照合しません：権限またはバックエンドの宣言が変わったときだけ改めて確認します。",
+        "folderLabel": "フォルダー",
+        "selfHostedQuarantine": "{id} {version} は自前の Registry から入れたもので、読み込まれていません。開発者モードをオンにするか、Navide マーケットプレイスからインストールしてください。"
+      },
       "localInstall": {
         "button": ".vsix ファイルからインストール…",
         "backToMarketplace": "Navide マーケットプレイス版に戻す",

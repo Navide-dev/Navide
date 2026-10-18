@@ -280,7 +280,7 @@ protocol.
 | Stage | Python backend | Host-visible contract |
 |---|---|---|
 | Source development | Authors may use `.py` files, a virtual environment, and any Python build/test layout. | None. Source layout is not an installed interface. |
-| Local testing | There is no `navide-plugin dev` command, and Developer Mode refuses packages with a backend. Build the executable and run it with `navide-plugin dev-backend <directory>`, which uses the Host's sandbox profile but answers every Host bridge request with `CAPABILITY_DENIED`. | None. A backend first runs inside Navide after it is installed from a Registry. |
+| Local testing | Turn on Developer Mode (Settings → Navide Plugins) and **Load from folder…**: the view opens with its declared grant and the backend runs in the same sandbox, after the same native backend consent, as an installed one. `navide-plugin dev-backend <directory>` still runs the executable alone, with every Host bridge request answered `CAPABILITY_DENIED`. | A developer folder's consent is bound to the folder and its manifest `permissions` and `backend`; editing files never asks again, changing either declaration does. |
 | `navide-plugin package` | Python, its required modules, and the plugin code are bundled into a target-specific executable by an author-selected tool such as PyInstaller or Nuitka. | `backend.entry` names the resulting executable inside the archive. |
 | Install and runtime target | No Python installation, `pip`, virtual environment, source checkout, or author build tool may be required on the user's machine. | The Electron main process supervises the executable over Backend Wire v1 without a shell. The first-party Plans backend runs directly; a third-party backend runs only under the conditions in [Third-party backends](#third-party-backends-sandbox-consent-and-publishing). |
 
@@ -1997,8 +1997,9 @@ runs only inside the OS sandbox described in
   and future backend spawn. A newly revoked running frontend plugin is stopped
   and quarantined; the Electron backend supervisor re-verifies the current
   root-signed trust decision immediately before every child spawn.
-- Developer Mode exists only in development builds; packaged builds ignore
-  its environment variables. It accepts one explicitly selected local unpacked
+- The environment-variable Developer Mode exists only in development builds;
+  packaged builds ignore its environment variables (the Settings switch below
+  is a separate path). It accepts one explicitly selected local unpacked
   Manifest v1 or Manifest v2 frontend directory only when
   `AGENT_TEAM_PLUGIN_DEV=1` and `AGENT_TEAM_PLUGIN_DEV_PATH` names that exact
   directory. Manifest v1 is a
@@ -2017,6 +2018,24 @@ runs only inside the OS sandbox described in
   item) or from a Registry; a local Registry works (see
   [Publishing to the Navide Marketplace](marketplace-publishing.md)).
   Manifest v1 packages need no grant.
+- **Developer Mode** (Settings → Navide Plugins → Developer Mode, off by
+  default) is a main-process setting the main window's settings page alone can
+  change; every change is written to the plugin activity log as a Host event
+  (`source: "host"`, `plugin_id: "host"`, `developerMode.on` / `.off`), which
+  no plugin row can claim. A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
+  `AGENT_TEAM_PLUGIN_DEV_PATH` either way; with the switch on, **Load from
+  folder…** opens the Host's own folder dialog. A folder loads a Manifest v2
+  package (not `navide.`, not an id something else installed holds) with a
+  grant for its declared permissions and, when it declares one, its backend
+  through the unchanged sandbox, master switch and native backend consent.
+  Consent is bound to the folder and the digest of the manifest's
+  `permissions` and `backend`: **Reload** after a file edit asks nothing, a
+  change to either declaration unloads the package and asks again, and so does
+  the next start. Content is not compared, since a developer folder changes all
+  the time; the dialog and a banner say so, and every launch reminds the user
+  while the switch is on. Anything that can write the folder can change the
+  code that runs; the sandbox bounds what it can do. Turning the switch off
+  unloads every developer folder.
 - **Install from a file** (Settings → Navide Plugins → **Install from .vsix
   file…**) works in packaged builds too, without Developer Mode. The main
   process opens its own file dialog over the main window and reads the picked

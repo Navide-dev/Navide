@@ -360,11 +360,76 @@ async function restoreFactoryPackage(id: string): Promise<void> {
   }
 }
 
+// Card K4: the Developer Mode switch (owned by the main process) and its
+// developer folders; D6: packages from a self-hosted Registry it quarantines.
+const developerMode = ref<DeveloperModeState>({ enabled: false, folders: [] })
+const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>([])
+const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
+
+async function refreshDeveloperMode(): Promise<void> {
+  const api = pluginsApi()
+  try {
+    developerMode.value = (await api?.developerMode?.()) ?? { enabled: false, folders: [] }
+    selfHostedQuarantine.value = (await api?.selfHostedQuarantine?.()) ?? []
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  }
+}
+
+async function setDeveloperMode(enabled: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setDeveloperMode) return
+  if (enabled) {
+    const confirmed = await notify.confirm(t('settings.extensions.developerMode.confirmBody'), {
+      title: t('settings.extensions.developerMode.confirmTitle'),
+      confirmText: t('settings.extensions.developerMode.confirmOn'),
+      cancelText: t('settings.extensions.trust.cancel'),
+      danger: true,
+    })
+    if (!confirmed) {
+      await refreshDeveloperMode()
+      return
+    }
+  }
+  busy.value = true
+  error.value = ''
+  try {
+    developerMode.value = await api.setDeveloperMode(enabled)
+    await refreshInstalled()
+    selfHostedQuarantine.value = (await api.selfHostedQuarantine?.()) ?? []
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function removeDeveloperFolder(id: string): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.removeDeveloperFolder) return
+  busy.value = true
+  error.value = ''
+  try {
+    developerMode.value = await api.removeDeveloperFolder(id)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+}
+
+// A developer folder consented to or reloaded changes the inventory.
+watch(() => updateFlow.pendingConfirm.value, (pending) => {
+  if (!pending) void refreshDeveloperMode()
+})
+
 onMounted(() => {
   void reloadInventory()
   void refreshDisabledStoreStatus()
   void pluginUpdates.refresh()
   void refreshPacks()
+  void refreshDeveloperMode()
 })
 // A pack installed from the Marketplace page shows up here without a remount.
 watch(installed, () => void refreshPacks())
@@ -375,6 +440,14 @@ watch(installed, () => void refreshPacks())
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
     <p v-if="inventoryError" class="ext-error" role="alert">{{ inventoryError }}</p>
     <p v-if="updateFlow.error.value" class="ext-error" role="alert">{{ updateFlow.error.value }}</p>
+    <!-- Card K4: shown above the lists for as long as Developer Mode is on. -->
+    <p v-if="developerMode.enabled" class="ext-devmode-banner ext-risk-banner" role="status">
+      {{ $t('settings.extensions.developerMode.banner') }}
+    </p>
+    <!-- D6: never let a self-hosted Registry package disappear silently. -->
+    <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
+      {{ $t('settings.extensions.developerMode.selfHostedQuarantine', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
+    </p>
 
     <section class="ext-section">
       <h3 class="ext-section-title">
@@ -636,6 +709,15 @@ watch(installed, () => void refreshPacks())
             >
               {{ $t('settings.extensions.restartPlugin') }}
             </button>
+            <!-- Card K4: reload a developer folder; changed permissions ask again. -->
+            <button
+              v-if="p.provenance === 'developer-local-unpacked' && developerMode.folders.some((folder) => folder.pluginId === p.id)"
+              class="ext-devmode-reload nv-btn nv-btn--sm"
+              :disabled="busy || updateFlow.busy.value"
+              @click="updateFlow.reloadDeveloperPlugin(p.id)"
+            >
+              {{ $t('settings.extensions.developerMode.reload') }}
+            </button>
             <!-- D7: back to the Marketplace version; the install flow asks first. -->
             <button
               v-if="p.source === 'local-unsigned' && !p.pendingCandidateVersion"
@@ -678,13 +760,49 @@ watch(installed, () => void refreshPacks())
               v-if="!isFirstPartyId(p.id)"
               class="ext-remove nv-btn nv-btn--sm ext-btn-danger"
               :disabled="busy || updateFlow.busy.value"
-              @click="remove(p.id)"
+              @click="developerMode.folders.some((folder) => folder.pluginId === p.id) ? removeDeveloperFolder(p.id) : remove(p.id)"
             >
               {{ $t('settings.extensions.marketplace.uninstall') }}
             </button>
           </div>
         </li>
         <li v-if="!nonFactoryInstalled.length" class="ext-empty nv-empty">{{ $t('settings.extensions.empty') }}</li>
+      </ul>
+    </section>
+
+    <section class="ext-section ext-devmode">
+      <h3 class="ext-section-title">{{ $t('settings.extensions.developerMode.title') }}</h3>
+      <label class="ext-devmode-switch">
+        <input
+          type="checkbox"
+          class="ext-devmode-toggle"
+          :checked="developerMode.enabled"
+          :disabled="busy"
+          @change="setDeveloperMode(($event.target as HTMLInputElement).checked)"
+        />
+        {{ $t('settings.extensions.developerMode.switch') }}
+      </label>
+      <p class="ext-devmode-hint">{{ $t('settings.extensions.developerMode.hint') }}</p>
+      <button
+        v-if="developerMode.enabled"
+        class="ext-load-folder nv-btn nv-btn--sm"
+        :disabled="busy || updateFlow.busy.value"
+        @click="updateFlow.loadFromFolder()"
+      >
+        {{ $t('settings.extensions.developerMode.loadFolder') }}
+      </button>
+      <ul v-if="developerMode.enabled && unloadedFolders.length" class="ext-list ext-devmode-folders">
+        <li v-for="folder in unloadedFolders" :key="folder.pluginId" class="ext-devmode-folder ext-card">
+          <span class="ext-id" v-truncate>{{ reveal(folder.pluginId) }}</span>
+          <code class="ext-devmode-path">{{ reveal(folder.path) }}</code>
+          <span class="ext-badge ext-dev-warning">{{ $t('settings.extensions.developerMode.needsConsent') }}</span>
+          <button class="ext-devmode-reload nv-btn nv-btn--sm" :disabled="busy || updateFlow.busy.value" @click="updateFlow.reloadDeveloperPlugin(folder.pluginId)">
+            {{ $t('settings.extensions.developerMode.reload') }}
+          </button>
+          <button class="ext-remove nv-btn nv-btn--sm ext-btn-danger" :disabled="busy" @click="removeDeveloperFolder(folder.pluginId)">
+            {{ $t('settings.extensions.developerMode.removeFolder') }}
+          </button>
+        </li>
       </ul>
     </section>
 
@@ -744,6 +862,36 @@ watch(installed, () => void refreshPacks())
 }
 .ext-install-file {
   margin-left: auto;
+}
+.ext-risk-banner {
+  margin: 0 0 var(--space-3);
+  padding: 8px 10px 8px 12px;
+  border-left: 3px solid var(--risk-fg);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--risk-subtle);
+  color: var(--risk-fg);
+}
+.ext-devmode-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+.ext-devmode-hint {
+  margin: var(--space-2) 0 var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+.ext-devmode-folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ext-devmode-path {
+  font-family: var(--font-mono);
+  font-size: var(--font-2xs);
+  overflow-wrap: anywhere;
 }
 .ext-section-title::before {
   content: '';

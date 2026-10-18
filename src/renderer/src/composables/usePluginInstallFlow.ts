@@ -51,9 +51,13 @@ export function usePluginInstallFlow() {
   ): Promise<void> {
     const plugins = api()
     if (!plugins) return
-    const local = pendingConfirm.value?.prepared.id === id && pendingConfirm.value.prepared.source === 'local-unsigned'
+    const pendingSource = pendingConfirm.value?.prepared.id === id ? pendingConfirm.value.prepared.source : undefined
+    const local = pendingSource === 'local-unsigned'
     const replace = replaceConfirmed.value ? { replaceConfirmed: true } : {}
-    if (local) {
+    if (pendingSource === 'developer-unpacked') {
+      if (!plugins.commitFolderLoad) throw new Error('loading from a folder is unavailable')
+      await plugins.commitFolderLoad(id, { riskConfirmed: approval.riskConfirmed === true })
+    } else if (local) {
       if (!plugins.commitLocalInstall) throw new Error('installing from a file is unavailable')
       await plugins.commitLocalInstall(id, { riskConfirmed: approval.riskConfirmed === true, ...replace })
     } else {
@@ -106,6 +110,43 @@ export function usePluginInstallFlow() {
       if (!prepared) return
       pendingConfirm.value = { label: prepared.id, prepared }
       pendingStep.value = replacesAnother(prepared) ? 'replace' : 'risk'
+      publisherConfirmed.value = false
+      replaceConfirmed.value = false
+    } catch (err) {
+      fail(err)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** Card K4: load a developer folder the user picks in the main process's
+   *  own folder dialog (Developer Mode on). Always held for consent. */
+  async function loadFromFolder(): Promise<void> {
+    const plugins = api()
+    if (!plugins?.loadFromFolder) return
+    await holdForConsent(() => plugins.loadFromFolder!())
+  }
+
+  /** Card K4: reload a developer folder; a change to its permissions or
+   *  backend asks for consent again, a change to its files does not. */
+  async function reloadDeveloperPlugin(id: string): Promise<void> {
+    const plugins = api()
+    if (!plugins?.reloadDeveloperPlugin) return
+    await holdForConsent(async () => {
+      const result = await plugins.reloadDeveloperPlugin!(id)
+      if (!result.requiresConsent) await inventory.refresh()
+      return result.requiresConsent ? result.prepared : null
+    })
+  }
+
+  async function holdForConsent(prepare: () => Promise<PreparedInstallSummary | null>): Promise<void> {
+    busy.value = true
+    error.value = ''
+    try {
+      const prepared = await prepare()
+      if (!prepared) return
+      pendingConfirm.value = { label: prepared.id, prepared }
+      pendingStep.value = 'risk'
       publisherConfirmed.value = false
       replaceConfirmed.value = false
     } catch (err) {
@@ -205,6 +246,8 @@ export function usePluginInstallFlow() {
     pendingStep,
     install,
     installFromFile,
+    loadFromFolder,
+    reloadDeveloperPlugin,
     uninstall,
     confirmReplace,
     confirmPublisher,

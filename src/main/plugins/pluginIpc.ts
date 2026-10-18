@@ -38,6 +38,7 @@ import {
 } from './pluginRegistryRootApproval'
 import {
   loadPluginDir,
+  manifestCapabilities,
   manifestToInstalledPackageSummary,
   type PluginActivationCatalogEntry,
 } from './installedPlugins'
@@ -51,8 +52,11 @@ import {
   verifyInstalledRegistryPackage,
   writeRegistryTrustSnapshot,
   REGISTRY_ARTIFACT_NAME,
+  REGISTRY_RECEIPT_NAME,
   type InstalledTrustDecision,
 } from './pluginInstalledTrust'
+import { pluginDeveloperModeEnabled } from './pluginDeveloperMode'
+import { developerPermissionsDigest, PluginDeveloperModeStore } from './pluginDeveloperModeStore'
 import {
   currentPluginHostTarget,
   isPluginTargetCompatible,
@@ -127,6 +131,22 @@ function defaultMarketplaceUrl(): string {
   return app.isPackaged ? OFFICIAL_MARKETPLACE_URL : DEV_MARKETPLACE_URL
 }
 
+/** Card K4 (D6): whether this Host honors `AGENT_TEAM_MARKETPLACE_URL` and
+ * `AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE`. A development build always does;
+ * a packaged build only while the user's Developer Mode switch is on, which
+ * the Host supplies at startup. Until it does, a packaged build ignores both. */
+let marketplaceOverridesAllowed: () => boolean = () => !app.isPackaged
+
+export function setMarketplaceOverridesAllowed(allowed: () => boolean): void {
+  marketplaceOverridesAllowed = allowed
+}
+
+function marketplaceOverride(
+  name: 'AGENT_TEAM_MARKETPLACE_URL' | 'AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE',
+): string | undefined {
+  return marketplaceOverridesAllowed() ? process.env[name] : undefined
+}
+
 /** Resolve the marketplace registry URL, enforcing the transport policy
  *  (production forbids plaintext http except loopback). Throws before any
  *  fetch when the configured URL is disallowed. */
@@ -134,7 +154,7 @@ export function resolveConfiguredMarketplace(
   explicitTrust?: InstallerTrustConfig
 ): { registryUrl: string; trust: InstallerTrustConfig } {
   if (explicitTrust) {
-    const registryUrl = process.env['AGENT_TEAM_MARKETPLACE_URL'] ?? defaultMarketplaceUrl()
+    const registryUrl = marketplaceOverride('AGENT_TEAM_MARKETPLACE_URL') ?? defaultMarketplaceUrl()
     assertRegistryUrlAllowed(registryUrl, app.isPackaged)
     return {
       registryUrl,
@@ -147,11 +167,11 @@ export function resolveConfiguredMarketplace(
     }
   }
   const resolved = resolveMarketplaceRegistryRoot({
-    registryUrlOverride: process.env['AGENT_TEAM_MARKETPLACE_URL'],
+    registryUrlOverride: marketplaceOverride('AGENT_TEAM_MARKETPLACE_URL'),
     defaultRegistryUrl: defaultMarketplaceUrl(),
     officialRegistryUrl: OFFICIAL_MARKETPLACE_URL,
     officialRootPublicKey: loadOfficialRegistryRootKey(process.resourcesPath),
-    approvalFile: process.env['AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE'],
+    approvalFile: marketplaceOverride('AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE'),
   })
   assertRegistryUrlAllowed(resolved.registryUrl, app.isPackaged)
   return {
@@ -418,6 +438,10 @@ export interface PluginTrustRefreshController {
   /** D-f: rescans of installed versions that found new items since the last
    *  call, each reported once. Notice only. */
   takeRescanNotices(): PluginRescanNotice[]
+  /** Card K4: at startup, load the developer folders the user consented to,
+   *  when Developer Mode is on. A folder whose permissions or backend changed
+   *  since is left unloaded until the user consents again. */
+  loadDeveloperFolders(): Promise<void>
   /** Put back notices no window received, to be sent after the next check. */
   restoreRescanNotices(notices: PluginRescanNotice[]): void
 }
@@ -488,6 +512,9 @@ export interface PluginIpcOptions {
   /** Card K3 (D7): drop the native backend consent and the agent tool write
    * answers of a package whose source changed, so nothing carries over. */
   forgetBackendConsent?: (pluginId: string) => void
+  /** Card K4: the Host's own folder dialog, parented to the window that
+   * asked. Absent, loading from a folder is unavailable. */
+  pickDeveloperFolder?: (event: IpcMainInvokeEvent) => Promise<string | null>
   /** The running Navide release that `engines.navide` is checked against. */
   appVersion?: () => string
   /** An agent disabled or enabled an installed Marketplace package (B2-c):
@@ -2069,6 +2096,237 @@ export function registerPluginIpc(
     }
   )
 
+  // ---- Card K4 (DX report A2): Developer Mode and developer folders ----
+  // The switch lives in a main-process file; only this window's settings page
+  // changes it, and every change is audited in the plugin activity log. With
+  // it on, the user may load a folder they pick in the Host dialog: it is not
+  // reviewed, its content may change at any time, and its consent is bound to
+  // the folder and its declared permissions and backend.
+  const developerMode = new PluginDeveloperModeStore(pluginsRoot)
+  const developerModeOn = (): boolean =>
+    pluginDeveloperModeEnabled(process.env, app.isPackaged, developerMode.isEnabled())
+  const preparedFolders = new Map<string, { dir: string; permissionsDigest: string }>()
+
+  /** What the consent dialog shows for a developer folder, from its manifest. */
+  const describeFolder = (dir: string): {
+    pluginId: string
+    permissionsDigest: string
+    summary: Record<string, unknown>
+  } => {
+    const scanned = loadPluginDir(dir)
+    if (scanned.error) throw new Error(scanned.error)
+    const manifest = parseInstalledManifest(parseManifestJson(readFileSync(join(dir, 'manifest.json'), 'utf8')))
+    if (!isManifestV2(manifest) || !scanned.activation) {
+      throw new Error('Developer Mode loads Manifest v2 folders only')
+    }
+    if (isReservedPluginId(manifest.id)) {
+      throw new Error(`Developer Mode cannot claim reserved plugin id '${manifest.id}'`)
+    }
+    const disclosure = computeDisclosure(manifest as unknown as DisclosureManifestInput)
+    const permissionsDigest = developerPermissionsDigest(manifest)
+    return {
+      pluginId: manifest.id,
+      permissionsDigest,
+      summary: {
+        id: manifest.id,
+        version: manifest.version,
+        trustTier: 'unsigned',
+        sensitive: sensitiveCapabilities(manifestCapabilities(manifest)),
+        containsBackendExecutable: manifest.backend !== undefined,
+        ...(disclosure.agentTools.length > 0 ? { agentTools: disclosure.agentTools } : {}),
+        requiresConfirmation: true,
+        publisherId: manifest.publisher,
+        requiresPublisherTrust: false,
+        requiresRiskConfirmation: true,
+        disclosureDiff: null,
+        disclosure,
+        scan: null,
+        registry: null,
+        source: 'developer-unpacked',
+        folder: dir,
+      },
+    }
+  }
+
+  /** A developer folder may not take an id something else installed holds:
+   * the grant and the package registration are per id. */
+  const assertFolderIdFree = (pluginId: string): void => {
+    const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+    if ((installed && installed.provenance !== 'developer-local-unpacked') || lifecycleSelector.read(pluginId)) {
+      throw new Error(`${pluginId} is installed; remove it before loading a developer folder with the same id`)
+    }
+  }
+
+  const unloadDeveloperFolder = async (pluginId: string): Promise<void> => {
+    const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+    if (installed?.provenance !== 'developer-local-unpacked') return
+    await revokeInstalledPackageRuntime(manager, pluginsRoot, pluginId)
+    manager.removeInstalledPlugin(pluginId)
+    capabilityGrants.remove(pluginId)
+    options.onActivationChange?.({ pluginId })
+  }
+
+  /** Load one consented folder: the view's grant and the backend activation.
+   * Returns false, loading nothing, when its permissions or backend changed. */
+  const activateDeveloperFolder = (pluginId: string): boolean => {
+    const consent = developerMode.folder(pluginId)
+    if (!consent) return false
+    const described = describeFolder(consent.path)
+    if (described.pluginId !== pluginId || described.permissionsDigest !== consent.permissionsDigest) return false
+    assertFolderIdFree(pluginId)
+    const result = manager.loadExplicitDeveloperPlugin(consent.path, true, { allowBackend: true })
+    if (!result.loaded) throw new Error(result.error)
+    const scanned = loadPluginDir(consent.path)
+    const policy = scanned.descriptor?.capabilityPolicy
+    if (scanned.descriptor && policy?.kind === 'manifest-v2' && scanned.descriptor.packageVersion) {
+      capabilityGrants.set(pluginId, {
+        packageVersion: scanned.descriptor.packageVersion,
+        system: [...policy.system],
+        ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
+        storage: true,
+      })
+    }
+    if (scanned.activation) {
+      options.onActivationChange?.({
+        pluginId,
+        activation: { ...scanned.activation, provenance: 'developer-local-unpacked' },
+      })
+    }
+    return true
+  }
+
+  const developerModeState = () => ({
+    enabled: developerMode.isEnabled(),
+    folders: developerMode.folders().map((folder) => ({
+      pluginId: folder.pluginId,
+      path: folder.path,
+      consentedAt: folder.consentedAt,
+      loaded: manager.listInstalledPackages().some(
+        (pkg) => pkg.id === folder.pluginId && pkg.provenance === 'developer-local-unpacked',
+      ),
+    })),
+  })
+
+  ipcMain.handle('plugins:developerMode', (event) => {
+    assertAuthorized(event)
+    return developerModeState()
+  })
+
+  ipcMain.handle('plugins:setDeveloperMode', async (event, args: { enabled?: unknown } | null) => {
+    assertAuthorized(event)
+    if (typeof args?.enabled !== 'boolean') throw new Error('invalid Developer Mode switch value')
+    const enabled = args.enabled
+    if (developerMode.isEnabled() !== enabled) {
+      developerMode.setEnabled(enabled)
+      manager.recordDeveloperModeChange(enabled, hostAppVersion())
+      if (!developerModeOn()) {
+        for (const folder of developerMode.folders()) await unloadDeveloperFolder(folder.pluginId)
+      } else {
+        await loadDeveloperFolders()
+      }
+    }
+    return developerModeState()
+  })
+
+  ipcMain.handle('plugins:loadFromFolder', async (event) => {
+    assertAuthorized(event)
+    if (!developerModeOn()) throw new Error('turn on Developer Mode to load a Navide plugin from a folder')
+    const pickFolder = options.pickDeveloperFolder
+    if (!pickFolder) throw new Error('loading from a folder is unavailable')
+    const dir = await pickFolder(event)
+    if (!dir) return null
+    const described = describeFolder(dir)
+    assertFolderIdFree(described.pluginId)
+    preparedFolders.set(described.pluginId, { dir, permissionsDigest: described.permissionsDigest })
+    return described.summary
+  })
+
+  ipcMain.handle('plugins:commitFolderLoad', async (event, args: { id?: unknown; riskConfirmed?: unknown } | null) => {
+    assertAuthorized(event)
+    if (!developerModeOn()) throw new Error('turn on Developer Mode to load a Navide plugin from a folder')
+    const id = typeof args?.id === 'string' ? args.id : ''
+    const pending = preparedFolders.get(id)
+    if (!pending) throw new Error(`no prepared developer folder for ${id}; choose the folder again`)
+    if (args?.riskConfirmed !== true) throw new Error(`consent is required to load ${id} from a folder`)
+    preparedFolders.delete(id)
+    // What the user saw is what they consent to: a permissions or backend
+    // change while the dialog was open asks again.
+    const described = describeFolder(pending.dir)
+    if (described.pluginId !== id || described.permissionsDigest !== pending.permissionsDigest) {
+      throw new Error(`the permissions or backend of ${id} changed; choose the folder again`)
+    }
+    await unloadDeveloperFolder(id)
+    developerMode.consent({
+      path: pending.dir,
+      pluginId: id,
+      permissionsDigest: pending.permissionsDigest,
+      consentedAt: new Date().toISOString(),
+    })
+    activateDeveloperFolder(id)
+    return developerModeState()
+  })
+
+  ipcMain.handle('plugins:reloadDeveloperPlugin', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    if (!developerModeOn()) throw new Error('turn on Developer Mode to reload a developer folder')
+    const id = typeof args?.id === 'string' ? args.id : ''
+    const consent = developerMode.folder(id)
+    if (!consent) throw new Error(`${id} is not a developer folder`)
+    const described = describeFolder(consent.path)
+    if (described.pluginId !== id || described.permissionsDigest !== consent.permissionsDigest) {
+      // Changed permissions or backend: unload and ask again. File content
+      // alone never asks; it is expected to change during development.
+      await unloadDeveloperFolder(id)
+      preparedFolders.set(described.pluginId, { dir: consent.path, permissionsDigest: described.permissionsDigest })
+      return { reloaded: false, requiresConsent: true, prepared: described.summary }
+    }
+    await unloadDeveloperFolder(id)
+    activateDeveloperFolder(id)
+    return { reloaded: true, requiresConsent: false }
+  })
+
+  ipcMain.handle('plugins:removeDeveloperFolder', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    const id = typeof args?.id === 'string' ? args.id : ''
+    await unloadDeveloperFolder(id)
+    developerMode.forget(id)
+    return developerModeState()
+  })
+
+  // D6: a package installed from a self-hosted Registry is quarantined in a
+  // packaged build while Developer Mode is off. Say so instead of letting it
+  // disappear: the Extensions page lists these with that reason.
+  ipcMain.handle('plugins:selfHostedQuarantine', (event): Array<{ id: string; version: string | null }> => {
+    assertAuthorized(event)
+    if (marketplaceOverridesAllowed()) return []
+    const loaded = new Set(manager.listInstalledPackages().map((pkg) => pkg.id))
+    return discoverInstalledRegistryPackageIds(pluginsRoot).flatMap((id) => {
+      if (loaded.has(id)) return []
+      try {
+        const active = lifecycleSelector.read(id)?.active
+        const dir = active ? lifecycleSelector.packageDir(id, active) : join(pluginsRoot, id)
+        const receipt = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as Record<string, unknown>
+        return receipt.registryAuthority === 'self-hosted'
+          ? [{ id, version: typeof receipt.version === 'string' ? receipt.version : null }]
+          : []
+      } catch {
+        return []
+      }
+    })
+  })
+
+  async function loadDeveloperFolders(): Promise<void> {
+    if (!developerModeOn()) return
+    for (const folder of developerMode.folders()) {
+      try {
+        activateDeveloperFolder(folder.pluginId)
+      } catch (error) {
+        console.warn(`[plugins] developer folder ${folder.pluginId} was not loaded: ${errorText(error)}`)
+      }
+    }
+  }
+
   ipcMain.handle('plugins:restart', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
@@ -2956,6 +3214,7 @@ export function registerPluginIpc(
 
   return {
     checkUpdates: checkInstalledUpdates,
+    loadDeveloperFolders,
     takeRescanNotices() {
       const taken = rescanNotices
       rescanNotices = []

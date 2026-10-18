@@ -67,6 +67,7 @@ import { usePreview } from './preview/usePreview'
 import { usePreviewLog } from './preview/usePreviewLog'
 import NotificationHost from './components/NotificationHost.vue'
 import BackendResourceNotices from './components/BackendResourceNotices.vue'
+import DeveloperModeReminder from './components/DeveloperModeReminder.vue'
 import Welcome from './components/Welcome.vue'
 import { agentUsesBracketedPaste } from '@navide/plugin-shell'
 import { useNotify, useTheme } from '@navide/plugin-ui/foundation'
@@ -22326,6 +22327,8 @@ function paneIsCommander(p: ActivePane): boolean {
     <NotificationHost />
     <!-- Plan B watchdog option C: Stop / Keep running for an over-threshold Navide plugin backend. -->
     <BackendResourceNotices />
+    <!-- Card K4: every launch says Developer Mode is on. -->
+    <DeveloperModeReminder />
     <WhatsNewModal
       v-if="whatsNewEntry"
       :entry="whatsNewEntry"

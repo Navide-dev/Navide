@@ -485,6 +485,16 @@ declare global {
           id: string,
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean }
         ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        developerMode?: () => Promise<DeveloperModeState>
+        setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
+        loadFromFolder?: () => Promise<PreparedInstallSummary | null>
+        commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean }) => Promise<DeveloperModeState>
+        reloadDeveloperPlugin?: (id: string) => Promise<
+          | { reloaded: true; requiresConsent: false }
+          | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
+        >
+        removeDeveloperFolder?: (id: string) => Promise<DeveloperModeState>
+        selfHostedQuarantine?: () => Promise<Array<{ id: string; version: string | null }>>
         restart: (id: string) => Promise<{
           id: string
           packageVersion: string
@@ -803,6 +813,14 @@ declare global {
     replaces?: { version: string | null; source: 'marketplace' | 'local-unsigned' }
     /** Card K3 (D7): the local file install a Marketplace install replaces. */
     replacesLocal?: { version: string | null }
+    /** Card K4: the developer folder this summary was read from. */
+    folder?: string
+  }
+
+  /** Card K4: the Developer Mode switch and the developer folders consented to. */
+  interface DeveloperModeState {
+    enabled: boolean
+    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean }>
   }
 }
 

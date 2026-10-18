@@ -18,7 +18,12 @@ const emit = defineEmits<{ confirmReplace: []; confirmPublisher: []; confirmRisk
 // Card K3: a package picked from a file has no Registry review or signature.
 // Its warning is fixed text, and consent takes an explicit acknowledgement so
 // it cannot be clicked through like a Marketplace install.
-const local = computed(() => props.pending.prepared.source === 'local-unsigned')
+// Card K4: a developer folder is unreviewed too, and its content may change
+// at any time; it gets the same safeguards with its own warning.
+const local = computed(() =>
+  props.pending.prepared.source === 'local-unsigned' || props.pending.prepared.source === 'developer-unpacked'
+)
+const folder = computed(() => props.pending.prepared.source === 'developer-unpacked')
 const acknowledged = ref(false)
 watch(() => [props.pending.prepared.id, props.step], () => { acknowledged.value = false })
 const { t, te } = useI18n()
@@ -92,10 +97,16 @@ function capabilityHint(cap: string): string {
         </template>
         <!-- Card K3: what a file install is, always above everything else. -->
         <template v-if="step === 'risk' && local">
-          <p class="ext-local-warning ext-risk-callout" role="note">{{ $t('settings.extensions.localInstall.warning') }}</p>
+          <p class="ext-local-warning ext-risk-callout" role="note">
+            {{ $t(folder ? 'settings.extensions.developerMode.folderWarning' : 'settings.extensions.localInstall.warning') }}
+          </p>
           <dl class="ext-local-facts">
             <dt>{{ $t('settings.extensions.localInstall.signatureLabel') }}</dt>
             <dd>{{ $t('settings.extensions.localInstall.signature') }}</dd>
+            <template v-if="pending.prepared.folder">
+              <dt>{{ $t('settings.extensions.developerMode.folderLabel') }}</dt>
+              <dd><code class="ext-local-digest">{{ reveal(pending.prepared.folder) }}</code></dd>
+            </template>
             <template v-if="pending.prepared.digest">
               <dt>{{ $t('settings.extensions.localInstall.digestLabel') }}</dt>
               <dd><code class="ext-local-digest">{{ pending.prepared.digest }}</code></dd>

@@ -1904,6 +1904,24 @@
         },
         "prereleaseAvailable": "pre-release {version} available"
       },
+      "developerMode": {
+        "title": "Developer Mode",
+        "switch": "Turn on Developer Mode",
+        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded.",
+        "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
+        "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
+        "reminderClose": "Got it",
+        "confirmTitle": "Turn on Developer Mode?",
+        "confirmBody": "Developer Mode lets you load Navide plugins from a folder without Navide review, and the folder can change at any time. Turn it on only while you develop or test a Navide plugin yourself.",
+        "confirmOn": "Turn on",
+        "loadFolder": "Load from folder…",
+        "reload": "Reload",
+        "removeFolder": "Remove",
+        "needsConsent": "Permissions or backend changed; consent again",
+        "folderWarning": "This Navide plugin is loaded straight from the folder you picked. Navide has not reviewed it and it is not signed. The folder can change at any time and Navide does not compare its content: you are asked again only when its permissions or backend change.",
+        "folderLabel": "Folder",
+        "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
+      },
       "localInstall": {
         "button": "Install from .vsix file…",
         "backToMarketplace": "Switch back to the Navide Marketplace version",
