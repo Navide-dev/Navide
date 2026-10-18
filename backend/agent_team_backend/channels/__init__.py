@@ -361,3 +361,55 @@ async def wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict[
     if opened.get("launched_session_id") != session_id:
         return {"ok": False, "code": "session-mismatch", "started": True}
     return {"ok": True, "pane_id": opened["pane"].pane_id}
+
+
+async def start() -> None:
+    """Load channel config and start enabled adapters. Never raises into the lifespan."""
+    global _manager, _start_task
+    from .. import agent_messaging, app
+    from .store import ChannelStore
+
+    if _manager is not None:
+        return
+    try:
+        manager = ChannelManager(ChannelStore(app.database), default_seams())
+        _manager = manager
+        app.pane_activity_listeners.append(manager.on_pane_activity)
+        app.pane_prompt_listeners.append(manager.mirror.on_local_prompt)
+        agent_messaging.pane_listeners.append(manager.mirror.on_registry)
+        agent_messaging.message_row_listeners.append(manager.mirror.on_message_rows)
+        # Keychain reads can take seconds; adapters come up without holding the lifespan.
+        _start_task = asyncio.create_task(manager.start(), name="channels-start")
+        _start_task.add_done_callback(_log_start_failure)
+    except Exception:  # noqa: BLE001 — chat channels must never block startup
+        log.exception("channels: start failed")
+
+
+def _log_start_failure(task: asyncio.Task[None]) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        log.error("channels: start failed", exc_info=task.exception())
+
+
+async def stop() -> None:
+    global _manager
+    from .. import app
+
+    manager, _manager = _manager, None
+    if manager is None:
+        return
+    from .. import agent_messaging
+
+    for registry, hook in (
+        (app.pane_activity_listeners, manager.on_pane_activity),
+        (app.pane_prompt_listeners, manager.mirror.on_local_prompt),
+        (agent_messaging.pane_listeners, manager.mirror.on_registry),
+        (agent_messaging.message_row_listeners, manager.mirror.on_message_rows),
+    ):
+        try:
+            registry.remove(hook)
+        except ValueError:
+            pass
+    try:
+        await manager.stop()
+    except Exception:  # noqa: BLE001
+        log.exception("channels: stop failed")

@@ -551,3 +551,26 @@ async def test_kept_messages_sent_by_a_wake_get_their_reply_when_delivery_is_unc
     await _until(lambda: any("the woken pane answers" in t for t in env.tg.texts()))
     await env.m.wait_idle()
     assert not env.m._queued.get("pane-1b")  # both watches ended; neither is spinning
+
+
+async def test_the_package_still_starts_and_stops_the_gateway(monkeypatch) -> None:
+    # The app lifespan calls channels.start() / channels.stop(); losing them kept the whole
+    # backend from starting (CI on bc69b68b0).
+    from agent_team_backend import app
+
+    started: list[str] = []
+
+    async def fake_start(self) -> None:
+        started.append("start")
+
+    async def fake_stop(self) -> None:
+        started.append("stop")
+
+    monkeypatch.setattr(mgr_mod.ChannelManager, "start", fake_start)
+    monkeypatch.setattr(mgr_mod.ChannelManager, "stop", fake_stop)
+    monkeypatch.setattr(channels_pkg, "_manager", None)
+    await channels_pkg.start()
+    assert channels_pkg.get_manager() is not None
+    await channels_pkg._start_task
+    await channels_pkg.stop()
+    assert started == ["start", "stop"] and channels_pkg.get_manager() is None
