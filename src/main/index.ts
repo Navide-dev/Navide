@@ -58,7 +58,7 @@ import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/fr
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
-import { agentApprovalSourceNote } from './plugins/pluginLocalInstall'
+import { agentApprovalSourceNote, localSourceConsentLine } from './plugins/pluginLocalInstall'
 import {
   BackendPluginError,
   PluginBackendSupervisor,
@@ -1258,12 +1258,19 @@ function nativeBackendDialogParent(): BrowserWindow | null {
 
 async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): Promise<boolean> {
   // Plan B D-g: in the user's language, with the methods it serves.
-  const { title, message, detail, buttons } = nativeBackendConsentText(prompt, currentUiLocale())
+  const locale = currentUiLocale()
+  const { title, message, detail, buttons } = nativeBackendConsentText(prompt, locale)
+  // Card K3 (MED-2 on #425): an unreviewed package says so on the first line
+  // of the detail, before anything the package itself supplied.
+  const sourceLine = localSourceConsentLine(
+    frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
+    locale,
+  )
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title,
     message,
-    detail,
+    detail: sourceLine ? `${sourceLine}\n\n${detail}` : detail,
     buttons,
     defaultId: 0,
     cancelId: 0,
@@ -1800,11 +1807,7 @@ const pluginTrustRefresh = registerPluginIpc(
       })
       return picked.canceled ? null : picked.filePaths[0] ?? null
     },
-    forgetBackendConsent: (pluginId) => {
-      nativeBackendStore.revokeConsent(pluginId)
-      nativeBackendStore.forgetAgentToolWrites(pluginId)
-      nativeBackendStore.clearAgentToolsSince(pluginId)
-    },
+    forgetBackendConsent: (pluginId) => nativeBackendStore.forgetGrants(pluginId),
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     cleanupPluginStorage: async (pluginId) => {
       await pluginStorageStore.cleanupPlugin(pluginId)

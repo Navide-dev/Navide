@@ -478,6 +478,12 @@ export interface PreparedInstallSummary {
   replaces?: { version: string | null; source: 'marketplace' | 'local-unsigned' }
   /** Card K3 (D7): the local file install a Marketplace install replaces. */
   replacesLocal?: { version: string | null }
+  /** D7: the replaced package's native backend data will be set aside. */
+  backendDataSetAside?: boolean
+  /** D7: data set aside earlier from the incoming source, which the user may take back. */
+  reattachableBackendData?: string
+  /** MED-1 on #425: false when the takedown list could not be checked. */
+  takedownChecked?: boolean
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []
@@ -1276,14 +1282,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }): Promise<PreparedInstallSummary> => ipcRenderer.invoke('plugins:prepareInstall', args),
     commitInstall: (
       id: string,
-      approval: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean } = {}
+      approval: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean } = {}
     ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
       ipcRenderer.invoke('plugins:commitInstall', { id, ...approval }),
     /** Card K3: the main process opens its own file dialog; nothing names a path. */
     installFromFile: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:installFromFile'),
     commitLocalInstall: (
       id: string,
-      approval: { riskConfirmed: boolean; replaceConfirmed?: boolean }
+      approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
     ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
     restart: (id: string): Promise<{

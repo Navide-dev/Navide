@@ -97,3 +97,17 @@ export function forgetLocalTrustRecords(pluginsRoot: string, pluginId: string, r
 export function agentApprovalSourceNote(source: PluginSource | undefined): string {
   return source === 'local-unsigned' ? 'Source: a local file, not reviewed by Navide.' : ''
 }
+
+/** The source line the native backend consent puts first in its detail, in
+ * the words of the K2 "Source and review" row. Its agent tools ride on that
+ * consent, so an unreviewed package must say so there too (MED-2 on #425). */
+const LOCAL_SOURCE_CONSENT_LINE: Record<string, string> = {
+  'zh-TW': '來源與審核：本機檔案，未經 Navide 審核，未簽章',
+  'en-US': 'Source and review: Local file, not reviewed by Navide, unsigned',
+  'ja-JP': '提供元と審査：ローカルファイル。Navide の審査なし、署名なし',
+}
+
+export function localSourceConsentLine(source: PluginSource | undefined, locale: string): string {
+  if (source !== 'local-unsigned') return ''
+  return LOCAL_SOURCE_CONSENT_LINE[locale] ?? LOCAL_SOURCE_CONSENT_LINE['en-US']
+}

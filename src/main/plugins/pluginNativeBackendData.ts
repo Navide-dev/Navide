@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, rmSync, type Stats } from 'node:fs'
+import { existsSync, lstatSync, readdirSync, renameSync, rmSync, type Stats } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
 // A third-party native backend's private data directory (its HOME, TMPDIR and
@@ -79,4 +79,82 @@ export function removeNativeBackendData(dataRoot: string, pluginId: string): voi
   }
   // rmSync unlinks symlinks found inside the tree; it does not follow them.
   rmSync(path, { recursive: true, force: true })
+}
+
+/** Card K3 (D7): which source a set-aside data directory belonged to. */
+export type SetAsideSource = 'marketplace' | 'local-unsigned'
+
+const SET_ASIDE_RE = /^(.+)@set-aside-(marketplace|local-unsigned)-(\d+)(?:-(\d+))?$/
+
+/** Move the plugin's data directory aside when a package of another source
+ *  replaces it, so the new one starts empty and never reads the old one's
+ *  data. The directory is kept, renamed `<id>@set-aside-<source>-<ms>` (no
+ *  plugin id contains `@`, so no plugin can claim it as its own); a name that
+ *  exists gets a counter, never an overwrite. Returns the new name, or null
+ *  when there was nothing to move. Any failure throws: the caller stops. */
+export function setAsideNativeBackendData(
+  dataRoot: string,
+  pluginId: string,
+  source: SetAsideSource,
+  now = Date.now(),
+): string | null {
+  const path = dataDirFor(dataRoot, pluginId)
+  const stat = lstatOrNull(path)
+  if (!stat) return null
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error('refusing to set native backend data aside: the data path is not a plain directory')
+  }
+  const base = `${pluginId}@set-aside-${source}-${now}`
+  let name = base
+  for (let n = 1; existsSync(join(resolve(dataRoot), name)); n++) name = `${base}-${n}`
+  renameSync(path, join(resolve(dataRoot), name))
+  return name
+}
+
+/** The most recent data directory set aside from `source` for this plugin. */
+export function latestSetAsideNativeBackendData(
+  dataRoot: string,
+  pluginId: string,
+  source: SetAsideSource,
+): string | null {
+  dataDirFor(dataRoot, pluginId)
+  let entries: string[]
+  try {
+    entries = readdirSync(resolve(dataRoot))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
+  }
+  const matches = entries
+    .map((name) => ({ name, match: SET_ASIDE_RE.exec(name) }))
+    .filter((entry) => entry.match?.[1] === pluginId && entry.match[2] === source)
+    .filter((entry) => lstatOrNull(join(resolve(dataRoot), entry.name))?.isDirectory() === true)
+    .sort((a, b) =>
+      Number(a.match![3]) - Number(b.match![3]) || Number(a.match![4] ?? 0) - Number(b.match![4] ?? 0))
+  return matches.at(-1)?.name ?? null
+}
+
+/** Put a set-aside data directory back as the plugin's own, only when the
+ *  user chose to and the plugin has no data directory now. */
+export function reattachNativeBackendData(dataRoot: string, pluginId: string, setAsideName: string): void {
+  const path = dataDirFor(dataRoot, pluginId)
+  const match = SET_ASIDE_RE.exec(setAsideName)
+  if (!match || match[1] !== pluginId) throw new Error('not a set-aside data directory of this plugin')
+  if (lstatOrNull(path)) throw new Error('the plugin already has a data directory; nothing was reattached')
+  const from = join(resolve(dataRoot), setAsideName)
+  const stat = lstatOrNull(from)
+  if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('the set-aside data directory is gone')
+  renameSync(from, path)
+}
+
+
+/** Undo a reattach: put the plugin's data directory back under the set-aside
+ *  name it came from (a restart that failed after reattaching it). */
+export function returnReattachedNativeBackendData(dataRoot: string, pluginId: string, setAsideName: string): void {
+  const path = dataDirFor(dataRoot, pluginId)
+  const match = SET_ASIDE_RE.exec(setAsideName)
+  if (!match || match[1] !== pluginId) throw new Error('not a set-aside data directory of this plugin')
+  const to = join(resolve(dataRoot), setAsideName)
+  if (lstatOrNull(to)) throw new Error('the set-aside name is taken; nothing was moved')
+  renameSync(path, to)
 }

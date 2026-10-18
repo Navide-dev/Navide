@@ -191,6 +191,9 @@ export interface PreparedInstall {
   /** The Host target a local package is staged under; Registry packages take
    * theirs from the signed receipt instead. */
   localTarget?: string
+  /** False when no root-signed takedown list was available, so the package
+   * could not be checked against it (MED-1 on #425). */
+  takedownChecked?: boolean
 }
 
 export class InstallError extends Error {
@@ -629,6 +632,7 @@ export function prepareLocalInstall(bytes: Uint8Array, trust: LocalInstallTrust)
     // A native executable is built for one platform; without a backend the
     // package is the same everywhere.
     localTarget: backendEntry !== undefined ? trust.expectedTarget ?? currentPluginHostTarget() : UNIVERSAL_PLUGIN_TARGET,
+    takedownChecked: takedown !== null,
   }
 }
 

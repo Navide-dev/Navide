@@ -13,14 +13,19 @@ import PluginAgentToolsList from './PluginAgentToolsList.vue'
 import PluginSourceBadge from './PluginSourceBadge.vue'
 
 const props = defineProps<{ pending: PendingInstall; step: InstallStep | null }>()
-const emit = defineEmits<{ confirmReplace: []; confirmPublisher: []; confirmRisk: []; cancel: [] }>()
+const emit = defineEmits<{ confirmReplace: [reattach: boolean]; confirmPublisher: []; confirmRisk: []; cancel: [] }>()
 
 // Card K3: a package picked from a file has no Registry review or signature.
 // Its warning is fixed text, and consent takes an explicit acknowledgement so
 // it cannot be clicked through like a Marketplace install.
 const local = computed(() => props.pending.prepared.source === 'local-unsigned')
 const acknowledged = ref(false)
-watch(() => [props.pending.prepared.id, props.step], () => { acknowledged.value = false })
+// D7: taking back data set aside earlier is the user's choice, off by default.
+const reattach = ref(false)
+watch(() => [props.pending.prepared.id, props.step], () => {
+  acknowledged.value = false
+  reattach.value = false
+})
 const { t, te } = useI18n()
 
 // Esc cancels this confirmation only; it must not reach the settings modal,
@@ -89,10 +94,20 @@ function capabilityHint(cap: string): string {
             {{ $t('settings.extensions.localInstall.replaceWithMarketplace', { id: reveal(pending.prepared.id), version: reveal(pending.prepared.version) }) }}
           </p>
           <p class="ext-replace-reset">{{ $t('settings.extensions.localInstall.replaceResets') }}</p>
+          <p v-if="pending.prepared.backendDataSetAside" class="ext-replace-data">
+            {{ $t('settings.extensions.localInstall.replaceDataSetAside') }}
+          </p>
+          <label v-if="pending.prepared.reattachableBackendData" class="ext-local-ack ext-replace-reattach">
+            <input v-model="reattach" type="checkbox" class="ext-replace-reattach-input" />
+            {{ $t('settings.extensions.localInstall.reattachData') }}
+          </label>
         </template>
         <!-- Card K3: what a file install is, always above everything else. -->
         <template v-if="step === 'risk' && local">
           <p class="ext-local-warning ext-risk-callout" role="note">{{ $t('settings.extensions.localInstall.warning') }}</p>
+          <p v-if="pending.prepared.takedownChecked === false" class="ext-local-takedown ext-risk-callout" role="note">
+            {{ $t('settings.extensions.localInstall.takedownUnknown') }}
+          </p>
           <dl class="ext-local-facts">
             <dt>{{ $t('settings.extensions.localInstall.signatureLabel') }}</dt>
             <dd>{{ $t('settings.extensions.localInstall.signature') }}</dd>
@@ -192,7 +207,7 @@ function capabilityHint(cap: string): string {
         <button
           v-if="step === 'replace'"
           class="ext-confirm-replace nv-btn nv-btn--primary"
-          @click="$emit('confirmReplace')"
+          @click="$emit('confirmReplace', reattach)"
         >
           {{ $t('settings.extensions.localInstall.confirmReplace') }}
         </button>
