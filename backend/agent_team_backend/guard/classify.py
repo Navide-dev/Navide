@@ -301,10 +301,17 @@ _SECRET_NAMES = tuple(_fold(n) for n in (
 ))
 
 
-def _names(seg: str, name: str) -> bool:
-    """A glob segment that matches ``name`` and is anchored by more than a
-    leading ``*`` sweep: '.s?h' names .ssh, '*' and '*.md' only sweep it."""
-    return not seg.startswith("*") and bool(set(seg) - set("*?")) and fnmatch.fnmatchcase(name, seg)
+_EXTENSION_FILTER = re.compile(r"\*\.[^*?\[\]]+")
+
+
+def _names(seg: str, name: str, *, file: bool) -> bool:
+    """A glob segment that matches ``name`` beyond a bare sweep: '.s?h',
+    '*ssh' and '*_rsa' name their store or file; '*' only sweeps, and so does
+    an extension filter ('*.json') on a file with a stem before it (auth.json)."""
+    if not fnmatch.fnmatchcase(name, seg) or not set(seg) - set("*?"):
+        return False
+    # '*.netrc' matches all of .netrc, so it names it rather than filtering.
+    return not (file and _EXTENSION_FILTER.fullmatch(seg) and len(name) > len(seg) - 1)
 
 
 def _glob_reaches(globs: list[str], store: list[str], directory: bool) -> int:
@@ -321,7 +328,7 @@ def _glob_reaches(globs: list[str], store: list[str], directory: bool) -> int:
                 elif i == len(globs):
                     memo[i, j] = 0
                 else:
-                    memo[i, j] = 2 if any(_names(globs[-1], n) for n in _SECRET_NAMES) else 1
+                    memo[i, j] = 2 if any(_names(globs[-1], n, file=True) for n in _SECRET_NAMES) else 1
             elif i == len(globs):
                 memo[i, j] = 0
             elif globs[i] == "**":
@@ -330,7 +337,7 @@ def _glob_reaches(globs: list[str], store: list[str], directory: bool) -> int:
                 memo[i, j] = 0
             else:
                 r = reach(i + 1, j + 1)
-                memo[i, j] = 2 if r and j == len(store) - 1 and _names(globs[i], store[j]) else r
+                memo[i, j] = 2 if r and j == len(store) - 1 and _names(globs[i], store[j], file=not directory) else r
         return memo[i, j]
 
     return reach(0, 0)

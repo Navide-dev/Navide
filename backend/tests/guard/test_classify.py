@@ -351,6 +351,14 @@ def test_search_with_path_and_paths_unchanged_off_credential_paths(tool, tool_in
     # `*` directly under home names the file store ~/.netrc, as Glob ~/.netrc does.
     ("Glob", {"pattern": "*", "path": "~"}, "high", "credential-path-list"),
     ("Grep", {"pattern": "x", "path": "~", "glob": "config"}, "critical", "credential-access"),
+    # A leading `*` still names a store or secret file it matches.
+    ("Grep", {"pattern": "x", "path": "~", "glob": "*ssh/*"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "*.ssh/*"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "**/*.ssh/**"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "**/*_rsa"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "*_ed25519"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "**/*credentials"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "*.netrc"}, "critical", "credential-access"),
     # Glob dialect: [^x] negates like [!x]; a backslash escapes the next character.
     ("Glob", {"pattern": "~/.[^a]sh/*"}, "high", "credential-path-list"),
     ("Glob", {"pattern": "~/\\.ssh/*"}, "high", "credential-path-list"),
@@ -414,6 +422,13 @@ def test_ordinary_search_globs_unchanged(tool, tool_input):
     ("Grep", {"pattern": "TODO", "path": "~", "glob": "*"}),
     ("Grep", {"pattern": "TODO", "path": "~", "glob": "*.md"}),
     ("Grep", {"pattern": "TODO", "path": "~/.claude", "glob": "*.md"}),
+    # An extension filter is a sweep even where it matches a secret file (auth.json).
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "*.toml"}),
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "*.py"}),
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "*.json"}),
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "*.ts"}),
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "**/*.json"}),
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "*.yml"}),
     ("grep", {"pattern": "TODO", "paths": ["src", "~/.claude"], "glob": "*.md"}),
     ("rg", {"pattern": "TODO", "path": ".", "paths": ["src", "~/.claude"], "glob": "*.md"}),
 ])
