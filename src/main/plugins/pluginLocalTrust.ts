@@ -278,12 +278,17 @@ export function verifyLocalPackage(
 
     const takedown = rootSignedTakedownList(trust)
     if (takedown) {
-      const publisherId = manifest.publisher ?? manifest.id.split('.')[0]
-      if (takedown.blockedPublishers.includes(publisherId)) {
+      // A Manifest v1 file may declare a publisher other than its id
+      // namespace, and nothing local vouches for either, so both are checked.
+      const publisherIds = [manifest.id.split('.')[0], ...(manifest.publisher ? [manifest.publisher] : [])]
+      const blockedPublisher = publisherIds.find((publisherId) =>
+        takedown.blockedPublishers.includes(publisherId)
+      )
+      if (blockedPublisher !== undefined) {
         return {
           action: 'blocked',
           code: 'LOCAL_PUBLISHER_BLOCKED',
-          reason: `taken down by Navide: publisher '${publisherId}' is blocked`,
+          reason: `taken down by Navide: publisher '${blockedPublisher}' is blocked`,
         }
       }
       if (

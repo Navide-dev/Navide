@@ -17,6 +17,7 @@ import {
   REGISTRY_TRUST_SNAPSHOT_NAME,
   assertRegistryTrustSnapshotDoesNotRollback,
   discoverInstalledRegistryPackageIds,
+  readRegistryReceiptChannel,
   readRegistryTrustSnapshot,
   registryReceiptFromEvidence,
   verifyInstalledPackage,
@@ -446,6 +447,18 @@ describe('verifyInstalledRegistryPackage', () => {
       })
       expect(discoverInstalledRegistryPackageIds(root)).toEqual(['acme.demo'])
     })
+  })
+
+  it('reads the release channel from the retained Registry envelope', () => {
+    // A receipt written before channels existed carries none.
+    expect(readRegistryReceiptChannel(pluginDir)).toBeUndefined()
+    const receiptPath = join(pluginDir, REGISTRY_RECEIPT_NAME)
+    const receipt = JSON.parse(readFileSync(receiptPath, 'utf8')) as { envelope: Record<string, unknown> }
+    receipt.envelope.channel = 'testplace'
+    writeFileSync(receiptPath, JSON.stringify(receipt))
+    expect(readRegistryReceiptChannel(pluginDir)).toBe('testplace')
+    rmSync(receiptPath)
+    expect(readRegistryReceiptChannel(pluginDir)).toBeUndefined()
   })
 
   it('keeps the legacy provenance value in every Registry receipt, which older Apps require', () => {
