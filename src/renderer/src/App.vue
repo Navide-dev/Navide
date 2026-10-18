@@ -196,7 +196,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, runKickoffAttempts,
   submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
-import { confirmWeakSubmit } from './lib/submitTurnConfirm'
+import { confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
@@ -4478,8 +4478,26 @@ async function injectText(
   // A turn started or ended after this Enter — the CLI took a message.
   const turnSince = (t: number): boolean => paneId !== undefined
     && Math.max(paneTurnStartedAt.get(paneId) ?? 0, paneTurnCompleteAt.get(paneId) ?? 0) > t
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  // Sampled before the first Enter: a pane already working queues our message
+  // and starts no turn for it, so there is no turn to watch for.
+  const midTurnAtEnter = paneId !== undefined
+    && (paneLastActiveAt.get(paneId) ?? 0) > (paneTurnCompleteAt.get(paneId) ?? 0)
+  // A permission / confirm dialog, where Enter would pick the default option.
+  const dialogShown = (): boolean => {
+    if (paneId === undefined) return false
+    if (paneRefs[paneId]?.displayStatus === 'awaiting') return true
+    const screen = visibleScreen() ?? screenTail()
+    return screenShowsBlockingDialog(screen) || (!!agentKey && matchAwaitingInput(agentKey, screen))
+  }
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
+    // Never press a resent Enter into a dialog. Our earlier Enter most likely
+    // started the work that raised it, but nothing confirms that.
+    if (attempt > 1 && dialogShown()) {
+      if (evidence) evidence.submit = 'unconfirmed'
+      return true
+    }
     const enterAt = Date.now()
     try {
       await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
@@ -4506,17 +4524,15 @@ async function injectText(
       // 'unconfirmed' keeps watching: the box may still come into view.
       if (how !== null && how !== 'unconfirmed') break
     }
-    // A collapsed paste with no box in sight: press Enter once more rather
-    // than call it sent, then report it unconfirmed, never as a success.
-    if (how === 'unconfirmed' && attempt === 1) {
-      console.warn('[injectText] collapsed paste on screen but no input box found — resending Enter once')
-      continue
-    }
+    // A collapsed paste with no box in sight comes back 'unconfirmed' and is
+    // reported as such: no extra Enter on a screen we cannot read the box on.
     if (how !== null) {
       // Growth alone gets a second look: the CLI starting a new turn
       // (lib/submitTurnConfirm.ts). Every other verdict returns at once.
       const settled = await confirmWeakSubmit({
         how,
+        watchTurn: shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter }),
+        dialogShown,
         turnStarted: () => turnSince(enterAt),
         collapsedHeld: () => framedComposerHolds(visibleScreen() ?? screenTail(), ''),
         pressEnter: async () => {

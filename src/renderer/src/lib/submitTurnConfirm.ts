@@ -16,15 +16,60 @@ import type { SubmitEvidence } from './injectEcho'
 /** How long to watch for the new turn after a growth-only submit. */
 export const SUBMIT_TURN_CONFIRM_MS = 12_000
 
+/** Whether a vendor's log reader reports the start of a turn (agent_active
+ *  after a turn end) — the only thing the watch can wait for. Every agent spec
+ *  is listed on purpose (a test enforces it): a vendor that cannot signal a
+ *  turn would have every growth-only submit read as unconfirmed, and a
+ *  scheduler run recorded as an error. Those keep main's growth verdict. */
+export const TURN_START_SIGNAL: Readonly<Record<string, boolean>> = {
+  claude: true,
+  codex: true,
+  copilot: true,
+  cursor: true,
+  droid: true,
+  antigravity: true,
+  aider: true,
+  muse: true,
+  opencode: true,
+  kilo: true,
+  grok: true,
+  kimi: true,
+  pi: true,
+  qwen: true,
+  // No log reader: mcode keeps its history in SQLite Navide cannot read yet.
+  mcode: false,
+  // A plain shell takes its own submit path and never reaches the watch.
+  terminal: false,
+}
+
+/** Watch for a new turn only where one can be seen, and only on a pane that
+ *  was not already mid-turn: a message pushed mid-turn is queued by the CLI
+ *  and starts no turn of its own until the current one ends, however long
+ *  that is. Both cases keep main's growth verdict. */
+export function shouldWatchTurn(input: { agentKey: string | undefined; midTurn: boolean }): boolean {
+  return !input.midTurn && input.agentKey !== undefined && TURN_START_SIGNAL[input.agentKey] === true
+}
+
+/** An Enter we add on our own goes only into a box we located by its frame,
+ *  that still holds the collapsed paste, with no dialog on screen — Enter on
+ *  a permission or confirm dialog picks its default option. */
+export function extraEnterAllowed(framedHeld: boolean | null, dialogShown: boolean): boolean {
+  return framedHeld === true && !dialogShown
+}
+
 /** 'turn' once the CLI starts a new turn inside the window, 'unconfirmed'
  *  when it does not, null once the injection is aborted. Any verdict but
- *  'growth' comes back as it went in, without a single sleep.
+ *  'growth' — and growth when `watchTurn` is false — comes back as it went
+ *  in, without a single sleep.
  *
- *  While watching, a framed box that still holds the collapsed paste
- *  (`collapsedHeld` true) gets ONE more Enter — never on a box that is empty
- *  or cannot be located (false / null). */
+ *  While watching, a framed box that still holds the collapsed paste gets ONE
+ *  more Enter, and only when extraEnterAllowed says so. */
 export async function confirmWeakSubmit(deps: {
   how: SubmitEvidence
+  /** shouldWatchTurn's answer for this pane, sampled before the Enter. */
+  watchTurn: boolean
+  /** A permission / confirm dialog is on screen. */
+  dialogShown: () => boolean
   /** Has the CLI started a turn since the Enter that produced `how`? */
   turnStarted: () => boolean
   collapsedHeld: () => boolean | null
@@ -36,7 +81,7 @@ export async function confirmWeakSubmit(deps: {
   windowMs?: number
   pollMs?: number
 }): Promise<SubmitEvidence | null> {
-  if (deps.how !== 'growth') return deps.how
+  if (deps.how !== 'growth' || !deps.watchTurn) return deps.how
   const pollMs = deps.pollMs ?? 250
   const deadline = deps.now() + (deps.windowMs ?? SUBMIT_TURN_CONFIRM_MS)
   let pressed = false
@@ -44,7 +89,7 @@ export async function confirmWeakSubmit(deps: {
     await deps.sleep(pollMs)
     if (deps.aborted()) return null
     if (deps.turnStarted()) return 'turn'
-    if (!pressed && deps.collapsedHeld() === true) {
+    if (!pressed && extraEnterAllowed(deps.collapsedHeld(), deps.dialogShown())) {
       pressed = true
       await deps.pressEnter()
     }

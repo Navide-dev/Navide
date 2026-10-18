@@ -1810,3 +1810,65 @@ async def test_a_relay_prompt_that_cannot_be_settled_is_a_warning(env: Env, capl
     await env.m._settle_prompt(req, mgr_mod.MSG_RELAY_SUPERSEDED)
     [record] = [r for r in caplog.records if "settling relay prompt" in r.getMessage()]
     assert record.levelno == logging.WARNING
+
+
+async def test_an_unconfirmed_delivery_is_armed_without_spinning_the_loop(env, monkeypatch) -> None:
+    # The real seam returns at once for any status but "queued", so a watch
+    # loop with no branch for "unconfirmed" never yielded: the whole backend
+    # stalled for up to VERDICT_WATCH_MAX_S. Driven through default_seams, not
+    # the fake, because the fake's await_verdict always sleeps.
+    import dataclasses
+
+    from agent_team_backend.channels import default_seams
+    from agent_team_backend.mcp_server import server as mcp
+
+    monkeypatch.setattr(mgr_mod, "VERDICT_WATCH_MAX_S", 0.5)
+    env.m._seams = dataclasses.replace(env.m._seams, await_verdict=default_seams().await_verdict)
+    monkeypatch.setitem(mcp._mcp_message_status, "k-unconfirmed", {"status": "unconfirmed"})
+    loc = Location("telegram", "default", "-100", "50", "api")
+    pending = mgr_mod._Pending(loc=loc)
+    env.m._pending["pane-1"] = pending
+
+    steps = 0
+    done = asyncio.Event()
+
+    async def other() -> None:
+        nonlocal steps
+        while not done.is_set():
+            steps += 1
+            await asyncio.sleep(0)
+
+    bystander = asyncio.create_task(other())
+    await asyncio.sleep(0)
+    before = steps
+    await asyncio.wait_for(env.m._watch_delivery("pane-1", "k-unconfirmed", pending), 2.0)
+    await asyncio.sleep(0)
+    done.set()
+    await bystander
+    # Unconfirmed means it was typed and submitted: watch for the reply.
+    assert env.m._pending["pane-1"].armed_at is not None
+    assert steps > before
+
+
+async def test_a_status_that_is_neither_queued_nor_terminal_still_yields(env, monkeypatch) -> None:
+    import dataclasses
+
+    from agent_team_backend.channels import default_seams
+    from agent_team_backend.mcp_server import server as mcp
+
+    monkeypatch.setattr(mgr_mod, "VERDICT_WATCH_MAX_S", 0.3)
+    env.m._seams = dataclasses.replace(env.m._seams, await_verdict=default_seams().await_verdict)
+    monkeypatch.setitem(mcp._mcp_message_status, "k-odd", {"status": "some-future-status"})
+    pending = mgr_mod._Pending(loc=Location("telegram", "default", "-100", "50", "api"))
+    looks = 0
+    real_clock = env.m._clock
+
+    def counting_clock() -> float:
+        nonlocal looks
+        looks += 1
+        return real_clock()
+
+    monkeypatch.setattr(env.m, "_clock", counting_clock)
+    await asyncio.wait_for(env.m._watch_delivery("pane-1", "k-odd", pending), 2.0)
+    # One look per VERDICT_POLL_S (0.01 here) over 0.3s, not thousands.
+    assert looks < 200

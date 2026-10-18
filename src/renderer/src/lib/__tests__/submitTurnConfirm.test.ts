@@ -3,8 +3,11 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import type { SubmitEvidence } from '../injectEcho'
+import { AGENT_SPECS } from '../../platform/plugin-shell/agents'
 import { kickoffAttemptOutcome } from '../spawnKickoff'
-import { confirmWeakSubmit, SUBMIT_TURN_CONFIRM_MS } from '../submitTurnConfirm'
+import {
+  confirmWeakSubmit, extraEnterAllowed, shouldWatchTurn, SUBMIT_TURN_CONFIRM_MS, TURN_START_SIGNAL,
+} from '../submitTurnConfirm'
 
 /** A fake clock: sleep advances it, nothing really waits. */
 function harness(opts: {
@@ -12,12 +15,16 @@ function harness(opts: {
   turnAfterMs?: number
   held?: () => boolean | null
   abortAfterMs?: number
+  watchTurn?: boolean
+  dialog?: () => boolean
 }) {
   let t = 0
   const slept: number[] = []
   let enters = 0
   const run = confirmWeakSubmit({
     how: opts.how,
+    watchTurn: opts.watchTurn ?? true,
+    dialogShown: opts.dialog ?? (() => false),
     turnStarted: () => opts.turnAfterMs !== undefined && t >= opts.turnAfterMs,
     collapsedHeld: opts.held ?? (() => false),
     pressEnter: async () => { enters++; return true },
@@ -67,6 +74,8 @@ describe('confirmWeakSubmit', () => {
     let entered = -1
     const how = await confirmWeakSubmit({
       how: 'growth',
+      watchTurn: true,
+      dialogShown: () => false,
       turnStarted: () => entered >= 0 && t > entered,
       collapsedHeld: () => entered < 0,
       pressEnter: async () => { entered = t; return true },
@@ -83,6 +92,22 @@ describe('confirmWeakSubmit', () => {
       await h.run
       expect(h.enters()).toBe(0)
     }
+  })
+
+  // A permission or confirm dialog: Enter would pick its default option.
+  it('never presses Enter while a dialog is on screen, held box or not', async () => {
+    const h = harness({ how: 'growth', held: () => true, dialog: () => true })
+    expect(await h.run).toBe('unconfirmed')
+    expect(h.enters()).toBe(0)
+  })
+
+  // No turn signal to wait for (mcode), or the pane was mid-turn when Enter
+  // went in: growth keeps main's meaning and nothing waits.
+  it('returns growth at once when the turn is not watched', async () => {
+    const h = harness({ how: 'growth', watchTurn: false, held: () => true })
+    expect(await h.run).toBe('growth')
+    expect(h.slept()).toEqual([])
+    expect(h.enters()).toBe(0)
   })
 
   it('answers null once the injection is aborted', async () => {
@@ -117,5 +142,62 @@ describe('injectText routes every submit verdict through confirmWeakSubmit', () 
   it('confirms before reporting, and reports what it settled on', () => {
     expect(fn).toContain('const settled = await confirmWeakSubmit({')
     expect(fn).toContain('if (evidence) evidence.submit = settled')
+  })
+})
+
+describe('extraEnterAllowed', () => {
+  it('needs a located box holding the collapsed paste and no dialog', () => {
+    expect(extraEnterAllowed(true, false)).toBe(true)
+    expect(extraEnterAllowed(true, true)).toBe(false)
+    expect(extraEnterAllowed(null, false)).toBe(false)
+    expect(extraEnterAllowed(false, false)).toBe(false)
+  })
+})
+
+describe('which vendors get the turn watch', () => {
+  // Every vendor is classified on purpose: one that is left out must not
+  // silently turn every growth-only submit into an error.
+  it('classifies every agent spec explicitly', () => {
+    for (const spec of AGENT_SPECS) {
+      expect(TURN_START_SIGNAL, spec.agentKey).toHaveProperty(spec.agentKey)
+    }
+  })
+
+  it('watches the vendors whose log reader reports a turn start', () => {
+    for (const key of ['claude', 'codex', 'copilot', 'cursor', 'droid', 'antigravity', 'aider',
+      'muse', 'opencode', 'kilo', 'grok', 'kimi', 'pi', 'qwen']) {
+      expect(shouldWatchTurn({ agentKey: key, midTurn: false }), key).toBe(true)
+    }
+  })
+
+  it('keeps main\'s growth verdict for vendors with no turn signal', () => {
+    expect(shouldWatchTurn({ agentKey: 'mcode', midTurn: false })).toBe(false)
+    expect(shouldWatchTurn({ agentKey: 'terminal', midTurn: false })).toBe(false)
+    expect(shouldWatchTurn({ agentKey: 'some-new-cli', midTurn: false })).toBe(false)
+    expect(shouldWatchTurn({ agentKey: undefined, midTurn: false })).toBe(false)
+  })
+
+  // A message pushed mid-turn is queued by the CLI and starts no turn of its
+  // own until the current one ends, however long that takes.
+  it('does not watch a pane that was already mid-turn', () => {
+    expect(shouldWatchTurn({ agentKey: 'claude', midTurn: true })).toBe(false)
+  })
+})
+
+describe('injectText never presses an extra Enter it cannot justify', () => {
+  const app = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
+  const start = app.indexOf('async function injectText(')
+  const fn = app.slice(start, app.indexOf('\n}\n', start))
+
+  it('does not resend Enter on a screen with no box to locate', () => {
+    expect(fn).not.toContain("how === 'unconfirmed' && attempt === 1")
+  })
+
+  it('stops resending Enter once a dialog is on screen', () => {
+    expect(fn).toContain('if (attempt > 1 && dialogShown()) {')
+  })
+
+  it('decides the turn watch per vendor and per mid-turn', () => {
+    expect(fn).toContain('watchTurn: shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter })')
   })
 })
