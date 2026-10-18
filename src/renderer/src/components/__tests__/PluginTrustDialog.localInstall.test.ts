@@ -118,4 +118,27 @@ describe('PluginTrustDialog for a file install (K3)', () => {
     expect(dialog.find('.ext-local-ack').exists()).toBe(false)
     expect(dialog.get('.ext-confirm-risk').attributes('disabled')).toBeUndefined()
   })
+
+  it('says plainly when the takedown check could not be done, and only then (MED-1)', () => {
+    const unknown = render('risk', { takedownChecked: false })
+    expect(unknown.get('.ext-local-takedown').text()).toBe(i18n.global.t('settings.extensions.localInstall.takedownUnknown'))
+    unknown.unmount()
+    const checked = render('risk', { takedownChecked: true })
+    expect(checked.find('.ext-local-takedown').exists()).toBe(false)
+  })
+
+  it('discloses that the data is kept aside, and takes it back only when the user ticks it (D7)', async () => {
+    const dialog = render('replace', {
+      replaces: { version: '0.9.0', source: 'marketplace' },
+      backendDataSetAside: true,
+      reattachableBackendData: 'acme.todo@set-aside-local-unsigned-1',
+    })
+    expect(dialog.get('.ext-replace-data').text()).toBe(i18n.global.t('settings.extensions.localInstall.replaceDataSetAside'))
+    const box = dialog.get('.ext-replace-reattach-input').element as HTMLInputElement
+    expect(box.checked).toBe(false)
+    await dialog.get('.ext-confirm-replace').trigger('click')
+    await dialog.get('.ext-replace-reattach-input').setValue(true)
+    await dialog.get('.ext-confirm-replace').trigger('click')
+    expect(dialog.emitted('confirmReplace')).toEqual([[false], [true]])
+  })
 })

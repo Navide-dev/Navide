@@ -1934,7 +1934,10 @@
         "replaceMarketplace": "要把 {id}（Navide 市集版本 {version}）換成本機檔案版本嗎？換了之後不會自動更新。",
         "replaceLocal": "要把 {id} 的本機檔案版本 {version} 換成這個檔案嗎？",
         "replaceWithMarketplace": "要把 {id} 的本機檔案版本換成 Navide 市集版本 {version} 嗎？",
-        "replaceResets": "取代之後，原本給的權限、原生後端同意和 agent 工具授權都會清掉，需要重新同意。",
+        "replaceResets": "取代之後，原本給的權限、原生後端同意、允許改檔的工作區和 agent 工具授權都會清掉，需要重新同意；也不能用「回復」換回被取代的版本。",
+        "replaceDataSetAside": "新版本會從空的資料夾開始，原本的資料會保留在一旁，不會被新版本讀到。",
+        "reattachData": "接回這個來源之前保留在一旁的資料（預設不接回）",
+        "takedownUnknown": "目前無法確認這個 Navide 外掛是否已被 Navide 下架：沒有取得 Navide 的下架清單。",
         "confirmReplace": "取代"
       },
       "trust": {

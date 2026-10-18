@@ -2046,7 +2046,9 @@ runs only inside the OS sandbox described in
   paths), the Manifest v2 schema, the backend executable rules and the engine
   check; Manifest v1, extension packs and the `navide.` namespace are refused,
   and so is a publisher or package id on the root-signed takedown list (even an
-  expired one). It has no Registry signature and no Navide review or scan, so
+  expired one). The Host fetches the current list from the Registry first;
+  when that fails and no list is stored, the dialog says the takedown check
+  could not be done (the next load still applies a list once one arrives). It has no Registry signature and no Navide review or scan, so
   the user always consents in a dialog that shows a fixed warning, the
   self-declared publisher and "not scanned", starts on Cancel and enables its
   consent button only after an explicit acknowledgement. The package is staged
@@ -2055,8 +2057,16 @@ runs only inside the OS sandbox described in
   sandbox. A file install never updates automatically. Installing a file over
   an installed package of the same id (or a Marketplace version over a file
   install) asks first, and the replacement keeps none of the replaced
-  package's grant, rollback grant, native backend consent or agent tool
-  approvals. The takedown check covers id and publisher only: a package
+  package's permissions: its capability grant and rollback grant, its native
+  backend consent, every workspace its backend may change files in, its agent
+  tool write approvals and agent tool name priority. The new package cannot
+  read the replaced one's view storage either. When the source changes, the
+  native backend's private data folder is moved aside
+  (`<id>@set-aside-<source>-<time>` under the data root; never deleted, never
+  overwritten) so the new package starts empty; the question says so, and
+  going back to the earlier source offers to take that data back, off by
+  default. A failed move stops the replacement with nothing changed. An update
+  within one source keeps the data folder as before. The takedown check covers id and publisher only: a package
   renamed to a new id is not caught, because the trust metadata carries no
   blocked-digest list. Files extracted from a `.vsix` carry no quarantine
   attribute, the same as a Registry install.

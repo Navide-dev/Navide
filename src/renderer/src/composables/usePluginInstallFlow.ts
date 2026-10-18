@@ -36,6 +36,8 @@ export function usePluginInstallFlow() {
   const pendingStep = ref<InstallStep | null>(null)
   const publisherConfirmed = ref(false)
   const replaceConfirmed = ref(false)
+  // D7: take back data set aside earlier from this source; off unless chosen.
+  const reattachBackendData = ref(false)
 
   function api() {
     return window.agentTeam?.plugins
@@ -53,7 +55,9 @@ export function usePluginInstallFlow() {
     if (!plugins) return
     const pendingSource = pendingConfirm.value?.prepared.id === id ? pendingConfirm.value.prepared.source : undefined
     const local = pendingSource === 'local-unsigned'
-    const replace = replaceConfirmed.value ? { replaceConfirmed: true } : {}
+    const replace = replaceConfirmed.value
+      ? { replaceConfirmed: true, ...(reattachBackendData.value ? { reattachBackendData: true } : {}) }
+      : {}
     if (pendingSource === 'developer-unpacked') {
       if (!plugins.commitFolderLoad) throw new Error('loading from a folder is unavailable')
       await plugins.commitFolderLoad(id, { riskConfirmed: approval.riskConfirmed === true })
@@ -88,6 +92,7 @@ export function usePluginInstallFlow() {
         pendingStep.value = replacesAnother(prepared) ? 'replace' : requiresPublisherTrust ? 'publisher' : 'risk'
         publisherConfirmed.value = false
         replaceConfirmed.value = false
+        reattachBackendData.value = false
         return
       }
       await commit(prepared.id, {})
@@ -112,6 +117,7 @@ export function usePluginInstallFlow() {
       pendingStep.value = replacesAnother(prepared) ? 'replace' : 'risk'
       publisherConfirmed.value = false
       replaceConfirmed.value = false
+      reattachBackendData.value = false
     } catch (err) {
       fail(err)
     } finally {
@@ -149,6 +155,7 @@ export function usePluginInstallFlow() {
       pendingStep.value = 'risk'
       publisherConfirmed.value = false
       replaceConfirmed.value = false
+      reattachBackendData.value = false
     } catch (err) {
       fail(err)
     } finally {
@@ -157,10 +164,11 @@ export function usePluginInstallFlow() {
   }
 
   /** D7: the user agreed to replace the installed package of this id. */
-  async function confirmReplace(): Promise<void> {
+  async function confirmReplace(reattach = false): Promise<void> {
     const pending = pendingConfirm.value
     if (!pending) return
     replaceConfirmed.value = true
+    reattachBackendData.value = reattach === true && pending.prepared.reattachableBackendData !== undefined
     const prepared = pending.prepared
     if (prepared.requiresPublisherTrust === true) {
       pendingStep.value = 'publisher'
@@ -220,6 +228,7 @@ export function usePluginInstallFlow() {
     pendingStep.value = null
     publisherConfirmed.value = false
     replaceConfirmed.value = false
+    reattachBackendData.value = false
   }
 
   async function uninstall(id: string): Promise<void> {

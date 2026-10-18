@@ -55,4 +55,12 @@ describe('install-from-file entry points', () => {
     const prompt = main.slice(main.indexOf('async function promptAgentToolWorkspaceWrite'))
     expect(prompt.slice(0, prompt.indexOf('\n}\n'))).toContain('agentApprovalSourceNote(')
   })
+
+  it('puts the local source first in the native backend consent detail (MED-2)', () => {
+    const main = read('src/main/index.ts')
+    const prompt = main.slice(main.indexOf('async function promptNativeBackendConsent'))
+    const body = prompt.slice(0, prompt.indexOf('\n}\n'))
+    expect(body).toContain('localSourceConsentLine(')
+    expect(body).toContain('detail: sourceLine ? `${sourceLine}\\n\\n${detail}` : detail,')
+  })
 })

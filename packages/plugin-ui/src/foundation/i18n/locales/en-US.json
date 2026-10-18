@@ -1934,7 +1934,10 @@
         "replaceMarketplace": "Replace {id} (Navide Marketplace version {version}) with the version from this file? It will no longer update automatically.",
         "replaceLocal": "Replace the file version {version} of {id} with this file?",
         "replaceWithMarketplace": "Replace the file version of {id} with Navide Marketplace version {version}?",
-        "replaceResets": "Replacing it clears the permissions, the native backend consent and the agent tool approvals given to the installed version; you will be asked again.",
+        "replaceResets": "Replacing it clears the permissions, the native backend consent, the workspaces it may change files in and the agent tool approvals given to the installed version; you will be asked again, and Rollback cannot bring the replaced version back.",
+        "replaceDataSetAside": "The new version starts with an empty data folder. The existing data is kept aside, and the new version cannot read it.",
+        "reattachData": "Take back the data kept aside from this source earlier (off by default)",
+        "takedownUnknown": "Navide cannot tell right now whether this Navide plugin has been taken down: the Navide takedown list could not be fetched.",
         "confirmReplace": "Replace"
       },
       "trust": {
