@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createUiZoomStore } from './ui-zoom-store'
-import { DEFAULT_UI_SCALE, MAX_UI_SCALE } from '../shared/uiScale'
+import { createUiZoomStore, initialUiScaleFrom } from './ui-zoom-store'
+import { DEFAULT_UI_SCALE, MAX_UI_SCALE, MIN_UI_SCALE, UI_SCALE_SETTING_KEY } from '../shared/uiScale'
 
 function contentsStub(overrides: Partial<{ destroyed: boolean; throws: boolean }> = {}) {
   return {
@@ -129,5 +129,28 @@ describe('createUiZoomStore', () => {
     store.set(1.1)
 
     expect(contents.setZoomFactor).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('initialUiScaleFrom', () => {
+  // The renderer stores the scale as a raw number (settingsSet), so ui_settings.json
+  // holds `1.25`, not the JSON-encoded string other keys use.
+  it('restores a scale stored as a number', () => {
+    expect(initialUiScaleFrom({ [UI_SCALE_SETTING_KEY]: 1.25 })).toBe(1.25)
+  })
+
+  it('restores a scale stored as a numeric string', () => {
+    expect(initialUiScaleFrom({ [UI_SCALE_SETTING_KEY]: '1.25' })).toBe(1.25)
+  })
+
+  it('falls back to 100% when the key is absent or malformed', () => {
+    expect(initialUiScaleFrom({})).toBe(DEFAULT_UI_SCALE)
+    expect(initialUiScaleFrom({ [UI_SCALE_SETTING_KEY]: 'big' })).toBe(DEFAULT_UI_SCALE)
+    expect(initialUiScaleFrom({ [UI_SCALE_SETTING_KEY]: null })).toBe(DEFAULT_UI_SCALE)
+  })
+
+  it('clamps an out-of-range stored scale', () => {
+    expect(initialUiScaleFrom({ [UI_SCALE_SETTING_KEY]: 12 })).toBe(MAX_UI_SCALE)
+    expect(initialUiScaleFrom({ [UI_SCALE_SETTING_KEY]: 0.1 })).toBe(MIN_UI_SCALE)
   })
 })
