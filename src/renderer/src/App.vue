@@ -196,6 +196,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, runKickoffAttempts,
   submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
+import { confirmWeakSubmit } from './lib/submitTurnConfirm'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
@@ -4474,8 +4475,12 @@ async function injectText(
     return true
   }
   const MAX_SUBMITS = 3
+  // A turn started or ended after this Enter — the CLI took a message.
+  const turnSince = (t: number): boolean => paneId !== undefined
+    && Math.max(paneTurnStartedAt.get(paneId) ?? 0, paneTurnCompleteAt.get(paneId) ?? 0) > t
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
+    const enterAt = Date.now()
     try {
       await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
     } catch (err) {
@@ -4508,7 +4513,26 @@ async function injectText(
       continue
     }
     if (how !== null) {
-      if (evidence) evidence.submit = how
+      // Growth alone gets a second look: the CLI starting a new turn
+      // (lib/submitTurnConfirm.ts). Every other verdict returns at once.
+      const settled = await confirmWeakSubmit({
+        how,
+        turnStarted: () => turnSince(enterAt),
+        collapsedHeld: () => framedComposerHolds(visibleScreen() ?? screenTail(), ''),
+        pressEnter: async () => {
+          try {
+            await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
+            return true
+          } catch {
+            return false
+          }
+        },
+        aborted,
+        sleep,
+        now: Date.now,
+      })
+      if (settled === null) return false
+      if (evidence) evidence.submit = settled
       return true
     }
     if (attempt < MAX_SUBMITS) {

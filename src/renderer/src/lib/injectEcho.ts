@@ -34,10 +34,11 @@ export type EchoEvidence = 'tail' | 'placeholder' | 'growth'
 
 /** How we concluded Enter took. `tail-left` watched our text leave the
  *  composer; `queued` saw the CLI's own "message queued" hint appear; `growth`
- *  only saw the terminal react. `unconfirmed` is a collapsed-paste summary on
- *  a screen with no input box to locate: Enter went out, and nothing on screen
- *  can say whether it took — never a success. */
-export type SubmitEvidence = 'tail-left' | 'queued' | 'growth' | 'unconfirmed'
+ *  only saw the terminal react; `turn` is growth followed by the CLI starting
+ *  a new turn (submitTurnConfirm). `unconfirmed` is Enter gone out with
+ *  nothing able to say it took — a collapsed-paste summary on a screen with
+ *  no input box to locate, or growth no new turn followed — never a success. */
+export type SubmitEvidence = 'tail-left' | 'queued' | 'growth' | 'turn' | 'unconfirmed'
 
 /** Claude Code's footer hint once a mid-turn message is enqueued. Three
  *  wordings ship ("Press up to edit queued messages", "Press up to select a
