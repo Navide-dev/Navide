@@ -100,8 +100,7 @@ import {
 } from './plugins/pluginBackendActivationCatalog'
 import { registerStorageIpc } from './storage-ipc'
 import { lockPageZoom } from './web-contents-zoom'
-import { createUiZoomStore, type UiZoomStore } from './ui-zoom-store'
-import { clampUiScale, UI_SCALE_SETTING_KEY } from '../shared/uiScale'
+import { createUiZoomStore, initialUiScaleFrom, type UiZoomStore } from './ui-zoom-store'
 import { installContextMenu, registerTerminalContextMenu } from './context-menu'
 import { inAppUpdateSupported, initUpdater } from './updater'
 import { withDeadline } from './deadline'
@@ -2627,9 +2626,7 @@ function currentUiLocale(): SupportedLocale {
 let uiZoomStoreRef: UiZoomStore | null = null
 function uiZoomStore(): UiZoomStore {
   if (!uiZoomStoreRef) {
-    uiZoomStoreRef = createUiZoomStore(
-      clampUiScale(uiSetting<number>(readUiSettings(), UI_SCALE_SETTING_KEY))
-    )
+    uiZoomStoreRef = createUiZoomStore(initialUiScaleFrom(readUiSettings()))
   }
   return uiZoomStoreRef
 }
