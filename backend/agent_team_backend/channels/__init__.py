@@ -9,12 +9,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from types import SimpleNamespace
 from typing import Any
 
 from . import relay
 from .manager import ChannelManager, Seams
 
 log = logging.getLogger(__name__)
+
+# How long a woken workspace's window gets to register the pane after it answers. Past it the
+# wake is refused: opening another pane onto the session could run two CLIs on one conversation.
+WAKE_PANE_WAIT_S = 30.0
+WAKE_PANE_POLL_S = 0.5
 
 _manager: ChannelManager | None = None
 _start_task: asyncio.Task[None] | None = None
@@ -233,6 +239,25 @@ def default_seams() -> Seams:
 
         await asyncio.to_thread(app.credential_vault.write_app_secret, name, secret)
 
+    def wake_target(pane_id: str) -> dict[str, str]:
+        from .. import app
+
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {}
+        project = app.project_store.peek(pane.workspace_path)
+        record = next((r for r in project.panes if r.pane_id == pane.pane_id), None) if project else None
+        return {"workspace_path": pane.workspace_path,
+                "session_id": (getattr(record, "session_id", "") or "").strip()}
+
+    def windows_open() -> bool:
+        from .. import app
+
+        return bool(app.live_main_window_ids())
+
+    async def wake(pane_id: str, workspace_path: str, session_id: str) -> dict[str, Any]:
+        return await wake_pane(pane_id, workspace_path, session_id)
+
     return Seams(
         deliver=deliver, await_verdict=await_verdict, interrupt=interrupt, pane_state=pane_state,
         awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, resolve_pane=resolve_pane, broadcast=broadcast,
@@ -240,7 +265,129 @@ def default_seams() -> Seams:
         pane_directory=pane_directory, inherit_taint=inherit_taint,
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
         agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
+        wake_target=wake_target, windows_open=windows_open, wake=wake,
     )
+
+
+def _host_ctx() -> Any:
+    """The credential this backend's own calls into the MCP tools carry (as evolve_service)."""
+    from ..mcp_server import auth
+
+    params = {"client": "host", "t": auth.internal_token()}
+    return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
+
+
+# The renderer's resume preference (RESUME_BEHAVIOR_SETTING_KEY in lib/resumeBehavior.ts).
+RESUME_BEHAVIOR_KEY = "agentTeam.resumeBehavior"
+
+
+def _wake_record(workspace_path: str, session_id: str) -> Any | None:
+    """The newest pane record of the workspace that held this conversation, or None; None
+    too when that pane was closed (a close is the user's word, even if its unbind was lost)."""
+    from .. import app
+
+    project = app.project_store.peek(workspace_path)
+    if project is None:
+        return None
+    record = next((r for r in reversed(project.panes)
+                   if (getattr(r, "session_id", "") or "").strip() == session_id and getattr(r, "agent", "")), None)
+    return None if record is None or getattr(record, "spawn_status", "") == "removed" else record
+
+
+def _session_open_elsewhere(pane_id: str, workspace_path: str, session_id: str) -> bool:
+    """Whether a realized pane other than ``pane_id`` (or the pane it is now known by) already
+    runs this conversation in the workspace: opening ours too would put two CLIs on it."""
+    from .. import agent_messaging, app
+
+    ours = agent_messaging.current(pane_id)
+    ours_id = ours.pane_id if ours is not None else pane_id
+    project = app.project_store.peek(workspace_path)
+    for record in project.panes if project else []:
+        if (getattr(record, "session_id", "") or "").strip() != session_id \
+                or getattr(record, "spawn_status", "") == "removed":
+            continue
+        entry = agent_messaging.current(record.pane_id)
+        if entry is not None and entry.realized and entry.pane_id != ours_id:
+            return True
+    return False
+
+
+def _registered_pane(pane_id: str, workspace_path: str, session_id: str) -> Any | None:
+    """The registered pane behind the binding: its id (or an alias), else the live record
+    that holds the same conversation."""
+    from .. import agent_messaging, app
+
+    entry = agent_messaging.current(pane_id)
+    if entry is not None:
+        return entry
+    project = app.project_store.peek(workspace_path)
+    for record in reversed(project.panes if project else []):
+        if (getattr(record, "session_id", "") or "").strip() == session_id \
+                and getattr(record, "spawn_status", "") != "removed":
+            entry = agent_messaging.current(record.pane_id)
+            if entry is not None:
+                return entry
+    return None
+
+
+async def wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict[str, Any]:
+    """Bring a pane that is not online back onto its own conversation (the chat's wake).
+
+    Refused before anything opens, with ``started`` False: no Navide window, no record of
+    the conversation, a conversation the CLI cannot resume, a CLI out of quota (the cached
+    reading only), or Navide set never to resume (opening the window would start every pane
+    of the workspace fresh). Then the workspace's window is opened if needed and the pane is
+    opened in place onto that same session. It succeeds only when the window reports the
+    pane was launched on exactly ``session_id``; a pane the window does not bring back is
+    refused, never opened a second time."""
+    from .. import app, quota_failover
+    from ..mcp_server import server as mcp
+
+    if not app.live_main_window_ids():
+        return {"ok": False, "code": "no-window", "started": False}
+    record = await asyncio.to_thread(_wake_record, workspace_path, session_id)
+    if record is None:
+        return {"ok": False, "code": "no-record", "started": False}
+    agent_key = str(record.agent)
+    refusal = await asyncio.to_thread(mcp._refuse_unresumable_session, agent_key, workspace_path, session_id)
+    if refusal:
+        return {"ok": False, "code": str(refusal.get("error_code") or "no-record"), "started": False}
+    if quota_failover.snapshot_exhausted(await mcp._cached_usage_snapshot(agent_key)):
+        return {"ok": False, "code": "quota", "agent": agent_key, "started": False}
+    settings = await asyncio.to_thread(app.ui_settings_store.get)
+    behavior = (settings or {}).get(RESUME_BEHAVIOR_KEY)
+    if behavior == "never":
+        return {"ok": False, "code": "fresh-refused", "started": False}
+    if behavior == "ask":
+        # Opening the window would put the restore question on the user's screen from a chat.
+        return {"ok": False, "code": "ask-refused", "started": False}
+    if await asyncio.to_thread(_session_open_elsewhere, pane_id, workspace_path, session_id):
+        return {"ok": False, "code": "session-open-elsewhere", "started": False}
+    if not await mcp._probe_window(workspace_path, mcp._WINDOW_PROBE_TIMEOUT_S):
+        opened = await mcp.workspace_open(workspace_path, _host_ctx())
+        if not opened.get("ok") or not opened.get("ready"):
+            return {"ok": False, "code": "window-not-ready", "started": True}
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + WAKE_PANE_WAIT_S
+    entry = _registered_pane(pane_id, workspace_path, session_id)
+    while entry is None and loop.time() < deadline:
+        await asyncio.sleep(WAKE_PANE_POLL_S)
+        entry = _registered_pane(pane_id, workspace_path, session_id)
+    if entry is None:
+        return {"ok": False, "code": "pane-not-restored", "started": True}
+    # The window's own restore may have brought the conversation back in another pane.
+    if await asyncio.to_thread(_session_open_elsewhere, entry.pane_id, workspace_path, session_id):
+        return {"ok": False, "code": "session-open-elsewhere", "started": True}
+    # Asked even when it is already open: the window's own restore may have opened it fresh,
+    # and only the window knows which session it launched.
+    opened = await mcp._open_placeholder(entry, require_resume=True)
+    if not opened["ok"]:
+        return {"ok": False, "code": str(opened.get("reason") or ""), "started": True}
+    if opened.get("reason") == "fresh":
+        return {"ok": False, "code": "fresh-refused", "started": True}
+    if opened.get("launched_session_id") != session_id:
+        return {"ok": False, "code": "session-mismatch", "started": True}
+    return {"ok": True, "pane_id": opened["pane"].pane_id}
 
 
 async def start() -> None:

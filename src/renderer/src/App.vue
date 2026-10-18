@@ -284,6 +284,7 @@ import {
   type RestoreSessionTrigger,
   type WorkspaceRestoreSession,
 } from './lib/resumeBehavior'
+import { WakeClaims, joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere, type SessionHolder } from './lib/paneOpenAnswer'
 import { flushSettingsOnExit, initSettingsBackend, onSettingsChanged, settingsGet, settingsRemove, settingsSet } from '@navide/plugin-ui/shared'
 import { cliPermissionKey, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
 import { chooseLaunchCommand, cliCommandKey, cliEnvKey, spawnEnvOverride, type LaunchCommandSource } from '@navide/plugin-shell'
@@ -1821,6 +1822,9 @@ interface ActivePane {
    *  path may inject on the user's behalf. Cleared by the first injection or by
    *  agent activity. Not persisted: a restart re-derives it from the restore. */
   resumeContinueAvailable?: boolean
+  /** Runtime-only: the session a restore launched this pane on ('' = a fresh one).
+   *  ui.pane.open reports it so a caller that needs the saved conversation can check. */
+  launchedSessionId?: string
   /** Cold-restore metadata retained until the placeholder is explicitly opened. */
   deferredRestore?: DeferredRestoreMetadata
 }
@@ -10237,14 +10241,19 @@ registerCommand('ui.pane.place', async (args) => {
 // restarted. The restored pane gets a fresh runtime id (the old one becomes
 // an alias), so the answer carries the id it is known by now.
 registerCommand('ui.pane.open', async (args) => {
-  const paneId = (args as { paneId?: string } | undefined)?.paneId
+  const { paneId, requireResume } = (args as { paneId?: string; requireResume?: boolean } | undefined) ?? {}
   if (!paneId) throw new Error(`ui.pane.open requires ${PANE_ID_HINT}`)
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) throw new Error(`unknown pane ${paneId}`)
-  if (pane.realized) return { realized: true, reason: 'already-open', paneId }
-  const reason = await realizeRestoredPane(paneId, false, { explicit: true })
+  const required = requireResume === true
+  if (pane.realized) {
+    return paneOpenAnswer({ paneId, reason: 'already-open', realized: true, requireResume: required,
+      launchedSessionId: pane.launchedSessionId })
+  }
+  const reason = await realizeRestoredPane(paneId, false, { explicit: true, requireResume: required })
   const opened = panes.value.find((p) => p.id === paneId || p.formerPaneIds?.includes(paneId))
-  return { realized: opened?.realized === true, reason, paneId: opened?.id ?? paneId }
+  return paneOpenAnswer({ paneId: opened?.id ?? paneId, reason, realized: opened?.realized === true,
+    requireResume: required, launchedSessionId: opened?.launchedSessionId })
 })
 // The rung between "ask it to stop" (a message, which waits for the turn to
 // end) and ui.pane.close (which takes the pane and its PTY away). Like close
@@ -12263,6 +12272,25 @@ function deferredPaneStillCurrent(
 // waits for the same restore attempt instead of treating an in-flight restore as
 // an immediate no-op.
 const restoringPanePromises = new Map<string, Promise<RealizeOutcome>>()
+/** Placeholders a cold restore has queued and not finished yet (advanceRestoreSession). */
+const scheduledRestoreIds = new Set<string>()
+/** `${agent}:${session}` of conversations a chat's wake (requireResume) has opened. */
+const wakeClaims = new WakeClaims()
+
+function sessionHolders(): SessionHolder[] {
+  return panes.value.map((p) => {
+    const agentKey = p.deferredRestore?.saved.agent ?? p.agentKey
+    return {
+      id: p.id,
+      agentKey,
+      sessionId: p.realized
+        ? paneResumeSessionId(p)
+        : normalizeResumeSessionId(agentKey, (p.deferredRestore?.saved.session_id ?? '').trim()),
+      realized: p.realized === true,
+      restoring: p.restoring === true,
+    }
+  })
+}
 
 async function restoreSessionDecision(
   session: RestoreSession,
@@ -12337,6 +12365,9 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
     : []
   const interruptedKids = interrupted.length > 0 ? interruptedChildren(session.workspacePath) : []
   const ids = [...new Set([...scopeIds, ...interrupted])]
+  // Queued until the batch is done: a wake checks these as well as the panes restoring now
+  // (one that has finished is realized, which the wake checks anyway).
+  for (const id of ids) scheduledRestoreIds.add(id)
   const reconnectStart = reconnectedCount.value
   // Starting a workspace fresh is the one batch nothing caps. Fresh spawns are
   // deliberately exempt from the resume semaphore — throttling them would stall
@@ -12351,17 +12382,21 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // the semaphore at whatever the user set (default 3), so adding a second
   // ceiling of 2 would just make their own setting slower.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
-  if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
-  } else if (decision === 'resume' && session.scope === 'auto') {
-    // Auto brings back every pane live at the last close: same ceiling as 'all'.
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
-  } else if (interrupted.length > 0) {
-    // The interrupted panes ride on top of the scope's pick: same ceiling as
-    // an 'all' restore, so a relaunch never starts more than two at once.
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
-  } else {
-    await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))
+  try {
+    if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
+      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    } else if (decision === 'resume' && session.scope === 'auto') {
+      // Auto brings back every pane live at the last close: same ceiling as 'all'.
+      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    } else if (interrupted.length > 0) {
+      // The interrupted panes ride on top of the scope's pick: same ceiling as
+      // an 'all' restore, so a relaunch never starts more than two at once.
+      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    } else {
+      await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))
+    }
+  } finally {
+    for (const id of ids) scheduledRestoreIds.delete(id)
   }
   const reconnected = reconnectedCount.value - reconnectStart
   if (reconnected > 0) {
@@ -12440,27 +12475,34 @@ type RealizeOutcome =
   | 'cancelled'
   | 'superseded'
   | 'session-unavailable'
+  | 'fresh-refused'
+  | 'resume-unavailable'
+  | 'session-open-elsewhere'
   | 'error'
 
 /** Realize one cold-restore record after explicit user activation.
  *  `opts.explicit`: the caller named this one pane (ui.pane.open), so the
  *  restore decision is taken by explicitRestoreDecision instead of the
- *  workspace-wide question. */
+ *  workspace-wide question. `opts.requireResume`: open only onto the saved
+ *  conversation; where it would start a fresh one the pane stays a
+ *  placeholder ('fresh-refused' / 'resume-unavailable'). */
 async function realizeRestoredPane(
   paneId: string,
   aggregateReconnect = false,
-  opts?: { explicit?: boolean },
+  opts?: { explicit?: boolean; requireResume?: boolean },
 ): Promise<RealizeOutcome> {
   const pending = restoringPanePromises.get(paneId)
-  if (pending) return pending
+  if (pending) return pending.then((outcome) => joinedRealizeOutcome(outcome, opts?.requireResume === true))
   const promise = performRealizeRestoredPane(paneId, aggregateReconnect, opts)
   restoringPanePromises.set(paneId, promise)
   void promise.then(
-    () => {
+    (outcome) => {
       if (restoringPanePromises.get(paneId) === promise) restoringPanePromises.delete(paneId)
+      if (opts?.requireResume) wakeClaims.settle(paneId, outcome)
     },
     () => {
       if (restoringPanePromises.get(paneId) === promise) restoringPanePromises.delete(paneId)
+      if (opts?.requireResume) wakeClaims.settle(paneId, 'error')
     },
   )
   return promise
@@ -12469,7 +12511,7 @@ async function realizeRestoredPane(
 async function performRealizeRestoredPane(
   paneId: string,
   aggregateReconnect = false,
-  opts?: { explicit?: boolean },
+  opts?: { explicit?: boolean; requireResume?: boolean },
 ): Promise<RealizeOutcome> {
   const placeholder = panes.value.find((p) => p.id === paneId)
   const deferred = placeholder?.deferredRestore
@@ -12507,6 +12549,24 @@ async function performRealizeRestoredPane(
   }
   const session = workspaceRestoreSession(batch.workspacePath)
   const sessionId = normalizeResumeSessionId(saved.agent, (saved.session_id ?? '').trim())
+  // One conversation, one CLI. A chat's wake is refused while another pane runs, is being
+  // restored onto, or is queued in a cold restore for the same session; a restore is refused
+  // while a pane a wake opened holds it. Checked and claimed (restoring) in one tick: the
+  // renderer is single threaded, so nothing slips in between.
+  const sessionKey = `${saved.agent}:${sessionId}`
+  const heldElsewhere = (scheduled: ReadonlySet<string>) =>
+    sessionHeldElsewhere(sessionHolders(), paneId, saved.agent, sessionId, scheduled)
+  if (opts?.requireResume ? heldElsewhere(scheduledRestoreIds)
+    : wakeClaims.holds(sessionKey) && heldElsewhere(new Set())) {
+    recordDiagnostic({
+      level: 'warn',
+      code: 'restore.sessionOpenElsewhere',
+      message: `${saved.agent} session ${sessionId} is already open in another pane; not opening it twice`,
+      paneId,
+    })
+    return 'session-open-elsewhere'
+  }
+  if (opts?.requireResume && sessionId) wakeClaims.claim(paneId, sessionKey)
   placeholder.restoring = true
   syncViews()
 
@@ -12544,7 +12604,8 @@ async function performRealizeRestoredPane(
       saved.agent, sessionId, canResume, looksLikeResumeCommand(saved.agent, saved.command || ''),
     )
     let reconnectId = ''
-    if (ghostConfirmed && supportsGhostReconnect(saved.agent)) {
+    // A chat's wake asks for the saved conversation itself: never repoint it to another one.
+    if (ghostConfirmed && supportsGhostReconnect(saved.agent) && !opts?.requireResume) {
       reconnectId = await resolveReconnectForPane(saved, batch.workspacePath, batch.savedClaims)
       if (!deferredPaneStillCurrent(paneId, deferred)) return 'superseded'
     }
@@ -12570,6 +12631,8 @@ async function performRealizeRestoredPane(
         reconnectId = ''
       }
     }
+    // A chat's wake asks for the pane's own conversation or nothing.
+    if (opts?.requireResume && !resumeCmd) return forceFresh ? 'fresh-refused' : 'resume-unavailable'
     if (ghostConfirmed && !reconnectId) {
       wasDisconnected = supportsGhostReconnect(saved.agent)
       pipelineLog(`⚠ ${saved.agent}: previous conversation ${sessionId} not found at ${batch.workspacePath}; opened a fresh one`)
@@ -12610,6 +12673,8 @@ async function performRealizeRestoredPane(
     // was dropped before it could be persisted). The placeholder stands.
     if (!restored) return 'error'
     const { paneId: newId } = restored
+    const launched = panes.value.find((p) => p.id === newId)
+    if (launched) launched.launchedSessionId = isResume ? effectiveResumeId : ''
     // A resumed CLI has its transcript back but is parked at the prompt, and the
     // restore path deliberately injects nothing. Offer the one-click continue.
     if (isResume) {

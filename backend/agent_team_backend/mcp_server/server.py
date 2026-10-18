@@ -1794,7 +1794,7 @@ async def _send_to_device(
     }
 
 
-async def _open_placeholder(entry: Any) -> dict[str, Any]:
+async def _open_placeholder(entry: Any, *, require_resume: bool = False) -> dict[str, Any]:
     """Ask the window holding *entry* to open it (ui.pane.open) and re-read it.
 
     Returns {ok, realized, reason, pane} — `pane` is the registry entry the
@@ -1804,16 +1804,21 @@ async def _open_placeholder(entry: Any) -> dict[str, Any]:
     delivering to it would be dropped by the receiving window. `reason` is the
     renderer's word: "opened", "fresh" (a new session — resume behavior
     "never", or the user chose start-fresh — so the agent does not remember
-    its earlier conversation), or why it stayed closed.
+    its earlier conversation), or why it stayed closed. With `require_resume`
+    the window opens it only onto the saved conversation and otherwise leaves
+    it closed ("fresh-refused" / "resume-unavailable").
     """
     from agent_team_backend import agent_messaging
 
+    args: dict[str, Any] = {"paneId": entry.pane_id}
+    if require_resume:
+        args["requireResume"] = True
     ui = await _ui_request(
         entry.workspace_path,
         "invoke",
         caller=_pane_caller(entry.pane_id),
         action="ui.pane.open",
-        args={"paneId": entry.pane_id},
+        args=args,
     )
     outcome = (ui.get("result") or {}) if ui.get("ok") else {}
     if not ui.get("ok") or not outcome.get("realized"):
@@ -1828,6 +1833,9 @@ async def _open_placeholder(entry: Any) -> dict[str, Any]:
         "realized": True,
         "reason": outcome.get("reason"),
         "pane": agent_messaging.current(entry.pane_id) or entry,
+        # The session the window launched the pane on ("" = a fresh one; None = a window
+        # that does not say). A caller that must have the saved conversation checks this.
+        "launched_session_id": outcome.get("launchedSessionId"),
     }
 
 
