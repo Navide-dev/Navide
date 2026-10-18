@@ -297,6 +297,37 @@ describe('the extra Enter under each awaiting kind', () => {
     expect(await run('permission')).toBe(0)
   })
 
+  // aider keeps the submitted "> message" row on screen and prints its Y/N
+  // question below it, with no prompt row of its own. Enter would answer the
+  // default Yes.
+  const AIDER_ASK = [
+    '> please fix the failing test',
+    '',
+    'tests/test_x.py',
+    'Allow edits to file that has not been added to the chat? (Y)es/(N)o [Yes]: ',
+  ].join('\n')
+
+  it('reads aider\'s question below its old prompt row as a dialog', () => {
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'aider', screen: AIDER_ASK })).toBe(true)
+  })
+
+  it('never presses Enter on aider\'s Y/N question', async () => {
+    let t = 0
+    let enters = 0
+    await confirmWeakSubmit({
+      how: 'growth',
+      watchTurn: true,
+      dialogShown: () => blockingDialogShown({ awaitingKind: null, agentKey: 'aider', screen: AIDER_ASK }),
+      turnStarted: () => false,
+      collapsedHeld: () => true,
+      pressEnter: async () => { enters++; return true },
+      aborted: () => false,
+      sleep: async (ms) => { t += ms },
+      now: () => t,
+    })
+    expect(enters).toBe(0)
+  })
+
   it('never presses Enter on a frameless approval menu', async () => {
     const menu = ['• Would you like to run the following command?', '› 1. Yes, proceed',
       '  2. No, and tell Codex what to do differently'].join('\n')

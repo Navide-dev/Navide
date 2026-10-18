@@ -75,14 +75,19 @@ const OPTION_ROW_RE = /^\s*[›>❯]\s*\d+[.)]/
  *  it, may quote a dialog's wording without any dialog being up. With no
  *  frame (codex), the composer is the last prompt row and what wraps below
  *  it, and only the rows above it are read — unless that row is a numbered
- *  option, the cursor of a menu drawn in the composer's place; then, as with
- *  no prompt row at all, the whole screen is read. */
+ *  option, the cursor of a menu drawn in the composer's place, or a dialog
+ *  pattern matches below it (aider prints its Y/N question under the
+ *  submitted "> message" row, with no prompt row of its own); then, as with
+ *  no prompt row at all, the whole screen is read. Safety first: a wrapped
+ *  message quoting a dialog below its prompt row reads as a dialog too. */
 export function blockingDialogShown(input: {
   awaitingKind: string | null | undefined
   agentKey: string | undefined
   screen: string
 }): boolean {
   if (input.awaitingKind === 'permission') return true
+  const matches = (text: string): boolean => screenShowsBlockingDialog(text)
+    || (!!input.agentKey && matchAwaitingInput(input.agentKey, text))
   const lines = input.screen.split('\n')
   let close = -1
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -100,10 +105,11 @@ export function blockingDialogShown(input: {
     for (let i = lines.length - 1; i >= 0; i--) {
       if (PROMPT_ROW_RE.test(lines[i])) { prompt = i; break }
     }
-    if (prompt >= 0 && !OPTION_ROW_RE.test(lines[prompt])) region = lines.slice(0, prompt).join('\n')
+    if (prompt >= 0 && !OPTION_ROW_RE.test(lines[prompt]) && !matches(lines.slice(prompt + 1).join('\n'))) {
+      region = lines.slice(0, prompt).join('\n')
+    }
   }
-  return screenShowsBlockingDialog(region)
-    || (!!input.agentKey && matchAwaitingInput(input.agentKey, region))
+  return matches(region)
 }
 
 /** 'turn' once the CLI starts a new turn inside the window, 'unconfirmed'
