@@ -14,6 +14,19 @@ describe('pluginSourceFromLegacyProvenance', () => {
     expect(pluginSourceFromLegacyProvenance('factory-bundled', true)).toBe('factory-bundled')
   })
 
+  it('takes a Registry install\'s source from its signed envelope channel when it has one', () => {
+    expect(pluginSourceFromLegacyProvenance('official-registry', false, 'testplace')).toBe('testplace')
+    // The version number never overrides the signed channel.
+    expect(pluginSourceFromLegacyProvenance('official-registry', true, 'testplace')).toBe('testplace')
+    expect(pluginSourceFromLegacyProvenance('official-registry', false, 'pre-release')).toBe('prerelease')
+    expect(pluginSourceFromLegacyProvenance('official-registry', true, 'stable')).toBe('marketplace')
+    // An unknown channel is not labelled as reviewed.
+    expect(pluginSourceFromLegacyProvenance('official-registry', false, 'nightly')).toBeUndefined()
+    // No channel: the version number decides, as before.
+    expect(pluginSourceFromLegacyProvenance('official-registry', true, undefined)).toBe('prerelease')
+    expect(pluginSourceFromLegacyProvenance('official-registry', false, undefined)).toBe('marketplace')
+  })
+
   it('has no source for a package without provenance', () => {
     expect(pluginSourceFromLegacyProvenance(undefined, false)).toBeUndefined()
   })
