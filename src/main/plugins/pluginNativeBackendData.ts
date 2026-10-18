@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, renameSync, rmSync, type Stats } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, type Stats } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
 // A third-party native backend's private data directory (its HOME, TMPDIR and
@@ -57,7 +57,10 @@ export function inspectNativeBackendData(dataRoot: string, pluginId: string): Na
   const path = dataDirFor(dataRoot, pluginId)
   const stat = lstatOrNull(path)
   // Data a source change set aside is the plugin's too, and goes with it.
-  const setAside = setAsideNames(dataRoot, pluginId).map((name) => join(resolve(dataRoot), name))
+  const setAside = setAsideNames(dataRoot, pluginId)
+    .map((name) => join(resolve(dataRoot), name))
+    // Review LOW-9: a set-aside entry that is not a plain directory is never followed.
+    .filter((dir) => lstatOrNull(dir)?.isDirectory() === true)
   if ((!stat || !stat.isDirectory()) && setAside.length === 0) return { exists: false, bytes: 0, path }
   const own = stat?.isDirectory() ? sizeOf(path) : 0
   return { exists: true, bytes: setAside.reduce((total, dir) => total + sizeOf(dir), own), path }
@@ -72,6 +75,7 @@ export function removeNativeBackendData(dataRoot: string, pluginId: string): voi
   if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
     throw new Error('refusing to delete native backend data: the data root is a symbolic link or not a directory')
   }
+  rmSync(keptSourcePath(dataRoot, pluginId), { force: true })
   for (const dir of [path, ...setAsideNames(dataRoot, pluginId).map((name) => join(resolve(dataRoot), name))]) {
     const stat = lstatOrNull(dir)
     if (!stat) continue
@@ -174,4 +178,44 @@ export function returnReattachedNativeBackendData(dataRoot: string, pluginId: st
   const to = join(resolve(dataRoot), setAsideName)
   if (lstatOrNull(to)) throw new Error('the set-aside name is taken; nothing was moved')
   renameSync(path, to)
+}
+
+// Review HIGH-3 on #425: data a removal kept goes to the next install of the
+// same id only when that install has the same source. The source is recorded
+// beside (never inside) the data folder, where the sandboxed backend cannot
+// write: `<dataRoot>/<id>@kept-source.json`. Data kept by a release before
+// this one has no record and is taken as Marketplace data, the only source
+// that could run a third-party backend then.
+function keptSourcePath(dataRoot: string, pluginId: string): string {
+  dataDirFor(dataRoot, pluginId)
+  return join(resolve(dataRoot), `${pluginId}@kept-source.json`)
+}
+
+/** After a removal that kept the data: record which source it belongs to. */
+export function recordKeptNativeBackendDataSource(dataRoot: string, pluginId: string, source: SetAsideSource): void {
+  const stat = lstatOrNull(dataDirFor(dataRoot, pluginId))
+  if (!stat?.isDirectory()) return
+  const path = keptSourcePath(dataRoot, pluginId)
+  const temporary = `${path}.${process.pid}.${Date.now()}.tmp`
+  writeFileSync(temporary, JSON.stringify({ schemaVersion: 1, source }), { mode: 0o600 })
+  chmodSync(temporary, 0o600)
+  renameSync(temporary, path)
+}
+
+/** The source of data a removal kept, or null when there is no data folder. */
+export function keptNativeBackendDataSource(dataRoot: string, pluginId: string): SetAsideSource | null {
+  const stat = lstatOrNull(dataDirFor(dataRoot, pluginId))
+  if (!stat?.isDirectory()) return null
+  try {
+    const parsed = JSON.parse(readFileSync(keptSourcePath(dataRoot, pluginId), 'utf8')) as { source?: unknown }
+    if (parsed.source === 'local-unsigned' || parsed.source === 'marketplace') return parsed.source
+  } catch {
+    // No record: data from before records existed.
+  }
+  return 'marketplace'
+}
+
+/** The data now belongs to an installed package again: drop the record. */
+export function forgetKeptNativeBackendDataSource(dataRoot: string, pluginId: string): void {
+  rmSync(keptSourcePath(dataRoot, pluginId), { force: true })
 }

@@ -108,6 +108,10 @@ function capabilityHint(cap: string): string {
           <p v-if="pending.prepared.takedownChecked === false" class="ext-local-takedown ext-risk-callout" role="note">
             {{ $t('settings.extensions.localInstall.takedownUnknown') }}
           </p>
+          <!-- HIGH-3: data a removal kept from another source is not handed over. -->
+          <p v-if="pending.prepared.backendDataSetAside && !pending.prepared.replaces" class="ext-replace-data">
+            {{ $t('settings.extensions.localInstall.replaceDataSetAside') }}
+          </p>
           <dl class="ext-local-facts">
             <dt>{{ $t('settings.extensions.localInstall.signatureLabel') }}</dt>
             <dd>{{ $t('settings.extensions.localInstall.signature') }}</dd>

@@ -66,8 +66,11 @@ import { compareSemver } from './pluginManifestV2'
 import { MAX_EXTENSION_PACK_MEMBERS } from '../../../packages/plugin-contracts/src/index'
 import { PluginPrereleaseStore } from './pluginPrereleaseStore'
 import {
+  forgetKeptNativeBackendDataSource,
   inspectNativeBackendData,
+  keptNativeBackendDataSource,
   latestSetAsideNativeBackendData,
+  recordKeptNativeBackendDataSource,
   reattachNativeBackendData,
   removeNativeBackendData,
   returnReattachedNativeBackendData,
@@ -623,7 +626,12 @@ export function registerPluginIpc(
    * `incoming` earlier may be taken back. */
   const backendDataOnReplace = (id: string, incoming: 'marketplace' | 'local-unsigned') => {
     const installed = manager.listInstalledPackages().find((pkg) => pkg.id === id)
-    if (!installed) return {}
+    if (!installed) {
+      // HIGH-3: data a removal kept from another source is set aside, too.
+      const root = options.nativeBackendDataRoot
+      const kept = root ? keptNativeBackendDataSource(root, id) : null
+      return kept !== null && kept !== incoming ? { backendDataSetAside: true } : {}
+    }
     const current = installed.source === 'local-unsigned' ? 'local-unsigned' : 'marketplace'
     if (current === incoming) return {}
     const places = dataPlaces(id)
@@ -1732,7 +1740,9 @@ export function registerPluginIpc(
             ? { replacesLocal: { version: local.packageVersion ?? null }, ...backendDataOnReplace(result.id, 'marketplace') }
             : stagedLocalCandidate(result.id)
               ? { replacesLocal: { version: lifecycleSelector.read(result.id)?.candidate?.packageVersion ?? null } }
-              : {}
+              : manager.listInstalledPackages().some((pkg) => pkg.id === result.id)
+                ? {}
+                : backendDataOnReplace(result.id, 'marketplace')
         })(),
       }
     }
@@ -2092,7 +2102,7 @@ export function registerPluginIpc(
             },
             ...backendDataOnReplace(pkg.id, 'local-unsigned'),
           }
-        : {}),
+        : backendDataOnReplace(pkg.id, 'local-unsigned')),
     }
   })
 
@@ -2366,6 +2376,15 @@ export function registerPluginIpc(
       }
       // D7: with the old backend stopped, set its data aside before cutover.
       // A failed move stops the restart here; nothing has been promoted yet.
+      // HIGH-3: a fresh install never takes data a removal kept from another
+      // source; data kept from its own source is reused exactly as on main.
+      const keptRoot = options.nativeBackendDataRoot
+      const keptSource = !installedSummary && keptRoot ? keptNativeBackendDataSource(keptRoot, id) : null
+      if (keptRoot && keptSource !== null && keptSource !== incomingSource) {
+        const entry: (typeof moved)[number] = { root: keptRoot, name: id, setAside: null, reattached: null }
+        moved.push(entry)
+        entry.setAside = setAsideNativeBackendData(keptRoot, id, keptSource)
+      }
       if (sourceChanged) {
         const reattach = pendingReattach.delete(id)
         for (const place of dataPlaces(id)) {
@@ -2435,6 +2454,7 @@ export function registerPluginIpc(
         manager.completePackageRestart(restartTransaction)
         lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
         finishSourceReplacement()
+        if (!installedSummary && options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
         if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
         return {
@@ -2446,6 +2466,7 @@ export function registerPluginIpc(
       }
       lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
       finishSourceReplacement()
+      if (!installedSummary && options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
       if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
@@ -2904,6 +2925,9 @@ export function registerPluginIpc(
     // new renderer calls from being admitted while cleanup is in progress.
     const previousVersion = installedPackageVersion(manager, pluginsRoot, id)
     const previousBackend = previousVersion ? manager.getBackendActivation(id, previousVersion) : undefined
+    const removedSource = manager.listInstalledPackages().find((pkg) => pkg.id === id)?.source === 'local-unsigned'
+      ? 'local-unsigned' as const
+      : 'marketplace' as const
     const pending = prepared.get(id)
     activeTransactions.add(id)
     try {
@@ -2936,6 +2960,17 @@ export function registerPluginIpc(
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
       forgetLocalTrustRecords(pluginsRoot, id)
+      // HIGH-3: kept data remembers whose it is, so only an install of the
+      // same source takes it over. If that cannot be recorded, the data is
+      // set aside instead of being left for any later install of the id.
+      if (!deleteNativeBackendData && nativeBackendDataRoot) {
+        try {
+          recordKeptNativeBackendDataSource(nativeBackendDataRoot, id, removedSource)
+        } catch (error) {
+          console.warn(`[plugins] source of the kept data of ${id} not recorded: ${errorText(error)}; setting it aside`)
+          setAsideNativeBackendData(nativeBackendDataRoot, id, removedSource)
+        }
+      }
       disabledPlugins.remove(id)
       // A reinstalled package starts with no record of who disabled it.
       recordDisableSource(id, null)

@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { generateKeyPairSync, sign as edSign } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { makeZip } from './zipFixture'
@@ -323,6 +323,69 @@ describe('HIGH-2: view storage when the source changes', () => {
     await fileInstall('acme.todo', '1.1.0', { replaceConfirmed: true })
     await call('plugins:remove', { id: 'acme.todo' })
     expect(readdirSync(storageRoot)).toEqual([])
+  })
+})
+
+describe('HIGH-3: data a removal kept', () => {
+  const setAside = (source: string) => new RegExp(`^acme\\.todo@set-aside-${source}-\\d+$`)
+
+  it('Q3: Marketplace data kept by a default removal never reaches a file claiming the id', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'M-secret')
+    await call('plugins:remove', { id: 'acme.todo' })
+    writeFileSync(picked, vsix('acme.todo', '1.0.0'))
+    expect(await call('plugins:installFromFile')).toMatchObject({ backendDataSetAside: true })
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect(existsSync(join(dataRoot, 'acme.todo'))).toBe(false)
+    expect(readdirSync(dataRoot)).toEqual([expect.stringMatching(setAside('marketplace'))])
+  })
+
+  it('Q3b: data a local file left behind is never handed to a later Marketplace install', async () => {
+    await fileInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'L-planted')
+    await call('plugins:remove', { id: 'acme.todo' })
+    await marketplaceInstall('acme.todo', '1.1.0')
+    expect(existsSync(join(dataRoot, 'acme.todo'))).toBe(false)
+    expect(readdirSync(dataRoot)).toEqual([expect.stringMatching(setAside('local-unsigned'))])
+  })
+
+  it('RULE ZERO: a Marketplace reinstall after a removal that kept the data reuses it as on main', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'kept')
+    await call('plugins:remove', { id: 'acme.todo' })
+    await marketplaceInstall('acme.todo', '1.0.0')
+    expect(readdirSync(dataRoot)).toEqual(['acme.todo'])
+    expect(readdirSync(join(dataRoot, 'acme.todo'))).toEqual(['token.txt'])
+  })
+
+  it('takes data kept before source records existed as Marketplace data', async () => {
+    writeData('acme.todo', 'from 0.2.25')
+    await marketplaceInstall('acme.todo', '1.0.0')
+    expect(readdirSync(dataRoot)).toEqual(['acme.todo'])
+    await call('plugins:remove', { id: 'acme.todo' })
+    rmSync(join(dataRoot, 'acme.todo@kept-source.json'), { force: true })
+    await fileInstall('acme.todo', '1.1.0')
+    expect(readdirSync(dataRoot)).toEqual([expect.stringMatching(setAside('marketplace'))])
+  })
+
+  it('records the source beside the data, owner-only, where the backend cannot write', async () => {
+    await fileInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'x')
+    await call('plugins:remove', { id: 'acme.todo' })
+    const marker = join(dataRoot, 'acme.todo@kept-source.json')
+    expect(JSON.parse(readFileSync(marker, 'utf8'))).toEqual({ schemaVersion: 1, source: 'local-unsigned' })
+    if (process.platform !== 'win32') expect(statSync(marker).mode & 0o777).toBe(0o600)
+    expect(readdirSync(join(dataRoot, 'acme.todo'))).toEqual(['token.txt'])
+  })
+
+  it('LOW-9: a set-aside entry that is a symlink is never followed for the removal size', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    mkdirSync(join(base, 'outside'))
+    writeFileSync(join(base, 'outside', 'big.bin'), Buffer.alloc(4096))
+    symlinkSync(join(base, 'outside'), join(dataRoot, 'acme.todo@set-aside-marketplace-1'))
+    writeData('acme.todo', 'ab')
+    expect(await call('plugins:nativeBackendData', { id: 'acme.todo' })).toMatchObject({ exists: true, bytes: 2 })
   })
 })
 
