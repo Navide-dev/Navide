@@ -478,6 +478,37 @@ async def test_an_external_caller_on_windows_names_an_open_drive_letter_workspac
     assert [r["target"]["workspace_path"] for r in host.requests] == ["C:\\Users\\dev\\proj"] * 3
 
 
+async def test_an_external_caller_on_windows_is_refused_anything_but_an_open_workspace(host: FakeHost, monkeypatch) -> None:
+    monkeypatch.setattr(proxy, "os", types.SimpleNamespace(path=ntpath), raising=False)
+    _apply(_snapshot(1, [_entry("devmap_read")], external=True))
+    _as_caller(monkeypatch, _Caller(kind="external"))
+    agent_messaging.register("p-9", "dev", "C:\\Users\\dev\\proj")
+    for workspace_path in (
+        "C:",  # drive only, relative to that drive's current directory
+        "C:proj",  # drive-relative
+        "..",
+        "\\\\server\\share",  # UNC, but not open
+        None,
+        123,
+        "",
+        "C:\\Users\\dev\\proj2",  # prefix confusion with the open `proj`
+        "C:\\Users\\dev\\pro",
+    ):
+        body = _body(await core.server.call_tool("devmap_read", {"workspace_path": workspace_path}))
+        assert body["error_code"] == "BAD_REQUEST" and "workspace_path" in body["error"], workspace_path
+    assert host.requests == []
+
+
+async def test_an_external_caller_on_windows_names_an_open_unc_workspace(host: FakeHost, monkeypatch) -> None:
+    monkeypatch.setattr(proxy, "os", types.SimpleNamespace(path=ntpath), raising=False)
+    _apply(_snapshot(1, [_entry("devmap_read")], external=True))
+    _as_caller(monkeypatch, _Caller(kind="external"))
+    agent_messaging.register("p-9", "dev", "\\\\server\\share\\proj")
+    for workspace_path in ("\\\\server\\share\\proj", "//SERVER/share/proj/"):
+        await core.server.call_tool("devmap_read", {"workspace_path": workspace_path, "block_id": "b1"})
+    assert [r["target"]["workspace_path"] for r in host.requests] == ["\\\\server\\share\\proj"] * 2
+
+
 async def test_an_unauthenticated_caller_is_refused(host: FakeHost, monkeypatch) -> None:
     def refuse(_ctx: Any) -> _Caller:
         raise core.CallerUnknown("caller token rejected")

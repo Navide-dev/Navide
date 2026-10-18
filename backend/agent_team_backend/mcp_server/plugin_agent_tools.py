@@ -807,7 +807,9 @@ def _open_workspace(requested: Any) -> str | None:
     wanted = agent_messaging._normalize_workspace(requested)  # noqa: SLF001
     # Windows folds case and slash direction (`c:/users/x/` names `C:\Users\x`).
     # On POSIX `normcase` is the identity and `sep` is "/", so the key is
-    # `wanted` itself: the exact match this always was. The window's own
+    # `wanted` itself: the exact match this always was. That holds because
+    # `register` already stripped the trailing "/" from every entry of
+    # `workspaces()`, so `key(workspace)` is `workspace`. The window's own
     # spelling is what goes on to the plugin.
     def key(path: str) -> str:
         return agent_messaging._normalize_workspace(os.path.normcase(path).replace(os.path.sep, "/"))  # noqa: SLF001
