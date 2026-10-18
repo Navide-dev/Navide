@@ -828,6 +828,13 @@ export function registerPluginIpc(
     typeof id === 'string'
       ? manager.listInstalledPackages().find((pkg) => pkg.id === id && pkg.source === 'local-unsigned')
       : undefined
+  // Card K4: a developer folder holding an id is removed before anything else
+  // installs that id, so no install replaces it without the D7 rules.
+  const assertNoDeveloperFolder = (id: string): void => {
+    if (manager.listInstalledPackages().some((pkg) => pkg.id === id && pkg.provenance === 'developer-local-unpacked')) {
+      throw new Error(`${id} is loaded from a developer folder; remove that folder in Developer Mode first`)
+    }
+  }
   // A file install committed but not restarted yet (review LOW-6).
   const stagedLocalCandidate = (id: string): boolean => {
     const candidate = lifecycleSelector.read(id)?.candidate
@@ -1723,6 +1730,7 @@ export function registerPluginIpc(
     async (event, args: { namespace: string; name: string; version?: string }) => {
       assertAuthorized(event)
       const result = await verifyRegistryPackage(args)
+      assertNoDeveloperFolder(result.id)
       // A pack is never installed as a package: its members are installed one
       // by one through plugins:preparePack and the ordinary install flow.
       if (isManifestV2(result.manifest) && result.manifest.extensionPack) {
@@ -2089,6 +2097,7 @@ export function registerPluginIpc(
     if (isManifestV2(pkg.manifest) && pkg.manifest.extensionPack) {
       throw new Error(`${pkg.id} is an extension pack; packs install only from the Marketplace`)
     }
+    assertNoDeveloperFolder(pkg.id)
     assertEngineCompatible(pkg.id, pkg.version, pkg.manifest, hostAppVersion())
     preparedLocal.set(pkg.id, pkg)
     const replaced = manager.listInstalledPackages().find((item) => item.id === pkg.id)

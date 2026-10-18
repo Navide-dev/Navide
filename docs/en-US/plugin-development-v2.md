@@ -2025,7 +2025,8 @@ runs only inside the OS sandbox described in
   no plugin row can claim. A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
   `AGENT_TEAM_PLUGIN_DEV_PATH` either way; with the switch on, **Load from
   folder…** opens the Host's own folder dialog. A folder loads a Manifest v2
-  package (not `navide.`, not an id something else installed holds) with a
+  package (not `navide.`, not an id something else installed holds; nothing
+  installs an id a developer folder holds until the folder is removed) with a
   grant for its declared permissions and, when it declares one, its backend
   through the unchanged sandbox, master switch and native backend consent.
   Consent is bound to the folder and the digest of the manifest's

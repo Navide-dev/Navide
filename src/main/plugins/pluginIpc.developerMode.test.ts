@@ -249,6 +249,25 @@ describe('loading a developer folder', () => {
     await expect(call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })).rejects.toThrow(/changed; choose the folder again/)
   })
 
+  it('an install of an id a developer folder holds is refused until the folder is removed', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const picked = join(base, 'picked.vsix')
+    writeFileSync(picked, makeZip([
+      { name: 'manifest.json', data: JSON.stringify(manifest('acme.devtodo', {}, false)) },
+      { name: 'frontend/left/index.html', data: '<!doctype html>' },
+    ]))
+    handlers.clear()
+    const manager = new FrontendPluginManager()
+    manager.loadExplicitDeveloperPlugin(folder, true, { allowBackend: true })
+    registerPluginIpc(manager, pluginsRoot, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: async () => undefined,
+      pickLocalPackageFile: async () => picked,
+    })
+    await expect(call('plugins:installFromFile')).rejects.toThrow(/developer folder; remove that folder/)
+  })
+
   it('removing a developer folder forgets its consent and never touches the folder', async () => {
     register()
     await call('plugins:setDeveloperMode', { enabled: true })
