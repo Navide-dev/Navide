@@ -534,3 +534,20 @@ async def test_open_placeholder_reports_the_session_the_window_launched(monkeypa
     assert opened["ok"] and opened["launched_session_id"] == "sess-1"
     await mcp._open_placeholder(entry)
     assert sent[-1] == {"paneId": "p1"}  # every other caller asks exactly as before
+
+
+async def test_kept_messages_sent_by_a_wake_get_their_reply_when_delivery_is_unconfirmed(env: Env) -> None:
+    # #413: an "unconfirmed" delivery (typed and submitted, not seen taken) arms the reply like
+    # "delivered". The messages a wake sends in go through that same watch.
+    _wakeable(env)
+    await env.inbound("first kept")
+    await env.inbound("second kept")
+    env.fake.verdicts["k1"] = {"status": "unconfirmed"}
+    env.fake.verdicts["k2"] = {"status": "unconfirmed"}
+    await _press_wake(env)
+    assert [d[:2] for d in env.fake.delivered] == [("pane-1b", "first kept"), ("pane-1b", "second kept")]
+    await _until(lambda: "pane-1b" in env.m._pending and env.m._pending["pane-1b"].armed_at is not None)
+    env.turn_complete("pane-1b", "the woken pane answers")
+    await _until(lambda: any("the woken pane answers" in t for t in env.tg.texts()))
+    await env.m.wait_idle()
+    assert not env.m._queued.get("pane-1b")  # both watches ended; neither is spinning
