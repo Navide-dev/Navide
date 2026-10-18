@@ -223,6 +223,8 @@ async def test_stop_on_an_offline_pane_is_not_kept(env: Env) -> None:
      _zh("unresumable", reason=_zh("reason_unavailable"))),
     ({"ok": False, "code": "fresh-refused", "started": True}, _zh("unresumable", reason=_zh("reason_fresh"))),
     ({"ok": False, "code": "window-not-ready", "started": True}, _zh("failed", reason=_zh("reason_window"))),
+    ({"ok": False, "code": "session-open-elsewhere", "started": False}, _zh("open_elsewhere")),
+    ({"ok": False, "code": "ask-refused", "started": False}, _zh("unresumable", reason=_zh("reason_ask"))),
 ])
 async def test_a_refused_wake_says_why_and_sends_nothing(env: Env, result, expected) -> None:
     fw = _wakeable(env)
@@ -574,3 +576,67 @@ async def test_the_package_still_starts_and_stops_the_gateway(monkeypatch) -> No
     await channels_pkg._start_task
     await channels_pkg.stop()
     assert started == ["start", "stop"] and channels_pkg.get_manager() is None
+
+
+
+async def test_seam_refuses_a_session_another_pane_already_runs(seam) -> None:
+    # Review MED-3: resuming the bound placeholder too would put two CLIs on one conversation.
+    seam.records.append(_Record(pane_id="live-2", agent="claude", session_id="sess-1",
+                                spawn_status="spawned", custom_name="api", auto_name=""))
+    seam.registry["old-1"] = SimpleNamespace(pane_id="old-1", realized=False)
+    seam.registry["live-2"] = SimpleNamespace(pane_id="live-2", realized=True)
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": False, "code": "session-open-elsewhere", "started": False}
+    assert seam.placeholder_calls == [] and seam.opened_ws == []
+
+
+async def test_seam_refuses_resume_behavior_ask_without_opening_anything(seam) -> None:
+    # Review LOW-9: no window and no restore dialog on the user's computer from a chat.
+    seam.probe = False
+    seam.settings = {"agentTeam.resumeBehavior": "ask"}
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": False, "code": "ask-refused", "started": False}
+    assert seam.opened_ws == [] and seam.placeholder_calls == []
+
+
+async def test_kept_messages_over_the_queue_limit_are_listed_not_dropped(env: Env, monkeypatch) -> None:
+    # Review LOW-7: MAX_QUEUED_PER_PANE stays; what does not fit is named in the chat.
+    monkeypatch.setattr(mgr_mod, "MAX_QUEUED_PER_PANE", 2)
+    _wakeable(env)
+    for text in ("kept 1", "kept 2", "kept 3"):
+        await env.inbound(text)
+    env.fake.gone.discard("pane-1")
+    await env.inbound("new")
+    # One slot stays for the new message; the kept ones that do not fit are listed.
+    assert [d[1] for d in env.fake.delivered] == ["kept 1", "new"]
+    assert _zh("not_sent_queue_full", count=2, items="「kept 2」、「kept 3」") in env.tg.texts()
+
+
+async def test_kept_messages_over_the_queue_limit_on_a_wake_are_listed(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "MAX_QUEUED_PER_PANE", 2)
+    _wakeable(env)
+    for text in ("kept 1", "kept 2", "kept 3"):
+        await env.inbound(text)
+    await _press_wake(env)
+    assert [d[1] for d in env.fake.delivered] == ["kept 1", "kept 2"]
+    assert _zh("not_sent_queue_full", count=1, items="「kept 3」") in env.tg.texts()
+
+
+async def test_a_lost_list_waits_for_its_bot_and_is_then_deleted(env: Env) -> None:
+    # Review LOW-8: a bot that does not start on the restart is told once it does, and the
+    # previews do not stay in sqlite after that.
+    _wakeable(env)
+    await env.inbound("kept before the restart")
+    factory = env.m._factory_for
+    await env.m.stop()
+    env.store.set_account_enabled("telegram", False)
+    restarted = mgr_mod.ChannelManager(env.store, env.fake.seams(), factory_for=factory, clock=env.clock)
+    env.m = restarted
+    await restarted.start()
+    await restarted.wait_idle()
+    notice = _zh("not_sent_restart", count=1, items="「kept before the restart」")
+    assert notice not in env.tg.texts()  # its bot is not running: nowhere to tell it yet
+    assert (await restarted.set_enabled("telegram", True))["ok"]
+    await restarted.wait_idle()
+    await _until(lambda: notice in env.tg.texts())
+    assert env.store.kept_previews() == {} and env.store.lost_previews() == {}

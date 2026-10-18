@@ -20,6 +20,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "not_sent_overflow": "⚠️ 暫存已滿 {max} 則，最舊的 {count} 則沒有送進去：{items}。請重送",
         "not_sent_expired": "⚠️ 這 {count} 則暫存超過 {minutes} 分鐘已失效，沒有送進去：{items}。請重送",
         "not_sent_restart": "⚠️ Navide 重啟了，暫存的這 {count} 則沒有送進去：{items}。請重送",
+        "not_sent_queue_full": "⚠️ pane 的排隊已滿，暫存的這 {count} 則沒有送進去：{items}。請稍後重送",
+        "open_elsewhere": "⚠️ 這段對話已經在另一個 pane 開著，沒有喚醒；請在電腦上那個 pane 繼續",
         "offline_wake_nothing_kept": "⚠️ pane 目前不在線上，沒有可以中斷的工作。喚醒會接回原本的對話",
         "no_window": "⚠️ pane 目前不在線上，而且電腦上沒有開著任何 Navide 視窗，無法喚醒。請先在電腦上打開 Navide",
         "waking": "⏳ 喚醒中…",
@@ -39,6 +41,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason_window": "Navide 視窗沒有回應",
         "reason_mismatch": "接回的不是原本那段對話",
         "reason_not_restored": "Navide 視窗沒有把這個 pane 帶回來",
+        "reason_ask": "Navide 的接續設定為每次詢問，請到電腦上開啟",
     },
     "en-US": {
         "offline": "⚠️ The pane is not online: the Navide window it belongs to is not open, or the pane was closed",
@@ -46,6 +49,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "not_sent_overflow": "⚠️ The keep list is full ({max}); the oldest {count} message(s) were not sent: {items}. Please resend",
         "not_sent_expired": "⚠️ These {count} kept message(s) are older than {minutes} minutes and were not sent: {items}. Please resend",
         "not_sent_restart": "⚠️ Navide restarted; these {count} kept message(s) were not sent: {items}. Please resend",
+        "not_sent_queue_full": "⚠️ The pane's queue is full; these {count} kept message(s) were not sent: {items}. Please resend later",
+        "open_elsewhere": "⚠️ This conversation is already open in another pane, so nothing was woken; continue in that pane on the computer",
         "offline_wake_nothing_kept": "⚠️ The pane is not online, so there is nothing to interrupt. Waking it resumes its own conversation",
         "no_window": "⚠️ The pane is not online and no Navide window is open on the computer, so it cannot be woken. Open Navide on the computer first",
         "waking": "⏳ Waking…",
@@ -65,6 +70,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason_window": "the Navide window did not answer",
         "reason_mismatch": "the pane came back on a different conversation",
         "reason_not_restored": "the Navide window did not bring this pane back",
+        "reason_ask": "Navide is set to ask every time; open it on the computer",
     },
     "ja-JP": {
         "offline": "⚠️ pane は現在オフラインです：所属する Navide ウィンドウが開いていないか、pane が閉じられています",
@@ -72,6 +78,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "not_sent_overflow": "⚠️ 保留が上限の {max} 件に達したため、古い {count} 件は送られませんでした：{items}。もう一度送ってください",
         "not_sent_expired": "⚠️ 保留していた {count} 件は {minutes} 分を過ぎたため送られませんでした：{items}。もう一度送ってください",
         "not_sent_restart": "⚠️ Navide が再起動したため、保留していた {count} 件は送られませんでした：{items}。もう一度送ってください",
+        "not_sent_queue_full": "⚠️ pane の待ち行列がいっぱいのため、保留していた {count} 件は送られませんでした：{items}。しばらくしてからもう一度送ってください",
+        "open_elsewhere": "⚠️ この会話はすでに別の pane で開いているため、起動しませんでした。パソコンでその pane から続けてください",
         "offline_wake_nothing_kept": "⚠️ pane は現在オフラインのため、中断するものはありません。起動すると元の会話に戻ります",
         "no_window": "⚠️ pane はオフラインで、パソコンで Navide のウィンドウが一つも開いていないため起動できません。先にパソコンで Navide を開いてください",
         "waking": "⏳ 起動中…",
@@ -91,6 +99,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason_window": "Navide のウィンドウが応答しませんでした",
         "reason_mismatch": "別の会話で戻ってきました",
         "reason_not_restored": "Navide のウィンドウがこの pane を戻しませんでした",
+        "reason_ask": "Navide の設定が毎回確認になっています。パソコンで開いてください",
     },
 }
 DEFAULT_LANGUAGE = "zh-TW"
@@ -106,6 +115,7 @@ UNRESUMABLE_REASONS = {
     "no-session-support": "reason_no_resume",
     "fresh-refused": "reason_fresh",
     "session-mismatch": "reason_mismatch",
+    "ask-refused": "reason_ask",
 }
 # A wake that failed for another known reason -> the reason shown.
 FAILURE_REASONS = {"pane-not-restored": "reason_not_restored"}
@@ -120,6 +130,8 @@ def outcome_text(lang: str, result: dict[str, Any]) -> str:
     code = str(result.get("code") or "")
     if code == "no-window":
         return text(lang, "no_window")
+    if code == "session-open-elsewhere":
+        return text(lang, "open_elsewhere")
     if code == "quota":
         return text(lang, "quota", agent=str(result.get("agent") or "CLI"))
     if code in UNRESUMABLE_REASONS:

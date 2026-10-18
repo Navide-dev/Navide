@@ -434,11 +434,11 @@ class ChannelManager:
         await asyncio.to_thread(pdf.clear, self._seams.pdf_root())
         if self._status_task is None:
             self._status_task = asyncio.create_task(self._status_watch(), name="channels-status")
+        self._adopt_lost_kept()
         if self.store.global_enabled():
             for (platform, account), acct in self.store.accounts().items():
                 if acct["enabled"]:
                     await self._start_bot(platform, account)
-        await self._report_lost_kept()
         self.mirror.schedule_sync()
 
     async def stop(self) -> None:
@@ -592,6 +592,7 @@ class ChannelManager:
             # Telegram describes its "/" menu in the language the rest of Navide speaks.
             adapter.command_language = lambda: prompt_skills.language(self._seams.ui_settings())
         await adapter.start(emit)
+        await self._report_lost_kept(bot)
         return None
 
     async def _stop_bot(self, platform: str, account: str) -> None:
@@ -1599,7 +1600,8 @@ class ChannelManager:
             lang = prompt_skills.language(await self._ui_settings())
             if wake_pressed:
                 await self._reply(msg, wake.text(lang, "already_online"))
-            await self._deliver_kept(msg, binding, pane_id, lang)
+            # A new message follows unless this was the button: it keeps its place in the queue.
+            await self._deliver_kept(msg, binding, pane_id, lang, reserve=0 if wake_pressed else 1)
             if wake_pressed:
                 return
         # "<@bot> stop" or "@bot /cancel" is the command, addressed to the bot.
@@ -1690,7 +1692,7 @@ class ChannelManager:
         current = self._binding_for(msg) or binding
         kept = await self._live_kept(msg, key, lang)
         await self._reply(msg, wake.text(lang, "woke_sent", count=len(kept)) if kept else wake.text(lang, "woke"))
-        await self._deliver_kept(msg, current, pane_id, lang)
+        await self._deliver_kept(msg, current, pane_id, lang, reserve=0)
 
     def _set_kept(self, key: str, kept: list[tuple[float, InboundMessage]]) -> None:
         """Keep ``kept`` for ``key`` (none: forget it), with previews saved so a restart can say
@@ -1720,33 +1722,65 @@ class ChannelManager:
                                              count=len(expired), items=_previews(expired)))
         return kept
 
-    async def _deliver_kept(self, msg: InboundMessage, binding: Binding, pane_id: str, lang: str) -> None:
-        """Send in, in order, what was kept for the binding while its pane was not online."""
+    async def _deliver_kept(self, msg: InboundMessage, binding: Binding, pane_id: str, lang: str, *,
+                            reserve: int) -> None:
+        """Send in, in order, what was kept for the binding while its pane was not online, as
+        far as the pane's queue takes (``reserve`` slots stay for what follows); the chat is
+        told which did not fit."""
         key = binding.location().key()
         kept = await self._live_kept(msg, key, lang)
         self._set_kept(key, [])
-        for _kept_at, kept_msg in kept:
+        room = max(MAX_QUEUED_PER_PANE - len(self._queued.get(pane_id, ())) - reserve, 0)
+        fits, over = kept[:room], kept[room:]
+        for _kept_at, kept_msg in fits:
             await self._deliver(kept_msg, binding, pane_id)
+        if over:
+            await self._reply(msg, wake.text(lang, "not_sent_queue_full", count=len(over), items=_previews(over)))
 
-    async def _report_lost_kept(self) -> None:
-        """Messages kept for a wake when the backend last stopped are gone: say which."""
+    def _adopt_lost_kept(self) -> None:
+        """At start: what was kept for a wake when the backend last stopped is gone. Hold its
+        previews until each chat's bot is running to be told; chats no longer bound are dropped."""
         try:
-            lost = self.store.kept_previews()
+            lost = self.store.lost_previews()
+            for key, previews in self.store.kept_previews().items():
+                lost[key] = lost.get(key, []) + previews
+            bound = {b.location().key() for b in self.store.bindings()}
+            self.store.set_lost_previews({k: v for k, v in lost.items() if k in bound})
             self.store.set_kept_previews({})
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: reading the kept messages from before the restart failed: %s", exc)
+
+    async def _report_lost_kept(self, bot: BotKey) -> None:
+        """Tell ``bot``'s chats which kept messages a restart lost, then forget the previews."""
+        try:
+            lost = self.store.lost_previews()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading the lost kept messages failed: %s", exc)
             return
-        if not lost:
+        adapter = self._adapters.get(bot)
+        if not lost or adapter is None:
             return
         lang = prompt_skills.language(await self._ui_settings())
         for b in self.store.bindings():
-            previews = lost.get(b.location().key())
-            adapter = self._adapters.get((b.platform, b.account))
-            if not previews or adapter is None:
+            loc = b.location()
+            previews = lost.get(loc.key())
+            if not previews or (b.platform, b.account) != bot:
                 continue
             text = wake.text(lang, "not_sent_restart", count=len(previews), items=wake.quoted(previews))
-            loc = b.location()
-            self._enqueue(loc.key(), lambda adapter=adapter, loc=loc, text=text: self._notice(adapter, loc, text))
+
+            async def tell(adapter: Any = adapter, loc: Location = loc, text: str = text) -> None:
+                await self._notice(adapter, loc, text)
+                self._forget_lost(loc.key())
+
+            self._enqueue(loc.key(), tell)
+
+    def _forget_lost(self, key: str) -> None:
+        try:
+            lost = self.store.lost_previews()
+            if lost.pop(key, None) is not None:
+                self.store.set_lost_previews(lost)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: forgetting the lost kept messages of %s failed: %s", key, exc)
 
     async def _resolve_after_startup(self, pane_id: str) -> str:
         """The pane's current id; during the startup grace an unknown pane is waited for."""

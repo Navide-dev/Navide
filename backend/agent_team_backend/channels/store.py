@@ -20,6 +20,8 @@ KV_ENABLED = "channels.enabled"
 KV_SHARE_OPEN_NOTIFY = "channels.share_open_notify"
 # location key -> previews of the messages kept for a wake, so a restart can say which were lost
 KV_WAKE_KEPT = "channels.wake_kept"
+# the same, carried over from before a restart until each chat's bot is running to be told
+KV_WAKE_LOST = "channels.wake_lost"
 
 
 def _v1(cur: sqlite3.Cursor) -> None:
@@ -218,6 +220,14 @@ class ChannelStore:
 
     def set_kept_previews(self, kept: dict[str, list[str]]) -> None:
         self._db.kv_set(KV_WAKE_KEPT, kept, now=int(time.time()))
+
+    def lost_previews(self) -> dict[str, list[str]]:
+        lost = self._db.kv_get(KV_WAKE_LOST, {})
+        return {str(k): [str(p) for p in v] for k, v in lost.items() if isinstance(v, list)} \
+            if isinstance(lost, dict) else {}
+
+    def set_lost_previews(self, lost: dict[str, list[str]]) -> None:
+        self._db.kv_set(KV_WAKE_LOST, lost, now=int(time.time()))
 
     # --- accounts -------------------------------------------------------------
 
