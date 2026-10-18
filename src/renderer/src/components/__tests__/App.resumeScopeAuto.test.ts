@@ -38,9 +38,27 @@ describe('auto resume scope wiring', () => {
     expect(body).toContain("last_live_launch: ''")
   })
 
-  it('leaves the live stamp alone on a rebuild', () => {
-    expect(fn('rebuildPaneViaResume')).not.toContain('last_live_launch')
-    expect(fn('rebuildPaneClean')).not.toContain('last_live_launch')
+  // The rest of the rule — Kill All, a CLI exiting by itself, closing a
+  // workspace and a pipeline restart clear the stamp; the app ending and a
+  // rebuild keep it — lives in the backend's terminal.exit hook and is
+  // behaviour-tested there (backend/tests/test_projects_pane_last_live_launch.py).
+  // What the renderer must guarantee is that the app ending never turns into a
+  // requested kill ("killed" clears; only the shutdown kill_all keeps it).
+  it('runs no workspace close and no kill while the app is ending', () => {
+    const calls = appSource.split('\n').filter((line) =>
+      /\bcloseWorkspace\b/.test(line) && !/^\s*(\/\/|\*|\/\*)/.test(line))
+    // The definition and the sidebar's own "Close workspace" event, nothing else.
+    expect(calls.map((l) => l.trim())).toEqual([
+      'async function closeWorkspace(path: string): Promise<void> {',
+      '@close-workspace="closeWorkspace"',
+    ])
+    const quit = appSource.slice(
+      appSource.indexOf('window.agentTeam?.onQuitProgress?.('),
+      appSource.indexOf('\n  })', appSource.indexOf('window.agentTeam?.onQuitProgress?.(')),
+    )
+    expect(quit).not.toMatch(/onKill|closeWorkspace|terminal\.kill/)
+    const unloads = [...appSource.matchAll(/addEventListener\('beforeunload', (\w+(?:\.\w+)?)\)/g)].map((m) => m[1])
+    expect(unloads.sort()).toEqual(['flushSettingsOnExit', 'msgLog.flushOnExit', 'saveAllScrollSnapshots'])
   })
 
   it('offers Auto after the four existing options', () => {

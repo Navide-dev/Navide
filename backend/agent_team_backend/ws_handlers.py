@@ -8268,6 +8268,9 @@ def note_terminal_exit(payload: dict) -> None:
     entry = _dock_record_to_retire(payload)
     if entry is not None:
         _retire_dock_record(*entry)
+    target = _live_stamp_to_clear(payload)
+    if target is not None:
+        _clear_live_stamp(*target)
 
 
 async def note_terminal_exit_async(payload: dict) -> None:
@@ -8276,6 +8279,41 @@ async def note_terminal_exit_async(payload: dict) -> None:
     entry = _dock_record_to_retire(payload)
     if entry is not None:
         await asyncio.to_thread(_retire_dock_record, *entry)
+    target = _live_stamp_to_clear(payload)
+    if target is not None:
+        await asyncio.to_thread(_clear_live_stamp, *target)
+
+
+def _live_stamp_to_clear(payload: dict) -> tuple[str, str] | None:
+    """The (workspace, pane) whose last_live_launch an exit clears, or None.
+
+    The 'auto' resume scope restores the panes whose CLI was still running when
+    the app ended. A CLI that stops while the app runs — on its own ("exit",
+    "error") or through a requested kill ("killed": Kill All, closing a
+    workspace, a pipeline restart, an idle reclaim) — is not one of them. The
+    app ending is "shutdown" (kill_all at backend shutdown) and keeps the stamp.
+    A rebuild's kill names the OLD pane id, which the replacement's spawn
+    re-keys away, so the rebuilt pane stays stamped."""
+    if payload.get("reason") not in ("exit", "error", "killed"):
+        return None
+    workspace_path = str(payload.get("workspace_path") or "")
+    pane_id = str(payload.get("pane_id") or "")
+    if not workspace_path or not pane_id:
+        return None
+    return workspace_path, pane_id
+
+
+def _clear_live_stamp(workspace_path: str, pane_id: str) -> None:
+    from . import app
+
+    try:
+        # peek, not load_or_create: an exit must never create a project.
+        project = app.project_store.peek(workspace_path)
+        if project is None or not any(p.pane_id == pane_id for p in project.panes):
+            return
+        app.project_store.set_pane_resume_state(workspace_path, pane_id=pane_id, last_live_launch="")
+    except Exception:  # noqa: BLE001 — the PTY is already gone; a lost stamp clear must not fail its caller
+        log.exception("clearing live stamp of %s in %s failed", pane_id, workspace_path)
 
 
 def _dock_record_to_retire(payload: dict) -> tuple[str, str, str, str] | None:

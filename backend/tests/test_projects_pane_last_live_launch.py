@@ -183,3 +183,130 @@ def test_backend_startup_rotates_the_launch() -> None:
     import inspect
 
     assert "launch_id.rotate(ui_settings_store)" in inspect.getsource(app._start_log_watcher)
+
+
+# ── a CLI that stops while the app keeps running ─────────────────────────────
+#
+# 'auto' means "the CLI was still running when the app ended". Every way a CLI
+# stops mid-session reaches the backend as a terminal.exit: on its own ("exit",
+# "error"), or through a requested kill ("killed": Kill All, closing a
+# workspace, a pipeline restart, an idle reclaim). The app ending is the one
+# exit labelled "shutdown" (kill_all at backend shutdown, for ⌘Q and for the
+# update-install restart alike) and must leave the stamp alone, or Auto would
+# have nothing to restore.
+
+
+def _exit(ws: str, pane_id: str, reason: str, exit_code: int | None = 0) -> dict[str, Any]:
+    return {
+        "terminal_session_id": f"t-{pane_id}", "pane_id": pane_id, "workspace_path": ws,
+        "reason": reason, "exit_code": exit_code, "uptime_ms": 60_000,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["exit", "error", "killed"])
+async def test_a_cli_stopping_mid_session_clears_the_stamp(tmp_path: Path, reason: str) -> None:
+    from agent_team_backend import ws_handlers
+
+    ws = str(tmp_path)
+    store = app.project_store
+    store.record_manual_pane_spawn(ws, pane_id="p1", agent="claude", launch_id="L1")
+    await ws_handlers.note_terminal_exit_async(_exit(ws, "p1", reason, exit_code=1))
+    assert ProjectStore().peek(ws).panes[0].last_live_launch == ""
+
+
+@pytest.mark.asyncio
+async def test_the_app_ending_keeps_the_stamp(tmp_path: Path) -> None:
+    from agent_team_backend import ws_handlers
+
+    ws = str(tmp_path)
+    app.project_store.record_manual_pane_spawn(ws, pane_id="p1", agent="claude", launch_id="L1")
+    await ws_handlers.note_terminal_exit_async(_exit(ws, "p1", "shutdown"))
+    assert ProjectStore().peek(ws).panes[0].last_live_launch == "L1"
+
+
+def test_the_sync_exit_hook_follows_the_same_rule(tmp_path: Path) -> None:
+    from agent_team_backend import ws_handlers
+
+    ws = str(tmp_path)
+    app.project_store.record_manual_pane_spawn(ws, pane_id="p1", agent="claude", launch_id="L1")
+    app.project_store.record_manual_pane_spawn(ws, pane_id="p2", agent="claude", launch_id="L1")
+    ws_handlers.note_terminal_exit(_exit(ws, "p1", "shutdown"))
+    ws_handlers.note_terminal_exit(_exit(ws, "p2", "killed"))
+    stamps = {p.pane_id: p.last_live_launch for p in ProjectStore().peek(ws).panes}
+    assert stamps == {"p1": "L1", "p2": ""}
+
+
+@pytest.mark.asyncio
+async def test_an_exit_never_creates_a_project(tmp_path: Path) -> None:
+    from agent_team_backend import ws_handlers
+
+    ws = str(tmp_path / "no-project")
+    Path(ws).mkdir()
+    await ws_handlers.note_terminal_exit_async(_exit(ws, "p1", "exit"))
+    await ws_handlers.note_terminal_exit_async(_exit("", "p1", "exit"))
+    assert ProjectStore().peek(ws) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exit_first", [True, False])
+async def test_a_rebuild_keeps_the_pane_live_whichever_lands_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exit_first: bool,
+) -> None:
+    """A rebuild kills the old PTY ("killed", old pane id) and records the
+    replacement under a new id through previous_pane_id. The old exit can land
+    before or after that re-key; either way the rebuilt pane stays stamped."""
+    from agent_team_backend import ws_handlers
+
+    monkeypatch.setattr(launch_id, "_current", "LIVE")
+    ws = str(tmp_path)
+
+    async def spawn(pane_id: str, previous: str = "") -> None:
+        await app.handle_message(_session(), {
+            "id": pane_id, "type": "manual_pane.spawn",
+            "payload": {"workspace_path": ws, "pane_id": pane_id, "previous_pane_id": previous,
+                        "agent": "claude", "command": "claude", "session_id": "s1"},
+        })
+
+    await spawn("old")
+    if exit_first:
+        await ws_handlers.note_terminal_exit_async(_exit(ws, "old", "killed"))
+        await spawn("new", previous="old")
+    else:
+        await spawn("new", previous="old")
+        await ws_handlers.note_terminal_exit_async(_exit(ws, "old", "killed"))
+    live = [p for p in ProjectStore().peek(ws).panes if p.spawn_status == "spawned"]
+    assert [(p.pane_id, p.last_live_launch) for p in live] == [("new", "LIVE")]
+
+
+@pytest.mark.asyncio
+async def test_terminal_exit_carries_the_workspace_and_the_real_reasons(tmp_path: Path) -> None:
+    """The hook needs the pane's workspace, which only the PTY session knows;
+    and the reasons it keys on are the ones the terminal service really emits."""
+    import asyncio
+
+    from agent_team_backend.terminals import TerminalService
+
+    events: list[dict[str, Any]] = []
+
+    async def emit(event: Any) -> None:
+        if isinstance(event, dict):  # output frames arrive as bytes
+            events.append(event)
+
+    svc = TerminalService(emit=emit)
+    cmd = ["sh", "-c", 'trap "exit 0" TERM; while :; do sleep 0.05; done']
+    killed = svc.create(pane_id="k", agent_key=None, command=cmd, cwd="/",
+                        metadata={"workspace_path": str(tmp_path)})
+    svc.create(pane_id="s", agent_key=None, command=cmd, cwd="/",
+               metadata={"workspace_path": str(tmp_path)})
+    await asyncio.sleep(0.3)
+    await svc.kill(killed.id)
+    for _ in range(60):
+        if any(e.get("type") == "terminal.exit" for e in events):
+            break
+        await asyncio.sleep(0.05)
+    await svc.kill_all(grace=0.5)
+    await asyncio.sleep(0.1)
+    exits = {e["payload"]["pane_id"]: e["payload"] for e in events if e.get("type") == "terminal.exit"}
+    assert (exits["k"]["reason"], exits["k"]["workspace_path"]) == ("killed", str(tmp_path))
+    assert (exits["s"]["reason"], exits["s"]["workspace_path"]) == ("shutdown", str(tmp_path))
