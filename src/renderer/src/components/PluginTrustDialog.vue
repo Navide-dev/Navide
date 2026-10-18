@@ -2,7 +2,7 @@
 // The publisher-trust / capability-risk confirmation shown between a verified
 // prepareInstall and its commit. Presentation only: usePluginInstallFlow owns
 // the pending package and decides which step is showing.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PendingInstall } from '../composables/usePluginInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
@@ -11,8 +11,10 @@ import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import PluginAgentToolsList from './PluginAgentToolsList.vue'
 import PluginSourceBadge from './PluginSourceBadge.vue'
+import type { PluginSource } from '../../../shared/pluginSource'
+import { registrySourceOfVersion } from '../lib/pluginSourceMark'
 
-defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
+const props = defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
 const emit = defineEmits<{ confirmPublisher: []; confirmRisk: []; cancel: [] }>()
 const { t, te } = useI18n()
 
@@ -27,15 +29,18 @@ function onKeydown(event: KeyboardEvent): void {
 onMounted(() => window.addEventListener('keydown', onKeydown, true))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
 
+/** K2: the Host's own source when it sends one; else only a Registry-signed
+ *  package has a source, read from its version. */
+const source = computed<PluginSource | undefined>(() => {
+  const prepared = props.pending.prepared
+  if (prepared.source) return prepared.source
+  return prepared.trustTier === 'signed-verified' ? registrySourceOfVersion(prepared.version) : undefined
+})
+
 // Focus starts on Cancel: the safe answer to a security question.
 const card = ref<HTMLElement | null>(null)
 const cancelButton = ref<HTMLButtonElement | null>(null)
 useDialogFocus(card, () => cancelButton.value)
-
-/** K5: SemVer pre-release suffix (build metadata is not one); pre-releases are reviewed too. */
-function isPrerelease(version: string): boolean {
-  return version.split('+', 1)[0].includes('-')
-}
 
 /** One line on what a sensitive capability lets the extension do. */
 function capabilityHint(cap: string): string {
@@ -129,12 +134,12 @@ function capabilityHint(cap: string): string {
           :tools="pending.prepared.agentTools"
         />
         <!-- K2: only a Registry-signed package reads as reviewed; an unsigned
-             one keeps the unsigned badge below and no source row. -->
+             one without a Host source keeps the unsigned badge below and no row. -->
         <PluginSourceBadge
-          v-if="pending.prepared.trustTier === 'signed-verified'"
+          v-if="source"
           row
           class="ext-trust-source"
-          :source="isPrerelease(pending.prepared.version) ? 'prerelease' : 'marketplace'"
+          :source="source"
           :publisher="pending.prepared.publisherId"
         />
         <p class="ext-trust-tier">
