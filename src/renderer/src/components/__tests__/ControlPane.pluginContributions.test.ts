@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
+import { i18n } from '@navide/plugin-ui/foundation'
 import ControlPane from '../ControlPane.vue'
 
 // These cases pin the macOS rule table and tooltips (⌘N, ⌘,); happy-dom's
@@ -405,5 +406,28 @@ describe('ControlPane manifest-driven plugin placement', () => {
     expect(host!.props('visible')).toBe(false)
 
     wrapper.unmount()
+  })
+})
+
+// Card K2: a local or test package keeps a mark on its sidebar tab, in Navide's
+// own chrome; a Marketplace or built-in package keeps the tab as it was.
+describe('ControlPane plugin tab source mark (K2)', () => {
+  it('marks only sources that are neither Marketplace stable nor built in', () => {
+    const saved = i18n.global.locale.value
+    i18n.global.locale.value = 'en-US'
+    const wrapper = mountPane([
+      contribution({ contributionKey: 'a.left', source: 'local-unsigned' }),
+      contribution({ contributionKey: 'b.left', source: 'marketplace' }),
+      contribution({ contributionKey: 'c.left' }),
+    ])
+    const tab = (key: string) => wrapper.get(`.plugin-tab-btn[data-plugin-contribution="${key}"]`)
+    expect(tab('a.left').find('.plugin-tab-source-mark').exists()).toBe(true)
+    expect(tab('a.left').attributes('title')).toBe('Files · Local file, not reviewed by Navide, unsigned')
+    for (const key of ['b.left', 'c.left']) {
+      expect(tab(key).find('.plugin-tab-source-mark').exists()).toBe(false)
+      expect(tab(key).attributes('title')).toBe('Files')
+    }
+    wrapper.unmount()
+    i18n.global.locale.value = saved
   })
 })

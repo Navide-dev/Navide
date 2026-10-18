@@ -24,6 +24,7 @@ import { workspaceAliasKey } from './lib/workspaceAlias'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
+import { chromeSourceMark, pluginSourceLabel } from './lib/pluginSourceMark'
 import { subtreeSignals } from './lib/paneSubtreeStatus'
 import { closeAdvisoriesFor } from './lib/paneCloseAdvisories'
 import { interruptAdvisoriesFor } from './lib/paneInterruptAdvisories'
@@ -1150,6 +1151,12 @@ const windowPluginContributions = computed(() =>
       contribution.contributionKey !== 'navide.plans.window'
   )
 )
+
+/** K2: a local or test package names its source on its title-bar button. */
+function titlebarPluginLabel(contribution: PluginRegionContribution): string {
+  const mark = chromeSourceMark(contribution.source)
+  return mark ? `${contribution.title} · ${pluginSourceLabel(i18n.global.t, mark)}` : contribution.title
+}
 
 // The titlebar shows these as icons, matching the gear beside them. A plugin
 // whose icon file is missing or unreadable falls back to a glyph rather than
@@ -21203,8 +21210,9 @@ function paneIsCommander(p: ActivePane): boolean {
           :key="contribution.contributionKey"
           class="titlebar-plugin-action"
           type="button"
-          :title="contribution.title"
-          :aria-label="contribution.title"
+          :title="titlebarPluginLabel(contribution)"
+          :aria-label="titlebarPluginLabel(contribution)"
+          :data-source-mark="chromeSourceMark(contribution.source) ?? undefined"
           @mousedown.stop
           @click="openPluginContributionWindow(contribution)"
         >
@@ -21224,6 +21232,8 @@ function paneIsCommander(p: ActivePane): boolean {
             @error="markPluginIconFailed(contribution)"
           />
           <span v-else class="titlebar-plugin-fallback" aria-hidden="true">◇</span>
+          <!-- K2: a local or test package keeps a mark in Navide's own title bar. -->
+          <span v-if="chromeSourceMark(contribution.source)" class="titlebar-plugin-source-mark" aria-hidden="true"></span>
         </button>
       </div>
       <!-- Detached windows could only be merged back by closing them, which is
@@ -23109,6 +23119,18 @@ function paneIsCommander(p: ActivePane): boolean {
   mask-position: center;
   -webkit-mask-size: contain;
   mask-size: contain;
+}
+.titlebar-plugin-action[data-source-mark] {
+  position: relative;
+}
+.titlebar-plugin-source-mark {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--trust-unsigned-fg);
 }
 .titlebar-plugin-fallback {
   font-size: 12px;
