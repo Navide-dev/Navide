@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import sys
 from typing import Any
 
 import pytest
@@ -13,6 +14,14 @@ from agent_team_backend import app
 from agent_team_backend.mcp_server import server as plan_mcp
 from agent_team_backend.mcp_server.server import _Caller, request_host_agent_workspace_backend
 from agent_team_backend.plugins import agent_tools_contract as contract
+
+
+# Most CPU time one event-loop step may take. `time.thread_time` counts in
+# whole scheduler ticks on Windows (15.625 ms), so a step of a little over one
+# tick reads as two (31.25 ms): there the budget is three ticks. A step that
+# parses a whole result on the loop costs hundreds of milliseconds, so both
+# budgets still catch it.
+LOOP_SLICE_BUDGET_S = 0.047 if sys.platform == "win32" else 0.02
 
 
 class FakeWebSocket:
@@ -272,7 +281,7 @@ async def test_10_mib_of_arguments_never_stalls_the_event_loop(monkeypatch: pyte
     assert len(received) >= 80
     # CPU time the loop's thread spent between two hand-backs: what a slow
     # step costs every other pane, whatever the machine's load.
-    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
     # Checked after the measurement: the pieces join to the arguments' spelling.
     joined = contract.reassemble_agent_tool_payload_text(
         [{"seq": seq, "data": data} for seq, data in enumerate(received)], summaries[0]
