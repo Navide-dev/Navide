@@ -301,15 +301,20 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     return lines.length ? `[沿用的前置產出（未重跑）]\n${lines.join('\n')}\n\n` : ''
   }
 
-  /** Close the run: anything still running or awaiting takes the outcome. */
-  async function end(outcome: 'completed' | 'aborted' | 'failed'): Promise<void> {
+  /** Close the run: anything still running or awaiting takes the outcome.
+   *  `reason` is recorded as their `error` when the run failed because of
+   *  something else (#448: another slot's kickoff), so they do not look broken
+   *  themselves. */
+  async function end(outcome: 'completed' | 'aborted' | 'failed', reason?: string): Promise<void> {
     if (!run) return
     const final: NodeRunState['status'] = outcome === 'completed' ? 'done' : outcome === 'failed' ? 'failed' : 'aborted'
     // An abort is a pause: the gate it paused on stays recorded so a resume
     // goes back to waiting on it. Any other ending clears it.
     const keptGate = outcome === 'aborted' ? awaitingGate.value : null
     for (const [id, st] of Object.entries(run.nodes)) {
-      if (st.status === 'running' || st.status === 'awaiting') run.nodes[id] = { ...st, status: final, endedAt: now() }
+      if (st.status === 'running' || st.status === 'awaiting') {
+        run.nodes[id] = { ...st, status: final, endedAt: now(), ...(reason ? { error: reason } : {}) }
+      }
     }
     awaitingGate.value = null
     await report(keptGate)

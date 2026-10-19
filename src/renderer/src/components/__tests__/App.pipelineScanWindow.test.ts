@@ -244,12 +244,13 @@ describe('the Manager router does not read its own kickoff echo as a result', ()
       // protocol's sentinels back inside the scan window. Tightening the window
       // shrank the slack this case used to get for free.
       expect(act).toContain('if (ok) armRouterCursors(router, pane.id)')
-      // The failure case takes no floor: it ends the run (#448) before the
-      // stage is recorded spawned or a watcher is armed over it.
+      // The failure case takes no floor: it ends the run (#448) after the
+      // stage is recorded spawned (so a resume continues there) and before a
+      // watcher is armed over it.
       expect(act).not.toContain('if (managerSlot && !ok) {')
       const failed = act.indexOf('await failRunOnKickoff(')
       expect(failed, 'the failed-kickoff exit').toBeGreaterThan(-1)
-      expect(act.indexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'", failed)).toBeGreaterThan(failed)
+      expect(act.lastIndexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'")).toBeLessThan(failed)
       expect(act.indexOf('startStageWatcher(index, pane.id, kickoffScanFrom)', failed)).toBeGreaterThan(failed)
       // Registration with the router is NOT conditional: DISPATCH routing has
       // to know about the pane even when its kickoff never landed.

@@ -50,11 +50,11 @@ describe('usePipelineDag node-state reporting', () => {
     dag.slotStarted(0, 'a', 'pane-a')
     dag.slotStarted(0, 'b', 'pane-b')
     dag.slotFailed(0, 'a', 'kickoff never reached the agent')
-    await dag.end('failed')
+    await dag.end('failed', 'run stopped: slot "a" failed')
     const last = reports[reports.length - 1].nodes as Record<string, { status: string; error?: string }>
     expect(last['n-01-0']).toMatchObject({ status: 'failed', error: 'kickoff never reached the agent' })
-    expect(last['n-01-1'].status).toBe('failed')
-    expect(last['n-01-1'].error).toBeUndefined()
+    // A sibling stopped with the run says why, instead of looking broken itself.
+    expect(last['n-01-1']).toMatchObject({ status: 'failed', error: 'run stopped: slot "a" failed' })
     expect(dag.nodeStates.value['n-01-0'].error).toBe('kickoff never reached the agent')
   })
 })

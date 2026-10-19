@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
+import { runPipelineKickoff } from '../../lib/cliCoordination'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -25,10 +26,10 @@ function block(startMarker: string, endMarker: string): string {
 async function loadFail() {
   const source = block('async function failRunOnKickoff(', '\n/** Approve the gate the run is paused on')
   const { code } = await transformWithEsbuild(`${source}\nreturn failRunOnKickoff`, 'AppKickoffFailed.ts', { loader: 'ts' })
-  const pipeline = { state: 'running', workspacePath: '/ws', log: [] as string[] }
+  const pipeline = { state: 'running', stageIndex: 1, workspacePath: '/ws', log: [] as string[] }
   const sent: Array<{ type: string; payload: Record<string, unknown> }> = []
   const failed: Array<[number, string, string]> = []
-  const ends: string[] = []
+  const ends: Array<[string, string | undefined]> = []
   const toasts: Array<{ text: string; type: string }> = []
   const deps: Record<string, unknown> = {
     pipeline,
@@ -36,7 +37,7 @@ async function loadFail() {
     pipelineLog: (line: string) => pipeline.log.push(line),
     pipelineDag: {
       slotFailed: (index: number, label: string, reason: string) => failed.push([index, label, reason]),
-      end: vi.fn(async (outcome: string) => { ends.push(outcome) }),
+      end: vi.fn(async (outcome: string, reason?: string) => { ends.push([outcome, reason]) }),
     },
     tearDownPipelineOrchestration: vi.fn(() => { pipeline.state = 'aborted' }),
     sendQuiet: vi.fn(async (type: string, payload: Record<string, unknown>) => {
@@ -60,7 +61,7 @@ describe('a kickoff that never reached its pane fails the run (#448)', () => {
     await t.failRunOnKickoff(1, 'codex-1', 'kickoff never reached the agent after 3 attempts')
     expect(t.failed).toEqual([[1, 'codex-1', 'kickoff never reached the agent after 3 attempts']])
     expect(t.pipeline.state).not.toBe('running')
-    expect(t.ends).toEqual(['failed'])
+    expect(t.ends.map((e) => e[0])).toEqual(['failed'])
     expect(t.sent).toEqual([{ type: 'pipeline.abort', payload: { workspace_path: '/ws', reason: 'failed' } }])
     expect(t.toasts).toHaveLength(1)
     expect(t.toasts[0].type).toBe('error')
@@ -77,15 +78,66 @@ describe('a kickoff that never reached its pane fails the run (#448)', () => {
     ])
     expect(t.failed.map((f) => f[1])).toEqual(['manager', 'codex-1'])
     expect(t.sent.filter((s) => s.type === 'pipeline.abort')).toHaveLength(1)
-    expect(t.ends).toEqual(['failed'])
+    expect(t.ends.map((e) => e[0])).toEqual(['failed'])
     expect(t.toasts).toHaveLength(1)
+  })
+
+  it('names the failing slot on the nodes it stops with the run', async () => {
+    const t = await loadFail()
+    await t.failRunOnKickoff(1, 'codex-1', 'kickoff never reached the agent')
+    expect(t.ends[0][1]).toContain('codex-1')
+    expect(t.ends[0][1]).toContain('kickoff never reached the agent')
+  })
+
+  it('a late failure from a stage the run has moved past fails nothing', async () => {
+    // The scheduleInjection kickoff is long-lived; it can finish after the
+    // user aborted and started another run, which is now at another stage.
+    const t = await loadFail()
+    t.pipeline.stageIndex = 0
+    await t.failRunOnKickoff(1, 'codex-1', 'kickoff never reached the agent')
+    expect(t.failed).toEqual([])
+    expect(t.sent).toEqual([])
+    expect(t.pipeline.state).toBe('running')
+  })
+})
+
+describe('a kickoff held in the input box is never pasted a second time (#448)', () => {
+  const base = { sleep: async () => {}, paneAlive: () => true }
+
+  it('submits the copy still in the input box instead of injecting', async () => {
+    const inject = vi.fn(async () => ({ injected: true }))
+    const submit = vi.fn(async () => true)
+    const r = await runPipelineKickoff({ ...base, inject, heldCopy: { holds: () => true, submit } })
+    expect(r).toEqual({ sent: true, cancelled: false })
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(inject).not.toHaveBeenCalled()
+  })
+
+  it('reports it held again when Enter does not take, still without pasting', async () => {
+    const inject = vi.fn(async () => ({ injected: true }))
+    const onHeld = vi.fn()
+    const r = await runPipelineKickoff({ ...base, inject, onHeld, heldCopy: { holds: () => true, submit: async () => false } })
+    expect(r).toEqual({ sent: false, cancelled: false })
+    expect(onHeld).toHaveBeenCalledTimes(1)
+    expect(inject).not.toHaveBeenCalled()
+  })
+
+  it('injects as usual once the input box no longer holds it', async () => {
+    const inject = vi.fn(async () => ({ injected: true }))
+    const submit = vi.fn(async () => true)
+    const r = await runPipelineKickoff({ ...base, inject, heldCopy: { holds: () => false, submit } })
+    expect(r).toEqual({ sent: true, cancelled: false })
+    expect(inject).toHaveBeenCalledTimes(1)
+    expect(submit).not.toHaveBeenCalled()
   })
 })
 
 describe('no kickoff path arms a watcher over a kickoff that failed (#448)', () => {
   it('both kickoff paths hand a failed kickoff to failRunOnKickoff', () => {
     expect(appSource.includes('arming watcher anyway')).toBe(false)
-    const calls = appSource.match(/await failRunOnKickoff\(/g) ?? []
-    expect(calls.length).toBe(2)
+    const schedule = block('function scheduleInjection(pane: ActivePane): void {', '\ninterface SpawnInternal')
+    const activate = block('async function activateStage(index: number): Promise<void> {', '\nasync function spawnPipelineStage(')
+    expect(schedule).toContain('await failRunOnKickoff(')
+    expect(activate).toContain('await failRunOnKickoff(')
   })
 })
