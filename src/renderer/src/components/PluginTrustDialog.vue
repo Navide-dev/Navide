@@ -173,6 +173,7 @@ function capabilityHint(cap: string): string {
             :registry="pending.prepared.registry ?? null"
             :verified="!local"
             :local-source="local"
+            :has-views="pending.prepared.hasViews"
           />
         </details>
         <PluginDisclosureCard
@@ -183,6 +184,7 @@ function capabilityHint(cap: string): string {
           :registry="pending.prepared.registry ?? null"
           :verified="!local"
           :local-source="local"
+          :has-views="pending.prepared.hasViews"
         />
         <PluginAgentToolsList
           v-if="step === 'risk' && pending.prepared.agentTools?.length"

@@ -10171,6 +10171,171 @@ async def plugins_enable(ctx: Context, namespace: str, name: str) -> dict[str, A
     return await _plugin_agent_action(ctx, "enable", namespace, name)
 
 
+# ── Quota failover state (read-only) ────────────────────────────────────────
+#: The fields of the failover authority's state() this tool passes on. Named,
+#: not filtered: the live login's identity and fingerprint, raw error text
+#: (it can quote a Keychain item), idempotency keys, confirmation payloads and
+#: the evidence an incident lifted from a pane's output never leave here.
+_FAILOVER_INCIDENT_FIELDS = (
+    "id", "agentKey", "authScope", "outgoingSlotId", "epoch", "state", "reason",
+    "trusted", "autoAllowed", "tried", "panes", "transactionIds", "detectedAt",
+    "resetsAt", "windowKind", "closedAt", "updatedAt",
+)
+_FAILOVER_TRANSACTION_FIELDS = (
+    "id", "incidentId", "agentKey", "authScope", "fromSlotId", "toSlotId",
+    "automatic", "switchMode", "restartStrategy", "state", "reason", "swapped",
+    "epochBefore", "epochAfter", "createdAt", "committedAt", "closedAt",
+)
+_FAILOVER_UNRECONCILED_FIELDS = (
+    "transactionId", "agentKey", "authScope", "fromSlotId", "toSlotId",
+    "liveSlotId", "reason",
+)
+_FAILOVER_BUDGET_FIELDS = (
+    "agentKey", "authScope", "used", "limit", "windowSec", "minGapSec", "nextAllowedAt",
+)
+
+
+@server.tool()
+async def cli_failover_state(ctx: Context, agent: str = "") -> dict[str, Any]:
+    """Read where Navide's quota failover stands: what it is doing about an
+    exhausted CLI account, and what it may still do.
+
+    cli_usage says how much quota a vendor has left; this says what happens
+    when it runs out. Check it before handing work to a vendor that is out:
+    an open incident means Navide is already asking the user to switch (or
+    switching) that vendor's account, and a vendor listed under
+    `unreconciled` refuses every account switch until the user resolves a
+    half-finished one in Navide. Read-only: nothing is refreshed, switched or
+    confirmed, and no credential is read.
+
+    agent narrows the answer to one vendor key ("claude", "codex", ...) — the
+    same key cli_whoami reports as agent_key. Left empty, every vendor comes
+    back.
+
+    Returns {ok, policy, auditDegraded, capabilities, budget, unreconciled,
+    incidents, transactions, recentIncidents, recentTransactions}, plus
+    `agent` when a filter was applied.
+      - `policy` is the user's setting: "off", "notify" (ask before switching)
+        or "auto" (switch on its own, within the budget).
+      - `auditDegraded` true means the switch record could not be written, and
+        automatic switching is stopped until it can.
+      - `capabilities` maps a vendor to how its account can be switched
+        (`method` "hot" / "restart" / "manual", `supported`).
+      - `budget` maps an account pool to the AUTOMATIC switches it has used in
+        the window ({used, limit, windowSec, minGapSec, nextAllowedAt}).
+        Switches made by hand do not count against it.
+      - `unreconciled` maps a vendor to the swap blocking it
+        ({transactionId, fromSlotId, toSlotId, liveSlotId, reason}).
+      - `incidents` / `transactions` are what is open now; the `recent*` lists
+        are what closed lately, newest first.
+    Accounts are named by their slot id only, never by the login's email.
+    """
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    from agent_team_backend import app as _app
+
+    state = _app.quota_failover.state()
+    agent = str(agent or "").strip().lower()
+
+    def wanted(row: dict[str, Any]) -> bool:
+        return not agent or row.get("agentKey") == agent
+
+    def rows(key: str, fields: tuple[str, ...]) -> list[dict[str, Any]]:
+        return [_pick(row, fields) for row in state.get(key) or [] if wanted(row)]
+
+    result: dict[str, Any] = {"ok": True}
+    if agent:
+        result["agent"] = agent
+    result["policy"] = state.get("policy")
+    result["auditDegraded"] = state.get("auditDegraded")
+    result["capabilities"] = {
+        key: cap for key, cap in (state.get("capabilities") or {}).items()
+        if not agent or key == agent
+    }
+    result["budget"] = {
+        scope: _pick(info, _FAILOVER_BUDGET_FIELDS)
+        for scope, info in (state.get("budget") or {}).items() if wanted(info)
+    }
+    result["unreconciled"] = {
+        key: _pick(row, _FAILOVER_UNRECONCILED_FIELDS)
+        for key, row in (state.get("unreconciled") or {}).items()
+        if not agent or key == agent
+    }
+    result["incidents"] = rows("incidents", _FAILOVER_INCIDENT_FIELDS)
+    result["transactions"] = rows("transactions", _FAILOVER_TRANSACTION_FIELDS)
+    result["recentIncidents"] = rows("recentIncidents", _FAILOVER_INCIDENT_FIELDS)
+    result["recentTransactions"] = rows("recentTransactions", _FAILOVER_TRANSACTION_FIELDS)
+    return result
+
+
+#: The fields of an account row this tool passes on: what the account store
+#: file holds about it, nothing read from its credentials.
+_ACCOUNT_FIELDS = ("id", "agentKey", "name", "scope", "createdAt")
+#: The built-in Default row's id (cli_profiles' DEFAULT_SLOT_ID).
+_DEFAULT_ACCOUNT_ID = "__default__"
+
+
+@server.tool()
+async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
+    """List the CLI accounts Navide keeps, and which one each CLI runs on.
+
+    The same accounts Settings → Accounts shows, read from Navide's account
+    store only: it says which accounts exist and which is active, not who is
+    signed in to them — no email and no signed-in flag, since both would mean
+    reading the credentials themselves. Read-only: nothing is switched or
+    refreshed. Quota is in cli_usage, the failover state in
+    cli_failover_state.
+
+    agent narrows the answer to one vendor key ("claude", "codex", ...) — the
+    same key cli_whoami reports as agent_key. Left empty, every vendor comes
+    back.
+
+    Returns {ok, accounts, active, defaultNames, paneDefaults}, plus `agent`
+    when a filter was applied.
+      - `accounts` is every account row the user added: {id, agentKey, name,
+        scope?, createdAt}. `scope` is the provider an account of a
+        multi-provider CLI is bound to.
+      - `active` maps a vendor to the account its CLI runs on now:
+        "__default__" is the built-in Default row (the login the CLI had
+        before any account was added), which has no row in `accounts`.
+      - `defaultNames` holds the names the user gave a vendor's Default row.
+      - `paneDefaults` maps a vendor to the account new panes are pinned to,
+        when the user chose one that differs from `active`.
+    """
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    from agent_team_backend import app as _app
+
+    doc = await asyncio.to_thread(_app.cli_profiles_store.list)
+    agent = str(agent or "").strip().lower()
+
+    def wanted(key: str) -> bool:
+        return not agent or key == agent
+
+    result: dict[str, Any] = {"ok": True}
+    if agent:
+        result["agent"] = agent
+    result["accounts"] = [
+        _pick(row, _ACCOUNT_FIELDS)
+        for row in doc.get("profiles") or [] if wanted(str(row.get("agentKey") or ""))
+    ]
+    result["active"] = {
+        key: str(value or _DEFAULT_ACCOUNT_ID)
+        for key, value in (doc.get("defaults") or {}).items() if wanted(key)
+    }
+    result["defaultNames"] = {
+        key: value for key, value in (doc.get("defaultNames") or {}).items() if wanted(key)
+    }
+    result["paneDefaults"] = {
+        key: value for key, value in (doc.get("paneDefaults") or {}).items() if wanted(key)
+    }
+    return result
+
+
 # ── CLI account sign-in (plan mcp_614482 P2) ────────────────────────────────
 #: How much of an agent's reason reaches the user's notice; the rest is cut.
 _SIGN_IN_REASON_MAX = 300

@@ -63,7 +63,9 @@ export const RESERVED_TOOL_PREFIXES = [
 /** tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned. */
 export const CORE_TOOL_NAMES = [
   'cli_account_sign_in',
+  'cli_accounts_list',
   'cli_answer_prompt', 'cli_cancel_message', 'cli_check_message', 'cli_close_agent', 'cli_extensions_list',
+  'cli_failover_state',
   'cli_get_status', 'cli_inbox_summary', 'cli_interrupt', 'cli_list_sessions', 'cli_list_targets',
   'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
   'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',

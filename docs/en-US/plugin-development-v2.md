@@ -15,8 +15,10 @@
 >
 > What is not available: Navide never calls a `definePlugin` activation function
 > (see [SDK interface](#sdk-interface)); there is no `navide-plugin dev` command;
-> Developer Mode cannot open a Manifest v2 view or run a backend (see
-> [Backend trust](#backend-trust)); there are no command, menu or keybinding
+> the environment-variable Developer Mode of a development build
+> (`AGENT_TEAM_PLUGIN_DEV_PATH`) cannot open a Manifest v2 view or run a
+> backend, while a folder loaded with Settings → Navide Plugins → Developer
+> Mode can (see [Backend trust](#backend-trust)); there are no command, menu or keybinding
 > contribution points; `custom` is the only view kind; and a package can be
 > installed and removed but not disabled.
 >
@@ -67,8 +69,9 @@ value of the Navide Marketplace.
 When a new design would add a restriction, turn it into a declaration plus
 disclosure instead, or bring it to the product owner as an explicit decision.
 Some existing rules in this spec predate the principle and are under review:
-third-party methods are never callable by MCP agents. Until it changes, it is
-documented as it stands. (A backend package may now declare
+a third-party method is callable by MCP agents only as a declared agent tool,
+behind a switch that is off by default (see
+[Agent tools](#agent-tools-backendagenttools)). (A backend package may now declare
 `shell: "allowlist"`; see [Third-party backends](#third-party-backends-sandbox-consent-and-publishing).)
 
 ## What is public
@@ -434,6 +437,24 @@ disclosure data's `network` field is still `"none"` in contract v1 and is
 being revisited separately. The broker rules are exactly those of a view's
 `shell.run`.
 
+**Network reach of views.** The sandbox above is the backend's. A plugin view
+is an ordinary web page on the default session: it can `fetch` any host (and
+read the response where CORS allows), load images and scripts from anywhere,
+and embed an external website in an `<iframe>` whose scripts run. The Host
+installs no request filtering, CSP or frame-navigation rule on views (only the
+frame carrier, `navide-plugin-frame://`, has a CSP), so none of this traffic is
+filtered or recorded. A view that can read workspace content through its
+capabilities can therefore send it off the machine, and a view can show a
+remote page that looks like a sign-in page. The disclosure data's `network`
+field covers only commands and the native backend, so the disclosure card of
+a package with views (`contributes.views` in its manifest) states this
+separately, including for a view-only package whose `network` is `"none"`; a
+package without views (backend or agent tools only) gets no such line, and
+where the card shows Registry listing data without the manifest (the Navide
+Marketplace detail page, an agent's install request) it says so
+conditionally. Making view network access a declared permission (DB10) is planned
+for 0.2.27.
+
 #### Agent tools (`backend.agentTools`)
 
 A package with a backend may declare tools that agents call through the core
@@ -495,10 +516,20 @@ has not allowed (or not re-allowed since its tools changed), or whose native
 backend the user disabled, holds no names, and a version that declares no
 tools gives up its place.
 
-Serving the tools to agents comes in a later release step, behind a master
-switch that is off by default. Until then declared tools are validated,
-disclosed and consented to but never served, and the sentence above
-("Third-party methods are never callable by MCP agents") holds.
+Agents call these tools through the core `navide` MCP server behind two
+switches in Settings → Navide Plugins → Native backends, both off by
+default: **Let agents call tools from third-party Navide plugins** (agents in
+your panes) and **Let external MCP clients call them too**. With the first
+off, nothing is served: declared tools are validated, disclosed and consented
+to, and every backend's agent methods stay empty. With it on, a tool is
+served only for an installed, enabled package whose current consent covers
+it; the Host re-checks the switch, the caller kind, the package state, the
+consent and the tool on every call. A `write` tool asks once per package and
+workspace before its first call. The result is returned as external content
+labelled with the package, and the calling pane is marked tainted, like any
+other external input. Methods that no tool names are never callable by
+agents. See [plugin-agent-tools-contract.md](plugin-agent-tools-contract.md)
+section 4.
 
 `backend.methods` and `backend.events` declare the package-local names the
 Host forwards (1–64 methods, 1–32 events, dotted lower-camel names such as
@@ -1473,9 +1504,11 @@ declare a new `storage` permission in its manifest.
 
 Current runtime status: the Host writes the storage grant together with the
 package-version grant, both for the bundled packages and for a package
-installed from a Registry (when **Restart Plugin** activates it). A view
-without such a grant, for example one loaded through Developer Mode, cannot
-open at all. The API below does not expose the first-party storage migration
+installed from a Registry (when **Restart Plugin** activates it), for a
+package installed from a file, and for a folder loaded with Settings → Navide
+Plugins → Developer Mode once the user consents. A view without such a grant,
+for example one loaded through `AGENT_TEAM_PLUGIN_DEV_PATH` in a development
+build, cannot open at all. The API below does not expose the first-party storage migration
 seam to third-party packages.
 
 The SDK calls accept only a partition class and key; the Host derives the
@@ -2019,10 +2052,24 @@ runs only inside the OS sandbox described in
   [Publishing to the Navide Marketplace](marketplace-publishing.md)).
   Manifest v1 packages need no grant.
 - **Developer Mode** (Settings → Navide Plugins → Developer Mode, off by
-  default) is a main-process setting the main window's settings page alone can
-  change; every change is written to the plugin activity log as a Host event
-  (`source: "host"`, `plugin_id: "host"`, `developerMode.on` / `.off`), which
-  no plugin row can claim. A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
+  default) is a main-process setting. Inside Navide only the main window's
+  settings page can change it; every change made there is written to the
+  plugin activity log as a Host event (`source: "host"`, `plugin_id: "host"`,
+  `developerMode.on` / `.off`), which no plugin row can claim. The switch and
+  the folder consents live in an unsigned file,
+  `.navide-plugin-developer-mode.json` in the plugin install root, which is
+  checked only for its shape. Any unsandboxed process running as the same
+  user, an agent CLI included, can write that file to turn Developer Mode on
+  and add a consented folder (the permission digest is a plain SHA-256 of the
+  manifest's declarations); the next start then loads that folder without the
+  consent dialog, and a packaged build starts honouring a self-hosted Registry
+  URL. A direct write leaves no activity log entry; the launch reminder still
+  appears while the switch is on, and a native backend still needs its own
+  consent. A plugin frame and a plugin's own sandboxed backend cannot write
+  it. Navide Guard grades an agent's write to this file as critical where the
+  CLI runs Navide's hooks (rule `plugin-store-write`, with the limits listed
+  under the local trust record below); it does not stop other processes of
+  the same user. A main-process signed consent is planned for 0.2.27. A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
   `AGENT_TEAM_PLUGIN_DEV_PATH` either way; with the switch on, **Load from
   folder…** opens the Host's own folder dialog. A folder loads a Manifest v2
   package (not `navide.`, not an id something else installed holds or
@@ -2116,6 +2163,35 @@ runs only inside the OS sandbox described in
   does not protect against other processes of the same user. A plugin's own
   backend (inside its sandbox) and plugin frames cannot write it. It is
   evidence of consent, not a verification by Navide.
+  Navide Guard grades an agent's write to these stores as critical (rule
+  `plugin-store-write`, which can be lowered to high but not switched off):
+  writing, deleting, moving, linking or changing the mode of the plugin
+  install root (`plugins/` in Navide's data folder, Developer Mode folders and
+  grants included), the local trust records (`plugin-local-trust/`), the
+  native backend consent store, and the kept-source markers and set-aside
+  folders beside backend data. A plugin's own backend data is not covered, and
+  reading any of these stays as before. This has limits. Guard only sees tool
+  calls from CLIs that run Navide's hooks. Shell commands are recognised only
+  in the forms Guard parses: redirection (`>`, `>>`, `>|`, `&>`), `tee`, the
+  destination of `cp`/`install`/`rsync`/`scp`/`ditto`, `mv`, `ln`, `chmod`,
+  `chown`, `touch`, `truncate`, `sed -i`, `xattr -w/-d/-c`, `mkdir`, `rmdir`,
+  `unlink`, `rm`, `find -delete`, `dd of=`, the output file of `curl`/`wget`
+  and the destination of `git clone`, with bare file names resolved against
+  the working directory. Not recognised: a computed path (`"$DIR"`,
+  `$(…)`), an interpreter's inline code (`python -c`, `perl -pi`), archive
+  extractors (`tar -C`, `unzip -d`), `xargs`, PowerShell cmdlets such as
+  `Set-Content`, and a write through a symlink created earlier that points
+  into the data folder (paths are compared as written, not resolved). With
+  Guard off, agent tool calls are only audited, never blocked; approvals
+  sent from a chat relay and text typed into a plain terminal pane are still
+  refused for these writes, as for every critical action. The chat relay
+  screens a relayed shell command fully but a relayed file-tool prompt only
+  for credential paths, so a relayed `Write` into the store is not refused
+  there (the existing relay model). It reduces accidental or induced agent
+  writes; it does not stop other processes of the same user and does not
+  replace a signed consent mechanism.
+  Navide's own installs, updates, removals and rollbacks write these files
+  from the main process directly and never pass through Guard.
   The installed-package `source` field (`marketplace`, `prerelease`,
   `testplace`, `local-signed`, `local-unsigned`, `developer-unpacked`,
   `factory-bundled`) is reported beside the legacy `provenance` field, which
@@ -2155,6 +2231,8 @@ to the Navide Marketplace are covered step by step in
 
 There is no `navide-plugin dev` command and no in-app hot-reload loop. Test a
 backend with `navide-plugin dev-backend`, whose Host bridge refuses every
-request, and test the complete package inside Navide by installing it from a
-local Registry; Developer Mode cannot open a v2 view (see
-[Backend trust](#backend-trust)).
+request, and test the complete package inside Navide by loading its folder
+with Settings → Navide Plugins → Developer Mode, installing it from a file, or
+installing it from a local Registry; only the environment-variable Developer
+Mode of a development build (`AGENT_TEAM_PLUGIN_DEV_PATH`) cannot open a v2
+view (see [Backend trust](#backend-trust)).

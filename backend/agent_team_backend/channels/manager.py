@@ -1604,15 +1604,19 @@ class ChannelManager:
             self.store.rename_pane(binding.pane_id, pane_id)
         self._spawn(self._remember_wake_target(binding, pane_id))
         key = binding.location().key()
-        if wake_pressed or key in self._wake_kept:
-            # The pane is back (on its own, or a wake button from before it came back): what
+        # A typed /wake (offered where there are no buttons) is answered like the button, never
+        # sent to the CLI as a prompt.
+        wake_asked = wake_pressed or _command_word(
+            quick_menu.strip_mention(msg.text, self._identity(msg))) in WAKE_WORDS
+        if wake_asked or key in self._wake_kept:
+            # The pane is back (on its own, or a wake asked for before it came back): what
             # was kept for it goes in first, in order.
             lang = prompt_skills.language(await self._ui_settings())
-            if wake_pressed:
+            if wake_asked:
                 await self._reply(msg, wake.text(lang, "already_online"))
-            # A new message follows unless this was the button: it keeps its place in the queue.
-            await self._deliver_kept(msg, binding, pane_id, lang, reserve=0 if wake_pressed else 1)
-            if wake_pressed:
+            # A new message follows unless this was a wake: it keeps its place in the queue.
+            await self._deliver_kept(msg, binding, pane_id, lang, reserve=0 if wake_asked else 1)
+            if wake_asked:
                 return
         # "<@bot> stop" or "@bot /cancel" is the command, addressed to the bot.
         command = quick_menu.strip_mention(msg.text, self._identity(msg))

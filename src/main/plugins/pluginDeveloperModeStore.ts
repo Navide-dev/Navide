@@ -14,10 +14,16 @@ import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import { canonicalContractJson } from '../../shared/pluginDisclosure'
 
 // The Developer Mode switch (DX report A2, card K4) and the developer folders
-// the user consented to. The main process owns this file; the renderer can
-// only ask the main window's settings page to change it, so neither a plugin,
-// an agent nor page script can turn it on. Off by default: a missing or
-// unreadable file means Developer Mode is off and no folder is loaded.
+// the user consented to. The main process owns this file; inside Navide the
+// renderer can only ask the main window's settings page to change it, so no
+// plugin frame, sandboxed plugin backend or page script can turn it on. The
+// file itself is unsigned and only shape-checked: any unsandboxed process of
+// the same user, an agent CLI included, can write it to turn Developer Mode
+// on and add a consented folder, without an activity log entry (disclosed in
+// plugin-development-v2.md; Navide Guard grades an agent's write to it as
+// critical where its hooks run; a signed consent is 0.2.27). Off by default:
+// a missing or unreadable file means Developer Mode is off and no folder is
+// loaded.
 const DEVELOPER_MODE_FILE = '.navide-plugin-developer-mode.json'
 
 /** One developer folder and the permission set the user consented to. The
