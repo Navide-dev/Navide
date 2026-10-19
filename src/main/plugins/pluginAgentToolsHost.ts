@@ -23,12 +23,11 @@ import { consentedAgentMethods, type ThirdPartyLaunchSpec } from './pluginThirdP
  * third-party `agentMethods` stays `[]`, exactly as on main.
  *
  * First-party packages (pluginFirstPartyBackends.ts, listed through
- * `listFirstPartyPackages`) are the exception: their tools are served without
- * the master switch and without per-version consent, so the snapshot carries
- * `enabled: true` as soon as one of them declares tools. Everything else
- * still applies to them: the Disabled switch, quarantine and revocation, the
- * caller-kind switch, and, on the backend side, the external-content
- * wrapping and pane taint of every result. A package counts as first-party
+ * `listFirstPartyPackages`) follow the master switch too, but their tools need
+ * no per-version consent and keep their names against a third-party package.
+ * Everything else still applies to them: the Disabled switch, quarantine and
+ * revocation, the caller-kind switch, and, on the backend side, the
+ * external-content wrapping and pane taint of every result. A package counts as first-party
  * only when it is listed there and its id is on the first-party list; a
  * third-party package never inherits the exemption, whatever its id.
  */
@@ -111,7 +110,7 @@ export class PluginAgentToolsHost {
   private catalog: AgentToolSyncEntry[] = []
   private queue: Promise<void> = Promise.resolve()
   /** Ids that were listed as first-party, so a disabled, quarantined or
-   *  revoked one keeps being reported without the master switch. */
+   *  revoked one keeps its first-party treatment. */
   private readonly firstPartyIds = new Set<string>()
 
   constructor(options: PluginAgentToolsHostOptions) {
@@ -229,11 +228,7 @@ export class PluginAgentToolsHost {
     const present = registered.filter((spec) => declaredTools(spec).length > 0)
     this.updateKnown(present)
     const switches = this.options.switches()
-    // With the master switch off only first-party packages are served.
-    const specs = [...this.known.values()]
-      .filter((spec) => switches.enabled || this.firstPartyIds.has(spec.pluginId))
-      .sort((a, b) => (a.pluginId < b.pluginId ? -1 : a.pluginId > b.pluginId ? 1 : 0))
-    if (!switches.enabled && specs.length === 0) {
+    if (!switches.enabled) {
       for (const spec of registered) this.options.setAgentMethods(spec.pluginId, spec.packageVersion, [])
       this.catalog = []
       this.collided = new Set()
@@ -243,6 +238,7 @@ export class PluginAgentToolsHost {
       return
     }
     const presentIds = new Set(present.map((spec) => spec.pluginId))
+    const specs = [...this.known.values()].sort((a, b) => (a.pluginId < b.pluginId ? -1 : a.pluginId > b.pluginId ? 1 : 0))
     const entries: AgentToolSyncEntry[] = []
     for (const spec of specs) {
       const state = await this.packageState(spec, presentIds.has(spec.pluginId))
@@ -283,8 +279,8 @@ export class PluginAgentToolsHost {
         collided.add(`${entry.pluginId}\u0000${entry.name}`)
       }
     }
-    // The switch may have been turned off (or on) while consent was being checked.
-    if (this.options.switches().enabled !== switches.enabled) return this.refreshNow()
+    // The switch may have been turned off while consent was being checked.
+    if (!this.options.switches().enabled) return this.refreshNow()
     for (const spec of registered) {
       // Only the tools actually served open their methods to agents.
       const served = new Set(entries
@@ -302,9 +298,7 @@ export class PluginAgentToolsHost {
     }
     this.catalog = entries
     this.collided = collided
-    // Callers without a pane need both switches, also for first-party tools.
-    const current = this.options.switches()
-    this.push({ enabled: true, externalCallers: current.enabled && current.externalCallers, tools: entries })
+    this.push({ enabled: true, externalCallers: this.options.switches().externalCallers, tools: entries })
   }
 
   private push(snapshot: Omit<AgentToolsSyncPayload, 'revision'>): void {
@@ -346,9 +340,9 @@ export class PluginAgentToolsHost {
     expected?: ThirdPartyLaunchSpec,
   ): { ok: true; spec: ThirdPartyLaunchSpec } | { ok: false; reason: AgentToolUnavailableReason } {
     const switches = this.options.switches()
+    if (!switches.enabled) return { ok: false, reason: 'master-switch-off' }
     const firstParty = this.firstPartyPackages().find((candidate) => candidate.pluginId === pluginId)
-    if (!firstParty && !switches.enabled) return { ok: false, reason: 'master-switch-off' }
-    if (caller.kind !== 'pane' && !(switches.enabled && switches.externalCallers)) {
+    if (caller.kind !== 'pane' && !switches.externalCallers) {
       return { ok: false, reason: 'external-callers-off' }
     }
     const mark = this.marks.get(pluginId)?.kind

@@ -1717,9 +1717,8 @@ async def test_a_tool_call_writes_one_audit_row(host: FakeHost, monkeypatch) -> 
 async def test_a_first_party_browser_tool_is_still_wrapped_as_external_content_and_taints(
     host: FakeHost, monkeypatch,
 ) -> None:
-    # The Host serves first-party tools (navide.browser) without the DB8 master
-    # switch: its snapshot says enabled with only those tools and external
-    # callers off. Nothing on this side treats them differently.
+    # The Host serves first-party tools (navide.browser) without per-version
+    # consent. Nothing on this side treats them differently.
     browser = _entry(
         "browser_snapshot",
         pluginId="navide.browser",

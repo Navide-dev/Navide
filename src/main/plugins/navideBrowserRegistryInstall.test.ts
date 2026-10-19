@@ -4,7 +4,7 @@
 // root and signer. Only Electron, the network and the plugin web view host are
 // stubbed. It covers what first-party treatment the installed package gets
 // (backend outside the third-party gate with exactly the `web` bridge port,
-// agent tools without the master switch or consent) and that look-alikes do
+// agent tools behind the master switch but without consent) and that look-alikes do
 // not get it: a third-party `acme.browser`, and `navide.browser` from any
 // source other than the Official Registry.
 
@@ -297,13 +297,24 @@ describe('(a) navide.browser installed from the Official Registry', () => {
 })
 
 describe('(b) agent tools of a registry-installed navide.browser', () => {
-  it('are served with the DB8 master switch off and without consent', async () => {
+  it('are not served with the DB8 master switch off', async () => {
+    register()
+    const activation = await installFromRegistry('navide.browser')
+    const { host, sent, methods } = agentToolsHost([firstPartyAgentToolSpec(activation)!], [])
+    await host.refresh()
+    expect(sent).toEqual([])
+    expect(methods.get('navide.browser@1.0.0') ?? []).toEqual([])
+    await expect(host.admit({ pluginId: 'navide.browser', toolName: 'browser_list', pluginVersion: '1.0.0', caller: PANE }, notStopping))
+      .resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+  })
+
+  it('are served with the DB8 master switch on, without per-version consent', async () => {
     register()
     const activation = await installFromRegistry('navide.browser')
     const catalog = firstPartyAgentToolSpec(activation)
     expect(catalog).not.toBeNull()
     const { host, sent, methods, hasConsent } = agentToolsHost([catalog!], [])
-    await host.refresh()
+    await host.setSwitches({ enabled: true })
     expect(sent.at(-1)).toMatchObject({ enabled: true, externalCallers: false })
     expect(sent.at(-1)!.tools.map((tool) => [tool.pluginId, tool.name, tool.state])).toEqual([
       ['navide.browser', 'browser_list', 'available'],

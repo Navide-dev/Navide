@@ -1833,8 +1833,8 @@ const registeredThirdPartySpecs = (): ThirdPartyLaunchSpec[] =>
     return spec && isThirdPartyLaunchSpec(spec) ? [spec] : []
   })
 // First-party backends with agent tools (navide.browser): the catalog entry
-// of each registered first-party activation. Their tools need neither the
-// master switch nor per-version consent (PluginAgentToolsHost).
+// of each registered first-party activation. Their tools follow the master
+// switch but need no per-version consent (PluginAgentToolsHost).
 const registeredFirstPartyAgentToolSpecs = (): ThirdPartyLaunchSpec[] =>
   approvedInstalledPluginActivations.flatMap((activation) => {
     if (!activation.backend || !isFirstPartyAgentToolPlugin(activation.pluginId)) return []
