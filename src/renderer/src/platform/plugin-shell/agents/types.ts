@@ -114,6 +114,16 @@ export interface AgentSpec {
      *  output lands, and the hook's own release path still runs. */
     clearsOnMiss?: boolean
   }
+  /** This CLI's folder-trust prompt at launch, and the keys that accept it.
+   *  Navide answers it for every pane it spawns, fresh or resumed, while the
+   *  pane's first screen is up (lib/startupTrust.ts) — the same acceptance the
+   *  marker bootstrap's dismissStartupDialog gives a fresh pane. Matched on the
+   *  RENDERED, whitespace-collapsed screen, so a transcript replayed on resume
+   *  that merely quotes the prompt is not mistaken for it. */
+  startupTrust?: {
+    pattern: RegExp
+    keys: string
+  }
   /** This vendor's TUI keeps bracketed paste on. Enables chunked clipboard
    *  paste wrapping AND serves as the default Shift+Enter encoding (bracketed
    *  LF inserts a literal newline without submitting). */
@@ -218,10 +228,13 @@ export interface AgentSpec {
   /** This CLI accepts a session id at launch, so a fresh pane can pin one
    *  instead of waiting for the log reader to attribute it. `flag` is the
    *  argument that carries it; `handwritten` recognizes an id the user typed
-   *  into a custom command (the pin is then theirs, not ours). Only claude. */
+   *  into a custom command (the pin is then theirs, not ours). claude and grok. */
   pinsSessionIdAtLaunch?: {
     flag: string
     handwritten: RegExp
+    /** The id this CLI wants, when a random UUIDv4 is not it (grok's are
+     *  UUIDv7). Undefined = the caller's generator. */
+    generateId?: () => string
   }
   /** What this CLI's usage windows (the backend's `fetch_usage` output) mean
    *  for quota-exhaustion failover — which kinds are account-level limits,

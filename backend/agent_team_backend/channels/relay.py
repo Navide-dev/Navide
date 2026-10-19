@@ -34,9 +34,9 @@ _TEXT_ANSWER_RE = re.compile(rf"^\s*(yes|y|no|n|[1-9])\s+([{ID_ALPHABET}]{{{ID_L
 _CALLBACK_RE = re.compile(rf"^nv1:([{ID_ALPHABET}]{{{ID_LENGTH}}}):(y|n|[1-9])$")
 _BARE_ANSWER_RE = re.compile(r"^\s*(yes|y|no|n|[1-9])\s*$", re.IGNORECASE)
 
-# Vendors whose prompts Navide can answer with keys. Keep in sync with MENU_VENDORS
-# and LINE_PROMPT_VENDORS in src/renderer/src/lib/paneAnswerKeys.ts.
-ANSWERABLE_AGENTS = frozenset({"claude", "codex", "aider"})
+# Vendors whose prompts Navide can answer with keys. Keep in sync with MENU_VENDORS,
+# LINE_PROMPT_VENDORS and HOTKEY_VENDORS in src/renderer/src/lib/paneAnswerKeys.ts.
+ANSWERABLE_AGENTS = frozenset({"claude", "codex", "aider", "grok"})
 
 # Keep in sync with PERMANENT_ALLOW in src/renderer/src/lib/paneAnswerKeys.ts.
 _PERMANENT_ALLOW_RE = re.compile(

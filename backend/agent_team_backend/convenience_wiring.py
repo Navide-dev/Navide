@@ -557,6 +557,48 @@ def _drop_codex_hook_trust() -> None:
         manager.drop_all_hook_trust()
 
 
+# ── Grok: folder trust (issue #402) ────────────────────────────────────────
+
+
+def merge_grok_folder_trust_gated(real_vendor: Path) -> None:
+    """``pane_home.merge_grok_folder_trust`` as the feature grok.folder-trust.
+
+    Writes ``~/.grok/trusted_folders.toml``, the user's own file: backed up
+    before every change, announced the first time, and taken back by the
+    switch. Off, a pane's trust decision stays in that pane's home. A failure
+    never blocks the spawn."""
+    from .mcp_server import pane_home
+
+    real = real_vendor / pane_home.GROK_TRUST_FILE
+    try:
+        g = _gate
+        if g is None:
+            pane_home.merge_grok_folder_trust(real_vendor)
+            return
+        g.apply(
+            "grok.folder-trust", real,
+            write=lambda: pane_home.merge_grok_folder_trust(real_vendor),
+            present=lambda: pane_home.grok_trust_rows_present(pane_home.grok_trust_ledger_rows(), real_vendor),
+            file=real, quiet_repairs=True, reset_folder=real_vendor,
+            detail="merged the folders Grok panes were told to trust",
+        )
+    except OSError as err:
+        log.warning("could not merge grok folder trust into %s: %s", real, err)
+
+
+def _grok_folder_trust_takeback() -> list[Takeback]:
+    from .mcp_server import pane_home
+
+    real_vendor = pane_home.real_home() / ".grok"
+    rows = pane_home.grok_trust_ledger_rows()
+    return [Takeback(
+        str(real_vendor / pane_home.GROK_TRUST_FILE),
+        lambda: pane_home.take_back_grok_folder_trust(real_vendor),
+        lambda: pane_home.grok_trust_rows_present(rows, real_vendor),
+        real_vendor / pane_home.GROK_TRUST_FILE,
+    )]
+
+
 # ── Account auto-repair (D7) ───────────────────────────────────────────────
 
 
@@ -663,4 +705,5 @@ TAKEBACKS: dict[str, Callable[[], list[Takeback]]] = {
     "cursor.project-mcp": _project_config_takeback,
     "cursor.project-skills": _project_dir_takeback,
     "codex.hook-trust": _codex_hook_trust_takeback,
+    "grok.folder-trust": _grok_folder_trust_takeback,
 }

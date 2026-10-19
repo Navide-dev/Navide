@@ -400,7 +400,9 @@ def _write_config(path: Path, document: dict[str, Any]) -> None:
 
     TOML is re-emitted rather than patched: the shim copy is ours to rebuild,
     so the user's data survives the round trip while comments and key order do
-    not. Their own file is never written — only this copy.
+    not. Their own file is never written — only this copy (and, through the
+    convenience gate, grok's trusted_folders.toml: see
+    merge_grok_folder_trust).
     """
     content = tomli_w.dumps(document) if _is_toml(path) else json.dumps(document, indent=2) + "\n"
     try:
@@ -461,6 +463,11 @@ def prepare(
         log.warning("home %s is itself a shim — not preparing another", home)
         return None
     real_vendor = home / spec.vendor_dir
+    if agent_key == "grok":
+        # Before this shim's mirror pass, so the merged file is what it links.
+        from ..convenience_wiring import merge_grok_folder_trust_gated
+
+        merge_grok_folder_trust_gated(real_vendor)
     try:
         # Created before anything is written into them: a grok shim holds a
         # copy of the API key, so no part of the path may be world-readable,
@@ -496,3 +503,130 @@ def prepare(
         log.warning("could not prepare %s shim home for pane %s: %s", agent_key, pane_id, err)
         return None
     return spec.env_var, str(root)
+
+
+# ---- grok folder trust (convenience feature grok.folder-trust) ----
+
+#: Where Grok Build records the folders the user trusted (its docs,
+#: 18-sandbox.md). A pane that answers the trust prompt writes it inside its
+#: own shim, where no other pane — and no later pane for the same folder —
+#: can see it, so every new grok pane asked again (issue #402).
+GROK_TRUST_FILE = "trusted_folders.toml"
+#: The rows Navide merged into the user's file, so the switch can take back
+#: exactly those. Lives beside the grok shims, in Navide's own tree.
+GROK_TRUST_LEDGER = ".folder-trust-merged.json"
+
+
+def _grok_trust_ledger() -> Path:
+    return panes_root() / "grok" / GROK_TRUST_LEDGER
+
+
+def grok_trust_ledger_rows() -> dict[str, Any]:
+    """The rows Navide merged and has not taken back, keyed by folder."""
+    try:
+        rows = json.loads(_grok_trust_ledger().read_text(encoding="utf-8")).get("rows")
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return rows if isinstance(rows, dict) else {}
+
+
+def _grok_trust_folders(path: Path) -> dict[str, Any] | None:
+    """A trust file's ``folders`` table; ``{}`` when it does not exist, None
+    when it cannot be read or parsed (never written over)."""
+    if not path.exists():
+        return {}
+    try:
+        folders = tomllib.loads(path.read_text(encoding="utf-8")).get("folders", {})
+    except (OSError, ValueError):
+        return None
+    return folders if isinstance(folders, dict) else None
+
+
+def grok_trust_rows_present(rows: dict[str, Any], real_vendor: Path) -> bool:
+    """Whether every row Navide merged is still in the user's file."""
+    folders = _grok_trust_folders(real_vendor / GROK_TRUST_FILE)
+    return bool(rows) and folders is not None and all(folders.get(k) == v for k, v in rows.items())
+
+
+def merge_grok_folder_trust(real_vendor: Path) -> None:
+    """Move the trust decisions grok panes recorded in their shims into the
+    user's ``~/.grok/trusted_folders.toml``, and point those shims at it.
+
+    Only folders the user's file does not mention are added: a decision made
+    outside Navide always wins. A file that cannot be parsed is left alone, and
+    so are the shim copies. Each added row goes into the ledger the switch's
+    takeback reads.
+    """
+    if not real_vendor.is_dir():
+        return
+    real = real_vendor / GROK_TRUST_FILE
+    stranded = [
+        path for path in sorted((panes_root() / "grok").glob(f"*/.grok/{GROK_TRUST_FILE}"))
+        if path.is_file() and not path.is_symlink()
+    ]
+    if not stranded:
+        return
+    created = not real.exists()
+    folders = _grok_trust_folders(real)
+    if folders is None:
+        log.warning("%s cannot be parsed; leaving the panes' trust where it is", real)
+        return
+    document: dict[str, Any] = {} if created else tomllib.loads(real.read_text(encoding="utf-8"))
+    added: dict[str, Any] = {}
+    merged: list[Path] = []
+    for path in stranded:
+        rows = _grok_trust_folders(path)
+        if rows is None:
+            continue
+        for key, row in rows.items():
+            if key not in folders and isinstance(row, dict):
+                folders[key] = row
+                added[key] = row
+        merged.append(path)
+    if added:
+        document["folders"] = folders
+        _write_config(real, document)
+        ledger = _grok_trust_ledger()
+        try:
+            state = json.loads(ledger.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            state = {"created": created, "rows": {}}
+        state.setdefault("rows", {}).update(added)
+        ledger.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    if not real.exists():
+        return
+    for path in merged:
+        try:
+            path.unlink()
+            path.symlink_to(real)
+        except OSError as err:
+            log.warning("could not point %s at %s: %s", path, real, err)
+
+
+def take_back_grok_folder_trust(real_vendor: Path) -> None:
+    """The switch's takeback: remove the rows Navide merged (unless the user
+    changed them since), and the file itself when Navide created it and
+    nothing else is left in it."""
+    real = real_vendor / GROK_TRUST_FILE
+    rows = grok_trust_ledger_rows()
+    folders = _grok_trust_folders(real)
+    if folders is None:
+        raise OSError(f"{real} cannot be parsed")
+    if rows and real.exists():
+        document = tomllib.loads(real.read_text(encoding="utf-8"))
+        for key, row in rows.items():
+            if folders.get(key) == row:
+                del folders[key]
+        try:
+            created = bool(json.loads(_grok_trust_ledger().read_text(encoding="utf-8")).get("created"))
+        except (OSError, ValueError, AttributeError):
+            created = False
+        if folders:
+            document["folders"] = folders
+        else:
+            document.pop("folders", None)
+        if created and not document:
+            real.unlink()
+        else:
+            _write_config(real, document)
+    _grok_trust_ledger().unlink(missing_ok=True)

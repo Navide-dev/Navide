@@ -114,6 +114,13 @@
         "writes": "~/.codex/auth.json（指向 pane 登入的硬連結）",
         "cost": "在 pane 內完成的登入只留在那個 pane。"
       },
+      "grok_folder-trust": {
+        "name": "Grok 資料夾信任共用",
+        "benefit": "在一個 Grok pane 信任過的資料夾，所有 Grok pane 都會沿用，包括之後新開或重建的。",
+        "purpose": "讓 Grok pane 不必為同一個資料夾再問一次信任",
+        "writes": "~/.grok/trusted_folders.toml：Grok pane 記下你信任某個資料夾後，Navide 會把那一列合併進這個檔，並讓各 pane 都讀它。只加入檔案裡還沒有的資料夾，不改你自己的決定。每次修改前都會備份；關閉這項會只收回 Navide 加入的那幾列（檔案是 Navide 建立的就整個移除）",
+        "cost": "在一個 Grok pane 信任過的資料夾，每個新開或重建的 Grok pane 都會再問一次。"
+      },
       "cursor_project-mcp": {
         "name": "Cursor 的 Navide MCP 工具",
         "benefit": "Cursor pane 可以使用 Navide 的 MCP 工具，例如傳訊、計畫與排程。",
