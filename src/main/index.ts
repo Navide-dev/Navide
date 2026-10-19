@@ -1474,6 +1474,50 @@ function loadFactoryMiniIdePackage() {
   })
   return factoryMiniIde
 }
+// navide.browser: an App-bundled first-party package like Git, whose native
+// backend starts like Plans (pluginFirstPartyBackends.ts). Built per host
+// target, because its backend is a native program.
+const BROWSER_PLUGIN_ID = 'navide.browser'
+const factoryBrowserDir = (): string => officialPluginArtifactPackageDir(
+  miniIdeSource,
+  BROWSER_PLUGIN_ID,
+  currentPluginHostTarget(),
+)
+/** Load the bundled browser package. A build without it (no staged
+ *  dist-plugins/navide-browser) is not an error: nothing is loaded. */
+function loadFactoryBrowserPackage():
+  | { loaded: true; pluginId: string; packageVersion: string; activation: PluginActivationCatalogEntry }
+  | { loaded: false; reason: string; absent?: true } {
+  if (!existsSync(join(factoryBrowserDir(), 'manifest.json'))) {
+    return { loaded: false, reason: 'factory package is not bundled', absent: true }
+  }
+  const factoryBrowser = frontendPluginManager.loadFactoryPlugin(factoryBrowserDir(), BROWSER_PLUGIN_ID)
+  if (!factoryBrowser.loaded) return factoryBrowser
+  const descriptor = frontendPluginManager.getDescriptor(factoryBrowser.pluginId)
+  const policy = descriptor?.capabilityPolicy
+  if (policy?.kind !== 'manifest-v2') {
+    frontendPluginManager.removeInstalledPlugin(factoryBrowser.pluginId, { restoreBuiltin: false })
+    return { loaded: false as const, reason: 'factory package has no Manifest v2 policy' }
+  }
+  pluginCapabilityGrants.set(factoryBrowser.pluginId, {
+    packageVersion: factoryBrowser.packageVersion,
+    system: [...policy.system],
+    ...(policy.shell ? { shell: policy.shell } : {}),
+    storage: true,
+  })
+  const backend = factoryBrowser.activation.backend ? firstPartyBackendActivation(factoryBrowser.activation) : null
+  if (backend && !frontendPluginManager.hasBackendActivation(backend.pluginId, backend.packageVersion)) {
+    frontendPluginManager.registerBackendActivation(backend)
+  }
+  return factoryBrowser
+}
+const installedBrowserDescriptorPresent = frontendPluginManager.getDescriptor(BROWSER_PLUGIN_ID) !== undefined
+const factoryBrowserActivations = installedPluginLoad.activationCatalog.slice(0, 0)
+if (!installedBrowserDescriptorPresent && !pluginFactoryOptOuts.has(BROWSER_PLUGIN_ID)) {
+  const factoryBrowser = loadFactoryBrowserPackage()
+  if (factoryBrowser.loaded) factoryBrowserActivations.push(factoryBrowser.activation)
+  else if (!factoryBrowser.absent) warnMain(`[main] bundled navide.browser unavailable: ${factoryBrowser.reason}`)
+}
 const factoryMiniIdeActivations = installedPluginLoad.activationCatalog.slice(0, 0)
 if (!installedMiniIdeDescriptorPresent && !pluginFactoryOptOuts.has(MINI_IDE_PLUGIN_ID)) {
   const factoryMiniIde = loadFactoryMiniIdePackage()
@@ -1598,6 +1642,7 @@ let approvedInstalledPluginActivations = [
   ...installedPluginLoad.activationCatalog,
   ...factoryGitActivations,
   ...factoryMiniIdeActivations,
+  ...factoryBrowserActivations,
 ]
 for (const error of installedPluginLoad.errors) {
   console.warn(`[main] installed plugin quarantined: ${error}`)
@@ -1920,7 +1965,7 @@ const pluginTrustRefresh = registerPluginIpc(
         frontendPluginManager.setMiniIdeStorageSnapshotContext('', null)
       }
     },
-    factoryPackageIds: ['navide.git', MINI_IDE_PLUGIN_ID],
+    factoryPackageIds: ['navide.git', MINI_IDE_PLUGIN_ID, BROWSER_PLUGIN_ID],
     // loadFactoryPackage refuses the same way, but only after the open Git
     // views were drained; asking first keeps the button hidden instead.
     factoryRollbackRefusal: (pluginId) => {
@@ -1951,6 +1996,22 @@ const pluginTrustRefresh = registerPluginIpc(
         disabled: frontendPluginManager.isBuiltinPluginDisabled(pluginId),
         ...(builtinRemovedEarlier.has(pluginId) ? { dataDeletedByEarlierRemoval: true } : {}),
       })
+      // The browser row is listed only in a build that ships it, or while a
+      // copy of it is loaded.
+      const browserDescriptor = frontendPluginManager.getDescriptor(BROWSER_PLUGIN_ID)
+      const browserFactoryActive = frontendPluginManager
+        .listInstalledPackages()
+        .some((pkg) => pkg.id === BROWSER_PLUGIN_ID && pkg.provenance === 'factory-bundled') &&
+        browserDescriptor?.capabilityPolicy?.kind === 'manifest-v2'
+      const browserRows = browserDescriptor || existsSync(join(factoryBrowserDir(), 'manifest.json'))
+        ? [{
+            id: BROWSER_PLUGIN_ID,
+            version: browserFactoryActive ? browserDescriptor?.packageVersion ?? null : null,
+            active: browserFactoryActive,
+            optedOut: pluginFactoryOptOuts.has(BROWSER_PLUGIN_ID),
+            ...builtinSwitch(BROWSER_PLUGIN_ID),
+          }]
+        : []
       return [{
         id: 'navide.git',
         version: factoryActive ? descriptor?.packageVersion ?? null : null,
@@ -1966,9 +2027,19 @@ const pluginTrustRefresh = registerPluginIpc(
       }, {
         ...plansFactoryPackageSummary(frontendPluginManager, plansRecoveryEnabled),
         ...builtinSwitch('navide.plans'),
-      }]
+      }, ...browserRows]
     },
     restoreFactoryPackage: (pluginId) => {
+      if (pluginId === BROWSER_PLUGIN_ID) {
+        if (existsSync(join(pluginsRoot(), pluginId))) {
+          throw new Error('an installed package already owns this plugin id')
+        }
+        const restored = loadFactoryBrowserPackage()
+        if (!restored.loaded) throw new Error(restored.reason)
+        pluginFactoryOptOuts.remove(pluginId)
+        applyPluginActivationChange({ pluginId, activation: restored.activation })
+        return
+      }
       if (pluginId === MINI_IDE_PLUGIN_ID) {
         if (existsSync(join(pluginsRoot(), pluginId))) {
           throw new Error('an installed package already owns this plugin id')
@@ -2051,9 +2122,26 @@ const pluginTrustRefresh = registerPluginIpc(
         }
         return loaded
       }
+      if (pluginId === BROWSER_PLUGIN_ID) {
+        const loaded = loadFactoryBrowserPackage()
+        if (loaded.loaded) pluginFactoryOptOuts.remove(pluginId)
+        return loaded.loaded ? loaded : { loaded: false, reason: loaded.reason }
+      }
       return { loaded: false, reason: 'unknown factory package' }
     },
     onFactoryPackageRemoved: (pluginId) => {
+      if (pluginId === BROWSER_PLUGIN_ID) {
+        pluginFactoryOptOuts.add(pluginId)
+        for (const [key, hostWindow] of contributionWindows) {
+          if (key.startsWith(`${BROWSER_PLUGIN_ID}.`) && !hostWindow.isDestroyed()) hostWindow.close()
+        }
+        for (const hostWindow of mainWindows) {
+          if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
+            hostWindow.webContents.send('plugins:contributionsChanged')
+          }
+        }
+        return
+      }
       if (pluginId === MINI_IDE_PLUGIN_ID) {
         pluginFactoryOptOuts.add(pluginId)
         miniIdeRecoveryEnabled = false
@@ -2079,6 +2167,7 @@ const pluginTrustRefresh = registerPluginIpc(
     onPackageInstalled: (pluginId) => {
       if (pluginId === 'navide.git') pluginFactoryOptOuts.remove(pluginId)
       if (pluginId === MINI_IDE_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
+      if (pluginId === BROWSER_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
     },
     onBuiltinSwitchReset: (resumed) => {
       for (const pluginId of resumed) completeBuiltinEnable(pluginId)
