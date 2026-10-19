@@ -14,11 +14,16 @@
 
 import { AGENT_SPECS } from '@navide/plugin-shell'
 
-/** The keys that accept this vendor's trust prompt, while it is on screen. */
-export function startupTrustKeys(agentKey: string, screen: string): string | null {
+const withoutTrailingSlash = (path: string): string => path.replace(/(.)\/+$/, '$1')
+
+/** The keys that accept this vendor's trust prompt, while it is the live
+ *  dialog on screen and asks about `folder` (the pane's workspace). Any other
+ *  folder is left for the user to answer. */
+export function startupTrustKeys(agentKey: string, screen: string, folder: string): string | null {
   const trust = AGENT_SPECS.find((s) => s.agentKey === agentKey)?.startupTrust
-  if (!trust) return null
-  return trust.pattern.test(screen.replace(/\s+/g, ' ')) ? trust.keys : null
+  if (!trust || !folder) return null
+  const asked = trust.pattern.exec(screen.replace(/\s+/g, ' '))?.[1]
+  return asked && withoutTrailingSlash(asked) === withoutTrailingSlash(folder) ? trust.keys : null
 }
 
 export interface StartupTrustDeps {
@@ -34,6 +39,8 @@ export interface StartupTrustDeps {
   /** Output that has appeared and stayed quiet this long without the prompt
    *  means none is coming (dismissStartupDialog's NO_DIALOG_QUIET_MS). */
   quietMs: number
+  /** The pane's workspace: the one folder whose prompt is accepted. */
+  folder: string
 }
 
 /** Watch the pane's first screen and press the accept keys once if the trust
@@ -44,7 +51,7 @@ export async function acceptStartupTrust(agentKey: string, deps: StartupTrustDep
   let stableSince = deps.now()
   while (deps.now() < deadline) {
     if (!deps.alive()) return false
-    const keys = startupTrustKeys(agentKey, deps.readScreen())
+    const keys = startupTrustKeys(agentKey, deps.readScreen(), deps.folder)
     if (keys) {
       await deps.send(keys)
       return true

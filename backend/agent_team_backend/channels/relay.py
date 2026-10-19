@@ -38,6 +38,13 @@ _BARE_ANSWER_RE = re.compile(r"^\s*(yes|y|no|n|[1-9])\s*$", re.IGNORECASE)
 # LINE_PROMPT_VENDORS and HOTKEY_VENDORS in src/renderer/src/lib/paneAnswerKeys.ts.
 ANSWERABLE_AGENTS = frozenset({"claude", "codex", "aider", "grok"})
 
+# Vendors whose one answerable prompt grants for good: Grok Build keeps a
+# trusted folder in its trust store, which grok.folder-trust shares with every
+# Grok pane. Its "allow" is a permanent allow, only the user's to give (#442's
+# rule); Navide's own acceptance of a pane's workspace at launch is separate.
+# Keep in sync with PERMANENT_ALLOW_VENDORS in src/renderer/src/lib/paneAnswerKeys.ts.
+PERMANENT_ALLOW_AGENTS = frozenset({"grok"})
+
 # Keep in sync with PERMANENT_ALLOW in src/renderer/src/lib/paneAnswerKeys.ts.
 _PERMANENT_ALLOW_RE = re.compile(
     r"\bdon['’]?t ask again\b|\bdo not ask again\b|\balways\b|\b(?:this|the) session\b"
@@ -77,6 +84,8 @@ class RelayRequest:
     message_text: str = ""
     # The 「正在等確認」 warnings that carried this request's buttons too: (message id, text).
     held: list[tuple[str, str]] = field(default_factory=list)
+    # The pane's CLI, where the window reported it.
+    agent_key: str = ""
 
 
 @dataclass(frozen=True)
@@ -123,7 +132,10 @@ def is_free_text(option: str) -> bool:
 def refuses_permanent(request: RelayRequest, choice: str) -> bool:
     """``choice`` would press a permanent-allow option (``yes`` presses option 1)."""
     if request.kind == "permission":
-        return choice == "y" and bool(request.options) and is_permanent_allow(request.options[0])
+        return choice == "y" and (
+            request.agent_key in PERMANENT_ALLOW_AGENTS
+            or (bool(request.options) and is_permanent_allow(request.options[0]))
+        )
     if choice.isdigit() and 1 <= int(choice) <= len(request.options):
         return is_permanent_allow(request.options[int(choice) - 1])
     return False
@@ -172,7 +184,7 @@ def _offered(request: RelayRequest) -> list[tuple[int, str]]:
 
 
 def _allow_offered(request: RelayRequest) -> bool:
-    return not (request.options and is_permanent_allow(request.options[0]))
+    return not refuses_permanent(request, "y")
 
 
 def answer_payload(request: RelayRequest, choice: str) -> dict[str, Any] | None:
@@ -265,13 +277,15 @@ class RelayTable:
         self._on_expired = on_expired
 
     def create(
-        self, pane_id: str, kind: str, options: list[str], loc: Location, prompt: str = ""
+        self, pane_id: str, kind: str, options: list[str], loc: Location, prompt: str = "",
+        agent_key: str = "",
     ) -> RelayRequest:
         self.prune()
         rid = new_request_id()
         while rid in self._by_id:
             rid = new_request_id()
-        req = RelayRequest(rid, pane_id, kind, list(options), loc, self._clock(), prompt)
+        req = RelayRequest(rid, pane_id, kind, list(options), loc, self._clock(), prompt,
+                           agent_key=agent_key)
         self._by_id[rid] = req
         return req
 

@@ -118,8 +118,10 @@ export interface AgentSpec {
    *  Navide answers it for every pane it spawns, fresh or resumed, while the
    *  pane's first screen is up (lib/startupTrust.ts) — the same acceptance the
    *  marker bootstrap's dismissStartupDialog gives a fresh pane. Matched on the
-   *  RENDERED, whitespace-collapsed screen, so a transcript replayed on resume
-   *  that merely quotes the prompt is not mistaken for it. */
+   *  RENDERED, whitespace-collapsed screen and anchored on its end, so a
+   *  transcript replayed on resume that merely quotes the prompt is not
+   *  mistaken for it. Group 1 of `pattern` is the folder asked about: only the
+   *  pane's own workspace is accepted. */
   startupTrust?: {
     pattern: RegExp
     keys: string

@@ -4494,7 +4494,7 @@ async def cli_answer_prompt(
 
     request = relay.RelayRequest(
         id="", pane_id=pane.pane_id, kind="question" if choice.isdigit() else "permission",
-        options=options, loc=relay.Location("mcp", "", ""), prompt=prompt)
+        options=options, loc=relay.Location("mcp", "", ""), prompt=prompt, agent_key=pane.agent_key or "")
     if any(relay.is_multi_select(o) for o in options):
         return _answer_refusal(pane, "computer-only", relay.COMPUTER_ONLY)
     if relay.refuses_permanent(request, choice):

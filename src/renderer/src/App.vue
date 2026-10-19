@@ -6460,7 +6460,7 @@ function paneAcceptsStartupTrust(paneId: string): boolean {
   return !!agentSpecs.find((s) => s.agentKey === agentKey)?.startupTrust
 }
 
-function watchStartupTrust(paneId: string, agentKey: string): void {
+function watchStartupTrust(paneId: string, agentKey: string, folder: string): void {
   const watch = acceptStartupTrust(agentKey, {
     readScreen: () => {
       try {
@@ -6481,6 +6481,7 @@ function watchStartupTrust(paneId: string, agentKey: string): void {
     now: Date.now,
     timeoutMs: DISMISS_TIMEOUT_MS,
     quietMs: NO_DIALOG_QUIET_MS,
+    folder,
   }).finally(() => startupTrustWatches.delete(paneId))
   startupTrustWatches.set(paneId, watch)
 }
@@ -7379,7 +7380,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     if ((ref.status as unknown as string) === 'running') {
       // Fresh or resumed, with a task or without: a resumed pane gets no other
       // startup handling at all, and sat on the prompt with every message held.
-      if (spec.startupTrust) watchStartupTrust(id, spec.agentKey)
+      if (spec.startupTrust) watchStartupTrust(id, spec.agentKey, opts.workspacePath ?? '')
       if (pane.origin !== 'pipeline' && !pane.roleKey && !pane.kickoffPrompt) {
         pane.injectionStatus = 'skipped'
         setPrepStatus(pane, 'ready')

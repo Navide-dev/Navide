@@ -157,21 +157,32 @@ on its next spawn. This is a known trade-off.
 Grok Build records the folders you trusted in `~/.grok/trusted_folders.toml`.
 A Grok pane runs in its own home shim, and a trust decision it saves lands in
 that shim, where no other pane can see it — so every new or rebuilt pane
-asked again (issue #402). Before each Grok pane starts, Navide merges the
-decisions every Grok shim holds into your file and points the shims at it:
+asked again (issue #402). Each Grok pane now has its own copy of the file,
+seeded with your decisions. Before each Grok pane starts, Navide appends the
+folders the panes trusted in their copies to your file:
 
-- Only folders your file does not mention are added. A decision you made
-  outside Navide is never changed.
+- Only folders your file does not mention are added, as text at its end. A
+  decision you made outside Navide is never changed, and neither are your
+  comments, key order or layout.
 - Your file is backed up before every change. The first change is announced;
   later ones are logged quietly.
-- The rows Navide added are listed in `~/.navide-panes/grok/.folder-trust-merged.json`.
-  Turning the switch off takes back exactly those rows, unless you changed
-  them since, and removes the file when Navide created it and nothing else
-  is in it. Deleting a row Navide added turns the feature off.
-- A file that cannot be parsed is left alone, and so are the panes' copies.
+- The text Navide appended is listed in `~/.navide-panes/grok/.folder-trust-merged.json`.
+  Turning the switch off removes exactly that text, unless you changed it
+  since, so the file is back to its own bytes; it removes the file when
+  Navide created it and nothing else is in it. Each pane keeps the folders it
+  trusted in its own copy. Deleting a folder Navide added turns the feature off.
+- A file that cannot be parsed, or that a folder table cannot be appended to,
+  is left alone.
+- Off, a pane's trust decision stays in that pane's copy, and no pane ever
+  writes your file directly.
 
 Navide also answers Grok Build's trust prompt (`y`) when a pane it spawns
-shows it, fresh or resumed, as it already did for a fresh pane.
+shows it, fresh or resumed, as it already did for a fresh pane, but only for
+the pane's own workspace and only while the prompt is the live dialog at the
+bottom of the screen. A prompt for any other folder is left for you. Agents
+and chat relays cannot accept it for you: `cli_answer_prompt` refuses
+`allow` with `permanent-allow-refused`, as for any choice that grants more than
+one prompt.
 
 ### Claude: hooks carried by the panes
 

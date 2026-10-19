@@ -565,16 +565,15 @@ def merge_grok_folder_trust_gated(real_vendor: Path) -> None:
 
     Writes ``~/.grok/trusted_folders.toml``, the user's own file: backed up
     before every change, announced the first time, and taken back by the
-    switch. Off, a pane's trust decision stays in that pane's home. A failure
-    never blocks the spawn."""
+    switch. Off, a pane's trust decision stays in that pane's home. Without a
+    gate nothing is written. A failure never blocks the spawn."""
     from .mcp_server import pane_home
 
     real = real_vendor / pane_home.GROK_TRUST_FILE
+    g = _gate
+    if g is None:
+        return
     try:
-        g = _gate
-        if g is None:
-            pane_home.merge_grok_folder_trust(real_vendor)
-            return
         g.apply(
             "grok.folder-trust", real,
             write=lambda: pane_home.merge_grok_folder_trust(real_vendor),
@@ -582,7 +581,7 @@ def merge_grok_folder_trust_gated(real_vendor: Path) -> None:
             file=real, quiet_repairs=True, reset_folder=real_vendor,
             detail="merged the folders Grok panes were told to trust",
         )
-    except OSError as err:
+    except Exception as err:  # noqa: BLE001 — the spawn goes ahead whatever happens here
         log.warning("could not merge grok folder trust into %s: %s", real, err)
 
 

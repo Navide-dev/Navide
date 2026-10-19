@@ -8,9 +8,13 @@ import type { AgentSpec } from './types'
 //   Grok Build may run or modify contents in this directory, posing security risks.
 //     Yes, proceed   y
 //     No, quit       n
-// Anchored on the question AND the live option row, which only exist while it
-// waits; the screen is whitespace-collapsed before matching.
-const TRUST_PROMPT = /Do you trust the contents of this directory\? .*Yes, proceed y\b/
+// Matched on the whitespace-collapsed screen, and only as the dialog that is
+// live NOW: the last question on screen, with its option rows as the very
+// last thing on it. A replayed transcript that quotes the prompt has more
+// below it (the composer at least), so it does not match. Group 1 is the
+// folder the prompt asks about.
+const TRUST_PROMPT =
+  /Do you trust the contents of this directory\? ((?:(?!Do you trust the contents of this directory\?).)+?)(?: Grok Build may run(?:(?!Do you trust the contents of this directory\?).)*?)? Yes, proceed y No, quit n ?$/
 
 /** A UUIDv7 (RFC 9562): Grok Build names its own sessions with these, and
  *  `--session-id` must be a UUID that does not exist yet. */
@@ -61,9 +65,11 @@ export const SPEC = {
   bracketedPaste: true,
   // The folder-trust prompt is the one wait this CLI shows as plain text. It
   // reads as awaiting, so a message is held instead of being pasted into a
-  // y/n prompt, and cli_answer_prompt can answer it (lib/paneAnswerKeys.ts).
+  // y/n prompt, and cli_answer_prompt can refuse it (lib/paneAnswerKeys.ts:
+  // trusting a folder is a permanent allow, the user's alone).
   awaitingInput: { pattern: TRUST_PROMPT },
-  // Accepted for every pane Navide spawns, a resumed one included (#402).
+  // Accepted for every pane Navide spawns, a resumed one included (#402), and
+  // only for the pane's own workspace.
   startupTrust: { pattern: TRUST_PROMPT, keys: 'y' },
   resumeCommandPattern: /^grok\s+-r\s+\S+/,
   supportsRebuild: true,

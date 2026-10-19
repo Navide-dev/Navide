@@ -17,6 +17,19 @@ const TRUST_SCREEN = [
 ].join('\n')
 
 const COMPOSER = '> \n  grok-build · ctrl+c to quit'
+const WORKSPACE = '/Users/someone/workspace'
+
+// A resumed pane replaying a conversation that quotes the prompt: the words
+// are on screen, but the live screen below them is the composer.
+const QUOTED = [
+  'user: Grok kept asking me this:',
+  TRUST_SCREEN,
+  'grok: That is the folder-trust prompt; answer y once.',
+  COMPOSER,
+].join('\n')
+
+// The same live prompt, for a folder that is not the pane's workspace.
+const OTHER_FOLDER = TRUST_SCREEN.replace(WORKSPACE, '/etc')
 
 describe('the trust prompt is an answerable wait', () => {
   it('reads Grok Build trust prompt as awaiting, and its composer as not', () => {
@@ -25,12 +38,18 @@ describe('the trust prompt is an answerable wait', () => {
     expect(matchAwaitingInput('grok', COMPOSER)).toBe(false)
   })
 
+  it('does not read a quoted prompt above the composer as a wait', () => {
+    expect(matchAwaitingInput('grok', QUOTED)).toBe(false)
+  })
+
   it('answers it with the keys the prompt names', () => {
     const resolve = (answer: PaneAnswer) =>
       resolveAnswerKeys({
         agentKey: 'grok', displayStatus: 'awaiting', awaitingKind: 'permission', screen: TRUST_SCREEN, answer,
       })
-    expect(resolve({ kind: 'permission', choice: 'allow' })).toEqual({ ok: true, keys: 'y' })
+    // Trusting a folder lasts and is shared by every Grok pane: a permanent
+    // allow, which only the user gives (#442's rule).
+    expect(resolve({ kind: 'permission', choice: 'allow' })).toMatchObject({ ok: false })
     expect(resolve({ kind: 'permission', choice: 'deny' })).toEqual({ ok: true, keys: 'n' })
     expect(resolve({ kind: 'question', option: 1 })).toEqual({ ok: false, error: 'unsupported for grok' })
   })
@@ -38,9 +57,20 @@ describe('the trust prompt is an answerable wait', () => {
 
 describe('Grok panes accept the trust prompt at launch, fresh or resumed', () => {
   it('names the keys only while the prompt is on screen', () => {
-    expect(startupTrustKeys('grok', TRUST_SCREEN)).toBe('y')
-    expect(startupTrustKeys('grok', COMPOSER)).toBeNull()
-    expect(startupTrustKeys('claude', TRUST_SCREEN)).toBeNull()
+    expect(startupTrustKeys('grok', TRUST_SCREEN, WORKSPACE)).toBe('y')
+    expect(startupTrustKeys('grok', TRUST_SCREEN, `${WORKSPACE}/`)).toBe('y')
+    expect(startupTrustKeys('grok', COMPOSER, WORKSPACE)).toBeNull()
+    expect(startupTrustKeys('claude', TRUST_SCREEN, WORKSPACE)).toBeNull()
+  })
+
+  it('never accepts a quoted prompt', () => {
+    expect(startupTrustKeys('grok', QUOTED, WORKSPACE)).toBeNull()
+  })
+
+  it('accepts only the pane\'s own workspace', () => {
+    expect(startupTrustKeys('grok', OTHER_FOLDER, WORKSPACE)).toBeNull()
+    expect(startupTrustKeys('grok', OTHER_FOLDER, '/etc/x')).toBeNull()
+    expect(startupTrustKeys('grok', TRUST_SCREEN, '')).toBeNull()
   })
 
   function harness(screens: string[]) {
@@ -61,6 +91,7 @@ describe('Grok panes accept the trust prompt at launch, fresh or resumed', () =>
       now: () => t,
       timeoutMs: 8000,
       quietMs: 1500,
+      folder: WORKSPACE,
     }
     return { deps, send }
   }
