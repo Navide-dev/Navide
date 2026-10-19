@@ -83,8 +83,13 @@ function stripMetaRefresh(html: string): string {
     seen ??= new Uint8Array(html.length)
     const end = startTagEnd(html, m.index + 5, seen)
     // A `<meta` that never ends may be only text (a comment, an attribute
-    // value): leave it and read on from the next one.
-    if (end === -1) continue
+    // value), so read on from the next one. It becomes text for certain: left
+    // as it is, markup added after the strip could close it into a tag.
+    if (end === -1) {
+      out += html.slice(kept, m.index) + '&lt;meta'
+      kept = m.index + 5
+      continue
+    }
     if (isRefreshMeta(html.slice(m.index, end))) {
       out += html.slice(kept, m.index) + '<meta>'
       kept = end

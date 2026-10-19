@@ -200,8 +200,15 @@ describe('preparePlanDocHtml', () => {
     ['a textarea', '<textarea><meta a="</textarea><p>after</p>'],
   ])('keeps what follows a never-ending <meta in %s', (_name, body) => {
     const html = prepare(`<body>${body}<meta http-equiv=refresh content=0;url=https://attacker.invalid/r></body>`)
-    expect(html).toContain(body)
+    expect(html).toContain(body.replace('<meta', '&lt;meta'))
     expect(html).not.toContain('attacker.invalid')
+  })
+
+  // Markup injected after the strip (the runtime script) must not be able to
+  // close a `<meta` the plan left open into a meta refresh.
+  it('turns a <meta that never ends into text', () => {
+    const html = prepare("<body><p>a</p><meta http-equiv=refresh content='0;url=https://attacker.invalid/")
+    expect(html).toContain("<p>a</p>&lt;meta http-equiv=refresh content='0;url=https://attacker.invalid/")
   })
 
   // The browser reads `<me<meta>` as one unknown tag, so what surrounds a
