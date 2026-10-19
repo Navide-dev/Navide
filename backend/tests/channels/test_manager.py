@@ -1883,3 +1883,12 @@ async def test_a_status_that_is_neither_queued_nor_terminal_still_yields(env, mo
     await asyncio.wait_for(env.m._watch_delivery("pane-1", "k-odd", pending), 2.0)
     # One look per VERDICT_POLL_S (0.01 here) over 0.3s, not thousands.
     assert looks < 200
+
+
+async def test_a_sign_in_pane_gets_no_child_topic(env: Env) -> None:
+    """mirror's auto child topic binds without ChannelManager.bind, so it checks itself."""
+    env.m._seams.is_login_pane = lambda pane_id: pane_id == "child-login"  # noqa: SLF001
+    root = next(b for b in env.store.bindings() if b.pane_id == "pane-1")
+    await env.m.mirror._adopt_child(root, {"pane_id": "pane-1", "name": "api"},  # noqa: SLF001
+                                     {"pane_id": "child-login", "name": "claude-login"})
+    assert all(b.pane_id != "child-login" for b in env.store.bindings())

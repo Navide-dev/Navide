@@ -34,8 +34,10 @@ from agent_team_backend.mcp_server import (
 @pytest.fixture(autouse=True)
 def _clean_registry() -> Any:
     agent_messaging._reset_for_test()
+    login_panes._reset_for_test()
     yield
     agent_messaging._reset_for_test()
+    login_panes._reset_for_test()
 
 
 def _ctx(pane_id: str = "pa") -> Any:
@@ -336,3 +338,132 @@ def test_no_tool_hands_out_a_sign_in_panes_turn_text(monkeypatch: pytest.MonkeyP
 
     assert "text" not in plan_mcp._activity_summary("login")
     assert plan_mcp._activity_summary("work")["text"] == "SECRET-CODE"
+
+
+# ── the sign-in pane's marker outlives its PTY (review LOW-1) ───────────────
+
+
+def test_a_sign_in_pane_stays_marked_after_its_terminal_is_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    _terminals(monkeypatch, {})
+    login_panes.note("login", {"login_pane": True})
+    assert login_panes.is_login_pane("login") is True
+
+
+def test_a_pane_id_reused_for_an_ordinary_terminal_is_no_longer_marked(monkeypatch: pytest.MonkeyPatch) -> None:
+    _terminals(monkeypatch, {})
+    login_panes.note("p", {"live_login": True})
+    login_panes.note("p", {"profile_id": "a1"})
+    assert login_panes.is_login_pane("p") is False
+
+
+# ── nothing but the user types into a sign-in pane (review MED-2, LOW-2) ────
+
+
+class _Dispatched:
+    def __init__(self) -> None:
+        self.targets: list[str] = []
+
+    async def __call__(self, entry: Any, text: str, **_kw: Any) -> str:
+        self.targets.append(entry.pane_id)
+        return f"k-{len(self.targets)}"
+
+
+@pytest.fixture
+def dispatched(monkeypatch: pytest.MonkeyPatch) -> _Dispatched:
+    fake = _Dispatched()
+    monkeypatch.setattr(plan_mcp, "_dispatch_delivery", fake)
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    agent_messaging.register("login", "claude-login", "/ws/alpha", agent_key="claude")
+    agent_messaging.register("work", "worker", "/ws/alpha", agent_key="claude")
+    _terminals(monkeypatch, {})
+    login_panes.note("login", {"login_pane": True})
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_cli_send_refuses_a_sign_in_pane(dispatched: _Dispatched) -> None:
+    result = await plan_mcp.cli_send("claude-login", "pick option 2", _ctx())
+    assert result["ok"] is False
+    assert result["error_code"] == "login-pane-input-refused"
+    assert dispatched.targets == []
+
+
+@pytest.mark.asyncio
+async def test_cli_send_to_an_ordinary_pane_is_unchanged(dispatched: _Dispatched) -> None:
+    result = await plan_mcp.cli_send("worker", "hello", _ctx())
+    assert result["ok"] is True
+    assert dispatched.targets == ["work"]
+
+
+@pytest.mark.asyncio
+async def test_a_scheduled_send_by_pane_id_is_refused(dispatched: _Dispatched) -> None:
+    """The scheduler sends as the host, by pane id, with open_target (scheduler.LiveBridge)."""
+    result = await plan_mcp._send(plan_mcp._Caller(kind="host"), "", "hi", pane_id="login", open_target=True)
+    assert result["error_code"] == "login-pane-input-refused"
+    assert dispatched.targets == []
+
+
+@pytest.mark.asyncio
+async def test_a_group_broadcast_skips_a_sign_in_pane(
+    dispatched: _Dispatched, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(plan_mcp, "_ui_request", _UiRequests({"ui.groupPeers": {"ok": True, "result": {
+        "group_id": "g", "peers": [{"pane_id": "login", "name": "claude-login"}, {"pane_id": "work", "name": "worker"}],
+    }}}))
+    result = await plan_mcp.cli_send("group", "status?", _ctx())
+    by_id = {r["pane_id"]: r for r in result["recipients"]}
+    assert by_id["login"]["accepted"] is False
+    assert by_id["login"]["reason"] == "login-pane-input-refused"
+    assert by_id["work"]["accepted"] is True
+    assert dispatched.targets == ["work"]
+
+
+@pytest.mark.asyncio
+async def test_cli_interrupt_refuses_a_sign_in_pane(dispatched: _Dispatched, monkeypatch: pytest.MonkeyPatch) -> None:
+    ui = _UiRequests({})
+    monkeypatch.setattr(plan_mcp, "_ui_request", ui)
+    result = await plan_mcp.cli_interrupt("claude-login", _ctx())
+    assert result["ok"] is False
+    assert result["error_code"] == "login-pane-input-refused"
+    assert ui.calls == []
+
+
+@pytest.mark.asyncio
+async def test_cli_answer_prompt_refuses_a_sign_in_pane(dispatched: _Dispatched, monkeypatch: pytest.MonkeyPatch) -> None:
+    ui = _UiRequests({})
+    monkeypatch.setattr(plan_mcp, "_ui_request", ui)
+    result = await plan_mcp.cli_answer_prompt("claude-login", "1", "fp", _ctx())
+    assert result["ok"] is False
+    assert result["error_code"] == "login-pane-input-refused"
+    assert ui.calls == []
+
+
+@pytest.mark.asyncio
+async def test_ui_invoke_cannot_interrupt_a_sign_in_pane(dispatched: _Dispatched, monkeypatch: pytest.MonkeyPatch) -> None:
+    ui = _UiRequests({})
+    monkeypatch.setattr(plan_mcp, "_ui_request", ui)
+    result = await plan_mcp.ui_invoke("/ws/alpha", "ui.pane.interrupt", _ctx(), args={"paneId": "login"})
+    assert result["error_code"] == "login-pane-input-refused"
+    assert ui.calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_chat_channel_cannot_type_interrupt_or_answer_a_sign_in_pane(
+    dispatched: _Dispatched, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_team_backend import channels
+
+    ui = _UiRequests({})
+    monkeypatch.setattr(plan_mcp, "_ui_request", ui)
+    seams = channels.default_seams()
+
+    delivered = await seams.deliver("login", "hello", "alice")
+    interrupted = await seams.interrupt("login")
+    answered = await seams.answer("login", {"choice": "1"})
+
+    for result in (delivered, interrupted, answered):
+        assert result["ok"] is False
+        assert result["error_code"] == "login-pane-input-refused"
+    assert dispatched.targets == []
+    assert ui.calls == []
+    assert (await seams.deliver("work", "hello", "alice"))["ok"] is True

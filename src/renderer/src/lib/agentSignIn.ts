@@ -12,6 +12,12 @@
 
 export type AgentSignInMode = 'isolated' | 'folder'
 
+/** Why a message, a chat line or a key press addressed to a CLI sign-in pane
+ *  is refused (backend error_code login-pane-input-refused): only the user
+ *  types into one, or an agent could finish the sign-in on its own account. */
+export const SIGN_IN_PANE_INPUT_REFUSAL =
+  'only the user types into a CLI sign-in pane (login-pane-input-refused)'
+
 export interface AgentSignInRequest {
   agentKey: string
   profileId: string

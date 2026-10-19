@@ -115,7 +115,7 @@ function stored(key = SELF_KEY): string | null {
   return localStorage.getItem(key)
 }
 
-async function spawnPane(opts: { resumeKey?: string } = {}) {
+async function spawnPane(opts: { resumeKey?: string; isLogin?: boolean; loginProfileId?: string } = {}) {
   const mock = createMockBackend()
   mock.setResponse('terminal.create', { terminal_session_id: 'sess-1', pid: 42 })
   const { result, scope } = withScope(() => useTerminal('pane-1', mock.backend))
@@ -271,4 +271,36 @@ describe('useTerminal — periodic scrollback snapshot', () => {
     expect(stored(oldKey)).toBeNull()  // no orphan left behind
     scope.stop()
   })
+})
+
+// A CLI sign-in pane's screen holds an authorization URL or a pasted code.
+// localStorage is written to disk in plain text (Local Storage/leveldb) where
+// any agent with a shell can read it, so a sign-in pane is never snapshotted:
+// not at idle, not at teardown, not on app exit.
+describe('useTerminal — a sign-in pane is never snapshotted', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    snap.text = 'https://example.invalid/oauth?code=SIGN-IN-CODE'
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+    store.values.clear()
+    store.values.set('terminal-last-size', JSON.stringify({ cols: 80, rows: 24 }))
+  })
+
+  for (const opts of [{ isLogin: true }, { loginProfileId: 'p-1' }]) {
+    it(`writes nothing for ${JSON.stringify(opts)}, idle, on app exit or at teardown`, async () => {
+      const setItem = vi.spyOn(localStorage, 'setItem')
+      const { mock, scope } = await spawnPane(opts)
+      await output(mock, 'Paste code here if prompted >\r\n')
+      await vi.advanceTimersByTimeAsync(QUIET_MS + MIN_GAP_MS)
+      saveAllScrollSnapshots()
+      scope.stop()
+
+      expect(stored()).toBeNull()
+      expect(setItem.mock.calls.filter(([key]) => String(key).startsWith('terminal-scroll:'))).toEqual([])
+      expect([...store.values.values()].join('\n')).not.toContain('SIGN-IN-CODE')
+    })
+  }
 })

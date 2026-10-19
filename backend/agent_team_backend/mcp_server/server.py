@@ -1909,6 +1909,12 @@ async def _send_to_group(
                 {"name": name, "pane_id": pane_id, "accepted": False, "reason": "target-offline"}
             )
             continue
+        if login_panes.is_login_pane(entry.pane_id):
+            recipients.append(
+                {"name": entry.name, "pane_id": entry.pane_id, "accepted": False,
+                 "reason": LOGIN_PANE_INPUT_REFUSED}
+            )
+            continue
         msg_key = await _dispatch_delivery(
             entry, text, caller=caller, me=me, cross_workspace=False,
             reply_to=reply_to, kind=kind,
@@ -1952,6 +1958,26 @@ class TerminalExternalRefused(Exception):
 TERMINAL_EXTERNAL_ERROR = (
     "external content is never typed into a plain terminal pane — the shell would run it"
 )
+
+
+#: error_code for any agent, MCP, scheduler or chat input to a CLI sign-in pane.
+LOGIN_PANE_INPUT_REFUSED = "login-pane-input-refused"
+
+
+def _login_pane_input_refusal(pane_id: str, name: str) -> dict[str, Any] | None:
+    """The answer for input addressed to a CLI sign-in pane, or None.
+
+    Only the user types into a sign-in pane: a wizard that takes typed input (a
+    menu choice, a pasted key) would otherwise let an agent finish the sign-in
+    on an account it controls. See login_panes.
+    """
+    if not login_panes.is_login_pane(pane_id):
+        return None
+    return {
+        "ok": False,
+        "error": f"{name!r} is signing in to a CLI account; only the user types into a sign-in pane",
+        "error_code": LOGIN_PANE_INPUT_REFUSED,
+    }
 
 
 async def _dispatch_delivery(
@@ -2355,6 +2381,9 @@ async def _send(
         )
     if me and result.pane.pane_id == me:
         return {"ok": False, "error": "that is your own pane"}
+    refused = _login_pane_input_refusal(result.pane.pane_id, result.pane.qualified_name)
+    if refused is not None:
+        return refused
 
     # Only the single-target path gets here: the group broadcast and the
     # cross-device relay returned above, so open_target cannot reach them.
@@ -4260,6 +4289,9 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
                 }
         return failure
     pane = result.pane
+    refused = _login_pane_input_refusal(pane.pane_id, pane.qualified_name)
+    if refused is not None:
+        return refused
     if caller.kind == "pane" and pane.pane_id == caller.pane_id:
         # Interrupting yourself aborts the very turn making this call, so the
         # answer would never reach the caller that asked for it. cli_send
@@ -4426,6 +4458,9 @@ async def cli_answer_prompt(
             }
         return failure
     pane = result.pane
+    refused = _login_pane_input_refusal(pane.pane_id, pane.qualified_name)
+    if refused is not None:
+        return refused
 
     word = (answer or "").strip().lower()
     choice = _ANSWER_WORDS.get(word) or (word if len(word) == 1 and word in "123456789" else "")
@@ -5894,6 +5929,11 @@ async def ui_invoke(
                 ),
                 "error_code": "ui_pane_private",
             }
+    if action == "ui.pane.interrupt":
+        named = str((args or {}).get("paneId") or "")
+        refused = _login_pane_input_refusal(named, named)
+        if refused is not None:
+            return {**refused, "result": None}
     if action.startswith("ui.accounts."):
         # Reached through their own tools only, which check the caller and
         # tell the user who asked; the window refuses them off that path too.

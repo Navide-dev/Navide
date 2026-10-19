@@ -381,7 +381,7 @@ import {
   type RestartOutcome,
 } from './composables/useQuotaFailover'
 import { accountLabel } from './lib/accountLabel'
-import { planAgentSignIn, type AgentSignInMode } from './lib/agentSignIn'
+import { planAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL, type AgentSignInMode } from './lib/agentSignIn'
 import {
   DEFAULT_SLOT_ID,
   FOLLOW_SWITCH_AGENT,
@@ -3936,11 +3936,17 @@ onMounted(() => {
     isPaneIdle: (paneId: string) => deliveryHoldKey(paneId) === null,
     idleHoldKey: deliveryHoldKey,
     refuseDelivery: (paneId, envelope) => {
-      if (panes.value.find((p) => p.id === paneId)?.agentKey !== TERMINAL_AGENT_KEY) return null
+      const target = panes.value.find((p) => p.id === paneId)
+      // Only the user types into a CLI sign-in pane: whatever addressed it (an
+      // agent, a chat, another device, a scheduled job) could otherwise finish
+      // the sign-in on an account it controls.
+      if (target?.isLogin) return rawReason(SIGN_IN_PANE_INPUT_REFUSAL)
+      if (target?.agentKey !== TERMINAL_AGENT_KEY) return null
       const refusal = paneMultilineRefusal(paneId, envelope)
       return refusal ? rawReason(refusal) : null
     },
-    pushTarget: pushTargetForMessaging,
+    // A push skips refuseDelivery, so a sign-in pane is never offered one.
+    pushTarget: (paneId) => (panes.value.find((p) => p.id === paneId)?.isLogin ? null : pushTargetForMessaging(paneId)),
     pushDeliver: pushDeliverAgentMessage,
     routeRemote: routeRemoteMessage,
     reportDelivery: (msgKey, ok, reason) => {
@@ -10416,6 +10422,7 @@ registerCommand('ui.pane.sendKeys', async (args) => {
   if (!pane) throw new Error(`ui.pane.sendKeys: pane "${a.paneId}" not found`)
   const ref = paneRefs[a.paneId]
   if (!pane.realized || !ref?.sessionId || !a.answer) return { ok: false, sent: false, error: 'pane is not ready' }
+  if (pane.isLogin) return { ok: false, sent: false, error: SIGN_IN_PANE_INPUT_REFUSAL, error_code: 'login-pane-input-refused' }
   const resolved = resolveAnswerKeys({
     agentKey: pane.agentKey,
     displayStatus: ref.displayStatus as string | undefined,

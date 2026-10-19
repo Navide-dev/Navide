@@ -40,6 +40,9 @@ def default_seams() -> Seams:
         if res.pane is None:
             return {"ok": False, "error": res.error or "pane is gone"}
         target = res.pane
+        refused = mcp._login_pane_input_refusal(target.pane_id, target.name)
+        if refused is not None:
+            return refused
         if not target.realized:
             # Same as the scheduler's open_target=True: a restore placeholder
             # would otherwise park the message until someone opens it.
@@ -95,6 +98,9 @@ def default_seams() -> Seams:
         pane = agent_messaging.current(pane_id)
         if pane is None:
             return {"ok": False, "error": "pane is gone"}
+        refused = mcp._login_pane_input_refusal(pane.pane_id, pane.name)
+        if refused is not None:
+            return refused
         reply = await mcp._ui_request(
             pane.workspace_path, "invoke", caller=mcp._pane_caller(pane.pane_id),
             action="ui.pane.interrupt", args={"paneId": pane.pane_id},
@@ -150,6 +156,9 @@ def default_seams() -> Seams:
         pane = agent_messaging.current(pane_id)
         if pane is None:
             return {"ok": False, "error": "pane is gone"}
+        refused = mcp._login_pane_input_refusal(pane.pane_id, pane.name)
+        if refused is not None:
+            return refused
         args: dict[str, Any] = {"paneId": pane.pane_id, "answer": answer_payload}
         if expected is not None:
             # The window presses only while this same prompt is on screen, as for cli_answer_prompt.
