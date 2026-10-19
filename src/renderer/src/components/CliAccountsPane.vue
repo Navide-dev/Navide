@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
-import { cliAccountSwitchKey, tLogin, type useCliProfiles, type CliProfile } from '../composables/useCliProfiles'
+import {
+  cliAccountDirActionsKey,
+  cliAccountSwitchKey,
+  tLogin,
+  type useCliProfiles,
+  type CliProfile,
+} from '../composables/useCliProfiles'
 import PortableCredentialBlock from './PortableCredentialBlock.vue'
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import {
@@ -12,6 +18,7 @@ import {
   refreshUsage,
   remainingTier,
   TRANSLATED_REFRESH_STATUSES,
+  usageBackendConnected,
   usageFor,
   usageVersion,
   type UsageSnapshot,
@@ -228,6 +235,69 @@ async function signIn(agentKey: string, profileId: string | null): Promise<void>
   emit('login', agentKey)
 }
 
+// ── Sign in inside the account's own folder (Claude) ────────────────────────
+// Claude Code reports quota only for the account it runs as, so a parked
+// account has no live figure — unless it is also signed in inside its own
+// config dir, which the poller reads on its own. The main window owns that
+// sign-in flow (it spawns the login pane); this pane only offers it.
+const dirActions = inject(cliAccountDirActionsKey, null)
+
+function accountDirSignedIn(agentKey: string, profileId: string | null): boolean {
+  return !!props.api.accountDirFor?.(agentKey, profileId)?.signedIn
+}
+
+function canSignInDir(agentKey: string, profileId: string | null): boolean {
+  return (
+    !!dirActions &&
+    agentKey === 'claude' &&
+    profileId !== null &&
+    !!rowIdentity(agentKey, profileId)?.signedIn &&
+    !accountDirSignedIn(agentKey, profileId)
+  )
+}
+
+// Once the folder is signed in, the card shows the folder's login. The email
+// the card showed before is remembered at the click so a sign-in with another
+// account can be pointed out (a warning only — nothing is blocked). Settings
+// closes when the login pane opens, so this has to outlive the component.
+const DIR_EXPECTED_EMAIL_KEY = 'navide.cliAccountDirExpectedEmail'
+
+function readExpectedEmails(): Record<string, string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DIR_EXPECTED_EMAIL_KEY) ?? '{}')
+    return raw && typeof raw === 'object' ? raw : {}
+  } catch {
+    return {}
+  }
+}
+
+function signInDir(agentKey: string, profileId: string): void {
+  if (!dirActions || !requireWorkspace()) return
+  const email = rowIdentity(agentKey, profileId)?.email
+  if (email) {
+    try {
+      localStorage.setItem(
+        DIR_EXPECTED_EMAIL_KEY,
+        JSON.stringify({ ...readExpectedEmails(), [profileId]: email }),
+      )
+    } catch {
+      // No storage: the sign-in still works, only the mismatch check is lost.
+    }
+  }
+  dirActions.signIn(agentKey, profileId)
+}
+
+function dirEmailMismatch(
+  agentKey: string,
+  profileId: string | null,
+): { dirEmail: string; expected: string } | null {
+  if (profileId === null || !accountDirSignedIn(agentKey, profileId)) return null
+  const dirEmail = props.api.accountDirFor?.(agentKey, profileId)?.email
+  const expected = readExpectedEmails()[profileId]
+  if (!dirEmail || !expected || dirEmail.toLowerCase() === expected.toLowerCase()) return null
+  return { dirEmail, expected }
+}
+
 // ── Set default ──────────────────────────────────────────────────────────────
 const { toast, confirm } = useNotify()
 const t = i18n.global.t
@@ -304,8 +374,10 @@ interface CardUsage {
   windows: UsageWindow[]
   foot: string
   lastSuccess: string
+  updated: string
   refreshStatus: string
   refreshError: string
+  notMeasuredHint: boolean
 }
 
 /** Display model for a card's quota area; undefined hides the area. */
@@ -323,11 +395,16 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
     expired: snap.status === 'expired' || snap.refreshStatus === 'expired',
     cached,
     // A read is in flight for this account (it just became active). Whatever
-    // the card shows below is an earlier reading until that lands.
-    pending: snap.refreshPending === true,
+    // the card shows below is an earlier reading until that lands. With the
+    // backend gone that answer can no longer arrive, so stop promising it.
+    pending: snap.refreshPending === true && usageBackendConnected(),
     resetExpired: cached && windows.length === 0 && snap.windows.length > 0,
     lastSuccess: formatResetAbsolute(snap.lastSuccessAt ?? snap.fetchedAt),
+    // When a current figure was read; a cached one says so on its own line.
+    updated: !cached && snap.status === 'ok' ? formatResetAbsolute(snap.fetchedAt) : '',
     refreshStatus,
+    notMeasuredHint:
+      (snap.refreshStatus ?? snap.status) === 'not-measured' && canSignInDir(agentKey, profileId),
     // The backend's sentence for why the last read failed. `refreshStatus`
     // collapses a timeout, a dead token and an outdated CLI into the same
     // "unavailable"; this is the part that says which one it was.
@@ -349,7 +426,7 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
     noData: false,
     big: formatRemaining(rem),
     tier: remainingTier(rem),
-    headLabel: head.label,
+    headLabel: t('usage.window-left', { label: windowLabel(head) }),
     windows,
     foot: cardFoot(currentSnap, head),
   }
@@ -359,18 +436,36 @@ function refreshStatusLabel(status: string): string {
   return TRANSLATED_REFRESH_STATUSES.has(status) ? t(`usage.refresh-status-${status}`) : status
 }
 
-/** Card footer: the non-headline windows plus the headline reset countdown. */
+/** Window label in the UI language. The backend names Claude's windows after
+ *  the CLI's own English panel; any other label is shown as sent. */
+function windowLabel(w: UsageWindow): string {
+  if (w.label === 'Session (5h)') return t('usage.window-claude-session')
+  if (w.label === 'Weekly (all models)') return t('usage.window-claude-weekly')
+  const model = w.kind === 'weekly-model' ? /^Weekly \((.+)\)$/.exec(w.label) : null
+  if (model) return t('usage.window-claude-weekly-model', { scope: model[1] })
+  return w.label
+}
+
+/** Card footer: the non-headline windows plus the headline reset countdown.
+ *  Every figure on the card is what is LEFT — the CLI's own panel prints
+ *  what is used, so the word is spelled out rather than implied. */
 function cardFoot(snap: UsageSnapshot, head: UsageWindow): string {
   const parts = snap.windows
     .filter((w) => w !== head)
-    .map((w) => `${w.label} ${formatRemaining(windowRemaining(w))}`)
+    .map((w) =>
+      t('usage.window-left-pct', { label: windowLabel(w), pct: formatRemaining(windowRemaining(w)) }),
+    )
   const countdown = formatResetCountdown(head.resetsAt)
   if (countdown) parts.push(t('usage.resets-in', { time: countdown }))
   return parts.join(' · ')
 }
 
 function barTitle(w: UsageWindow): string {
-  const base = `${w.label} ${formatRemaining(windowRemaining(w))}`
+  const base = t('usage.window-left-used', {
+    label: windowLabel(w),
+    pct: formatRemaining(windowRemaining(w)),
+    used: `${Math.round(w.usedPercent)}%`,
+  })
   const countdown = formatResetCountdown(w.resetsAt)
   return countdown ? `${base} · ${t('usage.resets-in', { time: countdown })}` : base
 }
@@ -400,17 +495,18 @@ function avatarInitial(label: string): string {
 // carries its own that clears only that CLI's, so one stale number can be
 // re-read without booting every other CLI along with it.
 //
-// Only the account a CLI is signed in as gets a card button: the CLI reports
-// whoever is live, so a parked account has nothing to ask for (its card says
-// "Not measured"). Busy is tracked per scope — the header's key is ALL_SCOPE,
-// a card's is its `switchRowKey`.
+// Only an account that can actually be read gets a card button: the one a CLI
+// is signed in as, or a Claude account signed in inside its own folder. Any
+// other parked account has nothing to ask for (its card says "Not measured").
+// Busy is tracked per scope — the header's key is ALL_SCOPE, a card's is its
+// `switchRowKey`.
 const ALL_SCOPE = '__all__'
 // Maps a busy scope to the agent whose read it waits on (null = every agent).
 const refreshing = ref(new Map<string, string | null>())
 // Safety net only. The poller broadcasts when its cycle ends and that is what
 // normally clears a flag; this stops a button latching when no broadcast ever
-// comes (poller disabled, backend gone).
-const REFRESH_BUSY_TIMEOUT_MS = 60_000
+// comes (poller disabled, backend gone). One Claude read may take up to 180s.
+const REFRESH_BUSY_TIMEOUT_MS = 200_000
 const refreshBusyTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function clearRefreshBusy(scope: string): void {
@@ -440,10 +536,12 @@ function refreshCardQuota(agentKey: string, profileId: string | null): void {
 }
 
 /** A card's own refresh, shown only where a read can actually happen: the
- *  active account of a CLI that reports quota at all. */
+ *  active account of a CLI that reports quota at all, or a Claude account
+ *  signed in inside its own folder. */
 function canRefreshCard(agentKey: string, profileId: string | null): boolean {
   return (
-    props.api.defaultProfileId(agentKey) === profileId &&
+    (props.api.defaultProfileId(agentKey) === profileId ||
+      (agentKey === 'claude' && accountDirSignedIn(agentKey, profileId))) &&
     cardUsage(agentKey, profileId) !== undefined
   )
 }
@@ -710,6 +808,12 @@ onMounted(() => void props.api.refreshCloud())
               <div v-else-if="u.cached" class="cli-card-refresh">
                 {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
               </div>
+              <div v-else-if="u.updated" class="cli-card-refresh cli-card-updated">
+                {{ $t('usage.updated', { time: u.updated }) }}
+              </div>
+              <div v-if="u.notMeasuredHint" class="cli-card-reason cli-card-dir-hint">
+                {{ $t('usage.parked-not-measured-hint') }}
+              </div>
               <div v-if="u.refreshError" class="cli-card-reason">
                 {{ $t('usage.refresh-error', { reason: u.refreshError }) }}
               </div>
@@ -729,9 +833,23 @@ onMounted(() => void props.api.refreshCloud())
               <span v-else-if="u?.refreshStatus" class="cli-card-refresh">
                 {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
               </span>
+              <span v-if="u?.notMeasuredHint" class="cli-card-reason cli-card-dir-hint">
+                {{ $t('usage.parked-not-measured-hint') }}
+              </span>
               <span v-if="u?.refreshError" class="cli-card-reason">
                 {{ $t('usage.refresh-error', { reason: u.refreshError }) }}
               </span>
+            </div>
+          </template>
+
+          <!-- The folder was signed in with another account than this card
+               showed: point it out, block nothing. -->
+          <template
+            v-for="m in [dirEmailMismatch(spec.agentKey, p?.id ?? null)]"
+            :key="'dir-mismatch'"
+          >
+            <div v-if="m" class="cli-card-dup cli-card-dir-mismatch">
+              <span>⚠ {{ $t('settings.accounts.cli.dir-email-mismatch', m) }}</span>
             </div>
           </template>
 
@@ -778,6 +896,14 @@ onMounted(() => void props.api.refreshCloud())
                 @click="signIn(spec.agentKey, p?.id ?? null)"
               >
                 {{ $t('settings.accounts.cli.sign-in') }}
+              </button>
+              <button
+                v-if="p && canSignInDir(spec.agentKey, p.id)"
+                class="cli-btn ghost sm cli-card-dir-btn"
+                :title="$t('settings.accounts.cli.dir-sign-in-hint')"
+                @click="signInDir(spec.agentKey, p.id)"
+              >
+                {{ $t('settings.accounts.cli.dir-sign-in') }}
               </button>
               <button
                 v-if="canStartPortable(spec.agentKey, p?.id ?? '__default__')"
