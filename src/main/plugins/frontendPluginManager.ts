@@ -52,7 +52,7 @@ import {
 import { WebViewError, type PluginWebViewRegistry, type WebGuestView, type WebHostSurface } from './pluginWebViews'
 import { pluginWebViewRegistry, setPluginWebViewChangedHook } from './pluginWebViewHost'
 import { dispatchWebBridge } from './webBridge'
-import { firstPartyBridgePorts } from './pluginFirstPartyBackends'
+import { firstPartyBridgePorts, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import type { WebViewInfo, WebViewOwner, WebViewRect } from './webCapability'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
@@ -2431,14 +2431,33 @@ export class FrontendPluginManager {
   /** A disabled package stays in the installed inventory, but the Host
    *  registers neither its views nor its backend. First-party ids are not
    *  governed by this switch. */
-  isPluginDisabled(pluginId: string): boolean {
-    return this.canDisablePlugin(pluginId) && (this.disabledPluginResolver?.(pluginId) ?? false)
+  isPluginDisabled(
+    pluginId: string,
+    provenance: InstalledPluginPackageSummary['provenance'] = this.installedPackages.get(pluginId)?.provenance,
+  ): boolean {
+    return this.canDisablePlugin(pluginId, provenance) && (this.disabledPluginResolver?.(pluginId) ?? false)
   }
 
   /** The bundled first-party packages (Plans, Git, Mini-IDE) have their own
-   *  factory and recovery paths and are outside the "Disabled" switch. */
-  canDisablePlugin(pluginId: string): boolean {
-    return !isReservedPluginId(pluginId)
+   *  factory and recovery paths and are outside the "Disabled" switch. A
+   *  Marketplace first-party package ({@link isMarketplaceFirstPartyPackage})
+   *  is disabled like any installed package. */
+  canDisablePlugin(
+    pluginId: string,
+    provenance: InstalledPluginPackageSummary['provenance'] = this.installedPackages.get(pluginId)?.provenance,
+  ): boolean {
+    return !isReservedPluginId(pluginId) || this.isMarketplaceFirstPartyPackage(pluginId, provenance)
+  }
+
+  /** A first-party package the Official Registry installed that is not
+   *  bundled with the App (navide.browser; never Plans): the user disables
+   *  and removes it like any Marketplace package. Every other reserved
+   *  `navide.` id keeps its own rules. */
+  isMarketplaceFirstPartyPackage(
+    pluginId: string,
+    provenance: InstalledPluginPackageSummary['provenance'] = this.installedPackages.get(pluginId)?.provenance,
+  ): boolean {
+    return isFirstPartyAgentToolPlugin(pluginId) && provenance === 'official-registry'
   }
 
   /** The user's Disabled switch for the built-in Plans, Git and Mini-IDE
@@ -6754,7 +6773,12 @@ export class FrontendPluginManager {
   /** Uninstall: wipe the package's browser partition when it declares `web`. */
   async clearPluginWebData(pluginId: string): Promise<void> {
     const policy = this.descriptors.get(pluginId)?.capabilityPolicy
-    if (policy?.kind !== 'manifest-v2' || !policy.system.includes('web')) return
+    // A disabled package has no descriptor; its installed summary still says
+    // what its manifest declares.
+    const system = policy?.kind === 'manifest-v2'
+      ? policy.system
+      : this.installedPackages.get(pluginId)?.manifestPermissions?.system
+    if (!system?.includes('web')) return
     await this.pluginWebViews().clearData(pluginId)
   }
 
@@ -11825,7 +11849,7 @@ export class FrontendPluginManager {
     this.destroyPluginInstances(summary.id)
     this.clearTerminalRoutes(summary.id)
     this.descriptors.delete(summary.id)
-    if (descriptor && !this.isPluginDisabled(summary.id)) this.registerDescriptor(descriptor, opts)
+    if (descriptor && !this.isPluginDisabled(summary.id, summary.provenance)) this.registerDescriptor(descriptor, opts)
     const canonicalPackageDir = canonicalBackendPackageDir(packageDir ?? descriptor?.packageDir)
     if (canonicalPackageDir) this.installedPackageDirectories.set(summary.id, canonicalPackageDir)
     else this.installedPackageDirectories.delete(summary.id)

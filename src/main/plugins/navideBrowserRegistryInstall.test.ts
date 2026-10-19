@@ -54,6 +54,7 @@ import type { InstallerTrustConfig } from './pluginInstaller'
 import { backendEntryOnDisk, type PluginActivationCatalogEntry } from './installedPlugins'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import { readRegistryTrustSnapshot } from './pluginInstalledTrust'
 import { registerPluginIpc } from './pluginIpc'
 import { FrontendPluginManager } from './frontendPluginManager'
 import { PluginAgentToolsHost } from './pluginAgentToolsHost'
@@ -386,6 +387,70 @@ describe('(c) look-alikes do not get first-party treatment', () => {
       expect(firstPartyBackendLaunchSpec(activation)).toBeNull()
       expect(firstPartyAgentToolSpec(activation)).toBeNull()
     }
+  })
+})
+
+describe('disable and removal of a registry-installed navide.browser', () => {
+  it('can be disabled: its web views go and it registers nothing; enabling brings it back', async () => {
+    register()
+    await installFromRegistry('navide.browser')
+    // The backend's web port has used the registry, as a running browser does.
+    manager.pluginWebViews()
+    await expect(call('plugins:setDisabled', { id: 'navide.browser', disabled: true }))
+      .resolves.toEqual({ id: 'navide.browser', disabled: true })
+    expect(web.destroyed).toContain('navide.browser')
+    expect(activations.has('navide.browser')).toBe(false)
+    expect(manager.isPluginDisabled('navide.browser')).toBe(true)
+    expect(manager.getDescriptor('navide.browser')).toBeUndefined()
+    const listed = (await call('plugins:listInstalled')) as Array<Record<string, unknown>>
+    expect(listed.find((pkg) => pkg.id === 'navide.browser')).toMatchObject({ disabled: true })
+
+    await expect(call('plugins:setDisabled', { id: 'navide.browser', disabled: false }))
+      .resolves.toEqual({ id: 'navide.browser', disabled: false })
+    expect(activations.get('navide.browser')).toMatchObject({ provenance: 'official-registry' })
+    expect(manager.isPluginDisabled('navide.browser')).toBe(false)
+    expect(manager.getDescriptor('navide.browser')?.packageVersion).toBe('1.0.0')
+  })
+
+  it('stays disabled across a restart of the App', async () => {
+    register()
+    await installFromRegistry('navide.browser')
+    await call('plugins:setDisabled', { id: 'navide.browser', disabled: true })
+    const coldStart = new FrontendPluginManager()
+    coldStart.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    const loaded = coldStart.loadInstalledPlugins(root, {
+      provenance: 'official-registry',
+      trust: {
+        pinnedRootKey: registryRoot.pubPem,
+        snapshot: readRegistryTrustSnapshot(root),
+        registryAuthority: 'official',
+        officialRegistryUrl: OFFICIAL_URL,
+        now: FIXED_NOW,
+      },
+    })
+    expect(loaded.errors).toEqual([])
+    expect(loaded.activationCatalog.some((entry) => entry.pluginId === 'navide.browser')).toBe(false)
+    expect(coldStart.getDescriptor('navide.browser')).toBeUndefined()
+    expect(coldStart.isPluginDisabled('navide.browser')).toBe(true)
+  })
+
+  it('can be removed, and removal clears its browser partition', async () => {
+    register()
+    await installFromRegistry('navide.browser')
+    manager.pluginWebViews()
+    await expect(call('plugins:remove', { id: 'navide.browser' })).resolves.toEqual({ ok: true })
+    expect(web.destroyed).toContain('navide.browser')
+    expect(web.cleared).toEqual(['persist:navide-web:navide.browser'])
+    expect(activations.has('navide.browser')).toBe(false)
+    expect(manager.listInstalledPackages().some((pkg) => pkg.id === 'navide.browser')).toBe(false)
+  })
+
+  it('clears the browser partition when a disabled navide.browser is removed', async () => {
+    register()
+    await installFromRegistry('navide.browser')
+    await call('plugins:setDisabled', { id: 'navide.browser', disabled: true })
+    await expect(call('plugins:remove', { id: 'navide.browser' })).resolves.toEqual({ ok: true })
+    expect(web.cleared).toEqual(['persist:navide-web:navide.browser'])
   })
 })
 

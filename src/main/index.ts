@@ -1896,10 +1896,11 @@ agentToolsHost = new PluginAgentToolsHost({
   listFirstPartyPackages: registeredFirstPartyAgentToolSpecs,
   // Native backends turned off globally or for the package count as disabled.
   // A first-party package is not a third-party native backend: only its own
-  // built-in Disabled switch applies.
+  // Disabled switch applies (the installed-package one: it is a Marketplace
+  // package).
   isDisabled: (pluginId) =>
     isFirstPartyAgentToolPlugin(pluginId)
-      ? frontendPluginManager.isBuiltinPluginDisabled(pluginId)
+      ? frontendPluginManager.isPluginDisabled(pluginId)
       : !nativeBackendStore.isEnabled() ||
         frontendPluginManager.isPluginDisabled(pluginId) ||
         nativeBackendStore.record(pluginId).disabled === true,
