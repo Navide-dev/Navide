@@ -1539,7 +1539,7 @@ the Bridge port `web`. The port maps to the `web` Execution Policy namespace.
 | `list` | `{}` → `{views}` | |
 | `create` | `{space, url?}` → `{viewId}` | `owner` and `control` are `agent`, `state` is `running`; the view runs in the background, unattached and without background throttling |
 | `close` | `{viewId}` | Only a view whose `owner` is `agent` |
-| `cdp` | `{viewId, method, params?}` → `{result}` | One Chrome DevTools Protocol command (`Domain.method`, at most 128 characters; `params` a plain object). The debugger attaches to that one view only. Refused with `USER_IN_CONTROL` while `owner` or `control` is `user`, with `reason` `user-owned`, `manual_takeover` or `permission` |
+| `cdp` | `{viewId, method, params?}` → `{result}` | One Chrome DevTools Protocol command (`Domain.method`, at most 128 characters; `params` a plain object) from the Host allowlist (see [Host-enforced boundaries](#host-enforced-boundaries)); any other method is `CAPABILITY_DENIED`. The debugger attaches to that one view only. Refused with `USER_IN_CONTROL` while `owner` or `control` is `user`, with `reason` `user-owned`, `manual_takeover` or `permission` |
 | `setState` | `{viewId, state, note?}` | `note` at most 500 characters; `need-action` also sets `control` to `user` |
 
 #### Host-enforced boundaries
@@ -1556,6 +1556,23 @@ someone it is not.
   preload and no Node.js. Only `http(s)` and `about:blank` load; that keeps
   `file:` and Host-internal pages out of a view an agent can read.
   `window.open` loads in the same view instead of opening a new window.
+- **CDP is a per-method allowlist.** The Bridge `cdp` operation accepts only
+  these methods, which are what the Navide Browser backend uses to read and
+  drive a page: `Accessibility.getFullAXTree`, `DOM.focus`, `DOM.getBoxModel`,
+  `DOM.resolveNode`, `DOM.scrollIntoViewIfNeeded`,
+  `DOMSnapshot.captureSnapshot`, `Input.dispatchKeyEvent`,
+  `Input.dispatchMouseEvent`, `Input.insertText`, `Page.captureScreenshot`,
+  `Page.getNavigationHistory`, `Page.navigate` (its `url` follows the same
+  `http(s)` rule as `web.create`), `Page.navigateToHistoryEntry`,
+  `Runtime.callFunctionOn` and `Runtime.evaluate`. Every other method is
+  `CAPABILITY_DENIED`. That keeps out the cookie jar (`Network.getCookies`,
+  `getAllCookies`, `setCookie`, `clearBrowserCookies`, …, which would hand an
+  agent the HttpOnly session tokens of sites the user signed in to), the cache,
+  request interception (`Fetch.*`, `Network.setRequestInterception`), scripts
+  and bindings that outlive a page (`Page.addScriptToEvaluateOnNewDocument`,
+  `Runtime.addBinding`), `DOMStorage`, file chooser paths, the download
+  directory and other targets. Script run with `Runtime.evaluate` still acts
+  inside the page with the page's own sign-in, as the disclosure says.
 - **Permission requests are denied.** Camera, microphone, location,
   notifications and other permission prompts are denied in this first
   version; on an agent-controlled view the `state` becomes `need-action` with

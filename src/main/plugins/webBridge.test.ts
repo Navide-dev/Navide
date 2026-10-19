@@ -28,7 +28,7 @@ function fakeGuest(sent: string[]): WebGuestView & { emit(event: string, ...args
       detach: () => { attached = false },
       sendCommand: async (method: string) => {
         sent.push(method)
-        if (method === 'Page.crashTest') throw new Error('y'.repeat(800))
+        if (method === 'DOM.resolveNode') throw new Error('y'.repeat(800))
         return { method }
       },
     },
@@ -82,9 +82,9 @@ describe('dispatchWebBridge', () => {
     const viewId = (created as { viewId: string }).viewId
     expect(registry.list('acme.web')[0]).toMatchObject({ viewId, owner: 'agent', control: 'agent', state: 'running' })
     await expect(dispatchWebBridge(registry, 'acme.web', 'list', {})).resolves.toEqual({ views: registry.list('acme.web') })
-    await expect(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.reload' }))
-      .resolves.toEqual({ result: { method: 'Page.reload' } })
-    expect(sent).toEqual(['Page.reload'])
+    await expect(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.getNavigationHistory' }))
+      .resolves.toEqual({ result: { method: 'Page.getNavigationHistory' } })
+    expect(sent).toEqual(['Page.getNavigationHistory'])
     await expect(dispatchWebBridge(registry, 'acme.web', 'setState', { viewId, state: 'done', note: 'ok' }))
       .resolves.toEqual({ ok: true })
     expect(registry.list('acme.web')[0]).toMatchObject({ state: 'done', note: 'ok' })
@@ -104,7 +104,7 @@ describe('dispatchWebBridge', () => {
       expect((await bridgeError(dispatchWebBridge(registry, 'acme.web', operation, args))).code).toBe('INVALID_ARGUMENT')
     }
     expect((await bridgeError(dispatchWebBridge(registry, 'acme.other', 'close', { viewId }))).code).toBe('INVALID_ARGUMENT')
-    expect((await bridgeError(dispatchWebBridge(registry, 'acme.other', 'cdp', { viewId, method: 'Page.reload' }))).code)
+    expect((await bridgeError(dispatchWebBridge(registry, 'acme.other', 'cdp', { viewId, method: 'Page.getNavigationHistory' }))).code)
       .toBe('INVALID_ARGUMENT')
     await expect(dispatchWebBridge(registry, 'acme.other', 'list', {})).resolves.toEqual({ views: [] })
   })
@@ -113,12 +113,12 @@ describe('dispatchWebBridge', () => {
     const { registry, sent, guests } = setup()
     const { viewId } = await dispatchWebBridge(registry, 'acme.web', 'create', { space: 'task' }) as { viewId: string }
     guests[0]!.emit('before-input-event', {}, { type: 'keyDown' })
-    const takeover = await bridgeError(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.reload' }))
+    const takeover = await bridgeError(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.getNavigationHistory' }))
     expect(takeover.code).toBe('USER_IN_CONTROL')
     expect(takeover.data).toEqual({ reason: 'manual_takeover' })
 
     const user = registry.create('acme.web', { space: 'mine' }, 'user')
-    const owned = await bridgeError(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId: user.viewId, method: 'Page.reload' }))
+    const owned = await bridgeError(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId: user.viewId, method: 'Page.getNavigationHistory' }))
     expect(owned.code).toBe('USER_IN_CONTROL')
     expect(owned.data).toEqual({ reason: 'user-owned' })
     expect((await bridgeError(dispatchWebBridge(registry, 'acme.web', 'close', { viewId: user.viewId }))).data)
@@ -126,10 +126,10 @@ describe('dispatchWebBridge', () => {
     expect(sent).toEqual([])
   })
 
-  it('maps a failed CDP command to CDP_ERROR with its message and a denied domain to CAPABILITY_DENIED', async () => {
+  it('maps a failed CDP command to CDP_ERROR with its message and a denied method to CAPABILITY_DENIED', async () => {
     const { registry } = setup()
     const { viewId } = await dispatchWebBridge(registry, 'acme.web', 'create', { space: 'task' }) as { viewId: string }
-    const failed = await bridgeError(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.crashTest' }))
+    const failed = await bridgeError(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'DOM.resolveNode' }))
     expect(failed.code).toBe('CDP_ERROR')
     expect(failed.data).toEqual({ message: 'y'.repeat(500) })
     expect((await bridgeError(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Target.getTargets' }))).code)

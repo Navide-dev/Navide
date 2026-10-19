@@ -375,6 +375,59 @@ describe('cdp scope', () => {
     expect(views[0].webContents.sent.map(entry => entry.method)).toEqual(['Page.navigate', 'Accessibility.getFullAXTree'])
   })
 
+  it('refuses cookie, cache, interception and persistent-injection methods inside page domains', async () => {
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
+    for (const method of [
+      'Network.getCookies',
+      'Network.getAllCookies',
+      'Network.setCookie',
+      'Network.setCookies',
+      'Network.deleteCookies',
+      'Network.clearBrowserCookies',
+      'Network.clearBrowserCache',
+      'Network.setRequestInterception',
+      'Network.enable',
+      'Fetch.enable',
+      'Fetch.continueRequest',
+      'Fetch.fulfillRequest',
+      'Fetch.getResponseBody',
+      'Page.addScriptToEvaluateOnNewDocument',
+      'Page.reload',
+      'Runtime.addBinding',
+      'DOMStorage.setDOMStorageItem',
+      'DOMStorage.removeDOMStorageItem',
+      'DOMStorage.clear',
+      'DOMStorage.getDOMStorageItems',
+    ]) {
+      expect((await rejectionOf(registry.cdp('navide.browser', viewId, method, {}))).code, method).toBe('CAPABILITY_DENIED')
+    }
+    expect(views[0].webContents.sent).toEqual([])
+  })
+
+  it('allows every method the Navide Browser backend sends', async () => {
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
+    const methods = [
+      'Accessibility.getFullAXTree',
+      'DOM.focus',
+      'DOM.getBoxModel',
+      'DOM.resolveNode',
+      'DOM.scrollIntoViewIfNeeded',
+      'DOMSnapshot.captureSnapshot',
+      'Input.dispatchKeyEvent',
+      'Input.dispatchMouseEvent',
+      'Input.insertText',
+      'Page.captureScreenshot',
+      'Page.getNavigationHistory',
+      'Page.navigateToHistoryEntry',
+      'Runtime.callFunctionOn',
+      'Runtime.evaluate',
+    ]
+    for (const method of methods) await registry.cdp('navide.browser', viewId, method, {})
+    expect(views[0].webContents.sent.map(entry => entry.method)).toEqual(methods)
+  })
+
   it('reports a CDP failure as CDP_ERROR with a bounded message', async () => {
     const { registry, views } = setup()
     const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')

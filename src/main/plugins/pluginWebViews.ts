@@ -15,9 +15,9 @@ import {
  * its lane lives here, not in the plugin: one persistent partition per
  * plugin, a sandboxed guest with no preload, an http(s)-only navigation
  * allowlist, denied permission requests, the owner/control flags that make
- * `cdp` answer USER_IN_CONTROL, and a CDP method allowlist that keeps the
- * debugger inside the page (no file chooser paths, no download directory, no
- * other targets). The Electron objects are injected so the rules are tested
+ * `cdp` answer USER_IN_CONTROL, and a per-method CDP allowlist that keeps the
+ * debugger inside the page (no cookies, no interception, no persistent
+ * scripts, no file chooser paths, no download directory, no other targets). The Electron objects are injected so the rules are tested
  * without a browser. */
 
 export type WebViewErrorCode =
@@ -102,35 +102,29 @@ const CDP_PROTOCOL_VERSION = '1.3'
 const MAX_CDP_ERROR_MESSAGE = 500
 const PLUGIN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
-/** CDP domains the plugin may drive; everything else (Target, Browser,
- *  SystemInfo, IO, Storage, Security, Tracing, ...) reaches past the page. */
-const CDP_ALLOWED_DOMAINS: ReadonlySet<string> = new Set([
-  'Accessibility',
-  'Animation',
-  'CSS',
-  'DOM',
-  'DOMSnapshot',
-  'DOMStorage',
-  'Emulation',
-  'Input',
-  'Log',
-  'Network',
-  'Overlay',
-  'Page',
-  'Performance',
-  'Runtime',
-])
-
-/** Methods inside allowed domains that would read local files, write to a
- *  chosen directory, or end the target. */
-const CDP_DENIED_METHODS: ReadonlySet<string> = new Set([
-  'DOM.setFileInputFiles',
-  'Input.dispatchDragEvent',
-  'Page.setDownloadBehavior',
-  'Page.handleFileChooser',
-  'Page.close',
-  'Page.crash',
-  'Network.loadNetworkResource',
+/** The only CDP methods the plugin may send: exactly what the Navide Browser
+ *  backend uses to read and drive a page. Anything else is refused, which
+ *  keeps out the cookie jar (shared with the user's own Spaces), the cache,
+ *  request interception (`Fetch.*`, `Network.setRequestInterception`),
+ *  scripts and bindings that outlive a page (`Page.addScriptToEvaluateOnNewDocument`,
+ *  `Runtime.addBinding`), DOM storage, file chooser paths, the download
+ *  directory and every other target. */
+const CDP_ALLOWED_METHODS: ReadonlySet<string> = new Set([
+  'Accessibility.getFullAXTree',
+  'DOM.focus',
+  'DOM.getBoxModel',
+  'DOM.resolveNode',
+  'DOM.scrollIntoViewIfNeeded',
+  'DOMSnapshot.captureSnapshot',
+  'Input.dispatchKeyEvent',
+  'Input.dispatchMouseEvent',
+  'Input.insertText',
+  'Page.captureScreenshot',
+  'Page.getNavigationHistory',
+  'Page.navigate',
+  'Page.navigateToHistoryEntry',
+  'Runtime.callFunctionOn',
+  'Runtime.evaluate',
 ])
 
 /** Persistent partition for one plugin's web views (kept across restarts). */
@@ -310,10 +304,7 @@ export class PluginWebViewRegistry {
   async cdp(pluginId: string, viewId: string, method: string, params?: Record<string, unknown>): Promise<unknown> {
     const entry = this.entry(pluginId, viewId)
     this.assertAgentInControl(entry)
-    const domain = method.split('.')[0] ?? ''
-    if (!CDP_ALLOWED_DOMAINS.has(domain) || CDP_DENIED_METHODS.has(method)) {
-      throw new WebViewError('CAPABILITY_DENIED')
-    }
+    if (!CDP_ALLOWED_METHODS.has(method)) throw new WebViewError('CAPABILITY_DENIED')
     if (method === 'Page.navigate' && !isAllowedWebUrl(params?.url)) throw new WebViewError('INVALID_ARGUMENT')
     const contents = entry.view.webContents
     if (contents.isDestroyed()) throw new WebViewError('INVALID_ARGUMENT')
@@ -324,7 +315,7 @@ export class PluginWebViewRegistry {
         throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
       }
     }
-    const input = domain === 'Input'
+    const input = method.startsWith('Input.')
     if (input) entry.agentInput += 1
     try {
       return await contents.debugger.sendCommand(method, params)
