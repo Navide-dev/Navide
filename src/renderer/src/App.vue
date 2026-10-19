@@ -404,6 +404,15 @@ import {
   followingPaneRows,
   isAccountFixed,
 } from './lib/accountFollowPanes'
+import {
+  chainsDirLogin,
+  dirLoginLanded,
+  dirLoginReminderTargets,
+  loadDirLoginReminded,
+  saveDirLoginReminded,
+  skippedDirLogins,
+  type PendingLogin,
+} from './lib/accountDirLoginChain'
 import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
@@ -7432,7 +7441,9 @@ async function onManualSpawn(payload: SpawnPayload, quota?: { transactionId: str
 // Login panes pending browser authorization, keyed by profile id. Only THIS
 // window (the one that spawned the pane) holds an entry, so exactly one
 // window closes the pane and toasts when the harvest broadcast arrives.
-const pendingLoginPanes = new Map<string, { paneId: string; agentKey: string }>()
+// `step` tells a vault-slot sign-in from the own-folder one that follows it
+// for a Claude account (lib/accountDirLoginChain.ts).
+const pendingLoginPanes = new Map<string, PendingLogin>()
 
 async function onCliLoginSpawn(
   agentKey: string,
@@ -7468,7 +7479,9 @@ async function onCliLoginSpawn(
   }
   showSettings.value = false
   const pendingProfileId = dirProfileId ?? loginProfileId
-  if (pendingProfileId) pendingLoginPanes.set(pendingProfileId, { paneId, agentKey })
+  if (pendingProfileId) {
+    pendingLoginPanes.set(pendingProfileId, { paneId, agentKey, step: dirProfileId ? 'dir' : 'slot' })
+  }
   // The user must see the pane that is waiting for the browser authorization.
   noteViewJump('account login spawn', { paneId })
   onFocusPane(paneId)
@@ -15215,6 +15228,7 @@ backend.on('cli_profiles.changed', (raw) => {
     forced?: boolean
     harvestedProfileIds?: string[]
     identities?: Record<string, Record<string, { email?: string | null }>>
+    accountDirs?: Record<string, Record<string, { signedIn?: boolean }>>
     defaults?: Record<string, string | null>
     hotSwitchedPanes?: HotSwitchedPane[]
   }
@@ -15245,12 +15259,43 @@ backend.on('cli_profiles.changed', (raw) => {
     return
   }
   if (ev?.reason !== 'login-harvest') return
+  // The broadcast carries the own-folder state it was sent with; the
+  // composable's copy may not have taken it yet.
+  const dirSignedIn = (id: string): boolean =>
+    (ev.accountDirs?.[FOLLOW_SWITCH_AGENT]?.[id]?.signedIn ?? followDirSignedIn(id)) === true
   for (const profileId of ev.harvestedProfileIds ?? []) {
     const pending = pendingLoginPanes.get(profileId)
     if (!pending) continue
+    // The own-folder pane stays open until its folder reads signed in.
+    if (pending.step === 'dir' && !dirLoginLanded(pending, profileId, dirSignedIn)) continue
     pendingLoginPanes.delete(profileId)
     if (panes.value.some((p) => p.id === pending.paneId)) void onKill(pending.paneId)
     const email = ev.identities?.[pending.agentKey]?.[profileId]?.email || ''
+    if (chainsDirLogin(pending, profileId, dirSignedIn)) {
+      // Step two: the same own-folder login pane the account badge opens.
+      // The user is told to authorize once more; the reminder below would
+      // only repeat that.
+      const reminded = loadDirLoginReminded()
+      reminded.add(profileId)
+      saveDirLoginReminded(reminded)
+      notifyRestore.toast(
+        email
+          ? i18n.global.t('settings.accounts.cli.login-step2', { email })
+          : i18n.global.t('settings.accounts.cli.login-step2-no-email'),
+        { type: 'info', duration: 20000 }
+      )
+      void onCliLoginSpawn(pending.agentKey, undefined, { accountDirProfileId: profileId })
+      continue
+    }
+    if (pending.step === 'dir') {
+      notifyRestore.toast(
+        email
+          ? i18n.global.t('settings.accounts.cli.login-step2-done', { email })
+          : i18n.global.t('settings.accounts.cli.login-step2-done-no-email'),
+        { type: 'success' }
+      )
+      continue
+    }
     notifyRestore.toast(
       email
         ? i18n.global.t('settings.accounts.cli.login-complete', { email })
@@ -15259,6 +15304,43 @@ backend.on('cli_profiles.changed', (raw) => {
     )
   }
 })
+
+// An own-folder login pane closed before its folder signed in: the account
+// keeps running on the shared login, so only say how to finish later.
+function noteSkippedDirLogins(livePaneIds: ReadonlySet<string>): void {
+  for (const profileId of skippedDirLogins(pendingLoginPanes, livePaneIds)) {
+    pendingLoginPanes.delete(profileId)
+    const email = cliProfilesApi.identityFor(FOLLOW_SWITCH_AGENT, profileId)?.email || ''
+    notifyRestore.toast(
+      email
+        ? i18n.global.t('settings.accounts.cli.login-step2-skipped', { email })
+        : i18n.global.t('settings.accounts.cli.login-step2-skipped-no-email'),
+      { type: 'info', duration: 15000 }
+    )
+  }
+}
+watch(() => panes.value.map((p) => p.id), (ids) => noteSkippedDirLogins(new Set(ids)))
+
+// Claude accounts signed in before the two-step sign-in existed: reminded
+// once that their own folder still needs a sign-in. Nothing converts them.
+function remindDirLogins(): void {
+  if (!cliProfilesApi.loaded.value) return
+  const reminded = loadDirLoginReminded()
+  const ids = dirLoginReminderTargets(
+    cliProfilesApi.profilesForAgent(FOLLOW_SWITCH_AGENT).map((p) => p.id).filter((id) => !pendingLoginPanes.has(id)),
+    (id) => cliProfilesApi.identityFor(FOLLOW_SWITCH_AGENT, id)?.signedIn === true,
+    followDirSignedIn,
+    reminded,
+  )
+  if (ids.length === 0) return
+  for (const id of ids) reminded.add(id)
+  saveDirLoginReminded(reminded)
+  notifyRestore.toast(
+    i18n.global.t('settings.accounts.cli.dir-remind', { count: ids.length }),
+    { type: 'info', duration: 20000 }
+  )
+}
+watch([cliProfilesApi.loaded, cliProfilesApi.accountDirs, cliProfilesApi.identities], remindDirLogins)
 
 // Guided install request currently on screen (null = none). One dialog at a
 // time: several panes of the same CLI exiting 127 together (e.g. a pipeline
