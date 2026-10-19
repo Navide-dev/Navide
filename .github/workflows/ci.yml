@@ -150,8 +150,8 @@ jobs:
         run: |
           bun install --frozen-lockfile
           uv --project backend sync --locked
-      # CI installs from bun.lock but releases install from pnpm-lock.yaml; both
-      # must resolve the same packages (see CONTRIBUTING.md).
+      # CI and releases install from bun.lock, pnpm users from pnpm-lock.yaml;
+      # both must resolve the same packages (see CONTRIBUTING.md).
       - name: Verify pnpm-lock.yaml and bun.lock resolve the same packages
         run: bun scripts/check-lockfile-parity.mjs
       - name: Typecheck every application and plugin surface
@@ -253,20 +253,19 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # This job installs and builds the way releases do (release.yml): pnpm +
-      # Node.js, frozen pnpm-lock.yaml. pnpm comes from packageManager.
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-      # Bun only runs the artifact tests below, against the Node-built output.
-      # The Bun version is pinned in .bun-version.
+      # This job installs and builds the way releases do (release.yml): on Bun,
+      # frozen bun.lock. The Bun version is pinned in .bun-version.
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: .bun-version
+      # Only for the plain `node scripts/...` step below, as in release.yml.
+      # Everything started through `bun run` runs on Bun itself (bunfig.toml
+      # [run] bun).
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -282,23 +281,12 @@ jobs:
         with:
           go-version: '1.27.x'
           cache: false
-      # pnpm and Bun cannot share one node_modules, so this job installs with
-      # pnpm only; the other jobs cover `bun install --frozen-lockfile`. This
-      # is the only PR job that fails when package.json and pnpm-lock.yaml
-      # disagree, which would otherwise surface at release time.
       - name: Install locked dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
-      # The release path also typechecks under Node (release.yml); one OS is
-      # enough because typecheck is platform independent.
-      - name: Typecheck under Node.js
-        if: runner.os == 'Linux'
-        run: pnpm typecheck
-      # The release build: pnpm runs the scripts under Node.js, so bunfig.toml's
-      # `[run] bun = true` does not apply.
       - name: Build application and all bundled plugins once
-        run: pnpm build
+        run: bun run build
       # Consumes this job's output. The macOS invocation additionally builds
       # the test-only Plans fixtures and exercises the production backend.
       - name: Complete artifact suite and packaged Plans contracts
@@ -313,6 +301,32 @@ jobs:
           name: artifacts-${{ matrix.platform }}-diagnostics
           path: test-results/ci/
           retention-days: 7
+
+  # Releases build on Bun, but pnpm-lock.yaml stays the lock for pnpm users
+  # until it is retired. This is the only PR job that fails when package.json
+  # and pnpm-lock.yaml disagree, and the only one that typechecks under Node.js.
+  pnpm-lockfile:
+    name: pnpm lockfile and Node.js typecheck
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.frontend != 'false' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # pnpm comes from packageManager.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck under Node.js
+        run: pnpm typecheck
 
   # macOS exercises native PTY/zsh behavior; Linux and Windows retain their
   # complete suites. Only Windows is split across five collection-based shards.
@@ -511,7 +525,7 @@ jobs:
     # except a group the path filter (the changes job) chose not to run.
     name: Lint and test
     if: ${{ always() }}
-    needs: [changes, static, frontend, build-artifacts, backend, registry, dependency-audit, stt-sidecar]
+    needs: [changes, static, frontend, build-artifacts, pnpm-lockfile, backend, registry, dependency-audit, stt-sidecar]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -522,6 +536,7 @@ jobs:
           STATIC_RESULT: ${{ needs.static.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           BUILD_ARTIFACTS_RESULT: ${{ needs['build-artifacts'].result }}
+          PNPM_LOCKFILE_RESULT: ${{ needs['pnpm-lockfile'].result }}
           BACKEND_RESULT: ${{ needs.backend.result }}
           REGISTRY_RESULT: ${{ needs.registry.result }}
           AUDIT_RESULT: ${{ needs['dependency-audit'].result }}
@@ -540,6 +555,7 @@ jobs:
           check static "$STATIC_RESULT"
           check frontend "$FRONTEND_RESULT" "$RUN_FRONTEND"
           check build-artifacts "$BUILD_ARTIFACTS_RESULT" "$RUN_FRONTEND"
+          check pnpm-lockfile "$PNPM_LOCKFILE_RESULT" "$RUN_FRONTEND"
           check backend "$BACKEND_RESULT" "$RUN_BACKEND"
           check registry "$REGISTRY_RESULT"
           check dependency-audit "$AUDIT_RESULT"
