@@ -12,13 +12,14 @@
     <li><b>{{ items|length }}</b><span>blocked</span></li>
     <li><b>{{ items|selectattr('kind', 'equalto', 'publisher')|list|length }}</b><span>publishers</span></li>
     <li><b>{{ items|selectattr('kind', 'equalto', 'package')|list|length }}</b><span>packages</span></li>
+    <li><b>{{ items|selectattr('kind', 'equalto', 'digest')|list|length }}</b><span>digests</span></li>
     <li><b>{{ items|rejectattr('id')|list|length }}</b><span>from config (read-only)</span></li>
   </ul>
   {% if error %}<p class="warn warn-block" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="{{ base }}/admin/blocklist" class="row">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <select name="kind" aria-label="Kind"><option value="package">package</option><option value="publisher">publisher</option></select>
-    <input class="wide-input" name="value" placeholder="namespace.name[@version] or namespace" required>
+    <select name="kind" aria-label="Kind"><option value="package">package</option><option value="publisher">publisher</option><option value="digest">digest (.vsix sha256)</option></select>
+    <input class="wide-input" name="value" placeholder="namespace.name[@version], namespace or .vsix sha256" required>
     <input class="wide-input" name="reason" placeholder="Public reason" required maxlength="500">
     <button type="submit">Block</button>
   </form>

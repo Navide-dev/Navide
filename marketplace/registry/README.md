@@ -458,6 +458,40 @@ settings below are set; without them the registry behaves exactly as before
   `--token`/`NAVIDE_PLUGIN_TOKEN` is given. No password is ever typed into the
   CLI.
 
+### Developer qualification (0.2.27)
+
+Only an approved developer can claim a namespace or obtain a publish token
+(`qualification.py`). The record is keyed by `navide_member_id` and lives only
+here; Cloud's `members` table is untouched, and no existing account is
+grandfathered.
+
+- **Account token**: `/cli/authorize?scope=account` (same loopback + PKCE flow)
+  issues an `nva_` token that names the Cloud account only. It can read and
+  submit the account's developer application and list its versions; it never
+  publishes. `/api/cli/token` answers `{token, scope, namespace, expires_at}`.
+- **Application**: `GET|POST /api/developer/me/application` (account or
+  publisher token) or the website form `/developer/apply`. Real-name fields;
+  `field_sources` marks each field `user` or `agent-draft`.
+- **Admin queue**: `/admin/developers`, `GET /api/admin/developers`,
+  `POST /api/admin/developers/{member_id}/approve|reject|revoke` (a reason is
+  required to reject or revoke). Revoking, in one transaction, revokes every
+  token of the account, freezes its namespaces, yanks all of their versions in
+  every channel and revokes their publisher keys.
+- **Own data**: `GET /api/publisher/me`, `PUT /api/publisher/me/key`,
+  `GET /api/publisher/me/versions` (`?extension=&version=`).
+- **Local-install trust**: `GET /api/trust/local-install` returns a separate
+  root-signed document (`kind: local-install-trust`) with the keys of approved
+  and first-party publishers (replaced or revoked ones as `revoked`) and the
+  blocked package digests (blocklist kind `digest`). The existing trust
+  metadata is unchanged: released Apps reject any new field in it.
+- **Errors**: new and changed JSON errors carry `detail: {code, message}` —
+  `TOKEN_MISSING|INVALID|REVOKED|EXPIRED` (401), `TOKEN_SCOPE`,
+  `QUALIFICATION_REQUIRED`, `NAMESPACE_FROZEN`, `DIGEST_BLOCKED` (403), yank
+  `NOT_OWNER` (403) and `NOT_FOUND` (404).
+- **Audit**: every application, decision, revocation, claim, token issue or
+  revoke, key change, submission, yank and blocklist change is a
+  `registry_audit` row naming the actor; `GET /api/admin/audit` reads it.
+
 | Variable | Default | Meaning |
 |---|---|---|
 | `REGISTRY_AUTH_URL` | _(unset)_ | navide-auth base, e.g. `https://forum.navide.dev/navide-auth`. |
