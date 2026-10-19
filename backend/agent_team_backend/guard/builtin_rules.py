@@ -51,6 +51,9 @@ BUILTIN_RULES: tuple[BuiltinRule, ...] = (
                 "git push --force origin main"),
     BuiltinRule("cloud-destroy", "critical", "critical", "Destroys cloud infrastructure or cluster resources",
                 "terraform destroy   ·   kubectl delete …"),
+    BuiltinRule("plugin-store-write", "critical", "critical",
+                "Writes, deletes, moves, links or chmods Navide's plugin install root or trust stores",
+                "echo … > ~/.config/agent-team/plugin-local-trust/x.json"),
     # default high
     BuiltinRule("credential-path-list", "high", "high", "Lists a credential location", "ls ~/.ssh"),
     BuiltinRule("git-hooks-write", "high", "high", "Writes a git hook", ".git/hooks/pre-commit"),
@@ -94,7 +97,7 @@ RULES_BY_ID = {r.id: r for r in BUILTIN_RULES}
 #: Never below high (the fixed safety floor).
 FLOOR_RULES = frozenset({
     "credential-access", "credential-exfil", "keychain-access", "pipe-download-to-shell",
-    "download-then-exec", "rm-root-or-home", "disk-format", "disk-write",
+    "download-then-exec", "rm-root-or-home", "disk-format", "disk-write", "plugin-store-write",
 })
 
 LEVELS = ("critical", "high", "normal")

@@ -1240,3 +1240,33 @@ describe('ExtensionsPane invisible characters', () => {
     expect(wrapper.text()).not.toMatch(/[\u200b\u202e]/)
   })
 })
+
+describe('ExtensionsPane source badge (K2)', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('badges each installed row by the Host\'s source and never guesses one', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.registry', requires: [], sensitive: [], provenance: 'official-registry' },
+        { id: 'acme.folder', requires: [], sensitive: [], provenance: 'developer-local-unpacked' },
+        { id: 'acme.file', requires: [], sensitive: [], source: 'local-unsigned' },
+        { id: 'acme.test', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2027-01-17T00:00:00Z' },
+        { id: 'acme.unknown', requires: [], sensitive: [] },
+      ]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const source = (id: string) => wrapper!.find(`[data-id="${id}"] .nv-source-badge`)
+    // No source means the Host could not name one (an unknown channel): no badge.
+    expect(source('acme.registry').exists()).toBe(false)
+    expect(source('acme.folder').exists()).toBe(false)
+    expect(source('acme.file').attributes('data-source')).toBe('local-unsigned')
+    expect(source('acme.test').attributes('data-source')).toBe('testplace')
+    expect(source('acme.test').text()).toContain('2027-01-17')
+    expect(source('acme.unknown').exists()).toBe(false)
+  })
+})

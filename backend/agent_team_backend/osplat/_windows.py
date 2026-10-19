@@ -151,6 +151,7 @@ PROCESS_TERMINATE = 0x0001
 PROCESS_SET_QUOTA = 0x0100
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 SYNCHRONIZE = 0x00100000
+STD_ERROR_HANDLE = 0xFFFFFFF4  # (DWORD)-12
 WAIT_OBJECT_0 = 0x00000000
 WAIT_TIMEOUT = 0x00000102
 INFINITE = 0xFFFFFFFF
@@ -227,6 +228,10 @@ def _kernel32() -> Any:
         k.GetExitCodeProcess.restype = wintypes.BOOL
         k.LocalFree.argtypes = [ctypes.c_void_p]
         k.LocalFree.restype = ctypes.c_void_p
+        k.GetStdHandle.argtypes = [wintypes.DWORD]
+        k.GetStdHandle.restype = wintypes.HANDLE
+        k.GetHandleInformation.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        k.GetHandleInformation.restype = wintypes.BOOL
         _k32 = k
     return _k32
 
@@ -474,7 +479,7 @@ class WindowsProcessTree:
         # No process groups: the "group" is the subtree rooted at gid.
         self.kill_tree(gid, force=force)
 
-    def contain(self, pid: int) -> None:
+    def contain(self, pid: int) -> int | None:
         job = _create_kill_on_close_job()
         try:
             _assign_to_job(job, pid)
@@ -482,8 +487,19 @@ class WindowsProcessTree:
             _kernel32().CloseHandle(job)
             raise
         _register_job(pid, job)
+        return job
 
-    def end_contained(self, pid: int) -> None:
+    def end_contained(self, pid: int, job: int | None = None) -> None:
+        if job is not None:
+            # The caller's own job only, as `_release_job`: a pane spawned
+            # onto this pid after the root exited owns the entry by then, and
+            # closing that pane's job would end its whole tree.
+            with _jobs_lock:
+                entry = _jobs.get(pid)
+                if entry is not None and entry[0] == job:
+                    del _jobs[pid]
+            _kernel32().CloseHandle(job)
+            return
         with _jobs_lock:
             entry = _jobs.pop(pid, None)
         if entry is not None:
@@ -495,6 +511,19 @@ class WindowsProcessTree:
             self.kill_tree(pid, force=True)
         except OSError:
             pass
+
+    def stderr_handle_info(self) -> str:
+        try:
+            from ctypes import wintypes
+
+            k = _kernel32()
+            handle = k.GetStdHandle(STD_ERROR_HANDLE)
+            flags = wintypes.DWORD(0)
+            ok = k.GetHandleInformation(handle, ctypes.byref(flags))
+            error = 0 if ok else ctypes.get_last_error()  # type: ignore[attr-defined]
+            return f"stderr handle={handle!r} GetHandleInformation ok={bool(ok)} flags={flags.value:#x} error={error}"
+        except Exception as exc:  # noqa: BLE001 - diagnostics never raise
+            return f"stderr handle not readable: {exc}"
 
     def kill_tree(self, pid: int, *, force: bool) -> None:
         if _terminate_job(pid):

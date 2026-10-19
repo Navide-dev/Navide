@@ -211,7 +211,7 @@ function body(request: IncomingMessage): Promise<Buffer> {
 
 /** A stand-in Registry: /api/cli/token checks the PKCE pair the CLI sent to
  *  /cli/authorize, /api/publish records the upload. */
-async function fakeRegistry() {
+async function fakeRegistry(publishResponse = '{"review_status":"pending"}') {
   const uploads: Array<{ url: URL; authorization?: string; body: Buffer }> = []
   let challenge = ''
   const server: Server = createServer(async (request, response) => {
@@ -227,7 +227,7 @@ async function fakeRegistry() {
     if (url.pathname === '/api/publish') {
       uploads.push({ url, authorization: request.headers.authorization, body: raw })
       response.writeHead(201, { 'Content-Type': 'application/json' })
-      response.end('{"review_status":"pending"}')
+      response.end(publishResponse)
       return
     }
     response.writeHead(404).end()
@@ -420,6 +420,29 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     const expired = run(['whoami', '--registry', registry], directory, env)
     expect(expired.status).not.toBe(0)
     expect(expired.stdout).toContain('token expired')
+  })
+
+  it('says what a pre-release publish means (K5)', async () => {
+    const directory = root()
+    const env = { ...process.env, NAVIDE_PLUGIN_CONFIG_DIR: join(directory, 'config'), NAVIDE_PLUGIN_TOKEN: 'nvp_env' }
+    packageDirectory(directory, frontendManifest(), { 'frontend/main/index.html': '<!doctype html>' })
+    expect(run(['package', directory, '--out', 'f.vsix'], directory).status).toBe(0)
+    const hint = 'public to everyone who turns on Get pre-releases'
+    for (const [version, shown] of [['1.1.0-beta.1', true], ['1.1.0', false], ['1.1.0+build.7', false]] as const) {
+      const registry = await fakeRegistry(JSON.stringify({ version, review_status: 'pending' }))
+      try {
+        const child = spawn(process.execPath, [cli, 'publish', 'f.vsix', '--registry', registry.url], { cwd: directory, env })
+        let stdout = ''
+        child.stdout.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString('utf8')
+        })
+        expect(await new Promise((resolve) => child.on('close', resolve))).toBe(0)
+        expect(stdout.includes(hint), `${version}: ${stdout}`).toBe(shown)
+        if (shown) expect(stdout).toContain('wait for Testplace (Navide 0.2.27)')
+      } finally {
+        await registry.close()
+      }
+    }
   })
 
   it('warns that --token is visible to other processes', async () => {

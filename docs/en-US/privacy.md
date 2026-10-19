@@ -22,6 +22,14 @@ Depending on enabled features, Navide stores:
   the executable and subcommand only. Detail rows are kept 7 days, then only
   per-day counts for 90 days. The bundled Plans, Git and Mini-IDE are not
   logged. It never leaves this machine
+- Previews of chat messages kept for an offline pane, in the local `navide.db`
+  (`channels.wake_kept`, then `channels.wake_lost` across a restart): the first
+  40 characters of each message a bound chat sent while its pane was not
+  online, so the chat can be told which ones were not sent. They are stored as
+  typed, without masking, so a secret at the start of a message is stored too.
+  They are deleted once the message is sent in or the chat has been told, when
+  the chat is unbound, or when its bot is removed; while that bot stays
+  disabled they wait for it. They never leave this machine
 - Optional AI provider API keys in a local settings file protected with restrictive file permissions (`0600` on supported systems)
 
 Navide does not operate a project telemetry service and does not require a Navide account.

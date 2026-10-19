@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import IO, Any, Awaitable, Callable
 from uuid import uuid4
 
-from . import osplat, pty_registry
+from . import login_panes, osplat, pty_registry
 from .applog import app_data_dir, in_data_dir
 from .cli_vendors.base import VendorRuntimeContext
 from .cli_vendors.registry import risk_runtime_context
@@ -685,6 +685,8 @@ class TerminalService:
                 risk_context=risk_context,
             )
             self._sessions[session.id] = session
+            # A sign-in pane stays one after its PTY exits (login_panes).
+            login_panes.note(pane_id, session.metadata)
             if log_fp is not None:
                 _register_live_log(session.id, output_log_file)
             handle.start_reading(self._loop, lambda: self._on_readable(session))
@@ -2089,6 +2091,7 @@ class TerminalService:
             {
                 "terminal_session_id": session.id,
                 "pane_id": session.pane_id,
+                "workspace_path": str(session.metadata.get("workspace_path") or ""),
                 "reason": reason,
                 "exit_code": exit_code,
                 "uptime_ms": uptime_ms,

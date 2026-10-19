@@ -36,6 +36,8 @@ const PERMANENT_ALLOW = new RegExp(
     '\\balways\\b',
     '\\b(?:this|the) session\\b',
     '\\bauto[- ]?accept',
+    // "Yes, and switch to auto mode": auto mode then approves every later prompt.
+    '\\bauto mode\\b',
     '\\ballow all\\b',
     '\\bpermanent',
     '不再詢問|不再询问|一律允許|一律允许|自動核准|自动批准|總是允許|总是允许|始終允許|始终允许',

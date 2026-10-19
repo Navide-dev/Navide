@@ -57,6 +57,8 @@ export function gitCapabilityMethod<K extends GitOperation>(operation: K): GitCa
     : `shell.git${operation.split('_').map(part => part[0].toUpperCase() + part.slice(1)).join('')}`) as GitCapabilityMethod<K>
 }
 
-export const GIT_CAPABILITY_METHODS = Object.fromEntries(
+// A pure call, so a bundler can drop the table when a plugin does not read it
+// (an annotated call still keeps side effects it cannot rule out in its arguments).
+export const GIT_CAPABILITY_METHODS = /*#__PURE__*/ (() => Object.fromEntries(
   (Object.keys(GIT_OPERATION_FIELDS) as GitOperation[]).map(operation => [gitCapabilityMethod(operation), operation]),
-) as Record<GitCapabilityMethod, GitOperation>
+))() as Record<GitCapabilityMethod, GitOperation>

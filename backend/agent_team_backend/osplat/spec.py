@@ -484,19 +484,29 @@ class ProcessTree(Protocol):
         """Kill `pid` and every descendant, including ones that left its group."""
         ...
 
-    def contain(self, pid: int) -> None:
+    def contain(self, pid: int) -> int | None:
         """Make a child the root of a tree `end_contained` can end whole.
 
         On Windows the child joins a Job Object that kills its processes when
-        closed (processes it starts afterwards join too). On POSIX it must
-        have been started in a session of its own (`start_new_session`); that
-        is already the tree, so nothing is done.
+        closed (processes it starts afterwards join too); its handle is
+        returned, so the caller can end that job and no other. On POSIX it
+        must have been started in a session of its own (`start_new_session`);
+        that is already the tree, so nothing is done and None is returned.
         """
         ...
 
-    def end_contained(self, pid: int) -> None:
+    def end_contained(self, pid: int, job: int | None = None) -> None:
         """Kill the tree `contain` made for `pid`, everything in it, even when
-        the root itself has exited: killpg on POSIX, closing the job on Windows."""
+        the root itself has exited: killpg on POSIX, closing the job on Windows.
+
+        With `job` (what `contain` returned) only that job is closed, and the
+        table entry for `pid` is dropped only while it is still that job's."""
+        ...
+
+    def stderr_handle_info(self) -> str:
+        """For a child that could not be started: this process's standard
+        error handle as the OS reports it (Windows), "" elsewhere. Diagnostics
+        only."""
         ...
 
 

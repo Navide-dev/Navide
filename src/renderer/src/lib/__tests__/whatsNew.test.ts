@@ -137,6 +137,32 @@ describe('0.2.10 — Channels and Voice Input', () => {
   })
 })
 
+// R3 MED-2 on 0.2.26: release.sh bumps package.json to 0.2.26 at release time,
+// so the entry must exist before that bump. These pin it without touching
+// package.json: the bump is simulated by passing 0.2.26 as the running version.
+describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
+  const entry = whatsNewFor('0.2.26')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    expect(entry?.features?.map((f) => f.name['en-US'])).toEqual(['Wake from chat', 'Resume scope Auto', 'Install from a file or folder'])
+    const texts: WhatsNewText[] = [
+      entry!.title,
+      ...entry!.highlights,
+      ...entry!.features!.flatMap((f) => [f.name, f.tagline, f.where]),
+    ]
+    for (const text of texts) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('shows once to someone updating from 0.2.25, as the newest entry', () => {
+    expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
+    expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
+    expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
+    expect(WHATS_NEW[0].version).toBe('0.2.26')
+    expect(WHATS_NEW[1].version).toBe('0.2.25')
+  })
+})
+
 describe('pickWhatsNewOnDemand (Help → What’s New…)', () => {
   it('reopens the running version’s entry even after it was seen', () => {
     expect(pickWhatsNewOnDemand('0.2.10', false)?.version).toBe('0.2.10')

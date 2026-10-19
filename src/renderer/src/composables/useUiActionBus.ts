@@ -61,6 +61,16 @@ export interface UseUiActionBusOptions {
    *  one. A focus re-announces with focused true, so the backend prefers the
    *  window the user touched last. */
   focusTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>
+  /** The window's account actions (ui.accounts.*), reached from MCP through
+   *  their dedicated tools only. They are deliberately NOT in the command
+   *  registry: a keybinding or anything else that runs registered commands
+   *  must not start a sign-in. Each gets the request's args, the caller
+   *  pane from the credential, and a signal that aborts when the backend
+   *  withdraws the request (ui.invoke.cancel) or the window loses the
+   *  backend. Absent (tests, plugin hosts): refused. */
+  accountActions?: {
+    signIn: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
+  }
 }
 
 function errorMessage(err: unknown): string {
@@ -88,7 +98,11 @@ const WORKSPACE_SCOPED_ACTIONS = new Set([
   'ui.pipeline.resume',
   'ui.pipeline.reset',
   'ui.pipeline.restart',
+  'ui.accounts.signIn',
 ])
+
+/** Prefix of the account actions: see UseUiActionBusOptions.accountActions. */
+const ACCOUNT_ACTION_PREFIX = 'ui.accounts.'
 
 /** Actions whose args.paneId names a pane's PRIVATE data — its inbox — rather
  *  than a window or a project. They run only when the caller IS that pane:
@@ -112,6 +126,7 @@ const normWs = (p: string): string => p.replace(/\/+$/, '')
 export async function handleUiInvokeRequest(
   raw: unknown,
   opts: UseUiActionBusOptions,
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<void> {
   const req = raw as Partial<UiInvokeRequest> | null | undefined
   if (!req || !req.request_id || !req.op) return
@@ -172,6 +187,17 @@ export async function handleUiInvokeRequest(
       if (!req.action) {
         ok = false
         error = 'action is required for op "invoke"'
+      } else if (req.action.startsWith(ACCOUNT_ACTION_PREFIX)) {
+        const signIn = opts.accountActions?.signIn
+        if (!req.caller_pane_id) {
+          ok = false
+          error = `${req.action} is reachable only from a CLI pane, through its own MCP tool`
+        } else if (req.action !== 'ui.accounts.signIn' || !signIn) {
+          ok = false
+          error = `unknown account action: ${req.action}`
+        } else {
+          result = await signIn(req.args ?? {}, req.caller_pane_id, signal)
+        }
       } else {
         const outcome = await invokeCommand(req.action, req.args ?? undefined)
         ok = outcome.ok
@@ -206,9 +232,35 @@ export async function handleUiInvokeRequest(
  *  unsubscribe function; App.vue does not call it (App.vue lives for the
  *  window's lifetime, same as its other backend.on registrations). */
 export function useUiActionBus(opts: UseUiActionBusOptions): () => void {
-  const off = opts.backend.on('ui.invoke.request', (raw) => { void handleUiInvokeRequest(raw, opts) })
+  // In-flight account requests, so a withdrawn one can be called off
+  // (review #438 LOW-1). Other actions finish on their own and are not kept.
+  const inFlight = new Map<string, AbortController>()
+  const off = opts.backend.on('ui.invoke.request', (raw) => {
+    const req = raw as Partial<UiInvokeRequest> | null | undefined
+    const id = req?.request_id
+    if (!id || !req?.action?.startsWith(ACCOUNT_ACTION_PREFIX)) {
+      void handleUiInvokeRequest(raw, opts)
+      return
+    }
+    const controller = new AbortController()
+    inFlight.set(id, controller)
+    void handleUiInvokeRequest(raw, opts, controller.signal).finally(() => inFlight.delete(id))
+  })
+  const offCancel = opts.backend.on('ui.invoke.cancel', (raw) => {
+    const id = (raw as { request_id?: unknown } | null | undefined)?.request_id
+    if (typeof id === 'string') inFlight.get(id)?.abort()
+  })
   const status = opts.connectionStatus
-  if (!status) return () => { off?.() }
+  if (!status) return () => { off?.(); offCancel?.() }
+  // The backend that asked is gone (restart, lost link): nobody waits for the
+  // answer any more.
+  const stopAbortWatch = watch(
+    () => status.value,
+    (s) => {
+      if (s === 'connected') return
+      for (const controller of inFlight.values()) controller.abort()
+    },
+  )
 
   const announce = (focused: boolean) => {
     if (status.value !== 'connected') return
@@ -225,6 +277,8 @@ export function useUiActionBus(opts: UseUiActionBusOptions): () => void {
   focusTarget?.addEventListener('focus', onFocus)
   return () => {
     off?.()
+    offCancel?.()
+    stopAbortWatch()
     stopWatch()
     focusTarget?.removeEventListener('focus', onFocus)
   }

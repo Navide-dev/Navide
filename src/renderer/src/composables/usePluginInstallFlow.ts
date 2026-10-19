@@ -4,6 +4,7 @@ import { useNotify } from '@navide/plugin-ui/foundation'
 import { usePluginInventory } from './usePluginInventory'
 import { usePluginUpdates } from './usePluginUpdates'
 import { formatBytes } from '../lib/formatBytes'
+import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 
 // The verified install flow shared by the Marketplace (install/update) and the
 // Extensions page (update): prepare → optional publisher/risk confirmation →
@@ -17,6 +18,14 @@ export interface PendingInstall {
   prepared: PreparedInstallSummary
 }
 
+/** Card K3: the extra step a package of the same id asks for before it is
+ *  replaced (D7), then the publisher or risk step as before. */
+export type InstallStep = 'replace' | 'publisher' | 'risk'
+
+function replacesAnother(prepared: PreparedInstallSummary): boolean {
+  return prepared.replaces !== undefined || prepared.replacesLocal !== undefined
+}
+
 export function usePluginInstallFlow() {
   const { t } = useI18n()
   const notify = useNotify()
@@ -25,15 +34,18 @@ export function usePluginInstallFlow() {
   const busy = ref(false)
   const error = ref('')
   const pendingConfirm = ref<PendingInstall | null>(null)
-  const pendingStep = ref<'publisher' | 'risk' | null>(null)
+  const pendingStep = ref<InstallStep | null>(null)
   const publisherConfirmed = ref(false)
+  const replaceConfirmed = ref(false)
+  // D7: take back data set aside earlier from this source; off unless chosen.
+  const reattachBackendData = ref(false)
 
   function api() {
     return window.agentTeam?.plugins
   }
 
   function fail(err: unknown): void {
-    error.value = ipcErrorMessage(err)
+    error.value = localizeDeveloperModeError(ipcErrorMessage(err), t)
   }
 
   async function commit(
@@ -42,7 +54,20 @@ export function usePluginInstallFlow() {
   ): Promise<void> {
     const plugins = api()
     if (!plugins) return
-    await plugins.commitInstall(id, approval)
+    const pendingSource = pendingConfirm.value?.prepared.id === id ? pendingConfirm.value.prepared.source : undefined
+    const local = pendingSource === 'local-unsigned'
+    const replace = replaceConfirmed.value
+      ? { replaceConfirmed: true, ...(reattachBackendData.value ? { reattachBackendData: true } : {}) }
+      : {}
+    if (pendingSource === 'developer-unpacked') {
+      if (!plugins.commitFolderLoad) throw new Error('loading from a folder is unavailable')
+      await plugins.commitFolderLoad(id, { riskConfirmed: approval.riskConfirmed === true })
+    } else if (local) {
+      if (!plugins.commitLocalInstall) throw new Error('installing from a file is unavailable')
+      await plugins.commitLocalInstall(id, { riskConfirmed: approval.riskConfirmed === true, ...replace })
+    } else {
+      await plugins.commitInstall(id, { ...approval, ...replace })
+    }
     pendingConfirm.value = null
     pendingStep.value = null
     await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
@@ -62,13 +87,100 @@ export function usePluginInstallFlow() {
       const requiresPublisherTrust = prepared.requiresPublisherTrust === true
       const requiresRiskConfirmation =
         prepared.requiresRiskConfirmation ?? prepared.requiresConfirmation
-      if (requiresPublisherTrust || requiresRiskConfirmation) {
+      if (requiresPublisherTrust || requiresRiskConfirmation || replacesAnother(prepared)) {
         // Hold for the trust dialog — nothing is written until the user confirms.
         pendingConfirm.value = { label: `${namespace}.${name}`, prepared }
-        pendingStep.value = requiresPublisherTrust ? 'publisher' : 'risk'
+        pendingStep.value = replacesAnother(prepared) ? 'replace' : requiresPublisherTrust ? 'publisher' : 'risk'
         publisherConfirmed.value = false
+        replaceConfirmed.value = false
+        reattachBackendData.value = false
         return
       }
+      await commit(prepared.id, {})
+    } catch (err) {
+      fail(err)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** Card K3: install a `.vsix` the user picks in the main process's own
+   *  file dialog. Always held for consent: the package is unreviewed. */
+  async function installFromFile(): Promise<void> {
+    const plugins = api()
+    if (!plugins?.installFromFile) return
+    busy.value = true
+    error.value = ''
+    try {
+      const prepared = await plugins.installFromFile()
+      if (!prepared) return
+      pendingConfirm.value = { label: prepared.id, prepared }
+      pendingStep.value = replacesAnother(prepared) ? 'replace' : 'risk'
+      publisherConfirmed.value = false
+      replaceConfirmed.value = false
+      reattachBackendData.value = false
+    } catch (err) {
+      fail(err)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** Card K4: load a developer folder the user picks in the main process's
+   *  own folder dialog (Developer Mode on). Always held for consent. */
+  async function loadFromFolder(): Promise<void> {
+    const plugins = api()
+    if (!plugins?.loadFromFolder) return
+    await holdForConsent(() => plugins.loadFromFolder!())
+  }
+
+  /** Card K4: reload a developer folder; a change to its permissions or
+   *  backend asks for consent again, a change to its files does not. */
+  async function reloadDeveloperPlugin(id: string): Promise<void> {
+    const plugins = api()
+    if (!plugins?.reloadDeveloperPlugin) return
+    await holdForConsent(async () => {
+      const result = await plugins.reloadDeveloperPlugin!(id)
+      if (!result.requiresConsent) await inventory.refresh()
+      return result.requiresConsent ? result.prepared : null
+    })
+  }
+
+  async function holdForConsent(prepare: () => Promise<PreparedInstallSummary | null>): Promise<void> {
+    busy.value = true
+    error.value = ''
+    try {
+      const prepared = await prepare()
+      if (!prepared) return
+      pendingConfirm.value = { label: prepared.id, prepared }
+      pendingStep.value = 'risk'
+      publisherConfirmed.value = false
+      replaceConfirmed.value = false
+      reattachBackendData.value = false
+    } catch (err) {
+      fail(err)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** D7: the user agreed to replace the installed package of this id. */
+  async function confirmReplace(reattach = false): Promise<void> {
+    const pending = pendingConfirm.value
+    if (!pending) return
+    replaceConfirmed.value = true
+    reattachBackendData.value = reattach === true && pending.prepared.reattachableBackendData !== undefined
+    const prepared = pending.prepared
+    if (prepared.requiresPublisherTrust === true) {
+      pendingStep.value = 'publisher'
+      return
+    }
+    if (prepared.requiresRiskConfirmation ?? prepared.requiresConfirmation) {
+      pendingStep.value = 'risk'
+      return
+    }
+    busy.value = true
+    try {
       await commit(prepared.id, {})
     } catch (err) {
       fail(err)
@@ -116,6 +228,8 @@ export function usePluginInstallFlow() {
     pendingConfirm.value = null
     pendingStep.value = null
     publisherConfirmed.value = false
+    replaceConfirmed.value = false
+    reattachBackendData.value = false
   }
 
   async function uninstall(id: string): Promise<void> {
@@ -141,7 +255,11 @@ export function usePluginInstallFlow() {
     pendingConfirm,
     pendingStep,
     install,
+    installFromFile,
+    loadFromFolder,
+    reloadDeveloperPlugin,
     uninstall,
+    confirmReplace,
     confirmPublisher,
     confirmRisk,
     cancel,

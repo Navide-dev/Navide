@@ -1,0 +1,104 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PluginSourceBadge (K2) > words every source in every locale (badge and disclosure row) 1`] = `
+{
+  "en-US": {
+    "developer-unpacked": {
+      "badge": "Developer folder; its contents can change at any time",
+      "row": "Source and review Developer folder; its contents can change at any timeNot scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)Publisher: Self-declared: acme",
+    },
+    "factory-bundled": {
+      "badge": "Built into Navide",
+      "row": "Source and review Built into Navide",
+    },
+    "local-signed": {
+      "badge": "Local file signed by its publisher; this version was not reviewed by Navide",
+      "row": "Source and review Local file signed by its publisher; this version was not reviewed by NavideNot scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)Publisher: acme",
+    },
+    "local-unsigned": {
+      "badge": "Local file, not reviewed by Navide, unsigned",
+      "row": "Source and review Local file, not reviewed by Navide, unsignedNot scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)Publisher: Self-declared: acme",
+    },
+    "marketplace": {
+      "badge": "Reviewed",
+      "row": "Source and review Reviewed",
+    },
+    "prerelease": {
+      "badge": "Pre-release (reviewed)",
+      "row": "Source and review Pre-release (reviewed)",
+    },
+    "testplace": {
+      "badge": "Test build, no human review, expires 2026-12-31",
+      "row": "Source and review Test build, no human review, expires 2026-12-31",
+    },
+  },
+  "ja-JP": {
+    "developer-unpacked": {
+      "badge": "開発者フォルダー。内容はいつでも変わる可能性があります",
+      "row": "提供元と審査 開発者フォルダー。内容はいつでも変わる可能性があります未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）発行者：自称：acme",
+    },
+    "factory-bundled": {
+      "badge": "Navide に組み込み",
+      "row": "提供元と審査 Navide に組み込み",
+    },
+    "local-signed": {
+      "badge": "ローカルファイル。発行者の署名あり。このバージョンは Navide の審査を受けていません",
+      "row": "提供元と審査 ローカルファイル。発行者の署名あり。このバージョンは Navide の審査を受けていません未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）発行者：acme",
+    },
+    "local-unsigned": {
+      "badge": "ローカルファイル。Navide の審査なし、署名なし",
+      "row": "提供元と審査 ローカルファイル。Navide の審査なし、署名なし未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）発行者：自称：acme",
+    },
+    "marketplace": {
+      "badge": "審査済み",
+      "row": "提供元と審査 審査済み",
+    },
+    "prerelease": {
+      "badge": "プレリリース版（審査済み）",
+      "row": "提供元と審査 プレリリース版（審査済み）",
+    },
+    "testplace": {
+      "badge": "テスト版。人による審査なし。2026-12-31 に期限切れ",
+      "row": "提供元と審査 テスト版。人による審査なし。2026-12-31 に期限切れ",
+    },
+  },
+  "zh-TW": {
+    "developer-unpacked": {
+      "badge": "開發者資料夾，內容隨時可能變動",
+      "row": "來源與審核 開發者資料夾，內容隨時可能變動未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）發佈者：自稱：acme",
+    },
+    "factory-bundled": {
+      "badge": "Navide 內建",
+      "row": "來源與審核 Navide 內建",
+    },
+    "local-signed": {
+      "badge": "本機檔案，發佈者已簽章，這個版本未經 Navide 審核",
+      "row": "來源與審核 本機檔案，發佈者已簽章，這個版本未經 Navide 審核未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）發佈者：acme",
+    },
+    "local-unsigned": {
+      "badge": "本機檔案，未經 Navide 審核，未簽章",
+      "row": "來源與審核 本機檔案，未經 Navide 審核，未簽章未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）發佈者：自稱：acme",
+    },
+    "marketplace": {
+      "badge": "已審核",
+      "row": "來源與審核 已審核",
+    },
+    "prerelease": {
+      "badge": "預覽版（已審核）",
+      "row": "來源與審核 預覽版（已審核）",
+    },
+    "testplace": {
+      "badge": "測試版，沒有人工審核，2026-12-31 到期",
+      "row": "來源與審核 測試版，沒有人工審核，2026-12-31 到期",
+    },
+  },
+}
+`;
+
+exports[`Pre-release source row (K5) > words a pre-release install as reviewed in every locale 1`] = `
+{
+  "en-US": "Source and review Pre-release (reviewed)",
+  "ja-JP": "提供元と審査 プレリリース版（審査済み）",
+  "zh-TW": "來源與審核 預覽版（已審核）",
+}
+`;

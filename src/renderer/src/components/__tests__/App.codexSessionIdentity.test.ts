@@ -8,7 +8,8 @@ import {
   shouldPreserveMissingSessionOnRestore, shouldWarnMissingResume,
 } from '../../platform/plugin-shell/lib/resume-command'
 import { pinFreshSessionAtLaunch, shouldAttemptResume } from '../../lib/sessionHeal'
-import { accountSpawnPin } from '../../lib/accountFollowPanes'
+import { accountSpawnPin, restoreSpawnPin } from '../../lib/accountFollowPanes'
+import { WakeClaims, sessionHeldElsewhere } from '../../lib/paneOpenAnswer'
 
 const source = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -97,6 +98,9 @@ function harness() {
     autoNameSourceOf: () => undefined, persistedMessagingName: () => '',
     dropPersistedMessagingName: vi.fn(), isLocalWorkspace: () => true,
     workspaceRestoreSession: () => ({}), explicitRestoreDecision: () => 'fresh',
+    // The one-CLI-per-conversation guard (a chat's wake): no other pane holds a session here.
+    sessionHeldElsewhere, sessionHolders: () => [],
+    scheduledRestoreIds: new Set<string>(), wakeClaims: new WakeClaims(),
     deferredPaneStillCurrent: () => true, skipFlagFor: () => '',
     canResumeSession: async () => false, savedHistoryFile: async () => '',
     stripPinnedSessionId: (command: string) => command,
@@ -104,7 +108,8 @@ function harness() {
     minimizedPanes: { value: new Set<string>() },
     useChannels: () => ({ paneReplaced: vi.fn(), paneClosed: vi.fn() }),
     // Scheme A's follow flag (plan claude_f1bf4b): no account dir here.
-    FOLLOW_SWITCH_AGENT: 'claude', followDirSignedIn: () => false, accountSpawnPin,
+    FOLLOW_SWITCH_AGENT: 'claude', followDirSignedIn: () => false, accountSpawnPin, restoreSpawnPin,
+    restorePinGate: () => ({ loaded: () => true, load: async () => {}, disclose: vi.fn() }),
     accountFollow: { add: vi.fn(), remove: vi.fn(), has: () => false },
   }
   const actions = new Function(...Object.keys(deps), `${javascript}; return {

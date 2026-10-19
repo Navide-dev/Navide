@@ -81,6 +81,7 @@ import {
   verifyInstalledRegistryPackage,
   type InstalledRegistryTrustContext,
 } from './pluginInstalledTrust'
+import { verifyLocalInstalledPackage } from './pluginLocalInstall'
 import { legacyCapabilityPolicy, type PluginCapabilityPolicy } from './pluginPermissions'
 import {
   createWsClient,
@@ -6679,6 +6680,13 @@ export class FrontendPluginManager {
     throw new Error(`unsupported public capability '${plan.address}'`)
   }
 
+  /** Card K4: audit one change of the Developer Mode switch in the plugin
+   *  activity log, under the Host's own event identity. Best effort like every
+   *  activity row: sent with the next batch over the Host session. */
+  recordDeveloperModeChange(enabled: boolean, appVersion: string): void {
+    this.activityRecorder.recordHostEvent(enabled ? 'developerMode.on' : 'developerMode.off', appVersion)
+  }
+
   /** D-e: a removed plugin's first-seen activity rows go (`plugin.activity.forget`),
    *  so a reinstall's first writes in a workspace are flagged again. Best effort:
    *  with no Host session it is skipped, and removal never waits for it. */
@@ -11479,6 +11487,7 @@ export class FrontendPluginManager {
         ? { manifestPermissions: copyManifestPermissionsSummary(summary.manifestPermissions) }
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
+      ...(summary.source ? { source: summary.source } : {}),
       ...(summary.warning ? { warning: summary.warning } : {}),
     }))
   }
@@ -11500,11 +11509,15 @@ export class FrontendPluginManager {
    * Load exactly one Host-selected frontend package for Developer
    * Mode. This intentionally reads the selected directory only; it never
    * scans a parent directory or turns an arbitrary package tree into a
-   * registry-like inventory. Backend contributions remain fail-closed.
+   * registry-like inventory. Backend contributions remain fail-closed, except
+   * for a folder the user picked in Settings with Developer Mode on (card K4,
+   * `allowBackend`): its backend then goes through the same sandboxed
+   * third-party admission and native backend consent as any other.
    */
   loadExplicitDeveloperPlugin(
     packageDir: string | undefined,
-    optedIn = process.env['AGENT_TEAM_PLUGIN_DEV'] === '1'
+    optedIn = process.env['AGENT_TEAM_PLUGIN_DEV'] === '1',
+    options: { allowBackend?: boolean } = {},
   ): { loaded: true; pluginId: string } | { loaded: false; error: string } {
     if (!optedIn) {
       return { loaded: false, error: 'Developer Mode explicit package loading requires opt-in' }
@@ -11523,7 +11536,7 @@ export class FrontendPluginManager {
         error: 'Developer Mode requires a valid frontend package',
       }
     }
-    if (activation?.backend) {
+    if (activation?.backend && options.allowBackend !== true) {
       return { loaded: false, error: 'Developer Mode cannot load backend contributions' }
     }
     if (!descriptor) {
@@ -11640,6 +11653,7 @@ export class FrontendPluginManager {
         ? { manifestPermissions: copyManifestPermissionsSummary(summary.manifestPermissions) }
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
+      ...(summary.source ? { source: summary.source } : {}),
       ...(summary.warning ? { warning: summary.warning } : {}),
       ...(summary.hasBackend ? { hasBackend: true as const } : {}),
     })
@@ -12644,11 +12658,9 @@ export class FrontendPluginManager {
           lifecycleSelector.recoverInterruptedActivation(record.pluginId)
           continue
         }
-        const decision = verifyInstalledRegistryPackage(
-          lifecycleSelector.packageDir(record.pluginId, recoveredSelection),
-          record.pluginId,
-          source.trust,
-        )
+        const recoveredDir = lifecycleSelector.packageDir(record.pluginId, recoveredSelection)
+        const decision = verifyLocalInstalledPackage(root, recoveredDir, record.pluginId, source.trust) ??
+          verifyInstalledRegistryPackage(recoveredDir, record.pluginId, source.trust)
         if (
           decision.action === 'quarantine' ||
           decision.artifactDigest !== recoveredSelection.artifactDigest
@@ -12695,7 +12707,10 @@ export class FrontendPluginManager {
           )
           continue
         }
-        const decision = verifyInstalledRegistryPackage(scanned.dir, pluginId, source.trust)
+        // Card K3: a package installed from a file is verified against the
+        // user's consent record; it has no Registry receipt to verify.
+        const localDecision = verifyLocalInstalledPackage(root, scanned.dir, pluginId, source.trust)
+        const decision = localDecision ?? verifyInstalledRegistryPackage(scanned.dir, pluginId, source.trust)
         if (decision.action === 'quarantine') {
           errors.push(`${scanned.dir}: quarantined: ${decision.reason ?? 'trust verification failed'}`)
           continue
@@ -12708,10 +12723,18 @@ export class FrontendPluginManager {
           errors.push(`${scanned.dir}: active artifact digest does not match the durable lifecycle selector`)
           continue
         }
-        scanned.packageSummary.provenance = 'official-registry'
-        if (scanned.activation) {
-          scanned.activation.provenance = 'official-registry'
-          scanned.activation.artifactDigest = decision.artifactDigest
+        if (localDecision) {
+          scanned.packageSummary.source = 'local-unsigned'
+          if (scanned.activation) {
+            scanned.activation.source = 'local-unsigned'
+            scanned.activation.artifactDigest = decision.artifactDigest
+          }
+        } else {
+          scanned.packageSummary.provenance = 'official-registry'
+          if (scanned.activation) {
+            scanned.activation.provenance = 'official-registry'
+            scanned.activation.artifactDigest = decision.artifactDigest
+          }
         }
       } else if (source?.provenance === 'developer-local-unpacked') {
         if (isReservedPluginId(pluginId)) {
@@ -12818,7 +12841,8 @@ export class FrontendPluginManager {
       const pluginId = scanned.activation?.pluginId ?? scanned.descriptor?.id
       if (!pluginId) continue
       if (includePluginIds && !includePluginIds.has(pluginId)) continue
-      const decision = verifyInstalledRegistryPackage(scanned.dir, pluginId, trust)
+      const decision = verifyLocalInstalledPackage(root, scanned.dir, pluginId, trust) ??
+        verifyInstalledRegistryPackage(scanned.dir, pluginId, trust)
       if (
         decision.action === 'allow' &&
         isReservedPluginId(pluginId) &&

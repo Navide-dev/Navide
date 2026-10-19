@@ -7,8 +7,15 @@
 // Order (D6): the one-line summary, risk level, then what the scan found that
 // the package does not declare (red, the only red on the card), the scan
 // sentences, what the package declares (collapsed), what was declared but
-// not seen (grey), the fixed scan-coverage and honest-limits text, and last
-// the Registry's facts.
+// not seen (grey), the fixed scan-coverage and honest-limits text, the fixed
+// view-network line, and last the Registry's facts.
+//
+// View network (R2 MED-3 on 0.2.26): a view is an ordinary web page with network
+// access the Host does not filter, while the signed `network` field covers only
+// commands and the native backend. `hasViews` (from the manifest's
+// `contributes.views`, outside the signed card) says whether the package has
+// views: true states it, false (backend or agent tools only) says nothing, and
+// unknown (Registry data carries no manifest) states it conditionally.
 //
 // Provenance (review I1 on #354): listing and detail data is raw Registry
 // output that nothing has verified yet; only a prepareInstall result has had
@@ -28,14 +35,29 @@ import {
 import { disclosureClauses, disclosureList } from '../lib/disclosureText'
 import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 import PluginDisclosureSummary from './PluginDisclosureSummary.vue'
+import PluginSourceBadge from './PluginSourceBadge.vue'
+import type { PluginSource } from '../../../shared/pluginSource'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   disclosure: ManifestDisclosure | null | undefined
   scan?: ScanReport | null
   registry?: RegistryDisclosureFacts | null
   /** True only for a prepareInstall result (signature and digests checked). */
   verified?: boolean
-}>()
+  /** Card K3: a package picked from a file. Its disclosure is the Host's
+   *  reading of the package's own manifest; no Registry stands behind it. */
+  localSource?: boolean
+  /** K2: adds the fixed "Source and review" row; absent renders as before. */
+  source?: PluginSource
+  publisher?: string
+  expiresAt?: string | null
+  /** R2 MED-6 on #436: whether the package declares views; undefined when the
+   *  surface cannot tell (Registry listing data). Not part of the signed card. */
+  hasViews?: boolean
+}>(), {
+  // Absent must stay unknown, not Vue's boolean-prop false.
+  hasViews: undefined,
+})
 const { t, te, locale } = useI18n()
 
 const scan = computed(() => (props.disclosure ? props.scan ?? null : null))
@@ -85,7 +107,9 @@ const clauses = computed(() => (props.disclosure ? disclosureClauses(t, locale.v
 /** F1 on #360: "verified" names only what prepareInstall checked; without a
  *  scan report there is no scan signature to speak of. */
 const provenance = computed(() =>
-  !props.verified
+  props.localSource
+    ? 'pluginDisclosure.provenance.local'
+    : !props.verified
     ? 'pluginDisclosure.provenance.unverified'
     : scan.value
       ? 'pluginDisclosure.provenance.verified'
@@ -140,6 +164,7 @@ const facts = computed(() => {
 
 <template>
   <section class="nv-disclosure" :aria-label="$t('pluginDisclosure.title')">
+    <PluginSourceBadge v-if="source" row :source="source" :publisher="publisher" :expires-at="expiresAt" />
     <p v-if="!disclosure" class="nv-disclosure-none">{{ $t('pluginDisclosure.noDisclosure') }}</p>
     <template v-else>
       <p class="nv-disclosure-provenance" :class="verified ? 'nv-disclosure-provenance--verified' : 'nv-disclosure-provenance--unverified'">
@@ -188,6 +213,9 @@ const facts = computed(() => {
         </template>
         <template v-else>{{ $t('pluginDisclosure.limitsWithoutScan') }}</template>
       </p>
+      <p v-if="hasViews !== false" class="nv-disclosure-view-network">
+        {{ hasViews ? $t('pluginDisclosure.viewNetwork') : $t('pluginDisclosure.viewNetworkIfViews') }}
+      </p>
 
       <template v-if="facts.length">
         <h5 class="nv-disclosure-heading">{{ $t('pluginDisclosure.registryHeading') }}</h5>
@@ -231,6 +259,7 @@ const facts = computed(() => {
 .nv-disclosure-notseen,
 .nv-disclosure-facts,
 .nv-disclosure-limits,
+.nv-disclosure-view-network,
 .nv-disclosure-noscan,
 .nv-disclosure-none {
   color: var(--text-secondary);

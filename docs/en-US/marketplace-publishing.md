@@ -207,13 +207,20 @@ A publisher created with the admin token is trusted, so its versions are
 listed at once; a namespace claimed on the Marketplace is reviewed first
 (section 5). To install from the local Registry in a development build of
 Navide, point the app at it as described under **Registry endpoints** in the
-[Plugin development guide](plugin-development.md#packaging-and-publishing).
+[Plugin development guide](plugin-development.md#packaging-and-publishing). A
+packaged build honors those settings only while Developer Mode is on
+(Settings → Navide Plugins); with it off it uses the Navide Marketplace.
 
-This is the way to try a package inside Navide before publishing. There is no
-`navide-plugin dev` command, and Developer Mode (`AGENT_TEAM_PLUGIN_DEV_PATH`)
-writes no capability grant, so it cannot open a Manifest v2 view and refuses a
-backend. A Registry install grants the declared permissions and storage for
-that exact version when you choose **Restart Plugin**.
+This is one way to try a package inside Navide before publishing; the others are
+Settings → Navide Plugins → **Install from .vsix file…**, which works in any
+build and installs the file you pick as an unreviewed local package (it never
+updates automatically), and Developer Mode → **Load from folder…**, which runs
+your working folder with its view and backend and reloads it as you edit. There
+is no `navide-plugin dev` command, and the development-build variable
+`AGENT_TEAM_PLUGIN_DEV_PATH` writes no capability grant, so it cannot open a
+Manifest v2 view and refuses a backend. A Registry or file install
+grants the declared permissions and storage for that exact version when you
+choose **Restart Plugin**.
 
 ## 4. Publish to the Marketplace
 
@@ -321,6 +328,18 @@ version number, once used, cannot be reused).
 All targets of one version are decided together. If you upload another target
 while a version waits, the reviewer reloads and decides on the full set.
 
+### How Navide labels the source
+
+Navide shows where every installed Navide plugin came from, as a badge in the
+installed list and on Marketplace results and detail pages, and as a fixed
+**Source and review** row on every disclosure card. Only a Registry-signed
+version reads as reviewed (**Reviewed**, or **Pre-release (reviewed)**). A
+package installed from a local file or a developer folder is labelled as
+such, its scan line reads "Not scanned (only Navide plugins installed from the
+Navide Marketplace are scanned by Navide)", and an unsigned one shows its
+publisher as **Self-declared**. No source is ever called verified or safe on
+these labels.
+
 ## 6. Pre-releases
 
 A version with a SemVer pre-release suffix is a pre-release:
@@ -335,6 +354,61 @@ newest one as `latest_prerelease_version` until a newer stable version is
 published, and Navide installs it only for users who turn on **Get
 pre-releases** for your extension. Build metadata (`1.0.0+build.7`) does not make a
 version a pre-release.
+
+A publish may name its channel with `?channel=stable` or
+`?channel=pre-release`; it must match the version (`400` otherwise). Leaving
+it out derives the channel from the version as above. `?channel=testplace`
+(invite-only test builds that expire after 90 days) is answered with
+`409 TESTPLACE_NOT_OPEN` until Testplace opens in Navide 0.2.27. Public
+listings, details and downloads never include a testplace version. Its
+Registry envelope carries `channel` and `expiresAt` inside the signature, so
+an App released before Testplace refuses it, and a current App refuses it
+after it expires (`TESTPLACE_EXPIRED`) or when the channel is one it does not
+know (`CHANNEL_UNSUPPORTED`).
+
+A user who has not installed your Navide plugin yet can pick **Install *version*
+(pre-release)** on its Marketplace page. That installs the newest pre-release and
+turns on **Get pre-releases** for your Navide plugin only; Install keeps taking
+the stable version. A Navide plugin with only pre-releases is installed this
+way. Navide labels a pre-release **Pre-release (reviewed)**, never unreviewed.
+`navide-plugin publish` says so when the Registry records a pre-release.
+
+### Pre-release, Testplace or a local install
+
+Pick by who should get the build and whether it must be reviewed first.
+Testplace is planned for Navide 0.2.27; until then, use a pre-release or send
+the package file.
+
+| | Pre-release | Testplace | Local install |
+|---|---|---|---|
+| Who can install it | Everyone who turns on **Get pre-releases** for your Navide plugin, or picks **Install *version* (pre-release)** | Only the testers you invite (up to 100 per Navide plugin) | Anyone you send the `.vsix` file to |
+| Review | Same review as a stable version | Automated scan only for invited testers; a public test code adds a light human review | None; Navide does not scan it |
+| Signed by the Navide Marketplace | Yes | Yes | No (your publisher signature at most) |
+| Label in Navide | **Pre-release (reviewed)** | **Test build, no human review, expires *date*** | **Local file**, with "not reviewed by Navide" |
+| Expires | No | After 90 days; the Navide plugin is turned off and its data kept | No |
+| How users get it | The Navide Marketplace, as an update or with **Install *version* (pre-release)** | The Navide Marketplace, after accepting the invitation | **Install from file**, after a separate consent |
+
+繁體中文：
+
+| | 預覽版 | Testplace | 本機安裝 |
+|---|---|---|---|
+| 誰能安裝 | 對你的 Navide 外掛打開「接收預覽版」，或選「安裝 *版本*（預覽版）」的所有人 | 只有你邀請的測試者（每個 Navide 外掛最多 100 位） | 你把 `.vsix` 檔案寄給的任何人 |
+| 審核 | 和正式版相同的審核 | 受邀測試者只跑自動掃描；公開測試碼另有輕量人工審核 | 沒有；Navide 不會掃描 |
+| Navide 市集簽章 | 有 | 有 | 沒有（最多只有發佈者自己的簽章） |
+| Navide 裡的標記 | 「預覽版（已審核）」 | 「測試版，沒有人工審核，*日期* 到期」 | 「本機檔案」，並註明未經 Navide 審核 |
+| 到期 | 不會 | 90 天後到期；Navide 外掛會停用、資料保留 | 不會 |
+| 使用者怎麼取得 | 從 Navide 市集更新，或選「安裝 *版本*（預覽版）」 | 接受邀請後從 Navide 市集安裝 | 另外同意後「從檔案安裝」 |
+
+日本語：
+
+| | プレリリース版 | Testplace | ローカルインストール |
+|---|---|---|---|
+| インストールできる人 | その Navide プラグインで「プレリリースを受け取る」をオンにした人、または「*バージョン* をインストール（プレリリース）」を選んだ人全員 | 招待したテスターのみ（Navide プラグインごとに最大 100 人） | `.vsix` ファイルを受け取った人なら誰でも |
+| 審査 | 正式版と同じ審査 | 招待テスターは自動スキャンのみ。公開テストコードには簡易な人による審査が加わります | なし。Navide はスキャンしません |
+| Navide マーケットプレイスの署名 | あり | あり | なし（あっても発行者自身の署名のみ） |
+| Navide での表示 | 「プレリリース版（審査済み）」 | 「テスト版。人による審査なし。*日付* に期限切れ」 | 「ローカルファイル」、Navide の審査を受けていない旨を表示 |
+| 有効期限 | なし | 90 日後。Navide プラグインは無効になり、データは残ります | なし |
+| 入手方法 | Navide マーケットプレイスからの更新、または「*バージョン* をインストール（プレリリース）」 | 招待を受け入れたあと Navide マーケットプレイスから | 別途同意したうえで「ファイルからインストール」 |
 
 ## 7. Extension packs
 

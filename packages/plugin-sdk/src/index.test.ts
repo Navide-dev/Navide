@@ -6,6 +6,11 @@ import {
   createPluginBackendClient,
   PluginBackendError,
   createPluginSettingsStore,
+  hideView,
+  onBackendStatus,
+  onOpenTarget,
+  openContributionWindow,
+  viewReady,
   type PluginContext,
 } from './index'
 
@@ -745,5 +750,69 @@ describe('public plugin SDK adapters', () => {
       ['storage.set', { scope: 'workspace', key: 'view', value: { density: 'comfortable' } }],
       ['storage.delete', { scope: 'workspace', key: 'view' }],
     ])
+  })
+})
+
+describe('standalone view runtime functions', () => {
+  it('leaves the view runtime client shape unchanged', () => {
+    ;(globalThis as unknown as { nav: object }).nav = { ready: vi.fn(), onOpenTarget: vi.fn() }
+    const client = createPluginViewRuntimeClient()
+    expect(Object.isFrozen(client)).toBe(true)
+    expect(Object.keys(client)).toEqual([
+      'openDetail', 'onDetailTarget', 'onPrepareClose', 'onCloseCancelled', 'openContributionWindow',
+      'ready', 'hide', 'registerReceiver', 'onOpenTarget', 'onBackendStatus',
+    ])
+  })
+
+  it('makes the same bridge calls as the client methods', async () => {
+    const removeTarget = vi.fn()
+    const removeStatus = vi.fn()
+    const bridge = {
+      ready: vi.fn(),
+      hideSelf: vi.fn(),
+      onOpenTarget: vi.fn(() => removeTarget),
+      callCapability: vi.fn(() => Promise.resolve({ reqId: 'cap-window', ok: true, result: { ok: true } })),
+      on: vi.fn((_type: string, _listener: (payload: unknown) => void) => removeStatus),
+    }
+    ;(globalThis as unknown as { nav: typeof bridge }).nav = bridge
+    const client = createPluginViewRuntimeClient()
+
+    viewReady()
+    client.ready()
+    expect(bridge.ready).toHaveBeenCalledTimes(2)
+    hideView()
+    client.hide()
+    expect(bridge.hideSelf).toHaveBeenCalledTimes(2)
+
+    const params = { contributionKey: 'navide.git.left', path: 'src/main.ts', line: 4 }
+    await expect(openContributionWindow(params)).resolves.toEqual(await client.openContributionWindow(params))
+    expect(bridge.callCapability.mock.calls).toEqual([
+      ['ui', 'openPluginWindow', params],
+      ['ui', 'openPluginWindow', params],
+    ])
+
+    const targetListener = vi.fn()
+    const target = onOpenTarget(targetListener)
+    expect(Object.isFrozen(target)).toBe(true)
+    expect(bridge.onOpenTarget).toHaveBeenCalledWith(targetListener)
+    expect(target.dispose).toBe(removeTarget)
+    expect(() => onOpenTarget(undefined as unknown as () => void)).toThrow('Plugin target listener is invalid.')
+    expect(() => client.onOpenTarget(undefined as unknown as () => void)).toThrow('Plugin target listener is invalid.')
+
+    const statuses: string[] = []
+    const status = onBackendStatus(value => statuses.push(value))
+    expect(Object.isFrozen(status)).toBe(true)
+    expect(status.dispose).toBe(removeStatus)
+    expect(bridge.on).toHaveBeenCalledWith('nav.backend_status', expect.any(Function))
+    const deliver = bridge.on.mock.calls[0][1]
+    deliver({ status: 'connected' })
+    deliver({ status: 'bogus' })
+    deliver(null)
+    expect(statuses).toEqual(['connected'])
+  })
+
+  it('reports an unavailable runtime the same way as the client', () => {
+    expect(() => viewReady()).toThrow('Plugin view runtime is unavailable.')
+    expect(() => onBackendStatus(vi.fn())).toThrow('Plugin capability runtime is unavailable.')
   })
 })

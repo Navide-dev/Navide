@@ -313,6 +313,19 @@ export class NativeBackendStore {
     })
   }
 
+  /** Card K3 (D7): the package was replaced by one from another source
+   * (Marketplace ↔ local file). Forget every permission given to the replaced
+   * one: its consent, every workspace it may change files in, its agent write
+   * answers and its agent tool place. Only the user's own Disabled switch for
+   * the id stays. */
+  forgetGrants(pluginId: string): void {
+    const current = this.state.plugins[pluginId]
+    if (!current) return
+    // Restricting: even if the file cannot be written, nothing stays granted
+    // for the rest of this run.
+    this.update(pluginId, () => (current.disabled ? { disabled: true } : {}), true)
+  }
+
   /** Uninstall: forget every decision about the plugin. */
   forget(pluginId: string): void {
     if (!this.state.plugins[pluginId]) return

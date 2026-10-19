@@ -3,11 +3,13 @@
 // installed Registry package on one page: its disclosure card (from the
 // installed manifest and the scan verified at install), recent activity,
 // undeclared uses and unusual items. Records only: nothing on this page
-// changes what a plugin may do. Mounted only when the page is first opened.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+// changes what a plugin may do. Mounted only when the section is first shown;
+// `paused` stops the queue sampling while it is out of view.
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { PluginActivityReport } from '../../../shared/pluginActivity'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { ScanReport } from '../../../shared/pluginDisclosureScan'
+import type { PluginSource } from '../../../shared/pluginSource'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
@@ -18,17 +20,23 @@ interface Entry {
   version: string
   disclosure: ManifestDisclosure | null
   scan: ScanReport | null
+  /** The Host's source; absent (unknown channel) shows no source row, never a guess. */
+  source?: PluginSource
+  expiresAt?: string
+  /** Whether the package declares views; absent when unknown. */
+  hasViews?: boolean
   report: PluginActivityReport | null
   reportError: string
 }
 
-const props = withDefaults(defineProps<{ pollMs?: number }>(), { pollMs: 5000 })
+const props = withDefaults(defineProps<{ pollMs?: number; paused?: boolean }>(), { pollMs: 5000, paused: false })
 const entries = ref<Entry[]>([])
 const loading = ref(true)
 const growing = ref(new Set<string>())
 const open = ref(new Set<string>())
 const trend = createQueueTrend()
 let timer: ReturnType<typeof setInterval> | null = null
+let loaded = false
 
 function api() {
   return window.agentTeam?.plugins
@@ -72,14 +80,24 @@ function onToggle(id: string, event: Event): void {
   open.value = next
 }
 
-onMounted(async () => {
-  await load()
+function startPolling(): void {
+  if (timer || props.paused || !loaded) return
   void sampleQueues()
   timer = setInterval(() => void sampleQueues(), props.pollMs)
-})
-onBeforeUnmount(() => {
+}
+
+function stopPolling(): void {
   if (timer) clearInterval(timer)
+  timer = null
+}
+
+watch(() => props.paused, (paused) => { if (paused) stopPolling(); else startPolling() })
+onMounted(async () => {
+  await load()
+  loaded = true
+  startPolling()
 })
+onBeforeUnmount(stopPolling)
 </script>
 
 <template>
@@ -90,7 +108,16 @@ onBeforeUnmount(() => {
     <article v-for="entry in entries" :key="entry.id" class="nv-overview-entry" :data-id="entry.id">
       <h3 class="nv-overview-name">{{ reveal(entry.id) }} <span class="nv-overview-muted">{{ reveal(entry.version) }}</span></h3>
       <p v-if="growing.has(entry.id)" class="nv-overview-growing" role="status">{{ $t('pluginActivity.live.queueGrowing') }}</p>
-      <PluginDisclosureCard :disclosure="entry.disclosure" :scan="entry.scan" :registry="null" :verified="true" />
+      <PluginDisclosureCard
+        :disclosure="entry.disclosure"
+        :scan="entry.scan"
+        :registry="null"
+        :verified="true"
+        :source="entry.source"
+        :expires-at="entry.expiresAt"
+        :publisher="entry.id.split('.')[0]"
+        :has-views="entry.hasViews"
+      />
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>
       <h4>{{ $t('pluginActivity.overview.activity') }}</h4>
       <template v-if="entry.report">
@@ -103,7 +130,7 @@ onBeforeUnmount(() => {
       <p v-else-if="entry.reportError" class="nv-overview-muted">{{ $t('pluginActivity.unavailable', { error: entry.reportError }) }}</p>
       <details class="nv-overview-details" @toggle="onToggle(entry.id, $event)">
         <summary>{{ $t('pluginActivity.tab') }}</summary>
-        <PluginActivityPanel v-if="open.has(entry.id)" :plugin-id="entry.id" :poll-ms="props.pollMs" />
+        <PluginActivityPanel v-if="open.has(entry.id)" :plugin-id="entry.id" :poll-ms="props.pollMs" :paused="props.paused" />
       </details>
     </article>
   </div>

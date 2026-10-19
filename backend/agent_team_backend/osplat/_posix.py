@@ -152,11 +152,14 @@ class PosixProcessTree:
         # Started with start_new_session: its session is the tree.
         return None
 
-    def end_contained(self, pid: int) -> None:
+    def end_contained(self, pid: int, job: int | None = None) -> None:
         try:
             os.killpg(pid, _signal_for(True))
         except (ProcessLookupError, PermissionError):
             pass
+
+    def stderr_handle_info(self) -> str:
+        return ""
 
     def kill_tree(self, pid: int, *, force: bool) -> None:
         """Group kill plus each descendant individually: the descendants are

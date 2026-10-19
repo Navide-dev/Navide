@@ -319,22 +319,6 @@
           "evidence": "FAILED backend\\tests\\test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on - AssertionError: ({'bytes': 88000, 'segments': True, 'cancelled': True, 'prompt': None, ...}, {'bytes': 320000, 'segments': True, 'cancelled': False, 'prompt': None, ...})"
         }
       ]
-    },
-    {
-      "test": "backend/tests/test_plugin_agent_tools_proxy.py::test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop[10 MiB of small values]",
-      "category": "test-race",
-      "count": 1,
-      "firstSeen": "2026-10-17T23:49:49Z",
-      "lastSeen": "2026-10-17T23:49:49Z",
-      "runs": [
-        {
-          "run": 39079110816,
-          "job": "Backend tests (macOS, 1/1)",
-          "pr": 0,
-          "at": "2026-10-17T23:49:49Z",
-          "evidence": "FAILED backend/tests/test_plugin_agent_tools_proxy.py::test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop[10 MiB of small values] - AssertionError: the loop ran 31.1 ms of CPU without handing back"
-        }
-      ]
     }
   ]
 }

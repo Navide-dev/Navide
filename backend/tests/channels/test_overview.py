@@ -111,9 +111,11 @@ async def test_auto_child_topics_carry_their_parent(ov: Env) -> None:
 
 async def test_a_chat_the_running_bot_never_saw_is_still_listed_from_its_binding(ov: Env) -> None:
     # Bound under an older token: the new token's bot has no channel_chats row for it.
-    ov.store.bind("pane-1", Location("telegram", "default", "-555", "", "old chat"))
+    ov.store.bind("pane-1", Location("telegram", "default", "-555", "", "scout"))
     chat = _chat(_bot(ov.m.overview()), "-555")
-    assert chat["title"] == "old chat"
+    # The binding's title is the pane's name at bind time, not the chat's: leave the
+    # title empty so the UI names the chat by its id instead.
+    assert chat["title"] == ""
     assert [b["pane_id"] for b in chat["bindings"]] == ["pane-1"]
 
 

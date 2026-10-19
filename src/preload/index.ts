@@ -24,6 +24,7 @@ import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
+import type { PluginSource } from '../shared/pluginSource'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
 export interface ClearElectronCachesOptions {
@@ -163,6 +164,10 @@ export interface InstalledPluginSummary {
   manifestPermissions?: ManifestPermissionsSummary
   packageVersionGrant?: PackageVersionGrantSummary | null
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  /** Source and review state; see `shared/pluginSource.ts`. */
+  source?: PluginSource
+  /** Registry-signed expiry; present only when `source` is `testplace`. */
+  expiresAt?: string
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -256,6 +261,8 @@ export interface MarketplaceExtension {
   extension_pack?: string[] | null
   /** Trust tier of the latest version ('signed-verified' or 'unsigned'). */
   trust_tier?: string | null
+  /** Newest pre-release newer than `latest_version` (Registry's view). */
+  latest_prerelease_version?: string | null
   /** Plan B D1 list card: the latest version's manifest disclosure and scan
    *  report as the Registry listed them, kept by the main process only when
    *  well formed and naming this item; unverified display data. */
@@ -437,12 +444,21 @@ export interface MarketplaceListResponse {
   limit: number
 }
 
+/** Card K4: the Developer Mode switch and the developer folders consented to. */
+export interface DeveloperModeState {
+  enabled: boolean
+  folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
+}
+
 export interface PreparedInstallSummary {
   id: string
   version: string
   trustTier: 'signed-verified' | 'unsigned'
   sensitive: string[]
   containsBackendExecutable: boolean
+  /** R2 MED-6 on #436: the manifest declares views (`contributes.views`); the
+   *  disclosure card says views can reach the network only then. */
+  hasViews?: boolean
   /** Declared agent tools (sorted, timeouts defaulted); absent when none. */
   agentTools?: Array<{
     name: string
@@ -467,6 +483,23 @@ export interface PreparedInstallSummary {
   scan?: PluginScanReport | null
   /** Unsigned Registry facts, never verified. */
   registry?: PluginRegistryDisclosureFacts | null
+  /** Source and review state from the verified Registry envelope; absent for
+   *  a channel this App does not know. */
+  source?: PluginSource
+  /** Card K3: sha256 of the picked file, shown in the consent dialog. */
+  digest?: string
+  /** Card K3 (D7): the installed package of the same id a file install replaces. */
+  replaces?: { version: string | null; source: 'marketplace' | 'local-unsigned' }
+  /** Card K3 (D7): the local file install a Marketplace install replaces. */
+  replacesLocal?: { version: string | null }
+  /** Card K4: the developer folder this summary was read from. */
+  folder?: string
+  /** D7: the replaced package's native backend data will be set aside. */
+  backendDataSetAside?: boolean
+  /** D7: data set aside earlier from the incoming source, which the user may take back. */
+  reattachableBackendData?: true
+  /** MED-1 on #425: false when the takedown list could not be checked. */
+  takedownChecked?: boolean
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []
@@ -1178,6 +1211,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
       version: string
       disclosure: PluginManifestDisclosure | null
       scan: PluginScanReport | null
+      /** Source and review state; see `shared/pluginSource.ts`. */
+      source?: PluginSource
+      /** Registry-signed expiry; present only when `source` is `testplace`. */
+      expiresAt?: string
+      /** Whether the active package declares views (R2 MED-6 on #436). */
+      hasViews?: boolean
     }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
     backendResourceUsage: (): Promise<BackendResourceUsage> =>
       ipcRenderer.invoke('plugins:backendResourceUsage'),
@@ -1198,6 +1237,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       kind: 'custom'
       location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
       manifestOrder: number
+      /** Source and review state of the package that contributes this view. */
+      source?: PluginSource
     }>> => ipcRenderer.invoke('plugins:listContributions'),
     hostThemeChanged: (theme: string): void =>
       ipcRenderer.send('plugins:hostThemeChanged', theme),
@@ -1263,9 +1304,31 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }): Promise<PreparedInstallSummary> => ipcRenderer.invoke('plugins:prepareInstall', args),
     commitInstall: (
       id: string,
-      approval: { publisherConfirmed?: boolean; riskConfirmed?: boolean } = {}
+      approval: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean } = {}
     ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
       ipcRenderer.invoke('plugins:commitInstall', { id, ...approval }),
+    /** Card K3: the main process opens its own file dialog; nothing names a path. */
+    installFromFile: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:installFromFile'),
+    commitLocalInstall: (
+      id: string,
+      approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
+    ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
+      ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
+    /** Card K4: the Developer Mode switch and the developer folders. The main
+     *  process owns the switch; it opens its own folder dialog. */
+    developerMode: (): Promise<DeveloperModeState> => ipcRenderer.invoke('plugins:developerMode'),
+    setDeveloperMode: (enabled: boolean): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:setDeveloperMode', { enabled }),
+    loadFromFolder: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:loadFromFolder'),
+    commitFolderLoad: (id: string, approval: { riskConfirmed: boolean }): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:commitFolderLoad', { id, ...approval }),
+    reloadDeveloperPlugin: (id: string): Promise<
+      { reloaded: true; requiresConsent: false } | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
+    > => ipcRenderer.invoke('plugins:reloadDeveloperPlugin', { id }),
+    removeDeveloperFolder: (id: string): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:removeDeveloperFolder', { id }),
+    selfHostedQuarantine: (): Promise<Array<{ id: string; version: string | null }>> =>
+      ipcRenderer.invoke('plugins:selfHostedQuarantine'),
     restart: (id: string): Promise<{
       id: string
       packageVersion: string
