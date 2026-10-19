@@ -1131,8 +1131,8 @@ both allowlist and denylist modes. Entries are unique.
 }
 ```
 
-The initial Host default is `allowlist` with `fs`, `ui`, and `aiCli` (not
-`web`) and only `git`, `gh`, and `glab` in `shell`. Wrappers and interpreters are not in
+The initial Host default is `allowlist` with every system namespace (`fs`,
+`ui`, `aiCli`, and `web`) and only `git`, `gh`, and `glab` in `shell`. Wrappers and interpreters are not in
 that default. A user policy replaces the single global default and persists at
 `<userData>/execution-policy/policy.json`. The Host-owned companion
 `<userData>/execution-policy/revision.json` stores the durable revision
@@ -1476,8 +1476,10 @@ for the second confirmation.
 **Agent Execution Policy.** An agent-initiated `web` call (a view capability
 or the `web` Bridge port) is admitted only in `full` mode or by an `allowlist`
 that names `web`. A `denylist` never admits `web`, because a denylist written
-before the namespace existed would otherwise allow it by omission; the Host
-default allowlist does not include it. Direct user actions are not filtered.
+before the namespace existed would otherwise allow it by omission. The Host
+default allowlist includes `web`; a saved allowlist that predates it does not,
+so such a user's agents are refused until they add `web`. Direct user actions
+are not filtered.
 
 #### View capabilities
 
