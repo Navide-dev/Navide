@@ -757,7 +757,10 @@ jobs:
           # SmartScreen will warn on first run and electron-updater installs
           # updates without verifying a signature. `--publish never` still
           # writes latest.yml, which the NSIS updater reads.
-          bun run electron-builder --win --x64 --publish never
+          # electron-builder runs under Node on Windows: under Bun it hangs after
+          # the icons-bundle download, in the step that edits Navide.exe's
+          # resources (dry run 39303269789). Install and build stay on Bun.
+          node node_modules/electron-builder/cli.js --win --x64 --publish never
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
@@ -911,7 +914,10 @@ jobs:
           node scripts/verify-plans-production.mjs
           # Unsigned for the same reason the x64 build is: there is no Windows
           # code-signing certificate yet.
-          bun run electron-builder --win --arm64 --publish never
+          # electron-builder runs under Node on Windows: under Bun it hangs after
+          # the icons-bundle download, in the step that edits Navide.exe's
+          # resources (dry run 39303269789). Install and build stay on Bun.
+          node node_modules/electron-builder/cli.js --win --arm64 --publish never
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
