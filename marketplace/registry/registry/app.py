@@ -194,6 +194,9 @@ def create_app(
     from .publisher_web import create_publisher_router
 
     app.include_router(create_publisher_router())
+    from .testplace_web import create_testplace_admin_router
+
+    app.include_router(create_testplace_admin_router())
     app.add_middleware(_HtmlSecurityHeadersMiddleware, csp=html_content_security_policy(settings))
     return app
 
