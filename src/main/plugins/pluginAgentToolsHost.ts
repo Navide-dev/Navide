@@ -74,7 +74,7 @@ export type AgentToolAdmission =
   | { ok: false; reason: AgentToolUnavailableReason }
 
 const UNAVAILABLE_MESSAGES: Record<AgentToolUnavailableReason, string> = {
-  'master-switch-off': 'Agent tools from third-party Navide plugins are turned off.',
+  'master-switch-off': 'Agent tools from Navide plugins are turned off.',
   'external-callers-off': 'External MCP clients may not call third-party Navide plugin tools.',
   'plugin-not-installed': 'The Navide plugin is not installed.',
   'plugin-disabled': 'The Navide plugin is disabled.',

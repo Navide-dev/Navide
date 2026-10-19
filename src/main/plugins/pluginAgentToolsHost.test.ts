@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentToolCaller, AgentToolsSyncPayload } from '../../shared/pluginAgentTools'
 import type { DisclosureAgentTool } from '../../shared/pluginDisclosure'
-import { PluginAgentToolsHost, type PluginAgentToolsHostOptions } from './pluginAgentToolsHost'
+import { agentToolUnavailableMessage, PluginAgentToolsHost, type PluginAgentToolsHostOptions } from './pluginAgentToolsHost'
 import type { AgentToolSwitches } from './pluginNativeBackendStore'
 import type { ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 
@@ -450,6 +450,8 @@ describe('PluginAgentToolsHost first-party agent tools (navide.browser)', () => 
     expect(h.sent).toEqual([])
     expect(h.methods.get('navide.browser@1.0.0') ?? []).toEqual([])
     await expect(h.host.admit(browserCall, notStopping)).resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+    // The switch covers first-party tools too, so the agent is not told "third-party".
+    expect(agentToolUnavailableMessage('master-switch-off')).toBe('Agent tools from Navide plugins are turned off.')
   })
 
   it('serves first-party tools with the master switch on and no consent', async () => {
