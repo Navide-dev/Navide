@@ -143,6 +143,14 @@ import {
 } from './pluginLocalInstallTrust'
 import { canonicalArchivePath } from './pluginPathPolicy'
 import {
+  DigestBlockNoticeStore,
+  recordDigestBlock,
+  type DigestBlockChoice,
+  type DigestBlockPrompt,
+  type LocalDigestBlock,
+} from './pluginDigestBlock'
+import type { LocalBlockReason } from './pluginLocalInstallTrust'
+import {
   forgetLocalTrustRecords,
   isLocalInstalledPackage,
   localTrustRecordFor,
@@ -235,6 +243,9 @@ interface InstalledSummary {
   /** A3, a local file only: `verified` while the vetted publisher key that
    * signed it is active, `revoked` once the Registry revoked it. */
   localSignature?: 'verified' | 'revoked'
+  /** Decision d5, a local file only: Navide blocked the `.vsix` it was
+   * installed from since; `reason` null when the list names none. */
+  digestBlock?: { reason: LocalBlockReason | null }
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -489,6 +500,10 @@ export interface PluginTrustRefreshController {
   loadDeveloperFolders(): Promise<void>
   /** Put back notices no window received, to be sent after the next check. */
   restoreRescanNotices(notices: PluginRescanNotice[]): void
+  /** Decision d5: refresh the local-install trust and check every local
+   *  install's `.vsix` digest against it; returns the ids a security block
+   *  quarantined. The one-time dialogs run after it returns. */
+  revalidateLocalInstalls(): Promise<{ quarantined: string[] }>
 }
 
 /** A rescan of an installed version found these new scan items (D-f). */
@@ -572,6 +587,10 @@ export interface PluginIpcOptions {
   /** An agent disabled or enabled an installed Marketplace package (B2-c):
    *  tell the user who, with a one-click undo. */
   onPluginAgentAction?: (notice: PluginAgentActionNotice) => void
+  /** Decision d5: the one-time dialog about a local install whose `.vsix`
+   *  Navide blocked since; resolves to the user's choice. Absent, nobody is
+   *  asked and only the list labels it. */
+  promptDigestBlock?: (prompt: DigestBlockPrompt) => Promise<DigestBlockChoice>
 }
 
 /** Input of the shared static scanner: the package's files by archive path,
@@ -795,17 +814,39 @@ export function registerPluginIpc(
       return undefined
     }
   }
+  // Decision d5 (W6): the block on the `.vsix` a local install came from.
+  const localDigestBlockFor = (summary: { id: string; packageVersion?: string }): LocalDigestBlock | null => {
+    if (!summary.packageVersion) return null
+    const path = localTrustRecordFor(pluginsRoot, summary.id, summary.packageVersion)
+    if (!path) return null
+    try {
+      const pinned = resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey
+      return recordDigestBlock(readLocalTrustRecord(path), readLocalInstallTrust(pluginsRoot, pinned))
+    } catch {
+      return null
+    }
+  }
   const sourceFields = (summary: {
     id: string
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
     source?: PluginSource
     packageVersion?: string
-  }): { source?: PluginSource; expiresAt?: string; localSignature?: 'verified' | 'revoked' } => {
+  }): {
+    source?: PluginSource
+    expiresAt?: string
+    localSignature?: 'verified' | 'revoked'
+    digestBlock?: { reason: LocalBlockReason | null }
+  } => {
     const source = installedSource(summary, activeRegistryChannel(summary))
     if (!source) return {}
     if (source === 'local-unsigned') {
       const signature = recordedLocalSignature(summary)
-      return signature ? { source, localSignature: signature } : { source }
+      const block = localDigestBlockFor(summary)
+      return {
+        source,
+        ...(signature ? { localSignature: signature } : {}),
+        ...(block ? { digestBlock: { reason: block.reason } } : {}),
+      }
     }
     const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined
     const expiresAt = dir === undefined ? undefined : readRegistryReceiptExpiresAt(dir)
@@ -1074,7 +1115,10 @@ export function registerPluginIpc(
       ...(summary.provenance === 'official-registry'
         ? { getsPrereleases: optedIn.has(summary.id) }
         : {}),
-      ...(summary.provenance === 'official-registry' && manager.canDisablePlugin(summary.id)
+      // d5: a blocked local install gets the switch too, so a user who chose
+      // "Disable" in its warning can enable it again.
+      ...((summary.provenance === 'official-registry' || localDigestBlockFor(summary) !== null) &&
+        manager.canDisablePlugin(summary.id)
         ? { disabled: disabledPlugins.has(summary.id) }
         : {}),
       ...(() => {
@@ -2488,6 +2532,8 @@ export function registerPluginIpc(
           source: 'file',
           consentedAt: new Date().toISOString(),
           signer: pkg.localSignature?.state === 'verified' ? pkg.localSignature.signer : null,
+          // d5: checked again against the blocked digests at every load.
+          artifactDigest: pkg.digest,
         })
         // Review LOW-2: the record must cover exactly the bytes read from the
         // chosen file, not whatever the staged directory holds by now.
@@ -3788,7 +3834,8 @@ export function registerPluginIpc(
         throw new Error(`plugin transaction already in progress for ${id}`)
       }
       const installed = manager.listInstalledPackages().find((pkg) => pkg.id === id)
-      if (!installed || installed.provenance !== 'official-registry') {
+      // d5: a local install Navide blocked since can be disabled too.
+      if (!installed || (installed.provenance !== 'official-registry' && localDigestBlockFor(installed) === null)) {
         throw new Error(`plugin ${id} is not an installed Marketplace package`)
       }
       if (disabledPlugins.has(id) === disabled) return { id, disabled, changed: false }
@@ -3896,9 +3943,78 @@ export function registerPluginIpc(
     })
   )
 
+  // Decision d5 (W6), at startup and after every trust refresh: refresh the
+  // local-install trust, then check every local install's `.vsix` digest
+  // against it. A security block quarantines the running copy through the
+  // same re-verification a Registry takedown uses; the others are told once.
+  const digestBlockNotices = new DigestBlockNoticeStore(pluginsRoot)
+  let revalidatingLocalInstalls: Promise<{ quarantined: string[] }> | null = null
+  const askAboutDigestBlocks = async (
+    prompt: (ask: DigestBlockPrompt) => Promise<DigestBlockChoice>,
+    asks: DigestBlockPrompt[],
+  ): Promise<void> => {
+    for (const ask of asks) {
+      const choice = await prompt(ask)
+      try {
+        if (choice === 'remove') {
+          await uninstallPlugin(ask.pluginId)
+        } else if (choice === 'disable') {
+          const result = await setInstalledPackageDisabled(ask.pluginId, true)
+          if (result.changed) recordDisableSource(ask.pluginId, true, { by: 'user', at: Date.now(), agent: null })
+        }
+      } catch (error) {
+        console.warn(`[plugins] ${choice} of blocked ${ask.pluginId} failed: ${errorText(error)}`)
+      }
+    }
+  }
+  const revalidateLocalInstalls = async (): Promise<{ quarantined: string[] }> => {
+    await refreshLocalInstallTrust()
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const prompt = options.promptDigestBlock
+    const quarantined: string[] = []
+    const asks: DigestBlockPrompt[] = []
+    // The selector, not the loaded list: a copy the load already
+    // quarantined for a security block is told about too.
+    for (const record of lifecycleSelector.list()) {
+      if (!record.active) continue
+      const summary = { id: record.pluginId, packageVersion: record.active.packageVersion }
+      const block = localDigestBlockFor(summary)
+      if (!block || block.action === 'label') continue
+      if (block.action === 'disable' && manager.listInstalledPackages().some((pkg) => pkg.id === summary.id)) {
+        const decisions = manager.refreshInstalledPluginTrust(pluginsRoot, {
+          pinnedRootKey: marketplace.trust.pinnedRegistryRootKey,
+          snapshot: readRegistryTrustSnapshot(pluginsRoot),
+          registryAuthority: marketplace.trust.registryAuthority,
+          officialRegistryUrl: marketplace.trust.officialRegistryUrl,
+          expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
+          now: marketplace.trust.now,
+        }, new Set([summary.id]))
+        for (const decision of decisions) {
+          if (decision.action !== 'quarantine') continue
+          options.onActivationChange?.({ pluginId: decision.pluginId })
+          quarantined.push(decision.pluginId)
+        }
+      }
+      if (!prompt || digestBlockNotices.shown(summary.id, block)) continue
+      // Recorded before asking, so a second refresh during the dialog does not ask again.
+      digestBlockNotices.record(summary.id, block)
+      asks.push({ pluginId: summary.id, version: summary.packageVersion, reason: block.reason, action: block.action })
+    }
+    // The dialogs do not hold up the refresh (or the update check after it).
+    if (prompt && asks.length > 0) void askAboutDigestBlocks(prompt, asks)
+    return { quarantined }
+  }
+
   return {
     checkUpdates: checkInstalledUpdates,
     loadDeveloperFolders,
+    /** Decision d5: one run at a time; a call during a run joins it. */
+    revalidateLocalInstalls(): Promise<{ quarantined: string[] }> {
+      revalidatingLocalInstalls ??= revalidateLocalInstalls().finally(() => {
+        revalidatingLocalInstalls = null
+      })
+      return revalidatingLocalInstalls
+    },
     takeRescanNotices() {
       const taken = rescanNotices
       rescanNotices = []
