@@ -256,7 +256,7 @@ def test_the_startup_probe_names_a_grok_that_is_not_grok_build(
     result = _probe_prints(monkeypatch, tmp_path, "1.1.7\n")
 
     assert "Grok Build" in result["warning"]
-    assert "x.ai/cli/install.sh" in result["warning"]
+    assert "x.ai/cli/install." in result["warning"]  # install.sh, or install.ps1 on Windows
 
 
 def test_the_startup_probe_is_quiet_for_grok_build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
