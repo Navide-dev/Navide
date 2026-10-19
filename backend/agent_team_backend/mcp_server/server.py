@@ -10569,3 +10569,4 @@ async def shutdown() -> None:
 
 # The Navide Marketplace developer tools (W3) register on `server` from their own module.
 from agent_team_backend.mcp_server import marketplace_forms as _marketplace_forms  # noqa: E402,F401
+from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  # noqa: E402,F401

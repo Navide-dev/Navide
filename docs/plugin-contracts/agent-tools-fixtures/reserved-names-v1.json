@@ -69,6 +69,8 @@
     "marketplace_request_status",
     "marketplace_request_update",
     "marketplace_search",
+    "marketplace_testplace_invite_fill",
+    "marketplace_testplace_invite_open",
     "mcp_list",
     "memory_list",
     "pipeline_abort",
