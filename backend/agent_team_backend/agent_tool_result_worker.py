@@ -286,7 +286,8 @@ class ResultWorker:
                 # Not inherited on Windows: that duplicates the backend's
                 # standard error handle, which mem_probe swaps on another
                 # thread every minute, and a start in that window fails with
-                # WinError 6.
+                # WinError 6. So on Windows the helper's own error output
+                # (tracebacks included) no longer reaches the backend log.
                 stderr=asyncio.subprocess.DEVNULL if osplat.platform_id == "win32" else None,
                 limit=_SLICE,
                 start_new_session=True,
