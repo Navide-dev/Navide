@@ -8472,6 +8472,9 @@ async function confirmBatchRebuild(count: number): Promise<boolean> {
 // live credential or any other pane.
 provide(cliAccountDirActionsKey, {
   continueWith: async (paneId, profileId) => {
+    // A sign-in pane has no conversation to carry over: reopening it would
+    // drop the sign-in for an ordinary pane (review 0.2.26 R2 LOW-9).
+    if (panes.value.find((p) => p.id === paneId)?.isLogin) return
     const label = accountLabel(cliProfilesApi, 'claude', profileId, i18n.global.t)
     const ok = await notifyRestore.confirm(
       i18n.global.t('usage.continue-with-confirm-body', { account: label }),
@@ -8817,6 +8820,8 @@ function paneAccountFixed(p: ActivePane): boolean {
 async function toggleAccountPin(paneId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || pane.agentKey !== FOLLOW_SWITCH_AGENT) return
+  // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
+  if (pane.isLogin) return
   if (paneAccountFixed(pane)) {
     accountFollow.add(paneId)
     if (await rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })) accountFollow.remove(paneId)
