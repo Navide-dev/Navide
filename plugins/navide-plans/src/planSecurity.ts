@@ -25,9 +25,11 @@ function stripExecutableScripts(content: string): string {
 // past its `>`, or -1 when input runs out first. A quoted value may hold `>`,
 // so the first `>` is not always the end. Only an `=` after an attribute name
 // opens a value; one where a name belongs starts that name instead.
-// `seen` marks each (position, afterName) a read has passed. Every read from
-// one of them ends the same way, and a read that ran into an earlier one could
-// only have failed, so later reads stop there and the whole strip stays linear.
+// `seen` marks each state a read has passed: a position before an attribute
+// name or after one (bits 1 and 2), or inside an unquoted value (bit 4). Every
+// read from one of them ends the same way, and a read that ran into an earlier
+// one could only have failed, so later reads stop there and the strip stays
+// linear.
 function startTagEnd(html: string, from: number, seen: Uint8Array): number {
   const space = '\t\n\f\r '
   let afterName = false
@@ -50,7 +52,11 @@ function startTagEnd(html: string, from: number, seen: Uint8Array): number {
         if (close === -1) return -1
         i = close + 1
       } else {
-        while (i < html.length && !space.includes(html[i]) && html[i] !== '>') i++
+        while (i < html.length && !space.includes(html[i]) && html[i] !== '>') {
+          if (seen[i] & 4) return -1
+          seen[i] |= 4
+          i++
+        }
       }
       afterName = false
     } else {

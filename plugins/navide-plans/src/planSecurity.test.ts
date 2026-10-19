@@ -155,6 +155,16 @@ describe('planSecurity', () => {
       expect(html).not.toContain('attacker.invalid')
     })
 
+    // Catches quadratic time, not speed: when each `<meta` read its unquoted
+    // value to the end of input again, this took minutes; a linear read takes
+    // milliseconds, so one second is a generous bound.
+    it('reads 1 MB of never-ending unquoted values in linear time', () => {
+      const html = '<meta/a='.repeat(131072)
+      const start = performance.now()
+      prepare(html)
+      expect(performance.now() - start).toBeLessThan(1000)
+    }, 600_000)
+
     // Markup injected after the strip (the runtime script) must not be able to
     // close a `<meta` the plan left open into a meta refresh.
     it('turns a <meta that never ends into text', () => {
