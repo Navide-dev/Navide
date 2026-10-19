@@ -308,7 +308,11 @@ class RegistryRepository:
         disclosure_envelope: dict | None = None,
         disclosure_signature: str | None = None,
         scan: dict | None = None,
+        channel: str | None = None,
+        expires_at: datetime | None = None,
     ) -> ExtensionVersion:
+        """`channel` defaults to the one the SemVer implies; only a testplace
+        publish passes it, together with `expires_at`."""
         record = ExtensionVersion(
             extension_id=extension.id,
             version=version,
@@ -320,7 +324,8 @@ class RegistryRepository:
             registry_envelope=registry_envelope,
             registry_signature=registry_signature,
             trust_tier=trust_tier,
-            channel=version_channel(version),
+            channel=channel or version_channel(version),
+            expires_at=expires_at,
             review_status=review_status,
             review_report=review_report or {},
             disclosure=disclosure,
