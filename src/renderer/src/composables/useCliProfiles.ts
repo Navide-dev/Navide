@@ -887,10 +887,19 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
     }
   })
 
+  // The first load, shared: a pane restore can ask for the list while the
+  // initial refresh is still in flight, and must not send a second one.
+  let firstLoad: Promise<void> | null = null
+  function ensureLoaded(): Promise<void> {
+    if (loaded.value) return Promise.resolve()
+    firstLoad ??= refresh().finally(() => { firstLoad = null })
+    return firstLoad
+  }
+
   // Initial load once connected; re-fetch on reconnect (mirrors useRoles).
   let lastStatus = backend.status.value
   function maybeLoad(): void {
-    if (backend.status.value === 'connected') void refresh()
+    if (backend.status.value === 'connected') void (loaded.value ? refresh() : ensureLoaded())
   }
   maybeLoad()
   unsubBackend = (() => {
@@ -924,6 +933,7 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
     loading,
     error,
     refresh,
+    ensureLoaded,
     create,
     rename,
     remove,

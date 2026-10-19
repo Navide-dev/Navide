@@ -36,6 +36,18 @@ describe('useCliProfiles', () => {
     scope.stop()
   })
 
+  it('ensureLoaded shares the initial load and does not re-fetch once loaded', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await result.ensureLoaded()
+    await flush()
+    expect(result.loaded.value).toBe(true)
+    await result.ensureLoaded()
+    expect(mock.sent.filter((s) => s.type === 'cli_profiles.list')).toHaveLength(1)
+    scope.stop()
+  })
+
   it('create sends snake_case payload and adopts the returned lists', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })

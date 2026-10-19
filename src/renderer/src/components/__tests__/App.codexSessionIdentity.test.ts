@@ -8,7 +8,7 @@ import {
   shouldPreserveMissingSessionOnRestore, shouldWarnMissingResume,
 } from '../../platform/plugin-shell/lib/resume-command'
 import { pinFreshSessionAtLaunch, shouldAttemptResume } from '../../lib/sessionHeal'
-import { accountSpawnPin } from '../../lib/accountFollowPanes'
+import { accountSpawnPin, restoreSpawnPin } from '../../lib/accountFollowPanes'
 import { WakeClaims, sessionHeldElsewhere } from '../../lib/paneOpenAnswer'
 
 const source = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
@@ -108,7 +108,8 @@ function harness() {
     minimizedPanes: { value: new Set<string>() },
     useChannels: () => ({ paneReplaced: vi.fn(), paneClosed: vi.fn() }),
     // Scheme A's follow flag (plan claude_f1bf4b): no account dir here.
-    FOLLOW_SWITCH_AGENT: 'claude', followDirSignedIn: () => false, accountSpawnPin,
+    FOLLOW_SWITCH_AGENT: 'claude', followDirSignedIn: () => false, accountSpawnPin, restoreSpawnPin,
+    restorePinGate: () => ({ loaded: () => true, load: async () => {}, disclose: vi.fn() }),
     accountFollow: { add: vi.fn(), remove: vi.fn(), has: () => false },
   }
   const actions = new Function(...Object.keys(deps), `${javascript}; return {
