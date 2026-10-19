@@ -443,6 +443,28 @@ async function keepExpiredTestplace(id: string): Promise<void> {
     await refreshExpiredTestplace()
   }
 }
+// "Install the Navide Marketplace version": a promoted build of the same digest
+// only takes its new receipt (nothing downloaded, nothing to consent to again);
+// otherwise the normal verified install runs.
+async function expiredToMarketplace(id: string): Promise<void> {
+  const api = pluginsApi()
+  busy.value = true
+  error.value = ''
+  let adopted = false
+  try {
+    adopted = (await api?.adoptTestplaceRelease?.(id))?.adopted === true
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+  if (adopted) {
+    await refreshInstalled()
+    await refreshExpiredTestplace()
+    return
+  }
+  if (!error.value) await updateFlow.install(idParts(id).namespace, idParts(id).name)
+}
 async function removeExpiredTestplace(id: string): Promise<void> {
   await remove(id)
   await refreshExpiredTestplace()
@@ -489,7 +511,7 @@ watch(installed, () => {
         <button
           class="ext-testplace-marketplace nv-btn nv-btn--primary nv-btn--sm"
           :disabled="busy || updateFlow.busy.value"
-          @click="updateFlow.install(idParts(item.id).namespace, idParts(item.id).name)"
+          @click="expiredToMarketplace(item.id)"
         >{{ $t('testplace.expired.toMarketplace') }}</button>
         <button
           v-if="item.canKeep"

@@ -1286,6 +1286,7 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
 
   it('lists an expired build with its three choices and never removes it unasked', async () => {
     const keepExpiredTestplace = vi.fn().mockResolvedValue({ ok: true })
+    const adoptTestplaceRelease = vi.fn().mockResolvedValue({ adopted: false })
     const prepareInstall = vi.fn().mockRejectedValue(new Error('extension not found: HTTP 404'))
     const api = mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([]),
@@ -1295,6 +1296,7 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
       ]),
       keepExpiredTestplace,
       prepareInstall,
+      adoptTestplaceRelease,
     })
     wrapper = mountExtensions()
     await flushPromises()
@@ -1315,7 +1317,13 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
     await flushPromises()
     expect(keepExpiredTestplace).toHaveBeenCalledWith('acme.kept')
 
-    // "Install the Navide Marketplace version" is the normal verified install.
+    // "Install the Navide Marketplace version": a promoted build of the same
+    // digest is adopted in place; otherwise the normal verified install runs.
+    adoptTestplaceRelease.mockResolvedValueOnce({ adopted: true })
+    await kept.get('.ext-testplace-marketplace').trigger('click')
+    await flushPromises()
+    expect(adoptTestplaceRelease).toHaveBeenCalledWith('acme.kept')
+    expect(prepareInstall).not.toHaveBeenCalled()
     await kept.get('.ext-testplace-marketplace').trigger('click')
     await flushPromises()
     expect(prepareInstall).toHaveBeenCalledWith({ namespace: 'acme', name: 'kept' })
