@@ -355,6 +355,7 @@ import { useUiActionBus } from './composables/useUiActionBus'
 import {
   pluginAgentNoticeTitle,
   pluginAgentUndoApplies,
+  pluginAgentDowngradeStep,
   releaseAnnouncementId,
   useAnnouncements,
   type SchedulerDisabledNotice,
@@ -15073,6 +15074,21 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   try {
     // Only what the agent did: if the user changed it since, leave it be.
     const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (action.kind === 'plugin-agent-downgrade') {
+      // O1: back to the version an agent's update replaced.
+      const step = pluginAgentDowngradeStep(action, installed)
+      if (step === null) {
+        notifyRestore.toast(i18n.global.t('plugin-agent.notice.undo-stale'), { type: 'info' })
+        return
+      }
+      if (step === 'discard') await window.agentTeam?.plugins?.discardCandidate?.(action.pluginId)
+      else await window.agentTeam?.plugins?.rollback?.(action.pluginId)
+      notifyRestore.toast(
+        i18n.global.t('plugin-agent.notice.downgraded', { plugin: action.pluginId, version: action.fromVersion }),
+        { type: 'info' },
+      )
+      return
+    }
     if (!pluginAgentUndoApplies(action, installed)) {
       notifyRestore.toast(i18n.global.t('plugin-agent.notice.undo-stale'), { type: 'info' })
       return
