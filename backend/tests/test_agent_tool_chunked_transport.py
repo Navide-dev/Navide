@@ -215,9 +215,9 @@ async def test_pieces_and_progress_need_an_authenticated_host_and_a_pending_requ
     assert malformed["error"]["code"] == "BAD_REQUEST"
 
 
-async def _loop_step_times(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[Any, list[float]]:
-    """``work``'s result and the CPU time (``time.thread_time``) of every
-    event-loop step taken meanwhile: every callback the loop runs, a task's
+async def _loop_step_times(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[Any, list[tuple[float, float]]]:
+    """``work``'s result and when (``time.thread_time``) every event-loop step
+    taken meanwhile started and ended: every callback the loop runs, a task's
     step between two awaits included, is one step. CPU time leaves out the OS
     pausing the process, so a busy machine does not change it; garbage is
     collected first, so a collection of the test's own garbage is not counted."""
@@ -225,7 +225,7 @@ async def _loop_step_times(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[
     import time
 
     gc.collect()
-    steps: list[float] = []
+    steps: list[tuple[float, float]] = []
     run = asyncio.events.Handle._run
 
     def timed(handle: asyncio.events.Handle) -> None:
@@ -233,7 +233,7 @@ async def _loop_step_times(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[
         try:
             run(handle)
         finally:
-            steps.append(time.thread_time() - started)
+            steps.append((started, time.thread_time()))
 
     monkeypatch.setattr(asyncio.events.Handle, "_run", timed)
     try:
@@ -250,7 +250,7 @@ async def _loop_step_times(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[
 async def _longest_loop_slice(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[Any, float]:
     """``work``'s result and the most CPU time one event-loop step took meanwhile."""
     result, steps = await _loop_step_times(monkeypatch, work)
-    return result, max(steps, default=0.0)
+    return result, max((ended - started for started, ended in steps), default=0.0)
 
 
 @pytest.mark.asyncio

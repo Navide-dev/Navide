@@ -1155,32 +1155,46 @@ def _devmap_tool(monkeypatch) -> dict[str, Any]:
     return proxy._catalog.entries["devmap_read"]  # noqa: SLF001
 
 
-def _fresh_copy_cpu(text: str) -> float:
-    """CPU time of building a string like ``text`` from slices of it on fresh
-    memory: what the step a result in pieces ends in must do, once.
+async def _measured_pieces_call(monkeypatch) -> tuple[Any, list[float], float | None]:
+    """A ``devmap_read`` call's result, the CPU time of each event-loop step
+    it took, and the CPU time of the text assembly, the one copy excused.
 
-    The agent gets the result as one string, so the backend assembles it from
-    the pieces the helper sent in one step (``ResultWorker._text_frame``): a
-    copy of the whole text, the one step no slicing can bound. Its cost is
-    memory, not parsing: the copy, and the faults on the pages it writes for
-    the first time. On a VM a fault on such a page is served by the host
-    while the thread's CPU clock runs on (13 us a fault on the macOS runner,
-    1 us on bare metal), so that one step read as 18 to 29 ms there and as
-    1 to 2 ms here. The step is measured against this copy made on this
-    machine at this moment, never against a constant raised to fit a VM."""
+    The agent gets a result as one string, so the backend joins the text the
+    helper sent, decoded a slice per step, in one step: ``_text_frame`` ends
+    with ``"".join(parts)``. That copy is the one step no slicing can bound,
+    and its cost is memory, not parsing: the bytes copied, and faults on the
+    pages written for the first time. On a VM such a fault is served by the
+    host while the thread's CPU clock runs on (13 us a fault on the macOS
+    runner, 1 us on bare metal), and whether the allocator hands out fresh
+    pages is up to it, so that one copy read anywhere from 3 to 30 ms there
+    (1 to 2 ms here). So the step it ends is timed up to the moment
+    ``_text_frame`` returns, and only that part is excused: the rest of that
+    step, and every other step, is held to the budget."""
     import time
 
-    from agent_team_backend.agent_tool_result_worker import _SLICE
+    from agent_team_backend.agent_tool_result_worker import ResultWorker
+    from tests.test_agent_tool_chunked_transport import _loop_step_times
 
-    slices = [text[at:at + _SLICE] for at in range(0, len(text), _SLICE)]
-    # Holds the memory the call just freed, so the copy below writes to fresh
-    # pages as the step it stands for did.
-    plug = text[1:]
-    started = time.thread_time()
-    copy = "".join(slices)
-    spent = time.thread_time() - started
-    del copy, plug, slices
-    return spent
+    text_frame = ResultWorker._text_frame
+    assembled: list[float] = []
+
+    async def timed_text_frame(stream: Any) -> str:
+        text = await text_frame(stream)
+        # Still the step that joined the text: a return hands nothing back.
+        assembled.append(time.thread_time())
+        return text
+
+    monkeypatch.setattr(ResultWorker, "_text_frame", staticmethod(timed_text_frame))
+    result, steps = await _loop_step_times(monkeypatch, proxy.call("devmap_read", {}, None))
+    monkeypatch.setattr(ResultWorker, "_text_frame", text_frame)
+    times: list[float] = []
+    assembly = None
+    for started, ended in steps:
+        if assembled and started <= assembled[0] <= ended:
+            assembly = assembled[0] - started
+            started = assembled[0]
+        times.append(ended - started)
+    return result, times, assembly
 
 
 @pytest.mark.parametrize(
@@ -1191,8 +1205,6 @@ def _fresh_copy_cpu(text: str) -> float:
     ],
 )
 async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop(monkeypatch, shape) -> None:
-    from tests.test_agent_tool_chunked_transport import _loop_step_times
-
     import gc
 
     value = shape()
@@ -1207,28 +1219,26 @@ async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loo
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
     del value
     gc.collect()
-    result, steps = await _loop_step_times(monkeypatch, proxy.call("devmap_read", {}, None))
-    assembled = _fresh_copy_cpu(result.content[0].text)
+    result, steps, assembly = await _measured_pieces_call(monkeypatch)
     assert result.isError is False
     # Character for character what the in-process wrap gives (same function, in the helper).
     assert result.content[0].text == expected
-    *slices, longest = sorted(steps)
-    # Every step but one moves a slice of the bytes and hands back ...
-    assert slices[-1] < LOOP_SLICE_BUDGET_S, f"the loop ran {slices[-1] * 1000:.1f} ms of CPU without handing back"
-    # ... and that one also copies the text into one string, nothing more.
-    assert longest < LOOP_SLICE_BUDGET_S + assembled, (
+    # The text came from the helper, joined once ...
+    assert assembly is not None
+    # ... and apart from that copy no step held the loop.
+    longest = max(steps)
+    assert longest < LOOP_SLICE_BUDGET_S, (
         f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
-        f" (assembling the text costs {assembled * 1000:.1f} ms)"
+        f" (besides joining the text, {assembly * 1000:.1f} ms)"
     )
 
 
 async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(monkeypatch) -> None:
     """The control for the check above: a result parsed and wrapped in one
-    step on the loop, as before the helper, fails it. A tenth of the 10 MiB
-    keeps it cheap: it still holds the loop for hundreds of milliseconds
-    (the 10 MiB one, seconds), while copying its text costs about one."""
+    step on the loop, as before the helper, fails it on every attempt. A
+    tenth of the 10 MiB keeps it cheap: one still holds the loop for
+    hundreds of milliseconds (the 10 MiB one, seconds)."""
     from agent_team_backend.agent_tool_result_worker import strict_loads
-    from tests.test_agent_tool_chunked_transport import _loop_step_times
 
     import gc
 
@@ -1240,11 +1250,30 @@ async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(mo
 
     monkeypatch.setattr(proxy._result_worker, "wrap", on_the_loop)  # noqa: SLF001
     gc.collect()
-    result, steps = await _loop_step_times(monkeypatch, proxy.call("devmap_read", {}, None))
-    assembled = _fresh_copy_cpu(result.content[0].text)
+    result, steps, assembly = await _measured_pieces_call(monkeypatch)
     assert result.isError is False
-    longest = max(steps)
-    assert longest >= LOOP_SLICE_BUDGET_S + assembled, f"a whole-result parse on the loop read as {longest * 1000:.1f} ms"
+    assert assembly is None
+    assert max(steps) >= LOOP_SLICE_BUDGET_S, f"a whole-result parse on the loop read as {max(steps) * 1000:.1f} ms"
+
+
+async def test_the_loop_check_still_catches_work_on_the_assembled_text(monkeypatch) -> None:
+    """The excused copy covers the join and nothing after it: a pass over the
+    whole text in the step that joined it (here wrapping it again, the work
+    the helper is for) still fails."""
+    _devmap_tool(monkeypatch)
+    _pieces_host(monkeypatch, agent_tool_payload_text({"rows": [{"k": i, "v": "abcdefgh中"} for i in range(34_500)]}))
+    wrap = proxy._result_worker.wrap  # noqa: SLF001
+
+    async def then_wrapped(entry: dict[str, Any], pieces: list[str]) -> str:
+        text = await wrap(entry, pieces)
+        proxy.wrap_result(entry, {"text": text})
+        return text
+
+    monkeypatch.setattr(proxy._result_worker, "wrap", then_wrapped)  # noqa: SLF001
+    result, steps, assembly = await _measured_pieces_call(monkeypatch)
+    assert result.isError is False
+    assert assembly is not None
+    assert max(steps) >= LOOP_SLICE_BUDGET_S, f"wrapping after the join read as {max(steps) * 1000:.1f} ms"
 
 
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400"])
