@@ -220,3 +220,84 @@ async def test_an_unknown_caller_is_refused_before_anything_is_read(failover: _F
 async def test_is_registered_with_only_the_agent_filter() -> None:
     tools = {tool.name: tool for tool in await plan_mcp.server.list_tools()}
     assert set(tools["cli_failover_state"].inputSchema.get("properties") or {}) == {"agent"}
+
+
+# ── cli_accounts_list ───────────────────────────────────────────────────────
+# Which accounts Navide keeps per CLI and which one is active, read from the
+# account store's own file. No email and no signed-in flag: both come from the
+# credentials (the Keychain for claude), which a listing must never read.
+
+
+class _FakeProfilesStore:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def list(self) -> dict[str, Any]:
+        self.calls += 1
+        return {
+            "profiles": [
+                {"id": "a1", "agentKey": "claude", "name": "Work", "createdAt": "2026-10-01T00:00:00Z",
+                 "nameIsCustom": True, "homeSecret": "must-not-leak"},
+                {"id": "c1", "agentKey": "codex", "name": "Account 2", "createdAt": "2026-10-02T00:00:00Z"},
+                {"id": "o1", "agentKey": "opencode", "name": "Account 2", "scope": "anthropic",
+                 "createdAt": "2026-10-03T00:00:00Z"},
+            ],
+            "defaults": {"claude": "a1", "codex": None, "opencode": "o1"},
+            "defaultNames": {"claude": "Personal"},
+            "paneDefaults": {"claude": "a1"},
+        }
+
+
+@pytest.fixture
+def profiles(monkeypatch: pytest.MonkeyPatch) -> _FakeProfilesStore:
+    fake = _FakeProfilesStore()
+    monkeypatch.setattr(backend_app, "cli_profiles_store", fake, raising=False)
+    monkeypatch.setattr(backend_app, "credential_vault", _Untouchable(), raising=False)
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_reports_the_store_through_named_fields_only(profiles: _FakeProfilesStore) -> None:
+    agent_messaging.register("pa", "reviewer", "/ws/alpha", agent_key="claude")
+
+    result = await plan_mcp.cli_accounts_list(_ctx())
+
+    assert result["ok"] is True
+    assert result["accounts"] == [
+        {"id": "a1", "agentKey": "claude", "name": "Work", "createdAt": "2026-10-01T00:00:00Z"},
+        {"id": "c1", "agentKey": "codex", "name": "Account 2", "createdAt": "2026-10-02T00:00:00Z"},
+        {"id": "o1", "agentKey": "opencode", "name": "Account 2", "scope": "anthropic",
+         "createdAt": "2026-10-03T00:00:00Z"},
+    ]
+    assert result["active"] == {"claude": "a1", "codex": "__default__", "opencode": "o1"}
+    assert result["defaultNames"] == {"claude": "Personal"}
+    assert result["paneDefaults"] == {"claude": "a1"}
+    assert "must-not-leak" not in repr(result)
+    assert not ({"email", "signedIn", "emailAddress"} & _keys(result))
+    assert profiles.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_narrows_to_one_vendor(profiles: _FakeProfilesStore) -> None:
+    result = await plan_mcp.cli_accounts_list(_host_ctx(), agent=" CLAUDE ")
+
+    assert result["agent"] == "claude"
+    assert [a["id"] for a in result["accounts"]] == ["a1"]
+    assert result["active"] == {"claude": "a1"}
+    assert result["defaultNames"] == {"claude": "Personal"}
+    assert result["paneDefaults"] == {"claude": "a1"}
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_refuses_an_unknown_caller_before_reading(profiles: _FakeProfilesStore) -> None:
+    result = await plan_mcp.cli_accounts_list(_bad_ctx())
+
+    assert result["ok"] is False
+    assert "accounts" not in result
+    assert profiles.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_accounts_list_is_registered_with_only_the_agent_filter() -> None:
+    tools = {tool.name: tool for tool in await plan_mcp.server.list_tools()}
+    assert set(tools["cli_accounts_list"].inputSchema.get("properties") or {}) == {"agent"}

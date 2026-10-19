@@ -51,6 +51,7 @@ const cliTools = [
   'cli_message_log',
   'cli_usage',
   'cli_failover_state',
+  'cli_accounts_list',
   'cli_token_stats',
 ] as const
 

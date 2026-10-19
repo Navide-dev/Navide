@@ -10196,6 +10196,72 @@ async def cli_failover_state(ctx: Context, agent: str = "") -> dict[str, Any]:
     result["recentTransactions"] = rows("recentTransactions", _FAILOVER_TRANSACTION_FIELDS)
     return result
 
+
+#: The fields of an account row this tool passes on: what the account store
+#: file holds about it, nothing read from its credentials.
+_ACCOUNT_FIELDS = ("id", "agentKey", "name", "scope", "createdAt")
+#: The built-in Default row's id (cli_profiles' DEFAULT_SLOT_ID).
+_DEFAULT_ACCOUNT_ID = "__default__"
+
+
+@server.tool()
+async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
+    """List the CLI accounts Navide keeps, and which one each CLI runs on.
+
+    The same accounts Settings → Accounts shows, read from Navide's account
+    store only: it says which accounts exist and which is active, not who is
+    signed in to them — no email and no signed-in flag, since both would mean
+    reading the credentials themselves. Read-only: nothing is switched or
+    refreshed. Quota is in cli_usage, the failover state in
+    cli_failover_state.
+
+    agent narrows the answer to one vendor key ("claude", "codex", ...) — the
+    same key cli_whoami reports as agent_key. Left empty, every vendor comes
+    back.
+
+    Returns {ok, accounts, active, defaultNames, paneDefaults}, plus `agent`
+    when a filter was applied.
+      - `accounts` is every account row the user added: {id, agentKey, name,
+        scope?, createdAt}. `scope` is the provider an account of a
+        multi-provider CLI is bound to.
+      - `active` maps a vendor to the account its CLI runs on now:
+        "__default__" is the built-in Default row (the login the CLI had
+        before any account was added), which has no row in `accounts`.
+      - `defaultNames` holds the names the user gave a vendor's Default row.
+      - `paneDefaults` maps a vendor to the account new panes are pinned to,
+        when the user chose one that differs from `active`.
+    """
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    from agent_team_backend import app as _app
+
+    doc = await asyncio.to_thread(_app.cli_profiles_store.list)
+    agent = str(agent or "").strip().lower()
+
+    def wanted(key: str) -> bool:
+        return not agent or key == agent
+
+    result: dict[str, Any] = {"ok": True}
+    if agent:
+        result["agent"] = agent
+    result["accounts"] = [
+        _pick(row, _ACCOUNT_FIELDS)
+        for row in doc.get("profiles") or [] if wanted(str(row.get("agentKey") or ""))
+    ]
+    result["active"] = {
+        key: str(value or _DEFAULT_ACCOUNT_ID)
+        for key, value in (doc.get("defaults") or {}).items() if wanted(key)
+    }
+    result["defaultNames"] = {
+        key: value for key, value in (doc.get("defaultNames") or {}).items() if wanted(key)
+    }
+    result["paneDefaults"] = {
+        key: value for key, value in (doc.get("paneDefaults") or {}).items() if wanted(key)
+    }
+    return result
+
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
 
 _session_manager: StreamableHTTPSessionManager | None = None
