@@ -3329,6 +3329,8 @@ export function registerPluginIpc(
       // the package and restore its approved backend tuple for this session.
       try {
         await cleanupPluginStorage(id)
+        // Its browser partition (sign-ins, cookies, cache) goes with it.
+        await manager.clearPluginWebData(id)
         // Storage a source change set aside goes with the plugin's storage.
         if (options.pluginStorageRoot) removeNativeBackendData(options.pluginStorageRoot, pluginStorageDirName(id))
         // The backend child was stopped with the runtime above. Deleting its

@@ -114,6 +114,9 @@ vi.mock('electron', () => {
     setBounds(b: unknown): void {
       this.bounds = b
     }
+    getBounds(): unknown {
+      return this.bounds ?? { x: 0, y: 0, width: 0, height: 0 }
+    }
     setVisible(v: boolean): void {
       this.visible = v
     }
@@ -323,6 +326,71 @@ const wsMock = vi.hoisted(() => {
 
 vi.mock('ws', () => ({ WebSocket: wsMock.FakeNodeWebSocket }))
 
+// The production web view registry over Electron fakes: the real boundaries in
+// PluginWebViewRegistry, with guests and sessions that record what they saw.
+const webHostMock = vi.hoisted(() => ({
+  hook: null as ((pluginId: string, views: unknown[]) => void) | null,
+  guests: [] as Array<{ options: { partition: string; backgroundThrottling: boolean }; bounds: unknown; visible: boolean; webContents: { destroyed: boolean; url: string } }>,
+  cleared: [] as string[],
+}))
+vi.mock('./pluginWebViewHost', async () => {
+  const { PluginWebViewRegistry } = await import('./pluginWebViews')
+  type Listener = (...args: unknown[]) => void
+  const registry = new PluginWebViewRegistry({
+    createView: (options) => {
+      const listeners = new Map<string, Listener[]>()
+      const contents = {
+        destroyed: false,
+        url: 'about:blank',
+        isDestroyed: () => contents.destroyed,
+        loadURL: async (url: string) => { contents.url = url },
+        getURL: () => contents.url,
+        getTitle: () => '',
+        isLoading: () => false,
+        stop: () => {},
+        reload: () => {},
+        close: () => {
+          contents.destroyed = true
+          for (const listener of listeners.get('destroyed') ?? []) listener()
+        },
+        on: (event: string, listener: Listener) => { listeners.set(event, [...(listeners.get(event) ?? []), listener]) },
+        setWindowOpenHandler: () => {},
+        capturePage: async () => ({
+          isEmpty: () => false,
+          getSize: () => ({ width: 100, height: 50 }),
+          resize: () => ({ toJPEG: () => Buffer.from('jpeg') }),
+          toJPEG: () => Buffer.from('jpeg'),
+        }),
+        navigationHistory: { canGoBack: () => false, canGoForward: () => false, goBack: () => {}, goForward: () => {} },
+        debugger: { isAttached: () => false, attach: () => {}, detach: () => {}, sendCommand: async () => ({}) },
+      }
+      const guest = {
+        options,
+        bounds: null as unknown,
+        visible: true,
+        webContents: contents,
+        setBounds(rect: unknown) { guest.bounds = rect },
+        setVisible(visible: boolean) { guest.visible = visible },
+      }
+      webHostMock.guests.push(guest)
+      return guest
+    },
+    session: (partition) => ({
+      setPermissionRequestHandler: () => {},
+      setPermissionCheckHandler: () => {},
+      setDisplayMediaRequestHandler: () => {},
+      on: () => undefined,
+      clearStorageData: async () => { webHostMock.cleared.push(partition) },
+      clearCache: async () => {},
+    }),
+    onChanged: (pluginId, views) => webHostMock.hook?.(pluginId, views),
+  })
+  return {
+    pluginWebViewRegistry: () => registry,
+    setPluginWebViewChangedHook: (hook: typeof webHostMock.hook) => { webHostMock.hook = hook },
+  }
+})
+
 import * as electron from 'electron'
 import type { BrowserWindow } from 'electron'
 import {
@@ -392,6 +460,7 @@ import { NativeBackendStore } from './pluginNativeBackendStore'
 import { ThirdPartyBackendController, thirdPartyBackendLaunchSpec } from './pluginThirdPartyBackends'
 import { readInstalledManifestV2, type ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 import { PluginAgentToolsHost } from './pluginAgentToolsHost'
+import { pluginWebViewRegistry } from './pluginWebViewHost'
 import { HOST_DEFAULT_EXECUTION_POLICY, FAIL_CLOSED_EXECUTION_POLICY } from './executionPolicy'
 
 interface FakeWebContentsLike {
@@ -17511,5 +17580,287 @@ describe('plugin.resource.decision rows to the backend', () => {
     } finally {
       warn.mockRestore()
     }
+  })
+})
+
+describe('web.* view capabilities (Host web view registry)', () => {
+  const CALL = 'plugin:cap:call'
+  type WebResponse = { ok?: boolean; result?: Record<string, unknown>; error?: { code: string; message?: string } }
+  let seq = 0
+
+  function webDescriptor(
+    mgr: FrontendPluginManager,
+    id: string,
+    granted: Array<'ui' | 'web'>,
+  ): PluginLaunchDescriptor {
+    return {
+      id,
+      packageVersion: '1.0.0',
+      requires: [],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['web'] }),
+      capabilityContext: {
+        publisherEligible: false,
+        userGrant: { packageVersion: '1.0.0', system: granted },
+        runtimeBinding: {
+          pluginId: id,
+          packageVersion: '1.0.0',
+          workspaceId: mgr.workspaceIdForPath('/workspace'),
+          instanceId: null,
+          audience: `${id}.main`,
+        },
+      },
+      devUrl: '',
+      entryFile: `/plugins/${id}/index.html`,
+      views: [{
+        id: 'main',
+        contributionKey: `${id}.main`,
+        kind: 'custom',
+        location: 'main',
+        title: id,
+        entryFile: `/plugins/${id}/index.html`,
+      }],
+    }
+  }
+
+  async function openWeb(mgr: FrontendPluginManager, id: string, granted: Array<'ui' | 'web'> = ['web']) {
+    const descriptor = webDescriptor(mgr, id, granted)
+    mgr.registerDescriptor(descriptor)
+    const host = new FakeBrowserWindow()
+    const handle = await mgr.openView(descriptor, descriptor.views![0], {
+      hostWindow: asHost(host),
+      bounds: 'fill',
+      workspacePath: '/workspace',
+      capabilityContext: descriptor.capabilityContext,
+    })
+    const view = host.children[0] as FakeViewLike
+    const call = async (
+      method: string,
+      args: Record<string, unknown> = {},
+      extra: Record<string, unknown> = {},
+    ): Promise<WebResponse> => (await ipcHandlers.get(CALL)!({ sender: { id: view.webContents.id } }, {
+      reqId: `web-${method}-${++seq}`,
+      ns: 'web',
+      method,
+      args,
+      ...extra,
+    })) as WebResponse
+    return { host, view, instanceId: handle.instanceId, call }
+  }
+
+  function newManager(): FrontendPluginManager {
+    const mgr = new FrontendPluginManager()
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+    return mgr
+  }
+
+  const gesture = { userGesture: true }
+  const webEvents = (view: FakeViewLike) => view.webContents.sent.filter((message) =>
+    (message.args[0] as { type?: string }).type === 'web.changed')
+  const lastGuest = () => webHostMock.guests[webHostMock.guests.length - 1]!
+
+  it('reaches only the calling plugin\'s own views, with the plugin id taken from the Host binding', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-own-a')
+    const b = await openWeb(mgr, 'acme.web-own-b')
+    const created = await a.call('create', { space: 'mail', url: 'https://example.com/' }, gesture)
+    expect(created).toMatchObject({ ok: true, result: { viewId: expect.any(String) } })
+    const viewId = created.result!.viewId as string
+    expect(lastGuest().options).toEqual({ partition: 'persist:navide-web:acme.web-own-a', backgroundThrottling: true })
+
+    await expect(a.call('list')).resolves.toMatchObject({
+      ok: true,
+      result: { views: [expect.objectContaining({ viewId, space: 'mail', owner: 'user', control: 'user', attached: false })] },
+    })
+    await expect(b.call('list')).resolves.toMatchObject({ ok: true, result: { views: [] } })
+    // A request cannot name the plugin it acts for.
+    const forged = await b.call('list', {}, { pluginId: 'acme.web-own-a' })
+    expect(forged.ok ? forged.result : forged.error?.code).toEqual(forged.ok ? { views: [] } : 'BAD_REQUEST')
+    for (const [method, args] of [
+      ['close', { viewId }],
+      ['detach', { viewId }],
+      ['attach', { viewId, rect: { x: 0, y: 0, width: 10, height: 10 } }],
+      ['navigate', { viewId, url: 'https://example.org/' }],
+      ['capture', { viewId }],
+    ] as const) {
+      await expect(b.call(method, args)).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })
+    }
+    await expect(b.call('setOwner', { viewId, owner: 'agent' }, gesture))
+      .resolves.toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })
+    expect(pluginWebViewRegistry().list('acme.web-own-a')).toHaveLength(1)
+    expect(b.host.children).toHaveLength(1)
+
+    await expect(a.call('attach', { viewId, rect: { x: 5, y: 6, width: 100, height: 50 } }))
+      .resolves.toEqual({ reqId: expect.any(String), ok: true, result: { ok: true } })
+    expect(a.host.children).toContain(lastGuest())
+    expect(lastGuest().bounds).toEqual({ x: 5, y: 6, width: 100, height: 50 })
+    await expect(a.call('capture', { viewId })).resolves.toMatchObject({
+      ok: true, result: { dataUrl: expect.stringMatching(/^data:image\/jpeg;base64,/) },
+    })
+    await expect(a.call('detach', { viewId })).resolves.toMatchObject({ ok: true, result: { ok: true } })
+    expect(a.host.children).not.toContain(lastGuest())
+    await expect(a.call('close', { viewId })).resolves.toMatchObject({ ok: true, result: { ok: true } })
+    expect(pluginWebViewRegistry().list('acme.web-own-a')).toEqual([])
+  })
+
+  it('refuses the gesture-gated web addresses without a Host-observed user gesture', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-gesture')
+    await expect(a.call('create', { space: 's' })).resolves.toMatchObject({ ok: false, error: { code: 'USER_CANCELLED' } })
+    expect(pluginWebViewRegistry().list('acme.web-gesture')).toEqual([])
+    const viewId = (await a.call('create', { space: 's' }, gesture)).result!.viewId as string
+    const info = () => pluginWebViewRegistry().list('acme.web-gesture')[0]!
+    for (const [method, args] of [
+      ['setOwner', { viewId, owner: 'agent' }],
+      ['takeControl', { viewId }],
+      ['returnControl', { viewId }],
+      ['clearData', {}],
+    ] as const) {
+      await expect(a.call(method, args)).resolves.toMatchObject({ ok: false, error: { code: 'USER_CANCELLED' } })
+    }
+    expect(info()).toMatchObject({ owner: 'user', control: 'user' })
+    expect(webHostMock.cleared).not.toContain('persist:navide-web:acme.web-gesture')
+
+    // USER_IN_CONTROL has no view-side code: it is CAPABILITY_DENIED with the reason.
+    await expect(a.call('returnControl', { viewId }, gesture)).resolves.toMatchObject({
+      ok: false, error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('user-owned') },
+    })
+    await expect(a.call('setOwner', { viewId, owner: 'agent' }, gesture)).resolves.toMatchObject({ ok: true, result: { ok: true } })
+    expect(info()).toMatchObject({ owner: 'agent', control: 'agent' })
+    await expect(a.call('takeControl', { viewId }, gesture)).resolves.toMatchObject({ ok: true, result: { ok: true } })
+    expect(info()).toMatchObject({ owner: 'agent', control: 'user' })
+    await expect(a.call('returnControl', { viewId }, gesture)).resolves.toMatchObject({ ok: true, result: { ok: true } })
+    expect(info()).toMatchObject({ owner: 'agent', control: 'agent' })
+    await expect(a.call('clearData', {}, gesture)).resolves.toMatchObject({ ok: true, result: { ok: true } })
+    expect(webHostMock.cleared).toContain('persist:navide-web:acme.web-gesture')
+  })
+
+  it('refuses web calls and withholds web.changed without the web grant', async () => {
+    const mgr = newManager()
+    const granted = await openWeb(mgr, 'acme.web-events')
+    const ungranted = await openWeb(mgr, 'acme.web-events', ['ui'])
+    const other = await openWeb(mgr, 'acme.web-events-other')
+    await expect(ungranted.call('list')).resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    await expect(ungranted.call('create', { space: 's' }, gesture))
+      .resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    for (const view of [granted.view, ungranted.view, other.view]) view.webContents.sent.length = 0
+
+    const viewId = (await granted.call('create', { space: 's' }, gesture)).result!.viewId as string
+    await vi.waitFor(() => expect(webEvents(granted.view)).toHaveLength(1))
+    expect(webEvents(granted.view)[0]).toMatchObject({
+      channel: 'plugin:cap:event',
+      args: [{ type: 'web.changed', data: { views: [expect.objectContaining({ viewId, owner: 'user' })] } }],
+    })
+    expect(webEvents(ungranted.view)).toEqual([])
+    expect(webEvents(other.view)).toEqual([])
+  })
+
+  it('refuses agent-initiated web calls unless the execution policy names web', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-agent')
+    const agentCall = (method: string, args: Record<string, unknown> = {}) =>
+      mgr.executeAgentCapability(a.instanceId, { reqId: `agent-${method}-${++seq}`, ns: 'web', method, args })
+    const policy = (mode: 'allowlist' | 'denylist', system: string[], revision: number) =>
+      mgr.setExecutionPolicyResolver(() => ({
+        policy: { schemaVersion: 1, mode, system, shell: [] },
+        revision,
+        state: 'user',
+      }) as ExecutionPolicySnapshot)
+
+    policy('allowlist', ['ui'], 1)
+    await expect(agentCall('list')).resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    // A denylist written before `web` existed never admits it by omission.
+    policy('denylist', [], 2)
+    await expect(agentCall('list')).resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    policy('allowlist', ['web'], 3)
+    await expect(agentCall('list')).resolves.toMatchObject({ ok: true, result: { views: [] } })
+    // An agent never carries a user gesture.
+    await expect(agentCall('create', { space: 's' })).resolves.toMatchObject({ ok: false, error: { code: 'USER_CANCELLED' } })
+    expect(pluginWebViewRegistry().list('acme.web-agent')).toEqual([])
+
+    // The executor re-checks the live policy itself before any side effect.
+    const runtime = (mgr as unknown as {
+      running: Map<string, { capabilityContext?: HostCapabilityContext | null }>
+    }).running.get(a.instanceId)!.capabilityContext!.runtimeBinding!
+    policy('allowlist', ['ui'], 4)
+    await expect(mgr.executePublicCapability({
+      kind: 'public',
+      address: 'web.list',
+      scope: 'plugin',
+      args: {},
+      runtime,
+      initiator: { kind: 'agent', source: 'mcp', id: 'agent-1' },
+    })).rejects.toThrow(/execution policy/)
+  })
+
+  it('refuses to attach to a frame-carried view', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-frame')
+    const viewId = (await a.call('create', { space: 's' }, gesture)).result!.viewId as string
+    const record = (mgr as unknown as {
+      running: Map<string, { carrier: string; capabilityContext?: HostCapabilityContext | null }>
+    }).running.get(a.instanceId)!
+    record.carrier = 'frame'
+    try {
+      await expect(mgr.executePublicCapability({
+        kind: 'public',
+        address: 'web.attach',
+        scope: 'plugin',
+        args: { viewId, rect: { x: 0, y: 0, width: 10, height: 10 } },
+        runtime: record.capabilityContext!.runtimeBinding!,
+      })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    } finally {
+      record.carrier = 'surface'
+    }
+    expect(a.host.children).toHaveLength(1)
+  })
+
+  it('follows the plugin view bounds and visibility, and keeps views running after the view closes', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-follow')
+    const viewId = (await a.call('create', { space: 's' }, gesture)).result!.viewId as string
+    const guest = lastGuest()
+    await a.call('attach', { viewId, rect: { x: 5, y: 6, width: 100, height: 50 } })
+    mgr.setBounds(a.instanceId, { x: 100, y: 200, width: 300, height: 300 })
+    expect(guest.bounds).toEqual({ x: 105, y: 206, width: 100, height: 50 })
+    mgr.deactivate(a.instanceId)
+    expect(guest.visible).toBe(false)
+    mgr.activate(a.instanceId)
+    expect(guest.visible).toBe(true)
+
+    mgr.destroyInstance(a.instanceId)
+    expect(a.host.children).not.toContain(guest)
+    expect(pluginWebViewRegistry().list('acme.web-follow')).toEqual([
+      expect.objectContaining({ viewId, attached: false }),
+    ])
+    expect(guest.webContents.destroyed).toBe(false)
+  })
+
+  it('destroys a plugin\'s views when it is removed or its package version is revoked', async () => {
+    const mgr = newManager()
+    const removed = await openWeb(mgr, 'acme.web-removed')
+    await removed.call('create', { space: 's' }, gesture)
+    const removedGuest = lastGuest()
+    const revoked = await openWeb(mgr, 'acme.web-revoked')
+    await revoked.call('create', { space: 's' }, gesture)
+    const revokedGuest = lastGuest()
+
+    mgr.preparePluginRemoval('acme.web-removed')
+    expect(pluginWebViewRegistry().list('acme.web-removed')).toEqual([])
+    expect(removedGuest.webContents.destroyed).toBe(true)
+    expect(revokedGuest.webContents.destroyed).toBe(false)
+
+    await mgr.revokePackageVersion('acme.web-revoked', '1.0.0')
+    expect(pluginWebViewRegistry().list('acme.web-revoked')).toEqual([])
+    expect(revokedGuest.webContents.destroyed).toBe(true)
+  })
+
+  it('clears a removed plugin\'s browser partition only when it declares web', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-clear')
+    void a
+    await mgr.clearPluginWebData('acme.web-clear')
+    expect(webHostMock.cleared).toContain('persist:navide-web:acme.web-clear')
+    await mgr.clearPluginWebData('acme.not-web')
+    expect(webHostMock.cleared).not.toContain('persist:navide-web:acme.not-web')
   })
 })
