@@ -248,6 +248,27 @@ describe('permissions', () => {
     expect(error).toMatchObject({ code: 'USER_IN_CONTROL', reason: 'permission' })
   })
 
+  it('answers client certificate, Bluetooth and HTTP auth requests with nothing', () => {
+    const { registry, views } = setup()
+    registry.create('navide.browser', { space: 'a' }, 'agent')
+    const contents = views[0].webContents
+    const certificate = { preventDefault: vi.fn() }
+    const pickCertificate = vi.fn()
+    contents.emit('select-client-certificate', certificate, 'https://mtls.example.com/', [{ subjectName: 'me' }], pickCertificate)
+    expect(certificate.preventDefault).toHaveBeenCalled()
+    expect(pickCertificate).toHaveBeenCalledWith()
+    const bluetooth = { preventDefault: vi.fn() }
+    const pickDevice = vi.fn()
+    contents.emit('select-bluetooth-device', bluetooth, [{ deviceId: 'd1', deviceName: 'Keyboard' }], pickDevice)
+    expect(bluetooth.preventDefault).toHaveBeenCalled()
+    expect(pickDevice).toHaveBeenCalledWith('')
+    const login = { preventDefault: vi.fn() }
+    const answer = vi.fn()
+    contents.emit('login', login, { url: 'https://example.com/' }, { isProxy: false, host: 'example.com' }, answer)
+    expect(login.preventDefault).toHaveBeenCalled()
+    expect(answer).toHaveBeenCalledWith()
+  })
+
   it('cancels downloads and screen capture requests', () => {
     const { registry, sessions } = setup()
     registry.create('navide.browser', { space: 'a' }, 'user')

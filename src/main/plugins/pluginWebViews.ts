@@ -516,6 +516,23 @@ export class PluginWebViewRegistry {
       if (isAllowedWebUrl(url)) void contents.loadURL(url).catch(() => undefined)
       return { action: 'deny' }
     })
+    // Electron's defaults would hand a site the first client certificate in the
+    // store and the first Bluetooth device found; refuse both, and cancel HTTP
+    // auth prompts, so an agent-opened site learns nothing about this machine.
+    // Electron routes the app-level `select-client-certificate` to the
+    // requesting webContents, so this covers guests and nothing else.
+    contents.on('select-client-certificate', (event: { preventDefault(): void }, _url: string, _list: unknown, callback: () => void) => {
+      event.preventDefault()
+      callback()
+    })
+    contents.on('select-bluetooth-device', (event: { preventDefault(): void }, _devices: unknown, callback: (deviceId: string) => void) => {
+      event.preventDefault()
+      callback('')
+    })
+    contents.on('login', (event: { preventDefault(): void }, _response: unknown, _authInfo: unknown, callback: () => void) => {
+      event.preventDefault()
+      callback()
+    })
     contents.on('before-input-event', (_event: unknown, input: { type: string }) => {
       if (input.type === 'keyDown' || input.type === 'rawKeyDown' || input.type === 'char') this.userInput(entry)
     })

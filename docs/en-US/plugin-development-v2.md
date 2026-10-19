@@ -1578,6 +1578,10 @@ someone it is not.
   version; on an agent-controlled view the `state` becomes `need-action` with
   reason `permission`, so the user sees why the agent stopped. Allowing them
   with disclosure is a later product decision.
+- **No device or identity is handed over.** A site that asks for a client
+  certificate gets none, a Bluetooth device chooser is cancelled, and HTTP
+  authentication prompts are cancelled, instead of Electron's defaults (the
+  first certificate in the store, the first device found).
 - **The user always wins.** Any keyboard or mouse input from the user on an
   agent-controlled view sets `control` to `user` (reason `manual_takeover`);
   the agent cannot drive the view again until the user returns control. Every
