@@ -30,6 +30,9 @@ export const WEB_GESTURE_METHODS: ReadonlySet<string> = new Set([
 ])
 
 export type WebViewOwner = 'agent' | 'user'
+/** The pane behind a bridge call, from the Host-verified initiator; null
+ *  fields for a caller that is not a pane (an external client or the Host). */
+export interface WebAgentCaller { paneId: string | null; workspace: string | null }
 export type WebViewControl = 'agent' | 'user'
 export type WebViewState = 'idle' | 'running' | 'need-action' | 'done'
 /** Why a bridge `cdp` call was refused with USER_IN_CONTROL. */

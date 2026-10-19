@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import {
   isAllowedWebUrl,
+  type WebAgentCaller,
   type WebControlReason,
   type WebViewControl,
   type WebViewInfo,
@@ -139,6 +140,11 @@ export function webPartitionFor(pluginId: string): string {
  *  their navigation is governed by the registry's own allowlist instead. */
 const guestContents = new WeakSet<object>()
 
+function mayUse(entry: WebViewEntry, caller: WebAgentCaller): boolean {
+  return entry.agentPane === null
+    || (entry.agentPane.paneId === caller.paneId && entry.agentPane.workspace === caller.workspace)
+}
+
 export function isPluginWebGuest(contents: object): boolean {
   return guestContents.has(contents)
 }
@@ -149,6 +155,9 @@ interface WebViewEntry {
   readonly space: string
   readonly view: WebGuestView
   owner: WebViewOwner
+  /** The pane (in its workspace) that created an agent view. Null for a
+   *  Space the user owns or handed to agents: any pane may use that one. */
+  agentPane: WebAgentCaller | null
   control: WebViewControl
   reason: WebControlReason | undefined
   state: WebViewState
@@ -166,12 +175,20 @@ export class PluginWebViewRegistry {
 
   constructor(private readonly deps: PluginWebViewDeps) {}
 
-  list(pluginId: string): WebViewInfo[] {
-    return [...this.views.values()].filter(entry => entry.pluginId === pluginId).map(entry => this.info(entry))
+  /** With `caller` (the bridge), another pane's views are left out. */
+  list(pluginId: string, caller?: WebAgentCaller): WebViewInfo[] {
+    return [...this.views.values()]
+      .filter(entry => entry.pluginId === pluginId && (caller === undefined || mayUse(entry, caller)))
+      .map(entry => this.info(entry))
   }
 
-  /** `web.create` (owner user) or bridge `create` (owner agent). */
-  create(pluginId: string, request: { space: string; url?: string }, owner: WebViewOwner): { viewId: string } {
+  /** `web.create` (owner user) or bridge `create` (owner agent, for `caller`). */
+  create(
+    pluginId: string,
+    request: { space: string; url?: string },
+    owner: WebViewOwner,
+    caller?: WebAgentCaller,
+  ): { viewId: string } {
     const partition = webPartitionFor(pluginId)
     if (request.url !== undefined && !isAllowedWebUrl(request.url)) throw new WebViewError('INVALID_ARGUMENT')
     if (this.list(pluginId).length >= MAX_WEB_VIEWS_PER_PLUGIN) throw new WebViewError('RESOURCE_LIMIT')
@@ -186,6 +203,7 @@ export class PluginWebViewRegistry {
       space: request.space,
       view,
       owner,
+      agentPane: owner === 'agent' && caller ? { ...caller } : null,
       control: owner,
       reason: owner === 'user' ? 'user-owned' : undefined,
       state: owner === 'agent' ? 'running' : 'idle',
@@ -261,6 +279,8 @@ export class PluginWebViewRegistry {
   setOwner(pluginId: string, viewId: string, owner: WebViewOwner): void {
     const entry = this.entry(pluginId, viewId)
     entry.owner = owner
+    // A Space the user hands to agents has no pane: any pane may use it.
+    entry.agentPane = null
     entry.control = owner
     entry.reason = owner === 'user' ? 'user-owned' : undefined
     if (owner === 'agent' && entry.state === 'need-action') entry.state = 'running'
@@ -286,8 +306,8 @@ export class PluginWebViewRegistry {
   }
 
   /** Bridge `setState`: need-action hands control to the user. */
-  setState(pluginId: string, viewId: string, state: WebViewState, note?: string): void {
-    const entry = this.entry(pluginId, viewId)
+  setState(pluginId: string, viewId: string, state: WebViewState, note?: string, caller?: WebAgentCaller): void {
+    const entry = this.entry(pluginId, viewId, caller)
     if (entry.owner !== 'agent') throw new WebViewError('USER_IN_CONTROL', { reason: 'user-owned' })
     entry.state = state
     entry.note = note
@@ -296,16 +316,22 @@ export class PluginWebViewRegistry {
   }
 
   /** `byAgent`: the bridge may only close the agent's own views. */
-  close(pluginId: string, viewId: string, byAgent: boolean): void {
-    const entry = this.entry(pluginId, viewId)
+  close(pluginId: string, viewId: string, byAgent: boolean, caller?: WebAgentCaller): void {
+    const entry = this.entry(pluginId, viewId, caller)
     if (byAgent && entry.owner !== 'agent') throw new WebViewError('USER_IN_CONTROL', { reason: 'user-owned' })
     this.destroyEntry(entry)
     this.changed(pluginId)
   }
 
   /** Bridge `cdp`: only while the agent owns and controls the view. */
-  async cdp(pluginId: string, viewId: string, method: string, params?: Record<string, unknown>): Promise<unknown> {
-    const entry = this.entry(pluginId, viewId)
+  async cdp(
+    pluginId: string,
+    viewId: string,
+    method: string,
+    params?: Record<string, unknown>,
+    caller?: WebAgentCaller,
+  ): Promise<unknown> {
+    const entry = this.entry(pluginId, viewId, caller)
     this.assertAgentInControl(entry)
     if (!CDP_ALLOWED_METHODS.has(method)) throw new WebViewError('CAPABILITY_DENIED')
     if (method === 'Page.navigate' && !isAllowedWebUrl(params?.url)) throw new WebViewError('INVALID_ARGUMENT')
@@ -390,10 +416,11 @@ export class PluginWebViewRegistry {
     }
   }
 
-  private entry(pluginId: string, viewId: string): WebViewEntry {
+  private entry(pluginId: string, viewId: string, caller?: WebAgentCaller): WebViewEntry {
     const entry = this.views.get(viewId)
-    // Another plugin's view id is indistinguishable from an unknown one.
+    // Another plugin's or another pane's view id is indistinguishable from an unknown one.
     if (!entry || entry.pluginId !== pluginId) throw new WebViewError('INVALID_ARGUMENT')
+    if (caller !== undefined && !mayUse(entry, caller)) throw new WebViewError('INVALID_ARGUMENT')
     return entry
   }
 

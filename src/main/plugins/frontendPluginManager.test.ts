@@ -17930,6 +17930,41 @@ describe('web.* view capabilities (Host web view registry)', () => {
     expect(pluginWebViewRegistry().list('navide.browser')).toEqual([])
   })
 
+  it('gives the web Bridge port the calling pane, so a pane reaches only its own agent Spaces', async () => {
+    const mgr = newManager()
+    mgr.setCapabilityGrantResolver((_pluginId, packageVersion) => ({ packageVersion, system: ['web'] }))
+    mgr.configurePlansFilesystemService()
+    const dispatcher = (mgr as unknown as {
+      pluginBackendHost: { bridgeDispatcher: { dispatch: (request: unknown, context: PlansBridgeContext) => Promise<unknown> } }
+    }).pluginBackendHost.bridgeDispatcher
+    const bridge = (paneId: string, operation: string, args: unknown) => dispatcher.dispatch({
+      id: `bridge-${++seq}`,
+      origin: { kind: 'call', requestId: 'parent-1' },
+      port: 'web',
+      operation,
+      arguments: args,
+    }, {
+      runtime: {
+        pluginId: 'navide.browser',
+        packageVersion: '1.0.0',
+        workspaceId: null,
+        instanceId: null,
+        contributionKey: null,
+        hostWindowId: null,
+        initiator: { kind: 'agent', source: 'mcp', id: `call-${seq}`, caller: { kind: 'pane', paneId, workspace: '/w', verifiedTo: 'pane' } },
+      },
+      requestId: `bridge-${seq}`,
+      signal: new AbortController().signal,
+      emit: () => undefined,
+    })
+
+    const created = await bridge('p-1', 'create', { space: 'pane-p-1' }) as { viewId: string }
+    await expect(bridge('p-2', 'list', {})).resolves.toEqual({ views: [] })
+    await expect(bridge('p-2', 'close', { viewId: created.viewId })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(bridge('p-1', 'list', {})).resolves.toMatchObject({ views: [expect.objectContaining({ viewId: created.viewId })] })
+    await expect(bridge('p-1', 'close', { viewId: created.viewId })).resolves.toEqual({ ok: true })
+  })
+
   it('clears a removed plugin\'s browser partition only when it declares web', async () => {
     const mgr = newManager()
     const a = await openWeb(mgr, 'acme.web-clear')

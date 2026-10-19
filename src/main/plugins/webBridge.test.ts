@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PlansBridgeError } from './plansBridge'
 import { PluginWebViewRegistry, type WebGuestSession, type WebGuestView } from './pluginWebViews'
 import { dispatchWebBridge } from './webBridge'
+import type { WebViewInfo } from './webCapability'
 
 type Listener = (...args: unknown[]) => void
 
@@ -143,6 +144,44 @@ describe('dispatchWebBridge', () => {
     expect((await bridgeError(dispatchWebBridge(registry, 'acme.web', 'close', { viewId: user.viewId }))).data)
       .toEqual({ reason: 'user-owned' })
     expect(sent).toEqual([])
+  })
+
+  it('keeps a pane to the Spaces it created, in its own workspace', async () => {
+    const { registry, sent } = setup()
+    const paneA = { paneId: 'p-a', workspace: '/w' }
+    const paneB = { paneId: 'p-b', workspace: '/w' }
+    const { viewId } = await dispatchWebBridge(registry, 'acme.web', 'create', { space: 'pane-a' }, paneA) as { viewId: string }
+    await expect(dispatchWebBridge(registry, 'acme.web', 'list', {}, paneB)).resolves.toEqual({ views: [] })
+    for (const caller of [paneB, { paneId: 'p-a', workspace: '/other' }, { paneId: null, workspace: null }]) {
+      for (const [operation, args] of [
+        ['cdp', { viewId, method: 'Page.getNavigationHistory' }],
+        ['setState', { viewId, state: 'done' }],
+        ['close', { viewId }],
+      ] as const) {
+        expect((await bridgeError(dispatchWebBridge(registry, 'acme.web', operation, args, caller))).code).toBe('INVALID_ARGUMENT')
+      }
+    }
+    expect(sent).toEqual([])
+    await expect(dispatchWebBridge(registry, 'acme.web', 'list', {}, paneA)).resolves.toEqual({ views: registry.list('acme.web') })
+    await dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.getNavigationHistory' }, paneA)
+    expect(sent).toEqual(['Page.getNavigationHistory'])
+  })
+
+  it('lets any pane use a Space the user handed to agents', async () => {
+    const { registry, sent } = setup()
+    const paneA = { paneId: 'p-a', workspace: '/w' }
+    const paneB = { paneId: 'p-b', workspace: '/v' }
+    const handed = registry.create('acme.web', { space: 'shopping' }, 'user')
+    registry.setOwner('acme.web', handed.viewId, 'agent')
+    const taken = await dispatchWebBridge(registry, 'acme.web', 'create', { space: 'pane-a' }, paneA) as { viewId: string }
+    registry.setOwner('acme.web', taken.viewId, 'user')
+    registry.setOwner('acme.web', taken.viewId, 'agent')
+    for (const viewId of [handed.viewId, taken.viewId]) {
+      await dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.getNavigationHistory' }, paneB)
+    }
+    expect(sent).toHaveLength(2)
+    const listed = await dispatchWebBridge(registry, 'acme.web', 'list', {}, paneB) as unknown as { views: WebViewInfo[] }
+    expect(listed.views.map(view => view.viewId)).toEqual([handed.viewId, taken.viewId])
   })
 
   it('maps a failed CDP command to CDP_ERROR with its message and a denied method to CAPABILITY_DENIED', async () => {

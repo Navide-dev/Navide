@@ -453,11 +453,23 @@ def _find_view(bridge: Bridge, view_id: str) -> dict[str, Any] | None:
 
 def _view_summary(view: dict[str, Any]) -> dict[str, Any]:
     keys = ("viewId", "space", "owner", "control", "state", "note", "url", "title", "loading")
+    if view.get("owner") == "user":
+        keys = ("viewId", "space", "owner", "control", "state", "loading")
     return {key: view[key] for key in keys if key in view}
 
 
 def pane_space_name(pane: str) -> str:
     return f"pane-{pane[:8]}"
+
+
+def _other_pane_space(name: Any, pane: str | None) -> bool:
+    """A `pane-*` Space that is not the caller's: another pane's own Space."""
+    return isinstance(name, str) and name.startswith("pane-") and (pane is None or name != pane_space_name(pane))
+
+
+def _usable_views(bridge: Bridge, pane: str | None) -> list[dict[str, Any]]:
+    """The Host's list without other panes' Spaces (the Host refuses them too)."""
+    return [view for view in _list_views(bridge) if not _other_pane_space(view.get("space"), pane)]
 
 
 def _space_name(arguments: dict[str, Any], pane: str | None) -> str | None:
@@ -466,6 +478,8 @@ def _space_name(arguments: dict[str, Any], pane: str | None) -> str | None:
     if space is not None:
         if not isinstance(space, str) or not space.strip():
             raise ToolError("INVALID_ARGUMENT", "space must be a non-empty string.")
+        if _other_pane_space(space.strip(), pane):
+            raise ToolError("OTHER_PANE_SPACE", "That Space belongs to another pane. Use your own Space or one the user handed to agents.")
         return space.strip()
     return pane_space_name(pane) if pane else None
 
@@ -487,6 +501,10 @@ def _resolve_view(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -
     if explicit is not None:
         if not isinstance(explicit, str) or not explicit:
             raise ToolError("INVALID_ARGUMENT", "viewId must be a non-empty string.")
+        # A view the list does not show is left to the Host, which refuses
+        # another pane's view whatever it is called.
+        if any(view.get("viewId") == explicit and _other_pane_space(view.get("space"), pane) for view in _list_views(bridge)):
+            raise ToolError("OTHER_PANE_SPACE", "That Space belongs to another pane. Use your own Space or one the user handed to agents.")
         return explicit
     name = _space_name(arguments, pane)
     if name is None:
@@ -879,7 +897,7 @@ def open_space(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> d
     if url is not None:
         url = _http_url(url)
     explicit = arguments.get("viewId")
-    views = _list_views(bridge)
+    views = _usable_views(bridge, pane)
     if isinstance(explicit, str) and explicit:
         if not any(view.get("viewId") == explicit for view in views):
             raise ToolError("SPACE_CLOSED", "No Space has that viewId.")
@@ -919,7 +937,7 @@ def run_tool(name: str, arguments: dict[str, Any], bridge: Bridge, pane: str | N
     """One agent tool call; failures the agent can act on come back as ok: false."""
     try:
         if name == "browser.list":
-            views = _list_views(bridge)
+            views = _usable_views(bridge, pane)
             value: dict[str, Any] = {
                 "views": [_view_summary(view) for view in views],
                 "yourSpace": _named_view(views, pane_space_name(pane) if pane else None),

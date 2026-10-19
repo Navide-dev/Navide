@@ -1534,6 +1534,15 @@ interface WebViewInfo {
 A native backend whose package declares `web` reaches the same views through
 the Bridge port `web`. The port maps to the `web` Execution Policy namespace.
 
+Every operation runs for the pane behind the agent call: the pane id and
+workspace the Host verified for that call, never an argument. A view created
+through the port belongs to that pane in that workspace. Another pane, the same
+pane in another workspace, and a caller that is not a pane all get
+`INVALID_ARGUMENT` for it, as for an unknown `viewId`, and `list` leaves it out.
+A Space the user owns, or one the user handed to agents with `web.setOwner`,
+belongs to no pane: every pane sees it, and may drive it while `owner` and
+`control` are `agent`. Handing a Space to agents does not pick a pane.
+
 | Operation | Arguments → result | Rule |
 |---|---|---|
 | `list` | `{}` → `{views}` | A view whose `owner` is `user` is listed with `url` and `title` empty and no `note`: the agent learns that the user's Space exists and who controls it, not what is open in it. `web.list` in the package UI is unredacted |

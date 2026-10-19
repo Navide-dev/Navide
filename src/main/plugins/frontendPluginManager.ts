@@ -6265,7 +6265,11 @@ export class FrontendPluginManager {
             if (!this.webBridgeGrantAllows(context)) {
               throw new PlansBridgeError('CAPABILITY_DENIED', 'Web capability is denied.')
             }
-            return dispatchWebBridge(this.pluginWebViews(), context.runtime.pluginId, operation, arguments_)
+            const initiator = context.runtime.initiator
+            const caller = initiator.kind === 'agent' && initiator.caller
+              ? { paneId: initiator.caller.paneId, workspace: initiator.caller.workspace }
+              : undefined
+            return dispatchWebBridge(this.pluginWebViews(), context.runtime.pluginId, operation, arguments_, caller)
           },
         },
       }),
