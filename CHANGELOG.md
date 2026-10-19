@@ -29,6 +29,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Linux: panes and tools started by the packaged build no longer inherit its bundled `LD_LIBRARY_PATH` (`libcrypto.so.3: version 'OPENSSL_3.4.0' not found`). (#418)
 - Scheduler: a job's daily run count starts at its local midnight on DST-change days too. (#419)
 - Navide plugins: a Navide plugin from a test channel whose signed expiry has passed is refused, and an unknown Registry channel is refused instead of trusted. (#421)
+- Registry (self-hosted): every `X-Admin-Token` endpoint now refuses with 401 while `REGISTRY_ADMIN_TOKEN` is unset, empty or blank (`POST /api/publishers` and `/featured` used to accept any request then); `REGISTRY_ALLOW_OPEN_ADMIN=1` reopens only those two for local development, and the `official` profile refuses it. Publishing with `channel=testplace` answers 409 `TESTPLACE_NOT_OPEN`, an unknown or mismatched `channel` answers 400, and test-channel versions are hidden from every public read. (#411, #421)
 - Plugin SDK: `@navide/plugin-contracts` and `@navide/plugin-sdk` are tree-shakeable, so a plugin bundle keeps only the SDK it calls and the Registry scan no longer reports unused capabilities. (#410)
 
 ## [0.2.25] — 2026-10-18 — signed release
