@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "acme.browser",
+  "name": "Browser",
+  "version": "1.0.0",
+  "publisher": "acme",
+  "permissions": { "system": ["fs", "ui", "aiCli", "web"] },
+  "marketplace": { "description": "Host-owned browser views with every system namespace.", "license": "MIT" },
+  "contributes": {
+    "views": [
+      {
+        "id": "main",
+        "kind": "custom",
+        "location": "window",
+        "title": "Browser",
+        "entry": "frontend/window/index.html"
+      }
+    ]
+  }
+}
