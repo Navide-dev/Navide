@@ -184,8 +184,9 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
   it('fixing and unfixing a pane reuse the ordinary rebuild', () => {
     expect(appSource).toContain('@toggle-account-follow="toggleAccountPin(p.id)"')
     const body = functionBody('toggleAccountPin')
-    expect(body).toContain('rebuildPaneViaResume(paneId)')
-    expect(body).toContain('rebuildPaneViaResume(paneId, { profileId: live })')
+    // A pane with no transcript yet reopens fresh rather than failing resume.
+    expect(body).toContain('rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })')
+    expect(body).toContain('rebuildPaneViaResume(paneId, { profileId: live, freshWhenNoTranscript: true })')
     // Fixing on an account without a dir login sends the user to sign in.
     expect(body).toContain('if (!followDirSignedIn(live))')
     expect(body).toContain('onCliLoginSpawn(FOLLOW_SWITCH_AGENT, undefined, { accountDirProfileId: live })')
@@ -206,6 +207,19 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     // The flag goes on the pane as it is now, not on an id a rebuild retired.
     expect(body).toContain('const now = followPaneNow(id, sessions)')
     expect(body).toContain('if (now) accountFollow.add(now)')
+  })
+
+  it('reopens fresh only on the single-pane account moves, never in a batch', () => {
+    // Fixing, unfixing and "continue on this account": the move is the point
+    // and a pane with no transcript has nothing to lose. The follow batch and
+    // every other rebuild keep the plain resume preflight.
+    const optIns = appSource.split('freshWhenNoTranscript: true').length - 1
+    expect(optIns).toBe(3)
+    expect(functionBody('toggleAccountPin').split('freshWhenNoTranscript: true').length - 1).toBe(2)
+    expect(appSource).toContain(
+      'await rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true })'
+    )
+    expect(functionBody('moveFollowPanes')).not.toContain('freshWhenNoTranscript')
   })
 
   it("keeps #194's follow flow wired but no longer offered in this window", () => {
