@@ -134,6 +134,9 @@ describe('isPermanentAllow', () => {
       'Yes, allow all edits during this session (shift+tab)',
       'Always allow Bash(rm:*)',
       'Auto-accept edits',
+      // claude 2.1.303's Bash box: switching the pane to auto mode approves
+      // every later prompt, so it is as permanent as "always allow".
+      'Yes, and switch to auto mode · auto mode handles these prompts for',
       '是，並且不再詢問',
       '一律允許',
       '自動核准',
