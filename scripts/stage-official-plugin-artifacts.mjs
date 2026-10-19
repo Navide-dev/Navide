@@ -16,6 +16,7 @@ const sources = [
   { id: 'navide.mini-ide', directory: 'dist-plugins/navide-mini-ide', target: 'universal' },
   { id: 'navide.git', directory: 'dist-plugins/navide-git', target: 'universal' },
   { id: 'navide.plans', directory: 'dist-plugins/navide-plans', target: hostTarget },
+  { id: 'navide.browser', directory: 'dist-plugins/navide-browser', target: hostTarget },
 ]
 
 function runCli(args) {
