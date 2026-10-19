@@ -57,7 +57,7 @@ B2C_CORE_TOOLS = frozenset({
     "plugins_request_remove", "marketplace_request_status", "plugins_disable", "plugins_enable",
 })
 #: Core tools added after that digest by plan mcp_614482 (read-only failover state and accounts, account sign-in).
-ACCOUNT_CORE_TOOLS = frozenset({"cli_failover_state", "cli_accounts_list", "cli_account_sign_in"})
+ACCOUNT_CORE_TOOLS = frozenset({"cli_failover_state", "cli_accounts_list", "cli_account_sign_in", "cli_account_switch"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server).
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"

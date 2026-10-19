@@ -382,6 +382,7 @@ import {
 } from './composables/useQuotaFailover'
 import { accountLabel } from './lib/accountLabel'
 import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
+import { runAgentAccountSwitch, type AgentAccountSwitchConfirmRequest } from './lib/agentAccountSwitch'
 import {
   DEFAULT_SLOT_ID,
   FOLLOW_SWITCH_AGENT,
@@ -453,6 +454,7 @@ const CliInstallDialog = defineAsyncComponent(() => import('./components/CliInst
 const SkillInstallApprovalDialog = defineAsyncComponent(() => import('./components/SkillInstallApprovalDialog.vue'))
 const PluginAgentRequestDialog = defineAsyncComponent(() => import('./components/PluginAgentRequestDialog.vue'))
 const AgentSignInConfirmDialog = defineAsyncComponent(() => import('./components/AgentSignInConfirmDialog.vue'))
+const AgentAccountSwitchConfirmDialog = defineAsyncComponent(() => import('./components/AgentAccountSwitchConfirmDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
@@ -10822,7 +10824,7 @@ useUiActionBus({
   buildSnapshot: buildUiActionSnapshot,
   ownsWorkspace: isLocalWorkspace,
   connectionStatus: backend.status,
-  accountActions: { signIn: agentSignIn },
+  accountActions: { signIn: agentSignIn, switch: agentAccountSwitch },
 })
 
 // MCP cli_account_sign_in (ui.accounts.signIn — on the bus, never in the
@@ -10860,6 +10862,40 @@ async function agentSignIn(args: Record<string, unknown>, callerPaneId: string, 
     i18n.global.t('settings.accounts.cli.agent-login-started', {
       agent: caller?.messagingName || caller?.customName || callerPaneId,
       account: accountLabel(cliProfilesApi, agentKey, profileId, i18n.global.t),
+      reason: String(args.reason ?? ''),
+    }),
+    { type: 'info' },
+  )
+  return outcome
+}
+
+// MCP cli_account_switch (ui.accounts.switch — on the bus, never in the
+// command registry; plan mcp_614482 P3): nothing switches until the user says
+// yes in AgentAccountSwitchConfirmDialog. The switch itself is the window's
+// own cliAccountSwitch, called with the vendor and the account only — no
+// force, no option — so its own restart and live-drift questions still go to
+// the user. The follow-switch offer is the user's own flow and is not made here.
+const agentAccountSwitchConfirm = createSignInConfirm<AgentAccountSwitchConfirmRequest>()
+async function agentAccountSwitch(args: Record<string, unknown>, callerPaneId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const outcome = await runAgentAccountSwitch(args, callerPaneId, {
+    accounts: cliProfilesApi,
+    callerPane: (id) => {
+      const pane = panes.value.find((p) => p.id === id)
+      return pane ? { workspacePath: pane.workspacePath, name: pane.messagingName || pane.customName || id } : undefined
+    },
+    accountLabel: (key, id) => accountLabel(cliProfilesApi, key, id, i18n.global.t),
+    confirm: agentAccountSwitchConfirm.ask,
+    switchAccount: (agentKey, profileId) => cliAccountSwitch(agentKey, profileId),
+    now: () => Date.now(),
+  }, signal)
+  if (outcome.status !== 'switched' && outcome.status !== 'switched-signed-out') return outcome
+  const caller = panes.value.find((p) => p.id === callerPaneId)
+  notifyRestore.toast(
+    i18n.global.t('settings.accounts.cli.agent-switch-done', {
+      agent: caller?.messagingName || caller?.customName || callerPaneId,
+      vendor: String(args.agentKey ?? ''),
+      from: String(outcome.from ?? ''),
+      to: String(outcome.to ?? ''),
       reason: String(args.reason ?? ''),
     }),
     { type: 'info' },
@@ -21342,6 +21378,12 @@ function paneIsCommander(p: ActivePane): boolean {
     v-if="agentSignInConfirm.pending.value"
     :request="agentSignInConfirm.pending.value"
     @answer="agentSignInConfirm.answer"
+  />
+  <!-- An agent's cli_account_switch waits here for the user's yes. -->
+  <AgentAccountSwitchConfirmDialog
+    v-if="agentAccountSwitchConfirm.pending.value"
+    :request="agentAccountSwitchConfirm.pending.value"
+    @answer="agentAccountSwitchConfirm.answer"
   />
   <RestoreScopeModal
     v-if="showRestoreScopeModal"
