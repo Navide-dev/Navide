@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 # ── manifest: backend.agentTools[] ──────────────────────────────────────────
 
@@ -693,7 +693,8 @@ class PluginApprovalDecision(TypedDict):
 
 PLUGIN_AGENT_ACTION_REQUEST_EVENT = "plugins.agent_action.request"
 PLUGIN_AGENT_ACTION_RESULT_MESSAGE = "plugins.agent_action.result"
-PLUGIN_AGENT_ACTION_KINDS = ("disable", "enable")
+#: ``update``: marketplace_request_update when the disclosure is unchanged (O1).
+PLUGIN_AGENT_ACTION_KINDS = ("disable", "enable", "update")
 #: ``APPROVAL_REQUIRED``: plugins_enable of a package the user disabled (B2-c option B).
 PLUGIN_AGENT_ACTION_ERROR_CODES = (
     "BAD_REQUEST", "NOT_INSTALLED", "BUILTIN_PLUGIN", "ACTION_FAILED", "HOST_UNAVAILABLE", "APPROVAL_REQUIRED",
@@ -702,8 +703,10 @@ PLUGIN_AGENT_ACTION_ERROR_CODES = (
 
 class PluginAgentActionRequest(TypedDict):
     request_id: str
-    action: Literal["disable", "enable"]
+    action: Literal["disable", "enable", "update"]
     plugin_id: str
+    #: ``update`` only: the version to update to.
+    version: NotRequired[str]
     requester: PluginApprovalRequester
 
 
@@ -844,7 +847,8 @@ PLUGIN_AUDIT_DDL = (
 # schema component: created if missing, nothing else touched.
 
 PLUGIN_AGENT_ACTIONS = (
-    "disable", "enable", "request-install", "request-update", "request-rollback", "request-remove",
+    # ``update``: an agent's update the Host carried out at once (O1, unchanged disclosure).
+    "disable", "enable", "update", "request-install", "request-update", "request-rollback", "request-remove",
     "request-enable", "decide-approve", "decide-reject", "finish-completed", "finish-failed",
     # The carrying window's own result, after another window had settled the request.
     "finish-late-completed", "finish-late-failed",
