@@ -13,8 +13,8 @@
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { backendCallAddress } from './pluginActivity'
-import { existsSync, readFileSync, statSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import {
   prepareInstall,
   prepareLocalInstall,
@@ -65,6 +65,7 @@ import {
   currentPluginHostTarget,
   isPluginTargetCompatible,
   selectPluginArtifact,
+  UNIVERSAL_PLUGIN_TARGET,
 } from './pluginTarget'
 import { assertEngineCompatible, isEngineCompatible, minNavideVersion } from './pluginEngineCompat'
 import { compareSemver } from './pluginManifestV2'
@@ -123,11 +124,19 @@ import { pluginSourceFromLegacyProvenance, type PluginSource } from '../../share
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
-import { createLocalTrustRecord, localTakedownDecision, writeLocalTrustRecord } from './pluginLocalTrust'
+import { createLocalTrustRecord, localTakedownDecision, readLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import {
+  LOCAL_INSTALL_TRUST_PATH,
+  LOCAL_SIGNATURE_SUFFIX,
+  readLocalInstallTrust,
+  recordedSignatureState,
+  writeLocalInstallTrust,
+} from './pluginLocalInstallTrust'
 import { canonicalArchivePath } from './pluginPathPolicy'
 import {
   forgetLocalTrustRecords,
   isLocalInstalledPackage,
+  localTrustRecordFor,
   localTrustRecordPath,
   promoteLocalCandidateRecord,
   verifyLocalInstalledPackage,
@@ -542,11 +551,40 @@ export interface PluginIpcOptions {
   /** Card K4: the Host's own folder dialog, parented to the window that
    * asked. Absent, loading from a folder is unavailable. */
   pickDeveloperFolder?: (event: IpcMainInvokeEvent) => Promise<string | null>
+  /** The static scan run on a package installed from a file (the scanner the
+   * Registry and `navide-plugin scan` share). Absent, the consent dialog says
+   * the scan is not available. Never decides the install. */
+  scanLocalPackage?: LocalPackageScanner
   /** The running Navide release that `engines.navide` is checked against. */
   appVersion?: () => string
   /** An agent disabled or enabled an installed Marketplace package (B2-c):
    *  tell the user who, with a one-click undo. */
   onPluginAgentAction?: (notice: PluginAgentActionNotice) => void
+}
+
+/** Input of the shared static scanner: the package's files by archive path,
+ * manifest.json included. Null result: the scanner does not cover it. */
+export type LocalPackageScanner = (input: {
+  files: ReadonlyMap<string, Uint8Array>
+  artifactDigest: string
+  target: string
+  manifest: unknown
+}) => ScanReport | null
+
+/** The largest `<file>.sig` read: a base64 Ed25519 signature is 88 bytes. */
+const MAX_SIGNATURE_BYTES = 4096
+
+/** The `navide-plugin sign` sidecar beside a local package, or null. Only a
+ * small regular file is read; a symlink or anything else is ignored. */
+function readSidecarSignature(packagePath: string): string | null {
+  const path = `${packagePath}${LOCAL_SIGNATURE_SUFFIX}`
+  try {
+    const stat = lstatSync(path)
+    if (!stat.isFile() || stat.size > MAX_SIGNATURE_BYTES) return null
+    return readFileSync(path, 'utf8').trim() || null
+  } catch {
+    return null
+  }
 }
 
 function errorText(error: unknown): string {
@@ -722,14 +760,33 @@ export function registerPluginIpc(
     return dir === undefined ? undefined : readRegistryReceiptChannel(dir)
   }
   /** `source`, plus the signed testplace expiry when the source is testplace. */
+  // A3: a file a vetted publisher signed is labelled signed while that key
+  // stays active, and "signature no longer valid" once the Registry revokes it.
+  const recordedLocalSignature = (summary: { id: string; packageVersion?: string }): 'verified' | 'revoked' | undefined => {
+    if (!summary.packageVersion) return undefined
+    const path = localTrustRecordFor(pluginsRoot, summary.id, summary.packageVersion)
+    if (!path) return undefined
+    try {
+      const signer = readLocalTrustRecord(path).signer
+      if (!signer) return undefined
+      const pinned = resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey
+      return recordedSignatureState(readLocalInstallTrust(pluginsRoot, pinned), summary.id, signer)
+    } catch {
+      return undefined
+    }
+  }
   const sourceFields = (summary: {
     id: string
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
     source?: PluginSource
     packageVersion?: string
-  }): { source?: PluginSource; expiresAt?: string } => {
+  }): { source?: PluginSource; expiresAt?: string; localSignature?: 'verified' | 'revoked' } => {
     const source = installedSource(summary, activeRegistryChannel(summary))
     if (!source) return {}
+    if (source === 'local-unsigned') {
+      const signature = recordedLocalSignature(summary)
+      return signature ? { source, localSignature: signature } : { source }
+    }
     const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined
     const expiresAt = dir === undefined ? undefined : readRegistryReceiptExpiresAt(dir)
     return expiresAt === undefined ? { source } : { source, expiresAt }
@@ -2161,22 +2218,60 @@ export function registerPluginIpc(
     }
   }
 
-  ipcMain.handle('plugins:installFromFile', async (event) => {
-    assertAuthorized(event)
-    const pickFile = options.pickLocalPackageFile
-    if (!pickFile) throw new Error('installing from a file is unavailable')
-    const path = await pickFile(event)
-    if (!path) return null
-    // Review LOW-1: only a regular file is read (never a FIFO or a device).
-    if (!statSync(path).isFile()) throw new Error('the chosen path is not a regular file')
-    const bytes = new Uint8Array(readFileSync(path))
-    await refreshTakedownList()
+  // W1 (A3, digest takedown): the root-signed document a local install checks
+  // its file against. Refreshed before every file install like the takedown
+  // list; any failure keeps the stored one, and without one the file is shown
+  // as unsigned-or-unverifiable and no digest is refused.
+  const refreshLocalInstallTrust = async (): Promise<void> => {
+    try {
+      const marketplace = resolveConfiguredMarketplace(trust)
+      const base = marketplace.registryUrl.replace(/\/+$/, '')
+      const res = await fetch(`${base}${LOCAL_INSTALL_TRUST_PATH}`)
+      if (!res.ok) return
+      const body = (await res.json()) as { local_trust_metadata?: unknown; local_trust_metadata_signature?: unknown }
+      writeLocalInstallTrust(
+        pluginsRoot,
+        body.local_trust_metadata,
+        body.local_trust_metadata_signature,
+        marketplace.trust.pinnedRegistryRootKey,
+      )
+    } catch (error) {
+      console.warn(`[plugins] local install trust not refreshed: ${errorText(error)}`)
+    }
+  }
+
+  /** Verify one local `.vsix` already read into memory and hold it for the
+   * consent dialog. Shared by the user's own file dialog (K3) and an agent's
+   * prefilled request (plugins_install_file_fill); both commit through
+   * plugins:commitLocalInstall, so what is installed is these bytes. */
+  const prepareLocalFile = async (bytes: Uint8Array, signature: string | null) => {
+    await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
     const marketplace = resolveConfiguredMarketplace(trust)
     const pkg = prepareLocalInstall(bytes, {
       pinnedRegistryRootKey: marketplace.trust.pinnedRegistryRootKey,
       trustSnapshot: readRegistryTrustSnapshot(pluginsRoot),
       expectedTarget: marketplace.trust.expectedTarget,
+      localInstallTrust: readLocalInstallTrust(pluginsRoot, marketplace.trust.pinnedRegistryRootKey),
+      signature,
     })
+    const localSignature = pkg.localSignature ?? { state: 'none' as const }
+    let scan: ScanReport | null = null
+    if (options.scanLocalPackage) {
+      try {
+        scan = options.scanLocalPackage({
+          files: new Map(pkg.entries.flatMap((entry) => {
+            const path = entry.type === 'regular' ? canonicalArchivePath(entry.path, 'regular') : null
+            return path === null ? [] : [[path, new Uint8Array(entry.data)] as const]
+          })),
+          artifactDigest: pkg.digest,
+          target: pkg.localTarget ?? UNIVERSAL_PLUGIN_TARGET,
+          manifest: pkg.manifest,
+        })
+      } catch (error) {
+        // The scan informs the dialog; it never decides the install.
+        console.warn(`[plugins] local scan of ${pkg.id} failed: ${errorText(error)}`)
+      }
+    }
     if (isManifestV2(pkg.manifest) && pkg.manifest.extensionPack) {
       throw new Error(`${pkg.id} is an extension pack; packs install only from the Marketplace`)
     }
@@ -2199,9 +2294,17 @@ export function registerPluginIpc(
       requiresRiskConfirmation: true,
       disclosureDiff: updateDisclosureDiff(pkg),
       disclosure: pkg.disclosure ?? null,
-      scan: null,
+      scan,
+      localScan: options.scanLocalPackage ? 'ran' : 'unavailable',
       registry: null,
       source: pkg.source,
+      localSignature: localSignature.state === 'none'
+        ? { state: 'none' }
+        : {
+            state: localSignature.state,
+            publisherId: localSignature.publisherId,
+            ...('keyId' in localSignature ? { keyId: localSignature.keyId } : {}),
+          },
       digest: pkg.digest,
       takedownChecked: pkg.takedownChecked === true,
       ...(replaced
@@ -2214,15 +2317,36 @@ export function registerPluginIpc(
           }
         : backendDataOnReplace(pkg.id, 'local-unsigned')),
     }
+  }
+
+  ipcMain.handle('plugins:installFromFile', async (event) => {
+    assertAuthorized(event)
+    const pickFile = options.pickLocalPackageFile
+    if (!pickFile) throw new Error('installing from a file is unavailable')
+    const path = await pickFile(event)
+    if (!path) return null
+    // Review LOW-1: only a regular file is read (never a FIFO or a device).
+    if (!statSync(path).isFile()) throw new Error('the chosen path is not a regular file')
+    const bytes = new Uint8Array(readFileSync(path))
+    return prepareLocalFile(bytes, readSidecarSignature(path))
   })
 
   ipcMain.handle(
     'plugins:commitLocalInstall',
-    async (event, args: { id?: unknown; riskConfirmed?: unknown; replaceConfirmed?: unknown; reattachBackendData?: unknown } | null) => {
+    async (
+      event,
+      args: { id?: unknown; riskConfirmed?: unknown; replaceConfirmed?: unknown; reattachBackendData?: unknown; expectedDigest?: unknown } | null,
+    ) => {
       assertAuthorized(event)
       const id = typeof args?.id === 'string' ? args.id : ''
       const pkg = preparedLocal.get(id)
       if (!pkg) throw new Error(`no prepared local install for ${id}; choose the file again`)
+      // An agent's request was approved for the digest its card showed; a file
+      // of the same id prepared since (another request, the user's own pick)
+      // is not what was approved.
+      if (args?.expectedDigest !== undefined && args.expectedDigest !== pkg.digest) {
+        throw new Error(`the prepared file of ${id} is not the one that was approved; ask again`)
+      }
       assertNoDeveloperFolder(id)
       if (activeTransactions.has(id)) {
         throw new Error(`plugin transaction already in progress for ${id}`)
@@ -2251,7 +2375,11 @@ export function registerPluginIpc(
         }
         // The consent covers exactly the copy just written under the plugins
         // root, never the file the user picked (which may change later).
-        const record = createLocalTrustRecord(staged.candidateDir, { source: 'file', consentedAt: new Date().toISOString() })
+        const record = createLocalTrustRecord(staged.candidateDir, {
+          source: 'file',
+          consentedAt: new Date().toISOString(),
+          signer: pkg.localSignature?.state === 'verified' ? pkg.localSignature.signer : null,
+        })
         // Review LOW-2: the record must cover exactly the bytes read from the
         // chosen file, not whatever the staged directory holds by now.
         const expected = new Map(pkg.entries
@@ -2530,6 +2658,32 @@ export function registerPluginIpc(
     })
     activateDeveloperFolder(id)
     return developerModeState()
+  })
+
+  // W1 (S2): an agent's plugins_install_file_fill names a `.vsix` or, with
+  // Developer Mode on, a folder. The main window passes the path from the
+  // request it is showing; nothing is installed here. A file is read once and
+  // held like the user's own pick (K3), a folder is described like the user's
+  // own folder (K4), and both go to the same consent dialog and commit
+  // (plugins:commitLocalInstall / plugins:commitFolderLoad), which the user
+  // presses. Developer Mode itself stays the user's switch.
+  ipcMain.handle('plugins:prepareAgentFileInstall', async (event, args: { path?: unknown } | null) => {
+    assertAuthorized(event)
+    const path = args?.path
+    if (typeof path !== 'string' || !isAbsolute(path)) throw new Error('the request names no absolute path')
+    const stat = statSync(path)
+    if (stat.isDirectory()) {
+      if (!developerModeOn()) {
+        throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
+      }
+      const described = describeFolder(path)
+      assertFolderIdFree(described.pluginId, path)
+      preparedFolders.set(described.pluginId, { dir: path, permissionsDigest: described.permissionsDigest })
+      return described.summary
+    }
+    if (!stat.isFile()) throw new Error('the requested path is not a regular file or a folder')
+    const bytes = new Uint8Array(readFileSync(path))
+    return prepareLocalFile(bytes, readSidecarSignature(path))
   })
 
   ipcMain.handle('plugins:reloadDeveloperPlugin', async (event, args: { id?: unknown } | null) => {
