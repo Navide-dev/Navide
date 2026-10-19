@@ -10,12 +10,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import signal
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import osplat
 from .mcp_settings import MCPSettingsStore, default_mcp_servers
 
 log = logging.getLogger("agent_team_backend.mcp_manager")
@@ -217,18 +216,14 @@ class MCPClient:
             handle.cancel()
 
     def _kill_server_group(self) -> None:
-        """SIGKILL the stdio server's process group (it is its own group leader:
-        stdio_client starts it with start_new_session). Windows: the library's
-        Job object ends the tree when the backend exits; nothing to do here."""
+        """End the stdio server and everything it started. stdio_client spawns
+        it with start_new_session (a Job object on Windows), the shape
+        osplat's end_contained ends: the group on POSIX, the tree on Windows."""
         pid = self._server_pid
-        if pid is None or sys.platform == "win32":
+        if pid is None:
             return
-        try:
-            if os.getpgid(pid) == pid:
-                os.killpg(pid, signal.SIGKILL)
-                log.warning("MCP '%s' server group %d killed", self.name, pid)
-        except (ProcessLookupError, PermissionError):
-            pass
+        osplat.process_tree.end_contained(pid)
+        log.warning("MCP '%s' server tree %d ended", self.name, pid)
 
     async def list_tools(self) -> list[dict[str, str]]:
         """Return the tools exposed by this server (best-effort, empty on failure)."""
