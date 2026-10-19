@@ -617,6 +617,10 @@ export type MarketplaceQuery =
   | { kind: 'search'; text: string; category?: string; cursor?: string; limit?: number }
   | { kind: 'detail'; id: string; version?: string }
   | { kind: 'installed' }
+  /** plugins_validate_package (W1, S1): check a `.vsix` or a plugin folder. */
+  | { kind: 'localValidate'; path: string }
+  /** plugins_package (W1, S1b): build a `.vsix` from a plugin folder. */
+  | { kind: 'localPackage'; path: string; target?: string; out?: string }
 
 export interface MarketplaceQueryRequest {
   request_id: string
@@ -639,6 +643,11 @@ export interface MarketplaceListingItem {
 export interface MarketplaceInstalledItem {
   id: string
   version: string
+  /** Where it came from and what review it passed (`PluginSource`); a local
+   * file a vetted publisher signed is `local-signed`. Absent when unknown. */
+  source?: string
+  /** A local file whose publisher key the Registry has since revoked. */
+  signatureRevoked?: boolean
   enabled: boolean
   quarantined: boolean
   hasBackend: boolean
@@ -649,6 +658,24 @@ export type MarketplaceQueryResult =
   | { kind: 'search'; items: MarketplaceListingItem[]; nextCursor: string | null }
   | { kind: 'detail'; item: MarketplaceListingItem; versions: string[]; card: DisclosureCard }
   | { kind: 'installed'; items: MarketplaceInstalledItem[] }
+  | { kind: 'localValidate' | 'localPackage'; report: LocalPackageQueryReport }
+
+/** A local package check or build (W1). Package-chosen strings (id, version,
+ * errors quoting the manifest) are third-party text to the backend. */
+export interface LocalPackageQueryReport {
+  path: string
+  packageKind: 'file' | 'folder'
+  valid: boolean
+  errors: string[]
+  id: string | null
+  version: string | null
+  target: string | null
+  digest: string | null
+  signature: 'none' | 'verified' | 'revoked' | 'unverifiable'
+  disclosure: unknown
+  risk: DisclosureRiskLevel | null
+  scan: unknown
+}
 
 export type MarketplaceQueryResponse =
   | { request_id: string; ok: true; result: MarketplaceQueryResult }

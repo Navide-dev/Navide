@@ -296,10 +296,10 @@ describe('the static scan of a local file', () => {
     expect(await call('plugins:installFromFile')).toMatchObject({ scan: null, localScan: 'unavailable' })
     handlers.clear()
     const report = { schemaVersion: 1 }
-    const scanLocalPackage = vi.fn(() => report)
+    const scanLocalPackage = vi.fn((_input: { files: Map<string, Uint8Array>; artifactDigest: string; target: string }) => report)
     register({ scanLocalPackage })
     expect(await call('plugins:installFromFile')).toMatchObject({ scan: report, localScan: 'ran' })
-    const input = scanLocalPackage.mock.calls[0][0] as { files: Map<string, Uint8Array>; artifactDigest: string; target: string }
+    const input = scanLocalPackage.mock.calls[0][0]
     expect([...input.files.keys()].sort()).toEqual(['frontend/left/index.html', 'manifest.json'])
     expect(input).toMatchObject({ artifactDigest: sha256Hex(vsix()), target: 'universal' })
   })

@@ -38,6 +38,7 @@ import {
   resolveConfiguredMarketplace,
   setMarketplaceOverridesAllowed,
 } from './plugins/pluginIpc'
+import { scanLocalPackageInWorker } from './plugins/pluginLocalScan'
 import { developerFolderBackendDigest, PluginDeveloperModeStore } from './plugins/pluginDeveloperModeStore'
 import { disableOfficialKeyOverride } from './plugins/pluginVerify'
 import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
@@ -1853,6 +1854,9 @@ const pluginTrustRefresh = registerPluginIpc(
       const picked = await dialog.showOpenDialog(parent, { properties: ['openDirectory'] })
       return picked.canceled ? null : picked.filePaths[0] ?? null
     },
+    // W1: the static scan shown in the consent dialog of a local install,
+    // run in a worker thread (the scanner's budget is up to 30 s).
+    scanLocalPackage: scanLocalPackageInWorker,
     forgetBackendConsent: (pluginId) => nativeBackendStore.forgetGrants(pluginId),
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),

@@ -125,6 +125,7 @@ import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
 import { createLocalTrustRecord, localTakedownDecision, readLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import { packageLocalFolder, validateLocalPackage, type LocalPackageToolDeps } from './pluginLocalPackageTools'
 import {
   LOCAL_INSTALL_TRUST_PATH,
   LOCAL_SIGNATURE_SUFFIX,
@@ -223,6 +224,9 @@ interface InstalledSummary {
   source?: PluginSource
   /** Registry-signed expiry; present only when `source` is `testplace`. */
   expiresAt?: string
+  /** A3, a local file only: `verified` while the vetted publisher key that
+   * signed it is active, `revoked` once the Registry revoked it. */
+  localSignature?: 'verified' | 'revoked'
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -569,7 +573,7 @@ export type LocalPackageScanner = (input: {
   artifactDigest: string
   target: string
   manifest: unknown
-}) => ScanReport | null
+}) => ScanReport | null | Promise<ScanReport | null>
 
 /** The largest `<file>.sig` read: a base64 Ed25519 signature is 88 bytes. */
 const MAX_SIGNATURE_BYTES = 4096
@@ -1434,9 +1438,45 @@ export function registerPluginIpc(
           packageVersion: summary.packageVersion,
           disabled: summary.disabled,
           hasBackend: manager.installedPackageHasBackend(summary.id),
+          ...(summary.source
+            ? { source: summary.localSignature === 'verified' ? 'local-signed' : summary.source }
+            : {}),
+          ...(summary.localSignature === 'revoked' ? { signatureRevoked: true } : {}),
         })),
+      // W1 (S1, S1b): plugins_validate_package and plugins_package. The same
+      // checks a local install applies, with the lists refreshed first.
+      localValidate: async (path) => {
+        await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
+        return validateLocalPackage(path, localPackageToolDeps())
+      },
+      localPackage: async (path, packageOptions) => {
+        await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
+        return packageLocalFolder(path, packageOptions, localPackageToolDeps())
+      },
     })
   )
+  const localPackageToolDeps = (): LocalPackageToolDeps => ({
+    trust: () => {
+      const marketplace = resolveConfiguredMarketplace(trust)
+      return {
+        pinnedRegistryRootKey: marketplace.trust.pinnedRegistryRootKey,
+        trustSnapshot: readRegistryTrustSnapshot(pluginsRoot),
+        expectedTarget: marketplace.trust.expectedTarget,
+        localInstallTrust: readLocalInstallTrust(pluginsRoot, marketplace.trust.pinnedRegistryRootKey),
+      }
+    },
+    readSignature: readSidecarSignature,
+    ...(options.scanLocalPackage ? { scan: options.scanLocalPackage } : {}),
+    // Navide's data folder: plugins, consent records, stores.
+    protectedRoots: [dirname(pluginsRoot)],
+    assertInstallable: (pkg) => {
+      const manifest = pkg.manifest as Parameters<typeof assertEngineCompatible>[2]
+      if (isManifestV2(manifest as never) && (manifest as { extensionPack?: unknown }).extensionPack) {
+        throw new Error(`${pkg.id} is an extension pack; packs install only from the Marketplace`)
+      }
+      assertEngineCompatible(pkg.id, pkg.version, manifest, hostAppVersion())
+    },
+  })
 
   // Update detection for installed Registry packages: compares each installed
   // version against the newest version this Host can install. Detection only —
@@ -2258,7 +2298,7 @@ export function registerPluginIpc(
     let scan: ScanReport | null = null
     if (options.scanLocalPackage) {
       try {
-        scan = options.scanLocalPackage({
+        scan = await options.scanLocalPackage({
           files: new Map(pkg.entries.flatMap((entry) => {
             const path = entry.type === 'regular' ? canonicalArchivePath(entry.path, 'regular') : null
             return path === null ? [] : [[path, new Uint8Array(entry.data)] as const]
@@ -2620,12 +2660,17 @@ export function registerPluginIpc(
     return described.summary
   })
 
-  ipcMain.handle('plugins:commitFolderLoad', async (event, args: { id?: unknown; riskConfirmed?: unknown } | null) => {
+  ipcMain.handle('plugins:commitFolderLoad', async (event, args: { id?: unknown; riskConfirmed?: unknown; expectedFolder?: unknown } | null) => {
     assertAuthorized(event)
     if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
     const id = typeof args?.id === 'string' ? args.id : ''
     const pending = preparedFolders.get(id)
     if (!pending) throw new Error(`no prepared developer folder for ${id}; choose the folder again`)
+    // The folder the consent dialog showed; another prepare of the same id
+    // since then (an agent's request, the user's own pick) is not it.
+    if (args?.expectedFolder !== undefined && args.expectedFolder !== pending.dir) {
+      throw new Error(`DEVELOPER_FOLDER_CHANGED [${id}]: the prepared folder of ${id} is not the one that was approved; choose the folder again`)
+    }
     if (args?.riskConfirmed !== true) throw new Error(`consent is required to load ${id} from a folder`)
     preparedFolders.delete(id)
     // What the user saw is what they consent to: a permissions or backend
