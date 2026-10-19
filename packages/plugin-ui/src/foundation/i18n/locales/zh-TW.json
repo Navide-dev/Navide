@@ -10433,7 +10433,7 @@
     },
     "monitor": {
       "title": "Channel 連線監控",
-      "tagline": "集中查看每個與聊天室連線的 pane，以及連線是否正常。",
+      "tagline": "集中查看每個與聊天室連線的 pane。狀態指的是 bot：顯示已連線代表這個 bot 在線，不代表每個聊天室都能送達。",
       "open": "Channel 連線監控",
       "close": "關閉",
       "empty": "目前沒有任何 pane 連線到 channel。",

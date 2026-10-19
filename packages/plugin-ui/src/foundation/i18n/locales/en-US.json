@@ -10433,7 +10433,7 @@
     },
     "monitor": {
       "title": "Channel connections",
-      "tagline": "Every pane linked to a chat, and whether the link is up.",
+      "tagline": "Every pane linked to a chat. The status is the bot's: Connected means the bot is online, not that every chat can be reached.",
       "open": "Channel connections",
       "close": "Close",
       "empty": "No pane is linked to a channel yet.",
