@@ -612,3 +612,63 @@ describe('useUiActionBus — announcing the bus to the backend', () => {
     expect(sent.filter((s) => s.type === 'ui.invoke.ready')).toHaveLength(ready.length)
   })
 })
+
+// ui.accounts.* is reachable from MCP only, through its dedicated tools: the
+// window never registers it in the command registry (so no keybinding and no
+// ui_list_actions entry can reach it), and the bus hands it to the account
+// actions App.vue provides, with the caller pane taken from the credential.
+describe('useUiActionBus — account actions', () => {
+  function setup(signIn = vi.fn(async () => ({ status: 'started', loginPaneId: 'login-1' }))) {
+    const { backend, emit, sent } = createMockBackend()
+    useUiActionBus({ backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), accountActions: { signIn } })
+    return { signIn, sent, emit }
+  }
+
+  it('hands ui.accounts.signIn to the account actions with the caller pane', async () => {
+    const { signIn, sent, emit } = setup()
+    const args = { agentKey: 'codex', profileId: 'p-2', mode: 'isolated', reason: 'out of quota' }
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.signIn', args, caller_pane_id: 'pa', addressed: true }))
+    await flush()
+    expect(signIn).toHaveBeenCalledWith(args, 'pa')
+    const reply = sent.find((s) => s.type === 'ui.invoke.result')
+    expect(reply?.payload).toMatchObject({ ok: true, result: { status: 'started', loginPaneId: 'login-1' } })
+  })
+
+  it('refuses a caller with no pane', async () => {
+    const { signIn, sent, emit } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.signIn', args: {}, addressed: true }))
+    await flush()
+    expect(signIn).not.toHaveBeenCalled()
+    const reply = sent.find((s) => s.type === 'ui.invoke.result')
+    expect(reply?.payload).toMatchObject({ ok: false })
+  })
+
+  it('never runs a registered command of that name', async () => {
+    const registered = vi.fn(() => 'ran')
+    registerCommand('ui.accounts.signIn', registered)
+    const { backend, emit, sent } = createMockBackend()
+    useUiActionBus({ backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}) })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.signIn', args: {}, caller_pane_id: 'pa', addressed: true }))
+    await flush()
+    expect(registered).not.toHaveBeenCalled()
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
+  })
+
+  it('refuses an unknown account action', async () => {
+    const { signIn, sent, emit } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args: {}, caller_pane_id: 'pa', addressed: true }))
+    await flush()
+    expect(signIn).not.toHaveBeenCalled()
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
+  })
+
+  it('acts only on the project the window is showing', async () => {
+    const { backend, emit, sent } = createMockBackend()
+    const signIn = vi.fn()
+    useUiActionBus({ backend, currentWorkspace: ref('/other'), buildSnapshot: () => ({}), ownsWorkspace: () => true, accountActions: { signIn } })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.signIn', args: {}, caller_pane_id: 'pa', addressed: true }))
+    await flush()
+    expect(signIn).not.toHaveBeenCalled()
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
+  })
+})

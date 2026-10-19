@@ -31,7 +31,7 @@ def get_manager() -> ChannelManager | None:
 
 
 def default_seams() -> Seams:
-    from .. import agent_messaging
+    from .. import agent_messaging, login_panes
     from ..ipc import make_event
     from ..mcp_server import server as mcp
 
@@ -266,6 +266,7 @@ def default_seams() -> Seams:
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
         agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
         wake_target=wake_target, windows_open=windows_open, wake=wake,
+        is_login_pane=login_panes.is_login_pane,
     )
 
 

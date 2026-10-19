@@ -56,6 +56,8 @@ B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
     "plugins_request_remove", "marketplace_request_status", "plugins_disable", "plugins_enable",
 })
+#: Core tools added after that digest by plan mcp_614482 (account sign-in).
+ACCOUNT_CORE_TOOLS = frozenset({"cli_account_sign_in"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server).
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"
@@ -227,8 +229,8 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     pristine = await _tools_list_text()
     builtin = await _builtin_package_tool_names()
     module_only = [t for t in json.loads(pristine) if t["name"] not in builtin]
-    assert B2C_CORE_TOOLS <= {t["name"] for t in module_only}
-    existing = [t for t in module_only if t["name"] not in B2C_CORE_TOOLS]
+    assert B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS <= {t["name"] for t in module_only}
+    existing = [t for t in module_only if t["name"] not in B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS]
     module_text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     assert hashlib.sha256(module_text.encode()).hexdigest() == MAIN_TOOLS_LIST_SHA256
 

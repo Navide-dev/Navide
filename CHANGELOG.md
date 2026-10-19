@@ -4,6 +4,14 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- MCP: a `cli_account_sign_in` tool lets an agent open the sign-in Navide already offers for one CLI account — a parked account in its own private home, or a claude account inside its own folder — so the user only finishes it in the browser. The user is told which agent asked and why. It goes through the window's own sign-in, never switches accounts, returns no token, code or URL, and leaves the active account, the built-in Default and sign-ins that replace the live credential to the user. Only CLI panes can call it; `ui_invoke` cannot reach it.
+
+### Security
+
+- What a CLI sign-in pane prints (an authorization URL, a pasted code) no longer reaches anything but that pane: it writes no log file, `cli_read_log` refuses it, `cli_get_status` and the chat relay get no screen text from it, a chat cannot be bound to it, and it is not shared with the editor's AI Chat or by dragging it onto another pane.
+
 ## [0.2.25] — 2026-10-18 — signed release
 
 ### Added

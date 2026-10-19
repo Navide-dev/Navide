@@ -381,6 +381,7 @@ import {
   type RestartOutcome,
 } from './composables/useQuotaFailover'
 import { accountLabel } from './lib/accountLabel'
+import { planAgentSignIn, type AgentSignInMode } from './lib/agentSignIn'
 import {
   DEFAULT_SLOT_ID,
   FOLLOW_SWITCH_AGENT,
@@ -566,11 +567,13 @@ onMounted(() => {
   // process (cli:get-pane-buffer); answer from this window's paneRefs.
   window.agentTeam?.onCliPaneBufferRequest?.((paneId) => {
     const ref = paneRefs[paneId]
+    const pane = panes.value.find((p) => p.id === paneId)
     return buildCliPaneBufferReply(
-      panes.value.find((p) => p.id === paneId),
+      pane,
       ref
         ? {
-            buffer: readPaneShareText(ref, CLI_CHIP_LINE_CAP)
+            // A sign-in pane's screen holds its authorization URL or code.
+            buffer: pane?.isLogin ? '' : readPaneShareText(ref, CLI_CHIP_LINE_CAP)
           }
         : null
     )
@@ -1731,6 +1734,10 @@ interface ActivePane {
    *  downstream stages point agents at prior outputs via file path instead of
    *  inlining the whole terminal buffer into the kickoff. */
   outputLogFile?: string
+  /** A CLI sign-in pane (spawned with isLogin / loginProfileId). What it prints
+   *  — an authorization URL, a pasted code — is never handed to another pane,
+   *  a chat or the editor's AI Chat, and it writes no log file. */
+  isLogin?: boolean
   /** CLI session id used to resume this pane on restart. Known immediately for
    *  Claude (the --session-id we pinned); filled in later for Codex/Antigravity once
    *  their CLI-generated id is detected from the session file. */
@@ -4844,6 +4851,8 @@ async function injectPaneContext(sourcePaneId: string, targetPaneId: string): Pr
   // paste either.
   if (!sourcePane.realized || !panes.value.find((p) => p.id === targetPaneId)?.realized || !targetSessionId) return
   if (await tryMentionOnDrop(targetPaneId, () => sourcePane.messagingName ?? null)) return
+  // A sign-in pane's screen holds its authorization URL or code: never shared.
+  if (sourcePane.isLogin) return
 
   const text = buildPaneContextPaste({
     paneId: sourcePane.id,
@@ -7124,6 +7133,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     effort: launchedModel.effort || undefined,
     spawnedBy: opts.spawnedBy,
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
+    isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
   }
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
   // follows account switches; one its pin puts in an account dir is fixed.
@@ -7224,7 +7234,9 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     // each run is self-contained; manual panes land under a flat manual/
     // folder grouped by date so they're still recoverable.
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    const outputLogFile = opts.workspacePath
+    // A sign-in pane writes none: its output is an authorization URL or code,
+    // and a file in the workspace is readable by every agent working there.
+    const outputLogFile = opts.workspacePath && !pane.isLogin
       ? opts.origin === 'pipeline'
         ? pipeline.runDir
           ? `${opts.workspacePath}/.agent-team/${pipeline.runDir}/stage-${opts.stageId}-${id.slice(0, 8)}.log`
@@ -7261,6 +7273,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
         slot_label: opts.slotLabel ?? '',         // stable by_pane key survives frontend restarts
         profile_id: opts.profileId ?? '',        // CLI account pin (restore) → per-pane isolated home
         run_group_id: pane.runGroupId ?? '',     // sidebar run group → by_group token bucket
+        login_pane: pane.isLogin,                // sign-in pane → backend keeps its output from other panes
       },
       outputLogFile,
       // Stable reattach key: the pinned CLI session id is identical on first
@@ -10381,12 +10394,14 @@ registerCommand('ui.pane.getStatus', (args) => {
       ? {
           displayStatus: ref.displayStatus as string | undefined,
           awaitingKind: ref.awaitingKind as string | null | undefined,
-          buffer: readPaneShareText(ref, CLI_CHIP_LINE_CAP),
+          // A sign-in pane's screen holds its authorization URL or code: this
+          // reply reaches cli_get_status, ui_invoke and the chat relay.
+          buffer: pane.isLogin ? '' : readPaneShareText(ref, CLI_CHIP_LINE_CAP),
         }
       : null,
   )
   // What the pane is waiting on, for the chat-channel permission relay.
-  const screen = ref?.displayStatus === 'awaiting' ? (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '' : ''
+  const screen = !pane.isLogin && ref?.displayStatus === 'awaiting' ? (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '' : ''
   if (!screen.trim()) return reply
   const options = parseMenuOptions(screen)
   return { ...reply, awaitingPrompt: awaitingPromptText(screen), ...(options.length ? { awaitingOptions: options } : {}) }
@@ -10768,7 +10783,40 @@ useUiActionBus({
   buildSnapshot: buildUiActionSnapshot,
   ownsWorkspace: isLocalWorkspace,
   connectionStatus: backend.status,
+  accountActions: { signIn: agentSignIn },
 })
+
+// MCP cli_account_sign_in (ui.accounts.signIn — on the bus, never in the
+// command registry): opens a sign-in Settings → Accounts already offers, for
+// the accounts lib/agentSignIn lets an agent start one for, and tells the user
+// which agent asked and why. The sign-in is the CLI's own; the user finishes
+// it in the browser. Nothing here switches an account or reads a credential.
+async function agentSignIn(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
+  const agentKey = String(args.agentKey ?? '')
+  const profileId = String(args.profileId ?? '')
+  const plan = planAgentSignIn({ agentKey, profileId, mode: args.mode as AgentSignInMode }, cliProfilesApi)
+  if (plan.kind === 'refused') return { status: plan.code, message: plan.message }
+  if (!currentWorkspace.value) {
+    return { status: 'no-workspace', message: 'this window has no workspace open to start a sign-in pane in' }
+  }
+  const before = pendingLoginPanes.get(profileId)?.paneId
+  if (plan.kind === 'folder') await onCliLoginSpawn('claude', undefined, { accountDirProfileId: plan.profileId })
+  else await onCliLoginSpawn(plan.agentKey, plan.profileId)
+  const loginPaneId = pendingLoginPanes.get(profileId)?.paneId
+  if (!loginPaneId || loginPaneId === before) {
+    return { status: 'spawn-failed', message: 'the sign-in pane did not start' }
+  }
+  const caller = panes.value.find((p) => p.id === callerPaneId)
+  notifyRestore.toast(
+    i18n.global.t('settings.accounts.cli.agent-login-started', {
+      agent: caller?.messagingName || caller?.customName || callerPaneId,
+      account: accountLabel(cliProfilesApi, agentKey, profileId, i18n.global.t),
+      reason: String(args.reason ?? ''),
+    }),
+    { type: 'info' },
+  )
+  return { status: 'started', loginPaneId }
+}
 
 // Single source of truth for the 'modalOpen' keybinding context. Hoisted so
 // the watches below can share it; only ever CALLED after setup completes, so
