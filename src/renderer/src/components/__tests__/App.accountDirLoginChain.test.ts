@@ -33,7 +33,9 @@ describe('two-step Claude sign-in wiring', () => {
 
   it('opens the own-folder sign-in pane through the existing entry point after the slot sign-in', () => {
     expect(harvestStart).toBeGreaterThan(-1)
-    expect(harvestBlock).toContain('chainsDirLogin(pending, profileId, dirSignedIn)')
+    expect(harvestBlock).toContain(
+      'chainsDirLogin(pending, profileId, dirSignedIn, cliProfilesApi.defaultProfileId(pending.agentKey))',
+    )
     expect(harvestBlock).toContain('void onCliLoginSpawn(pending.agentKey, undefined, { accountDirProfileId: profileId })')
     expect(harvestBlock).toContain("i18n.global.t('settings.accounts.cli.login-step2'")
   })

@@ -19,16 +19,20 @@ export interface PendingLogin {
   step: LoginStep
 }
 
-/** Whether a harvested slot sign-in goes on to the own-folder sign-in. */
+/** Whether a harvested slot sign-in goes on to the own-folder sign-in. Not
+ *  for the account that is active by then (switched to while step one was
+ *  open): it runs on the live login, and #433 refuses it a folder sign-in. */
 export function chainsDirLogin(
   pending: PendingLogin,
   profileId: string,
   dirSignedIn: (profileId: string) => boolean,
+  activeProfileId: string | null,
 ): boolean {
   return (
     pending.step === 'slot' &&
     pending.agentKey === FOLLOW_SWITCH_AGENT &&
     profileId !== DEFAULT_SLOT_ID &&
+    profileId !== activeProfileId &&
     !dirSignedIn(profileId)
   )
 }

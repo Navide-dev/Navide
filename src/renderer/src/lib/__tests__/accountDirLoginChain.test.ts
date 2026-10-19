@@ -22,25 +22,32 @@ afterEach(() => {
 
 describe('chainsDirLogin: a finished slot sign-in goes on to the own-folder sign-in', () => {
   it('chains a claude account whose own folder is not signed in yet', () => {
-    expect(chainsDirLogin(slot(), 'acct-2', none)).toBe(true)
+    expect(chainsDirLogin(slot(), 'acct-2', none, null)).toBe(true)
   })
 
   it('never chains another vendor: its sign-in ends as it does on main', () => {
     for (const agentKey of ['codex', 'kimi', 'grok', 'opencode']) {
-      expect(chainsDirLogin(slot(agentKey), 'acct-2', none), agentKey).toBe(false)
+      expect(chainsDirLogin(slot(agentKey), 'acct-2', none, null), agentKey).toBe(false)
     }
   })
 
   it('does not chain an account whose own folder is already signed in', () => {
-    expect(chainsDirLogin(slot(), 'acct-2', all)).toBe(false)
+    expect(chainsDirLogin(slot(), 'acct-2', all, null)).toBe(false)
   })
 
   it('never chains the built-in Default, which has no own folder', () => {
-    expect(chainsDirLogin(slot(), '__default__', none)).toBe(false)
+    expect(chainsDirLogin(slot(), '__default__', none, null)).toBe(false)
   })
 
   it('does not chain from the own-folder step itself', () => {
-    expect(chainsDirLogin(dir(), 'acct-2', none)).toBe(false)
+    expect(chainsDirLogin(dir(), 'acct-2', none, null)).toBe(false)
+  })
+
+  it('does not chain an account that became the active one while step one was open', () => {
+    // The live account signs in on the live login; a folder sign-in is not
+    // opened for it here, as #433 refuses it to agents.
+    expect(chainsDirLogin(slot(), 'acct-2', none, 'acct-2')).toBe(false)
+    expect(chainsDirLogin(slot(), 'acct-2', none, 'acct-3')).toBe(true)
   })
 })
 

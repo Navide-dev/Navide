@@ -15271,7 +15271,7 @@ backend.on('cli_profiles.changed', (raw) => {
     pendingLoginPanes.delete(profileId)
     if (panes.value.some((p) => p.id === pending.paneId)) void onKill(pending.paneId)
     const email = ev.identities?.[pending.agentKey]?.[profileId]?.email || ''
-    if (chainsDirLogin(pending, profileId, dirSignedIn)) {
+    if (chainsDirLogin(pending, profileId, dirSignedIn, cliProfilesApi.defaultProfileId(pending.agentKey))) {
       // Step two: the same own-folder login pane the account badge opens.
       // The user is told to authorize once more; the reminder below would
       // only repeat that.
