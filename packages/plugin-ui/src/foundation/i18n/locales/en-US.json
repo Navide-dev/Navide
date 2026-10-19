@@ -10640,7 +10640,10 @@
     },
     "pane": {
       "badge": "External influence",
-      "tooltip": "Received content from {sources} since {since}",
+      "badge-since": "External influence since {date}",
+      "tooltip": "Since {since}, this pane has received messages from {sources}.",
+      "source-who": "{source} ({who})",
+      "typing": "Typing on this computer never adds this mark.",
       "console": "Delivery log",
       "expand": "Show the full text",
       "text-missing": "text no longer in the message log",
