@@ -21,6 +21,7 @@ import { requestMarketplaceDetail } from './marketplaceDeepLink'
 import type { DeepLinkExtensionTarget } from '../../shared/deepLink'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
+import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
@@ -1528,7 +1529,16 @@ function refitAllTerminals(): void {
 // empty space on the right. A debounced window 'resize' listener guarantees a
 // refit on any OS-window size change regardless of the observers.
 let _winResizeTimer: number | null = null
+// The layout-mode cols cap and its lift on a window widen (lib/stageWidthCap.ts).
+const stageWidthCap = createStageWidthCap(
+  () => Object.values(paneRefs) as unknown as CappablePane[],
+  () => window.innerWidth
+)
+
 function onWindowResize(): void {
+  // Widening the window lifts the layout-mode cap, which also covers moving the
+  // window to a larger monitor.
+  stageWidthCap.onWindowResize()
   if (_winResizeTimer !== null) clearTimeout(_winResizeTimer)
   _winResizeTimer = window.setTimeout(() => { _winResizeTimer = null; refitAllTerminals() }, 150)
 }
@@ -20400,13 +20410,19 @@ const effectiveLayoutMode = computed<'grid' | 'spotlight' | 'sidebar' | 'fullscr
 // After any layout mode change, refit all terminals once the browser has
 // finished laying out the new grid — ResizeObserver alone is unreliable when
 // panes transition from display:none (sidebar) to visible (spotlight/grid).
-// Every mode fills its container: a pane handed the whole stage
-// (sidebar/spotlight/fullscreen) widens to it rather than leaving the extra
-// space blank. Widening reflows the scrollback, and fragments a CLI paints at
-// absolute positions (claude) can strand there — the same cost a window
-// resize in grid mode already pays — while the redraw after settle repaints
-// the visible frame at the new width.
-watch(effectiveLayoutMode, () => {
+// The modes that hand one pane the whole stage (sidebar/spotlight/fullscreen)
+// are a step change in width, and widening makes xterm reflow the scrollback.
+// A CLI that paints absolute-positioned full-width rows (claude) can never
+// repaint what reflow strands there — its redraw addresses the viewport only —
+// so the garbled history is permanent. Cap each pane at its grid-mode width on
+// the way in: the extra space is left blank instead of becoming columns, and
+// switching back is then a no-op resize. Set before the fit below, which is
+// what reads the cap. Panes stay uncapped in grid mode, where the container is
+// the width the user actually chose, and so do panes on their alternate
+// screen (see lockCols). Widening the window itself past the width it had on
+// entry lifts the cap — see onWindowResize.
+watch(effectiveLayoutMode, (mode) => {
+  stageWidthCap.enterMode(mode)
   void nextTick(() => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {

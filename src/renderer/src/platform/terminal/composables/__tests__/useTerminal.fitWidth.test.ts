@@ -19,6 +19,9 @@ const ctrl = vi.hoisted(() => ({
   ackedRows: 0,
 }))
 
+// The buffer the mocked terminal is showing; 'alternate' has no scrollback.
+const bufferType = vi.hoisted(() => ({ value: 'normal' as 'normal' | 'alternate' }))
+
 vi.mock('../useTerminalResize', () => ({
   createResizeController: () => ctrl,
 }))
@@ -30,7 +33,9 @@ vi.mock('@xterm/xterm', () => {
     options: Record<string, unknown> = {}
     unicode = { activeVersion: '6' }
     buffer = {
-      active: { type: 'normal', viewportY: 0, baseY: 0, cursorX: 0, cursorY: 0, getLine: () => undefined },
+      get active() {
+        return { type: bufferType.value, viewportY: 0, baseY: 0, cursorX: 0, cursorY: 0, getLine: () => undefined }
+      },
     }
     loadAddon(): void {}
     open(): void {}
@@ -88,6 +93,7 @@ describe('useTerminal — fit to pane width', () => {
     vi.clearAllMocks()
     ctrl.capCols.mockImplementation((cols: number) => cols)
     fitDims.value = { cols: 160, rows: 24 }
+    bufferType.value = 'normal'
   })
 
   it('reads as capped only while the cap leaves part of the container blank', () => {
@@ -129,6 +135,26 @@ describe('useTerminal — fit to pane width', () => {
     expect(ctrl.setColsCap).toHaveBeenLastCalledWith(null)
     expect(ctrl.applyFit).not.toHaveBeenCalled()
     expect(ctrl.requestResizeRedraw).not.toHaveBeenCalled()
+    scope.stop()
+  })
+
+  // xterm keeps no scrollback for the alternate buffer and never reflows it, so
+  // there is nothing for a cap to protect: that pane fills the stage at once.
+  it('never caps a pane that is showing its alternate screen', () => {
+    bufferType.value = 'alternate'
+    const { result, scope } = mountedTerminal()
+    result.lockCols(true)
+    expect(ctrl.setColsCap).toHaveBeenLastCalledWith(null)
+    scope.stop()
+  })
+
+  it('clears a stale cap when the pane has since moved to its alternate screen', () => {
+    const { result, scope } = mountedTerminal()
+    result.lockCols(true)
+    expect(ctrl.setColsCap).toHaveBeenLastCalledWith(80)
+    bufferType.value = 'alternate'
+    result.lockCols(true)
+    expect(ctrl.setColsCap).toHaveBeenLastCalledWith(null)
     scope.stop()
   })
 })
