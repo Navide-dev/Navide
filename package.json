@@ -326,7 +326,7 @@
     "electron-updater": "^6.8.9",
     "html-to-text": "^10",
     "koffi": "^3.3.3",
-    "mermaid": "^12.1.0",
+    "mermaid": "^12.2.0",
     "monaco-editor": "^0.55.1",
     "vue-i18n": "11",
     "ws": "^8.22.0",
