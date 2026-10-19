@@ -23,8 +23,9 @@ import type { PluginActivityReport } from '../shared/pluginActivity'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
-import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
+import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
 import type { PluginSource } from '../shared/pluginSource'
+import type { DeveloperApi } from '../shared/marketplaceDeveloper'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
 export interface ClearElectronCachesOptions {
@@ -1160,13 +1161,18 @@ contextBridge.exposeInMainWorld('agentTeam', {
       return () => ipcRenderer.removeListener(FN_KEY_STATUS_CHANNEL, listener)
     },
   } satisfies FnKeyApi,
-  // navide://extension/<id> links routed by src/main/deep-link.ts.
+  // navide://extension/<id> and navide://publish links routed by src/main/deep-link.ts.
   deepLink: {
     ready: () => ipcRenderer.invoke(DEEP_LINK_READY_CHANNEL),
     onOpenExtension: (handler) => {
       const listener = (_e: unknown, target: Parameters<typeof handler>[0]): void => handler(target)
       ipcRenderer.on(DEEP_LINK_OPEN_CHANNEL, listener)
       return () => ipcRenderer.removeListener(DEEP_LINK_OPEN_CHANNEL, listener)
+    },
+    onOpenPublish: (handler) => {
+      const listener = (_e: unknown, target: Parameters<typeof handler>[0]): void => handler(target)
+      ipcRenderer.on(DEEP_LINK_PUBLISH_CHANNEL, listener)
+      return () => ipcRenderer.removeListener(DEEP_LINK_PUBLISH_CHANNEL, listener)
     },
   } satisfies DeepLinkApi,
   executionPolicy: {
@@ -1194,6 +1200,19 @@ contextBridge.exposeInMainWorld('agentTeam', {
       return () => ipcRenderer.removeListener('execution-policy:changed', listener)
     },
   },
+  /** Navide Marketplace developer (W3): the Host keeps the token and key; this sees states only. */
+  developer: {
+    state: () => ipcRenderer.invoke('developer:state'),
+    signIn: (scope) => ipcRenderer.invoke('developer:signIn', scope),
+    signOut: () => ipcRenderer.invoke('developer:signOut'),
+    registerKey: () => ipcRenderer.invoke('developer:registerKey'),
+    application: () => ipcRenderer.invoke('developer:application'),
+    submitApplication: (input) => ipcRenderer.invoke('developer:submitApplication', input),
+    versions: () => ipcRenderer.invoke('developer:versions'),
+    stagePackage: (path) => ipcRenderer.invoke('developer:stagePackage', path ?? null),
+    publish: (input) => ipcRenderer.invoke('developer:publish', input),
+    yank: (input) => ipcRenderer.invoke('developer:yank', input),
+  } satisfies DeveloperApi,
   plugins: {
     listInstalled: (): Promise<InstalledPluginSummary[]> =>
       ipcRenderer.invoke('plugins:listInstalled'),

@@ -7,6 +7,7 @@ type UpdateState = import('../../shared/updater').UpdateState
 type ExecutionPolicyApi = import('../../shared/executionPolicy').ExecutionPolicyApi
 type FnKeyApi = import('../../shared/fnKey').FnKeyApi
 type DeepLinkApi = import('../../shared/deepLink').DeepLinkApi
+type DeveloperApi = import('../../shared/marketplaceDeveloper').DeveloperApi
 type ManifestPermissionsSummary = import('../../shared/executionPolicy').ManifestPermissionsSummary
 type PackageVersionGrantSummary = import('../../shared/executionPolicy').PackageVersionGrantSummary
 type LegacyPlansPreferenceProjection = import('../../shared/plansPreferences').LegacyPlansPreferenceProjection
@@ -378,6 +379,7 @@ declare global {
       }
       fnKey?: FnKeyApi
       deepLink?: DeepLinkApi
+      developer?: DeveloperApi
       executionPolicy?: ExecutionPolicyApi
       plugins?: {
         listInstalled: () => Promise<InstalledPluginSummary[]>
