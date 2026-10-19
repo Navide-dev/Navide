@@ -169,17 +169,33 @@ describe('PluginDisclosureCard layout', () => {
 // The signed `network` field covers commands and the native backend only, so a
 // view-only Navide plugin's card must never read as having no network.
 describe('PluginDisclosureCard view network (R2 MED-3)', () => {
-  it('tells a view-only Navide plugin\'s reader that its views can reach the network', () => {
+  it('tells a Navide plugin with views that they can reach the network', () => {
     const disclosure = disclosureOf('ui-only')
     expect(disclosure.network).toBe('none')
     for (const [locale, words] of [['en-US', 'can reach the network'], ['zh-TW', '可以連網'], ['ja-JP', 'ネットワークに接続でき']] as const) {
       i18n.global.locale.value = locale
       for (const props of [
-        { disclosure, scan: scanOf('nothing-found'), registry: REGISTRY, verified: true },
-        { disclosure, scan: null, localSource: true },
+        { disclosure, scan: scanOf('nothing-found'), registry: REGISTRY, verified: true, hasViews: true },
+        { disclosure, scan: null, localSource: true, hasViews: true },
       ]) {
         expect(render(props).get('.nv-disclosure-view-network').text()).toContain(words)
       }
+    }
+  })
+
+  // R2 MED-6 on #436: a package without contributes (backend or agent tools
+  // only) has no view, so the line would be a false disclosure there.
+  it('says nothing about views for a Navide plugin without views', () => {
+    const wrapper = render({ disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), verified: true, hasViews: false })
+    expect(wrapper.find('.nv-disclosure-view-network').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('views can reach the network')
+  })
+
+  it('states it conditionally where the surface cannot know whether there are views (Registry data)', () => {
+    for (const [locale, words] of [['en-US', 'If this Navide plugin has views'], ['zh-TW', '如果這個 Navide 外掛有畫面'], ['ja-JP', 'この Navide プラグインにビューがある場合']] as const) {
+      i18n.global.locale.value = locale
+      const line = render({ disclosure: disclosureOf('ui-only'), scan: null, verified: false }).get('.nv-disclosure-view-network').text()
+      expect(line).toContain(words)
     }
   })
 
@@ -218,8 +234,8 @@ describe('PluginDisclosureCard source row (K2)', () => {
   const MAIN_BASELINE = './__snapshots__/PluginDisclosureCard.main-baseline.html'
   const strip = (html: string): string => html.replace(/<!--v-if-->/g, '').replace(/^[ \t]*\n/gm, '')
   const cases = (): Array<[string, Record<string, unknown>]> => [
-    ['verified card', { disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), registry: REGISTRY, verified: true }],
-    ['listing card', { disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), registry: REGISTRY, verified: false }],
+    ['verified card', { disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), registry: REGISTRY, verified: true, hasViews: true }],
+    ['listing card', { disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), registry: REGISTRY, verified: false, hasViews: true }],
     ['no disclosure', { disclosure: null, scan: null, registry: null, verified: true }],
   ]
   const baseline = (): string => cases().map(([name, props]) => `<!-- ${name} -->\n${strip(render(props).html())}`).join('\n')

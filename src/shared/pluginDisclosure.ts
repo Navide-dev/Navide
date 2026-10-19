@@ -96,9 +96,10 @@ export interface ManifestDisclosure {
    * 3.8) names the concrete hosts. Plugin views are not covered here: they are
    * web pages that can reach the network and embed external sites, which the
    * Host does not filter. "none" therefore never means the package has no
-   * network; the disclosure card states the view side on every card
-   * (`pluginDisclosure.viewNetwork`, R2 MED-3 on 0.2.26). Kept out of this
-   * signed field so cards the Registry already signed still match. */
+   * network; the disclosure card states the view side for a package with
+   * views (`pluginDisclosure.viewNetwork`, R2 MED-3 on 0.2.26; `hasViews` from
+   * the manifest, R2 MED-6 on #436). Kept out of this signed field so cards
+   * the Registry already signed still match. */
   network: 'none' | 'via-shell'
   agentTools: DisclosureAgentTool[]
   dataLocations: { hostStorage: true; backendDataDirectory: boolean; projectWrites: DisclosureProjectWrites }

@@ -11327,6 +11327,7 @@
     "scannedByRegistry": "The scan was run by the Navide Registry.",
     "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
     "viewNetwork": "A Navide plugin's views can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
+    "viewNetworkIfViews": "If this Navide plugin has views, they can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "summary": {
       "nativeBackend": "Ships native code (runs in a sandbox)",
       "files": {

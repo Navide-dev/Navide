@@ -11327,6 +11327,7 @@
     "scannedByRegistry": "掃描由 Navide Registry 執行。",
     "limitsWithoutScan": "這個版本沒有系統掃描，以上只有這個 Navide 外掛自己的宣告。",
     "viewNetwork": "Navide 外掛的畫面（view）可以連網，也可以在 Navide 裡顯示外部網站；Navide 不會過濾或記錄這些流量。上面的網路項目只涵蓋它的指令與原生後端。",
+    "viewNetworkIfViews": "如果這個 Navide 外掛有畫面（view），畫面可以連網，也可以在 Navide 裡顯示外部網站；Navide 不會過濾或記錄這些流量。上面的網路項目只涵蓋它的指令與原生後端。",
     "summary": {
       "nativeBackend": "附帶原生程式（在沙盒裡執行）",
       "files": {

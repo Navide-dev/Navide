@@ -446,9 +446,13 @@ frame carrier, `navide-plugin-frame://`, has a CSP), so none of this traffic is
 filtered or recorded. A view that can read workspace content through its
 capabilities can therefore send it off the machine, and a view can show a
 remote page that looks like a sign-in page. The disclosure data's `network`
-field covers only commands and the native backend, so every disclosure card
-states this separately, including for a view-only package whose `network` is
-`"none"`. Making view network access a declared permission (DB10) is planned
+field covers only commands and the native backend, so the disclosure card of
+a package with views (`contributes.views` in its manifest) states this
+separately, including for a view-only package whose `network` is `"none"`; a
+package without views (backend or agent tools only) gets no such line, and
+where the card shows Registry listing data without the manifest (the Navide
+Marketplace detail page, an agent's install request) it says so
+conditionally. Making view network access a declared permission (DB10) is planned
 for 0.2.27.
 
 #### Agent tools (`backend.agentTools`)
