@@ -10860,9 +10860,10 @@ async function agentSignIn(args: Record<string, unknown>, callerPaneId: string, 
   const caller = panes.value.find((p) => p.id === callerPaneId)
   notifyRestore.toast(
     i18n.global.t('settings.accounts.cli.agent-login-started', {
-      agent: caller?.messagingName || caller?.customName || callerPaneId,
+      // Agent-written text: invisible characters shown, as in the dialog.
+      agent: revealInvisibleText(caller?.messagingName || caller?.customName || callerPaneId),
       account: accountLabel(cliProfilesApi, agentKey, profileId, i18n.global.t),
-      reason: String(args.reason ?? ''),
+      reason: revealInvisibleText(String(args.reason ?? '')),
     }),
     { type: 'info' },
   )
