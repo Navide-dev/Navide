@@ -42,6 +42,7 @@ import { developerFolderBackendDigest, PluginDeveloperModeStore } from './plugin
 import { disableOfficialKeyOverride } from './plugins/pluginVerify'
 import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
+import { PluginTestplaceStore } from './plugins/pluginTestplaceStore'
 import { contributionIcon } from './plugins/pluginContributionIcon'
 import { broadcastQuitStage } from './quit-progress'
 import { currentPluginHostTarget, UNIVERSAL_PLUGIN_TARGET } from './plugins/pluginTarget'
@@ -992,12 +993,17 @@ try {
     `[main] marketplace Registry root is not approved; installed v2 plugins remain quarantined: ${error instanceof Error ? error.message : String(error)}`
   )
 }
+// D3: an expired Testplace build the user chose to keep using loads on.
+const pluginTestplaceStore = new PluginTestplaceStore(pluginsRoot())
+const keepsExpiredTestplace = (packageId: string, artifactDigest: string): boolean =>
+  pluginTestplaceStore.keepsExpired(packageId, artifactDigest)
 const installedPluginTrust = {
   pinnedRootKey: installedRegistryRootKey,
   snapshot: readRegistryTrustSnapshot(pluginsRoot()),
   registryAuthority: installedRegistryAuthority,
   officialRegistryUrl: installedOfficialRegistryUrl,
   expectedTarget: currentPluginHostTarget(),
+  keepsExpiredTestplace,
 }
 
 function currentInstalledRegistryTrust() {
@@ -1009,6 +1015,7 @@ function currentInstalledRegistryTrust() {
     officialRegistryUrl: marketplace.trust.officialRegistryUrl,
     expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
     now: marketplace.trust.now,
+    keepsExpiredTestplace,
   }
 }
 
