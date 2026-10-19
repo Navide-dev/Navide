@@ -1904,6 +1904,52 @@
         },
         "prereleaseAvailable": "有預覽版 {version}"
       },
+      "developerMode": {
+        "errors": {
+          "holdsId": "{id} 目前由開發者資料夾載入；請先在開發者模式移除那個資料夾。",
+          "anotherFolder": "{id} 已經從另一個開發者資料夾載入；請先移除那個資料夾。",
+          "idInstalled": "{id} 已經安裝；請先移除，再用同一個 id 載入開發者資料夾。",
+          "modeOff": "請先開啟開發者模式。",
+          "v2Only": "開發者模式只能載入 Manifest v2 的資料夾。",
+          "reservedId": "開發者資料夾不能使用保留的 id {id}。",
+          "changed": "{id} 的權限或後端已經變更，請重新選擇資料夾。",
+          "takenDown": "{id} 已被 Navide 下架，無法從資料夾載入。（{detail}）"
+        },
+        "title": "開發者模式",
+        "switch": "開啟開發者模式",
+        "hint": "開啟後可以從你選的資料夾載入 Navide 外掛來開發與測試，也會套用自架 Registry 的設定（AGENT_TEAM_MARKETPLACE_URL）。只有在這個設定頁可以切換，每次變更都會記錄。",
+        "banner": "開發者模式已開啟，從資料夾載入的 Navide 外掛沒有經過審核。",
+        "reminder": "開發者模式已開啟：從資料夾載入的 Navide 外掛沒有經過審核。不用時請到「設定 → Navide 外掛」關閉。",
+        "reminderClose": "知道了",
+        "confirmTitle": "開啟開發者模式？",
+        "confirmBody": "開發者模式會讓你從資料夾載入未經 Navide 審核的 Navide 外掛，資料夾內容隨時可能被改掉。只在你自己開發或測試時開啟。",
+        "confirmOn": "開啟",
+        "loadFolder": "從資料夾載入…",
+        "reload": "重新載入",
+        "removeFolder": "移除",
+        "needsConsent": "權限或後端已變更，需要重新同意",
+        "folderWarning": "這個 Navide 外掛直接從你選的資料夾載入，沒有經過 Navide 審核，也沒有簽章。資料夾內容隨時可能變動，Navide 不做內容比對：只有權限或後端宣告改變時才會再問你。",
+        "folderLabel": "資料夾",
+        "selfHostedQuarantine": "{id} {version} 來自自架 Registry，目前沒有載入。請開啟開發者模式，或改從 Navide 市集安裝。"
+      },
+      "localInstall": {
+        "button": "從檔案安裝 .vsix…",
+        "backToMarketplace": "換回 Navide 市集版本",
+        "warning": "這個 Navide 外掛來自你選的本機檔案，沒有經過 Navide 審核，也沒有簽章：無法確認作者，檔案也可能被改過。只安裝你信任的人給你的檔案。",
+        "signatureLabel": "簽章",
+        "signature": "無：無法確認作者，檔案可能被改過",
+        "digestLabel": "檔案 SHA-256",
+        "acknowledge": "我了解這個 Navide 外掛沒有經過 Navide 審核，並確定要執行它的程式碼。",
+        "replaceTitle": "取代已安裝的 Navide 外掛",
+        "replaceMarketplace": "要把 {id}（Navide 市集版本 {version}）換成本機檔案版本嗎？換了之後不會自動更新。",
+        "replaceLocal": "要把 {id} 的本機檔案版本 {version} 換成這個檔案嗎？",
+        "replaceWithMarketplace": "要把 {id} 的本機檔案版本換成 Navide 市集版本 {version} 嗎？",
+        "replaceResets": "取代之後，原本給的權限、原生後端同意、允許改檔的工作區和 agent 工具授權都會清掉，需要重新同意；也不能用「回復」換回被取代的版本。",
+        "replaceDataSetAside": "新版本會從空的資料夾開始，原本的資料會保留在一旁，不會被新版本讀到。",
+        "reattachData": "接回這個來源之前保留在一旁的資料（預設不接回）",
+        "takedownUnknown": "目前無法確認這個 Navide 外掛是否已被 Navide 下架：沒有取得 Navide 的下架清單。",
+        "confirmReplace": "取代"
+      },
       "trust": {
         "publisherRiskUnsigned": "{publisher} 的套件 {id} 沒有 Registry 簽章。信任這個發佈者後，Navide 會執行它的程式碼。",
         "sensitiveHeading": "敏感權限",
@@ -2206,11 +2252,12 @@
       "resume-behavior-never": "一律開新對話",
       "resume-behavior-ask": "每次詢問",
       "restore-scope": "恢復範圍",
-      "restore-scope-hint": "選擇「總是恢復」時，可自動開啟單一 CLI、目前的 Grid 頁面、目前分頁，或全部 CLI（一次兩個依序啟動）。",
+      "restore-scope-hint": "選擇「總是恢復」時，可自動開啟單一 CLI、目前的 Grid 頁面、目前分頁、全部 CLI，或「自動」：只恢復上次關閉 Navide 時仍在執行的 CLI（全部 CLI 與自動都一次兩個依序啟動）。",
       "restore-scope-single": "單一 CLI",
       "restore-scope-page": "目前 Grid 頁面",
       "restore-scope-tab": "目前分頁",
       "restore-scope-all": "全部 CLI",
+      "restore-scope-auto": "自動",
       "resume-concurrency": "同時恢復上限",
       "resume-concurrency-hint": "開啟工作區或還原版面時，最多可同時恢復幾個 CLI pane，其餘依序排隊。若一次恢復太多 pane 導致「terminal.create timeout」錯誤，就把這個值調小（1–10）。",
       "resume-concurrency-label": "同時恢復數上限"
@@ -2439,16 +2486,12 @@
               "more": "本頁第 3 章"
             },
             "extensions": {
-              "what": "Navide 外掛執行時套用的執行政策，以及隨附與已安裝的 Navide 外掛",
+              "what": "Navide 外掛執行時套用的執行政策，以及隨附與已安裝的 Navide 外掛；頁面最下方是揭露總覽，列出所有從 Navide 市集安裝的 Navide 外掛（只是紀錄，不會改變 Navide 外掛能做的事）",
               "more": "本頁第 4 章"
             },
             "marketplace": {
               "what": "搜尋 Navide 外掛登錄庫並從中安裝",
               "more": "本頁第 4 章"
-            },
-            "disclosureOverview": {
-              "what": "所有從 Navide 市集安裝的 Navide 外掛：揭露卡、風險等級、最近活動和異常，集中在同一頁。",
-              "more": "只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。每個 Navide 外掛完整的活動，也可以在「Navide 外掛」頁該 Navide 外掛的那一列打開。"
             },
             "shortcuts": {
               "what": "快捷鍵改綁、匯入匯出",
@@ -2499,7 +2542,7 @@
               "fallback": "Always"
             },
             "resumeScope": {
-              "desc": "接續範圍：單一 CLI／目前 Grid 頁面／目前分頁／全部 CLI。",
+              "desc": "接續範圍：單一 CLI／目前 Grid 頁面／目前分頁／全部 CLI／自動（只接續上次關閉 Navide 時仍在執行的 CLI）。",
               "fallback": "單一 CLI"
             },
             "resumeAfterRestart": {
@@ -5114,6 +5157,9 @@
             "cli_reclaim_agent": "回收做完的 pane：CLI 行程結束、pane 留成可點擊接續的卡片，等同狀態列的「立即回收」；忙碌、被聚焦或無法接續的 pane 會附理由拒絕，早於 v0.2.16 的視窗回 reclaim-unsupported",
             "cli_message_log": "自己收送過的訊息歷史；訊息一旦送達就從 inbox_summary 與 pending_incoming 消失，這裡是唯一還查得到的地方",
             "cli_usage": "各家 CLI 還剩多少額度；派工前先看，否則訊息會送達到一個已經用完額度的 CLI 手上",
+            "cli_failover_state": "Navide 的額度用完自動切換目前狀態：政策、進行中的事件、自動切換預算還剩幾次，以及哪家廠商因切換做到一半而被擋住、要等使用者處理。唯讀；帳號只以 slot 表示，不含 email",
+            "cli_accounts_list": "Navide 保存的 CLI 帳號，以及每家 CLI 目前用哪一個；只讀帳號設定檔：名稱與 id，不含 email 與是否已登入，因為那得讀取憑證本身。唯讀",
+            "cli_account_sign_in": "開啟 Navide 本來就有的某個 CLI 帳號登入流程（停用中的帳號在它自己的私有 home 登入，或 claude 帳號在它自己的資料夾登入），使用者只需要在瀏覽器完成；使用者要先在確認框同意，框裡會列出是哪個 agent 要求、理由是什麼；拒絕或沒回答就什麼都不開。不回傳任何 token、代碼或網址，不切換帳號；目前使用中的帳號，或會取代 live 憑證的登入，留給使用者自己做",
             "cli_token_stats": "這個工作區目前的 token 用量",
             "cli_list_sessions": "這個工作區還留得住、可以接續的 CLI 對話有哪些——對話比 pane 活得久，pane 關掉、App 重開、pane 重建過，紀錄都還在磁碟上。每一列會說它還接不接得起來，以及當初擁有它的 pane 是不是還開著：還開著的別去接，那會分岔或弄壞它，直接傳訊給那個 pane 就好",
             "cli_place_pane": "搬動一個 pane：換分頁群組、或改掛在另一個 pane 底下（等同你在側欄拖放，走同一組寫入路徑，所以重開也還在原位）。兩半各自獨立，回傳會說哪一半成功了。不會動到那個 pane 的 CLI——不送訊息、不中斷、不重啟。只能搬本機的 pane",
@@ -7797,8 +7843,28 @@
         "hint-more": "詳細說明",
         "login-no-workspace": "請先開啟工作區 — 登入需要啟動暫時的登入 pane。",
         "login-spawn-failed": "無法啟動登入 pane。",
+        "agent-login-started": "{agent} 開啟了 {account} 的登入：請在瀏覽器完成，或關掉登入 pane 取消。agent 給的理由：{reason}",
+        "agent-login-confirm-title": "有 agent 要求開啟 CLI 登入",
+        "agent-login-confirm-body": "你同意之前什麼都不會開。登入 pane 執行的是 CLI 自己的登入流程，由你在瀏覽器完成，agent 看不到任何內容。沒有回答的話，這個要求會自動關閉。",
+        "agent-login-confirm-vendor": "CLI",
+        "agent-login-confirm-account": "帳號",
+        "agent-login-confirm-caller": "提出要求的 pane",
+        "agent-login-confirm-workspace": "登入 pane 開在",
+        "agent-login-confirm-reason": "理由（由 agent 提供）",
+        "agent-login-confirm-reason-truncated": "agent 的理由超過 300 字，只顯示前 300 字。",
+        "agent-login-confirm-cancel": "取消",
+        "agent-login-confirm-ok": "開啟登入",
         "login-complete": "已登入 {email}，帳號已儲存。",
         "login-complete-no-email": "登入完成，帳號已儲存。",
+        "login-step2": "第 1 步完成：{email} 已儲存。還要再授權一次，讓這個帳號登入到自己的資料夾，請在新開的登入 pane 裡完成瀏覽器授權。",
+        "login-step2-no-email": "第 1 步完成：帳號已儲存。還要再授權一次，讓這個帳號登入到自己的資料夾，請在新開的登入 pane 裡完成瀏覽器授權。",
+        "login-step2-done": "兩步都完成：{email} 已登入，也已登入到自己的資料夾。",
+        "login-step2-done-no-email": "兩步都完成：帳號已登入，也已登入到自己的資料夾。",
+        "login-step2-skipped": "{email} 可以照常使用，但還沒登入到自己的資料夾。之後可以從帳號徽章的「登入到帳號資料夾」補做。",
+        "login-step2-skipped-no-email": "這個帳號可以照常使用，但還沒登入到自己的資料夾。之後可以從帳號徽章的「登入到帳號資料夾」補做。",
+        "login-step2-failed": "第 1 步完成：{email} 已儲存，但登入到自己資料夾的 pane 開不起來。帳號可以照常使用，之後可以從帳號徽章的「登入到帳號資料夾」補做。",
+        "login-step2-failed-no-email": "第 1 步完成：帳號已儲存，但登入到自己資料夾的 pane 開不起來。帳號可以照常使用，之後可以從帳號徽章的「登入到帳號資料夾」補做。",
+        "dir-remind": "有 {count} 個 Claude 帳號還沒登入到自己的資料夾，目前仍使用共用的登入。可以從帳號徽章的「登入到帳號資料夾」逐一補做。",
         "new-account": "＋ 新增帳號",
         "new-account-scope": "新帳號的 provider",
         "global-login-title": "要在生效中的憑證上登入嗎？",
@@ -8543,6 +8609,7 @@
     "statusbar-note": "狀態列上的資訊窗會一起消失"
   },
   "error": {
+    "pipeline-start-refused": "流程沒有啟動：{reason}",
     "workspace-create-exists": "該位置已有名為「{name}」的項目，請換個名稱。",
     "workspace-create-denied": "沒有權限在 {path} 建立資料夾。",
     "workspace-create-failed": "無法在 {path} 建立工作區資料夾。",
@@ -9419,7 +9486,7 @@
     "unpin-all-tooltip": "把這些 pane 改回用目前的登入，之後每次切換帳號都會一起換。每個 pane 會重開一次並接續對話；正在執行的會先詢問。",
     "continue-with": "接續 ›",
     "continue-with-tooltip": "用 {account} 重開這個 pane 並接續對話",
-    "dir-sign-in": "登入",
+    "dir-sign-in": "登入到帳號資料夾",
     "dir-sign-in-tooltip": "這個帳號還沒在自己的資料夾登入，目前仍使用共用的登入。登入一次後，就能和其他帳號同時使用。",
     "continue-with-confirm-title": "要用 {account} 接續這個 pane 嗎？",
     "continue-with-confirm-body": "這個 pane 會用 {account} 重開並接續對話，正在進行的這一輪會中斷。其他 pane 不受影響。",
@@ -11213,6 +11280,20 @@
     }
   },
   "pluginDisclosure": {
+    "source": {
+      "heading": "來源與審核",
+      "marketplace": "已審核",
+      "prerelease": "預覽版（已審核）",
+      "testplace": "測試版，沒有人工審核，{date} 到期",
+      "testplaceNoExpiry": "測試版，沒有人工審核，到期日不明",
+      "local-signed": "本機檔案，發佈者已簽章，這個版本未經 Navide 審核",
+      "local-unsigned": "本機檔案，未經 Navide 審核，未簽章",
+      "developer-unpacked": "開發者資料夾，內容隨時可能變動",
+      "factory-bundled": "Navide 內建",
+      "notScanned": "未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）",
+      "publisher": "發佈者：{publisher}",
+      "selfDeclared": "自稱：{publisher}"
+    },
     "diff": {
       "heading": "這次更新的權限變化",
       "versions": "目前安裝 {from} → 更新到 {to}；以下只列出不同的地方。",
@@ -11269,6 +11350,7 @@
     "declaredHeading": "這個 Navide 外掛宣告的權限",
     "registryHeading": "Navide Registry 的紀錄（未簽章）",
     "provenance": {
+      "local": "以下由 Navide 從套件自己的 manifest 讀出；沒有 Navide Registry 簽章，也沒有經過 Navide 掃描。",
       "unverified": "以下由 Navide Registry 提供，尚未驗證；安裝前 Navide 會驗證簽章，並和套件內容比對。",
       "verified": "已驗證：揭露內容和下載的套件一致，掃描報告的 Navide Registry 簽章正確。",
       "verifiedNoScan": "已驗證：揭露內容和下載的套件一致。這個版本沒有系統掃描。"
@@ -11277,6 +11359,8 @@
     "signedByRegistry": "掃描由 Navide Registry 執行並簽章。",
     "scannedByRegistry": "掃描由 Navide Registry 執行。",
     "limitsWithoutScan": "這個版本沒有系統掃描，以上只有這個 Navide 外掛自己的宣告。",
+    "viewNetwork": "Navide 外掛的畫面（view）可以連網，也可以在 Navide 裡顯示外部網站；Navide 不會過濾或記錄這些流量。上面的網路項目只涵蓋它的指令與原生後端。",
+    "viewNetworkIfViews": "如果這個 Navide 外掛有畫面（view），畫面可以連網，也可以在 Navide 裡顯示外部網站；Navide 不會過濾或記錄這些流量。上面的網路項目只涵蓋它的指令與原生後端。",
     "summary": {
       "nativeBackend": "附帶原生程式（在沙盒裡執行）",
       "files": {
@@ -11309,7 +11393,7 @@
         "read": "這個 Navide 外掛會讀取 {paths}。"
       },
       "network": {
-        "hosts": "程式碼裡出現這些網址：{hosts}。Navide 外掛頁框與原生程式都不能直接連網，這些網址可能用來開啟瀏覽器，或交給 git、gh 等指令。"
+        "hosts": "程式碼裡出現這些網址：{hosts}。原生程式不能直接連網，但 Navide 外掛的畫面（view）可以；這些網址也可能用來開啟瀏覽器，或交給 git、gh 等指令。"
       },
       "code": {
         "eval": {

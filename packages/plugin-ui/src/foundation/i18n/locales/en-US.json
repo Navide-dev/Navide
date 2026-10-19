@@ -1904,6 +1904,52 @@
         },
         "prereleaseAvailable": "pre-release {version} available"
       },
+      "developerMode": {
+        "errors": {
+          "holdsId": "{id} is loaded from a developer folder; remove that folder in Developer Mode first.",
+          "anotherFolder": "{id} is already loaded from another developer folder; remove that folder first.",
+          "idInstalled": "{id} is installed; remove it before loading a developer folder with the same id.",
+          "modeOff": "Turn on Developer Mode first.",
+          "v2Only": "Developer Mode loads Manifest v2 folders only.",
+          "reservedId": "A developer folder cannot use the reserved id {id}.",
+          "changed": "The permissions or backend of {id} changed; choose the folder again.",
+          "takenDown": "{id} was taken down by Navide and cannot be loaded from a folder. ({detail})"
+        },
+        "title": "Developer Mode",
+        "switch": "Turn on Developer Mode",
+        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded.",
+        "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
+        "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
+        "reminderClose": "Got it",
+        "confirmTitle": "Turn on Developer Mode?",
+        "confirmBody": "Developer Mode lets you load Navide plugins from a folder without Navide review, and the folder can change at any time. Turn it on only while you develop or test a Navide plugin yourself.",
+        "confirmOn": "Turn on",
+        "loadFolder": "Load from folder…",
+        "reload": "Reload",
+        "removeFolder": "Remove",
+        "needsConsent": "Permissions or backend changed; consent again",
+        "folderWarning": "This Navide plugin is loaded straight from the folder you picked. Navide has not reviewed it and it is not signed. The folder can change at any time and Navide does not compare its content: you are asked again only when its permissions or backend change.",
+        "folderLabel": "Folder",
+        "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
+      },
+      "localInstall": {
+        "button": "Install from .vsix file…",
+        "backToMarketplace": "Switch back to the Navide Marketplace version",
+        "warning": "This Navide plugin comes from a file on this computer. Navide has not reviewed it and it is not signed: its author cannot be confirmed and the file may have been changed. Only install files from people you trust.",
+        "signatureLabel": "Signature",
+        "signature": "None: the author cannot be confirmed and the file may have been changed",
+        "digestLabel": "File SHA-256",
+        "acknowledge": "I understand Navide has not reviewed this Navide plugin, and I want to run its code.",
+        "replaceTitle": "Replace an installed Navide plugin",
+        "replaceMarketplace": "Replace {id} (Navide Marketplace version {version}) with the version from this file? It will no longer update automatically.",
+        "replaceLocal": "Replace the file version {version} of {id} with this file?",
+        "replaceWithMarketplace": "Replace the file version of {id} with Navide Marketplace version {version}?",
+        "replaceResets": "Replacing it clears the permissions, the native backend consent, the workspaces it may change files in and the agent tool approvals given to the installed version; you will be asked again, and Rollback cannot bring the replaced version back.",
+        "replaceDataSetAside": "The new version starts with an empty data folder. The existing data is kept aside, and the new version cannot read it.",
+        "reattachData": "Take back the data kept aside from this source earlier (off by default)",
+        "takedownUnknown": "Navide cannot tell right now whether this Navide plugin has been taken down: the Navide takedown list could not be fetched.",
+        "confirmReplace": "Replace"
+      },
       "trust": {
         "publisherRiskUnsigned": "{publisher}'s package {id} is not signed by the Registry. Trusting this publisher lets Navide run its code.",
         "sensitiveHeading": "Sensitive capabilities",
@@ -2206,11 +2252,12 @@
       "resume-behavior-never": "Always start fresh",
       "resume-behavior-ask": "Ask each time",
       "restore-scope": "Resume scope",
-      "restore-scope-hint": "When always resuming, choose one CLI, the current Grid page, the active tab, or all CLIs (started two at a time, in order).",
+      "restore-scope-hint": "When always resuming, choose one CLI, the current Grid page, the active tab, all CLIs, or Auto — only the CLIs that were running when Navide last closed (all CLIs and Auto start two at a time, in order).",
       "restore-scope-single": "One CLI",
       "restore-scope-page": "Current Grid page",
       "restore-scope-tab": "Active tab",
       "restore-scope-all": "All CLIs",
+      "restore-scope-auto": "Auto",
       "resume-concurrency": "Concurrent resume limit",
       "resume-concurrency-hint": "How many CLI panes may resume at the same time when opening a workspace or restoring a layout; the rest queue. Lower this if resuming many panes at once causes 'terminal.create timeout' errors (1–10).",
       "resume-concurrency-label": "Max concurrent resumes"
@@ -2439,16 +2486,12 @@
               "more": "section 3 of this page"
             },
             "extensions": {
-              "what": "The execution policy Navide plugins run under, plus the bundled and installed Navide plugins",
+              "what": "The execution policy Navide plugins run under, plus the bundled and installed Navide plugins; at the bottom, the disclosure overview of every Navide plugin installed from the Navide Marketplace (records only, it changes nothing a Navide plugin may do)",
               "more": "section 4 of this page"
             },
             "marketplace": {
               "what": "Searching the Navide plugin registry and installing from it",
               "more": "section 4 of this page"
-            },
-            "disclosureOverview": {
-              "what": "Each Navide plugin installed from the Navide Marketplace: its disclosure card, risk level, recent activity and unusual items on one page.",
-              "more": "Records only: nothing here changes what a Navide plugin may do. Each Navide plugin's full activity is also under its row on the Navide Plugins page."
             },
             "shortcuts": {
               "what": "Rebinding shortcuts, import and export",
@@ -2499,7 +2542,7 @@
               "fallback": "Always"
             },
             "resumeScope": {
-              "desc": "How far resume reaches: One CLI / Current Grid page / Active tab / All CLIs.",
+              "desc": "How far resume reaches: One CLI / Current Grid page / Active tab / All CLIs / Auto (only the CLIs running when Navide last closed).",
               "fallback": "One CLI"
             },
             "resumeAfterRestart": {
@@ -5114,6 +5157,9 @@
             "cli_reclaim_agent": "Reclaim a finished pane: its CLI process ends and the pane stays as a click-to-resume card, the status bar's \"reclaim now\". A busy, focused or not-yet-resumable pane is refused with the reason; a window older than v0.2.16 answers reclaim-unsupported",
             "cli_message_log": "The history of messages I sent and received; once delivered a message disappears from inbox_summary and pending_incoming, and this is the only place left to find it",
             "cli_usage": "How much quota each CLI has left; check before handing out work, or the message lands on a CLI that has already run out",
+            "cli_failover_state": "What Navide's quota failover is doing about an exhausted CLI account: the policy, open incidents, how many automatic switches the budget still allows, and any half-finished switch that blocks a vendor until the user resolves it. Read-only; accounts are named by slot, never by email",
+            "cli_accounts_list": "The CLI accounts Navide keeps and which one each CLI runs on, from the account store only: names and ids, no email and no signed-in state, since those would mean reading the credentials. Read-only",
+            "cli_account_sign_in": "Open the sign-in Navide already offers for one CLI account (a parked account in its own private home, or a claude account inside its own folder), so the user only finishes it in the browser; the user agrees first in a dialog that names the agent and its reason; nothing opens on a no or no answer. No token, code or URL comes back, nothing is switched, and the active account or a sign-in that would replace the live credential is left to the user",
             "cli_token_stats": "This workspace's current token usage",
             "cli_list_sessions": "The CLI conversations in this workspace a new pane could be opened onto — a conversation outlives the pane that ran it: close the pane, restart the app, rebuild the pane, and the transcript stays on disk. Each row says whether it is still resumable and whether the pane that owned it is still open: do not resume a live one, which forks or corrupts it — message that pane instead",
             "cli_place_pane": "Move a pane: change the tab group it sits in, or make it a child of another pane (the same thing as dragging it in the sidebar, through the same write path, so the position survives a restart). The two halves are independent and the reply says which landed. It does not touch that pane's CLI — nothing is sent, interrupted or restarted. Local panes only",
@@ -7797,8 +7843,28 @@
         "hint-more": "Details",
         "login-no-workspace": "Open a workspace first — signing in launches a temporary login pane.",
         "login-spawn-failed": "Could not start the login pane.",
+        "agent-login-started": "{agent} opened a sign-in for {account}: finish it in the browser, or close the sign-in pane to cancel. The agent's reason: {reason}",
+        "agent-login-confirm-title": "An agent asks to open a CLI sign-in",
+        "agent-login-confirm-body": "Nothing opens unless you agree. The sign-in pane runs the CLI's own login and you finish it in the browser; the agent sees none of it. If you do not answer, the request closes by itself.",
+        "agent-login-confirm-vendor": "CLI",
+        "agent-login-confirm-account": "Account",
+        "agent-login-confirm-caller": "Asked by pane",
+        "agent-login-confirm-workspace": "Sign-in pane opens in",
+        "agent-login-confirm-reason": "Reason, written by the agent",
+        "agent-login-confirm-reason-truncated": "The agent's reason was longer than 300 characters; only the first 300 are shown.",
+        "agent-login-confirm-cancel": "Cancel",
+        "agent-login-confirm-ok": "Open sign-in",
         "login-complete": "Signed in as {email}. Account saved.",
         "login-complete-no-email": "Sign-in complete. Account saved.",
+        "login-step2": "Step 1 done: {email} is saved. One more authorization signs this account in to its own folder. Finish it in the browser from the sign-in pane that just opened.",
+        "login-step2-no-email": "Step 1 done: the account is saved. One more authorization signs it in to its own folder. Finish it in the browser from the sign-in pane that just opened.",
+        "login-step2-done": "All set: {email} is signed in, including in its own folder.",
+        "login-step2-done-no-email": "All set: the account is signed in, including in its own folder.",
+        "login-step2-skipped": "{email} works as usual but is not signed in to its own folder yet. You can finish it later with “Sign in to its own folder” in the account badge.",
+        "login-step2-skipped-no-email": "The account works as usual but is not signed in to its own folder yet. You can finish it later with “Sign in to its own folder” in the account badge.",
+        "login-step2-failed": "Step 1 done: {email} is saved, but the pane for signing it in to its own folder could not open. The account works as usual; use “Sign in to its own folder” in the account badge to finish.",
+        "login-step2-failed-no-email": "Step 1 done: the account is saved, but the pane for signing it in to its own folder could not open. The account works as usual; use “Sign in to its own folder” in the account badge to finish.",
+        "dir-remind": "Claude accounts not signed in to their own folder yet: {count}. They keep working on the shared login. Use “Sign in to its own folder” in the account badge to finish each one.",
         "new-account": "+ New account",
         "new-account-scope": "Provider for the new account",
         "global-login-title": "Sign in on the live credential?",
@@ -8543,6 +8609,7 @@
     "statusbar-note": "its popovers go with it"
   },
   "error": {
+    "pipeline-start-refused": "The pipeline did not start: {reason}",
     "workspace-create-exists": "An item named “{name}” is already there. Pick another name.",
     "workspace-create-denied": "No permission to create a folder at {path}.",
     "workspace-create-failed": "Could not create the workspace folder at {path}.",
@@ -9419,7 +9486,7 @@
     "unpin-all-tooltip": "Reopen these panes on the current login so they move with every account switch. Each reopens once and picks up its conversation; one that is working is asked about first.",
     "continue-with": "Continue ›",
     "continue-with-tooltip": "Reopen this pane on {account} and resume its conversation",
-    "dir-sign-in": "Sign in",
+    "dir-sign-in": "Sign in to its own folder",
     "dir-sign-in-tooltip": "This account has not signed in inside its own folder yet, so it still runs on the shared login. Sign in once to run it alongside other accounts.",
     "continue-with-confirm-title": "Continue this pane on {account}?",
     "continue-with-confirm-body": "This pane reopens on {account} and resumes its conversation. A turn in progress stops. Other panes are not affected.",
@@ -11213,6 +11280,20 @@
     }
   },
   "pluginDisclosure": {
+    "source": {
+      "heading": "Source and review",
+      "marketplace": "Reviewed",
+      "prerelease": "Pre-release (reviewed)",
+      "testplace": "Test build, no human review, expires {date}",
+      "testplaceNoExpiry": "Test build, no human review, expiry unknown",
+      "local-signed": "Local file signed by its publisher; this version was not reviewed by Navide",
+      "local-unsigned": "Local file, not reviewed by Navide, unsigned",
+      "developer-unpacked": "Developer folder; its contents can change at any time",
+      "factory-bundled": "Built into Navide",
+      "notScanned": "Not scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)",
+      "publisher": "Publisher: {publisher}",
+      "selfDeclared": "Self-declared: {publisher}"
+    },
     "diff": {
       "heading": "What this update changes",
       "versions": "Installed {from} → update to {to}; only the differences are listed.",
@@ -11269,6 +11350,7 @@
     "declaredHeading": "What this Navide plugin declares",
     "registryHeading": "Navide Registry records (unsigned)",
     "provenance": {
+      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and was not scanned by Navide.",
       "unverified": "Provided by the Navide Registry, not yet verified; before installing, Navide verifies the signature and compares it with the package.",
       "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid.",
       "verifiedNoScan": "Verified: the disclosure matches the downloaded package. This version has no system scan."
@@ -11277,6 +11359,8 @@
     "signedByRegistry": "The scan was run and signed by the Navide Registry.",
     "scannedByRegistry": "The scan was run by the Navide Registry.",
     "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
+    "viewNetwork": "A Navide plugin's views can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
+    "viewNetworkIfViews": "If this Navide plugin has views, they can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "summary": {
       "nativeBackend": "Ships native code (runs in a sandbox)",
       "files": {
@@ -11309,7 +11393,7 @@
         "read": "This Navide plugin reads {paths}."
       },
       "network": {
-        "hosts": "These addresses appear in the code: {hosts}. Neither the Navide plugin frame nor native code can reach the network directly; the addresses may be opened in a browser or passed to commands such as git or gh."
+        "hosts": "These addresses appear in the code: {hosts}. Native code cannot reach the network directly, but the Navide plugin's views can; the addresses may also be opened in a browser or passed to commands such as git or gh."
       },
       "code": {
         "eval": {

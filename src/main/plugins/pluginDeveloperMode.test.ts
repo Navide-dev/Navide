@@ -23,6 +23,20 @@ describe('pluginDeveloperModeEnabled', () => {
   })
 })
 
+describe('pluginDeveloperModeEnabled with the user switch (card K4)', () => {
+  it('turns a packaged build on only with the switch, never with the environment', () => {
+    expect(pluginDeveloperModeEnabled({}, true, true)).toBe(true)
+    expect(pluginDeveloperModeEnabled({ AGENT_TEAM_PLUGIN_DEV: '1' }, true, false)).toBe(false)
+    expect(pluginDeveloperModeEnabled({ AGENT_TEAM_PLUGIN_DEV: '1', AGENT_TEAM_PLUGIN_DEV_PATH: '/tmp/x' }, true)).toBe(false)
+  })
+
+  it('keeps a development build as it was, the switch only adding to it', () => {
+    expect(pluginDeveloperModeEnabled({ AGENT_TEAM_PLUGIN_DEV: '1' }, false, false)).toBe(true)
+    expect(pluginDeveloperModeEnabled({}, false, false)).toBe(false)
+    expect(pluginDeveloperModeEnabled({}, false, true)).toBe(true)
+  })
+})
+
 describe('main process Developer Mode gate', () => {
   const mainSource = readFileSync(resolve(process.cwd(), 'src/main/index.ts'), 'utf8')
 

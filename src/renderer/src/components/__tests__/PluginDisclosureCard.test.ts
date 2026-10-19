@@ -164,6 +164,50 @@ describe('PluginDisclosureCard layout', () => {
   })
 })
 
+// R2 MED-3 on 0.2.26 (user option (a)): a view is an ordinary web page that can
+// reach the network and embed external sites, and the Host filters none of it.
+// The signed `network` field covers commands and the native backend only, so a
+// view-only Navide plugin's card must never read as having no network.
+describe('PluginDisclosureCard view network (R2 MED-3)', () => {
+  it('tells a Navide plugin with views that they can reach the network', () => {
+    const disclosure = disclosureOf('ui-only')
+    expect(disclosure.network).toBe('none')
+    for (const [locale, words] of [['en-US', 'can reach the network'], ['zh-TW', '可以連網'], ['ja-JP', 'ネットワークに接続でき']] as const) {
+      i18n.global.locale.value = locale
+      for (const props of [
+        { disclosure, scan: scanOf('nothing-found'), registry: REGISTRY, verified: true, hasViews: true },
+        { disclosure, scan: null, localSource: true, hasViews: true },
+      ]) {
+        expect(render(props).get('.nv-disclosure-view-network').text()).toContain(words)
+      }
+    }
+  })
+
+  // R2 MED-6 on #436: a package without contributes (backend or agent tools
+  // only) has no view, so the line would be a false disclosure there.
+  it('says nothing about views for a Navide plugin without views', () => {
+    const wrapper = render({ disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), verified: true, hasViews: false })
+    expect(wrapper.find('.nv-disclosure-view-network').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('views can reach the network')
+  })
+
+  it('states it conditionally where the surface cannot know whether there are views (Registry data)', () => {
+    for (const [locale, words] of [['en-US', 'If this Navide plugin has views'], ['zh-TW', '如果這個 Navide 外掛有畫面'], ['ja-JP', 'この Navide プラグインにビューがある場合']] as const) {
+      i18n.global.locale.value = locale
+      const line = render({ disclosure: disclosureOf('ui-only'), scan: null, verified: false }).get('.nv-disclosure-view-network').text()
+      expect(line).toContain(words)
+    }
+  })
+
+  it('no longer says a Navide plugin\'s frame cannot reach the network', () => {
+    for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
+      i18n.global.locale.value = locale
+      const text = render({ disclosure: disclosureOf('devmap-0.2.0'), scan: scanOf('devmap-push-and-reads'), verified: false }).text()
+      expect(text).not.toMatch(/Neither the Navide plugin frame|頁框與原生程式都不能直接連網|フレームもネイティブコードも直接ネットワークに接続できません/)
+    }
+  })
+})
+
 // Review of #360, L3: third-party strings cannot reorder or hide card text.
 describe('PluginDisclosureCard invisible characters', () => {
   it('spells out bidi and zero-width characters in scan strings and Registry facts', () => {
@@ -179,5 +223,36 @@ describe('PluginDisclosureCard invisible characters', () => {
     expect(text).toContain('evil\\u{202e}moc.example')
     expect(text).toContain('acme\\u{200b}.example')
     expect(text).toContain('key\\u{2066}x')
+  })
+})
+
+// Card K2 (DX report §10.4), RULE ZERO: the "Source and review" row is the only
+// thing a marketplace source adds. The baseline file was written by main's card
+// before the row existed; `<!--v-if-->` placeholders are not rendered and are
+// left out of the comparison.
+describe('PluginDisclosureCard source row (K2)', () => {
+  const MAIN_BASELINE = './__snapshots__/PluginDisclosureCard.main-baseline.html'
+  const strip = (html: string): string => html.replace(/<!--v-if-->/g, '').replace(/^[ \t]*\n/gm, '')
+  const cases = (): Array<[string, Record<string, unknown>]> => [
+    ['verified card', { disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), registry: REGISTRY, verified: true, hasViews: true }],
+    ['listing card', { disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), registry: REGISTRY, verified: false, hasViews: true }],
+    ['no disclosure', { disclosure: null, scan: null, registry: null, verified: true }],
+  ]
+  const baseline = (): string => cases().map(([name, props]) => `<!-- ${name} -->\n${strip(render(props).html())}`).join('\n')
+
+  it('renders exactly what main rendered when no source is given', async () => {
+    await expect(baseline()).toMatchFileSnapshot(MAIN_BASELINE)
+  })
+
+  it('adds only one "Reviewed" row for a marketplace source; the rest of the DOM is main\'s', async () => {
+    const html = cases().map(([name, props]) => {
+      const wrapper = render({ ...props, source: 'marketplace' })
+      const rows = wrapper.findAll('.nv-source-row')
+      expect(rows).toHaveLength(1)
+      expect(rows[0].text()).toBe('Source and review Reviewed')
+      rows[0].element.remove()
+      return `<!-- ${name} -->\n${strip(wrapper.html())}`
+    }).join('\n')
+    await expect(html).toMatchFileSnapshot(MAIN_BASELINE)
   })
 })

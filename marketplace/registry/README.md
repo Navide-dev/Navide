@@ -32,6 +32,14 @@ override with `REGISTRY_DATA_DIR=/some/path`.
 
 Health check: `curl http://localhost:8787/api/health` → `{"status":"ok"}`.
 
+The `X-Admin-Token` endpoints (`POST /api/publishers`, `/featured` and the
+`/api/admin/*` review/blocklist API) fail closed: while `REGISTRY_ADMIN_TOKEN`
+is unset or blank they return `401` and log a warning. Set a token and send it
+as `X-Admin-Token`. For a throwaway local registry only,
+`REGISTRY_ALLOW_OPEN_ADMIN=1` leaves `/api/publishers` and `/featured` open
+while no token is set (the startup log warns); `/api/admin/*` stays closed, and
+the `official` profile refuses to start with it.
+
 ## Run tests
 
 ```bash
@@ -43,8 +51,8 @@ uv --project marketplace/registry run pytest marketplace/registry/tests
 | Method | Path | Behavior |
 |---|---|---|
 | GET | `/api/health` | Liveness probe. |
-| POST | `/api/publishers` | Register/update a publisher's Ed25519 public key + bearer token. Admin-gated by `X-Admin-Token` when `REGISTRY_ADMIN_TOKEN` is set (open in dev). |
-| POST | `/api/publish` | Upload a `.vsix` package (multipart field `package`); requires a `Bearer` publisher token and (in strict mode) a valid `signature`. Validates manifest, verifies signature, stores blob + assets, appends a version artifact for `?target=` (default `universal`) with a trust tier. 409 on a duplicate (version, target), on mixing `universal` with platform targets in one version, or on a yanked version; 403 on cross-namespace/bad-signature, 401 on bad/missing token. |
+| POST | `/api/publishers` | Register/update a publisher's Ed25519 public key + bearer token. Admin-gated by `X-Admin-Token`; `401` while `REGISTRY_ADMIN_TOKEN` is unset or blank (unless `REGISTRY_ALLOW_OPEN_ADMIN`) and on a missing or wrong token. |
+| POST | `/api/publish` | Upload a `.vsix` package (multipart field `package`); requires a `Bearer` publisher token and (in strict mode) a valid `signature`. Validates manifest, verifies signature, stores blob + assets, appends a version artifact for `?target=` (default `universal`) with a trust tier. 409 on a duplicate (version, target), on mixing `universal` with platform targets in one version, or on a yanked version, and `409 TESTPLACE_NOT_OPEN` for `?channel=testplace`; 400 on a `?channel=` that is unknown or does not match the version's SemVer channel; 403 on cross-namespace/bad-signature, 401 on bad/missing token. |
 | GET | `/api/extensions` | Search (`q`) over name/description/categories, newest first, paginated (`offset`, `limit`). |
 | GET | `/api/extensions/{namespace}/{name}` | Extension detail + full version list, registry envelopes/signatures, and root-signed trust metadata. |
 | GET | `/api/extensions/{namespace}/{name}/{version}/download` | Stream one artifact's blob **and increment** its download counter plus the aggregate one. `?target=` picks the artifact exactly (no fallback to `universal`); it may be omitted only when the version has a single artifact, else `400` lists the available targets. |
@@ -179,7 +187,8 @@ Extensions view to warn users. This is metadata/gating only — no runtime sandb
 | `REGISTRY_VERIFIER` | `ed25519` | `ed25519` (real) or `accepting` (dev). |
 | `REGISTRY_REQUIRE_SIGNATURE` | `true` | Reject unsigned publishes. |
 | `REGISTRY_REQUIRE_AUTH` | `true` | Reject anonymous publish/yank. |
-| `REGISTRY_ADMIN_TOKEN` | _(unset)_ | Gates `POST /api/publishers` when set; required and non-empty for the `official` profile. |
+| `REGISTRY_ADMIN_TOKEN` | _(unset)_ | Gates `POST /api/publishers` and `/featured` (compared in constant time). Unset or blank refuses them and `/api/admin/*` with `401`; required and non-empty for the `official` profile. |
+| `REGISTRY_ALLOW_OPEN_ADMIN` | `false` | Local dev only: with no admin token, leave `/api/publishers` and `/featured` open instead of refusing them (`/api/admin/*` stays closed). Ignored once a token is set; rejected by the `official` profile. |
 | `REGISTRY_TRUST_PROFILE` | `self-hosted-dev` | `self-hosted-dev` for persistent locally generated trust material, or `official` for explicitly provisioned production material. |
 | `REGISTRY_TRUST_CONFIG_FILE` | _(unset)_ | Required with `official`; path to the complete signer, root, rotation, validity, and blocklist policy below. Rejected for the default profile. |
 | `REGISTRY_ROOT_PATH` | _(unset)_ | Public path prefix when served behind a reverse proxy, e.g. `/registry`. Requests are accepted with the prefix forwarded unchanged (AWS ALB) or stripped by the proxy, and every link the website emits carries it. `/registry-evil/...` is not served. Do not combine with `uvicorn --root-path`. |

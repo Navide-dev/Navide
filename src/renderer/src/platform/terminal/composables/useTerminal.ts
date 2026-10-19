@@ -476,6 +476,20 @@ export function serializeRenderedBuffer(
   return lines.join('\n')
 }
 
+/** Every row of the visible screen, top to bottom, frame and blank rows kept.
+ *  Unlike serializeRenderedBuffer it drops nothing off the bottom: the
+ *  collapsed-paste submit check locates the input box by its frame, closing
+ *  edge included, and a box taller than a fixed tail window must still be
+ *  found. READ-ONLY. */
+export function serializeVisibleScreen(term: import('@xterm/xterm').Terminal): string {
+  const buffer = term.buffer.active
+  const lines: string[] = []
+  for (let r = 0; r < term.rows; r++) {
+    lines.push(buffer.getLine(buffer.baseY + r)?.translateToString(true) ?? '')
+  }
+  return lines.join('\n')
+}
+
 interface UseTerminalOptions {
   workspacePath?: string
   onClear?: () => void
@@ -1209,6 +1223,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  wherever it happened to leave the cursor. */
   function readScreenTail(maxLines: number): string {
     return serializeRenderedBuffer(term, maxLines, 'viewport-bottom')
+  }
+
+  /** The whole visible screen with its frame rows — see serializeVisibleScreen. */
+  function readVisibleScreen(): string {
+    return serializeVisibleScreen(term)
   }
 
   /** Cursor-row text up to the cursor column. Used by the pane-drop handler
@@ -1962,6 +1981,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // unlike the old raw buffer there is nothing to clear — the content lives in
   // xterm itself, which is still on screen at that point.
   let snapshotDiscarded = false
+  // A CLI sign-in pane (spawned with isLogin / loginProfileId): its screen holds
+  // an authorization URL or a pasted code, and localStorage lands on disk in
+  // plain text where any agent with a shell can read it. Never snapshotted.
+  let isSignInPane = false
   // Set once this pane's xterm has had the snapshot written into it. Both entry
   // points (tryReattach on a live PTY, _doCreate on a fresh one) read the same
   // stored payload, and replaying it a second time into the same terminal would
@@ -2049,6 +2072,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   }
   function saveScrollSnapshot(): void {
     const key = scrollSnapKey()
+    if (isSignInPane) {
+      try { localStorage.removeItem(key) } catch { /* ignore */ }
+      return
+    }
     let lines = SCROLL_SNAP_LINES
     let payload = snapshotDiscarded ? '' : serializeSnapshot(lines)
     // Halve the line count (never the string) until it fits the byte cap.
@@ -3005,6 +3032,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // Use the stable CLI session id as the reattach key when provided, so the
     // lookup below survives a reload (paneId does not).
     if (opts.resumeKey) persistKey = opts.resumeKey
+    isSignInPane = !!(opts.isLogin || opts.loginProfileId)
     // Snapshot the pane's previous PTY id NOW — tryReattach clears it when the
     // PTY is gone. Passed to terminal.create as replaces_terminal_id so the
     // backend reaps a still-live predecessor this spawn is replacing (resume-id
@@ -3465,6 +3493,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     flushPendingClean,
     readRenderedText,
     readScreenTail,
+    readVisibleScreen,
     readLineBeforeCursor,
     updateXtermTheme,
     isAltBuffer,

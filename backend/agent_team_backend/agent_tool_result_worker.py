@@ -33,6 +33,7 @@ import asyncio
 import atexit
 import codecs
 import json
+import logging
 import math
 import os
 import sys
@@ -40,6 +41,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, BinaryIO
+
+log = logging.getLogger(__name__)
 
 WORKER_FLAG = "--agent-tool-result-worker"
 #: Seconds between the helper's empty frames while it works.
@@ -51,6 +54,10 @@ IDLE_S = 30.0
 STOP_GRACE_S = 2.0
 #: Seconds after a failed start before the next start is tried (each try forks).
 RETRY_START_S = 60.0
+#: Seconds a helper may sit idle after a request before it is stopped: what
+#: a large result left in its memory goes with it, and the next large result
+#: starts a new one. A time window, not a limit on work.
+IDLE_EXIT_S = 60.0
 #: Seconds a new helper has to say it is ready: a onefile build unpacks
 #: itself on every start, which a virus scan can slow down; as IDLE_S.
 READY_S = 30.0
@@ -217,6 +224,10 @@ class ResultWorker:
         self._lock: asyncio.Lock | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._start_failed: tuple[float, str] | None = None
+        self._idle_exit: asyncio.TimerHandle | None = None
+        #: The job contain() made for the running helper (Windows), so that
+        #: stopping it ends that job and never another one on a reused pid.
+        self._job: int | None = None
         self.state = "idle"
         self.last_error = ""
         self.since = int(time.time() * 1000)
@@ -263,6 +274,8 @@ class ResultWorker:
             return process
         if self._start_failed is not None and time.monotonic() < self._start_failed[0]:
             raise ResultWorkerUnavailable(self._start_failed[1], attempted=False)
+        from agent_team_backend import osplat
+
         try:
             # Its own session (process group on POSIX), so stop() ends the
             # whole tree: a onefile build runs Python under a bootloader.
@@ -270,18 +283,26 @@ class ResultWorker:
                 *self.argv(),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
+                # Not inherited on Windows: that duplicates the backend's
+                # standard error handle, which mem_probe swaps on another
+                # thread every minute, and a start in that window fails with
+                # WinError 6. So on Windows the helper's own error output
+                # (tracebacks included) no longer reaches the backend log.
+                stderr=asyncio.subprocess.DEVNULL if osplat.platform_id == "win32" else None,
                 limit=_SLICE,
                 start_new_session=True,
                 env={**os.environ, PARENT_ENV: str(os.getpid())},
             )
         except OSError as error:
+            info = osplat.process_tree.stderr_handle_info()
+            if info:
+                log.warning("result helper could not be started: %s (%s)", error, info)
             raise self._unavailable(f"it could not be started: {error}") from error
         self._process = process
-        from agent_team_backend import osplat
-
+        self._job = None
         try:
             # The tree stop() can end whole (a kill-on-close job on Windows).
-            osplat.process_tree.contain(process.pid)
+            self._job = osplat.process_tree.contain(process.pid)
         except OSError:
             pass
         assert process.stdout is not None
@@ -328,6 +349,18 @@ class ResultWorker:
             await asyncio.sleep(0)
         return "".join(parts)
 
+    def _schedule_idle_exit(self) -> None:
+        """Stop the helper once it has been idle for IDLE_EXIT_S."""
+        if self._process is None or self._loop is None:
+            return
+        self._idle_exit = self._loop.call_later(IDLE_EXIT_S, self._exit_idle)
+
+    def _exit_idle(self) -> None:
+        self._idle_exit = None
+        if self._lock is not None and self._lock.locked():
+            return  # a request is in progress; it schedules the next check
+        self.stop()
+
     def stop(self) -> None:
         """End the helper; the next request starts a new one.
 
@@ -335,6 +368,9 @@ class ResultWorker:
         itself (a onefile bootloader then removes what it unpacked); after
         STOP_GRACE_S its whole process tree is killed, whatever it is doing,
         and also when it has exited (what it started may still run)."""
+        if self._idle_exit is not None:
+            self._idle_exit.cancel()
+            self._idle_exit = None
         process, self._process = self._process, None
         if process is None:
             return
@@ -347,7 +383,8 @@ class ResultWorker:
                 pass  # its event loop is gone, and the pipe with it
         # A timer thread, not the event loop: it runs even if the loop ends
         # first; one still waiting when the backend exits is run then.
-        _stopping.add(process)
+        _stopping[process] = self._job
+        self._job = None
         timer = threading.Timer(STOP_GRACE_S if process.returncode is None else 0, _kill_tree, args=(process,))
         timer.daemon = True
         timer.start()
@@ -363,47 +400,57 @@ class ResultWorker:
         self._bind()
         assert self._lock is not None
         async with self._lock:
+            if self._idle_exit is not None:
+                self._idle_exit.cancel()
+                self._idle_exit = None
             try:
-                process = await self._started()
-                assert process.stdin is not None and process.stdout is not None
-                header = json.dumps({"entry": entry}).encode()
-                process.stdin.write(len(header).to_bytes(8, "big") + header)
-                encoded: list[bytes] = []
-                for piece in pieces:
-                    encoded.append(piece.encode("utf-8", "surrogatepass"))
-                    await asyncio.sleep(0)
-                process.stdin.write(sum(len(part) for part in encoded).to_bytes(8, "big"))
-                for part in encoded:
-                    process.stdin.write(part)
-                    await asyncio.wait_for(process.stdin.drain(), IDLE_S)
-                answer = json.loads(await self._frame(process.stdout))
-                if not answer.get("ok"):
-                    if answer.get("reason") == "json":
-                        raise InvalidResult
-                    raise ResultWorkerError("crashed", f"the helper reported {answer.get('reason')}")
-                text = await self._text_frame(process.stdout)
-            except (InvalidResult, ResultWorkerUnavailable):
-                raise
-            except BaseException as error:
-                # A request cut short leaves the pipes mid-frame: start over next time.
-                if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
-                    failure = ResultWorkerError("timeout", f"nothing for {IDLE_S:g} s")
-                elif isinstance(error, ResultWorkerError):
-                    failure = error
-                elif isinstance(error, Exception):
-                    failure = ResultWorkerError("crashed", f"{type(error).__name__}: {error}")
-                else:
-                    self.stop()
-                    raise
-                # A ready helper that fails is this request's failure: the next
-                # request starts a new helper at once.
+                return await self._wrap_locked(entry, pieces)
+            finally:
+                self._schedule_idle_exit()
+
+    async def _wrap_locked(self, entry: dict[str, Any], pieces: list[str]) -> str:
+        try:
+            process = await self._started()
+            assert process.stdin is not None and process.stdout is not None
+            header = json.dumps({"entry": entry}).encode()
+            process.stdin.write(len(header).to_bytes(8, "big") + header)
+            encoded: list[bytes] = []
+            for piece in pieces:
+                encoded.append(piece.encode("utf-8", "surrogatepass"))
+                await asyncio.sleep(0)
+            process.stdin.write(sum(len(part) for part in encoded).to_bytes(8, "big"))
+            for part in encoded:
+                process.stdin.write(part)
+                await asyncio.wait_for(process.stdin.drain(), IDLE_S)
+            answer = json.loads(await self._frame(process.stdout))
+            if not answer.get("ok"):
+                if answer.get("reason") == "json":
+                    raise InvalidResult
+                raise ResultWorkerError("crashed", f"the helper reported {answer.get('reason')}")
+            text = await self._text_frame(process.stdout)
+        except (InvalidResult, ResultWorkerUnavailable):
+            raise
+        except BaseException as error:
+            # A request cut short leaves the pipes mid-frame: start over next time.
+            if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
+                failure = ResultWorkerError("timeout", f"nothing for {IDLE_S:g} s")
+            elif isinstance(error, ResultWorkerError):
+                failure = error
+            elif isinstance(error, Exception):
+                failure = ResultWorkerError("crashed", f"{type(error).__name__}: {error}")
+            else:
                 self.stop()
-                raise failure from error
+                raise
+            # A ready helper that fails is this request's failure: the next
+            # request starts a new helper at once.
+            self.stop()
+            raise failure from error
         return text
 
 
-#: Helpers stopped whose grace has not run out yet.
-_stopping: set[asyncio.subprocess.Process] = set()
+#: Helpers stopped whose grace has not run out yet, with the job contain()
+#: made for each (None on POSIX or when there is none).
+_stopping: dict[asyncio.subprocess.Process, int | None] = {}
 
 
 @atexit.register
@@ -415,11 +462,16 @@ def _kill_stopping() -> None:
 def _kill_tree(process: asyncio.subprocess.Process) -> None:
     """Kill a helper with every process under it, also when the helper itself
     has exited: what it started may still run."""
-    _stopping.discard(process)
+    try:
+        # Taken out before it is ended, so the timer and the exit hook never
+        # both end it (closing the same job handle twice).
+        job = _stopping.pop(process)
+    except KeyError:
+        return
     from agent_team_backend import osplat
 
     try:
-        osplat.process_tree.end_contained(process.pid)
+        osplat.process_tree.end_contained(process.pid, job)
     except OSError:
         pass
 

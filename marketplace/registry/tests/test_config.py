@@ -226,6 +226,16 @@ def test_official_trust_configuration_fails_closed(
         load_settings()
 
 
+def test_open_admin_is_an_explicit_dev_opt_in(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("REGISTRY_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("REGISTRY_TRUST_PROFILE", raising=False)
+    monkeypatch.delenv("REGISTRY_ALLOW_OPEN_ADMIN", raising=False)
+    assert load_settings().allow_open_admin is False
+
+    monkeypatch.setenv("REGISTRY_ALLOW_OPEN_ADMIN", "1")
+    assert load_settings().allow_open_admin is True
+
+
 def test_official_profile_rejects_security_downgrades_and_requires_admin_token(
     monkeypatch, tmp_path
 ) -> None:
@@ -270,6 +280,7 @@ def test_official_profile_rejects_security_downgrades_and_requires_admin_token(
         ("REGISTRY_VERIFIER", VERIFIER_ACCEPTING, "ed25519 verifier"),
         ("REGISTRY_REQUIRE_SIGNATURE", "false", "package signatures"),
         ("REGISTRY_REQUIRE_AUTH", "false", "publisher authentication"),
+        ("REGISTRY_ALLOW_OPEN_ADMIN", "true", "open admin"),
     ):
         monkeypatch.setenv(variable, value)
         with pytest.raises(ValueError, match=message):

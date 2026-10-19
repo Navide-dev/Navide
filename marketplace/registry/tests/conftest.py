@@ -28,6 +28,7 @@ def settings(tmp_path) -> Settings:
         verifier_kind=VERIFIER_ACCEPTING,
         require_signature=False,
         require_auth=False,
+        allow_open_admin=True,
     )
 
 

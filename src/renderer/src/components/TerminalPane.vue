@@ -406,6 +406,7 @@ defineExpose({
   flushPendingClean: terminal.flushPendingClean,
   readRenderedText: terminal.readRenderedText,
   readScreenTail: terminal.readScreenTail,
+  readVisibleScreen: terminal.readVisibleScreen,
   // The pane's scrollback for a replacement pane to replay (quota-failover restart).
   serializeScrollback: terminal.serializeScrollback,
   readLineBeforeCursor: terminal.readLineBeforeCursor,

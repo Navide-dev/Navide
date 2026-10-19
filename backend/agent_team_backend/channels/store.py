@@ -18,6 +18,10 @@ from .base import Location
 COMPONENT = "channels"
 KV_ENABLED = "channels.enabled"
 KV_SHARE_OPEN_NOTIFY = "channels.share_open_notify"
+# location key -> previews of the messages kept for a wake, so a restart can say which were lost
+KV_WAKE_KEPT = "channels.wake_kept"
+# the same, carried over from before a restart until each chat's bot is running to be told
+KV_WAKE_LOST = "channels.wake_lost"
 
 
 def _v1(cur: sqlite3.Cursor) -> None:
@@ -119,6 +123,14 @@ def _v5(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE channel_pairing_requests ADD COLUMN account TEXT NOT NULL DEFAULT 'default'")
 
 
+def _v6(cur: sqlite3.Cursor) -> None:
+    # Waking a pane that is not online from its chat: the workspace and the conversation it
+    # is resumed onto. Rows from v5 keep '' until their pane is next seen online; until then
+    # an offline pane is only reported, as before.
+    cur.execute("ALTER TABLE channel_bindings ADD COLUMN workspace_path TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE channel_bindings ADD COLUMN session_id TEXT NOT NULL DEFAULT ''")
+
+
 DEFAULT_ACCOUNT = "default"
 
 # "replies": only answers to turns the chat started (the pre-mirror behaviour).
@@ -155,6 +167,8 @@ class Binding:
     verbosity: str = DEFAULT_VERBOSITY
     parent_pane_id: str = ""
     auto: bool = False
+    workspace_path: str = ""  # where the pane lives, for waking it ("" = unknown)
+    session_id: str = ""  # the conversation a wake resumes ("" = unknown)
 
     def location(self) -> Location:
         return Location(self.platform, self.account, self.chat_id, self.thread_id, self.title)
@@ -173,6 +187,7 @@ class ChannelStore:
         db.migrate(COMPONENT, 3, _v3)
         db.migrate(COMPONENT, 4, _v4)
         db.migrate(COMPONENT, 5, _v5)
+        db.migrate(COMPONENT, 6, _v6)
 
     def _rows(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
         with self._db.transaction() as cur:
@@ -197,6 +212,22 @@ class ChannelStore:
 
     def set_share_open_notify(self, enabled: bool) -> None:
         self._db.kv_set(KV_SHARE_OPEN_NOTIFY, bool(enabled), now=int(time.time()))
+
+    def kept_previews(self) -> dict[str, list[str]]:
+        kept = self._db.kv_get(KV_WAKE_KEPT, {})
+        return {str(k): [str(p) for p in v] for k, v in kept.items() if isinstance(v, list)} \
+            if isinstance(kept, dict) else {}
+
+    def set_kept_previews(self, kept: dict[str, list[str]]) -> None:
+        self._db.kv_set(KV_WAKE_KEPT, kept, now=int(time.time()))
+
+    def lost_previews(self) -> dict[str, list[str]]:
+        lost = self._db.kv_get(KV_WAKE_LOST, {})
+        return {str(k): [str(p) for p in v] for k, v in lost.items() if isinstance(v, list)} \
+            if isinstance(lost, dict) else {}
+
+    def set_lost_previews(self, lost: dict[str, list[str]]) -> None:
+        self._db.kv_set(KV_WAKE_LOST, lost, now=int(time.time()))
 
     # --- accounts -------------------------------------------------------------
 
@@ -342,7 +373,8 @@ class ChannelStore:
     @staticmethod
     def _binding(r: sqlite3.Row) -> Binding:
         return Binding(r["pane_id"], r["platform"], r["account"], r["chat_id"], r["thread_id"],
-                       r["title"], int(r["created_at"]), r["verbosity"], r["parent_pane_id"], bool(r["auto"]))
+                       r["title"], int(r["created_at"]), r["verbosity"], r["parent_pane_id"], bool(r["auto"]),
+                       r["workspace_path"], r["session_id"])
 
     def bindings(self) -> list[Binding]:
         return [self._binding(r) for r in self._rows("SELECT * FROM channel_bindings ORDER BY created_at")]
@@ -376,6 +408,10 @@ class ChannelStore:
                         (new_pane_id, old_pane_id))
             return cur.execute("UPDATE channel_bindings SET pane_id = ? WHERE pane_id = ?",
                                (new_pane_id, old_pane_id)).rowcount > 0
+
+    def set_wake_target(self, pane_id: str, workspace_path: str, session_id: str) -> bool:
+        return self._exec("UPDATE channel_bindings SET workspace_path = ?, session_id = ? WHERE pane_id = ?",
+                          (workspace_path, session_id, pane_id)) > 0
 
     def set_verbosity(self, pane_id: str, verbosity: str) -> Binding | None:
         with self._db.transaction() as cur:

@@ -31,6 +31,9 @@ MARKETPLACE_REQUEST_TOOLS = [
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
     "plugins_request_remove", "marketplace_request_status", "plugins_disable", "plugins_enable",
 ]
+#: Core tools registered after those: plan mcp_614482's read-only failover state and accounts (P1)
+#: and account sign-in (P2).
+ACCOUNT_TOOLS = ["cli_failover_state", "cli_accounts_list", "cli_account_sign_in"]
 #: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills).
 PLUGIN_PREFIXES = ("plan_", "skills_")
 BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"
@@ -50,7 +53,7 @@ def test_the_existing_tools_are_exactly_mains_and_the_share_tools_come_after() -
     # onto the same server; those are left out by their known prefixes, and
     # anything else that is not main's must make this fail.
     tools = [t for t in _tools() if t["name"] in core or not t["name"].startswith(PLUGIN_PREFIXES)]
-    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS
+    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS + ACCOUNT_TOOLS
     existing = [t for t in tools if t["name"] not in added]
     assert json.loads(json.dumps(existing, sort_keys=True)) == baseline
     assert [t["name"] for t in tools[-len(added):]] == added

@@ -20,6 +20,8 @@ import { ipcErrorMessage, usePluginInstallFlow } from '../composables/usePluginI
 import PluginTrustDialog from './PluginTrustDialog.vue'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureSummary from './PluginDisclosureSummary.vue'
+import PluginSourceBadge from './PluginSourceBadge.vue'
+import type { PluginSource } from '../../../shared/pluginSource'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import PackInstallDialog from './PackInstallDialog.vue'
 import { usePackInstallFlow } from '../composables/usePackInstallFlow'
@@ -271,6 +273,13 @@ const latestVersionInfo = computed(() => {
     null
   )
 })
+
+/** K2: only a Registry-signed version reads as reviewed; anything else gets no source badge. */
+const detailSource = computed<PluginSource | undefined>(() => {
+  const info = latestVersionInfo.value
+  if ((info?.trust_tier ?? detail.value?.trust_tier) !== 'signed-verified') return undefined
+  return info?.channel === 'pre-release' ? 'prerelease' : 'marketplace'
+})
 // The Registry's latest version has no artifact for this Host. A different
 // install candidate alone does not mean that: with "Get pre-releases" on, the
 // candidate is a newer pre-release while the latest stable is still installable.
@@ -344,6 +353,26 @@ async function setPrerelease(enabled: boolean, input?: HTMLInputElement): Promis
   } finally {
     prereleaseBusy.value = false
   }
+}
+
+// K5: a Navide plugin that is not installed can be installed as a pre-release
+// from its detail page. The offer is the Registry's newest pre-release when
+// this Host can install it and Install would not already take it.
+const prereleaseOffer = computed(() => {
+  const d = detail.value
+  const version = d?.latest_prerelease_version
+  if (!d || !version || installableVersionInfo.value?.version === version) return null
+  return d.versions.find((v) => v.version === version && v.installable && !v.yanked && v.compatible !== false) ?? null
+})
+// Turns on this Navide plugin's switch only (never another one's), then
+// installs the offered version through the normal flow.
+async function installPrereleaseOffer(): Promise<void> {
+  const d = detail.value
+  const offer = prereleaseOffer.value
+  if (!d || !offer) return
+  await setPrerelease(true)
+  if (detail.value?.gets_prereleases !== true || idOf(detail.value) !== idOf(d)) return
+  await installFrom(d.namespace, d.name, offer.version)
 }
 
 // Extension Pack detail: each member's name, version and permissions, shown
@@ -517,6 +546,11 @@ watch(
             <div class="mkt-hero-text">
               <div class="mkt-detail-title">
                 <h3>{{ reveal(detail.display_name || detail.name) }}</h3>
+                <PluginSourceBadge v-if="detailSource" :source="detailSource" />
+                <PluginSourceBadge
+                  v-if="detailSource === 'marketplace' && detail.latest_prerelease_version"
+                  source="prerelease"
+                />
                 <span v-if="isPack(detail)" class="mkt-badge mkt-badge--accent mkt-pack-badge">
                   {{ $t('settings.extensions.pack.badge') }}
                 </span>
@@ -616,6 +650,14 @@ watch(
                     ? $t('settings.extensions.install')
                     : $t('settings.extensions.marketplace.installVersion', { version: installableVersionInfo.version })
               }}</template>
+            </button>
+            <button
+              v-if="!isPack(detail) && !installedById.get(idOf(detail)) && prereleaseOffer"
+              class="mkt-install-prerelease nv-btn nv-btn--ghost"
+              :disabled="flow.busy.value || prereleaseBusy"
+              @click="installPrereleaseOffer"
+            >
+              {{ $t('settings.extensions.marketplace.installPrerelease', { version: prereleaseOffer.version }) }}
             </button>
             <label v-if="hasPrereleases" class="mkt-prerelease-toggle">
               <input
@@ -909,6 +951,7 @@ watch(
                 :scan="latestVersionInfo.scan"
                 :registry="latestVersionInfo.registry"
                 :verified="false"
+                :source="detailSource"
               />
             </section>
 
@@ -1117,6 +1160,10 @@ watch(
               <div class="mkt-card-title">
                 <span class="ext-id">{{ reveal(ext.display_name || ext.name) }}</span>
                 <span v-if="ext.latest_version" class="mkt-muted mkt-card-version">{{ ext.latest_version }}</span>
+                <template v-if="ext.trust_tier === 'signed-verified'">
+                  <PluginSourceBadge v-if="ext.latest_prerelease_version !== ext.latest_version" source="marketplace" />
+                  <PluginSourceBadge v-if="ext.latest_prerelease_version" source="prerelease" />
+                </template>
                 <span
                   v-if="updatesById.get(ext.identity)"
                   class="mkt-badge mkt-badge--accent ext-update-badge"
@@ -1223,6 +1270,7 @@ watch(
       v-if="flow.pendingConfirm.value"
       :pending="flow.pendingConfirm.value"
       :step="flow.pendingStep.value"
+      @confirm-replace="flow.confirmReplace"
       @confirm-publisher="flow.confirmPublisher"
       @confirm-risk="flow.confirmRisk"
       @cancel="flow.cancel"

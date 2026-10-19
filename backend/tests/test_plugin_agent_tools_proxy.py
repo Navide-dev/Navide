@@ -56,6 +56,8 @@ B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
     "plugins_request_remove", "marketplace_request_status", "plugins_disable", "plugins_enable",
 })
+#: Core tools added after that digest by plan mcp_614482 (read-only failover state and accounts, account sign-in).
+ACCOUNT_CORE_TOOLS = frozenset({"cli_failover_state", "cli_accounts_list", "cli_account_sign_in"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server).
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"
@@ -227,8 +229,8 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     pristine = await _tools_list_text()
     builtin = await _builtin_package_tool_names()
     module_only = [t for t in json.loads(pristine) if t["name"] not in builtin]
-    assert B2C_CORE_TOOLS <= {t["name"] for t in module_only}
-    existing = [t for t in module_only if t["name"] not in B2C_CORE_TOOLS]
+    assert B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS <= {t["name"] for t in module_only}
+    existing = [t for t in module_only if t["name"] not in B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS]
     module_text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     assert hashlib.sha256(module_text.encode()).hexdigest() == MAIN_TOOLS_LIST_SHA256
 
@@ -1161,7 +1163,7 @@ def _devmap_tool(monkeypatch) -> dict[str, Any]:
     ],
 )
 async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop(monkeypatch, shape) -> None:
-    from tests.test_agent_tool_chunked_transport import _longest_loop_slice
+    from tests.test_agent_tool_chunked_transport import _least_longest_loop_slice
 
     import gc
 
@@ -1177,11 +1179,38 @@ async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loo
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
     del value
     gc.collect()
-    result, longest = await _longest_loop_slice(monkeypatch, proxy.call("devmap_read", {}, None))
+    result, longest = await _least_longest_loop_slice(
+        monkeypatch, lambda: proxy.call("devmap_read", {}, None), LOOP_SLICE_BUDGET_S
+    )
     assert result.isError is False
     # Character for character what the in-process wrap gives (same function, in the helper).
     assert result.content[0].text == expected
     assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+
+
+async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(monkeypatch) -> None:
+    """The control for the check above: a result parsed and wrapped in one
+    step on the loop, as before the helper, fails it on every attempt. A
+    tenth of the 10 MiB keeps the three attempts cheap: one still holds the
+    loop for hundreds of milliseconds (the 10 MiB one, seconds)."""
+    from agent_team_backend.agent_tool_result_worker import strict_loads
+    from tests.test_agent_tool_chunked_transport import _least_longest_loop_slice
+
+    import gc
+
+    entry = _devmap_tool(monkeypatch)
+    _pieces_host(monkeypatch, agent_tool_payload_text({"rows": [{"k": i, "v": "abcdefgh中"} for i in range(34_500)]}))
+
+    async def on_the_loop(entry: dict[str, Any], pieces: list[str]) -> str:
+        return proxy.wrap_result(entry, strict_loads("".join(pieces)))
+
+    monkeypatch.setattr(proxy._result_worker, "wrap", on_the_loop)  # noqa: SLF001
+    gc.collect()
+    result, longest = await _least_longest_loop_slice(
+        monkeypatch, lambda: proxy.call("devmap_read", {}, None), LOOP_SLICE_BUDGET_S
+    )
+    assert result.isError is False
+    assert longest >= LOOP_SLICE_BUDGET_S, f"a whole-result parse on the loop read as {longest * 1000:.1f} ms"
 
 
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400"])
@@ -1264,6 +1293,115 @@ async def test_the_helper_starts_with_the_first_result_in_pieces_and_not_before(
     assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
     assert proxy._result_worker._process is not None  # noqa: SLF001
     assert proxy._result_worker.state == "ready"  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+
+
+async def test_an_idle_helper_exits_after_its_window_and_the_next_large_result_starts_a_new_one(monkeypatch) -> None:
+    import asyncio
+
+    from agent_team_backend import agent_tool_result_worker as worker
+
+    proxy._result_worker.stop()  # noqa: SLF001
+    proxy._result_worker._start_failed = None  # noqa: SLF001
+    monkeypatch.setattr(worker, "IDLE_EXIT_S", 0.5)
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    first = proxy._result_worker._process  # noqa: SLF001
+    assert first is not None
+    # Within the window the same helper answers: no new start.
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    assert proxy._result_worker._process is first  # noqa: SLF001
+    # Idle past the window: stopped, so what the result left in its memory is gone.
+    await asyncio.sleep(1.0)
+    assert proxy._result_worker._process is None  # noqa: SLF001
+    assert proxy._result_worker.state == "idle"  # noqa: SLF001
+    assert await asyncio.wait_for(first.wait(), 10) == 0
+    # The next large result starts a new helper and reads the same.
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    second = proxy._result_worker._process  # noqa: SLF001
+    assert second is not None and second is not first
+    assert proxy._result_worker.state == "ready"  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+
+
+async def test_a_stopped_helper_closes_only_its_own_job_once_when_its_pid_was_taken_by_a_pane(monkeypatch) -> None:
+    """Windows: the job table is keyed by pid and shared with the panes. A
+    pane spawned onto the helper's pid owns that entry; ending the helper must
+    close the helper's job only (once), never the pane's (closing it kills the
+    pane's whole tree), and leave the pane's entry in place."""
+    import asyncio
+
+    from agent_team_backend import agent_tool_result_worker as worker
+    from agent_team_backend import osplat
+    from agent_team_backend.osplat import _windows
+
+    # End the helpers earlier tests left (on Windows each holds a real job)
+    # with the real handles first: their stop timers must not close those
+    # jobs through the fake below while this test counts.
+    proxy._result_worker.stop()  # noqa: SLF001
+    for leftover in list(worker._stopping):  # noqa: SLF001
+        worker._kill_tree(leftover)  # noqa: SLF001
+    closed: list[int] = []
+    kernel32 = types.SimpleNamespace(CloseHandle=lambda handle: closed.append(int(handle)) or 1)
+    monkeypatch.setattr(_windows, "_kernel32", lambda: kernel32)
+    monkeypatch.setattr(_windows, "_create_kill_on_close_job", lambda: 1001)
+    monkeypatch.setattr(_windows, "_assign_to_job", lambda job, pid: None)
+    monkeypatch.setattr(_windows, "_jobs", {})
+    monkeypatch.setattr(osplat, "process_tree", _windows.process_tree)
+    monkeypatch.setattr(worker, "STOP_GRACE_S", 0.0)
+    proxy._result_worker.stop()  # noqa: SLF001
+    proxy._result_worker._start_failed = None  # noqa: SLF001
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    helper = proxy._result_worker._process  # noqa: SLF001
+    assert helper is not None
+    assert _windows._jobs[helper.pid][0] == 1001  # noqa: SLF001
+    # A pane spawned onto the same pid registers its own job over the entry.
+    _windows._jobs[helper.pid] = (2002, "pane")  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+    await asyncio.wait_for(helper.wait(), 10)
+    for _ in range(100):
+        if closed:
+            break
+        await asyncio.sleep(0.05)
+    # The kill at exit (or a second timer) finds nothing left to close.
+    worker._kill_tree(helper)  # noqa: SLF001
+    assert closed == [1001]
+    assert _windows._jobs[helper.pid] == (2002, "pane")  # noqa: SLF001
+    # The pane's own close still ends its job, once.
+    _windows._release_job(helper.pid, 2002)  # noqa: SLF001
+    assert closed == [1001, 2002]
+
+
+async def test_on_windows_the_helper_does_not_inherit_the_backend_stderr(monkeypatch) -> None:
+    """Windows: an inherited stderr is duplicated from the backend's standard
+    handle, which another thread may be swapping at that moment (WinError 6)."""
+    import asyncio
+
+    from agent_team_backend import osplat
+
+    seen: list[Any] = []
+    real = asyncio.create_subprocess_exec
+
+    async def spy(*args: Any, **kwargs: Any) -> Any:
+        seen.append(kwargs.get("stderr"))
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    # None is the default: inherited, as before, on macOS and Linux.
+    for platform, expected in (("darwin", None), ("linux", None), ("win32", asyncio.subprocess.DEVNULL)):
+        proxy._result_worker.stop()  # noqa: SLF001
+        proxy._result_worker._start_failed = None  # noqa: SLF001
+        monkeypatch.setattr(osplat, "platform_id", platform)
+        _pieces_host(monkeypatch, agent_tool_payload_text(value))
+        assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+        assert seen[-1] == expected, platform
     proxy._result_worker.stop()  # noqa: SLF001
 
 

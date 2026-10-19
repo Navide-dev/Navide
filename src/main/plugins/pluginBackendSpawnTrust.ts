@@ -9,6 +9,7 @@ import {
   type InstalledRegistryTrustContext,
 } from './pluginInstalledTrust'
 import { PluginActivationSelector } from './pluginActivationSelector'
+import { verifyLocalInstalledPackage } from './pluginLocalInstall'
 
 export interface BackendSpawnTrustContext {
   pluginsRoot: () => string
@@ -33,8 +34,8 @@ export function verifyInstalledBackendSpawnTrust(
     packageRelativePath.startsWith(`..${sep}`)
   ) {
     // Factory-bundled and developer-local packages do not carry Registry
-    // receipts. The Registry trust hook applies only to installed Registry
-    // packages under the Host-owned plugins root.
+    // receipts. The Registry trust hook applies only to installed packages
+    // under the Host-owned plugins root (Registry or installed from a file).
     return
   }
 
@@ -55,11 +56,9 @@ export function verifyInstalledBackendSpawnTrust(
   // Pre-selector installs retain their legacy Registry verification path. Once
   // a selector exists, every launch must match its active immutable identity.
   if (selectorRecord === null) {
-    const decision = verifyInstalledRegistryPackage(
-      canonicalPackageDir,
-      activation.pluginId,
-      context.currentRegistryTrust(),
-    )
+    const trust = context.currentRegistryTrust()
+    const decision = verifyLocalInstalledPackage(pluginsRoot, canonicalPackageDir, activation.pluginId, trust) ??
+      verifyInstalledRegistryPackage(canonicalPackageDir, activation.pluginId, trust)
     if (decision.action === 'quarantine') {
       throw new BackendPluginError(
         'BACKEND_UNAVAILABLE',
@@ -97,11 +96,11 @@ export function verifyInstalledBackendSpawnTrust(
     )
   }
 
-  const decision = verifyInstalledRegistryPackage(
-    canonicalPackageDir,
-    activation.pluginId,
-    context.currentRegistryTrust(),
-  )
+  // Card K3: a package installed from a file is verified against the user's
+  // consent record, under the same selector identity checks.
+  const trust = context.currentRegistryTrust()
+  const decision = verifyLocalInstalledPackage(pluginsRoot, canonicalPackageDir, activation.pluginId, trust) ??
+    verifyInstalledRegistryPackage(canonicalPackageDir, activation.pluginId, trust)
   if (decision.action === 'quarantine') {
     throw new BackendPluginError(
       'BACKEND_UNAVAILABLE',

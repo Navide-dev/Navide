@@ -1,5 +1,6 @@
 """The detached Windows runner must fail closed when job setup is unavailable."""
 import importlib.util
+import types
 from pathlib import Path
 
 import pytest
@@ -123,3 +124,51 @@ def test_main_writes_failure_verdict_without_starting_pytest(tmp_path, monkeypat
     assert ci_windows_tests.main() == 1
     assert Path(ci_windows_tests.DONE).read_text(encoding="ascii") == "1"
     assert "pytest not started" in output.value
+
+
+def test_main_takes_the_verdict_of_a_pytest_that_ended_at_the_cap(tmp_path, monkeypatch):
+    """pytest ends during the last report interval: the loop leaves at the cap
+    without polling again, so the verdict has to come from one more poll."""
+    class _Output:
+        value = ""
+
+        def reconfigure(self, **_kwargs):
+            pass
+
+        def write(self, text):
+            self.value += text
+            return len(text)
+
+        def flush(self):
+            pass
+
+    clock = [0.0]
+
+    class _Child:
+        pid = 789
+
+        def poll(self):
+            # Still running until the clock reaches the cap, done from then on.
+            return 0 if clock[0] >= ci_windows_tests.CAP_SECONDS else None
+
+    def sleep(seconds):
+        clock[0] += seconds
+
+    output = _Output()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(ci_windows_tests.sys, "argv", ["ci_windows_tests.py"])
+    monkeypatch.setattr(ci_windows_tests.sys, "stdout", output)
+    monkeypatch.setattr(ci_windows_tests, "_join_job", lambda: object())
+    monkeypatch.setattr(ci_windows_tests, "_job_pids", lambda _job: [])
+    monkeypatch.setattr(ci_windows_tests, "_runner_procs", lambda: "(none)")
+    monkeypatch.setattr(ci_windows_tests.subprocess, "Popen", lambda *_args, **_kwargs: _Child())
+    monkeypatch.setattr(ci_windows_tests.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(ci_windows_tests.time, "sleep", sleep)
+    monkeypatch.setattr(ci_windows_tests.psutil, "virtual_memory", lambda: types.SimpleNamespace(percent=1, total=1 << 30))
+    monkeypatch.setattr(ci_windows_tests.psutil, "cpu_percent", lambda: 1)
+    monkeypatch.setattr(ci_windows_tests.psutil, "pids", lambda: [])
+
+    assert ci_windows_tests.main() == 0
+    assert Path(ci_windows_tests.DONE).read_text() == "0"
+    assert "pytest exit: 0" in output.value
+    assert "still running at cap" not in output.value

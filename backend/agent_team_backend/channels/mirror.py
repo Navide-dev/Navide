@@ -691,6 +691,9 @@ class Mirror:
 
     async def _adopt_child(self, root: Binding, parent: dict[str, Any], child: dict[str, Any]) -> None:
         cid, cname = str(child["pane_id"]), str(child["name"])
+        # Binds without ChannelManager.bind, so it keeps that refusal itself.
+        if self.m._seams.is_login_pane(cid):
+            return
         adapter = self.m._adapters.get((root.platform, root.account))
         if adapter is None:
             return

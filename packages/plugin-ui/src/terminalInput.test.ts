@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Terminal } from '@xterm/xterm'
+import { Terminal } from '@xterm/xterm'
 import { createTerminalInputHandlers } from './terminalInput'
 
 // Issue #190: on Windows, Ctrl+V reached xterm, which encoded it as ^V and
@@ -83,5 +83,56 @@ describe('terminal key handler – paste chords (issue #190)', () => {
     expect(cmdV.defaultPrevented).toBe(false)
     expect(h.keyHandler(ctrlV)).toBe(true)
     expect(h.keyHandler(ctrlShiftV)).toBe(true)
+  })
+})
+
+// Switching input source with Cmd+Space while a reading is still unconfirmed
+// committed it twice. Driven through a REAL xterm so the CompositionHelper's
+// own finalize logic is what is under test, not a model of it.
+describe('terminal key handler – input-source switch mid-composition', () => {
+  function ime(textarea: HTMLTextAreaElement, type: string, data: string): void {
+    textarea.dispatchEvent(Object.assign(new Event(type), { data }))
+  }
+
+  function key(type: 'keydown' | 'keyup', init: KeyboardEventInit, keyCode: number): KeyboardEvent {
+    const e = new KeyboardEvent(type, { bubbles: true, cancelable: true, ...init })
+    Object.defineProperty(e, 'keyCode', { value: keyCode })
+    return e
+  }
+
+  const macrotask = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+
+  it('commits the pending reading once when Cmd is pressed before compositionend', async () => {
+    onPlatform('MacIntel')
+    const term = new Terminal({ allowProposedApi: true })
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    term.open(host)
+    const sent: string[] = []
+    term.onData((d) => sent.push(d))
+    term.attachCustomKeyEventHandler(createTerminalInputHandlers({
+      terminal: term,
+      isAgentPane: () => true,
+      send: vi.fn(),
+      encodeNewline: () => '\n',
+      finalizeStaleComposition: vi.fn(),
+      reportEmptyCopy: vi.fn(),
+      copy: vi.fn(),
+    }).keyHandler)
+    const textarea = term.textarea!
+
+    ime(textarea, 'compositionstart', '')
+    textarea.value = 'ㄇㄚ˙'
+    ime(textarea, 'compositionupdate', 'ㄇㄚ˙')
+    await macrotask()
+
+    // Cmd goes down; Space is taken by macOS, which commits the reading.
+    textarea.dispatchEvent(key('keydown', { key: 'Meta', code: 'MetaLeft', metaKey: true, isComposing: true }, 91))
+    ime(textarea, 'compositionend', 'ㄇㄚ˙')
+    await macrotask()
+
+    expect(sent.join('')).toBe('ㄇㄚ˙')
+    term.dispose()
+    host.remove()
   })
 })

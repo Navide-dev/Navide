@@ -48,7 +48,7 @@ import logging
 import re
 import time
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -178,11 +178,19 @@ def next_run_after(schedule: dict[str, Any], after_ms: int) -> int | None:
 
 
 def _day_start_ms(schedule: dict[str, Any], now_ms: int) -> int:
-    """Local midnight of ``now_ms`` in the job's zone (system zone for every)."""
+    """Local midnight of ``now_ms`` in the job's zone (system zone for every).
+
+    Built from the calendar date of ``now_ms`` with that day's own UTC offset,
+    so a DST switch later in the day does not move the day's start. Without a
+    zone the naive local datetime resolves through the system zone rules.
+    """
     tz = schedule.get("tz")
-    zone = _zone(str(tz)) if tz else datetime.now().astimezone().tzinfo or timezone.utc
-    local = datetime.fromtimestamp(now_ms / 1000, zone)
-    return int(local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
+    if tz:
+        zone = _zone(str(tz))
+        day = datetime.fromtimestamp(now_ms / 1000, zone).date()
+        return int(datetime(day.year, day.month, day.day, tzinfo=zone).timestamp() * 1000)
+    day = datetime.fromtimestamp(now_ms / 1000).date()
+    return int(datetime(day.year, day.month, day.day).timestamp() * 1000)
 
 
 # ── the one validator (WS scheduler.upsert and MCP scheduler_upsert) ────────
@@ -707,6 +715,15 @@ def outcome_of_send(answer: dict[str, Any]) -> dict[str, Any]:
     if status == "queued":
         hold = (answer.get("hold") or {}).get("key") or "pending"
         return {"status": "ok", "detail": f"queued ({hold})", "msg_key": msg_key}
+    if status == "unconfirmed":
+        # The text and its Enter went out, but nothing confirmed the CLI took
+        # it. Not a run that happened: an error the owner sees, and a warning.
+        log.warning("scheduler: delivery %s unconfirmed — the target may not have taken it", msg_key)
+        return {
+            "status": "error", "reason": "unconfirmed", "msg_key": msg_key,
+            "detail": "delivery unconfirmed: sent, but the target was not seen taking it — "
+            "check the pane before resending",
+        }
     return {"status": "ok", "detail": str(status or "sent"), "msg_key": msg_key}
 
 
@@ -923,6 +940,11 @@ class SchedulerService:
         if status in ("failed", "rejected"):
             await self.store.resolve_queued_run(
                 job["id"], "error", status, f"then {status}: {(outcome or {}).get('reason') or status}"
+            )
+        elif status == "unconfirmed":
+            log.warning("scheduler: queued delivery %s ended unconfirmed", key)
+            await self.store.resolve_queued_run(
+                job["id"], "error", status, "then unconfirmed: the target was not seen taking it"
             )
         elif outcome is None:
             await self.store.resolve_queued_run(job["id"], "ok", None, "outcome no longer tracked")

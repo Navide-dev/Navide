@@ -24,6 +24,7 @@ import { workspaceAliasKey } from './lib/workspaceAlias'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
+import { chromeSourceMark, pluginSourceLabel } from './lib/pluginSourceMark'
 import { subtreeSignals } from './lib/paneSubtreeStatus'
 import { closeAdvisoriesFor } from './lib/paneCloseAdvisories'
 import { interruptAdvisoriesFor } from './lib/paneInterruptAdvisories'
@@ -66,6 +67,7 @@ import { usePreview } from './preview/usePreview'
 import { usePreviewLog } from './preview/usePreviewLog'
 import NotificationHost from './components/NotificationHost.vue'
 import BackendResourceNotices from './components/BackendResourceNotices.vue'
+import DeveloperModeReminder from './components/DeveloperModeReminder.vue'
 import Welcome from './components/Welcome.vue'
 import { agentUsesBracketedPaste } from '@navide/plugin-shell'
 import { useNotify, useTheme } from '@navide/plugin-ui/foundation'
@@ -196,6 +198,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, runKickoffAttempts,
   submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
+import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
@@ -262,6 +265,7 @@ import {
   RESUME_BEHAVIOR_SETTING_KEY,
   RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY,
   RESTORE_SCOPE_SETTING_KEY,
+  PREVIOUS_LAUNCH_ID_SETTING_KEY,
   createWorkspaceRestoreSession,
   explicitRestoreDecision,
   interruptedRestoreTargetIds,
@@ -275,11 +279,13 @@ import {
   stripDeadOpencodeAutoFlag,
   turnStateForStatus,
   wasInterruptedAtLaunch,
+  wasLiveAtLastLaunch,
   type RestoreScope,
   type RestoreSessionDecision,
   type RestoreSessionTrigger,
   type WorkspaceRestoreSession,
 } from './lib/resumeBehavior'
+import { WakeClaims, joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere, type SessionHolder } from './lib/paneOpenAnswer'
 import { flushSettingsOnExit, initSettingsBackend, onSettingsChanged, settingsGet, settingsRemove, settingsSet } from '@navide/plugin-ui/shared'
 import { cliPermissionKey, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
 import { chooseLaunchCommand, cliCommandKey, cliEnvKey, spawnEnvOverride, type LaunchCommandSource } from '@navide/plugin-shell'
@@ -375,6 +381,7 @@ import {
   type RestartOutcome,
 } from './composables/useQuotaFailover'
 import { accountLabel } from './lib/accountLabel'
+import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
 import {
   DEFAULT_SLOT_ID,
   FOLLOW_SWITCH_AGENT,
@@ -397,7 +404,18 @@ import {
   createAccountFollowStore,
   followingPaneRows,
   isAccountFixed,
+  restoreSpawnPin,
+  type AccountDirsGate,
 } from './lib/accountFollowPanes'
+import {
+  chainsDirLogin,
+  dirLoginLanded,
+  dirLoginReminderTargets,
+  loadDirLoginReminded,
+  saveDirLoginReminded,
+  skippedDirLogins,
+  type PendingLogin,
+} from './lib/accountDirLoginChain'
 import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
@@ -434,6 +452,7 @@ const CliHealthGuide = defineAsyncComponent(() => import('./components/CliHealth
 const CliInstallDialog = defineAsyncComponent(() => import('./components/CliInstallDialog.vue'))
 const SkillInstallApprovalDialog = defineAsyncComponent(() => import('./components/SkillInstallApprovalDialog.vue'))
 const PluginAgentRequestDialog = defineAsyncComponent(() => import('./components/PluginAgentRequestDialog.vue'))
+const AgentSignInConfirmDialog = defineAsyncComponent(() => import('./components/AgentSignInConfirmDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
@@ -463,6 +482,16 @@ const rolesApi = useRoles(backend)
 const cliProfilesApi = useCliProfiles(backend)
 const pipelinesApi = usePipelines(backend)
 const stagesApi = useStages(backend, () => pipelinesApi.activePipelineId.value)
+// The run panel's stage count reads this cache, so it follows the active
+// pipeline: it first loads before pipelines.list has answered (under the
+// 'default' placeholder id), and a switch made elsewhere (MCP, another window)
+// arrives as pipelines.changed with no stages for it (#417).
+watch(
+  () => pipelinesApi.activePipelineId.value,
+  (id) => {
+    if (id) void stagesApi.refresh(id)
+  },
+)
 // DAG run engine (gates, reject loops, pins, restart-from-node). Its hooks are
 // no-ops for a linear pipeline. It reports node states over its own requests,
 // not sendQuiet, so a run's pipeline.* call sequence stays what it was.
@@ -550,11 +579,13 @@ onMounted(() => {
   // process (cli:get-pane-buffer); answer from this window's paneRefs.
   window.agentTeam?.onCliPaneBufferRequest?.((paneId) => {
     const ref = paneRefs[paneId]
+    const pane = panes.value.find((p) => p.id === paneId)
     return buildCliPaneBufferReply(
-      panes.value.find((p) => p.id === paneId),
+      pane,
       ref
         ? {
-            buffer: readPaneShareText(ref, CLI_CHIP_LINE_CAP)
+            // A sign-in pane's screen holds its authorization URL or code.
+            buffer: pane?.isLogin ? '' : readPaneShareText(ref, CLI_CHIP_LINE_CAP)
           }
         : null
     )
@@ -1138,6 +1169,12 @@ const windowPluginContributions = computed(() =>
   )
 )
 
+/** K2: a local or test package names its source on its title-bar button. */
+function titlebarPluginLabel(contribution: PluginRegionContribution): string {
+  const mark = chromeSourceMark(contribution.source)
+  return mark ? `${contribution.title} · ${pluginSourceLabel(i18n.global.t, mark)}` : contribution.title
+}
+
 // The titlebar shows these as icons, matching the gear beside them. A plugin
 // whose icon file is missing or unreadable falls back to a glyph rather than
 // to its title: a word-shaped button next to icon-shaped ones reads as a
@@ -1709,6 +1746,10 @@ interface ActivePane {
    *  downstream stages point agents at prior outputs via file path instead of
    *  inlining the whole terminal buffer into the kickoff. */
   outputLogFile?: string
+  /** A CLI sign-in pane (spawned with isLogin / loginProfileId). What it prints
+   *  — an authorization URL, a pasted code — is never handed to another pane,
+   *  a chat or the editor's AI Chat, and it writes no log file. */
+  isLogin?: boolean
   /** CLI session id used to resume this pane on restart. Known immediately for
    *  Claude (the --session-id we pinned); filled in later for Codex/Antigravity once
    *  their CLI-generated id is detected from the session file. */
@@ -1801,6 +1842,9 @@ interface ActivePane {
    *  path may inject on the user's behalf. Cleared by the first injection or by
    *  agent activity. Not persisted: a restart re-derives it from the restore. */
   resumeContinueAvailable?: boolean
+  /** Runtime-only: the session a restore launched this pane on ('' = a fresh one).
+   *  ui.pane.open reports it so a caller that needs the saved conversation can check. */
+  launchedSessionId?: string
   /** Cold-restore metadata retained until the placeholder is explicitly opened. */
   deferredRestore?: DeferredRestoreMetadata
 }
@@ -2611,6 +2655,12 @@ async function deliverAgentMessage(
   // that it is reported unconfirmed, not failed: the text and its Enter did go
   // out, and a sender told "failed" resends work that may already be running.
   // Its user record arriving later still confirms it (messaging.confirmDelivery).
+  // Enter went out on a collapsed paste nothing on screen could judge: not a
+  // delivery. Its user record arriving later still confirms it.
+  if (outcome.submit === 'unconfirmed') {
+    paneRefs[paneId]?.clearDeliveredPending?.()
+    return { unconfirmed: true }
+  }
   if (unconfirmed && !injectionVerified(outcome.echo ?? null, outcome.submit ?? null)) {
     if (!(await cliSignalSince(paneId, typedAt, RESUME_CONSUME_WAIT_MS))) {
       paneRefs[paneId]?.clearDeliveredPending?.()
@@ -3898,11 +3948,17 @@ onMounted(() => {
     isPaneIdle: (paneId: string) => deliveryHoldKey(paneId) === null,
     idleHoldKey: deliveryHoldKey,
     refuseDelivery: (paneId, envelope) => {
-      if (panes.value.find((p) => p.id === paneId)?.agentKey !== TERMINAL_AGENT_KEY) return null
+      const target = panes.value.find((p) => p.id === paneId)
+      // Only the user types into a CLI sign-in pane: whatever addressed it (an
+      // agent, a chat, another device, a scheduled job) could otherwise finish
+      // the sign-in on an account it controls.
+      if (target?.isLogin) return rawReason(SIGN_IN_PANE_INPUT_REFUSAL)
+      if (target?.agentKey !== TERMINAL_AGENT_KEY) return null
       const refusal = paneMultilineRefusal(paneId, envelope)
       return refusal ? rawReason(refusal) : null
     },
-    pushTarget: pushTargetForMessaging,
+    // A push skips refuseDelivery, so a sign-in pane is never offered one.
+    pushTarget: (paneId) => (panes.value.find((p) => p.id === paneId)?.isLogin ? null : pushTargetForMessaging(paneId)),
     pushDeliver: pushDeliverAgentMessage,
     routeRemote: routeRemoteMessage,
     reportDelivery: (msgKey, ok, reason) => {
@@ -4423,6 +4479,12 @@ async function injectText(
     ? (paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined)
     : undefined
   const screenTail = (): string => (readScreen ? readScreen(SUBMIT_SCREEN_LINES) : '')
+  // The collapsed-paste check alone reads the whole screen, frame rows kept —
+  // see submitEvidence. The other two verdicts keep the narrow tail read.
+  const readVisible = paneId !== undefined
+    ? (paneRefs[paneId]?.readVisibleScreen as (() => string) | undefined)
+    : undefined
+  const visibleScreen = (): string | undefined => readVisible?.()
   // Whether the composer is holding our tail RIGHT NOW decides which signal we
   // can trust below, so sample it before pressing Enter.
   const tailWasOnScreen = !!tail && normalizeForMatch(screenTail()).includes(tail)
@@ -4462,8 +4524,30 @@ async function injectText(
     return true
   }
   const MAX_SUBMITS = 3
+  // A turn started or ended after this Enter — the CLI took a message.
+  const turnSince = (t: number): boolean => paneId !== undefined
+    && Math.max(paneTurnStartedAt.get(paneId) ?? 0, paneTurnCompleteAt.get(paneId) ?? 0) > t
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  // Sampled before the first Enter: a pane already working queues our message
+  // and starts no turn for it, so there is no turn to watch for.
+  const midTurnAtEnter = paneId !== undefined
+    && (paneLastActiveAt.get(paneId) ?? 0) > (paneTurnCompleteAt.get(paneId) ?? 0)
+  // A permission / confirm dialog, where Enter would pick the default option.
+  // Not a turn that merely ended on a question — see blockingDialogShown.
+  const dialogShown = (): boolean => paneId !== undefined && blockingDialogShown({
+    awaitingKind: paneRefs[paneId]?.awaitingKind as string | null | undefined,
+    agentKey,
+    screen: visibleScreen() ?? screenTail(),
+  })
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
+    // Never press a resent Enter into a dialog. Our earlier Enter most likely
+    // started the work that raised it, but nothing confirms that.
+    if (attempt > 1 && dialogShown()) {
+      if (evidence) evidence.submit = 'unconfirmed'
+      return true
+    }
+    const enterAt = Date.now()
     try {
       await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
     } catch (err) {
@@ -4474,21 +4558,48 @@ async function injectText(
     // Poll instead of one flat sleep: a fast agent clears the composer in a few
     // hundred ms, and waiting the full gap on every attempt costs seconds.
     const deadline = Date.now() + SUBMIT_CONFIRM_MS
-    let landed = false
-    while (Date.now() < deadline && !landed) {
+    let how: SubmitEvidence | null = null
+    while (Date.now() < deadline) {
       await sleep(200)
       if (shouldAbort?.()) return false
-      const how = submitEvidence({
+      how = submitEvidence({
         tailWasOnScreen,
         tail,
         screen: screenTail(),
         grownBy: cleanBytes() - before,
-        baseline
+        baseline,
+        visibleScreen: visibleScreen(),
       })
-      landed = how !== null
-      if (landed && evidence) evidence.submit = how
+      // 'unconfirmed' keeps watching: the box may still come into view.
+      if (how !== null && how !== 'unconfirmed') break
     }
-    if (landed) return true
+    // A collapsed paste with no box in sight comes back 'unconfirmed' and is
+    // reported as such: no extra Enter on a screen we cannot read the box on.
+    if (how !== null) {
+      // Growth alone gets a second look: the CLI starting a new turn
+      // (lib/submitTurnConfirm.ts). Every other verdict returns at once.
+      const settled = await confirmWeakSubmit({
+        how,
+        watchTurn: shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter }),
+        dialogShown,
+        turnStarted: () => turnSince(enterAt),
+        collapsedHeld: () => framedComposerHolds(visibleScreen() ?? screenTail(), ''),
+        pressEnter: async () => {
+          try {
+            await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
+            return true
+          } catch {
+            return false
+          }
+        },
+        aborted,
+        sleep,
+        now: Date.now,
+      })
+      if (settled === null) return false
+      if (evidence) evidence.submit = settled
+      return true
+    }
     if (attempt < MAX_SUBMITS) {
       console.warn(
         `[injectText] input box still holds the text ${SUBMIT_CONFIRM_MS}ms after Enter ` +
@@ -4758,6 +4869,8 @@ async function injectPaneContext(sourcePaneId: string, targetPaneId: string): Pr
   // paste either.
   if (!sourcePane.realized || !panes.value.find((p) => p.id === targetPaneId)?.realized || !targetSessionId) return
   if (await tryMentionOnDrop(targetPaneId, () => sourcePane.messagingName ?? null)) return
+  // A sign-in pane's screen holds its authorization URL or code: never shared.
+  if (sourcePane.isLogin) return
 
   const text = buildPaneContextPaste({
     paneId: sourcePane.id,
@@ -7038,6 +7151,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     effort: launchedModel.effort || undefined,
     spawnedBy: opts.spawnedBy,
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
+    isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
   }
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
   // follows account switches; one its pin puts in an account dir is fixed.
@@ -7138,7 +7252,9 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     // each run is self-contained; manual panes land under a flat manual/
     // folder grouped by date so they're still recoverable.
     const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    const outputLogFile = opts.workspacePath
+    // A sign-in pane writes none: its output is an authorization URL or code,
+    // and a file in the workspace is readable by every agent working there.
+    const outputLogFile = opts.workspacePath && !pane.isLogin
       ? opts.origin === 'pipeline'
         ? pipeline.runDir
           ? `${opts.workspacePath}/.agent-team/${pipeline.runDir}/stage-${opts.stageId}-${id.slice(0, 8)}.log`
@@ -7175,6 +7291,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
         slot_label: opts.slotLabel ?? '',         // stable by_pane key survives frontend restarts
         profile_id: opts.profileId ?? '',        // CLI account pin (restore) → per-pane isolated home
         run_group_id: pane.runGroupId ?? '',     // sidebar run group → by_group token bucket
+        login_pane: pane.isLogin,                // sign-in pane → backend keeps its output from other panes
       },
       outputLogFile,
       // Stable reattach key: the pinned CLI session id is identical on first
@@ -7346,16 +7463,18 @@ async function onManualSpawn(payload: SpawnPayload, quota?: { transactionId: str
 // Login panes pending browser authorization, keyed by profile id. Only THIS
 // window (the one that spawned the pane) holds an entry, so exactly one
 // window closes the pane and toasts when the harvest broadcast arrives.
-const pendingLoginPanes = new Map<string, { paneId: string; agentKey: string }>()
+// `step` tells a vault-slot sign-in from the own-folder one that follows it
+// for a Claude account (lib/accountDirLoginChain.ts).
+const pendingLoginPanes = new Map<string, PendingLogin>()
 
 async function onCliLoginSpawn(
   agentKey: string,
   loginProfileId?: string,
   opts?: { accountDirProfileId?: string },
-): Promise<void> {
+): Promise<boolean> {
   if (!currentWorkspace.value) {
     notifyRestore.toast(i18n.global.t('settings.accounts.cli.login-no-workspace'), { type: 'error' })
-    return
+    return false
   }
   // A sign-in inside the account's own config dir runs as that account's pane
   // (its pin), not in a login home: Claude Code keeps the login there.
@@ -7378,14 +7497,17 @@ async function onCliLoginSpawn(
       { type: 'error' }
     )
     if (paneId) void onKill(paneId)
-    return
+    return false
   }
   showSettings.value = false
   const pendingProfileId = dirProfileId ?? loginProfileId
-  if (pendingProfileId) pendingLoginPanes.set(pendingProfileId, { paneId, agentKey })
+  if (pendingProfileId) {
+    pendingLoginPanes.set(pendingProfileId, { paneId, agentKey, step: dirProfileId ? 'dir' : 'slot' })
+  }
   // The user must see the pane that is waiting for the browser authorization.
   noteViewJump('account login spawn', { paneId })
   onFocusPane(paneId)
+  return true
 }
 
 // Plan window "execute" dispatch: inject the plan-execution prompt into an
@@ -7420,6 +7542,7 @@ async function dispatchPlanToPane(relPath: string, agentKey: string): Promise<Pl
       workspacePath: p.workspacePath,
       status: (paneRefs[p.id]?.displayStatus as string | undefined) ?? 'starting',
       sessionId: (paneRefs[p.id]?.sessionId as string | undefined) ?? undefined,
+      isLogin: p.isLogin,
     })),
     agentKey,
     currentWorkspace.value
@@ -8018,7 +8141,6 @@ type RebuildFailure =
   | 'locked' // another rebuild of this pane/session is in flight
   | 'probe-failed' // stale-create rollback or resumability probe failed
   | 'not-resumable' // session definitively not resumable
-  | 'missing-session' // session file absent on disk
   | 'spawn-failed' // replacement pane spawn failed
 
 async function rebuildPaneViaResume(
@@ -8045,6 +8167,12 @@ async function rebuildPaneViaResume(
     /** Resume on this CLI account instead of the pane's own — "continue on
      *  this account" for a claude account with its own config dir. */
     profileId?: string
+    /** Reopen fresh instead of resuming when the pane has no transcript yet:
+     *  claude pins `--session-id` at spawn but writes the jsonl only on the
+     *  first prompt, so a pane nobody typed in fails the resume preflight
+     *  ("Session not found on disk"). For single-pane account moves (fixing,
+     *  unfixing, "continue on this account"), where nothing can be lost. */
+    freshWhenNoTranscript?: boolean
   }
 ): Promise<RebuildFailure | undefined> {
   const pane = panes.value.find((p) => p.id === paneId)
@@ -8090,7 +8218,7 @@ async function rebuildPaneViaResume(
   }
   // Lock synchronously, before any await: a concurrent call (double-click, or
   // overlap with the rebuild-all batch) would otherwise pass the has() check
-  // during canResumeSession/has_session and double kill/spawn the same pane.
+  // during canResumeSession and double kill/spawn the same pane.
   // The session id is locked alongside the pane id because spawnPane swaps the
   // replacement pane in (new pane id, same session) before the backend spawn
   // resolves — a second click landing on the replacement must be blocked too.
@@ -8125,7 +8253,11 @@ async function rebuildPaneViaResume(
     // them: false = the session is definitively absent, null = the probe
     // itself failed (the session may well exist — the user should retry).
     const resumable = await canResumeSession(pane.agentKey, ws, sessionId)
-    if (resumable !== true) {
+    // Reopen fresh only on a definitive "absent" for a pane that never wrote a
+    // transcript. The flag alone is not enough: it lags a first turn that is
+    // still running, whose jsonl may already exist.
+    const fresh = resumable === false && !!opts?.freshWhenNoTranscript && !pane.sessionOnDisk
+    if (resumable !== true && !fresh) {
       pipelineLog(`⚠ rebuild ${pane.agentLabel}: session ${sessionId} not resumable`)
       if (!opts?.suppressBusyToast) {
         notifyRestore.toast(
@@ -8139,28 +8271,15 @@ async function rebuildPaneViaResume(
     }
     const spec = agentSpecs.find((s) => s.agentKey === pane.agentKey)
     const skipFlag = skipFlagFor(pane.agentKey, spec)
-    const resumeCmd = buildResumeCommand(pane.agentKey, sessionId, skipFlag, '', {
+    const resumeCmd = fresh ? '' : buildResumeCommand(pane.agentKey, sessionId, skipFlag, '', {
       model: pane.model ?? '',
       effort: pane.effort ?? '',
     })
-    if (!resumeCmd) {
+    if (!fresh && !resumeCmd) {
       if (!opts?.suppressBusyToast) {
         notifyRestore.toast(i18n.global.t('pane.terminal.rebuild-no-session'), { type: 'error' })
       }
       return 'no-session'
-    }
-
-    // Safety: Ensure the requested session actually exists on disk.
-    const hasSession = await backend.send('terminals.has_session', {
-      workspace_path: ws,
-      session_id: sessionId,
-    })
-    if (!hasSession) {
-      pipelineLog(`⚠ rebuild session ${sessionId.slice(0, 8)} not found`)
-      if (!opts?.suppressBusyToast) {
-        notifyRestore.toast(i18n.global.t('pane.terminal.rebuild-not-resumable'), { type: 'error' })
-      }
-      return 'missing-session'
     }
     // Snapshot identity before onKill removes the pane from the list.
     const snap = {
@@ -8223,12 +8342,12 @@ async function rebuildPaneViaResume(
       origin: snap.origin,
       spawnedBy: snap.spawnedBy,
       runGroupId: snap.runGroupId || undefined,
-      isResume: true,
-      skipRoleInjection: true,
-      restoreMode: 'fresh',
+      isResume: !fresh,
+      skipRoleInjection: !fresh,
+      restoreMode: fresh ? undefined : 'fresh',
       sessionHomeId: snap.sessionHomeId,
       profileId: explicitPin ?? accountSpawnPin(snap.profileId, snap.following, followDirSignedIn),
-      resumeSessionId: sessionId,
+      resumeSessionId: fresh ? undefined : sessionId,
       model: snap.model,
       effort: snap.effort,
       replacePaneId: paneId, // Atomic swap to prevent layout shift
@@ -8250,6 +8369,8 @@ async function rebuildPaneViaResume(
         if (opts?.offerContinue) revived.resumeContinueAvailable = true
       }
       opts?.onReplaced?.(newId)
+      // A fresh reopen pinned a NEW session; the records must follow it.
+      const recordSessionId = fresh ? (revived?.pinnedSessionId ?? '') : sessionId
       if (snap.origin !== 'pipeline') {
         await sendQuiet<ProjectPayload>('manual_pane.spawn', {
           workspace_path: snap.workspacePath,
@@ -8258,7 +8379,7 @@ async function rebuildPaneViaResume(
           agent: snap.agentKey,
           role: snap.roleKey || '',
           command: resumeCmd,
-          session_id: sessionId,
+          session_id: recordSessionId,
           session_home_id: snap.sessionHomeId || '',
           run_group_id: snap.runGroupId || '',
           output_log_file: panes.value.find((p) => p.id === newId)?.outputLogFile ?? '',
@@ -8278,7 +8399,7 @@ async function rebuildPaneViaResume(
           pane_id: newId,
           agent: snap.agentKey,
           role: snap.roleKey,
-          session_id: sessionId,
+          session_id: recordSessionId,
           session_home_id: snap.sessionHomeId || '',
           run_group_id: snap.runGroupId || '',
         })
@@ -8351,6 +8472,9 @@ async function confirmBatchRebuild(count: number): Promise<boolean> {
 // live credential or any other pane.
 provide(cliAccountDirActionsKey, {
   continueWith: async (paneId, profileId) => {
+    // A sign-in pane has no conversation to carry over: reopening it would
+    // drop the sign-in for an ordinary pane (review 0.2.26 R2 LOW-9).
+    if (panes.value.find((p) => p.id === paneId)?.isLogin) return
     const label = accountLabel(cliProfilesApi, 'claude', profileId, i18n.global.t)
     const ok = await notifyRestore.confirm(
       i18n.global.t('usage.continue-with-confirm-body', { account: label }),
@@ -8361,7 +8485,7 @@ provide(cliAccountDirActionsKey, {
       }
     )
     if (!ok) return
-    await rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true })
+    await rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true })
   },
   signIn: (agentKey, profileId) => {
     void onCliLoginSpawn(agentKey, undefined, { accountDirProfileId: profileId })
@@ -8511,6 +8635,15 @@ function followPaneInput(p: ActivePane): FollowPaneInput {
 
 function followDirSignedIn(profileId: string): boolean {
   return cliProfilesApi.accountDirFor(FOLLOW_SWITCH_AGENT, profileId)?.signedIn === true
+}
+
+/** The account dirs as a restore sees them (see restoreSpawnPin). */
+function restorePinGate(paneId: string): AccountDirsGate {
+  return {
+    loaded: () => cliProfilesApi.loaded.value,
+    load: () => cliProfilesApi.ensureLoaded(),
+    disclose: (pin) => pipelineLog(`⚠ claude: account list not loaded; restoring ${paneId} with its saved account ${pin}`),
+  }
 }
 
 function followAccountLabel(profileId: string): string {
@@ -8687,9 +8820,11 @@ function paneAccountFixed(p: ActivePane): boolean {
 async function toggleAccountPin(paneId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || pane.agentKey !== FOLLOW_SWITCH_AGENT) return
+  // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
+  if (pane.isLogin) return
   if (paneAccountFixed(pane)) {
     accountFollow.add(paneId)
-    if (await rebuildPaneViaResume(paneId)) accountFollow.remove(paneId)
+    if (await rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })) accountFollow.remove(paneId)
     return
   }
   const live = cliProfilesApi.defaultProfileId(FOLLOW_SWITCH_AGENT)
@@ -8703,7 +8838,7 @@ async function toggleAccountPin(paneId: string): Promise<void> {
     return
   }
   accountFollow.remove(paneId)
-  if (await rebuildPaneViaResume(paneId, { profileId: live })) accountFollow.add(paneId)
+  if (await rebuildPaneViaResume(paneId, { profileId: live, freshWhenNoTranscript: true })) accountFollow.add(paneId)
 }
 
 /** "Make all follow" from the badge: reopen every fixed pane on the live
@@ -10156,14 +10291,19 @@ registerCommand('ui.pane.place', async (args) => {
 // restarted. The restored pane gets a fresh runtime id (the old one becomes
 // an alias), so the answer carries the id it is known by now.
 registerCommand('ui.pane.open', async (args) => {
-  const paneId = (args as { paneId?: string } | undefined)?.paneId
+  const { paneId, requireResume } = (args as { paneId?: string; requireResume?: boolean } | undefined) ?? {}
   if (!paneId) throw new Error(`ui.pane.open requires ${PANE_ID_HINT}`)
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) throw new Error(`unknown pane ${paneId}`)
-  if (pane.realized) return { realized: true, reason: 'already-open', paneId }
-  const reason = await realizeRestoredPane(paneId, false, { explicit: true })
+  const required = requireResume === true
+  if (pane.realized) {
+    return paneOpenAnswer({ paneId, reason: 'already-open', realized: true, requireResume: required,
+      launchedSessionId: pane.launchedSessionId })
+  }
+  const reason = await realizeRestoredPane(paneId, false, { explicit: true, requireResume: required })
   const opened = panes.value.find((p) => p.id === paneId || p.formerPaneIds?.includes(paneId))
-  return { realized: opened?.realized === true, reason, paneId: opened?.id ?? paneId }
+  return paneOpenAnswer({ paneId: opened?.id ?? paneId, reason, realized: opened?.realized === true,
+    requireResume: required, launchedSessionId: opened?.launchedSessionId })
 })
 // The rung between "ask it to stop" (a message, which waits for the turn to
 // end) and ui.pane.close (which takes the pane and its PTY away). Like close
@@ -10290,12 +10430,14 @@ registerCommand('ui.pane.getStatus', (args) => {
       ? {
           displayStatus: ref.displayStatus as string | undefined,
           awaitingKind: ref.awaitingKind as string | null | undefined,
-          buffer: readPaneShareText(ref, CLI_CHIP_LINE_CAP),
+          // A sign-in pane's screen holds its authorization URL or code: this
+          // reply reaches cli_get_status, ui_invoke and the chat relay.
+          buffer: pane.isLogin ? '' : readPaneShareText(ref, CLI_CHIP_LINE_CAP),
         }
       : null,
   )
   // What the pane is waiting on, for the chat-channel permission relay.
-  const screen = ref?.displayStatus === 'awaiting' ? (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '' : ''
+  const screen = !pane.isLogin && ref?.displayStatus === 'awaiting' ? (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '' : ''
   if (!screen.trim()) return reply
   const options = parseMenuOptions(screen)
   return { ...reply, awaitingPrompt: awaitingPromptText(screen), ...(options.length ? { awaitingOptions: options } : {}) }
@@ -10310,6 +10452,7 @@ registerCommand('ui.pane.sendKeys', async (args) => {
   if (!pane) throw new Error(`ui.pane.sendKeys: pane "${a.paneId}" not found`)
   const ref = paneRefs[a.paneId]
   if (!pane.realized || !ref?.sessionId || !a.answer) return { ok: false, sent: false, error: 'pane is not ready' }
+  if (pane.isLogin) return { ok: false, sent: false, error: SIGN_IN_PANE_INPUT_REFUSAL, error_code: 'login-pane-input-refused' }
   const resolved = resolveAnswerKeys({
     agentKey: pane.agentKey,
     displayStatus: ref.displayStatus as string | undefined,
@@ -10403,7 +10546,7 @@ registerCommand('ui.pipeline.start', async (args) => {
   if (!pipelineId) {
     throw new Error('ui.pipeline.start requires a pipelineId: this workspace has no active pipeline')
   }
-  await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId })
+  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId })
   // onPipelineStart bails SOFTLY on every one of its own refusals (unknown
   // pipeline, stages not loaded, every slot of stage 01 failing to spawn) —
   // it logs and returns. Reporting ok on that is exactly the "started but
@@ -10411,7 +10554,10 @@ registerCommand('ui.pipeline.start', async (args) => {
   // what gets reported, not the fact that the call returned.
   const started: PipelineRun['state'] = pipeline.state
   if (started !== 'running') {
-    throw new Error(`ui.pipeline.start: the run did not start (state "${started}") — see the pipeline log for why`)
+    throw new Error(
+      `ui.pipeline.start: the run did not start (state "${started}")` +
+        (refusal ? `: ${refusal}` : ' — see the pipeline log for why')
+    )
   }
   return {
     pipelineId: pipelinesApi.activePipelineId.value,
@@ -10508,6 +10654,9 @@ registerCommand('ui.pipeline.reset', async () => {
   const state: PipelineRun['state'] = pipeline.state
   if (state !== 'idle') {
     throw new Error(`ui.pipeline.reset: the run was not cleared (state "${state}") — see the pipeline log for why`)
+  }
+  if (!(await clearStoredPipelineRun(currentWorkspace.value))) {
+    throw new Error('ui.pipeline.reset: the panes were closed but the stored run was not cleared — see the backend log')
   }
   return { workspacePath: currentWorkspace.value, state, stageIndex: pipeline.stageIndex }
 })
@@ -10671,7 +10820,50 @@ useUiActionBus({
   buildSnapshot: buildUiActionSnapshot,
   ownsWorkspace: isLocalWorkspace,
   connectionStatus: backend.status,
+  accountActions: { signIn: agentSignIn },
 })
+
+// MCP cli_account_sign_in (ui.accounts.signIn — on the bus, never in the
+// command registry): opens a sign-in Settings → Accounts already offers, for
+// the accounts lib/agentSignIn lets an agent start one for, and tells the user
+// which agent asked and why. The sign-in is the CLI's own; the user finishes
+// it in the browser. Nothing here switches an account or reads a credential.
+// Nothing opens until the user says yes in AgentSignInConfirmDialog (review
+// #433 LOW-3); the user's own sign-in from Settings never comes through here.
+const agentSignInConfirm = createSignInConfirm()
+async function agentSignIn(args: Record<string, unknown>, callerPaneId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const agentKey = String(args.agentKey ?? '')
+  const profileId = String(args.profileId ?? '')
+  const outcome = await runAgentSignIn(args, callerPaneId, {
+    accounts: cliProfilesApi,
+    currentWorkspace: () => currentWorkspace.value,
+    callerPane: (id) => {
+      const pane = panes.value.find((p) => p.id === id)
+      return pane ? { workspacePath: pane.workspacePath, name: pane.messagingName || pane.customName || id } : undefined
+    },
+    accountLabel: (key, id) => accountLabel(cliProfilesApi, key, id, i18n.global.t),
+    confirm: agentSignInConfirm.ask,
+    spawn: async (plan) => {
+      const before = pendingLoginPanes.get(plan.profileId)?.paneId
+      if (plan.kind === 'folder') await onCliLoginSpawn('claude', undefined, { accountDirProfileId: plan.profileId })
+      else await onCliLoginSpawn(plan.agentKey, plan.profileId)
+      const loginPaneId = pendingLoginPanes.get(plan.profileId)?.paneId
+      return loginPaneId && loginPaneId !== before ? loginPaneId : undefined
+    },
+    now: () => Date.now(),
+  }, signal)
+  if (outcome.status !== 'started') return outcome
+  const caller = panes.value.find((p) => p.id === callerPaneId)
+  notifyRestore.toast(
+    i18n.global.t('settings.accounts.cli.agent-login-started', {
+      agent: caller?.messagingName || caller?.customName || callerPaneId,
+      account: accountLabel(cliProfilesApi, agentKey, profileId, i18n.global.t),
+      reason: String(args.reason ?? ''),
+    }),
+    { type: 'info' },
+  )
+  return outcome
+}
 
 // Single source of truth for the 'modalOpen' keybinding context. Hoisted so
 // the watches below can share it; only ever CALLED after setup completes, so
@@ -11056,6 +11248,9 @@ interface ProjectPane {
   last_turn_state?: string
   report_to?: string
   report_pending?: boolean
+  /** The launch the pane's CLI last spawned in ('' after an idle reclaim).
+   *  Absent on records written before the field existed. */
+  last_live_launch?: string
 }
 
 const HISTORY_ORIGINS: readonly SpawnHistoryEntry['origin'][] = ['manual', 'pipeline', 'mcp']
@@ -12021,12 +12216,14 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
         ? stripDeadOpencodeAutoFlag(saved.agent, saved.command) : ''
       const fallbackCommand = savedFallbackCommand
       const commandOverride = resumeCmd || fallbackCommand || ''
+      const restorePin = await restoreSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn, restorePinGate(saved.pane_id))
+      if (isStale?.() || !isLocalWorkspace(workspacePath)) return
       const restored = await spawnRestoredPane({
         saved,
         workspacePath,
         runGroupId: runGroupId || undefined,
         sessionHomeId,
-        profileId: accountSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn),
+        profileId: restorePin,
         commandOverride,
         fallbackCommand,
         isResume,
@@ -12173,6 +12370,25 @@ function deferredPaneStillCurrent(
 // waits for the same restore attempt instead of treating an in-flight restore as
 // an immediate no-op.
 const restoringPanePromises = new Map<string, Promise<RealizeOutcome>>()
+/** Placeholders a cold restore has queued and not finished yet (advanceRestoreSession). */
+const scheduledRestoreIds = new Set<string>()
+/** `${agent}:${session}` of conversations a chat's wake (requireResume) has opened. */
+const wakeClaims = new WakeClaims()
+
+function sessionHolders(): SessionHolder[] {
+  return panes.value.map((p) => {
+    const agentKey = p.deferredRestore?.saved.agent ?? p.agentKey
+    return {
+      id: p.id,
+      agentKey,
+      sessionId: p.realized
+        ? paneResumeSessionId(p)
+        : normalizeResumeSessionId(agentKey, (p.deferredRestore?.saved.session_id ?? '').trim()),
+      realized: p.realized === true,
+      restoring: p.restoring === true,
+    }
+  })
+}
 
 async function restoreSessionDecision(
   session: RestoreSession,
@@ -12202,6 +12418,10 @@ function restoreSessionScopeTargets(session: RestoreSession, trigger: RestoreSes
   // workspace's entire pending list on top of the foreground one, so the CLIs a
   // window could start at once became the sum of every workspace it held.
   const onScreen = normWs(session.workspacePath) === normWs(currentWorkspace.value)
+  const previousLaunchId = settingsGet<unknown>(PREVIOUS_LAUNCH_ID_SETTING_KEY, '')
+  const liveAtLastLaunchIds = new Set(panes.value
+    .filter((pane) => pane.deferredRestore && wasLiveAtLastLaunch(pane.deferredRestore.saved, previousLaunchId))
+    .map((pane) => pane.id))
   return restoreScopeTargetIds({
     scope: session.scope,
     pendingPaneIds: pendingRestorePaneIds(panes.value, session.workspacePath),
@@ -12210,6 +12430,7 @@ function restoreSessionScopeTargets(session: RestoreSession, trigger: RestoreSes
     minimizedPaneIds: minimizedPanes.value,
     focusedPaneId: onScreen ? focusPaneId.value : null,
     trigger,
+    liveAtLastLaunchIds,
   })
 }
 
@@ -12242,6 +12463,9 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
     : []
   const interruptedKids = interrupted.length > 0 ? interruptedChildren(session.workspacePath) : []
   const ids = [...new Set([...scopeIds, ...interrupted])]
+  // Queued until the batch is done: a wake checks these as well as the panes restoring now
+  // (one that has finished is realized, which the wake checks anyway).
+  for (const id of ids) scheduledRestoreIds.add(id)
   const reconnectStart = reconnectedCount.value
   // Starting a workspace fresh is the one batch nothing caps. Fresh spawns are
   // deliberately exempt from the resume semaphore — throttling them would stall
@@ -12256,14 +12480,21 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // the semaphore at whatever the user set (default 3), so adding a second
   // ceiling of 2 would just make their own setting slower.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
-  if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
-  } else if (interrupted.length > 0) {
-    // The interrupted panes ride on top of the scope's pick: same ceiling as
-    // an 'all' restore, so a relaunch never starts more than two at once.
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
-  } else {
-    await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))
+  try {
+    if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
+      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    } else if (decision === 'resume' && session.scope === 'auto') {
+      // Auto brings back every pane live at the last close: same ceiling as 'all'.
+      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    } else if (interrupted.length > 0) {
+      // The interrupted panes ride on top of the scope's pick: same ceiling as
+      // an 'all' restore, so a relaunch never starts more than two at once.
+      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    } else {
+      await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))
+    }
+  } finally {
+    for (const id of ids) scheduledRestoreIds.delete(id)
   }
   const reconnected = reconnectedCount.value - reconnectStart
   if (reconnected > 0) {
@@ -12342,27 +12573,34 @@ type RealizeOutcome =
   | 'cancelled'
   | 'superseded'
   | 'session-unavailable'
+  | 'fresh-refused'
+  | 'resume-unavailable'
+  | 'session-open-elsewhere'
   | 'error'
 
 /** Realize one cold-restore record after explicit user activation.
  *  `opts.explicit`: the caller named this one pane (ui.pane.open), so the
  *  restore decision is taken by explicitRestoreDecision instead of the
- *  workspace-wide question. */
+ *  workspace-wide question. `opts.requireResume`: open only onto the saved
+ *  conversation; where it would start a fresh one the pane stays a
+ *  placeholder ('fresh-refused' / 'resume-unavailable'). */
 async function realizeRestoredPane(
   paneId: string,
   aggregateReconnect = false,
-  opts?: { explicit?: boolean },
+  opts?: { explicit?: boolean; requireResume?: boolean },
 ): Promise<RealizeOutcome> {
   const pending = restoringPanePromises.get(paneId)
-  if (pending) return pending
+  if (pending) return pending.then((outcome) => joinedRealizeOutcome(outcome, opts?.requireResume === true))
   const promise = performRealizeRestoredPane(paneId, aggregateReconnect, opts)
   restoringPanePromises.set(paneId, promise)
   void promise.then(
-    () => {
+    (outcome) => {
       if (restoringPanePromises.get(paneId) === promise) restoringPanePromises.delete(paneId)
+      if (opts?.requireResume) wakeClaims.settle(paneId, outcome)
     },
     () => {
       if (restoringPanePromises.get(paneId) === promise) restoringPanePromises.delete(paneId)
+      if (opts?.requireResume) wakeClaims.settle(paneId, 'error')
     },
   )
   return promise
@@ -12371,7 +12609,7 @@ async function realizeRestoredPane(
 async function performRealizeRestoredPane(
   paneId: string,
   aggregateReconnect = false,
-  opts?: { explicit?: boolean },
+  opts?: { explicit?: boolean; requireResume?: boolean },
 ): Promise<RealizeOutcome> {
   const placeholder = panes.value.find((p) => p.id === paneId)
   const deferred = placeholder?.deferredRestore
@@ -12409,6 +12647,24 @@ async function performRealizeRestoredPane(
   }
   const session = workspaceRestoreSession(batch.workspacePath)
   const sessionId = normalizeResumeSessionId(saved.agent, (saved.session_id ?? '').trim())
+  // One conversation, one CLI. A chat's wake is refused while another pane runs, is being
+  // restored onto, or is queued in a cold restore for the same session; a restore is refused
+  // while a pane a wake opened holds it. Checked and claimed (restoring) in one tick: the
+  // renderer is single threaded, so nothing slips in between.
+  const sessionKey = `${saved.agent}:${sessionId}`
+  const heldElsewhere = (scheduled: ReadonlySet<string>) =>
+    sessionHeldElsewhere(sessionHolders(), paneId, saved.agent, sessionId, scheduled)
+  if (opts?.requireResume ? heldElsewhere(scheduledRestoreIds)
+    : wakeClaims.holds(sessionKey) && heldElsewhere(new Set())) {
+    recordDiagnostic({
+      level: 'warn',
+      code: 'restore.sessionOpenElsewhere',
+      message: `${saved.agent} session ${sessionId} is already open in another pane; not opening it twice`,
+      paneId,
+    })
+    return 'session-open-elsewhere'
+  }
+  if (opts?.requireResume && sessionId) wakeClaims.claim(paneId, sessionKey)
   placeholder.restoring = true
   syncViews()
 
@@ -12446,7 +12702,8 @@ async function performRealizeRestoredPane(
       saved.agent, sessionId, canResume, looksLikeResumeCommand(saved.agent, saved.command || ''),
     )
     let reconnectId = ''
-    if (ghostConfirmed && supportsGhostReconnect(saved.agent)) {
+    // A chat's wake asks for the saved conversation itself: never repoint it to another one.
+    if (ghostConfirmed && supportsGhostReconnect(saved.agent) && !opts?.requireResume) {
       reconnectId = await resolveReconnectForPane(saved, batch.workspacePath, batch.savedClaims)
       if (!deferredPaneStillCurrent(paneId, deferred)) return 'superseded'
     }
@@ -12472,6 +12729,8 @@ async function performRealizeRestoredPane(
         reconnectId = ''
       }
     }
+    // A chat's wake asks for the pane's own conversation or nothing.
+    if (opts?.requireResume && !resumeCmd) return forceFresh ? 'fresh-refused' : 'resume-unavailable'
     if (ghostConfirmed && !reconnectId) {
       wasDisconnected = supportsGhostReconnect(saved.agent)
       pipelineLog(`⚠ ${saved.agent}: previous conversation ${sessionId} not found at ${batch.workspacePath}; opened a fresh one`)
@@ -12484,6 +12743,8 @@ async function performRealizeRestoredPane(
       : ''
     const fallbackCommand = isResume ? savedFallbackCommand : stripPinnedSessionId(savedFallbackCommand)
     const commandOverride = resumeCmd || fallbackCommand || ''
+    const restorePin = await restoreSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn, restorePinGate(saved.pane_id))
+    if (!deferredPaneStillCurrent(paneId, deferred)) return 'superseded'
     const wasMinimized = minimizedPanes.value.has(paneId)
     const wasMuted = isPaneMuted(paneId)
     const restored = await spawnRestoredPane({
@@ -12492,7 +12753,7 @@ async function performRealizeRestoredPane(
       runGroupId: placeholder.runGroupId || undefined,
       spawnedBy: placeholder.spawnedBy,
       sessionHomeId: placeholder.sessionHomeId,
-      profileId: accountSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn),
+      profileId: restorePin,
       commandOverride,
       fallbackCommand,
       isResume,
@@ -12512,6 +12773,8 @@ async function performRealizeRestoredPane(
     // was dropped before it could be persisted). The placeholder stands.
     if (!restored) return 'error'
     const { paneId: newId } = restored
+    const launched = panes.value.find((p) => p.id === newId)
+    if (launched) launched.launchedSessionId = isResume ? effectiveResumeId : ''
     // A resumed CLI has its transcript back but is parked at the prompt, and the
     // restore path deliberately injects nothing. Offer the one-click continue.
     if (isResume) {
@@ -13541,7 +13804,18 @@ async function spawnPipelineStage(index: number): Promise<void> {
   }
 }
 
-async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string }): Promise<void> {
+/** Returns why the run was refused, or '' when it was not (ui.pipeline.start
+ *  reports the reason). */
+async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string }): Promise<string> {
+  const pid = payload.pipelineId || pipelinesApi.activePipelineId.value
+  // pipelineLog alone left a refusal nowhere durable: it persists only once
+  // pipeline.workspacePath is set, which happens below, so after a reset or a
+  // restart nothing about it reached any log (#417).
+  const refuse = (reason: string): string => {
+    pipelineLog(`Pipeline start refused: ${reason}`)
+    void sendQuiet('pipeline.start_refused', { workspace_path: payload.workspacePath, pipeline_id: pid, reason })
+    return reason
+  }
   // If a specific pipeline was requested and it's not currently active, switch first.
   if (payload.pipelineId && payload.pipelineId !== pipelinesApi.activePipelineId.value) {
     // Both calls fail SOFTLY — setActivePipeline returns false and refresh only
@@ -13550,23 +13824,23 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
     // pipeline's name, so abort instead of starting the wrong run.
     const switched = await pipelinesApi.setActivePipeline(payload.pipelineId, payload.workspacePath)
     if (!switched) {
-      pipelineLog(
-        `Pipeline start aborted: could not switch to the requested pipeline` +
+      return refuse(
+        `could not switch to pipeline ${payload.pipelineId}` +
           (pipelinesApi.error.value ? ` — ${pipelinesApi.error.value}` : '')
       )
-      return
-    }
-    // Reload stages for the newly-active pipeline before running. Pass the id
-    // explicitly so this never races the active-id ref.
-    await stagesApi.refresh(payload.pipelineId)
-    if (stagesApi.error.value) {
-      pipelineLog(`Pipeline start aborted: could not load its stages — ${stagesApi.error.value}`)
-      return
     }
   }
+  // Reload the stages of the pipeline being started, by explicit id so this
+  // never races the active-id ref — even when it already is the active one.
+  // The window's cache cannot be trusted for a start: it can hold none (it
+  // first loads before the active id is known) or another template's, and a
+  // start from it was refused, or ran stages the pipeline no longer has (#417).
+  await stagesApi.refresh(pid)
+  if (stagesApi.error.value) {
+    return refuse(`could not load the stages of pipeline ${pid} — ${stagesApi.error.value}`)
+  }
   if (!stagesApi.isLoaded.value || stagesApi.stages.value.length === 0) {
-    pipelineLog('Pipeline start skipped: stages not loaded yet. Please wait and try again.')
-    return
+    return refuse(`pipeline ${pid} has no stages`)
   }
   const stateBefore = pipeline.state
   pipeline.task = payload.task
@@ -13581,9 +13855,8 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
     fromNodeId: payload.fromNodeId,
   })
   if (startIndex === null) {
-    pipelineLog('Pipeline start aborted: could not prepare the run graph — see the line above')
     pipeline.state = stateBefore
-    return
+    return refuse('could not prepare the run graph — see the DAG line above')
   }
   pipeline.stageIndex = startIndex
   // Pipeline-created panes are grouped under a RunGroup tab named after the
@@ -13625,7 +13898,7 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   if (pipelineDag.holdBeforeStage(startIndex)) {
     pipeline.stageIndex = startIndex - 1
     if (pipeline.globalManager) startGlobalManagerRouter()
-    return
+    return ''
   }
   // Pre-spawn stage 01 only (role prompt, no kickoff). Every later stage is
   // warmed one ahead from activateStage — see stagePrewarms for why the whole
@@ -13637,11 +13910,18 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   // this check activateStage(0) then re-registered the stage and spawned the
   // same missing agents a second time, and the global router was armed on a
   // run that had already stopped.
-  if (pipeline.state !== 'running') return
+  if (pipeline.state !== 'running') return ''
   // Activate the first stage: build context + inject kickoffs + arm watchers.
   await activateStage(startIndex)
   // Start the global Manager cross-stage router (if configured).
   if (pipeline.globalManager) startGlobalManagerRouter()
+  return ''
+}
+
+/** ControlPane's Run button: a refusal is toasted, not only logged (#417). */
+async function onPipelineStartFromPanel(payload: Parameters<typeof onPipelineStart>[0]): Promise<void> {
+  const refusal = await onPipelineStart(payload)
+  if (refusal) notifyRestore.toast(i18n.global.t('error.pipeline-start-refused', { reason: refusal }), { type: 'error' })
 }
 
 /** Before firing 🎉 on the final stage, wait until every pipeline pane has
@@ -13882,6 +14162,27 @@ async function onPipelineReset(paneIds?: readonly string[]): Promise<void> {
   pipeline.pipelineLogFile = ''
   pipeline.backendLogFile = ''
   pipeline.runDir = ''
+}
+
+/** The backend leg of the user's Reset: return the stored run to idle, so it
+ *  stops answering pipeline_status and offering Resume, through a restart too
+ *  (#417). Not part of onPipelineReset, which closing or leaving a workspace
+ *  also runs: those keep the stored run so reopening the folder can resume it. */
+async function clearStoredPipelineRun(workspacePath: string): Promise<boolean> {
+  if (!workspacePath) return true
+  const resp = await sendQuiet<ProjectPayload>('pipeline.reset', { workspace_path: workspacePath })
+  if (!resp) {
+    pipelineLog('Pipeline reset: the stored run could not be returned to idle')
+    return false
+  }
+  existingProject.value = buildExistingProjectInfo(resp)
+  return true
+}
+
+/** ControlPane's Reset button. */
+async function onPipelineUserReset(): Promise<void> {
+  await onPipelineReset()
+  await clearStoredPipelineRun(currentWorkspace.value)
 }
 
 // ─────────── Switch / close workspace (phase-7) ───────────
@@ -15013,6 +15314,7 @@ backend.on('cli_profiles.changed', (raw) => {
     forced?: boolean
     harvestedProfileIds?: string[]
     identities?: Record<string, Record<string, { email?: string | null }>>
+    accountDirs?: Record<string, Record<string, { signedIn?: boolean }>>
     defaults?: Record<string, string | null>
     hotSwitchedPanes?: HotSwitchedPane[]
   }
@@ -15043,12 +15345,31 @@ backend.on('cli_profiles.changed', (raw) => {
     return
   }
   if (ev?.reason !== 'login-harvest') return
+  // The broadcast carries the own-folder state it was sent with; the
+  // composable's copy may not have taken it yet.
+  const dirSignedIn = (id: string): boolean =>
+    (ev.accountDirs?.[FOLLOW_SWITCH_AGENT]?.[id]?.signedIn ?? followDirSignedIn(id)) === true
   for (const profileId of ev.harvestedProfileIds ?? []) {
     const pending = pendingLoginPanes.get(profileId)
     if (!pending) continue
+    // The own-folder pane stays open until its folder reads signed in.
+    if (pending.step === 'dir' && !dirLoginLanded(pending, profileId, dirSignedIn)) continue
     pendingLoginPanes.delete(profileId)
     if (panes.value.some((p) => p.id === pending.paneId)) void onKill(pending.paneId)
     const email = ev.identities?.[pending.agentKey]?.[profileId]?.email || ''
+    if (chainsDirLogin(pending, profileId, dirSignedIn, cliProfilesApi.defaultProfileId(pending.agentKey))) {
+      void startDirLoginStep(pending.agentKey, profileId, email)
+      continue
+    }
+    if (pending.step === 'dir') {
+      notifyRestore.toast(
+        email
+          ? i18n.global.t('settings.accounts.cli.login-step2-done', { email })
+          : i18n.global.t('settings.accounts.cli.login-step2-done-no-email'),
+        { type: 'success' }
+      )
+      continue
+    }
     notifyRestore.toast(
       email
         ? i18n.global.t('settings.accounts.cli.login-complete', { email })
@@ -15057,6 +15378,74 @@ backend.on('cli_profiles.changed', (raw) => {
     )
   }
 })
+
+// Step two of a Claude Settings sign-in: the same own-folder login pane the
+// account badge opens. Only once it is open is the user told to authorize
+// once more and the one-time reminder spent; a pane that does not open says
+// so and leaves the reminder for later.
+const dirLoginStarting = new Set<string>()
+async function startDirLoginStep(agentKey: string, profileId: string, email: string): Promise<void> {
+  dirLoginStarting.add(profileId)
+  try {
+    if (!(await onCliLoginSpawn(agentKey, undefined, { accountDirProfileId: profileId }))) {
+      notifyRestore.toast(
+        email
+          ? i18n.global.t('settings.accounts.cli.login-step2-failed', { email })
+          : i18n.global.t('settings.accounts.cli.login-step2-failed-no-email'),
+        { type: 'error', duration: 15000 }
+      )
+      return
+    }
+  } finally {
+    dirLoginStarting.delete(profileId)
+  }
+  const reminded = loadDirLoginReminded()
+  reminded.add(profileId)
+  saveDirLoginReminded(reminded)
+  notifyRestore.toast(
+    email
+      ? i18n.global.t('settings.accounts.cli.login-step2', { email })
+      : i18n.global.t('settings.accounts.cli.login-step2-no-email'),
+    { type: 'info', duration: 20000 }
+  )
+}
+
+// An own-folder login pane closed before its folder signed in: the account
+// keeps running on the shared login, so only say how to finish later.
+function noteSkippedDirLogins(livePaneIds: ReadonlySet<string>): void {
+  for (const profileId of skippedDirLogins(pendingLoginPanes, livePaneIds)) {
+    pendingLoginPanes.delete(profileId)
+    const email = cliProfilesApi.identityFor(FOLLOW_SWITCH_AGENT, profileId)?.email || ''
+    notifyRestore.toast(
+      email
+        ? i18n.global.t('settings.accounts.cli.login-step2-skipped', { email })
+        : i18n.global.t('settings.accounts.cli.login-step2-skipped-no-email'),
+      { type: 'info', duration: 15000 }
+    )
+  }
+}
+watch(() => panes.value.map((p) => p.id), (ids) => noteSkippedDirLogins(new Set(ids)))
+
+// Claude accounts signed in before the two-step sign-in existed: reminded
+// once that their own folder still needs a sign-in. Nothing converts them.
+function remindDirLogins(): void {
+  if (!cliProfilesApi.loaded.value) return
+  const reminded = loadDirLoginReminded()
+  const ids = dirLoginReminderTargets(
+    cliProfilesApi.profilesForAgent(FOLLOW_SWITCH_AGENT).map((p) => p.id).filter((id) => !pendingLoginPanes.has(id) && !dirLoginStarting.has(id)),
+    (id) => cliProfilesApi.identityFor(FOLLOW_SWITCH_AGENT, id)?.signedIn === true,
+    followDirSignedIn,
+    reminded,
+  )
+  if (ids.length === 0) return
+  for (const id of ids) reminded.add(id)
+  saveDirLoginReminded(reminded)
+  notifyRestore.toast(
+    i18n.global.t('settings.accounts.cli.dir-remind', { count: ids.length }),
+    { type: 'info', duration: 20000 }
+  )
+}
+watch([cliProfilesApi.loaded, cliProfilesApi.accountDirs, cliProfilesApi.identities], remindDirLogins)
 
 // Guided install request currently on screen (null = none). One dialog at a
 // time: several panes of the same CLI exiting 127 together (e.g. a pipeline
@@ -17074,6 +17463,15 @@ async function reclaimIdlePane(paneId: string): Promise<boolean> {
   // the cold-restore path builds.
   const stillThere = panes.value.find((p) => p.id === paneId)
   if (!stillThere) return false
+  // Its CLI is gone: the 'auto' resume scope must not count it as live at the
+  // next launch. A rebuild re-stamps through its own spawn record instead.
+  if (stillThere.workspacePath && isLocalWorkspace(stillThere.workspacePath)) {
+    backend
+      .send('project.set_pane_resume_state', {
+        workspace_path: stillThere.workspacePath, pane_id: paneId, last_live_launch: '',
+      })
+      .catch(() => {})
+  }
   stillThere.realized = false
   stillThere.restoring = false
   stillThere.preparationStatus = 'starting'
@@ -20937,6 +21335,12 @@ function paneIsCommander(p: ActivePane): boolean {
   <!-- An agent's skills_install waits here for the user's approval. -->
   <SkillInstallApprovalDialog :backend="backend" />
   <PluginAgentRequestDialog :backend="backend" />
+  <!-- An agent's cli_account_sign_in waits here for the user's yes. -->
+  <AgentSignInConfirmDialog
+    v-if="agentSignInConfirm.pending.value"
+    :request="agentSignInConfirm.pending.value"
+    @answer="agentSignInConfirm.answer"
+  />
   <RestoreScopeModal
     v-if="showRestoreScopeModal"
     :open="showRestoreScopeModal"
@@ -21065,8 +21469,9 @@ function paneIsCommander(p: ActivePane): boolean {
           :key="contribution.contributionKey"
           class="titlebar-plugin-action"
           type="button"
-          :title="contribution.title"
-          :aria-label="contribution.title"
+          :title="titlebarPluginLabel(contribution)"
+          :aria-label="titlebarPluginLabel(contribution)"
+          :data-source-mark="chromeSourceMark(contribution.source) ?? undefined"
           @mousedown.stop
           @click="openPluginContributionWindow(contribution)"
         >
@@ -21086,6 +21491,8 @@ function paneIsCommander(p: ActivePane): boolean {
             @error="markPluginIconFailed(contribution)"
           />
           <span v-else class="titlebar-plugin-fallback" aria-hidden="true">◇</span>
+          <!-- K2: a local or test package keeps a mark in Navide's own title bar. -->
+          <span v-if="chromeSourceMark(contribution.source)" class="titlebar-plugin-source-mark" aria-hidden="true"></span>
         </button>
       </div>
       <!-- Detached windows could only be merged back by closing them, which is
@@ -21203,10 +21610,10 @@ function paneIsCommander(p: ActivePane): boolean {
       @rebuild-all="rebuildPanesViaResume('all', $event)"
       @restore="restorePane"
       @context-menu="(id, ev) => openPaneCtxMenu(ev, id)"
-      @pipeline-start="onPipelineStart"
+      @pipeline-start="onPipelineStartFromPanel"
       @pipeline-next="onPipelineNext"
       @pipeline-abort="onPipelineAbort"
-      @pipeline-reset="onPipelineReset"
+      @pipeline-reset="onPipelineUserReset"
       @workspace-check="onWorkspaceCheck"
       @pipeline-resume="onPipelineResume"
       @pipeline-restart="onPipelineRestart"
@@ -22254,6 +22661,8 @@ function paneIsCommander(p: ActivePane): boolean {
     <NotificationHost />
     <!-- Plan B watchdog option C: Stop / Keep running for an over-threshold Navide plugin backend. -->
     <BackendResourceNotices />
+    <!-- Card K4: every launch says Developer Mode is on. -->
+    <DeveloperModeReminder />
     <WhatsNewModal
       v-if="whatsNewEntry"
       :entry="whatsNewEntry"
@@ -22971,6 +23380,18 @@ function paneIsCommander(p: ActivePane): boolean {
   mask-position: center;
   -webkit-mask-size: contain;
   mask-size: contain;
+}
+.titlebar-plugin-action[data-source-mark] {
+  position: relative;
+}
+.titlebar-plugin-source-mark {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--trust-unsigned-fg);
 }
 .titlebar-plugin-fallback {
   font-size: 12px;

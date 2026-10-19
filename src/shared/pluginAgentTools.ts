@@ -62,7 +62,10 @@ export const RESERVED_TOOL_PREFIXES = [
 
 /** tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned. */
 export const CORE_TOOL_NAMES = [
+  'cli_account_sign_in',
+  'cli_accounts_list',
   'cli_answer_prompt', 'cli_cancel_message', 'cli_check_message', 'cli_close_agent', 'cli_extensions_list',
+  'cli_failover_state',
   'cli_get_status', 'cli_inbox_summary', 'cli_interrupt', 'cli_list_sessions', 'cli_list_targets',
   'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
   'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',
@@ -154,6 +157,16 @@ const INVISIBLE_TEXT = new RegExp(`[${INVISIBLE_CHARACTERS}]`, 'gu')
  *  reorder or hide what a consent surface shows. Nothing is refused for it. */
 export function revealInvisibleText(text: string): string {
   return text.replace(INVISIBLE_TEXT, (char) => `\\u{${char.codePointAt(0)!.toString(16)}}`)
+}
+
+/** `revealInvisibleText`, and also every control character and the two
+ *  Unicode line and paragraph separators: for package text placed in a native
+ *  dialog line, where a line break could forge a line of the Host's own
+ *  (card K3, MED-3 on #425). */
+const UNSAFE_LINE_TEXT = new RegExp(`[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029${INVISIBLE_CHARACTERS}]`, 'gu')
+
+export function revealUnsafeLineText(text: string): string {
+  return text.replace(UNSAFE_LINE_TEXT, (char) => `\\u{${char.codePointAt(0)!.toString(16)}}`)
 }
 
 /** `revealInvisibleText` for a value shown as is: a string is spelled out,

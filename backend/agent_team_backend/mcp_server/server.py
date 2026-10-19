@@ -49,6 +49,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import Receive, Scope, Send
 
+from agent_team_backend import login_panes
 from agent_team_backend import osplat as _osplat
 from agent_team_backend.fs_service import FsError
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
@@ -1794,7 +1795,7 @@ async def _send_to_device(
     }
 
 
-async def _open_placeholder(entry: Any) -> dict[str, Any]:
+async def _open_placeholder(entry: Any, *, require_resume: bool = False) -> dict[str, Any]:
     """Ask the window holding *entry* to open it (ui.pane.open) and re-read it.
 
     Returns {ok, realized, reason, pane} — `pane` is the registry entry the
@@ -1804,16 +1805,21 @@ async def _open_placeholder(entry: Any) -> dict[str, Any]:
     delivering to it would be dropped by the receiving window. `reason` is the
     renderer's word: "opened", "fresh" (a new session — resume behavior
     "never", or the user chose start-fresh — so the agent does not remember
-    its earlier conversation), or why it stayed closed.
+    its earlier conversation), or why it stayed closed. With `require_resume`
+    the window opens it only onto the saved conversation and otherwise leaves
+    it closed ("fresh-refused" / "resume-unavailable").
     """
     from agent_team_backend import agent_messaging
 
+    args: dict[str, Any] = {"paneId": entry.pane_id}
+    if require_resume:
+        args["requireResume"] = True
     ui = await _ui_request(
         entry.workspace_path,
         "invoke",
         caller=_pane_caller(entry.pane_id),
         action="ui.pane.open",
-        args={"paneId": entry.pane_id},
+        args=args,
     )
     outcome = (ui.get("result") or {}) if ui.get("ok") else {}
     if not ui.get("ok") or not outcome.get("realized"):
@@ -1828,6 +1834,9 @@ async def _open_placeholder(entry: Any) -> dict[str, Any]:
         "realized": True,
         "reason": outcome.get("reason"),
         "pane": agent_messaging.current(entry.pane_id) or entry,
+        # The session the window launched the pane on ("" = a fresh one; None = a window
+        # that does not say). A caller that must have the saved conversation checks this.
+        "launched_session_id": outcome.get("launchedSessionId"),
     }
 
 
@@ -1900,6 +1909,12 @@ async def _send_to_group(
                 {"name": name, "pane_id": pane_id, "accepted": False, "reason": "target-offline"}
             )
             continue
+        if login_panes.is_login_pane(entry.pane_id):
+            recipients.append(
+                {"name": entry.name, "pane_id": entry.pane_id, "accepted": False,
+                 "reason": LOGIN_PANE_INPUT_REFUSED}
+            )
+            continue
         msg_key = await _dispatch_delivery(
             entry, text, caller=caller, me=me, cross_workspace=False,
             reply_to=reply_to, kind=kind,
@@ -1943,6 +1958,26 @@ class TerminalExternalRefused(Exception):
 TERMINAL_EXTERNAL_ERROR = (
     "external content is never typed into a plain terminal pane — the shell would run it"
 )
+
+
+#: error_code for any agent, MCP, scheduler or chat input to a CLI sign-in pane.
+LOGIN_PANE_INPUT_REFUSED = "login-pane-input-refused"
+
+
+def _login_pane_input_refusal(pane_id: str, name: str) -> dict[str, Any] | None:
+    """The answer for input addressed to a CLI sign-in pane, or None.
+
+    Only the user types into a sign-in pane: a wizard that takes typed input (a
+    menu choice, a pasted key) would otherwise let an agent finish the sign-in
+    on an account it controls. See login_panes.
+    """
+    if not login_panes.is_login_pane(pane_id):
+        return None
+    return {
+        "ok": False,
+        "error": f"{name!r} is signing in to a CLI account; only the user types into a sign-in pane",
+        "error_code": LOGIN_PANE_INPUT_REFUSED,
+    }
 
 
 async def _dispatch_delivery(
@@ -2346,6 +2381,9 @@ async def _send(
         )
     if me and result.pane.pane_id == me:
         return {"ok": False, "error": "that is your own pane"}
+    refused = _login_pane_input_refusal(result.pane.pane_id, result.pane.qualified_name)
+    if refused is not None:
+        return refused
 
     # Only the single-target path gets here: the group broadcast and the
     # cross-device relay returned above, so open_target cannot reach them.
@@ -3585,6 +3623,16 @@ async def cli_read_log(
     result, failure = _resolve_pane_target(caller, me, target, pane_id)
     if failure is not None:
         return failure
+    if login_panes.is_login_pane(result.pane.pane_id):
+        # Its output is an authorization URL or code (the window writes it no
+        # log; an older window may have).
+        return {
+            "ok": False,
+            "error": (
+                f"pane {result.pane.qualified_name!r} is signing in to a CLI account; "
+                "what it prints is not readable by other panes"
+            ),
+        }
 
     def _find_log_path() -> str:
         project = app.project_store.peek(result.pane.workspace_path)
@@ -3634,7 +3682,9 @@ def _activity_summary(pane_id: str) -> dict[str, Any] | None:
         "type": activity["event_type"],
         "age_seconds": round(time.monotonic() - activity["ts_monotonic"], 1),
     }
-    if activity["text"]:
+    # A sign-in pane's turn text can quote its sign-in: never handed out, by
+    # cli_get_status, cli_wait_idle or cli_send_and_wait alike.
+    if activity["text"] and not login_panes.is_login_pane(pane_id):
         last["text"] = activity["text"]
     return last
 
@@ -3758,6 +3808,9 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
             **result.entry.to_dict(),
         }
     pane = result.pane
+    # A sign-in pane's screen holds its authorization URL or code: its text
+    # stays out of this answer (the window already sends none; an older one may).
+    login = login_panes.is_login_pane(pane.pane_id)
 
     status: dict[str, Any] = {
         "ok": True,
@@ -3783,6 +3836,12 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
         args={"paneId": pane.pane_id},
     )
     if ui_result.get("ok") and isinstance(ui_result.get("result"), dict):
+        if login:
+            ui_result["result"] = {
+                key: value for key, value in ui_result["result"].items()
+                if key not in ("awaitingPrompt", "awaitingOptions", "logPath")
+            }
+            ui_result["result"]["buffer"] = ""
         status["ui"] = ui_result["result"]
         # One answer, not two that disagree: the badge only ever ADDS busy.
         if ui_result["result"].get("status") in ("running", "starting"):
@@ -4230,6 +4289,9 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
                 }
         return failure
     pane = result.pane
+    refused = _login_pane_input_refusal(pane.pane_id, pane.qualified_name)
+    if refused is not None:
+        return refused
     if caller.kind == "pane" and pane.pane_id == caller.pane_id:
         # Interrupting yourself aborts the very turn making this call, so the
         # answer would never reach the caller that asked for it. cli_send
@@ -4396,6 +4458,9 @@ async def cli_answer_prompt(
             }
         return failure
     pane = result.pane
+    refused = _login_pane_input_refusal(pane.pane_id, pane.qualified_name)
+    if refused is not None:
+        return refused
 
     word = (answer or "").strip().lower()
     choice = _ANSWER_WORDS.get(word) or (word if len(word) == 1 and word in "123456789" else "")
@@ -5519,6 +5584,10 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     "ui.pipeline.gate_pass",
     "ui.pipeline.gate_reject",
     "ui.pipeline.restart_from",
+    # Asks the user, then spawns a sign-in pane (cli_account_sign_in): the
+    # confirmation ends one ordinary wait before this one, leaving a pane
+    # create its wait.
+    "ui.accounts.signIn",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
 
@@ -5657,6 +5726,28 @@ def _ui_timeout_error(
     }
 
 
+#: Actions whose window side waits on the user and must be called off when
+#: nobody waits for the answer any more (review #438 LOW-1): a sign-in
+#: confirmation must not open a pane after its tool call was cancelled or
+#: timed out. Other actions finish on their own and get no withdrawal.
+_UI_INVOKE_WITHDRAWN_ACTIONS = frozenset({"ui.accounts.signIn"})
+
+
+def _withdraw_ui_request(action: str | None, request_id: str, owner: Any) -> None:
+    """Tell the window a request is no longer waited for (ui.invoke.cancel),
+    on the route the request took. Fire and forget: it runs from a cancelled
+    task too, which must not await."""
+    if action not in _UI_INVOKE_WITHDRAWN_ACTIONS:
+        return
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    event = make_event("ui.invoke.cancel", {"request_id": request_id})
+    send = app.unicast_to(owner, event) if owner is not None else app.broadcast(event)
+    task = asyncio.ensure_future(send)
+    task.add_done_callback(lambda t: t.cancelled() or t.exception())
+
+
 async def _ui_request(
     workspace_path: str,
     op: str,
@@ -5715,8 +5806,13 @@ async def _ui_request(
         await app.broadcast(make_event("ui.invoke.request", payload))
 
     timeout = _UI_INVOKE_SLOW_TIMEOUT_S if action in _UI_INVOKE_SLOW_ACTIONS else _UI_INVOKE_TIMEOUT_S
-    result = await _ui_invoke_pending.wait(request_id, fut, timeout=timeout)
+    try:
+        result = await _ui_invoke_pending.wait(request_id, fut, timeout=timeout)
+    except asyncio.CancelledError:
+        _withdraw_ui_request(action, request_id, owner if payload["addressed"] else None)
+        raise
     if result is TIMEOUT:
+        _withdraw_ui_request(action, request_id, owner if payload["addressed"] else None)
         return _ui_timeout_error(
             workspace_path,
             timeout,
@@ -5862,6 +5958,20 @@ async def ui_invoke(
                 ),
                 "error_code": "ui_pane_private",
             }
+    if action == "ui.pane.interrupt":
+        named = str((args or {}).get("paneId") or "")
+        refused = _login_pane_input_refusal(named, named)
+        if refused is not None:
+            return {**refused, "result": None}
+    if action.startswith("ui.accounts."):
+        # Reached through their own tools only, which check the caller and
+        # tell the user who asked; the window refuses them off that path too.
+        return {
+            "ok": False,
+            "result": None,
+            "error": f"{action} is not a ui_invoke action; use cli_account_sign_in",
+            "error_code": "ui_dedicated_tool",
+        }
     return await _ui_request(
         workspace_path,
         "invoke",
@@ -10088,6 +10198,291 @@ async def plugins_enable(ctx: Context, namespace: str, name: str) -> dict[str, A
     false, error, error_code}; `changed` is false when it was already enabled.
     """
     return await _plugin_agent_action(ctx, "enable", namespace, name)
+
+
+# ── Quota failover state (read-only) ────────────────────────────────────────
+#: The fields of the failover authority's state() this tool passes on. Named,
+#: not filtered: the live login's identity and fingerprint, raw error text
+#: (it can quote a Keychain item), idempotency keys, confirmation payloads and
+#: the evidence an incident lifted from a pane's output never leave here.
+_FAILOVER_INCIDENT_FIELDS = (
+    "id", "agentKey", "authScope", "outgoingSlotId", "epoch", "state", "reason",
+    "trusted", "autoAllowed", "tried", "panes", "transactionIds", "detectedAt",
+    "resetsAt", "windowKind", "closedAt", "updatedAt",
+)
+_FAILOVER_TRANSACTION_FIELDS = (
+    "id", "incidentId", "agentKey", "authScope", "fromSlotId", "toSlotId",
+    "automatic", "switchMode", "restartStrategy", "state", "reason", "swapped",
+    "epochBefore", "epochAfter", "createdAt", "committedAt", "closedAt",
+)
+_FAILOVER_UNRECONCILED_FIELDS = (
+    "transactionId", "agentKey", "authScope", "fromSlotId", "toSlotId",
+    "liveSlotId", "reason",
+)
+_FAILOVER_BUDGET_FIELDS = (
+    "agentKey", "authScope", "used", "limit", "windowSec", "minGapSec", "nextAllowedAt",
+)
+
+
+@server.tool()
+async def cli_failover_state(ctx: Context, agent: str = "") -> dict[str, Any]:
+    """Read where Navide's quota failover stands: what it is doing about an
+    exhausted CLI account, and what it may still do.
+
+    cli_usage says how much quota a vendor has left; this says what happens
+    when it runs out. Check it before handing work to a vendor that is out:
+    an open incident means Navide is already asking the user to switch (or
+    switching) that vendor's account, and a vendor listed under
+    `unreconciled` refuses every account switch until the user resolves a
+    half-finished one in Navide. Read-only: nothing is refreshed, switched or
+    confirmed, and no credential is read.
+
+    agent narrows the answer to one vendor key ("claude", "codex", ...) — the
+    same key cli_whoami reports as agent_key. Left empty, every vendor comes
+    back.
+
+    Returns {ok, policy, auditDegraded, capabilities, budget, unreconciled,
+    incidents, transactions, recentIncidents, recentTransactions}, plus
+    `agent` when a filter was applied.
+      - `policy` is the user's setting: "off", "notify" (ask before switching)
+        or "auto" (switch on its own, within the budget).
+      - `auditDegraded` true means the switch record could not be written, and
+        automatic switching is stopped until it can.
+      - `capabilities` maps a vendor to how its account can be switched
+        (`method` "hot" / "restart" / "manual", `supported`).
+      - `budget` maps an account pool to the AUTOMATIC switches it has used in
+        the window ({used, limit, windowSec, minGapSec, nextAllowedAt}).
+        Switches made by hand do not count against it.
+      - `unreconciled` maps a vendor to the swap blocking it
+        ({transactionId, fromSlotId, toSlotId, liveSlotId, reason}).
+      - `incidents` / `transactions` are what is open now; the `recent*` lists
+        are what closed lately, newest first.
+    Accounts are named by their slot id only, never by the login's email.
+    """
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    from agent_team_backend import app as _app
+
+    state = _app.quota_failover.state()
+    agent = str(agent or "").strip().lower()
+
+    def wanted(row: dict[str, Any]) -> bool:
+        return not agent or row.get("agentKey") == agent
+
+    def rows(key: str, fields: tuple[str, ...]) -> list[dict[str, Any]]:
+        return [_pick(row, fields) for row in state.get(key) or [] if wanted(row)]
+
+    result: dict[str, Any] = {"ok": True}
+    if agent:
+        result["agent"] = agent
+    result["policy"] = state.get("policy")
+    result["auditDegraded"] = state.get("auditDegraded")
+    result["capabilities"] = {
+        key: cap for key, cap in (state.get("capabilities") or {}).items()
+        if not agent or key == agent
+    }
+    result["budget"] = {
+        scope: _pick(info, _FAILOVER_BUDGET_FIELDS)
+        for scope, info in (state.get("budget") or {}).items() if wanted(info)
+    }
+    result["unreconciled"] = {
+        key: _pick(row, _FAILOVER_UNRECONCILED_FIELDS)
+        for key, row in (state.get("unreconciled") or {}).items()
+        if not agent or key == agent
+    }
+    result["incidents"] = rows("incidents", _FAILOVER_INCIDENT_FIELDS)
+    result["transactions"] = rows("transactions", _FAILOVER_TRANSACTION_FIELDS)
+    result["recentIncidents"] = rows("recentIncidents", _FAILOVER_INCIDENT_FIELDS)
+    result["recentTransactions"] = rows("recentTransactions", _FAILOVER_TRANSACTION_FIELDS)
+    return result
+
+
+#: The fields of an account row this tool passes on: what the account store
+#: file holds about it, nothing read from its credentials.
+_ACCOUNT_FIELDS = ("id", "agentKey", "name", "scope", "createdAt")
+#: The built-in Default row's id (cli_profiles' DEFAULT_SLOT_ID).
+_DEFAULT_ACCOUNT_ID = "__default__"
+
+
+@server.tool()
+async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
+    """List the CLI accounts Navide keeps, and which one each CLI runs on.
+
+    The same accounts Settings → Accounts shows, read from Navide's account
+    store only: it says which accounts exist and which is active, not who is
+    signed in to them — no email and no signed-in flag, since both would mean
+    reading the credentials themselves. Read-only: nothing is switched or
+    refreshed. Quota is in cli_usage, the failover state in
+    cli_failover_state.
+
+    agent narrows the answer to one vendor key ("claude", "codex", ...) — the
+    same key cli_whoami reports as agent_key. Left empty, every vendor comes
+    back.
+
+    Returns {ok, accounts, active, defaultNames, paneDefaults}, plus `agent`
+    when a filter was applied.
+      - `accounts` is every account row the user added: {id, agentKey, name,
+        scope?, createdAt}. `scope` is the provider an account of a
+        multi-provider CLI is bound to.
+      - `active` maps a vendor to the account its CLI runs on now:
+        "__default__" is the built-in Default row (the login the CLI had
+        before any account was added), which has no row in `accounts`.
+      - `defaultNames` holds the names the user gave a vendor's Default row.
+      - `paneDefaults` maps a vendor to the account new panes are pinned to,
+        when the user chose one that differs from `active`.
+    """
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    from agent_team_backend import app as _app
+
+    doc = await asyncio.to_thread(_app.cli_profiles_store.list)
+    agent = str(agent or "").strip().lower()
+
+    def wanted(key: str) -> bool:
+        return not agent or key == agent
+
+    result: dict[str, Any] = {"ok": True}
+    if agent:
+        result["agent"] = agent
+    result["accounts"] = [
+        _pick(row, _ACCOUNT_FIELDS)
+        for row in doc.get("profiles") or [] if wanted(str(row.get("agentKey") or ""))
+    ]
+    result["active"] = {
+        key: str(value or _DEFAULT_ACCOUNT_ID)
+        for key, value in (doc.get("defaults") or {}).items() if wanted(key)
+    }
+    result["defaultNames"] = {
+        key: value for key, value in (doc.get("defaultNames") or {}).items() if wanted(key)
+    }
+    result["paneDefaults"] = {
+        key: value for key, value in (doc.get("paneDefaults") or {}).items() if wanted(key)
+    }
+    return result
+
+
+# ── CLI account sign-in (plan mcp_614482 P2) ────────────────────────────────
+#: How much of an agent's reason reaches the user's notice; the rest is cut.
+_SIGN_IN_REASON_MAX = 300
+_SIGN_IN_MODES = ("isolated", "folder")
+
+
+@server.tool()
+async def cli_account_sign_in(
+    ctx: Context, agent: str, profile_id: str, reason: str, mode: str = "isolated",
+) -> dict[str, Any]:
+    """Open the sign-in flow Navide already offers for one CLI account, so the
+    user only has to finish it in the browser.
+
+    It is the same sign-in Settings → Accounts starts: Navide opens a sign-in
+    pane running the CLI's own login command in your window, in your own
+    workspace. Your window first asks the user, naming which agent asked and
+    showing your `reason` (required; cut at 300 characters); nothing opens
+    until they agree, and a no or no answer in time is a refusal. If this
+    call is cancelled or times out, the window closes the question unanswered. You never
+    see the login: no token, code or URL comes back,
+    and what the sign-in pane prints cannot be read by any pane (cli_read_log
+    refuses it, cli_get_status leaves its text out).
+
+    agent is the vendor key ("claude", "codex", ...); profile_id is an account
+    of that vendor as Settings → Accounts lists it. mode "isolated" (default)
+    signs a PARKED account in, in its own private home: the active account and
+    running panes are untouched. mode "folder" signs a claude account in
+    inside its own config folder. Anything that would move the credential the
+    user is running on — the active account, the built-in Default, a vendor
+    whose sign-in replaces the live credential while it runs — is refused with
+    error_code "needs-user": the user starts those in Settings → Accounts.
+    Nothing here switches accounts.
+
+    Only a CLI pane can call it, and only for the project its window shows.
+
+    Returns {ok: true, status: "started", agent, profile_id, mode,
+    login_pane_id} once the sign-in pane is up; whether the user then signed
+    in is not known here. Otherwise {ok: false, error, error_code}:
+    "pane-only", "bad-request", "reason-required", "needs-user",
+    "unknown-profile", "unsupported", "no-workspace", "wrong-workspace",
+    "declined" (the user said no), "confirm-timeout" (the user did not answer
+    in time), "busy" (another agent's sign-in is waiting for the user),
+    "workspace-changed" (the window left your workspace while the user was
+    asked), "spawn-failed" or "window-unavailable".
+    """
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    if caller.kind != "pane":
+        return {
+            "ok": False,
+            "error": "only a CLI pane can ask for a sign-in; the user is told which pane asked",
+            "error_code": "pane-only",
+        }
+    agent = str(agent or "").strip().lower()
+    profile_id = str(profile_id or "").strip()
+    mode = str(mode or "").strip().lower()
+    if not agent or not profile_id or mode not in _SIGN_IN_MODES:
+        return {
+            "ok": False,
+            "error": 'agent and profile_id are required, and mode is "isolated" or "folder"',
+            "error_code": "bad-request",
+        }
+    reason = " ".join(str(reason or "").split())
+    # The cut is disclosed to the user too, not only in this docstring.
+    reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
+    reason = reason[:_SIGN_IN_REASON_MAX]
+    if not reason:
+        return {
+            "ok": False,
+            "error": "say why: the reason is shown to the user with the sign-in",
+            "error_code": "reason-required",
+        }
+    from agent_team_backend import agent_messaging
+
+    pane = agent_messaging.get(caller.pane_id)
+    # The window asks the user before it opens anything (review #433 LOW-3).
+    # The answer is due within this action's slow wait; the user's yes must
+    # come one ordinary action's wait before that, so the window can still
+    # open the pane while this tool is waiting. Epoch ms, one machine's clock.
+    confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
+    answer = await _ui_request(
+        pane.workspace_path if pane else "",
+        "invoke",
+        caller=caller,
+        action="ui.accounts.signIn",
+        args={
+            "agentKey": agent, "profileId": profile_id, "mode": mode, "reason": reason,
+            "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
+        },
+    )
+    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+    status = str(result.get("status") or "") if answer.get("ok") else ""
+    _log.info(
+        "cli_account_sign_in from pane %s: agent=%s profile=%s mode=%s -> %s",
+        caller.pane_id, agent, profile_id, mode, status or "window-unavailable",
+    )
+    if not answer.get("ok"):
+        return {
+            "ok": False,
+            "error": str(answer.get("error") or "the Navide window did not answer"),
+            "error_code": "window-unavailable",
+        }
+    if status != "started":
+        return {
+            "ok": False,
+            "error": str(result.get("message") or "the window refused the sign-in"),
+            "error_code": status or "refused",
+        }
+    return {
+        "ok": True,
+        "status": "started",
+        "agent": agent,
+        "profile_id": profile_id,
+        "mode": mode,
+        "login_pane_id": str(result.get("loginPaneId") or ""),
+    }
 
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
 

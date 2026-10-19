@@ -36,7 +36,10 @@ import {
   isTrustedPluginManagementSender,
   registerPluginIpc,
   resolveConfiguredMarketplace,
+  setMarketplaceOverridesAllowed,
 } from './plugins/pluginIpc'
+import { developerFolderBackendDigest, PluginDeveloperModeStore } from './plugins/pluginDeveloperModeStore'
+import { disableOfficialKeyOverride } from './plugins/pluginVerify'
 import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
 import { contributionIcon } from './plugins/pluginContributionIcon'
@@ -58,6 +61,9 @@ import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/fr
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
+import { localTakedownDecision } from './plugins/pluginLocalTrust'
+import { agentApprovalSourceNote, installedPackageSource, nativeBackendConsentDialog } from './plugins/pluginLocalInstall'
+import { revealUnsafeLineText } from '../shared/pluginAgentTools'
 import {
   BackendPluginError,
   PluginBackendSupervisor,
@@ -188,8 +194,8 @@ import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import {
   isThirdPartyLaunchSpec,
-  nativeBackendConsentText,
   thirdPartyBackendLaunchSpec,
+  packageContentDigest,
   type ThirdPartyLaunchSpec,
   ThirdPartyBackendController,
   type AgentToolWritePrompt,
@@ -967,6 +973,12 @@ app.whenReady().then(() => {
 // Extensions view: install/update/remove third-party plugins. Verified packages
 // are written under userData/plugins and scanned back on next launch.
 const pluginsRoot = (): string => join(app.getPath('userData'), 'plugins')
+// Card K4 (D6): a packaged build honors the self-hosted Registry overrides only
+// while the user's Developer Mode switch is on, and never takes the official
+// publisher key from the environment. Set before anything resolves either.
+const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot())
+setMarketplaceOverridesAllowed(() => !app.isPackaged || pluginDeveloperModeStore.isEnabled())
+if (app.isPackaged) disableOfficialKeyOverride()
 let installedRegistryRootKey: string | null = null
 let installedRegistryAuthority: 'official' | 'self-hosted' = 'self-hosted'
 let installedOfficialRegistryUrl: string | undefined
@@ -997,6 +1009,25 @@ function currentInstalledRegistryTrust() {
     officialRegistryUrl: marketplace.trust.officialRegistryUrl,
     expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
     now: marketplace.trust.now,
+  }
+}
+
+/** Why a developer folder is taken down by Navide, or null (card K4). */
+function developerFolderTakedown(packageDir: string): string | null {
+  try {
+    const manifest = JSON.parse(readFileSync(join(packageDir, 'manifest.json'), 'utf8')) as Record<string, unknown>
+    const decision = localTakedownDecision(
+      {
+        id: String(manifest.id),
+        version: String(manifest.version),
+        ...(typeof manifest.publisher === 'string' ? { publisher: manifest.publisher } : {}),
+      },
+      currentInstalledRegistryTrust(),
+    )
+    return decision.action === 'blocked' ? decision.reason : null
+  } catch {
+    // An unreadable manifest is refused by the loader itself.
+    return null
   }
 }
 
@@ -1206,6 +1237,12 @@ const nativeBackendStore = new NativeBackendStore(nativeBackendRoot)
 let agentToolsHost: PluginAgentToolsHost | null = null
 const thirdPartyBackends = new ThirdPartyBackendController({
   store: nativeBackendStore,
+  // Card K4: a developer folder's consent is bound to the folder and its
+  // declared permissions and backend, not to content that changes as the
+  // developer works; every other package binds to its exact content.
+  digestBackend: (spec) =>
+    Promise.resolve(developerFolderBackendDigest(pluginDeveloperModeStore.folders(), spec))
+      .then((digest) => digest ?? packageContentDigest(spec.packageDir)),
   dataRoot: join(nativeBackendRoot, 'data'),
   filesystemPort: () => frontendPluginManager.createWorkspaceFilesystemPort(),
   shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
@@ -1256,8 +1293,13 @@ function nativeBackendDialogParent(): BrowserWindow | null {
 }
 
 async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): Promise<boolean> {
-  // Plan B D-g: in the user's language, with the methods it serves.
-  const { title, message, detail, buttons } = nativeBackendConsentText(prompt, currentUiLocale())
+  // Plan B D-g: in the user's language, with the methods it serves. Card K3:
+  // an unreviewed package's source leads the text (nativeBackendConsentDialog).
+  const { title, message, detail, buttons } = nativeBackendConsentDialog(
+    prompt,
+    currentUiLocale(),
+    installedPackageSource(frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)),
+  )
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title,
@@ -1295,8 +1337,21 @@ async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Prom
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Agent wants to change files',
-    message: `An agent asked to use "${prompt.tool.title}" (${prompt.tool.name}) of ${prompt.name} ${prompt.packageVersion}, which changes files. Allow agents to do this in this workspace?`,
-    detail: `${prompt.workspacePath}\n\nThe agent, not you, started this. You are asked again after an update or a new permission.`,
+    message: [
+      // Card K3: the source first, then package text with nothing hidden in it.
+      agentApprovalSourceNote(
+        installedPackageSource(frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)),
+      ),
+      `An agent asked to use "${revealUnsafeLineText(prompt.tool.title)}" (${revealUnsafeLineText(prompt.tool.name)}) of ${revealUnsafeLineText(prompt.name)} ${revealUnsafeLineText(prompt.packageVersion)}, which changes files. Allow agents to do this in this workspace?`,
+    ].filter(Boolean).join('\n'),
+    detail: [
+      // Card K3: an unreviewed package's tool says where it came from.
+      agentApprovalSourceNote(
+        installedPackageSource(frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)),
+      ),
+      prompt.workspacePath,
+      'The agent, not you, started this. You are asked again after an update or a new permission.',
+    ].filter(Boolean).join('\n\n'),
     buttons: ['Don\'t allow', 'Allow'],
     defaultId: 0,
     cancelId: 0,
@@ -1781,7 +1836,26 @@ const pluginTrustRefresh = registerPluginIpc(
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
     preflightCandidateFrontend,
     preflightCandidateBackend,
+    // Card K3: the only source of a local package path is this dialog, opened
+    // over the main window that asked (never a detached or plugin window).
+    pickLocalPackageFile: async (event) => {
+      const parent = BrowserWindow.fromWebContents(event.sender)
+      if (!parent || parent.isDestroyed() || !mainWindows.has(parent) || detachedWindowIds.has(parent.id)) return null
+      const picked = await dialog.showOpenDialog(parent, {
+        properties: ['openFile'],
+        filters: [{ name: 'Navide plugin package', extensions: ['vsix'] }],
+      })
+      return picked.canceled ? null : picked.filePaths[0] ?? null
+    },
+    pickDeveloperFolder: async (event) => {
+      const parent = BrowserWindow.fromWebContents(event.sender)
+      if (!parent || parent.isDestroyed() || !mainWindows.has(parent) || detachedWindowIds.has(parent.id)) return null
+      const picked = await dialog.showOpenDialog(parent, { properties: ['openDirectory'] })
+      return picked.canceled ? null : picked.filePaths[0] ?? null
+    },
+    forgetBackendConsent: (pluginId) => nativeBackendStore.forgetGrants(pluginId),
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
+    pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),
     cleanupPluginStorage: async (pluginId) => {
       await pluginStorageStore.cleanupPlugin(pluginId)
       nativeBackendStore.forget(pluginId)
@@ -1972,6 +2046,8 @@ const pluginTrustRefresh = registerPluginIpc(
     holdBuiltinSwitch: (task) => builtinSwitchReconciler.hold(task),
   }
 )
+// Card K4: the developer folders the user consented to, when Developer Mode is on.
+void pluginTrustRefresh.loadDeveloperFolders()
 /** The Host side of a built-in's Disabled switch: drain and close it, or bring
  *  it back. Used by the Extensions switch and by a store change the switch did
  *  not make (see builtinSwitchReconciler). */
@@ -5620,7 +5696,11 @@ app.whenReady().then(async () => {
       }
     }
     const explicitPackageDir = process.env['AGENT_TEAM_PLUGIN_DEV_PATH']
-    if (explicitPackageDir !== undefined) {
+    // Review MED-1 on #428: the root-signed takedown list applies here too.
+    const explicitTakedown = explicitPackageDir === undefined ? null : developerFolderTakedown(explicitPackageDir)
+    if (explicitTakedown) {
+      console.warn(`[main] AGENT_TEAM_PLUGIN_DEV_PATH was not loaded: ${explicitTakedown}`)
+    } else if (explicitPackageDir !== undefined) {
       const explicitResult = frontendPluginManager.loadExplicitDeveloperPlugin(explicitPackageDir)
       if (!explicitResult.loaded) {
         console.warn(

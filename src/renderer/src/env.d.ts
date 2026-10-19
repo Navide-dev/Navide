@@ -10,6 +10,7 @@ type DeepLinkApi = import('../../shared/deepLink').DeepLinkApi
 type ManifestPermissionsSummary = import('../../shared/executionPolicy').ManifestPermissionsSummary
 type PackageVersionGrantSummary = import('../../shared/executionPolicy').PackageVersionGrantSummary
 type LegacyPlansPreferenceProjection = import('../../shared/plansPreferences').LegacyPlansPreferenceProjection
+type PluginSource = import('../../shared/pluginSource').PluginSource
 type PluginManifestDisclosure = import('../../shared/pluginDisclosure').ManifestDisclosure
 type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
@@ -391,6 +392,12 @@ declare global {
           version: string
           disclosure: PluginManifestDisclosure | null
           scan: PluginScanReport | null
+          /** Source and review state; see `shared/pluginSource.ts`. */
+          source?: PluginSource
+          /** Test build expiry (ISO-8601), from the signed envelope; testplace only. */
+          expiresAt?: string
+          /** Whether the active package declares views (R2 MED-6 on #436). */
+          hasViews?: boolean
         }>>
         /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped). */
         backendResourceUsage?: () => Promise<{
@@ -424,6 +431,8 @@ declare global {
           kind: 'custom'
           location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
           manifestOrder: number
+          /** Source and review state of the package that contributes this view. */
+          source?: PluginSource
         }>>
         hostThemeChanged: (theme: string) => void
         prepareContribution: (args: {
@@ -473,8 +482,23 @@ declare global {
         }) => Promise<PreparedInstallSummary>
         commitInstall: (
           id: string,
-          approval?: { publisherConfirmed?: boolean; riskConfirmed?: boolean }
+          approval?: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
         ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        installFromFile?: () => Promise<PreparedInstallSummary | null>
+        commitLocalInstall?: (
+          id: string,
+          approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
+        ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        developerMode?: () => Promise<DeveloperModeState>
+        setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
+        loadFromFolder?: () => Promise<PreparedInstallSummary | null>
+        commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean }) => Promise<DeveloperModeState>
+        reloadDeveloperPlugin?: (id: string) => Promise<
+          | { reloaded: true; requiresConsent: false }
+          | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
+        >
+        removeDeveloperFolder?: (id: string) => Promise<DeveloperModeState>
+        selfHostedQuarantine?: () => Promise<Array<{ id: string; version: string | null }>>
         restart: (id: string) => Promise<{
           id: string
           packageVersion: string
@@ -545,6 +569,10 @@ declare global {
     manifestPermissions?: ManifestPermissionsSummary
     packageVersionGrant?: PackageVersionGrantSummary | null
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+    /** Source and review state; see `shared/pluginSource.ts`. */
+    source?: PluginSource
+    /** Test build expiry (ISO-8601), from the signed envelope; testplace only. */
+    expiresAt?: string
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'
@@ -602,6 +630,8 @@ declare global {
     extension_pack?: string[] | null
     /** Trust tier of the latest version ('signed-verified' or 'unsigned'). */
     trust_tier?: string | null
+    /** Newest pre-release newer than `latest_version` (Registry's view). */
+    latest_prerelease_version?: string | null
     /** Plan B D1 list card: the latest version's manifest disclosure and scan
      *  report as the Registry listed them, kept by the main process only when
      *  well formed and naming this item; unverified display data. */
@@ -759,6 +789,8 @@ declare global {
     trustTier: 'signed-verified' | 'unsigned'
     sensitive: string[]
     containsBackendExecutable: boolean
+    /** R2 MED-6 on #436: the manifest declares views (`contributes.views`). */
+    hasViews?: boolean
     /** Declared agent tools (sorted, timeouts defaulted); absent when none. */
     agentTools?: Array<{
       name: string
@@ -771,6 +803,8 @@ declare global {
     }>
     requiresConfirmation: boolean
     publisherId: string
+    /** Source and review state, when the Host sends one; see `shared/pluginSource.ts`. */
+    source?: PluginSource
     requiresPublisherTrust: boolean
     requiresRiskConfirmation: boolean
     /** Plan B D2: what this update changes, computed by the Host from the
@@ -783,6 +817,28 @@ declare global {
     scan?: PluginScanReport | null
     /** Unsigned Registry facts, never verified. */
     registry?: PluginRegistryDisclosureFacts | null
+    /** Card K3: the package's source; `local-unsigned` for a file install. */
+    source?: PluginSource
+    /** Card K3: sha256 of the picked file, shown in the consent dialog. */
+    digest?: string
+    /** Card K3 (D7): the installed package of the same id a file install replaces. */
+    replaces?: { version: string | null; source: 'marketplace' | 'local-unsigned' }
+    /** Card K3 (D7): the local file install a Marketplace install replaces. */
+    replacesLocal?: { version: string | null }
+    /** D7: the replaced package's native backend data will be set aside. */
+    backendDataSetAside?: boolean
+    /** D7: data set aside earlier from the incoming source, which the user may take back. */
+    reattachableBackendData?: true
+    /** MED-1 on #425: false when the takedown list could not be checked. */
+    takedownChecked?: boolean
+    /** Card K4: the developer folder this summary was read from. */
+    folder?: string
+  }
+
+  /** Card K4: the Developer Mode switch and the developer folders consented to. */
+  interface DeveloperModeState {
+    enabled: boolean
+    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
   }
 }
 
