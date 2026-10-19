@@ -20384,20 +20384,13 @@ const effectiveLayoutMode = computed<'grid' | 'spotlight' | 'sidebar' | 'fullscr
 // After any layout mode change, refit all terminals once the browser has
 // finished laying out the new grid — ResizeObserver alone is unreliable when
 // panes transition from display:none (sidebar) to visible (spotlight/grid).
-// The modes that hand one pane the whole stage (sidebar/spotlight/fullscreen)
-// are a step change in width, and widening makes xterm reflow the scrollback.
-// A CLI that paints absolute-positioned full-width rows (claude) can never
-// repaint what reflow strands there — its redraw addresses the viewport only —
-// so the garbled history is permanent. Cap each pane at its grid-mode width on
-// the way in: the extra space is left blank instead of becoming columns, and
-// switching back is then a no-op resize. Set before the fit below, which is
-// what reads the cap. Panes stay uncapped in grid mode, where the container is
-// the width the user actually chose.
-watch(effectiveLayoutMode, (mode) => {
-  const capped = mode !== 'grid'
-  for (const ref of Object.values(paneRefs)) {
-    (ref as unknown as { lockCols?: (locked: boolean) => void })?.lockCols?.(capped)
-  }
+// Every mode fills its container: a pane handed the whole stage
+// (sidebar/spotlight/fullscreen) widens to it rather than leaving the extra
+// space blank. Widening reflows the scrollback, and fragments a CLI paints at
+// absolute positions (claude) can strand there — the same cost a window
+// resize in grid mode already pays — while the redraw after settle repaints
+// the visible frame at the new width.
+watch(effectiveLayoutMode, () => {
   void nextTick(() => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {

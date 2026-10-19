@@ -39,15 +39,13 @@ describe('fit to pane width in the pane context menu', () => {
   })
 })
 
-// The cap exists so a layout-mode switch never widens (and reflows) the
-// scrollback on its own. Only the explicit menu action may lift it.
-describe('layout-mode cols cap', () => {
-  it('still caps every pane outside grid mode and refits after a frame', () => {
-    const watcher = block('watch(effectiveLayoutMode, (mode) => {', '// Tab switches and minimize/restore')
-    expect(watcher).toContain("const capped = mode !== 'grid'")
-    expect(watcher).toContain('?.lockCols?.(capped)')
+// A layout-mode switch fills the container: a pane handed the whole stage
+// must not stay pinned at its grid width with the rest left blank.
+describe('layout-mode switch', () => {
+  it('caps no pane and refits every pane with a redraw after a frame', () => {
+    const watcher = block('watch(effectiveLayoutMode, () => {', '// Tab switches and minimize/restore')
+    expect(watcher).not.toContain('lockCols')
     expect(watcher).toContain('?.fitTerminal?.({ redrawAfterSettle: true })')
-    expect(watcher).not.toContain('unlockCols')
   })
 
   it('lifts the cap nowhere else in App.vue but the menu item', () => {
