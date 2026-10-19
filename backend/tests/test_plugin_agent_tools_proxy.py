@@ -1326,6 +1326,79 @@ async def test_an_idle_helper_exits_after_its_window_and_the_next_large_result_s
     proxy._result_worker.stop()  # noqa: SLF001
 
 
+async def test_a_stopped_helper_closes_only_its_own_job_once_when_its_pid_was_taken_by_a_pane(monkeypatch) -> None:
+    """Windows: the job table is keyed by pid and shared with the panes. A
+    pane spawned onto the helper's pid owns that entry; ending the helper must
+    close the helper's job only (once), never the pane's (closing it kills the
+    pane's whole tree), and leave the pane's entry in place."""
+    import asyncio
+
+    from agent_team_backend import agent_tool_result_worker as worker
+    from agent_team_backend import osplat
+    from agent_team_backend.osplat import _windows
+
+    closed: list[int] = []
+    kernel32 = types.SimpleNamespace(CloseHandle=lambda handle: closed.append(int(handle)) or 1)
+    monkeypatch.setattr(_windows, "_kernel32", lambda: kernel32)
+    monkeypatch.setattr(_windows, "_create_kill_on_close_job", lambda: 1001)
+    monkeypatch.setattr(_windows, "_assign_to_job", lambda job, pid: None)
+    monkeypatch.setattr(_windows, "_jobs", {})
+    monkeypatch.setattr(osplat, "process_tree", _windows.process_tree)
+    monkeypatch.setattr(worker, "STOP_GRACE_S", 0.0)
+    proxy._result_worker.stop()  # noqa: SLF001
+    proxy._result_worker._start_failed = None  # noqa: SLF001
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    helper = proxy._result_worker._process  # noqa: SLF001
+    assert helper is not None
+    assert _windows._jobs[helper.pid][0] == 1001  # noqa: SLF001
+    # A pane spawned onto the same pid registers its own job over the entry.
+    _windows._jobs[helper.pid] = (2002, "pane")  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+    await asyncio.wait_for(helper.wait(), 10)
+    for _ in range(100):
+        if closed:
+            break
+        await asyncio.sleep(0.05)
+    # The kill at exit (or a second timer) finds nothing left to close.
+    worker._kill_tree(helper)  # noqa: SLF001
+    assert closed == [1001]
+    assert _windows._jobs[helper.pid] == (2002, "pane")  # noqa: SLF001
+    # The pane's own close still ends its job, once.
+    _windows._release_job(helper.pid, 2002)  # noqa: SLF001
+    assert closed == [1001, 2002]
+
+
+async def test_on_windows_the_helper_does_not_inherit_the_backend_stderr(monkeypatch) -> None:
+    """Windows: an inherited stderr is duplicated from the backend's standard
+    handle, which another thread may be swapping at that moment (WinError 6)."""
+    import asyncio
+
+    from agent_team_backend import osplat
+
+    seen: list[Any] = []
+    real = asyncio.create_subprocess_exec
+
+    async def spy(*args: Any, **kwargs: Any) -> Any:
+        seen.append(kwargs.get("stderr"))
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    # None is the default: inherited, as before, on macOS and Linux.
+    for platform, expected in (("darwin", None), ("linux", None), ("win32", asyncio.subprocess.DEVNULL)):
+        proxy._result_worker.stop()  # noqa: SLF001
+        proxy._result_worker._start_failed = None  # noqa: SLF001
+        monkeypatch.setattr(osplat, "platform_id", platform)
+        _pieces_host(monkeypatch, agent_tool_payload_text(value))
+        assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+        assert seen[-1] == expected, platform
+    proxy._result_worker.stop()  # noqa: SLF001
+
+
 async def test_a_helper_that_is_still_working_is_waited_for(monkeypatch) -> None:
     from agent_team_backend import agent_tool_result_worker as worker
 

@@ -33,6 +33,7 @@ import asyncio
 import atexit
 import codecs
 import json
+import logging
 import math
 import os
 import sys
@@ -40,6 +41,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, BinaryIO
+
+log = logging.getLogger(__name__)
 
 WORKER_FLAG = "--agent-tool-result-worker"
 #: Seconds between the helper's empty frames while it works.
@@ -222,6 +225,9 @@ class ResultWorker:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._start_failed: tuple[float, str] | None = None
         self._idle_exit: asyncio.TimerHandle | None = None
+        #: The job contain() made for the running helper (Windows), so that
+        #: stopping it ends that job and never another one on a reused pid.
+        self._job: int | None = None
         self.state = "idle"
         self.last_error = ""
         self.since = int(time.time() * 1000)
@@ -268,6 +274,8 @@ class ResultWorker:
             return process
         if self._start_failed is not None and time.monotonic() < self._start_failed[0]:
             raise ResultWorkerUnavailable(self._start_failed[1], attempted=False)
+        from agent_team_backend import osplat
+
         try:
             # Its own session (process group on POSIX), so stop() ends the
             # whole tree: a onefile build runs Python under a bootloader.
@@ -275,18 +283,25 @@ class ResultWorker:
                 *self.argv(),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
+                # Not inherited on Windows: that duplicates the backend's
+                # standard error handle, which mem_probe swaps on another
+                # thread every minute, and a start in that window fails with
+                # WinError 6.
+                stderr=asyncio.subprocess.DEVNULL if osplat.platform_id == "win32" else None,
                 limit=_SLICE,
                 start_new_session=True,
                 env={**os.environ, PARENT_ENV: str(os.getpid())},
             )
         except OSError as error:
+            info = osplat.process_tree.stderr_handle_info()
+            if info:
+                log.warning("result helper could not be started: %s (%s)", error, info)
             raise self._unavailable(f"it could not be started: {error}") from error
         self._process = process
-        from agent_team_backend import osplat
-
+        self._job = None
         try:
             # The tree stop() can end whole (a kill-on-close job on Windows).
-            osplat.process_tree.contain(process.pid)
+            self._job = osplat.process_tree.contain(process.pid)
         except OSError:
             pass
         assert process.stdout is not None
@@ -367,7 +382,8 @@ class ResultWorker:
                 pass  # its event loop is gone, and the pipe with it
         # A timer thread, not the event loop: it runs even if the loop ends
         # first; one still waiting when the backend exits is run then.
-        _stopping.add(process)
+        _stopping[process] = self._job
+        self._job = None
         timer = threading.Timer(STOP_GRACE_S if process.returncode is None else 0, _kill_tree, args=(process,))
         timer.daemon = True
         timer.start()
@@ -431,8 +447,9 @@ class ResultWorker:
         return text
 
 
-#: Helpers stopped whose grace has not run out yet.
-_stopping: set[asyncio.subprocess.Process] = set()
+#: Helpers stopped whose grace has not run out yet, with the job contain()
+#: made for each (None on POSIX or when there is none).
+_stopping: dict[asyncio.subprocess.Process, int | None] = {}
 
 
 @atexit.register
@@ -444,11 +461,16 @@ def _kill_stopping() -> None:
 def _kill_tree(process: asyncio.subprocess.Process) -> None:
     """Kill a helper with every process under it, also when the helper itself
     has exited: what it started may still run."""
-    _stopping.discard(process)
+    try:
+        # Taken out before it is ended, so the timer and the exit hook never
+        # both end it (closing the same job handle twice).
+        job = _stopping.pop(process)
+    except KeyError:
+        return
     from agent_team_backend import osplat
 
     try:
-        osplat.process_tree.end_contained(process.pid)
+        osplat.process_tree.end_contained(process.pid, job)
     except OSError:
         pass
 
