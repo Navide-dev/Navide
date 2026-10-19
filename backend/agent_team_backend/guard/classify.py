@@ -400,7 +400,112 @@ def _agent_config(path: str, ctx: _Ctx) -> bool:
     )
 
 
-def _check_path(acc: _Acc, path: str, ctx: _Ctx, *, write: bool, list_only: bool = False) -> None:
+#: Navide's Electron userData folder names: package.json `name`, and the dev
+#: instance's suffixes from src/main/devUserData.ts.
+_APP_NAMES = ("agent-team", "agent-team-dev")
+_APP_DEV_PLANS = "agent-team-dev-plans-"
+#: Below userData, the plugin install root (Developer Mode folders, activation
+#: and grants included) and the local trust records are protected whole; the
+#: native backend folder only for its consent store and the kept-source
+#: markers and set-aside folders beside plugin data, never a plugin's own data.
+_STORE_DIRS = ("plugins", "plugin-local-trust")
+_NATIVE_DIR = "plugin-native-backends"
+_NATIVE_CONSENT = "native-backends.json"
+_NATIVE_DATA = "data"
+#: A write naming userData itself or a native backend folder can swap the
+#: stores below it in one step, so those count too.
+_STORE_ACCEPT = {"u", "native", "data", "in"}
+
+
+def _app_data_roots(ctx: _Ctx) -> list[tuple[tuple[str, ...], bool]]:
+    """Electron's appData folders on every platform's layout, as path
+    segments with named=False (a userData name follows), plus an explicit
+    absolute dev userData (named=True). Checking every layout everywhere costs
+    nothing and covers a home shared across systems."""
+    cands = []
+    for h in _homes(ctx):
+        cands += [posixpath.join(h, "Library/Application Support"), posixpath.join(h, ".config"),
+                  posixpath.join(h, "AppData/Roaming")]
+    cands += [os.environ.get(v, "") for v in ("XDG_CONFIG_HOME", "APPDATA")]
+    out = [(tuple(n.split("/")), False) for n in (_norm(c) for c in cands if c) if _isabs(n)]
+    dev = _norm(os.environ.get("NAVIDE_DEV_USER_DATA_DIR", ""))
+    if dev and _isabs(dev):
+        out.append((tuple(dev.split("/")), True))
+    return out
+
+
+def _seg_match(g: str, name: str) -> bool:
+    return fnmatch.fnmatchcase(name, g) if _GLOB_CHARS & set(g) else g == name
+
+
+def _store_step(state: tuple, g: str) -> list[tuple]:
+    """Where one path segment ``g`` (literal or glob) leads from ``state``."""
+    kind = state[0]
+    if kind == "root":
+        _, segs, k, named = state
+        if not _seg_match(g, segs[k]):
+            return []
+        if k + 1 < len(segs):
+            return [("root", segs, k + 1, named)]
+        return [("u",)] if named else [("name",)]
+    if kind == "name":
+        prefix = _fold(_APP_DEV_PLANS)
+        names = [_fold(n) for n in _APP_NAMES] + [prefix + "x"]
+        dev = g.startswith(prefix) and (len(g) > len(prefix) or bool(_GLOB_CHARS & set(g)))
+        return [("u",)] if dev or any(_seg_match(g, n) for n in names) else []
+    out: list[tuple] = []
+    if kind == "u":
+        if any(_seg_match(g, _fold(d)) for d in _STORE_DIRS):
+            out.append(("in",))
+        if _seg_match(g, _fold(_NATIVE_DIR)):
+            out.append(("native",))
+    elif kind == "native":
+        if _seg_match(g, _fold(_NATIVE_CONSENT)):
+            out.append(("in",))
+        if _seg_match(g, _fold(_NATIVE_DATA)):
+            out.append(("data",))
+    elif kind == "data":
+        # `<id>@kept-source.json` and `<id>@set-aside-<source>-<ms>` (pluginNativeBackendData.ts);
+        # a glob here may reach them, so it counts.
+        if _GLOB_CHARS & set(g) or g.endswith(_fold("@kept-source.json")) or _fold("@set-aside-") in g:
+            out.append(("in",))
+    elif kind == "in":
+        out.append(("in",))
+    return out
+
+
+def _reaches_store(path: str, ctx: _Ctx) -> bool:
+    segs = path.split("/")
+    for root, named in _app_data_roots(ctx):
+        states: set[tuple] = {("root", root, 0, named)}
+        for g in segs:
+            if g == "**":
+                # Zero or more segments: every state any segment can lead to.
+                while True:
+                    more = {n for s in states for n in _store_step(s, "*")} - states
+                    if not more:
+                        break
+                    states |= more
+                continue
+            states = {n for s in states for n in _store_step(s, g)}
+            if not states:
+                break
+        if any(s[0] in _STORE_ACCEPT for s in states):
+            return True
+    return False
+
+
+def _store_write(acc: _Acc, path: str, ctx: _Ctx) -> None:
+    """A write to Navide's plugin install root or trust stores: a same-user
+    writer there can make Navide load code without the consent dialog."""
+    if any(_reaches_store(p, ctx) for p in _expand_braces(path)):
+        acc.hit("critical", "plugin-store-write", f"writes Navide's plugin install root or trust store: {path}")
+
+
+def _check_path(
+    acc: _Acc, path: str, ctx: _Ctx, *, write: bool, list_only: bool = False, store: bool = True,
+) -> None:
+    """``store=False``: the caller grades plugin store writes itself (a copy's source is only read)."""
     ws = ctx.workspace
     if _credential_kind(path, ctx):
         if list_only:
@@ -413,6 +518,8 @@ def _check_path(acc: _Acc, path: str, ctx: _Ctx, *, write: bool, list_only: bool
         return
     if not write:
         return
+    if store:
+        _store_write(acc, path, ctx)
     if "/.git/hooks/" in path + "/" and path.rstrip("/").split("/.git/hooks", 1)[1:] != [""]:
         acc.hit("high", "git-hooks-write", f"writes a git hook: {path}")
     elif "/.github/workflows/" in path:
@@ -678,7 +785,8 @@ def _split(text: str) -> list[list[_Cmd]]:
                 pipelines.append(pipeline)
             pipeline = []
             continue
-        if tok and set(tok) <= set("<>&") and ("<" in tok or ">" in tok):
+        # `>|` (noclobber override) is one punctuation token that holds a `|`.
+        if tok == ">|" or (tok and set(tok) <= set("<>&") and ("<" in tok or ">" in tok)):
             if tok.endswith("&"):
                 continue  # >&2 style fd dup; the next token is an fd
             pending_redirect = tok
@@ -1146,6 +1254,9 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
             acc.hit("critical", "disk-write", "dd writes directly to a device")
         else:
             acc.hit("high", "dd", "dd copies raw data")
+        for a in args:
+            if a.startswith("of="):
+                _store_arg(acc, a[3:], ctx)
         return
     if word.startswith("mkfs") or word.startswith("newfs") or word in {"fdisk", "sfdisk", "gpt", "wipefs"}:
         acc.hit("critical", "disk-format", f"{word} formats or repartitions a disk")
@@ -1185,6 +1296,12 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
         acc.hit("critical", "cloud-destroy", f"{word} deletes cloud resources")
         return
     if word in DOWNLOADERS:
+        # A download's output file is graded exactly like `>` into it.
+        for a in _download_outputs(word, args):
+            for cand in _arg_paths(a) or ([a] if not a.startswith("-") else []):
+                path = _resolve(cand, ctx)
+                if path:
+                    _check_path(acc, path, ctx, write=True)
         _classify_upload(word, args, ctx, acc)
         return
     # Generic: any path-like argument that names a credential store or a
@@ -1195,7 +1312,87 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
         for cand in _arg_paths(a):
             path = _resolve(cand, ctx)
             if path:
-                _check_path(acc, path, ctx, write=writes, list_only=list_only)
+                _check_path(acc, path, ctx, write=writes, list_only=list_only, store=False)
+    if writes or word in _STORE_ONLY_WRITES:
+        for a in _store_targets(word, args):
+            _store_arg(acc, a, ctx)
+
+
+#: Commands that change files but grade normal elsewhere: only the plugin
+#: store check reads them, so their grading outside the stores stays as it was.
+_STORE_ONLY_WRITES = {"unlink", "rmdir", "mkdir", "chown", "chgrp", "xattr", "ditto"}
+
+
+def _store_arg(acc: _Acc, arg: str, ctx: _Ctx) -> None:
+    """Plugin store check for one argument. A bare word (``acme.json``) is a
+    path relative to the working directory here too, unlike _arg_paths:
+    after ``cd plugin-local-trust`` it names a trust record, and anywhere
+    outside the stores it changes nothing."""
+    for cand in _arg_paths(arg) or ([arg] if arg and not arg.startswith("-") else []):
+        path = _resolve(cand, ctx)
+        if path:
+            _store_write(acc, path, ctx)
+
+
+def _url_file_name(url: str) -> str:
+    path = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://[^/]*", "", url).split("?", 1)[0].split("#", 1)[0]
+    return posixpath.basename(path) or "index.html"
+
+
+def _download_outputs(word: str, args: list[str]) -> list[str]:
+    """Files a download writes: curl -o/--output, wget -O/--output-document,
+    and otherwise (curl -O, a plain wget) the URL's file name in --output-dir
+    / -P or the working directory. ``-`` is stdout."""
+    curl = word != "wget"
+    files: list[str] = []
+    dirs: list[str] = []
+    remote = not curl
+    i = 0
+    while i < len(args):
+        a, nxt = args[i], (args[i + 1] if i + 1 < len(args) else "")
+        i += 1
+        if a.startswith("--"):
+            key, eq, val = a.partition("=")
+            if key in ("--output", "--output-document", "--output-dir", "--directory-prefix"):
+                if not eq:
+                    val, i = nxt, i + 1
+                (dirs if key in ("--output-dir", "--directory-prefix") else files).append(val)
+            elif key in ("--remote-name", "--remote-name-all"):
+                remote = True
+            continue
+        if not a.startswith("-") or a == "-":
+            continue
+        for j, ch in enumerate(a[1:], 1):
+            if curl and ch == "O":
+                remote = True
+            elif ch == ("o" if curl else "O") or (not curl and ch == "P"):
+                val = a[j + 1:]
+                if not val:
+                    val, i = nxt, i + 1
+                (dirs if ch == "P" else files).append(val)
+                break
+    if files or not remote:
+        return [f for f in files if f and f != "-"]
+    names = [_url_file_name(a) for a in args if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a)]
+    return [posixpath.join(d, n) for n in names for d in dirs] if dirs else names
+
+
+def _store_targets(word: str, args: list[str]) -> list[str]:
+    """The arguments a write command changes: every one (mv, ln and chmod
+    change their sources too), but only a copy's destination, and sed's files
+    only with -i."""
+    if word == "sed":
+        return args if _flags(args) & {"-i", "--in-place"} else []
+    if word == "xattr":
+        return args if _flags(args) & {"-w", "-d", "-c"} else []
+    if word in {"cp", "install", "rsync", "scp", "ditto"}:
+        for i, a in enumerate(args):
+            if a == "-t" and i + 1 < len(args):
+                return [args[i + 1]]
+            if a.startswith("--target-directory="):
+                return [a.split("=", 1)[1]]
+        return _positionals(args)[-1:]
+    return args
 
 
 def _arg_paths(arg: str) -> list[str]:
@@ -1238,6 +1435,7 @@ def _classify_rm(
         if _credential_kind(base, ctx) or _credential_kind(path, ctx):
             acc.hit("critical", "credential-access", f"deletes a credential store: {path}")
             continue
+        _store_write(acc, path, ctx)
         if base == "/" or base in _homes(ctx) or (_WINDOWS and _DRIVE_RE.fullmatch(base.rstrip("/"))) or (ws and _inside(base, ws) and base != ws):
             acc.hit("critical", "rm-root-or-home", f"deletes the root, home, or a parent of the workspace: {path}")
             continue
@@ -1268,6 +1466,15 @@ def _classify_git(args: list[str], ctx: _Ctx, acc: _Acc) -> None:
         return
     sub, rest = args[i], args[i + 1:]
     fl = _flags(rest)
+    if sub == "clone":
+        # The clone's destination (the repository's name when none is given).
+        pos = _positionals(rest)
+        urls = [k for k, p in enumerate(pos) if "://" in p or ":" in p or p.endswith(".git")]
+        if urls:
+            k = urls[0]
+            dest = pos[k + 1] if k + 1 < len(pos) else posixpath.basename(pos[k].rstrip("/")).removesuffix(".git")
+            _store_arg(acc, dest, ctx)
+        return
     if sub == "push":
         pos = _positionals(rest)
         refspecs = pos[1:]
