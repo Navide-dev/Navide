@@ -39,6 +39,7 @@ export const web = {
   navigate: (viewId: string, target: { url: string } | { action: 'back' | 'forward' | 'reload' | 'stop' }) =>
     invoke('web.navigate', { viewId, ...target }),
   setOwner: (viewId: string, owner: 'agent' | 'user') => invoke('web.setOwner', { viewId, owner }),
+  takeControl: (viewId: string) => invoke('web.takeControl', { viewId }),
   returnControl: (viewId: string) => invoke('web.returnControl', { viewId }),
   close: (viewId: string) => invoke('web.close', { viewId }),
   async capture(viewId: string, maxWidth: number): Promise<string | null> {

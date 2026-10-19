@@ -75,7 +75,6 @@ def _no_sleep(_: float) -> None:
 
 @pytest.fixture(autouse=True)
 def _fresh_spaces(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(browser, "_pane_spaces", {})
     monkeypatch.setattr(browser.time, "sleep", _no_sleep)
 
 
@@ -203,17 +202,29 @@ def test_screenshot_steps_quality_down_until_it_fits(monkeypatch: pytest.MonkeyP
 
 def test_open_creates_one_space_per_pane_and_reuses_it() -> None:
     bridge = FakeBridge(cdp={"Runtime.evaluate": _loaded(), "Page.navigate": {"frameId": "f"}})
-    first = browser.run_tool("browser.open", {"url": "https://example.com", "space": "Research"}, bridge, "p1")
+    first = browser.run_tool("browser.open", {"url": "https://example.com"}, bridge, "p1")
     second = browser.run_tool("browser.open", {"url": "https://example.org"}, bridge, "p1")
     other = browser.run_tool("browser.open", {}, bridge, "p2")
-    assert first["ok"] and first["view"]["viewId"] == "v1" and first["view"]["space"] == "Research"
+    assert first["ok"] and first["view"]["viewId"] == "v1" and first["view"]["space"] == "Agent p1"
     assert second["view"]["viewId"] == "v1"
     assert other["view"]["viewId"] == "v2"
     assert [arguments for operation, arguments in bridge.calls if operation == "create"] == [
-        {"space": "Research", "url": "https://example.com"},
+        {"space": "Agent p1", "url": "https://example.com"},
         {"space": "Agent p2"},
     ]
     assert bridge.cdp_calls("Page.navigate")[0]["params"] == {"url": "https://example.org"}
+
+
+def test_the_pane_space_is_found_again_by_name_after_a_restart() -> None:
+    bridge = FakeBridge(views=[
+        {"viewId": "v7", "space": "Agent pane-123", "owner": "agent", "control": "agent", "state": "running"},
+        {"viewId": "v8", "space": "Agent other-pa", "owner": "agent", "control": "agent", "state": "running"},
+    ], cdp={"Runtime.evaluate": _loaded(), "Page.navigate": {"frameId": "f"}})
+    listed = browser.run_tool("browser.list", {}, bridge, "pane-12345678")
+    opened = browser.run_tool("browser.open", {"url": "https://example.com"}, bridge, "pane-12345678")
+    assert listed["yourSpace"] == "v7"
+    assert opened["view"]["viewId"] == "v7"
+    assert bridge.created == 0
 
 
 def test_a_tool_before_open_says_to_open_first() -> None:

@@ -73,7 +73,6 @@
           "additionalProperties": false,
           "properties": {
             "url": { "type": "string", "description": "An http or https URL to load." },
-            "space": { "type": "string", "description": "Name shown on the Space card when it is created, such as your pane or task name." },
             "viewId": { "type": "string", "description": "Use this Space instead of your own; it must be one the user let agents use." }
           }
         }

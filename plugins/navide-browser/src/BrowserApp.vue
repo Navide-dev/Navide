@@ -98,8 +98,8 @@ function navigate(action: 'back' | 'forward' | 'reload' | 'stop'): void {
 }
 
 function takeOver(): void {
-  // 9.2 has no dedicated call: a user navigation turns control to the user.
-  navigate('stop')
+  const view = selected.value
+  if (view) void run(() => web.takeControl(view.viewId))
 }
 
 function handBack(): void {

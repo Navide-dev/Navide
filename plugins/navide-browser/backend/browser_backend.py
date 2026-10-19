@@ -49,8 +49,6 @@ _closing = False
 _subscriptions: dict[str, dict[str, Any]] = {}
 _bridge_pending: dict[str, queue.Queue[tuple[str, Any]]] = {}
 _bridge_origin_ids: dict[str, set[str]] = {}
-# One Space per calling agent pane: initiator id -> viewId.
-_pane_spaces: dict[str, str] = {}
 
 
 class DuplicateKeyError(ValueError):
@@ -455,6 +453,22 @@ def _view_summary(view: dict[str, Any]) -> dict[str, Any]:
     return {key: view[key] for key in keys if key in view}
 
 
+def pane_space_name(pane: str) -> str:
+    return f"Agent {pane[:8]}"
+
+
+def _pane_view(views: list[dict[str, Any]], pane: str | None) -> str | None:
+    """The pane's own Space, found by its name in the Host's list.
+
+    Nothing is kept in this process, so a restarted backend finds it again.
+    """
+    if not pane:
+        return None
+    name = pane_space_name(pane)
+    view_id = next((view.get("viewId") for view in views if view.get("space") == name), None)
+    return view_id if isinstance(view_id, str) else None
+
+
 def _resolve_view(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> str:
     """The view an agent tool acts on: an explicit viewId, else the pane's Space."""
     explicit = arguments.get("viewId")
@@ -462,8 +476,7 @@ def _resolve_view(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -
         if not isinstance(explicit, str) or not explicit:
             raise ToolError("INVALID_ARGUMENT", "viewId must be a non-empty string.")
         return explicit
-    with _state_lock:
-        view_id = _pane_spaces.get(pane) if pane else None
+    view_id = _pane_view(_list_views(bridge), pane)
     if view_id is None:
         raise ToolError("NO_SPACE", "This pane has no Space yet. Call browser_open first.")
     return view_id
@@ -850,20 +863,18 @@ def open_space(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> d
     url = arguments.get("url")
     if url is not None:
         url = _http_url(url)
-    space = arguments.get("space")
-    if space is not None and (not isinstance(space, str) or not space.strip()):
-        raise ToolError("INVALID_ARGUMENT", "space must be a non-empty string.")
     explicit = arguments.get("viewId")
-    with _state_lock:
-        mapped = _pane_spaces.get(pane) if pane else None
-    view_id = explicit if isinstance(explicit, str) and explicit else mapped
-    if view_id is not None and _find_view(bridge, view_id) is None:
-        if view_id == explicit:
+    views = _list_views(bridge)
+    if isinstance(explicit, str) and explicit:
+        if not any(view.get("viewId") == explicit for view in views):
             raise ToolError("SPACE_CLOSED", "No Space has that viewId.")
-        view_id = None
+        view_id: str | None = explicit
+    else:
+        view_id = _pane_view(views, pane)
     if view_id is None:
-        name = space.strip() if isinstance(space, str) else f"Agent {pane[:8]}" if pane else "Agent"
-        created_arguments: dict[str, Any] = {"space": name}
+        if not pane:
+            raise ToolError("INVALID_ARGUMENT", "Only an agent pane has its own Space; pass viewId.")
+        created_arguments: dict[str, Any] = {"space": pane_space_name(pane)}
         if url is not None:
             created_arguments["url"] = url
         created = _call(bridge, "create", created_arguments)
@@ -874,9 +885,6 @@ def open_space(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> d
         navigated = _cdp(bridge, view_id, "Page.navigate", {"url": url})
         if isinstance(navigated.get("errorText"), str) and navigated["errorText"]:
             raise ToolError("NAVIGATION_FAILED", navigated["errorText"])
-    if pane:
-        with _state_lock:
-            _pane_spaces[pane] = view_id
     loaded = wait_for_load(bridge, view_id) if url is not None else True
     view = _find_view(bridge, view_id) or {"viewId": view_id}
     return {"loaded": loaded, "view": _view_summary(view)}
@@ -895,9 +903,11 @@ def run_tool(name: str, arguments: dict[str, Any], bridge: Bridge, pane: str | N
     """One agent tool call; failures the agent can act on come back as ok: false."""
     try:
         if name == "browser.list":
-            value: dict[str, Any] = {"views": [_view_summary(view) for view in _list_views(bridge)]}
-            with _state_lock:
-                value["yourSpace"] = _pane_spaces.get(pane) if pane else None
+            views = _list_views(bridge)
+            value: dict[str, Any] = {
+                "views": [_view_summary(view) for view in views],
+                "yourSpace": _pane_view(views, pane),
+            }
         elif name == "browser.open":
             value = open_space(bridge, arguments, pane)
         elif name == "browser.snapshot":
