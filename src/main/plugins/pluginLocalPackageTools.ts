@@ -139,6 +139,16 @@ export function agentPackagePath(path: string, protectedRoots: readonly string[]
   return { path: resolved, folder: false }
 }
 
+/** Check `.vsix` bytes already read once (an agent file request's staging). */
+export function validateLocalBytes(
+  path: string,
+  bytes: Uint8Array,
+  signature: string | null,
+  deps: LocalPackageToolDeps,
+): Promise<LocalPackageReport> {
+  return report(path, 'file', bytes, signature, null, deps)
+}
+
 /** plugins_validate_package: check a `.vsix` or a plugin folder. Read-only. */
 export async function validateLocalPackage(path: string, deps: LocalPackageToolDeps): Promise<LocalPackageReport> {
   const target = agentPackagePath(path, deps.protectedRoots)

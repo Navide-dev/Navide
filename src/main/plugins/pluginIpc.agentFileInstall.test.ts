@@ -109,8 +109,13 @@ let base = ''
 let pluginsRoot = ''
 let picked = ''
 
+let query: (q: unknown) => Promise<unknown>
+
 function register(extra: Record<string, unknown> = {}): FrontendPluginManager {
   const manager = new FrontendPluginManager()
+  vi.spyOn(manager, 'setMarketplaceQueryHandler').mockImplementation((handler) => {
+    query = handler
+  })
   registerPluginIpc(manager, pluginsRoot, () => true, TRUST_CONFIG, undefined, {
     cleanupPluginStorage: async () => undefined,
     preflightCandidateFrontend: async () => undefined,
@@ -126,6 +131,17 @@ const call = (channel: string, args?: unknown) => {
   const handler = handlers.get(channel)
   if (!handler) throw new Error(`${channel} is not registered`)
   return handler(null, args)
+}
+
+/** What the backend does for plugins_install_file_fill: stage, then the
+ * main window prepares the staged copy for the consent dialog. */
+async function stage(path: string): Promise<{ ok: boolean; result?: { report: Record<string, unknown> & { stagingId?: string; digest: string } }; error?: string; error_code?: string }> {
+  return await query({ kind: 'localStage', path }) as never
+}
+async function prepareStaged(path: string): Promise<Prepared> {
+  const staged = await stage(path)
+  if (!staged.ok || !staged.result?.report.stagingId) throw new Error(staged.error ?? JSON.stringify(staged.result?.report.errors))
+  return await call('plugins:prepareAgentFileInstall', { stagingId: staged.result.report.stagingId }) as Prepared
 }
 
 type Prepared = { id: string; digest: string; source: string; localSignature: Record<string, unknown>; scan: unknown; localScan: string }
@@ -150,12 +166,14 @@ describe('plugins_install_file_fill: an agent prefills, the user approves', () =
     const manager = register()
     const bytes = vsix()
     writeFileSync(picked, bytes)
-    const prepared = await call('plugins:prepareAgentFileInstall', { path: picked }) as Prepared
+    const staged = await stage(picked)
+    expect(staged.result?.report).toMatchObject({ valid: true, id: 'acme.todo', version: '1.0.0', digest: sha256Hex(bytes) })
+    // The file changes on disk after the agent's request: the staged bytes are what the card and the install use.
+    writeFileSync(picked, vsix('acme.todo', '1.0.0', '<!doctype html><p>changed</p>'))
+    const prepared = await call('plugins:prepareAgentFileInstall', { stagingId: staged.result!.report.stagingId }) as Prepared
     expect(prepared).toMatchObject({ id: 'acme.todo', digest: sha256Hex(bytes), source: 'local-unsigned' })
     expect(manager.listInstalledPackages()).toEqual([])
     expect(call('plugins:listInstalled')).toEqual([])
-    // The file changes on disk after the card: the held bytes are what installs.
-    writeFileSync(picked, vsix('acme.todo', '1.0.0', '<!doctype html><p>changed</p>'))
     await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, expectedDigest: prepared.digest })
     await call('plugins:restart', { id: 'acme.todo' })
     expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', packageVersion: '1.0.0', source: 'local-unsigned' }])
@@ -166,7 +184,7 @@ describe('plugins_install_file_fill: an agent prefills, the user approves', () =
   it('still needs the user\'s consent, and refuses a file that is not the one approved', async () => {
     register()
     writeFileSync(picked, vsix())
-    const prepared = await call('plugins:prepareAgentFileInstall', { path: picked }) as Prepared
+    const prepared = await prepareStaged(picked)
     await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', expectedDigest: prepared.digest })).rejects.toThrow(/consent is required/)
     // Another prepare of the same id since the card (here the user's own pick) replaces the held bytes.
     writeFileSync(picked, vsix('acme.todo', '1.0.0', '<p>other</p>'))
@@ -178,14 +196,25 @@ describe('plugins_install_file_fill: an agent prefills, the user approves', () =
 
   it('never reads Navide\'s own data folder', async () => {
     register()
-    await expect(call('plugins:prepareAgentFileInstall', { path: join(base, 'userData', 'plugins') })).rejects.toThrow(/own data folder/)
+    expect(await stage(join(base, 'userData', 'plugins'))).toMatchObject({ ok: false, error: expect.stringMatching(/own data folder/) })
   })
 
-  it('takes only an absolute path to a regular file or a folder', async () => {
+  it('takes only an absolute path to a regular file or a folder; the window names only a staged copy', async () => {
     register()
-    await expect(call('plugins:prepareAgentFileInstall', { path: 'todo-scout.vsix' })).rejects.toThrow(/absolute path/)
-    await expect(call('plugins:prepareAgentFileInstall', {})).rejects.toThrow(/absolute path/)
-    await expect(call('plugins:prepareAgentFileInstall', { path: join(base, 'missing.vsix') })).rejects.toThrow()
+    expect(await stage('todo-scout.vsix')).toMatchObject({ ok: false, error: expect.stringMatching(/absolute/) })
+    expect(await stage(join(base, 'missing.vsix'))).toMatchObject({ ok: false })
+    // The main window cannot name a path, only a stagingId the Host made.
+    writeFileSync(picked, vsix())
+    await expect(call('plugins:prepareAgentFileInstall', { path: picked })).rejects.toThrow(/staged package/)
+    await expect(call('plugins:prepareAgentFileInstall', { stagingId: 'f'.repeat(32) })).rejects.toThrow(/staged package/)
+  })
+
+  it('stages nothing for a package a local install refuses, and says why', async () => {
+    register()
+    writeFileSync(picked, vsix('navide.todo'))
+    const staged = await stage(picked)
+    expect(staged.result?.report).toMatchObject({ valid: false })
+    expect(staged.result?.report.stagingId).toBeUndefined()
   })
 
   it('takes a folder only with Developer Mode on, through the K4 consent', async () => {
@@ -198,9 +227,9 @@ describe('plugins_install_file_fill: an agent prefills, the user approves', () =
     writeFileSync(join(dir, 'frontend', 'left', 'index.html'), '<!doctype html>')
     writeFileSync(join(dir, backendEntryOnDisk('backend/entry')), Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
     chmodSync(join(dir, backendEntryOnDisk('backend/entry')), 0o755)
-    await expect(call('plugins:prepareAgentFileInstall', { path: dir })).rejects.toThrow(/DEVELOPER_MODE_OFF/)
+    expect(await stage(dir)).toMatchObject({ ok: false, error: expect.stringMatching(/DEVELOPER_MODE_OFF/) })
     await call('plugins:setDeveloperMode', { enabled: true })
-    const prepared = await call('plugins:prepareAgentFileInstall', { path: dir }) as Prepared
+    const prepared = await prepareStaged(dir)
     expect(prepared).toMatchObject({ id: 'acme.devtodo', source: 'developer-unpacked' })
     expect(call('plugins:listInstalled')).toEqual([])
     await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
@@ -215,7 +244,8 @@ describe('digest takedown', () => {
     register()
     writeFileSync(picked, bytes)
     await expect(call('plugins:installFromFile')).rejects.toThrow(/DIGEST_BLOCKED/)
-    await expect(call('plugins:prepareAgentFileInstall', { path: picked })).rejects.toThrow(/DIGEST_BLOCKED/)
+    const staged = await stage(picked)
+    expect(staged.result?.report).toMatchObject({ valid: false, errors: [expect.stringMatching(/DIGEST_BLOCKED/)] })
     // A one-byte change is another file; the takedown names bytes, not an id.
     writeFileSync(picked, vsix('acme.todo', '1.0.0', '<p>x</p>'))
     await expect(call('plugins:installFromFile')).resolves.toMatchObject({ id: 'acme.todo' })

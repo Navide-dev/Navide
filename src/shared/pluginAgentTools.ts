@@ -621,6 +621,9 @@ export type MarketplaceQuery =
   | { kind: 'localValidate'; path: string }
   /** plugins_package (W1, S1b): build a `.vsix` from a plugin folder. */
   | { kind: 'localPackage'; path: string; target?: string; out?: string }
+  /** plugins_install_file_fill (W1, S2): read once, check and hold a package
+   * for the user's approval; nothing is installed. */
+  | { kind: 'localStage'; path: string }
 
 export interface MarketplaceQueryRequest {
   request_id: string
@@ -658,7 +661,7 @@ export type MarketplaceQueryResult =
   | { kind: 'search'; items: MarketplaceListingItem[]; nextCursor: string | null }
   | { kind: 'detail'; item: MarketplaceListingItem; versions: string[]; card: DisclosureCard }
   | { kind: 'installed'; items: MarketplaceInstalledItem[] }
-  | { kind: 'localValidate' | 'localPackage'; report: LocalPackageQueryReport }
+  | { kind: 'localValidate' | 'localPackage' | 'localStage'; report: LocalPackageQueryReport }
 
 /** A local package check or build (W1). Package-chosen strings (id, version,
  * errors quoting the manifest) are third-party text to the backend. */
@@ -675,6 +678,8 @@ export interface LocalPackageQueryReport {
   disclosure: unknown
   risk: DisclosureRiskLevel | null
   scan: unknown
+  /** localStage only: the Host's handle on the held copy, for the approval. */
+  stagingId?: string
 }
 
 export type MarketplaceQueryResponse =

@@ -59,7 +59,7 @@ export type MarketplaceQueryResult =
   | { kind: 'search'; items: MarketplaceQueryListingItem[]; nextCursor: string | null }
   | { kind: 'detail'; item: MarketplaceQueryListingItem; versions: string[]; card: DisclosureCard | null }
   | { kind: 'installed'; items: MarketplaceInstalledItem[] }
-  | { kind: 'localValidate' | 'localPackage'; report: LocalPackageQueryReport }
+  | { kind: 'localValidate' | 'localPackage' | 'localStage'; report: LocalPackageQueryReport }
 
 type ErrorCode = Extract<MarketplaceQueryResponse, { ok: false }>['error_code']
 
@@ -93,6 +93,7 @@ export interface MarketplaceQuerySources {
   /** W1: absent, the local package kinds answer HOST_UNAVAILABLE. */
   localValidate?(path: string): Promise<LocalPackageQueryReport>
   localPackage?(path: string, options: { target?: string; out?: string }): Promise<LocalPackageQueryReport>
+  localStage?(path: string): Promise<LocalPackageQueryReport>
 }
 
 const DEFAULT_LIMIT = 20
@@ -495,8 +496,8 @@ export async function answerMarketplaceQuery(
     }))
     return { ok: true, result: { kind: 'installed', items } }
   }
-  if (query.kind === 'localValidate' || query.kind === 'localPackage') {
-    const allowed = new Set(query.kind === 'localValidate' ? ['kind', 'path'] : ['kind', 'path', 'target', 'out'])
+  if (query.kind === 'localValidate' || query.kind === 'localPackage' || query.kind === 'localStage') {
+    const allowed = new Set(query.kind === 'localPackage' ? ['kind', 'path', 'target', 'out'] : ['kind', 'path'])
     if (Object.keys(query).some((key) => !allowed.has(key))) return bad(`unknown ${query.kind} field`)
     if (typeof query.path !== 'string' || !query.path) return bad('path must be an absolute path')
     for (const key of ['target', 'out'] as const) {
@@ -504,6 +505,8 @@ export async function answerMarketplaceQuery(
     }
     const run = query.kind === 'localValidate'
       ? sources.localValidate?.bind(sources, query.path)
+      : query.kind === 'localStage'
+      ? sources.localStage?.bind(sources, query.path)
       : sources.localPackage?.bind(sources, query.path, {
           ...(typeof query.target === 'string' ? { target: query.target } : {}),
           ...(typeof query.out === 'string' ? { out: query.out } : {}),

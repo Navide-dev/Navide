@@ -12,6 +12,7 @@
 // main-side, keyed by id, until commit.
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { randomBytes } from 'node:crypto'
 import { backendCallAddress } from './pluginActivity'
 import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -120,12 +121,19 @@ import {
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
 import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
+import type { LocalPackageQueryReport } from '../../shared/pluginAgentTools'
 import { pluginSourceFromLegacyProvenance, type PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
 import { createLocalTrustRecord, localTakedownDecision, readLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
-import { agentPackagePath, packageLocalFolder, validateLocalPackage, type LocalPackageToolDeps } from './pluginLocalPackageTools'
+import {
+  agentPackagePath,
+  packageLocalFolder,
+  validateLocalBytes,
+  validateLocalPackage,
+  type LocalPackageToolDeps,
+} from './pluginLocalPackageTools'
 import {
   LOCAL_INSTALL_TRUST_PATH,
   LOCAL_SIGNATURE_SUFFIX,
@@ -574,6 +582,14 @@ export type LocalPackageScanner = (input: {
   target: string
   manifest: unknown
 }) => ScanReport | null | Promise<ScanReport | null>
+
+/** A package staged for an agent's file request (W1, S2). */
+type AgentStagedPackage =
+  | { kind: 'file'; bytes: Uint8Array; signature: string | null; at: number }
+  | { kind: 'folder'; path: string; at: number }
+/** As long as the request it belongs to lives. */
+const AGENT_STAGED_TTL_MS = 15 * 60 * 1000
+const MAX_AGENT_STAGED = 4
 
 /** The largest `<file>.sig` read: a base64 Ed25519 signature is 88 bytes. */
 const MAX_SIGNATURE_BYTES = 4096
@@ -1453,8 +1469,55 @@ export function registerPluginIpc(
         await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
         return packageLocalFolder(path, packageOptions, localPackageToolDeps())
       },
+      localStage: (path) => stageAgentPackage(path),
     })
   )
+  // Staged packages of agent file requests, by a random id. Bounded: a few
+  // requests at a time, for as long as a request lives (15 minutes).
+  const agentStaged = new Map<string, AgentStagedPackage>()
+  const takeAgentStaged = (stagingId: string): AgentStagedPackage | undefined => {
+    const now = Date.now()
+    for (const [id, entry] of agentStaged) if (now - entry.at > AGENT_STAGED_TTL_MS) agentStaged.delete(id)
+    return agentStaged.get(stagingId)
+  }
+  const stageAgentPackage = async (requested: string): Promise<LocalPackageQueryReport & { stagingId?: string }> => {
+    await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
+    const deps = localPackageToolDeps()
+    const { path, folder } = agentPackagePath(requested, deps.protectedRoots)
+    if (folder && !developerModeOn()) {
+      throw new Error('DEVELOPER_MODE_OFF: a folder loads only with Developer Mode on, which the user turns on in Settings')
+    }
+    // One read: the report, the approval card and the install all use these bytes.
+    const bytes = folder ? null : new Uint8Array(readFileSync(path))
+    const signature = folder ? null : readSidecarSignature(path)
+    // A folder is checked as Developer Mode loads it (K4), in place.
+    const report = folder ? developerFolderReport(path) : await validateLocalBytes(path, bytes!, signature, deps)
+    if (!report.valid) return report
+    const stagingId = randomBytes(16).toString('hex')
+    takeAgentStaged('')
+    while (agentStaged.size >= MAX_AGENT_STAGED) agentStaged.delete(agentStaged.keys().next().value as string)
+    agentStaged.set(stagingId, folder
+      ? { kind: 'folder', path, at: Date.now() }
+      : { kind: 'file', bytes: bytes!, signature, at: Date.now() })
+    return { ...report, stagingId }
+  }
+  const developerFolderReport = (path: string): LocalPackageQueryReport => {
+    const base: LocalPackageQueryReport = {
+      path, packageKind: 'folder', valid: false, errors: [], id: null, version: null, target: null,
+      digest: null, signature: 'none', disclosure: null, risk: null, scan: null,
+    }
+    try {
+      const described = describeFolder(path)
+      assertFolderIdFree(described.pluginId, path)
+      const disclosure = described.summary.disclosure as ManifestDisclosure
+      return {
+        ...base, valid: true, id: described.pluginId, version: String(described.summary.version),
+        disclosure, risk: cardRiskLevel(disclosure, null),
+      }
+    } catch (error) {
+      return { ...base, errors: [errorText(error)] }
+    }
+  }
   const localPackageToolDeps = (): LocalPackageToolDeps => ({
     trust: () => {
       const marketplace = resolveConfiguredMarketplace(trust)
@@ -2705,29 +2768,29 @@ export function registerPluginIpc(
     return developerModeState()
   })
 
-  // W1 (S2): an agent's plugins_install_file_fill names a `.vsix` or, with
-  // Developer Mode on, a folder. The main window passes the path from the
-  // request it is showing; nothing is installed here. A file is read once and
-  // held like the user's own pick (K3), a folder is described like the user's
-  // own folder (K4), and both go to the same consent dialog and commit
-  // (plugins:commitLocalInstall / plugins:commitFolderLoad), which the user
-  // presses. Developer Mode itself stays the user's switch.
-  ipcMain.handle('plugins:prepareAgentFileInstall', async (event, args: { path?: unknown } | null) => {
+  // W1 (S2): an agent's plugins_install_file_fill. The backend asks the Host
+  // to stage the path the agent named (localStage): a `.vsix` is read once,
+  // checked and its bytes held here; a folder (Developer Mode on) is checked
+  // and its path held. The approval card and the consent dialog show that
+  // staged copy, and the main window names it only by its stagingId, never by
+  // a path. Nothing is installed here: the same consent dialog and commit as
+  // the user's own pick (plugins:commitLocalInstall / plugins:commitFolderLoad)
+  // install it, after the user presses. Developer Mode stays the user's switch.
+  ipcMain.handle('plugins:prepareAgentFileInstall', async (event, args: { stagingId?: unknown } | null) => {
     assertAuthorized(event)
-    if (typeof args?.path !== 'string' || !isAbsolute(args.path)) throw new Error('the request names no absolute path')
-    // Never Navide's own data, never more than a package can be.
-    const { path, folder } = agentPackagePath(args.path, [dirname(pluginsRoot)])
-    if (folder) {
+    const stagingId = typeof args?.stagingId === 'string' ? args.stagingId : ''
+    const staged = takeAgentStaged(stagingId)
+    if (!staged) throw new Error('the staged package of this request is gone; ask the agent to send it again')
+    if (staged.kind === 'folder') {
       if (!developerModeOn()) {
         throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
       }
-      const described = describeFolder(path)
-      assertFolderIdFree(described.pluginId, path)
-      preparedFolders.set(described.pluginId, { dir: path, permissionsDigest: described.permissionsDigest })
+      const described = describeFolder(staged.path)
+      assertFolderIdFree(described.pluginId, staged.path)
+      preparedFolders.set(described.pluginId, { dir: staged.path, permissionsDigest: described.permissionsDigest })
       return described.summary
     }
-    const bytes = new Uint8Array(readFileSync(path))
-    return prepareLocalFile(bytes, readSidecarSignature(path))
+    return prepareLocalFile(staged.bytes, staged.signature)
   })
 
   ipcMain.handle('plugins:reloadDeveloperPlugin', async (event, args: { id?: unknown } | null) => {
