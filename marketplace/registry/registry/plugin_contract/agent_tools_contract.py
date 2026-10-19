@@ -53,13 +53,21 @@ CORE_TOOL_NAMES = (
     "cli_message_log", "cli_open_agent", "cli_pending_incoming", "cli_permission_settings", "cli_place_pane",
     "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_send", "cli_send_and_wait", "cli_token_stats",
     "cli_usage", "cli_wait_idle", "cli_whoami", "credentials_findings", "credentials_list", "evolve_report",
-    "marketplace_detail", "marketplace_request_install", "marketplace_request_rollback",
+    "marketplace_detail",
+    "marketplace_open",
+    "marketplace_request_install", "marketplace_request_rollback",
     "marketplace_request_status", "marketplace_request_update", "marketplace_search", "mcp_list", "memory_list",
     "pipeline_abort", "pipeline_define", "pipeline_gate", "pipeline_graph",
     "pipeline_list", "pipeline_next", "pipeline_reset", "pipeline_restart", "pipeline_restart_from",
     "pipeline_resume", "pipeline_start", "pipeline_status", "plan_add_note", "plan_add_todo", "plan_create",
-    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo", "plugins_disable", "plugins_enable",
-    "plugins_list_installed", "plugins_request_remove",
+    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo",
+    "plugins_developer_mode_open",
+    "plugins_disable", "plugins_enable",
+    "plugins_install_file_fill", "plugins_install_file_open",
+    "plugins_list_installed",
+    "plugins_package",
+    "plugins_request_remove",
+    "plugins_validate_package",
     "preview_clear", "preview_list",
     "preview_record", "preview_show", "prompt_list", "role_define", "scheduler_list", "scheduler_remove",
     "scheduler_run_now", "scheduler_runs", "scheduler_set_enabled", "scheduler_upsert", "share_create",
@@ -568,7 +576,7 @@ def agent_tool_arguments_digest(arguments: Any) -> tuple[str, int]:
 
 MARKETPLACE_QUERY_REQUEST_EVENT = "marketplace.query.request"
 MARKETPLACE_QUERY_RESULT_MESSAGE = "marketplace.query.result"
-MARKETPLACE_QUERY_KINDS = ("search", "detail", "installed")
+MARKETPLACE_QUERY_KINDS = ("search", "detail", "installed", "localValidate", "localPackage", "localStage")
 MARKETPLACE_QUERY_ERROR_CODES = ("BAD_REQUEST", "NOT_FOUND", "REGISTRY_UNAVAILABLE", "HOST_UNAVAILABLE")
 
 # ── Host → backend: plugin activity (D-e, section 5) ────────────────────────
@@ -605,7 +613,11 @@ class MarketplaceQueryRequest(TypedDict):
 
 # ── approval registry (B2) ──────────────────────────────────────────────────
 
-APPROVAL_KINDS = ("skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable")
+APPROVAL_KINDS = (
+    "skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable",
+    # W1 (S2): a local .vsix or developer folder an agent named, staged by the Host.
+    "plugin-install-file",
+)
 PLUGIN_APPROVAL_STATUSES = ("pending", "applying", "completed", "rejected", "failed", "expired")
 PLUGIN_APPROVAL_DECIDE_ACTION = "plugins.agent_request.decide"
 PLUGIN_APPROVAL_TTL_S = 15 * 60
@@ -836,6 +848,8 @@ PLUGIN_AGENT_ACTIONS = (
     "request-enable", "decide-approve", "decide-reject", "finish-completed", "finish-failed",
     # The carrying window's own result, after another window had settled the request.
     "finish-late-completed", "finish-late-failed",
+    # W1 (S2): plugins_install_file_fill.
+    "request-install-file",
 )
 #: ``user`` is a person in a Navide window (deciding or finishing a request).
 PLUGIN_AGENT_ACTION_CALLER_KINDS = ("pane", "external", "host", "user")

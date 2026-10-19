@@ -9438,10 +9438,15 @@ _MQ_ENUMS = frozenset({
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
     "available", "consent-required", "plugin-disabled", "plugin-quarantined", "plugin-revoked", "name-collision",
+    # PluginSource (src/shared/pluginSource.ts), for plugins_list_installed (W1).
+    "marketplace", "prerelease", "testplace", "local-signed", "local-unsigned", "developer-unpacked",
+    "factory-bundled",
 })
 _MQ_ENUM_KEYS = frozenset({
     "kind", "risk", "level", "key", "mode", "access", "status", "secretScan", "network", "template",
     "state", "root", "projectWrites", "system", "executables",
+    # An installed package's source (W1); a scan's `source` stays fenced.
+    "source",
 })
 _MQ_KNOWN_KEYS = frozenset({
     "kind", "items", "nextCursor", "item", "versions", "card",
@@ -9452,7 +9457,7 @@ _MQ_KNOWN_KEYS = frozenset({
     "timeoutMs", "inputSchema", "dataLocations", "hostStorage", "backendDataDirectory", "projectWrites",
     "patterns", "domainVerifiedAt", "signature", "keyId", "review", "status", "reviewedAt",
     "nativeCodeInspected", "scan", "secretScan", "secretFindings", "similarityWarning", "similarTo",
-    "scannedAt", "enabled", "quarantined", "hasBackend", "state",
+    "scannedAt", "enabled", "quarantined", "hasBackend", "state", "signatureRevoked",
     # The card's scan report (contract 3.4, 3.8); its strings are fenced like any other.
     "scanner", "artifactDigest", "target", "coverage", "filesTotal", "filesScanned", "bytesScanned",
     "skipped", "reason", "count", "truncated", "timedOut", "calls", "executable", "subcommand", "category",
@@ -9702,8 +9707,15 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
 
     The same inventory Settings → Navide Plugins shows. Returns {ok, kind:
     "installed", items}; each item is {id, version, enabled, quarantined,
-    hasBackend, agentTools: [{name, state}]}. Enabling, disabling, updating
-    or removing a plugin is the user's decision and is not possible from here.
+    hasBackend, agentTools: [{name, state}], source, signatureRevoked?}.
+    `source` says where it came from and what review it passed:
+    marketplace / prerelease / testplace (Navide Marketplace), local-signed
+    (a local file a vetted publisher signed; this version not reviewed),
+    local-unsigned (a local file, unsigned and unreviewed), developer-unpacked
+    (a Developer Mode folder) or factory-bundled. `signatureRevoked: true`
+    marks a local file whose publisher key Navide has since revoked. Enabling,
+    disabling, updating or removing a plugin is the user's decision and is not
+    possible from here.
     """
     caller, out = await _marketplace_query(ctx, {"kind": "installed"})
     if out.get("ok") is not True or caller is None:
@@ -10565,3 +10577,7 @@ async def shutdown() -> None:
     global _session_manager
     _session_manager = None
     await _lifecycle.aclose()
+
+
+# W1: local Navide plugin package tools (open, validate, package, fill).
+from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401

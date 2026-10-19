@@ -70,13 +70,21 @@ export const CORE_TOOL_NAMES = [
   'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
   'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',
   'cli_usage', 'cli_wait_idle', 'cli_whoami', 'credentials_findings', 'credentials_list', 'evolve_report',
-  'marketplace_detail', 'marketplace_request_install', 'marketplace_request_rollback',
+  'marketplace_detail',
+  'marketplace_open',
+  'marketplace_request_install', 'marketplace_request_rollback',
   'marketplace_request_status', 'marketplace_request_update', 'marketplace_search', 'mcp_list', 'memory_list',
   'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
   'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
   'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
-  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo', 'plugins_disable', 'plugins_enable',
-  'plugins_list_installed', 'plugins_request_remove',
+  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo',
+  'plugins_developer_mode_open',
+  'plugins_disable', 'plugins_enable',
+  'plugins_install_file_fill', 'plugins_install_file_open',
+  'plugins_list_installed',
+  'plugins_package',
+  'plugins_request_remove',
+  'plugins_validate_package',
   'preview_clear', 'preview_list',
   'preview_record', 'preview_show', 'prompt_list', 'role_define', 'scheduler_list', 'scheduler_remove',
   'scheduler_run_now', 'scheduler_runs', 'scheduler_set_enabled', 'scheduler_upsert', 'share_create',
@@ -701,8 +709,11 @@ export const PLUGIN_ACTIVITY_FORGET_MESSAGE = 'plugin.activity.forget'
 // ── approval registry (B2) ──────────────────────────────────────────────────
 
 export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
+  /** W1 (S2): a local `.vsix` or developer folder an agent named, staged by the Host. */
+  | 'plugin-install-file'
 export const APPROVAL_KINDS: readonly ApprovalKind[] = [
   'skill', 'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable',
+  'plugin-install-file',
 ]
 
 export type PluginApprovalStatus = 'pending' | 'applying' | 'completed' | 'rejected' | 'failed' | 'expired'
