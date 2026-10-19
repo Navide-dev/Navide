@@ -153,6 +153,7 @@ jobs:
           # …and the exact selected v2 factory package carries its arm64 backend.
           artifact_version="$(node -p "require('./package.json').version")"
           test -x "${app_path}/Contents/Resources/official-artifacts/navide.plans/${artifact_version}/darwin-arm64/package/backend/navide-plans"
+          test -x "${app_path}/Contents/Resources/official-artifacts/navide.browser/${artifact_version}/darwin-arm64/package/backend/navide-browser"
           # The voice sidecar is a loose Mach-O in Resources/bin; it must carry
           # the Developer ID signature with the hardened runtime flag.
           stt_bin="${app_path}/Contents/Resources/bin/navide-stt"
@@ -339,6 +340,7 @@ jobs:
           # …and the exact selected v2 factory package carries its Linux backend.
           artifact_version="$(node -p "require('./package.json').version")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-x64/package/backend/navide-plans"
+          test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${artifact_version}/linux-x64/package/backend/navide-browser"
           rm -rf "${work}"
 
       - name: Attach installers to the workflow run
@@ -541,6 +543,7 @@ jobs:
           # …and the selected v2 Plans package carries its Linux backend.
           artifact_version="$(node -p "require('./package.json').version")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-arm64/package/backend/navide-plans"
+          test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${artifact_version}/linux-arm64/package/backend/navide-browser"
           rm -rf "${work}"
 
       - name: Attach installers to the workflow run
@@ -736,6 +739,7 @@ jobs:
           test -f dist-release/win-unpacked/resources/bin/agent_team_backend.exe
           artifact_version="$(node -p "require('./package.json').version")"
           test -f "dist-release/win-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-x64/package/backend/navide-plans.exe"
+          test -f "dist-release/win-unpacked/resources/official-artifacts/navide.browser/${artifact_version}/win32-x64/package/backend/navide-browser.exe"
 
       - name: Attach installers to the workflow run
         # Every run, including a workflow_dispatch dry run: this is how a
@@ -888,13 +892,16 @@ jobs:
           artifact_version="$(node -p "require('./package.json').version")"
           plans_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-arm64/package/backend/navide-plans.exe"
           test -f "${plans_backend}"
+          browser_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.browser/${artifact_version}/win32-arm64/package/backend/navide-browser.exe"
+          test -f "${browser_backend}"
           # The point of this job is a native build, and an installer whose
           # payload is quietly x64 would run anyway — under Prism, exactly what
           # we are trying to stop. The COFF headers are the only witness.
           node scripts/check-pe-machine.mjs arm64 \
             dist-release/win-arm64-unpacked/Navide.exe \
             dist-release/win-arm64-unpacked/resources/bin/agent_team_backend.exe \
-            "${plans_backend}"
+            "${plans_backend}" \
+            "${browser_backend}"
 
       - name: Fetch the x64 update manifest
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
