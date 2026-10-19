@@ -193,6 +193,7 @@ import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
 import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import { isFirstPartyAgentToolPlugin, isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
+import { isPluginWebGuest } from './plugins/pluginWebViews'
 import {
   firstPartyAgentToolSpec,
   firstPartyBackendLaunchSpec,
@@ -5734,6 +5735,8 @@ app.on('web-contents-created', (_e, contents) => {
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
   contents.on('will-navigate', (e, url) => {
+    // A plugin web view enforces its own http(s) allowlist (pluginWebViews.ts).
+    if (isPluginWebGuest(contents)) return
     if (!isAppNavigation(url)) e.preventDefault()
   })
   contents.setWindowOpenHandler(({ url }) => {
