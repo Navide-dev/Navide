@@ -462,6 +462,7 @@ import { readInstalledManifestV2, type ThirdPartyLaunchSpec } from './pluginThir
 import { PluginAgentToolsHost } from './pluginAgentToolsHost'
 import { pluginWebViewRegistry } from './pluginWebViewHost'
 import { HOST_DEFAULT_EXECUTION_POLICY, FAIL_CLOSED_EXECUTION_POLICY } from './executionPolicy'
+import { webPolicyDeniedMessage } from '../browserAgentStrings'
 
 interface FakeWebContentsLike {
   id: number
@@ -16395,7 +16396,7 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     bind: MockInstance<PluginBackendHost['bindAgentToolWorkspace']>
     call: MockInstance<PluginBackendHost['call']>
     policy: { value: ExecutionPolicySnapshot }
-    grant: { value: { packageVersion: string; system: Array<'fs'>; storage: boolean } | null }
+    grant: { value: { packageVersion: string; system: Array<'fs' | 'web'>; storage: boolean } | null }
     openWorkspaces: Set<string>
     cleanup: () => Promise<void>
   }
@@ -16404,7 +16405,8 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     return socket.sent.map((raw) => JSON.parse(raw) as SentMessage)
   }
 
-  async function fixture(options: { enabled?: boolean; register?: boolean } = {}): Promise<Fixture> {
+  async function fixture(options: { enabled?: boolean; register?: boolean; system?: Array<'fs' | 'web'> } = {}): Promise<Fixture> {
+    const system = options.system ?? ['fs']
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tools-')))
     const workspace = join(root, 'workspace')
     const packageDir = join(root, 'package')
@@ -16413,7 +16415,7 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     writeFileSync(join(packageDir, 'backend', 'devmap'), 'binary', { mode: 0o700 })
     writeFileSync(join(packageDir, 'manifest.json'), JSON.stringify({
       schemaVersion: 2, apiVersion: '^1.0.0', id: 'nerdtechnic.devmap', name: 'Dev map', version: '0.2.0', publisher: 'nerdtechnic',
-      permissions: { system: ['fs'] },
+      permissions: { system },
       marketplace: { description: 'Dev map.', license: 'MIT' },
       backend: { entry: 'backend/devmap', protocolVersion: 1, activation: 'startup', methods: ['devmap.read', 'devmap.setStatus'] },
     }))
@@ -16427,13 +16429,13 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       { ...parsed, backend: { ...parsed.backend!, agentTools } as never },
     )!
     const mgr = new FrontendPluginManager()
-    const grant: Fixture['grant'] = { value: { packageVersion: '0.2.0', system: ['fs'], storage: true } }
+    const grant: Fixture['grant'] = { value: { packageVersion: '0.2.0', system, storage: true } }
     mgr.setCapabilityGrantResolver(() => grant.value)
     const policy: Fixture['policy'] = { value: { policy: HOST_DEFAULT_EXECUTION_POLICY, revision: 1, state: 'default' } }
     mgr.setExecutionPolicyResolver(() => policy.value)
     mgr.registerDescriptor({
       id: 'nerdtechnic.devmap', packageVersion: '0.2.0', packageDir, requires: ['fs'],
-      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }), devUrl: '', entryFile: join(packageDir, 'index.html'), views: [],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system }), devUrl: '', entryFile: join(packageDir, 'index.html'), views: [],
     }, { builtin: true })
     mgr.registerBackendActivation(registered)
     const spec = () => mgr.getBackendActivation('nerdtechnic.devmap', '0.2.0') as ThirdPartyLaunchSpec
@@ -16782,6 +16784,34 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       )!
       await expect(f.mgr.executeAgentBackendCall(instanceId, { reqId: 'r-1', name: 'devmap.read', args: {} }))
         .resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+      expect(f.call).not.toHaveBeenCalled()
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('tells the user where to add web when a saved policy leaves it out', async () => {
+    const f = await fixture({ system: ['fs', 'web'] })
+    try {
+      f.policy.value = { policy: { ...HOST_DEFAULT_EXECUTION_POLICY, system: ['fs', 'ui', 'aiCli'] }, revision: 2, state: 'user' }
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({
+        ok: false,
+        error_code: 'EXECUTION_POLICY_DENIED',
+        error: 'Your agent Execution Policy allowlist does not include web. Add web in Settings → Navide Plugins → Execution Policy.',
+      })
+      f.mgr.setUiLocaleResolver(() => 'zh-TW')
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:2' }))).resolves.toMatchObject({
+        error: '你的 agent 執行政策 allowlist 沒有包含 web，請到「設定 → Navide 外掛 → 執行政策」加入 web。',
+      })
+      f.policy.value = { policy: { ...HOST_DEFAULT_EXECUTION_POLICY, mode: 'denylist', system: [] }, revision: 3, state: 'user' }
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:3' }))).resolves.toMatchObject({
+        error: webPolicyDeniedMessage('zh-TW', 'denylist'),
+      })
+      // A refusal that is not about web keeps the generic text.
+      f.policy.value = { policy: FAIL_CLOSED_EXECUTION_POLICY, revision: 4, state: 'corrupt' }
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:4' }))).resolves.toMatchObject({
+        error: 'The agent execution policy denied the operation.',
+      })
       expect(f.call).not.toHaveBeenCalled()
     } finally {
       await f.cleanup()

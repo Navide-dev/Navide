@@ -59,6 +59,7 @@ import { BuiltinRemovedEarlierStore, migrateBuiltinRemovalsToDisabled, PluginDis
 import { createBuiltinSwitchReconciler } from './plugins/builtinSwitchReconciler'
 import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/frontendPluginManager'
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
+import { webAgentWritePrompt } from './browserAgentStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
 import { localTakedownDecision } from './plugins/pluginLocalTrust'
@@ -1353,6 +1354,8 @@ async function promptNativeBackendWorkspaceWrite(prompt: NativeBackendWritePromp
 // DB3: an agent asked for a write-risk tool. Its own question, naming the
 // agent and the tool, separate from the view's "allow file changes".
 async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Promise<boolean> {
+  // Navide Browser's write tools drive web pages; asking about files would mislead.
+  if (prompt.pluginId === 'navide.browser') return promptWebAgentToolWrite(prompt)
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Agent wants to change files',
@@ -1372,6 +1375,29 @@ async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Prom
       'The agent, not you, started this. You are asked again after an update or a new permission.',
     ].filter(Boolean).join('\n\n'),
     buttons: ['Don\'t allow', 'Allow'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  }
+  const parent = nativeBackendDialogParent()
+  const result = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options)
+  return result.response === 1
+}
+
+async function promptWebAgentToolWrite(prompt: AgentToolWritePrompt): Promise<boolean> {
+  const tool = `"${revealUnsafeLineText(prompt.tool.title)}" (${revealUnsafeLineText(prompt.tool.name)})`
+  const text = webAgentWritePrompt(
+    currentUiLocale(),
+    tool,
+    revealUnsafeLineText(prompt.name),
+    revealUnsafeLineText(prompt.packageVersion),
+  )
+  const options: Electron.MessageBoxOptions = {
+    type: 'warning',
+    title: text.title,
+    message: text.message,
+    detail: [prompt.workspacePath, text.origin].join('\n\n'),
+    buttons: text.buttons,
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -1401,6 +1427,7 @@ for (const activation of installedPluginLoad.activationCatalog) {
   }
 }
 
+frontendPluginManager.setUiLocaleResolver(() => currentUiLocale())
 frontendPluginManager.setExecutionPolicyResolver((workspacePath?: string): ExecutionPolicySnapshot => {
   try {
     if (!workspacePath) return executionPolicySourceStore.getGlobalEffectivePolicy()

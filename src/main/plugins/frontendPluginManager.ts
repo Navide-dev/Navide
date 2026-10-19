@@ -11,7 +11,8 @@ import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents
 import { warnMain } from '../main-log'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
-import { validateSupportedLocale } from '../hostLocale'
+import { validateSupportedLocale, type SupportedLocale } from '../hostLocale'
+import { webPolicyDeniedMessage } from '../browserAgentStrings'
 import { composePluginFrameQuery } from './pluginContributionQuery'
 import { systemFrameUnlessMac } from '../window-controls'
 import { createHash, randomUUID } from 'node:crypto'
@@ -1620,6 +1621,8 @@ export class FrontendPluginManager {
   private executionPolicyResolver:
     | ((workspacePath?: string) => ExecutionPolicySnapshot)
     | null = null
+  /** The Host UI locale, for refusals the user reads through their agent. */
+  private uiLocaleResolver: (() => SupportedLocale) | null = null
   /** Exact package-version tuples whose complete runtime is being revoked. */
   private readonly stoppingPlugins = new Set<string>()
   private readonly packageRevocationTasks = new Map<string, Promise<void>>()
@@ -2811,6 +2814,10 @@ export class FrontendPluginManager {
     resolver: ((workspacePath?: string) => ExecutionPolicySnapshot) | null
   ): void {
     this.executionPolicyResolver = resolver
+  }
+
+  setUiLocaleResolver(resolver: (() => SupportedLocale) | null): void {
+    this.uiLocaleResolver = resolver
   }
 
   setTerminalShell(shell: string | null): void {
@@ -7354,7 +7361,7 @@ export class FrontendPluginManager {
       }),
     })
     if (!this.agentToolPolicyAllows(root!, initiator, spec)) {
-      return agentToolError('EXECUTION_POLICY_DENIED', 'The agent execution policy denied the operation.')
+      return agentToolError('EXECUTION_POLICY_DENIED', this.agentToolPolicyDeniedMessage(root!, spec))
     }
     const crossWorkspace = parsed.caller.workspace !== null &&
       (canonicalExistingDirectory(parsed.caller.workspace) ?? resolve(parsed.caller.workspace)) !== root
@@ -7527,6 +7534,23 @@ export class FrontendPluginManager {
     // policy: it is evaluated as the narrowest one a backend reaches, `fs`.
     return (namespaces.length > 0 ? namespaces : ['fs' as const])
       .every((namespace) => executionPolicyAllows(initiator, snapshot, namespace))
+  }
+
+  /** Why the policy refused a tool: a user policy that leaves out `web` says
+   * so and where to add it; anything else keeps the generic text. */
+  private agentToolPolicyDeniedMessage(workspacePath: string, spec: ThirdPartyLaunchSpec): string {
+    const generic = 'The agent execution policy denied the operation.'
+    if (!spec.thirdParty.system.includes('web')) return generic
+    let snapshot: ExecutionPolicySnapshot | undefined
+    try {
+      snapshot = this.executionPolicyResolver?.(workspacePath)
+    } catch {
+      return generic
+    }
+    if (!snapshot || snapshot.state === 'corrupt') return generic
+    const { mode, system } = snapshot.policy
+    if (mode === 'full' || (mode === 'allowlist' && system.includes('web'))) return generic
+    return webPolicyDeniedMessage(this.uiLocaleResolver?.() ?? 'en-US', mode)
   }
 
   /** One headless binding per package version and workspace, made for agent
