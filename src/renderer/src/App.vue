@@ -7525,6 +7525,7 @@ async function dispatchPlanToPane(relPath: string, agentKey: string): Promise<Pl
       workspacePath: p.workspacePath,
       status: (paneRefs[p.id]?.displayStatus as string | undefined) ?? 'starting',
       sessionId: (paneRefs[p.id]?.sessionId as string | undefined) ?? undefined,
+      isLogin: p.isLogin,
     })),
     agentKey,
     currentWorkspace.value
