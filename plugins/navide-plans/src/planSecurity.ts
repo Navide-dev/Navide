@@ -22,24 +22,33 @@ function stripExecutableScripts(content: string): string {
 }
 
 // Where the tokenizer ends the start tag whose attributes begin at `from`: just
-// past its `>`, or -1 when input runs out first and the parser drops the tag.
-// A quoted value may hold `>`, so the first `>` is not always the end.
+// past its `>`, or -1 when input runs out first. A quoted value may hold `>`,
+// so the first `>` is not always the end. Only an `=` after an attribute name
+// opens a value; one where a name belongs starts that name instead.
 function startTagEnd(html: string, from: number): number {
   const space = '\t\n\f\r '
+  let afterName = false
   let i = from
   while (i < html.length) {
-    const c = html[i]
-    if (c === '>') return i + 1
-    i++
-    if (c !== '=') continue
-    while (i < html.length && space.includes(html[i])) i++
-    const quote = html[i]
-    if (quote === '"' || quote === "'") {
-      const close = html.indexOf(quote, i + 1)
-      if (close === -1) return -1
-      i = close + 1
+    const c = html[i++]
+    if (c === '>') return i
+    if (c === '/') {
+      afterName = false
+    } else if (space.includes(c)) {
+      // An attribute name still takes a value across whitespace: `a = b`.
+    } else if (c === '=' && afterName) {
+      while (i < html.length && space.includes(html[i])) i++
+      const quote = html[i]
+      if (quote === '"' || quote === "'") {
+        const close = html.indexOf(quote, i + 1)
+        if (close === -1) return -1
+        i = close + 1
+      } else {
+        while (i < html.length && !space.includes(html[i]) && html[i] !== '>') i++
+      }
+      afterName = false
     } else {
-      while (i < html.length && !space.includes(html[i]) && html[i] !== '>') i++
+      afterName = true
     }
   }
   return -1
@@ -65,7 +74,9 @@ function stripMetaRefresh(html: string): string {
   let kept = 0
   for (let m = meta.exec(html); m; m = meta.exec(html)) {
     const end = startTagEnd(html, m.index + 5)
-    if (end === -1) break
+    // A tag that never ends swallows the rest of the document; drop that rest
+    // as the parser does, so nothing in it is left unchecked.
+    if (end === -1) return out + html.slice(kept, m.index)
     if (isRefreshMeta(html.slice(m.index, end))) {
       out += html.slice(kept, m.index) + '<meta>'
       kept = end

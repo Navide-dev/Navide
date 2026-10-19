@@ -181,6 +181,17 @@ describe('preparePlanDocHtml', () => {
     expect(prepare(`<!doctype html><html><head>${metas}</head><body>Hi</body></html>`)).toContain(metas)
   })
 
+  // `=` where an attribute name belongs starts that name, not a value, so a
+  // quote after it opens nothing and the tag ends at the next `>`.
+  it.each([
+    ['a leading =', "<meta =' >"],
+    ['= right after a quoted value', '<meta a="x"=" >'],
+    ['an unterminated quoted value', '<meta a="x >'],
+  ])('still drops a meta refresh after a tag with %s', (_name, tag) => {
+    const html = prepare(`<head>${tag}<meta http-equiv=refresh content=0;url=https://attacker.invalid/r></head>`)
+    expect(html).not.toContain('attacker.invalid')
+  })
+
   // The browser reads `<me<meta>` as one unknown tag, so what surrounds a
   // removed meta refresh never becomes a meta refresh or a script of its own.
   it('leaves a bare meta where a refresh was, so its neighbours cannot join', () => {
