@@ -399,7 +399,6 @@ defineExpose({
   holdNeedsInput: terminal.holdNeedsInput,
   releaseNeedsInputHold: terminal.releaseNeedsInputHold,
   awaitingHeld: terminal.awaitingHeld,
-  noteForeignToolResult: terminal.noteForeignToolResult,
   noteAnswerKeys: terminal.noteAnswerKeys,
   permissionWaitLive: terminal.permissionWaitLive,
   markQuestion: terminal.markQuestion,

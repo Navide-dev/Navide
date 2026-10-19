@@ -289,7 +289,7 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
   it('keeps a held AWAITING through output past the settle window', async () => {
     const { result, mock, scope } = await spawnedFake()
     await chunkThenWait(mock, 0, 100)
-    result.holdNeedsInput()
+    result.holdNeedsInput('Bash:aaaa')
     await vi.advanceTimersByTimeAsync(5_000)
     await chunkThenWait(mock, 1, 100)
     expect(result.displayStatus.value).toBe('awaiting')
@@ -304,7 +304,7 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     expect(result.awaitingHeld()).toMatchObject({ key: 'Bash:aaaa' })
     expect(result.awaitingHeld().since).toBeGreaterThan(0)
     result.releaseNeedsInputHold()
-    expect(result.awaitingHeld()).toEqual({ since: 0, key: '', foreign: false })
+    expect(result.awaitingHeld()).toEqual({ since: 0, key: '' })
     expect(result.displayStatus.value).not.toBe('awaiting')
     scope.stop()
   })
@@ -330,40 +330,34 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
   it('leaves a held AWAITING on an authoritative turn end', async () => {
     const { result, mock, scope } = await spawnedFake()
     await chunkThenWait(mock, 0, 100)
-    result.holdNeedsInput()
+    result.holdNeedsInput('Bash:aaaa')
     result.markTurnComplete()
+    expect(result.awaitingHeld().since).toBe(0)
     expect(result.displayStatus.value).toBe('idle')
     scope.stop()
   })
 
-  // Every way of answering the box is input to the pane, so an answering key
-  // ends the hold even when no hook or transcript record ever says so (a
-  // subagent's "No", a hook that rewrote the tool input).
-  it.each([['Enter', '\r'], ['Esc', '\x1b'], ['a digit', '2']])(
-    'releases a held AWAITING when %s is typed',
-    async (_name, keys) => {
-      const { result, mock, scope } = await spawnedFake()
-      await chunkThenWait(mock, 0, 100)
-      result.holdNeedsInput('Bash:aaaa')
-      typeKeys(keys)
-      expect(result.awaitingHeld().since).toBe(0)
-      expect(result.displayStatus.value).not.toBe('awaiting')
-      scope.stop()
-    },
-  )
+  // The answering key is classified by keysAnswerPermissionBox (its own tests
+  // hold the key matrix); these two pin that typing reaches it.
+  it('releases a held AWAITING when an answering key is typed', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    typeKeys('\r')
+    expect(result.awaitingHeld().since).toBe(0)
+    expect(result.displayStatus.value).not.toBe('awaiting')
+    scope.stop()
+  })
 
-  it.each([['an arrow', '\x1b[B'], ['Tab', '\t'], ['a letter', 'y'], ['a focus report', '\x1b[I'], ['a mouse report', '\x1b[M 1!']])(
-    'keeps a held AWAITING through %s',
-    async (_name, keys) => {
-      const { result, mock, scope } = await spawnedFake()
-      await chunkThenWait(mock, 0, 100)
-      result.holdNeedsInput('Bash:aaaa')
-      typeKeys(keys)
-      expect(result.awaitingHeld().since).toBeGreaterThan(0)
-      expect(result.displayStatus.value).toBe('awaiting')
-      scope.stop()
-    },
-  )
+  it('keeps a held AWAITING through navigation', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    typeKeys('\x1b[B')
+    expect(result.awaitingHeld().since).toBeGreaterThan(0)
+    expect(result.displayStatus.value).toBe('awaiting')
+    scope.stop()
+  })
 
   it('releases a held AWAITING on keys relayed straight to the PTY', async () => {
     // ui.pane.sendKeys writes through terminal.input, not through onData.
@@ -375,42 +369,13 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     scope.stop()
   })
 
-  it('does not touch the Notification hook\'s wait when an answering key ends the hold', async () => {
-    const { result, mock, scope } = await spawnedFake()
-    await chunkThenWait(mock, 0, 100)
-    result.markNeedsInput()
-    result.holdNeedsInput('Bash:aaaa')
-    typeKeys('\r')
-    expect(result.awaitingHeld().since).toBe(0)
-    expect(result.permissionWaitLive()).toBe(true)
-    scope.stop()
-  })
-
-  it('remembers a different tool finishing while held, and forgets it with the hold', async () => {
-    const { result, mock, scope } = await spawnedFake()
-    await chunkThenWait(mock, 0, 100)
-    result.holdNeedsInput('Bash:aaaa')
-    expect(result.awaitingHeld().foreign).toBe(false)
-    result.noteForeignToolResult()
-    expect(result.awaitingHeld().foreign).toBe(true)
-    // A new box starts clean.
-    result.holdNeedsInput('Bash:bbbb')
-    expect(result.awaitingHeld().foreign).toBe(false)
-    result.noteForeignToolResult()
-    result.releaseNeedsInputHold()
-    expect(result.awaitingHeld().foreign).toBe(false)
-    // With nothing held there is nothing for it to refer to.
-    result.noteForeignToolResult()
-    expect(result.awaitingHeld().foreign).toBe(false)
-    scope.stop()
-  })
-
   it('does not carry AWAITING across a respawn', async () => {
     // The composable outlives the PTY, so a pane rebuilt while parked on a
     // prompt would otherwise open showing a question that no longer exists.
     const { result, mock, scope } = await spawnedFake()
     await chunkThenWait(mock, 0, 100)
     result.markNeedsInput()
+    result.holdNeedsInput('Bash:aaaa')
     expect(result.displayStatus.value).toBe('awaiting')
 
     // The PTY ends (backend exit event); spawn() only runs from a dead pane.
@@ -422,6 +387,7 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     await chunkThenWait(mock, 1, 100)
 
     expect(result.displayStatus.value).not.toBe('awaiting')
+    expect(result.awaitingHeld()).toEqual({ since: 0, key: '' })
     scope.stop()
   })
 

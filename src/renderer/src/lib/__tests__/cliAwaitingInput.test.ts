@@ -9,9 +9,8 @@ import {
   questionActionFor,
   permissionHoldActionFor,
   keysAnswerPermissionBox,
-  permissionBoxOnScreen,
-  heldBoxGone,
-  HELD_BOX_PAINT_GRACE_MS,
+  holdOutlivedBox,
+  HOLD_PAINT_GRACE_MS,
   QUESTION_DETAIL,
 } from '../cliAwaitingInput'
 
@@ -102,12 +101,8 @@ describe('notificationEndsAwaiting — releasing a hook-set wait', () => {
 // they are what the pattern has to survive.
 
 describe('permissionHoldActionFor — the permission box, by hook events', () => {
-  // The hold is raised by PermissionRequest and lasts until the box is
-  // answered; output while the box is open (the old 3 s settle) does not end it.
-  const HELD_AT = Date.parse('2026-10-19T06:00:00.000Z')
   const NOT_HELD = { since: 0, key: '' }
-  const held = { since: HELD_AT, key: 'Bash:aaaa' }
-  const AFTER = '2026-10-19T06:00:05.000Z'
+  const held = { since: Date.parse('2026-10-19T06:00:00.000Z'), key: 'Bash:aaaa' }
 
   it('holds on PermissionRequest', () => {
     expect(permissionHoldActionFor({ detail: 'hook:permission_request' }, NOT_HELD)).toBe('hold')
@@ -119,66 +114,36 @@ describe('permissionHoldActionFor — the permission box, by hook events', () =>
     }
   })
 
-  it('does not release on a different tool finishing — it defers to the screen', () => {
-    // Parallel tools, or another subagent: their result is not this box's answer
-    // by itself. It is also what a hook that approved and rewrote the input
-    // looks like, so the pane checks whether the box is still showing.
+  it('keeps the hold when a different tool finishes while the box is open', () => {
+    // A parallel tool, or another subagent's: not this box's answer.
     for (const detail of ['hook:post_tool_use', 'hook:post_tool_use_failure']) {
-      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:bbbb' }, held), detail).toBe('check-screen')
-      expect(permissionHoldActionFor({ detail, tool_key: 'Read:aaaa' }, held), detail).toBe('check-screen')
-      expect(permissionHoldActionFor({ detail, tool_key: '' }, held), detail).toBe('check-screen')
+      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:bbbb' }, held), detail).toBeNull()
+      expect(permissionHoldActionFor({ detail, tool_key: 'Read:aaaa' }, held), detail).toBeNull()
+      expect(permissionHoldActionFor({ detail, tool_key: '' }, held), detail).toBeNull()
     }
   })
 
-  it('releases on any tool result when the hold has no key to compare', () => {
-    // No tool input to fingerprint: the pair cannot be told apart, so the old
-    // any-result release stands (the turn end still bounds it).
-    const unkeyed = { since: HELD_AT, key: '' }
-    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use', tool_key: 'Bash:bbbb' }, unkeyed)).toBe('release')
-  })
-
-  it('releases on a denial record written after the box opened — a denial fires no hook', () => {
-    const denial = { detail: 'user:tool_rejected', timestamp: AFTER }
-    expect(permissionHoldActionFor(denial, held)).toBe('release')
-  })
-
-  it('releases on a prompt the user typed after the box opened', () => {
-    const typed = { detail: 'user', text: 'do something else', timestamp: AFTER }
-    expect(permissionHoldActionFor(typed, held)).toBe('release')
-  })
-
-  it("keeps the hold on a parallel tool's tool_result record, which is a bare `user` record", () => {
-    // Every tool_result is a `user` record with no text; one landing while the
-    // box is open says nothing about the box.
-    expect(permissionHoldActionFor({ detail: 'user', timestamp: AFTER }, held)).toBeNull()
-  })
-
-  it('ignores a transcript record from before the box opened', () => {
-    // The reader can deliver an earlier record after the hook: it says nothing
-    // about the box now on screen.
-    const early = '2026-10-19T05:59:58.000Z'
-    expect(permissionHoldActionFor({ detail: 'user:tool_rejected', timestamp: early }, held)).toBeNull()
-    expect(permissionHoldActionFor({ detail: 'user', text: 'hi', timestamp: early }, held)).toBeNull()
-    expect(permissionHoldActionFor({ detail: 'user:tool_rejected' }, held)).toBeNull()
+  it('a hold without a key matches no tool result', () => {
+    const unkeyed = { since: held.since, key: '' }
+    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use', tool_key: '' }, unkeyed)).toBeNull()
   })
 
   it('releases nothing when nothing is held', () => {
     // A wait the Notification hook or the screen raised is not this hold's to end.
     expect(permissionHoldActionFor({ detail: 'hook:post_tool_use', tool_key: 'Bash:aaaa' }, NOT_HELD)).toBeNull()
-    expect(permissionHoldActionFor({ detail: 'user:tool_rejected', timestamp: AFTER }, NOT_HELD)).toBeNull()
   })
 
   it('leaves the hold alone on everything else, including the next PreToolUse', () => {
     // PreToolUse of a parallel tool can fire while the box is still open.
-    for (const detail of ['hook:pre_tool_use', 'hook:notification', 'assistant', 'hook:subagent_stop']) {
+    for (const detail of ['hook:pre_tool_use', 'hook:notification', 'assistant', 'user', 'hook:subagent_stop']) {
       expect(permissionHoldActionFor({ detail, tool_key: 'Bash:aaaa' }, held), detail).toBeNull()
     }
   })
 })
 
 describe('keysAnswerPermissionBox — what answers a held box', () => {
-  it('Enter, a lone Esc and digits 1-9 answer it', () => {
-    for (const keys of ['\r', '\x1b', '1', '2', '9', 'y\r', 'n\r']) {
+  it('Enter, a lone Esc, Ctrl+C and digits 1-9 answer it', () => {
+    for (const keys of ['\r', '\x1b', '\x03', '1', '2', '9', 'y\r', 'n\r']) {
       expect(keysAnswerPermissionBox(keys), JSON.stringify(keys)).toBe(true)
     }
   })
@@ -229,76 +194,25 @@ describe('keysAnswerPermissionBox — what answers a held box', () => {
   })
 })
 
-describe('permissionBoxOnScreen — is the held box still up?', () => {
-  // The box as Claude Code 2.1.303 draws it, from a reviewer's description of
-  // its rows and footer (synthetic: no PTY capture of it is checked in).
-  const boxRows = [
-    'Bash command',
-    '  rm -rf build',
-    'Do you want to proceed?',
-    '❯ 1. Yes',
-    "  2. Yes, and don't ask again for rm commands in /repo",
-    '  3. Yes, allow all edits during this session',
-    '  4. No',
-    'Esc to cancel · Tab to amend',
-  ]
-  const box = boxRows.join('\n')
-  // The same box with a status line painted under it, as the CLI does.
-  const boxWithStatusLine = [...boxRows, '', '  ⏵⏵ accept edits on (shift+tab to cycle)'].join('\n')
+describe('holdOutlivedBox — the safety net under a held wait', () => {
+  const past = HOLD_PAINT_GRACE_MS + 1
 
-  it('the vendor pattern knows the bare box', () => {
-    expect(matchAwaitingInput('claude', box)).toBe(true)
-    expect(permissionBoxOnScreen('claude', box)).toBe(true)
+  it('keeps holding while the box is on screen', () => {
+    expect(holdOutlivedBox({ heldMs: past, turnInFlight: true, boxOnScreen: true })).toBe(false)
+    expect(holdOutlivedBox({ heldMs: past, turnInFlight: false, boxOnScreen: true })).toBe(false)
   })
 
-  it('sees a box with rows under its footer, which the vendor pattern misses', () => {
-    // The vendor pattern is anchored to the end of the screen, so it cannot see
-    // an open box that has a status line below it. A parallel tool's result must
-    // not end that box's hold.
-    expect(matchAwaitingInput('claude', boxWithStatusLine)).toBe(false)
-    expect(permissionBoxOnScreen('claude', boxWithStatusLine)).toBe(true)
-    expect(heldBoxGone({
-      foreignResultSeen: true,
-      heldMs: HELD_BOX_PAINT_GRACE_MS + 1,
-      boxOnScreen: permissionBoxOnScreen('claude', boxWithStatusLine),
-    })).toBe(false)
+  it('releases mid-turn once the box has been missing past the paint grace', () => {
+    // A hook approved the call and rewrote its input: no box, no matching result.
+    expect(holdOutlivedBox({ heldMs: past, turnInFlight: true, boxOnScreen: false })).toBe(true)
   })
 
-  it('does not take the box\'s question or numbered rows alone for a box', () => {
-    // Only the footer anchors count: "Do you want to" and "1. Yes" are ordinary
-    // prose and list items.
-    expect(permissionBoxOnScreen('claude', 'Do you want to proceed?\n1. Yes\n2. No')).toBe(false)
+  it('waits out the paint grace mid-turn — the hook fires before the box is drawn', () => {
+    expect(holdOutlivedBox({ heldMs: HOLD_PAINT_GRACE_MS - 1, turnInFlight: true, boxOnScreen: false })).toBe(false)
   })
 
-  it('still sees the boxes the vendor pattern knows', () => {
-    expect(permissionBoxOnScreen('claude', '3. No, and tell Claude what to do differently (esc)')).toBe(true)
-  })
-
-  it('reports no box once the screen is ordinary output, so an approved call is let go', () => {
-    const after = '● Bash(rm -rf build)\n  ⎿  (no content)\n\n● Done.\n\n> '
-    expect(permissionBoxOnScreen('claude', after)).toBe(false)
-    expect(heldBoxGone({ foreignResultSeen: true, heldMs: HELD_BOX_PAINT_GRACE_MS + 1, boxOnScreen: false })).toBe(true)
-  })
-})
-
-describe('heldBoxGone — a foreign tool result and an empty screen', () => {
-  const past = HELD_BOX_PAINT_GRACE_MS + 1
-
-  it('releases when another tool finished and the box is not on screen', () => {
-    expect(heldBoxGone({ foreignResultSeen: true, heldMs: past, boxOnScreen: false })).toBe(true)
-  })
-
-  it('keeps holding while the box is still on screen (a parallel tool finished)', () => {
-    expect(heldBoxGone({ foreignResultSeen: true, heldMs: past, boxOnScreen: true })).toBe(false)
-  })
-
-  it('keeps holding when no foreign result was seen, however quiet the screen', () => {
-    // A missed screen match must never end a real wait on its own.
-    expect(heldBoxGone({ foreignResultSeen: false, heldMs: past, boxOnScreen: false })).toBe(false)
-  })
-
-  it('waits out the paint grace — the hook fires before the box is drawn', () => {
-    expect(heldBoxGone({ foreignResultSeen: true, heldMs: HELD_BOX_PAINT_GRACE_MS - 1, boxOnScreen: false })).toBe(false)
+  it('releases at once on a pane that is not mid-turn, where nothing is left to paint', () => {
+    expect(holdOutlivedBox({ heldMs: 0, turnInFlight: false, boxOnScreen: false })).toBe(true)
   })
 })
 

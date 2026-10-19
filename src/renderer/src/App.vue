@@ -338,11 +338,10 @@ import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, quotaExhau
 import {
   awaitingClearsOnMiss,
   hasAwaitingPattern,
-  heldBoxGone,
+  holdOutlivedBox,
   matchAwaitingInput,
   notificationEndsAwaiting,
   notificationMeansAwaiting,
-  permissionBoxOnScreen,
   permissionHoldActionFor,
   questionActionFor,
 } from './lib/cliAwaitingInput'
@@ -4094,16 +4093,18 @@ function pollAwaitingPanes(): void {
     try {
       const screen = ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string
       const boxOnScreen = matchAwaitingInput(pane.agentKey, screen)
-      // A held permission box that another tool's result was seen against, and
-      // that is no longer on screen, was approved without ever being shown (a hook
-      // that rewrote the input): nothing else will release it. The looser
-      // permissionBoxOnScreen decides "still there", so a drifted vendor pattern
-      // cannot end a hold whose box is open.
-      const held = ref.awaitingHeld?.() as { since: number; foreign: boolean } | undefined
-      if (held && held.since > 0 && heldBoxGone({
-        foreignResultSeen: held.foreign,
+      // The safety net under a held permission wait (see holdOutlivedBox): the
+      // box is no longer on screen, so nothing is left to hold for.
+      const held = ref.awaitingHeld?.() as { since: number } | undefined
+      if (held && held.since > 0 && holdOutlivedBox({
         heldMs: Date.now() - held.since,
-        boxOnScreen: permissionBoxOnScreen(pane.agentKey, screen),
+        turnInFlight: isTurnInFlight(
+          paneLastActiveAt.get(pane.id) ?? 0,
+          paneTurnCompleteAt.get(pane.id) ?? 0,
+          Date.now(),
+          { inferEndFromSilence: VENDORS_WITHOUT_TURN_END.has(pane.agentKey) },
+        ),
+        boxOnScreen,
       })) ref.releaseNeedsInputHold?.()
       if (boxOnScreen) ref.markNeedsInput?.()
       else if (awaitingClearsOnMiss(pane.agentKey)) ref.clearNeedsInput?.()
@@ -14735,21 +14736,18 @@ backend.on('agent.activity', (raw) => {
         paneRefs[ev.pane_id]?.clearNeedsInput?.()
       }
     }
-    // Claude's PermissionRequest hook marks the permission box opening; the
-    // tool running (PostToolUse/Failure) or a newer transcript record marks it
-    // answered. Held in between, so the box's own redraws cannot let AWAITING
-    // settle away while it is still on screen. Rules in permissionHoldActionFor.
-    const held = paneRefs[ev.pane_id]?.awaitingHeld?.() ?? { since: 0, key: '' }
-    const holdAction = permissionHoldActionFor(ev, held)
+    // Claude's PermissionRequest hook opens a hold on AWAITING that the box's own
+    // repaints cannot settle away; see permissionHoldActionFor for what ends it.
+    const holdAction = permissionHoldActionFor(
+      ev,
+      paneRefs[ev.pane_id]?.awaitingHeld?.() ?? { since: 0, key: '' },
+    )
     if (holdAction === 'hold') {
       // The Notification hook may have reported this same box first.
       if (paneRefs[ev.pane_id]?.permissionWaitLive?.() !== true) notifyAttention(ev.pane_id)
       paneRefs[ev.pane_id]?.holdNeedsInput?.(ev.tool_key ?? '')
     } else if (holdAction === 'release') {
       paneRefs[ev.pane_id]?.releaseNeedsInputHold?.()
-    } else if (holdAction === 'check-screen') {
-      // Settled by pollAwaitingPanes once it can see whether the box is on screen.
-      paneRefs[ev.pane_id]?.noteForeignToolResult?.()
     }
     // Clear the restore-mode badge once the user interacts with the pane.
     const histEntry = spawnHistory.value.find((e) => e.paneId === ev.pane_id)

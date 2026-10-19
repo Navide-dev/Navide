@@ -839,17 +839,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // prompt paints once and then goes silent, so the hysteresis below would
   // call it idle. See markNeedsInput.
   const awaitingInputAt = ref<number>(0)
-  // Set when the wait came from Claude's PermissionRequest hook, which knows
-  // the box stays open until it is answered: such a wait is held, and output
-  // cannot end it — only releaseNeedsInputHold (the answer), a turn end or a
-  // respawn does. The value is when the hold began, which App.vue compares
-  // transcript records against. See permissionHoldActionFor.
+  // When Claude's PermissionRequest hook raised a wait, 0 when none: the box
+  // stays open until answered, so output cannot end it. See holdNeedsInput.
   const awaitingHeldAt = ref<number>(0)
-  // Which tool the held box is for ("" when unknown); not reactive — only
+  // The tool that box is for, as the backend keyed it. Not reactive: only
   // App.vue's release decision reads it.
   let awaitingHeldKey = ''
-  // A different tool's result was seen while held (see noteForeignToolResult).
-  let awaitingHeldForeign = false
   // The prompt box the hook announces is itself clean output, and it can land
   // on either side of the hook (one arrives over HTTP, the other over the PTY).
   // Clean output inside this window is read as the prompt painting itself;
@@ -1134,8 +1129,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // A turn that ended is not waiting on anyone: clear the flag so a stale
     // notification can't hold the badge on AWAITING past the turn.
     awaitingInputAt.value = 0
-    awaitingHeldAt.value = 0
-    awaitingHeldKey = ''
+    releaseNeedsInputHold()
   }
 
   /** The CLI is parked on the user. Two callers, both in App.vue: Claude's
@@ -1154,9 +1148,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     awaitingInputAt.value = 0
   }
 
-  /** A permission wait is on right now: held by the PermissionRequest hook, or
-   *  raised by the Notification hook / screen watcher and not yet settled. App.vue
-   *  asks before raising one, so a box that two signals report chimes once. */
+  /** A permission wait is on right now: held, or raised by the Notification hook
+   *  or the screen watcher and not yet settled. App.vue asks before raising one
+   *  so a box two signals report chimes once. Edge: a Notification wait older
+   *  than the settle window no longer counts, so a second signal that late chimes
+   *  again. */
   function permissionWaitLive(): boolean {
     return (
       awaitingHeldAt.value > 0 ||
@@ -1165,43 +1161,27 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     )
   }
 
-  /** Claude's PermissionRequest hook: its box is about to open and stays open
-   *  until answered, so the wait is held against output. `toolKey` names the
-   *  tool the box is for, so only that tool finishing releases it. Leaves
-   *  awaitingInputAt alone: a wait the Notification hook raised keeps its own
-   *  settle behaviour after the hold is gone. */
-  function holdNeedsInput(toolKey = ''): void {
+  /** Claude's PermissionRequest hook: hold the wait against output until the box
+   *  is answered. `toolKey` is the tool it is for. Leaves awaitingInputAt alone,
+   *  so a wait the Notification hook raised keeps its own settle behaviour. */
+  function holdNeedsInput(toolKey: string): void {
     awaitingHeldAt.value = Date.now()
     awaitingHeldKey = toolKey
-    awaitingHeldForeign = false
   }
 
-  /** The held permission box was answered (see permissionHoldActionFor). Ends
-   *  the hold and nothing else — awaitingInputAt belongs to the Notification
-   *  hook and the screen watcher. */
+  /** End the hold, and only the hold. Every way a hold ends comes through here:
+   *  the matching tool result, an answering key, the turn end, a respawn, the
+   *  screen check. */
   function releaseNeedsInputHold(): void {
     awaitingHeldAt.value = 0
     awaitingHeldKey = ''
-    awaitingHeldForeign = false
   }
 
-  /** A different tool's result arrived while a box is held. Whether that tool
-   *  was a parallel one (box still open) or the held tool itself with its input
-   *  rewritten by a hook (no box) is for the screen to say: App.vue's poll
-   *  releases through heldBoxGone once it sees the box gone. */
-  function noteForeignToolResult(): void {
-    if (awaitingHeldAt.value > 0) awaitingHeldForeign = true
-  }
-
-  /** Keys sent to this pane — typed (term.onData) or relayed (App.vue's
-   *  ui.pane.sendKeys, which writes to the PTY without going through onData).
-   *  Every way of answering a permission box is one of them, so an answering key
-   *  ends a hold. Choosing "No, and tell Claude what to do" and pressing Enter
-   *  releases while the text field is open: the user is at the keyboard. */
+  /** Keys sent to this pane, typed (term.onData) or relayed (ui.pane.sendKeys
+   *  writes to the PTY without going through onData). An answering key ends a
+   *  held wait. */
   function noteAnswerKeys(data: string): void {
-    if (awaitingHeldAt.value > 0 && !isTerminalReport(data) && keysAnswerPermissionBox(data)) {
-      releaseNeedsInputHold()
-    }
+    if (awaitingHeldAt.value > 0 && keysAnswerPermissionBox(data)) releaseNeedsInputHold()
   }
 
   /** The agent put a question to the user. Called from App.vue on the reader's
@@ -3061,8 +3041,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // timestamp here would show the fresh pane as parked on a question that
     // no longer exists.
     awaitingInputAt.value = 0
-    awaitingHeldAt.value = 0
-    awaitingHeldKey = ''
+    releaseNeedsInputHold()
     questionAt.value = 0
     deliveredPendingCount.value = 0
     // A new process has none of the old one's background tasks.
@@ -3546,12 +3525,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     clearNeedsInput,
     holdNeedsInput,
     releaseNeedsInputHold,
-    awaitingHeld: (): { since: number; key: string; foreign: boolean } => ({
-      since: awaitingHeldAt.value,
-      key: awaitingHeldKey,
-      foreign: awaitingHeldForeign,
-    }),
-    noteForeignToolResult,
+    awaitingHeld: (): { since: number; key: string } => ({ since: awaitingHeldAt.value, key: awaitingHeldKey }),
     noteAnswerKeys,
     permissionWaitLive,
     markQuestion,
