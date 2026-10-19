@@ -8140,7 +8140,6 @@ type RebuildFailure =
   | 'locked' // another rebuild of this pane/session is in flight
   | 'probe-failed' // stale-create rollback or resumability probe failed
   | 'not-resumable' // session definitively not resumable
-  | 'missing-session' // session file absent on disk
   | 'spawn-failed' // replacement pane spawn failed
 
 async function rebuildPaneViaResume(
@@ -8167,6 +8166,12 @@ async function rebuildPaneViaResume(
     /** Resume on this CLI account instead of the pane's own — "continue on
      *  this account" for a claude account with its own config dir. */
     profileId?: string
+    /** Reopen fresh instead of resuming when the pane has no transcript yet:
+     *  claude pins `--session-id` at spawn but writes the jsonl only on the
+     *  first prompt, so a pane nobody typed in fails the resume preflight
+     *  ("Session not found on disk"). For single-pane account moves (fixing,
+     *  unfixing, "continue on this account"), where nothing can be lost. */
+    freshWhenNoTranscript?: boolean
   }
 ): Promise<RebuildFailure | undefined> {
   const pane = panes.value.find((p) => p.id === paneId)
@@ -8212,7 +8217,7 @@ async function rebuildPaneViaResume(
   }
   // Lock synchronously, before any await: a concurrent call (double-click, or
   // overlap with the rebuild-all batch) would otherwise pass the has() check
-  // during canResumeSession/has_session and double kill/spawn the same pane.
+  // during canResumeSession and double kill/spawn the same pane.
   // The session id is locked alongside the pane id because spawnPane swaps the
   // replacement pane in (new pane id, same session) before the backend spawn
   // resolves — a second click landing on the replacement must be blocked too.
@@ -8247,7 +8252,11 @@ async function rebuildPaneViaResume(
     // them: false = the session is definitively absent, null = the probe
     // itself failed (the session may well exist — the user should retry).
     const resumable = await canResumeSession(pane.agentKey, ws, sessionId)
-    if (resumable !== true) {
+    // Reopen fresh only on a definitive "absent" for a pane that never wrote a
+    // transcript. The flag alone is not enough: it lags a first turn that is
+    // still running, whose jsonl may already exist.
+    const fresh = resumable === false && !!opts?.freshWhenNoTranscript && !pane.sessionOnDisk
+    if (resumable !== true && !fresh) {
       pipelineLog(`⚠ rebuild ${pane.agentLabel}: session ${sessionId} not resumable`)
       if (!opts?.suppressBusyToast) {
         notifyRestore.toast(
@@ -8261,28 +8270,15 @@ async function rebuildPaneViaResume(
     }
     const spec = agentSpecs.find((s) => s.agentKey === pane.agentKey)
     const skipFlag = skipFlagFor(pane.agentKey, spec)
-    const resumeCmd = buildResumeCommand(pane.agentKey, sessionId, skipFlag, '', {
+    const resumeCmd = fresh ? '' : buildResumeCommand(pane.agentKey, sessionId, skipFlag, '', {
       model: pane.model ?? '',
       effort: pane.effort ?? '',
     })
-    if (!resumeCmd) {
+    if (!fresh && !resumeCmd) {
       if (!opts?.suppressBusyToast) {
         notifyRestore.toast(i18n.global.t('pane.terminal.rebuild-no-session'), { type: 'error' })
       }
       return 'no-session'
-    }
-
-    // Safety: Ensure the requested session actually exists on disk.
-    const hasSession = await backend.send('terminals.has_session', {
-      workspace_path: ws,
-      session_id: sessionId,
-    })
-    if (!hasSession) {
-      pipelineLog(`⚠ rebuild session ${sessionId.slice(0, 8)} not found`)
-      if (!opts?.suppressBusyToast) {
-        notifyRestore.toast(i18n.global.t('pane.terminal.rebuild-not-resumable'), { type: 'error' })
-      }
-      return 'missing-session'
     }
     // Snapshot identity before onKill removes the pane from the list.
     const snap = {
@@ -8345,12 +8341,12 @@ async function rebuildPaneViaResume(
       origin: snap.origin,
       spawnedBy: snap.spawnedBy,
       runGroupId: snap.runGroupId || undefined,
-      isResume: true,
-      skipRoleInjection: true,
-      restoreMode: 'fresh',
+      isResume: !fresh,
+      skipRoleInjection: !fresh,
+      restoreMode: fresh ? undefined : 'fresh',
       sessionHomeId: snap.sessionHomeId,
       profileId: explicitPin ?? accountSpawnPin(snap.profileId, snap.following, followDirSignedIn),
-      resumeSessionId: sessionId,
+      resumeSessionId: fresh ? undefined : sessionId,
       model: snap.model,
       effort: snap.effort,
       replacePaneId: paneId, // Atomic swap to prevent layout shift
@@ -8372,6 +8368,8 @@ async function rebuildPaneViaResume(
         if (opts?.offerContinue) revived.resumeContinueAvailable = true
       }
       opts?.onReplaced?.(newId)
+      // A fresh reopen pinned a NEW session; the records must follow it.
+      const recordSessionId = fresh ? (revived?.pinnedSessionId ?? '') : sessionId
       if (snap.origin !== 'pipeline') {
         await sendQuiet<ProjectPayload>('manual_pane.spawn', {
           workspace_path: snap.workspacePath,
@@ -8380,7 +8378,7 @@ async function rebuildPaneViaResume(
           agent: snap.agentKey,
           role: snap.roleKey || '',
           command: resumeCmd,
-          session_id: sessionId,
+          session_id: recordSessionId,
           session_home_id: snap.sessionHomeId || '',
           run_group_id: snap.runGroupId || '',
           output_log_file: panes.value.find((p) => p.id === newId)?.outputLogFile ?? '',
@@ -8400,7 +8398,7 @@ async function rebuildPaneViaResume(
           pane_id: newId,
           agent: snap.agentKey,
           role: snap.roleKey,
-          session_id: sessionId,
+          session_id: recordSessionId,
           session_home_id: snap.sessionHomeId || '',
           run_group_id: snap.runGroupId || '',
         })
@@ -8483,7 +8481,7 @@ provide(cliAccountDirActionsKey, {
       }
     )
     if (!ok) return
-    await rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true })
+    await rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true })
   },
   signIn: (agentKey, profileId) => {
     void onCliLoginSpawn(agentKey, undefined, { accountDirProfileId: profileId })
@@ -8820,7 +8818,7 @@ async function toggleAccountPin(paneId: string): Promise<void> {
   if (!pane || pane.agentKey !== FOLLOW_SWITCH_AGENT) return
   if (paneAccountFixed(pane)) {
     accountFollow.add(paneId)
-    if (await rebuildPaneViaResume(paneId)) accountFollow.remove(paneId)
+    if (await rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })) accountFollow.remove(paneId)
     return
   }
   const live = cliProfilesApi.defaultProfileId(FOLLOW_SWITCH_AGENT)
@@ -8834,7 +8832,7 @@ async function toggleAccountPin(paneId: string): Promise<void> {
     return
   }
   accountFollow.remove(paneId)
-  if (await rebuildPaneViaResume(paneId, { profileId: live })) accountFollow.add(paneId)
+  if (await rebuildPaneViaResume(paneId, { profileId: live, freshWhenNoTranscript: true })) accountFollow.add(paneId)
 }
 
 /** "Make all follow" from the badge: reopen every fixed pane on the live
