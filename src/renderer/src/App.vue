@@ -341,6 +341,7 @@ import {
   matchAwaitingInput,
   notificationEndsAwaiting,
   notificationMeansAwaiting,
+  permissionHoldActionFor,
   questionActionFor,
 } from './lib/cliAwaitingInput'
 import {
@@ -14697,6 +14698,17 @@ backend.on('agent.activity', (raw) => {
         // stays excluded from messaging and dispatch — indefinitely.
         paneRefs[ev.pane_id]?.clearNeedsInput?.()
       }
+    }
+    // Claude's PermissionRequest hook marks the permission box opening; the
+    // tool running (PostToolUse/Failure) or a newer transcript record marks it
+    // answered. Held in between, so the box's own redraws cannot let AWAITING
+    // settle away while it is still on screen. Rules in permissionHoldActionFor.
+    const holdAction = permissionHoldActionFor(ev, Number(paneRefs[ev.pane_id]?.awaitingHeldSince?.() ?? 0))
+    if (holdAction === 'hold') {
+      notifyAttention(ev.pane_id)
+      paneRefs[ev.pane_id]?.holdNeedsInput?.()
+    } else if (holdAction === 'release') {
+      paneRefs[ev.pane_id]?.releaseNeedsInputHold?.()
     }
     // Clear the restore-mode badge once the user interacts with the pane.
     const histEntry = spawnHistory.value.find((e) => e.paneId === ev.pane_id)

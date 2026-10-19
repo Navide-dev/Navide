@@ -7,6 +7,7 @@ import {
   matchAwaitingInput,
   textEndsOnQuestion,
   questionActionFor,
+  permissionHoldActionFor,
   QUESTION_DETAIL,
 } from '../cliAwaitingInput'
 
@@ -95,6 +96,47 @@ describe('notificationEndsAwaiting — releasing a hook-set wait', () => {
 
 // The strings below are verbatim captures from each CLI, not paraphrases —
 // they are what the pattern has to survive.
+
+describe('permissionHoldActionFor — the permission box, by hook events', () => {
+  // The hold is raised by PermissionRequest and lasts until the box is
+  // answered; output while the box is open (the old 3 s settle) does not end it.
+  const HELD_AT = Date.parse('2026-10-19T06:00:00.000Z')
+
+  it('holds on PermissionRequest', () => {
+    expect(permissionHoldActionFor({ detail: 'hook:permission_request' }, 0)).toBe('hold')
+  })
+
+  it('releases when the approved tool finishes, whether it succeeded or failed', () => {
+    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use' }, HELD_AT)).toBe('release')
+    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use_failure' }, HELD_AT)).toBe('release')
+  })
+
+  it('releases on a transcript record written after the box opened — a denial fires no hook', () => {
+    const denial = { detail: 'user', timestamp: '2026-10-19T06:00:05.000Z' }
+    expect(permissionHoldActionFor(denial, HELD_AT)).toBe('release')
+  })
+
+  it('ignores a transcript record from before the box opened', () => {
+    // The reader can deliver an earlier tool's result after the hook: that
+    // record says nothing about the box now on screen.
+    const earlier = { detail: 'user', timestamp: '2026-10-19T05:59:58.000Z' }
+    expect(permissionHoldActionFor(earlier, HELD_AT)).toBeNull()
+    expect(permissionHoldActionFor({ detail: 'user' }, HELD_AT)).toBeNull()
+  })
+
+  it('releases nothing when nothing is held', () => {
+    // A wait the Notification hook or the screen raised is not this hold's to end.
+    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use' }, 0)).toBeNull()
+    expect(permissionHoldActionFor({ detail: 'user', timestamp: '2026-10-19T06:00:05.000Z' }, 0)).toBeNull()
+  })
+
+  it('leaves the hold alone on everything else, including the next PreToolUse', () => {
+    // PreToolUse of a parallel tool can fire while the box is still open.
+    for (const detail of ['hook:pre_tool_use', 'hook:notification', 'assistant', 'hook:subagent_stop']) {
+      expect(permissionHoldActionFor({ detail }, HELD_AT), detail).toBeNull()
+    }
+  })
+})
 
 describe('matchAwaitingInput — aider (line-mode prompts)', () => {
   it('matches every confirmation shape aider asks', () => {

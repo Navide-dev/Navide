@@ -273,6 +273,40 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     scope.stop()
   })
 
+  // The PermissionRequest hook knows the box is open until it is answered, so
+  // its wait is held: the box's own repaints past the settle window must not
+  // end it, which is how a pane parked on a permission box used to decay.
+  it('keeps a held AWAITING through output past the settle window', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput()
+    await vi.advanceTimersByTimeAsync(5_000)
+    await chunkThenWait(mock, 1, 100)
+    expect(result.displayStatus.value).toBe('awaiting')
+    expect(result.awaitingKind.value).toBe('permission')
+    scope.stop()
+  })
+
+  it('leaves a held AWAITING once the hold is released', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput()
+    expect(result.awaitingHeldSince()).toBeGreaterThan(0)
+    result.releaseNeedsInputHold()
+    expect(result.awaitingHeldSince()).toBe(0)
+    expect(result.displayStatus.value).not.toBe('awaiting')
+    scope.stop()
+  })
+
+  it('leaves a held AWAITING on an authoritative turn end', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput()
+    result.markTurnComplete()
+    expect(result.displayStatus.value).toBe('idle')
+    scope.stop()
+  })
+
   it('does not carry AWAITING across a respawn', async () => {
     // The composable outlives the PTY, so a pane rebuilt while parked on a
     // prompt would otherwise open showing a question that no longer exists.

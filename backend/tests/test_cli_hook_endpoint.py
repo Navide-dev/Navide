@@ -65,6 +65,23 @@ def test_notification_forwards_the_type_that_distinguishes_waiting_from_done(
     assert payload["notification_type"] == "permission_prompt"
 
 
+@pytest.mark.parametrize("kind", ["permission_request", "post_tool_use", "post_tool_use_failure"])
+def test_permission_box_events_reach_the_frontend_as_activity(
+    client: TestClient, events: list[dict], kind: str
+) -> None:
+    # The frontend holds AWAITING from permission_request until one of the
+    # others (or the transcript's denial record) says the box was answered.
+    resp = client.post(
+        "/hooks/claude",
+        headers={"X-Agent-Team-Event": kind},
+        json={"session_id": "s-1", "cwd": "/tmp/ws", "tool_name": "Bash"},
+    )
+    assert resp.json() == {"ok": True}
+    payload = _payload(events)
+    assert payload["event_type"] == "agent_active"
+    assert payload["detail"] == f"hook:{kind}"
+
+
 def test_idle_prompt_is_forwarded_verbatim_for_the_frontend_to_reject(
     client: TestClient, events: list[dict]
 ) -> None:

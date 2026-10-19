@@ -2908,7 +2908,8 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     Hook commands installed by `claude_hooks` / `qwen_hooks` / `copilot_hooks`
     POST here with:
       - Header X-Agent-Team-Event: pre_tool_use | stop | notification |
-        subagent_stop
+        subagent_stop | permission_request | post_tool_use |
+        post_tool_use_failure
       - Body: the JSON payload the CLI pipes to the hook on stdin
 
     The three vendors disagree on where hooks are configured but agree on what
@@ -2946,7 +2947,10 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # a new event_type to keep working.
     if event_kind == "stop":
         event_type = "turn_complete"
-    elif event_kind in ("pre_tool_use", "notification", "subagent_stop"):
+    elif event_kind in (
+        "pre_tool_use", "notification", "subagent_stop",
+        "permission_request", "post_tool_use", "post_tool_use_failure",
+    ):
         event_type = "agent_active"
     else:
         return {"ok": False, "reason": f"unknown event kind: {event_kind!r}"}
@@ -3047,11 +3051,11 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         "pending_subagents": subagent_tracker.pending(pane_id),
     }))
     # Dev time: only real work signals. A notification (idle_prompt /
-    # permission_prompt) is mapped to agent_active above for the busy-state
-    # path, but it marks the agent WAITING — beating on it would open an agent
+    # permission_prompt) or a permission_request is mapped to agent_active above
+    # for the busy-state path, but it marks the agent WAITING — beating on it would open an agent
     # interval at exactly the moment nothing is running. Guarded like the
     # preview record: this endpoint's response must not depend on the store.
-    if event_kind != "notification":
+    if event_kind not in ("notification", "permission_request"):
         try:
             if dev_time_store.agent_event(ws_path or cwd, pane_id or "", event_type, ""):
                 await broadcast(

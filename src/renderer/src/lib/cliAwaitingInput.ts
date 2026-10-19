@@ -142,6 +142,37 @@ export const USER_RECORD_DETAILS: ReadonlySet<string> = new Set(['user', 'prompt
 /** The reader's name for an assistant message that opened a question box. */
 export const QUESTION_DETAIL = 'assistant:question'
 
+/** What one `agent.activity` event means for a held permission wait.
+ *
+ *  Claude's PermissionRequest hook runs only when its permission dialog is
+ *  about to open, so it raises a hold that output alone cannot end — unlike
+ *  the Notification hook's wait, which the 3 s settle releases on the box's
+ *  own repaints. The answer ends it: an approved tool finishing
+ *  (PostToolUse / PostToolUseFailure), or, for a denial, which fires no hook
+ *  at all, the transcript record the denial writes. A transcript record only
+ *  counts when it was written after the hold began: the reader can deliver an
+ *  earlier tool's result after the hook, and that says nothing about the box
+ *  now on screen. PreToolUse never releases — a parallel tool's PreToolUse can
+ *  fire while the box is still open.
+ *
+ *  `heldSince` is the wall-clock ms the hold began, 0 when nothing is held —
+ *  then nothing is released either, so a wait some other signal raised (the
+ *  Notification hook, a screen match) is never ended from here. Null leaves
+ *  the state untouched. */
+export function permissionHoldActionFor(
+  ev: { detail?: string; timestamp?: string },
+  heldSince: number,
+): 'hold' | 'release' | null {
+  if (ev.detail === 'hook:permission_request') return 'hold'
+  if (heldSince <= 0) return null
+  if (ev.detail === 'hook:post_tool_use' || ev.detail === 'hook:post_tool_use_failure') return 'release'
+  if (ev.detail !== undefined && USER_RECORD_DETAILS.has(ev.detail)) {
+    const writtenAt = Date.parse(ev.timestamp ?? '')
+    return Number.isFinite(writtenAt) && writtenAt > heldSince ? 'release' : null
+  }
+  return null
+}
+
 /** What one `agent.activity` event means for the QUESTION badge.
  *
  *  Pure, so the decision can be executed in a test instead of only inspected in

@@ -332,6 +332,18 @@ def test_subagent_stop_hook_reaches_the_endpoint(tmp_path) -> None:
     assert stdout == "", "a signal hook's response must not reach the CLI"
 
 
+def test_permission_request_hook_never_answers_the_dialog(tmp_path) -> None:
+    """PermissionRequest is report-only: whatever the backend replies, nothing
+    reaches the CLI, so Claude Code shows its own dialog exactly as before.
+    A body on stdout here would be read as an allow/deny decision."""
+    payloads, stdout = _run_hook(
+        tmp_path, "permission_request",
+        b'{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}',
+    )
+    assert payloads, "the hook sent nothing"
+    assert stdout == "", "the permission hook must never hand Claude a decision"
+
+
 def test_a_windows_install_writes_powershell_and_says_so(tmp_path, monkeypatch) -> None:
     """On Windows a hook's `command` runs under Git Bash, or PowerShell when
     Git Bash is not installed — and the entry declares which it was written

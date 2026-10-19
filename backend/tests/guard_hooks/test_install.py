@@ -71,7 +71,11 @@ def test_claude_other_events_are_unchanged(tmp_path) -> None:
     claude_hooks.install_hooks("/tmp/port-file", settings_file=settings)
 
     hooks = json.loads(settings.read_text())["hooks"]
-    for event, kind in (("Stop", "stop"), ("Notification", "notification"), ("SubagentStop", "subagent_stop")):
+    for event, kind in (
+        ("Stop", "stop"), ("Notification", "notification"), ("SubagentStop", "subagent_stop"),
+        ("PermissionRequest", "permission_request"), ("PostToolUse", "post_tool_use"),
+        ("PostToolUseFailure", "post_tool_use_failure"),
+    ):
         assert _ours(hooks[event]) == [
             osplat.scripts.hook_entry(_build_curl_command("/tmp/port-file", kind))
         ], event

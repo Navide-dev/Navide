@@ -838,6 +838,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // prompt paints once and then goes silent, so the hysteresis below would
   // call it idle. See markNeedsInput.
   const awaitingInputAt = ref<number>(0)
+  // Set when the wait came from Claude's PermissionRequest hook, which knows
+  // the box stays open until it is answered: such a wait is held, and output
+  // cannot end it — only releaseNeedsInputHold (the answer), a turn end or a
+  // respawn does. The value is when the hold began, which App.vue compares
+  // transcript records against. See permissionHoldActionFor.
+  const awaitingHeldAt = ref<number>(0)
   // The prompt box the hook announces is itself clean output, and it can land
   // on either side of the hook (one arrives over HTTP, the other over the PTY).
   // Clean output inside this window is read as the prompt painting itself;
@@ -973,8 +979,9 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // settle window absorbs the prompt's own paint; real output past it, or an
     // authoritative turn end (which clears the flag), means it is over.
     if (
-      awaitingInputAt.value > 0 &&
-      lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS
+      awaitingHeldAt.value > 0 ||
+      (awaitingInputAt.value > 0 &&
+        lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS)
     ) return 'awaiting'
     // A question reports the same badge as a permission prompt — both mean the
     // pane will not move until the user answers. It is kept a separate signal
@@ -1040,8 +1047,9 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   const awaitingKind = computed<'permission' | 'question' | null>(() => {
     if (displayStatus.value !== 'awaiting') return null
     const permission =
-      awaitingInputAt.value > 0 &&
-      lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS
+      awaitingHeldAt.value > 0 ||
+      (awaitingInputAt.value > 0 &&
+        lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS)
     return permission ? 'permission' : 'question'
   })
   const BUFFER_CAP = 128 * 1024
@@ -1128,6 +1136,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // A turn that ended is not waiting on anyone: clear the flag so a stale
     // notification can't hold the badge on AWAITING past the turn.
     awaitingInputAt.value = 0
+    awaitingHeldAt.value = 0
   }
 
   /** The CLI is parked on the user. Two callers, both in App.vue: Claude's
@@ -1143,6 +1152,20 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  watcher calls this: the hook has nothing to re-check, so clearing it on a
    *  poll would drop AWAITING while Claude is still parked. */
   function clearNeedsInput(): void {
+    awaitingInputAt.value = 0
+  }
+
+  /** Claude's PermissionRequest hook: its box is about to open and stays open
+   *  until answered, so the wait is held against output. */
+  function holdNeedsInput(): void {
+    const now = Date.now()
+    awaitingHeldAt.value = now
+    awaitingInputAt.value = now
+  }
+
+  /** The held permission box was answered (see permissionHoldActionFor). */
+  function releaseNeedsInputHold(): void {
+    awaitingHeldAt.value = 0
     awaitingInputAt.value = 0
   }
 
@@ -3002,6 +3025,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // timestamp here would show the fresh pane as parked on a question that
     // no longer exists.
     awaitingInputAt.value = 0
+    awaitingHeldAt.value = 0
     questionAt.value = 0
     deliveredPendingCount.value = 0
     // A new process has none of the old one's background tasks.
@@ -3483,6 +3507,9 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     markTurnComplete,
     markNeedsInput,
     clearNeedsInput,
+    holdNeedsInput,
+    releaseNeedsInputHold,
+    awaitingHeldSince: (): number => awaitingHeldAt.value,
     markQuestion,
     clearQuestion,
     markDeliveredPending,

@@ -54,6 +54,15 @@ _HOOK_EVENTS: dict[str, str] = {
     "Stop": "stop",
     "Notification": "notification",
     "SubagentStop": "subagent_stop",
+    # The permission-box pair. PermissionRequest runs only when Claude Code is
+    # about to show its permission dialog; ours reports it and returns no
+    # decision, so the dialog appears exactly as it would without us. The
+    # answer then shows up as the tool finishing (PostToolUse /
+    # PostToolUseFailure) or, for a denial — which fires no hook at all — as
+    # the denial record in the transcript.
+    "PermissionRequest": "permission_request",
+    "PostToolUse": "post_tool_use",
+    "PostToolUseFailure": "post_tool_use_failure",
 }
 
 #: Events that also arm the background rewake waiter — the hook that lets an
