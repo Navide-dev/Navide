@@ -185,7 +185,9 @@ def register_testplace_routes(
         member_id: str = Depends(require_member),
         session: Session = Depends(session_dep),
     ) -> None:
-        extension = extension_or_404(session, namespace, name)
+        # The tester gate, so a member without a seat gets the same 404 as for
+        # an extension that does not exist.
+        extension = tester_extension(session, member_id, namespace, name)
         testplace.leave(session, extension, member_id)
 
     # -- developers ----------------------------------------------------------

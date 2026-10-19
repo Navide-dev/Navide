@@ -296,6 +296,43 @@ def test_a_rejected_code_needs_a_reason_and_stays_closed(client: TestClient) -> 
     assert _join(client, _member(client, "member-a"), code["code"]).status_code == 404
 
 
+def test_leave_answers_a_member_without_a_seat_like_a_missing_extension(client: TestClient) -> None:
+    assert _publish(client).status_code == 201
+    outsider = _member(client, "member-out")
+    missing = client.post("/api/testplace/acme/nothing/leave", headers=outsider)
+    existing = client.post("/api/testplace/acme/files/leave", headers=outsider)
+    # Same answer either way, so leave cannot tell an uninvited member a test exists.
+    assert (existing.status_code, existing.json()) == (missing.status_code, missing.json())
+    assert existing.status_code == 404
+    tester = _member(client, "member-a")
+    assert _join(client, tester, _invite(client)[0]).status_code == 200
+    assert client.post("/api/testplace/acme/files/leave", headers=tester).status_code == 204
+    assert client.get("/api/testplace/acme/files", headers=tester).status_code == 404
+
+
+def test_a_public_code_never_seats_more_testers_than_its_cap_under_a_race(client: TestClient, monkeypatch) -> None:
+    from registry import testplace as tp
+
+    assert _publish(client).status_code == 201
+    code = client.post("/api/testplace/acme/files/codes", json={"max_testers": 1}, headers=_publisher()).json()
+    client.post(f"/api/admin/testplace/codes/{code['id']}/decision", json={"approve": True}, headers=_admin())
+    real = tp.code_testers
+
+    def count_then_race(session, row):
+        # Member B joins and commits between member A's seat count and A's insert.
+        seen = real(session, row)
+        monkeypatch.setattr(tp, "code_testers", real)
+        assert _join(client, _member(client, "member-b"), code["code"]).status_code == 200
+        return seen
+
+    monkeypatch.setattr(tp, "code_testers", count_then_race)
+    late = _join(client, _member(client, "member-a"), code["code"])
+    assert late.status_code == 409 and late.json()["detail"]["code"] == "CODE_FULL"
+    with _session(client) as session:
+        row = session.get(tp.TestplaceCode, code["id"])
+        assert real(session, row) == 1
+
+
 # -- promotion -------------------------------------------------------------
 def test_promotion_resigns_the_same_artifact_as_a_public_version(client: TestClient) -> None:
     assert _publish(client).status_code == 201
