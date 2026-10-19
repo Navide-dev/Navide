@@ -2116,6 +2116,35 @@ runs only inside the OS sandbox described in
   does not protect against other processes of the same user. A plugin's own
   backend (inside its sandbox) and plugin frames cannot write it. It is
   evidence of consent, not a verification by Navide.
+  Navide Guard grades an agent's write to these stores as critical (rule
+  `plugin-store-write`, which can be lowered to high but not switched off):
+  writing, deleting, moving, linking or changing the mode of the plugin
+  install root (`plugins/` in Navide's data folder, Developer Mode folders and
+  grants included), the local trust records (`plugin-local-trust/`), the
+  native backend consent store, and the kept-source markers and set-aside
+  folders beside backend data. A plugin's own backend data is not covered, and
+  reading any of these stays as before. This has limits. Guard only sees tool
+  calls from CLIs that run Navide's hooks. Shell commands are recognised only
+  in the forms Guard parses: redirection (`>`, `>>`, `>|`, `&>`), `tee`, the
+  destination of `cp`/`install`/`rsync`/`scp`/`ditto`, `mv`, `ln`, `chmod`,
+  `chown`, `touch`, `truncate`, `sed -i`, `xattr -w/-d/-c`, `mkdir`, `rmdir`,
+  `unlink`, `rm`, `find -delete`, `dd of=`, the output file of `curl`/`wget`
+  and the destination of `git clone`, with bare file names resolved against
+  the working directory. Not recognised: a computed path (`"$DIR"`,
+  `$(…)`), an interpreter's inline code (`python -c`, `perl -pi`), archive
+  extractors (`tar -C`, `unzip -d`), `xargs`, PowerShell cmdlets such as
+  `Set-Content`, and a write through a symlink created earlier that points
+  into the data folder (paths are compared as written, not resolved). With
+  Guard off, agent tool calls are only audited, never blocked; approvals
+  sent from a chat relay and text typed into a plain terminal pane are still
+  refused for these writes, as for every critical action. The chat relay
+  screens a relayed shell command fully but a relayed file-tool prompt only
+  for credential paths, so a relayed `Write` into the store is not refused
+  there (the existing relay model). It reduces accidental or induced agent
+  writes; it does not stop other processes of the same user and does not
+  replace a signed consent mechanism.
+  Navide's own installs, updates, removals and rollbacks write these files
+  from the main process directly and never pass through Guard.
   The installed-package `source` field (`marketplace`, `prerelease`,
   `testplace`, `local-signed`, `local-unsigned`, `developer-unpacked`,
   `factory-bundled`) is reported beside the legacy `provenance` field, which
