@@ -142,6 +142,11 @@ export const USER_RECORD_DETAILS: ReadonlySet<string> = new Set(['user', 'prompt
 /** The reader's name for an assistant message that opened a question box. */
 export const QUESTION_DETAIL = 'assistant:question'
 
+/** The reader's name for the transcript note that the permission box was
+ *  answered No (or dismissed). Claude's reader emits it beside the plain `user`
+ *  record that carries the same line. */
+export const TOOL_REJECTED_DETAIL = 'user:tool_rejected'
+
 /** What one `agent.activity` event means for a held permission wait.
  *
  *  Claude's PermissionRequest hook runs only when its permission dialog is
@@ -149,26 +154,45 @@ export const QUESTION_DETAIL = 'assistant:question'
  *  the Notification hook's wait, which the 3 s settle releases on the box's
  *  own repaints. The answer ends it: an approved tool finishing
  *  (PostToolUse / PostToolUseFailure), or, for a denial, which fires no hook
- *  at all, the transcript record the denial writes. A transcript record only
- *  counts when it was written after the hold began: the reader can deliver an
- *  earlier tool's result after the hook, and that says nothing about the box
- *  now on screen. PreToolUse never releases — a parallel tool's PreToolUse can
- *  fire while the box is still open.
+ *  at all, the transcript record the denial writes (TOOL_REJECTED_DETAIL), or a
+ *  prompt the user typed. A transcript record only counts when it was written
+ *  after the hold began: the reader can deliver an earlier tool's result after
+ *  the hook, and that says nothing about the box now on screen. A tool_result
+ *  alone does not count either — it is a `user` record too, and a parallel tool
+ *  can finish while the box is still open. PreToolUse never releases, for the
+ *  same reason.
  *
- *  `heldSince` is the wall-clock ms the hold began, 0 when nothing is held —
+ *  A tool result releases only when it is the tool the box was for. Another
+ *  tool (parallel, or a subagent's) can finish while the box is still open, so
+ *  the backend stamps each of the three hook events with `tool_key` — the tool
+ *  name plus a fingerprint of its input — and a PostToolUse(Failure) whose key
+ *  differs from the held one is ignored. Claude's PermissionRequest payload
+ *  carries no tool_use_id, which is why the key is built from the input. A hold
+ *  with no key (no tool input to fingerprint) cannot be told apart, so any tool
+ *  result releases it; the transcript record and the turn end still bound it.
+ *
+ *  `held.since` is the wall-clock ms the hold began, 0 when nothing is held —
  *  then nothing is released either, so a wait some other signal raised (the
  *  Notification hook, a screen match) is never ended from here. Null leaves
  *  the state untouched. */
 export function permissionHoldActionFor(
-  ev: { detail?: string; timestamp?: string },
-  heldSince: number,
+  ev: { detail?: string; timestamp?: string; text?: string; tool_key?: string },
+  held: { since: number; key: string },
 ): 'hold' | 'release' | null {
   if (ev.detail === 'hook:permission_request') return 'hold'
-  if (heldSince <= 0) return null
-  if (ev.detail === 'hook:post_tool_use' || ev.detail === 'hook:post_tool_use_failure') return 'release'
-  if (ev.detail !== undefined && USER_RECORD_DETAILS.has(ev.detail)) {
+  if (held.since <= 0) return null
+  if (ev.detail === 'hook:post_tool_use' || ev.detail === 'hook:post_tool_use_failure') {
+    return held.key === '' || ev.tool_key === held.key ? 'release' : null
+  }
+  // Only the records that mean the user answered the box: a denial, or a prompt
+  // they typed (it carries text). A bare `user` record is every tool_result,
+  // including a parallel tool finishing while the box is still open.
+  const answeredByUser =
+    ev.detail === TOOL_REJECTED_DETAIL ||
+    (ev.detail !== undefined && USER_RECORD_DETAILS.has(ev.detail) && !!ev.text)
+  if (answeredByUser) {
     const writtenAt = Date.parse(ev.timestamp ?? '')
-    return Number.isFinite(writtenAt) && writtenAt > heldSince ? 'release' : null
+    return Number.isFinite(writtenAt) && writtenAt > held.since ? 'release' : null
   }
   return null
 }

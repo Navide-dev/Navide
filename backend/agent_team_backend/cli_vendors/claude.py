@@ -120,6 +120,32 @@ BACKGROUND_END_DETAIL = "background:end"
 _TASK_STOP_TOOLS = frozenset({"TaskStop", "KillShell", "KillBash"})
 _TASK_NOTIFICATION_ID_RE = re.compile(r"<task-id>([^<]+)</task-id>")
 
+# The permission box answered with "No" (or dismissed with Esc) fires no hook;
+# the transcript is the only place it shows. Every tool_result is a plain `user`
+# record, so a parallel tool finishing is indistinguishable from a denial at
+# that detail — this one is emitted beside it for the denial alone, and the
+# frontend ends a held permission wait on it (see permissionHoldActionFor).
+TOOL_REJECTED_DETAIL = "user:tool_rejected"
+_TOOL_REJECTED_RESULT = "User rejected tool use"
+_TOOL_INTERRUPTED_TEXT = "[Request interrupted by user for tool use]"
+
+
+def _tool_use_rejected(rec: dict) -> bool:
+    """True when a user record is Claude's note that the permission box was
+    answered No: the rejected tool_result, or the interrupt line Esc leaves."""
+    if rec.get("toolUseResult") == _TOOL_REJECTED_RESULT:
+        return True
+    msg = rec.get("message")
+    content = msg.get("content") if isinstance(msg, dict) else None
+    if not isinstance(content, list):
+        return False
+    return any(
+        isinstance(b, dict)
+        and b.get("type") == "text"
+        and str(b.get("text") or "").startswith(_TOOL_INTERRUPTED_TEXT)
+        for b in content
+    )
+
 
 def _background_task_started(rec: dict) -> str:
     """Task id a tool_result record launched in the background, or ""."""
@@ -645,6 +671,14 @@ class ClaudeLogReader(LogReader):
                             dedup_key=key, timestamp=ts,
                             detail=str(rtype), text=text,
                         ))
+                        if rtype == "user" and _tool_use_rejected(rec):
+                            out.append(ActivityEvent(
+                                vendor="claude",
+                                event_type="agent_active",
+                                cwd=cwd, session_id=session_id, file_path=str(path),
+                                dedup_key=f"rej:{line_no}", timestamp=ts,
+                                detail=TOOL_REJECTED_DETAIL,
+                            ))
                         started = _background_task_started(rec) if rtype == "user" else ""
                         if started:
                             out.append(ActivityEvent(

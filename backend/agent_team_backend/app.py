@@ -2782,6 +2782,23 @@ _HOOK_VENDORS = frozenset(
 # vendor's hook file, not something the vendor spec exposes.
 _SUBAGENT_COUNTING_VENDORS = frozenset({"claude"})
 
+# Hook events that pair a permission box with the tool result that answers it.
+# PermissionRequest carries no tool_use_id, so the pairing is the tool name plus
+# a fingerprint of its input — both Post events repeat the same tool_input.
+_TOOL_KEYED_EVENTS = frozenset({"permission_request", "post_tool_use", "post_tool_use_failure"})
+
+
+def _hook_tool_key(payload: dict) -> str:
+    """`<tool_name>:<hash of tool_input>`, or "" when the payload names no tool."""
+    name = str(payload.get("tool_name") or "")
+    if not name:
+        return ""
+    try:
+        canonical = json.dumps(payload.get("tool_input"), sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return ""
+    return f"{name}:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:16]}"
+
 # Tools whose PreToolUse payload names a file the agent is about to write.
 # Read-only tools carry a file_path too, so the set — not the field — is what
 # decides whether a hook becomes a preview record.
@@ -3044,6 +3061,10 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         "timestamp": "",
         "detail": "hook:stop-blocked" if blocked_envelope else f"hook:{event_kind}",
         "notification_type": notification_type,
+        # Which tool a permission box is for, and which tool a result is of, so
+        # the frontend releases a held box only on its own tool finishing.
+        # Empty on every other event kind.
+        "tool_key": _hook_tool_key(payload) if event_kind in _TOOL_KEYED_EVENTS else "",
         # Background subagents this pane is still waiting on. Always present so
         # the frontend can trust a 0 as "none running" rather than "not
         # reported"; vendors without these hooks never send the field at all

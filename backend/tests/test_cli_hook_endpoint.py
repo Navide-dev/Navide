@@ -82,6 +82,44 @@ def test_permission_box_events_reach_the_frontend_as_activity(
     assert payload["detail"] == f"hook:{kind}"
 
 
+def _tool_key_of(client: TestClient, events: list[dict], kind: str, body: dict) -> str:
+    events.clear()
+    client.post(
+        "/hooks/claude",
+        headers={"X-Agent-Team-Event": kind},
+        json={"session_id": "s-1", "cwd": "/tmp/ws", **body},
+    )
+    return _payload(events)["tool_key"]
+
+
+def test_permission_box_and_its_tool_result_share_a_tool_key(
+    client: TestClient, events: list[dict]
+) -> None:
+    # PermissionRequest has no tool_use_id; the frontend pairs the box with its
+    # tool by name + input, so the same call must key identically on every event
+    # (whatever the key order of tool_input) and another call must not.
+    box = _tool_key_of(client, events, "permission_request",
+                       {"tool_name": "Bash", "tool_input": {"command": "rm x", "description": "d"}})
+    done = _tool_key_of(client, events, "post_tool_use",
+                        {"tool_name": "Bash", "tool_input": {"description": "d", "command": "rm x"},
+                         "tool_response": {"stdout": ""}})
+    failed = _tool_key_of(client, events, "post_tool_use_failure",
+                          {"tool_name": "Bash", "tool_input": {"command": "rm x", "description": "d"},
+                           "error": "boom"})
+    other = _tool_key_of(client, events, "post_tool_use",
+                         {"tool_name": "Bash", "tool_input": {"command": "ls", "description": "d"}})
+    assert box and box == done == failed
+    assert other != box
+
+
+def test_tool_key_is_empty_without_a_tool_and_off_the_paired_events(
+    client: TestClient, events: list[dict]
+) -> None:
+    assert _tool_key_of(client, events, "permission_request", {}) == ""
+    assert _tool_key_of(client, events, "pre_tool_use",
+                        {"tool_name": "Bash", "tool_input": {"command": "ls"}}) == ""
+
+
 def test_idle_prompt_is_forwarded_verbatim_for_the_frontend_to_reject(
     client: TestClient, events: list[dict]
 ) -> None:

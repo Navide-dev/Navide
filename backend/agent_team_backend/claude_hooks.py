@@ -4,12 +4,15 @@ Claude Code (CLI) supports hooks: `~/.claude/settings.json` may declare shell
 commands to run at specific lifecycle events (PreToolUse / Stop / Notification
 / SubagentStop / etc.). Each hook receives a JSON payload on stdin.
 
-We install four hooks pointing at our local FastAPI endpoint so the
+We install seven hooks pointing at our local FastAPI endpoint so the
 orchestrator gets reliable signals (better than buffer-scanning):
-  - PreToolUse    → 100% signal: agent is actively working
-  - Stop          → 100% signal: turn ended
-  - Notification  → user attention requested (e.g. waiting for approval)
-  - SubagentStop  → a subagent (Task tool) finished
+  - PreToolUse         → 100% signal: agent is actively working
+  - Stop               → 100% signal: turn ended
+  - Notification       → user attention requested (e.g. waiting for approval)
+  - SubagentStop       → a subagent (Task tool) finished
+  - PermissionRequest  → the permission box is about to open (report-only)
+  - PostToolUse        → a tool finished; with PostToolUseFailure, tells the
+    PostToolUseFailure   frontend the box for that tool was answered (async)
 
 PreToolUse also carries a second, synchronous hook: Navide Guard's decision
 (`_build_guard_command`), whose printed body can deny or ask for the call.
@@ -64,6 +67,14 @@ _HOOK_EVENTS: dict[str, str] = {
     "PostToolUse": "post_tool_use",
     "PostToolUseFailure": "post_tool_use_failure",
 }
+
+#: Report-only events that fire once per tool call. Claude Code runs a command
+#: hook flagged `"async": true` in the background without waiting for it, so
+#: these two add no hook latency to every tool call. Safe because nothing reads
+#: their reply — the hook already discards the response body — and they are
+#: never needed before the tool proceeds. PermissionRequest stays synchronous:
+#: it fires once per box, and the box should not open before it has reported.
+_ASYNC_EVENTS: frozenset[str] = frozenset({"PostToolUse", "PostToolUseFailure"})
 
 #: Events that also arm the background rewake waiter — the hook that lets an
 #: inter-CLI message reach a claude pane that is sitting IDLE, which is the one
@@ -537,7 +548,10 @@ def install_hooks(
         # (Stop) wants both.
         ours: list[dict[str, Any]] = []
         if event_kind and f"{event_name}:{event_kind}" not in skip:
-            ours.append(osplat.scripts.hook_entry(_build_curl_command(port_file, event_kind)))
+            signal = osplat.scripts.hook_entry(_build_curl_command(port_file, event_kind))
+            if event_name in _ASYNC_EVENTS:
+                signal = {**signal, "async": True}
+            ours.append(signal)
         if event_name == GUARD_EVENT and f"{event_name}:guard" not in skip:
             ours.append(guard_hook_entry(port_file))
         if event_name in _REWAKE_EVENTS and rewake_wanted and f"{event_name}:rewake" not in skip:

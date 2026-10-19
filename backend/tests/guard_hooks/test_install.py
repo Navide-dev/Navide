@@ -73,12 +73,25 @@ def test_claude_other_events_are_unchanged(tmp_path) -> None:
     hooks = json.loads(settings.read_text())["hooks"]
     for event, kind in (
         ("Stop", "stop"), ("Notification", "notification"), ("SubagentStop", "subagent_stop"),
-        ("PermissionRequest", "permission_request"), ("PostToolUse", "post_tool_use"),
-        ("PostToolUseFailure", "post_tool_use_failure"),
+        ("PermissionRequest", "permission_request"),
     ):
         assert _ours(hooks[event]) == [
             osplat.scripts.hook_entry(_build_curl_command("/tmp/port-file", kind))
         ], event
+
+
+def test_claude_per_tool_report_hooks_run_in_the_background(tmp_path) -> None:
+    # PostToolUse(Failure) fire once per tool call and only report, so they must
+    # not add a blocking hook process to each call; PermissionRequest stays sync.
+    settings = tmp_path / "settings.json"
+    claude_hooks.install_hooks("/tmp/port-file", settings_file=settings)
+
+    hooks = json.loads(settings.read_text())["hooks"]
+    for event, kind in (("PostToolUse", "post_tool_use"), ("PostToolUseFailure", "post_tool_use_failure")):
+        assert _ours(hooks[event]) == [
+            {**osplat.scripts.hook_entry(_build_curl_command("/tmp/port-file", kind)), "async": True}
+        ], event
+    assert all("async" not in h for h in _ours(hooks["PermissionRequest"]))
 
 
 def test_claude_reinstall_and_uninstall_handle_the_guard_hook(tmp_path) -> None:

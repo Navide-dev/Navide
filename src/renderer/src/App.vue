@@ -14489,7 +14489,7 @@ const sessionGhostHealGate = createGhostHealGate(async (paneId, pinnedSessionId)
 // is working; turn_complete = its turn ended. We timestamp both per pane; the
 // completion logic reads these instead of guessing from the TUI buffer.
 backend.on('agent.activity', (raw) => {
-  const ev = raw as { event_type?: string; pane_id?: string; vendor?: string; session_id?: string; detail?: string; text?: string; timestamp?: string; notification_type?: string; superseded?: boolean; pending_subagents?: number }
+  const ev = raw as { event_type?: string; pane_id?: string; vendor?: string; session_id?: string; detail?: string; text?: string; timestamp?: string; notification_type?: string; tool_key?: string; superseded?: boolean; pending_subagents?: number }
   if (!ev?.pane_id) return
   // QUESTION badge: "the agent asked you something and is waiting". Decided in
   // one place for both event types because both carry a half of it — the turn
@@ -14689,7 +14689,10 @@ backend.on('agent.activity', (raw) => {
       // once per turn on top of the existing done notification. Builds that
       // send no type at all keep the old always-notify behaviour rather than
       // silently losing a signal the user may already rely on.
-      if (awaiting || !ev.notification_type) notifyAttention(ev.pane_id)
+      // One permission box reports through this hook AND PermissionRequest, in
+      // either order: chime only for whichever lands first.
+      const alreadyWaiting = awaiting && paneRefs[ev.pane_id]?.permissionWaitLive?.() === true
+      if ((awaiting && !alreadyWaiting) || !ev.notification_type) notifyAttention(ev.pane_id)
       if (awaiting) {
         paneRefs[ev.pane_id]?.markNeedsInput?.()
       } else if (notificationEndsAwaiting(ev.notification_type)) {
@@ -14703,10 +14706,12 @@ backend.on('agent.activity', (raw) => {
     // tool running (PostToolUse/Failure) or a newer transcript record marks it
     // answered. Held in between, so the box's own redraws cannot let AWAITING
     // settle away while it is still on screen. Rules in permissionHoldActionFor.
-    const holdAction = permissionHoldActionFor(ev, Number(paneRefs[ev.pane_id]?.awaitingHeldSince?.() ?? 0))
+    const held = paneRefs[ev.pane_id]?.awaitingHeld?.() ?? { since: 0, key: '' }
+    const holdAction = permissionHoldActionFor(ev, held)
     if (holdAction === 'hold') {
-      notifyAttention(ev.pane_id)
-      paneRefs[ev.pane_id]?.holdNeedsInput?.()
+      // The Notification hook may have reported this same box first.
+      if (paneRefs[ev.pane_id]?.permissionWaitLive?.() !== true) notifyAttention(ev.pane_id)
+      paneRefs[ev.pane_id]?.holdNeedsInput?.(ev.tool_key ?? '')
     } else if (holdAction === 'release') {
       paneRefs[ev.pane_id]?.releaseNeedsInputHold?.()
     }

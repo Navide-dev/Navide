@@ -371,6 +371,59 @@ def test_parse_activity_names_ask_user_question(
     )
 
 
+def test_parse_activity_names_a_denied_permission_box(
+    fake_claude: tuple[ClaudeLogReader, Path],
+) -> None:
+    # "No" in the permission box fires no hook; these two records are all the
+    # CLI leaves. A tool_result that merely succeeded is also a `user` record,
+    # which is why the denial needs a detail of its own.
+    reader, root = fake_claude
+    session = root / "-tmp-demo" / "rej-001.jsonl"
+    _write_jsonl(session, [
+        {
+            "type": "user", "timestamp": "2026-10-19T06:00:01Z",
+            "toolUseResult": "User rejected tool use",
+            "message": {"role": "user", "content": [
+                {"type": "tool_result", "is_error": True, "tool_use_id": "toolu_1",
+                 "content": "The user doesn't want to proceed with this tool use."},
+            ]},
+        },
+        {
+            "type": "user", "timestamp": "2026-10-19T06:00:02Z",
+            "message": {"role": "user", "content": [
+                {"type": "text", "text": "[Request interrupted by user for tool use]"},
+            ]},
+        },
+    ])
+    events = reader.parse_activity(session, set())
+
+    rejected = [e for e in events if e.detail == "user:tool_rejected"]
+    assert len(rejected) == 2
+    assert len({e.dedup_key for e in events}) == len(events)
+
+
+def test_parse_activity_does_not_call_a_finished_tool_a_denial(
+    fake_claude: tuple[ClaudeLogReader, Path],
+) -> None:
+    reader, root = fake_claude
+    session = root / "-tmp-demo" / "rej-002.jsonl"
+    _write_jsonl(session, [
+        {
+            "type": "user", "timestamp": "2026-10-19T06:00:01Z",
+            "toolUseResult": {"stdout": "ok"},
+            "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "toolu_1", "content": "ok"},
+            ]},
+        },
+        {"type": "user", "timestamp": "2026-10-19T06:00:02Z",
+         "message": {"role": "user", "content": "please continue"}},
+    ])
+    events = reader.parse_activity(session, set())
+
+    assert [e for e in events if e.detail == "user:tool_rejected"] == []
+    assert [e.detail for e in events] == ["user", "user"]
+
+
 def test_parse_activity_ignores_other_tools(
     fake_claude: tuple[ClaudeLogReader, Path],
 ) -> None:

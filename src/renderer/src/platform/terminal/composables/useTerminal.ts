@@ -844,6 +844,9 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // respawn does. The value is when the hold began, which App.vue compares
   // transcript records against. See permissionHoldActionFor.
   const awaitingHeldAt = ref<number>(0)
+  // Which tool the held box is for ("" when unknown); not reactive — only
+  // App.vue's release decision reads it.
+  let awaitingHeldKey = ''
   // The prompt box the hook announces is itself clean output, and it can land
   // on either side of the hook (one arrives over HTTP, the other over the PTY).
   // Clean output inside this window is read as the prompt painting itself;
@@ -978,11 +981,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // one case where the user has to act for anything to happen at all. The
     // settle window absorbs the prompt's own paint; real output past it, or an
     // authoritative turn end (which clears the flag), means it is over.
-    if (
-      awaitingHeldAt.value > 0 ||
-      (awaitingInputAt.value > 0 &&
-        lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS)
-    ) return 'awaiting'
+    if (permissionWaitLive()) return 'awaiting'
     // A question reports the same badge as a permission prompt — both mean the
     // pane will not move until the user answers. It is kept a separate signal
     // rather than folded into awaitingInputAt because the two are raised and
@@ -1046,11 +1045,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  them, so a pane with both flags lit reports the more restrictive one. */
   const awaitingKind = computed<'permission' | 'question' | null>(() => {
     if (displayStatus.value !== 'awaiting') return null
-    const permission =
-      awaitingHeldAt.value > 0 ||
-      (awaitingInputAt.value > 0 &&
-        lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS)
-    return permission ? 'permission' : 'question'
+    return permissionWaitLive() ? 'permission' : 'question'
   })
   const BUFFER_CAP = 128 * 1024
   const redrawGuard = createRedrawGuard()
@@ -1137,6 +1132,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // notification can't hold the badge on AWAITING past the turn.
     awaitingInputAt.value = 0
     awaitingHeldAt.value = 0
+    awaitingHeldKey = ''
   }
 
   /** The CLI is parked on the user. Two callers, both in App.vue: Claude's
@@ -1155,18 +1151,33 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     awaitingInputAt.value = 0
   }
 
-  /** Claude's PermissionRequest hook: its box is about to open and stays open
-   *  until answered, so the wait is held against output. */
-  function holdNeedsInput(): void {
-    const now = Date.now()
-    awaitingHeldAt.value = now
-    awaitingInputAt.value = now
+  /** A permission wait is on right now: held by the PermissionRequest hook, or
+   *  raised by the Notification hook / screen watcher and not yet settled. App.vue
+   *  asks before raising one, so a box that two signals report chimes once. */
+  function permissionWaitLive(): boolean {
+    return (
+      awaitingHeldAt.value > 0 ||
+      (awaitingInputAt.value > 0 &&
+        lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS)
+    )
   }
 
-  /** The held permission box was answered (see permissionHoldActionFor). */
+  /** Claude's PermissionRequest hook: its box is about to open and stays open
+   *  until answered, so the wait is held against output. `toolKey` names the
+   *  tool the box is for, so only that tool finishing releases it. Leaves
+   *  awaitingInputAt alone: a wait the Notification hook raised keeps its own
+   *  settle behaviour after the hold is gone. */
+  function holdNeedsInput(toolKey = ''): void {
+    awaitingHeldAt.value = Date.now()
+    awaitingHeldKey = toolKey
+  }
+
+  /** The held permission box was answered (see permissionHoldActionFor). Ends
+   *  the hold and nothing else — awaitingInputAt belongs to the Notification
+   *  hook and the screen watcher. */
   function releaseNeedsInputHold(): void {
     awaitingHeldAt.value = 0
-    awaitingInputAt.value = 0
+    awaitingHeldKey = ''
   }
 
   /** The agent put a question to the user. Called from App.vue on the reader's
@@ -3026,6 +3037,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // no longer exists.
     awaitingInputAt.value = 0
     awaitingHeldAt.value = 0
+    awaitingHeldKey = ''
     questionAt.value = 0
     deliveredPendingCount.value = 0
     // A new process has none of the old one's background tasks.
@@ -3509,7 +3521,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     clearNeedsInput,
     holdNeedsInput,
     releaseNeedsInputHold,
-    awaitingHeldSince: (): number => awaitingHeldAt.value,
+    awaitingHeld: (): { since: number; key: string } => ({ since: awaitingHeldAt.value, key: awaitingHeldKey }),
+    permissionWaitLive,
     markQuestion,
     clearQuestion,
     markDeliveredPending,

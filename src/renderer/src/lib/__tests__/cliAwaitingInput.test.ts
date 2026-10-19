@@ -101,39 +101,71 @@ describe('permissionHoldActionFor — the permission box, by hook events', () =>
   // The hold is raised by PermissionRequest and lasts until the box is
   // answered; output while the box is open (the old 3 s settle) does not end it.
   const HELD_AT = Date.parse('2026-10-19T06:00:00.000Z')
+  const NOT_HELD = { since: 0, key: '' }
+  const held = { since: HELD_AT, key: 'Bash:aaaa' }
+  const AFTER = '2026-10-19T06:00:05.000Z'
 
   it('holds on PermissionRequest', () => {
-    expect(permissionHoldActionFor({ detail: 'hook:permission_request' }, 0)).toBe('hold')
+    expect(permissionHoldActionFor({ detail: 'hook:permission_request' }, NOT_HELD)).toBe('hold')
   })
 
-  it('releases when the approved tool finishes, whether it succeeded or failed', () => {
-    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use' }, HELD_AT)).toBe('release')
-    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use_failure' }, HELD_AT)).toBe('release')
+  it('releases when the tool the box was for finishes, whether it succeeded or failed', () => {
+    for (const detail of ['hook:post_tool_use', 'hook:post_tool_use_failure']) {
+      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:aaaa' }, held), detail).toBe('release')
+    }
   })
 
-  it('releases on a transcript record written after the box opened — a denial fires no hook', () => {
-    const denial = { detail: 'user', timestamp: '2026-10-19T06:00:05.000Z' }
-    expect(permissionHoldActionFor(denial, HELD_AT)).toBe('release')
+  it('keeps the hold when a different tool finishes while the box is still open', () => {
+    // Parallel tools, or another subagent: their result is not this box's answer.
+    for (const detail of ['hook:post_tool_use', 'hook:post_tool_use_failure']) {
+      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:bbbb' }, held), detail).toBeNull()
+      expect(permissionHoldActionFor({ detail, tool_key: 'Read:aaaa' }, held), detail).toBeNull()
+      expect(permissionHoldActionFor({ detail, tool_key: '' }, held), detail).toBeNull()
+    }
+  })
+
+  it('releases on any tool result when the hold has no key to compare', () => {
+    // No tool input to fingerprint: the pair cannot be told apart, so the old
+    // any-result release stands (the turn end still bounds it).
+    const unkeyed = { since: HELD_AT, key: '' }
+    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use', tool_key: 'Bash:bbbb' }, unkeyed)).toBe('release')
+  })
+
+  it('releases on a denial record written after the box opened — a denial fires no hook', () => {
+    const denial = { detail: 'user:tool_rejected', timestamp: AFTER }
+    expect(permissionHoldActionFor(denial, held)).toBe('release')
+  })
+
+  it('releases on a prompt the user typed after the box opened', () => {
+    const typed = { detail: 'user', text: 'do something else', timestamp: AFTER }
+    expect(permissionHoldActionFor(typed, held)).toBe('release')
+  })
+
+  it("keeps the hold on a parallel tool's tool_result record, which is a bare `user` record", () => {
+    // Every tool_result is a `user` record with no text; one landing while the
+    // box is open says nothing about the box.
+    expect(permissionHoldActionFor({ detail: 'user', timestamp: AFTER }, held)).toBeNull()
   })
 
   it('ignores a transcript record from before the box opened', () => {
-    // The reader can deliver an earlier tool's result after the hook: that
-    // record says nothing about the box now on screen.
-    const earlier = { detail: 'user', timestamp: '2026-10-19T05:59:58.000Z' }
-    expect(permissionHoldActionFor(earlier, HELD_AT)).toBeNull()
-    expect(permissionHoldActionFor({ detail: 'user' }, HELD_AT)).toBeNull()
+    // The reader can deliver an earlier record after the hook: it says nothing
+    // about the box now on screen.
+    const early = '2026-10-19T05:59:58.000Z'
+    expect(permissionHoldActionFor({ detail: 'user:tool_rejected', timestamp: early }, held)).toBeNull()
+    expect(permissionHoldActionFor({ detail: 'user', text: 'hi', timestamp: early }, held)).toBeNull()
+    expect(permissionHoldActionFor({ detail: 'user:tool_rejected' }, held)).toBeNull()
   })
 
   it('releases nothing when nothing is held', () => {
     // A wait the Notification hook or the screen raised is not this hold's to end.
-    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use' }, 0)).toBeNull()
-    expect(permissionHoldActionFor({ detail: 'user', timestamp: '2026-10-19T06:00:05.000Z' }, 0)).toBeNull()
+    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use', tool_key: 'Bash:aaaa' }, NOT_HELD)).toBeNull()
+    expect(permissionHoldActionFor({ detail: 'user:tool_rejected', timestamp: AFTER }, NOT_HELD)).toBeNull()
   })
 
   it('leaves the hold alone on everything else, including the next PreToolUse', () => {
     // PreToolUse of a parallel tool can fire while the box is still open.
     for (const detail of ['hook:pre_tool_use', 'hook:notification', 'assistant', 'hook:subagent_stop']) {
-      expect(permissionHoldActionFor({ detail }, HELD_AT), detail).toBeNull()
+      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:aaaa' }, held), detail).toBeNull()
     }
   })
 })

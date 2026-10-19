@@ -290,11 +290,30 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
   it('leaves a held AWAITING once the hold is released', async () => {
     const { result, mock, scope } = await spawnedFake()
     await chunkThenWait(mock, 0, 100)
-    result.holdNeedsInput()
-    expect(result.awaitingHeldSince()).toBeGreaterThan(0)
+    result.holdNeedsInput('Bash:aaaa')
+    expect(result.awaitingHeld()).toMatchObject({ key: 'Bash:aaaa' })
+    expect(result.awaitingHeld().since).toBeGreaterThan(0)
     result.releaseNeedsInputHold()
-    expect(result.awaitingHeldSince()).toBe(0)
+    expect(result.awaitingHeld()).toEqual({ since: 0, key: '' })
     expect(result.displayStatus.value).not.toBe('awaiting')
+    scope.stop()
+  })
+
+  it("releasing the hold leaves the Notification hook's own wait standing", async () => {
+    // The same box can be reported by both hooks. Ending the hold must not wipe
+    // the wait the Notification hook raised: that one still settles on output.
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.markNeedsInput()
+    result.holdNeedsInput('Bash:aaaa')
+    result.releaseNeedsInputHold()
+    expect(result.displayStatus.value).toBe('awaiting')
+    expect(result.permissionWaitLive()).toBe(true)
+    // ...and it still ends the way it always did, on output past its settle window.
+    await vi.advanceTimersByTimeAsync(5_000)
+    await chunkThenWait(mock, 1, 100)
+    expect(result.displayStatus.value).not.toBe('awaiting')
+    expect(result.permissionWaitLive()).toBe(false)
     scope.stop()
   })
 
