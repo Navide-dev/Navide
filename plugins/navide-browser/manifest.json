@@ -6,7 +6,7 @@
   "version": "0.1.0",
   "publisher": "navide",
   "engines": {
-    "navide": "^0.1.0"
+    "navide": ">=0.2.27"
   },
   "permissions": {
     "system": [
