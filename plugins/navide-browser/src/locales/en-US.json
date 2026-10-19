@@ -1,0 +1,58 @@
+{
+  "browser": {
+    "app": { "title": "Navide Browser" },
+    "overview": {
+      "title": "Navide Browser Spaces",
+      "new": "New Space",
+      "pending": "{count} need your action",
+      "empty": "No Spaces yet. Create one with ＋, or an agent opens its own the first time it browses."
+    },
+    "state": {
+      "idle": "Idle",
+      "running": "Running",
+      "need-action": "Need your action",
+      "done": "Done"
+    },
+    "owner": { "agent": "Agent", "user": "You" },
+    "space": {
+      "all": "All Spaces",
+      "yours": "Your Space: agents cannot use it unless you let them",
+      "default-name": "My Space {n}"
+    },
+    "nav": {
+      "back": "Back",
+      "forward": "Forward",
+      "reload": "Reload",
+      "stop": "Stop",
+      "address": "Enter a URL"
+    },
+    "control": {
+      "agent": "Agent in control",
+      "user": "You are in control",
+      "yours": "Your Space"
+    },
+    "action": {
+      "take-over": "Take over",
+      "hand-back": "Hand back to agent",
+      "delegate": "Let the agent use this Space",
+      "reclaim": "Take this Space back",
+      "close": "Close Space"
+    },
+    "settings": {
+      "title": "Settings",
+      "shared-sign-in": "All Spaces share the same sign-ins, kept on this computer: an agent's Space can use every site you signed in to in Navide Browser.",
+      "clear-data": "Clear all sign-in data",
+      "clear-data-confirm": "Click again to sign out of every site in Navide Browser",
+      "clear-data-done": "Sign-in data cleared.",
+      "cancel": "Cancel"
+    },
+    "left": {
+      "open": "Open Navide Browser",
+      "empty": "No Spaces yet."
+    },
+    "errors": {
+      "generic": "Something went wrong ({code}).",
+      "invalid-address": "Enter an http or https address."
+    }
+  }
+}
