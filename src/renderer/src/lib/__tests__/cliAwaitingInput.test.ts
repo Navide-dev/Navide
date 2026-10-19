@@ -274,6 +274,12 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
       expect(matchAwaitingInput('claude', screen)).toBe(false)
     })
 
+    it('does not count a full-width border row against the tail bound', () => {
+      const wide = `╰${'─'.repeat(250)}╯`
+      expect(matchAwaitingInput('claude', [...permissionBox, wide, STATUS_LINE].join('\n'))).toBe(true)
+      expect(matchAwaitingInput('claude', [QUESTION_BOX, wide, STATUS_LINE].join('\n'))).toBe(true)
+    })
+
     it('does not match when the tail outgrows its bound', () => {
       const screen = [FOOTER, '', 'x'.repeat(400)].join('\n')
       expect(matchAwaitingInput('claude', screen)).toBe(false)

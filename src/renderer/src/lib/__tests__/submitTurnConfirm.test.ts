@@ -256,6 +256,29 @@ describe('blockingDialogShown', () => {
     expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen })).toBe(true)
   })
 
+  // Border rows left under a live footer pair up like an input box's frame;
+  // with no prompt row between them they are not one, so the dialog above
+  // them is still read.
+  it('reads a dialog footer with border rows drawn below it', () => {
+    const border = ['╰──────────────────────────────────────╯', '│']
+    const pickerScreen = [
+      '  1. Merge them into one state',
+      '  2. Keep them separate',
+      'Enter to select · Tab/Arrow keys to navigate · Esc to cancel',
+      ...border,
+    ].join('\n')
+    const permissionScreen = [
+      'Do you want to proceed?',
+      '❯ 1. Yes',
+      '  2. No',
+      '',
+      'Esc to cancel · Tab to amend',
+      ...border,
+    ].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: pickerScreen })).toBe(true)
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: permissionScreen })).toBe(true)
+  })
+
   // Frameless (codex): the composer is the prompt row and what wraps below
   // it. An unsent message quoting a dialog's wording must not read as one —
   // main resends the Enter there and the message is delivered.

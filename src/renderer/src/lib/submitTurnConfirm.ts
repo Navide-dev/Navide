@@ -63,6 +63,8 @@ export function extraEnterAllowed(framedHeld: boolean | null, dialogShown: boole
  *  option) that uses the same glyph. */
 const PROMPT_ROW_RE = /^\s*[›>❯]/
 const OPTION_ROW_RE = /^\s*[›>❯]\s*\d+[.)]/
+/** A prompt row inside a drawn frame, whose side border may precede the glyph. */
+const FRAMED_PROMPT_ROW_RE = /^[\s│]*[›>❯]/
 
 /** Is a dialog that would take an Enter as its answer on screen?
  *
@@ -97,8 +99,12 @@ export function blockingDialogShown(input: {
   for (let i = close - 1; i >= 0; i--) {
     if (BOX_ONLY_LINE_RE.test(lines[i])) { open = i; break }
   }
+  // Two box-only rows are the input box only when a prompt row sits between
+  // them: border characters left below a live dialog's footer pair up the same
+  // way, and reading below THEM would skip the dialog.
+  const framed = open >= 0 && lines.slice(open + 1, close).some(line => FRAMED_PROMPT_ROW_RE.test(line))
   let region = input.screen
-  if (open >= 0) {
+  if (framed) {
     region = lines.slice(close + 1).join('\n')
   } else {
     let prompt = -1
