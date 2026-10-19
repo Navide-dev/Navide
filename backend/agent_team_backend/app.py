@@ -479,6 +479,11 @@ async def nudge_plugin_request_recovery(session: "Session") -> None:
         log.warning("plugin request recovery nudge failed: %s", err)
 
 
+def has_main_window() -> bool:
+    """Whether a main window is connected now (forms open there)."""
+    return any(not s.dead and is_main_window(s) for s in list(_SESSIONS))
+
+
 def live_main_window_ids() -> set[str]:
     """The page-load ids (``ui.invoke.ready`` window_id) of the main windows connected now."""
     return {
