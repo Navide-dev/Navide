@@ -494,6 +494,11 @@ export interface PreparedInstallSummary {
   replacesLocal?: { version: string | null }
   /** Card K4: the developer folder this summary was read from. */
   folder?: string
+  /** W1 (A3): the `<file>.sig` beside a local file against the vetted
+   *  publisher keys; `none` when there is no signature. */
+  localSignature?: { state: 'none' | 'verified' | 'revoked' | 'unverifiable'; publisherId?: string; keyId?: string }
+  /** W1: whether the shared static scan ran on a local file (`scan` holds it). */
+  localScan?: 'ran' | 'unavailable'
   /** D7: the replaced package's native backend data will be set aside. */
   backendDataSetAside?: boolean
   /** D7: data set aside earlier from the incoming source, which the user may take back. */
@@ -1311,16 +1316,20 @@ contextBridge.exposeInMainWorld('agentTeam', {
     installFromFile: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:installFromFile'),
     commitLocalInstall: (
       id: string,
-      approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
+      approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
     ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
+    /** W1 (S2): the copy the Host staged for an agent's file request, named
+     *  by its stagingId; never a path. Installs nothing. */
+    prepareAgentFileInstall: (stagingId: string): Promise<PreparedInstallSummary> =>
+      ipcRenderer.invoke('plugins:prepareAgentFileInstall', { stagingId }),
     /** Card K4: the Developer Mode switch and the developer folders. The main
      *  process owns the switch; it opens its own folder dialog. */
     developerMode: (): Promise<DeveloperModeState> => ipcRenderer.invoke('plugins:developerMode'),
     setDeveloperMode: (enabled: boolean): Promise<DeveloperModeState> =>
       ipcRenderer.invoke('plugins:setDeveloperMode', { enabled }),
     loadFromFolder: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:loadFromFolder'),
-    commitFolderLoad: (id: string, approval: { riskConfirmed: boolean }): Promise<DeveloperModeState> =>
+    commitFolderLoad: (id: string, approval: { riskConfirmed: boolean; expectedFolder?: string }): Promise<DeveloperModeState> =>
       ipcRenderer.invoke('plugins:commitFolderLoad', { id, ...approval }),
     reloadDeveloperPlugin: (id: string): Promise<
       { reloaded: true; requiresConsent: false } | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }

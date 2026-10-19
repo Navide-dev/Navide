@@ -87,6 +87,10 @@ function capabilityHint(cap: string): string {
         </div>
       </div>
       <div id="ext-trust-desc" class="nv-dialog-body">
+        <!-- W1 (S2): an agent asked for this install; the user still decides here. -->
+        <p v-if="pending.agentRequest" class="ext-agent-request ext-risk-callout" role="note" data-testid="ext-trust-agent-request">
+          {{ $t('settings.extensions.localInstall.agentRequest', { requester: pending.agentRequest.requester }) }}
+        </p>
         <!-- D7: replacing an installed package of the same id is asked first. -->
         <template v-if="step === 'replace'">
           <p v-if="pending.prepared.replaces?.source === 'marketplace'" class="ext-replace-question">
