@@ -1151,6 +1151,8 @@ const pluginContributionsByLocation = computed(() => {
     left: [],
     main: [],
     window: [],
+    // Mounted only by the receiver that owns it; the main window never renders it.
+    detail: [],
   }
   for (const contribution of pluginContributions.value) {
     grouped[contribution.location].push(contribution)
@@ -1158,7 +1160,7 @@ const pluginContributionsByLocation = computed(() => {
   return grouped
 })
 
-function pluginContributionsAt(location: Exclude<PluginRegionLocation, 'left' | 'window'>): PluginRegionContribution[] {
+function pluginContributionsAt(location: Exclude<PluginRegionLocation, 'left' | 'window' | 'detail'>): PluginRegionContribution[] {
   return pluginContributionsByLocation.value[location]
 }
 
