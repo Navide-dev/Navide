@@ -423,6 +423,8 @@ function bridgeOperationForPort(port: PlansBridgePort): string {
       return 'transform'
     case 'shell':
       return 'run'
+    case 'web':
+      return 'list'
   }
   const exhaustive: never = port
   return exhaustive
@@ -914,7 +916,8 @@ describe('PluginBackendSupervisor', () => {
     expect(bridgeDispatcher).not.toHaveBeenCalled()
   })
 
-  it.each(PLANS_BRIDGE_PORTS.filter((port) => port !== 'filesystem' && port !== 'shell'))(
+  // `web` is mapped to its own policy namespace, like filesystem and shell.
+  it.each(PLANS_BRIDGE_PORTS.filter((port) => port !== 'filesystem' && port !== 'shell' && port !== 'web'))(
     'rejects agent Bridge use of unmapped %s even in full policy',
     async (port) => {
       const bridgeDispatcher = vi.fn(async () => ({ ok: true }))

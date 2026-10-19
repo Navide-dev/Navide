@@ -56,6 +56,9 @@ export const PLANS_BRIDGE_PORTS = [
   'streams',
   'spawn',
   'shell',
+  // First-party navide.browser only (pluginFirstPartyBackends.ts). Plans
+  // never declares it.
+  'web',
 ] as const
 
 export type PlansBridgePort = (typeof PLANS_BRIDGE_PORTS)[number]
@@ -234,6 +237,8 @@ const PORT_OPERATIONS: PortOperation = {
   // Third-party package backends only (pluginThirdPartyBackends.ts): the Host
   // shell broker, under the same allowlist as a view's shell.run.
   shell: ['run'],
+  // Section 9.3 of the browser contract; dispatched by the Host's web port.
+  web: ['list', 'create', 'close', 'cdp', 'setState'],
 }
 
 export function isPlansBridgePort(value: unknown): value is PlansBridgePort {
@@ -908,6 +913,9 @@ export function createPlansBridgeDispatcher(ports: PlansCorePorts): BackendBridg
         case 'shell':
           // Plans never declares shell; only third-party package bridges serve it.
           throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no shell port.')
+        case 'web':
+          // Served by the Host's web port, never by the Plans core ports.
+          throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no web port.')
       }
     },
   })

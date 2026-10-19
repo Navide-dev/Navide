@@ -12,9 +12,11 @@ import {
   PlansBridgeError,
   type BackendBridgeDispatcher,
   type PlansBridgeContext,
+  type PlansBridgePort,
   type PlansBridgeRequest,
   type PlansFilesystemPort,
 } from './plansBridge'
+import { firstPartyBridgePorts, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import {
   createHostSandboxProbe,
   resolveBackendSandbox,
@@ -60,7 +62,8 @@ import type { SupportedLocale } from '../hostLocale'
 
 /**
  * Admission control for third-party package backends (every package backend
- * other than the first-party Plans package).
+ * not on the first-party list, pluginFirstPartyBackends.ts: Plans and the
+ * browser start outside this gate).
  *
  * A third-party child starts only when ALL of these hold, checked again before
  * every (re)spawn: the global switch is on, the user has not disabled the
@@ -147,6 +150,68 @@ export function thirdPartyBackendLaunchSpec(
       ...(manifest.permissions.shell ? { shell: manifest.permissions.shell } : {}),
       ...(agentTools ?? {}),
     },
+  }
+}
+
+/** The system permission a first-party bridge port needs in the manifest. */
+const FIRST_PARTY_PORT_NAMESPACE: Partial<Record<PlansBridgePort, PluginSystemNamespace>> = {
+  filesystem: 'fs',
+  web: 'web',
+}
+
+/**
+ * Project a first-party package backend other than Plans (pluginFirstPartyBackends.ts)
+ * into a launch spec. It has no `thirdParty` part, so it never goes through
+ * the third-party admission gate: it starts like Plans, without the global
+ * switch, per-version consent or OS sandbox. Its methods and events come from
+ * its manifest; its bridge ports are the ones the first-party list gives it,
+ * each only when the manifest declares the matching system permission. Agents
+ * reach it only through agent tools: `agentMethods` stays empty.
+ */
+export function firstPartyBackendLaunchSpec(
+  activation: PluginActivationCatalogEntry,
+  manifest?: PluginManifestV2,
+): BackendPluginLaunchSpec | null {
+  if (!isFirstPartyAgentToolPlugin(activation.pluginId) || !activation.backend) return null
+  const parsed = manifest ?? readInstalledManifestV2(activation.packageDir)
+  if (!parsed.backend || parsed.id !== activation.pluginId || !parsed.backend.methods?.length) return null
+  const system = parsed.permissions.system ?? []
+  return {
+    pluginId: activation.pluginId,
+    packageVersion: activation.packageVersion,
+    packageDir: activation.packageDir,
+    entryFile: activation.backend.entryFile,
+    protocolVersion: activation.backend.protocolVersion,
+    activation: activation.backend.activation,
+    approvedMethods: [...parsed.backend.methods],
+    agentMethods: [],
+    approvedEvents: [...(parsed.backend.events ?? [])],
+    approvedBridgePorts: (firstPartyBridgePorts(activation.pluginId) ?? []).filter((port) => {
+      const namespace = FIRST_PARTY_PORT_NAMESPACE[port]
+      return namespace !== undefined && system.includes(namespace)
+    }),
+  }
+}
+
+/**
+ * The agent-tool catalog entry of a first-party backend (PluginAgentToolsHost):
+ * its launch spec plus the name, system permissions and declared agent tools
+ * the catalog and the per-call checks read. It describes the package only;
+ * the backend actually registered is {@link firstPartyBackendLaunchSpec}, and
+ * the Host never admits this object through the third-party gate.
+ */
+export function firstPartyAgentToolSpec(
+  activation: PluginActivationCatalogEntry,
+  manifest?: PluginManifestV2,
+): ThirdPartyLaunchSpec | null {
+  if (!isFirstPartyAgentToolPlugin(activation.pluginId) || !activation.backend) return null
+  const parsed = manifest ?? readInstalledManifestV2(activation.packageDir)
+  const launch = firstPartyBackendLaunchSpec(activation, parsed)
+  const agentTools = launch ? declaredAgentTools(parsed) : null
+  if (!launch || !agentTools) return null
+  return {
+    ...launch,
+    thirdParty: { name: parsed.name, system: [...(parsed.permissions.system ?? [])], ...agentTools },
   }
 }
 

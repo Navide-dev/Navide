@@ -192,7 +192,9 @@ import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
 import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
 import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
+import { isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
 import {
+  firstPartyBackendLaunchSpec,
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
   packageContentDigest,
@@ -1104,7 +1106,7 @@ async function preflightCandidateBackend(
 ): Promise<void> {
   const backend = activation.backend
   if (!backend) return
-  if (activation.pluginId !== 'navide.plans') {
+  if (!isFirstPartyBackendPlugin(activation.pluginId)) {
     // A third-party candidate runs only with the admission a real launch
     // needs (switch, consent for this content, sandbox, breaker), never with
     // a prompt, and under the same watchdog and cleanup. Otherwise installing
@@ -1273,6 +1275,21 @@ frontendPluginManager.setThirdPartyBackendAdmitter((activation, workspacePath, i
     : Promise.reject(new BackendPluginError('BACKEND_UNAVAILABLE', 'not a third-party backend')),
 )
 
+/** A first-party backend other than Plans (pluginFirstPartyBackends.ts):
+ *  launched like Plans, outside the third-party admission gate. */
+function firstPartyBackendActivation(activation: PluginActivationCatalogEntry): BackendPluginLaunchSpec | null {
+  try {
+    return firstPartyBackendLaunchSpec(activation)
+  } catch (error) {
+    console.warn(
+      `[main] first-party backend for ${activation.pluginId} is unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+    return null
+  }
+}
+
 function thirdPartyBackendActivation(activation: PluginActivationCatalogEntry): BackendPluginLaunchSpec | null {
   try {
     return thirdPartyBackendLaunchSpec(activation)
@@ -1362,11 +1379,14 @@ async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Prom
   return result.response === 1
 }
 
-// Installed third-party backends from the previous session. Plans registers
+// Installed package backends from the previous session: first-party ones
+// outside the third-party gate, every other one through it. Plans registers
 // through its own bundled/installed selection path.
 for (const activation of installedPluginLoad.activationCatalog) {
   if (!activation.backend || activation.pluginId === 'navide.plans') continue
-  const spec = thirdPartyBackendActivation(activation)
+  const spec = isFirstPartyBackendPlugin(activation.pluginId)
+    ? firstPartyBackendActivation(activation)
+    : thirdPartyBackendActivation(activation)
   if (!spec || frontendPluginManager.hasBackendActivation(activation.pluginId, activation.packageVersion)) continue
   try {
     frontendPluginManager.registerBackendActivation(spec)
@@ -1689,12 +1709,16 @@ const applyPluginActivationChange = ({
   activation?: (typeof approvedInstalledPluginActivations)[number]
 }): void => {
   if (activation?.backend) {
-    // Every package backend other than Plans is third-party native code: its
-    // allowlists come from its manifest and it is launched only through the
-    // sandboxed third-party admission gate. Plans retains its explicit allowlist.
+    // Every package backend not on the first-party list is third-party native
+    // code: its allowlists come from its manifest and it is launched only
+    // through the sandboxed third-party admission gate. Plans retains its
+    // explicit allowlist; the other first-party backends (the browser) take
+    // theirs from the manifest and the first-party list, outside the gate.
     const backend: BackendPluginLaunchSpec | null = activation.pluginId === 'navide.plans'
       ? plansBackendActivation(activation)
-      : thirdPartyBackendActivation(activation)
+      : isFirstPartyBackendPlugin(activation.pluginId)
+        ? firstPartyBackendActivation(activation)
+        : thirdPartyBackendActivation(activation)
     if (backend && !frontendPluginManager.hasBackendActivation(pluginId, activation.packageVersion)) {
       frontendPluginManager.registerBackendActivation(backend)
     }
@@ -1775,7 +1799,7 @@ ipcMain.handle('git:retryV2', (event) => {
 
 const registeredThirdPartySpecs = (): ThirdPartyLaunchSpec[] =>
   approvedInstalledPluginActivations.flatMap((activation) => {
-    if (!activation.backend || activation.pluginId === 'navide.plans') return []
+    if (!activation.backend || isFirstPartyBackendPlugin(activation.pluginId)) return []
     const spec = frontendPluginManager.getBackendActivation(activation.pluginId, activation.packageVersion)
     return spec && isThirdPartyLaunchSpec(spec) ? [spec] : []
   })
