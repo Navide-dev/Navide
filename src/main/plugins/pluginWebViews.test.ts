@@ -77,11 +77,15 @@ class FakeSession extends FakeEmitter implements WebGuestSession {
   checkHandler: (() => boolean) | null = null
   displayHandler: ((request: unknown, callback: (streams: Record<string, never>) => void) => void) | null = null
   cleared = 0
+  authCleared = 0
+  hostsCleared = 0
   setPermissionRequestHandler(handler: NonNullable<FakeSession['permissionHandler']>): void { this.permissionHandler = handler }
   setPermissionCheckHandler(handler: () => boolean): void { this.checkHandler = handler }
   setDisplayMediaRequestHandler(handler: NonNullable<FakeSession['displayHandler']>): void { this.displayHandler = handler }
   async clearStorageData(): Promise<void> { this.cleared += 1 }
   async clearCache(): Promise<void> {}
+  async clearAuthCache(): Promise<void> { this.authCleared += 1 }
+  async clearHostResolverCache(): Promise<void> { this.hostsCleared += 1 }
 }
 
 function setup() {
@@ -176,6 +180,8 @@ describe('partition isolation', () => {
     await registry.clearData('navide.browser')
     expect(sessions.get('persist:navide-web:navide.browser')?.cleared).toBe(1)
     expect(sessions.get('persist:navide-web:acme.docs')?.cleared).toBe(0)
+    expect(sessions.get('persist:navide-web:navide.browser')).toMatchObject({ authCleared: 1, hostsCleared: 1 })
+    expect(sessions.get('persist:navide-web:acme.docs')).toMatchObject({ authCleared: 0, hostsCleared: 0 })
   })
 })
 

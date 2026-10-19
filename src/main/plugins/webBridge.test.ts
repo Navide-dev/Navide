@@ -51,6 +51,8 @@ function setup() {
     on: () => undefined,
     clearStorageData: async () => {},
     clearCache: async () => {},
+    clearAuthCache: async () => {},
+    clearHostResolverCache: async () => {},
   }
   const registry = new PluginWebViewRegistry({
     createView: () => {

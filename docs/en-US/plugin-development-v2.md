@@ -1500,7 +1500,7 @@ agent or a backend can never perform them.
 | `web.returnControl` | `{viewId}` → `{ok}` | User gesture; `control` goes back to `agent` |
 | `web.close` | `{viewId}` → `{ok}` | Destroys the view |
 | `web.capture` | `{viewId, maxWidth?}` → `{dataUrl}` | A thumbnail for an overview card; `maxWidth` is an integer from 64 to 2048 |
-| `web.clearData` | `{}` → `{ok}` | User gesture; clears every cookie, sign-in and cache in this package's browser partition |
+| `web.clearData` | `{}` → `{ok}` | User gesture; clears every cookie, sign-in, cache, HTTP auth answer and cached host lookup in this package's browser partition |
 
 `space` and `viewId` are non-empty strings of at most 128 characters. A `url`
 is accepted only when it is `http:` or `https:` without a user name or

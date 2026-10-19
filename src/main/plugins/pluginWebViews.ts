@@ -76,6 +76,8 @@ export interface WebGuestSession {
   on(event: string, listener: Listener): unknown
   clearStorageData(): Promise<void>
   clearCache(): Promise<void>
+  clearAuthCache(): Promise<void>
+  clearHostResolverCache(): Promise<void>
 }
 
 /** The plugin view a web view is stacked on: its window's content view and
@@ -343,6 +345,9 @@ export class PluginWebViewRegistry {
     const session = this.deps.session(webPartitionFor(pluginId))
     await session.clearStorageData()
     await session.clearCache()
+    // HTTP auth answers and resolved hosts would otherwise outlive the wipe.
+    await session.clearAuthCache()
+    await session.clearHostResolverCache()
   }
 
   /** Plugin disabled, removed or revoked: every view goes. */

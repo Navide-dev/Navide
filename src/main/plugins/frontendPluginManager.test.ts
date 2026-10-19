@@ -382,6 +382,8 @@ vi.mock('./pluginWebViewHost', async () => {
       on: () => undefined,
       clearStorageData: async () => { webHostMock.cleared.push(partition) },
       clearCache: async () => {},
+      clearAuthCache: async () => {},
+      clearHostResolverCache: async () => {},
     }),
     onChanged: (pluginId, views) => webHostMock.hook?.(pluginId, views),
   })
