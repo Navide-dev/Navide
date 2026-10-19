@@ -15,8 +15,10 @@
 >
 > What is not available: Navide never calls a `definePlugin` activation function
 > (see [SDK interface](#sdk-interface)); there is no `navide-plugin dev` command;
-> Developer Mode cannot open a Manifest v2 view or run a backend (see
-> [Backend trust](#backend-trust)); there are no command, menu or keybinding
+> the environment-variable Developer Mode of a development build
+> (`AGENT_TEAM_PLUGIN_DEV_PATH`) cannot open a Manifest v2 view or run a
+> backend, while a folder loaded with Settings → Navide Plugins → Developer
+> Mode can (see [Backend trust](#backend-trust)); there are no command, menu or keybinding
 > contribution points; `custom` is the only view kind; and a package can be
 > installed and removed but not disabled.
 >
@@ -67,8 +69,9 @@ value of the Navide Marketplace.
 When a new design would add a restriction, turn it into a declaration plus
 disclosure instead, or bring it to the product owner as an explicit decision.
 Some existing rules in this spec predate the principle and are under review:
-third-party methods are never callable by MCP agents. Until it changes, it is
-documented as it stands. (A backend package may now declare
+a third-party method is callable by MCP agents only as a declared agent tool,
+behind a switch that is off by default (see
+[Agent tools](#agent-tools-backendagenttools)). (A backend package may now declare
 `shell: "allowlist"`; see [Third-party backends](#third-party-backends-sandbox-consent-and-publishing).)
 
 ## What is public
@@ -509,10 +512,20 @@ has not allowed (or not re-allowed since its tools changed), or whose native
 backend the user disabled, holds no names, and a version that declares no
 tools gives up its place.
 
-Serving the tools to agents comes in a later release step, behind a master
-switch that is off by default. Until then declared tools are validated,
-disclosed and consented to but never served, and the sentence above
-("Third-party methods are never callable by MCP agents") holds.
+Agents call these tools through the core `navide` MCP server behind two
+switches in Settings → Navide Plugins → Native backends, both off by
+default: **Let agents call tools from third-party Navide plugins** (agents in
+your panes) and **Let external MCP clients call them too**. With the first
+off, nothing is served: declared tools are validated, disclosed and consented
+to, and every backend's agent methods stay empty. With it on, a tool is
+served only for an installed, enabled package whose current consent covers
+it; the Host re-checks the switch, the caller kind, the package state, the
+consent and the tool on every call. A `write` tool asks once per package and
+workspace before its first call. The result is returned as external content
+labelled with the package, and the calling pane is marked tainted, like any
+other external input. Methods that no tool names are never callable by
+agents. See [plugin-agent-tools-contract.md](plugin-agent-tools-contract.md)
+section 4.
 
 `backend.methods` and `backend.events` declare the package-local names the
 Host forwards (1–64 methods, 1–32 events, dotted lower-camel names such as
@@ -1487,9 +1500,11 @@ declare a new `storage` permission in its manifest.
 
 Current runtime status: the Host writes the storage grant together with the
 package-version grant, both for the bundled packages and for a package
-installed from a Registry (when **Restart Plugin** activates it). A view
-without such a grant, for example one loaded through Developer Mode, cannot
-open at all. The API below does not expose the first-party storage migration
+installed from a Registry (when **Restart Plugin** activates it), for a
+package installed from a file, and for a folder loaded with Settings → Navide
+Plugins → Developer Mode once the user consents. A view without such a grant,
+for example one loaded through `AGENT_TEAM_PLUGIN_DEV_PATH` in a development
+build, cannot open at all. The API below does not expose the first-party storage migration
 seam to third-party packages.
 
 The SDK calls accept only a partition class and key; the Host derives the
@@ -2212,6 +2227,8 @@ to the Navide Marketplace are covered step by step in
 
 There is no `navide-plugin dev` command and no in-app hot-reload loop. Test a
 backend with `navide-plugin dev-backend`, whose Host bridge refuses every
-request, and test the complete package inside Navide by installing it from a
-local Registry; Developer Mode cannot open a v2 view (see
-[Backend trust](#backend-trust)).
+request, and test the complete package inside Navide by loading its folder
+with Settings → Navide Plugins → Developer Mode, installing it from a file, or
+installing it from a local Registry; only the environment-variable Developer
+Mode of a development build (`AGENT_TEAM_PLUGIN_DEV_PATH`) cannot open a v2
+view (see [Backend trust](#backend-trust)).
