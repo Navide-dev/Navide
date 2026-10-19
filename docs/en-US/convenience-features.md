@@ -167,8 +167,10 @@ folders the panes trusted in their copies to your file:
 - Your file is backed up before every change. The first change is announced;
   later ones are logged quietly.
 - The text Navide appended is listed in `~/.navide-panes/grok/.folder-trust-merged.json`.
-  Turning the switch off removes exactly that text, unless you changed it
-  since, so the file is back to its own bytes; it removes the file when
+  Turning the switch off removes exactly that text, so the file is back to
+  its own bytes. Text you changed since, or a table you added something
+  inside (removing it would move that under your own table), is kept, and
+  the overview says why; it removes the file when
   Navide created it and nothing else is in it. Each pane keeps the folders it
   trusted in its own copy. Deleting a folder Navide added turns the feature off.
 - A file that cannot be parsed, or that a folder table cannot be appended to,

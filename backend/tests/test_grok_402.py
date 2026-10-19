@@ -124,6 +124,28 @@ def test_the_switch_restores_the_users_file_byte_for_byte(gate, home: Path) -> N
     assert gate.state("grok.folder-trust") == ("off", "user")
 
 
+def test_a_key_the_user_put_inside_navides_table_keeps_that_table(gate, home: Path) -> None:
+    real = home / ".grok" / TRUST
+    real.write_text(USERS_OWN, encoding="utf-8")
+    _prepare("p1")
+    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _prepare("p2")
+    # Typed under Navide's table: cutting that table out would leave the key
+    # under the user's own last table and change what it says.
+    real.write_text(real.read_text(encoding="utf-8") + 'note = "mine"\n', encoding="utf-8")
+    edited = real.read_text(encoding="utf-8")
+
+    with pytest.raises(convenience.CleanupIncomplete):
+        _off()
+
+    assert real.read_text(encoding="utf-8") == edited
+    assert _folders(real)["/also-mine"] == {"decided_at": 2, "trusted": False}
+    failed = [e for e in gate.history("grok.folder-trust") if e["action"] == "cleanup-failed"]
+    assert failed and "/work/a" in failed[-1]["detail"]
+    assert gate.state("grok.folder-trust")[0] != "off", "what could not be taken back still works"
+    assert "/work/a" in pane_home.grok_trust_ledger_rows(), "kept for a later takeback"
+
+
 def test_a_file_without_a_final_newline_comes_back_exactly(gate, home: Path) -> None:
     real = home / ".grok" / TRUST
     real.write_text(USERS_OWN.rstrip("\n"), encoding="utf-8")

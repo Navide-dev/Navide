@@ -700,16 +700,27 @@ def take_back_grok_folder_trust(real_vendor: Path) -> None:
     ledger = _grok_trust_ledger()
     state = _read_json_object(ledger)
     rows = state.get("rows") if isinstance(state.get("rows"), dict) else {}
+    kept: dict[str, Any] = {}
+    reasons: list[str] = []
     if rows and real.exists():
         text = real.read_text(encoding="utf-8")
         seeds = _read_json_object(_grok_trust_seeds_path())
         for key, entry in reversed(list(rows.items())):
             chunk = entry.get("chunk") if isinstance(entry, dict) else None
             if not chunk or chunk not in text:
-                log.warning("%s: the row for %s changed since Navide added it; left in place", real, key)
+                kept[key] = entry
+                reasons.append(f"the table for {key} was changed since Navide added it")
                 continue
             at = text.rfind(chunk)
-            text = text[:at] + text[at + len(chunk):]
+            cut = text[:at] + text[at + len(chunk):]
+            if not _only_folder_removed(text, cut, key):
+                # Something typed inside Navide's table would land under the
+                # user's own table above it: keep the table, change nothing.
+                kept[key] = entry
+                reasons.append(f"removing the table for {key} would change your own entries"
+                               " (something was added inside it)")
+                continue
+            text = cut
             seed = seeds.get(entry.get("pane"))
             if isinstance(seed, dict):
                 seed.pop(key, None)
@@ -720,4 +731,28 @@ def take_back_grok_folder_trust(real_vendor: Path) -> None:
             _write_text(real, text)
             os.chmod(real, mode)
         _write_json(_grok_trust_seeds_path(), seeds)
-    ledger.unlink(missing_ok=True)
+    if not kept:
+        ledger.unlink(missing_ok=True)
+        return
+    state["rows"] = {key: rows[key] for key in rows if key in kept}
+    _write_json(ledger, state)
+    reason = f"{real}: kept what Navide added — " + "; ".join(reversed(reasons))
+    log.warning("%s", reason)
+    raise OSError(reason)
+
+
+def _only_folder_removed(before: str, after: str, folder: str) -> bool:
+    """Whether ``after`` reads exactly as ``before`` without ``folder``'s
+    table — every other entry the same."""
+    try:
+        was = tomllib.loads(before)
+        now = tomllib.loads(after)
+    except ValueError:
+        return False
+    folders = was.get("folders")
+    if not isinstance(folders, dict) or folder not in folders:
+        return False
+    del folders[folder]
+    if not folders and "folders" not in now:
+        del was["folders"]
+    return was == now
