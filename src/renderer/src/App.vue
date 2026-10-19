@@ -360,7 +360,7 @@ import {
   type SchedulerDisabledNotice,
 } from './composables/useAnnouncements'
 import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
-import { PLUGIN_APPROVAL_RECOVER_EVENT } from '../../shared/pluginAgentTools'
+import { PLUGIN_APPROVAL_RECOVER_EVENT, revealInvisibleText } from '../../shared/pluginAgentTools'
 import type {
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
@@ -10892,11 +10892,12 @@ async function agentAccountSwitch(args: Record<string, unknown>, callerPaneId: s
   const caller = panes.value.find((p) => p.id === callerPaneId)
   notifyRestore.toast(
     i18n.global.t('settings.accounts.cli.agent-switch-done', {
-      agent: caller?.messagingName || caller?.customName || callerPaneId,
+      // Agent-written text: invisible characters shown, as in the dialog.
+      agent: revealInvisibleText(caller?.messagingName || caller?.customName || callerPaneId),
       vendor: String(args.agentKey ?? ''),
       from: String(outcome.from ?? ''),
       to: String(outcome.to ?? ''),
-      reason: String(args.reason ?? ''),
+      reason: revealInvisibleText(String(args.reason ?? '')),
     }),
     { type: 'info' },
   )

@@ -7857,6 +7857,7 @@
         "agent-login-confirm-ok": "開啟登入",
         "agent-switch-confirm-title": "有 agent 要求切換 CLI 帳號",
         "agent-switch-confirm-body": "你同意之前什麼都不會切換。這和 Settings → Accounts 的切換是同一個：CLI 會改用另一個帳號；如果有 pane 正在用它，重啟 pane 之前會再問你一次。沒有回答的話，這個要求會自動關閉。",
+        "agent-switch-confirm-late": "你同意之後，就算 agent 已經不再等待，切換仍會完成。如果要重啟 pane，而提出要求的 agent 也跑在這個 CLI 上，它自己的 pane 也會被重啟；它收不到結果，重啟後要再查一次帳號狀態。",
         "agent-switch-confirm-vendor": "CLI",
         "agent-switch-confirm-from": "切換前帳號",
         "agent-switch-confirm-to": "切換後帳號",

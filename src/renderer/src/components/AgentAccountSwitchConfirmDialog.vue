@@ -49,6 +49,7 @@ useDialogFocus(card, () => cancelButton.value)
       </div>
       <div id="switch-confirm-desc" class="nv-dialog-body">
         <p>{{ $t('settings.accounts.cli.agent-switch-confirm-body') }}</p>
+        <p>{{ $t('settings.accounts.cli.agent-switch-confirm-late') }}</p>
         <dl class="switch-confirm-facts">
           <dt>{{ $t('settings.accounts.cli.agent-switch-confirm-vendor') }}</dt>
           <dd><code>{{ request.agentKey }}</code></dd>

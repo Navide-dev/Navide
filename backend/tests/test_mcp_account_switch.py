@@ -166,10 +166,12 @@ async def test_switch_returns_only_named_fields(ui: _UiRequests) -> None:
 @pytest.mark.asyncio
 async def test_switch_reports_an_unanswered_window(ui: _UiRequests) -> None:
     agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
-    ui.answers["ui.accounts.switch"] = {"ok": False, "error": "no window answered"}
+    ui.answers["ui.accounts.switch"] = {"ok": False, "error": "TypeError: raw renderer text"}
     result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="p-1", reason="x")
-    assert result["ok"] is False
-    assert result["error_code"] == "window-unavailable"
+    # The code only: the bus error is whatever the renderer threw.
+    assert result == {
+        "ok": False, "error": "the Navide window did not answer", "error_code": "window-unavailable",
+    }
 
 
 @pytest.mark.asyncio

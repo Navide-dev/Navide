@@ -51,6 +51,10 @@ describe('AgentAccountSwitchConfirmDialog', () => {
     expect(text).toContain('/Users/me/project')
   })
 
+  it('says a yes switches even if the agent stops waiting, and may restart its own pane', () => {
+    expect(render().text()).toContain(i18n.global.t('settings.accounts.cli.agent-switch-confirm-late'))
+  })
+
   it("labels the reason as the agent's and reveals invisible characters", () => {
     const dialog = render()
     expect(dialog.text()).toContain(i18n.global.t('settings.accounts.cli.agent-switch-confirm-reason'))

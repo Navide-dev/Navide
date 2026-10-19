@@ -6,6 +6,7 @@ import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { runAgentAccountSwitch } from '../../lib/agentAccountSwitch'
+import { revealInvisibleText } from '../../../../shared/pluginAgentTools'
 import type { AgentSignInConfirmAnswer } from '../../lib/agentSignIn'
 
 // Plan mcp_614482 P3: App.vue's agentAccountSwitch (MCP cli_account_switch)
@@ -31,18 +32,19 @@ function harness(answer: AgentSignInConfirmAnswer) {
   const setDefault = vi.fn(async () => ({ ok: true }))
   const scope = {
     runAgentAccountSwitch,
+    revealInvisibleText,
     cliProfilesApi: {
       findProfile: (id: string | null) => (id ? profiles[id] : undefined),
       defaultProfileId: () => 'p-a',
       aliasFor: () => undefined,
       setDefault,
     },
-    panes: ref([{ id: 'pa', workspacePath: '/ws/alpha', messagingName: 'builder' }]),
+    panes: ref([{ id: 'pa', workspacePath: '/ws/alpha', messagingName: 'builder\u200b' }]),
     cliAccountSwitch: vi.fn(async () => ({ ok: true })),
     agentAccountSwitchConfirm: { ask: vi.fn(async () => answer) },
     accountLabel: (_api: unknown, _agentKey: string, id: string | null) => `label:${id}`,
     notifyRestore: { toast: vi.fn() },
-    i18n: { global: { t: (key: string) => key } },
+    i18n: { global: { t: (key: string, params?: Record<string, unknown>) => `${key} ${JSON.stringify(params ?? {})}` } },
   }
   const agentAccountSwitch = new Function(...Object.keys(scope), `${js}\nreturn agentAccountSwitch`)(...Object.values(scope)) as (
     args: Record<string, unknown>, callerPaneId: string, signal?: AbortSignal
@@ -72,6 +74,15 @@ describe('App.vue agentAccountSwitch asks the user first', () => {
     expect(scope.cliAccountSwitch.mock.calls).toEqual([['claude', 'p-b']])
     expect(scope.cliProfilesApi.setDefault).not.toHaveBeenCalled()
     expect(scope.notifyRestore.toast).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the agent name and reason in the toast with invisible characters revealed', async () => {
+    const { scope, agentAccountSwitch } = harness('confirmed')
+    await agentAccountSwitch({ ...args(), reason: 'quota\u202e out' }, 'pa')
+    const [[text]] = scope.notifyRestore.toast.mock.calls as unknown as [[string]]
+    expect(text).toContain('quota\\\\u{202e} out')
+    expect(text).toContain('builder\\\\u{200b}')
+    expect(text).not.toMatch(/[\u200b\u202e]/)
   })
 
   it('hands the bus signal to the confirmation', async () => {

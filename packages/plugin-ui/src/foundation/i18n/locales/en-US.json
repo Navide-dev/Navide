@@ -7857,6 +7857,7 @@
         "agent-login-confirm-ok": "Open sign-in",
         "agent-switch-confirm-title": "An agent asks to switch a CLI account",
         "agent-switch-confirm-body": "Nothing switches unless you agree. The switch is the same one Settings → Accounts makes: the CLI moves to the other account, and if panes are running on it Navide asks you again before restarting them. If you do not answer, the request closes by itself.",
+        "agent-switch-confirm-late": "Once you agree, the switch finishes even if the agent has stopped waiting. If panes are restarted, that includes the asking agent's own pane when it runs on this CLI; it will not get the result and has to check its accounts again after the restart.",
         "agent-switch-confirm-vendor": "CLI",
         "agent-switch-confirm-from": "From account",
         "agent-switch-confirm-to": "To account",

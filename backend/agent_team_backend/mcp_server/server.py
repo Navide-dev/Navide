@@ -10506,8 +10506,11 @@ async def cli_account_switch(
     closes the question unanswered. On a yes it is the same switch Settings →
     Accounts makes, never forced: if panes are running on that CLI, the window
     asks the user again before restarting them, and a no there is
-    "restart-declined". A switch the user answers only after this call timed
-    out may still happen — read cli_accounts_list to see where it stands.
+    "restart-declined". Once the user says yes in time, the switch runs to
+    the end even if this call has timed out by then. If your own pane runs
+    on that CLI, the restart includes it and this call's result never
+    reaches you — after a restart, read cli_accounts_list to see where the
+    switch stands.
 
     agent is the vendor key ("claude", "codex", ...); profile_id is an
     account of that vendor as cli_accounts_list lists it, "__default__" for
@@ -10574,7 +10577,7 @@ async def cli_account_switch(
     if not answer.get("ok"):
         return {
             "ok": False,
-            "error": str(answer.get("error") or "the Navide window did not answer"),
+            "error": "the Navide window did not answer",
             "error_code": "window-unavailable",
         }
     if status in ("switched", "switched-signed-out"):

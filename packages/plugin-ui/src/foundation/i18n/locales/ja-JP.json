@@ -7857,6 +7857,7 @@
         "agent-login-confirm-ok": "サインインを開く",
         "agent-switch-confirm-title": "エージェントが CLI アカウントの切り替えを求めています",
         "agent-switch-confirm-body": "同意するまで何も切り替わりません。Settings → Accounts と同じ切り替えです：CLI がもう一方のアカウントに移り、そのアカウントで動いている Pane があれば、再起動する前にもう一度確認します。応答しない場合、この要求は自動的に閉じます。",
+        "agent-switch-confirm-late": "同意すると、エージェントが待つのをやめていても切り替えは最後まで実行されます。Pane を再起動する場合、要求したエージェントがこの CLI で動いていれば、その Pane も再起動されます。エージェントは結果を受け取れないため、再起動後にアカウントの状態を確認し直す必要があります。",
         "agent-switch-confirm-vendor": "CLI",
         "agent-switch-confirm-from": "切り替え前",
         "agent-switch-confirm-to": "切り替え後",
