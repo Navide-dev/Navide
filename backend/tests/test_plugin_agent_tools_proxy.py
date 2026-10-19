@@ -1337,6 +1337,12 @@ async def test_a_stopped_helper_closes_only_its_own_job_once_when_its_pid_was_ta
     from agent_team_backend import osplat
     from agent_team_backend.osplat import _windows
 
+    # End the helpers earlier tests left (on Windows each holds a real job)
+    # with the real handles first: their stop timers must not close those
+    # jobs through the fake below while this test counts.
+    proxy._result_worker.stop()  # noqa: SLF001
+    for leftover in list(worker._stopping):  # noqa: SLF001
+        worker._kill_tree(leftover)  # noqa: SLF001
     closed: list[int] = []
     kernel32 = types.SimpleNamespace(CloseHandle=lambda handle: closed.append(int(handle)) or 1)
     monkeypatch.setattr(_windows, "_kernel32", lambda: kernel32)
