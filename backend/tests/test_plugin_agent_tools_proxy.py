@@ -1377,6 +1377,157 @@ async def test_a_stopped_helper_closes_only_its_own_job_once_when_its_pid_was_ta
     assert closed == [1001, 2002]
 
 
+async def test_a_helper_contain_could_not_put_in_a_job_is_ended_only_while_its_pid_is_still_it(monkeypatch) -> None:
+    """Windows, contain() failed: no job of the helper's exists, so the job
+    table entry for its pid can only be someone else's. Ending the helper must
+    never close that entry, and kills the pid's tree only while the pid is
+    still this helper (as on main), never a pane spawned onto it."""
+    import asyncio
+
+    from agent_team_backend import agent_tool_result_worker as worker
+    from agent_team_backend import osplat
+    from agent_team_backend.osplat import _windows
+
+    proxy._result_worker.stop()  # noqa: SLF001
+    for leftover in list(worker._stopping):  # noqa: SLF001
+        worker._kill_tree(leftover)  # noqa: SLF001
+    closed: list[int] = []
+    kernel32 = types.SimpleNamespace(CloseHandle=lambda handle: closed.append(int(handle)) or 1)
+    monkeypatch.setattr(_windows, "_kernel32", lambda: kernel32)
+    monkeypatch.setattr(_windows, "_create_kill_on_close_job", lambda: 1001)
+
+    def refuse(job: int, pid: int) -> None:
+        raise OSError("assign refused")
+
+    monkeypatch.setattr(_windows, "_assign_to_job", refuse)
+    monkeypatch.setattr(_windows, "_jobs", {})
+    tree = _windows.WindowsProcessTree()
+    owner = {"start": "helper"}
+    killed: list[int] = []
+    monkeypatch.setattr(tree, "start_time", lambda pid: owner["start"])
+    monkeypatch.setattr(tree, "kill_tree", lambda pid, *, force: killed.append(pid))
+    monkeypatch.setattr(osplat, "process_tree", tree)
+    monkeypatch.setattr(worker, "STOP_GRACE_S", 0.0)
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    for reused in (True, False):
+        proxy._result_worker._start_failed = None  # noqa: SLF001
+        assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+        helper = proxy._result_worker._process  # noqa: SLF001
+        assert helper is not None
+        # contain() closed its own new job when the assign failed.
+        assert closed == [1001]
+        closed.clear()
+        if reused:
+            # The helper is gone and a pane was spawned onto its pid.
+            owner["start"] = "pane"
+            _windows._jobs[helper.pid] = (2002, "pane")  # noqa: SLF001
+        proxy._result_worker.stop()  # noqa: SLF001
+        await asyncio.wait_for(helper.wait(), 10)
+        for _ in range(40):
+            if helper not in worker._stopping:  # noqa: SLF001
+                break
+            await asyncio.sleep(0.05)
+        worker._kill_tree(helper)  # noqa: SLF001
+        if reused:
+            assert closed == [] and killed == []
+            assert _windows._jobs[helper.pid] == (2002, "pane")  # noqa: SLF001
+            _windows._jobs.clear()  # noqa: SLF001
+            owner["start"] = "helper"
+        else:
+            assert closed == [] and killed == [helper.pid]
+
+
+async def test_a_helper_that_died_while_idle_has_its_own_job_closed_once_before_the_next_starts(monkeypatch) -> None:
+    """A helper that exits between requests (before its idle stop) is
+    replaced by the next request: its own job is closed then, exactly once,
+    and the replacement adds no state change for listeners."""
+    import asyncio
+
+    from agent_team_backend import agent_tool_result_worker as worker
+    from agent_team_backend import osplat
+    from agent_team_backend.osplat import _windows
+
+    proxy._result_worker.stop()  # noqa: SLF001
+    for leftover in list(worker._stopping):  # noqa: SLF001
+        worker._kill_tree(leftover)  # noqa: SLF001
+    closed: list[int] = []
+    kernel32 = types.SimpleNamespace(CloseHandle=lambda handle: closed.append(int(handle)) or 1)
+    jobs = iter((1001, 1002))
+    monkeypatch.setattr(_windows, "_kernel32", lambda: kernel32)
+    monkeypatch.setattr(_windows, "_create_kill_on_close_job", lambda: next(jobs))
+    monkeypatch.setattr(_windows, "_assign_to_job", lambda job, pid: None)
+    monkeypatch.setattr(_windows, "_jobs", {})
+    monkeypatch.setattr(osplat, "process_tree", _windows.process_tree)
+    monkeypatch.setattr(worker, "STOP_GRACE_S", 0.0)
+    proxy._result_worker._start_failed = None  # noqa: SLF001
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    first = proxy._result_worker._process  # noqa: SLF001
+    assert first is not None
+    states: list[str] = []
+    monkeypatch.setattr(proxy._result_worker, "on_state", lambda snap: states.append(snap["state"]))  # noqa: SLF001
+    first.kill()
+    await asyncio.wait_for(first.wait(), 10)
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    second = proxy._result_worker._process  # noqa: SLF001
+    assert second is not None and second is not first
+    assert closed == [1001]
+    assert states == []
+    # Nothing is left to close it a second time.
+    worker._kill_tree(first)  # noqa: SLF001
+    assert closed == [1001]
+    proxy._result_worker.stop()  # noqa: SLF001
+    await asyncio.wait_for(second.wait(), 10)
+    for _ in range(100):
+        if len(closed) == 2:
+            break
+        await asyncio.sleep(0.05)
+    assert closed == [1001, 1002]
+
+
+async def test_a_helper_that_died_while_idle_has_its_group_ended_only_while_its_pid_is_free(monkeypatch) -> None:
+    """POSIX: the dead helper's group is ended (killpg on its pid) before the
+    next one starts, but not when its pid is alive again: that pid is then
+    another process, maybe leading a group of its own."""
+    import asyncio
+
+    from agent_team_backend import agent_tool_result_worker as worker
+    from agent_team_backend import osplat
+    from agent_team_backend.osplat import _posix
+
+    proxy._result_worker.stop()  # noqa: SLF001
+    for leftover in list(worker._stopping):  # noqa: SLF001
+        worker._kill_tree(leftover)  # noqa: SLF001
+    tree = _posix.PosixProcessTree()
+    ended: list[int] = []
+    alive = {"value": False}
+    monkeypatch.setattr(tree, "end_contained", lambda pid, job=None: ended.append(pid))
+    monkeypatch.setattr(tree, "is_alive", lambda pid: alive["value"])
+    monkeypatch.setattr(osplat, "process_tree", tree)
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    for reused in (False, True):
+        proxy._result_worker.stop()  # noqa: SLF001
+        proxy._result_worker._start_failed = None  # noqa: SLF001
+        ended.clear()
+        assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+        first = proxy._result_worker._process  # noqa: SLF001
+        assert first is not None
+        first.kill()
+        await asyncio.wait_for(first.wait(), 10)
+        alive["value"] = reused
+        assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+        assert proxy._result_worker._process is not first  # noqa: SLF001
+        assert ended == ([] if reused else [first.pid])
+        assert first not in worker._stopping  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+
+
 async def test_on_windows_the_helper_does_not_inherit_the_backend_stderr(monkeypatch) -> None:
     """Windows: an inherited stderr is duplicated from the backend's standard
     handle, which another thread may be swapping at that moment (WinError 6)."""
