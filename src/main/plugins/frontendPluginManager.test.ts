@@ -17854,6 +17854,50 @@ describe('web.* view capabilities (Host web view registry)', () => {
     expect(revokedGuest.webContents.destroyed).toBe(true)
   })
 
+  it('serves the native backend web Bridge port only to a first-party web backend with the web grant', async () => {
+    const mgr = newManager()
+    let grantedSystem: Array<'ui' | 'web'> = ['web']
+    mgr.setCapabilityGrantResolver((_pluginId, packageVersion) => ({ packageVersion, system: grantedSystem }))
+    mgr.configurePlansFilesystemService()
+    const dispatcher = (mgr as unknown as {
+      pluginBackendHost: { bridgeDispatcher: { dispatch: (request: unknown, context: PlansBridgeContext) => Promise<unknown> } }
+    }).pluginBackendHost.bridgeDispatcher
+    const bridge = (pluginId: string, operation: string, args: unknown) => dispatcher.dispatch({
+      id: `bridge-${++seq}`,
+      origin: { kind: 'call', requestId: 'parent-1' },
+      port: 'web',
+      operation,
+      arguments: args,
+    }, {
+      runtime: {
+        pluginId,
+        packageVersion: '1.0.0',
+        workspaceId: null,
+        instanceId: null,
+        contributionKey: null,
+        hostWindowId: null,
+        initiator: { kind: 'agent', source: 'mcp', id: 'agent-1' },
+      },
+      requestId: `bridge-${seq}`,
+      signal: new AbortController().signal,
+      emit: () => undefined,
+    })
+
+    const created = await bridge('navide.browser', 'create', { space: 'task' }) as { viewId: string }
+    expect(pluginWebViewRegistry().list('navide.browser')).toEqual([
+      expect.objectContaining({ viewId: created.viewId, owner: 'agent', control: 'agent' }),
+    ])
+    await expect(bridge('navide.browser', 'list', {})).resolves.toMatchObject({ views: [expect.objectContaining({ viewId: created.viewId })] })
+    // Not a first-party web backend, and Plans never declares the port.
+    await expect(bridge('acme.browser', 'list', {})).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    await expect(bridge('navide.plans', 'list', {})).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    grantedSystem = ['ui']
+    await expect(bridge('navide.browser', 'list', {})).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    grantedSystem = ['web']
+    await expect(bridge('navide.browser', 'close', { viewId: created.viewId })).resolves.toEqual({ ok: true })
+    expect(pluginWebViewRegistry().list('navide.browser')).toEqual([])
+  })
+
   it('clears a removed plugin\'s browser partition only when it declares web', async () => {
     const mgr = newManager()
     const a = await openWeb(mgr, 'acme.web-clear')

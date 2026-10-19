@@ -75,14 +75,26 @@ export type PlansBridgeErrorCode =
   | 'BACKEND_UNAVAILABLE'
   | 'PLUGIN_STOPPING'
   | 'INTERNAL_ERROR'
+  | 'USER_IN_CONTROL'
+  | 'CDP_ERROR'
+
+/** Error detail the child may see beside `data.code`: the `web` port's
+ *  USER_IN_CONTROL reason and CDP_ERROR message. `message` (the Error's own)
+ *  stays Host-side. */
+export interface PlansBridgeErrorData {
+  reason?: string
+  message?: string
+}
 
 export class PlansBridgeError extends Error {
   readonly code: PlansBridgeErrorCode
+  readonly data: PlansBridgeErrorData | undefined
 
-  constructor(code: PlansBridgeErrorCode, message?: string) {
+  constructor(code: PlansBridgeErrorCode, message?: string, data?: PlansBridgeErrorData) {
     super(message)
     this.name = 'PlansBridgeError'
     this.code = code
+    this.data = data
   }
 }
 
@@ -202,6 +214,12 @@ export interface PlansCorePorts {
   routes: PlansRoutesPort
   streams: PlansStreamsPort
   spawn: PlansSpawnPort
+  /** The Host's plugin web views (first-party navide.browser); absent = denied. */
+  web?: PlansWebPort
+}
+
+export interface PlansWebPort {
+  dispatch(operation: string, arguments_: JsonValue, context: PlansBridgeContext): Promise<JsonValue>
 }
 
 export interface BackendBridgeDispatcher {
@@ -915,7 +933,8 @@ export function createPlansBridgeDispatcher(ports: PlansCorePorts): BackendBridg
           throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no shell port.')
         case 'web':
           // Served by the Host's web port, never by the Plans core ports.
-          throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no web port.')
+          if (!ports.web) throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no web port.')
+          return ports.web.dispatch(request.operation, request.arguments, context)
       }
     },
   })

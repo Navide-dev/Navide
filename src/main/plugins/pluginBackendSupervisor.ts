@@ -16,6 +16,7 @@ import {
   type BackendBridgeDispatcher,
   type PlansBridgeContext,
   type PlansBridgeErrorCode,
+  type PlansBridgeErrorData,
   type PlansBridgeOrigin,
   type PlansBridgePort,
   type PlansBridgeRequest,
@@ -51,6 +52,8 @@ const ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u
 /** Live cancellation tombstones kept per child; the oldest is evicted past it. */
 export const MAX_IGNORED_REQUEST_IDS = 256
 const MAX_RETAINED_STDERR_BYTES = 64 * 1024
+/** A Bridge error message the child may see (the web port's CDP_ERROR). */
+const MAX_BRIDGE_ERROR_MESSAGE = 500
 const MAX_DIAGNOSTIC_EMITTED_BYTES = 64 * 1024
 export const MAX_CAUSE_STDERR_CHARS = 8192
 
@@ -2365,7 +2368,12 @@ export class PluginBackendSupervisor {
         if (!controller.signal.aborted) this.sendBridgeSuccess(generation, request.id, value)
       } catch (error) {
         if (!controller.signal.aborted) {
-          this.sendBridgeError(generation, request.id, this.bridgeErrorCode(error))
+          this.sendBridgeError(
+            generation,
+            request.id,
+            this.bridgeErrorCode(error),
+            error instanceof PlansBridgeError ? error.data : undefined,
+          )
         }
       } finally {
         if (this.bridgeRequests.get(request.id) === pending) {
@@ -2427,6 +2435,7 @@ export class PluginBackendSupervisor {
     generation: ChildGeneration,
     requestId: WireRequestId,
     code: PlansBridgeErrorCode | BackendPluginErrorCode,
+    detail?: PlansBridgeErrorData,
   ): void {
     if (this.currentGeneration !== generation || generation.exited) return
     try {
@@ -2438,7 +2447,13 @@ export class PluginBackendSupervisor {
           error: {
             code: 1000,
             message: 'Host Bridge request failed.',
-            data: { code },
+            data: {
+              code,
+              ...(typeof detail?.reason === 'string' ? { reason: detail.reason } : {}),
+              ...(typeof detail?.message === 'string'
+                ? { message: detail.message.slice(0, MAX_BRIDGE_ERROR_MESSAGE) }
+                : {}),
+            },
           },
         }),
       )

@@ -50,6 +50,8 @@ import {
 } from './pluginCapabilityBroker'
 import { WebViewError, type PluginWebViewRegistry, type WebGuestView, type WebHostSurface } from './pluginWebViews'
 import { pluginWebViewRegistry, setPluginWebViewChangedHook } from './pluginWebViewHost'
+import { dispatchWebBridge } from './webBridge'
+import { firstPartyBridgePorts } from './pluginFirstPartyBackends'
 import type { WebViewInfo, WebViewOwner, WebViewRect } from './webCapability'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
@@ -6231,8 +6233,30 @@ export class FrontendPluginManager {
     this.pluginBackendHost.setBridgeDispatcher(
       createProductionPlansBridgeDispatcher({
         filesystem: filesystemPort ?? this.plansFilesystemPort(),
+        web: {
+          dispatch: async (operation, arguments_, context) => {
+            if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+            if (!this.webBridgeGrantAllows(context)) {
+              throw new PlansBridgeError('CAPABILITY_DENIED', 'Web capability is denied.')
+            }
+            return dispatchWebBridge(this.pluginWebViews(), context.runtime.pluginId, operation, arguments_)
+          },
+        },
       }),
     )
+  }
+
+  /** The `web` Bridge port serves a first-party backend that carries the port
+   *  and whose user Grant for the bound package version includes `web`. The
+   *  supervisor has already checked the approved ports and an agent's
+   *  Execution Policy; the plugin id is the authenticated binding's. */
+  private webBridgeGrantAllows(context: PlansBridgeContext): boolean {
+    const runtime = context.runtime
+    if (!firstPartyBridgePorts(runtime.pluginId)?.includes('web') || !nonEmptyString(runtime.packageVersion)) {
+      return false
+    }
+    const grant = this.capabilityGrantResolver?.(runtime.pluginId, runtime.packageVersion) ?? null
+    return Boolean(grant && grant.packageVersion === runtime.packageVersion && grant.system.includes('web'))
   }
 
   /** The Plans child reads and writes its plan files itself and asks for the
