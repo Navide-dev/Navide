@@ -224,6 +224,7 @@ _CAPABILITY_HINTS = {
     "shell": "runs shell commands",
     "terminal": "runs commands in a terminal",
     "aiCli": "drives AI CLI agents",
+    "web": "browses websites and keeps their sign-ins",
 }
 
 
