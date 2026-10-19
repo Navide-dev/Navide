@@ -442,17 +442,6 @@ function makeBridgePolicySupervisor(
   )
 }
 
-// TEMP DIAGNOSTIC: record long GC pauses with the test that was running.
-const diagGcPauses: string[] = []
-{
-  const { PerformanceObserver } = await import('node:perf_hooks')
-  new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) {
-      if (entry.duration >= 20) diagGcPauses.push(`${Math.round(entry.duration)}ms kind=${(entry as unknown as { detail?: { kind?: number } }).detail?.kind} in ${expect.getState().currentTestName?.slice(26, 110)}`)
-    }
-  }).observe({ entryTypes: ['gc'] })
-}
-
 describe('PluginBackendSupervisor', () => {
   const supervisors: PluginBackendSupervisor[] = []
 
@@ -2371,67 +2360,6 @@ describe('PluginBackendSupervisor', () => {
         },
       })
     }
-
-    // TEMP DIAGNOSTIC (removed before review): per-phase timing of the same-ID B setup.
-    async function diagSameIdB(): Promise<Record<string, number>> {
-      const t: Record<string, number> = {}
-      let last = performance.now()
-      const mark = (name: string): void => { const now = performance.now(); t[name] = Math.round((now - last) * 10) / 10; last = now }
-      const root = mkdtempSync(join(tmpdir(), 'navide-backend-selector-diag-'))
-      mark('mkdtemp')
-      try {
-        generateKeyPairSync('ed25519'); generateKeyPairSync('ed25519'); generateKeyPairSync('ed25519'); generateKeyPairSync('ed25519')
-        mark('keygen4')
-        const a = signedBackendFixture(root, '1.0.0')
-        mark('fixtureA')
-        const b = signedBackendFixture(root, '2.0.0')
-        mark('fixtureB')
-        const selector = new PluginActivationSelector(root)
-        selector.stageCandidate('acme.backend', a.selection)
-        mark('stage')
-        selector.activateCandidate('acme.backend')
-        mark('activate')
-        selector.completeActivation('acme.backend')
-        mark('complete')
-        const spawnCount = { value: 0 }
-        const supervisor = selectorSupervisor(root, { ...activation, packageVersion: b.selection.packageVersion, packageDir: b.packageDir }, spawnCount, a.trust)
-        await expect(supervisor.start()).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE' })
-        mark('start')
-        await supervisor.close()
-        mark('close')
-      } finally {
-        rmSync(root, { recursive: true, force: true })
-        mark('rm')
-      }
-      return t
-    }
-
-    it('TEMP DIAG Windows scanner status and first zip versus bin write cost', async () => {
-      const mem = process.memoryUsage()
-      console.log('DIAG memory MiB', JSON.stringify(Object.fromEntries(Object.entries(mem).map(([k, v]) => [k, Math.round(v / 1048576)]))))
-      console.log('DIAG gc pauses >= 20ms so far', JSON.stringify(diagGcPauses))
-      if (process.platform === 'win32') {
-        const { spawnSync } = await import('node:child_process')
-        const ps = spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Get-MpComputerStatus | Select-Object AMServiceEnabled,RealTimeProtectionEnabled,OnAccessProtectionEnabled,IoavProtectionEnabled,AntivirusSignatureLastUpdated | Format-List; (Get-MpPreference).ExclusionPath; (Get-MpPreference).DisableArchiveScanning'], { encoding: 'utf8', timeout: 60_000 })
-        console.log('DIAG defender', JSON.stringify({ status: ps.status, out: ps.stdout, err: ps.stderr }))
-      }
-      const dir = mkdtempSync(join(tmpdir(), 'navide-diag-write-'))
-      try {
-        const archive = new Uint8Array(makeZip([{ name: 'manifest.json', data: '{"a":1}' }, { name: 'frontend/index.html', data: '<!doctype html>' }]))
-        for (const ext of ['zip', 'bin', 'zip', 'bin', 'json']) {
-          const t: number[] = []
-          for (let i = 0; i < 5; i += 1) {
-            const start = performance.now()
-            writeFileSync(join(dir, `f-${ext}-${t.length}-${Math.random()}.${ext}`), archive)
-            t.push(Math.round((performance.now() - start) * 100) / 100)
-          }
-          console.log('DIAG write', ext, JSON.stringify(t))
-        }
-        for (let i = 0; i < 3; i += 1) console.log('DIAG idle', JSON.stringify(await diagSameIdB()))
-      } finally {
-        rmSync(dir, { recursive: true, force: true })
-      }
-    }, 120_000)
 
     it('rejects a signed same-ID B launch when selector A is active without spawning', async () => {
       const root = mkdtempSync(join(tmpdir(), 'navide-backend-selector-admission-'))
