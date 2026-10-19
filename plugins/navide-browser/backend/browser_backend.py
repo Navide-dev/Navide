@@ -165,12 +165,15 @@ def _is_initiator(value: Any) -> bool:
         return False
     if value.get("kind") == "user":
         return _exact_keys(value, ("kind", "id")) and isinstance(value["id"], str) and bool(value["id"])
+    # An agent initiator may carry the calling pane as `caller`.
+    keys = ("kind", "source", "id", "caller") if "caller" in value else ("kind", "source", "id")
     return (
         value.get("kind") == "agent"
         and value.get("source") == "mcp"
-        and _exact_keys(value, ("kind", "source", "id"))
+        and _exact_keys(value, keys)
         and isinstance(value["id"], str)
         and bool(value["id"])
+        and ("caller" not in value or _is_record(value["caller"]))
     )
 
 
@@ -454,17 +457,26 @@ def _view_summary(view: dict[str, Any]) -> dict[str, Any]:
 
 
 def pane_space_name(pane: str) -> str:
-    return f"Agent {pane[:8]}"
+    return f"pane-{pane[:8]}"
 
 
-def _pane_view(views: list[dict[str, Any]], pane: str | None) -> str | None:
-    """The pane's own Space, found by its name in the Host's list.
+def _space_name(arguments: dict[str, Any], pane: str | None) -> str | None:
+    """The Space a call means: the `space` it names, else its pane's default."""
+    space = arguments.get("space")
+    if space is not None:
+        if not isinstance(space, str) or not space.strip():
+            raise ToolError("INVALID_ARGUMENT", "space must be a non-empty string.")
+        return space.strip()
+    return pane_space_name(pane) if pane else None
+
+
+def _named_view(views: list[dict[str, Any]], name: str | None) -> str | None:
+    """A Space found by its name in the Host's list.
 
     Nothing is kept in this process, so a restarted backend finds it again.
     """
-    if not pane:
+    if not name:
         return None
-    name = pane_space_name(pane)
     view_id = next((view.get("viewId") for view in views if view.get("space") == name), None)
     return view_id if isinstance(view_id, str) else None
 
@@ -476,9 +488,12 @@ def _resolve_view(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -
         if not isinstance(explicit, str) or not explicit:
             raise ToolError("INVALID_ARGUMENT", "viewId must be a non-empty string.")
         return explicit
-    view_id = _pane_view(_list_views(bridge), pane)
+    name = _space_name(arguments, pane)
+    if name is None:
+        raise ToolError("SPACE_REQUIRED", "This call does not come from a Navide pane; pass viewId or space.")
+    view_id = _named_view(_list_views(bridge), name)
     if view_id is None:
-        raise ToolError("NO_SPACE", "This pane has no Space yet. Call browser_open first.")
+        raise ToolError("NO_SPACE", "This Space does not exist yet. Call browser_open first.")
     return view_id
 
 
@@ -870,11 +885,12 @@ def open_space(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> d
             raise ToolError("SPACE_CLOSED", "No Space has that viewId.")
         view_id: str | None = explicit
     else:
-        view_id = _pane_view(views, pane)
+        name = _space_name(arguments, pane)
+        if name is None:
+            raise ToolError("SPACE_REQUIRED", "This call does not come from a Navide pane; pass space to name the Space.")
+        view_id = _named_view(views, name)
     if view_id is None:
-        if not pane:
-            raise ToolError("INVALID_ARGUMENT", "Only an agent pane has its own Space; pass viewId.")
-        created_arguments: dict[str, Any] = {"space": pane_space_name(pane)}
+        created_arguments: dict[str, Any] = {"space": name}
         if url is not None:
             created_arguments["url"] = url
         created = _call(bridge, "create", created_arguments)
@@ -906,7 +922,7 @@ def run_tool(name: str, arguments: dict[str, Any], bridge: Bridge, pane: str | N
             views = _list_views(bridge)
             value: dict[str, Any] = {
                 "views": [_view_summary(view) for view in views],
-                "yourSpace": _pane_view(views, pane),
+                "yourSpace": _named_view(views, pane_space_name(pane) if pane else None),
             }
         elif name == "browser.open":
             value = open_space(bridge, arguments, pane)
@@ -1049,9 +1065,11 @@ def _handle(frame: Any) -> None:
         _write_frame({"jsonrpc": "2.0", "id": frame["id"], "error": {"code": -32601, "message": "Method not found"}})
         return
     origin = {"kind": "call", "requestId": frame["id"]}
-    initiator = runtime["initiator"]
-    # Each agent pane gets its own Space; a user-initiated call names a viewId.
-    pane = initiator["id"] if initiator.get("kind") == "agent" else None
+    # Each agent pane gets its own Space. initiator.id is new on every call;
+    # the pane is caller.paneId, present only for a pane caller.
+    caller = runtime["initiator"].get("caller")
+    pane_id = caller.get("paneId") if _is_record(caller) and caller.get("kind") == "pane" else None
+    pane = pane_id if isinstance(pane_id, str) and pane_id else None
 
     def bridge(operation: str, bridge_arguments: dict[str, Any]) -> Any:
         return _bridge_call(origin, "web", operation, bridge_arguments)

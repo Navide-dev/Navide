@@ -205,31 +205,48 @@ def test_open_creates_one_space_per_pane_and_reuses_it() -> None:
     first = browser.run_tool("browser.open", {"url": "https://example.com"}, bridge, "p1")
     second = browser.run_tool("browser.open", {"url": "https://example.org"}, bridge, "p1")
     other = browser.run_tool("browser.open", {}, bridge, "p2")
-    assert first["ok"] and first["view"]["viewId"] == "v1" and first["view"]["space"] == "Agent p1"
+    assert first["ok"] and first["view"]["viewId"] == "v1" and first["view"]["space"] == "pane-p1"
     assert second["view"]["viewId"] == "v1"
     assert other["view"]["viewId"] == "v2"
     assert [arguments for operation, arguments in bridge.calls if operation == "create"] == [
-        {"space": "Agent p1", "url": "https://example.com"},
-        {"space": "Agent p2"},
+        {"space": "pane-p1", "url": "https://example.com"},
+        {"space": "pane-p2"},
     ]
     assert bridge.cdp_calls("Page.navigate")[0]["params"] == {"url": "https://example.org"}
 
 
 def test_the_pane_space_is_found_again_by_name_after_a_restart() -> None:
     bridge = FakeBridge(views=[
-        {"viewId": "v7", "space": "Agent pane-123", "owner": "agent", "control": "agent", "state": "running"},
-        {"viewId": "v8", "space": "Agent other-pa", "owner": "agent", "control": "agent", "state": "running"},
+        {"viewId": "v7", "space": "pane-12345678", "owner": "agent", "control": "agent", "state": "running"},
+        {"viewId": "v8", "space": "pane-87654321", "owner": "agent", "control": "agent", "state": "running"},
     ], cdp={"Runtime.evaluate": _loaded(), "Page.navigate": {"frameId": "f"}})
-    listed = browser.run_tool("browser.list", {}, bridge, "pane-12345678")
-    opened = browser.run_tool("browser.open", {"url": "https://example.com"}, bridge, "pane-12345678")
+    listed = browser.run_tool("browser.list", {}, bridge, "12345678-aaaa")
+    opened = browser.run_tool("browser.open", {"url": "https://example.com"}, bridge, "12345678-aaaa")
     assert listed["yourSpace"] == "v7"
     assert opened["view"]["viewId"] == "v7"
     assert bridge.created == 0
 
 
+def test_a_named_space_overrides_the_pane_default_and_is_found_again() -> None:
+    bridge = FakeBridge(cdp={"Runtime.evaluate": _loaded()})
+    opened = browser.run_tool("browser.open", {"space": "Research"}, bridge, "p1")
+    snap = browser.run_tool("browser.snapshot", {"space": "Research", "scope": "full"}, bridge, "p1")
+    assert opened["view"]["space"] == "Research"
+    assert snap["viewId"] == opened["view"]["viewId"]
+
+
+def test_a_call_from_outside_a_pane_must_name_its_space() -> None:
+    bridge = FakeBridge(cdp={"Runtime.evaluate": _loaded()})
+    refused = browser.run_tool("browser.open", {}, bridge, None)
+    assert refused["ok"] is False and refused["error"] == "SPACE_REQUIRED"
+    assert bridge.created == 0
+    opened = browser.run_tool("browser.open", {"space": "Nightly check"}, bridge, None)
+    assert opened["ok"] is True and opened["view"]["space"] == "Nightly check"
+
+
 def test_a_tool_before_open_says_to_open_first() -> None:
     result = browser.run_tool("browser.snapshot", {}, FakeBridge(), "p1")
-    assert result == {"ok": False, "error": "NO_SPACE", "message": "This pane has no Space yet. Call browser_open first."}
+    assert result["ok"] is False and result["error"] == "NO_SPACE"
 
 
 def test_user_in_control_comes_back_with_its_reason() -> None:
@@ -312,7 +329,10 @@ def _call_frame(request_id: int, name: str, arguments: dict[str, Any]) -> dict[s
             "runtime": {
                 "pluginId": "navide.browser", "packageVersion": "0.2.27", "workspaceId": None,
                 "instanceId": None, "contributionKey": None, "hostWindowId": None,
-                "initiator": {"kind": "agent", "source": "mcp", "id": "pane-1"},
+                "initiator": {
+                    "kind": "agent", "source": "mcp", "id": "call-uuid-" + str(request_id),
+                    "caller": {"kind": "pane", "paneId": "abcdef1234567890", "workspace": "/w"},
+                },
             },
         },
     }
@@ -325,13 +345,14 @@ def test_wire_call_routes_through_the_web_bridge_port(monkeypatch: pytest.Monkey
 
     def fake_bridge_call(origin: dict[str, Any], port: str, operation: str, arguments: Any) -> Any:
         seen.append((port, operation, arguments))
-        return {"views": []}
+        return {"views": [{"viewId": "v3", "space": "pane-abcdef12", "owner": "agent", "control": "agent", "state": "idle"}]}
 
     monkeypatch.setattr(browser, "_bridge_call", fake_bridge_call)
     browser._handle(_call_frame(1, "browser.list", {}))
     frame = json.loads(out.getvalue().decode().strip())
     assert seen == [("web", "list", {})]
-    assert frame["result"]["value"] == {"ok": True, "views": [], "yourSpace": None}
+    # The pane comes from caller.paneId, never from the per-call initiator id.
+    assert frame["result"]["value"]["yourSpace"] == "v3"
 
 
 def test_wire_unknown_method_is_method_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
