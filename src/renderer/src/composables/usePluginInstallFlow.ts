@@ -267,12 +267,24 @@ export function usePluginInstallFlow() {
 }
 
 /** In-app confirmation before an installed plugin is removed. */
+/** Removal always clears the browser data (site sign-ins, cookies, cache) of a
+ *  Navide plugin that declares `web`; the confirmation says so. */
+function withWebDataNote(
+  t: (key: string, values?: Record<string, unknown>) => string,
+  id: string,
+  body: string,
+): string {
+  const declaresWeb = usePluginInventory().installed.value
+    .find((plugin) => plugin.id === id)?.manifestPermissions?.system?.includes('web') === true
+  return declaresWeb ? `${body} ${t('settings.extensions.marketplace.uninstallClearsWebData', { name: id })}` : body
+}
+
 export function confirmUninstall(
   t: (key: string, values?: Record<string, unknown>) => string,
   notify: ReturnType<typeof useNotify>,
   id: string
 ): Promise<boolean> {
-  return notify.confirm(t('settings.extensions.marketplace.uninstallConfirmBody', { name: id }), {
+  return notify.confirm(withWebDataNote(t, id, t('settings.extensions.marketplace.uninstallConfirmBody', { name: id })), {
     title: t('settings.extensions.marketplace.uninstallConfirmTitle'),
     confirmText: t('settings.extensions.marketplace.uninstall'),
     cancelText: t('settings.extensions.trust.cancel'),
@@ -305,7 +317,7 @@ export async function askUninstall(
   }
   if (!data?.exists) return (await confirmUninstall(t, notify, id)) ? {} : null
   const confirmed = await notify.confirm(
-    t('settings.extensions.marketplace.uninstallConfirmBodyWithData', { name: id, size: formatBytes(data.bytes) }),
+    withWebDataNote(t, id, t('settings.extensions.marketplace.uninstallConfirmBodyWithData', { name: id, size: formatBytes(data.bytes) })),
     {
       title: t('settings.extensions.marketplace.uninstallConfirmTitle'),
       confirmText: t('settings.extensions.marketplace.uninstall'),

@@ -1842,6 +1842,7 @@
         "uninstallConfirmBody": "{name} をこのデバイスから削除します。Navide マーケットプレイスから再インストールできます。",
         "uninstallConfirmBodyWithData": "{name} をこのデバイスから削除します。{name} のネイティブバックエンドは、このデバイスに {size} の専用データを保存しています（場所は下記）。保持を選ばない限り、Navide はこのデータも削除します。",
         "uninstallKeepNativeData": "このデータを保持し、再インストール時に引き続き使う",
+        "uninstallClearsWebData": "{name} を削除すると、このコンピューター上のサイトのサインイン、Cookie、キャッシュも削除されます。",
         "updatesCount": "利用可能なアップデート：{count} 件",
         "retry": "再試行",
         "featured": "注目",
