@@ -337,6 +337,12 @@ class ResultWorker:
         """Stop the helper once it has been idle for IDLE_EXIT_S."""
         if self._process is None or self._loop is None:
             return
+        from agent_team_backend import osplat
+
+        if osplat.platform_id == "win32":
+            # Kept running as in 0.2.25: starting it again after an idle exit
+            # can fail with WinError 6 on Windows (#429).
+            return
         self._idle_exit = self._loop.call_later(IDLE_EXIT_S, self._exit_idle)
 
     def _exit_idle(self) -> None:

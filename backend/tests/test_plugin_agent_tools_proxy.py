@@ -1296,6 +1296,7 @@ async def test_the_helper_starts_with_the_first_result_in_pieces_and_not_before(
     proxy._result_worker.stop()  # noqa: SLF001
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the helper is kept running on Windows (see the test below)")
 async def test_an_idle_helper_exits_after_its_window_and_the_next_large_result_starts_a_new_one(monkeypatch) -> None:
     import asyncio
 
@@ -1323,6 +1324,33 @@ async def test_an_idle_helper_exits_after_its_window_and_the_next_large_result_s
     second = proxy._result_worker._process  # noqa: SLF001
     assert second is not None and second is not first
     assert proxy._result_worker.state == "ready"  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+
+
+async def test_on_windows_an_idle_helper_is_kept_running_as_in_0_2_25(monkeypatch) -> None:
+    import asyncio
+
+    from agent_team_backend import agent_tool_result_worker as worker
+    from agent_team_backend import osplat
+
+    proxy._result_worker.stop()  # noqa: SLF001
+    proxy._result_worker._start_failed = None  # noqa: SLF001
+    monkeypatch.setattr(worker, "IDLE_EXIT_S", 0.5)
+    monkeypatch.setattr(osplat, "platform_id", "win32")
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    first = proxy._result_worker._process  # noqa: SLF001
+    assert first is not None
+    # No idle exit is scheduled, so past the window the same helper is there.
+    assert proxy._result_worker._idle_exit is None  # noqa: SLF001
+    await asyncio.sleep(1.0)
+    assert proxy._result_worker._process is first  # noqa: SLF001
+    assert first.returncode is None
+    assert proxy._result_worker.state == "ready"  # noqa: SLF001
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    assert proxy._result_worker._process is first  # noqa: SLF001
     proxy._result_worker.stop()  # noqa: SLF001
 
 
