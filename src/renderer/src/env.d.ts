@@ -479,6 +479,7 @@ declare global {
           namespace: string
           name: string
           version?: string
+          testplace?: boolean
         }) => Promise<PreparedInstallSummary>
         commitInstall: (
           id: string,
@@ -499,6 +500,11 @@ declare global {
         >
         removeDeveloperFolder?: (id: string) => Promise<DeveloperModeState>
         selfHostedQuarantine?: () => Promise<Array<{ id: string; version: string | null }>>
+        testplaceList?: () => Promise<TestplaceListing[]>
+        testplaceJoin?: (code: string) => Promise<{ id: string }>
+        testplaceLeave?: (id: string) => Promise<{ ok: true }>
+        expiredTestplace?: () => Promise<ExpiredTestplaceBuild[]>
+        keepExpiredTestplace?: (id: string) => Promise<{ ok: true }>
         restart: (id: string) => Promise<{
           id: string
           packageVersion: string
@@ -573,6 +579,8 @@ declare global {
     source?: PluginSource
     /** Test build expiry (ISO-8601), from the signed envelope; testplace only. */
     expiresAt?: string
+    /** How the user joined that test, when recorded; testplace only. */
+    testplaceVia?: 'invite' | 'code'
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'
@@ -819,6 +827,9 @@ declare global {
     registry?: PluginRegistryDisclosureFacts | null
     /** Card K3: the package's source; `local-unsigned` for a file install. */
     source?: PluginSource
+    /** A Testplace build: its signed expiry and how the user joined the test. */
+    expiresAt?: string
+    testplaceVia?: 'invite' | 'code'
     /** Card K3: sha256 of the picked file, shown in the consent dialog. */
     digest?: string
     /** Card K3 (D7): the installed package of the same id a file install replaces. */
@@ -833,6 +844,28 @@ declare global {
     takedownChecked?: boolean
     /** Card K4: the developer folder this summary was read from. */
     folder?: string
+  }
+
+  /** One test the user joined (Testplace, W5b). */
+  interface TestplaceListing {
+    id: string
+    namespace: string
+    name: string
+    displayName: string | null
+    description: string | null
+    publisher: string
+    via: 'invite' | 'code' | null
+    versions: Array<{ version: string; target: string; expiresAt: string | null; installable: boolean; compatible: boolean | null }>
+  }
+
+  /** D3: an installed Testplace build stopped because it expired; its data is kept. */
+  interface ExpiredTestplaceBuild {
+    id: string
+    version: string | null
+    expiresAt: string | null
+    artifactDigest?: string
+    /** False when it was taken down or fails for another reason: no "keep using". */
+    canKeep: boolean
   }
 
   /** Card K4: the Developer Mode switch and the developer folders consented to. */
