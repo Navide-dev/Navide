@@ -219,7 +219,7 @@ describe('web namespace admission', () => {
 
   it('routes web.changed only to a declared and granted audience with a valid payload', () => {
     const policy = manifestV2CapabilityPolicy({ system: ['web'] })
-    const payload = { views: [{ viewId: 'v1', space: 'S', owner: 'user', control: 'user', state: 'idle', url: 'about:blank', title: '', loading: false, attached: false }] }
+    const payload = { views: [{ viewId: 'v1', space: 'S', owner: 'user', control: 'user', state: 'idle', url: 'about:blank', title: '', loading: false, attached: false, agentScriptSinceLoad: false }] }
     expect(isPublicCapabilityEventAllowed(policy, 'web.changed', payload, webContext(), binding.pluginId, binding)).toBe(true)
     expect(isPublicCapabilityEventAllowed(policy, 'web.changed', { views: [{}] }, webContext(), binding.pluginId, binding)).toBe(false)
     expect(isPublicCapabilityEventAllowed(policy, 'web.changed', payload, webContext(), binding.pluginId)).toBe(false)
