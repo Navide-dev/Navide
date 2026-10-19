@@ -230,11 +230,9 @@ describe('keysAnswerPermissionBox — what answers a held box', () => {
 })
 
 describe('permissionBoxOnScreen — is the held box still up?', () => {
-  // The box as Claude Code 2.1.303 draws it, per the reviewer's capture of its
-  // rows and footer (synthetic: no PTY capture of it is checked in). The point
-  // is that the vendor's exact pattern does NOT match it, and the held box must
-  // still be seen as present.
-  const box = [
+  // The box as Claude Code 2.1.303 draws it, from a reviewer's description of
+  // its rows and footer (synthetic: no PTY capture of it is checked in).
+  const boxRows = [
     'Bash command',
     '  rm -rf build',
     'Do you want to proceed?',
@@ -243,16 +241,33 @@ describe('permissionBoxOnScreen — is the held box still up?', () => {
     '  3. Yes, allow all edits during this session',
     '  4. No',
     'Esc to cancel · Tab to amend',
-  ].join('\n')
+  ]
+  const box = boxRows.join('\n')
+  // The same box with a status line painted under it, as the CLI does.
+  const boxWithStatusLine = [...boxRows, '', '  ⏵⏵ accept edits on (shift+tab to cycle)'].join('\n')
 
-  it('sees a box the vendor pattern misses — a parallel result must not end its hold', () => {
-    expect(matchAwaitingInput('claude', box)).toBe(false)
+  it('the vendor pattern knows the bare box', () => {
+    expect(matchAwaitingInput('claude', box)).toBe(true)
     expect(permissionBoxOnScreen('claude', box)).toBe(true)
+  })
+
+  it('sees a box with rows under its footer, which the vendor pattern misses', () => {
+    // The vendor pattern is anchored to the end of the screen, so it cannot see
+    // an open box that has a status line below it. A parallel tool's result must
+    // not end that box's hold.
+    expect(matchAwaitingInput('claude', boxWithStatusLine)).toBe(false)
+    expect(permissionBoxOnScreen('claude', boxWithStatusLine)).toBe(true)
     expect(heldBoxGone({
       foreignResultSeen: true,
       heldMs: HELD_BOX_PAINT_GRACE_MS + 1,
-      boxOnScreen: permissionBoxOnScreen('claude', box),
+      boxOnScreen: permissionBoxOnScreen('claude', boxWithStatusLine),
     })).toBe(false)
+  })
+
+  it('does not take the box\'s question or numbered rows alone for a box', () => {
+    // Only the footer anchors count: "Do you want to" and "1. Yes" are ordinary
+    // prose and list items.
+    expect(permissionBoxOnScreen('claude', 'Do you want to proceed?\n1. Yes\n2. No')).toBe(false)
   })
 
   it('still sees the boxes the vendor pattern knows', () => {

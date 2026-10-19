@@ -257,18 +257,22 @@ export function keysAnswerPermissionBox(data: string): boolean {
   return false
 }
 
-/** What a permission box leaves on the rendered screen, matched loosely on
- *  purpose: the question, the numbered Yes/No rows, or the cancel footer. The
- *  vendor's own awaitingInput pattern is exact and drifts as the CLI's box is
- *  redrawn, and a miss there must not be read as "the box is gone". A false
- *  positive here (quoted prose on screen) only keeps a hold a little longer —
- *  the answering key and the turn end still release it. */
-const PERMISSION_BOX_HINT = /Esc to cancel|Do you want to |\b[1-9]\. (?:Yes|No)\b/
+/** The same anchors as claude's awaitingInput pattern, without its end-of-screen
+ *  anchor. That anchor is right for RAISING a wait (a live box is the bottom of
+ *  the frame, quoted prose is not), but a live box can have a status line, hint
+ *  or border row painted under its footer, and then the vendor pattern misses an
+ *  open box. Read as "the box is gone" that would end a hold on a parallel tool's
+ *  result. Here a miss is the costly direction and a false positive (the same
+ *  words quoted in conversation) only keeps a hold a little longer — the
+ *  answering key and the turn end still release it. Redundant once the vendor
+ *  pattern tolerates rows after its anchor; delete then. */
+const PERMISSION_BOX_ANCHORS =
+  /No, and tell Claude what to do differently|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend/
 
 /** True when `screen` (rendered, see matchAwaitingInput) still shows a
- *  permission box: the vendor's own pattern, or the looser hint above. */
+ *  permission box: the vendor's own pattern, or its anchors anywhere on screen. */
 export function permissionBoxOnScreen(agentKey: string, screen: string): boolean {
-  return matchAwaitingInput(agentKey, screen) || PERMISSION_BOX_HINT.test(screen.replace(/\s+/g, ' '))
+  return matchAwaitingInput(agentKey, screen) || PERMISSION_BOX_ANCHORS.test(screen.replace(/\s+/g, ' '))
 }
 
 /** How long a hold must have been up before a missing box counts as evidence.
