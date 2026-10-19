@@ -63,8 +63,10 @@ export function extraEnterAllowed(framedHeld: boolean | null, dialogShown: boole
  *  option) that uses the same glyph. */
 const PROMPT_ROW_RE = /^\s*[›>❯]/
 const OPTION_ROW_RE = /^\s*[›>❯]\s*\d+[.)]/
-/** A prompt row inside a drawn frame, whose side border may precede the glyph. */
-const FRAMED_PROMPT_ROW_RE = /^[\s│]*[›>❯]/
+/** A prompt row inside a drawn frame, whose side border may precede the glyph.
+ *  A numbered option is not one: a dialog's own cursor row ("❯ 1. Yes") sits
+ *  between the box-only rows its separators draw. */
+const FRAMED_PROMPT_ROW_RE = /^[\s│]*[›>❯](?!\s*\d+[.)])/
 
 /** Is a dialog that would take an Enter as its answer on screen?
  *

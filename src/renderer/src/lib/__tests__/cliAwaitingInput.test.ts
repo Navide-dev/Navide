@@ -232,7 +232,6 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
   // idle prompt. These are the rows a real pane can paint under the footer.
   describe('with rows drawn below the box', () => {
     const STATUS_LINE = '  ~/git/navide · main · Opus 4.7 · 42% context'
-    const HINT_ROW = '  ? for shortcuts'
     const BORDER = '╰──────────────────────────────────────╯'
     const FOOTER = 'Esc to cancel · Tab to amend'
     const permissionBox = [
@@ -243,20 +242,19 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
       FOOTER,
     ]
 
-    it.each([
+    // A hint row walks the same branch as a statusLine, so it has no case.
+    const below = [
       ['a custom statusLine', ['', STATUS_LINE]],
-      ['a hint row', ['', HINT_ROW]],
+      ['a statusLine that draws a prompt glyph', ['', '  ~/navide ❯ main']],
       ['trailing border characters', [BORDER, '│']],
-    ])('matches the permission box with %s below it', (_name, below) => {
-      expect(matchAwaitingInput('claude', [...permissionBox, ...below].join('\n'))).toBe(true)
+    ] as const
+
+    it.each(below)('matches the permission box with %s below it', (_name, rows) => {
+      expect(matchAwaitingInput('claude', [...permissionBox, ...rows].join('\n'))).toBe(true)
     })
 
-    it.each([
-      ['a custom statusLine', ['', STATUS_LINE]],
-      ['a hint row', ['', HINT_ROW]],
-      ['trailing border characters', [BORDER, '│']],
-    ])('matches the AskUserQuestion footer with %s below it', (_name, below) => {
-      expect(matchAwaitingInput('claude', [QUESTION_BOX, ...below].join('\n'))).toBe(true)
+    it.each(below)('matches the AskUserQuestion footer with %s below it', (_name, rows) => {
+      expect(matchAwaitingInput('claude', [QUESTION_BOX, ...rows].join('\n'))).toBe(true)
     })
 
     it('does not match when the idle input prompt follows the anchor', () => {

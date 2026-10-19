@@ -88,18 +88,17 @@ export const SPEC = {
   // The two-option box (`Do you want to proceed?` / `1. Yes` / `2. No`) has
   // neither, so a third anchor is its `Esc to cancel · Tab to amend` footer.
   // A live box REPLACES Claude's input box, so after an anchor only a bounded
-  // tail may follow — 300 characters, not counting box-drawing ones, since a
-  // border row spans the pane width — and it must hold no idle input prompt:
-  // `❯`, or the framed `│ >` older builds draw. Blank rows, a custom
-  // statusLine, a hint row and trailing box-drawing characters fit that tail.
-  // The same words quoted in conversation (a pane discussing this very
-  // pattern) sit above the idle input box, so the prompt row after them rules
-  // the match out — matching those parked an idle pane on AWAITING. A
-  // statusLine that itself draws `❯` reads as an idle prompt and misses the
-  // box: the safe direction, the hook still covers the permission box.
+  // tail may follow, and it must not draw the idle input prompt: a `❯` or `>`
+  // right after a frame character (`────` then `❯`, or the framed `│ >` older
+  // builds draw). A statusLine, a hint row and blank rows fit the tail, and so
+  // do border rows, which the 300-character bound does not count because one
+  // spans the pane width and the #416 guard reads the screen with them kept.
+  // The same words quoted in conversation sit above the idle input box, so the
+  // prompt row after them rules the match out — matching those parked an idle
+  // pane on AWAITING. Gap: bash mode's `!` prompt is not excluded.
   awaitingInput: {
     pattern:
-      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend)(?!.*(?:❯|│ ?>))(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
+      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend)(?!.*[─-╿] ?[❯>])(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
     // Additive to the hook, never authoritative over it: an MCP elicitation
     // draws no option box, so a non-match here says nothing about a wait the
     // hook raised. See the field's own doc comment.

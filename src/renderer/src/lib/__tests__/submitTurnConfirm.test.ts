@@ -279,6 +279,33 @@ describe('blockingDialogShown', () => {
     expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: permissionScreen })).toBe(true)
   })
 
+  // A dialog's own cursor row ("❯ 1. Yes") is not a composer, so the separators
+  // above it and ONE border row below must not read as the input box's frame.
+  it('reads a dialog whose own rows are the only box-only rows around its cursor', () => {
+    const dashed = '╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌'
+    const bash = [
+      ' Bash command',
+      dashed,
+      ' touch /tmp/navide-permission-test',
+      dashed,
+      ' Do you want to proceed?',
+      ' ❯ 1. Yes',
+      '   2. No',
+      '',
+      ' Esc to cancel · Tab to amend',
+      '╰──────────────────────────────────────╯',
+    ].join('\n')
+    const picker = [
+      '└──────┴───────┘',
+      '  ❯ 1. Merge them into one state',
+      '    2. Keep them separate',
+      'Enter to select · Tab/Arrow keys to navigate · Esc to cancel',
+      '╰──────────────────────────────────────╯',
+    ].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: bash })).toBe(true)
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: picker })).toBe(true)
+  })
+
   // Frameless (codex): the composer is the prompt row and what wraps below
   // it. An unsent message quoting a dialog's wording must not read as one —
   // main resends the Enter there and the message is delivered.
