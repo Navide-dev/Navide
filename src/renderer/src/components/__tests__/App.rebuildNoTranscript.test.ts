@@ -36,7 +36,7 @@ function harness(sessionOnDisk: boolean | undefined) {
     rebuildingPanes: new Set<string>(),
     cancelStalePendingCreate: async () => {},
     pipelineLog: vi.fn(),
-    canResumeSession: vi.fn(async () => false),
+    canResumeSession: vi.fn(async (): Promise<boolean | null> => false),
     agentSpecs: [],
     skipFlagFor: () => '',
     buildResumeCommand: (_agent: string, sid: string) => `claude --resume ${sid}`,
@@ -63,11 +63,11 @@ function harness(sessionOnDisk: boolean | undefined) {
 }
 
 describe('rebuildPaneViaResume on a pane with no transcript yet', () => {
-  it('reopens fresh on the target account when the caller opts in', async () => {
+  it('reopens fresh on the target account when the caller opts in and the probe says absent', async () => {
     const { scope, rebuild } = harness(undefined)
     const result = await rebuild('old', { profileId: 'acct-b', freshWhenNoTranscript: true })
     expect(result).toBeUndefined()
-    expect(scope.canResumeSession).not.toHaveBeenCalled()
+    expect(scope.canResumeSession).toHaveBeenCalledWith('claude', '/ws', 'sid-old')
     expect(scope.notifyRestore.toast).not.toHaveBeenCalled()
     expect(scope.spawnPane).toHaveBeenCalledWith(expect.objectContaining({
       commandOverride: '',
@@ -98,6 +98,39 @@ describe('rebuildPaneViaResume on a pane with no transcript yet', () => {
     expect(scope.sendQuiet).toHaveBeenCalledWith('manual_pane.spawn', expect.objectContaining({
       session_id: 'sid-old',
     }))
+  })
+
+  it('resumes when the flag lags but the probe finds the transcript', async () => {
+    // The first turn may still be running when the user moves the pane: the
+    // in-memory flag has not caught up, the jsonl already exists. Reopening
+    // fresh here would drop the conversation from the pane.
+    const { scope, rebuild } = harness(undefined)
+    scope.canResumeSession.mockResolvedValueOnce(true)
+    const result = await rebuild('old', { profileId: 'acct-b', freshWhenNoTranscript: true })
+    expect(result).toBeUndefined()
+    expect(scope.spawnPane).toHaveBeenCalledWith(expect.objectContaining({
+      commandOverride: 'claude --resume sid-old',
+      isResume: true,
+      resumeSessionId: 'sid-old',
+    }))
+  })
+
+  it('never reopens fresh on a failed probe: it reports and leaves the pane running', async () => {
+    const { scope, rebuild } = harness(undefined)
+    scope.canResumeSession.mockResolvedValueOnce(null)
+    const result = await rebuild('old', { profileId: 'acct-b', freshWhenNoTranscript: true })
+    expect(result).toBe('probe-failed')
+    expect(scope.notifyRestore.toast).toHaveBeenCalledWith('pane.terminal.rebuild-probe-failed', { type: 'error' })
+    expect(scope.onKill).not.toHaveBeenCalled()
+    expect(scope.spawnPane).not.toHaveBeenCalled()
+  })
+
+  it('a transcript the pane had and lost still refuses, even when the caller opts in', async () => {
+    const { scope, rebuild } = harness(true)
+    const result = await rebuild('old', { profileId: 'acct-b', freshWhenNoTranscript: true })
+    expect(result).toBe('not-resumable')
+    expect(scope.notifyRestore.toast).toHaveBeenCalledWith('pane.terminal.rebuild-not-resumable', { type: 'error' })
+    expect(scope.onKill).not.toHaveBeenCalled()
   })
 
   it('without the opt-in keeps refusing, and leaves the pane running', async () => {

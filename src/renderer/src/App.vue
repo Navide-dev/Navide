@@ -8213,13 +8213,16 @@ async function rebuildPaneViaResume(
       return 'probe-failed'
     }
     const ws = pane.workspacePath
-    const fresh = !!opts?.freshWhenNoTranscript && !pane.sessionOnDisk
     // Fail-safe: abort on false AND on null (probe failed) — never kill a
     // live pane on an unverified resumability answer. The toast distinguishes
     // them: false = the session is definitively absent, null = the probe
     // itself failed (the session may well exist — the user should retry).
-    const resumable = fresh || await canResumeSession(pane.agentKey, ws, sessionId)
-    if (resumable !== true) {
+    const resumable = await canResumeSession(pane.agentKey, ws, sessionId)
+    // Reopen fresh only on a definitive "absent" for a pane that never wrote a
+    // transcript. The flag alone is not enough: it lags a first turn that is
+    // still running, whose jsonl may already exist.
+    const fresh = resumable === false && !!opts?.freshWhenNoTranscript && !pane.sessionOnDisk
+    if (resumable !== true && !fresh) {
       pipelineLog(`⚠ rebuild ${pane.agentLabel}: session ${sessionId} not resumable`)
       if (!opts?.suppressBusyToast) {
         notifyRestore.toast(
