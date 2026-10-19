@@ -5,7 +5,7 @@
 // SDK's packaging rules for a folder (pluginLocalPackager), and reports every
 // refusal as an error instead of throwing.
 
-import { lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { linkSync, lstatSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import { computeDisclosure, type DisclosureManifestInput, type DisclosureRiskLevel, type ManifestDisclosure } from '../../shared/pluginDisclosure'
@@ -121,13 +121,39 @@ async function folderReport(
   return { report: await report(path, 'folder', built.bytes, null, built.target, deps), built }
 }
 
+/** The largest `.vsix` an agent tool reads: the archive reader refuses more
+ * than 200 MiB of content anyway. */
+export const MAX_LOCAL_PACKAGE_BYTES = 256 * 1024 * 1024
+
+/** A path an agent named for the Host to read: absolute, outside Navide's own
+ * data (consent records, stores, other packages), and a file no larger than a
+ * package can be. Returns the resolved path and whether it is a folder. */
+export function agentPackagePath(path: string, protectedRoots: readonly string[]): { path: string; folder: boolean } {
+  if (!isAbsolute(path)) throw new Error('path must be absolute')
+  const resolved = realpathSync(path)
+  if (insideAny(resolved, protectedRoots)) throw new Error("a path inside Navide's own data folder cannot be used")
+  const stat = statSync(resolved)
+  if (stat.isDirectory()) return { path: resolved, folder: true }
+  if (!stat.isFile()) throw new Error('path is not a regular file or a folder')
+  if (stat.size > MAX_LOCAL_PACKAGE_BYTES) throw new Error('the file is larger than any Navide plugin package')
+  return { path: resolved, folder: false }
+}
+
 /** plugins_validate_package: check a `.vsix` or a plugin folder. Read-only. */
 export async function validateLocalPackage(path: string, deps: LocalPackageToolDeps): Promise<LocalPackageReport> {
-  if (!isAbsolute(path)) throw new Error('path must be absolute')
-  const stat = statSync(path)
-  if (stat.isDirectory()) return (await folderReport(path, undefined, deps)).report
-  if (!stat.isFile()) throw new Error('path is not a regular file or a folder')
-  return report(path, 'file', new Uint8Array(readFileSync(path)), deps.readSignature(path), null, deps)
+  const target = agentPackagePath(path, deps.protectedRoots)
+  if (target.folder) return (await folderReport(target.path, undefined, deps)).report
+  return report(target.path, 'file', new Uint8Array(readFileSync(target.path)), deps.readSignature(target.path), null, deps)
+}
+
+function existsNoFollow(path: string): boolean {
+  try {
+    lstatSync(path)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
 }
 
 function insideAny(path: string, roots: readonly string[]): boolean {
@@ -144,8 +170,9 @@ function insideAny(path: string, roots: readonly string[]): boolean {
 }
 
 /** Where plugins_package writes: `out`, or the SDK's file name beside the
- * folder. Only a `.vsix` path, in an existing folder outside Navide's own
- * data, never through a symlink and never over anything but a regular file. */
+ * folder. Only a new `.vsix` file, in an existing folder outside Navide's own
+ * data; an existing file is never replaced (the Host writes this on an
+ * agent's word, past Guard, so it creates and never overwrites). */
 export function packageOutputPath(folder: string, built: FolderPackage, out: string | undefined, protectedRoots: readonly string[]): string {
   const target = out ?? join(dirname(folder), defaultPackageFileName(built.manifest, built.target))
   if (!isAbsolute(target)) throw new Error('out must be an absolute path')
@@ -154,12 +181,7 @@ export function packageOutputPath(folder: string, built: FolderPackage, out: str
   if (!statSync(parent).isDirectory()) throw new Error('the folder for out does not exist')
   const resolved = join(parent, basename(target))
   if (insideAny(resolved, protectedRoots)) throw new Error("a package cannot be written into Navide's own data folder")
-  try {
-    const existing = lstatSync(resolved)
-    if (!existing.isFile()) throw new Error('out exists and is not a regular file')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-  }
+  if (existsNoFollow(resolved)) throw new Error('out already exists; name a new .vsix file')
   return resolved
 }
 
@@ -170,13 +192,19 @@ export async function packageLocalFolder(
   options: { target?: string; out?: string },
   deps: LocalPackageToolDeps,
 ): Promise<LocalPackageReport> {
-  if (!isAbsolute(folder)) throw new Error('path must be absolute')
-  if (!statSync(folder).isDirectory()) throw new Error('path must be a plugin folder')
-  const { report: checked, built } = await folderReport(folder, options.target, deps)
+  const source = agentPackagePath(folder, deps.protectedRoots)
+  if (!source.folder) throw new Error('path must be a plugin folder')
+  const { report: checked, built } = await folderReport(source.path, options.target, deps)
   if (!checked.valid || !built) return checked
-  const output = packageOutputPath(folder, built, options.out, deps.protectedRoots)
+  const output = packageOutputPath(source.path, built, options.out, deps.protectedRoots)
   const temporary = `${output}.${randomUUID()}.tmp`
   writeFileSync(temporary, built.bytes, { mode: 0o644, flag: 'wx' })
-  renameSync(temporary, output)
+  try {
+    // A hard link fails when the name exists, so a file created meanwhile is
+    // never replaced either.
+    linkSync(temporary, output)
+  } finally {
+    unlinkSync(temporary)
+  }
   return { ...checked, path: output, packageKind: 'file' }
 }

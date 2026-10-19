@@ -134,8 +134,9 @@ beforeEach(() => {
   handlers.clear()
   packaged.value = false
   base = realpathSync(mkdtempSync(join(tmpdir(), 'navide-agent-file-')))
-  pluginsRoot = join(base, 'plugins')
-  mkdirSync(pluginsRoot)
+  // Navide's data folder is the plugins root's parent; packages live outside it.
+  pluginsRoot = join(base, 'userData', 'plugins')
+  mkdirSync(pluginsRoot, { recursive: true })
   picked = join(base, 'todo-scout.vsix')
   serve(localTrust())
 })
@@ -173,6 +174,11 @@ describe('plugins_install_file_fill: an agent prefills, the user approves', () =
     await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, expectedDigest: prepared.digest }))
       .rejects.toThrow(/not the one that was approved/)
     expect(call('plugins:listInstalled')).toEqual([])
+  })
+
+  it('never reads Navide\'s own data folder', async () => {
+    register()
+    await expect(call('plugins:prepareAgentFileInstall', { path: join(base, 'userData', 'plugins') })).rejects.toThrow(/own data folder/)
   })
 
   it('takes only an absolute path to a regular file or a folder', async () => {
@@ -264,8 +270,8 @@ describe('A3: a local file signed by a vetted publisher', () => {
     expect(readLocalTrustRecord(localTrustRecordPath(pluginsRoot, 'acme.todo')).signer).toBeNull()
 
     handlers.clear()
-    rmSync(pluginsRoot, { recursive: true, force: true })
-    mkdirSync(pluginsRoot)
+    rmSync(join(base, 'userData'), { recursive: true, force: true })
+    mkdirSync(pluginsRoot, { recursive: true })
     serve(localTrust())
     register()
     await install(bytes, signFile(bytes, vetted))

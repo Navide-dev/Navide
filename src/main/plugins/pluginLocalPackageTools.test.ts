@@ -99,7 +99,22 @@ describe('plugins_package', () => {
     await expect(packageLocalFolder(folder, { out: join(base, 'x.zip') }, deps())).rejects.toThrow(/\.vsix/)
     await expect(packageLocalFolder(folder, { out: 'x.vsix' }, deps())).rejects.toThrow(/absolute/)
     mkdirSync(join(base, 'dir.vsix'))
-    await expect(packageLocalFolder(folder, { out: join(base, 'dir.vsix') }, deps())).rejects.toThrow(/not a regular file/)
+    await expect(packageLocalFolder(folder, { out: join(base, 'dir.vsix') }, deps())).rejects.toThrow(/already exists/)
+  })
+
+  it('never replaces an existing file, its own earlier build included', async () => {
+    const existing = join(base, 'keep.vsix')
+    writeFileSync(existing, 'mine')
+    await expect(packageLocalFolder(folder, { out: existing }, deps())).rejects.toThrow(/already exists/)
+    expect(readFileSync(existing, 'utf8')).toBe('mine')
+    await packageLocalFolder(folder, {}, deps())
+    await expect(packageLocalFolder(folder, {}, deps())).rejects.toThrow(/already exists/)
+  })
+
+  it('never reads a folder inside Navide\'s data folder', async () => {
+    const inside = join(dataRoot, 'plugins', 'acme.todo')
+    writeFolder(inside)
+    await expect(packageLocalFolder(inside, { out: join(base, 'x.vsix') }, deps())).rejects.toThrow(/own data folder/)
   })
 })
 
@@ -125,6 +140,16 @@ describe('plugins_validate_package', () => {
     const reserved = await validateLocalPackage(folder, deps())
     expect(reserved.valid).toBe(false)
     expect(reserved.errors.join()).toMatch(/navide\./)
+  })
+
+  it('never reads Navide\'s own data, directly or through a symlink', async () => {
+    const record = join(dataRoot, 'plugin-local-trust', 'acme.todo.json')
+    mkdirSync(join(dataRoot, 'plugin-local-trust'))
+    writeFileSync(record, '{}')
+    await expect(validateLocalPackage(record, deps())).rejects.toThrow(/own data folder/)
+    symlinkSync(record, join(base, 'record.vsix'))
+    await expect(validateLocalPackage(join(base, 'record.vsix'), deps())).rejects.toThrow(/own data folder/)
+    await expect(validateLocalPackage('relative.vsix', deps())).rejects.toThrow(/absolute/)
   })
 
   it('reports a broken archive as an error, not a throw', async () => {

@@ -125,7 +125,7 @@ import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
 import { createLocalTrustRecord, localTakedownDecision, readLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
-import { packageLocalFolder, validateLocalPackage, type LocalPackageToolDeps } from './pluginLocalPackageTools'
+import { agentPackagePath, packageLocalFolder, validateLocalPackage, type LocalPackageToolDeps } from './pluginLocalPackageTools'
 import {
   LOCAL_INSTALL_TRUST_PATH,
   LOCAL_SIGNATURE_SUFFIX,
@@ -2714,10 +2714,10 @@ export function registerPluginIpc(
   // presses. Developer Mode itself stays the user's switch.
   ipcMain.handle('plugins:prepareAgentFileInstall', async (event, args: { path?: unknown } | null) => {
     assertAuthorized(event)
-    const path = args?.path
-    if (typeof path !== 'string' || !isAbsolute(path)) throw new Error('the request names no absolute path')
-    const stat = statSync(path)
-    if (stat.isDirectory()) {
+    if (typeof args?.path !== 'string' || !isAbsolute(args.path)) throw new Error('the request names no absolute path')
+    // Never Navide's own data, never more than a package can be.
+    const { path, folder } = agentPackagePath(args.path, [dirname(pluginsRoot)])
+    if (folder) {
       if (!developerModeOn()) {
         throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
       }
@@ -2726,7 +2726,6 @@ export function registerPluginIpc(
       preparedFolders.set(described.pluginId, { dir: path, permissionsDigest: described.permissionsDigest })
       return described.summary
     }
-    if (!stat.isFile()) throw new Error('the requested path is not a regular file or a folder')
     const bytes = new Uint8Array(readFileSync(path))
     return prepareLocalFile(bytes, readSidecarSignature(path))
   })
