@@ -8,6 +8,9 @@ import {
   textEndsOnQuestion,
   questionActionFor,
   permissionHoldActionFor,
+  keysAnswerPermissionBox,
+  heldBoxGone,
+  HELD_BOX_PAINT_GRACE_MS,
   QUESTION_DETAIL,
 } from '../cliAwaitingInput'
 
@@ -115,12 +118,14 @@ describe('permissionHoldActionFor — the permission box, by hook events', () =>
     }
   })
 
-  it('keeps the hold when a different tool finishes while the box is still open', () => {
-    // Parallel tools, or another subagent: their result is not this box's answer.
+  it('does not release on a different tool finishing — it defers to the screen', () => {
+    // Parallel tools, or another subagent: their result is not this box's answer
+    // by itself. It is also what a hook that approved and rewrote the input
+    // looks like, so the pane checks whether the box is still showing.
     for (const detail of ['hook:post_tool_use', 'hook:post_tool_use_failure']) {
-      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:bbbb' }, held), detail).toBeNull()
-      expect(permissionHoldActionFor({ detail, tool_key: 'Read:aaaa' }, held), detail).toBeNull()
-      expect(permissionHoldActionFor({ detail, tool_key: '' }, held), detail).toBeNull()
+      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:bbbb' }, held), detail).toBe('check-screen')
+      expect(permissionHoldActionFor({ detail, tool_key: 'Read:aaaa' }, held), detail).toBe('check-screen')
+      expect(permissionHoldActionFor({ detail, tool_key: '' }, held), detail).toBe('check-screen')
     }
   })
 
@@ -167,6 +172,57 @@ describe('permissionHoldActionFor — the permission box, by hook events', () =>
     for (const detail of ['hook:pre_tool_use', 'hook:notification', 'assistant', 'hook:subagent_stop']) {
       expect(permissionHoldActionFor({ detail, tool_key: 'Bash:aaaa' }, held), detail).toBeNull()
     }
+  })
+})
+
+describe('keysAnswerPermissionBox — what answers a held box', () => {
+  it('Enter, a lone Esc and digits 1-9 answer it', () => {
+    for (const keys of ['\r', '\x1b', '1', '2', '9', 'y\r', 'n\r']) {
+      expect(keysAnswerPermissionBox(keys), JSON.stringify(keys)).toBe(true)
+    }
+  })
+
+  it('navigation, ordinary letters and 0 do not', () => {
+    for (const keys of ['\x1b[A', '\x1b[B', '\x1b[C', '\x1b[D', '\x1bOA', '\t', '\x1b[Z', 'a', 'y', ' ', '0', '\x7f']) {
+      expect(keysAnswerPermissionBox(keys), JSON.stringify(keys)).toBe(false)
+    }
+  })
+
+  it('terminal reports are not answers, even when their bytes are digits', () => {
+    // X10 mouse: ESC [ M then button/col/row as printable bytes — '1' is col 17.
+    for (const report of ['\x1b[I', '\x1b[O', '\x1b[<0;12;3M', '\x1b[<0;12;3m', '\x1b[M 1!', '\x1b[M!1\r']) {
+      expect(keysAnswerPermissionBox(report), JSON.stringify(report)).toBe(false)
+    }
+  })
+
+  it('an Alt chord and a bracketed paste are not answers', () => {
+    expect(keysAnswerPermissionBox('\x1bb')).toBe(false)
+    expect(keysAnswerPermissionBox('\x1b[200~ls 1 2\r\x1b[201~')).toBe(false)
+  })
+
+  it('finds an answer after a navigation key in the same run', () => {
+    expect(keysAnswerPermissionBox('\x1b[B\r')).toBe(true)
+  })
+})
+
+describe('heldBoxGone — a foreign tool result and an empty screen', () => {
+  const past = HELD_BOX_PAINT_GRACE_MS + 1
+
+  it('releases when another tool finished and the box is not on screen', () => {
+    expect(heldBoxGone({ foreignResultSeen: true, heldMs: past, boxOnScreen: false })).toBe(true)
+  })
+
+  it('keeps holding while the box is still on screen (a parallel tool finished)', () => {
+    expect(heldBoxGone({ foreignResultSeen: true, heldMs: past, boxOnScreen: true })).toBe(false)
+  })
+
+  it('keeps holding when no foreign result was seen, however quiet the screen', () => {
+    // A missed screen match must never end a real wait on its own.
+    expect(heldBoxGone({ foreignResultSeen: false, heldMs: past, boxOnScreen: false })).toBe(false)
+  })
+
+  it('waits out the paint grace — the hook fires before the box is drawn', () => {
+    expect(heldBoxGone({ foreignResultSeen: true, heldMs: HELD_BOX_PAINT_GRACE_MS - 1, boxOnScreen: false })).toBe(false)
   })
 })
 

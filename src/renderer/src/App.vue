@@ -338,6 +338,7 @@ import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, quotaExhau
 import {
   awaitingClearsOnMiss,
   hasAwaitingPattern,
+  heldBoxGone,
   matchAwaitingInput,
   notificationEndsAwaiting,
   notificationMeansAwaiting,
@@ -4090,7 +4091,17 @@ function pollAwaitingPanes(): void {
     // A badge must never take messaging down with it.
     try {
       const screen = ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string
-      if (matchAwaitingInput(pane.agentKey, screen)) ref.markNeedsInput?.()
+      const boxOnScreen = matchAwaitingInput(pane.agentKey, screen)
+      // A held permission box that another tool's result was seen against, and
+      // that is no longer on screen, was approved without ever being shown (a hook
+      // that rewrote the input): nothing else will release it.
+      const held = ref.awaitingHeld?.() as { since: number; foreign: boolean } | undefined
+      if (held && held.since > 0 && heldBoxGone({
+        foreignResultSeen: held.foreign,
+        heldMs: Date.now() - held.since,
+        boxOnScreen,
+      })) ref.releaseNeedsInputHold?.()
+      if (boxOnScreen) ref.markNeedsInput?.()
       else if (awaitingClearsOnMiss(pane.agentKey)) ref.clearNeedsInput?.()
     } catch {
       /* leave this pane's badge as-is and carry on with the rest */
@@ -10460,6 +10471,9 @@ registerCommand('ui.pane.sendKeys', async (args) => {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }
   }
   const resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data: resolved.keys })
+  // This write goes straight to the PTY, not through the terminal's onData, so
+  // tell the pane its held permission box was just answered.
+  if (resp.ok) ref.noteAnswerKeys?.(resolved.keys)
   return resp.ok ? { ok: true, sent: true } : { ok: false, sent: false, error: resp.error?.message ?? 'terminal.input failed' }
 })
 // Diagnostics recorded by uiDiagnostics (e.g. injectText resends) — lets an
@@ -14714,6 +14728,9 @@ backend.on('agent.activity', (raw) => {
       paneRefs[ev.pane_id]?.holdNeedsInput?.(ev.tool_key ?? '')
     } else if (holdAction === 'release') {
       paneRefs[ev.pane_id]?.releaseNeedsInputHold?.()
+    } else if (holdAction === 'check-screen') {
+      // Settled by pollAwaitingPanes once it can see whether the box is on screen.
+      paneRefs[ev.pane_id]?.noteForeignToolResult?.()
     }
     // Clear the restore-mode badge once the user interacts with the pane.
     const histEntry = spawnHistory.value.find((e) => e.paneId === ev.pane_id)

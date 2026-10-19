@@ -166,10 +166,14 @@ export const TOOL_REJECTED_DETAIL = 'user:tool_rejected'
  *  tool (parallel, or a subagent's) can finish while the box is still open, so
  *  the backend stamps each of the three hook events with `tool_key` — the tool
  *  name plus a fingerprint of its input — and a PostToolUse(Failure) whose key
- *  differs from the held one is ignored. Claude's PermissionRequest payload
- *  carries no tool_use_id, which is why the key is built from the input. A hold
- *  with no key (no tool input to fingerprint) cannot be told apart, so any tool
- *  result releases it; the transcript record and the turn end still bound it.
+ *  differs from the held one does not release by itself: it returns
+ *  'check-screen', and the pane releases only if the box is gone from its screen
+ *  (heldBoxGone). Claude's PermissionRequest payload carries no tool_use_id,
+ *  which is why the key is built from the input. A hold with no key (no tool
+ *  input to fingerprint) cannot be told apart, so any tool result releases it.
+ *  The keystroke that answers the box (keysAnswerPermissionBox) and the turn end
+ *  also release, which is what bounds a denial the transcript reader never sees
+ *  (a subagent's lives in its own file).
  *
  *  `held.since` is the wall-clock ms the hold began, 0 when nothing is held —
  *  then nothing is released either, so a wait some other signal raised (the
@@ -178,11 +182,15 @@ export const TOOL_REJECTED_DETAIL = 'user:tool_rejected'
 export function permissionHoldActionFor(
   ev: { detail?: string; timestamp?: string; text?: string; tool_key?: string },
   held: { since: number; key: string },
-): 'hold' | 'release' | null {
+): 'hold' | 'release' | 'check-screen' | null {
   if (ev.detail === 'hook:permission_request') return 'hold'
   if (held.since <= 0) return null
   if (ev.detail === 'hook:post_tool_use' || ev.detail === 'hook:post_tool_use_failure') {
-    return held.key === '' || ev.tool_key === held.key ? 'release' : null
+    if (held.key === '' || ev.tool_key === held.key) return 'release'
+    // Another tool's result: usually a parallel tool, but also what a hook that
+    // approved the call and rewrote its input looks like (no box, no keys).
+    // Which one is a question for the screen — see heldBoxGone.
+    return 'check-screen'
   }
   // Only the records that mean the user answered the box: a denial, or a prompt
   // they typed (it carries text). A bare `user` record is every tool_result,
@@ -195,6 +203,72 @@ export function permissionHoldActionFor(
     return Number.isFinite(writtenAt) && writtenAt > held.since ? 'release' : null
   }
   return null
+}
+
+/** True when `data` — what a pane is sent, from the keyboard (xterm's onData
+ *  hands over one keystroke at a time) or from the chat relay (a short run such
+ *  as `y\r`) — contains a key that answers a permission box: Enter, a lone Esc,
+ *  or a digit 1-9 (the menu's numbered options).
+ *
+ *  Every way of answering the box is input to the pane, which is what lets the
+ *  hold end without any record or hook: a subagent's "No" lives in a transcript
+ *  nobody reads, and a hook that approves and rewrites the input fires no
+ *  matching result. Navigation (arrows, Tab) and ordinary letters do not
+ *  answer. Escape SEQUENCES are skipped whole — an arrow is `ESC [ A`, not an
+ *  Esc — and so are the terminal's own reports (focus, mouse): an X10 mouse
+ *  report carries three printable bytes that can be digits. A bracketed paste is
+ *  text, not an answer.
+ *
+ *  Pure so it can be tested; the caller decides whether anything is held. */
+export function keysAnswerPermissionBox(data: string): boolean {
+  if (data.startsWith('\x1b[200~')) return false
+  let i = 0
+  while (i < data.length) {
+    const c = data[i]
+    if (c === '\r' || (c >= '1' && c <= '9')) return true
+    if (c !== '\x1b') {
+      i += 1
+      continue
+    }
+    const next = data[i + 1]
+    if (next === undefined) return true // a lone Esc
+    if (next === '[') {
+      if (data[i + 2] === 'M') {
+        i += 6 // X10 mouse report: ESC [ M plus three bytes
+        continue
+      }
+      let j = i + 2
+      while (j < data.length && !(data.charCodeAt(j) >= 0x40 && data.charCodeAt(j) <= 0x7e)) j += 1
+      i = j + 1 // past the final byte of the CSI sequence
+    } else if (next === 'O') {
+      i += 3 // SS3 (application-mode arrows, F1-F4)
+    } else {
+      i += 2 // Alt+key arrives as ESC plus the key
+    }
+  }
+  return false
+}
+
+/** How long a hold must have been up before a missing box counts as evidence.
+ *  The hook runs before the box paints, so right after it the screen shows no
+ *  box yet. */
+export const HELD_BOX_PAINT_GRACE_MS = 1500
+
+/** True when a held permission wait should end because the box is gone.
+ *
+ *  Only meaningful once a DIFFERENT tool's result was seen while holding
+ *  (`foreignResultSeen`): with none, a quiet screen proves nothing and the hold
+ *  stays — this is the guard against ending a real wait on a missed screen
+ *  match. With one, the question is whether that result was a parallel tool
+ *  (the box is still on screen: keep holding) or the tool the hold was raised
+ *  for, whose input a hook rewrote after approving it (no box was ever shown:
+ *  release). `boxOnScreen` is matchAwaitingInput on the rendered screen tail. */
+export function heldBoxGone(state: {
+  foreignResultSeen: boolean
+  heldMs: number
+  boxOnScreen: boolean
+}): boolean {
+  return state.foreignResultSeen && state.heldMs >= HELD_BOX_PAINT_GRACE_MS && !state.boxOnScreen
 }
 
 /** What one `agent.activity` event means for the QUESTION badge.

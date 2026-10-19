@@ -33,6 +33,10 @@ const ctrl = vi.hoisted(() => ({
   ackedRows: 0,
 }))
 
+// The keyboard: the handlers useTerminal registers on xterm's onData, so a test
+// can type into the pane the way the user does.
+const keyboard = vi.hoisted(() => ({ handlers: [] as Array<(data: string) => void> }))
+
 vi.mock('../useTerminalResize', () => ({
   createResizeController: () => ctrl,
 }))
@@ -53,7 +57,10 @@ vi.mock('@xterm/xterm', () => {
     attachCustomKeyEventHandler(): void {}
     registerLinkProvider(): { dispose(): void } { return { dispose(): void {} } }
     onResize(): { dispose(): void } { return { dispose(): void {} } }
-    onData(): { dispose(): void } { return { dispose(): void {} } }
+    onData(handler: (data: string) => void): { dispose(): void } {
+      keyboard.handlers.push(handler)
+      return { dispose(): void {} }
+    }
     write(): void {}
     writeln(): void {}
     resize(): void {}
@@ -87,7 +94,10 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     vi.useRealTimers()
     vi.clearAllMocks()
     localStorage.clear()
+    keyboard.handlers.length = 0
   })
+
+  const typeKeys = (data: string): void => keyboard.handlers.at(-1)?.(data)
 
   async function spawned() {
     const mock = createMockBackend()
@@ -294,7 +304,7 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     expect(result.awaitingHeld()).toMatchObject({ key: 'Bash:aaaa' })
     expect(result.awaitingHeld().since).toBeGreaterThan(0)
     result.releaseNeedsInputHold()
-    expect(result.awaitingHeld()).toEqual({ since: 0, key: '' })
+    expect(result.awaitingHeld()).toEqual({ since: 0, key: '', foreign: false })
     expect(result.displayStatus.value).not.toBe('awaiting')
     scope.stop()
   })
@@ -323,6 +333,75 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     result.holdNeedsInput()
     result.markTurnComplete()
     expect(result.displayStatus.value).toBe('idle')
+    scope.stop()
+  })
+
+  // Every way of answering the box is input to the pane, so an answering key
+  // ends the hold even when no hook or transcript record ever says so (a
+  // subagent's "No", a hook that rewrote the tool input).
+  it.each([['Enter', '\r'], ['Esc', '\x1b'], ['a digit', '2']])(
+    'releases a held AWAITING when %s is typed',
+    async (_name, keys) => {
+      const { result, mock, scope } = await spawnedFake()
+      await chunkThenWait(mock, 0, 100)
+      result.holdNeedsInput('Bash:aaaa')
+      typeKeys(keys)
+      expect(result.awaitingHeld().since).toBe(0)
+      expect(result.displayStatus.value).not.toBe('awaiting')
+      scope.stop()
+    },
+  )
+
+  it.each([['an arrow', '\x1b[B'], ['Tab', '\t'], ['a letter', 'y'], ['a focus report', '\x1b[I'], ['a mouse report', '\x1b[M 1!']])(
+    'keeps a held AWAITING through %s',
+    async (_name, keys) => {
+      const { result, mock, scope } = await spawnedFake()
+      await chunkThenWait(mock, 0, 100)
+      result.holdNeedsInput('Bash:aaaa')
+      typeKeys(keys)
+      expect(result.awaitingHeld().since).toBeGreaterThan(0)
+      expect(result.displayStatus.value).toBe('awaiting')
+      scope.stop()
+    },
+  )
+
+  it('releases a held AWAITING on keys relayed straight to the PTY', async () => {
+    // ui.pane.sendKeys writes through terminal.input, not through onData.
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    result.noteAnswerKeys('1')
+    expect(result.awaitingHeld().since).toBe(0)
+    scope.stop()
+  })
+
+  it('does not touch the Notification hook\'s wait when an answering key ends the hold', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.markNeedsInput()
+    result.holdNeedsInput('Bash:aaaa')
+    typeKeys('\r')
+    expect(result.awaitingHeld().since).toBe(0)
+    expect(result.permissionWaitLive()).toBe(true)
+    scope.stop()
+  })
+
+  it('remembers a different tool finishing while held, and forgets it with the hold', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    expect(result.awaitingHeld().foreign).toBe(false)
+    result.noteForeignToolResult()
+    expect(result.awaitingHeld().foreign).toBe(true)
+    // A new box starts clean.
+    result.holdNeedsInput('Bash:bbbb')
+    expect(result.awaitingHeld().foreign).toBe(false)
+    result.noteForeignToolResult()
+    result.releaseNeedsInputHold()
+    expect(result.awaitingHeld().foreign).toBe(false)
+    // With nothing held there is nothing for it to refer to.
+    result.noteForeignToolResult()
+    expect(result.awaitingHeld().foreign).toBe(false)
     scope.stop()
   })
 

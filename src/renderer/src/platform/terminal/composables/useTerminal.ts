@@ -427,6 +427,7 @@ export function expandHomePath(fp: string, home: string): string {
 // frame — there by its position rather than to skip it — so the two cannot
 // drift apart.
 import { BOX_ONLY_LINE_RE } from '../../../lib/injectEcho'
+import { keysAnswerPermissionBox } from '../../../lib/cliAwaitingInput'
 import { collapseHomePath } from '../lib/paths'
 export { collapseHomePath } from '../lib/paths'
 
@@ -847,6 +848,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // Which tool the held box is for ("" when unknown); not reactive — only
   // App.vue's release decision reads it.
   let awaitingHeldKey = ''
+  // A different tool's result was seen while held (see noteForeignToolResult).
+  let awaitingHeldForeign = false
   // The prompt box the hook announces is itself clean output, and it can land
   // on either side of the hook (one arrives over HTTP, the other over the PTY).
   // Clean output inside this window is read as the prompt painting itself;
@@ -1170,6 +1173,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   function holdNeedsInput(toolKey = ''): void {
     awaitingHeldAt.value = Date.now()
     awaitingHeldKey = toolKey
+    awaitingHeldForeign = false
   }
 
   /** The held permission box was answered (see permissionHoldActionFor). Ends
@@ -1178,6 +1182,26 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   function releaseNeedsInputHold(): void {
     awaitingHeldAt.value = 0
     awaitingHeldKey = ''
+    awaitingHeldForeign = false
+  }
+
+  /** A different tool's result arrived while a box is held. Whether that tool
+   *  was a parallel one (box still open) or the held tool itself with its input
+   *  rewritten by a hook (no box) is for the screen to say: App.vue's poll
+   *  releases through heldBoxGone once it sees the box gone. */
+  function noteForeignToolResult(): void {
+    if (awaitingHeldAt.value > 0) awaitingHeldForeign = true
+  }
+
+  /** Keys sent to this pane — typed (term.onData) or relayed (App.vue's
+   *  ui.pane.sendKeys, which writes to the PTY without going through onData).
+   *  Every way of answering a permission box is one of them, so an answering key
+   *  ends a hold. Choosing "No, and tell Claude what to do" and pressing Enter
+   *  releases while the text field is open: the user is at the keyboard. */
+  function noteAnswerKeys(data: string): void {
+    if (awaitingHeldAt.value > 0 && !isTerminalReport(data) && keysAnswerPermissionBox(data)) {
+      releaseNeedsInputHold()
+    }
   }
 
   /** The agent put a question to the user. Called from App.vue on the reader's
@@ -2404,6 +2428,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       // overlay already blocks the pointer, but focus can still be in the
       // terminal when the socket drops mid-keystroke.
       if (!inputTransportReady()) return
+      noteAnswerKeys(data)
       if (data === '\r' || data === '\n' || data === '\r\n') {
         if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
         if (inputBuffer.trim() === '/clear' && opts?.onClear) {
@@ -3521,7 +3546,13 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     clearNeedsInput,
     holdNeedsInput,
     releaseNeedsInputHold,
-    awaitingHeld: (): { since: number; key: string } => ({ since: awaitingHeldAt.value, key: awaitingHeldKey }),
+    awaitingHeld: (): { since: number; key: string; foreign: boolean } => ({
+      since: awaitingHeldAt.value,
+      key: awaitingHeldKey,
+      foreign: awaitingHeldForeign,
+    }),
+    noteForeignToolResult,
+    noteAnswerKeys,
     permissionWaitLive,
     markQuestion,
     clearQuestion,
