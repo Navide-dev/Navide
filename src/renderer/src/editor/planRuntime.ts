@@ -349,7 +349,12 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
     'border:1px solid var(--line,#DDE1E9);background:var(--surface,#FFFFFF);' +
     'color:var(--ink,#1D2530);font-size:12px;cursor:pointer;font-family:inherit}' +
     '.plan-rt-secbar button:hover{background:var(--surface-2,#EDEFF4)}' +
-    '.plan-rt-secdel{color:var(--danger,#C0392B) !important;border-color:var(--danger,#C0392B) !important}';
+    '.plan-rt-secdel{color:var(--danger,#C0392B) !important;border-color:var(--danger,#C0392B) !important}' +
+    // Layout overrides for template documents: long code wraps inside table
+    // cells instead of being clipped, and the column uses the frame width.
+    '.tablewrap td,.tablewrap td code{overflow-wrap:anywhere}' +
+    '.wrap{max-width:1180px}' +
+    '.wrap td ul,.wrap td p{max-width:none}';
   (document.head || document.documentElement).appendChild(style);
 
   // Leading text (up to the first child element), whitespace-collapsed —
@@ -690,7 +695,13 @@ export function preparePlanDocHtml(
   }
 
   const cspMeta = buildPlanCspMeta(nonce)
-  const sanitizedContent = cspMeta + stripExecutableScripts(content)
+  const stripped = stripExecutableScripts(content)
+  // A doctype must stay the first thing in the document or the frame renders
+  // in quirks mode; the CSP meta goes right after it.
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(stripped)
+  const sanitizedContent = doctype
+    ? stripped.slice(0, doctype[0].length) + cspMeta + stripped.slice(doctype[0].length)
+    : cspMeta + stripped
   const runtimeTag = `<script nonce="${nonce}">${runtimeScript}</scr` + 'ipt>'
 
   const bodyClose = sanitizedContent.search(/<\/body>/i)

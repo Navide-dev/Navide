@@ -10318,7 +10318,9 @@
     },
     "managed": {
       "create": "一鍵建立新 bot",
-      "disclose": "{manager} 能隨時取得並更換新 bot 的 token。拿到 {manager} token 的人能控制它建立的所有 bot。",
+      "title": "透過 {manager} 建立新 bot",
+      "disclose": "{manager} 能隨時取得並更換新 bot 的 token。拿到 {manager} token 的人能控制它建立的所有 bot。只要 {manager} 的 token 外洩，它建立的每個 bot 都會跟著外洩。",
+      "confirm": "前往 Telegram 建立",
       "enable-hint": "想讓 bot 一鍵建立新 bot？到 BotFather 開啟「Bot Management Mode」。目前有 {n} 個 bot 還沒開。",
       "open-botfather": "開啟 BotFather",
       "dismiss": "不再顯示",
@@ -10434,7 +10436,7 @@
     },
     "monitor": {
       "title": "Channel 連線監控",
-      "tagline": "集中查看每個與聊天室連線的 pane，以及連線是否正常。",
+      "tagline": "集中查看每個與聊天室連線的 pane。狀態指的是 bot：顯示已連線代表這個 bot 在線，不代表每個聊天室都能送達。",
       "open": "Channel 連線監控",
       "close": "關閉",
       "empty": "目前沒有任何 pane 連線到 channel。",
@@ -10641,7 +10643,10 @@
     },
     "pane": {
       "badge": "外部影響",
-      "tooltip": "自 {since} 起收過來自{sources}的內容",
+      "badge-since": "外部影響（{date} 起）",
+      "tooltip": "自 {since} 起，這個 pane 收過來自{sources}的訊息。",
+      "source-who": "{source}（{who}）",
+      "typing": "在這台電腦上打字不會加上這個標記。",
       "console": "收件紀錄",
       "expand": "顯示全文",
       "text-missing": "訊息紀錄裡已沒有這段內文",

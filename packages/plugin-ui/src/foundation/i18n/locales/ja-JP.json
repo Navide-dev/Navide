@@ -10318,7 +10318,9 @@
     },
     "managed": {
       "create": "新しい bot を作成",
-      "disclose": "{manager} は新しい bot のトークンをいつでも取得・再発行できます。{manager} のトークンを持つ人は、作成したすべての bot を操作できます。",
+      "title": "{manager} で新しい bot を作成",
+      "disclose": "{manager} は新しい bot のトークンをいつでも取得・再発行できます。{manager} のトークンを持つ人は、作成したすべての bot を操作できます。{manager} のトークンが漏れると、作成したすべての bot も一緒に漏れます。",
+      "confirm": "Telegram で作成する",
       "enable-hint": "bot から新しい bot をワンタップで作りたい場合は、BotFather で「Bot Management Mode」をオンにしてください。まだオンになっていない bot が {n} 個あります。",
       "open-botfather": "BotFather を開く",
       "dismiss": "今後表示しない",
@@ -10434,7 +10436,7 @@
     },
     "monitor": {
       "title": "チャンネル接続",
-      "tagline": "チャットに接続されているペインと、その接続状態を一覧します。",
+      "tagline": "チャットに接続されているペインを一覧します。状態は bot のもので、接続済みは bot がオンラインであることを示し、すべてのチャットに届くことを保証するものではありません。",
       "open": "チャンネル接続",
       "close": "閉じる",
       "empty": "チャンネルに接続されているペインはありません。",
@@ -10641,7 +10643,10 @@
     },
     "pane": {
       "badge": "外部の影響",
-      "tooltip": "{since} から {sources} の内容を受信",
+      "badge-since": "外部の影響（{date} 以降）",
+      "tooltip": "{since} 以降、この pane は{sources}からメッセージを受信しています。",
+      "source-who": "{source}（{who}）",
+      "typing": "このコンピューターで入力しても、このマークは付きません。",
       "console": "受信ログ",
       "expand": "全文を表示",
       "text-missing": "本文はメッセージログに残っていません",

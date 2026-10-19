@@ -10318,7 +10318,9 @@
     },
     "managed": {
       "create": "Create a new bot",
-      "disclose": "{manager} can read and replace the new bot's token at any time. Whoever holds {manager}'s token controls every bot it creates.",
+      "title": "Create a new bot through {manager}",
+      "disclose": "{manager} can read and replace the new bot's token at any time. Whoever holds {manager}'s token controls every bot it creates. If {manager}'s token leaks, every bot it created leaks with it.",
+      "confirm": "Continue in Telegram",
       "enable-hint": "Want a bot to create new bots in one tap? Turn on “Bot Management Mode” in BotFather. {n} of your bots don't have it on yet.",
       "open-botfather": "Open BotFather",
       "dismiss": "Don't show again",
@@ -10434,7 +10436,7 @@
     },
     "monitor": {
       "title": "Channel connections",
-      "tagline": "Every pane linked to a chat, and whether the link is up.",
+      "tagline": "Every pane linked to a chat. The status is the bot's: Connected means the bot is online, not that every chat can be reached.",
       "open": "Channel connections",
       "close": "Close",
       "empty": "No pane is linked to a channel yet.",
@@ -10641,7 +10643,10 @@
     },
     "pane": {
       "badge": "External influence",
-      "tooltip": "Received content from {sources} since {since}",
+      "badge-since": "External influence since {date}",
+      "tooltip": "Since {since}, this pane has received messages from {sources}.",
+      "source-who": "{source} ({who})",
+      "typing": "Typing on this computer never adds this mark.",
       "console": "Delivery log",
       "expand": "Show the full text",
       "text-missing": "text no longer in the message log",

@@ -95,6 +95,13 @@ describe('buildPlanRuntimeScript', () => {
     expect(script).toContain('CODE_REF_RE')
     expect(script).toContain('\\d{1,7}')
   })
+
+  it('injects layout overrides so wide tables wrap and the document uses the frame width', () => {
+    const script = buildPlanRuntimeScript(initOf())
+    expect(script).toContain('.tablewrap td,.tablewrap td code{overflow-wrap:anywhere}')
+    expect(script).toContain('.wrap{max-width:1180px}')
+    expect(script).toContain('.wrap td ul,.wrap td p{max-width:none}')
+  })
 })
 
 describe('preparePlanDocHtml', () => {
@@ -115,10 +122,11 @@ describe('preparePlanDocHtml', () => {
     expect(documentToken).toMatch(/^[0-9a-f]{32}$/)
   })
 
-  it('prepends a nonce-restricted CSP meta at the very start and the runtime before </body>', () => {
+  it('puts a nonce-restricted CSP meta right after the doctype and the runtime before </body>', () => {
     const nonce = '0123456789abcdef0123456789abcdef'
     const { html: out } = preparePlanDocHtml(DOC, config, { nonce })
-    expect(out.startsWith('<meta http-equiv="Content-Security-Policy"')).toBe(true)
+    // The doctype stays the first token so the frame renders in standards mode.
+    expect(out.startsWith('<!doctype html><meta http-equiv="Content-Security-Policy"')).toBe(true)
     expect(out).toContain(`script-src 'nonce-${nonce}'`)
     expect(out).toContain("default-src 'none'")
     const runtimeAt = out.indexOf(`<script nonce="${nonce}">`)
