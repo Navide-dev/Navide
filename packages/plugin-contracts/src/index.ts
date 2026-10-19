@@ -22,6 +22,7 @@ export type { EditorNativeParams, EditorNativeResults, EditorNativeEvents, Edito
 export * from './gitCapabilities.js'
 export * from './issues.js'
 export * from './editorPreferences.js'
+export * from './staticScan.js'
 export type { GitAccountParams, GitAccountResults, GitAccountSummary } from './gitAccounts.js'
 
 export type JsonPrimitive = string | number | boolean | null
