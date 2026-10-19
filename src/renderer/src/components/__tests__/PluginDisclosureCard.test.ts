@@ -184,7 +184,7 @@ describe('PluginDisclosureCard view network (R2 MED-3)', () => {
   })
 
   it('no longer says a Navide plugin\'s frame cannot reach the network', () => {
-    for (const locale of ['en-US', 'zh-TW', 'ja-JP']) {
+    for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
       i18n.global.locale.value = locale
       const text = render({ disclosure: disclosureOf('devmap-0.2.0'), scan: scanOf('devmap-push-and-reads'), verified: false }).text()
       expect(text).not.toMatch(/Neither the Navide plugin frame|頁框與原生程式都不能直接連網|フレームもネイティブコードも直接ネットワークに接続できません/)
