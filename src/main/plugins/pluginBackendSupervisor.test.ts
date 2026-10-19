@@ -2395,21 +2395,27 @@ describe('PluginBackendSupervisor', () => {
       return t
     }
 
-    it('TEMP DIAG same-ID B phase timings, idle and under disk-flush pressure', async () => {
-      for (let i = 0; i < 3; i += 1) console.log('DIAG idle', JSON.stringify(await diagSameIdB()))
-      const stressDir = mkdtempSync(join(tmpdir(), 'navide-diag-stress-'))
-      const stress = spawn(process.execPath, ['-e', `
-        const fs = require('node:fs'); const path = require('node:path'); const buf = Buffer.alloc(8 * 1024 * 1024, 7);
-        let n = 0; const end = Date.now() + 60000;
-        while (Date.now() < end) { const f = path.join(process.argv[1], 'w' + (n++ % 4)); const fd = fs.openSync(f, 'w'); for (let k = 0; k < 8; k += 1) fs.writeSync(fd, buf); fs.fsyncSync(fd); fs.closeSync(fd); }
-      `, stressDir], { stdio: 'ignore' })
+    it('TEMP DIAG Windows scanner status and first zip versus bin write cost', async () => {
+      if (process.platform === 'win32') {
+        const { spawnSync } = await import('node:child_process')
+        const ps = spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Get-MpComputerStatus | Select-Object AMServiceEnabled,RealTimeProtectionEnabled,OnAccessProtectionEnabled,IoavProtectionEnabled,AntivirusSignatureLastUpdated | Format-List; (Get-MpPreference).ExclusionPath; (Get-MpPreference).DisableArchiveScanning'], { encoding: 'utf8', timeout: 60_000 })
+        console.log('DIAG defender', JSON.stringify({ status: ps.status, out: ps.stdout, err: ps.stderr }))
+      }
+      const dir = mkdtempSync(join(tmpdir(), 'navide-diag-write-'))
       try {
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 2000))
-        for (let i = 0; i < 5; i += 1) console.log('DIAG stress', JSON.stringify(await diagSameIdB()))
+        const archive = new Uint8Array(makeZip([{ name: 'manifest.json', data: '{"a":1}' }, { name: 'frontend/index.html', data: '<!doctype html>' }]))
+        for (const ext of ['zip', 'bin', 'zip', 'bin', 'json']) {
+          const t: number[] = []
+          for (let i = 0; i < 5; i += 1) {
+            const start = performance.now()
+            writeFileSync(join(dir, `f-${ext}-${t.length}-${Math.random()}.${ext}`), archive)
+            t.push(Math.round((performance.now() - start) * 100) / 100)
+          }
+          console.log('DIAG write', ext, JSON.stringify(t))
+        }
+        for (let i = 0; i < 3; i += 1) console.log('DIAG idle', JSON.stringify(await diagSameIdB()))
       } finally {
-        stress.kill()
-        await new Promise((resolveExit) => stress.once('exit', resolveExit))
-        rmSync(stressDir, { recursive: true, force: true })
+        rmSync(dir, { recursive: true, force: true })
       }
     }, 120_000)
 
