@@ -106,7 +106,7 @@ describe('dispatchWebBridge', () => {
     registry.setState('acme.web', agent.viewId, 'running', 'Reading')
     const listed = await dispatchWebBridge(registry, 'acme.web', 'list', {}) as { views: Array<Record<string, unknown>> }
     expect(listed.views).toEqual([
-      { viewId: user.viewId, space: 'mine', owner: 'user', control: 'user', state: 'idle', url: '', title: '', loading: false, attached: false },
+      { viewId: user.viewId, space: 'mine', owner: 'user', control: 'user', state: 'idle', url: '', title: '', loading: false, attached: false, agentScriptSinceLoad: false },
       expect.objectContaining({ viewId: agent.viewId, owner: 'agent', url: 'https://example.com/task', title: 'Task', note: 'Reading' }),
     ])
     expect(registry.list('acme.web')[0]).toMatchObject({ url: 'https://mail.example.com/inbox/secret-thread', title: 'Secret thread - Mail' })

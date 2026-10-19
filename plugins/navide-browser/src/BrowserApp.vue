@@ -2,7 +2,15 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorCode, onWebChanged, openBrowserWindow, web } from './backend'
-import { normalizeAddress, pendingCount, sortSpaces, stateLabelKey, type WebViewInfo } from './spaces'
+import {
+  keptPages,
+  normalizeAddress,
+  pendingCount,
+  showsAgentScriptWarning,
+  sortSpaces,
+  stateLabelKey,
+  type WebViewInfo,
+} from './spaces'
 
 const THUMBNAIL_WIDTH = 480
 const THUMBNAIL_REFRESH_MS = 5000
@@ -19,10 +27,13 @@ const showSettings = ref(false)
 const confirmClear = ref(false)
 const notice = ref('')
 const viewport = ref<HTMLElement | null>(null)
+/** Pages the user chose to keep despite the agent-script warning. */
+const kept = ref<Set<string>>(new Set())
 
 const spaces = computed(() => sortSpaces(views.value))
 const pending = computed(() => pendingCount(views.value))
 const selected = computed(() => views.value.find((view) => view.viewId === selectedId.value) ?? null)
+const showScriptWarning = computed(() => showsAgentScriptWarning(selected.value, kept.value))
 
 function fail(cause: unknown): void {
   error.value = t('browser.errors.generic', { code: errorCode(cause) })
@@ -39,6 +50,7 @@ async function run(action: () => Promise<unknown>): Promise<void> {
 
 function applyViews(next: WebViewInfo[]): void {
   views.value = next
+  kept.value = keptPages(next, kept.value)
   if (selectedId.value && !next.some((view) => view.viewId === selectedId.value)) selectedId.value = null
   for (const id of Object.keys(thumbnails.value)) {
     if (!next.some((view) => view.viewId === id)) delete thumbnails.value[id]
@@ -95,6 +107,11 @@ async function go(): Promise<void> {
 function navigate(action: 'back' | 'forward' | 'reload' | 'stop'): void {
   const view = selected.value
   if (view) void run(() => web.navigate(view.viewId, { action }))
+}
+
+function keepPage(): void {
+  const view = selected.value
+  if (view) kept.value = new Set([...kept.value, view.viewId])
 }
 
 function takeOver(): void {
@@ -227,10 +244,15 @@ onBeforeUnmount(() => {
       <span class="spacer" />
       <button v-if="selected.owner === 'agent' && selected.control === 'agent'" type="button" @click="takeOver">{{ t('browser.action.take-over') }}</button>
       <button v-if="selected.owner === 'agent' && selected.control === 'user'" type="button" class="primary" @click="handBack">{{ t('browser.action.hand-back') }}</button>
-      <button v-if="selected.owner === 'agent' && selected.control === 'user'" type="button" class="ghost" @click="navigate('reload')">{{ t('browser.action.reload-agent-scripts') }}</button>
       <button v-if="selected.owner === 'user'" type="button" @click="setOwner('agent')">{{ t('browser.action.delegate') }}</button>
+      <span v-if="selected.owner === 'user'" class="delegate-note">{{ t('browser.action.delegate-note') }}</span>
       <button v-else type="button" class="ghost" @click="setOwner('user')">{{ t('browser.action.reclaim') }}</button>
       <button type="button" class="ghost" @click="closeSpace">{{ t('browser.action.close') }}</button>
+    </div>
+    <div v-if="showScriptWarning" class="script-warning" role="alert">
+      <span class="script-warning-text">{{ t('browser.agent-script.warning') }}</span>
+      <button type="button" class="primary" @click="navigate('reload')">{{ t('browser.agent-script.reload') }}</button>
+      <button type="button" class="ghost" @click="keepPage">{{ t('browser.agent-script.keep') }}</button>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <div ref="viewport" class="viewport" :class="{ 'agent-frame': selected.owner === 'agent' }" />
@@ -367,6 +389,9 @@ button.icon { width: 28px; padding: 4px 0; }
 .status.is-agent { background: var(--bg-muted); }
 .status.is-user { background: var(--bg-subtle); }
 .status .note { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status .delegate-note { color: var(--text-muted); font-size: var(--font-2xs); }
+.script-warning { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: var(--font-xs); font-weight: 600; color: var(--text-danger); border-bottom: 2px solid var(--danger-fg); background: var(--bg-subtle); }
+.script-warning-text { flex: 1; }
 .viewport { flex: 1; min-height: 0; margin: 6px; border-radius: 6px; background: var(--bg-base); }
 
 .browser-left { display: flex; flex-direction: column; gap: 8px; padding: 10px; height: 100%; box-sizing: border-box; overflow: auto; }

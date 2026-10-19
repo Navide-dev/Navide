@@ -49,6 +49,8 @@ export interface WebViewInfo {
   title: string
   loading: boolean
   attached: boolean
+  /** The agent ran script in the page since it last loaded a new document. */
+  agentScriptSinceLoad: boolean
 }
 
 export const WEB_BRIDGE_OPERATIONS = ['list', 'create', 'close', 'cdp', 'setState'] as const
@@ -154,13 +156,14 @@ export function validateWebRequest(address: string, value: unknown): value is Re
 
 function isWebViewInfo(value: unknown): value is WebViewInfo {
   return isRecord(value) &&
-    hasOnlyKeys(value, ['viewId', 'space', 'owner', 'control', 'state', 'note', 'url', 'title', 'loading', 'attached']) &&
+    hasOnlyKeys(value, ['viewId', 'space', 'owner', 'control', 'state', 'note', 'url', 'title', 'loading', 'attached', 'agentScriptSinceLoad']) &&
     isId(value.viewId) && isId(value.space) &&
     OWNERS.includes(value.owner as string) && OWNERS.includes(value.control as string) &&
     STATES.includes(value.state as string) &&
     (value.note === undefined || typeof value.note === 'string') &&
     typeof value.url === 'string' && typeof value.title === 'string' &&
-    typeof value.loading === 'boolean' && typeof value.attached === 'boolean'
+    typeof value.loading === 'boolean' && typeof value.attached === 'boolean' &&
+    typeof value.agentScriptSinceLoad === 'boolean'
 }
 
 /** Validate the `web.changed` payload: `{ views: WebViewInfo[] }`. */

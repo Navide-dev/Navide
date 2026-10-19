@@ -22,6 +22,7 @@ const view = {
   title: 'Example',
   loading: false,
   attached: true,
+  agentScriptSinceLoad: false,
 }
 
 describe('web URL allowlist', () => {

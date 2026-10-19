@@ -37,7 +37,12 @@
       "delegate": "Let the agent use this Space",
       "reclaim": "Take this Space back",
       "close": "Close Space",
-      "reload-agent-scripts": "Reload to clear agent scripts"
+      "delegate-note": "Agents in any pane and any workspace can use it"
+    },
+    "agent-script": {
+      "warning": "Agent scripts may still be running in this page. Reload it before you type a password or a verification code.",
+      "reload": "Reload",
+      "keep": "Keep page"
     },
     "settings": {
       "title": "Settings",

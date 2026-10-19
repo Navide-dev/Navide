@@ -13,6 +13,8 @@ export interface WebViewInfo {
   title: string
   loading: boolean
   attached: boolean
+  /** The agent ran script in the page since it last loaded a new document. */
+  agentScriptSinceLoad: boolean
 }
 
 const OWNERS = new Set<unknown>(['agent', 'user'])
@@ -34,7 +36,20 @@ function parseView(value: unknown): WebViewInfo | null {
     title: typeof view.title === 'string' ? view.title : '',
     loading: view.loading === true,
     attached: view.attached === true,
+    agentScriptSinceLoad: view.agentScriptSinceLoad === true,
   }
+}
+
+/** The "agent script may still run" banner: the user controls a page the
+ *  agent ran script in, and has not chosen to keep that page as it is. */
+export function showsAgentScriptWarning(view: WebViewInfo | null, kept: ReadonlySet<string>): boolean {
+  return view !== null && view.control === 'user' && view.agentScriptSinceLoad && !kept.has(view.viewId)
+}
+
+/** The pages the user kept that still hold agent script; a new document
+ *  ends the choice, so the banner returns the next time it applies. */
+export function keptPages(views: readonly WebViewInfo[], kept: ReadonlySet<string>): Set<string> {
+  return new Set(views.filter((view) => view.agentScriptSinceLoad && kept.has(view.viewId)).map((view) => view.viewId))
 }
 
 /** Keep every well-formed view; drop anything else rather than guess. */

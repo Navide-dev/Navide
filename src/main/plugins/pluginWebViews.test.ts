@@ -54,7 +54,8 @@ class FakeContents extends FakeEmitter {
   getTitle(): string { return 'Title' }
   isLoading(): boolean { return false }
   stop(): void { this.stopped += 1 }
-  reload(): void {}
+  reloads = 0
+  reload(): void { this.reloads += 1 }
   close(): void { this.closed += 1; this.destroyed = true; this.emit('destroyed') }
   setWindowOpenHandler(handler: (details: { url: string }) => { action: 'deny' }): void { this.windowOpenHandler = handler }
   async capturePage(): Promise<any> {
@@ -402,6 +403,55 @@ describe('user in control', () => {
     expect((await rejectionOf(registry.cdp('navide.browser', viewId, 'Runtime.evaluate', {}))).reason).toBe('user-owned')
     expect(errorOf(() => registry.returnControl('navide.browser', viewId)).reason).toBe('user-owned')
     expect(errorOf(() => registry.setState('navide.browser', viewId, 'done')).reason).toBe('user-owned')
+  })
+})
+
+describe('agent script since load', () => {
+  it('is set by Runtime.evaluate and callFunctionOn and cleared when the main frame loads a new document', async () => {
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
+    const contents = views[0].webContents
+    const flag = () => registry.list('navide.browser')[0].agentScriptSinceLoad
+    expect(flag()).toBe(false)
+    await registry.cdp('navide.browser', viewId, 'DOMSnapshot.captureSnapshot', {})
+    await registry.cdp('navide.browser', viewId, 'Input.insertText', { text: 'a' })
+    expect(flag()).toBe(false)
+    await registry.cdp('navide.browser', viewId, 'Runtime.evaluate', { expression: '1' })
+    expect(flag()).toBe(true)
+    contents.emit('did-navigate-in-page', {}, 'https://example.com/#a', true)
+    expect(flag()).toBe(true)
+    contents.emit('did-navigate', {}, 'https://example.com/next')
+    expect(flag()).toBe(false)
+    await registry.cdp('navide.browser', viewId, 'Runtime.callFunctionOn', { functionDeclaration: 'function () {}' })
+    expect(flag()).toBe(true)
+  })
+
+  it('reloads the page when the agent hands it to the user with its script in it', async () => {
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
+    await registry.cdp('navide.browser', viewId, 'Runtime.evaluate', { expression: '1' })
+    registry.setState('navide.browser', viewId, 'need-action', 'Sign in')
+    expect(views[0].webContents.reloads).toBe(1)
+    expect(registry.list('navide.browser')[0]).toMatchObject({ control: 'user', state: 'need-action' })
+  })
+
+  it('never reloads when the user takes over by clicking, typing or the take-over button', async () => {
+    const { registry, views, sessions } = setup()
+    const takeovers: Array<(viewId: string, contents: (typeof views)[number]['webContents']) => void> = [
+      (_viewId, contents) => contents.emit('before-mouse-event', {}, { type: 'mouseDown' }),
+      (_viewId, contents) => contents.emit('before-input-event', {}, { type: 'keyDown' }),
+      (viewId) => registry.takeControl('navide.browser', viewId),
+      (_viewId, contents) => sessions.get('persist:navide-web:navide.browser')!.permissionHandler?.(contents, 'geolocation', () => {}),
+      (viewId) => registry.setOwner('navide.browser', viewId, 'user'),
+    ]
+    for (const [index, takeOver] of takeovers.entries()) {
+      const { viewId } = registry.create('navide.browser', { space: `agent-${index}` }, 'agent')
+      const contents = views[index].webContents
+      await registry.cdp('navide.browser', viewId, 'Runtime.evaluate', { expression: '1' })
+      takeOver(viewId, contents)
+      expect(contents.reloads, `takeover ${index}`).toBe(0)
+      expect(registry.list('navide.browser').find(view => view.viewId === viewId)?.agentScriptSinceLoad, `takeover ${index}`).toBe(true)
+    }
   })
 })
 

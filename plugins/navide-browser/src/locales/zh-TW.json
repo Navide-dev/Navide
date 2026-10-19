@@ -37,7 +37,12 @@
       "delegate": "讓 agent 使用這個 Space",
       "reclaim": "收回這個 Space",
       "close": "關閉 Space",
-      "reload-agent-scripts": "重新載入以清除 agent 腳本"
+      "delegate-note": "任何 pane、任何工作區的 agent 都能使用"
+    },
+    "agent-script": {
+      "warning": "agent 的腳本可能仍在這個頁面執行，輸入密碼或驗證碼前請先重新載入。",
+      "reload": "重新載入",
+      "keep": "保留頁面"
     },
     "settings": {
       "title": "設定",

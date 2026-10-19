@@ -166,6 +166,9 @@ interface WebViewEntry {
   rect: WebViewRect | null
   /** In-flight CDP Input.* calls: input observed meanwhile is the agent's. */
   agentInput: number
+  /** The agent ran script in the current document (Runtime.evaluate or
+   *  callFunctionOn); it may outlive a detach until the next document. */
+  agentScriptSinceLoad: boolean
 }
 
 export class PluginWebViewRegistry {
@@ -211,6 +214,7 @@ export class PluginWebViewRegistry {
       host: null,
       rect: null,
       agentInput: 0,
+      agentScriptSinceLoad: false,
     }
     this.views.set(entry.viewId, entry)
     this.wireGuest(entry)
@@ -311,7 +315,13 @@ export class PluginWebViewRegistry {
     if (entry.owner !== 'agent') throw new WebViewError('USER_IN_CONTROL', { reason: 'user-owned' })
     entry.state = state
     entry.note = note
-    if (state === 'need-action') this.takeOver(entry, 'manual_takeover')
+    if (state === 'need-action') {
+      this.takeOver(entry, 'manual_takeover')
+      // The agent asked the user in: there is no user input to lose, so the
+      // page its script ran in is reloaded before the user types anything.
+      const contents = entry.view.webContents
+      if (entry.agentScriptSinceLoad && !contents.isDestroyed()) contents.reload()
+    }
     this.changed(pluginId)
   }
 
@@ -344,6 +354,7 @@ export class PluginWebViewRegistry {
         throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
       }
     }
+    if (method === 'Runtime.evaluate' || method === 'Runtime.callFunctionOn') entry.agentScriptSinceLoad = true
     const input = method.startsWith('Input.')
     if (input) entry.agentInput += 1
     try {
@@ -438,6 +449,7 @@ export class PluginWebViewRegistry {
       title: alive ? contents.getTitle() : '',
       loading: alive ? contents.isLoading() : false,
       attached: entry.host !== null,
+      agentScriptSinceLoad: entry.agentScriptSinceLoad,
     }
   }
 
@@ -572,6 +584,9 @@ export class PluginWebViewRegistry {
       // Hovering over a page the agent drives is watching, not taking over.
       if (mouse.type === 'mouseDown' || mouse.type === 'mouseWheel') this.userInput(entry)
     })
+    // A main-frame navigation (a reload included) replaces the document and
+    // with it any script the agent left there; in-page navigations do not.
+    contents.on('did-navigate', () => { entry.agentScriptSinceLoad = false })
     for (const event of ['did-navigate', 'did-navigate-in-page', 'page-title-updated', 'did-start-loading', 'did-stop-loading']) {
       contents.on(event, () => this.changed(entry.pluginId))
     }

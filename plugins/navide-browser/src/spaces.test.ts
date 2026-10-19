@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import enUS from './locales/en-US.json'
 import jaJP from './locales/ja-JP.json'
 import zhTW from './locales/zh-TW.json'
-import { normalizeAddress, parseViews, pendingCount, sortSpaces, type WebViewInfo } from './spaces'
+import { keptPages, normalizeAddress, parseViews, pendingCount, showsAgentScriptWarning, sortSpaces, type WebViewInfo } from './spaces'
 
 function view(overrides: Partial<WebViewInfo>): WebViewInfo {
   return {
     viewId: 'v', space: 's', owner: 'agent', control: 'agent', state: 'idle',
-    url: 'https://example.com/', title: '', loading: false, attached: false, ...overrides,
+    url: 'https://example.com/', title: '', loading: false, attached: false, agentScriptSinceLoad: false, ...overrides,
   }
 }
 
@@ -26,6 +26,24 @@ describe('parseViews', () => {
   it('answers an empty list for anything that is not an array', () => {
     expect(parseViews(undefined)).toEqual([])
     expect(parseViews({ views: [] })).toEqual([])
+  })
+})
+
+describe('agent script warning', () => {
+  it('shows only while the user controls a page the agent ran script in, until the user keeps the page', () => {
+    const risky = view({ viewId: 'r', control: 'user', agentScriptSinceLoad: true })
+    expect(showsAgentScriptWarning(risky, new Set())).toBe(true)
+    expect(showsAgentScriptWarning(risky, new Set(['r']))).toBe(false)
+    expect(showsAgentScriptWarning(view({ control: 'agent', agentScriptSinceLoad: true }), new Set())).toBe(false)
+    expect(showsAgentScriptWarning(view({ control: 'user', agentScriptSinceLoad: false }), new Set())).toBe(false)
+    expect(showsAgentScriptWarning(null, new Set())).toBe(false)
+  })
+
+  it('reads the flag from the Host and forgets a kept page once it loads a new document', () => {
+    expect(parseViews([view({ viewId: 'a', agentScriptSinceLoad: true })])[0].agentScriptSinceLoad).toBe(true)
+    expect(parseViews([{ viewId: 'b', owner: 'agent', control: 'agent', state: 'idle' }])[0].agentScriptSinceLoad).toBe(false)
+    const kept = keptPages([view({ viewId: 'a', agentScriptSinceLoad: true }), view({ viewId: 'b' })], new Set(['a', 'b', 'gone']))
+    expect([...kept]).toEqual(['a'])
   })
 })
 
@@ -89,7 +107,12 @@ describe('locales', () => {
       expect(locale.browser.settings['shared-sign-in']).toContain(identity[key])
       expect(locale.browser.settings['shared-sign-in']).toContain(reload[key])
     }
-    expect(zhTW.browser.action['reload-agent-scripts']).toBe('重新載入以清除 agent 腳本')
+    expect(zhTW.browser['agent-script']).toEqual({
+      warning: 'agent 的腳本可能仍在這個頁面執行，輸入密碼或驗證碼前請先重新載入。',
+      reload: '重新載入',
+      keep: '保留頁面',
+    })
+    expect(zhTW.browser.action['delegate-note']).toBe('任何 pane、任何工作區的 agent 都能使用')
   })
 
   it('name the product Navide Browser and never the reference product', () => {

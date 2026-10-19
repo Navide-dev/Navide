@@ -37,7 +37,12 @@
       "delegate": "この Space を agent に使わせる",
       "reclaim": "この Space を取り戻す",
       "close": "Space を閉じる",
-      "reload-agent-scripts": "再読み込みして agent のスクリプトを消去"
+      "delegate-note": "どの pane、どのワークスペースの agent でも使えます"
+    },
+    "agent-script": {
+      "warning": "このページでは agent のスクリプトがまだ動いている可能性があります。パスワードや確認コードを入力する前に再読み込みしてください。",
+      "reload": "再読み込み",
+      "keep": "ページを保持"
     },
     "settings": {
       "title": "設定",

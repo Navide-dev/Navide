@@ -1530,6 +1530,8 @@ interface WebViewInfo {
   title: string
   loading: boolean
   attached: boolean
+  agentScriptSinceLoad: boolean // the agent ran Runtime.evaluate or callFunctionOn
+                                // since the main frame last loaded a document
 }
 ```
 
@@ -1553,7 +1555,7 @@ belongs to no pane: every pane sees it, and may drive it while `owner` and
 | `create` | `{space, url?}` → `{viewId}` | `owner` and `control` are `agent`, `state` is `running`; the view runs in the background, unattached and without background throttling |
 | `close` | `{viewId}` | Only a view whose `owner` is `agent` |
 | `cdp` | `{viewId, method, params?}` → `{result}` | One Chrome DevTools Protocol command (`Domain.method`, at most 128 characters; `params` a plain object) from the Host allowlist (see [Host-enforced boundaries](#host-enforced-boundaries)); any other method is `CAPABILITY_DENIED`. The debugger attaches to that one view only. Refused with `USER_IN_CONTROL` while `owner` or `control` is `user`, with `reason` `user-owned`, `manual_takeover` or `permission` |
-| `setState` | `{viewId, state, note?}` | `note` at most 500 characters; `need-action` also sets `control` to `user` |
+| `setState` | `{viewId, state, note?}` | `note` at most 500 characters; `need-action` also sets `control` to `user`, and reloads the page first when `agentScriptSinceLoad` is set |
 
 #### Host-enforced boundaries
 
@@ -1603,10 +1605,16 @@ someone it is not.
   debugger from the view; the agent's next `cdp` after control returns
   attaches it again. Residual risk: script the agent already started in the
   page (for example a timer from `Runtime.evaluate`) keeps running after the
-  detach, because the page itself is not reloaded. Reloading the page clears
-  it; the disclosure says so, and Navide Browser offers "Reload to clear
-  agent scripts" (`web.navigate {action: "reload"}`) while the user is in
-  control.
+  detach, because the page itself is not reloaded. A new document (a reload
+  or another full navigation; not an in-page one) clears it, and the
+  disclosure says so. The Host tracks it per view as `agentScriptSinceLoad`:
+  set by every `Runtime.evaluate` or `Runtime.callFunctionOn`, cleared by a
+  main-frame `did-navigate`. When the agent hands the view over
+  (`setState` `need-action`) with the flag set, the Host reloads the page
+  first. A takeover by the user (input, `web.takeControl`, a permission
+  request) never reloads, so nothing the user typed is lost; while the user
+  is in control with the flag set, Navide Browser shows a warning with
+  "Reload" (`web.navigate {action: "reload"}`) and "Keep page".
 - **Views follow the package.** Disabling or removing the package destroys all
   its views. Closing the package's window does not: views keep running in the
   background until the package closes them.
