@@ -1,0 +1,540 @@
+import { randomUUID } from 'node:crypto'
+import {
+  isAllowedWebUrl,
+  type WebControlReason,
+  type WebViewControl,
+  type WebViewInfo,
+  type WebViewOwner,
+  type WebViewRect,
+  type WebViewState,
+} from './webCapability'
+
+/** Host side of the `web` system namespace: plugin-owned browser views.
+ *
+ * Every boundary that keeps a plugin (and the agent driving its backend) in
+ * its lane lives here, not in the plugin: one persistent partition per
+ * plugin, a sandboxed guest with no preload, an http(s)-only navigation
+ * allowlist, denied permission requests, the owner/control flags that make
+ * `cdp` answer USER_IN_CONTROL, and a CDP method allowlist that keeps the
+ * debugger inside the page (no file chooser paths, no download directory, no
+ * other targets). The Electron objects are injected so the rules are tested
+ * without a browser. */
+
+export type WebViewErrorCode =
+  | 'INVALID_ARGUMENT'
+  | 'USER_IN_CONTROL'
+  | 'CAPABILITY_DENIED'
+  | 'CDP_ERROR'
+  | 'RESOURCE_LIMIT'
+
+export class WebViewError extends Error {
+  readonly code: WebViewErrorCode
+  readonly reason: WebControlReason | undefined
+
+  constructor(code: WebViewErrorCode, options: { reason?: WebControlReason; message?: string } = {}) {
+    super(options.message ?? code)
+    this.name = 'WebViewError'
+    this.code = code
+    this.reason = options.reason
+  }
+}
+
+type Listener = (...args: any[]) => void
+
+/** The subset of Electron's WebContents the registry uses. */
+export interface WebGuestContents {
+  isDestroyed(): boolean
+  loadURL(url: string): Promise<void>
+  getURL(): string
+  getTitle(): string
+  isLoading(): boolean
+  stop(): void
+  reload(): void
+  close(): void
+  on(event: string, listener: Listener): unknown
+  setWindowOpenHandler(handler: (details: { url: string }) => { action: 'deny' }): void
+  capturePage(): Promise<{ isEmpty(): boolean; getSize(): { width: number; height: number }; resize(options: { width: number }): { toJPEG(quality: number): Buffer } ; toJPEG(quality: number): Buffer }>
+  navigationHistory: { canGoBack(): boolean; canGoForward(): boolean; goBack(): void; goForward(): void }
+  debugger: {
+    isAttached(): boolean
+    attach(protocolVersion?: string): void
+    detach(): void
+    sendCommand(method: string, params?: Record<string, unknown>): Promise<unknown>
+  }
+}
+
+export interface WebGuestView {
+  readonly webContents: WebGuestContents
+  setBounds(rect: WebViewRect): void
+  setVisible(visible: boolean): void
+}
+
+export interface WebGuestSession {
+  setPermissionRequestHandler(handler: (contents: unknown, permission: string, callback: (granted: boolean) => void) => void): void
+  setPermissionCheckHandler(handler: () => boolean): void
+  setDisplayMediaRequestHandler(handler: (request: unknown, callback: (streams: Record<string, never>) => void) => void): void
+  on(event: string, listener: Listener): unknown
+  clearStorageData(): Promise<void>
+  clearCache(): Promise<void>
+}
+
+/** The plugin view a web view is stacked on: its window's content view and
+ *  the plugin view's own bounds in window coordinates. */
+export interface WebHostSurface {
+  readonly key: string
+  addChildView(view: WebGuestView): void
+  removeChildView(view: WebGuestView): void
+  /** Plugin view bounds in window coordinates; null when the surface is gone. */
+  bounds(): WebViewRect | null
+  visible(): boolean
+}
+
+export interface PluginWebViewDeps {
+  createView(options: { partition: string; backgroundThrottling: boolean }): WebGuestView
+  session(partition: string): WebGuestSession
+  /** Called (coalesced per microtask) whenever a plugin's view list changes. */
+  onChanged(pluginId: string, views: WebViewInfo[]): void
+}
+
+export const MAX_WEB_VIEWS_PER_PLUGIN = 16
+export const DEFAULT_CAPTURE_WIDTH = 480
+const CDP_PROTOCOL_VERSION = '1.3'
+const MAX_CDP_ERROR_MESSAGE = 500
+const PLUGIN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
+/** CDP domains the plugin may drive; everything else (Target, Browser,
+ *  SystemInfo, IO, Storage, Security, Tracing, ...) reaches past the page. */
+const CDP_ALLOWED_DOMAINS: ReadonlySet<string> = new Set([
+  'Accessibility',
+  'Animation',
+  'CSS',
+  'DOM',
+  'DOMSnapshot',
+  'DOMStorage',
+  'Emulation',
+  'Input',
+  'Log',
+  'Network',
+  'Overlay',
+  'Page',
+  'Performance',
+  'Runtime',
+])
+
+/** Methods inside allowed domains that would read local files, write to a
+ *  chosen directory, or end the target. */
+const CDP_DENIED_METHODS: ReadonlySet<string> = new Set([
+  'DOM.setFileInputFiles',
+  'Input.dispatchDragEvent',
+  'Page.setDownloadBehavior',
+  'Page.handleFileChooser',
+  'Page.close',
+  'Page.crash',
+  'Network.loadNetworkResource',
+])
+
+/** Persistent partition for one plugin's web views (kept across restarts). */
+export function webPartitionFor(pluginId: string): string {
+  if (!PLUGIN_ID_PATTERN.test(pluginId)) throw new WebViewError('INVALID_ARGUMENT')
+  return `persist:navide-web:${pluginId}`
+}
+
+/** Guests that the global `web-contents-created` navigation block must skip:
+ *  their navigation is governed by the registry's own allowlist instead. */
+const guestContents = new WeakSet<object>()
+
+export function isPluginWebGuest(contents: object): boolean {
+  return guestContents.has(contents)
+}
+
+interface WebViewEntry {
+  readonly viewId: string
+  readonly pluginId: string
+  readonly space: string
+  readonly view: WebGuestView
+  owner: WebViewOwner
+  control: WebViewControl
+  reason: WebControlReason | undefined
+  state: WebViewState
+  note: string | undefined
+  host: WebHostSurface | null
+  rect: WebViewRect | null
+  /** In-flight CDP Input.* calls: input observed meanwhile is the agent's. */
+  agentInput: number
+}
+
+export class PluginWebViewRegistry {
+  private readonly views = new Map<string, WebViewEntry>()
+  private readonly guardedSessions = new Set<string>()
+  private readonly pendingChanges = new Set<string>()
+
+  constructor(private readonly deps: PluginWebViewDeps) {}
+
+  list(pluginId: string): WebViewInfo[] {
+    return [...this.views.values()].filter(entry => entry.pluginId === pluginId).map(entry => this.info(entry))
+  }
+
+  /** `web.create` (owner user) or bridge `create` (owner agent). */
+  create(pluginId: string, request: { space: string; url?: string }, owner: WebViewOwner): { viewId: string } {
+    const partition = webPartitionFor(pluginId)
+    if (request.url !== undefined && !isAllowedWebUrl(request.url)) throw new WebViewError('INVALID_ARGUMENT')
+    if (this.list(pluginId).length >= MAX_WEB_VIEWS_PER_PLUGIN) throw new WebViewError('RESOURCE_LIMIT')
+    this.guardSession(partition)
+    // An agent's view runs in the background, never attached: it must not be
+    // throttled while nobody watches it.
+    const view = this.deps.createView({ partition, backgroundThrottling: owner !== 'agent' })
+    guestContents.add(view.webContents)
+    const entry: WebViewEntry = {
+      viewId: randomUUID(),
+      pluginId,
+      space: request.space,
+      view,
+      owner,
+      control: owner,
+      reason: owner === 'user' ? 'user-owned' : undefined,
+      state: owner === 'agent' ? 'running' : 'idle',
+      note: undefined,
+      host: null,
+      rect: null,
+      agentInput: 0,
+    }
+    this.views.set(entry.viewId, entry)
+    this.wireGuest(entry)
+    view.setVisible(false)
+    void view.webContents.loadURL(request.url ?? 'about:blank').catch(() => undefined)
+    this.changed(pluginId)
+    return { viewId: entry.viewId }
+  }
+
+  /** Stack the view on the caller's plugin view; one attached view per plugin. */
+  attach(pluginId: string, viewId: string, rect: WebViewRect, host: WebHostSurface): void {
+    const entry = this.entry(pluginId, viewId)
+    for (const other of this.views.values()) {
+      if (other !== entry && other.pluginId === pluginId && other.host) this.detachEntry(other)
+    }
+    if (entry.host && entry.host.key !== host.key) this.detachEntry(entry)
+    if (!entry.host) {
+      host.addChildView(entry.view)
+      entry.host = host
+    }
+    entry.rect = { ...rect }
+    this.layout(entry)
+    this.changed(pluginId)
+  }
+
+  detach(pluginId: string, viewId: string): void {
+    const entry = this.entry(pluginId, viewId)
+    if (!entry.host) return
+    this.detachEntry(entry)
+    this.changed(pluginId)
+  }
+
+  /** Re-place every view stacked on a host whose bounds or visibility moved. */
+  hostChanged(hostKey: string): void {
+    for (const entry of this.views.values()) {
+      if (entry.host?.key === hostKey) this.layout(entry)
+    }
+  }
+
+  /** The host surface is going away; its views keep running in the background. */
+  hostClosed(hostKey: string): void {
+    const plugins = new Set<string>()
+    for (const entry of this.views.values()) {
+      if (entry.host?.key !== hostKey) continue
+      this.detachEntry(entry)
+      plugins.add(entry.pluginId)
+    }
+    for (const pluginId of plugins) this.changed(pluginId)
+  }
+
+  /** `web.navigate`: a user action, so an agent's view passes to the user. */
+  navigate(pluginId: string, request: { viewId: string; url?: string; action?: 'back' | 'forward' | 'reload' | 'stop' }): void {
+    const entry = this.entry(pluginId, request.viewId)
+    if (request.url !== undefined && !isAllowedWebUrl(request.url)) throw new WebViewError('INVALID_ARGUMENT')
+    this.takeOver(entry, 'manual_takeover')
+    const contents = entry.view.webContents
+    if (request.url !== undefined) void contents.loadURL(request.url).catch(() => undefined)
+    else if (request.action === 'back') { if (contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack() }
+    else if (request.action === 'forward') { if (contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward() }
+    else if (request.action === 'reload') contents.reload()
+    else if (request.action === 'stop') contents.stop()
+    this.changed(pluginId)
+  }
+
+  /** `web.setOwner` (user gesture): hand a Space to the agent or take it back. */
+  setOwner(pluginId: string, viewId: string, owner: WebViewOwner): void {
+    const entry = this.entry(pluginId, viewId)
+    entry.owner = owner
+    entry.control = owner
+    entry.reason = owner === 'user' ? 'user-owned' : undefined
+    if (owner === 'agent' && entry.state === 'need-action') entry.state = 'running'
+    this.changed(pluginId)
+  }
+
+  /** `web.takeControl` (user gesture): the user's "take over" button. */
+  takeControl(pluginId: string, viewId: string): void {
+    const entry = this.entry(pluginId, viewId)
+    this.takeOver(entry, 'manual_takeover')
+    this.changed(pluginId)
+  }
+
+  /** `web.returnControl` (user gesture): the agent may drive its view again. */
+  returnControl(pluginId: string, viewId: string): void {
+    const entry = this.entry(pluginId, viewId)
+    if (entry.owner !== 'agent') throw new WebViewError('USER_IN_CONTROL', { reason: 'user-owned' })
+    entry.control = 'agent'
+    entry.reason = undefined
+    if (entry.state === 'need-action') entry.state = 'running'
+    this.changed(pluginId)
+  }
+
+  /** Bridge `setState`: need-action hands control to the user. */
+  setState(pluginId: string, viewId: string, state: WebViewState, note?: string): void {
+    const entry = this.entry(pluginId, viewId)
+    if (entry.owner !== 'agent') throw new WebViewError('USER_IN_CONTROL', { reason: 'user-owned' })
+    entry.state = state
+    entry.note = note
+    if (state === 'need-action') this.takeOver(entry, 'manual_takeover')
+    this.changed(pluginId)
+  }
+
+  /** `byAgent`: the bridge may only close the agent's own views. */
+  close(pluginId: string, viewId: string, byAgent: boolean): void {
+    const entry = this.entry(pluginId, viewId)
+    if (byAgent && entry.owner !== 'agent') throw new WebViewError('USER_IN_CONTROL', { reason: 'user-owned' })
+    this.destroyEntry(entry)
+    this.changed(pluginId)
+  }
+
+  /** Bridge `cdp`: only while the agent owns and controls the view. */
+  async cdp(pluginId: string, viewId: string, method: string, params?: Record<string, unknown>): Promise<unknown> {
+    const entry = this.entry(pluginId, viewId)
+    this.assertAgentInControl(entry)
+    const domain = method.split('.')[0] ?? ''
+    if (!CDP_ALLOWED_DOMAINS.has(domain) || CDP_DENIED_METHODS.has(method)) {
+      throw new WebViewError('CAPABILITY_DENIED')
+    }
+    if (method === 'Page.navigate' && !isAllowedWebUrl(params?.url)) throw new WebViewError('INVALID_ARGUMENT')
+    const contents = entry.view.webContents
+    if (contents.isDestroyed()) throw new WebViewError('INVALID_ARGUMENT')
+    if (!contents.debugger.isAttached()) {
+      try {
+        contents.debugger.attach(CDP_PROTOCOL_VERSION)
+      } catch (error) {
+        throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
+      }
+    }
+    const input = domain === 'Input'
+    if (input) entry.agentInput += 1
+    try {
+      return await contents.debugger.sendCommand(method, params)
+    } catch (error) {
+      throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
+    } finally {
+      if (input) entry.agentInput -= 1
+      // The user may have taken over while the command ran; the next one is refused.
+    }
+  }
+
+  /** `web.capture`: a JPEG data URL for the Spaces overview card. */
+  async capture(pluginId: string, viewId: string, maxWidth = DEFAULT_CAPTURE_WIDTH): Promise<{ dataUrl: string }> {
+    const entry = this.entry(pluginId, viewId)
+    const image = await entry.view.webContents.capturePage()
+    if (image.isEmpty()) return { dataUrl: '' }
+    const { width } = image.getSize()
+    const jpeg = width > maxWidth ? image.resize({ width: maxWidth }).toJPEG(70) : image.toJPEG(70)
+    return { dataUrl: `data:image/jpeg;base64,${jpeg.toString('base64')}` }
+  }
+
+  /** `web.clearData` (user gesture) and plugin removal: wipe the partition. */
+  async clearData(pluginId: string): Promise<void> {
+    const session = this.deps.session(webPartitionFor(pluginId))
+    await session.clearStorageData()
+    await session.clearCache()
+  }
+
+  /** Plugin disabled, removed or revoked: every view goes. */
+  destroyPlugin(pluginId: string): void {
+    let any = false
+    for (const entry of [...this.views.values()]) {
+      if (entry.pluginId !== pluginId) continue
+      this.destroyEntry(entry)
+      any = true
+    }
+    if (any) this.changed(pluginId)
+  }
+
+  private assertAgentInControl(entry: WebViewEntry): void {
+    if (entry.owner !== 'agent') throw new WebViewError('USER_IN_CONTROL', { reason: 'user-owned' })
+    if (entry.control !== 'agent') {
+      throw new WebViewError('USER_IN_CONTROL', { reason: entry.reason ?? 'manual_takeover' })
+    }
+  }
+
+  private takeOver(entry: WebViewEntry, reason: WebControlReason): void {
+    if (entry.owner !== 'agent' || entry.control === 'user') return
+    entry.control = 'user'
+    entry.reason = reason
+    if (reason === 'permission') entry.state = 'need-action'
+  }
+
+  private entry(pluginId: string, viewId: string): WebViewEntry {
+    const entry = this.views.get(viewId)
+    // Another plugin's view id is indistinguishable from an unknown one.
+    if (!entry || entry.pluginId !== pluginId) throw new WebViewError('INVALID_ARGUMENT')
+    return entry
+  }
+
+  private info(entry: WebViewEntry): WebViewInfo {
+    const contents = entry.view.webContents
+    const alive = !contents.isDestroyed()
+    return {
+      viewId: entry.viewId,
+      space: entry.space,
+      owner: entry.owner,
+      control: entry.control,
+      state: entry.state,
+      ...(entry.note === undefined ? {} : { note: entry.note }),
+      url: alive ? contents.getURL() : '',
+      title: alive ? contents.getTitle() : '',
+      loading: alive ? contents.isLoading() : false,
+      attached: entry.host !== null,
+    }
+  }
+
+  private layout(entry: WebViewEntry): void {
+    const host = entry.host
+    if (!host || !entry.rect) return
+    const bounds = host.bounds()
+    if (!bounds || !host.visible()) {
+      entry.view.setVisible(false)
+      return
+    }
+    // The rect is relative to the plugin view; clamp it inside that view so a
+    // plugin cannot paint a page over the rest of the window.
+    const x = Math.min(Math.max(0, Math.round(entry.rect.x)), bounds.width)
+    const y = Math.min(Math.max(0, Math.round(entry.rect.y)), bounds.height)
+    const width = Math.max(0, Math.min(Math.round(entry.rect.width), bounds.width - x))
+    const height = Math.max(0, Math.min(Math.round(entry.rect.height), bounds.height - y))
+    entry.view.setBounds({ x: bounds.x + x, y: bounds.y + y, width, height })
+    entry.view.setVisible(width > 0 && height > 0)
+  }
+
+  private detachEntry(entry: WebViewEntry): void {
+    const host = entry.host
+    entry.host = null
+    entry.rect = null
+    entry.view.setVisible(false)
+    if (host) {
+      try {
+        host.removeChildView(entry.view)
+      } catch {
+        /* The host window is already gone. */
+      }
+    }
+  }
+
+  private destroyEntry(entry: WebViewEntry): void {
+    this.detachEntry(entry)
+    this.views.delete(entry.viewId)
+    const contents = entry.view.webContents
+    if (contents.isDestroyed()) return
+    try {
+      if (contents.debugger.isAttached()) contents.debugger.detach()
+    } catch {
+      /* Detaching a debugger that the page already dropped. */
+    }
+    contents.close()
+  }
+
+  private changed(pluginId: string): void {
+    if (this.pendingChanges.has(pluginId)) return
+    this.pendingChanges.add(pluginId)
+    queueMicrotask(() => {
+      this.pendingChanges.delete(pluginId)
+      this.deps.onChanged(pluginId, this.list(pluginId))
+    })
+  }
+
+  private entryForContents(contents: unknown): WebViewEntry | undefined {
+    for (const entry of this.views.values()) {
+      if (entry.view.webContents === contents) return entry
+    }
+    return undefined
+  }
+
+  /** Once per partition: deny every permission, device and screen request. */
+  private guardSession(partition: string): void {
+    if (this.guardedSessions.has(partition)) return
+    this.guardedSessions.add(partition)
+    const session = this.deps.session(partition)
+    session.setPermissionRequestHandler((contents, _permission, callback) => {
+      callback(false)
+      const entry = this.entryForContents(contents)
+      if (entry && entry.owner === 'agent') {
+        this.takeOver(entry, 'permission')
+        this.changed(entry.pluginId)
+      }
+    })
+    session.setPermissionCheckHandler(() => false)
+    session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
+    // Downloads would write outside the plugin's reach; not offered yet.
+    session.on('will-download', (event: { preventDefault(): void }) => event.preventDefault())
+    for (const chooser of ['select-hid-device', 'select-serial-port', 'select-usb-device']) {
+      session.on(chooser, (event: { preventDefault(): void }, _details: unknown, callback: (id?: string) => void) => {
+        event.preventDefault()
+        callback()
+      })
+    }
+  }
+
+  private wireGuest(entry: WebViewEntry): void {
+    const contents = entry.view.webContents
+    const refuse = (event: { preventDefault(): void }, url: string): void => {
+      if (!isAllowedWebUrl(url)) event.preventDefault()
+    }
+    contents.on('will-navigate', refuse)
+    contents.on('will-redirect', refuse)
+    contents.on('will-frame-navigate', (event: { preventDefault(): void; url: string; isMainFrame: boolean }) => {
+      if (event.isMainFrame && !isAllowedWebUrl(event.url)) event.preventDefault()
+    })
+    // Browser-initiated loads (history, CDP) skip will-navigate: stop any main
+    // frame load that leaves the allowlist after the fact.
+    contents.on('did-start-navigation', (event: { url: string; isMainFrame: boolean }) => {
+      if (!event.isMainFrame || isAllowedWebUrl(event.url)) return
+      contents.stop()
+      void contents.loadURL('about:blank').catch(() => undefined)
+    })
+    contents.setWindowOpenHandler(({ url }) => {
+      if (isAllowedWebUrl(url)) void contents.loadURL(url).catch(() => undefined)
+      return { action: 'deny' }
+    })
+    contents.on('before-input-event', (_event: unknown, input: { type: string }) => {
+      if (input.type === 'keyDown' || input.type === 'rawKeyDown' || input.type === 'char') this.userInput(entry)
+    })
+    contents.on('before-mouse-event', (_event: unknown, mouse: { type: string }) => {
+      // Hovering over a page the agent drives is watching, not taking over.
+      if (mouse.type === 'mouseDown' || mouse.type === 'mouseWheel') this.userInput(entry)
+    })
+    for (const event of ['did-navigate', 'did-navigate-in-page', 'page-title-updated', 'did-start-loading', 'did-stop-loading']) {
+      contents.on(event, () => this.changed(entry.pluginId))
+    }
+    contents.on('destroyed', () => {
+      if (this.views.get(entry.viewId) !== entry) return
+      this.detachEntry(entry)
+      this.views.delete(entry.viewId)
+      this.changed(entry.pluginId)
+    })
+  }
+
+  private userInput(entry: WebViewEntry): void {
+    if (entry.agentInput > 0 || entry.owner !== 'agent' || entry.control === 'user') return
+    this.takeOver(entry, 'manual_takeover')
+    this.changed(entry.pluginId)
+  }
+}
+
+function cdpMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.slice(0, MAX_CDP_ERROR_MESSAGE)
+}
