@@ -342,6 +342,7 @@ import {
   matchAwaitingInput,
   notificationEndsAwaiting,
   notificationMeansAwaiting,
+  permissionBoxOnScreen,
   permissionHoldActionFor,
   questionActionFor,
 } from './lib/cliAwaitingInput'
@@ -4094,12 +4095,14 @@ function pollAwaitingPanes(): void {
       const boxOnScreen = matchAwaitingInput(pane.agentKey, screen)
       // A held permission box that another tool's result was seen against, and
       // that is no longer on screen, was approved without ever being shown (a hook
-      // that rewrote the input): nothing else will release it.
+      // that rewrote the input): nothing else will release it. The looser
+      // permissionBoxOnScreen decides "still there", so a drifted vendor pattern
+      // cannot end a hold whose box is open.
       const held = ref.awaitingHeld?.() as { since: number; foreign: boolean } | undefined
       if (held && held.since > 0 && heldBoxGone({
         foreignResultSeen: held.foreign,
         heldMs: Date.now() - held.since,
-        boxOnScreen,
+        boxOnScreen: permissionBoxOnScreen(pane.agentKey, screen),
       })) ref.releaseNeedsInputHold?.()
       if (boxOnScreen) ref.markNeedsInput?.()
       else if (awaitingClearsOnMiss(pane.agentKey)) ref.clearNeedsInput?.()

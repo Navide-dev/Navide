@@ -215,9 +215,10 @@ export function permissionHoldActionFor(
  *  nobody reads, and a hook that approves and rewrites the input fires no
  *  matching result. Navigation (arrows, Tab) and ordinary letters do not
  *  answer. Escape SEQUENCES are skipped whole — an arrow is `ESC [ A`, not an
- *  Esc — and so are the terminal's own reports (focus, mouse): an X10 mouse
- *  report carries three printable bytes that can be digits. A bracketed paste is
- *  text, not an answer.
+ *  Esc — and so are the terminal's own reports and replies (focus, mouse, device
+ *  attributes, cursor position, colour and version strings): an X10 mouse report
+ *  carries three printable bytes, and an OSC/DCS reply is mostly digits. A
+ *  bracketed paste is text, not an answer.
  *
  *  Pure so it can be tested; the caller decides whether anything is held. */
 export function keysAnswerPermissionBox(data: string): boolean {
@@ -242,11 +243,32 @@ export function keysAnswerPermissionBox(data: string): boolean {
       i = j + 1 // past the final byte of the CSI sequence
     } else if (next === 'O') {
       i += 3 // SS3 (application-mode arrows, F1-F4)
+    } else if (next === ']' || next === 'P' || next === 'X' || next === '^' || next === '_') {
+      // OSC / DCS / SOS / PM / APC: a string, ended by BEL or ST (ESC \). These
+      // are the terminal's replies to a CLI's queries (a colour, a version), and
+      // their payload is full of digits.
+      let j = i + 2
+      while (j < data.length && data[j] !== '\x07' && !(data[j] === '\x1b' && data[j + 1] === '\\')) j += 1
+      i = data[j] === '\x07' ? j + 1 : j + 2
     } else {
       i += 2 // Alt+key arrives as ESC plus the key
     }
   }
   return false
+}
+
+/** What a permission box leaves on the rendered screen, matched loosely on
+ *  purpose: the question, the numbered Yes/No rows, or the cancel footer. The
+ *  vendor's own awaitingInput pattern is exact and drifts as the CLI's box is
+ *  redrawn, and a miss there must not be read as "the box is gone". A false
+ *  positive here (quoted prose on screen) only keeps a hold a little longer —
+ *  the answering key and the turn end still release it. */
+const PERMISSION_BOX_HINT = /Esc to cancel|Do you want to |\b[1-9]\. (?:Yes|No)\b/
+
+/** True when `screen` (rendered, see matchAwaitingInput) still shows a
+ *  permission box: the vendor's own pattern, or the looser hint above. */
+export function permissionBoxOnScreen(agentKey: string, screen: string): boolean {
+  return matchAwaitingInput(agentKey, screen) || PERMISSION_BOX_HINT.test(screen.replace(/\s+/g, ' '))
 }
 
 /** How long a hold must have been up before a missing box counts as evidence.
@@ -262,7 +284,7 @@ export const HELD_BOX_PAINT_GRACE_MS = 1500
  *  match. With one, the question is whether that result was a parallel tool
  *  (the box is still on screen: keep holding) or the tool the hold was raised
  *  for, whose input a hook rewrote after approving it (no box was ever shown:
- *  release). `boxOnScreen` is matchAwaitingInput on the rendered screen tail. */
+ *  release). `boxOnScreen` is permissionBoxOnScreen on the rendered screen tail. */
 export function heldBoxGone(state: {
   foreignResultSeen: boolean
   heldMs: number

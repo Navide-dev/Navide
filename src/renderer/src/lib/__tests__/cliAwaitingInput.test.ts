@@ -9,6 +9,7 @@ import {
   questionActionFor,
   permissionHoldActionFor,
   keysAnswerPermissionBox,
+  permissionBoxOnScreen,
   heldBoxGone,
   HELD_BOX_PAINT_GRACE_MS,
   QUESTION_DETAIL,
@@ -195,6 +196,29 @@ describe('keysAnswerPermissionBox — what answers a held box', () => {
     }
   })
 
+  it('the terminal\'s replies to a CLI query are not answers, even full of digits', () => {
+    for (const reply of [
+      '\x1b]11;rgb:1e1e/1e1e/1e1e\x07', // OSC 11 colour, BEL-terminated
+      '\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\', // the same, ST-terminated
+      '\x1bP1$r0m\x1b\\', // DCS: DECRQSS reply
+      '\x1bP>|xterm.js(5.5.0)\x1b\\', // DCS: XTVERSION
+      '\x1b[?2004;1$y', // DECRQM
+      '\x1b[?1;2c', // device attributes
+      '\x1b[12;40R', // cursor position
+    ]) {
+      expect(keysAnswerPermissionBox(reply), JSON.stringify(reply)).toBe(false)
+    }
+  })
+
+  it('still finds a key typed right after a reply', () => {
+    expect(keysAnswerPermissionBox('\x1b]11;rgb:1e1e/1e1e/1e1e\x07\r')).toBe(true)
+    expect(keysAnswerPermissionBox('\x1bP1$r0m\x1b\\2')).toBe(true)
+  })
+
+  it('an unterminated string swallows the rest rather than reading its digits', () => {
+    expect(keysAnswerPermissionBox('\x1b]11;rgb:1e1e')).toBe(false)
+  })
+
   it('an Alt chord and a bracketed paste are not answers', () => {
     expect(keysAnswerPermissionBox('\x1bb')).toBe(false)
     expect(keysAnswerPermissionBox('\x1b[200~ls 1 2\r\x1b[201~')).toBe(false)
@@ -202,6 +226,43 @@ describe('keysAnswerPermissionBox — what answers a held box', () => {
 
   it('finds an answer after a navigation key in the same run', () => {
     expect(keysAnswerPermissionBox('\x1b[B\r')).toBe(true)
+  })
+})
+
+describe('permissionBoxOnScreen — is the held box still up?', () => {
+  // The box as Claude Code 2.1.303 draws it, per the reviewer's capture of its
+  // rows and footer (synthetic: no PTY capture of it is checked in). The point
+  // is that the vendor's exact pattern does NOT match it, and the held box must
+  // still be seen as present.
+  const box = [
+    'Bash command',
+    '  rm -rf build',
+    'Do you want to proceed?',
+    '❯ 1. Yes',
+    "  2. Yes, and don't ask again for rm commands in /repo",
+    '  3. Yes, allow all edits during this session',
+    '  4. No',
+    'Esc to cancel · Tab to amend',
+  ].join('\n')
+
+  it('sees a box the vendor pattern misses — a parallel result must not end its hold', () => {
+    expect(matchAwaitingInput('claude', box)).toBe(false)
+    expect(permissionBoxOnScreen('claude', box)).toBe(true)
+    expect(heldBoxGone({
+      foreignResultSeen: true,
+      heldMs: HELD_BOX_PAINT_GRACE_MS + 1,
+      boxOnScreen: permissionBoxOnScreen('claude', box),
+    })).toBe(false)
+  })
+
+  it('still sees the boxes the vendor pattern knows', () => {
+    expect(permissionBoxOnScreen('claude', '3. No, and tell Claude what to do differently (esc)')).toBe(true)
+  })
+
+  it('reports no box once the screen is ordinary output, so an approved call is let go', () => {
+    const after = '● Bash(rm -rf build)\n  ⎿  (no content)\n\n● Done.\n\n> '
+    expect(permissionBoxOnScreen('claude', after)).toBe(false)
+    expect(heldBoxGone({ foreignResultSeen: true, heldMs: HELD_BOX_PAINT_GRACE_MS + 1, boxOnScreen: false })).toBe(true)
   })
 })
 
