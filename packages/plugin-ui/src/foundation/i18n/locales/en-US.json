@@ -8610,6 +8610,7 @@
   },
   "error": {
     "pipeline-start-refused": "The pipeline did not start: {reason}",
+    "pipeline-kickoff-failed": "Pipeline failed: stage {stage}, slot {slot} — {reason}. Its panes are still open.",
     "workspace-create-exists": "An item named “{name}” is already there. Pick another name.",
     "workspace-create-denied": "No permission to create a folder at {path}.",
     "workspace-create-failed": "Could not create the workspace folder at {path}.",

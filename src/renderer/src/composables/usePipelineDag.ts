@@ -259,6 +259,15 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     void report()
   }
 
+  /** The slot cannot run (its kickoff never reached the agent): failed, with
+   *  the reason for the canvas and pipeline_status. */
+  function slotFailed(index: number, label: string, error: string): void {
+    const id = nodeId(index, label)
+    if (!run || !id) return
+    run.nodes[id] = { ...run.nodes[id], status: 'failed', endedAt: now(), error }
+    void report()
+  }
+
   function summaryOf(id: string): string {
     return run?.nodes[id]?.summary || outputs[id]?.summary || ''
   }
@@ -322,6 +331,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     looped,
     slotStarted,
     slotFinished,
+    slotFailed,
     expandKickoff,
     frozenContext,
     end,

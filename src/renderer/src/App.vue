@@ -6816,6 +6816,7 @@ function scheduleInjection(pane: ActivePane): void {
       // Use bracketed-paste so newlines in the context header (prior-stage
       // documents) are preserved — without it they become Enter keypresses
       // and fragment the prompt into multiple partial submissions.
+      let held = false
       const kickoffResult = await runPipelineKickoff({
         inject: async () => {
           const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
@@ -6824,7 +6825,10 @@ function scheduleInjection(pane: ActivePane): void {
         },
         sleep,
         paneAlive: () => paneAlive(pane.id),
-        onHeld: () => pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`),
+        onHeld: () => {
+          held = true
+          pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+        },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       })
       if (kickoffResult.cancelled) return
@@ -6832,8 +6836,20 @@ function scheduleInjection(pane: ActivePane): void {
       pane.kickoffStatus = ok2 ? 'sent' : 'failed'
       setPrepStatus(pane, ok2 ? 'ready' : 'failed')
       syncViews()
+      const stageIndexForPane = pane.origin === 'pipeline'
+        ? stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
+        : -1
       if (!ok2) {
-        pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts — arming watcher anyway`)
+        pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+        // A pipeline slot without its task cannot finish its stage (#448).
+        if (stageIndexForPane >= 0) {
+          await failRunOnKickoff(
+            stageIndexForPane,
+            pane.slotLabel ?? '',
+            held ? 'kickoff sat in the input box but was never submitted' : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`,
+          )
+          return
+        }
       } else {
         pipelineLog(`${tag} ✓ kickoff sent`)
       }
@@ -6841,15 +6857,12 @@ function scheduleInjection(pane: ActivePane): void {
       // 5. Arm watcher. For question-interactive stages (P01) capture scanFrom
       //    after kickoff confirmation; for other stages pass undefined so the
       //    watcher uses markBufferPosition() and agentGenerating handles pacing.
-      if (pane.origin === 'pipeline') {
-        const stageIndex = stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
-        if (stageIndex >= 0) {
-          const stageAllowsQ = stagesApi.stages.value[stageIndex]?.allowQuestions ?? false
-          const kickoffScanFrom2 = stageAllowsQ
-            ? (paneRefs[pane.id]?.markBufferPosition as () => number | undefined)?.()
-            : undefined
-          startStageWatcher(stageIndex, pane.id, kickoffScanFrom2)
-        }
+      if (stageIndexForPane >= 0) {
+        const stageAllowsQ = stagesApi.stages.value[stageIndexForPane]?.allowQuestions ?? false
+        const kickoffScanFrom2 = stageAllowsQ
+          ? (paneRefs[pane.id]?.markBufferPosition as () => number | undefined)?.()
+          : undefined
+        startStageWatcher(stageIndexForPane, pane.id, kickoffScanFrom2)
       }
     }
   })()
@@ -13617,6 +13630,7 @@ async function activateStage(index: number): Promise<void> {
         index, slot.label) +
       sessionMarkerLine(pane.sessionMarker)
     pipelineLog(`${tag} ➜ injecting kickoff (${kickoff.length} chars)`)
+    let held = false
     const kickoffResult = await runPipelineKickoff({
       inject: async () => {
         const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
@@ -13625,7 +13639,10 @@ async function activateStage(index: number): Promise<void> {
       },
       sleep,
       paneAlive: () => paneAlive(pane.id),
-      onHeld: () => pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`),
+      onHeld: () => {
+        held = true
+        pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+      },
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
     })
     if (kickoffResult.cancelled) {
@@ -13647,9 +13664,8 @@ async function activateStage(index: number): Promise<void> {
     // the floor. When ok is false the echo was never observed and may still be
     // in flight (this app has a known late paste-ack), and a floor taken now
     // would sit below it — putting the protocol's sentinels back above the
-    // floor, which is the failure the floor exists to prevent. That case takes
-    // the deferred arm after the round trips below, which is the position this
-    // used to have for every slot.
+    // floor, which is the failure the floor exists to prevent. That case ends
+    // the run below instead (#448), so no floor is taken for it.
     if (managerSlot) {
       const router = ensureStageRouter(index)
       if (slot === managerSlot) router.managerPaneId = pane.id
@@ -13666,10 +13682,17 @@ async function activateStage(index: number): Promise<void> {
       kickoff_status: ok ? 'sent' : 'failed',
     })
     if (!ok) {
-      pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts — arming watcher anyway`)
-    } else {
-      pipelineLog(`${tag} ✓ kickoff sent`)
+      pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+      // A slot without its task cannot finish the stage, and a watcher armed
+      // over it kept the run `running` with nothing to show for it (#448).
+      await failRunOnKickoff(
+        index,
+        slot.label,
+        held ? 'kickoff sat in the input box but was never submitted' : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`,
+      )
+      return
     }
+    pipelineLog(`${tag} ✓ kickoff sent`)
 
     // For question-interactive stages (P01): capture scanFrom AFTER kickoff is
     // confirmed so the watcher only scans content produced after the kickoff.
@@ -13689,14 +13712,6 @@ async function activateStage(index: number): Promise<void> {
       role: slot.roleKey,
     })
     applyProjectPaths(stageResp ?? undefined)
-
-    // Deferred floor for an unverified kickoff — see the note above the router
-    // wiring. The round trips just awaited are the settle time a late echo
-    // needs to land below it.
-    if (managerSlot && !ok) {
-      const router = ensureStageRouter(index)
-      armRouterCursors(router, pane.id)
-    }
 
     startStageWatcher(index, pane.id, kickoffScanFrom)
   }))
@@ -14082,6 +14097,30 @@ async function onPipelineAbort(): Promise<void> {
   applyProjectPaths(resp ?? undefined)
   // Refresh existingProject so the Resume banner appears immediately in the
   // same session without requiring the user to switch workspaces and back.
+  if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
+}
+
+/** A slot's kickoff never reached its agent: fail its node with the reason and
+ *  end the run as failed, instead of leaving it `running` around a pane that
+ *  never got its task (#448). Like an abort, the panes stay alive for a
+ *  resume. The first failing slot ends the run; later ones only fail their
+ *  own node. */
+async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string): Promise<void> {
+  pipelineDag.slotFailed(stageIndex, slotLabel, reason)
+  if (pipeline.state !== 'running') return
+  const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
+  pipelineLog(`Stage ${stageLabel}/${slotLabel} ✕ ${reason} — pipeline failed`)
+  tearDownPipelineOrchestration()
+  await pipelineDag.end('failed')
+  const resp = await sendQuiet<ProjectPayload>('pipeline.abort', {
+    workspace_path: pipeline.workspacePath,
+    reason: 'failed'
+  })
+  applyProjectPaths(resp ?? undefined)
+  notifyRestore.toast(
+    i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
+    { type: 'error' },
+  )
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
 }
 

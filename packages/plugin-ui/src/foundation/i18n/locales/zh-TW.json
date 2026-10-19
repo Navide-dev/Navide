@@ -8610,6 +8610,7 @@
   },
   "error": {
     "pipeline-start-refused": "流程沒有啟動：{reason}",
+    "pipeline-kickoff-failed": "流程失敗：階段 {stage}、slot {slot} — {reason}。它的 pane 仍保持開啟。",
     "workspace-create-exists": "該位置已有名為「{name}」的項目，請換個名稱。",
     "workspace-create-denied": "沒有權限在 {path} 建立資料夾。",
     "workspace-create-failed": "無法在 {path} 建立工作區資料夾。",

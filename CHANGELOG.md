@@ -33,6 +33,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Pipelines: a slot whose kickoff never reached its agent no longer leaves the run `running` with a pane that never got its task. Its node is marked failed with the reason, in the run view and in MCP `pipeline_status` (`nodes[…].error`), the run ends as failed with an error toast, and the panes stay open so the run can be resumed. (#448)
 - Navide plugins: the helper that carries large agent tool results now exits after 60 s idle, so it no longer keeps about 339 MiB after a large result (0.2.25 known item). The next large result starts a new one, about a second slower. (#429)
 - Windows: restarting the agent tool result helper after its idle stop could fail with "The handle is invalid", so results over 1 MiB were refused for about a minute; fixed. On Windows the helper's own error output (stderr) is no longer written to Navide's backend log. Stopping the helper now ends only the helper's own process job, so a pane that was given the same process id is no longer ended with it. (#445)
 - Pipelines: a workspace can start a pipeline again after an aborted run; a start reads the pipeline's current stages, a refused start says why (toast and log), and Reset also clears the stored run. (#420)
