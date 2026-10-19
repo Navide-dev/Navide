@@ -16,7 +16,7 @@ import {
   type PlansBridgeRequest,
   type PlansFilesystemPort,
 } from './plansBridge'
-import { firstPartyBridgePorts, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
+import { firstPartyBridgePorts, isFirstPartyAgentToolActivation, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import {
   createHostSandboxProbe,
   resolveBackendSandbox,
@@ -171,13 +171,14 @@ const FIRST_PARTY_PORT_NAMESPACE: Partial<Record<PlansBridgePort, PluginSystemNa
  * switch, per-version consent or OS sandbox. Its methods and events come from
  * its manifest; its bridge ports are the ones the first-party list gives it,
  * each only when the manifest declares the matching system permission. Agents
- * reach it only through agent tools: `agentMethods` stays empty.
+ * reach it only through agent tools: `agentMethods` stays empty. Only a
+ * package the Official Registry installed is projected; any other yields null.
  */
 export function firstPartyBackendLaunchSpec(
   activation: PluginActivationCatalogEntry,
   manifest?: PluginManifestV2,
 ): BackendPluginLaunchSpec | null {
-  if (!isFirstPartyAgentToolPlugin(activation.pluginId) || !activation.backend) return null
+  if (!isFirstPartyAgentToolActivation(activation) || !activation.backend) return null
   const parsed = manifest ?? readInstalledManifestV2(activation.packageDir)
   if (!parsed.backend || parsed.id !== activation.pluginId || !parsed.backend.methods?.length) return null
   const system = parsed.permissions.system ?? []
@@ -209,7 +210,7 @@ export function firstPartyAgentToolSpec(
   activation: PluginActivationCatalogEntry,
   manifest?: PluginManifestV2,
 ): ThirdPartyLaunchSpec | null {
-  if (!isFirstPartyAgentToolPlugin(activation.pluginId) || !activation.backend) return null
+  if (!isFirstPartyAgentToolActivation(activation) || !activation.backend) return null
   const parsed = manifest ?? readInstalledManifestV2(activation.packageDir)
   const launch = firstPartyBackendLaunchSpec(activation, parsed)
   const agentTools = launch ? declaredAgentTools(parsed) : null

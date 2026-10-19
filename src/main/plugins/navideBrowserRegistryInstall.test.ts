@@ -372,6 +372,21 @@ describe('(c) look-alikes do not get first-party treatment', () => {
       .rejects.toThrow(/publisher must match id/)
     expect(activations.has('navide.browser')).toBe(false)
   })
+
+  it('never treats a navide.browser activation without Official Registry provenance as first-party', async () => {
+    register()
+    const installed = await installFromRegistry('navide.browser')
+    const { provenance: _provenance, ...bare } = installed
+    for (const activation of [
+      bare,
+      { ...bare, provenance: 'developer-local-unpacked' as const },
+      { ...bare, provenance: 'factory-bundled' as const },
+      { ...bare, source: 'local-unsigned' as const },
+    ]) {
+      expect(firstPartyBackendLaunchSpec(activation)).toBeNull()
+      expect(firstPartyAgentToolSpec(activation)).toBeNull()
+    }
+  })
 })
 
 describe('reserved navide.* rules stay as on main for everything else', () => {

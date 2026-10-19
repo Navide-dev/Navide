@@ -69,6 +69,9 @@ function writePackage(id: string, system: string[] = ['ui', 'web']): PluginActiv
     packageDir,
     views: [],
     backend: { entryFile: join(packageDir, entry), protocolVersion: 1, activation: 'startup' },
+    // Installed from the Official Registry: the only provenance a first-party
+    // backend other than Plans is projected for.
+    provenance: 'official-registry',
   }
 }
 
