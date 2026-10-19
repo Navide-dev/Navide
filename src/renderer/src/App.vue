@@ -7449,10 +7449,10 @@ async function onCliLoginSpawn(
   agentKey: string,
   loginProfileId?: string,
   opts?: { accountDirProfileId?: string },
-): Promise<void> {
+): Promise<boolean> {
   if (!currentWorkspace.value) {
     notifyRestore.toast(i18n.global.t('settings.accounts.cli.login-no-workspace'), { type: 'error' })
-    return
+    return false
   }
   // A sign-in inside the account's own config dir runs as that account's pane
   // (its pin), not in a login home: Claude Code keeps the login there.
@@ -7475,7 +7475,7 @@ async function onCliLoginSpawn(
       { type: 'error' }
     )
     if (paneId) void onKill(paneId)
-    return
+    return false
   }
   showSettings.value = false
   const pendingProfileId = dirProfileId ?? loginProfileId
@@ -7485,6 +7485,7 @@ async function onCliLoginSpawn(
   // The user must see the pane that is waiting for the browser authorization.
   noteViewJump('account login spawn', { paneId })
   onFocusPane(paneId)
+  return true
 }
 
 // Plan window "execute" dispatch: inject the plan-execution prompt into an
@@ -15272,19 +15273,7 @@ backend.on('cli_profiles.changed', (raw) => {
     if (panes.value.some((p) => p.id === pending.paneId)) void onKill(pending.paneId)
     const email = ev.identities?.[pending.agentKey]?.[profileId]?.email || ''
     if (chainsDirLogin(pending, profileId, dirSignedIn, cliProfilesApi.defaultProfileId(pending.agentKey))) {
-      // Step two: the same own-folder login pane the account badge opens.
-      // The user is told to authorize once more; the reminder below would
-      // only repeat that.
-      const reminded = loadDirLoginReminded()
-      reminded.add(profileId)
-      saveDirLoginReminded(reminded)
-      notifyRestore.toast(
-        email
-          ? i18n.global.t('settings.accounts.cli.login-step2', { email })
-          : i18n.global.t('settings.accounts.cli.login-step2-no-email'),
-        { type: 'info', duration: 20000 }
-      )
-      void onCliLoginSpawn(pending.agentKey, undefined, { accountDirProfileId: profileId })
+      void startDirLoginStep(pending.agentKey, profileId, email)
       continue
     }
     if (pending.step === 'dir') {
@@ -15304,6 +15293,37 @@ backend.on('cli_profiles.changed', (raw) => {
     )
   }
 })
+
+// Step two of a Claude Settings sign-in: the same own-folder login pane the
+// account badge opens. Only once it is open is the user told to authorize
+// once more and the one-time reminder spent; a pane that does not open says
+// so and leaves the reminder for later.
+const dirLoginStarting = new Set<string>()
+async function startDirLoginStep(agentKey: string, profileId: string, email: string): Promise<void> {
+  dirLoginStarting.add(profileId)
+  try {
+    if (!(await onCliLoginSpawn(agentKey, undefined, { accountDirProfileId: profileId }))) {
+      notifyRestore.toast(
+        email
+          ? i18n.global.t('settings.accounts.cli.login-step2-failed', { email })
+          : i18n.global.t('settings.accounts.cli.login-step2-failed-no-email'),
+        { type: 'error', duration: 15000 }
+      )
+      return
+    }
+  } finally {
+    dirLoginStarting.delete(profileId)
+  }
+  const reminded = loadDirLoginReminded()
+  reminded.add(profileId)
+  saveDirLoginReminded(reminded)
+  notifyRestore.toast(
+    email
+      ? i18n.global.t('settings.accounts.cli.login-step2', { email })
+      : i18n.global.t('settings.accounts.cli.login-step2-no-email'),
+    { type: 'info', duration: 20000 }
+  )
+}
 
 // An own-folder login pane closed before its folder signed in: the account
 // keeps running on the shared login, so only say how to finish later.
@@ -15327,7 +15347,7 @@ function remindDirLogins(): void {
   if (!cliProfilesApi.loaded.value) return
   const reminded = loadDirLoginReminded()
   const ids = dirLoginReminderTargets(
-    cliProfilesApi.profilesForAgent(FOLLOW_SWITCH_AGENT).map((p) => p.id).filter((id) => !pendingLoginPanes.has(id)),
+    cliProfilesApi.profilesForAgent(FOLLOW_SWITCH_AGENT).map((p) => p.id).filter((id) => !pendingLoginPanes.has(id) && !dirLoginStarting.has(id)),
     (id) => cliProfilesApi.identityFor(FOLLOW_SWITCH_AGENT, id)?.signedIn === true,
     followDirSignedIn,
     reminded,

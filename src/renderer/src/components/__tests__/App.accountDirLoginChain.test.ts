@@ -36,8 +36,25 @@ describe('two-step Claude sign-in wiring', () => {
     expect(harvestBlock).toContain(
       'chainsDirLogin(pending, profileId, dirSignedIn, cliProfilesApi.defaultProfileId(pending.agentKey))',
     )
-    expect(harvestBlock).toContain('void onCliLoginSpawn(pending.agentKey, undefined, { accountDirProfileId: profileId })')
-    expect(harvestBlock).toContain("i18n.global.t('settings.accounts.cli.login-step2'")
+    expect(harvestBlock).toContain('void startDirLoginStep(pending.agentKey, profileId, email)')
+    const step = functionBody('startDirLoginStep')
+    expect(step).toContain('await onCliLoginSpawn(agentKey, undefined, { accountDirProfileId: profileId })')
+    expect(step).toContain("i18n.global.t('settings.accounts.cli.login-step2'")
+  })
+
+  it('a step-two pane that does not open says so, and keeps the one-time reminder', () => {
+    // Review of #434, LOW-3: the "finish it in the pane" text and the
+    // reminder bookkeeping wait for the pane to exist.
+    expect(functionBody('onCliLoginSpawn')).toContain('return true')
+    const step = functionBody('startDirLoginStep')
+    const spawn = step.indexOf('await onCliLoginSpawn(')
+    const failed = step.indexOf("i18n.global.t('settings.accounts.cli.login-step2-failed'")
+    expect(failed).toBeGreaterThan(spawn)
+    expect(step.indexOf('return', failed)).toBeLessThan(step.indexOf('saveDirLoginReminded('))
+    expect(step.indexOf('saveDirLoginReminded(')).toBeGreaterThan(spawn)
+    expect(step.indexOf("i18n.global.t('settings.accounts.cli.login-step2',")).toBeGreaterThan(spawn)
+    // While the pane is being opened the reminder leaves the account alone.
+    expect(functionBody('remindDirLogins')).toContain('!dirLoginStarting.has(id)')
   })
 
   it('ends the own-folder step only once the folder is signed in', () => {
@@ -66,7 +83,7 @@ describe('two-step Claude sign-in wiring', () => {
   })
 
   it('sends nothing of its own to the backend', () => {
-    for (const name of ['noteSkippedDirLogins', 'remindDirLogins']) {
+    for (const name of ['noteSkippedDirLogins', 'remindDirLogins', 'startDirLoginStep']) {
       const body = functionBody(name)
       expect(body, name).not.toContain('backend.send')
       expect(body, name).not.toContain('setDefault')
@@ -76,7 +93,7 @@ describe('two-step Claude sign-in wiring', () => {
 })
 
 describe('two-step Claude sign-in copy', () => {
-  const keys = ['login-step2', 'login-step2-no-email', 'login-step2-done', 'login-step2-done-no-email', 'login-step2-skipped', 'login-step2-skipped-no-email', 'dir-remind']
+  const keys = ['login-step2', 'login-step2-no-email', 'login-step2-done', 'login-step2-done-no-email', 'login-step2-skipped', 'login-step2-skipped-no-email', 'login-step2-failed', 'login-step2-failed-no-email', 'dir-remind']
   for (const name of ['en-US', 'zh-TW', 'ja-JP']) {
     it(`${name} has every step string`, () => {
       const cli = (locale(name).settings as Record<string, Record<string, Record<string, string>>>).accounts.cli

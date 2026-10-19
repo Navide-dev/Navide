@@ -7848,6 +7848,8 @@
         "login-step2-done-no-email": "All set: the account is signed in, including in its own folder.",
         "login-step2-skipped": "{email} works as usual but is not signed in to its own folder yet. You can finish it later with “Sign in to its own folder” in the account badge.",
         "login-step2-skipped-no-email": "The account works as usual but is not signed in to its own folder yet. You can finish it later with “Sign in to its own folder” in the account badge.",
+        "login-step2-failed": "Step 1 done: {email} is saved, but the pane for signing it in to its own folder could not open. The account works as usual; use “Sign in to its own folder” in the account badge to finish.",
+        "login-step2-failed-no-email": "Step 1 done: the account is saved, but the pane for signing it in to its own folder could not open. The account works as usual; use “Sign in to its own folder” in the account badge to finish.",
         "dir-remind": "Claude accounts not signed in to their own folder yet: {count}. They keep working on the shared login. Use “Sign in to its own folder” in the account badge to finish each one.",
         "new-account": "+ New account",
         "new-account-scope": "Provider for the new account",

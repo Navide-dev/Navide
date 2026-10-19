@@ -7848,6 +7848,8 @@
         "login-step2-done-no-email": "兩步都完成：帳號已登入，也已登入到自己的資料夾。",
         "login-step2-skipped": "{email} 可以照常使用，但還沒登入到自己的資料夾。之後可以從帳號徽章的「登入到帳號資料夾」補做。",
         "login-step2-skipped-no-email": "這個帳號可以照常使用，但還沒登入到自己的資料夾。之後可以從帳號徽章的「登入到帳號資料夾」補做。",
+        "login-step2-failed": "第 1 步完成：{email} 已儲存，但登入到自己資料夾的 pane 開不起來。帳號可以照常使用，之後可以從帳號徽章的「登入到帳號資料夾」補做。",
+        "login-step2-failed-no-email": "第 1 步完成：帳號已儲存，但登入到自己資料夾的 pane 開不起來。帳號可以照常使用，之後可以從帳號徽章的「登入到帳號資料夾」補做。",
         "dir-remind": "有 {count} 個 Claude 帳號還沒登入到自己的資料夾，目前仍使用共用的登入。可以從帳號徽章的「登入到帳號資料夾」逐一補做。",
         "new-account": "＋ 新增帳號",
         "new-account-scope": "新帳號的 provider",
