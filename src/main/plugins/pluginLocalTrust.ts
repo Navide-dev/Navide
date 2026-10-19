@@ -47,6 +47,10 @@ export interface PluginLocalTrustRecord {
    * against a later key list. Null for every unsigned install, which keeps
    * those records readable by releases before A3. */
   signer: LocalSignerEvidence | null
+  /** sha256 hex of the `.vsix` file this copy was installed from (decision
+   * d5), checked again against the blocked digests at every load and trust
+   * refresh. Absent for a folder and for records written before it. */
+  artifactDigest?: string
 }
 
 /** Stable refusal codes; tests and UI key off these, never the message text. */
@@ -151,7 +155,7 @@ function parseRecord(path: string): PluginLocalTrustRecord {
     'consentedAt',
     'source',
     'signer',
-  ])
+  ], ['artifactDigest'])
   const files = requireTrustObject(raw.fileDigests, `${LOCAL_TRUST_RECORD_LABEL}.fileDigests`)
   if (
     raw.schemaVersion !== 1 ||
@@ -163,6 +167,7 @@ function parseRecord(path: string): PluginLocalTrustRecord {
     !Number.isFinite(Date.parse(raw.consentedAt)) ||
     (raw.source !== 'file' && raw.source !== 'folder') ||
     !isSignerEvidence(raw.signer) ||
+    (raw.artifactDigest !== undefined && (typeof raw.artifactDigest !== 'string' || !/^[0-9a-f]{64}$/.test(raw.artifactDigest))) ||
     Object.values(files).some((digest) => typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest))
   ) {
     throw new Error(`malformed ${LOCAL_TRUST_RECORD_LABEL}`)
@@ -186,7 +191,7 @@ export function readLocalTrustRecord(path: string): PluginLocalTrustRecord {
  */
 export function createLocalTrustRecord(
   packageDir: string,
-  consent: { source: 'file' | 'folder'; consentedAt: string; signer?: LocalSignerEvidence | null }
+  consent: { source: 'file' | 'folder'; consentedAt: string; signer?: LocalSignerEvidence | null; artifactDigest?: string }
 ): PluginLocalTrustRecord {
   const manifest = readManifest(packageDir)
   if (isOfficialPluginId(manifest.id)) {
@@ -202,6 +207,7 @@ export function createLocalTrustRecord(
     consentedAt: consent.consentedAt,
     source: consent.source,
     signer: consent.signer ?? null,
+    ...(consent.artifactDigest ? { artifactDigest: consent.artifactDigest } : {}),
   }
 }
 
