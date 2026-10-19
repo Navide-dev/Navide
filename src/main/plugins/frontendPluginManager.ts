@@ -1036,13 +1036,12 @@ export function isReservedPluginId(id: string): boolean {
   return id === HOST_EVENT_SOURCE_PLUGIN_ID || id.startsWith('navide.')
 }
 
-/** The bundled first-party Navide plugins. They cannot be removed; the user
- *  can disable them. Their names, for messages the user reads. */
+/** The three bundled first-party Navide plugins. They cannot be removed; the
+ *  user can disable them. Their names, for messages the user reads. */
 export const BUILTIN_PLUGIN_NAMES: ReadonlyMap<string, string> = new Map([
   ['navide.plans', 'Plans'],
   ['navide.git', 'Git'],
   ['navide.mini-ide', 'Mini-IDE'],
-  ['navide.browser', 'Browser'],
 ])
 
 /** A web view refusal as a capability error. The view-side contract has no

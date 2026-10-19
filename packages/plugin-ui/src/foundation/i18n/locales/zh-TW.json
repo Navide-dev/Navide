@@ -1756,7 +1756,6 @@
         }
       },
       "bundled": "內建",
-      "bundledBrowser": "內建瀏覽器",
       "bundledGit": "內建 Git",
       "state": {
         "active": "啟用中",
@@ -1802,7 +1801,6 @@
       "permissionDetails": "權限與授予",
       "permissionDetailsWithActivity": "權限、授予與活動",
       "plansRiskNote": "此 Navide 外掛有自己的後端程式，以您的使用者權限執行，沒有沙盒。它處理目前專案的計畫文件：從往上找到的 Git 儲存庫根目錄起（含其下的巢狀儲存庫），任何深度的 .agent-team、.claude、.cursor 與 docs 底下的 plans／reports 類資料夾、根目錄的 .plans，以及這些資料夾的 .history（只讀）。讀取與寫入計畫文件都由此 Navide 外掛的後端直接進行；刪除與改名仍經由 Navide 進行。",
-      "browserRiskNote": "此 Navide 外掛有自己的後端程式，以您的使用者權限執行，沒有沙盒。它可開啟並瀏覽任何網站；網站登入資料會保存在本機；agent 可讀取此 Navide 外掛開啟的所有網頁內容與登入狀態。",
       "searchPlaceholder": "搜尋 Navide 外掛",
       "search": "搜尋",
       "install": "安裝",

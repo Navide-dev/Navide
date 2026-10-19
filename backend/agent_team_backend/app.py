@@ -511,7 +511,7 @@ def host_supports_plans_backend() -> bool:
 
 
 #: The Navide plugins whose Disabled switch the Host reports.
-DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide", "navide.browser"})
+DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide"})
 #: Set by main on every backend start: the built-ins disabled at that moment,
 #: comma-separated. Absent when none is.
 DISABLED_BUILTIN_PLUGINS_ENV = "NAVIDE_DISABLED_BUILTIN_PLUGINS"

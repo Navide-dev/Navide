@@ -467,7 +467,7 @@ watch(installed, () => void refreshPacks())
           <div class="ext-row-head">
             <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="32" />
             <div class="ext-row-title">
-              <span class="ext-id" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id === 'navide.browser' ? $t('settings.extensions.bundledBrowser') : p.id }}</span>
+              <span class="ext-id" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id }}</span>
               <span v-if="p.installed?.packageVersion ?? p.version" class="ext-requires">
                 {{ p.installed?.packageVersion ?? p.version }}
               </span>
@@ -491,9 +491,6 @@ watch(installed, () => void refreshPacks())
                sandbox wording does not apply to it. -->
           <p v-if="p.id === 'navide.plans'" class="ext-risk-note">
             {{ $t('settings.extensions.plansRiskNote') }}
-          </p>
-          <p v-if="p.id === 'navide.browser'" class="ext-risk-note">
-            {{ $t('settings.extensions.browserRiskNote') }}
           </p>
           <details v-if="p.installed?.manifestPermissions || p.installed?.packageVersion" class="ext-permission-details">
             <summary>{{ $t('settings.extensions.permissionDetails') }}</summary>

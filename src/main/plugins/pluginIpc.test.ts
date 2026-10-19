@@ -5880,7 +5880,7 @@ describe('plugins:remove native backend data choice', () => {
 })
 
 describe('built-in Plans, Git and Mini-IDE: disabled, never removed', () => {
-  const BUILTINS = ['navide.plans', 'navide.git', 'navide.mini-ide', 'navide.browser'] as const
+  const BUILTINS = ['navide.plans', 'navide.git', 'navide.mini-ide'] as const
 
   function setup(prefix: string, hostSwitch?: (id: string, disabled: boolean) => Promise<void> | void) {
     const root = mkdtempSync(join(tmpdir(), prefix))

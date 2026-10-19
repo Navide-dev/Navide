@@ -85,7 +85,7 @@ async def test_host_register_carries_the_disabled_built_ins(host_session) -> Non
     assert app.plans_plugin_disabled() is False
 
 
-@pytest.mark.parametrize("value", [["acme.demo"], ["acme.browser"], "navide.plans", [1], ["navide.plans"] * 5])
+@pytest.mark.parametrize("value", [["acme.demo"], ["navide.browser"], "navide.plans", [1], ["navide.plans"] * 4])
 async def test_host_register_refuses_anything_but_built_in_ids(host_session, value) -> None:
     reply = await _register(host_session, {"plans_backend_v2": False, "disabled_plugins": value})
     assert reply["error"]["code"] == "UNAUTHORIZED"
@@ -212,13 +212,6 @@ def test_no_plan_assets_before_the_host_registers_when_spawned_disabled(
     monkeypatch.setenv(app.DISABLED_BUILTIN_PLUGINS_ENV, "navide.plans")
     app._register_workspace_and_backfill(str(tmp_path))  # noqa: SLF001
     assert provisioned == []
-
-
-async def test_host_register_accepts_the_bundled_browser(host_session) -> None:
-    reply = await _register(host_session, {"plans_backend_v2": True, "disabled_plugins": ["navide.browser"]})
-    assert reply["payload"] == {"registered": True}
-    assert app.host_disabled_plugins() == frozenset({"navide.browser"})
-    assert app.plans_plugin_disabled() is False
 
 
 def test_host_register_and_app_agree_on_the_built_in_ids() -> None:

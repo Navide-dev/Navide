@@ -1756,7 +1756,6 @@
         }
       },
       "bundled": "同梱",
-      "bundledBrowser": "同梱のブラウザー",
       "bundledGit": "同梱の Git",
       "state": {
         "active": "有効",
@@ -1802,7 +1801,6 @@
       "permissionDetails": "権限と付与",
       "permissionDetailsWithActivity": "権限・付与・アクティビティ",
       "plansRiskNote": "この Navide プラグインは独自のバックエンドプログラムを持ち、あなたのユーザー権限で動作し、サンドボックスはありません。現在のプロジェクトの計画ドキュメントを扱います：上方向に見つかった Git リポジトリのルート（その中のネストされたリポジトリを含む）から、任意の深さにある .agent-team・.claude・.cursor・docs 配下の plans／reports 系フォルダー、ルートの .plans、およびそれらの .history（読み取り専用）です。計画ドキュメントの読み取りと書き込みはどちらもこの Navide プラグインのバックエンドが直接行い、削除と名前変更は引き続き Navide を経由します。",
-      "browserRiskNote": "この Navide プラグインは独自のバックエンドプログラムを持ち、あなたのユーザー権限で動作し、サンドボックスはありません。任意のウェブサイトを開いて閲覧できます。サイトのログイン情報はこのコンピューターに保存されます。agent はこの Navide プラグインが開いたすべてのページの内容とログイン状態を読み取れます。",
       "searchPlaceholder": "Navide プラグインを検索",
       "search": "検索",
       "install": "インストール",

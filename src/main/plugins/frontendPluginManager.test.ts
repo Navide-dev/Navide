@@ -17306,7 +17306,7 @@ describe('the Disabled switch for the built-in Plans, Git and Mini-IDE', () => {
     const mgr = new FrontendPluginManager()
     mgr.setDisabledPluginResolver(() => true)
     expect(mgr.isBuiltinPluginDisabled('acme.demo')).toBe(false)
-    expect(mgr.listDisabledBuiltinPlugins()).toEqual(['navide.browser', GIT_PLUGIN_ID, MINI_IDE_PLUGIN_ID, PLANS_PLUGIN_ID].sort())
+    expect(mgr.listDisabledBuiltinPlugins()).toEqual([GIT_PLUGIN_ID, MINI_IDE_PLUGIN_ID, PLANS_PLUGIN_ID].sort())
   })
 
   it('drains the real Plans backend activation on Disable and registers it again on Enable', async () => {

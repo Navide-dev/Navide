@@ -1756,7 +1756,6 @@
         }
       },
       "bundled": "Bundled",
-      "bundledBrowser": "Bundled Browser",
       "bundledGit": "Bundled Git",
       "state": {
         "active": "Active",
@@ -1802,7 +1801,6 @@
       "permissionDetails": "Permissions and grants",
       "permissionDetailsWithActivity": "Permissions, grants and activity",
       "plansRiskNote": "This Navide plugin has its own backend program, which runs with your user permissions and has no sandbox. It works on plan documents in the current project, starting from the Git repository root found above it (including repositories nested inside): the plan and report folders under .agent-team, .claude, .cursor and docs at any depth, .plans at the root, and their .history (read only). Its backend reads and writes them directly; deletes and renames still go through Navide.",
-      "browserRiskNote": "This Navide plugin has its own backend program, which runs with your user permissions and has no sandbox. It can open and browse any website; site sign-ins are kept on this computer; agents can read every page this Navide plugin opens and its sign-in state.",
       "searchPlaceholder": "Search Navide plugins",
       "search": "Search",
       "install": "Install",
