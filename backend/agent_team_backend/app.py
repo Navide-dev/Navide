@@ -2788,11 +2788,20 @@ _SUBAGENT_COUNTING_VENDORS = frozenset({"claude"})
 _TOOL_KEYED_EVENTS = frozenset({"permission_request", "post_tool_use", "post_tool_use_failure"})
 
 
+# Tools whose answer is written into their input (AskUserQuestion's `answers`,
+# ExitPlanMode's approved plan), so the input a Post event repeats differs from
+# the one the box was raised with. They are keyed by name alone, which is enough:
+# only one such box is ever open at a time.
+_INPUT_REWRITTEN_TOOLS = frozenset({"AskUserQuestion", "ExitPlanMode"})
+
+
 def _hook_tool_key(payload: dict) -> str:
     """`<tool_name>:<hash of tool_input>`, or "" when the payload names no tool."""
     name = str(payload.get("tool_name") or "")
     if not name:
         return ""
+    if name in _INPUT_REWRITTEN_TOOLS:
+        return name
     try:
         canonical = json.dumps(payload.get("tool_input"), sort_keys=True, separators=(",", ":"))
     except (TypeError, ValueError):

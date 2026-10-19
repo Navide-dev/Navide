@@ -112,6 +112,21 @@ def test_permission_box_and_its_tool_result_share_a_tool_key(
     assert other != box
 
 
+def test_tool_key_ignores_the_input_of_tools_whose_answer_is_written_into_it(
+    client: TestClient, events: list[dict]
+) -> None:
+    # AskUserQuestion's answers (and ExitPlanMode's plan) land in tool_input, so
+    # the Post event no longer repeats what the box was raised with. Keyed by
+    # name alone or the hold would never find its release.
+    questions = [{"question": "Which?"}]
+    box = _tool_key_of(client, events, "permission_request",
+                       {"tool_name": "AskUserQuestion", "tool_input": {"questions": questions}})
+    done = _tool_key_of(client, events, "post_tool_use",
+                        {"tool_name": "AskUserQuestion",
+                         "tool_input": {"questions": questions, "answers": {"Which?": "A"}}})
+    assert box == done != ""
+
+
 def test_tool_key_is_empty_without_a_tool_and_off_the_paired_events(
     client: TestClient, events: list[dict]
 ) -> None:
