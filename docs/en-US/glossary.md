@@ -10,7 +10,7 @@ The rule behind every term: **name a thing by who owns its files.**
 
 | Concept | zh-TW | en | ja | Covers |
 |---|---|---|---|---|
-| A package that extends Navide itself | Navide 外掛 | Navide plugin | Navide プラグイン | Manifest v1/v2 packages, the plugin SDK and `navide-plugin`, the plugin backend sandbox, the bundled `navide.git`, `navide.plans`, `navide.mini-ide` and `navide.browser` |
+| A package that extends Navide itself | Navide 外掛 | Navide plugin | Navide プラグイン | Manifest v1/v2 packages, the plugin SDK and `navide-plugin`, the plugin backend sandbox, the bundled `navide.git`, `navide.plans` and `navide.mini-ide` |
 | Where Navide plugins are published | Navide 市集 | Navide Marketplace | Navide マーケットプレイス | `server.navide.dev/registry` |
 | A bundle of Navide plugins | Navide 外掛組合 | Navide Plugin Pack | Navide プラグインパック | Packages that declare `extensionPack` |
 | Content Navide owns and delivers to the CLIs | Agent 資產 | Agent Assets | エージェント資産 | Skills, MCP servers, prompts, memory. Not credentials: they never sync |

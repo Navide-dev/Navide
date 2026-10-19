@@ -6,7 +6,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
-- Navide Browser: a built-in Navide plugin that opens real web pages inside Navide. Each agent pane works in its own background Space, so your own Spaces are never taken over; a Spaces overview shows every Space with a thumbnail and its state (Running, Need your action, Done), and your own Spaces are pinned. Agents get `browser_*` tools (open, snapshot with `@ref`s, click/fill/press/select/hover/scroll/goto/back, screenshot, hand off, wait for control, finish); when an agent hands a Space to you, or you take over, its commands are refused until you hand it back. All Spaces share one set of sign-ins kept on this computer, and Settings can clear them.
+- Navide Browser: a Navide plugin, installed from the Navide Marketplace (it does not ship with the App; it needs Navide 0.2.27 or later), that opens real web pages inside Navide. Each agent pane works in its own background Space, so your own Spaces are never taken over; a Spaces overview shows every Space with a thumbnail and its state (Running, Need your action, Done), and your own Spaces are pinned. Agents get `browser_*` tools (open, snapshot with `@ref`s, click/fill/press/select/hover/scroll/goto/back, screenshot, hand off, wait for control, finish); when an agent hands a Space to you, or you take over, its commands are refused until you hand it back. All Spaces share one set of sign-ins kept on this computer, and Settings can clear them.
 
 ## [0.2.26] — 2026-10-19 — signed release
 
