@@ -111,6 +111,31 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.27',
+    title: {
+      'zh-TW': 'Navide 瀏覽器：agent 在自己的 Space 上網，你的分頁不會被搶走',
+      'en-US': 'Navide Browser: Agents Browse in Their Own Spaces, Yours Stay Yours',
+      'ja-JP': 'Navide ブラウザー：agent は自分の Space でブラウズし、あなたのタブは奪われません',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Navide 瀏覽器：在 Navide 裡開真正的網頁。每個 agent pane 在自己的背景 Space 工作，你的 Space 有釘選標記，agent 預設碰不到；總覽卡片顯示縮圖和狀態（執行中、需要你處理、完成）。',
+        'en-US': 'Navide Browser opens real web pages inside Navide. Each agent pane works in its own background Space; your own Spaces are pinned and off limits to agents unless you let them in. The overview shows every Space with a thumbnail and its state (Running, Need your action, Done).',
+        'ja-JP': 'Navide ブラウザーで Navide の中に本物の Web ページを開けます。agent の pane はそれぞれ自分のバックグラウンド Space で作業し、あなたの Space はピン留めされ、許可しない限り agent は使えません。一覧では各 Space のサムネイルと状態（実行中・対応が必要・完了）が表示されます。',
+      },
+      {
+        'zh-TW': '人機交接：agent 需要你登入、過驗證碼或付款時會把 Space 交給你；你也可以隨時按「接手」。交還前 agent 的操作一律被擋下。',
+        'en-US': 'Hand-offs: an agent hands you its Space when it needs you to sign in, solve a captcha or pay, and you can take over any time; its commands are refused until you hand the Space back.',
+        'ja-JP': '受け渡し：ログインや CAPTCHA、支払いが必要になると agent が Space をあなたに渡します。いつでも操作を引き継ぐこともでき、戻すまで agent の操作はすべて拒否されます。',
+      },
+      {
+        'zh-TW': '所有 Space 共用同一份登入資料，保存在這台電腦上；可在 Navide 瀏覽器的設定裡一鍵清除。',
+        'en-US': 'All Spaces share one set of sign-ins kept on this computer; clear them from the Navide Browser settings.',
+        'ja-JP': 'すべての Space は同じログイン情報を共有し、このコンピューターに保存されます。Navide ブラウザーの設定から消去できます。',
+      },
+    ],
+  },
+  {
     version: '0.2.26',
     title: {
       'zh-TW': '從聊天室喚醒 pane、只接回上次開著的 pane、從檔案或資料夾安裝 Navide 外掛（清楚標示來源）',
