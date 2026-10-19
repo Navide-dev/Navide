@@ -54,6 +54,12 @@ describe('planAgentSignIn', () => {
       .toMatchObject({ kind: 'refused', code: 'unknown-profile' })
   })
 
+  it('leaves the active account to the user in folder mode too', () => {
+    const active = accounts({ defaultProfileId: (agentKey) => (agentKey === 'claude' ? 'c-parked' : null) })
+    expect(planAgentSignIn({ agentKey: 'claude', profileId: 'c-parked', mode: 'folder' }, active))
+      .toMatchObject({ kind: 'refused', code: 'needs-user' })
+  })
+
   it('offers folder sign-in for claude only', () => {
     expect(planAgentSignIn({ agentKey: 'codex', profileId: 'p-parked', mode: 'folder' }, accounts()))
       .toMatchObject({ kind: 'refused', code: 'unsupported' })

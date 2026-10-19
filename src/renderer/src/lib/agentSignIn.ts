@@ -54,19 +54,18 @@ export function planAgentSignIn(req: AgentSignInRequest, accounts: AgentSignInAc
   if (!profile || profile.agentKey !== agentKey) {
     return { kind: 'refused', code: 'unknown-profile', message: `no ${agentKey} account "${profileId}" in Settings → Accounts` }
   }
-  if (mode === 'folder') {
-    if (agentKey !== FOLDER_SIGN_IN_AGENT) {
-      return { kind: 'refused', code: 'unsupported', message: `signing in inside an account folder is offered for ${FOLDER_SIGN_IN_AGENT} only` }
-    }
-    return { kind: 'folder', profileId }
+  if (mode === 'folder' && agentKey !== FOLDER_SIGN_IN_AGENT) {
+    return { kind: 'refused', code: 'unsupported', message: `signing in inside an account folder is offered for ${FOLDER_SIGN_IN_AGENT} only` }
   }
+  // Before either mode: the account the user runs on is theirs to sign in.
   if (accounts.defaultProfileId(agentKey) === profileId) {
     return {
       kind: 'refused',
       code: 'needs-user',
-      message: 'the active account signs in on the live login; the user starts that in Settings → Accounts',
+      message: 'the active account is the one the user runs on; the user signs it in from Settings → Accounts',
     }
   }
+  if (mode === 'folder') return { kind: 'folder', profileId }
   if (accounts.loginIsGlobal(agentKey)) {
     return {
       kind: 'refused',

@@ -3653,7 +3653,9 @@ def _activity_summary(pane_id: str) -> dict[str, Any] | None:
         "type": activity["event_type"],
         "age_seconds": round(time.monotonic() - activity["ts_monotonic"], 1),
     }
-    if activity["text"]:
+    # A sign-in pane's turn text can quote its sign-in: never handed out, by
+    # cli_get_status, cli_wait_idle or cli_send_and_wait alike.
+    if activity["text"] and not login_panes.is_login_pane(pane_id):
         last["text"] = activity["text"]
     return last
 
@@ -3789,8 +3791,6 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     }
     last = _activity_summary(pane.pane_id)
     if last is not None:
-        if login:
-            last.pop("text", None)
         status["last_activity"] = last
     usage = await _cached_usage_snapshot(pane.agent_key)
     if usage is not None:

@@ -15,6 +15,7 @@ to finish it in the browser. What is pinned here:
 
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 from typing import Any
 
@@ -274,10 +275,9 @@ async def test_cli_get_status_leaves_a_sign_in_panes_text_out(monkeypatch: pytes
         }},
     })
     monkeypatch.setattr(plan_mcp, "_ui_request", fake)
-    monkeypatch.setattr(
-        plan_mcp, "_activity_summary",
-        lambda _p: {"type": "turn_complete", "text": "SECRET-CODE", "age_seconds": 1.0},
-    )
+    monkeypatch.setattr(backend_app, "pane_activity", lambda _p: {
+        "event_type": "turn_complete", "text": "SECRET-CODE", "ts_monotonic": time.monotonic() - 1.0,
+    })
 
     async def _no_usage(_agent: str) -> None:
         return None
@@ -296,7 +296,8 @@ async def test_cli_get_status_leaves_a_sign_in_panes_text_out(monkeypatch: pytes
     assert result["ui"]["status"] == "awaiting"
     assert result["ui"]["agentLabel"] == "Claude Code"
     assert "prompt_fingerprint" not in result
-    assert result["last_activity"] == {"type": "turn_complete", "age_seconds": 1.0}
+    assert result["last_activity"]["type"] == "turn_complete"
+    assert "text" not in result["last_activity"]
 
 
 @pytest.mark.asyncio
@@ -321,3 +322,17 @@ async def test_cli_get_status_of_an_ordinary_pane_is_unchanged(monkeypatch: pyte
 
     assert result["ui"] == ui_reply
     assert result["last_activity"]["text"] == "done"
+
+
+def test_no_tool_hands_out_a_sign_in_panes_turn_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_activity_summary feeds cli_get_status, cli_wait_idle and cli_send_and_wait alike."""
+    _terminals(monkeypatch, {
+        "t1": {"pane_id": "login", "metadata": {"live_login": True}},
+        "t2": {"pane_id": "work", "metadata": {}},
+    })
+    monkeypatch.setattr(backend_app, "pane_activity", lambda _p: {
+        "event_type": "turn_complete", "text": "SECRET-CODE", "ts_monotonic": 0.0,
+    })
+
+    assert "text" not in plan_mcp._activity_summary("login")
+    assert plan_mcp._activity_summary("work")["text"] == "SECRET-CODE"
