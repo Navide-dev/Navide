@@ -5,7 +5,7 @@
       "title": "Navide Browser Spaces",
       "new": "New Space",
       "pending": "{count} need your action",
-      "empty": "No Spaces yet. Create one with ＋, or an agent opens its own the first time it browses."
+      "empty": "No Spaces yet. Create one with ＋, or an agent opens its own the first time it browses. Agents use your sign-ins in Navide Browser (they can send requests on websites for you)."
     },
     "state": {
       "idle": "Idle",
@@ -36,11 +36,12 @@
       "hand-back": "Hand back to agent",
       "delegate": "Let the agent use this Space",
       "reclaim": "Take this Space back",
-      "close": "Close Space"
+      "close": "Close Space",
+      "reload-agent-scripts": "Reload to clear agent scripts"
     },
     "settings": {
       "title": "Settings",
-      "shared-sign-in": "All Spaces share the same sign-ins, kept on this computer: an agent's Space can use every site you signed in to in Navide Browser.",
+      "shared-sign-in": "All Spaces share the same sign-ins, kept on this computer. Agents use your sign-ins in Navide Browser (they can send requests on websites for you). After you take over, agent scripts already running in a page stop only when you reload it.",
       "clear-data": "Clear all sign-in data",
       "clear-data-confirm": "Click again to sign out of every site in Navide Browser",
       "clear-data-done": "Sign-in data cleared.",

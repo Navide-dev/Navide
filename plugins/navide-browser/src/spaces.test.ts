@@ -73,6 +73,25 @@ describe('locales', () => {
     expect(keys(jaJP)).toEqual(keys(enUS))
   })
 
+  it('say on first use and in settings that agents use your sign-ins, and that a reload stops agent scripts', () => {
+    const identity = {
+      en: 'Agents use your sign-ins in Navide Browser (they can send requests on websites for you).',
+      zh: 'agent 會使用你在 Navide 瀏覽器中的登入身分（可代你在網頁上發送請求）。',
+      ja: 'agent は Navide ブラウザーでのあなたのログイン情報を使います（あなたの代わりにウェブページでリクエストを送信できます）。',
+    }
+    const reload = {
+      en: 'After you take over, agent scripts already running in a page stop only when you reload it.',
+      zh: '你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止。',
+      ja: '操作を引き継いだ後も、ページ内ですでに動いている agent のスクリプトは、再読み込みするまで止まりません。',
+    }
+    for (const [locale, key] of [[enUS, 'en'], [zhTW, 'zh'], [jaJP, 'ja']] as const) {
+      expect(locale.browser.overview.empty).toContain(identity[key])
+      expect(locale.browser.settings['shared-sign-in']).toContain(identity[key])
+      expect(locale.browser.settings['shared-sign-in']).toContain(reload[key])
+    }
+    expect(zhTW.browser.action['reload-agent-scripts']).toBe('重新載入以清除 agent 腳本')
+  })
+
   it('name the product Navide Browser and never the reference product', () => {
     expect(enUS.browser.app.title).toBe('Navide Browser')
     expect(zhTW.browser.app.title).toBe('Navide 瀏覽器')

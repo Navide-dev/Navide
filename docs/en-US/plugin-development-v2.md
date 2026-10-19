@@ -1468,8 +1468,12 @@ in `capabilities-v1.json`.
 
 **Disclosure.** `web` is disclosed at risk level **high** (reason
 `system.web`, summary clause `web`): the package can open and browse any
-website, the sites' sign-ins are kept on this computer, and an agent driving
-the package can read every page the package opened and its signed-in state.
+website, the sites' sign-ins are kept on this computer, an agent driving the
+package uses the user's sign-ins in it (it can send requests on websites as the
+user) and can read every page the package opened and its signed-in state, and
+agent script already running in a page stops only when the page is reloaded
+after the user takes over. All of a package's views share one partition, so an
+agent's Space is signed in wherever the user signed in.
 `web` is in the sensitive set (`SENSITIVE_CAPABILITIES`), so installing asks
 for the second confirmation.
 
@@ -1600,7 +1604,9 @@ someone it is not.
   attaches it again. Residual risk: script the agent already started in the
   page (for example a timer from `Runtime.evaluate`) keeps running after the
   detach, because the page itself is not reloaded. Reloading the page clears
-  it.
+  it; the disclosure says so, and Navide Browser offers "Reload to clear
+  agent scripts" (`web.navigate {action: "reload"}`) while the user is in
+  control.
 - **Views follow the package.** Disabling or removing the package destroys all
   its views. Closing the package's window does not: views keep running in the
   background until the package closes them.

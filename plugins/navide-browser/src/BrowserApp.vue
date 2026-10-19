@@ -227,6 +227,7 @@ onBeforeUnmount(() => {
       <span class="spacer" />
       <button v-if="selected.owner === 'agent' && selected.control === 'agent'" type="button" @click="takeOver">{{ t('browser.action.take-over') }}</button>
       <button v-if="selected.owner === 'agent' && selected.control === 'user'" type="button" class="primary" @click="handBack">{{ t('browser.action.hand-back') }}</button>
+      <button v-if="selected.owner === 'agent' && selected.control === 'user'" type="button" class="ghost" @click="navigate('reload')">{{ t('browser.action.reload-agent-scripts') }}</button>
       <button v-if="selected.owner === 'user'" type="button" @click="setOwner('agent')">{{ t('browser.action.delegate') }}</button>
       <button v-else type="button" class="ghost" @click="setOwner('user')">{{ t('browser.action.reclaim') }}</button>
       <button type="button" class="ghost" @click="closeSpace">{{ t('browser.action.close') }}</button>
