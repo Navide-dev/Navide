@@ -29,7 +29,8 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, update
+from sqlalchemy import func, insert, literal, update
+from sqlalchemy import select as sa_select
 from sqlmodel import Session, select
 
 from . import blocklist
@@ -366,14 +367,36 @@ def join(session: Session, member_id: str, token: str) -> Extension:
         extension = session.get(Extension, code.extension_id)
         if is_tester(session, extension, member_id):
             return extension
+        full = TestplaceError("CODE_FULL", "this test code has no seats left", status=409)
         if code_testers(session, code) >= code.max_testers:
-            raise TestplaceError("CODE_FULL", "this test code has no seats left", status=409)
-        session.add(
-            TestplaceInvite(
-                extension_id=extension.id, code_id=code.id, member_id=member_id, claimed_at=_now()
+            raise full
+        # The count above is only a fast answer: the seat is taken by one
+        # INSERT ... SELECT that counts again, so two members joining at once
+        # cannot both pass the cap (SQLite runs each write statement alone).
+        now = _now()
+        columns = TestplaceInvite.__table__.c
+        live_seats = (
+            sa_select(func.count())
+            .select_from(TestplaceInvite)
+            .where(TestplaceInvite.code_id == code.id, TestplaceInvite.revoked_at.is_(None))
+            .scalar_subquery()
+        )
+        seated = session.exec(
+            insert(TestplaceInvite).from_select(
+                ["extension_id", "code_id", "member_id", "label", "created_at", "claimed_at"],
+                sa_select(
+                    literal(extension.id, columns.extension_id.type),
+                    literal(code.id, columns.code_id.type),
+                    literal(member_id, columns.member_id.type),
+                    literal("", columns.label.type),
+                    literal(now, columns.created_at.type),
+                    literal(now, columns.claimed_at.type),
+                ).where(live_seats < code.max_testers),
             )
         )
         session.commit()
+        if seated.rowcount != 1:
+            raise full
         return extension
     raise not_found
 

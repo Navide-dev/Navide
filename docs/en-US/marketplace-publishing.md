@@ -410,6 +410,38 @@ Testplace needs Navide 0.2.27 or later on the tester's side.
 | 有効期限 | なし | 90 日後。Navide プラグインは無効になり、データは残ります | なし |
 | 入手方法 | Navide マーケットプレイスからの更新、または「*バージョン* をインストール（プレリリース）」 | 招待を受け入れたあと Navide マーケットプレイスから | 別途同意したうえで「ファイルからインストール」 |
 
+### Testplace
+
+Testplace hands a build to the testers you pick before it is reviewed for
+the Marketplace. Only a namespace whose developer qualification is approved
+can use it, and testers sign in to Navide Cloud: nobody else can see or
+download the build, and it never appears in search or listings.
+
+```sh
+navide-plugin publish acme.files-1.3.0.vsix --channel testplace
+navide-plugin testplace invite add acme.files alice@example.com "Bob (QA)"
+navide-plugin testplace invite list acme.files
+```
+
+- `publish --channel testplace` runs the automatic checks only (a likely
+  credential or a name too close to another Navide plugin refuses the build)
+  and signs it with an expiry 90 days out.
+- `invite add` creates one single-use join token per label and prints each
+  once. A label is your own note (for example the address you send it to); it
+  is never shown to the tester. Send the token yourself; the tester pastes it
+  in Navide while signed in to Navide Cloud. At most 100 invites per Navide
+  plugin; revoking one (`invite revoke`) frees its seat and removes that
+  tester's access.
+- `code create --max-testers <n>` opens a public test code for up to 1,000
+  testers. The first code of a Navide plugin waits for a light review by
+  Navide; later ones open at once. `code revoke` stops new joins; testers who
+  already joined keep their access.
+- `revoke <id> <version>` withdraws a test build early. Navide turns it off for
+  its testers within 24 hours.
+- `promote <id> <version>` sends the same package to Marketplace review. When
+  it is approved it becomes an ordinary stable or pre-release version (by its
+  SemVer), and testers keep it without reinstalling.
+
 ## 7. Extension packs
 
 An Extension Pack installs a set of plugins together. It is a manifest with
@@ -501,6 +533,9 @@ navide-plugin verify <package> --key <public-key> --signature <signature>
 navide-plugin login [--registry <url>] [--label <label>] [--no-browser] [--insecure-http]
 navide-plugin whoami [--registry <url>]
 navide-plugin logout [--registry <url>]
-navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--insecure-http]
+navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]
+navide-plugin testplace invite add <namespace.name> <label>... | invite list <namespace.name> | invite revoke <namespace.name> <invite-id>
+navide-plugin testplace code create <namespace.name> --max-testers <1-1000> | code list <namespace.name> | code revoke <namespace.name> <code-id>
+navide-plugin testplace versions <namespace.name> | revoke <namespace.name> <version> [--reason <text>] | promote <namespace.name> <version>
 navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]
 ```

@@ -296,6 +296,43 @@ def test_a_rejected_code_needs_a_reason_and_stays_closed(client: TestClient) -> 
     assert _join(client, _member(client, "member-a"), code["code"]).status_code == 404
 
 
+def test_leave_answers_a_member_without_a_seat_like_a_missing_extension(client: TestClient) -> None:
+    assert _publish(client).status_code == 201
+    outsider = _member(client, "member-out")
+    missing = client.post("/api/testplace/acme/nothing/leave", headers=outsider)
+    existing = client.post("/api/testplace/acme/files/leave", headers=outsider)
+    # Same answer either way, so leave cannot tell an uninvited member a test exists.
+    assert (existing.status_code, existing.json()) == (missing.status_code, missing.json())
+    assert existing.status_code == 404
+    tester = _member(client, "member-a")
+    assert _join(client, tester, _invite(client)[0]).status_code == 200
+    assert client.post("/api/testplace/acme/files/leave", headers=tester).status_code == 204
+    assert client.get("/api/testplace/acme/files", headers=tester).status_code == 404
+
+
+def test_a_public_code_never_seats_more_testers_than_its_cap_under_a_race(client: TestClient, monkeypatch) -> None:
+    from registry import testplace as tp
+
+    assert _publish(client).status_code == 201
+    code = client.post("/api/testplace/acme/files/codes", json={"max_testers": 1}, headers=_publisher()).json()
+    client.post(f"/api/admin/testplace/codes/{code['id']}/decision", json={"approve": True}, headers=_admin())
+    real = tp.code_testers
+
+    def count_then_race(session, row):
+        # Member B joins and commits between member A's seat count and A's insert.
+        seen = real(session, row)
+        monkeypatch.setattr(tp, "code_testers", real)
+        assert _join(client, _member(client, "member-b"), code["code"]).status_code == 200
+        return seen
+
+    monkeypatch.setattr(tp, "code_testers", count_then_race)
+    late = _join(client, _member(client, "member-a"), code["code"])
+    assert late.status_code == 409 and late.json()["detail"]["code"] == "CODE_FULL"
+    with _session(client) as session:
+        row = session.get(tp.TestplaceCode, code["id"])
+        assert real(session, row) == 1
+
+
 # -- promotion -------------------------------------------------------------
 def test_promotion_resigns_the_same_artifact_as_a_public_version(client: TestClient) -> None:
     assert _publish(client).status_code == 201
@@ -392,3 +429,53 @@ def test_migration_12_on_a_database_at_migration_11_keeps_existing_rows(tmp_path
         assert db.execute(
             "SELECT version, channel, promotion_status FROM extension_version"
         ).fetchall() == [("1.0.0", "stable", None)]
+
+
+# -- admin page ------------------------------------------------------------
+def test_admin_page_reviews_a_code_and_a_promotion_and_revokes(tmp_path) -> None:
+    from tests.phase2_helpers import ADMIN_MEMBER, ADMIN_TOKEN, cloud_settings, csrf_of, make_client, sign_in
+
+    client = make_client(cloud_settings(tmp_path))
+    assert client.post(
+        "/api/publishers", json={"name": "acme", "token": PUBLISHER_TOKEN}, headers={"X-Admin-Token": ADMIN_TOKEN}
+    ).status_code == 201
+    assert _publish(client).status_code == 201
+    code = client.post("/api/testplace/acme/files/codes", json={"max_testers": 3}, headers=_publisher()).json()
+    client.post("/api/testplace/acme/files/versions/1.0.0/promote", headers=_publisher())
+
+    # Not signed in: sent to sign-in; signed in but not an admin: 403.
+    assert client.get("/admin/testplace", follow_redirects=False).status_code == 303
+    sign_in(client, "mem-someone")
+    assert client.get("/admin/testplace").status_code == 403
+
+    sign_in(client, ADMIN_MEMBER)
+    html = client.get("/admin/testplace").text
+    assert f"#{code['id']}" in html and "acme.files @ 1.0.0" in html
+    csrf = csrf_of(client, "/admin/testplace")
+    assert client.post(
+        f"/admin/testplace/codes/{code['id']}", data={"decision": "approve", "csrf": csrf}, follow_redirects=False
+    ).status_code == 303
+    digest = client.get("/api/admin/testplace/promotions", headers={"X-Admin-Token": ADMIN_TOKEN}).json()[
+        "promotions"
+    ][0]["artifacts"][0]
+    assert client.post(
+        "/admin/testplace/promotions/acme/files/1.0.0",
+        data={"decision": "approve", "artifact": [digest], "csrf": csrf},
+        follow_redirects=False,
+    ).status_code == 303
+    assert client.get("/api/extensions/acme/files").json()["versions"][0]["channel"] == "stable"
+
+    assert _publish(client, "1.1.0").status_code == 201
+    assert client.post(
+        "/admin/testplace/revoke", data={"identity": "acme.files", "version": "1.1.0", "reason": "", "csrf": csrf}
+    ).status_code == 400
+    assert client.post(
+        "/admin/testplace/revoke",
+        data={"identity": "acme.files", "version": "1.1.0", "reason": "malware", "csrf": csrf},
+        follow_redirects=False,
+    ).status_code == 303
+    with _session(client) as session:
+        actions = [a.action for a in session.exec(select(RegistryAudit)).all()]
+        rows = session.exec(select(ExtensionVersion).where(ExtensionVersion.version == "1.1.0")).all()
+    assert {"testplace.code.approve", "testplace.promotion.approve", "testplace.version.revoke"} <= set(actions)
+    assert all(r.yanked for r in rows)
