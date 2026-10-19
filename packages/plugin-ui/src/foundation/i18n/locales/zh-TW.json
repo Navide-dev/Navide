@@ -10642,7 +10642,10 @@
     },
     "pane": {
       "badge": "外部影響",
-      "tooltip": "自 {since} 起收過來自{sources}的內容",
+      "badge-since": "外部影響（{date} 起）",
+      "tooltip": "自 {since} 起，這個 pane 收過來自{sources}的訊息。",
+      "source-who": "{source}（{who}）",
+      "typing": "在這台電腦上打字不會加上這個標記。",
       "console": "收件紀錄",
       "expand": "顯示全文",
       "text-missing": "訊息紀錄裡已沒有這段內文",

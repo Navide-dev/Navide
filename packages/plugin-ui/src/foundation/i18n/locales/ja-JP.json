@@ -10642,7 +10642,10 @@
     },
     "pane": {
       "badge": "外部の影響",
-      "tooltip": "{since} から {sources} の内容を受信",
+      "badge-since": "外部の影響（{date} 以降）",
+      "tooltip": "{since} 以降、この pane は{sources}からメッセージを受信しています。",
+      "source-who": "{source}（{who}）",
+      "typing": "このコンピューターで入力しても、このマークは付きません。",
       "console": "受信ログ",
       "expand": "全文を表示",
       "text-missing": "本文はメッセージログに残っていません",
