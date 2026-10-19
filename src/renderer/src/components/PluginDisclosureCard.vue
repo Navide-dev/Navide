@@ -7,8 +7,12 @@
 // Order (D6): the one-line summary, risk level, then what the scan found that
 // the package does not declare (red, the only red on the card), the scan
 // sentences, what the package declares (collapsed), what was declared but
-// not seen (grey), the fixed scan-coverage and honest-limits text, and last
-// the Registry's facts.
+// not seen (grey), the fixed scan-coverage and honest-limits text, the fixed
+// view-network line, and last the Registry's facts.
+//
+// View network (R2 MED-3 on 0.2.26): a view is an ordinary web page with network
+// access the Host does not filter, while the signed `network` field covers only
+// commands and the native backend, so the line is stated on every card.
 //
 // Provenance (review I1 on #354): listing and detail data is raw Registry
 // output that nothing has verified yet; only a prepareInstall result has had
@@ -200,6 +204,7 @@ const facts = computed(() => {
         </template>
         <template v-else>{{ $t('pluginDisclosure.limitsWithoutScan') }}</template>
       </p>
+      <p class="nv-disclosure-view-network">{{ $t('pluginDisclosure.viewNetwork') }}</p>
 
       <template v-if="facts.length">
         <h5 class="nv-disclosure-heading">{{ $t('pluginDisclosure.registryHeading') }}</h5>
@@ -243,6 +248,7 @@ const facts = computed(() => {
 .nv-disclosure-notseen,
 .nv-disclosure-facts,
 .nv-disclosure-limits,
+.nv-disclosure-view-network,
 .nv-disclosure-noscan,
 .nv-disclosure-none {
   color: var(--text-secondary);

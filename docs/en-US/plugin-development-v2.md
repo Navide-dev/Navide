@@ -434,6 +434,20 @@ disclosure data's `network` field is still `"none"` in contract v1 and is
 being revisited separately. The broker rules are exactly those of a view's
 `shell.run`.
 
+**Network reach of views.** The sandbox above is the backend's. A plugin view
+is an ordinary web page on the default session: it can `fetch` any host (and
+read the response where CORS allows), load images and scripts from anywhere,
+and embed an external website in an `<iframe>` whose scripts run. The Host
+installs no request filtering, CSP or frame-navigation rule on views (only the
+frame carrier, `navide-plugin-frame://`, has a CSP), so none of this traffic is
+filtered or recorded. A view that can read workspace content through its
+capabilities can therefore send it off the machine, and a view can show a
+remote page that looks like a sign-in page. The disclosure data's `network`
+field covers only commands and the native backend, so every disclosure card
+states this separately, including for a view-only package whose `network` is
+`"none"`. Making view network access a declared permission (DB10) is planned
+for 0.2.27.
+
 #### Agent tools (`backend.agentTools`)
 
 A package with a backend may declare tools that agents call through the core

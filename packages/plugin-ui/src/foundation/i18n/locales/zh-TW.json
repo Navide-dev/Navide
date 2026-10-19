@@ -11326,6 +11326,7 @@
     "signedByRegistry": "掃描由 Navide Registry 執行並簽章。",
     "scannedByRegistry": "掃描由 Navide Registry 執行。",
     "limitsWithoutScan": "這個版本沒有系統掃描，以上只有這個 Navide 外掛自己的宣告。",
+    "viewNetwork": "Navide 外掛的畫面（view）可以連網，也可以在 Navide 裡顯示外部網站；Navide 不會過濾或記錄這些流量。上面的網路項目只涵蓋它的指令與原生後端。",
     "summary": {
       "nativeBackend": "附帶原生程式（在沙盒裡執行）",
       "files": {
@@ -11358,7 +11359,7 @@
         "read": "這個 Navide 外掛會讀取 {paths}。"
       },
       "network": {
-        "hosts": "程式碼裡出現這些網址：{hosts}。Navide 外掛頁框與原生程式都不能直接連網，這些網址可能用來開啟瀏覽器，或交給 git、gh 等指令。"
+        "hosts": "程式碼裡出現這些網址：{hosts}。原生程式不能直接連網，但 Navide 外掛的畫面（view）可以；這些網址也可能用來開啟瀏覽器，或交給 git、gh 等指令。"
       },
       "code": {
         "eval": {

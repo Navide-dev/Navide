@@ -11326,6 +11326,7 @@
     "signedByRegistry": "The scan was run and signed by the Navide Registry.",
     "scannedByRegistry": "The scan was run by the Navide Registry.",
     "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
+    "viewNetwork": "A Navide plugin's views can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "summary": {
       "nativeBackend": "Ships native code (runs in a sandbox)",
       "files": {
@@ -11358,7 +11359,7 @@
         "read": "This Navide plugin reads {paths}."
       },
       "network": {
-        "hosts": "These addresses appear in the code: {hosts}. Neither the Navide plugin frame nor native code can reach the network directly; the addresses may be opened in a browser or passed to commands such as git or gh."
+        "hosts": "These addresses appear in the code: {hosts}. Native code cannot reach the network directly, but the Navide plugin's views can; the addresses may also be opened in a browser or passed to commands such as git or gh."
       },
       "code": {
         "eval": {
