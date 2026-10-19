@@ -811,7 +811,13 @@ Agent 不必有 Messages 面板可看，也能讀到同一個原因 ——
 1. **Settings → Channels**：填入平台憑證（Telegram bot token、Discord bot token、Slack App＋Bot token…）。機密存進系統鑰匙圈（`channel-<platform>`，單行），`navide.db` 只存非機密設定。平台卡片會顯示連線狀態（`starting`／`ready`／`recovering`／`blocked`／`stopped`）與最近的錯誤。
 2. **pane 快速連接**：在 pane 上按「連接聊天室」→ 選已設定的平台 →「新開主題（以 pane 名稱）」或「使用既有聊天室」。已連接的 pane 會顯示標記，按 ✕ 解除。尚未設定任何平台時，按鈕會直接開啟 Settings → Channels。
 
-一個 pane 對一個位置。綁定在視窗重新載入、pane 重建、群組分離、切換 workspace 後都會保留，只有手動解除（或真正關閉 pane）才會結束。訊息送到目前沒開著的已綁定 pane 時，會回覆「pane 目前不在線上」，綁定保留。
+一個 pane 對一個位置。綁定在視窗重新載入、pane 重建、群組分離、切換 workspace 後都會保留，只有手動解除（或真正關閉 pane）才會結束。訊息送到不在線上的已綁定 pane 時，會用 Navide 介面語言回覆「它所在的 Navide 視窗沒有開著，或 pane 已關閉」，綁定保留；Navide 啟動後一分鐘內，還沒登記的 pane 會先等它。綁定知道 pane 的 workspace 與對話之後（pane 每次在線上時都會更新），回覆會附「▶️ 喚醒」（打字：`/wake`），並暫存這則訊息：
+
+- 喚醒會在需要時打開 pane 的 Navide 視窗，把 pane 接回它自己的對話，接不回就不開。下列情況會先拒絕並說明原因，不開任何東西：沒有任何 Navide 視窗、CLI 額度用完（只讀快取）、對話接不回來、接續設定為「重新開始」或「每次詢問」、這段對話已在另一個 pane 開著。
+- 暫存的訊息（每個聊天室最多 20 則、30 分鐘）會在喚醒後或 pane 自己回到線上時依序送進去；被擠掉、過期、pane 排隊放不下或因 Navide 重啟而遺失的，會逐則告訴聊天室。`stop`、`/cancel`、`/resume` 不暫存。
+- 同一時間只喚醒一個；每個聊天室兩次喚醒間隔 5 分鐘、每天最多 10 次；在打開任何東西之前就被拒絕的喚醒不計次。
+- pane 已在線上時的喚醒（按鈕或打字 `/wake`）只會回覆 pane 已在線上，不會送進 CLI。
+- 每則暫存訊息的前 40 個字會存在 `navide.db`（`channels.wake_kept`、`channels.wake_lost`），送出或告知後刪除；見 privacy.md。
 
 ### 誰可以對 pane 說話
 

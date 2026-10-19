@@ -396,6 +396,8 @@ declare global {
           source?: PluginSource
           /** Test build expiry (ISO-8601), from the signed envelope; testplace only. */
           expiresAt?: string
+          /** Whether the active package declares views (R2 MED-6 on #436). */
+          hasViews?: boolean
         }>>
         /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped). */
         backendResourceUsage?: () => Promise<{
@@ -787,6 +789,8 @@ declare global {
     trustTier: 'signed-verified' | 'unsigned'
     sensitive: string[]
     containsBackendExecutable: boolean
+    /** R2 MED-6 on #436: the manifest declares views (`contributes.views`). */
+    hasViews?: boolean
     /** Declared agent tools (sorted, timeouts defaulted); absent when none. */
     agentTools?: Array<{
       name: string

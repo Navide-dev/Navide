@@ -403,6 +403,8 @@ import {
   createAccountFollowStore,
   followingPaneRows,
   isAccountFixed,
+  restoreSpawnPin,
+  type AccountDirsGate,
 } from './lib/accountFollowPanes'
 import {
   chainsDirLogin,
@@ -8613,6 +8615,15 @@ function followDirSignedIn(profileId: string): boolean {
   return cliProfilesApi.accountDirFor(FOLLOW_SWITCH_AGENT, profileId)?.signedIn === true
 }
 
+/** The account dirs as a restore sees them (see restoreSpawnPin). */
+function restorePinGate(paneId: string): AccountDirsGate {
+  return {
+    loaded: () => cliProfilesApi.loaded.value,
+    load: () => cliProfilesApi.ensureLoaded(),
+    disclose: (pin) => pipelineLog(`⚠ claude: account list not loaded; restoring ${paneId} with its saved account ${pin}`),
+  }
+}
+
 function followAccountLabel(profileId: string): string {
   return accountLabel(cliProfilesApi, FOLLOW_SWITCH_AGENT, profileId === DEFAULT_SLOT_ID ? null : profileId, i18n.global.t)
 }
@@ -12135,12 +12146,14 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
         ? stripDeadOpencodeAutoFlag(saved.agent, saved.command) : ''
       const fallbackCommand = savedFallbackCommand
       const commandOverride = resumeCmd || fallbackCommand || ''
+      const restorePin = await restoreSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn, restorePinGate(saved.pane_id))
+      if (isStale?.() || !isLocalWorkspace(workspacePath)) return
       const restored = await spawnRestoredPane({
         saved,
         workspacePath,
         runGroupId: runGroupId || undefined,
         sessionHomeId,
-        profileId: accountSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn),
+        profileId: restorePin,
         commandOverride,
         fallbackCommand,
         isResume,
@@ -12660,6 +12673,8 @@ async function performRealizeRestoredPane(
       : ''
     const fallbackCommand = isResume ? savedFallbackCommand : stripPinnedSessionId(savedFallbackCommand)
     const commandOverride = resumeCmd || fallbackCommand || ''
+    const restorePin = await restoreSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn, restorePinGate(saved.pane_id))
+    if (!deferredPaneStillCurrent(paneId, deferred)) return 'superseded'
     const wasMinimized = minimizedPanes.value.has(paneId)
     const wasMuted = isPaneMuted(paneId)
     const restored = await spawnRestoredPane({
@@ -12668,7 +12683,7 @@ async function performRealizeRestoredPane(
       runGroupId: placeholder.runGroupId || undefined,
       spawnedBy: placeholder.spawnedBy,
       sessionHomeId: placeholder.sessionHomeId,
-      profileId: accountSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn),
+      profileId: restorePin,
       commandOverride,
       fallbackCommand,
       isResume,

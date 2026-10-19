@@ -5157,6 +5157,8 @@
             "cli_reclaim_agent": "Reclaim a finished pane: its CLI process ends and the pane stays as a click-to-resume card, the status bar's \"reclaim now\". A busy, focused or not-yet-resumable pane is refused with the reason; a window older than v0.2.16 answers reclaim-unsupported",
             "cli_message_log": "The history of messages I sent and received; once delivered a message disappears from inbox_summary and pending_incoming, and this is the only place left to find it",
             "cli_usage": "How much quota each CLI has left; check before handing out work, or the message lands on a CLI that has already run out",
+            "cli_failover_state": "What Navide's quota failover is doing about an exhausted CLI account: the policy, open incidents, how many automatic switches the budget still allows, and any half-finished switch that blocks a vendor until the user resolves it. Read-only; accounts are named by slot, never by email",
+            "cli_accounts_list": "The CLI accounts Navide keeps and which one each CLI runs on, from the account store only: names and ids, no email and no signed-in state, since those would mean reading the credentials. Read-only",
             "cli_token_stats": "This workspace's current token usage",
             "cli_list_sessions": "The CLI conversations in this workspace a new pane could be opened onto — a conversation outlives the pane that ran it: close the pane, restart the app, rebuild the pane, and the transcript stays on disk. Each row says whether it is still resumable and whether the pane that owned it is still open: do not resume a live one, which forks or corrupts it — message that pane instead",
             "cli_place_pane": "Move a pane: change the tab group it sits in, or make it a child of another pane (the same thing as dragging it in the sidebar, through the same write path, so the position survives a restart). The two halves are independent and the reply says which landed. It does not touch that pane's CLI — nothing is sent, interrupted or restarted. Local panes only",
@@ -11335,6 +11337,8 @@
     "signedByRegistry": "The scan was run and signed by the Navide Registry.",
     "scannedByRegistry": "The scan was run by the Navide Registry.",
     "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
+    "viewNetwork": "A Navide plugin's views can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
+    "viewNetworkIfViews": "If this Navide plugin has views, they can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "summary": {
       "nativeBackend": "Ships native code (runs in a sandbox)",
       "files": {
@@ -11367,7 +11371,7 @@
         "read": "This Navide plugin reads {paths}."
       },
       "network": {
-        "hosts": "These addresses appear in the code: {hosts}. Neither the Navide plugin frame nor native code can reach the network directly; the addresses may be opened in a browser or passed to commands such as git or gh."
+        "hosts": "These addresses appear in the code: {hosts}. Native code cannot reach the network directly, but the Navide plugin's views can; the addresses may also be opened in a browser or passed to commands such as git or gh."
       },
       "code": {
         "eval": {

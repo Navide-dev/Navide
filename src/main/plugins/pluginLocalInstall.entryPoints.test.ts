@@ -5,7 +5,12 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { agentApprovalSourceNote } from './pluginLocalInstall'
+import {
+  agentApprovalSourceNote,
+  installedPackageSource,
+  localSourceConsentLine,
+  nativeBackendConsentDialog,
+} from './pluginLocalInstall'
 
 const read = (path: string): string => readFileSync(resolve(process.cwd(), path), 'utf8')
 const LOCAL_INSTALL = /installFromFile|commitLocalInstall/
@@ -54,6 +59,41 @@ describe('install-from-file entry points', () => {
     const main = read('src/main/index.ts')
     const prompt = main.slice(main.indexOf('async function promptAgentToolWorkspaceWrite'))
     expect(prompt.slice(0, prompt.indexOf('\n}\n'))).toContain('agentApprovalSourceNote(')
+  })
+
+  it('names a developer folder as unreviewed too, on both dialogs (R2 MED-2 on 0.2.26)', () => {
+    // A folder package (K4) carries only the legacy provenance, no `source`.
+    const folder = installedPackageSource({ provenance: 'developer-local-unpacked' })
+    expect(folder).toBe('developer-unpacked')
+    expect(agentApprovalSourceNote(folder)).toBe(
+      'Source: a developer folder, not reviewed by Navide; its contents can change at any time.',
+    )
+    const consent = nativeBackendConsentDialog(
+      { pluginId: 'acme.folder', name: 'Folder', packageVersion: '0.1.0', system: [], methods: [], agentTools: [], update: false },
+      'en-US',
+      folder,
+    )
+    expect(consent.message.split('\n')[0]).toBe(
+      'Source and review: Developer folder; its contents can change at any time, not reviewed by Navide',
+    )
+    expect(consent.detail.split('\n')[0]).toBe(consent.message.split('\n')[0])
+    for (const locale of ['zh-TW', 'ja-JP']) expect(localSourceConsentLine(folder, locale)).not.toBe('')
+    // A package's own source wins; Marketplace and local-file rows are unchanged.
+    expect(installedPackageSource({ provenance: 'official-registry', source: 'local-unsigned' })).toBe('local-unsigned')
+    expect(localSourceConsentLine('local-unsigned', 'en-US')).toBe('Source and review: Local file, not reviewed by Navide, unsigned')
+    for (const source of ['marketplace', 'prerelease', 'factory-bundled', undefined] as const) {
+      expect(agentApprovalSourceNote(source)).toBe('')
+      expect(localSourceConsentLine(source, 'en-US')).toBe('')
+    }
+    expect(installedPackageSource(undefined)).toBeUndefined()
+    // Both main-process dialogs read the source through it, not the bare `source` field.
+    const main = read('src/main/index.ts')
+    for (const name of ['async function promptNativeBackendConsent', 'async function promptAgentToolWorkspaceWrite']) {
+      const body = main.slice(main.indexOf(name))
+      const fn = body.slice(0, body.indexOf('\n}\n'))
+      expect(fn, name).toContain('installedPackageSource(')
+      expect(fn, name).not.toContain(')?.source')
+    }
   })
 
   it('puts the local source first in the native backend consent detail (MED-2)', () => {
