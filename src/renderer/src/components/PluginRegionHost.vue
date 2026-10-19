@@ -28,7 +28,7 @@ export interface PluginRegionContribution {
    *  so it follows the theme like the built-in SVG icons. */
   iconMonochrome?: boolean
   kind: 'custom'
-  location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
+  location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window' | 'detail'
   manifestOrder: number
   /** Source and review state of the contributing package (K1). */
   source?: PluginSource
