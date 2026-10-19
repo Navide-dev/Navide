@@ -28,6 +28,7 @@ from typing import Callable
 
 from sqlalchemy import Engine
 
+from .signing import public_key_fingerprint
 from .versions import version_channel
 
 MIGRATIONS_TABLE = "schema_migrations"
@@ -336,6 +337,130 @@ def _add_version_channel_expiry(connection: sqlite3.Connection) -> None:
         )
 
 
+def _developer_qualification(connection: sqlite3.Connection) -> None:
+    """Developer qualification, account tokens, publisher key history, the
+    registry audit trail and namespace freezing. Every existing public key
+    gets a history row; no account is grandfathered as approved."""
+    columns = _columns(connection, "publisher")
+    for column, ddl in (("frozen_at", "DATETIME"), ("frozen_reason", "VARCHAR")):
+        if column not in columns:
+            connection.execute(f"ALTER TABLE publisher ADD COLUMN {column} {ddl}")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS developer_qualification (
+            navide_member_id VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            application JSON,
+            field_sources JSON,
+            source VARCHAR,
+            submitted_at DATETIME NOT NULL,
+            decided_at DATETIME,
+            decided_by VARCHAR,
+            reason VARCHAR,
+            PRIMARY KEY (navide_member_id)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_developer_qualification_status "
+        "ON developer_qualification (status)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS account_token (
+            id INTEGER NOT NULL,
+            navide_member_id VARCHAR NOT NULL,
+            label VARCHAR NOT NULL,
+            token_hash VARCHAR NOT NULL,
+            created_at DATETIME NOT NULL,
+            expires_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            last_used_at DATETIME,
+            PRIMARY KEY (id)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_account_token_navide_member_id "
+        "ON account_token (navide_member_id)"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_account_token_token_hash "
+        "ON account_token (token_hash)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS account_auth_code (
+            id INTEGER NOT NULL,
+            code_hash VARCHAR NOT NULL,
+            navide_member_id VARCHAR NOT NULL,
+            code_challenge VARCHAR NOT NULL,
+            label VARCHAR NOT NULL,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME,
+            PRIMARY KEY (id)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_account_auth_code_code_hash "
+        "ON account_auth_code (code_hash)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS publisher_key (
+            id INTEGER NOT NULL,
+            publisher_id INTEGER NOT NULL,
+            key_id VARCHAR NOT NULL,
+            public_key VARCHAR NOT NULL,
+            created_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            revoked_reason VARCHAR,
+            PRIMARY KEY (id),
+            CONSTRAINT uq_publisher_key UNIQUE (publisher_id, key_id),
+            FOREIGN KEY(publisher_id) REFERENCES publisher (id)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_publisher_key_publisher_id "
+        "ON publisher_key (publisher_id)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS registry_audit (
+            id INTEGER NOT NULL,
+            created_at DATETIME NOT NULL,
+            actor VARCHAR NOT NULL,
+            action VARCHAR NOT NULL,
+            target VARCHAR NOT NULL,
+            reason VARCHAR,
+            detail JSON,
+            PRIMARY KEY (id)
+        )
+        """
+    )
+    for column in ("created_at", "actor", "action", "target"):
+        connection.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_registry_audit_{column} "
+            f"ON registry_audit ({column})"
+        )
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")
+    rows = connection.execute(
+        "SELECT id, public_key FROM publisher WHERE public_key IS NOT NULL"
+    ).fetchall()
+    for publisher_id, public_key in rows:
+        try:
+            key_id = public_key_fingerprint(public_key)
+        except Exception:  # noqa: BLE001 - an unparsable key gets no history row
+            continue
+        connection.execute(
+            "INSERT OR IGNORE INTO publisher_key "
+            "(publisher_id, key_id, public_key, created_at) VALUES (?, ?, ?, ?)",
+            (publisher_id, key_id, public_key, now),
+        )
+
+
 MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = (
     (1, "discovery-columns", _add_discovery_columns),
     (2, "registry-signing-columns", _add_registry_signing_columns),
@@ -347,6 +472,7 @@ MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = 
     (8, "publisher-native-backend", _add_publisher_native_backend),
     (9, "version-disclosure", _add_version_disclosure),
     (10, "version-channel-expiry", _add_version_channel_expiry),
+    (11, "developer-qualification", _developer_qualification),
 )
 
 

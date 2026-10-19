@@ -41,6 +41,10 @@ class Publisher(SQLModel, table=True):
     """Set once the TXT record matched; cleared when the domain changes."""
     native_backend_allowed: bool = Field(default=False, sa_column_kwargs={"server_default": text("0")})
     """Admin allowlist for publishing native backends (see native_backend.py)."""
+    frozen_at: datetime | None = None
+    """Set when the owner's developer qualification is revoked: nothing more
+    can be published or issued under this namespace (qualification.py)."""
+    frozen_reason: str | None = None
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -262,3 +266,89 @@ class ReportAuditEntry(SQLModel, table=True):
     action: str
     note: str | None = None
     created_at: datetime = Field(default_factory=_now)
+
+
+class DeveloperQualification(SQLModel, table=True):
+    """One developer application and its decision per Navide Cloud account
+    (qualification.py). Cloud's own `members` table is never touched."""
+
+    __tablename__ = "developer_qualification"
+
+    navide_member_id: str = Field(primary_key=True)
+    status: str = Field(index=True)
+    """'pending' | 'approved' | 'rejected' | 'revoked'."""
+    application: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    """The submitted fields (real-name identity); shown to the applicant and admins only."""
+    field_sources: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    """Who filled each field: 'user' or 'agent-draft'."""
+    source: str | None = None
+    """Where the application came from (for example 'navide-app' or 'web')."""
+    submitted_at: datetime = Field(default_factory=_now)
+    decided_at: datetime | None = None
+    decided_by: str | None = None
+    reason: str | None = None
+    """Rejection or revocation reason, shown to the applicant."""
+
+
+class AccountToken(SQLModel, table=True):
+    """Account-scoped bearer token: proves which Cloud account is calling
+    (developer application, own versions, testplace). It cannot publish."""
+
+    __tablename__ = "account_token"
+
+    id: int | None = Field(default=None, primary_key=True)
+    navide_member_id: str = Field(index=True)
+    label: str
+    token_hash: str = Field(index=True, unique=True)
+    created_at: datetime = Field(default_factory=_now)
+    expires_at: datetime
+    revoked_at: datetime | None = None
+    last_used_at: datetime | None = None
+
+
+class AccountAuthCode(SQLModel, table=True):
+    """One-time PKCE code for `/cli/authorize?scope=account`."""
+
+    __tablename__ = "account_auth_code"
+
+    id: int | None = Field(default=None, primary_key=True)
+    code_hash: str = Field(index=True, unique=True)
+    navide_member_id: str
+    code_challenge: str
+    label: str
+    expires_at: datetime
+    used_at: datetime | None = None
+
+
+class PublisherKey(SQLModel, table=True):
+    """Every Ed25519 key a publisher has registered; a replaced or revoked
+    key keeps its row so a client can tell a revoked signature from none."""
+
+    __tablename__ = "publisher_key"
+    __table_args__ = (UniqueConstraint("publisher_id", "key_id", name="uq_publisher_key"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    publisher_id: int = Field(foreign_key="publisher.id", index=True)
+    key_id: str
+    """`sha256:<hex>` of the SPKI DER (signing.public_key_fingerprint)."""
+    public_key: str
+    created_at: datetime = Field(default_factory=_now)
+    revoked_at: datetime | None = None
+    revoked_reason: str | None = None
+
+
+class RegistryAudit(SQLModel, table=True):
+    """Append-only trail of qualification, namespace, token, key, publish,
+    yank and blocklist actions: who did what to which target."""
+
+    __tablename__ = "registry_audit"
+
+    id: int | None = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=_now, index=True)
+    actor: str = Field(index=True)
+    """'member:<id>', 'admin:member:<id>', 'admin-token' or 'system:<why>'."""
+    action: str = Field(index=True)
+    target: str = Field(index=True)
+    reason: str | None = None
+    detail: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    """Facts about the action; never a token, key or other secret."""
