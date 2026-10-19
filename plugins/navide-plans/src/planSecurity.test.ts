@@ -109,6 +109,44 @@ describe('planSecurity', () => {
       expect(html.startsWith(' \t\r\n\f<!doctype html><meta http-equiv="Content-Security-Policy"')).toBe(true)
     })
 
+    const prepare = (content: string): string =>
+      preparePlanDocHtml(content, { buildTrustedRuntimeScript: () => TRUSTED_SCRIPT, nonce: VALID_NONCE }).html
+
+    // A meta refresh navigates the frame to a page the CSP above never reaches.
+    it.each([
+      ['double-quoted', '<meta http-equiv="refresh" content="0;url=https://attacker.invalid/">'],
+      ['in upper case, unquoted', '<META HTTP-EQUIV=REFRESH CONTENT="0;url=https://attacker.invalid/">'],
+      ['single-quoted with padding', "<meta http-equiv=' Refresh ' content='0;url=https://attacker.invalid/'>"],
+      ['with spaces around =', '<meta http-equiv = "refresh" content="0;url=https://attacker.invalid/">'],
+      ['slash-separated', '<meta/http-equiv=refresh/content="0;url=https://attacker.invalid/">'],
+      ['after a value holding >', '<meta content="0;url=https://attacker.invalid/?a>b" http-equiv="refresh">'],
+      ['as a character reference', '<meta http-equiv="&#x72;efresh" content="0;url=https://attacker.invalid/">'],
+    ])('drops a meta refresh written %s', (_name, meta) => {
+      const html = prepare(`<!doctype html><html><head>${meta}</head><body>Hi</body></html>`)
+      expect(html).not.toContain('attacker.invalid')
+      expect(html).toContain('<body>Hi')
+    })
+
+    it('keeps every other meta as written', () => {
+      const metas = '<meta charset="utf-8"><meta name="refresh" content="x"><meta http-equiv="Content-Type" content="text/html">'
+      expect(prepare(`<!doctype html><html><head>${metas}</head><body>Hi</body></html>`)).toContain(metas)
+    })
+
+    // The browser reads `<me<meta>` as one unknown tag, so what surrounds a
+    // removed meta refresh never becomes a meta refresh or a script of its own.
+    it('leaves a bare meta where a refresh was, so its neighbours cannot join', () => {
+      expect(prepare('<p>a</p><me<meta http-equiv=refresh>ta http-equiv=refresh>')).toContain('<p>a</p><me<meta>ta http-equiv=refresh>')
+      expect(prepare('<p>a</p><scr<meta http-equiv=refresh>ipt>x()</script>')).toContain('<p>a</p><scr<meta>ipt>x()</script>')
+    })
+
+    // The JSON exemption is for the type attribute itself, not a name ending in it.
+    it.each([
+      ['data-type', '<script data-type="application/json">x()</script>'],
+      ['a:type', '<script a:type="application/json">x()</script>'],
+    ])('strips a script whose %s merely says application/json', (_name, script) => {
+      expect(prepare(`<p>a</p>${script}`)).not.toContain('x()')
+    })
+
     it('rejects invalid nonces', () => {
       for (const invalid of [
         'bad',

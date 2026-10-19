@@ -13,12 +13,66 @@
  */
 
 const EXECUTABLE_SCRIPT_RE =
-  /<script\b(?![^>]*type=["']application\/json["'])[^>]*>[\s\S]*?<\/script\s*>/gi
+  /<script\b(?![^>]*[\t\n\f\r /"']type=["']application\/json["'])[^>]*>[\s\S]*?<\/script\s*>/gi
 
 const CSP_NONCE_RE = /^[0-9a-f]{32}$/
 
 function stripExecutableScripts(content: string): string {
   return content.replace(EXECUTABLE_SCRIPT_RE, '')
+}
+
+// Where the tokenizer ends the start tag whose attributes begin at `from`: just
+// past its `>`, or -1 when input runs out first and the parser drops the tag.
+// A quoted value may hold `>`, so the first `>` is not always the end.
+function startTagEnd(html: string, from: number): number {
+  const space = '\t\n\f\r '
+  let i = from
+  while (i < html.length) {
+    const c = html[i]
+    if (c === '>') return i + 1
+    i++
+    if (c !== '=') continue
+    while (i < html.length && space.includes(html[i])) i++
+    const quote = html[i]
+    if (quote === '"' || quote === "'") {
+      const close = html.indexOf(quote, i + 1)
+      if (close === -1) return -1
+      i = close + 1
+    } else {
+      while (i < html.length && !space.includes(html[i]) && html[i] !== '>') i++
+    }
+  }
+  return -1
+}
+
+function isRefreshMeta(tag: string): boolean {
+  for (const [, value] of tag.matchAll(/[\t\n\f\r /"']http-equiv[\t\n\f\r ]*=[\t\n\f\r ]*("[^"]*"|'[^']*'|[^\t\n\f\r >]*)/gi)) {
+    const decoded = value.replace(/&#(x[0-9a-f]+|\d+);?/gi, (_, code: string) => {
+      const point = code[0] === 'x' || code[0] === 'X' ? parseInt(code.slice(1), 16) : parseInt(code, 10)
+      return point <= 0x10ffff ? String.fromCodePoint(point) : '\ufffd'
+    })
+    if (/refresh/i.test(decoded)) return true
+  }
+  return false
+}
+
+// A meta refresh navigates the frame to a page the injected CSP never reaches.
+// Each one becomes a bare `<meta>` rather than nothing: the text on either
+// side then cannot join into a new tag, so one pass is enough.
+function stripMetaRefresh(html: string): string {
+  const meta = /<meta(?=[\t\n\f\r />])/gi
+  let out = ''
+  let kept = 0
+  for (let m = meta.exec(html); m; m = meta.exec(html)) {
+    const end = startTagEnd(html, m.index + 5)
+    if (end === -1) break
+    if (isRefreshMeta(html.slice(m.index, end))) {
+      out += html.slice(kept, m.index) + '<meta>'
+      kept = end
+    }
+    meta.lastIndex = end
+  }
+  return out + html.slice(kept)
 }
 
 function randomHexToken(): string {
@@ -58,7 +112,7 @@ export interface PreparedPlanDocHtml {
  * 1. Generates a unique documentToken.
  * 2. Generates trusted runtime script via builder and validates no tag-breaking.
  * 3. Prepends strict nonce-based Content-Security-Policy meta tag.
- * 4. Strips untrusted executable scripts while preserving JSON metadata.
+ * 4. Strips untrusted executable scripts and meta refreshes while preserving JSON metadata.
  * 5. Injects the trusted runtime script with matching nonce before `</body>`.
  */
 export function preparePlanDocHtml(
@@ -83,7 +137,7 @@ export function preparePlanDocHtml(
   }
 
   const cspMeta = buildPlanCspMeta(nonce)
-  const stripped = stripExecutableScripts(content)
+  const stripped = stripMetaRefresh(stripExecutableScripts(content))
   // A doctype must stay the first thing in the document or the frame renders
   // in quirks mode; the CSP meta goes right after it. Only HTML whitespace may
   // lead: JS `\s` also matches U+00A0, U+2028 and the like, which the parser
