@@ -5584,7 +5584,9 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     "ui.pipeline.gate_pass",
     "ui.pipeline.gate_reject",
     "ui.pipeline.restart_from",
-    # Spawns a sign-in pane (cli_account_sign_in): a pane create's wait.
+    # Asks the user, then spawns a sign-in pane (cli_account_sign_in): the
+    # confirmation ends one ordinary wait before this one, leaving a pane
+    # create its wait.
     "ui.accounts.signIn",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
@@ -10350,9 +10352,11 @@ async def cli_account_sign_in(
     user only has to finish it in the browser.
 
     It is the same sign-in Settings → Accounts starts: Navide opens a sign-in
-    pane running the CLI's own login command in your window, and the user is
-    told which agent asked and your `reason` (required; cut at 300
-    characters). You never see the login: no token, code or URL comes back,
+    pane running the CLI's own login command in your window, in your own
+    workspace. Your window first asks the user, naming which agent asked and
+    showing your `reason` (required; cut at 300 characters); nothing opens
+    until they agree, and a no or no answer in time is a refusal. You never
+    see the login: no token, code or URL comes back,
     and what the sign-in pane prints cannot be read by any pane (cli_read_log
     refuses it, cli_get_status leaves its text out).
 
@@ -10372,8 +10376,11 @@ async def cli_account_sign_in(
     login_pane_id} once the sign-in pane is up; whether the user then signed
     in is not known here. Otherwise {ok: false, error, error_code}:
     "pane-only", "bad-request", "reason-required", "needs-user",
-    "unknown-profile", "unsupported", "no-workspace", "spawn-failed" or
-    "window-unavailable".
+    "unknown-profile", "unsupported", "no-workspace", "wrong-workspace",
+    "declined" (the user said no), "confirm-timeout" (the user did not answer
+    in time), "busy" (another agent's sign-in is waiting for the user),
+    "workspace-changed" (the window left your workspace while the user was
+    asked), "spawn-failed" or "window-unavailable".
     """
     try:
         caller = _resolve_caller(ctx)
@@ -10404,12 +10411,17 @@ async def cli_account_sign_in(
     from agent_team_backend import agent_messaging
 
     pane = agent_messaging.get(caller.pane_id)
+    # The window asks the user before it opens anything (review #433 LOW-3).
+    # The answer is due within this action's slow wait; the user's yes must
+    # come one ordinary action's wait before that, so the window can still
+    # open the pane while this tool is waiting. Epoch ms, one machine's clock.
+    confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
     answer = await _ui_request(
         pane.workspace_path if pane else "",
         "invoke",
         caller=caller,
         action="ui.accounts.signIn",
-        args={"agentKey": agent, "profileId": profile_id, "mode": mode, "reason": reason},
+        args={"agentKey": agent, "profileId": profile_id, "mode": mode, "reason": reason, "confirmBy": confirm_by},
     )
     result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
     status = str(result.get("status") or "") if answer.get("ok") else ""

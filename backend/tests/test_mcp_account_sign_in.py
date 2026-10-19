@@ -145,10 +145,31 @@ async def test_sign_in_asks_the_callers_own_window_and_reports_the_login_pane(ui
     assert call["action"] == "ui.accounts.signIn"
     assert call["workspace_path"] == "/ws/alpha"
     assert call["caller"].kind == "pane" and call["caller"].pane_id == "pa"
-    assert call["args"] == {
+    args = dict(call["args"])
+    args.pop("confirmBy")
+    assert args == {
         "agentKey": "codex", "profileId": "p-2", "mode": "isolated",
         "reason": "quota ran out on the active account",
     }
+
+
+@pytest.mark.asyncio
+async def test_sign_in_gives_the_user_until_the_window_must_still_open_the_pane(ui: _UiRequests) -> None:
+    """LOW-3: the window asks the user first. The answer is due within the
+    slow-action wait, so the confirmation closes one ordinary action's wait
+    before it: a yes then still leaves the window time to open the pane."""
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.signIn"] = {"ok": True, "result": {"status": "declined", "message": "no"}}
+
+    before = time.time() * 1000
+    result = await plan_mcp.cli_account_sign_in(_ctx(), agent="codex", profile_id="p-2", reason="x")
+    after = time.time() * 1000
+
+    confirm_ms = (plan_mcp._UI_INVOKE_SLOW_TIMEOUT_S - plan_mcp._UI_INVOKE_TIMEOUT_S) * 1000
+    [call] = ui.calls
+    assert int(before + confirm_ms) <= call["args"]["confirmBy"] <= after + confirm_ms
+    assert result["ok"] is False
+    assert result["error_code"] == "declined"
 
 
 @pytest.mark.asyncio

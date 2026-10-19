@@ -381,7 +381,7 @@ import {
   type RestartOutcome,
 } from './composables/useQuotaFailover'
 import { accountLabel } from './lib/accountLabel'
-import { planAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL, type AgentSignInMode } from './lib/agentSignIn'
+import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
 import {
   DEFAULT_SLOT_ID,
   FOLLOW_SWITCH_AGENT,
@@ -452,6 +452,7 @@ const CliHealthGuide = defineAsyncComponent(() => import('./components/CliHealth
 const CliInstallDialog = defineAsyncComponent(() => import('./components/CliInstallDialog.vue'))
 const SkillInstallApprovalDialog = defineAsyncComponent(() => import('./components/SkillInstallApprovalDialog.vue'))
 const PluginAgentRequestDialog = defineAsyncComponent(() => import('./components/PluginAgentRequestDialog.vue'))
+const AgentSignInConfirmDialog = defineAsyncComponent(() => import('./components/AgentSignInConfirmDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
@@ -10822,21 +10823,31 @@ useUiActionBus({
 // the accounts lib/agentSignIn lets an agent start one for, and tells the user
 // which agent asked and why. The sign-in is the CLI's own; the user finishes
 // it in the browser. Nothing here switches an account or reads a credential.
+// Nothing opens until the user says yes in AgentSignInConfirmDialog (review
+// #433 LOW-3); the user's own sign-in from Settings never comes through here.
+const agentSignInConfirm = createSignInConfirm()
 async function agentSignIn(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
   const agentKey = String(args.agentKey ?? '')
   const profileId = String(args.profileId ?? '')
-  const plan = planAgentSignIn({ agentKey, profileId, mode: args.mode as AgentSignInMode }, cliProfilesApi)
-  if (plan.kind === 'refused') return { status: plan.code, message: plan.message }
-  if (!currentWorkspace.value) {
-    return { status: 'no-workspace', message: 'this window has no workspace open to start a sign-in pane in' }
-  }
-  const before = pendingLoginPanes.get(profileId)?.paneId
-  if (plan.kind === 'folder') await onCliLoginSpawn('claude', undefined, { accountDirProfileId: plan.profileId })
-  else await onCliLoginSpawn(plan.agentKey, plan.profileId)
-  const loginPaneId = pendingLoginPanes.get(profileId)?.paneId
-  if (!loginPaneId || loginPaneId === before) {
-    return { status: 'spawn-failed', message: 'the sign-in pane did not start' }
-  }
+  const outcome = await runAgentSignIn(args, callerPaneId, {
+    accounts: cliProfilesApi,
+    currentWorkspace: () => currentWorkspace.value,
+    callerPane: (id) => {
+      const pane = panes.value.find((p) => p.id === id)
+      return pane ? { workspacePath: pane.workspacePath, name: pane.messagingName || pane.customName || id } : undefined
+    },
+    accountLabel: (key, id) => accountLabel(cliProfilesApi, key, id, i18n.global.t),
+    confirm: agentSignInConfirm.ask,
+    spawn: async (plan) => {
+      const before = pendingLoginPanes.get(plan.profileId)?.paneId
+      if (plan.kind === 'folder') await onCliLoginSpawn('claude', undefined, { accountDirProfileId: plan.profileId })
+      else await onCliLoginSpawn(plan.agentKey, plan.profileId)
+      const loginPaneId = pendingLoginPanes.get(plan.profileId)?.paneId
+      return loginPaneId && loginPaneId !== before ? loginPaneId : undefined
+    },
+    now: () => Date.now(),
+  })
+  if (outcome.status !== 'started') return outcome
   const caller = panes.value.find((p) => p.id === callerPaneId)
   notifyRestore.toast(
     i18n.global.t('settings.accounts.cli.agent-login-started', {
@@ -10846,7 +10857,7 @@ async function agentSignIn(args: Record<string, unknown>, callerPaneId: string):
     }),
     { type: 'info' },
   )
-  return { status: 'started', loginPaneId }
+  return outcome
 }
 
 // Single source of truth for the 'modalOpen' keybinding context. Hoisted so
@@ -21319,6 +21330,12 @@ function paneIsCommander(p: ActivePane): boolean {
   <!-- An agent's skills_install waits here for the user's approval. -->
   <SkillInstallApprovalDialog :backend="backend" />
   <PluginAgentRequestDialog :backend="backend" />
+  <!-- An agent's cli_account_sign_in waits here for the user's yes. -->
+  <AgentSignInConfirmDialog
+    v-if="agentSignInConfirm.pending.value"
+    :request="agentSignInConfirm.pending.value"
+    @answer="agentSignInConfirm.answer"
+  />
   <RestoreScopeModal
     v-if="showRestoreScopeModal"
     :open="showRestoreScopeModal"
