@@ -4402,8 +4402,7 @@ async def cli_answer_prompt(
 
     `answer` is "allow" (the menu's "Yes", option 1), "deny" (its "No"), or
     an option number "1".."9" from `ui.awaitingOptions`. aider takes only
-    allow / deny, and so does grok, whose one answerable prompt is its
-    folder-trust question ("deny" is its "No, quit", which exits the CLI). `prompt_fingerprint` must be the one cli_get_status gave
+    allow / deny. `prompt_fingerprint` must be the one cli_get_status gave
     for the prompt you decided on; when the screen has moved on since, the
     answer is refused with `error_code` "prompt-changed" and the reply
     carries the current `prompt`, `options` and `prompt_fingerprint` to
@@ -4424,8 +4423,7 @@ async def cli_answer_prompt(
         cannot screen it); approving needs the user. `guard` says why.
         Refusing ("deny", or a "No …" option) is never vetoed.
       - "computer-only" — a multi-select menu or a free-text row.
-      - "unsupported-cli" — only claude, codex, aider and grok (its
-        folder-trust prompt) have mapped keys.
+      - "unsupported-cli" — only claude, codex and aider have mapped keys.
       - "not-awaiting", "prompt-changed", "invalid-answer".
       - "answer-local-only" — a pane on another device: there is no relay.
     The raw key action (ui_invoke "ui.pane.sendKeys") stays refused for

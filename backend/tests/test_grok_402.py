@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import tomllib
 from pathlib import Path
 from types import SimpleNamespace
@@ -205,9 +206,8 @@ def test_a_missing_billing_method_reads_as_unsupported_not_a_raw_rpc_error(
 
 
 def test_the_billing_rpc_reports_the_error_code(tmp_path: Path) -> None:
-    fake = tmp_path / "grok"
-    fake.write_text(
-        "#!/usr/bin/env python3\n"
+    script = tmp_path / "grok.py"
+    script.write_text(
         "import json, sys\n"
         "for line in sys.stdin:\n"
         "    req = json.loads(line)\n"
@@ -219,7 +219,15 @@ def test_the_billing_rpc_reports_the_error_code(tmp_path: Path) -> None:
         "    print(json.dumps(out), flush=True)\n",
         encoding="utf-8",
     )
-    fake.chmod(0o755)
+    # A launcher the platform can start directly: a shebang script on POSIX,
+    # a .cmd wrapper on Windows (which cannot run a script file itself).
+    if sys.platform == "win32":
+        fake = tmp_path / "grok.cmd"
+        fake.write_text(f'@"{sys.executable}" "{script}" %*\r\n', encoding="utf-8")
+    else:
+        fake = tmp_path / "grok"
+        fake.write_text(f"#!/bin/sh\nexec '{sys.executable}' '{script}' \"$@\"\n", encoding="utf-8")
+        fake.chmod(0o755)
 
     with pytest.raises(grok.GrokRpcError) as caught:
         asyncio.run(grok.grok_billing_rpc(str(fake)))
