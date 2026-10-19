@@ -238,6 +238,17 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
   })
 
+  it("never shows an agent's form draft as an approval card (W3): its form opens in Settings", async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', {
+      requests: [request({ approval_id: 'f1', kind: 'plugin-publish' as never }), request({ approval_id: 'f2', kind: 'developer-application' as never })],
+    })
+    wrapper = await open(mock)
+    mock.emit('plugins.agent_request', request({ approval_id: 'f3', kind: 'plugin-yank' as never }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
+  })
+
   it('drops a request decided in another window', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('plugins.agent_requests.list', { requests: [request()] })

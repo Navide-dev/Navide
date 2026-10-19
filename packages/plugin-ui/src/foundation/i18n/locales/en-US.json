@@ -11477,5 +11477,107 @@
       "enable": "Enable again",
       "disable": "Disable again"
     }
+  },
+  "marketplace-developer": {
+    "unavailable": "Navide Marketplace developer tools are not available in this window.",
+    "view": {
+      "label": "Navide Marketplace views",
+      "browse": "Browse",
+      "developer": "Developer"
+    },
+    "account": {
+      "title": "Developer account",
+      "desc": "Sign in with your Navide Cloud account to apply, publish Navide plugins and follow their review. Navide keeps the sign-in and the signing key in this computer's secure storage; agents never see them.",
+      "namespace": "Namespace",
+      "no-namespace": "None yet (granted when your application is approved)",
+      "key": "Signing key",
+      "no-key": "Created when you first sign in as a publisher",
+      "key-registered": "Registered",
+      "key-unregistered": "Not registered yet",
+      "expires": "Sign-in expires",
+      "sign-in": "Sign in with Navide Cloud",
+      "sign-in-publish": "Sign in as a publisher",
+      "sign-out": "Sign out",
+      "waiting": "Waiting for the browser…"
+    },
+    "application": {
+      "title": "Developer application",
+      "open": "Fill in the application",
+      "notice": "When you press Submit, these details go to Navide Cloud's developer review. Navide staff read them to decide whether you may publish Navide plugins.",
+      "sent": "Application sent for review",
+      "individual": "Individual",
+      "organization": "Organization",
+      "status": {
+        "none": "You have not applied yet.",
+        "pending": "Your application is waiting for review.",
+        "approved": "Approved: you can publish Navide plugins.",
+        "rejected": "Your application was not approved.",
+        "revoked": "Your developer status was revoked."
+      },
+      "field": {
+        "applicant_type": "Applying as",
+        "legal_name": "Legal name",
+        "display_name": "Display name",
+        "contact_email": "Contact email",
+        "country": "Country (ISO code, e.g. TW)",
+        "intended_namespace": "Namespace you want",
+        "description": "What you plan to publish",
+        "agreed_terms": "I agree to the Navide Marketplace developer terms",
+        "organization_name": "Organization name",
+        "organization_id": "Organization registration number",
+        "website": "Website",
+        "source_url": "Work or source code link",
+        "needs_native_backend": "My Navide plugins need a native backend",
+        "domain": "Domain to verify"
+      }
+    },
+    "form": {
+      "developer-application": "Developer application",
+      "publish": "Publish a Navide plugin version",
+      "publish-yank": "Yank a published version",
+      "from-link": "Opened from a link outside Navide, for example from a terminal. Check the package before you submit.",
+      "agent-opened": "Opened for you by {agent}. Fill it in yourself; nothing is sent until you press Submit.",
+      "agent-filled": "Filled in by {agent}. Fields marked \"Written by an agent\" are its draft: check and edit them; nothing is sent until you press Submit.",
+      "by-agent": "Written by an agent",
+      "submit": "Submit",
+      "cancel": "Cancel"
+    },
+    "publish": {
+      "open": "Publish a version",
+      "sign-in-first": "Sign in as a publisher first: Navide signs the package with the key it keeps and uploads it.",
+      "choose": "Choose a .vsix package…",
+      "package": "Navide plugin",
+      "file": "File",
+      "digest": "SHA-256",
+      "target": "Platform target",
+      "changelog-hint": "Release notes belong in the package's CHANGELOG.md; the Navide Marketplace shows it and it is signed with the package.",
+      "submit": "Sign and submit for review",
+      "sent": "{plugin} {version} was submitted for review"
+    },
+    "yank": {
+      "title": "Yank this version?",
+      "notice": "Yanking withdraws the version from new installs on every platform. People who already installed it keep it.",
+      "version": "Version",
+      "submit": "Yank",
+      "confirm": "Yank {plugin} {version} from the Navide Marketplace?",
+      "done": "{plugin} {version} was yanked"
+    },
+    "versions": {
+      "title": "Your published versions",
+      "refresh": "Refresh",
+      "empty": "No versions yet.",
+      "state": "Review",
+      "status": {
+        "pending": "Waiting for review",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "yanked": "Yanked"
+      }
+    },
+    "error": {
+      "not-signed-in": "Sign in under Developer account first.",
+      "qualification": "Your developer application must be approved first.",
+      "registry": "The Navide Marketplace refused it ({status} {code}): {message}"
+    }
   }
 }

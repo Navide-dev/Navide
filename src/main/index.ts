@@ -43,6 +43,10 @@ import { disableOfficialKeyOverride } from './plugins/pluginVerify'
 import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
 import { PluginTestplaceStore } from './plugins/pluginTestplaceStore'
+import { DeveloperAccount, setDeveloperAccount } from './plugins/developerAccount'
+import { DeveloperVault } from './plugins/developerVault'
+import { createDeveloperQueryHandler, registerDeveloperIpc } from './plugins/developerIpc'
+import { prepareLocalInstall } from './plugins/pluginInstaller'
 import { contributionIcon } from './plugins/pluginContributionIcon'
 import { broadcastQuitStage } from './quit-progress'
 import { currentPluginHostTarget, UNIVERSAL_PLUGIN_TARGET } from './plugins/pluginTarget'
@@ -2055,6 +2059,54 @@ const pluginTrustRefresh = registerPluginIpc(
 )
 // Card K4: the developer folders the user consented to, when Developer Mode is on.
 void pluginTrustRefresh.loadDeveloperFolders()
+
+// Navide Marketplace developer (W3): sign-in, publish, yank and the developer
+// application. Tokens and the signing key are safeStorage ciphertext in their
+// own file, never the CLI account credentials; see developerVault.ts.
+const developerAccount = new DeveloperAccount({
+  vault: new DeveloperVault(join(app.getPath('userData'), 'marketplace-developer.json'), {
+    get available(): boolean {
+      // A Linux basic_text store is not encryption: Navide keeps no developer secret in it.
+      return !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
+        (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+    },
+    encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
+    decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
+  }),
+  registryUrl: () => resolveConfiguredMarketplace().registryUrl,
+  openExternal: (url) => shell.openExternal(url),
+})
+setDeveloperAccount(developerAccount)
+const developerIpc = registerDeveloperIpc({
+  handle: (channel, listener) => ipcMain.handle(channel, listener),
+  authorize: (event) => isTrustedPluginManagementSender(event, mainWindows),
+  account: developerAccount,
+  inspectPackage: (bytes) => {
+    const marketplace = resolveConfiguredMarketplace()
+    const pkg = prepareLocalInstall(bytes, {
+      pinnedRegistryRootKey: marketplace.trust.pinnedRegistryRootKey,
+      trustSnapshot: readRegistryTrustSnapshot(pluginsRoot()),
+      expectedTarget: marketplace.trust.expectedTarget,
+    })
+    return { id: pkg.id, version: pkg.version, publisher: pkg.publisherId, digest: pkg.digest, manifest: pkg.manifest }
+  },
+  pickPackageFile: async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    if (!parent || parent.isDestroyed() || !mainWindows.has(parent) || detachedWindowIds.has(parent.id)) return null
+    const picked = await dialog.showOpenDialog(parent, {
+      properties: ['openFile'],
+      filters: [{ name: 'Navide plugin package', extensions: ['vsix'] }],
+    })
+    return picked.canceled ? null : picked.filePaths[0] ?? null
+  },
+  hostTarget: currentPluginHostTarget,
+})
+frontendPluginManager.setDeveloperQueryHandler(createDeveloperQueryHandler(
+  developerAccount,
+  developerIpc.publishFromPath,
+  // O3: only a Registry on this computer publishes without the user's Submit.
+  () => resolveConfiguredMarketplace().registryUrl,
+))
 /** The Host side of a built-in's Disabled switch: drain and close it, or bring
  *  it back. Used by the Extensions switch and by a store change the switch did
  *  not make (see builtinSwitchReconciler). */

@@ -13,6 +13,9 @@
 import { createHash, createPublicKey, generateKeyPairSync } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
+import type { DeveloperPublicState } from '../../shared/marketplaceDeveloper'
+
+export type { DeveloperPublicState }
 
 export interface DeveloperVaultCrypto {
   /** Whether real encryption is usable (false for Linux's basic_text backend too). */
@@ -41,16 +44,6 @@ interface StoredDeveloper {
 interface VaultDoc {
   version: 1
   registries: Record<string, StoredDeveloper>
-}
-
-/** What the renderer and the MCP status tools may see: no token, no key. */
-export interface DeveloperPublicState {
-  registry: string
-  signedIn: { account: boolean; publisher: boolean }
-  namespace: string | null
-  tokenExpiresAt: { account: string | null; publisher: string | null }
-  keyFingerprint: string | null
-  keyRegistered: boolean
 }
 
 export class DeveloperVaultUnavailableError extends Error {

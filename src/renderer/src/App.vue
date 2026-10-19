@@ -18,7 +18,8 @@ import {
   useReadbackAnnouncer,
 } from './composables/useVoiceReadback'
 import { requestMarketplaceDetail } from './marketplaceDeepLink'
-import type { DeepLinkExtensionTarget } from '../../shared/deepLink'
+import { isPublishDeepLink, type DeepLinkExtensionTarget, type DeepLinkPublishTarget } from '../../shared/deepLink'
+import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceForm } from './composables/useMarketplaceForms'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
@@ -955,6 +956,10 @@ watch(() => backend.status.value, (status) => {
   void pluginAgentRequests.recover().catch((error: unknown) => {
     console.warn('[plugins] could not settle interrupted agent plugin requests', error)
   })
+  // An agent's form draft filed before this window connected opens its form.
+  void restorePendingForms(backend).then((shown) => {
+    if (shown) openSettingsAt('marketplace')
+  }).catch(() => {})
 }, { immediate: true })
 // And when a main window went away while carrying out approved requests
 // (review-370 R1): the backend names them, and recover() settles whatever is
@@ -9419,15 +9424,34 @@ function openMarketplaceDetail(target: DeepLinkExtensionTarget): void {
   requestMarketplaceDetail(target)
   openSettingsAt('marketplace')
 }
+// navide://publish (navide-plugin publish --via-navide): open the publish form
+// with that package. Only opens the form; the user reviews and presses Submit.
+function openPublishFromLink(target: DeepLinkPublishTarget): void {
+  showMarketplaceForm({
+    form: 'publish', origin: 'link', requester: null, request: null,
+    prefill: { path: target.path, ...(target.target ? { target: target.target } : {}) },
+  })
+  openSettingsAt('marketplace')
+}
 let stopDeepLinks: (() => void) | null = null
+let stopPublishLinks: (() => void) | null = null
 onMounted(() => {
   const api = window.agentTeam?.deepLink
   if (!api) return
   stopDeepLinks = api.onOpenExtension(openMarketplaceDetail)
+  stopPublishLinks = api.onOpenPublish?.(openPublishFromLink) ?? null
   // Links that arrived before this window could show them (cold start).
-  void api.ready().then((queued) => queued.forEach(openMarketplaceDetail))
+  void api.ready().then((queued) =>
+    queued.forEach((target) => (isPublishDeepLink(target) ? openPublishFromLink(target) : openMarketplaceDetail(target))))
 })
-onUnmounted(() => stopDeepLinks?.())
+onUnmounted(() => {
+  stopDeepLinks?.()
+  stopPublishLinks?.()
+})
+// An agent's *_open / *_fill for a Navide Marketplace developer form (W3) shows
+// it in Settings > Navide Marketplace > Developer; nothing is sent until Submit.
+const stopMarketplaceForms = installMarketplaceFormListeners(backend, () => openSettingsAt('marketplace'))
+onUnmounted(stopMarketplaceForms)
 // Workspaces the Resource Manager's storage scan walks: the open one first, then the recents that
 // still exist on disk.
 const knownWorkspacePaths = computed<string[]>(() => {

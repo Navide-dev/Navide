@@ -31,13 +31,13 @@ from typing import Any
 
 from mcp.server.fastmcp import Context
 
+from agent_team_backend.mcp_server import server as _core
 from agent_team_backend.mcp_server.server import (
     CallerUnknown,
     _approval_requester,
     _audit_agent_action,
     _marketplace_error,
     _package_id,
-    _resolve_caller,
     _MQ_SEMVER,
     server,
 )
@@ -48,8 +48,11 @@ _developer_query_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
 _TARGET = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 #: Registry publisher tokens (``nva_``/``nvp_``...), PEM blocks and anything a
 #: key or token field would carry: never part of an answer to an agent.
-_SECRET_TEXT = re.compile(r"\bnv[a-z]_[A-Za-z0-9_-]{8,}|-----BEGIN [A-Z ]*(?:PRIVATE )?KEY-----")
-_SECRET_KEYS = frozenset({"token", "access_token", "publisher_token", "private_key", "privateKey", "secret"})
+_SECRET_TEXT = re.compile(
+    r"\bnv[a-z]_[A-Za-z0-9_-]{8,}|-----BEGIN [A-Z ]*KEY-----[\s\S]*?(?:-----END [A-Z ]*KEY-----|\Z)"
+)
+#: A key whose normalised name contains one of these is dropped whatever its value.
+_SECRET_KEY_PARTS = ("token", "secret", "privatekey", "apikey", "password")
 _OPEN_NOTE = (
     "The form is open in Navide for the user to fill in. If the user wants to fill it in "
     "themselves, stop here and wait for them; nothing is sent until they press Submit."
@@ -60,10 +63,15 @@ _FILL_NOTE = (
 )
 
 
+def _secret_key(key: Any) -> bool:
+    normalised = re.sub(r"[^a-z]", "", str(key).lower())
+    return any(part in normalised for part in _SECRET_KEY_PARTS)
+
+
 def _without_secrets(value: Any) -> Any:
     """``value`` with credential-shaped keys dropped and credential-shaped text redacted."""
     if isinstance(value, dict):
-        return {k: _without_secrets(v) for k, v in value.items() if k not in _SECRET_KEYS}
+        return {k: _without_secrets(v) for k, v in value.items() if not _secret_key(k)}
     if isinstance(value, list):
         return [_without_secrets(v) for v in value]
     if isinstance(value, str) and _SECRET_TEXT.search(value):
@@ -105,7 +113,7 @@ async def _open_form(ctx: Context, form: str, prefill: dict[str, str]) -> dict[s
     from agent_team_backend.plugins import agent_tools_contract as contract
 
     try:
-        caller = _resolve_caller(ctx)
+        caller = _core._resolve_caller(ctx)
     except CallerUnknown as err:
         return {"ok": False, "error": str(err)}
     if form not in contract.MARKETPLACE_FORMS:
@@ -128,7 +136,7 @@ async def _file_form_draft(
     from agent_team_backend.plugins import agent_tools_contract as contract
 
     try:
-        caller = _resolve_caller(ctx)
+        caller = _core._resolve_caller(ctx)
     except CallerUnknown as err:
         return {"ok": False, "error": str(err)}
     requester = _approval_requester(caller)
@@ -248,7 +256,7 @@ async def marketplace_developer_status(ctx: Context) -> dict[str, Any]:
     not signed in under Settings > Navide Marketplace > Developer.
     """
     try:
-        _resolve_caller(ctx)
+        _core._resolve_caller(ctx)
     except CallerUnknown as err:
         return {"ok": False, "error": str(err)}
     return await _developer_answer({"kind": "developer-status"})
@@ -277,30 +285,69 @@ async def marketplace_publish_open(ctx: Context, path: str = "") -> dict[str, An
 
 @server.tool()
 async def marketplace_publish_fill(
-    ctx: Context, path: str, target: str = "", notes: str = "", reason: str = "",
+    ctx: Context, path: str, target: str = "", reason: str = "",
 ) -> dict[str, Any]:
     """Prepare a Navide plugin version for publishing to the Navide Marketplace, as a draft.
 
     Use this when the user asked you to publish for them; you need not call
     marketplace_publish_open first. `path` is the absolute path of the .vsix
-    package, `target` the platform target (empty: from the package), `notes`
-    the release notes. Navide reads the package once and shows the user its
+    package, `target` the platform target (empty: from the package). Release
+    notes belong in the package's CHANGELOG.md, which the Navide Marketplace
+    shows and which is signed with the package. Navide reads the package once and shows the user its
     validation, disclosure and the permission changes from the last version;
     when the user presses Submit, Navide signs it with the key it keeps and
     uploads it for review. You get only the approval_id: no token or key.
 
     Returns {ok, approval_id, status: "pending", expires_at, note}; follow it
-    with marketplace_request_status, then marketplace_publish_status.
+    with marketplace_request_status, then marketplace_publish_status. One
+    exception: when Navide itself is set to a Registry on this computer (a
+    developer test Registry), it signs and uploads at once and returns
+    {ok, loopback: true, published, id, version, digest, status, note}.
     """
     error = _package_path_error(path)
     if error:
         return _marketplace_error("BAD_REQUEST", error)
     if target and not (isinstance(target, str) and _TARGET.fullmatch(target)):
         return _marketplace_error("BAD_REQUEST", "target must be a platform target such as darwin-arm64")
-    if not isinstance(notes, str):
-        return _marketplace_error("BAD_REQUEST", "notes must be a string")
-    fields = {"path": path, "target": target, "notes": notes}
+    direct = await _publish_to_loopback(ctx, path, target)
+    if direct is not None:
+        return direct
+    fields = {"path": path, "target": target}
     return await _file_form_draft(ctx, "plugin-publish", {"id": "", "namespace": "", "name": ""}, fields, reason)
+
+
+async def _publish_to_loopback(ctx: Context, path: str, target: str) -> dict[str, Any] | None:
+    """O3: when the Host says its Registry is on this computer, publish at once.
+
+    Only the Host decides that, from the Registry URL Navide is configured
+    with; nothing the agent sends can claim it. Any other answer, and any
+    failure to get one, is None: the draft goes to the user (fail closed).
+    """
+    try:
+        caller = _core._resolve_caller(ctx)
+    except CallerUnknown:
+        return None
+    answer = await _request_host_developer({"kind": "publish-direct", "path": path, "target": target})
+    result = answer.get("result") if answer.get("ok") is True else None
+    if not isinstance(result, dict) or result.get("kind") != "publish-direct" or result.get("loopback") is not True:
+        return None
+    published = result.get("published") is True
+    plugin_id = result.get("id") if isinstance(result.get("id"), str) else ""
+    version = result.get("version") if isinstance(result.get("version"), str) else ""
+    _audit_agent_action(caller, _approval_requester(caller), plugin_id=plugin_id, plugin_version=version,
+                        action="publish-loopback", outcome="allowed" if published else "error",
+                        error_code="" if published else str(result.get("error_code") or "PUBLISH_FAILED"))
+    body = {key: result.get(key) for key in ("id", "version", "digest", "status", "error_code", "error") if key in result}
+    return {
+        "ok": published,
+        "loopback": True,
+        "published": published,
+        **_without_secrets(body),
+        "note": (
+            "Navide's Registry is on this computer (a developer test Registry), so the package was signed and "
+            "uploaded without the user's Submit. Check it with marketplace_publish_status."
+        ),
+    }
 
 
 @server.tool()
@@ -315,7 +362,7 @@ async def marketplace_publish_status(ctx: Context, id: str = "") -> dict[str, An
     developer in Navide.
     """
     try:
-        _resolve_caller(ctx)
+        _core._resolve_caller(ctx)
     except CallerUnknown as err:
         return {"ok": False, "error": str(err)}
     namespace, _, name = id.partition(".")
