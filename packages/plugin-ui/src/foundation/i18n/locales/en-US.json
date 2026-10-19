@@ -8611,6 +8611,7 @@
   "error": {
     "pipeline-start-refused": "The pipeline did not start: {reason}",
     "pipeline-kickoff-failed": "Pipeline failed: stage {stage}, slot {slot} — {reason}. Its panes are still open.",
+    "pipeline-kickoff-held": "Pipeline failed: stage {stage}, slot {slot} — its kickoff is waiting in the input box. Leave it there and resume will submit it, or clear it. Its panes are still open.",
     "workspace-create-exists": "An item named “{name}” is already there. Pick another name.",
     "workspace-create-denied": "No permission to create a folder at {path}.",
     "workspace-create-failed": "Could not create the workspace folder at {path}.",

@@ -50,7 +50,7 @@ async function loadFail() {
     i18n: { global: { t: (key: string, named?: Record<string, unknown>) => `${key} ${JSON.stringify(named ?? {})}` } },
   }
   const failRunOnKickoff = new Function(...Object.keys(deps), code)(...Object.values(deps)) as (
-    stageIndex: number, slotLabel: string, reason: string,
+    stageIndex: number, slotLabel: string, reason: string, held?: boolean,
   ) => Promise<void>
   return { failRunOnKickoff, pipeline, sent, failed, ends, toasts, deps }
 }
@@ -87,6 +87,20 @@ describe('a kickoff that never reached its pane fails the run (#448)', () => {
     await t.failRunOnKickoff(1, 'codex-1', 'kickoff never reached the agent')
     expect(t.ends[0][1]).toContain('codex-1')
     expect(t.ends[0][1]).toContain('kickoff never reached the agent')
+  })
+
+  it('tells the user to leave a held kickoff for resume, not to send it by hand', async () => {
+    // Sending it by hand and then resuming would paste the task a second time.
+    const t = await loadFail()
+    await t.failRunOnKickoff(1, 'codex-1', 'kickoff is waiting in the input box', true)
+    expect(t.toasts[0].text).toContain('pipeline-kickoff-held')
+    expect(t.toasts[0].text).toContain('codex-1')
+    for (const locale of ['en-US', 'zh-TW', 'ja-JP']) {
+      const path = resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`)
+      const text = JSON.parse(readFileSync(path, 'utf8')).error['pipeline-kickoff-held'] as string
+      expect(text, locale).toMatch(/resume/i)
+    }
+    expect(appSource.includes('submit or clear it before resuming')).toBe(false)
   })
 
   it('a late failure from a stage the run has moved past fails nothing', async () => {

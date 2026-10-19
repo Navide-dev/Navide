@@ -6848,8 +6848,9 @@ function scheduleInjection(pane: ActivePane): void {
             stageIndexForPane,
             pane.slotLabel ?? '',
             held
-              ? 'kickoff sat in the input box but was never submitted (submit or clear it before resuming)'
+              ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
               : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`,
+            held,
           )
           return
         }
@@ -13656,7 +13657,7 @@ async function activateStage(index: number): Promise<void> {
     }
     const ok = kickoffResult.sent
     const failure = held
-      ? 'kickoff sat in the input box but was never submitted (submit or clear it before resuming)'
+      ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
       : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`
     // Another slot failed the run (or the user stopped it) while this kickoff
     // was in flight: record nothing and arm nothing for a run that is over.
@@ -13664,7 +13665,7 @@ async function activateStage(index: number): Promise<void> {
     if (runMovedOn()) {
       if (!ok) {
         if (held) heldKickoffPanes.add(pane.id)
-        void failRunOnKickoff(index, slot.label, failure)
+        void failRunOnKickoff(index, slot.label, failure, held)
       }
       return
     }
@@ -13718,7 +13719,7 @@ async function activateStage(index: number): Promise<void> {
     if (runMovedOn()) {
       if (!ok) {
         if (held) heldKickoffPanes.add(pane.id)
-        void failRunOnKickoff(index, slot.label, failure)
+        void failRunOnKickoff(index, slot.label, failure, held)
       }
       return
     }
@@ -13735,7 +13736,7 @@ async function activateStage(index: number): Promise<void> {
       // A slot without its task cannot finish the stage, and a watcher armed
       // over it kept the run `running` with nothing to show for it (#448).
       if (held) heldKickoffPanes.add(pane.id)
-      await failRunOnKickoff(index, slot.label, failure)
+      await failRunOnKickoff(index, slot.label, failure, held)
       return
     }
     if (runMovedOn()) return
@@ -14170,7 +14171,7 @@ function heldKickoffCopy(paneId: string, text: string): { holds: () => boolean; 
  *  never got its task (#448). Like an abort, the panes stay alive for a
  *  resume. The first failing slot ends the run; later ones only fail their
  *  own node. */
-async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string): Promise<void> {
+async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false): Promise<void> {
   // A kickoff that finishes late, after the user stopped this run and another
   // one moved to a different stage, must not fail that one.
   if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
@@ -14185,8 +14186,12 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
     reason: 'failed'
   })
   applyProjectPaths(resp ?? undefined)
+  // A held kickoff is left for resume to submit: one sent by hand would be
+  // pasted again by the resume.
   notifyRestore.toast(
-    i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
+    held
+      ? i18n.global.t('error.pipeline-kickoff-held', { stage: stageLabel, slot: slotLabel })
+      : i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
     { type: 'error' },
   )
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)

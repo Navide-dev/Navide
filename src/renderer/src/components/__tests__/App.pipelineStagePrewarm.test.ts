@@ -199,7 +199,7 @@ async function loadActivate(over: {
   /** Backend sends, kickoff failures and watcher arms, in the order they happened. */
   const events: string[] = []
   const heldKickoffPanes = new Set<string>()
-  const failRunOnKickoff = vi.fn(async (index: number, label: string, reason: string) => {
+  const failRunOnKickoff = vi.fn(async (index: number, label: string, reason: string, _held?: boolean) => {
     events.push(`fail ${index}/${label}: ${reason}`)
     // What tearDownPipelineOrchestration does first, synchronously.
     pipeline.state = 'aborted'
@@ -445,6 +445,8 @@ describe('a stage whose kickoff fails', () => {
     await api.activateStage(0)
     expect([...heldKickoffPanes].sort()).toEqual(['S1-0', 'S1-1'])
     expect(failRunOnKickoff.mock.calls[0][2]).toContain('input box')
+    expect(failRunOnKickoff.mock.calls[0][2]).toContain('resume submits it')
+    expect(failRunOnKickoff.mock.calls[0][3]).toBe(true)
   })
 
   it('a resumed slot whose kickoff was held submits the copy in its input box instead of pasting another', async () => {
