@@ -4,9 +4,10 @@ import { createStageWidthCap, type CappablePane } from '../stageWidthCap'
 // A pane reduced to the state the cap policy drives: its cols, its cap and the
 // width its container offers. It follows useTerminal's contract (lockCols sets
 // or clears the cap at the current cols, and never fits by itself; unlockCols
-// lifts the cap and fits; a pane on its alternate screen is never capped) so
-// assertions are on cols and cap state, not on which calls happened.
-function fakePane(opts: { cols: number; container: number; alternate?: boolean }) {
+// lifts the cap and fits) so assertions are on cols and cap state, not on which
+// calls happened. A pane on its alternate screen declining the cap is the pane's
+// own rule and is pinned in useTerminal.fitWidth.test.ts.
+function fakePane(opts: { cols: number; container: number }) {
   let { cols, container } = opts
   let cap: number | null = null
   return {
@@ -15,13 +16,13 @@ function fakePane(opts: { cols: number; container: number; alternate?: boolean }
     setContainer(n: number) { container = n },
     // What the refit after a mode switch (or the reconciler) does.
     fit() { cols = cap === null ? container : Math.min(container, cap) },
-    lockCols(locked: boolean) { cap = locked && !opts.alternate ? cols : null },
+    lockCols(locked: boolean) { cap = locked ? cols : null },
     unlockCols() { cap = null; cols = container },
     isColsCapped() { return cap !== null && cap < container },
   } satisfies CappablePane & Record<string, unknown>
 }
 
-function harness(width: number, panes: Array<ReturnType<typeof fakePane>>) {
+function harness(width: number, panes: Array<ReturnType<typeof fakePane> | null | undefined>) {
   let windowWidth = width
   const cap = createStageWidthCap(() => panes, () => windowWidth)
   return {
@@ -41,12 +42,15 @@ describe('layout-mode cols cap', () => {
     expect(pane.cap).toBe(90)
   })
 
-  it('a pane on its alternate screen is not capped and fills the stage at once', () => {
-    const pane = fakePane({ cols: 90, container: 90, alternate: true })
-    const { cap } = harness(1000, [pane])
+  // paneRefs holds null for a pane Vue has unmounted: one such entry must not
+  // stop the real panes being capped, lifted or (in App.vue) refitted afterwards.
+  it('skips a null pane ref without disturbing the real panes', () => {
+    const pane = fakePane({ cols: 90, container: 90 })
+    const { cap, resizeWindow } = harness(1000, [null, pane, undefined])
     cap.enterMode('spotlight')
+    expect(pane.cap).toBe(90)
     pane.setContainer(180)
-    pane.fit()
+    resizeWindow(1200)
     expect(pane.cap).toBeNull()
     expect(pane.cols).toBe(180)
   })

@@ -56,7 +56,7 @@ describe('layout-mode switch wiring', () => {
     expect(handler).toContain('stageWidthCap.onWindowResize()')
   })
 
-  it('lifts the cap nowhere else in App.vue but the menu item', () => {
+  it('calls unlockCols only from the menu item; the window-widen lift lives in stageWidthCap', () => {
     expect(appSource.match(/unlockCols/g)?.length).toBe(1)
   })
 })
