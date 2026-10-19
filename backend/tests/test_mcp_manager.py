@@ -494,6 +494,38 @@ class TestStopUnderShutdown:
         assert "MCP 'ctx' transport exit timed out" in caplog.text
         assert "MCP 'ctx' stopped" in caplog.text
 
+    @pytest.mark.parametrize(
+        ("recorded", "now", "killed"),
+        [
+            ("100", "100", True),  # still the server it spawned
+            ("100", "200", False),  # pid reused by another process
+            ("100", "", False),  # gone, or its start time unreadable
+            ("", "100", False),  # start time never read at start
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_stop_deadline_kills_the_server_only_while_its_pid_is_still_it(
+        self, monkeypatch, recorded, now, killed
+    ):
+        # Review of #454, LOW-7: the pid is read at start and used at the
+        # deadline; Windows reuses pids fast, and a tree kill on a reused pid
+        # would end someone else's process — possibly another pane.
+        from agent_team_backend import osplat
+
+        monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.05)
+        monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_GRACE", 0.05)
+        monkeypatch.setattr(osplat.process_tree, "start_time", lambda pid: now)
+        ended = []
+        monkeypatch.setattr(osplat.process_tree, "end_contained", lambda pid: ended.append(pid))
+        client = MCPClient(MCPServerConfig(name="ctx", command="echo"))
+        client._transport_cm = _hanging_exit_cm()
+        client._server_pid = 4242
+        client._server_start = recorded
+
+        await asyncio.wait_for(client.stop(), timeout=1.0)
+
+        assert ended == ([4242] if killed else [])
+
     @pytest.mark.asyncio
     async def test_shutdown_ends_a_startup_whose_failed_server_hangs_in_stop(
         self, tmp_path, caplog
@@ -597,6 +629,18 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def _probe_start_times(monkeypatch) -> None:
+    """Where `ps` cannot run (a sandbox denying setuid binaries, as the local
+    keychain-safe pytest wrapper is), stand in for the start-time probe so the
+    kill path is still exercised; elsewhere, CI included, the real one runs."""
+    from agent_team_backend import osplat
+
+    if not osplat.process_tree.start_time(os.getpid()):
+        monkeypatch.setattr(
+            osplat.process_tree, "start_time", lambda pid: "alive" if _alive(pid) else ""
+        )
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
 @pytest.mark.asyncio
 async def test_stop_deadline_kills_a_stdio_server_that_ignores_eof_and_sigterm(
@@ -607,6 +651,7 @@ async def test_stop_deadline_kills_a_stdio_server_that_ignores_eof_and_sigterm(
     # and anyio's Process.aclose then waited for a second cancel that never
     # came — stop() hung for good and the server lived on.
     monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 1.0)
+    _probe_start_times(monkeypatch)
     script = tmp_path / "server.py"
     script.write_text(_STUBBORN_SERVER)
     pidfile = tmp_path / "pids"
@@ -637,6 +682,7 @@ async def test_cancelled_stop_still_kills_the_server_group(tmp_path, monkeypatch
     # the library's group kill; anyio then killed only the direct child and a
     # grandchild that ignores EOF was left behind.
     monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 1.0)
+    _probe_start_times(monkeypatch)
     script = tmp_path / "server.py"
     script.write_text(_STUBBORN_SERVER)
     pidfile = tmp_path / "pids"

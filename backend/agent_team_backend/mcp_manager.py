@@ -48,6 +48,13 @@ def _stdio_server_pid(transport_cm: Any) -> int | None:
 
     stdio_client does not expose its process; it is a local of the suspended
     generator. Read once at start so a stuck teardown can still kill it.
+
+    This reads a private detail of mcp (checked against 1.30): the async
+    generator behind `stdio_client` and its local named `process`. Should an
+    mcp upgrade rename or restructure either, this returns None — no error —
+    and the deadline only cancels the teardown again instead of also ending
+    the server tree: stop() still returns, but a server that ignores EOF and
+    SIGTERM is then left to the library (and to the backend's own exit).
     """
     frame = getattr(getattr(transport_cm, "gen", None), "ag_frame", None)
     f_locals = getattr(frame, "f_locals", None)
@@ -95,6 +102,7 @@ class MCPClient:
         self._transport_cm: Any = None
         self._session_cm: Any = None
         self._server_pid: int | None = None
+        self._server_start = ""  # the server's start time, to tell a reused pid
         self._lock = asyncio.Lock()
         self.ready = False
 
@@ -129,6 +137,11 @@ class MCPClient:
             self._transport_cm = transport_cm
             if self._config.transport == "stdio":
                 self._server_pid = _stdio_server_pid(transport_cm)
+                if self._server_pid is not None:
+                    # A ps probe on POSIX (5 s cap), so off the event loop.
+                    self._server_start = await asyncio.to_thread(
+                        osplat.process_tree.start_time, self._server_pid
+                    )
             # mcp>=1.27 streamable HTTP yields (read, write, get_session_id),
             # while stdio and SSE yield only (read, write).
             read, write = streams[:2]
@@ -166,6 +179,7 @@ class MCPClient:
         self._session_cm = None
         self._transport_cm = None
         self._server_pid = None
+        self._server_start = ""
         self.ready = False
         log.info("MCP '%s' stopped", self.name)
         if cancelled is not None:
@@ -221,6 +235,14 @@ class MCPClient:
         osplat's end_contained ends: the group on POSIX, the tree on Windows."""
         pid = self._server_pid
         if pid is None:
+            return
+        # Only while the pid is still that server: Windows reuses pids fast,
+        # and a tree kill on a reused one ends someone else's process. A start
+        # time that cannot be read, then or now, leaves it to the library's own
+        # teardown (its Job object on Windows).
+        start = self._server_start
+        if not start or osplat.process_tree.start_time(pid) != start:
+            log.warning("MCP '%s' server %d not ended: no longer the server it started", self.name, pid)
             return
         osplat.process_tree.end_contained(pid)
         log.warning("MCP '%s' server tree %d ended", self.name, pid)
