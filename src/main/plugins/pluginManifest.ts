@@ -43,6 +43,13 @@ export function isManifestV2(manifest: InstalledManifest): manifest is PluginMan
   return manifest.schemaVersion === 2
 }
 
+/** Whether the package has a view (a web page that can reach the network,
+ * R2 MED-6 on #436). A v2 package without `contributes` (backend or agent
+ * tools only, an extension pack) has none; a v1 package is a frontend. */
+export function manifestHasViews(manifest: InstalledManifest): boolean {
+  return !isManifestV2(manifest) || (manifest.contributes?.views.length ?? 0) > 0
+}
+
 /** Namespace projection retained for legacy broker/install callers. */
 export function manifestCapabilities(manifest: InstalledManifest): string[] {
   if (!isManifestV2(manifest)) return manifest.requires

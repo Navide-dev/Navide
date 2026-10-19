@@ -111,6 +111,83 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.26',
+    title: {
+      'zh-TW': '從聊天室喚醒 pane、只接回上次開著的 pane、從檔案或資料夾安裝 Navide 外掛（清楚標示來源）',
+      'en-US': 'Wake a Pane From Its Chat, Resume Only What Was Running, and Install Navide Plugins From a File or Folder — With Their Source Shown',
+      'ja-JP': 'チャットから pane を起動、前回動いていた pane だけを再開、ファイルやフォルダーから Navide プラグインをインストール（提供元を明示）',
+    },
+    features: [
+      {
+        icon: '▶️',
+        name: { 'zh-TW': '從聊天室喚醒', 'en-US': 'Wake from chat', 'ja-JP': 'チャットから起動' },
+        tagline: {
+          'zh-TW': 'pane 不在線上時，按「▶️ 喚醒」把它接回原本的對話；離線時傳的訊息會依序送進去。',
+          'en-US': 'When a pane is offline, press ▶️ 喚醒 to bring it back on its own conversation; what you sent meanwhile goes in, in order.',
+          'ja-JP': 'pane がオフラインのとき「▶️ 喚醒」を押すと元の会話に戻り、その間に送ったメッセージが順番に届きます。',
+        },
+        where: { 'zh-TW': '聊天室 → pane 離線時的回覆', 'en-US': 'Chat → the offline reply', 'ja-JP': 'チャット → オフライン時の返信' },
+      },
+      {
+        icon: '🔁',
+        name: { 'zh-TW': '接續範圍「自動」', 'en-US': 'Resume scope Auto', 'ja-JP': '再開する範囲「自動」' },
+        tagline: {
+          'zh-TW': '只接回上次關閉 Navide 時還在執行的 pane。',
+          'en-US': 'Bring back only the panes still running when Navide last closed.',
+          'ja-JP': '前回 Navide を閉じたときに動いていた pane だけを再開します。',
+        },
+        where: { 'zh-TW': '設定 → 一般 → 恢復範圍', 'en-US': 'Settings → General → Resume scope', 'ja-JP': '設定 → 一般 → 再開する範囲' },
+      },
+      {
+        icon: '📦',
+        name: { 'zh-TW': '從檔案或資料夾安裝', 'en-US': 'Install from a file or folder', 'ja-JP': 'ファイルやフォルダーからインストール' },
+        tagline: {
+          'zh-TW': '從 .vsix 檔案安裝 Navide 外掛，或在開發者模式從資料夾載入；兩者都未經 Navide 審核，畫面會標明。',
+          'en-US': 'Install a Navide plugin from a .vsix file, or load one from a folder in Developer Mode; neither is reviewed by Navide, and it says so.',
+          'ja-JP': '.vsix ファイルから Navide プラグインをインストール、または開発者モードでフォルダーから読み込めます。どちらも Navide の審査を受けておらず、画面に明示されます。',
+        },
+        where: { 'zh-TW': '設定 → Navide 外掛', 'en-US': 'Settings → Navide Plugins', 'ja-JP': '設定 → Navide プラグイン' },
+      },
+    ],
+    highlights: [
+      {
+        'zh-TW': '喚醒：pane 不在線上時，聊天室可以按「▶️ 喚醒」接回原本的對話；離線期間的訊息最多暫存 20 則、30 分鐘，喚醒後依序送進去。絕不會開新對話。',
+        'en-US': 'Wake: a chat can wake an offline pane back onto its own conversation; up to 20 messages from the last 30 minutes are kept and sent in order. It never starts a new conversation.',
+        'ja-JP': '起動：pane がオフラインのとき、チャットから「▶️ 喚醒」で元の会話に戻せます。オフラインの間のメッセージは最大 20 件・30 分まで保留され、起動後に順番に送られます。新しい会話は決して始めません。',
+      },
+      {
+        'zh-TW': '接續範圍「自動」：只接回上次關閉 Navide 時還在執行的 pane。',
+        'en-US': 'Resume scope Auto brings back only the panes still running when Navide last closed.',
+        'ja-JP': '再開する範囲「自動」：前回 Navide を閉じたときにまだ動いていた pane だけを再開します。',
+      },
+      {
+        'zh-TW': '從 .vsix 檔案安裝、開發者模式從資料夾載入；兩者都未經 Navide 審核，對話框會標明，必須勾選了解風險才能同意。自架 Registry 只在開發者模式開著時使用。',
+        'en-US': 'Install a Navide plugin from a .vsix file, or load one from a folder in Developer Mode; neither is reviewed by Navide, the dialog says so, and you must acknowledge the risk. A self-hosted Registry is used only in Developer Mode.',
+        'ja-JP': '.vsix ファイルからのインストールと、開発者モードでのフォルダーからの読み込み。どちらも Navide の審査を受けておらず、ダイアログに明示され、リスクを理解したことを確認しないと同意できません。自前の Registry は開発者モードがオンのときだけ使われます。',
+      },
+      {
+        'zh-TW': '來源標記：每個 Navide 外掛都標示來源與審核狀態；本機或測試套件在 Navide 自己的介面上也有標記。揭露卡也會寫明 Navide 外掛的畫面可以連網。',
+        'en-US': 'Every Navide plugin shows its source and review; local and test packages are also marked in Navide’s own chrome. The disclosure card also says that a Navide plugin’s views can reach the network.',
+        'ja-JP': '提供元の表示：すべての Navide プラグインに提供元と審査の状態が表示され、ローカルやテスト用のパッケージは Navide 自身の画面にも印が付きます。開示カードには、Navide プラグインのビューがネットワークに接続できることも記載されます。',
+      },
+      {
+        'zh-TW': '行為改變：送出後無法確認 CLI 有收到的訊息，會標成「未確認」，不再當成已送達；排程把它記成錯誤。',
+        'en-US': 'Behaviour change: a message Navide cannot confirm the CLI took is reported as unconfirmed, not delivered; a scheduled run records it as an error.',
+        'ja-JP': '動作の変更：CLI が受け取ったことを確認できないメッセージは「未確認」と表示され、送信済みとして扱われなくなりました。スケジュール実行ではエラーとして記録されます。',
+      },
+      {
+        'zh-TW': '揭露總覽移到 設定 → Navide 外掛 頁面最下方。',
+        'en-US': 'The Disclosure overview moved to the bottom of Settings → Navide Plugins.',
+        'ja-JP': '開示の一覧は「設定 → Navide プラグイン」ページの一番下に移りました。',
+      },
+      {
+        'zh-TW': '修正：大結果處理完後 helper 不再一直佔用約 339 MiB；pipeline 中止後可以重新開始；Linux 正式版的 `LD_LIBRARY_PATH` 不再傳給子程序。',
+        'en-US': 'Fixed: the result helper no longer holds ~339 MiB when idle; a pipeline can start again after an abort; the Linux build’s `LD_LIBRARY_PATH` no longer leaks into spawned processes.',
+        'ja-JP': '修正：大きな結果の処理後、helper が約 339 MiB を使い続けなくなりました。中断した pipeline を再び開始できます。Linux 製品版の `LD_LIBRARY_PATH` が子プロセスに渡らなくなりました。',
+      },
+    ],
+  },
+  {
     version: '0.2.25',
     major: true,
     title: {

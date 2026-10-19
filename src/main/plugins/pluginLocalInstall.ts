@@ -14,7 +14,7 @@ import { basename, dirname, join } from 'node:path'
 import { REGISTRY_RECEIPT_NAME, type InstalledTrustDecision } from './pluginInstalledTrust'
 import { readLocalTrustRecord, verifyLocalPackage, type PluginLocalTrustContext } from './pluginLocalTrust'
 import { parseManifestJson } from './pluginManifest'
-import type { PluginSource } from '../../shared/pluginSource'
+import { pluginSourceFromLegacyProvenance, type LegacyPluginProvenance, type PluginSource } from '../../shared/pluginSource'
 import { revealUnsafeLineText } from '../../shared/pluginAgentTools'
 import { nativeBackendConsentText, type NativeBackendConsentPrompt } from './pluginThirdPartyBackends'
 import type { SupportedLocale } from '../hostLocale'
@@ -95,10 +95,28 @@ export function forgetLocalTrustRecords(pluginsRoot: string, pluginId: string, r
   for (const role of roles) rmSync(localTrustRecordPath(pluginsRoot, pluginId, role), { force: true })
 }
 
+/** The source of an installed package for the main-process dialogs below: its
+ * own `source` when a loader set one, else read from its legacy provenance. A
+ * developer folder (K4) carries only `provenance: 'developer-local-unpacked'`,
+ * so reading `source` alone left its dialogs without the unreviewed line. The
+ * pre-release distinction is not needed here: only local sources get a line. */
+export function installedPackageSource(
+  pkg: { provenance?: LegacyPluginProvenance; source?: PluginSource } | undefined,
+): PluginSource | undefined {
+  if (!pkg) return undefined
+  return pkg.source ?? pluginSourceFromLegacyProvenance(pkg.provenance, false)
+}
+
 /** The source line an agent approval names for a package installed from a
- * file, so an unreviewed package's tools never read like a Marketplace one's. */
+ * file or loaded from a developer folder, so an unreviewed package's tools
+ * never read like a Marketplace one's. */
+const AGENT_APPROVAL_SOURCE_NOTE: Partial<Record<PluginSource, string>> = {
+  'local-unsigned': 'Source: a local file, not reviewed by Navide.',
+  'developer-unpacked': 'Source: a developer folder, not reviewed by Navide; its contents can change at any time.',
+}
+
 export function agentApprovalSourceNote(source: PluginSource | undefined): string {
-  return source === 'local-unsigned' ? 'Source: a local file, not reviewed by Navide.' : ''
+  return (source && AGENT_APPROVAL_SOURCE_NOTE[source]) ?? ''
 }
 
 /** The source line the native backend consent puts first in its detail, in
@@ -110,9 +128,18 @@ const LOCAL_SOURCE_CONSENT_LINE: Record<string, string> = {
   'ja-JP': '提供元と審査：ローカルファイル。Navide の審査なし、署名なし',
 }
 
+const DEVELOPER_SOURCE_CONSENT_LINE: Record<string, string> = {
+  'zh-TW': '來源與審核：開發者資料夾，內容隨時可能變動，未經 Navide 審核',
+  'en-US': 'Source and review: Developer folder; its contents can change at any time, not reviewed by Navide',
+  'ja-JP': '提供元と審査：開発者フォルダー。内容はいつでも変わる可能性があります。Navide の審査なし',
+}
+
 export function localSourceConsentLine(source: PluginSource | undefined, locale: string): string {
-  if (source !== 'local-unsigned') return ''
-  return LOCAL_SOURCE_CONSENT_LINE[locale] ?? LOCAL_SOURCE_CONSENT_LINE['en-US']
+  const lines = source === 'local-unsigned'
+    ? LOCAL_SOURCE_CONSENT_LINE
+    : source === 'developer-unpacked' ? DEVELOPER_SOURCE_CONSENT_LINE : undefined
+  if (!lines) return ''
+  return lines[locale] ?? lines['en-US']
 }
 
 /** The native backend consent dialog's text with the package's own name made

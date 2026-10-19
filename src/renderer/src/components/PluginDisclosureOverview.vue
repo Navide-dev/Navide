@@ -23,6 +23,8 @@ interface Entry {
   /** The Host's source; absent (unknown channel) shows no source row, never a guess. */
   source?: PluginSource
   expiresAt?: string
+  /** Whether the package declares views; absent when unknown. */
+  hasViews?: boolean
   report: PluginActivityReport | null
   reportError: string
 }
@@ -114,6 +116,7 @@ onBeforeUnmount(stopPolling)
         :source="entry.source"
         :expires-at="entry.expiresAt"
         :publisher="entry.id.split('.')[0]"
+        :has-views="entry.hasViews"
       />
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>
       <h4>{{ $t('pluginActivity.overview.activity') }}</h4>
