@@ -456,6 +456,9 @@ export interface PreparedInstallSummary {
   trustTier: 'signed-verified' | 'unsigned'
   sensitive: string[]
   containsBackendExecutable: boolean
+  /** R2 MED-6 on #436: the manifest declares views (`contributes.views`); the
+   *  disclosure card says views can reach the network only then. */
+  hasViews?: boolean
   /** Declared agent tools (sorted, timeouts defaulted); absent when none. */
   agentTools?: Array<{
     name: string
@@ -1212,6 +1215,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       source?: PluginSource
       /** Registry-signed expiry; present only when `source` is `testplace`. */
       expiresAt?: string
+      /** Whether the active package declares views (R2 MED-6 on #436). */
+      hasViews?: boolean
     }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
     backendResourceUsage: (): Promise<BackendResourceUsage> =>
       ipcRenderer.invoke('plugins:backendResourceUsage'),

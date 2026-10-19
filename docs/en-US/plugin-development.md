@@ -544,7 +544,10 @@ In a development build (`pnpm dev`), set `AGENT_TEAM_PLUGIN_DEV=1` to expose
 the plugin dev menu, which registers dev descriptors pointing at local build
 output and adds entries for the `noop` and `fs_probe` probe plugins. Packaged
 builds ignore `AGENT_TEAM_PLUGIN_DEV` and `AGENT_TEAM_PLUGIN_DEV_PATH`; a
-packaged app loads plugins only from a Registry install.
+packaged app loads third-party plugins from a Registry install, a file install
+(**Install from .vsix file…**) or a folder loaded with Settings → Navide
+Plugins → Developer Mode (see
+[plugin-development-v2.md](plugin-development-v2.md#backend-trust)).
 
 To load one local unpacked Manifest v2 frontend package, also set
 `AGENT_TEAM_PLUGIN_DEV_PATH` to that exact package directory. Developer Mode
@@ -595,5 +598,7 @@ Two conventions are worth copying:
   the host.
 - Manifest v2 renders `contributes.views` of kind `custom` only and rejects
   `contributes.commands`; there are no menu or keybinding contribution points.
-- Developer Mode cannot open a Manifest v2 view or run a backend; see
-  [Local development](#local-development).
+- The environment-variable Developer Mode (`AGENT_TEAM_PLUGIN_DEV_PATH`)
+  cannot open a Manifest v2 view or run a backend; see
+  [Local development](#local-development). Settings → Navide Plugins →
+  Developer Mode can.

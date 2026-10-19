@@ -169,11 +169,15 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     expect(body).toContain('if (explicitPin) accountFollow.remove(paneId)')
   })
 
-  it('both restore paths send the pin through the same rule', () => {
+  it('both restore paths send the pin through the same rule, once the account dirs are known', () => {
     const uses = appSource.split(
-      'profileId: accountSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn),'
+      'const restorePin = await restoreSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn, restorePinGate(saved.pane_id))'
     ).length - 1
     expect(uses).toBe(2)
+    expect(appSource.split('profileId: restorePin,').length - 1).toBe(2)
+    const gate = functionBody('restorePinGate')
+    expect(gate).toContain('loaded: () => cliProfilesApi.loaded.value,')
+    expect(gate).toContain('load: () => cliProfilesApi.ensureLoaded(),')
   })
 
   it('the account badge reads the account the pane really runs on', () => {

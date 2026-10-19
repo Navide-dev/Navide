@@ -42,7 +42,7 @@ import {
   manifestToInstalledPackageSummary,
   type PluginActivationCatalogEntry,
 } from './installedPlugins'
-import { isManifestV2, parseInstalledManifest } from './pluginManifest'
+import { isManifestV2, manifestHasViews, parseInstalledManifest } from './pluginManifest'
 import { parseManifestJson } from './pluginManifestJson'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
@@ -750,6 +750,18 @@ export function registerPluginIpc(
       return null
     }
   }
+  /** R2 MED-6 on #436: whether the active package has views, for the
+   *  disclosure card; absent when its manifest cannot be read. */
+  const activeHasViews = (id: string): { hasViews?: boolean } => {
+    const active = lifecycleSelector.read(id)?.active
+    if (!active) return {}
+    try {
+      const dir = lifecycleSelector.packageDir(id, active)
+      return { hasViews: manifestHasViews(parseInstalledManifest(parseManifestJson(readFileSync(join(dir, 'manifest.json'), 'utf8')))) }
+    } catch {
+      return {}
+    }
+  }
   const updateDisclosureDiff = (pkg: PreparedInstall): DisclosureDiff | null => {
     if (!isManifestV2(pkg.manifest)) return null
     const from = activeDisclosure(pkg.id)
@@ -1073,6 +1085,7 @@ export function registerPluginIpc(
     scan: ScanReport | null
     source?: PluginSource
     expiresAt?: string
+    hasViews?: boolean
   }> => {
     assertAuthorized(event)
     return manager.listInstalledPackages()
@@ -1081,6 +1094,7 @@ export function registerPluginIpc(
         id: pkg.id,
         version: pkg.packageVersion!,
         disclosure: activeDisclosure(pkg.id),
+        ...activeHasViews(pkg.id),
         scan: installScans.get(pkg.id, pkg.packageVersion!),
         ...sourceFields(pkg),
       }))
@@ -1810,6 +1824,7 @@ export function registerPluginIpc(
         trustTier: result.trustTier,
         sensitive: result.sensitive,
         containsBackendExecutable: result.containsBackendExecutable,
+        hasViews: manifestHasViews(result.manifest),
         ...(agentTools.length > 0 ? { agentTools } : {}),
         requiresConfirmation: result.requiresConfirmation,
         publisherId: result.publisherId,
@@ -2176,6 +2191,7 @@ export function registerPluginIpc(
       trustTier: pkg.trustTier,
       sensitive: pkg.sensitive,
       containsBackendExecutable: pkg.containsBackendExecutable,
+      hasViews: manifestHasViews(pkg.manifest),
       ...(agentTools.length > 0 ? { agentTools } : {}),
       requiresConfirmation: true,
       publisherId: pkg.publisherId,
@@ -2353,6 +2369,7 @@ export function registerPluginIpc(
         trustTier: 'unsigned',
         sensitive: sensitiveCapabilities(manifestCapabilities(manifest)),
         containsBackendExecutable: manifest.backend !== undefined,
+        hasViews: manifestHasViews(manifest),
         ...(disclosure.agentTools.length > 0 ? { agentTools: disclosure.agentTools } : {}),
         requiresConfirmation: true,
         publisherId: manifest.publisher,

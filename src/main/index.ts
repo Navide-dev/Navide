@@ -62,7 +62,7 @@ import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
 import { localTakedownDecision } from './plugins/pluginLocalTrust'
-import { agentApprovalSourceNote, nativeBackendConsentDialog } from './plugins/pluginLocalInstall'
+import { agentApprovalSourceNote, installedPackageSource, nativeBackendConsentDialog } from './plugins/pluginLocalInstall'
 import { revealUnsafeLineText } from '../shared/pluginAgentTools'
 import {
   BackendPluginError,
@@ -1298,7 +1298,7 @@ async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): P
   const { title, message, detail, buttons } = nativeBackendConsentDialog(
     prompt,
     currentUiLocale(),
-    frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
+    installedPackageSource(frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)),
   )
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
@@ -1340,14 +1340,14 @@ async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Prom
     message: [
       // Card K3: the source first, then package text with nothing hidden in it.
       agentApprovalSourceNote(
-        frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
+        installedPackageSource(frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)),
       ),
       `An agent asked to use "${revealUnsafeLineText(prompt.tool.title)}" (${revealUnsafeLineText(prompt.tool.name)}) of ${revealUnsafeLineText(prompt.name)} ${revealUnsafeLineText(prompt.packageVersion)}, which changes files. Allow agents to do this in this workspace?`,
     ].filter(Boolean).join('\n'),
     detail: [
       // Card K3: an unreviewed package's tool says where it came from.
       agentApprovalSourceNote(
-        frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
+        installedPackageSource(frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)),
       ),
       prompt.workspacePath,
       'The agent, not you, started this. You are asked again after an update or a new permission.',

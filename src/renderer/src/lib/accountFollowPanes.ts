@@ -110,6 +110,36 @@ export function accountSpawnPin(
   return pin
 }
 
+/** Where a restore learns whether the account dirs are known yet. */
+export interface AccountDirsGate {
+  /** True once cli_profiles.list has answered. */
+  loaded: () => boolean
+  /** Settles when the list has answered or failed (the request's own timeout). */
+  load: () => Promise<void>
+  /** Called when the list could still not be read: the pin goes out as on main. */
+  disclose: (pin: string) => void
+}
+
+/**
+ * accountSpawnPin for a restore, which can run before cli_profiles.list has
+ * answered. Until then every account dir reads as not signed in, so a
+ * following pane would send its saved pin and the backend — which does know
+ * the dir is signed in — would put the pane in that account's dir. Only a
+ * following pane with a pin is decided by the dirs, so only it waits.
+ */
+export async function restoreSpawnPin(
+  pin: string | undefined,
+  following: boolean,
+  dirSignedIn: (id: string) => boolean,
+  gate: AccountDirsGate,
+): Promise<string | undefined> {
+  if (pin && pin !== DEFAULT_SLOT_ID && following && !gate.loaded()) {
+    await gate.load()
+    if (!gate.loaded()) gate.disclose(pin)
+  }
+  return accountSpawnPin(pin, following, dirSignedIn)
+}
+
 /** A pane fixed to its account: not following, and pinned to an account
  *  signed in inside its own dir (so it runs there). */
 export function isAccountFixed(

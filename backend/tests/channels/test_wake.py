@@ -293,6 +293,24 @@ async def test_a_wake_press_after_the_pane_came_back_sends_what_was_kept(env: En
     assert env.fake.delivered[-1][:2] == ("pane-1", "kept while offline")
 
 
+async def test_a_typed_wake_for_an_online_pane_is_answered_not_sent_to_the_cli(env: Env) -> None:
+    # A platform without buttons is told to type /wake; the pane may come back before it is sent.
+    fw = FakeWake(env).install()
+    for text in ("/wake", "/wake@navide_bot"):
+        await env.inbound(text)
+        assert env.tg.texts()[-1] == _zh("already_online")
+    assert env.fake.delivered == [] and fw.calls == []
+
+
+async def test_a_typed_wake_after_the_pane_came_back_sends_what_was_kept(env: Env) -> None:
+    fw = _wakeable(env)
+    await env.inbound("kept while offline")
+    env.fake.gone.discard("pane-1")  # back on its own
+    await env.inbound("/wake")
+    assert env.tg.texts()[-1] == _zh("already_online") and fw.calls == []
+    assert [d[1] for d in env.fake.delivered] == ["kept while offline"]
+
+
 async def test_a_pane_back_on_its_own_gets_the_kept_messages_first(env: Env) -> None:
     _wakeable(env)
     await env.inbound("old one")
