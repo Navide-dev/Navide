@@ -52,6 +52,7 @@ def test_permanent_allow_wording() -> None:
         "Always allow Bash(rm:*)",
         "Yes, and do not ask again",
         "Auto-accept edits",
+        "Yes, and switch to auto mode · auto mode handles these prompts for",
         "是，並且不再詢問",
         "一律允許",
         "自動核准",

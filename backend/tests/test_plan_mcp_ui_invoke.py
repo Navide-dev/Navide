@@ -1037,3 +1037,60 @@ async def test_the_chat_relay_still_presses_keys_through_its_internal_path(
     assert result == {"ok": True}
     _session, event = addressed[0]
     assert event["payload"]["action"] == "ui.pane.sendKeys"
+
+
+# ── a withdrawn sign-in request closes its confirmation (review #438 LOW-1) ──
+
+
+async def _pending_request_id() -> str:
+    for _ in range(200):
+        keys = list(plan_mcp._ui_invoke_pending.pending)
+        if keys:
+            return keys[0]
+        await asyncio.sleep(0.005)
+    raise AssertionError("no pending ui.invoke request appeared")
+
+
+def _withdrawals(events: list[dict[str, Any]]) -> list[str]:
+    return [e["payload"]["request_id"] for e in events if e["type"] == "ui.invoke.cancel"]
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_sign_in_request_is_withdrawn_from_the_window(broadcasts: list[dict[str, Any]]) -> None:
+    task = asyncio.create_task(plan_mcp._ui_request("/ws/alpha", "invoke", action="ui.accounts.signIn", args={}))
+    request_id = await _pending_request_id()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert _withdrawals(broadcasts) == [request_id]
+
+
+@pytest.mark.asyncio
+async def test_a_timed_out_sign_in_request_is_withdrawn_from_the_window(
+    monkeypatch: pytest.MonkeyPatch, broadcasts: list[dict[str, Any]],
+) -> None:
+    monkeypatch.setattr(plan_mcp, "_UI_INVOKE_SLOW_TIMEOUT_S", 0.05)
+    result = await plan_mcp._ui_request("/ws/alpha", "invoke", action="ui.accounts.signIn", args={})
+    assert result["ok"] is False
+    for _ in range(20):
+        await asyncio.sleep(0)
+    [request] = [e for e in broadcasts if e["type"] == "ui.invoke.request"]
+    assert _withdrawals(broadcasts) == [request["payload"]["request_id"]]
+
+
+@pytest.mark.asyncio
+async def test_other_actions_are_never_withdrawn(
+    monkeypatch: pytest.MonkeyPatch, broadcasts: list[dict[str, Any]],
+) -> None:
+    monkeypatch.setattr(plan_mcp, "_UI_INVOKE_TIMEOUT_S", 0.05)
+    await plan_mcp._ui_request("/ws/alpha", "invoke", action="editor.save", args={})
+    task = asyncio.create_task(plan_mcp._ui_request("/ws/alpha", "invoke", action="editor.save", args={}))
+    await _pending_request_id()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert _withdrawals(broadcasts) == []
