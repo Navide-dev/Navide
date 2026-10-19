@@ -11556,6 +11556,76 @@ describe('first-party Git private bridge', () => {
     }
   })
 
+  it('rechecks the agent policy for a plugin-scoped web call instead of default-allowing it', async () => {
+    const mgr = new FrontendPluginManager()
+    const pluginId = 'acme.plugin-web'
+    const packageVersion = '1.0.0'
+    const view: NonNullable<PluginLaunchDescriptor['views']>[number] = {
+      id: 'main',
+      contributionKey: `${pluginId}.main`,
+      kind: 'custom',
+      location: 'main',
+      title: 'Plugin Web',
+      entryFile: '/plugins/acme.plugin-web/index.html',
+    }
+    const context: HostCapabilityContext = {
+      publisherEligible: false,
+      userGrant: { packageVersion, system: ['web'] },
+      runtimeBinding: {
+        pluginId,
+        packageVersion,
+        workspaceId: null,
+        instanceId: null,
+        audience: view.contributionKey,
+      },
+    }
+    const descriptor: PluginLaunchDescriptor = {
+      id: pluginId,
+      packageVersion,
+      packageDir: process.cwd(),
+      requires: ['web'],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['web'] }),
+      capabilityContext: context,
+      devUrl: '',
+      entryFile: view.entryFile,
+      views: [view],
+    }
+    mgr.registerDescriptor(descriptor)
+    let reads = 0
+    mgr.setExecutionPolicyResolver((): ExecutionPolicySnapshot => {
+      reads += 1
+      return reads === 1
+        ? { policy: { schemaVersion: 1, mode: 'allowlist', system: ['web'], shell: [] }, revision: 1, state: 'user' }
+        : { policy: { schemaVersion: 1, mode: 'denylist', system: [], shell: [] }, revision: 2, state: 'user' }
+    })
+    const handler = vi.fn()
+    mgr.setPublicCapabilityHandler(handler)
+    const host = new FakeBrowserWindow()
+
+    try {
+      const handle = await mgr.openView(descriptor, view, {
+        hostWindow: asHost(host),
+        bounds: 'fill',
+        capabilityContext: context,
+      })
+
+      await expect(mgr.executeAgentCapability(handle.instanceId, {
+        reqId: 'agent-plugin-web-1',
+        ns: 'web',
+        method: 'list',
+        args: {},
+      })).resolves.toMatchObject({
+        reqId: 'agent-plugin-web-1',
+        ok: false,
+        error: { code: 'CAPABILITY_DENIED', message: 'agent execution policy denied the operation' },
+      })
+      expect(reads).toBe(2)
+      expect(handler).not.toHaveBeenCalled()
+    } finally {
+      await mgr.closeBackendPlugins()
+    }
+  })
+
   it('denies Git storage writes outside the approved preference ownership', async () => {
     const { mgr, view } = await openGitView()
     const executions: unknown[] = []

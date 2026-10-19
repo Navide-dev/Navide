@@ -792,11 +792,15 @@ function isApprovedBridgePortList(value: unknown): value is readonly PlansBridge
  * Ports without an established policy namespace remain unavailable to agents
  * until a later contract assigns one explicitly. */
 function executionPolicyNamespaceForBridgePort(
-  port: PlansBridgePort,
+  // `web` is mapped ahead of the port itself so the namespace is never left
+  // without an explicit policy decision once the port is admitted.
+  port: PlansBridgePort | 'web',
 ): PluginSystemNamespace | 'shell' | undefined {
   switch (port) {
     case 'filesystem':
       return 'fs'
+    case 'web':
+      return 'web'
     case 'shell':
       // The agent shell policy is judged on the command itself, like shell.run.
       return 'shell'
