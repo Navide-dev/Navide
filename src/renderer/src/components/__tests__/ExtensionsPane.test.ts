@@ -302,6 +302,26 @@ describe('ExtensionsPane', () => {
     expect(wrapper.find('.ext-store-unreadable').exists()).toBe(false)
   })
 
+  // Decision d5: a local install whose file Navide blocked keeps a label naming the reason.
+  it('labels a local install whose file Navide blocked, by reason', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.one', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: 'qualification-revoked' }, disabled: false },
+        { id: 'acme.two', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: null }, disabled: true },
+        { id: 'acme.three', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: 'developer-withdrawn' }, disabled: false },
+        { id: 'acme.four', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned' },
+      ]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const badge = (id: string) => wrapper!.find(`[data-id="${id}"] .ext-digest-blocked-badge`)
+    expect(badge('acme.one').text()).toBe('Developer qualification revoked')
+    expect(badge('acme.two').text()).toBe('Blocked by Navide')
+    expect(badge('acme.two').attributes('data-reason')).toBe('none')
+    expect(badge('acme.three').text()).toBe('Withdrawn by its developer')
+    expect(badge('acme.four').exists()).toBe(false)
+  })
+
   it('offers no Uninstall for a Marketplace copy of a built-in', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
