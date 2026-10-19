@@ -1536,7 +1536,7 @@ the Bridge port `web`. The port maps to the `web` Execution Policy namespace.
 
 | Operation | Arguments → result | Rule |
 |---|---|---|
-| `list` | `{}` → `{views}` | |
+| `list` | `{}` → `{views}` | A view whose `owner` is `user` is listed with `url` and `title` empty and no `note`: the agent learns that the user's Space exists and who controls it, not what is open in it. `web.list` in the package UI is unredacted |
 | `create` | `{space, url?}` → `{viewId}` | `owner` and `control` are `agent`, `state` is `running`; the view runs in the background, unattached and without background throttling |
 | `close` | `{viewId}` | Only a view whose `owner` is `agent` |
 | `cdp` | `{viewId, method, params?}` → `{result}` | One Chrome DevTools Protocol command (`Domain.method`, at most 128 characters; `params` a plain object) from the Host allowlist (see [Host-enforced boundaries](#host-enforced-boundaries)); any other method is `CAPABILITY_DENIED`. The debugger attaches to that one view only. Refused with `USER_IN_CONTROL` while `owner` or `control` is `user`, with `reason` `user-owned`, `manual_takeover` or `permission` |

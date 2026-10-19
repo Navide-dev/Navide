@@ -1,7 +1,15 @@
 import type { JsonValue } from '../../../packages/plugin-contracts/src/index'
 import { PlansBridgeError } from './plansBridge'
 import { WebViewError, type PluginWebViewRegistry } from './pluginWebViews'
-import { validateWebBridgeRequest, type WebViewState } from './webCapability'
+import { validateWebBridgeRequest, type WebViewInfo, type WebViewState } from './webCapability'
+
+/** What the agent may see of a view: a user-owned Space shows that it exists
+ *  and who controls it, never where the user is or what the page is called. */
+function agentView(view: WebViewInfo): WebViewInfo {
+  if (view.owner !== 'user') return view
+  const { note: _note, ...rest } = view
+  return { ...rest, url: '', title: '' }
+}
 
 /** The native backend's `web` Bridge port. `pluginId` is the Host-authenticated
  *  backend binding's, never an argument; the registry keeps the backend inside
@@ -16,7 +24,7 @@ export async function dispatchWebBridge(
   try {
     switch (operation) {
       case 'list':
-        return { views: registry.list(pluginId) } as unknown as JsonValue
+        return { views: registry.list(pluginId).map(agentView) } as unknown as JsonValue
       case 'create':
         return registry.create(pluginId, {
           space: String(args.space),

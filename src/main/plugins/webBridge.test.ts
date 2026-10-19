@@ -92,6 +92,23 @@ describe('dispatchWebBridge', () => {
     expect(registry.list('acme.web')).toEqual([])
   })
 
+  it('lists a user-owned Space without its URL, title or note', async () => {
+    const { registry, guests } = setup()
+    const user = registry.create('acme.web', { space: 'mine', url: 'https://mail.example.com/inbox' }, 'user')
+    guests[0]!.webContents.getURL = () => 'https://mail.example.com/inbox/secret-thread'
+    guests[0]!.webContents.getTitle = () => 'Secret thread - Mail'
+    const agent = await dispatchWebBridge(registry, 'acme.web', 'create', { space: 'task' }) as { viewId: string }
+    guests[1]!.webContents.getURL = () => 'https://example.com/task'
+    guests[1]!.webContents.getTitle = () => 'Task'
+    registry.setState('acme.web', agent.viewId, 'running', 'Reading')
+    const listed = await dispatchWebBridge(registry, 'acme.web', 'list', {}) as { views: Array<Record<string, unknown>> }
+    expect(listed.views).toEqual([
+      { viewId: user.viewId, space: 'mine', owner: 'user', control: 'user', state: 'idle', url: '', title: '', loading: false, attached: false },
+      expect.objectContaining({ viewId: agent.viewId, owner: 'agent', url: 'https://example.com/task', title: 'Task', note: 'Reading' }),
+    ])
+    expect(registry.list('acme.web')[0]).toMatchObject({ url: 'https://mail.example.com/inbox/secret-thread', title: 'Secret thread - Mail' })
+  })
+
   it('refuses invalid requests and another plugin\'s views', async () => {
     const { registry } = setup()
     const { viewId } = await dispatchWebBridge(registry, 'acme.web', 'create', { space: 'task' }) as { viewId: string }
