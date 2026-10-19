@@ -2361,6 +2361,58 @@ describe('PluginBackendSupervisor', () => {
       })
     }
 
+    // TEMP DIAGNOSTIC (removed before review): per-phase timing of the same-ID B setup.
+    async function diagSameIdB(): Promise<Record<string, number>> {
+      const t: Record<string, number> = {}
+      let last = performance.now()
+      const mark = (name: string): void => { const now = performance.now(); t[name] = Math.round((now - last) * 10) / 10; last = now }
+      const root = mkdtempSync(join(tmpdir(), 'navide-backend-selector-diag-'))
+      mark('mkdtemp')
+      try {
+        generateKeyPairSync('ed25519'); generateKeyPairSync('ed25519'); generateKeyPairSync('ed25519'); generateKeyPairSync('ed25519')
+        mark('keygen4')
+        const a = signedBackendFixture(root, '1.0.0')
+        mark('fixtureA')
+        const b = signedBackendFixture(root, '2.0.0')
+        mark('fixtureB')
+        const selector = new PluginActivationSelector(root)
+        selector.stageCandidate('acme.backend', a.selection)
+        mark('stage')
+        selector.activateCandidate('acme.backend')
+        mark('activate')
+        selector.completeActivation('acme.backend')
+        mark('complete')
+        const spawnCount = { value: 0 }
+        const supervisor = selectorSupervisor(root, { ...activation, packageVersion: b.selection.packageVersion, packageDir: b.packageDir }, spawnCount, a.trust)
+        await expect(supervisor.start()).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE' })
+        mark('start')
+        await supervisor.close()
+        mark('close')
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+        mark('rm')
+      }
+      return t
+    }
+
+    it('TEMP DIAG same-ID B phase timings, idle and under disk-flush pressure', async () => {
+      for (let i = 0; i < 3; i += 1) console.log('DIAG idle', JSON.stringify(await diagSameIdB()))
+      const stressDir = mkdtempSync(join(tmpdir(), 'navide-diag-stress-'))
+      const stress = spawn(process.execPath, ['-e', `
+        const fs = require('node:fs'); const path = require('node:path'); const buf = Buffer.alloc(8 * 1024 * 1024, 7);
+        let n = 0; const end = Date.now() + 60000;
+        while (Date.now() < end) { const f = path.join(process.argv[1], 'w' + (n++ % 4)); const fd = fs.openSync(f, 'w'); for (let k = 0; k < 8; k += 1) fs.writeSync(fd, buf); fs.fsyncSync(fd); fs.closeSync(fd); }
+      `, stressDir], { stdio: 'ignore' })
+      try {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 2000))
+        for (let i = 0; i < 5; i += 1) console.log('DIAG stress', JSON.stringify(await diagSameIdB()))
+      } finally {
+        stress.kill()
+        await new Promise((resolveExit) => stress.once('exit', resolveExit))
+        rmSync(stressDir, { recursive: true, force: true })
+      }
+    }, 120_000)
+
     it('rejects a signed same-ID B launch when selector A is active without spawning', async () => {
       const root = mkdtempSync(join(tmpdir(), 'navide-backend-selector-admission-'))
       try {
