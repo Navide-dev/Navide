@@ -1296,8 +1296,12 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
         acc.hit("critical", "cloud-destroy", f"{word} deletes cloud resources")
         return
     if word in DOWNLOADERS:
+        # A download's output file is graded exactly like `>` into it.
         for a in _download_outputs(word, args):
-            _store_arg(acc, a, ctx)
+            for cand in _arg_paths(a) or ([a] if not a.startswith("-") else []):
+                path = _resolve(cand, ctx)
+                if path:
+                    _check_path(acc, path, ctx, write=True)
         _classify_upload(word, args, ctx, acc)
         return
     # Generic: any path-like argument that names a credential store or a
