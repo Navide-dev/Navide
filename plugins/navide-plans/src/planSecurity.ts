@@ -25,11 +25,17 @@ function stripExecutableScripts(content: string): string {
 // past its `>`, or -1 when input runs out first. A quoted value may hold `>`,
 // so the first `>` is not always the end. Only an `=` after an attribute name
 // opens a value; one where a name belongs starts that name instead.
-function startTagEnd(html: string, from: number): number {
+// `seen` marks each (position, afterName) a read has passed. Every read from
+// one of them ends the same way, and a read that ran into an earlier one could
+// only have failed, so later reads stop there and the whole strip stays linear.
+function startTagEnd(html: string, from: number, seen: Uint8Array): number {
   const space = '\t\n\f\r '
   let afterName = false
   let i = from
   while (i < html.length) {
+    const state = afterName ? 2 : 1
+    if (seen[i] & state) return -1
+    seen[i] |= state
     const c = html[i++]
     if (c === '>') return i
     if (c === '/') {
@@ -70,13 +76,15 @@ function isRefreshMeta(tag: string): boolean {
 // side then cannot join into a new tag, so one pass is enough.
 function stripMetaRefresh(html: string): string {
   const meta = /<meta(?=[\t\n\f\r />])/gi
+  let seen: Uint8Array | undefined
   let out = ''
   let kept = 0
   for (let m = meta.exec(html); m; m = meta.exec(html)) {
-    const end = startTagEnd(html, m.index + 5)
-    // A tag that never ends swallows the rest of the document; drop that rest
-    // as the parser does, so nothing in it is left unchecked.
-    if (end === -1) return out + html.slice(kept, m.index)
+    seen ??= new Uint8Array(html.length)
+    const end = startTagEnd(html, m.index + 5, seen)
+    // A `<meta` that never ends may be only text (a comment, an attribute
+    // value): leave it and read on from the next one.
+    if (end === -1) continue
     if (isRefreshMeta(html.slice(m.index, end))) {
       out += html.slice(kept, m.index) + '<meta>'
       kept = end

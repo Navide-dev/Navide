@@ -192,6 +192,18 @@ describe('preparePlanDocHtml', () => {
     expect(html).not.toContain('attacker.invalid')
   })
 
+  // A `<meta` that is only text (a comment, an attribute value, a textarea)
+  // may never close its quote; everything after it is still the document.
+  it.each([
+    ['a comment', '<!-- <meta x=" --><p>after</p>'],
+    ['an attribute value', '<p title=\'<meta x="\'>after</p>'],
+    ['a textarea', '<textarea><meta a="</textarea><p>after</p>'],
+  ])('keeps what follows a never-ending <meta in %s', (_name, body) => {
+    const html = prepare(`<body>${body}<meta http-equiv=refresh content=0;url=https://attacker.invalid/r></body>`)
+    expect(html).toContain(body)
+    expect(html).not.toContain('attacker.invalid')
+  })
+
   // The browser reads `<me<meta>` as one unknown tag, so what surrounds a
   // removed meta refresh never becomes a meta refresh or a script of its own.
   it('leaves a bare meta where a refresh was, so its neighbours cannot join', () => {
