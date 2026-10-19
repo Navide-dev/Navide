@@ -1200,13 +1200,16 @@ async def _measured_pieces_call(monkeypatch) -> _Measured:
     from tests.test_agent_tool_chunked_transport import _loop_step_times
 
     text_frame = worker.ResultWorker._text_frame
-    returned: list[float] = []
-    last_decoded: list[float] = []
+    steps: list[tuple[float, float]] = []
+    # (index of the step, its CPU clock then): steps are told apart by index,
+    # as the CPU clock ticks in 15.625 ms on Windows and many steps share a tick.
+    returned: list[tuple[int, float]] = []
+    last_decoded: list[int] = []
 
     async def timed_text_frame(stream: Any) -> str:
         text = await text_frame(stream)
         # Still the step that joined the text: a return hands nothing back.
-        returned.append(time.thread_time())
+        returned.append((len(steps), time.thread_time()))
         return text
 
     def decoder_factory(encoding: str) -> Any:
@@ -1219,7 +1222,7 @@ async def _measured_pieces_call(monkeypatch) -> _Measured:
                 def decode(self, data: bytes, final: bool = False) -> str:
                     text = inner.decode(data, final)
                     if final:
-                        last_decoded.append(time.thread_time())
+                        last_decoded.append(len(steps))
                     return text
 
             return Timed()
@@ -1228,17 +1231,18 @@ async def _measured_pieces_call(monkeypatch) -> _Measured:
 
     monkeypatch.setattr(worker.ResultWorker, "_text_frame", staticmethod(timed_text_frame))
     monkeypatch.setattr(worker, "codecs", types.SimpleNamespace(getincrementaldecoder=decoder_factory))
-    result, steps = await _loop_step_times(monkeypatch, proxy.call("devmap_read", {}, None))
+    result, _ = await _loop_step_times(monkeypatch, proxy.call("devmap_read", {}, None), steps)
     monkeypatch.setattr(worker.ResultWorker, "_text_frame", text_frame)
     monkeypatch.setattr(worker, "codecs", codecs)
     times: list[float] = []
     excused: list[float] = []
     join_alone = False
-    for started, ended in steps:
-        if len(returned) == 1 and started <= returned[0] <= ended:
-            excused.append(returned[0] - started)
-            join_alone = len(last_decoded) == 1 and last_decoded[0] < started
-            started = returned[0]
+    for index, (started, ended) in enumerate(steps):
+        for step, at in returned:
+            if step == index:
+                excused.append(at - started)
+                join_alone = len(last_decoded) == 1 and last_decoded[0] < index
+                started = at
         times.append(ended - started)
     return _Measured(result, times, excused, len(returned), join_alone)
 
