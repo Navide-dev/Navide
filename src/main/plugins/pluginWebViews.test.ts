@@ -435,6 +435,15 @@ describe('agent script since load', () => {
     expect(registry.list('navide.browser')[0]).toMatchObject({ control: 'user', state: 'need-action' })
   })
 
+  it('does not reload on an agent hand-off when the agent ran no script in the page', async () => {
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
+    await registry.cdp('navide.browser', viewId, 'Input.insertText', { text: 'a' })
+    registry.setState('navide.browser', viewId, 'need-action', 'Sign in')
+    expect(views[0].webContents.reloads).toBe(0)
+    expect(registry.list('navide.browser')[0]).toMatchObject({ control: 'user', state: 'need-action', agentScriptSinceLoad: false })
+  })
+
   it('never reloads when the user takes over by clicking, typing or the take-over button', async () => {
     const { registry, views, sessions } = setup()
     const takeovers: Array<(viewId: string, contents: (typeof views)[number]['webContents']) => void> = [
