@@ -281,8 +281,10 @@ class ResultWorker:
         if process is not None:
             # It exited since the last request, before its idle stop: end what
             # it left (its own job, once) before a new helper takes its place.
-            # No state change, as before. Without a job (POSIX) its pid is the
-            # group to end; a pid alive again is another process's by now.
+            # It adds no state change of its own: a start that then fails is
+            # heard as `unavailable` alone (main sent a transient `idle` first).
+            # Without a job (POSIX) its pid is the group to end; a pid alive
+            # again is another process's by now.
             job, loose = self._job, self._loose
             self._process, self._job, self._loose = None, None, None
             if job is not None or loose is not None or not osplat.process_tree.is_alive(process.pid):
@@ -494,7 +496,8 @@ def _kill_tree(process: asyncio.subprocess.Process) -> None:
         if loose is not None:
             # No job of its own: a job table entry for its pid is someone
             # else's (a pane spawned onto it), so only the pid's tree is
-            # killed, and only while that pid is still this helper.
+            # killed, and only while that pid is still this helper. A start
+            # time that could not be read leaves it to its parent watchdog.
             if loose and osplat.process_tree.start_time(process.pid) == loose:
                 osplat.process_tree.kill_tree(process.pid, force=True)
             return

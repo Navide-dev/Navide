@@ -1528,6 +1528,47 @@ async def test_a_helper_that_died_while_idle_has_its_group_ended_only_while_its_
     proxy._result_worker.stop()  # noqa: SLF001
 
 
+async def test_a_helper_that_died_while_idle_then_fails_to_restart_is_heard_as_unavailable_alone(monkeypatch) -> None:
+    """The dead helper is ended before the new start, so a start that fails
+    is heard as `unavailable` with no transient `idle` before it (main sent
+    `idle` first, from stop() finding the dead helper still in place)."""
+    import asyncio
+
+    from agent_team_backend import agent_tool_result_worker as worker
+    from agent_team_backend import osplat
+    from agent_team_backend.osplat import _posix
+
+    proxy._result_worker.stop()  # noqa: SLF001
+    for leftover in list(worker._stopping):  # noqa: SLF001
+        worker._kill_tree(leftover)  # noqa: SLF001
+    tree = _posix.PosixProcessTree()
+    ended: list[int] = []
+    monkeypatch.setattr(tree, "end_contained", lambda pid, job=None: ended.append(pid))
+    monkeypatch.setattr(tree, "is_alive", lambda pid: False)
+    monkeypatch.setattr(osplat, "process_tree", tree)
+    proxy._result_worker._start_failed = None  # noqa: SLF001
+    entry = _devmap_tool(monkeypatch)
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    first = proxy._result_worker._process  # noqa: SLF001
+    assert first is not None and proxy._result_worker.state == "ready"  # noqa: SLF001
+    first.kill()
+    await asyncio.wait_for(first.wait(), 10)
+    states: list[str] = []
+    monkeypatch.setattr(proxy._result_worker, "on_state", lambda snap: states.append(snap["state"]))  # noqa: SLF001
+
+    async def refuse(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("spawn refused")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", refuse)
+    with pytest.raises(worker.ResultWorkerUnavailable):
+        await proxy._result_worker.wrap(entry, ["{}"])  # noqa: SLF001
+    assert states == ["unavailable"]
+    assert ended == [first.pid]
+    proxy._result_worker._start_failed = None  # noqa: SLF001
+
+
 async def test_on_windows_the_helper_does_not_inherit_the_backend_stderr(monkeypatch) -> None:
     """Windows: an inherited stderr is duplicated from the backend's standard
     handle, which another thread may be swapping at that moment (WinError 6)."""
