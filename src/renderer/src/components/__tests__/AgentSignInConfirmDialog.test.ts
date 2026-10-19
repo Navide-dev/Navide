@@ -19,15 +19,16 @@ const request: AgentSignInConfirmRequest = {
   callerName: 'builder​',
   workspacePath: '/Users/me/project',
   reason: 'quota ran out‮ on the active account',
+  reasonTruncated: false,
   confirmBy: Date.now() + 45_000,
 }
 
 let wrapper: VueWrapper | undefined
 afterEach(() => { wrapper?.unmount(); wrapper = undefined })
 
-function render(): VueWrapper {
+function render(over: Partial<AgentSignInConfirmRequest> = {}): VueWrapper {
   wrapper = mount(AgentSignInConfirmDialog, {
-    props: { request },
+    props: { request: { ...request, ...over } },
     global: { plugins: [i18n] },
     attachTo: document.body,
   })
@@ -55,6 +56,13 @@ describe('AgentSignInConfirmDialog', () => {
     expect(dialog.text()).toContain(i18n.global.t('settings.accounts.cli.agent-login-confirm-reason'))
     expect(dialog.get('[data-testid="signin-confirm-reason"]').text())
       .toBe('quota ran out\\u{202e} on the active account')
+  })
+
+  it('says when the backend cut the reason, and only then (review #438 LOW-2)', () => {
+    const note = i18n.global.t('settings.accounts.cli.agent-login-confirm-reason-truncated')
+    expect(render().text()).not.toContain(note)
+    wrapper!.unmount()
+    expect(render({ reasonTruncated: true }).get('[data-testid="signin-confirm-truncated"]').text()).toBe(note)
   })
 
   it('answers yes only from the confirm button', async () => {

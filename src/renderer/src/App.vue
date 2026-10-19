@@ -10831,7 +10831,7 @@ useUiActionBus({
 // Nothing opens until the user says yes in AgentSignInConfirmDialog (review
 // #433 LOW-3); the user's own sign-in from Settings never comes through here.
 const agentSignInConfirm = createSignInConfirm()
-async function agentSignIn(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
+async function agentSignIn(args: Record<string, unknown>, callerPaneId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const agentKey = String(args.agentKey ?? '')
   const profileId = String(args.profileId ?? '')
   const outcome = await runAgentSignIn(args, callerPaneId, {
@@ -10851,7 +10851,7 @@ async function agentSignIn(args: Record<string, unknown>, callerPaneId: string):
       return loginPaneId && loginPaneId !== before ? loginPaneId : undefined
     },
     now: () => Date.now(),
-  })
+  }, signal)
   if (outcome.status !== 'started') return outcome
   const caller = panes.value.find((p) => p.id === callerPaneId)
   notifyRestore.toast(

@@ -96,6 +96,8 @@ export interface AgentSignInConfirmRequest {
   /** Where the sign-in pane opens: the calling pane's workspace. */
   workspacePath: string
   reason: string
+  /** The backend cut the reason to its length cap; the dialog says so. */
+  reasonTruncated: boolean
   /** Epoch ms after which a yes no longer counts (the backend's deadline). */
   confirmBy: number
 }
@@ -104,23 +106,29 @@ export type AgentSignInConfirmAnswer = 'confirmed' | 'declined' | 'expired' | 'b
 
 /** One agent sign-in waiting for the user at a time: `pending` is what the
  *  dialog shows, `answer` is the user's click. The request closes itself at
- *  its deadline, and an answer after that changes nothing. */
+ *  its deadline, or when `signal` aborts (the backend withdrew it or the
+ *  window lost the backend), and an answer after that changes nothing. */
 export function createSignInConfirm(): {
   pending: Readonly<ShallowRef<AgentSignInConfirmRequest | null>>
-  ask: (request: AgentSignInConfirmRequest) => Promise<AgentSignInConfirmAnswer>
+  ask: (request: AgentSignInConfirmRequest, signal?: AbortSignal) => Promise<AgentSignInConfirmAnswer>
   answer: (confirmed: boolean) => void
 } {
   const pending = shallowRef<AgentSignInConfirmRequest | null>(null)
   let settle: ((answer: AgentSignInConfirmAnswer) => void) | null = null
 
-  function ask(request: AgentSignInConfirmRequest): Promise<AgentSignInConfirmAnswer> {
+  function ask(request: AgentSignInConfirmRequest, signal?: AbortSignal): Promise<AgentSignInConfirmAnswer> {
+    if (signal?.aborted) return Promise.resolve('expired')
     if (pending.value) return Promise.resolve('busy')
     return new Promise((resolve) => {
       const timer = setTimeout(() => finish('expired'), Math.max(0, request.confirmBy - Date.now()))
-      settle = (answer) => {
+      const onAbort = (): void => { if (settle === mine) finish('expired') }
+      const mine = (answer: AgentSignInConfirmAnswer): void => {
         clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
         resolve(answer)
       }
+      settle = mine
+      signal?.addEventListener('abort', onAbort)
       pending.value = request
     })
   }
@@ -141,7 +149,7 @@ export interface AgentSignInDeps {
   currentWorkspace: () => string | null
   callerPane: (paneId: string) => { workspacePath: string; name: string } | undefined
   accountLabel: (agentKey: string, profileId: string) => string
-  confirm: (request: AgentSignInConfirmRequest) => Promise<AgentSignInConfirmAnswer>
+  confirm: (request: AgentSignInConfirmRequest, signal?: AbortSignal) => Promise<AgentSignInConfirmAnswer>
   /** Opens the sign-in pane the way Settings → Accounts does; the new pane's
    *  id, or undefined when none started. */
   spawn: (plan: Exclude<AgentSignInPlan, { kind: 'refused' }>) => Promise<string | undefined>
@@ -162,6 +170,7 @@ export async function runAgentSignIn(
   args: Record<string, unknown>,
   callerPaneId: string,
   deps: AgentSignInDeps,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const agentKey = String(args.agentKey ?? '')
   const profileId = String(args.profileId ?? '')
@@ -187,9 +196,11 @@ export async function runAgentSignIn(
     callerName: caller.name,
     workspacePath: caller.workspacePath,
     reason: String(args.reason ?? ''),
+    reasonTruncated: args.reasonTruncated === true,
     confirmBy,
-  })
-  if (answer !== 'confirmed') return CONFIRM_REFUSALS[answer]
+  }, signal)
+  // A yes for a request the backend withdrew meanwhile is a lapsed one.
+  if (answer !== 'confirmed' || signal?.aborted) return CONFIRM_REFUSALS[answer === 'confirmed' ? 'expired' : answer]
 
   if (deps.currentWorkspace() !== caller.workspacePath) {
     return { status: 'workspace-changed', message: "the window left the caller's workspace while the user was asked; nothing was opened" }

@@ -7851,6 +7851,7 @@
         "agent-login-confirm-caller": "提出要求的 pane",
         "agent-login-confirm-workspace": "登入 pane 開在",
         "agent-login-confirm-reason": "理由（由 agent 提供）",
+        "agent-login-confirm-reason-truncated": "agent 的理由超過 300 字，只顯示前 300 字。",
         "agent-login-confirm-cancel": "取消",
         "agent-login-confirm-ok": "開啟登入",
         "login-complete": "已登入 {email}，帳號已儲存。",

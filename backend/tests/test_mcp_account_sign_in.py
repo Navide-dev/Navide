@@ -149,8 +149,22 @@ async def test_sign_in_asks_the_callers_own_window_and_reports_the_login_pane(ui
     args.pop("confirmBy")
     assert args == {
         "agentKey": "codex", "profileId": "p-2", "mode": "isolated",
-        "reason": "quota ran out on the active account",
+        "reason": "quota ran out on the active account", "reasonTruncated": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_sign_in_tells_the_window_when_it_cut_the_reason(ui: _UiRequests) -> None:
+    """Review #438 LOW-2: the cut is disclosed to the user, not only to the agent."""
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.signIn"] = {"ok": True, "result": {"status": "declined", "message": "no"}}
+
+    await plan_mcp.cli_account_sign_in(_ctx(), agent="codex", profile_id="p-2", reason="y" * 301)
+    await plan_mcp.cli_account_sign_in(_ctx(), agent="codex", profile_id="p-2", reason="y" * 300)
+
+    first, second = ui.calls
+    assert first["args"]["reason"] == "y" * 300 and first["args"]["reasonTruncated"] is True
+    assert second["args"]["reasonTruncated"] is False
 
 
 @pytest.mark.asyncio

@@ -107,7 +107,7 @@ describe('runAgentSignIn', () => {
     expect(d.asked).toEqual([{
       agentKey: 'codex', profileId: 'p-parked', mode: 'isolated', accountLabel: 'label:p-parked',
       callerPaneId: 'pa', callerName: 'builder', workspacePath: '/ws/alpha', reason: 'quota​ ran out',
-      confirmBy: NOW + 45_000,
+      reasonTruncated: false, confirmBy: NOW + 45_000,
     }])
     expect(d.spawned).toEqual([{ kind: 'isolated', agentKey: 'codex', profileId: 'p-parked' }])
   })
@@ -173,6 +173,27 @@ describe('runAgentSignIn', () => {
     expect(d.asked).toEqual([])
   })
 
+  it('passes on that the backend cut the reason (review #438 LOW-2)', async () => {
+    const d = deps()
+    await runAgentSignIn({ ...args, reasonTruncated: true }, 'pa', d)
+    expect(d.asked[0].reasonTruncated).toBe(true)
+  })
+
+  it('hands the request signal to the confirmation (review #438 LOW-1)', async () => {
+    const seen: Array<AbortSignal | undefined> = []
+    const d = deps({ confirm: async (_request, signal) => { seen.push(signal); return 'expired' } })
+    const controller = new AbortController()
+    expect((await runAgentSignIn(args, 'pa', d, controller.signal)).status).toBe('confirm-timeout')
+    expect(seen).toEqual([controller.signal])
+  })
+
+  it('opens nothing for a yes that lands after the request was withdrawn', async () => {
+    const controller = new AbortController()
+    const d = deps({ confirm: async () => { controller.abort(); return 'confirmed' } })
+    expect((await runAgentSignIn(args, 'pa', d, controller.signal)).status).toBe('confirm-timeout')
+    expect(d.spawned).toEqual([])
+  })
+
   it('reports a sign-in pane that did not start', async () => {
     const d = deps({ spawn: async () => undefined })
     expect((await runAgentSignIn(args, 'pa', d)).status).toBe('spawn-failed')
@@ -183,7 +204,7 @@ describe('createSignInConfirm', () => {
   afterEach(() => { vi.useRealTimers() })
   const request = (confirmBy: number): AgentSignInConfirmRequest => ({
     agentKey: 'codex', profileId: 'p-parked', mode: 'isolated', accountLabel: 'Work', callerPaneId: 'pa',
-    callerName: 'builder', workspacePath: '/ws/alpha', reason: 'r', confirmBy,
+    callerName: 'builder', workspacePath: '/ws/alpha', reason: 'r', reasonTruncated: false, confirmBy,
   })
 
   it('holds the request until the user answers', async () => {
@@ -211,6 +232,38 @@ describe('createSignInConfirm', () => {
     expect(gate.pending.value).toBeNull()
     gate.answer(true)
     expect(await answer).toBe('expired')
+  })
+
+  it('closes as expired when the request is withdrawn (review #438 LOW-1)', async () => {
+    const gate = createSignInConfirm()
+    const controller = new AbortController()
+    const answer = gate.ask(request(Date.now() + 45_000), controller.signal)
+    controller.abort()
+    expect(await answer).toBe('expired')
+    expect(gate.pending.value).toBeNull()
+    gate.answer(true)
+    expect(await answer).toBe('expired')
+  })
+
+  it('never shows a request already withdrawn', async () => {
+    const gate = createSignInConfirm()
+    const controller = new AbortController()
+    controller.abort()
+    expect(await gate.ask(request(Date.now() + 45_000), controller.signal)).toBe('expired')
+    expect(gate.pending.value).toBeNull()
+  })
+
+  it('a withdrawn earlier request does not close the next one', async () => {
+    const gate = createSignInConfirm()
+    const first = new AbortController()
+    const one = gate.ask(request(Date.now() + 45_000), first.signal)
+    gate.answer(false)
+    await one
+    const two = gate.ask(request(Date.now() + 45_000))
+    first.abort()
+    expect(gate.pending.value).not.toBeNull()
+    gate.answer(true)
+    expect(await two).toBe('confirmed')
   })
 
   it('asks one at a time', async () => {

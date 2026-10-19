@@ -7851,6 +7851,7 @@
         "agent-login-confirm-caller": "Asked by pane",
         "agent-login-confirm-workspace": "Sign-in pane opens in",
         "agent-login-confirm-reason": "Reason, written by the agent",
+        "agent-login-confirm-reason-truncated": "The agent's reason was longer than 300 characters; only the first 300 are shown.",
         "agent-login-confirm-cancel": "Cancel",
         "agent-login-confirm-ok": "Open sign-in",
         "login-complete": "Signed in as {email}. Account saved.",

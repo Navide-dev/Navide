@@ -62,6 +62,7 @@ useDialogFocus(card, () => cancelButton.value)
         <div class="signin-confirm-reason">
           <div class="signin-confirm-label">{{ $t('settings.accounts.cli.agent-login-confirm-reason') }}</div>
           <p data-testid="signin-confirm-reason">{{ reason }}</p>
+          <p v-if="request.reasonTruncated" class="signin-confirm-truncated" data-testid="signin-confirm-truncated">{{ $t('settings.accounts.cli.agent-login-confirm-reason-truncated') }}</p>
         </div>
       </div>
       <div class="nv-dialog-actions">
@@ -95,6 +96,10 @@ useDialogFocus(card, () => cancelButton.value)
   padding-left: 8px;
 }
 .signin-confirm-label {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+.signin-confirm-reason p.signin-confirm-truncated {
   color: var(--text-muted);
   font-size: 0.9em;
 }

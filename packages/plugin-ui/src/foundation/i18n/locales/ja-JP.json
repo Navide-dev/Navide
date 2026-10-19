@@ -7851,6 +7851,7 @@
         "agent-login-confirm-caller": "要求した Pane",
         "agent-login-confirm-workspace": "サインイン Pane を開く場所",
         "agent-login-confirm-reason": "理由（エージェントが記入）",
+        "agent-login-confirm-reason-truncated": "エージェントの理由が 300 文字を超えたため、最初の 300 文字だけを表示しています。",
         "agent-login-confirm-cancel": "キャンセル",
         "agent-login-confirm-ok": "サインインを開く",
         "login-complete": "{email} としてログインしました。アカウントを保存しました。",
