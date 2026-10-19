@@ -228,6 +228,58 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
     expect(matchAwaitingInput('claude', box)).toBe(true)
   })
 
+  // A live box replaces the input box, so whatever is drawn below it is not an
+  // idle prompt. These are the rows a real pane can paint under the footer.
+  describe('with rows drawn below the box', () => {
+    const STATUS_LINE = '  ~/git/navide · main · Opus 4.7 · 42% context'
+    const HINT_ROW = '  ? for shortcuts'
+    const BORDER = '╰──────────────────────────────────────╯'
+    const FOOTER = 'Esc to cancel · Tab to amend'
+    const permissionBox = [
+      'Do you want to proceed?',
+      '❯ 1. Yes',
+      '  2. No',
+      '',
+      FOOTER,
+    ]
+
+    it.each([
+      ['a custom statusLine', ['', STATUS_LINE]],
+      ['a hint row', ['', HINT_ROW]],
+      ['trailing border characters', [BORDER, '│']],
+    ])('matches the permission box with %s below it', (_name, below) => {
+      expect(matchAwaitingInput('claude', [...permissionBox, ...below].join('\n'))).toBe(true)
+    })
+
+    it.each([
+      ['a custom statusLine', ['', STATUS_LINE]],
+      ['a hint row', ['', HINT_ROW]],
+      ['trailing border characters', [BORDER, '│']],
+    ])('matches the AskUserQuestion footer with %s below it', (_name, below) => {
+      expect(matchAwaitingInput('claude', [QUESTION_BOX, ...below].join('\n'))).toBe(true)
+    })
+
+    it('does not match when the idle input prompt follows the anchor', () => {
+      // The same words as prose above a live input box: the `❯` row is the
+      // input box, so no dialog is up however much statusLine follows it.
+      const rule = '────────────────────────────────────────'
+      for (const anchor of [FOOTER, QUESTION_BOX.split('\n').pop()!]) {
+        const screen = [anchor, '', rule, '❯ ', rule, STATUS_LINE].join('\n')
+        expect(matchAwaitingInput('claude', screen)).toBe(false)
+      }
+    })
+
+    it('does not match when the framed prompt of an older build follows the anchor', () => {
+      const screen = [FOOTER, '╭──────────────────╮', '│ > Try "fix lint errors" │', '╰──────────────────╯', STATUS_LINE].join('\n')
+      expect(matchAwaitingInput('claude', screen)).toBe(false)
+    })
+
+    it('does not match when the tail outgrows its bound', () => {
+      const screen = [FOOTER, '', 'x'.repeat(400)].join('\n')
+      expect(matchAwaitingInput('claude', screen)).toBe(false)
+    })
+  })
+
   it('does not match the box quoted in conversation text above the idle prompt', () => {
     // A pane discussing the box shows its furniture as prose; the live box is
     // always the last thing on screen, the quoted one is followed by the input.

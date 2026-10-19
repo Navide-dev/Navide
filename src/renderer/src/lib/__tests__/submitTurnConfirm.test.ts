@@ -243,6 +243,19 @@ describe('blockingDialogShown', () => {
     expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen })).toBe(true)
   })
 
+  // The #416 guard for AskUserQuestion rides on the screen alone, so a
+  // statusLine under the picker's footer must not lift it.
+  it('reads an AskUserQuestion footer with a statusLine drawn below it', () => {
+    const screen = [
+      '  1. Merge them into one state',
+      '  2. Keep them separate',
+      'Enter to select · Tab/Arrow keys to navigate · Esc to cancel',
+      '',
+      '  ~/git/navide · main · Opus 4.7 · 42% context',
+    ].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen })).toBe(true)
+  })
+
   // Frameless (codex): the composer is the prompt row and what wraps below
   // it. An unsent message quoting a dialog's wording must not read as one —
   // main resends the Enter there and the message is delivered.
