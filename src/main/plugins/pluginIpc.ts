@@ -35,7 +35,7 @@ import {
   sha256Hex,
 } from './pluginVerify'
 import type { RegistryPackageEnvelope, RegistryTrustMetadata } from './pluginRegistryTrust'
-import { verifyRegistryTrustMetadata } from './pluginRegistryTrust'
+import { verifyRegistryPackageTrust, verifyRegistryTrustMetadata } from './pluginRegistryTrust'
 import {
   loadOfficialRegistryRootKey,
   resolveMarketplaceRegistryRoot,
@@ -61,8 +61,11 @@ import {
   REGISTRY_RECEIPT_NAME,
   REGISTRY_TRUST_SNAPSHOT_NAME,
   assertRegistryTrustSnapshotDoesNotRollback,
+  registryReceiptFromEvidence,
   type InstalledTrustDecision,
+  type RegistryInstallReceipt,
 } from './pluginInstalledTrust'
+import { swapRegistryReceipt } from './pluginReceiptPromotion'
 import { pluginDeveloperModeEnabled } from './pluginDeveloperMode'
 import { developerPermissionsDigest, PluginDeveloperModeStore } from './pluginDeveloperModeStore'
 import {
@@ -2802,6 +2805,101 @@ export function registerPluginIpc(
     })
   }
 
+  // DX report §9.5: a Testplace build the Registry promoted keeps its bytes,
+  // so testers do not reinstall. When the public listing has this exact
+  // version, target and digest under a non-testplace envelope that verifies,
+  // only the receipt is swapped (pluginReceiptPromotion.ts): a staged copy
+  // with the new receipt, verified, then renamed into place. The selection,
+  // grant and stored data stay; the source reads marketplace from then on.
+  // Answers whether it adopted the release; never installs anything else.
+  const adoptTestplaceRelease = async (id: string, reload: boolean): Promise<boolean> => {
+    const active = lifecycleSelector.read(id)?.active
+    if (!active || active.layout === 'legacy-mutable') return false
+    const dir = lifecycleSelector.packageDir(id, active)
+    if (readRegistryReceiptChannel(dir) !== 'testplace') return false
+    const current = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as RegistryInstallReceipt
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const base = marketplace.registryUrl.replace(/\/+$/, '')
+    const dot = id.indexOf('.')
+    const res = await fetch(`${base}/api/extensions/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}`)
+    if (!res.ok) return false
+    const detail = (await res.json()) as {
+      trust_metadata: RegistryTrustMetadata
+      trust_metadata_signature: string
+      versions?: Array<{ version?: unknown; target?: unknown; package_digest?: unknown; yanked?: unknown; registry_envelope?: RegistryPackageEnvelope; registry_signature?: string }>
+    }
+    const row = (detail.versions ?? []).find((v) =>
+      v.version === current.version && v.target === current.target && v.package_digest === current.artifactDigest && v.yanked !== true)
+    const envelope = row?.registry_envelope
+    if (!row || !envelope || !row.registry_signature || envelope.channel === 'testplace') return false
+    verifyRegistryPackageTrust({
+      envelope,
+      envelopeSignature: row.registry_signature,
+      trustMetadata: detail.trust_metadata,
+      trustMetadataSignature: detail.trust_metadata_signature,
+      pinnedRootKey: marketplace.trust.pinnedRegistryRootKey,
+      expected: {
+        artifactDigest: current.artifactDigest,
+        packageId: current.packageId,
+        version: current.version,
+        target: current.target,
+        publisherId: current.publisherId,
+      },
+      expectedHostTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
+      now: marketplace.trust.now,
+    })
+    const snapshot = { schemaVersion: 1 as const, metadata: detail.trust_metadata, metadataSignature: detail.trust_metadata_signature }
+    let stored: Uint8Array | null = null
+    try {
+      stored = new Uint8Array(readFileSync(join(pluginsRoot, REGISTRY_TRUST_SNAPSHOT_NAME)))
+    } catch {
+      stored = null
+    }
+    assertRegistryTrustSnapshotDoesNotRollback(stored, snapshot)
+    writeRegistryTrustSnapshot(pluginsRoot, snapshot)
+    swapRegistryReceipt(
+      pluginsRoot,
+      dir,
+      id,
+      registryReceiptFromEvidence({
+        packageId: current.packageId,
+        version: current.version,
+        publisherId: current.publisherId,
+        target: current.target,
+        artifactDigest: current.artifactDigest,
+        envelope,
+        envelopeSignature: row.registry_signature,
+        registryAuthority: current.registryAuthority,
+      }),
+      (staged) => verifyInstalledRegistryPackage(staged, id, currentRegistryTrustContext()),
+    )
+    testplaceStore.forget(id)
+    if (reload && !manager.listInstalledPackages().some((pkg) => pkg.id === id)) {
+      const reloaded = manager.loadInstalledPlugins(
+        pluginsRoot,
+        { provenance: 'official-registry', trust: currentRegistryTrustContext() },
+        new Set([id])
+      )
+      for (const activation of reloaded.activationCatalog) {
+        options.onActivationChange?.({ pluginId: activation.pluginId, activation })
+      }
+    }
+    return true
+  }
+
+  /** "Install the Navide Marketplace version" first tries this: no download, no new consent. */
+  ipcMain.handle('plugins:adoptTestplaceRelease', async (event, args: { id?: unknown } | null): Promise<{ adopted: boolean }> => {
+    assertAuthorized(event)
+    if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+    if (activeTransactions.has(args.id)) throw new Error(`plugin transaction already in progress for ${args.id}`)
+    activeTransactions.add(args.id)
+    try {
+      return { adopted: await adoptTestplaceRelease(args.id, true) }
+    } finally {
+      activeTransactions.delete(args.id)
+    }
+  })
+
   ipcMain.handle('plugins:expiredTestplace', (event): ExpiredTestplaceBuild[] => {
     assertAuthorized(event)
     return expiredTestplaceBuilds()
@@ -3887,6 +3985,16 @@ export function registerPluginIpc(
         })
       }
       if (packageIds.length === 0) return { decisions, activationCatalog: [] }
+      // A promoted Testplace build takes its new receipt before the trust
+      // check below, which then loads it again if it had expired (W5b).
+      for (const packageId of packageIds) {
+        if (activeTransactions.has(packageId)) continue
+        try {
+          await adoptTestplaceRelease(packageId, false)
+        } catch (error) {
+          console.warn(`[plugins] promoted Testplace build of ${packageId} not adopted: ${errorText(error)}`)
+        }
+      }
 
       const marketplace = resolveConfiguredMarketplace(trust)
       const base = marketplace.registryUrl.replace(/\/+$/, '')

@@ -106,11 +106,12 @@ const testplaceDetail = {
 let base = ''
 let pluginsRoot = ''
 let activations: Array<{ pluginId: string; activation?: PluginActivationCatalogEntry }>
+let controller: ReturnType<typeof registerPluginIpc>
 
 function register(now = INSTALL_AT) {
   handlers.clear()
   const manager = new FrontendPluginManager()
-  registerPluginIpc(manager, pluginsRoot, () => true, config(now), undefined, {
+  controller = registerPluginIpc(manager, pluginsRoot, () => true, config(now), undefined, {
     cleanupPluginStorage: async () => undefined,
     preflightCandidateFrontend: async () => undefined,
     preflightCandidateBackend: async () => undefined,
@@ -262,5 +263,65 @@ describe('an expired Testplace build (D3)', () => {
     expect(readFileSync(join(pluginsRoot, '.navide-testplace.json'), 'utf8')).toContain(digest)
     await call('plugins:remove', { id: ID })
     expect(readFileSync(join(pluginsRoot, '.navide-testplace.json'), 'utf8')).not.toContain(ID)
+  })
+})
+
+describe('a promoted Testplace build (same digest, no reinstall)', () => {
+  const stable: RegistryPackageEnvelope = {
+    schemaVersion: 1, artifactDigest: digest, packageId: ID, version: '0.3.0', target: 'universal',
+    publisherId: 'acme', keyId: 'k1', signedAt: '2026-08-16T11:30:00.000Z',
+  }
+  function publicListing(row: Partial<{ package_digest: string; registry_envelope: RegistryPackageEnvelope }> = {}) {
+    const detail = {
+      trust_metadata: metadata(), trust_metadata_signature: signCanonical(metadata(), root.privateKey),
+      versions: [{
+        version: '0.3.0', target: 'universal', package_digest: digest, yanked: false,
+        registry_envelope: stable, registry_signature: signCanonical(stable, signer.privateKey), ...row,
+      }],
+    }
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => detail })) as unknown as typeof fetch
+  }
+  const receipt = () => {
+    const dir = join(pluginsRoot, ID, '0.3.0', 'universal', 'package')
+    return JSON.parse(readFileSync(join(dir, '.navide-registry-receipt.json'), 'utf8')) as { envelope: RegistryPackageEnvelope }
+  }
+
+  it('takes the stable receipt in place and keeps the grant; the source reads marketplace', async () => {
+    register()
+    await installTestBuild()
+    const before = (call('plugins:listInstalled') as Array<Record<string, unknown>>).find((row) => row.id === ID)!
+    publicListing()
+    expect(await call('plugins:adoptTestplaceRelease', { id: ID })).toEqual({ adopted: true })
+    expect(receipt().envelope).toEqual(stable)
+    const after = (call('plugins:listInstalled') as Array<Record<string, unknown>>).find((row) => row.id === ID)!
+    expect(after.source).toBe('marketplace')
+    expect(after.expiresAt).toBeUndefined()
+    expect(after.packageVersion).toBe('0.3.0')
+    expect(after.packageVersionGrant).toEqual(before.packageVersionGrant)
+    // Nothing was downloaded.
+    expect(registry.download).toHaveBeenCalledTimes(1)
+    // Once adopted there is nothing left to adopt.
+    expect(await call('plugins:adoptTestplaceRelease', { id: ID })).toEqual({ adopted: false })
+  })
+
+  it('adopts nothing when the public version is another artifact', async () => {
+    register()
+    await installTestBuild()
+    const other = { ...stable, artifactDigest: 'f'.repeat(64) }
+    publicListing({ package_digest: 'f'.repeat(64), registry_envelope: other })
+    expect(await call('plugins:adoptTestplaceRelease', { id: ID })).toEqual({ adopted: false })
+    expect(receipt().envelope).toEqual(envelope)
+  })
+
+  it('brings an expired build back on the next trust refresh once it was promoted', async () => {
+    register()
+    await installTestBuild()
+    register(AFTER_EXPIRY)
+    expect(call('plugins:expiredTestplace')).toHaveLength(1)
+    publicListing()
+    const refreshed = await controller.refreshRegistryTrust()
+    expect(refreshed.activationCatalog.map((entry) => entry.pluginId)).toEqual([ID])
+    expect(receipt().envelope).toEqual(stable)
+    expect(call('plugins:expiredTestplace')).toEqual([])
   })
 })
