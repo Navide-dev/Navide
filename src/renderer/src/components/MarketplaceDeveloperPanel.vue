@@ -34,6 +34,7 @@ import type {
 } from '../../../shared/marketplaceDeveloper'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
+import TestplaceInviteForm from './TestplaceInviteForm.vue'
 
 const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
 const { t } = useI18n()
@@ -252,7 +253,7 @@ async function submitYank(): Promise<void> {
   await refresh()
 }
 
-function openForm(name: 'developer-application' | 'publish' | 'publish-yank', prefill: Record<string, string> = {}): void {
+function openForm(name: 'developer-application' | 'publish' | 'publish-yank' | 'testplace-invite', prefill: Record<string, string> = {}): void {
   showMarketplaceForm({ form: name, origin: 'user', prefill, requester: null, request: null })
 }
 
@@ -310,6 +311,7 @@ onMounted(() => {
       <div class="dev-actions">
         <button class="nv-btn nv-btn--sm" @click="openForm('developer-application')">{{ $t('marketplace-developer.application.open') }}</button>
         <button class="nv-btn nv-btn--sm" @click="openForm('publish')">{{ $t('marketplace-developer.publish.open') }}</button>
+        <button class="nv-btn nv-btn--sm" @click="openForm('testplace-invite')">{{ $t('testplace.invite.open') }}</button>
       </div>
     </section>
 
@@ -393,6 +395,8 @@ onMounted(() => {
         </div>
       </template>
     </section>
+
+    <TestplaceInviteForm v-if="form?.form === 'testplace-invite'" :backend="backend" :form="form" />
 
     <p v-if="error" class="dev-error" role="alert">{{ error }}</p>
 
