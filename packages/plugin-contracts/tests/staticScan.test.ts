@@ -56,6 +56,20 @@ describe('scanPackageFiles matches the Registry scanner', () => {
       expect(rest).toEqual(expected)
     })
 
+  it('splits long whitespace runs in linear time', () => {
+    const literal = `git${' '.repeat(100_000)}a${'\\t'.repeat(100_000)} `
+    const started = performance.now()
+    const report = scanPackageFiles({
+      files: filesOf({ schemaVersion: 2 }, { 'frontend/a.js': { text: `const s = '${literal}'` } }),
+      artifactDigest: 'b'.repeat(64),
+      target: 'universal',
+      manifest: { schemaVersion: 2 },
+    })
+    expect(performance.now() - started).toBeLessThan(2_000)
+    // Longer than MAX_COMMAND_LENGTH, so not parsed as a command (as in Python).
+    expect(report?.shell.calls).toEqual([])
+  })
+
   it('marks the report timed out when the budget runs out between files', () => {
     const ticks = [0, 0, STATIC_SCAN_LIMITS.timeBudgetMs + 1]
     let index = 0

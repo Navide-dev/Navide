@@ -106,11 +106,20 @@ class Deadline {
 /** Python's `str.isspace` set, which `str.split()` and `re`'s `\s` use. */
 const PY_WS = ' \\t\\n\\r\\f\\v\\x1c-\\x1f\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000'
 const PY_WS_RUN = new RegExp(`[${PY_WS}]+`)
-const PY_WS_EDGES = new RegExp(`^[${PY_WS}]+|[${PY_WS}]+$`, 'g')
+const PY_WS_CHAR = new RegExp(`[${PY_WS}]`)
+
+/** `value.strip()`, in linear time (an anchored `\s+$` regex backtracks quadratically on long runs). */
+function pyStrip(value: string): string {
+  let start = 0
+  let end = value.length
+  while (start < end && PY_WS_CHAR.test(value[start])) start += 1
+  while (end > start && PY_WS_CHAR.test(value[end - 1])) end -= 1
+  return value.slice(start, end)
+}
 
 /** `value.split()` (whitespace runs, edges dropped). */
 function pySplit(value: string): string[] {
-  const trimmed = value.replace(PY_WS_EDGES, '')
+  const trimmed = pyStrip(value)
   return trimmed === '' ? [] : trimmed.split(PY_WS_RUN)
 }
 
@@ -816,8 +825,6 @@ const EMBEDDED_RUNTIME_MARKERS: Array<[string, string[]]> = [
   ['bun', ['---- Bun! ----']],
   ['deno', ['d3n0l4nd']],
 ]
-const ASCII_STRINGS = /[\x20-\x7e]{4,}/g
-const UTF16_STRINGS = /(?:[\x20-\x7e]\x00){4,}/g
 const MACHO_ARCH: Record<number, string> = { 0x01000007: 'x64', 0x0100000c: 'arm64' }
 const ELF_ARCH: Record<number, string> = { 62: 'x64', 183: 'arm64' }
 const PE_ARCH: Record<number, string> = { 0x8664: 'x64', 0xaa64: 'arm64' }
@@ -1098,12 +1105,48 @@ function latin1(data: Uint8Array): string {
   return out
 }
 
+/** `marker in data` for an ASCII marker, without building one string of the whole executable
+ *  (512 MiB is past V8's string length limit). */
+function containsBytes(data: Uint8Array, marker: string): boolean {
+  const first = marker.charCodeAt(0)
+  for (let index = data.indexOf(first); index !== -1 && index + marker.length <= data.length; index = data.indexOf(first, index + 1)) {
+    let match = true
+    for (let offset = 1; offset < marker.length; offset += 1) {
+      if (data[index + offset] !== marker.charCodeAt(offset)) {
+        match = false
+        break
+      }
+    }
+    if (match) return true
+  }
+  return false
+}
+
+const printable = (byte: number | undefined): boolean => byte !== undefined && byte >= 0x20 && byte <= 0x7e
+
+/** The matches of `rb"[\x20-\x7e]{4,}"` (`step` 1) or `rb"(?:[\x20-\x7e]\x00){4,}"` (`step` 2),
+ *  leftmost and greedy like `re.finditer`, decoded to text. */
+function* printableRuns(data: Uint8Array, step: 1 | 2, deadline: Deadline): Generator<string> {
+  let index = 0
+  while (index < data.length) {
+    deadline.tick()
+    let units = 0
+    while (printable(data[index + units * step]) && (step === 1 || data[index + units * step + 1] === 0)) units += 1
+    if (units >= 4) {
+      let text = ''
+      for (let unit = 0; unit < units; unit += 1) text += String.fromCharCode(data[index + unit * step])
+      yield text
+      index += units * step
+    } else index += 1
+  }
+}
+
 function classifyNativeString(text: string, facts: NativeFacts): void {
   for (const host of hostsIn(text)) count(facts.hosts, host)
   for (const item of pySplit(text)) {
     if (CAPABILITY_ADDRESS_RE.test(item)) facts.capabilities.add(item)
   }
-  const parsed = commandLike(text.replace(PY_WS_EDGES, ''))
+  const parsed = commandLike(pyStrip(text))
   if (parsed !== null) facts.commands.set(JSON.stringify(parsed), parsed)
 }
 
@@ -1130,20 +1173,14 @@ function summarizeExecutable(path: string, data: Uint8Array, deadline: Deadline)
     facts.arch = PE_ARCH[machine ?? 0] ?? 'unknown'
     if (machine !== null) pe(bytes, facts, peOffset, deadline)
   }
-  const text = latin1(data)
   for (const [runtime, markers] of EMBEDDED_RUNTIME_MARKERS) {
-    if (markers.some((marker) => text.includes(marker))) {
+    if (markers.some((marker) => containsBytes(data, marker))) {
       facts.embeddedRuntime = runtime
       break
     }
   }
-  for (const match of text.matchAll(ASCII_STRINGS)) {
-    deadline.tick()
-    classifyNativeString(match[0], facts)
-  }
-  for (const match of text.matchAll(UTF16_STRINGS)) {
-    deadline.tick()
-    classifyNativeString(match[0].replace(/\x00/g, ''), facts)
+  for (const step of [1, 2] as const) {
+    for (const text of printableRuns(data, step, deadline)) classifyNativeString(text, facts)
   }
   return facts
 }
