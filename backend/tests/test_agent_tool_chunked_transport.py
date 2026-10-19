@@ -215,9 +215,9 @@ async def test_pieces_and_progress_need_an_authenticated_host_and_a_pending_requ
     assert malformed["error"]["code"] == "BAD_REQUEST"
 
 
-async def _longest_loop_slice(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[Any, float]:
-    """``work``'s result and the most CPU time (``time.thread_time``) one
-    event-loop step took meanwhile: every callback the loop runs, a task's
+async def _loop_step_times(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[Any, list[float]]:
+    """``work``'s result and the CPU time (``time.thread_time``) of every
+    event-loop step taken meanwhile: every callback the loop runs, a task's
     step between two awaits included, is one step. CPU time leaves out the OS
     pausing the process, so a busy machine does not change it; garbage is
     collected first, so a collection of the test's own garbage is not counted."""
@@ -225,16 +225,15 @@ async def _longest_loop_slice(monkeypatch: pytest.MonkeyPatch, work: Any) -> tup
     import time
 
     gc.collect()
-    longest = 0.0
+    steps: list[float] = []
     run = asyncio.events.Handle._run
 
     def timed(handle: asyncio.events.Handle) -> None:
-        nonlocal longest
         started = time.thread_time()
         try:
             run(handle)
         finally:
-            longest = max(longest, time.thread_time() - started)
+            steps.append(time.thread_time() - started)
 
     monkeypatch.setattr(asyncio.events.Handle, "_run", timed)
     try:
@@ -245,29 +244,13 @@ async def _longest_loop_slice(monkeypatch: pytest.MonkeyPatch, work: Any) -> tup
         await asyncio.sleep(0)
     finally:
         monkeypatch.setattr(asyncio.events.Handle, "_run", run)
-    return result, longest
+    return result, steps
 
 
-async def _least_longest_loop_slice(
-    monkeypatch: pytest.MonkeyPatch, make_work: Any, budget: float, attempts: int = 3
-) -> tuple[Any, float]:
-    """``_longest_loop_slice`` of ``make_work()``, measured again (up to
-    ``attempts`` times) while it is over ``budget``; the least longest step.
-
-    On a shared CI VM a step's CPU time is not only the step's: the host
-    taking the vCPU away mid-step counts as the thread running, and it came
-    in one step of one run (22.6 and 31.1 ms on macOS, while the steps of
-    this code take under 6 ms on bare metal at load 115 and no gen-2
-    collection falls in the window). That noise only ever adds and does not
-    come back on the next call; a step that handles the whole result costs
-    its hundreds of milliseconds on every call, so it still fails."""
-    best = None
-    for _ in range(attempts):
-        result, longest = await _longest_loop_slice(monkeypatch, make_work())
-        best = longest if best is None else min(best, longest)
-        if best < budget:
-            break
-    return result, best
+async def _longest_loop_slice(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[Any, float]:
+    """``work``'s result and the most CPU time one event-loop step took meanwhile."""
+    result, steps = await _loop_step_times(monkeypatch, work)
+    return result, max(steps, default=0.0)
 
 
 @pytest.mark.asyncio

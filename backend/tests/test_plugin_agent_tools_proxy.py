@@ -1155,6 +1155,34 @@ def _devmap_tool(monkeypatch) -> dict[str, Any]:
     return proxy._catalog.entries["devmap_read"]  # noqa: SLF001
 
 
+def _fresh_copy_cpu(text: str) -> float:
+    """CPU time of building a string like ``text`` from slices of it on fresh
+    memory: what the step a result in pieces ends in must do, once.
+
+    The agent gets the result as one string, so the backend assembles it from
+    the pieces the helper sent in one step (``ResultWorker._text_frame``): a
+    copy of the whole text, the one step no slicing can bound. Its cost is
+    memory, not parsing: the copy, and the faults on the pages it writes for
+    the first time. On a VM a fault on such a page is served by the host
+    while the thread's CPU clock runs on (13 us a fault on the macOS runner,
+    1 us on bare metal), so that one step read as 18 to 29 ms there and as
+    1 to 2 ms here. The step is measured against this copy made on this
+    machine at this moment, never against a constant raised to fit a VM."""
+    import time
+
+    from agent_team_backend.agent_tool_result_worker import _SLICE
+
+    slices = [text[at:at + _SLICE] for at in range(0, len(text), _SLICE)]
+    # Holds the memory the call just freed, so the copy below writes to fresh
+    # pages as the step it stands for did.
+    plug = text[1:]
+    started = time.thread_time()
+    copy = "".join(slices)
+    spent = time.thread_time() - started
+    del copy, plug, slices
+    return spent
+
+
 @pytest.mark.parametrize(
     "shape",
     [
@@ -1163,7 +1191,7 @@ def _devmap_tool(monkeypatch) -> dict[str, Any]:
     ],
 )
 async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop(monkeypatch, shape) -> None:
-    from tests.test_agent_tool_chunked_transport import _least_longest_loop_slice
+    from tests.test_agent_tool_chunked_transport import _loop_step_times
 
     import gc
 
@@ -1179,22 +1207,28 @@ async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loo
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
     del value
     gc.collect()
-    result, longest = await _least_longest_loop_slice(
-        monkeypatch, lambda: proxy.call("devmap_read", {}, None), LOOP_SLICE_BUDGET_S
-    )
+    result, steps = await _loop_step_times(monkeypatch, proxy.call("devmap_read", {}, None))
+    assembled = _fresh_copy_cpu(result.content[0].text)
     assert result.isError is False
     # Character for character what the in-process wrap gives (same function, in the helper).
     assert result.content[0].text == expected
-    assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    *slices, longest = sorted(steps)
+    # Every step but one moves a slice of the bytes and hands back ...
+    assert slices[-1] < LOOP_SLICE_BUDGET_S, f"the loop ran {slices[-1] * 1000:.1f} ms of CPU without handing back"
+    # ... and that one also copies the text into one string, nothing more.
+    assert longest < LOOP_SLICE_BUDGET_S + assembled, (
+        f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+        f" (assembling the text costs {assembled * 1000:.1f} ms)"
+    )
 
 
 async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(monkeypatch) -> None:
     """The control for the check above: a result parsed and wrapped in one
-    step on the loop, as before the helper, fails it on every attempt. A
-    tenth of the 10 MiB keeps the three attempts cheap: one still holds the
-    loop for hundreds of milliseconds (the 10 MiB one, seconds)."""
+    step on the loop, as before the helper, fails it. A tenth of the 10 MiB
+    keeps it cheap: it still holds the loop for hundreds of milliseconds
+    (the 10 MiB one, seconds), while copying its text costs about one."""
     from agent_team_backend.agent_tool_result_worker import strict_loads
-    from tests.test_agent_tool_chunked_transport import _least_longest_loop_slice
+    from tests.test_agent_tool_chunked_transport import _loop_step_times
 
     import gc
 
@@ -1206,11 +1240,11 @@ async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(mo
 
     monkeypatch.setattr(proxy._result_worker, "wrap", on_the_loop)  # noqa: SLF001
     gc.collect()
-    result, longest = await _least_longest_loop_slice(
-        monkeypatch, lambda: proxy.call("devmap_read", {}, None), LOOP_SLICE_BUDGET_S
-    )
+    result, steps = await _loop_step_times(monkeypatch, proxy.call("devmap_read", {}, None))
+    assembled = _fresh_copy_cpu(result.content[0].text)
     assert result.isError is False
-    assert longest >= LOOP_SLICE_BUDGET_S, f"a whole-result parse on the loop read as {longest * 1000:.1f} ms"
+    longest = max(steps)
+    assert longest >= LOOP_SLICE_BUDGET_S + assembled, f"a whole-result parse on the loop read as {longest * 1000:.1f} ms"
 
 
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400"])
