@@ -28,6 +28,7 @@ import {
   type InstallerTrustConfig,
 } from './pluginInstaller'
 import { developerRegistryDownload, developerRegistryFetch, registryError } from './developerAccount'
+import type { DeveloperCallResult } from '../../shared/marketplaceDeveloper'
 import {
   sensitiveCapabilities,
   assertRegistryUrlAllowed,
@@ -1846,6 +1847,34 @@ export function registerPluginIpc(
     testplaceStore.forgetJoin(args.id)
     return { ok: true }
   })
+
+  /** The invite form's Send (the user's, never an agent's): one invitation per
+   *  label. The join tokens go back to that form only; nothing here logs them. */
+  ipcMain.handle(
+    'plugins:testplaceInvite',
+    async (event, args: { id?: unknown; labels?: unknown } | null): Promise<DeveloperCallResult> => {
+      assertAuthorized(event)
+      if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+      const labels = args?.labels
+      if (
+        !Array.isArray(labels) ||
+        labels.length < 1 ||
+        labels.length > 100 ||
+        labels.some((label) => typeof label !== 'string' || !label.trim() || label.length > 120)
+      ) {
+        throw new Error('invitees must be 1-100 non-empty labels of up to 120 characters')
+      }
+      const dot = args.id.indexOf('.')
+      const res = await developerRegistryFetch(
+        `/api/testplace/${encodeURIComponent(args.id.slice(0, dot))}/${encodeURIComponent(args.id.slice(dot + 1))}/invites`,
+        { method: 'POST', json: { labels: labels.map((label: string) => label.trim()) } },
+        'account',
+      )
+      if (res.status === 201 || res.status === 200) return { ok: true, status: res.status, body: res.body }
+      const { code, message } = registryError(res.body)
+      return { ok: false, status: res.status, code, message }
+    }
+  )
 
   const verifyRegistryPackage = async (args: {
     namespace: string

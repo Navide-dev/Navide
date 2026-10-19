@@ -505,6 +505,7 @@ declare global {
         testplaceList?: () => Promise<TestplaceListing[]>
         testplaceJoin?: (code: string) => Promise<{ id: string }>
         testplaceLeave?: (id: string) => Promise<{ ok: true }>
+        testplaceInvite?: (id: string, labels: string[]) => Promise<import('../../shared/marketplaceDeveloper').DeveloperCallResult>
         expiredTestplace?: () => Promise<ExpiredTestplaceBuild[]>
         keepExpiredTestplace?: (id: string) => Promise<{ ok: true }>
         restart: (id: string) => Promise<{

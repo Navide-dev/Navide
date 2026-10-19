@@ -25,7 +25,7 @@ import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
 import type { PluginSource } from '../shared/pluginSource'
-import type { DeveloperApi } from '../shared/marketplaceDeveloper'
+import type { DeveloperApi, DeveloperCallResult } from '../shared/marketplaceDeveloper'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
 export interface ClearElectronCachesOptions {
@@ -1380,6 +1380,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
     testplaceList: (): Promise<TestplaceListing[]> => ipcRenderer.invoke('plugins:testplaceList'),
     testplaceJoin: (code: string): Promise<{ id: string }> => ipcRenderer.invoke('plugins:testplaceJoin', { code }),
     testplaceLeave: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugins:testplaceLeave', { id }),
+    /** The invite form's Send: the join tokens come back to that form only. */
+    testplaceInvite: (id: string, labels: string[]): Promise<DeveloperCallResult> =>
+      ipcRenderer.invoke('plugins:testplaceInvite', { id, labels }),
     /** D3: expired Testplace builds, stopped with their data kept, and "keep using". */
     expiredTestplace: (): Promise<ExpiredTestplaceBuild[]> => ipcRenderer.invoke('plugins:expiredTestplace'),
     keepExpiredTestplace: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugins:keepExpiredTestplace', { id }),
