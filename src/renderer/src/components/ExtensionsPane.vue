@@ -25,6 +25,7 @@ import NativeBackendPanel from './NativeBackendPanel.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 import PluginSourceBadge from './PluginSourceBadge.vue'
+import { isTestplaceExpired, testplaceDaysLeft } from '../lib/pluginSourceMark'
 
 const { t } = useI18n()
 
@@ -410,6 +411,43 @@ async function removeDeveloperFolder(id: string): Promise<void> {
   }
 }
 
+// D3: expired Testplace builds, stopped with their data kept. Each is listed
+// with three choices and never removed without the user: the Navide
+// Marketplace version (the normal verified install), keep using it marked
+// expired (only when it failed on its expiry alone), or remove it.
+const expiredTestplace = ref<ExpiredTestplaceBuild[]>([])
+async function refreshExpiredTestplace(): Promise<void> {
+  try {
+    expiredTestplace.value = (await pluginsApi()?.expiredTestplace?.()) ?? []
+  } catch {
+    expiredTestplace.value = []
+  }
+}
+async function keepExpiredTestplace(id: string): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.keepExpiredTestplace) return
+  const confirmed = await notify.confirm(t('testplace.expired.keepConfirm', { id: reveal(id) }), {
+    title: t('testplace.expired.keepTitle'),
+    confirmText: t('testplace.expired.keep'),
+  })
+  if (!confirmed) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api.keepExpiredTestplace(id)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+    await refreshExpiredTestplace()
+  }
+}
+async function removeExpiredTestplace(id: string): Promise<void> {
+  await remove(id)
+  await refreshExpiredTestplace()
+}
+
 // A developer folder consented to or reloaded changes the inventory.
 watch(() => updateFlow.pendingConfirm.value, (pending) => {
   if (!pending) void refreshDeveloperMode()
@@ -421,9 +459,13 @@ onMounted(() => {
   void pluginUpdates.refresh()
   void refreshPacks()
   void refreshDeveloperMode()
+  void refreshExpiredTestplace()
 })
 // A pack installed from the Marketplace page shows up here without a remount.
-watch(installed, () => void refreshPacks())
+watch(installed, () => {
+  void refreshPacks()
+  void refreshExpiredTestplace()
+})
 </script>
 
 <template>
@@ -439,6 +481,29 @@ watch(installed, () => void refreshPacks())
     <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
       {{ $t('settings.extensions.developerMode.selfHostedQuarantine', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
     </p>
+    <!-- D3: an expired test build is stopped, never silently dropped. -->
+    <div v-for="item in expiredTestplace" :key="`expired:${item.id}`" class="ext-testplace-expired ext-risk-banner" role="alert" :data-expired-id="item.id">
+      <p>{{ $t('testplace.expired.banner', { id: reveal(item.id), version: reveal(item.version ?? ''), date: (item.expiresAt ?? '').slice(0, 10) }) }}</p>
+      <p v-if="!item.canKeep" class="ext-testplace-cannot-keep">{{ $t('testplace.expired.cannotKeep') }}</p>
+      <div class="ext-actions">
+        <button
+          class="ext-testplace-marketplace nv-btn nv-btn--primary nv-btn--sm"
+          :disabled="busy || updateFlow.busy.value"
+          @click="updateFlow.install(idParts(item.id).namespace, idParts(item.id).name)"
+        >{{ $t('testplace.expired.toMarketplace') }}</button>
+        <button
+          v-if="item.canKeep"
+          class="ext-testplace-keep nv-btn nv-btn--sm"
+          :disabled="busy || updateFlow.busy.value"
+          @click="keepExpiredTestplace(item.id)"
+        >{{ $t('testplace.expired.keep') }}</button>
+        <button
+          class="ext-testplace-remove nv-btn nv-btn--sm ext-btn-danger"
+          :disabled="busy || updateFlow.busy.value"
+          @click="removeExpiredTestplace(item.id)"
+        >{{ $t('testplace.expired.remove') }}</button>
+      </div>
+    </div>
 
     <section class="ext-section">
       <h3 class="ext-section-title">
@@ -593,7 +658,7 @@ watch(installed, () => void refreshPacks())
               <span class="ext-id" v-truncate>{{ reveal(p.id) }}</span>
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
               <!-- K2: the Host's source only; none (an unknown channel) shows no badge. -->
-              <PluginSourceBadge v-if="p.source" :source="p.source" :expires-at="p.expiresAt" />
+              <PluginSourceBadge v-if="p.source" :source="p.source" :expires-at="p.expiresAt" :via="p.testplaceVia" />
               <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                 {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}
               </span>
@@ -631,6 +696,13 @@ watch(installed, () => void refreshPacks())
               </span>
             </div>
             <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
+            <!-- D3: remind from 7 days before a test build expires; once kept past it, say so. -->
+            <p v-if="p.source === 'testplace' && testplaceDaysLeft(p.expiresAt) !== null" class="ext-disabled-note ext-testplace-expiring" role="status">
+              {{ $t('testplace.expiring', { days: testplaceDaysLeft(p.expiresAt), date: (p.expiresAt ?? '').slice(0, 10) }) }}
+            </p>
+            <p v-if="p.source === 'testplace' && isTestplaceExpired(p.expiresAt)" class="ext-disabled-note ext-testplace-kept">
+              {{ $t('testplace.expired.kept') }}
+            </p>
             <p v-if="p.engineCompatible === false" class="ext-incompatible-reason">
               {{ $t('settings.extensions.incompatibleReason', { version: p.minNavideVersion ?? '' }) }}
             </p>
