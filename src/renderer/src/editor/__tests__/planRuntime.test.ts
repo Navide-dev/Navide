@@ -136,6 +136,28 @@ describe('preparePlanDocHtml', () => {
     expect(out).toContain('id="plan-meta"')
   })
 
+  // Only HTML whitespace and a doctype may precede the CSP meta: any other
+  // character starts <body>, and a CSP meta outside <head> is ignored.
+  it.each([
+    ['NO-BREAK SPACE', ' '],
+    ['LINE TABULATION', '\u000b'],
+    ['LINE SEPARATOR', ' '],
+    ['PARAGRAPH SEPARATOR', ' '],
+    ['OGHAM SPACE MARK', ' '],
+    ['IDEOGRAPHIC SPACE', '　'],
+  ])('keeps the CSP ahead of body content when a doctype is preceded by %s', (_name, lead) => {
+    const nonce = '0123456789abcdef0123456789abcdef'
+    const { html: out } = preparePlanDocHtml(`${lead}${DOC}`, config, { nonce })
+    const before = out.slice(0, out.indexOf('<meta http-equiv="Content-Security-Policy"'))
+    expect(before).toMatch(/^[\t\n\f\r ]*(?:<!doctype[^>]*>)?$/i)
+  })
+
+  it('keeps a doctype led by HTML whitespace first', () => {
+    const nonce = '0123456789abcdef0123456789abcdef'
+    const { html: out } = preparePlanDocHtml(` \t\r\n\f${DOC}`, config, { nonce })
+    expect(out.startsWith(' \t\r\n\f<!doctype html><meta http-equiv="Content-Security-Policy"')).toBe(true)
+  })
+
   it('appends the runtime and prepends the CSP when head/body tags are missing', () => {
     const nonce = '0123456789abcdef0123456789abcdef'
     const { html: out } = preparePlanDocHtml('<p>bare fragment</p>', config, { nonce })

@@ -697,8 +697,10 @@ export function preparePlanDocHtml(
   const cspMeta = buildPlanCspMeta(nonce)
   const stripped = stripExecutableScripts(content)
   // A doctype must stay the first thing in the document or the frame renders
-  // in quirks mode; the CSP meta goes right after it.
-  const doctype = /^\s*<!doctype[^>]*>/i.exec(stripped)
+  // in quirks mode; the CSP meta goes right after it. Only HTML whitespace may
+  // lead: JS `\s` also matches U+00A0, U+2028 and the like, which the parser
+  // treats as text that opens <body>, where a CSP meta is ignored.
+  const doctype = /^[\t\n\f\r ]*<!doctype[^>]*>/i.exec(stripped)
   const sanitizedContent = doctype
     ? stripped.slice(0, doctype[0].length) + cspMeta + stripped.slice(doctype[0].length)
     : cspMeta + stripped

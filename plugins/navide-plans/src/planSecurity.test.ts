@@ -81,6 +81,34 @@ describe('planSecurity', () => {
       expect(html.indexOf('Content-Security-Policy')).toBeGreaterThan(html.indexOf('<!DOCTYPE html>'))
     })
 
+    // Only HTML whitespace and a doctype may precede the CSP meta: any other
+    // character starts <body>, and a CSP meta outside <head> is ignored.
+    it.each([
+      ['NO-BREAK SPACE', ' '],
+      ['LINE TABULATION', '\u000b'],
+      ['LINE SEPARATOR', ' '],
+      ['PARAGRAPH SEPARATOR', ' '],
+      ['OGHAM SPACE MARK', ' '],
+      ['IDEOGRAPHIC SPACE', '　'],
+    ])('keeps the CSP ahead of body content when a doctype is preceded by %s', (_name, lead) => {
+      const { html } = preparePlanDocHtml(`${lead}<!doctype html><html><body><img src="data:," onerror="x()"></body></html>`, {
+        buildTrustedRuntimeScript: () => TRUSTED_SCRIPT,
+        nonce: VALID_NONCE,
+      })
+
+      const before = html.slice(0, html.indexOf('<meta http-equiv="Content-Security-Policy"'))
+      expect(before).toMatch(/^[\t\n\f\r ]*(?:<!doctype[^>]*>)?$/i)
+    })
+
+    it('keeps a doctype led by HTML whitespace first', () => {
+      const { html } = preparePlanDocHtml(' \t\r\n\f<!doctype html><html><body>Hi</body></html>', {
+        buildTrustedRuntimeScript: () => TRUSTED_SCRIPT,
+        nonce: VALID_NONCE,
+      })
+
+      expect(html.startsWith(' \t\r\n\f<!doctype html><meta http-equiv="Content-Security-Policy"')).toBe(true)
+    })
+
     it('rejects invalid nonces', () => {
       for (const invalid of [
         'bad',
