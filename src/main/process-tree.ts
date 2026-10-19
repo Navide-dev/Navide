@@ -67,8 +67,10 @@ export function killProcessTree(pid: number | undefined, signal: NodeJS.Signals)
         timeout: 5_000,
         windowsHide: true
       })
-    } catch {
-      /* already gone, or taskkill unavailable — nothing else can be named */
+    } catch (err) {
+      // Already gone, or taskkill unavailable — nothing else can be named. Say
+      // so: a tree this missed is left running with nothing in the log.
+      console.warn(`[process-tree] taskkill /PID ${pid} /T /F failed: ${(err as Error).message}`)
     }
     return
   }

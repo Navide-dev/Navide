@@ -33,6 +33,11 @@ except ImportError:
     streamablehttp_client = None  # type: ignore[assignment]
 
 _CALL_TIMEOUT = 30.0  # seconds per tool call
+# Bounds on a shutdown that would otherwise hang, not on work: a healthy stdio
+# exit takes at most ~2 s (the mcp library's own termination wait), and the
+# backend cannot exit until MCPManager.shutdown returns.
+_STOP_TIMEOUT = 5.0  # seconds per session/transport __aexit__
+_SHUTDOWN_LOCK_TIMEOUT = 5.0  # seconds shutdown waits for a cancelled startup
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -123,18 +128,32 @@ class MCPClient:
             await self.stop()  # ensure spawned subprocess is cleaned up
 
     async def stop(self) -> None:
-        """Tear down the session and its underlying transport."""
-        for cm in (self._session_cm, self._transport_cm):
+        """Tear down the session and its underlying transport.
+
+        A cancellation (shutdown cancelling a startup that is cleaning up a
+        failed server) still exits both contexts, then propagates: swallowing it
+        let the startup carry on while shutdown waited on the lifecycle lock.
+        """
+        cancelled: asyncio.CancelledError | None = None
+        for label, cm in (("session", self._session_cm), ("transport", self._transport_cm)):
             if cm is not None:
                 try:
-                    await cm.__aexit__(None, None, None)
-                except (Exception, asyncio.CancelledError):  # noqa: BLE001
+                    await asyncio.wait_for(cm.__aexit__(None, None, None), timeout=_STOP_TIMEOUT)
+                except asyncio.CancelledError as err:
+                    cancelled = err
+                except TimeoutError:
+                    log.warning(
+                        "MCP '%s' %s exit timed out after %.0fs", self.name, label, _STOP_TIMEOUT
+                    )
+                except Exception:  # noqa: BLE001
                     pass
         self._session = None
         self._session_cm = None
         self._transport_cm = None
         self.ready = False
         log.info("MCP '%s' stopped", self.name)
+        if cancelled is not None:
+            raise cancelled
 
     async def list_tools(self) -> list[dict[str, str]]:
         """Return the tools exposed by this server (best-effort, empty on failure)."""
@@ -192,14 +211,27 @@ class MCPManager:
         # server on cancellation; the ones already up are stopped below.
         if self._starting is not None:
             self._starting.cancel()
-        async with self._lifecycle_lock:
+        try:
+            await asyncio.wait_for(self._lifecycle_lock.acquire(), timeout=_SHUTDOWN_LOCK_TIMEOUT)
+        except TimeoutError:
+            # The startup did not end on cancel. Stop what it has registered so
+            # far rather than keep the backend from exiting.
+            log.warning(
+                "MCPManager: shutdown gave up waiting for the lifecycle lock after %.0fs",
+                _SHUTDOWN_LOCK_TIMEOUT,
+            )
             await self._shutdown_unlocked()
+            return
+        try:
+            await self._shutdown_unlocked()
+        finally:
+            self._lifecycle_lock.release()
 
     async def reload(self, config_path: Path | None = None) -> None:
         await self.startup(config_path or self._config_path)
 
     async def _shutdown_unlocked(self) -> None:
-        for client in self._clients.values():
+        for client in list(self._clients.values()):
             await client.stop()
         self._clients.clear()
 

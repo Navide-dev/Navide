@@ -439,3 +439,126 @@ class TestMCPManager:
             assert startup.cancelled()
             assert manager._clients == {}
             stop.assert_awaited_once()  # the server that did start is stopped
+
+
+# ── Shutdown while a stop hangs (0.2.26 packaged check: no "stopped" line) ────
+
+def _hanging_exit_cm(streams=None):
+    """A context manager whose __aexit__ never returns on its own."""
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=streams or (AsyncMock(), AsyncMock()))
+
+    async def hang(*_args):
+        await asyncio.sleep(60)
+
+    cm.__aexit__ = AsyncMock(side_effect=hang)
+    return cm
+
+
+class TestStopUnderShutdown:
+    @pytest.mark.asyncio
+    async def test_stop_reraises_cancellation_after_exiting_both_contexts(self, caplog):
+        client = MCPClient(MCPServerConfig(name="ctx", command="echo"))
+        session_cm = _hanging_exit_cm()
+        transport_cm = AsyncMock()
+        transport_cm.__aexit__ = AsyncMock(return_value=None)
+        client._session_cm = session_cm
+        client._transport_cm = transport_cm
+
+        caplog.set_level("INFO", logger="agent_team_backend.mcp_manager")
+        stopping = asyncio.create_task(client.stop())
+        await asyncio.sleep(0.05)
+        stopping.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await stopping
+        transport_cm.__aexit__.assert_awaited_once_with(None, None, None)
+        assert client._session_cm is None and client._transport_cm is None
+        assert "MCP 'ctx' stopped" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_stop_bounds_an_exit_that_never_returns(self, caplog, monkeypatch):
+        monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.05)
+        client = MCPClient(MCPServerConfig(name="ctx", command="echo"))
+        transport_cm = _hanging_exit_cm()
+        client._transport_cm = transport_cm
+
+        caplog.set_level("INFO", logger="agent_team_backend.mcp_manager")
+        await asyncio.wait_for(client.stop(), timeout=1.0)
+
+        assert "MCP 'ctx' transport exit timed out" in caplog.text
+        assert "MCP 'ctx' stopped" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_shutdown_ends_a_startup_whose_failed_server_hangs_in_stop(
+        self, tmp_path, caplog
+    ):
+        # The packaged-app hang: context7 "failed to start", its cleanup stop()
+        # blocked in the stdio transport's __aexit__, shutdown cancelled the
+        # startup, stop() swallowed that cancel, and startup went on to the
+        # next server while shutdown waited on the lifecycle lock for good.
+        cfg_path = tmp_path / "mcp_servers.json"
+        cfg_path.write_text(json.dumps([
+            {"name": "broken", "command": "echo", "args": [], "env": {}, "enabled": True},
+            {"name": "next", "command": "echo", "args": [], "env": {}, "enabled": True},
+        ]))
+        failing_session = AsyncMock()
+        failing_session.initialize = AsyncMock(side_effect=RuntimeError("handshake failed"))
+        session_cm = AsyncMock()
+        session_cm.__aenter__ = AsyncMock(return_value=failing_session)
+        session_cm.__aexit__ = AsyncMock(return_value=None)
+        transports = []
+
+        def make_transport(_params):
+            transports.append(_hanging_exit_cm())
+            return transports[-1]
+
+        caplog.set_level("INFO", logger="agent_team_backend.mcp_manager")
+        manager = MCPManager()
+        with patch("agent_team_backend.mcp_manager.stdio_client", side_effect=make_transport), \
+             patch("agent_team_backend.mcp_manager.ClientSession", return_value=session_cm), \
+             patch("agent_team_backend.mcp_manager.StdioServerParameters", return_value=MagicMock()), \
+             patch("agent_team_backend.mcp_manager._MCP_AVAILABLE", True):
+            startup = asyncio.create_task(manager.startup(cfg_path))
+            while not transports:
+                await asyncio.sleep(0.01)
+            await asyncio.sleep(0.05)  # "broken" is now inside its hanging stop()
+
+            await asyncio.wait_for(manager.shutdown(), timeout=2.0)
+
+        assert startup.cancelled()
+        assert len(transports) == 1, "startup must not go on to the next server"
+        assert manager._clients == {}
+        assert "MCP 'broken' stopped" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_shutdown_does_not_wait_forever_for_a_start_that_ignores_cancel(
+        self, tmp_path, caplog, monkeypatch
+    ):
+        monkeypatch.setattr("agent_team_backend.mcp_manager._SHUTDOWN_LOCK_TIMEOUT", 0.1)
+        cfg_path = tmp_path / "mcp_servers.json"
+        cfg_path.write_text(json.dumps([
+            {"name": "stubborn", "command": "echo", "args": [], "env": {}, "enabled": True},
+        ]))
+        entered = asyncio.Event()
+
+        async def start(_client):
+            entered.set()
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                await asyncio.sleep(60)  # swallows the first cancel
+
+        caplog.set_level("INFO", logger="agent_team_backend.mcp_manager")
+        manager = MCPManager()
+        with patch.object(MCPClient, "start", start):
+            startup = asyncio.create_task(manager.startup(cfg_path))
+            await entered.wait()
+            try:
+                await asyncio.wait_for(manager.shutdown(), timeout=1.0)
+            finally:
+                startup.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await startup
+
+        assert "MCPManager: shutdown gave up waiting for the lifecycle lock" in caplog.text
