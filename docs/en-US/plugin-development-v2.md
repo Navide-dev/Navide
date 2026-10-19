@@ -2033,10 +2033,24 @@ runs only inside the OS sandbox described in
   [Publishing to the Navide Marketplace](marketplace-publishing.md)).
   Manifest v1 packages need no grant.
 - **Developer Mode** (Settings → Navide Plugins → Developer Mode, off by
-  default) is a main-process setting the main window's settings page alone can
-  change; every change is written to the plugin activity log as a Host event
-  (`source: "host"`, `plugin_id: "host"`, `developerMode.on` / `.off`), which
-  no plugin row can claim. A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
+  default) is a main-process setting. Inside Navide only the main window's
+  settings page can change it; every change made there is written to the
+  plugin activity log as a Host event (`source: "host"`, `plugin_id: "host"`,
+  `developerMode.on` / `.off`), which no plugin row can claim. The switch and
+  the folder consents live in an unsigned file,
+  `.navide-plugin-developer-mode.json` in the plugin install root, which is
+  checked only for its shape. Any unsandboxed process running as the same
+  user, an agent CLI included, can write that file to turn Developer Mode on
+  and add a consented folder (the permission digest is a plain SHA-256 of the
+  manifest's declarations); the next start then loads that folder without the
+  consent dialog, and a packaged build starts honouring a self-hosted Registry
+  URL. A direct write leaves no activity log entry; the launch reminder still
+  appears while the switch is on, and a native backend still needs its own
+  consent. A plugin frame and a plugin's own sandboxed backend cannot write
+  it. Navide Guard grades an agent's write to this file as critical where the
+  CLI runs Navide's hooks (rule `plugin-store-write`, with the limits listed
+  under the local trust record below); it does not stop other processes of
+  the same user. A main-process signed consent is planned for 0.2.27. A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
   `AGENT_TEAM_PLUGIN_DEV_PATH` either way; with the switch on, **Load from
   folder…** opens the Host's own folder dialog. A folder loads a Manifest v2
   package (not `navide.`, not an id something else installed holds or
