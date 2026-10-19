@@ -516,3 +516,27 @@ def test_stable_envelope_and_trust_metadata_shapes_are_unchanged(client):
     client.post("/api/admin/blocklist", json={"kind": "digest", "value": "b" * 64, "reason": "x"}, headers=ADMIN_HEADERS)
     metadata, _ = signer.signed_metadata(now=when)
     assert metadata["blockedPackages"] == [] and metadata["blockedPublishers"] == []
+
+
+def test_a_blocked_digest_of_a_published_version_is_not_served(client):
+    token = approved_publisher(client)
+    data = package_for("mei-tools", "hello")
+    publish(client, token, data)
+    client.post(
+        "/api/admin/review/mei-tools/hello/1.0.0/approve",
+        json={"artifacts": queued_artifacts(client, "mei-tools", "hello")},
+        headers=ADMIN_HEADERS,
+    )
+    assert client.get("/api/extensions/mei-tools/hello/1.0.0/download").status_code == 200
+    import hashlib
+
+    added = client.post(
+        "/api/admin/blocklist",
+        json={"kind": "digest", "value": hashlib.sha256(data).hexdigest(), "reason": "malware"},
+        headers=ADMIN_HEADERS,
+    )
+    resp = client.get("/api/extensions/mei-tools/hello/1.0.0/download")
+    assert resp.status_code == 403 and resp.json()["detail"]["code"] == "DIGEST_BLOCKED"
+    # Unblocking restores it: the block is reversible, unlike a yank.
+    client.delete(f"/api/admin/blocklist/{added.json()['id']}", headers=ADMIN_HEADERS)
+    assert client.get("/api/extensions/mei-tools/hello/1.0.0/download").status_code == 200

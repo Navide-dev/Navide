@@ -892,6 +892,11 @@ def _register_routes(app: FastAPI) -> None:
                         f"(available: {available})"
                     ),
                 )
+        if digest_blocked(repo.session, row.package_digest) is not None:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DIGEST_BLOCKED", "message": "this package's sha256 is on the registry blocklist"},
+            )
         try:
             stream = state.storage.open_stream(row.package_key)
         except StorageError as exc:

@@ -7,7 +7,9 @@
   <p class="muted">Blocked publishers and packages are refused at publish, listed in the
     signed trust metadata the app enforces, hidden from the marketplace, and shown on
     the public <a href="{{ base }}/removed">removed extensions</a> list. Entries from the
-    trust config file are read-only here.</p>
+    trust config file are read-only here. A blocked digest is refused at publish and at
+    download, and listed in the signed local-install trust document; it does not hide a
+    listing (block the package for that).</p>
   <ul class="summary-bar" aria-label="Blocklist summary">
     <li><b>{{ items|length }}</b><span>blocked</span></li>
     <li><b>{{ items|selectattr('kind', 'equalto', 'publisher')|list|length }}</b><span>publishers</span></li>
