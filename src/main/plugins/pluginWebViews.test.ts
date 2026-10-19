@@ -338,6 +338,34 @@ describe('user in control', () => {
     expect(registry.list('navide.browser')[0]).toMatchObject({ control: 'agent', state: 'running' })
   })
 
+  it('detaches the debugger on every takeover and re-attaches on the next agent cdp', async () => {
+    const { registry, views, sessions } = setup()
+    const takeovers: Array<(viewId: string, contents: (typeof views)[number]['webContents']) => void> = [
+      (_viewId, contents) => contents.emit('before-mouse-event', {}, { type: 'mouseDown' }),
+      (_viewId, contents) => contents.emit('before-input-event', {}, { type: 'keyDown' }),
+      (viewId) => registry.takeControl('navide.browser', viewId),
+      (viewId) => registry.navigate('navide.browser', { viewId, action: 'reload' }),
+      (viewId) => registry.setState('navide.browser', viewId, 'need-action', 'Sign in'),
+      (_viewId, contents) => sessions.get('persist:navide-web:navide.browser')!.permissionHandler?.(contents, 'geolocation', () => {}),
+      (viewId) => registry.setOwner('navide.browser', viewId, 'user'),
+    ]
+    for (const [index, takeOver] of takeovers.entries()) {
+      const { viewId } = registry.create('navide.browser', { space: `agent-${index}` }, 'agent')
+      const contents = views[index].webContents
+      await registry.cdp('navide.browser', viewId, 'Runtime.evaluate', { expression: '1' })
+      expect(contents.attached, `takeover ${index}`).toBe(true)
+      takeOver(viewId, contents)
+      expect(contents.attached, `takeover ${index}`).toBe(false)
+      if (registry.list('navide.browser').find(view => view.viewId === viewId)?.owner === 'agent') {
+        registry.returnControl('navide.browser', viewId)
+      } else {
+        registry.setOwner('navide.browser', viewId, 'agent')
+      }
+      await registry.cdp('navide.browser', viewId, 'Runtime.evaluate', { expression: '2' })
+      expect(contents.attached, `takeover ${index}`).toBe(true)
+    }
+  })
+
   it('setOwner moves a Space between the user and the agent', async () => {
     const { registry } = setup()
     const { viewId } = registry.create('navide.browser', { space: 'mine' }, 'user')

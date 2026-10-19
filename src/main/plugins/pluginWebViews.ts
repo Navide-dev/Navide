@@ -262,6 +262,7 @@ export class PluginWebViewRegistry {
     entry.control = owner
     entry.reason = owner === 'user' ? 'user-owned' : undefined
     if (owner === 'agent' && entry.state === 'need-action') entry.state = 'running'
+    if (owner === 'user') this.detachDebugger(entry)
     this.changed(pluginId)
   }
 
@@ -367,6 +368,21 @@ export class PluginWebViewRegistry {
     entry.control = 'user'
     entry.reason = reason
     if (reason === 'permission') entry.state = 'need-action'
+    this.detachDebugger(entry)
+  }
+
+  /** The user now drives the page: drop the agent's debugger session so
+   *  nothing set through it outlives the takeover. The next agent
+   *  `cdp`, once control is back, attaches again. Script already running in
+   *  the page survives this; only a reload clears it. */
+  private detachDebugger(entry: WebViewEntry): void {
+    const contents = entry.view.webContents
+    if (contents.isDestroyed()) return
+    try {
+      if (contents.debugger.isAttached()) contents.debugger.detach()
+    } catch {
+      /* Detaching a debugger that the page already dropped. */
+    }
   }
 
   private entry(pluginId: string, viewId: string): WebViewEntry {

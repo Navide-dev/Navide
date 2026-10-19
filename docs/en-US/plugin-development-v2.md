@@ -1580,7 +1580,14 @@ someone it is not.
   with disclosure is a later product decision.
 - **The user always wins.** Any keyboard or mouse input from the user on an
   agent-controlled view sets `control` to `user` (reason `manual_takeover`);
-  the agent cannot drive the view again until the user returns control.
+  the agent cannot drive the view again until the user returns control. Every
+  takeover (input, `web.navigate`, `web.takeControl`, a permission request,
+  `need-action`) and `web.setOwner` to `user` also detaches the agent's
+  debugger from the view; the agent's next `cdp` after control returns
+  attaches it again. Residual risk: script the agent already started in the
+  page (for example a timer from `Runtime.evaluate`) keeps running after the
+  detach, because the page itself is not reloaded. Reloading the page clears
+  it.
 - **Views follow the package.** Disabling or removing the package destroys all
   its views. Closing the package's window does not: views keep running in the
   background until the package closes them.
