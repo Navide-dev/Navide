@@ -11291,6 +11291,9 @@
       "prerelease": "預覽版（已審核）",
       "testplace": "測試版，沒有人工審核，{date} 到期",
       "testplaceNoExpiry": "測試版，沒有人工審核，到期日不明",
+      "testplaceInvite": "測試版：只經過自動掃描，{date} 到期",
+      "testplaceCode": "測試版：公開測試碼已經過輕量人工審核，這一版沒有人工審核，{date} 到期",
+      "testplaceExpired": "測試版，已於 {date} 到期（繼續使用中）",
       "local-signed": "本機檔案，發佈者已簽章，這個版本未經 Navide 審核",
       "local-unsigned": "本機檔案，未經 Navide 審核，未簽章",
       "developer-unpacked": "開發者資料夾，內容隨時可能變動",
@@ -11476,6 +11479,57 @@
     "button": {
       "enable": "重新啟用",
       "disable": "再次停用"
+    }
+  },
+  "testplace": {
+    "view": "Testplace（受邀）",
+    "title": "受邀測試",
+    "intro": "Navide 外掛的測試版只有受邀的人看得到、裝得到，沒有經過 Navide 人工審核，到期後會停用。",
+    "signInNeeded": "要加入測試，請先登入 Navide Cloud 帳號。",
+    "joinLabel": "邀請碼或公開測試碼",
+    "joinPlaceholder": "貼上 tpi_… 或 tpc_…，也可以貼整段邀請訊息",
+    "join": "加入",
+    "joined": "已加入 {id} 的測試。",
+    "empty": "還沒有加入任何測試。",
+    "refresh": "重新整理",
+    "viaInvite": "以邀請加入",
+    "viaCode": "以公開測試碼加入",
+    "install": "安裝測試版 {version}",
+    "installedVersion": "已安裝 {version}",
+    "noVersion": "目前沒有可安裝的測試版。",
+    "notForThisComputer": "這個測試版不支援這台電腦。",
+    "leave": "退出測試",
+    "leaveTitle": "退出測試",
+    "leaveConfirm": "退出 {id} 的測試？已安裝的版本會保留，但不會再收到新的測試版。",
+    "expiring": "這個測試版 {days} 天後（{date}）到期。到期後會停用，但設定和資料都會保留。",
+    "error": {
+      "notSignedIn": "Navide Cloud 帳號尚未登入，或登入已過期。",
+      "notFound": "找不到這個邀請或測試碼，或它已經失效。",
+      "codeFull": "這個公開測試碼的名額已滿。",
+      "badCode": "這不是 Testplace 的邀請碼或公開測試碼。",
+      "inviteLimit": "超過這個 Navide 外掛的測試者上限。",
+      "other": "Testplace 要求失敗：{error}"
+    },
+    "expired": {
+      "banner": "{id} {version} 的測試版已於 {date} 到期，已經停用；設定和資料都保留著。請選擇接下來要怎麼做。",
+      "toMarketplace": "改裝 Navide 市集版本",
+      "keep": "繼續使用（標示已過期）",
+      "remove": "移除",
+      "cannotKeep": "這個版本已被下架或無法驗證，不能繼續使用。",
+      "keepTitle": "繼續使用已過期的測試版",
+      "keepConfirm": "繼續使用已過期的測試版 {id}？它沒有經過 Navide 人工審核，也不會再收到更新；被下架時仍會停用。",
+      "kept": "已過期的測試版，繼續使用中：不會再收到更新，被下架時仍會停用。"
+    },
+    "invite": {
+      "title": "邀請測試者",
+      "open": "邀請測試者",
+      "plugin": "Navide 外掛（namespace.name）",
+      "invitees": "測試者：每行一位（email 或備註，最多 120 字）",
+      "limit": "每個 Navide 外掛最多 {limit} 位測試者。邀請制的測試版只經過自動掃描。",
+      "submit": "送出邀請",
+      "sent": "已建立 {count} 個邀請。把每個邀請碼交給對應的測試者；邀請碼只會顯示這一次。",
+      "copy": "複製",
+      "done": "完成"
     }
   },
   "marketplace-developer": {

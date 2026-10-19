@@ -11291,6 +11291,9 @@
       "prerelease": "プレリリース版（審査済み）",
       "testplace": "テスト版。人による審査なし。{date} に期限切れ",
       "testplaceNoExpiry": "テスト版。人による審査なし。期限不明",
+      "testplaceInvite": "テスト版：自動スキャンのみ。{date} に期限切れ",
+      "testplaceCode": "テスト版：公開テストコードは簡易な人による審査済み、このバージョンは人による審査なし。{date} に期限切れ",
+      "testplaceExpired": "テスト版。{date} に期限切れ（使用を継続中）",
       "local-signed": "ローカルファイル。発行者の署名あり。このバージョンは Navide の審査を受けていません",
       "local-unsigned": "ローカルファイル。Navide の審査なし、署名なし",
       "developer-unpacked": "開発者フォルダー。内容はいつでも変わる可能性があります",
@@ -11476,6 +11479,57 @@
     "button": {
       "enable": "再度有効にする",
       "disable": "再度無効にする"
+    }
+  },
+  "testplace": {
+    "view": "Testplace（招待制）",
+    "title": "招待制テスト",
+    "intro": "Navide プラグインのテスト版は、招待された人だけが表示・インストールできます。Navide による人の審査はなく、期限が切れると停止します。",
+    "signInNeeded": "テストに参加するには、まず Navide Cloud アカウントにサインインしてください。",
+    "joinLabel": "招待コードまたは公開テストコード",
+    "joinPlaceholder": "tpi_… または tpc_… を貼り付け（招待メッセージ全体でも可）",
+    "join": "参加",
+    "joined": "{id} のテストに参加しました。",
+    "empty": "まだテストに参加していません。",
+    "refresh": "更新",
+    "viaInvite": "招待で参加",
+    "viaCode": "公開テストコードで参加",
+    "install": "テスト版 {version} をインストール",
+    "installedVersion": "{version} をインストール済み",
+    "noVersion": "現在インストールできるテスト版はありません。",
+    "notForThisComputer": "このテスト版はこのコンピューターに対応していません。",
+    "leave": "テストから抜ける",
+    "leaveTitle": "テストから抜ける",
+    "leaveConfirm": "{id} のテストから抜けますか？インストール済みのバージョンは残りますが、新しいテスト版は届かなくなります。",
+    "expiring": "このテスト版は {days} 日後（{date}）に期限切れになります。その後は停止しますが、設定とデータは残ります。",
+    "error": {
+      "notSignedIn": "Navide Cloud にサインインしていないか、サインインの期限が切れています。",
+      "notFound": "この招待またはテストコードが見つからないか、無効になっています。",
+      "codeFull": "この公開テストコードは定員に達しています。",
+      "badCode": "これは Testplace の招待コードまたは公開テストコードではありません。",
+      "inviteLimit": "この Navide プラグインのテスター上限を超えます。",
+      "other": "Testplace のリクエストに失敗しました：{error}"
+    },
+    "expired": {
+      "banner": "テスト版 {id} {version} は {date} に期限切れになり、停止しました。設定とデータは残っています。次の操作を選んでください。",
+      "toMarketplace": "Navide マーケットプレイス版をインストール",
+      "keep": "使い続ける（期限切れと表示）",
+      "remove": "削除",
+      "cannotKeep": "このバージョンは取り下げられたか検証できないため、使い続けることはできません。",
+      "keepTitle": "期限切れのテスト版を使い続ける",
+      "keepConfirm": "期限切れのテスト版 {id} を使い続けますか？Navide による人の審査はなく、更新も届きません。取り下げられた場合は停止します。",
+      "kept": "期限切れのテスト版を使用中：更新は届かず、取り下げられた場合は停止します。"
+    },
+    "invite": {
+      "title": "テスターを招待",
+      "open": "テスターを招待",
+      "plugin": "Navide プラグイン（namespace.name）",
+      "invitees": "テスター：1 行に 1 人（メールアドレスまたはメモ、120 文字まで）",
+      "limit": "Navide プラグインごとに最大 {limit} 人まで。招待制のテスト版は自動スキャンのみです。",
+      "submit": "招待を送信",
+      "sent": "{count} 件の招待を作成しました。各コードを該当するテスターに渡してください。コードは今回だけ表示されます。",
+      "copy": "コピー",
+      "done": "完了"
     }
   },
   "marketplace-developer": {

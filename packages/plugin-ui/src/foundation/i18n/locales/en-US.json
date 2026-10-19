@@ -11291,6 +11291,9 @@
       "prerelease": "Pre-release (reviewed)",
       "testplace": "Test build, no human review, expires {date}",
       "testplaceNoExpiry": "Test build, no human review, expiry unknown",
+      "testplaceInvite": "Test build: automated scan only, expires {date}",
+      "testplaceCode": "Test build: the public test code had a light human review; this version had none. Expires {date}",
+      "testplaceExpired": "Test build, expired {date} (kept in use)",
       "local-signed": "Local file signed by its publisher; this version was not reviewed by Navide",
       "local-unsigned": "Local file, not reviewed by Navide, unsigned",
       "developer-unpacked": "Developer folder; its contents can change at any time",
@@ -11476,6 +11479,57 @@
     "button": {
       "enable": "Enable again",
       "disable": "Disable again"
+    }
+  },
+  "testplace": {
+    "view": "Testplace (invited)",
+    "title": "Invited tests",
+    "intro": "Test builds of Navide plugins are visible and installable only to the people invited. They have no Navide human review and stop when they expire.",
+    "signInNeeded": "To join a test, sign in with your Navide Cloud account first.",
+    "joinLabel": "Invite or public test code",
+    "joinPlaceholder": "Paste tpi_… or tpc_…, or the whole invitation message",
+    "join": "Join",
+    "joined": "Joined the test of {id}.",
+    "empty": "You have not joined any test.",
+    "refresh": "Refresh",
+    "viaInvite": "Joined by invite",
+    "viaCode": "Joined with a public test code",
+    "install": "Install test build {version}",
+    "installedVersion": "{version} installed",
+    "noVersion": "No test build to install right now.",
+    "notForThisComputer": "This test build does not support this computer.",
+    "leave": "Leave test",
+    "leaveTitle": "Leave test",
+    "leaveConfirm": "Leave the test of {id}? The installed build stays, but you will get no new test builds.",
+    "expiring": "This test build expires in {days} days ({date}). It then stops; its settings and data are kept.",
+    "error": {
+      "notSignedIn": "Not signed in to Navide Cloud, or the sign-in expired.",
+      "notFound": "This invite or test code was not found or no longer works.",
+      "codeFull": "This public test code is full.",
+      "badCode": "This is not a Testplace invite or public test code.",
+      "inviteLimit": "This would exceed the tester limit of this Navide plugin.",
+      "other": "Testplace request failed: {error}"
+    },
+    "expired": {
+      "banner": "The test build {id} {version} expired on {date} and was stopped; its settings and data are kept. Choose what to do next.",
+      "toMarketplace": "Install the Navide Marketplace version",
+      "keep": "Keep using (marked expired)",
+      "remove": "Remove",
+      "cannotKeep": "This version was taken down or no longer verifies, so it cannot be kept.",
+      "keepTitle": "Keep an expired test build",
+      "keepConfirm": "Keep using the expired test build {id}? It had no Navide human review and gets no more updates; a takedown still stops it.",
+      "kept": "Expired test build, kept in use: it gets no updates, and a takedown still stops it."
+    },
+    "invite": {
+      "title": "Invite testers",
+      "open": "Invite testers",
+      "plugin": "Navide plugin (namespace.name)",
+      "invitees": "Testers, one per line (an email address or a note, up to 120 characters)",
+      "limit": "Up to {limit} testers per Navide plugin. Invite builds have the automated scan only.",
+      "submit": "Send invitations",
+      "sent": "{count} invitations created. Give each code to its tester; the codes are shown only this once.",
+      "copy": "Copy",
+      "done": "Done"
     }
   },
   "marketplace-developer": {
