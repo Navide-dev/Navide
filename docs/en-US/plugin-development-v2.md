@@ -1513,6 +1513,7 @@ and `y` at least 0, `width` and `height` from 1 to 16384. Unknown fields are
 The `web.changed` event carries `{views: WebViewInfo[]}` whenever any view of
 the package changes. It is delivered only to views of the same package.
 
+<!-- docs-typecheck: skip (shape reference; the SDK does not export WebViewInfo yet) -->
 ```ts
 interface WebViewInfo {
   viewId: string
