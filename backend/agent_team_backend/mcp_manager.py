@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,11 +35,26 @@ except ImportError:
     streamablehttp_client = None  # type: ignore[assignment]
 
 _CALL_TIMEOUT = 30.0  # seconds per tool call
-# Bounds on a shutdown that would otherwise hang, not on work: a healthy stdio
-# exit takes at most ~2 s (the mcp library's own termination wait), and the
-# backend cannot exit until MCPManager.shutdown returns.
+# Bounds on a shutdown that would otherwise hang, not on work: the mcp library's
+# own stdio teardown ends within ~4 s on POSIX (2 s for the server to exit on
+# stdin EOF, then SIGTERM to its group, 2 s, then SIGKILL) and ~2 s on Windows,
+# and the backend cannot exit until MCPManager.shutdown returns.
 _STOP_TIMEOUT = 5.0  # seconds per session/transport __aexit__
+_STOP_GRACE = 1.0  # seconds between the deadline's steps (kill, then cancels)
 _SHUTDOWN_LOCK_TIMEOUT = 5.0  # seconds shutdown waits for a cancelled startup
+
+
+def _stdio_server_pid(transport_cm: Any) -> int | None:
+    """The pid of the server a live `stdio_client` spawned, or None.
+
+    stdio_client does not expose its process; it is a local of the suspended
+    generator. Read once at start so a stuck teardown can still kill it.
+    """
+    frame = getattr(getattr(transport_cm, "gen", None), "ag_frame", None)
+    f_locals = getattr(frame, "f_locals", None)
+    process = f_locals.get("process") if isinstance(f_locals, dict) else None
+    pid = getattr(process, "pid", None)
+    return pid if isinstance(pid, int) else None
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -78,6 +95,7 @@ class MCPClient:
         self._session: Any = None
         self._transport_cm: Any = None
         self._session_cm: Any = None
+        self._server_pid: int | None = None
         self._lock = asyncio.Lock()
         self.ready = False
 
@@ -110,6 +128,8 @@ class MCPClient:
                 raise ValueError(f"unsupported MCP transport: {self._config.transport}")
             streams = await transport_cm.__aenter__()
             self._transport_cm = transport_cm
+            if self._config.transport == "stdio":
+                self._server_pid = _stdio_server_pid(transport_cm)
             # mcp>=1.27 streamable HTTP yields (read, write, get_session_id),
             # while stdio and SSE yield only (read, write).
             read, write = streams[:2]
@@ -138,22 +158,77 @@ class MCPClient:
         for label, cm in (("session", self._session_cm), ("transport", self._transport_cm)):
             if cm is not None:
                 try:
-                    await asyncio.wait_for(cm.__aexit__(None, None, None), timeout=_STOP_TIMEOUT)
+                    await self._exit_bounded(label, cm)
                 except asyncio.CancelledError as err:
                     cancelled = err
-                except TimeoutError:
-                    log.warning(
-                        "MCP '%s' %s exit timed out after %.0fs", self.name, label, _STOP_TIMEOUT
-                    )
                 except Exception:  # noqa: BLE001
                     pass
         self._session = None
         self._session_cm = None
         self._transport_cm = None
+        self._server_pid = None
         self.ready = False
         log.info("MCP '%s' stopped", self.name)
         if cancelled is not None:
             raise cancelled
+
+    async def _exit_bounded(self, label: str, cm: Any) -> None:
+        """`cm.__aexit__`, ended if it outlives _STOP_TIMEOUT.
+
+        Past the deadline the stdio server's process group is SIGKILLed first,
+        which lets the library's own teardown finish normally. Only if it still
+        has not, the task is cancelled every _STOP_GRACE: a single cancel is not
+        enough, since anyio's Process.aclose waits for a second one before it
+        kills, and a cancel landing before the library's SIGKILL step skips it.
+        A cancel from outside (shutdown) still propagates to the caller.
+        """
+        task = asyncio.current_task()
+        assert task is not None
+        loop = asyncio.get_running_loop()
+        outside = task.cancelling()
+        ours = 0
+        handle: asyncio.TimerHandle
+
+        def cancel_again() -> None:
+            nonlocal ours, handle
+            ours += 1
+            task.cancel()
+            handle = loop.call_later(_STOP_GRACE, cancel_again)
+
+        def on_deadline() -> None:
+            nonlocal handle
+            log.warning(
+                "MCP '%s' %s exit timed out after %.0fs", self.name, label, _STOP_TIMEOUT
+            )
+            if label == "transport":
+                self._kill_server_group()
+            handle = loop.call_later(_STOP_GRACE, cancel_again)
+
+        handle = loop.call_later(_STOP_TIMEOUT, on_deadline)
+        try:
+            await cm.__aexit__(None, None, None)
+        except asyncio.CancelledError:
+            handle.cancel()
+            for _ in range(ours):
+                task.uncancel()
+            if task.cancelling() > outside:
+                raise
+        finally:
+            handle.cancel()
+
+    def _kill_server_group(self) -> None:
+        """SIGKILL the stdio server's process group (it is its own group leader:
+        stdio_client starts it with start_new_session). Windows: the library's
+        Job object ends the tree when the backend exits; nothing to do here."""
+        pid = self._server_pid
+        if pid is None or sys.platform == "win32":
+            return
+        try:
+            if os.getpgid(pid) == pid:
+                os.killpg(pid, signal.SIGKILL)
+                log.warning("MCP '%s' server group %d killed", self.name, pid)
+        except (ProcessLookupError, PermissionError):
+            pass
 
     async def list_tools(self) -> list[dict[str, str]]:
         """Return the tools exposed by this server (best-effort, empty on failure)."""

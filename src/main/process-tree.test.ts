@@ -158,7 +158,7 @@ describe('killProcessTree', () => {
       killProcessTree(4102, 'SIGKILL')
 
       expect(warn).toHaveBeenCalledWith(
-        '[process-tree] taskkill /PID 4102 /T /F failed: ERROR: Access is denied.'
+        '[process-tree] taskkill /PID 4102 /T /F did not succeed: ERROR: Access is denied.'
       )
       warn.mockRestore()
     })

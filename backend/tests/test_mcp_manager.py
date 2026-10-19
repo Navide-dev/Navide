@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import signal
+import sys
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -479,6 +483,7 @@ class TestStopUnderShutdown:
     @pytest.mark.asyncio
     async def test_stop_bounds_an_exit_that_never_returns(self, caplog, monkeypatch):
         monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.05)
+        monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_GRACE", 0.05)
         client = MCPClient(MCPServerConfig(name="ctx", command="echo"))
         transport_cm = _hanging_exit_cm()
         client._transport_cm = transport_cm
@@ -562,3 +567,107 @@ class TestStopUnderShutdown:
                     await startup
 
         assert "MCPManager: shutdown gave up waiting for the lifecycle lock" in caplog.text
+
+
+# A stdio MCP server that answers the handshake, then ignores stdin EOF and
+# SIGTERM, with a grandchild in its process group that ignores them too.
+_STUBBORN_SERVER = r"""
+import json, os, signal, subprocess, sys, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+child = subprocess.Popen([sys.executable, "-c",
+    "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(300)"])
+with open(sys.argv[1], "w") as f:
+    f.write(f"{os.getpid()} {child.pid}")
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg.get("method") == "initialize":
+        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {
+            "protocolVersion": msg["params"]["protocolVersion"],
+            "capabilities": {}, "serverInfo": {"name": "stubborn", "version": "0"}}}),
+            flush=True)
+time.sleep(300)
+"""
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
+@pytest.mark.asyncio
+async def test_stop_deadline_kills_a_stdio_server_that_ignores_eof_and_sigterm(
+    tmp_path, monkeypatch
+):
+    # Review of #454, MED-1: the deadline used to cancel the library's own
+    # teardown before its SIGKILL step (~4 s on POSIX: 2 s EOF + 2 s SIGTERM),
+    # and anyio's Process.aclose then waited for a second cancel that never
+    # came — stop() hung for good and the server lived on.
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 1.0)
+    script = tmp_path / "server.py"
+    script.write_text(_STUBBORN_SERVER)
+    pidfile = tmp_path / "pids"
+    client = MCPClient(MCPServerConfig(
+        name="stubborn", command=sys.executable, args=[str(script), str(pidfile)]
+    ))
+    await client.start()
+    assert client.ready
+    pids = [int(p) for p in pidfile.read_text().split()]
+    try:
+        await asyncio.wait_for(client.stop(), timeout=8.0)
+        deadline = time.monotonic() + 3.0
+        while any(_alive(p) for p in pids) and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        assert not [p for p in pids if _alive(p)], "server and grandchild must be gone"
+    finally:
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
+@pytest.mark.asyncio
+async def test_cancelled_stop_still_kills_the_server_group(tmp_path, monkeypatch):
+    # Review of #454, LOW-2: shutdown's cancel landing in the teardown skipped
+    # the library's group kill; anyio then killed only the direct child and a
+    # grandchild that ignores EOF was left behind.
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 1.0)
+    script = tmp_path / "server.py"
+    script.write_text(_STUBBORN_SERVER)
+    pidfile = tmp_path / "pids"
+    client = MCPClient(MCPServerConfig(
+        name="stubborn", command=sys.executable, args=[str(script), str(pidfile)]
+    ))
+    started = asyncio.Event()
+
+    async def lifecycle():
+        # Start and stop in one task, as MCPClient.start's own cleanup does:
+        # anyio's task group must be exited by the task that entered it.
+        await client.start()
+        started.set()
+        await client.stop()
+
+    stopping = asyncio.create_task(lifecycle())
+    await asyncio.wait_for(started.wait(), timeout=8.0)
+    assert client.ready
+    pids = [int(p) for p in pidfile.read_text().split()]
+    try:
+        await asyncio.sleep(0.3)  # inside the library's 2 s wait for EOF exit
+        stopping.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(stopping, timeout=8.0)
+        deadline = time.monotonic() + 3.0
+        while any(_alive(p) for p in pids) and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        assert not [p for p in pids if _alive(p)], "server and grandchild must be gone"
+    finally:
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
