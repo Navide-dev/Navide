@@ -101,7 +101,7 @@ def test_format_md_matches_the_manifest_models() -> None:
     assert parse_manifest(manifest).version == "2.5.0-beta.1"
 
 
-def test_testplace_publish_is_refused_until_testplace_opens(client: TestClient) -> None:
+def test_anonymous_testplace_publish_is_refused(client: TestClient) -> None:
     manifest = copy.deepcopy(contract_manifest())
     manifest.update(id="acme.files", publisher="acme", version="1.0.0")
     resp = client.post(
@@ -109,8 +109,9 @@ def test_testplace_publish_is_refused_until_testplace_opens(client: TestClient) 
         params={"channel": "testplace"},
         files={"package": ("pkg.vsix", build_v2_package(manifest), "application/zip")},
     )
-    assert resp.status_code == 409, resp.text
-    assert "TESTPLACE_NOT_OPEN" in resp.json()["detail"]
+    # Testplace opened in 0.2.27 for authenticated, vetted publishers only
+    # (test_testplace.py); an anonymous dev publish still gets nothing stored.
+    assert resp.status_code == 401, resp.text
     assert client.get("/api/extensions/acme/files").status_code == 404
 
 
