@@ -197,7 +197,7 @@ function readSignature(value) {
 }
 
 /** Upload to `<registry>/api/publish`. Returns { status, body }. */
-export async function publish(registry, packagePath, { target, signature, token }) {
+export async function publish(registry, packagePath, { target, signature, token, channel }) {
   const resolvedToken = token || process.env[TOKEN_ENV] || storedCredentials(registry)?.token
   if (!resolvedToken) {
     throw new Error(`publish needs ${TOKEN_ENV} or \`navide-plugin login --registry ${registry}\``)
@@ -205,6 +205,7 @@ export async function publish(registry, packagePath, { target, signature, token 
   const params = new URLSearchParams({ target })
   const signatureValue = readSignature(signature)
   if (signatureValue) params.set('signature', signatureValue)
+  if (channel) params.set('channel', channel)
   const form = new FormData()
   form.append('package', new Blob([readRegularFileNoFollow(packagePath)], { type: 'application/zip' }), basename(packagePath))
   const response = await fetch(`${registry}/api/publish?${params}`, {

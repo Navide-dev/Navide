@@ -358,9 +358,10 @@ version a pre-release.
 A publish may name its channel with `?channel=stable` or
 `?channel=pre-release`; it must match the version (`400` otherwise). Leaving
 it out derives the channel from the version as above. `?channel=testplace`
-(invite-only test builds that expire after 90 days) is answered with
-`409 TESTPLACE_NOT_OPEN` until Testplace opens in Navide 0.2.27. Public
-listings, details and downloads never include a testplace version. Its
+publishes an invite-only test build that expires after 90 days (see
+[Testplace](#testplace) below); it needs a publisher token of a namespace
+whose developer qualification is approved. Public listings, details and
+downloads never include a testplace version. Its
 Registry envelope carries `channel` and `expiresAt` inside the signature, so
 an App released before Testplace refuses it, and a current App refuses it
 after it expires (`TESTPLACE_EXPIRED`) or when the channel is one it does not
@@ -376,8 +377,7 @@ way. Navide labels a pre-release **Pre-release (reviewed)**, never unreviewed.
 ### Pre-release, Testplace or a local install
 
 Pick by who should get the build and whether it must be reviewed first.
-Testplace is planned for Navide 0.2.27; until then, use a pre-release or send
-the package file.
+Testplace needs Navide 0.2.27 or later on the tester's side.
 
 | | Pre-release | Testplace | Local install |
 |---|---|---|---|
