@@ -78,15 +78,22 @@ export const SPEC = {
   //    clears it. The log route is structurally too late; only the screen is
   //    on time.
   //
-  // Two anchors, either of which is enough. The first is the permission box's
+  // Several anchors, any one of which is enough. The first is the permission box's
   // last option, identical across its edit / command / MCP variants. The
   // second is the option-picker footer, which AskUserQuestion and the
   // permission box both draw and neither leaves behind: answering repaints it
   // away, and the watcher re-checks every poll, so a stale match cannot hold.
   // The gap is bounded because `matchAwaitingInput` collapses whitespace to
   // single spaces before testing, and the footer's own separators vary.
+  // The two-option box (`Do you want to proceed?` / `1. Yes` / `2. No`) has
+  // neither, so a third anchor is its `Esc to cancel · Tab to amend` footer.
+  // Every anchor must be the last text on screen: a live box is always the
+  // bottom of the frame, while the same words quoted in conversation (a pane
+  // discussing this very pattern) sit above the idle input box and status
+  // line — matching those parked an idle pane on AWAITING.
   awaitingInput: {
-    pattern: /No, and tell Claude what to do differently|Enter to select ·.{0,80}?Esc to cancel/,
+    pattern:
+      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend) ?$/,
     // Additive to the hook, never authoritative over it: an MCP elicitation
     // draws no option box, so a non-match here says nothing about a wait the
     // hook raised. See the field's own doc comment.

@@ -189,12 +189,70 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
     expect(matchAwaitingInput('claude', PERMISSION_BOX)).toBe(true)
   })
 
+  it('matches the two-option permission box with the amend footer', () => {
+    // The current box drops the "No, and tell Claude..." option; its only
+    // furniture is the numbered No and the footer.
+    const box = [
+      'Do you want to proceed?',
+      '❯ 1. Yes',
+      '  2. No',
+      '',
+      'Esc to cancel · Tab to amend',
+    ].join('\n')
+    expect(matchAwaitingInput('claude', box)).toBe(true)
+    // Blank rows below the box (a short conversation) do not hide it.
+    expect(matchAwaitingInput('claude', `${box}\n\n\n`)).toBe(true)
+  })
+
+  it('matches the four-option Bash box from claude 2.1.303', () => {
+    // Transcribed from a screenshot of a live pane in manual mode.
+    const box = [
+      ' Bash command',
+      ' Tip: auto mode handles these prompts for you — choose "switch to auto',
+      ' mode" below',
+      ' Create empty permission test file in /tmp',
+      ' ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌',
+      ' touch /tmp/navide-permission-test',
+      ' ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌',
+      ' Do you want to proceed?',
+      ' ❯ 1. Yes',
+      '   2. Yes, and always allow access to /tmp from this project',
+      '   3. Yes, and switch to auto mode · auto mode handles these prompts for',
+      '      you',
+      '   4. No',
+      '',
+      ' Esc to cancel · Tab to amend',
+      '',
+      '',
+    ].join('\n')
+    expect(matchAwaitingInput('claude', box)).toBe(true)
+  })
+
+  it('does not match the box quoted in conversation text above the idle prompt', () => {
+    // A pane discussing the box shows its furniture as prose; the live box is
+    // always the last thing on screen, the quoted one is followed by the input.
+    const quoted = [
+      '  The current box is `Do you want to proceed?` / `1. Yes` / `2. No`',
+      '  with the footer Esc to cancel · Tab to amend.',
+      "  The old one ended on '3. No, and tell Claude what to do differently (esc)',",
+      '  and the picker on Enter to select · Tab to switch · Esc to cancel',
+      '',
+      '────────────────────────────────────────',
+      '❯ ',
+      '────────────────────────────────────────',
+      '  ▸▸ bypass permissions on (shift+tab to cycle)',
+    ].join('\n')
+    expect(matchAwaitingInput('claude', quoted)).toBe(false)
+  })
+
   it('does not match prose that merely reads like a prompt', () => {
     // The anchors are the widget's own furniture, not the question text: a
     // sentence about selecting something must not park the pane.
     expect(matchAwaitingInput('claude', 'Enter to select the approach, then continue.')).toBe(false)
     expect(matchAwaitingInput('claude', 'Press Esc to cancel if this looks wrong.')).toBe(false)
     expect(matchAwaitingInput('claude', '> Try "how do I log an error?"')).toBe(false)
+    expect(matchAwaitingInput('claude', 'Do you want to proceed? I can also 1. Yes, rewrite it.')).toBe(false)
+    expect(matchAwaitingInput('claude', 'Use Tab to amend the commit message.')).toBe(false)
   })
 
   it('never clears on a miss, unlike a pattern-only vendor', () => {
