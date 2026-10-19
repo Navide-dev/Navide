@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
 import PluginSourceBadge from '../PluginSourceBadge.vue'
@@ -18,9 +18,14 @@ function render(props: Record<string, unknown>) {
 let saved: typeof i18n.global.locale.value
 beforeEach(() => {
   saved = i18n.global.locale.value
+  // A test build's wording depends on whether its expiry has passed: pin "now"
+  // so the fixed expiries below never turn into a date bomb.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
 })
 afterEach(() => {
   i18n.global.locale.value = saved
+  vi.useRealTimers()
 })
 
 describe('PluginSourceBadge (K2)', () => {
@@ -81,6 +86,38 @@ describe('PluginSourceBadge (K2)', () => {
       expect(render({ source: 'testplace', expiresAt }).text()).toBe('測試版，沒有人工審核，到期日不明')
     }
   })
+
+  it('names the review of a test build by how the user joined it (W5b), in every locale', () => {
+    const expiresAt = '2026-12-31T08:00:00Z'
+    const shown: Record<string, Record<string, string>> = {}
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      shown[locale] = {
+        invite: render({ source: 'testplace', expiresAt, via: 'invite', row: true }).text(),
+        code: render({ source: 'testplace', expiresAt, via: 'code', row: true }).text(),
+        unknown: render({ source: 'testplace', expiresAt, via: null, row: true }).text(),
+      }
+    }
+    expect(shown['zh-TW']).toEqual({
+      invite: '來源與審核 測試版：只經過自動掃描，2026-12-31 到期',
+      code: '來源與審核 測試版：公開測試碼已經過輕量人工審核，這一版沒有人工審核，2026-12-31 到期',
+      unknown: '來源與審核 測試版，沒有人工審核，2026-12-31 到期',
+    })
+    // A public code's review is of the code, never of the version: no locale may call the version reviewed.
+    expect(shown['en-US'].code).toContain('this version had none')
+    expect(shown['ja-JP'].code).toContain('このバージョンは人による審査なし')
+    for (const locale of LOCALES) {
+      for (const text of Object.values(shown[locale])) expect(text, locale).not.toMatch(/verified|safe|已驗證|安全|検証済み/i)
+    }
+  })
+
+  it('says a kept test build is past its expiry (D3)', () => {
+    vi.setSystemTime(new Date('2027-01-02T00:00:00Z'))
+    i18n.global.locale.value = 'zh-TW'
+    expect(render({ source: 'testplace', expiresAt: '2026-12-31T08:00:00Z', via: 'invite' }).text()).toBe('測試版，已於 2026-12-31 到期（繼續使用中）')
+    i18n.global.locale.value = 'en-US'
+    expect(render({ source: 'testplace', expiresAt: '2026-12-31T08:00:00Z' }).text()).toBe('Test build, expired 2026-12-31 (kept in use)')
+  })
 })
 
 describe('PluginTrustDialog source row (K2)', () => {
@@ -112,6 +149,9 @@ describe('PluginTrustDialog source row (K2)', () => {
     i18n.global.locale.value = 'zh-TW'
     expect(at({ source: 'marketplace' }).get('.nv-source-badge').text()).toBe('已審核')
     expect(at({ source: 'prerelease', version: '2.0.0-beta.1' }).get('.nv-source-badge').text()).toBe('預覽版（已審核）')
+    // W5b: a Testplace install shows its expiry and how the user joined.
+    expect(at({ source: 'testplace', expiresAt: '2026-12-31T08:00:00Z', testplaceVia: 'code' }).get('.nv-source-badge').text())
+      .toBe('測試版：公開測試碼已經過輕量人工審核，這一版沒有人工審核，2026-12-31 到期')
   })
 
   it('never reads as reviewed from the version alone (a testplace build versioned 1.0.0)', () => {

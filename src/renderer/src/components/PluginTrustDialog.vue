@@ -200,6 +200,8 @@ function capabilityHint(cap: string): string {
           class="ext-trust-source"
           :source="pending.prepared.source"
           :publisher="pending.prepared.publisherId"
+          :expires-at="pending.prepared.expiresAt"
+          :via="pending.prepared.testplaceVia"
         />
         <label v-if="step === 'risk' && local" class="ext-local-ack">
           <input v-model="acknowledged" type="checkbox" class="ext-local-ack-input" />

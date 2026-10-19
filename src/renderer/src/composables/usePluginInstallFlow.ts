@@ -75,18 +75,23 @@ export function usePluginInstallFlow() {
 
   // `version` pins the artifact (an update names the newest version this Host
   // can install); omitted, the main process installs the Registry's latest.
-  async function install(namespace: string, name: string, version?: string): Promise<void> {
+  // `testplace` installs an invited test build with the user's Navide Cloud account.
+  async function install(namespace: string, name: string, version?: string, options: { testplace?: boolean } = {}): Promise<void> {
     const plugins = api()
     if (!plugins) return
     busy.value = true
     error.value = ''
     try {
-      const prepared = await plugins.prepareInstall(
-        version ? { namespace, name, version } : { namespace, name }
-      )
+      const prepared = await plugins.prepareInstall({
+        namespace,
+        name,
+        ...(version ? { version } : {}),
+        ...(options.testplace ? { testplace: true } : {}),
+      })
       const requiresPublisherTrust = prepared.requiresPublisherTrust === true
+      // A test build is never installed unseen: its source row says what review it had.
       const requiresRiskConfirmation =
-        prepared.requiresRiskConfirmation ?? prepared.requiresConfirmation
+        (prepared.requiresRiskConfirmation ?? prepared.requiresConfirmation) || prepared.source === 'testplace'
       if (requiresPublisherTrust || requiresRiskConfirmation || replacesAnother(prepared)) {
         // Hold for the trust dialog — nothing is written until the user confirms.
         pendingConfirm.value = { label: `${namespace}.${name}`, prepared }

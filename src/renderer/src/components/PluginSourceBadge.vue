@@ -19,6 +19,8 @@ const props = defineProps<{
   publisher?: string
   /** Test build expiry (ISO-8601); printed as YYYY-MM-DD, or "unknown" when absent. */
   expiresAt?: string | null
+  /** How the user joined a test build: decides which review the row names. */
+  via?: 'invite' | 'code' | null
   /** Render the disclosure card row instead of the badge. */
   row?: boolean
 }>()
@@ -27,7 +29,7 @@ const { t } = useI18n()
 const LOCAL: readonly PluginSource[] = ['local-signed', 'local-unsigned', 'developer-unpacked']
 const UNSIGNED: readonly PluginSource[] = ['local-unsigned', 'developer-unpacked']
 
-const label = computed(() => pluginSourceLabel(t, props.source, props.expiresAt))
+const label = computed(() => pluginSourceLabel(t, props.source, props.expiresAt, props.via))
 const local = computed(() => LOCAL.includes(props.source))
 const publisherText = computed(() => {
   if (!local.value || !props.publisher) return ''
