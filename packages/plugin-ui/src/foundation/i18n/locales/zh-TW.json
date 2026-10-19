@@ -10317,7 +10317,9 @@
     },
     "managed": {
       "create": "一鍵建立新 bot",
-      "disclose": "{manager} 能隨時取得並更換新 bot 的 token。拿到 {manager} token 的人能控制它建立的所有 bot。",
+      "title": "透過 {manager} 建立新 bot",
+      "disclose": "{manager} 能隨時取得並更換新 bot 的 token。拿到 {manager} token 的人能控制它建立的所有 bot。只要 {manager} 的 token 外洩，它建立的每個 bot 都會跟著外洩。",
+      "confirm": "前往 Telegram 建立",
       "enable-hint": "想讓 bot 一鍵建立新 bot？到 BotFather 開啟「Bot Management Mode」。目前有 {n} 個 bot 還沒開。",
       "open-botfather": "開啟 BotFather",
       "dismiss": "不再顯示",
