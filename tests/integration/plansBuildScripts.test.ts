@@ -227,7 +227,7 @@ describe('release workflow verifies the Plans artifact it signs', () => {
     // Ahead of electron-builder: an empty backend must fail the release before
     // the notarization leg, not silently ship.
     expect(buildStep.indexOf('verify-plans-production.mjs'))
-      .toBeLessThan(buildStep.indexOf('pnpm exec electron-builder'))
+      .toBeLessThan(buildStep.indexOf('bun run electron-builder'))
   })
 
   it('asserts each release artifact carries its exact official Plans package backend', () => {
