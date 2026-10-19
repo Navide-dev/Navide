@@ -424,3 +424,115 @@ describe('PluginAgentToolsHost review fixes', () => {
     await expect(h.host.admit(call, notStopping)).resolves.toEqual({ ok: false, reason: 'consent-required' })
   })
 })
+
+describe('PluginAgentToolsHost first-party agent tools (navide.browser)', () => {
+  function firstParty(pluginId = 'navide.browser', tools = [tool('browser_list', 'browser.list'), tool('browser_act', 'browser.act', 'write')]): ThirdPartyLaunchSpec {
+    const base = spec(pluginId, '1.0.0', tools)
+    return {
+      ...base,
+      approvedBridgePorts: ['web'],
+      thirdParty: { ...base.thirdParty, system: ['ui', 'web'], permissions: { system: ['ui', 'web'], shell: null, scopes: null } },
+    }
+  }
+  const BROWSER = firstParty()
+  const browserCall = { pluginId: 'navide.browser', toolName: 'browser_list', pluginVersion: '1.0.0', caller: PANE }
+  const call = { pluginId: 'nerdtechnic.devmap', toolName: 'devmap_read', pluginVersion: '0.2.0', caller: PANE }
+
+  function withBrowser(overrides: Partial<PluginAgentToolsHostOptions> = {}, initial: Partial<AgentToolSwitches> = {}) {
+    const firstPartyPackages = { value: [BROWSER] }
+    const h = harness({ listFirstPartyPackages: () => firstPartyPackages.value, ...overrides }, initial)
+    return { ...h, firstPartyPackages, h }
+  }
+
+  it('serves first-party tools with the master switch off and no consent, and sends enabled: true', async () => {
+    const hasConsent = vi.fn(async (candidate: ThirdPartyLaunchSpec) => candidate.pluginId === 'nerdtechnic.devmap')
+    const { h } = withBrowser({ hasConsent })
+    await h.host.refresh()
+    expect(h.sent).toHaveLength(1)
+    expect(h.sent[0]).toMatchObject({ enabled: true, externalCallers: false })
+    expect(h.sent[0].tools.map((entry) => [entry.pluginId, entry.name, entry.state])).toEqual([
+      ['navide.browser', 'browser_list', 'available'],
+      ['navide.browser', 'browser_act', 'available'],
+    ])
+    expect(h.sent[0].tools[0].permissions).toEqual({ system: ['ui', 'web'], shell: null, scopes: null })
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual(['browser.act', 'browser.list'])
+    // The third-party package stays exactly as with the switch off.
+    expect(h.methods.get('nerdtechnic.devmap@0.2.0') ?? []).toEqual([])
+    expect(hasConsent.mock.calls.some(([candidate]) => candidate.pluginId === 'navide.browser')).toBe(false)
+    await expect(h.host.admit(browserCall, notStopping)).resolves.toMatchObject({ ok: true, tool: { name: 'browser_list' } })
+    expect(hasConsent.mock.calls.some(([candidate]) => candidate.pluginId === 'navide.browser')).toBe(false)
+  })
+
+  it('still requires the master switch and consent for every third-party tool', async () => {
+    const { h } = withBrowser()
+    await expect(h.host.admit(call, notStopping)).resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+    await h.host.setSwitches({ enabled: true })
+    h.consented.clear()
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools.filter((entry) => entry.pluginId === 'nerdtechnic.devmap').map((entry) => entry.state))
+      .toEqual(['consent-required', 'consent-required'])
+    await expect(h.host.admit(call, notStopping)).resolves.toEqual({ ok: false, reason: 'consent-required' })
+    await expect(h.host.admit(browserCall, notStopping)).resolves.toMatchObject({ ok: true })
+  })
+
+  it('never exempts a package by its id alone: navide.browser listed as third-party, or acme.browser listed as first-party', async () => {
+    const impostor = { ...firstParty('acme.browser'), packageDir: '/pkgs/acme.browser/1.0.0' }
+    const { h, firstPartyPackages } = withBrowser({ listPackages: () => [DEVMAP, BROWSER] })
+    firstPartyPackages.value = [impostor]
+    await h.host.refresh()
+    expect(h.sent).toEqual([])
+    await expect(h.host.admit(browserCall, notStopping)).resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+    await expect(h.host.admit({ ...browserCall, pluginId: 'acme.browser' }, notStopping))
+      .resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+  })
+
+  it('keeps the disabled switch, quarantine and revocation for first-party tools', async () => {
+    const { h } = withBrowser()
+    h.disabled.add('navide.browser')
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools.map((entry) => entry.state)).toEqual(['plugin-disabled', 'plugin-disabled'])
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual([])
+    await expect(h.host.admit(browserCall, notStopping)).resolves.toEqual({ ok: false, reason: 'plugin-disabled' })
+    h.disabled.clear()
+    h.host.mark('navide.browser', 'quarantined')
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools.map((entry) => entry.state)).toEqual(['plugin-quarantined', 'plugin-quarantined'])
+    await expect(h.host.admit(browserCall, notStopping)).resolves.toEqual({ ok: false, reason: 'plugin-quarantined' })
+  })
+
+  it('refuses callers without a pane unless both switches are on', async () => {
+    const { h } = withBrowser({}, { externalCallers: true })
+    await h.host.refresh()
+    expect(h.sent.at(-1)).toMatchObject({ enabled: true, externalCallers: false })
+    await expect(h.host.admit({ ...browserCall, caller: EXTERNAL }, notStopping))
+      .resolves.toEqual({ ok: false, reason: 'external-callers-off' })
+    await expect(h.host.admit({ ...browserCall, caller: HOST }, notStopping))
+      .resolves.toEqual({ ok: false, reason: 'external-callers-off' })
+    await h.host.setSwitches({ enabled: true })
+    expect(h.sent.at(-1)).toMatchObject({ enabled: true, externalCallers: true })
+    await expect(h.host.admit({ ...browserCall, caller: EXTERNAL }, notStopping)).resolves.toMatchObject({ ok: true })
+  })
+
+  it('keeps a first-party name against a third-party package that derives the same prefix', async () => {
+    const lookalike = spec('acme.browser', '2.0.0', [tool('browser_list', 'browser.list')])
+    const { h } = withBrowser({ listPackages: () => [lookalike] }, { enabled: true })
+    h.consented.add('acme.browser')
+    h.since.set('acme.browser', '2020-01-01T00:00:00.000Z')
+    await h.host.refresh()
+    const states = h.sent.at(-1)!.tools.map((entry) => [entry.pluginId, entry.name, entry.state])
+    expect(states).toContainEqual(['acme.browser', 'browser_list', 'name-collision'])
+    expect(states).toContainEqual(['navide.browser', 'browser_list', 'available'])
+    expect(h.methods.get('acme.browser@2.0.0')).toEqual([])
+    await expect(h.host.admit({ ...browserCall, pluginId: 'acme.browser', pluginVersion: '2.0.0' }, notStopping))
+      .resolves.toEqual({ ok: false, reason: 'name-collision' })
+  })
+
+  it('sends one empty snapshot once the last first-party tool goes, with the switch off', async () => {
+    const { h, firstPartyPackages } = withBrowser()
+    await h.host.refresh()
+    firstPartyPackages.value = []
+    await h.host.refresh()
+    await h.host.refresh()
+    expect(h.sent.map((payload) => [payload.enabled, payload.tools.length])).toEqual([[true, 2], [false, 0]])
+  })
+})

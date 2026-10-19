@@ -192,8 +192,9 @@ import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
 import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
 import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
-import { isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
+import { isFirstPartyAgentToolPlugin, isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
 import {
+  firstPartyAgentToolSpec,
   firstPartyBackendLaunchSpec,
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
@@ -1803,15 +1804,40 @@ const registeredThirdPartySpecs = (): ThirdPartyLaunchSpec[] =>
     const spec = frontendPluginManager.getBackendActivation(activation.pluginId, activation.packageVersion)
     return spec && isThirdPartyLaunchSpec(spec) ? [spec] : []
   })
+// First-party backends with agent tools (navide.browser): the catalog entry
+// of each registered first-party activation. Their tools need neither the
+// master switch nor per-version consent (PluginAgentToolsHost).
+const registeredFirstPartyAgentToolSpecs = (): ThirdPartyLaunchSpec[] =>
+  approvedInstalledPluginActivations.flatMap((activation) => {
+    if (!activation.backend || !isFirstPartyAgentToolPlugin(activation.pluginId)) return []
+    const registered = frontendPluginManager.getBackendActivation(activation.pluginId, activation.packageVersion)
+    if (!registered || isThirdPartyLaunchSpec(registered)) return []
+    try {
+      const spec = firstPartyAgentToolSpec({ ...activation, packageDir: registered.packageDir })
+      return spec ? [spec] : []
+    } catch (error) {
+      console.warn(
+        `[main] agent tools of ${activation.pluginId} are unavailable: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return []
+    }
+  })
 agentToolsHost = new PluginAgentToolsHost({
   switches: () => nativeBackendStore.agentToolSwitches(),
   setSwitches: (change) => nativeBackendStore.setAgentToolSwitches(change),
   listPackages: registeredThirdPartySpecs,
+  listFirstPartyPackages: registeredFirstPartyAgentToolSpecs,
   // Native backends turned off globally or for the package count as disabled.
+  // A first-party package is not a third-party native backend: only its own
+  // built-in Disabled switch applies.
   isDisabled: (pluginId) =>
-    !nativeBackendStore.isEnabled() ||
-    frontendPluginManager.isPluginDisabled(pluginId) ||
-    nativeBackendStore.record(pluginId).disabled === true,
+    isFirstPartyAgentToolPlugin(pluginId)
+      ? frontendPluginManager.isBuiltinPluginDisabled(pluginId)
+      : !nativeBackendStore.isEnabled() ||
+        frontendPluginManager.isPluginDisabled(pluginId) ||
+        nativeBackendStore.record(pluginId).disabled === true,
   hasConsent: (spec) => thirdPartyBackends.hasAgentToolsConsent(spec),
   // DB1 collision order, per name (B1-a): when a consented version first
   // declared this name, else when the package first declared tools.
@@ -1822,7 +1848,9 @@ agentToolsHost = new PluginAgentToolsHost({
   setAgentMethods: (pluginId, packageVersion, methods) =>
     frontendPluginManager.setThirdPartyAgentMethods(pluginId, packageVersion, methods),
   confirmWrite: (spec, tool, workspaceRoot) =>
-    thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool),
+    isFirstPartyAgentToolPlugin(spec.pluginId)
+      ? thirdPartyBackends.confirmFirstPartyAgentToolWrite(spec, workspaceRoot, tool)
+      : thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool),
   send: (payload) => frontendPluginManager.sendAgentToolsSync(payload),
 })
 frontendPluginManager.setAgentToolsHost(agentToolsHost)

@@ -153,6 +153,11 @@ export function thirdPartyBackendLaunchSpec(
   }
 }
 
+/** The DB3 record of a first-party agent tool stands in this field for the
+ *  native-backend consent time a third-party one is bound to. It is never a
+ *  timestamp, so no consent ever matches it. */
+const FIRST_PARTY_WRITE_GRANT = 'first-party'
+
 /** The system permission a first-party bridge port needs in the manifest. */
 const FIRST_PARTY_PORT_NAMESPACE: Partial<Record<PlansBridgePort, PluginSystemNamespace>> = {
   filesystem: 'fs',
@@ -865,8 +870,31 @@ export class ThirdPartyBackendController {
   ): Promise<boolean> {
     const consent = this.store.record(spec.pluginId).consent
     if (!consent) return false
-    if (this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)) return true
-    const identity = `agent-write\n${spec.pluginId}\n${spec.packageVersion}\n${consent.grantedAt}\n${workspacePath}`
+    return this.confirmWriteFor(spec, workspacePath, tool, consent.grantedAt, () =>
+      this.store.record(spec.pluginId).consent?.grantedAt)
+  }
+
+  /** DB3 for a first-party agent tool (navide.browser): the same question,
+   * asked once per (package, version, workspace). A first-party package has
+   * no native-backend consent, so the answer is bound to the version alone. */
+  async confirmFirstPartyAgentToolWrite(
+    spec: ThirdPartyLaunchSpec,
+    workspacePath: string,
+    tool: { name: string; title: string },
+  ): Promise<boolean> {
+    if (!isFirstPartyAgentToolPlugin(spec.pluginId)) return false
+    return this.confirmWriteFor(spec, workspacePath, tool, FIRST_PARTY_WRITE_GRANT, () => FIRST_PARTY_WRITE_GRANT)
+  }
+
+  private async confirmWriteFor(
+    spec: ThirdPartyLaunchSpec,
+    workspacePath: string,
+    tool: { name: string; title: string },
+    grantedAt: string,
+    currentGrantedAt: () => string | undefined,
+  ): Promise<boolean> {
+    if (this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, grantedAt, workspacePath)) return true
+    const identity = `agent-write\n${spec.pluginId}\n${spec.packageVersion}\n${grantedAt}\n${workspacePath}`
     if (this.declinedWrite.has(identity) || !this.options.promptAgentToolWrite) return false
     let pending = this.pendingPrompts.get(identity)
     if (!pending) {
@@ -884,10 +912,9 @@ export class ThirdPartyBackendController {
       this.declinedWrite.add(identity)
       return false
     }
-    const current = this.store.record(spec.pluginId).consent
     // The consent may have changed while the dialog was open.
-    if (current?.grantedAt !== consent.grantedAt) return false
-    this.store.setAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)
+    if (currentGrantedAt() !== grantedAt) return false
+    this.store.setAgentToolWrite(spec.pluginId, spec.packageVersion, grantedAt, workspacePath)
     return true
   }
 
