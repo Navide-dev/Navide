@@ -277,11 +277,17 @@ export interface VerifyRegistryPackageTrustInput {
   /** Host-derived target; the Registry response cannot choose this value. */
   expectedHostTarget?: string
   now?: Date
+  /** D3: the user chose to keep using this expired testplace artifact. Only
+   * the expiry check is skipped; it runs after every other check, so a
+   * blocked package or a bad signature is still refused. */
+  allowExpiredTestplace?: boolean
 }
 
 export interface VerifiedRegistryPackageTrust {
   publisherId: string
   keyId: string
+  /** Set when an expired testplace artifact was allowed (allowExpiredTestplace). */
+  expired?: true
 }
 
 export function verifyRegistryTrustMetadata(
@@ -449,6 +455,9 @@ export function verifyRegistryPackageTrust(
   }
   // Checked after the signature, so only a Registry-signed expiry counts.
   if (expiresAt !== null && expiresAt <= now) {
+    if (input.allowExpiredTestplace === true) {
+      return { publisherId: input.envelope.publisherId, keyId: signer.keyId, expired: true }
+    }
     throw new RegistryTrustError(
       'TESTPLACE_EXPIRED',
       `testplace version '${input.envelope.packageId}@${input.envelope.version}' expired at ${input.envelope.expiresAt}`
