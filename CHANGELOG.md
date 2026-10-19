@@ -14,6 +14,11 @@ All notable released changes to Navide will be documented in this file. The form
 - Extensions: every Navide plugin shows where it came from (Navide Marketplace, pre-release, local file, developer folder, …) and what review it passed, in a "Source and review" row on its disclosure card, trust dialog and Disclosure overview. A local, developer or test package also keeps a mark in Navide's own chrome: a strip above its view, a dot on its sidebar tab and title-bar button. No source is ever called verified or safe. The native backend consent and the agent file-change approval name a local file or a developer folder as not reviewed by Navide. (#422, #423)
 - MCP: a read-only `cli_accounts_list` tool lists the CLI accounts Navide keeps and which one each CLI runs on, read from the account store only: no email and no signed-in state, since both would mean reading the credentials.
 - MCP: a read-only `cli_failover_state` tool lets an agent see what Navide's quota failover is doing: the policy, open incidents, how many automatic switches each account pool has left, and which vendor is blocked by a half-finished switch until the user resolves it. It reads only that in-memory state: nothing is refreshed or switched, no credential or Keychain item is read, accounts are named by slot id, and the live login's identity, fingerprint and raw error text are never returned.
+- MCP: a `cli_account_sign_in` tool lets an agent open the sign-in Navide already offers for one CLI account — a parked account in its own private home, or a claude account inside its own folder — so the user only finishes it in the browser. The user is told which agent asked and why. It goes through the window's own sign-in, never switches accounts, returns no token, code or URL, and leaves the active account, the built-in Default and sign-ins that replace the live credential to the user. Only CLI panes can call it; `ui_invoke` cannot reach it.
+
+### Security
+
+- What a CLI sign-in pane prints (an authorization URL, a pasted code) no longer reaches anything but that pane: it writes no log file, `cli_read_log` refuses it, `cli_get_status` and the chat relay get no screen text from it, a chat cannot be bound to it, and it is not shared with the editor's AI Chat or by dragging it onto another pane.
 
 ### Changed
 

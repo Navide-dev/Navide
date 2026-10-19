@@ -76,6 +76,8 @@ export interface ReusablePaneCandidate {
   status: string
   /** Backend PTY session id — undefined/empty means no live session to inject into. */
   sessionId?: string
+  /** A CLI sign-in pane: never reused (only the user types into one). */
+  isLogin?: boolean
 }
 
 /**
@@ -102,7 +104,8 @@ export function pickReusablePane<T extends ReusablePaneCandidate>(
         p.agentKey === agentKey &&
         normalizeWorkspace(p.workspacePath) === ws &&
         !!p.sessionId &&
-        p.status === 'idle'
+        p.status === 'idle' &&
+        !p.isLogin
     ) ?? null
   )
 }

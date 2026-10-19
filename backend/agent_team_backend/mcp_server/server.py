@@ -49,6 +49,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import Receive, Scope, Send
 
+from agent_team_backend import login_panes
 from agent_team_backend import osplat as _osplat
 from agent_team_backend.fs_service import FsError
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
@@ -1908,6 +1909,12 @@ async def _send_to_group(
                 {"name": name, "pane_id": pane_id, "accepted": False, "reason": "target-offline"}
             )
             continue
+        if login_panes.is_login_pane(entry.pane_id):
+            recipients.append(
+                {"name": entry.name, "pane_id": entry.pane_id, "accepted": False,
+                 "reason": LOGIN_PANE_INPUT_REFUSED}
+            )
+            continue
         msg_key = await _dispatch_delivery(
             entry, text, caller=caller, me=me, cross_workspace=False,
             reply_to=reply_to, kind=kind,
@@ -1951,6 +1958,26 @@ class TerminalExternalRefused(Exception):
 TERMINAL_EXTERNAL_ERROR = (
     "external content is never typed into a plain terminal pane — the shell would run it"
 )
+
+
+#: error_code for any agent, MCP, scheduler or chat input to a CLI sign-in pane.
+LOGIN_PANE_INPUT_REFUSED = "login-pane-input-refused"
+
+
+def _login_pane_input_refusal(pane_id: str, name: str) -> dict[str, Any] | None:
+    """The answer for input addressed to a CLI sign-in pane, or None.
+
+    Only the user types into a sign-in pane: a wizard that takes typed input (a
+    menu choice, a pasted key) would otherwise let an agent finish the sign-in
+    on an account it controls. See login_panes.
+    """
+    if not login_panes.is_login_pane(pane_id):
+        return None
+    return {
+        "ok": False,
+        "error": f"{name!r} is signing in to a CLI account; only the user types into a sign-in pane",
+        "error_code": LOGIN_PANE_INPUT_REFUSED,
+    }
 
 
 async def _dispatch_delivery(
@@ -2354,6 +2381,9 @@ async def _send(
         )
     if me and result.pane.pane_id == me:
         return {"ok": False, "error": "that is your own pane"}
+    refused = _login_pane_input_refusal(result.pane.pane_id, result.pane.qualified_name)
+    if refused is not None:
+        return refused
 
     # Only the single-target path gets here: the group broadcast and the
     # cross-device relay returned above, so open_target cannot reach them.
@@ -3593,6 +3623,16 @@ async def cli_read_log(
     result, failure = _resolve_pane_target(caller, me, target, pane_id)
     if failure is not None:
         return failure
+    if login_panes.is_login_pane(result.pane.pane_id):
+        # Its output is an authorization URL or code (the window writes it no
+        # log; an older window may have).
+        return {
+            "ok": False,
+            "error": (
+                f"pane {result.pane.qualified_name!r} is signing in to a CLI account; "
+                "what it prints is not readable by other panes"
+            ),
+        }
 
     def _find_log_path() -> str:
         project = app.project_store.peek(result.pane.workspace_path)
@@ -3642,7 +3682,9 @@ def _activity_summary(pane_id: str) -> dict[str, Any] | None:
         "type": activity["event_type"],
         "age_seconds": round(time.monotonic() - activity["ts_monotonic"], 1),
     }
-    if activity["text"]:
+    # A sign-in pane's turn text can quote its sign-in: never handed out, by
+    # cli_get_status, cli_wait_idle or cli_send_and_wait alike.
+    if activity["text"] and not login_panes.is_login_pane(pane_id):
         last["text"] = activity["text"]
     return last
 
@@ -3766,6 +3808,9 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
             **result.entry.to_dict(),
         }
     pane = result.pane
+    # A sign-in pane's screen holds its authorization URL or code: its text
+    # stays out of this answer (the window already sends none; an older one may).
+    login = login_panes.is_login_pane(pane.pane_id)
 
     status: dict[str, Any] = {
         "ok": True,
@@ -3791,6 +3836,12 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
         args={"paneId": pane.pane_id},
     )
     if ui_result.get("ok") and isinstance(ui_result.get("result"), dict):
+        if login:
+            ui_result["result"] = {
+                key: value for key, value in ui_result["result"].items()
+                if key not in ("awaitingPrompt", "awaitingOptions", "logPath")
+            }
+            ui_result["result"]["buffer"] = ""
         status["ui"] = ui_result["result"]
         # One answer, not two that disagree: the badge only ever ADDS busy.
         if ui_result["result"].get("status") in ("running", "starting"):
@@ -4238,6 +4289,9 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
                 }
         return failure
     pane = result.pane
+    refused = _login_pane_input_refusal(pane.pane_id, pane.qualified_name)
+    if refused is not None:
+        return refused
     if caller.kind == "pane" and pane.pane_id == caller.pane_id:
         # Interrupting yourself aborts the very turn making this call, so the
         # answer would never reach the caller that asked for it. cli_send
@@ -4404,6 +4458,9 @@ async def cli_answer_prompt(
             }
         return failure
     pane = result.pane
+    refused = _login_pane_input_refusal(pane.pane_id, pane.qualified_name)
+    if refused is not None:
+        return refused
 
     word = (answer or "").strip().lower()
     choice = _ANSWER_WORDS.get(word) or (word if len(word) == 1 and word in "123456789" else "")
@@ -5527,6 +5584,8 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     "ui.pipeline.gate_pass",
     "ui.pipeline.gate_reject",
     "ui.pipeline.restart_from",
+    # Spawns a sign-in pane (cli_account_sign_in): a pane create's wait.
+    "ui.accounts.signIn",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
 
@@ -5870,6 +5929,20 @@ async def ui_invoke(
                 ),
                 "error_code": "ui_pane_private",
             }
+    if action == "ui.pane.interrupt":
+        named = str((args or {}).get("paneId") or "")
+        refused = _login_pane_input_refusal(named, named)
+        if refused is not None:
+            return {**refused, "result": None}
+    if action.startswith("ui.accounts."):
+        # Reached through their own tools only, which check the caller and
+        # tell the user who asked; the window refuses them off that path too.
+        return {
+            "ok": False,
+            "result": None,
+            "error": f"{action} is not a ui_invoke action; use cli_account_sign_in",
+            "error_code": "ui_dedicated_tool",
+        }
     return await _ui_request(
         workspace_path,
         "invoke",
@@ -10261,6 +10334,109 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
         key: value for key, value in (doc.get("paneDefaults") or {}).items() if wanted(key)
     }
     return result
+
+
+# ── CLI account sign-in (plan mcp_614482 P2) ────────────────────────────────
+#: How much of an agent's reason reaches the user's notice; the rest is cut.
+_SIGN_IN_REASON_MAX = 300
+_SIGN_IN_MODES = ("isolated", "folder")
+
+
+@server.tool()
+async def cli_account_sign_in(
+    ctx: Context, agent: str, profile_id: str, reason: str, mode: str = "isolated",
+) -> dict[str, Any]:
+    """Open the sign-in flow Navide already offers for one CLI account, so the
+    user only has to finish it in the browser.
+
+    It is the same sign-in Settings → Accounts starts: Navide opens a sign-in
+    pane running the CLI's own login command in your window, and the user is
+    told which agent asked and your `reason` (required; cut at 300
+    characters). You never see the login: no token, code or URL comes back,
+    and what the sign-in pane prints cannot be read by any pane (cli_read_log
+    refuses it, cli_get_status leaves its text out).
+
+    agent is the vendor key ("claude", "codex", ...); profile_id is an account
+    of that vendor as Settings → Accounts lists it. mode "isolated" (default)
+    signs a PARKED account in, in its own private home: the active account and
+    running panes are untouched. mode "folder" signs a claude account in
+    inside its own config folder. Anything that would move the credential the
+    user is running on — the active account, the built-in Default, a vendor
+    whose sign-in replaces the live credential while it runs — is refused with
+    error_code "needs-user": the user starts those in Settings → Accounts.
+    Nothing here switches accounts.
+
+    Only a CLI pane can call it, and only for the project its window shows.
+
+    Returns {ok: true, status: "started", agent, profile_id, mode,
+    login_pane_id} once the sign-in pane is up; whether the user then signed
+    in is not known here. Otherwise {ok: false, error, error_code}:
+    "pane-only", "bad-request", "reason-required", "needs-user",
+    "unknown-profile", "unsupported", "no-workspace", "spawn-failed" or
+    "window-unavailable".
+    """
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    if caller.kind != "pane":
+        return {
+            "ok": False,
+            "error": "only a CLI pane can ask for a sign-in; the user is told which pane asked",
+            "error_code": "pane-only",
+        }
+    agent = str(agent or "").strip().lower()
+    profile_id = str(profile_id or "").strip()
+    mode = str(mode or "").strip().lower()
+    if not agent or not profile_id or mode not in _SIGN_IN_MODES:
+        return {
+            "ok": False,
+            "error": 'agent and profile_id are required, and mode is "isolated" or "folder"',
+            "error_code": "bad-request",
+        }
+    reason = " ".join(str(reason or "").split())[:_SIGN_IN_REASON_MAX]
+    if not reason:
+        return {
+            "ok": False,
+            "error": "say why: the reason is shown to the user with the sign-in",
+            "error_code": "reason-required",
+        }
+    from agent_team_backend import agent_messaging
+
+    pane = agent_messaging.get(caller.pane_id)
+    answer = await _ui_request(
+        pane.workspace_path if pane else "",
+        "invoke",
+        caller=caller,
+        action="ui.accounts.signIn",
+        args={"agentKey": agent, "profileId": profile_id, "mode": mode, "reason": reason},
+    )
+    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+    status = str(result.get("status") or "") if answer.get("ok") else ""
+    _log.info(
+        "cli_account_sign_in from pane %s: agent=%s profile=%s mode=%s -> %s",
+        caller.pane_id, agent, profile_id, mode, status or "window-unavailable",
+    )
+    if not answer.get("ok"):
+        return {
+            "ok": False,
+            "error": str(answer.get("error") or "the Navide window did not answer"),
+            "error_code": "window-unavailable",
+        }
+    if status != "started":
+        return {
+            "ok": False,
+            "error": str(result.get("message") or "the window refused the sign-in"),
+            "error_code": status or "refused",
+        }
+    return {
+        "ok": True,
+        "status": "started",
+        "agent": agent,
+        "profile_id": profile_id,
+        "mode": mode,
+        "login_pane_id": str(result.get("loginPaneId") or ""),
+    }
 
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
 

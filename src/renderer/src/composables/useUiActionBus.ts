@@ -61,6 +61,14 @@ export interface UseUiActionBusOptions {
    *  one. A focus re-announces with focused true, so the backend prefers the
    *  window the user touched last. */
   focusTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>
+  /** The window's account actions (ui.accounts.*), reached from MCP through
+   *  their dedicated tools only. They are deliberately NOT in the command
+   *  registry: a keybinding or anything else that runs registered commands
+   *  must not start a sign-in. Each gets the request's args and the caller
+   *  pane from the credential. Absent (tests, plugin hosts): refused. */
+  accountActions?: {
+    signIn: (args: Record<string, unknown>, callerPaneId: string) => unknown | Promise<unknown>
+  }
 }
 
 function errorMessage(err: unknown): string {
@@ -88,7 +96,11 @@ const WORKSPACE_SCOPED_ACTIONS = new Set([
   'ui.pipeline.resume',
   'ui.pipeline.reset',
   'ui.pipeline.restart',
+  'ui.accounts.signIn',
 ])
+
+/** Prefix of the account actions: see UseUiActionBusOptions.accountActions. */
+const ACCOUNT_ACTION_PREFIX = 'ui.accounts.'
 
 /** Actions whose args.paneId names a pane's PRIVATE data — its inbox — rather
  *  than a window or a project. They run only when the caller IS that pane:
@@ -172,6 +184,17 @@ export async function handleUiInvokeRequest(
       if (!req.action) {
         ok = false
         error = 'action is required for op "invoke"'
+      } else if (req.action.startsWith(ACCOUNT_ACTION_PREFIX)) {
+        const signIn = opts.accountActions?.signIn
+        if (!req.caller_pane_id) {
+          ok = false
+          error = `${req.action} is reachable only from a CLI pane, through its own MCP tool`
+        } else if (req.action !== 'ui.accounts.signIn' || !signIn) {
+          ok = false
+          error = `unknown account action: ${req.action}`
+        } else {
+          result = await signIn(req.args ?? {}, req.caller_pane_id)
+        }
       } else {
         const outcome = await invokeCommand(req.action, req.args ?? undefined)
         ok = outcome.ok
