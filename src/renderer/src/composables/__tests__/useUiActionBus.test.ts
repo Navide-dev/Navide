@@ -629,7 +629,7 @@ describe('useUiActionBus — account actions', () => {
     const args = { agentKey: 'codex', profileId: 'p-2', mode: 'isolated', reason: 'out of quota' }
     emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.signIn', args, caller_pane_id: 'pa', addressed: true }))
     await flush()
-    expect(signIn).toHaveBeenCalledWith(args, 'pa')
+    expect(signIn).toHaveBeenCalledWith(args, 'pa', expect.any(AbortSignal))
     const reply = sent.find((s) => s.type === 'ui.invoke.result')
     expect(reply?.payload).toMatchObject({ ok: true, result: { status: 'started', loginPaneId: 'login-1' } })
   })
@@ -670,5 +670,42 @@ describe('useUiActionBus — account actions', () => {
     await flush()
     expect(signIn).not.toHaveBeenCalled()
     expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
+  })
+})
+
+// Review #438 LOW-1: a sign-in confirmation outlives nothing that asked for it.
+// The handler gets a signal that aborts when the backend withdraws the request
+// (ui.invoke.cancel) or the window loses the backend, so the dialog closes
+// instead of opening a pane nobody is waiting for.
+describe('useUiActionBus — withdrawn account requests', () => {
+  function setup() {
+    const { backend, emit } = createMockBackend()
+    const status = ref('connected')
+    const signals: AbortSignal[] = []
+    const signIn = vi.fn((_args: Record<string, unknown>, _caller: string, signal?: AbortSignal) => {
+      signals.push(signal!)
+      return new Promise(() => { /* the user has not answered */ })
+    })
+    useUiActionBus({ backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), connectionStatus: status, accountActions: { signIn } })
+    emit('ui.invoke.request', baseRequest({ request_id: 'r-1', action: 'ui.accounts.signIn', args: {}, caller_pane_id: 'pa', addressed: true }))
+    return { emit, status, signals }
+  }
+
+  it('aborts the handler when the backend withdraws that request', async () => {
+    const { emit, signals } = setup()
+    await flush()
+    expect(signals[0].aborted).toBe(false)
+    emit('ui.invoke.cancel', { request_id: 'other' })
+    expect(signals[0].aborted).toBe(false)
+    emit('ui.invoke.cancel', { request_id: 'r-1' })
+    expect(signals[0].aborted).toBe(true)
+  })
+
+  it('aborts the handler when the window loses the backend', async () => {
+    const { status, signals } = setup()
+    await flush()
+    status.value = 'reconnecting'
+    await flush()
+    expect(signals[0].aborted).toBe(true)
   })
 })

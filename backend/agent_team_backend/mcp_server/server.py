@@ -5584,7 +5584,9 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     "ui.pipeline.gate_pass",
     "ui.pipeline.gate_reject",
     "ui.pipeline.restart_from",
-    # Spawns a sign-in pane (cli_account_sign_in): a pane create's wait.
+    # Asks the user, then spawns a sign-in pane (cli_account_sign_in): the
+    # confirmation ends one ordinary wait before this one, leaving a pane
+    # create its wait.
     "ui.accounts.signIn",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
@@ -5724,6 +5726,28 @@ def _ui_timeout_error(
     }
 
 
+#: Actions whose window side waits on the user and must be called off when
+#: nobody waits for the answer any more (review #438 LOW-1): a sign-in
+#: confirmation must not open a pane after its tool call was cancelled or
+#: timed out. Other actions finish on their own and get no withdrawal.
+_UI_INVOKE_WITHDRAWN_ACTIONS = frozenset({"ui.accounts.signIn"})
+
+
+def _withdraw_ui_request(action: str | None, request_id: str, owner: Any) -> None:
+    """Tell the window a request is no longer waited for (ui.invoke.cancel),
+    on the route the request took. Fire and forget: it runs from a cancelled
+    task too, which must not await."""
+    if action not in _UI_INVOKE_WITHDRAWN_ACTIONS:
+        return
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    event = make_event("ui.invoke.cancel", {"request_id": request_id})
+    send = app.unicast_to(owner, event) if owner is not None else app.broadcast(event)
+    task = asyncio.ensure_future(send)
+    task.add_done_callback(lambda t: t.cancelled() or t.exception())
+
+
 async def _ui_request(
     workspace_path: str,
     op: str,
@@ -5782,8 +5806,13 @@ async def _ui_request(
         await app.broadcast(make_event("ui.invoke.request", payload))
 
     timeout = _UI_INVOKE_SLOW_TIMEOUT_S if action in _UI_INVOKE_SLOW_ACTIONS else _UI_INVOKE_TIMEOUT_S
-    result = await _ui_invoke_pending.wait(request_id, fut, timeout=timeout)
+    try:
+        result = await _ui_invoke_pending.wait(request_id, fut, timeout=timeout)
+    except asyncio.CancelledError:
+        _withdraw_ui_request(action, request_id, owner if payload["addressed"] else None)
+        raise
     if result is TIMEOUT:
+        _withdraw_ui_request(action, request_id, owner if payload["addressed"] else None)
         return _ui_timeout_error(
             workspace_path,
             timeout,
@@ -10350,9 +10379,12 @@ async def cli_account_sign_in(
     user only has to finish it in the browser.
 
     It is the same sign-in Settings → Accounts starts: Navide opens a sign-in
-    pane running the CLI's own login command in your window, and the user is
-    told which agent asked and your `reason` (required; cut at 300
-    characters). You never see the login: no token, code or URL comes back,
+    pane running the CLI's own login command in your window, in your own
+    workspace. Your window first asks the user, naming which agent asked and
+    showing your `reason` (required; cut at 300 characters); nothing opens
+    until they agree, and a no or no answer in time is a refusal. If this
+    call is cancelled or times out, the window closes the question unanswered. You never
+    see the login: no token, code or URL comes back,
     and what the sign-in pane prints cannot be read by any pane (cli_read_log
     refuses it, cli_get_status leaves its text out).
 
@@ -10372,8 +10404,11 @@ async def cli_account_sign_in(
     login_pane_id} once the sign-in pane is up; whether the user then signed
     in is not known here. Otherwise {ok: false, error, error_code}:
     "pane-only", "bad-request", "reason-required", "needs-user",
-    "unknown-profile", "unsupported", "no-workspace", "spawn-failed" or
-    "window-unavailable".
+    "unknown-profile", "unsupported", "no-workspace", "wrong-workspace",
+    "declined" (the user said no), "confirm-timeout" (the user did not answer
+    in time), "busy" (another agent's sign-in is waiting for the user),
+    "workspace-changed" (the window left your workspace while the user was
+    asked), "spawn-failed" or "window-unavailable".
     """
     try:
         caller = _resolve_caller(ctx)
@@ -10394,7 +10429,10 @@ async def cli_account_sign_in(
             "error": 'agent and profile_id are required, and mode is "isolated" or "folder"',
             "error_code": "bad-request",
         }
-    reason = " ".join(str(reason or "").split())[:_SIGN_IN_REASON_MAX]
+    reason = " ".join(str(reason or "").split())
+    # The cut is disclosed to the user too, not only in this docstring.
+    reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
+    reason = reason[:_SIGN_IN_REASON_MAX]
     if not reason:
         return {
             "ok": False,
@@ -10404,12 +10442,20 @@ async def cli_account_sign_in(
     from agent_team_backend import agent_messaging
 
     pane = agent_messaging.get(caller.pane_id)
+    # The window asks the user before it opens anything (review #433 LOW-3).
+    # The answer is due within this action's slow wait; the user's yes must
+    # come one ordinary action's wait before that, so the window can still
+    # open the pane while this tool is waiting. Epoch ms, one machine's clock.
+    confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
     answer = await _ui_request(
         pane.workspace_path if pane else "",
         "invoke",
         caller=caller,
         action="ui.accounts.signIn",
-        args={"agentKey": agent, "profileId": profile_id, "mode": mode, "reason": reason},
+        args={
+            "agentKey": agent, "profileId": profile_id, "mode": mode, "reason": reason,
+            "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
+        },
     )
     result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
     status = str(result.get("status") or "") if answer.get("ok") else ""
