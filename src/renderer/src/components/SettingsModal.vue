@@ -127,6 +127,7 @@ import ExtensionsPane from './ExtensionsPane.vue'
 import ExecutionPolicyPane from './ExecutionPolicyPane.vue'
 import MarketplacePane from './MarketplacePane.vue'
 import MarketplaceDeveloperPanel from './MarketplaceDeveloperPanel.vue'
+import TestplacePane from './TestplacePane.vue'
 import { marketplaceView, setMarketplaceView } from '../composables/useMarketplaceForms'
 import PluginDisclosureOverview from './PluginDisclosureOverview.vue'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
@@ -4574,10 +4575,18 @@ watch(activeTab, (tab) => {
               :aria-selected="marketplaceView === 'developer'"
               @click="setMarketplaceView('developer')"
             >{{ $t('marketplace-developer.view.developer') }}</button>
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'testplace' }"
+              :aria-selected="marketplaceView === 'testplace'"
+              @click="setMarketplaceView('testplace')"
+            >{{ $t('testplace.view') }}</button>
           </div>
           <div class="marketplace-scroll">
             <MarketplacePane v-show="marketplaceView === 'browse'" />
             <MarketplaceDeveloperPanel v-if="marketplaceView === 'developer'" :backend="backend" />
+            <TestplacePane v-if="marketplaceView === 'testplace'" />
           </div>
         </div>
 
