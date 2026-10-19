@@ -1502,43 +1502,6 @@ function loadFactoryMiniIdePackage() {
   })
   return factoryMiniIde
 }
-// navide.browser: a first-party package whose native backend starts like Plans
-// (pluginFirstPartyBackends.ts). It is not bundled with the App: it installs
-// from the Navide Marketplace, so nothing calls the factory loader below.
-const BROWSER_PLUGIN_ID = 'navide.browser'
-const factoryBrowserDir = (): string => officialPluginArtifactPackageDir(
-  miniIdeSource,
-  BROWSER_PLUGIN_ID,
-  currentPluginHostTarget(),
-)
-/** Load the bundled browser package. A build without it (no staged
- *  dist-plugins/navide-browser) is not an error: nothing is loaded. */
-function loadFactoryBrowserPackage():
-  | { loaded: true; pluginId: string; packageVersion: string; activation: PluginActivationCatalogEntry }
-  | { loaded: false; reason: string; absent?: true } {
-  if (!existsSync(join(factoryBrowserDir(), 'manifest.json'))) {
-    return { loaded: false, reason: 'factory package is not bundled', absent: true }
-  }
-  const factoryBrowser = frontendPluginManager.loadFactoryPlugin(factoryBrowserDir(), BROWSER_PLUGIN_ID)
-  if (!factoryBrowser.loaded) return factoryBrowser
-  const descriptor = frontendPluginManager.getDescriptor(factoryBrowser.pluginId)
-  const policy = descriptor?.capabilityPolicy
-  if (policy?.kind !== 'manifest-v2') {
-    frontendPluginManager.removeInstalledPlugin(factoryBrowser.pluginId, { restoreBuiltin: false })
-    return { loaded: false as const, reason: 'factory package has no Manifest v2 policy' }
-  }
-  pluginCapabilityGrants.set(factoryBrowser.pluginId, {
-    packageVersion: factoryBrowser.packageVersion,
-    system: [...policy.system],
-    ...(policy.shell ? { shell: policy.shell } : {}),
-    storage: true,
-  })
-  const backend = factoryBrowser.activation.backend ? firstPartyBackendActivation(factoryBrowser.activation) : null
-  if (backend && !frontendPluginManager.hasBackendActivation(backend.pluginId, backend.packageVersion)) {
-    frontendPluginManager.registerBackendActivation(backend)
-  }
-  return factoryBrowser
-}
 const factoryMiniIdeActivations = installedPluginLoad.activationCatalog.slice(0, 0)
 if (!installedMiniIdeDescriptorPresent && !pluginFactoryOptOuts.has(MINI_IDE_PLUGIN_ID)) {
   const factoryMiniIde = loadFactoryMiniIdePackage()
