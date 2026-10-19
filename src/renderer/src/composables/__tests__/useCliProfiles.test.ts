@@ -10,6 +10,7 @@ import {
   type SetDefaultResult,
 } from '../useCliProfiles'
 import { createMockBackend, withScope, flush } from './mockBackend'
+import { restoreSpawnPin } from '../../lib/accountFollowPanes'
 import { i18n } from '@navide/plugin-ui/foundation'
 
 function profile(id: string, agentKey: string, name: string): CliProfile {
@@ -46,6 +47,34 @@ describe('useCliProfiles', () => {
     await result.ensureLoaded()
     expect(mock.sent.filter((s) => s.type === 'cli_profiles.list')).toHaveLength(1)
     scope.stop()
+  })
+
+  it('a failed first load is waited on once: later restores take the main pin without re-sending the list', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const mock = createMockBackend('connected')
+    mock.setRejection('cli_profiles.list', 'request cli_profiles.list timeout')
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    const disclose = vi.fn()
+    const gate = { loaded: () => result.loaded.value, load: () => result.ensureLoaded(), disclose }
+    const lists = () => mock.sent.filter((s) => s.type === 'cli_profiles.list').length
+    for (let i = 0; i < 4; i++) {
+      expect(await restoreSpawnPin('old', true, () => false, gate)).toBe('old')
+    }
+    expect(lists()).toBe(1)
+    expect(disclose).toHaveBeenCalledTimes(4)
+
+    // A reconnect starts a new round: the list is asked for again.
+    mock.clearRejection('cli_profiles.list')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    mock.status.value = 'disconnected'
+    vi.advanceTimersByTime(500)
+    mock.status.value = 'connected'
+    vi.advanceTimersByTime(500)
+    await flush()
+    expect(lists()).toBe(2)
+    expect(result.loaded.value).toBe(true)
+    scope.stop()
+    vi.useRealTimers()
   })
 
   it('create sends snake_case payload and adopts the returned lists', async () => {
