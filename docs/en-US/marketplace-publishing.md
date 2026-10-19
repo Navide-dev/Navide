@@ -267,6 +267,11 @@ navide-plugin whoami     # namespace and token expiry
 navide-plugin logout     # forget the stored token
 ```
 
+`whoami` reads the token `publish` would send: `NAVIDE_PLUGIN_TOKEN` first,
+then the stored login. For `NAVIDE_PLUGIN_TOKEN` it asks the Registry
+(`GET /api/publisher/me`) whose token it is; for a stored login it answers
+offline, as before.
+
 `logout` only deletes the local copy. To invalidate a token on the Registry,
 revoke it under **Publisher tokens** on the dashboard. For CI, create a token
 there and pass it as `NAVIDE_PLUGIN_TOKEN` instead of logging in.
@@ -291,6 +296,36 @@ Registry checks it against the key you registered and refuses the upload with
 token from `NAVIDE_PLUGIN_TOKEN`, then `login`. A `--token` argument still
 works, but it is visible to other processes and kept in shell history, so
 `publish` warns when you use it.
+
+To publish from Navide instead, where you are already signed in, hand the
+package to its publish form. The CLI reads and stores no token; you review and
+submit in the Navide window:
+
+```bash
+navide-plugin publish acme.hello-0.1.0-universal.vsix --via-navide
+```
+
+It opens `navide://publish?path=<absolute path>[&target=<target>]` and prints
+the link; `--no-browser` only prints it. `--registry`, `--token`,
+`--signature` and `--insecure-http` do not apply: the form chooses them.
+
+### Check the scan and the review
+
+`navide-plugin scan` runs the Registry's publish-time static scan locally, on
+a `.vsix` or on a staging directory (scanned exactly as `package` would build
+it), and compares what it finds with what the manifest declares, the same way
+users see it on the disclosure card. `--json` prints the report.
+
+```bash
+navide-plugin scan acme.hello-0.1.0-universal.vsix
+```
+
+After publishing, `navide-plugin status` lists your namespace's versions with
+their review state (pending, approved, rejected with the reviewer's reason, or
+yanked) and, once a version is approved, its risk level and anything the scan
+found that the manifest does not declare. Name one plugin or version to narrow
+it: `navide-plugin status acme.hello@0.1.0`. It reads the token like
+`whoami`.
 
 For a backend plugin, sign and publish each target's package with its target:
 
@@ -494,13 +529,16 @@ publisher. Removals, and why, are listed publicly at
 ```text
 navide-plugin init <directory> --id <namespace.name> [--name <display name>]
 navide-plugin validate <directory> [--target <target>]
+navide-plugin scan <package.vsix | directory> [--target <target>] [--json]
 navide-plugin package <directory> [--target <target>] [--out <file>]
 navide-plugin keygen [--out-dir <directory>] [--name <name>]
 navide-plugin sign <package> --key <private-key> [--out <signature>]
 navide-plugin verify <package> --key <public-key> --signature <signature>
 navide-plugin login [--registry <url>] [--label <label>] [--no-browser] [--insecure-http]
 navide-plugin whoami [--registry <url>]
+navide-plugin status [<namespace.name>[@<version>]] [--registry <url>] [--json]
 navide-plugin logout [--registry <url>]
 navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--insecure-http]
+navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]
 navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]
 ```
