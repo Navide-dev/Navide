@@ -15,10 +15,12 @@ All notable released changes to Navide will be documented in this file. The form
 - MCP: a read-only `cli_accounts_list` tool lists the CLI accounts Navide keeps and which one each CLI runs on, read from the account store only: no email and no signed-in state, since both would mean reading the credentials.
 - MCP: a read-only `cli_failover_state` tool lets an agent see what Navide's quota failover is doing: the policy, open incidents, how many automatic switches each account pool has left, and which vendor is blocked by a half-finished switch until the user resolves it. It reads only that in-memory state: nothing is refreshed or switched, no credential or Keychain item is read, accounts are named by slot id, and the live login's identity, fingerprint and raw error text are never returned.
 - MCP: a `cli_account_sign_in` tool lets an agent open the sign-in Navide already offers for one CLI account — a parked account in its own private home, or a claude account inside its own folder — so the user only finishes it in the browser. Nothing opens until the user agrees in a dialog in the main window that starts on Cancel and shows the vendor, the account (never an email), the calling pane, the workspace the sign-in pane opens in (the caller's own) and the agent's reason, labelled as the agent's with invisible characters shown; a no, no answer in time, or the window leaving the caller's workspace meanwhile opens nothing. A sign-in the user starts from Settings → Accounts asks nothing new. It goes through the window's own sign-in, never switches accounts, returns no token, code or URL, and leaves the active account, the built-in Default and sign-ins that replace the live credential to the user. Only CLI panes can call it; `ui_invoke` cannot reach it.
+- Accounts: signing in to a Claude account from Settings → Accounts now continues in the same pane with the sign-in for that account's own folder, and asks you to authorize once more, so the account no longer shows **Sign in** after it was signed in. It is skipped when the account is already the default. Closing that pane only leaves a reminder. (#434)
 
 ### Security
 
 - What a CLI sign-in pane prints (an authorization URL, a pasted code) no longer reaches anything but that pane: it writes no log file, `cli_read_log` refuses it, `cli_get_status` and the chat relay get no screen text from it, a chat cannot be bound to it, and it is not shared with the editor's AI Chat or by dragging it onto another pane.
+- Guard: answering a permission prompt remotely (the chat relay, `cli_answer_prompt`) can no longer pick Claude's "Yes, and switch to auto mode", which approves every later prompt like an "always allow"; answer it at the computer. (#442, thanks @slighter12)
 
 ### Changed
 
@@ -39,6 +41,11 @@ All notable released changes to Navide will be documented in this file. The form
 - Navide plugins: a Navide plugin from a test channel whose signed expiry has passed is refused, and an unknown Registry channel is refused instead of trusted. (#421)
 - Registry (self-hosted): every `X-Admin-Token` endpoint now refuses with 401 while `REGISTRY_ADMIN_TOKEN` is unset, empty or blank (`POST /api/publishers` and `/featured` used to accept any request then); `REGISTRY_ALLOW_OPEN_ADMIN=1` reopens only those two for local development, and the `official` profile refuses it. Publishing with `channel=testplace` answers 409 `TESTPLACE_NOT_OPEN`, an unknown or mismatched `channel` answers 400, and test-channel versions are hidden from every public read. (#411, #421)
 - Plugin SDK: `@navide/plugin-contracts` and `@navide/plugin-sdk` are tree-shakeable, so a plugin bundle keeps only the SDK it calls and the Registry scan no longer reports unused capabilities. (#410)
+- Accounts: after a restart, a pane pinned to an account waits for the account list to load before deciding its pin, so it no longer comes back on another account and wrongly shows its quota as used up. (#435)
+- Accounts: **Follow account switch** or **Continue with** on a claude pane where nothing has been typed yet reopens it fresh on the new account instead of failing with "Session not found on disk"; a pane with a conversation is still resumed. (#437)
+- Accounts: **Continue with** or the account pin toggle no longer moves a sign-in pane to another account (it used to reopen it as a normal pane and silently cancel the sign-in). (#438)
+- Claude: a pane waiting on Claude's current permission box (two- or four-option) is shown as waiting for an answer for as long as the box is open, and dialog text quoted in the conversation is no longer taken for a dialog. (#439, thanks @slighter12)
+- macOS: switching input source with Cmd+Space while an IME reading is still being composed no longer sends the reading twice. (#440, thanks @slighter12)
 
 ## [0.2.25] — 2026-10-18 — signed release
 
