@@ -435,6 +435,9 @@ declare global {
           manifestOrder: number
           /** Source and review state of the package that contributes this view. */
           source?: PluginSource
+          /** A test build: its signed expiry and how the user joined the test. */
+          expiresAt?: string
+          testplaceVia?: 'invite' | 'code'
         }>>
         hostThemeChanged: (theme: string) => void
         prepareContribution: (args: {

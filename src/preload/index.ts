@@ -1284,6 +1284,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
       manifestOrder: number
       /** Source and review state of the package that contributes this view. */
       source?: PluginSource
+      /** A test build: its signed expiry and how the user joined the test. */
+      expiresAt?: string
+      testplaceVia?: 'invite' | 'code'
     }>> => ipcRenderer.invoke('plugins:listContributions'),
     hostThemeChanged: (theme: string): void =>
       ipcRenderer.send('plugins:hostThemeChanged', theme),

@@ -187,6 +187,10 @@ describe('installing a Testplace build', () => {
     await call('plugins:restart', { id: ID })
     const installed = (call('plugins:listInstalled') as Array<Record<string, unknown>>).find((row) => row.id === ID)
     expect(installed).toMatchObject({ source: 'testplace', expiresAt: EXPIRES_AT, testplaceVia: 'code' })
+    // The chrome mark above its view reads the same signed expiry.
+    const views = (call('plugins:listContributions') as Array<Record<string, unknown>>).filter((row) => row.pluginId === ID)
+    expect(views.length).toBeGreaterThan(0)
+    for (const view of views) expect(view).toMatchObject({ source: 'testplace', expiresAt: EXPIRES_AT, testplaceVia: 'code' })
   })
 
   it('refuses a swapped package whatever the account fetched', async () => {

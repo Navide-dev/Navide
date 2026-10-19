@@ -1061,17 +1061,18 @@ export function registerPluginIpc(
     return manager.listContributionCatalog().map(({ iconFile, ...entry }) => {
       const icon = iconFile ? options.resolveContributionIcon?.(iconFile) ?? null : null
       const pkg = installed.get(entry.pluginId)
-      // Only the selected package's own record may label its views.
-      const source = pkg && pkg.packageVersion === (entry.packageVersion ?? undefined)
-        ? installedSource(pkg, activeRegistryChannel(pkg))
-        : undefined
+      // Only the selected package's own record may label its views. A test
+      // build also carries its signed expiry and how the user joined (W5b).
+      const fields = pkg && pkg.packageVersion === (entry.packageVersion ?? undefined)
+        ? sourceFields(pkg)
+        : {}
       return {
         ...entry,
         icon: icon?.url ?? null,
         // A silhouette is painted in the current text colour by the renderer,
         // so it follows the theme the way the built-in SVG icons do.
         iconMonochrome: icon?.monochrome ?? false,
-        ...(source ? { source } : {}),
+        ...fields,
       }
     })
   })
