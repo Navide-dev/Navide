@@ -72,7 +72,7 @@
     "typecheck:public": "tsc --noEmit -p packages/plugin-contracts/tsconfig.json && tsc --noEmit -p packages/plugin-sdk/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p packages/plugin-ui/tsconfig.json",
     "typecheck:plugin-git": "pnpm run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-git/tsconfig.json",
     "typecheck:plugin-plans": "pnpm run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-plans/tsconfig.json",
-    "typecheck": "pnpm run typecheck:node && pnpm run typecheck:integration && pnpm run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-git/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-plans/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-mini-ide/tsconfig.json && pnpm run typecheck:web && pnpm run typecheck:public",
+    "typecheck": "pnpm run typecheck:node && pnpm run typecheck:integration && pnpm run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-git/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-plans/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-mini-ide/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-browser/tsconfig.json && pnpm run typecheck:web && pnpm run typecheck:public",
     "build:public-packages": "tsc -p packages/plugin-contracts/tsconfig.json && tsc -p packages/plugin-sdk/tsconfig.build.json && vite build --config packages/plugin-ui/vite.config.ts && node scripts/bun/vue-tsc.cjs -p packages/plugin-ui/tsconfig.build.json",
     "test": "vitest",
     "test:run": "vitest run",
