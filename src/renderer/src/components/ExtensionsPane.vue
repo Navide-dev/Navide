@@ -592,8 +592,15 @@ watch(installed, () => void refreshPacks())
             <div class="ext-card-title">
               <span class="ext-id" v-truncate>{{ reveal(p.id) }}</span>
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
-              <!-- K2: the Host's source only; none (an unknown channel) shows no badge. -->
-              <PluginSourceBadge v-if="p.source" :source="p.source" :expires-at="p.expiresAt" />
+              <!-- K2: the Host's source only; none (an unknown channel) shows no badge.
+                   A3: a signed local file names the publisher its id names, the one whose key signed it. -->
+              <PluginSourceBadge
+                v-if="p.source"
+                :source="p.source"
+                :expires-at="p.expiresAt"
+                :signature="p.localSignature"
+                :publisher="p.localSignature ? p.id.split('.')[0] : undefined"
+              />
               <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                 {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}
               </span>

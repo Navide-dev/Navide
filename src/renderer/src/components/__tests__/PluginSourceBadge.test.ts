@@ -165,3 +165,27 @@ describe('Pre-release source row (K5)', () => {
     stable.unmount()
   })
 })
+
+describe('A3: a signed local file', () => {
+  it('reads as signed by the vetted developer only while the key is active, and as no longer valid once revoked', () => {
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      const verified = render({ source: 'local-unsigned', signature: 'verified', publisher: 'acme' })
+      expect(verified.attributes('data-source')).toBe('local-signed')
+      expect(verified.text()).toBe(i18n.global.t('pluginDisclosure.source.localSignedBy', { publisher: 'acme' }))
+      expect(verified.text()).toContain('acme')
+      const revoked = render({ source: 'local-unsigned', signature: 'revoked', publisher: 'acme' })
+      expect(revoked.classes()).toContain('nv-source-badge--signature-revoked')
+      expect(revoked.text()).toBe(i18n.global.t('pluginDisclosure.source.signatureRevoked'))
+      // No signature: the unsigned wording, unchanged.
+      expect(render({ source: 'local-unsigned' }).text()).toBe(i18n.global.t('pluginDisclosure.source.local-unsigned'))
+    }
+  })
+
+  it('never lets a signature relabel a source that is not a local file', () => {
+    i18n.global.locale.value = 'en-US'
+    const folder = render({ source: 'developer-unpacked', signature: 'verified', publisher: 'acme' })
+    expect(folder.attributes('data-source')).toBe('developer-unpacked')
+    expect(folder.text()).toBe(i18n.global.t('pluginDisclosure.source.developer-unpacked'))
+  })
+})

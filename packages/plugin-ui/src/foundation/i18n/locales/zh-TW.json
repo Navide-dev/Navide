@@ -1948,6 +1948,16 @@
         "replaceDataSetAside": "新版本會從空的資料夾開始，原本的資料會保留在一旁，不會被新版本讀到。",
         "reattachData": "接回這個來源之前保留在一旁的資料（預設不接回）",
         "takedownUnknown": "目前無法確認這個 Navide 外掛是否已被 Navide 下架：沒有取得 Navide 的下架清單。",
+        "signatureState": {
+          "verified": "開發者 {publisher}（已通過 Navide 資格審核）簽章，這一版本身未經 Navide 審核。",
+          "revoked": "簽章已失效：Navide 已撤銷 {publisher} 的簽章金鑰或開發者資格。",
+          "unverifiable": "有簽章，但 Navide 無法對應到已審核的開發者（{publisher}）：請把這個檔案當作未簽章。",
+          "warningVerified": "這個 Navide 外掛來自本機檔案，由已通過 Navide 資格審核的開發者 {publisher} 簽章，但這一版沒有經過 Navide 審核。只安裝你信任的人給你的檔案。",
+          "warningRevoked": "這個 Navide 外掛來自本機檔案，而且簽章已失效：Navide 已撤銷 {publisher} 的簽章金鑰或開發者資格。這個檔案沒有經過 Navide 審核。只有在你信任它的來源時才安裝。"
+        },
+        "errors": {
+          "digestBlocked": "無法安裝 {id} 的這個檔案：Navide 已下架這一份檔案（它的 digest 在 Navide 的封鎖清單上）。"
+        },
         "confirmReplace": "取代"
       },
       "trust": {
@@ -11297,7 +11307,9 @@
       "factory-bundled": "Navide 內建",
       "notScanned": "未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）",
       "publisher": "發佈者：{publisher}",
-      "selfDeclared": "自稱：{publisher}"
+      "selfDeclared": "自稱：{publisher}",
+      "localSignedBy": "開發者 {publisher}（已通過 Navide 資格審核）簽章，這一版未經 Navide 審核",
+      "signatureRevoked": "簽章已失效"
     },
     "diff": {
       "heading": "這次更新的權限變化",
@@ -11465,7 +11477,10 @@
       "enabled": "{caller}啟用了 Navide 外掛 {plugin}",
       "version": "版本 {version}。檔案、授權和資料都保留。",
       "undo-failed": "無法還原：{error}",
-      "undo-stale": "沒有還原：這個 Navide 外掛之後已經被改過。"
+      "undo-stale": "沒有還原：這個 Navide 外掛之後已經被改過。",
+      "updated": "{caller} 把 Navide 外掛 {plugin} 從 {from} 升級到 {to}",
+      "updated-detail": "沒有詢問你就直接升級：{to} 揭露的權限、後端、agent 工具和網路存取，和 {from} 完全相同。",
+      "downgraded": "{plugin} 已降回 {version}。"
     },
     "caller": {
       "pane": "Agent pane「{pane}」",
@@ -11475,7 +11490,8 @@
     },
     "button": {
       "enable": "重新啟用",
-      "disable": "再次停用"
+      "disable": "再次停用",
+      "downgrade": "降回 {version}"
     }
   }
 }

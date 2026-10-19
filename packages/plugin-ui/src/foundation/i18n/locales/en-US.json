@@ -1948,6 +1948,16 @@
         "replaceDataSetAside": "The new version starts with an empty data folder. The existing data is kept aside, and the new version cannot read it.",
         "reattachData": "Take back the data kept aside from this source earlier (off by default)",
         "takedownUnknown": "Navide cannot tell right now whether this Navide plugin has been taken down: the Navide takedown list could not be fetched.",
+        "signatureState": {
+          "verified": "Signed by developer {publisher}, who passed Navide's developer vetting. This version itself was not reviewed by Navide.",
+          "revoked": "Signature no longer valid: Navide has revoked the signing key or the developer qualification of {publisher}.",
+          "unverifiable": "A signature Navide cannot check against a vetted developer ({publisher}): treat this file as unsigned.",
+          "warningVerified": "This Navide plugin comes from a file on this computer. It is signed by developer {publisher}, who passed Navide's developer vetting, but Navide has not reviewed this version. Only install files from people you trust.",
+          "warningRevoked": "This Navide plugin comes from a file on this computer, and its signature is no longer valid: Navide has revoked the signing key or the developer qualification of {publisher}. Navide has not reviewed it. Only install it if you trust where it came from."
+        },
+        "errors": {
+          "digestBlocked": "This file of {id} cannot be installed: Navide has taken this exact file down (its digest is on Navide's blocked list)."
+        },
         "confirmReplace": "Replace"
       },
       "trust": {
@@ -11297,7 +11307,9 @@
       "factory-bundled": "Built into Navide",
       "notScanned": "Not scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)",
       "publisher": "Publisher: {publisher}",
-      "selfDeclared": "Self-declared: {publisher}"
+      "selfDeclared": "Self-declared: {publisher}",
+      "localSignedBy": "Signed by developer {publisher} (vetted by Navide); this version was not reviewed by Navide",
+      "signatureRevoked": "Signature no longer valid"
     },
     "diff": {
       "heading": "What this update changes",
@@ -11465,7 +11477,10 @@
       "enabled": "{caller} enabled the Navide plugin {plugin}",
       "version": "Version {version}. Its files, grants and data are kept.",
       "undo-failed": "Could not undo: {error}",
-      "undo-stale": "Nothing was undone: the Navide plugin was changed since."
+      "undo-stale": "Nothing was undone: the Navide plugin was changed since.",
+      "updated": "{caller} updated the Navide plugin {plugin} from {from} to {to}",
+      "updated-detail": "Applied without asking you: version {to} discloses exactly the same permissions, backend, agent tools and network access as {from}.",
+      "downgraded": "{plugin} is back to version {version}."
     },
     "caller": {
       "pane": "Agent pane “{pane}”",
@@ -11475,7 +11490,8 @@
     },
     "button": {
       "enable": "Enable again",
-      "disable": "Disable again"
+      "disable": "Disable again",
+      "downgrade": "Back to {version}"
     }
   }
 }
