@@ -426,6 +426,26 @@ describe('agent script since load', () => {
     expect(flag()).toBe(true)
   })
 
+  it('stays set when the main frame commits a new document while the script is in flight', async () => {
+    const { registry, views } = setup()
+    const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
+    const contents = views[0].webContents
+    const flag = () => registry.list('navide.browser')[0].agentScriptSinceLoad
+    // The evaluate can land in the document that commits while it is on the wire.
+    contents.debugger.sendCommand = async () => {
+      contents.emit('did-navigate', {}, 'https://example.com/next')
+      return {}
+    }
+    await registry.cdp('navide.browser', viewId, 'Runtime.evaluate', { expression: '1' })
+    expect(flag()).toBe(true)
+    contents.debugger.sendCommand = async () => {
+      contents.emit('did-navigate', {}, 'https://example.com/again')
+      throw new Error('Execution context was destroyed.')
+    }
+    await expect(registry.cdp('navide.browser', viewId, 'Runtime.callFunctionOn', {})).rejects.toBeDefined()
+    expect(flag()).toBe(true)
+  })
+
   it('reloads the page when the agent hands it to the user with its script in it', async () => {
     const { registry, views } = setup()
     const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')

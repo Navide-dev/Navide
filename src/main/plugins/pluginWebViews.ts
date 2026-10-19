@@ -354,7 +354,8 @@ export class PluginWebViewRegistry {
         throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
       }
     }
-    if (method === 'Runtime.evaluate' || method === 'Runtime.callFunctionOn') entry.agentScriptSinceLoad = true
+    const script = method === 'Runtime.evaluate' || method === 'Runtime.callFunctionOn'
+    if (script) entry.agentScriptSinceLoad = true
     const input = method.startsWith('Input.')
     if (input) entry.agentInput += 1
     try {
@@ -363,6 +364,8 @@ export class PluginWebViewRegistry {
       throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
     } finally {
       if (input) entry.agentInput -= 1
+      // A document that committed while the script was in flight may be the one it ran in.
+      if (script) entry.agentScriptSinceLoad = true
       // The user may have taken over while the command ran; the next one is refused.
     }
   }
