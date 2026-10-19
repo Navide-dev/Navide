@@ -10317,7 +10317,9 @@
     },
     "managed": {
       "create": "Create a new bot",
-      "disclose": "{manager} can read and replace the new bot's token at any time. Whoever holds {manager}'s token controls every bot it creates.",
+      "title": "Create a new bot through {manager}",
+      "disclose": "{manager} can read and replace the new bot's token at any time. Whoever holds {manager}'s token controls every bot it creates. If {manager}'s token leaks, every bot it created leaks with it.",
+      "confirm": "Continue in Telegram",
       "enable-hint": "Want a bot to create new bots in one tap? Turn on “Bot Management Mode” in BotFather. {n} of your bots don't have it on yet.",
       "open-botfather": "Open BotFather",
       "dismiss": "Don't show again",

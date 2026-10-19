@@ -715,10 +715,11 @@ function formatTime(ts: number | null | undefined): string {
             >
               <p v-if="managedWaiting[bot.key]" class="ch-form-hint" data-testid="channel-managed-waiting">{{ t('channels.managed.waiting') }}</p>
               <template v-else-if="managedAsk === bot.key && bot.status.can_manage_bots">
-                <p class="ch-form-hint" data-testid="channel-managed-disclose">{{ t('channels.managed.disclose', { manager: bot.status.identity }) }}</p>
+                <p class="ch-managed-title" data-testid="channel-managed-title">{{ t('channels.managed.title', { manager: bot.status.identity }) }}</p>
+                <p class="ch-managed-warn" role="note" data-testid="channel-managed-disclose">{{ t('channels.managed.disclose', { manager: bot.status.identity }) }}</p>
                 <div class="ch-form-actions">
                   <button type="button" class="ch-btn ghost sm" data-testid="channel-managed-cancel" @click="managedAsk = null">{{ t('channels.cancel') }}</button>
-                  <button type="button" class="ch-btn primary sm" :disabled="busy" data-testid="channel-managed-confirm" @click="createManaged(bot)">{{ t('channels.managed.create') }}</button>
+                  <button type="button" class="ch-btn primary sm" :disabled="busy" data-testid="channel-managed-confirm" @click="createManaged(bot)">{{ t('channels.managed.confirm') }}</button>
                 </div>
               </template>
               <p v-if="managedError[bot.key]" class="ch-error" role="alert" data-testid="channel-managed-error">{{ managedError[bot.key] }}</p>
@@ -1013,6 +1014,17 @@ function formatTime(ts: number | null | undefined): string {
 
 /* Creating a bot through a managing Telegram bot. */
 .ch-managed { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 8px 0 0; }
+.ch-managed-title { margin: 0; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
+.ch-managed-warn {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: var(--font-row-desc);
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--attention-subtle);
+  border: 1px solid var(--attention-muted);
+  border-radius: var(--radius-sm);
+}
 
 /* Buttons: the Accounts page's button set. */
 .ch-btn {

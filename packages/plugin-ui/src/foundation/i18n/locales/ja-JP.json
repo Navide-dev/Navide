@@ -10317,7 +10317,9 @@
     },
     "managed": {
       "create": "新しい bot を作成",
-      "disclose": "{manager} は新しい bot のトークンをいつでも取得・再発行できます。{manager} のトークンを持つ人は、作成したすべての bot を操作できます。",
+      "title": "{manager} で新しい bot を作成",
+      "disclose": "{manager} は新しい bot のトークンをいつでも取得・再発行できます。{manager} のトークンを持つ人は、作成したすべての bot を操作できます。{manager} のトークンが漏れると、作成したすべての bot も一緒に漏れます。",
+      "confirm": "Telegram で作成する",
       "enable-hint": "bot から新しい bot をワンタップで作りたい場合は、BotFather で「Bot Management Mode」をオンにしてください。まだオンになっていない bot が {n} 個あります。",
       "open-botfather": "BotFather を開く",
       "dismiss": "今後表示しない",

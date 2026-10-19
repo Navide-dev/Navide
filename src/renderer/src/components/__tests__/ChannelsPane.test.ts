@@ -836,9 +836,16 @@ describe('ChannelsPane', () => {
       seedManager(true)
       const w = await render()
       await managerRow(w).get('[data-testid="channel-managed-create"]').trigger('click')
-      expect(managerRow(w).get('[data-testid="channel-managed-disclose"]').text()).toContain(
+      expect(managerRow(w).get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @navide_bot')
+      const disclose = managerRow(w).get('[data-testid="channel-managed-disclose"]')
+      expect(disclose.text()).toContain(
         "@navide_bot can read and replace the new bot's token at any time. Whoever holds @navide_bot's token controls every bot it creates."
       )
+      expect(disclose.text()).toContain("If @navide_bot's token leaks, every bot it created leaks with it.")
+      // A warning in body text, not a muted hint that reads like a note about this bot.
+      expect(disclose.classes()).toContain('ch-managed-warn')
+      expect(disclose.classes()).not.toContain('ch-form-hint')
+      expect(managerRow(w).get('[data-testid="channel-managed-confirm"]').text()).toBe('Continue in Telegram')
       expect(mock.sent.some((m) => m.type === 'channels.managed_create')).toBe(false)
       expect(openExternal).not.toHaveBeenCalled()
       await managerRow(w).get('[data-testid="channel-managed-cancel"]').trigger('click')
