@@ -7,21 +7,30 @@ Cloud's `members` table is never touched. Revoking a qualification, in one
 transaction: revokes every token the account holds (publisher and account
 tokens, unused login codes, an admin-issued token on its namespaces), freezes
 its namespaces, yanks every version of them in every channel, and revokes
-their publisher keys. Every step is written to the audit trail (audit.py).
+their publisher keys, and blocks the digest of every version they published
+(reason qualification-revoked). Every step is written to the audit trail
+(audit.py).
+
+A namespace self-claimed before qualification existed is grandfathered
+(migration 13, decision d4(a)): it keeps publishing for 30 days while its owner
+applies, a pending application pauses the period, and once it runs out with no
+approved or pending application the namespace is reclaimed the way a
+revocation tears one down (reclaim_expired).
 
 Admin-created (first-party) publishers have no owner and are always vetted.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import update
 from sqlmodel import Session, select
 
-from . import audit
+from . import audit, blocklist
 from .config import PUBLISHER_PATTERN
 from .models import (
     AccountAuthCode,
@@ -68,6 +77,12 @@ DEFAULT_TEXT_LIMIT = 200
 MAX_SOURCE_LENGTH = 64
 MAX_REASON_LENGTH = 1000
 
+GRANDFATHER_REMINDER_DAYS = 7
+"""The owner of a grandfathered namespace is reminded this close to the end."""
+GRANDFATHER_EXPIRED_REASON = "developer qualification was not applied for within the 30-day grace period"
+REVOKED_DIGEST_REASON = "Developer qualification revoked"
+"""Public reason on the digest entries a revocation or reclaim adds."""
+
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 _COUNTRY_RE = re.compile(r"[A-Z]{2}")
 _URL_RE = re.compile(r"https?://\S+")
@@ -106,12 +121,94 @@ def is_approved(session: Session, member_id: str) -> bool:
     return status_of(session, member_id) == APPROVED
 
 
+def _aware(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def grandfather_deadline(publisher: Publisher, now: datetime) -> datetime | None:
+    """End of the grace period; while it is paused, the end moves with the clock."""
+    until = _aware(publisher.grandfather_until)
+    paused = _aware(publisher.grandfather_paused_at)
+    if until is None:
+        return None
+    if paused is not None:
+        until += max(now - paused, timedelta(0))
+    return until
+
+
+def grandfathered(session: Session, publisher: Publisher, now: datetime | None = None) -> bool:
+    """Whether the grace period still lets an unapproved owner publish: a
+    pending application always counts as having applied."""
+    if publisher.grandfather_until is None or publisher.navide_member_id is None:
+        return False
+    if status_of(session, publisher.navide_member_id) == PENDING:
+        return True
+    now = now or _now()
+    return now < grandfather_deadline(publisher, now)
+
+
+def grandfather_view(session: Session, publisher: Publisher, now: datetime | None = None) -> dict | None:
+    """What the owner is told about the grace period; None when none applies
+    (no grace, a frozen namespace, or an approved owner). `remind` is set in
+    the last GRANDFATHER_REMINDER_DAYS of a running period."""
+    if publisher.grandfather_until is None or publisher.navide_member_id is None or publisher.frozen_at is not None:
+        return None
+    status = status_of(session, publisher.navide_member_id)
+    if status == APPROVED:
+        return None
+    now = now or _now()
+    deadline = grandfather_deadline(publisher, now)
+    paused = status == PENDING
+    left = deadline - now
+    return {
+        "until": _iso(deadline),
+        "paused": paused,
+        "days_left": max(0, math.ceil(left.total_seconds() / 86400)),
+        "remind": not paused and left <= timedelta(days=GRANDFATHER_REMINDER_DAYS),
+        "expired": not paused and left <= timedelta(0),
+    }
+
+
+def _pause_grandfather(session: Session, member_id: str, now: datetime) -> None:
+    for publisher in session.exec(
+        select(Publisher).where(
+            Publisher.navide_member_id == member_id,
+            Publisher.grandfather_until.is_not(None),
+            Publisher.grandfather_paused_at.is_(None),
+        )
+    ).all():
+        publisher.grandfather_paused_at = now
+        session.add(publisher)
+
+
+def _resume_grandfather(session: Session, member_id: str, now: datetime) -> None:
+    """Resume a paused period, extended by the time it was paused."""
+    for publisher in session.exec(
+        select(Publisher).where(
+            Publisher.navide_member_id == member_id, Publisher.grandfather_paused_at.is_not(None)
+        )
+    ).all():
+        publisher.grandfather_until = grandfather_deadline(publisher, now)
+        publisher.grandfather_paused_at = None
+        session.add(publisher)
+
+
 def publisher_problem(session: Session, publisher: Publisher) -> tuple[str, str] | None:
     """(code, message) when nothing may be published or issued under this
     namespace; None when it may."""
     if publisher.frozen_at is not None:
         return "NAMESPACE_FROZEN", f"namespace '{publisher.name}' is frozen: {publisher.frozen_reason or 'qualification revoked'}"
     if publisher.navide_member_id is not None and not is_approved(session, publisher.navide_member_id):
+        if grandfathered(session, publisher):
+            return None
+        if publisher.grandfather_until is not None:
+            return (
+                "QUALIFICATION_REQUIRED",
+                "the 30-day grace period for this namespace has ended without a developer "
+                "application; apply on the marketplace website or in Navide",
+            )
         return (
             "QUALIFICATION_REQUIRED",
             "this account's developer qualification is not approved; apply on the "
@@ -241,6 +338,7 @@ def submit_application(
     row.field_sources = sources
     row.source = source
     row.submitted_at = _now()
+    _pause_grandfather(session, member_id, row.submitted_at)
     row.decided_at = None
     row.decided_by = None
     row.reason = None
@@ -279,6 +377,8 @@ def decide(session: Session, member_id: str, *, approve: bool, actor: str, reaso
     reason = _reason(reason, required=not approve)
     row.status = APPROVED if approve else REJECTED
     row.decided_at = _now()
+    if not approve:
+        _resume_grandfather(session, member_id, row.decided_at)
     row.decided_by = actor
     row.reason = reason
     session.add(row)
@@ -302,6 +402,84 @@ class RevocationResult:
     keys_revoked: int
 
 
+def _tear_down(
+    session: Session, publishers: list[Publisher], *, reason: str, actor: str, now: datetime
+) -> tuple[int, int, int, list[str]]:
+    """Freeze these namespaces: drop the admin-issued token, freeze, yank every
+    version, revoke the keys and block the digest of every version
+    (qualification-revoked). The caller revokes the publisher tokens and login
+    codes. Does not commit. Returns (versions yanked, keys revoked, tokens
+    dropped, digests blocked)."""
+    yanked = 0
+    keys = 0
+    tokens = 0
+    blocked: list[str] = []
+    for publisher in publishers:
+        if publisher.token_hash is not None:
+            publisher.token_hash = None
+            tokens += 1
+        publisher.frozen_at = now
+        publisher.frozen_reason = reason
+        session.add(publisher)
+        extension_ids = list(session.exec(select(Extension.id).where(Extension.publisher_id == publisher.id)).all())
+        versions: list[str] = []
+        digests: list[str] = []
+        if extension_ids:
+            rows = session.exec(
+                select(ExtensionVersion).where(ExtensionVersion.extension_id.in_(extension_ids))
+            ).all()
+            identities = {
+                e.id: e.identity for e in session.exec(select(Extension).where(Extension.id.in_(extension_ids))).all()
+            }
+            for version in rows:
+                digests.append(version.package_digest)
+                if version.yanked:
+                    continue
+                version.yanked = True
+                session.add(version)
+                versions.append(f"{identities[version.extension_id]}@{version.version}#{version.target}")
+        yanked += len(versions)
+        key_count = session.execute(
+            update(PublisherKey)
+            .where(PublisherKey.publisher_id == publisher.id, PublisherKey.revoked_at.is_(None))
+            .values(revoked_at=now, revoked_reason="qualification revoked")
+        ).rowcount
+        keys += key_count
+        added = blocklist.block_digests(
+            session,
+            digests,
+            reason=REVOKED_DIGEST_REASON,
+            digest_reason=blocklist.DIGEST_QUALIFICATION_REVOKED,
+            created_by=actor,
+        )
+        blocked += added
+        audit.record(
+            session,
+            actor=actor,
+            action="namespace.freeze",
+            target=f"publisher:{publisher.name}",
+            reason=reason,
+            detail={"yanked": versions, "keys_revoked": key_count, "digests_blocked": added},
+        )
+    return yanked, keys, tokens, blocked
+
+
+def _revoke_publisher_tokens(session: Session, publisher_ids: list[int], now: datetime) -> int:
+    if not publisher_ids:
+        return 0
+    revoked = session.execute(
+        update(PublisherToken)
+        .where(PublisherToken.publisher_id.in_(publisher_ids), PublisherToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+    ).rowcount
+    session.execute(
+        update(CliAuthCode)
+        .where(CliAuthCode.publisher_id.in_(publisher_ids), CliAuthCode.used_at.is_(None))
+        .values(used_at=now)
+    )
+    return revoked
+
+
 def revoke(session: Session, member_id: str, *, actor: str, reason: str) -> RevocationResult:
     """Revoke an approved qualification and everything it unlocked, in one
     transaction (see the module docstring). Commits."""
@@ -313,18 +491,7 @@ def revoke(session: Session, member_id: str, *, actor: str, reason: str) -> Revo
     publishers = list(session.exec(select(Publisher).where(Publisher.navide_member_id == member_id)).all())
     publisher_ids = [p.id for p in publishers]
 
-    tokens = 0
-    if publisher_ids:
-        tokens += session.execute(
-            update(PublisherToken)
-            .where(PublisherToken.publisher_id.in_(publisher_ids), PublisherToken.revoked_at.is_(None))
-            .values(revoked_at=now)
-        ).rowcount
-        session.execute(
-            update(CliAuthCode)
-            .where(CliAuthCode.publisher_id.in_(publisher_ids), CliAuthCode.used_at.is_(None))
-            .values(used_at=now)
-        )
+    tokens = _revoke_publisher_tokens(session, publisher_ids, now)
     tokens += session.execute(
         update(AccountToken)
         .where(AccountToken.navide_member_id == member_id, AccountToken.revoked_at.is_(None))
@@ -336,45 +503,10 @@ def revoke(session: Session, member_id: str, *, actor: str, reason: str) -> Revo
         .values(used_at=now)
     )
 
-    yanked = 0
-    keys = 0
-    for publisher in publishers:
-        if publisher.token_hash is not None:
-            publisher.token_hash = None
-            tokens += 1
-        publisher.frozen_at = now
-        publisher.frozen_reason = reason
-        session.add(publisher)
-        extension_ids = list(session.exec(select(Extension.id).where(Extension.publisher_id == publisher.id)).all())
-        versions: list[str] = []
-        if extension_ids:
-            rows = session.exec(
-                select(ExtensionVersion).where(
-                    ExtensionVersion.extension_id.in_(extension_ids), ExtensionVersion.yanked.is_(False)
-                )
-            ).all()
-            identities = {
-                e.id: e.identity for e in session.exec(select(Extension).where(Extension.id.in_(extension_ids))).all()
-            }
-            for version in rows:
-                version.yanked = True
-                session.add(version)
-                versions.append(f"{identities[version.extension_id]}@{version.version}#{version.target}")
-        yanked += len(versions)
-        key_count = session.execute(
-            update(PublisherKey)
-            .where(PublisherKey.publisher_id == publisher.id, PublisherKey.revoked_at.is_(None))
-            .values(revoked_at=now, revoked_reason="qualification revoked")
-        ).rowcount
-        keys += key_count
-        audit.record(
-            session,
-            actor=audit.SYSTEM_REVOCATION,
-            action="namespace.freeze",
-            target=f"publisher:{publisher.name}",
-            reason=reason,
-            detail={"yanked": versions, "keys_revoked": key_count},
-        )
+    yanked, keys, tokens_torn, digests = _tear_down(
+        session, publishers, reason=reason, actor=audit.SYSTEM_REVOCATION, now=now
+    )
+    tokens += tokens_torn
 
     row.status = REVOKED
     row.decided_at = now
@@ -392,12 +524,57 @@ def revoke(session: Session, member_id: str, *, actor: str, reason: str) -> Revo
             "tokens_revoked": tokens,
             "versions_yanked": yanked,
             "keys_revoked": keys,
+            "digests_blocked": len(digests),
         },
     )
     session.commit()
     return RevocationResult(
         namespaces=[p.name for p in publishers], tokens_revoked=tokens, versions_yanked=yanked, keys_revoked=keys
     )
+
+
+def reclaim_expired(session: Session, now: datetime | None = None) -> list[str]:
+    """Reclaim every grandfathered namespace whose grace period ran out with
+    no approved or pending application: tear it down as a revocation does
+    (the account keeps its account token and may still apply). Commits.
+    Returns the namespaces reclaimed."""
+    now = now or _now()
+    by_member: dict[str, list[Publisher]] = {}
+    for publisher in session.exec(
+        select(Publisher).where(
+            Publisher.grandfather_until.is_not(None),
+            Publisher.frozen_at.is_(None),
+            Publisher.navide_member_id.is_not(None),
+        )
+    ).all():
+        if status_of(session, publisher.navide_member_id) in (APPROVED, PENDING):
+            continue
+        if grandfather_deadline(publisher, now) > now:
+            continue
+        by_member.setdefault(publisher.navide_member_id, []).append(publisher)
+    reclaimed: list[str] = []
+    for member_id, publishers in by_member.items():
+        tokens = _revoke_publisher_tokens(session, [p.id for p in publishers], now)
+        yanked, keys, dropped, digests = _tear_down(
+            session, publishers, reason=GRANDFATHER_EXPIRED_REASON, actor=audit.SYSTEM_GRANDFATHER_EXPIRED, now=now
+        )
+        audit.record(
+            session,
+            actor=audit.SYSTEM_GRANDFATHER_EXPIRED,
+            action="namespace.reclaim",
+            target=member_target(member_id),
+            reason=GRANDFATHER_EXPIRED_REASON,
+            detail={
+                "namespaces": [p.name for p in publishers],
+                "tokens_revoked": tokens + dropped,
+                "versions_yanked": yanked,
+                "keys_revoked": keys,
+                "digests_blocked": len(digests),
+            },
+        )
+        reclaimed += [p.name for p in publishers]
+    session.commit()
+    return reclaimed
 
 
 # -- publisher keys -------------------------------------------------------
@@ -428,9 +605,9 @@ def record_key(session: Session, publisher: Publisher, pem: str) -> str:
 
 
 # -- local-install trust --------------------------------------------------
-def local_install_entries(session: Session) -> tuple[list[dict], list[str]]:
+def local_install_entries(session: Session) -> tuple[list[dict], list[dict]]:
     """(publisherKeys, blockedDigests) for the root-signed local-install
-    document. Keys of first-party publishers and of accounts that are or were
+    document; each blocked digest carries its reason (blocklist.DIGEST_REASONS). Keys of first-party publishers and of accounts that are or were
     approved are listed (revoked ones with status 'revoked'); an account that
     was never approved has no key here."""
     vetted_members = set(
@@ -458,7 +635,12 @@ def local_install_entries(session: Session) -> tuple[list[dict], list[str]]:
                 "revokedAt": key.revoked_at or (publisher.frozen_at if revoked else None),
             }
         )
-    digests = sorted(
-        session.exec(select(BlocklistEntry.value).where(BlocklistEntry.kind == "digest")).all()
-    )
+    digests = [
+        {"digest": value, "reason": digest_reason or blocklist.DIGEST_ADMIN}
+        for value, digest_reason in sorted(
+            session.exec(
+                select(BlocklistEntry.value, BlocklistEntry.digest_reason).where(BlocklistEntry.kind == "digest")
+            ).all()
+        )
+    ]
     return keys, digests

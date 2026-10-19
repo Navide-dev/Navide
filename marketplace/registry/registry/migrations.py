@@ -23,7 +23,7 @@ two processes starting against one data directory apply each step once.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from sqlalchemy import Engine
@@ -461,6 +461,46 @@ def _developer_qualification(connection: sqlite3.Connection) -> None:
         )
 
 
+GRANDFATHER_DAYS = 30
+"""Grace period for namespaces self-claimed before qualification existed."""
+
+
+def _grandfather_block_reason(connection: sqlite3.Connection) -> None:
+    """Grandfather self-claimed namespaces (decision d4(a)) and give digest
+    blocklist entries a reason (decision d5).
+
+    Every namespace an account claimed before this step whose owner is not
+    approved keeps publishing for GRANDFATHER_DAYS from now; an owner whose
+    application is pending starts with the period paused. Every existing
+    digest entry was added by an admin, so its reason is 'admin'."""
+    columns = _columns(connection, "publisher")
+    for column in ("grandfather_until", "grandfather_paused_at"):
+        if column not in columns:
+            connection.execute(f"ALTER TABLE publisher ADD COLUMN {column} DATETIME")
+    if "digest_reason" not in _columns(connection, "blocklist_entry"):
+        connection.execute("ALTER TABLE blocklist_entry ADD COLUMN digest_reason VARCHAR")
+    connection.execute(
+        "UPDATE blocklist_entry SET digest_reason = 'admin' "
+        "WHERE kind = 'digest' AND digest_reason IS NULL"
+    )
+    now = datetime.now(timezone.utc)
+    stamp = "%Y-%m-%d %H:%M:%S.%f"
+    until = (now + timedelta(days=GRANDFATHER_DAYS)).strftime(stamp)
+    rows = connection.execute(
+        "SELECT p.id, q.status FROM publisher p "
+        "LEFT JOIN developer_qualification q ON q.navide_member_id = p.navide_member_id "
+        "WHERE p.navide_member_id IS NOT NULL AND p.frozen_at IS NULL "
+        "AND p.grandfather_until IS NULL"
+    ).fetchall()
+    for publisher_id, status in rows:
+        if status in ("approved", "revoked"):
+            continue
+        connection.execute(
+            "UPDATE publisher SET grandfather_until = ?, grandfather_paused_at = ? WHERE id = ?",
+            (until, now.strftime(stamp) if status == "pending" else None, publisher_id),
+        )
+
+
 MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = (
     (1, "discovery-columns", _add_discovery_columns),
     (2, "registry-signing-columns", _add_registry_signing_columns),
@@ -473,6 +513,7 @@ MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = 
     (9, "version-disclosure", _add_version_disclosure),
     (10, "version-channel-expiry", _add_version_channel_expiry),
     (11, "developer-qualification", _developer_qualification),
+    (13, "grandfather-block-reason", _grandfather_block_reason),
 )
 
 

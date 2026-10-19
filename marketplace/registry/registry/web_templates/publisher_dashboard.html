@@ -16,6 +16,23 @@
     </div>
     <a class="install-button ns-publish" href="#publish-cli">Publish new version</a>
   </div>
+  {% if grandfather %}
+  {# Namespace claimed before developer qualification existed (decision d4(a)). #}
+  {% if grandfather.paused %}
+  <p class="muted" role="status">Your developer application is in review, so the grace period for this
+    namespace is paused with {{ grandfather.days_left }} day{{ '' if grandfather.days_left == 1 else 's' }} left.</p>
+  {% elif grandfather.remind %}
+  <p class="warn warn-block" role="alert">This namespace was claimed before developer qualification
+    existed. Apply for developer qualification by {{ grandfather.until[:10] }}
+    ({{ grandfather.days_left }} day{{ '' if grandfather.days_left == 1 else 's' }} left), or the namespace
+    is reclaimed: it is frozen, its tokens are revoked and its versions are taken down.
+    <a href="{{ base }}/developer/apply">Apply now</a></p>
+  {% else %}
+  <p class="muted" role="status">This namespace was claimed before developer qualification existed.
+    It keeps publishing until {{ grandfather.until[:10] }} while you
+    <a href="{{ base }}/developer/apply">apply for developer qualification</a>.</p>
+  {% endif %}
+  {% endif %}
   <nav class="page-toc" aria-label="On this page">
     <a href="#publish-cli">CLI</a><a href="#versions">Versions</a><a href="#reports">Reports</a><a href="#tokens">Tokens</a><a href="#signing-key">Signing key</a><a href="#verified">Verified publisher</a>
   </nav>

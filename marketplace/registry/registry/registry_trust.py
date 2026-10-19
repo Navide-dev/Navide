@@ -387,11 +387,12 @@ class RegistryTrustSigner:
         self,
         *,
         publisher_keys: list[dict],
-        blocked_digests: list[str],
+        blocked_digests: list[dict],
         now: datetime | None = None,
     ) -> tuple[dict, str]:
         """Root-signed document for locally installed packages (A3): approved
-        publisher keys, revoked ones included, and blocked package digests.
+        publisher keys, revoked ones included, and blocked package digests,
+        each with its reason (`{digest, reason}`; decision d5).
         A separate document because released Apps reject any new field in
         `signed_metadata`, which stays byte-for-byte unchanged; `kind` keeps
         the two apart under the same root key."""
@@ -402,7 +403,7 @@ class RegistryTrustSigner:
             "registryProfile": self.registry_profile,
             "generatedAt": _timestamp(generated_at),
             "expiresAt": _timestamp(generated_at + self.metadata_ttl),
-            "blockedDigests": list(blocked_digests),
+            "blockedDigests": [{"digest": d["digest"], "reason": d["reason"]} for d in blocked_digests],
             "publisherKeys": [
                 {
                     "publisherId": key["publisherId"],

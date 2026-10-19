@@ -293,9 +293,10 @@ def _schema(path) -> tuple[dict[str, set], set[str]]:
 
 def test_fresh_and_upgraded_databases_end_at_the_same_schema(tmp_path):
     """A fresh database and one upgraded from the pre-Phase-2 head schema must
-    end at the same schema and the same recorded steps, 1..11 in order."""
+    end at the same schema and the same recorded steps, 1..11 and 13 in order
+    (12, testplace, lands from its own branch: the merged list is 1..13)."""
     numbers = [number for number, _name, _step in MIGRATIONS]
-    assert numbers == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    assert numbers == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13]
 
     fresh = tmp_path / "fresh.db"
     fresh_engine = create_db_engine(fresh)

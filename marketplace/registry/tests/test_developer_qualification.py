@@ -449,7 +449,7 @@ def test_local_install_trust_lists_vetted_keys_and_blocked_digests(client):
         "publisherKeys",
     }
     assert document["kind"] == "local-install-trust"
-    assert document["blockedDigests"] == [digest]
+    assert document["blockedDigests"] == [{"digest": digest, "reason": "admin"}]
     keys = {(k["publisherId"], k["keyId"]): k for k in document["publisherKeys"]}
     assert keys[("mei-tools", public_key_fingerprint(first))]["status"] == "revoked"
     assert keys[("mei-tools", public_key_fingerprint(first))]["revokedAt"].endswith("Z")

@@ -45,6 +45,14 @@ class Publisher(SQLModel, table=True):
     """Set when the owner's developer qualification is revoked: nothing more
     can be published or issued under this namespace (qualification.py)."""
     frozen_reason: str | None = None
+    grandfather_until: datetime | None = None
+    """A namespace self-claimed before developer qualification existed
+    (migration 13) may keep publishing until this time while its owner
+    applies; past it, an owner with no approved or pending application has the
+    namespace reclaimed (qualification.reclaim_expired). None: no grace."""
+    grandfather_paused_at: datetime | None = None
+    """Set while the owner's application is pending: the grace period is
+    paused and resumes, extended by the pending time, if it is rejected."""
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -176,6 +184,10 @@ class BlocklistEntry(SQLModel, table=True):
     """'publisher' (a namespace) or 'package' (`ns.name` or `ns.name@version`)."""
     value: str
     reason: str
+    digest_reason: str | None = None
+    """For a 'digest' entry, why it was blocked (blocklist.DIGEST_REASONS);
+    the local-install trust document lists it so the app can grade what it
+    does to an installed copy. None for the other kinds."""
     created_at: datetime = Field(default_factory=_now)
     created_by: str | None = None
 
