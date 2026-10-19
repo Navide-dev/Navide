@@ -1057,8 +1057,10 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
         installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0', extra), pkg.bytes, pkg.digest)
         const result = (await prepare(null, { namespace: 'acme', name: 'demo' })) as Record<string, unknown>
         expect(result.source).toBe(expected)
+        // A test build also carries its signed expiry for the trust dialog (W5b).
+        expect(result.expiresAt).toBe(extra.expiresAt)
         // Every other field is what main returns for the same package.
-        const { source: _source, ...rest } = result
+        const { source: _source, expiresAt: _expiresAt, ...rest } = result
         expect(rest).toEqual(mainFields)
       }
     } finally {
