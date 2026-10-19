@@ -10469,7 +10469,7 @@ async def cli_account_sign_in(
     if not answer.get("ok"):
         return {
             "ok": False,
-            "error": str(answer.get("error") or "the Navide window did not answer"),
+            "error": "the Navide window did not answer",
             "error_code": "window-unavailable",
         }
     if status != "started":
