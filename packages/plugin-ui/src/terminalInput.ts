@@ -103,6 +103,12 @@ export function createTerminalInputHandlers(
     // compositionstart (xterm still false), and a genuine in-flight one
     // reports composing on both sides. Unlatch before xterm swallows this key.
     if (e.keyCode === 229 && !e.isComposing) options.finalizeStaleComposition()
+    // A bare Cmd mid-composition is the start of Cmd+Space (input-source
+    // switch). xterm's CompositionHelper only lets Shift/Ctrl/Alt pass while
+    // composing, so Cmd made it send the pending reading at once — and the
+    // compositionend macOS fires for the switch then sent it a second time.
+    // Keep it from xterm; a lone Cmd produces no input of its own.
+    if (e.isComposing && e.key === 'Meta') return false
     // IME guard: allow the browser to process composition (e.g. Zhuyin/Pinyin)
     if (e.isComposing) return true
 
