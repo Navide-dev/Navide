@@ -442,6 +442,17 @@ function makeBridgePolicySupervisor(
   )
 }
 
+// TEMP DIAGNOSTIC: record long GC pauses with the test that was running.
+const diagGcPauses: string[] = []
+{
+  const { PerformanceObserver } = await import('node:perf_hooks')
+  new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      if (entry.duration >= 20) diagGcPauses.push(`${Math.round(entry.duration)}ms kind=${(entry as unknown as { detail?: { kind?: number } }).detail?.kind} in ${expect.getState().currentTestName?.slice(26, 110)}`)
+    }
+  }).observe({ entryTypes: ['gc'] })
+}
+
 describe('PluginBackendSupervisor', () => {
   const supervisors: PluginBackendSupervisor[] = []
 
@@ -2396,6 +2407,9 @@ describe('PluginBackendSupervisor', () => {
     }
 
     it('TEMP DIAG Windows scanner status and first zip versus bin write cost', async () => {
+      const mem = process.memoryUsage()
+      console.log('DIAG memory MiB', JSON.stringify(Object.fromEntries(Object.entries(mem).map(([k, v]) => [k, Math.round(v / 1048576)]))))
+      console.log('DIAG gc pauses >= 20ms so far', JSON.stringify(diagGcPauses))
       if (process.platform === 'win32') {
         const { spawnSync } = await import('node:child_process')
         const ps = spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Get-MpComputerStatus | Select-Object AMServiceEnabled,RealTimeProtectionEnabled,OnAccessProtectionEnabled,IoavProtectionEnabled,AntivirusSignatureLastUpdated | Format-List; (Get-MpPreference).ExclusionPath; (Get-MpPreference).DisableArchiveScanning'], { encoding: 'utf8', timeout: 60_000 })
