@@ -76,6 +76,32 @@ describe('ExtensionsPane', () => {
     expect(row.get('.ext-update-badge').text()).toContain('1.3.1-beta.2')
   })
 
+  it('G3: says who had a loaded developer folder loaded, the user or an agent the user approved', async () => {
+    const folder = (pluginId: string, loadedBy: unknown) => ({ pluginId, path: `/dev/${pluginId}`, consentedAt: '2026-10-21T01:00:00.000Z', loaded: true, loadedBy })
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.mine', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.asked', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.older', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+      ]),
+      developerMode: vi.fn().mockResolvedValue({
+        enabled: true,
+        folders: [
+          folder('acme.mine', { kind: 'user' }),
+          folder('acme.asked', { kind: 'agent', callerKind: 'pane', paneName: 'builder', approvedAt: '2026-10-21T01:00:00.000Z' }),
+          folder('acme.older', { kind: 'unknown' }),
+        ],
+      }),
+      selfHostedQuarantine: vi.fn().mockResolvedValue([]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.mine"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUser'))
+    const asked = wrapper.get('[data-id="acme.asked"] .ext-devmode-loaded-by').text()
+    expect(asked).toContain(i18n.global.t('plugin-agent.caller.pane', { pane: 'builder' }))
+    expect(wrapper.get('[data-id="acme.older"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUnknown'))
+  })
+
   it('labels an installed version this Navide release is too old for, without disabling it', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
