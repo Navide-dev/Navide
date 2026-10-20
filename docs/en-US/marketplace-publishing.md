@@ -238,7 +238,10 @@ a reason and you can apply again.
 Revoking a qualification freezes every namespace of the account, revokes all
 of its tokens and signing keys, takes every version down and blocks their
 package digests as `qualification-revoked`. The reason is shown on each
-namespace's dashboard.
+namespace's dashboard. A frozen namespace keeps its name: it stays in your
+account and no other account can claim it. It does not count toward the three
+namespaces an account can hold, and a later approval does not unfreeze it, so
+to publish again you claim a new namespace.
 
 #### Namespaces claimed before developer qualification existed
 
@@ -259,8 +262,9 @@ deadline and warns in the last seven days.
   version is taken down and their digests are blocked as
   `qualification-revoked`. The dashboard shows when and why.
 - A reclaimed namespace is **not** released and is **not** unfrozen by a later
-  approval. It stays in your account and still counts toward the three
-  namespaces an account can hold. After approval, claim a new namespace.
+  approval. It stays in your account and no other account can claim its name,
+  but it no longer counts toward the three namespaces an account can hold.
+  After approval, claim a new namespace.
 
 ### Sign in and claim a namespace
 
@@ -270,7 +274,7 @@ deadline and warns in the last seven days.
 2. Open **Claim a namespace** (`/publisher/claim`), check a name and claim it.
    Namespaces are first come, first served; reserved words (`navide`,
    `official`, …) and look-alikes of an existing namespace are refused, and an
-   account holds at most three. The namespace must equal the first segment of
+   account holds at most three, not counting frozen ones. The namespace must equal the first segment of
    your plugin id and its `publisher` field.
 
 ### Create and register your signing key
