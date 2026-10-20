@@ -80,6 +80,60 @@ _STATE_PREFIX = "qwen_turn::"
 _TEXT_PREFIX = "qwen_text::"
 _TEXT_MAX_CHARS = 4_000
 
+# Background work that outlives the turn which started it: a subagent (qwen
+# runs top-level subagents in the background by default) or a backgrounded
+# shell. The foreground turn still goes quiet and ends, so these are reported
+# with the same detail values as claude's reader — the frontend's RUNNING
+# badge and the pipeline verdict hold on them. The start is the tool's own
+# llmContent in a tool_result record; the end is the <task-notification> the
+# CLI records as a user record with subtype "notification" (qwen-code 0.22.2,
+# ChatRecordingService.recordToolResult / recordNotification).
+# Same values as claude.BACKGROUND_START_DETAIL / BACKGROUND_END_DETAIL: the
+# cross-end contract the frontend keys on (vendor modules do not import each
+# other, see test_cli_vendors_registry).
+BACKGROUND_START_DETAIL = "background:start"
+BACKGROUND_END_DETAIL = "background:end"
+_BG_AGENT_STARTED_RE = re.compile(r"^Background agent launched successfully\.\ntask_id: (\S+)")
+_BG_SHELL_STARTED_RE = re.compile(r"^Background shell started\.\nid: (\S+)")
+_TASK_NOTIFICATION_ID_RE = re.compile(r"<task-id>([^<]+)</task-id>")
+_TASK_NOTIFICATION_STATUS_RE = re.compile(r"<status>([^<]+)</status>")
+
+
+def _background_tasks_started(rec: dict) -> list[str]:
+    """Task ids a tool_result record launched in the background."""
+    msg = rec.get("message")
+    parts = msg.get("parts") if isinstance(msg, dict) else None
+    if not isinstance(parts, list):
+        return []
+    ids: list[str] = []
+    for p in parts:
+        resp = p.get("functionResponse") if isinstance(p, dict) else None
+        response = resp.get("response") if isinstance(resp, dict) else None
+        output = response.get("output") if isinstance(response, dict) else None
+        if not isinstance(output, str):
+            continue
+        m = _BG_AGENT_STARTED_RE.match(output) or _BG_SHELL_STARTED_RE.match(output)
+        if m:
+            ids.append(m.group(1))
+    return ids
+
+
+def _background_tasks_finished(rec: dict) -> list[str]:
+    """Task ids a recorded <task-notification> reports as finished.
+
+    A Monitor event rides the same wrapper with status "running"; its task
+    keeps going, so only a terminal status ends one.
+    """
+    if str(rec.get("subtype") or "") != "notification":
+        return []
+    text = _parts_text(rec)
+    if "<task-notification>" not in text:
+        return []
+    status = _TASK_NOTIFICATION_STATUS_RE.search(text)
+    if not status or status.group(1) == "running":
+        return []
+    return _TASK_NOTIFICATION_ID_RE.findall(text)
+
 
 def _cap_text(text: str) -> str:
     if len(text) <= _TEXT_MAX_CHARS:
@@ -466,6 +520,24 @@ class QwenLogReader(LogReader):
                             dedup_key=key, timestamp=ts,
                             detail=str(rtype), text=text,
                         ))
+                    if rtype == "tool_result":
+                        started = _background_tasks_started(rec)
+                        if started:
+                            out.append(ActivityEvent(
+                                vendor="qwen", event_type="agent_active",
+                                cwd=cwd, session_id=session_id, file_path=str(path),
+                                dedup_key=f"bg:{line_no}", timestamp=ts,
+                                detail=BACKGROUND_START_DETAIL, text="\n".join(started),
+                            ))
+                    elif rtype == "user":
+                        finished = _background_tasks_finished(rec)
+                        if finished:
+                            out.append(ActivityEvent(
+                                vendor="qwen", event_type="agent_active",
+                                cwd=cwd, session_id=session_id, file_path=str(path),
+                                dedup_key=f"bg:{line_no}", timestamp=ts,
+                                detail=BACKGROUND_END_DETAIL, text="\n".join(finished),
+                            ))
 
                 # The latest turn has no following prompt; flush it once the file
                 # has stopped being written to for long enough to call it finished.
