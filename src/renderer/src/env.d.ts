@@ -489,12 +489,13 @@ declare global {
         installFromFile?: () => Promise<PreparedInstallSummary | null>
         commitLocalInstall?: (
           id: string,
-          approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
+          approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
         ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        prepareAgentFileInstall?: (stagingId: string) => Promise<PreparedInstallSummary>
         developerMode?: () => Promise<DeveloperModeState>
         setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
         loadFromFolder?: () => Promise<PreparedInstallSummary | null>
-        commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean }) => Promise<DeveloperModeState>
+        commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean; expectedFolder?: string }) => Promise<DeveloperModeState>
         reloadDeveloperPlugin?: (id: string) => Promise<
           | { reloaded: true; requiresConsent: false }
           | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
@@ -842,6 +843,8 @@ declare global {
     localSignature?: { state: 'none' } | { state: 'verified' | 'revoked' | 'unverifiable'; publisherId: string; keyId?: string }
     /** Card K4: the developer folder this summary was read from. */
     folder?: string
+    /** W1: whether the shared static scan ran on a local file (`scan` holds it). */
+    localScan?: 'ran' | 'unavailable'
   }
 
   /** Card K4: the Developer Mode switch and the developer folders consented to. */

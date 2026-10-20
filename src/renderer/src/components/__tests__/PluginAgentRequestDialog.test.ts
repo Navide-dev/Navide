@@ -102,6 +102,35 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect((diff.props('diff') as { widened: boolean }).widened).toBe(true)
   })
 
+  it('W1: a file request shows the path, the digest and that Navide has not reviewed it; approving opens the same local consent', async () => {
+    const digest = 'ab'.repeat(32)
+    const file = request({
+      kind: 'plugin-install-file' as PluginAgentRequest['kind'],
+      target: {
+        id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.2.0', fromVersion: null,
+        path: '/Users/me/Downloads/indexer.vsix', digest, stagingId: 'cd'.repeat(16), packageKind: 'file',
+      },
+    })
+    plugins.prepareAgentFileInstall = vi.fn(async () => ({
+      id: 'acme.indexer', version: '1.2.0', source: 'local-unsigned', digest, sensitive: [], requiresRiskConfirmation: true,
+    }))
+    plugins.commitLocalInstall = vi.fn(async () => ({}))
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [file] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...file, status: 'applying' } })
+    wrapper = await open(mock)
+    expect(wrapper.find('[data-testid="plugin-request-file-path"]').text()).toBe('/Users/me/Downloads/indexer.vsix')
+    expect(wrapper.find('[data-testid="plugin-request-file-digest"]').text()).toBe(digest)
+    expect(wrapper.find('[data-testid="plugin-request-file-unreviewed"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="plugin-request-approve"]').trigger('click')
+    await flushPromises()
+    // The window names the staged copy, never the path; nothing is committed
+    // until the user confirms the consent dialog, which names who asked.
+    expect(plugins.prepareAgentFileInstall).toHaveBeenCalledWith('cd'.repeat(16))
+    expect(plugins.commitLocalInstall).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="ext-trust-agent-request"]').text()).toContain('dev')
+  })
+
   it('approves with a window confirmation, installs, reports completed and closes', async () => {
     plugins.listInstalled.mockResolvedValue([{ id: 'acme.indexer', packageVersion: '1.2.0' }])
     const mock = createMockBackend('connected')

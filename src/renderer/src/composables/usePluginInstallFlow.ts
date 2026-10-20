@@ -16,6 +16,9 @@ export interface PendingInstall {
   /** `namespace.name`, shown in the risk copy. */
   label: string
   prepared: PreparedInstallSummary
+  /** W1 (S2): an agent's file request this consent carries out; the dialog
+   *  names who asked. Absent for the user's own pick. */
+  agentRequest?: { requester: string }
 }
 
 /** Card K3: the extra step a package of the same id asks for before it is
@@ -59,12 +62,23 @@ export function usePluginInstallFlow() {
     const replace = replaceConfirmed.value
       ? { replaceConfirmed: true, ...(reattachBackendData.value ? { reattachBackendData: true } : {}) }
       : {}
+    // The commit names the folder or file digest the dialog showed, so another
+    // prepare of the same id meanwhile (an agent's request, a second pick)
+    // is refused instead of installed.
+    const shown = pendingConfirm.value?.prepared.id === id ? pendingConfirm.value.prepared : undefined
     if (pendingSource === 'developer-unpacked') {
       if (!plugins.commitFolderLoad) throw new Error('loading from a folder is unavailable')
-      await plugins.commitFolderLoad(id, { riskConfirmed: approval.riskConfirmed === true })
+      await plugins.commitFolderLoad(id, {
+        riskConfirmed: approval.riskConfirmed === true,
+        ...(shown?.folder ? { expectedFolder: shown.folder } : {}),
+      })
     } else if (local) {
       if (!plugins.commitLocalInstall) throw new Error('installing from a file is unavailable')
-      await plugins.commitLocalInstall(id, { riskConfirmed: approval.riskConfirmed === true, ...replace })
+      await plugins.commitLocalInstall(id, {
+        riskConfirmed: approval.riskConfirmed === true,
+        ...replace,
+        ...(shown?.digest ? { expectedDigest: shown.digest } : {}),
+      })
     } else {
       await plugins.commitInstall(id, { ...approval, ...replace })
     }
@@ -115,6 +129,32 @@ export function usePluginInstallFlow() {
       const prepared = await plugins.installFromFile()
       if (!prepared) return
       pendingConfirm.value = { label: prepared.id, prepared }
+      pendingStep.value = replacesAnother(prepared) ? 'replace' : 'risk'
+      publisherConfirmed.value = false
+      replaceConfirmed.value = false
+      reattachBackendData.value = false
+    } catch (err) {
+      fail(err)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** W1 (S2): an approved agent file request. The Host staged the file (or
+   *  folder) when the agent asked; this holds that copy for the same consent
+   *  dialog as the user's own pick, naming who asked. A file whose digest is
+   *  not the one the request card showed is refused. */
+  async function prepareAgentFile(stagingId: string, expectedDigest: string | null, requester: string): Promise<void> {
+    const plugins = api()
+    if (!plugins?.prepareAgentFileInstall) throw new Error('installing from a file is unavailable')
+    busy.value = true
+    error.value = ''
+    try {
+      const prepared = await plugins.prepareAgentFileInstall(stagingId)
+      if (expectedDigest !== null && prepared.digest !== expectedDigest) {
+        throw new Error(t('plugin-request.file.digestChanged'))
+      }
+      pendingConfirm.value = { label: prepared.id, prepared, agentRequest: { requester } }
       pendingStep.value = replacesAnother(prepared) ? 'replace' : 'risk'
       publisherConfirmed.value = false
       replaceConfirmed.value = false
@@ -257,6 +297,7 @@ export function usePluginInstallFlow() {
     install,
     installFromFile,
     loadFromFolder,
+    prepareAgentFile,
     reloadDeveloperPlugin,
     uninstall,
     confirmReplace,

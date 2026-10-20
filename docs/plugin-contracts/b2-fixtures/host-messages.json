@@ -125,7 +125,8 @@
                     "name": "devmap_read",
                     "state": "available"
                   }
-                ]
+                ],
+                "source": "marketplace"
               }
             ]
           }

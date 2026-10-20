@@ -543,7 +543,7 @@ watch(installed, () => void refreshPacks())
       </ul>
     </section>
 
-    <section class="ext-section">
+    <section class="ext-section" data-settings-section="extensions-install-from-file">
       <h3 class="ext-section-title">
         {{ $t('settings.extensions.installed') }}
         <span class="ext-section-count">{{ packs.length + nonFactoryInstalled.length }}</span>
@@ -769,7 +769,7 @@ watch(installed, () => void refreshPacks())
       </ul>
     </section>
 
-    <section class="ext-section ext-devmode">
+    <section class="ext-section ext-devmode" data-settings-section="extensions-developer-mode">
       <h3 class="ext-section-title">{{ $t('settings.extensions.developerMode.title') }}</h3>
       <label class="ext-devmode-switch">
         <input

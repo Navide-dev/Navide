@@ -2140,9 +2140,15 @@ runs only inside the OS sandbox described in
   record counts as Marketplace data, the only kind that could run a
   third-party backend before file installs existed.
   The package's own name is shown in the native backend consent with every
-  line break and invisible character spelled out, below the source line. The takedown check covers id and publisher only: a package
-  renamed to a new id is not caught, because the trust metadata carries no
-  blocked-digest list. Files extracted from a `.vsix` carry no quarantine
+  line break and invisible character spelled out, below the source line. The takedown check covers id and publisher, and, before a
+  file is installed, the file itself: the Registry's root-signed local install
+  document (`GET /api/trust/local-install`, separate from the trust metadata
+  older releases check field for field) lists blocked `.vsix` SHA-256 digests
+  and the keys of vetted publishers. A file with a `navide-plugin sign`
+  signature beside it (`<file>.sig`) by the active key of the publisher its id
+  names is labelled signed by that publisher (`local-signed`; the version is
+  still not reviewed), and "signature no longer valid" once the Registry
+  revokes that key. A renamed package with changed bytes is still not caught. Files extracted from a `.vsix` carry no quarantine
   attribute, the same as a Registry install.
 - A package installed from a local file or folder is trusted through a local
   trust record, not the Registry root: the record holds the package id and

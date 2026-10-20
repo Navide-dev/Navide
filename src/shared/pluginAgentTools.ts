@@ -726,7 +726,19 @@ export interface PluginApprovalRequest {
   requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: AgentToolCaller['kind'] }
   /** Written by the agent; the card labels it as such. */
   reason: string
-  target: { id: string; namespace: string; name: string; version: string | null; fromVersion: string | null }
+  target: {
+    id: string
+    namespace: string
+    name: string
+    version: string | null
+    fromVersion: string | null
+    /** plugin-install-file (W1, S2): what the Host staged for the agent. */
+    path?: string
+    digest?: string | null
+    stagingId?: string
+    packageKind?: 'file' | 'folder'
+    signature?: 'none' | 'verified' | 'revoked' | 'unverifiable'
+  }
   card: DisclosureCard | null
   diff: DisclosureDiff | null
   /** plugin-enable: who disabled the package (`at` in Unix seconds, null when not recorded); null for every other kind. */
