@@ -26,9 +26,27 @@ def test_never_saved_gives_the_builtin_in_the_users_language() -> None:
 
 
 def test_builtin_takes_the_legacy_loop_prompt_and_unknown_language_falls_back() -> None:
-    skills = ps.effective({"loop-prompt-text": "keep going", "agent-team:language": "fr"})
+    skills = ps.effective({"loop-prompt-text": "keep going", "agent-team:language": "it-IT"})
     assert skills[0]["prompt"] == "keep going"
     assert skills[0]["name"] == ps.load_seed()["name"][ps.DEFAULT_LANGUAGE]
+
+
+def test_language_resolution() -> None:
+    assert ps.language({"agent-team:language": "ja-JP"}) == "ja-JP"
+    assert ps.language({"agent-team:language": "zh-TW"}) == "zh-TW"
+    # A UI locale with no backend strings yet gets English, not Chinese.
+    for code in ("zh-CN", "ko-KR", "es-ES", "fr-FR", "de-DE", "pt-BR", "ru-RU", "vi-VN"):
+        assert ps.language({"agent-team:language": code}) == "en-US"
+    # Unset or garbage keeps the historical default.
+    assert ps.language({}) == ps.DEFAULT_LANGUAGE == "zh-TW"
+    assert ps.language({"agent-team:language": "fr"}) == "zh-TW"
+    assert ps.language({"agent-team:language": 3}) == "zh-TW"
+
+
+def test_untranslated_languages_mirror_the_renderer_list() -> None:
+    source = (REPO / "packages" / "plugin-ui" / "src" / "foundation" / "i18n" / "uiLocales.ts").read_text("utf-8")
+    for code in (*ps.LANGUAGES, *ps.UNTRANSLATED_UI_LANGUAGES):
+        assert f"'{code}'" in source
 
 
 def test_saved_list_is_normalized_like_the_renderer() -> None:
