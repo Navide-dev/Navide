@@ -31,4 +31,30 @@ describe('usePipelineDag node-state reporting', () => {
     const sentOutputs = Object.assign({}, ...reports.map((r) => (r.outputs as Record<string, unknown>) ?? {}))
     expect(Object.keys(sentOutputs).sort()).toEqual(['n-01-0', 'n-01-1'])
   })
+
+  // #448: a slot whose kickoff never landed is failed with its reason, and
+  // closing the run does not overwrite either.
+  it('a failed slot reports failed with its reason, and keeps both when the run ends', async () => {
+    const reports: Array<Record<string, unknown>> = []
+    const dag = usePipelineDag({
+      send: async (type, payload) => {
+        if (type === 'pipelines.graph.get') return { derived: true }
+        reports.push(payload)
+        return {}
+      },
+      log: () => {},
+      workspacePath: () => '/ws',
+    })
+    await dag.begin('p1', STAGES)
+    await new Promise((r) => setTimeout(r, 0))
+    dag.slotStarted(0, 'a', 'pane-a')
+    dag.slotStarted(0, 'b', 'pane-b')
+    dag.slotFailed(0, 'a', 'kickoff never reached the agent')
+    await dag.end('failed', 'run stopped: slot "a" failed')
+    const last = reports[reports.length - 1].nodes as Record<string, { status: string; error?: string }>
+    expect(last['n-01-0']).toMatchObject({ status: 'failed', error: 'kickoff never reached the agent' })
+    // A sibling stopped with the run says why, instead of looking broken itself.
+    expect(last['n-01-1']).toMatchObject({ status: 'failed', error: 'run stopped: slot "a" failed' })
+    expect(dag.nodeStates.value['n-01-0'].error).toBe('kickoff never reached the agent')
+  })
 })

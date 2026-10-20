@@ -109,6 +109,7 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 | `copilot.hooks` | copilot | the pane's `hooks/` folder in `~/.navide-panes/copilot/<pane>/` (see [Copilot hooks ride on the panes](#copilot-hooks-ride-on-the-panes)); `~/.copilot/hooks/agent-team.json` only when that cannot be done | yes | same for Copilot |
 | `codex.hook-trust` | codex | nothing: each pane carries its rows inline (see below); `[hooks.state]` rows in `~/.codex/config.toml` only while earlier rows cannot be taken back | yes | every Codex pane asks you to trust your own hooks again |
 | `codex.login-promote` | codex | `~/.codex/auth.json` (hard link of a pane's login) | yes | a login made inside a pane stays in that pane |
+| `grok.folder-trust` | grok | rows in `~/.grok/trusted_folders.toml` for folders a Grok pane was told to trust (see below) | yes | every new or rebuilt Grok pane asks you to trust the same folder again |
 | `cursor.project-mcp` | cursor | `<workspace>/.cursor/mcp.json` + `.git/info/exclude` | yes | Cursor panes have no Navide tools |
 | `cursor.project-skills` | cursor | `<workspace>/.cursor/skills/` links + `.git/info/exclude` | yes | Cursor panes get no delivered skills |
 | `credentials.auto-repair` | all | live CLI login (Keychain, `~/.claude.json`, vendor credential files) | yes | a pane can start signed out after an account switch went wrong |
@@ -150,6 +151,40 @@ row would strip the rows of the installed build's live panes. It keeps
 seeding `config.toml`. The installed Navide does take back the rows of a
 development backend's live panes when it starts; that backend re-seeds them
 on its next spawn. This is a known trade-off.
+
+### Grok folder trust shared between panes
+
+Grok Build records the folders you trusted in `~/.grok/trusted_folders.toml`.
+A Grok pane runs in its own home shim, and a trust decision it saves lands in
+that shim, where no other pane can see it — so every new or rebuilt pane
+asked again (issue #402). Each Grok pane now has its own copy of the file,
+seeded with your decisions. Before each Grok pane starts, Navide appends the
+folders the panes trusted in their copies to your file:
+
+- Only folders your file does not mention are added, as text at its end. A
+  decision you made outside Navide is never changed, and neither are your
+  comments, key order or layout.
+- Your file is backed up before every change. The first change is announced;
+  later ones are logged quietly.
+- The text Navide appended is listed in `~/.navide-panes/grok/.folder-trust-merged.json`.
+  Turning the switch off removes exactly that text, so the file is back to
+  its own bytes. Text you changed since, or a table you added something
+  inside (removing it would move that under your own table), is kept, and
+  the overview says why; it removes the file when
+  Navide created it and nothing else is in it. Each pane keeps the folders it
+  trusted in its own copy. Deleting a folder Navide added turns the feature off.
+- A file that cannot be parsed, or that a folder table cannot be appended to,
+  is left alone.
+- Off, a pane's trust decision stays in that pane's copy, and no pane ever
+  writes your file directly.
+
+Navide also answers Grok Build's trust prompt (`y`) when a pane it spawns
+shows it, fresh or resumed, as it already did for a fresh pane, but only for
+the pane's own workspace and only while the prompt is the live dialog at the
+bottom of the screen. A prompt for any other folder is left for you. Agents
+and chat relays cannot accept it for you: `cli_answer_prompt` refuses
+`allow` with `permanent-allow-refused`, as for any choice that grants more than
+one prompt.
 
 ### Claude: hooks carried by the panes
 

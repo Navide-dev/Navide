@@ -209,6 +209,7 @@ defineExpose({ scrollToAnchor, isEditing, cancelEdit })
       ref="frame"
       :key="currentDocumentToken ?? relPath"
       class="pdp-frame"
+      name="navide-plan-doc"
       sandbox="allow-scripts"
       :srcdoc="docHtml"
       :title="relPath"

@@ -648,7 +648,91 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
 }
 
 function stripExecutableScripts(content: string): string {
-  return content.replace(/<script\b(?![^>]*\btype=["']application\/json["'])[\s\S]*?<\/script\s*>/gi, '')
+  return content.replace(/<script\b(?![^>]*[\t\n\f\r /"']type=["']application\/json["'])[\s\S]*?<\/script\s*>/gi, '')
+}
+
+// Where the tokenizer ends the start tag whose attributes begin at `from`: just
+// past its `>`, or -1 when input runs out first. A quoted value may hold `>`,
+// so the first `>` is not always the end. Only an `=` after an attribute name
+// opens a value; one where a name belongs starts that name instead.
+// `seen` marks each state a read has passed: a position before an attribute
+// name or after one (bits 1 and 2), or inside an unquoted value (bit 4). Every
+// read from one of them ends the same way, and a read that ran into an earlier
+// one could only have failed, so later reads stop there and the strip stays
+// linear.
+function startTagEnd(html: string, from: number, seen: Uint8Array): number {
+  const space = '\t\n\f\r '
+  let afterName = false
+  let i = from
+  while (i < html.length) {
+    const state = afterName ? 2 : 1
+    if (seen[i] & state) return -1
+    seen[i] |= state
+    const c = html[i++]
+    if (c === '>') return i
+    if (c === '/') {
+      afterName = false
+    } else if (space.includes(c)) {
+      // An attribute name still takes a value across whitespace: `a = b`.
+    } else if (c === '=' && afterName) {
+      while (i < html.length && space.includes(html[i])) i++
+      const quote = html[i]
+      if (quote === '"' || quote === "'") {
+        const close = html.indexOf(quote, i + 1)
+        if (close === -1) return -1
+        i = close + 1
+      } else {
+        while (i < html.length && !space.includes(html[i]) && html[i] !== '>') {
+          if (seen[i] & 4) return -1
+          seen[i] |= 4
+          i++
+        }
+      }
+      afterName = false
+    } else {
+      afterName = true
+    }
+  }
+  return -1
+}
+
+function isRefreshMeta(tag: string): boolean {
+  for (const [, value] of tag.matchAll(/[\t\n\f\r /"']http-equiv[\t\n\f\r ]*=[\t\n\f\r ]*("[^"]*"|'[^']*'|[^\t\n\f\r >]*)/gi)) {
+    const decoded = value.replace(/&#(x[0-9a-f]+|\d+);?/gi, (_, code: string) => {
+      const point = code[0] === 'x' || code[0] === 'X' ? parseInt(code.slice(1), 16) : parseInt(code, 10)
+      return point <= 0x10ffff ? String.fromCodePoint(point) : '\ufffd'
+    })
+    if (/refresh/i.test(decoded)) return true
+  }
+  return false
+}
+
+// A meta refresh navigates the frame to a page the injected CSP never reaches.
+// Each one becomes a bare `<meta>` rather than nothing: the text on either
+// side then cannot join into a new tag, so one pass is enough.
+function stripMetaRefresh(html: string): string {
+  const meta = /<meta(?=[\t\n\f\r />])/gi
+  let seen: Uint8Array | undefined
+  let out = ''
+  let kept = 0
+  for (let m = meta.exec(html); m; m = meta.exec(html)) {
+    seen ??= new Uint8Array(html.length)
+    const end = startTagEnd(html, m.index + 5, seen)
+    // A `<meta` that never ends may be only text (a comment, an attribute
+    // value), so read on from the next one. It becomes text for certain: left
+    // as it is, markup added after the strip could close it into a tag.
+    if (end === -1) {
+      out += html.slice(kept, m.index) + '&lt;meta'
+      kept = m.index + 5
+      continue
+    }
+    if (isRefreshMeta(html.slice(m.index, end))) {
+      out += html.slice(kept, m.index) + '<meta>'
+      kept = end
+    }
+    meta.lastIndex = end
+  }
+  return out + html.slice(kept)
 }
 
 function buildPlanCspMeta(nonce: string): string {
@@ -660,7 +744,7 @@ function buildPlanCspMeta(nonce: string): string {
 
 /**
  * Build the full srcdoc for the plan preview iframe: strip executable
- * document scripts, inject a nonce'd CSP meta (only the runtime may execute;
+ * document scripts and meta refreshes, inject a nonce'd CSP meta (only the runtime may execute;
  * inline styles and data: images stay allowed for self-contained docs), and
  * append the runtime script before `</body>`.
  */
@@ -695,10 +779,12 @@ export function preparePlanDocHtml(
   }
 
   const cspMeta = buildPlanCspMeta(nonce)
-  const stripped = stripExecutableScripts(content)
+  const stripped = stripMetaRefresh(stripExecutableScripts(content))
   // A doctype must stay the first thing in the document or the frame renders
-  // in quirks mode; the CSP meta goes right after it.
-  const doctype = /^\s*<!doctype[^>]*>/i.exec(stripped)
+  // in quirks mode; the CSP meta goes right after it. Only HTML whitespace may
+  // lead: JS `\s` also matches U+00A0, U+2028 and the like, which the parser
+  // treats as text that opens <body>, where a CSP meta is ignored.
+  const doctype = /^[\t\n\f\r ]*<!doctype[^>]*>/i.exec(stripped)
   const sanitizedContent = doctype
     ? stripped.slice(0, doctype[0].length) + cspMeta + stripped.slice(doctype[0].length)
     : cspMeta + stripped

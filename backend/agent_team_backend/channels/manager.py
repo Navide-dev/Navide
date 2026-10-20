@@ -2976,7 +2976,8 @@ class ChannelManager:
             self._awaiting_shown[pane_id] = _Shown(prompt)
             return
         self._retire_relay(pane_id, MSG_RELAY_SUPERSEDED)  # one live request per pane
-        request = self.relay.create(pane_id, kind, options, loc, prompt=prompt)
+        request = self.relay.create(pane_id, kind, options, loc, prompt=prompt,
+                                    agent_key=str(info.get("agent") or ""))
         text = who + relay.prompt_text(request, prompt)
         buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
         try:
