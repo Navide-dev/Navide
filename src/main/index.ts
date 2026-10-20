@@ -192,6 +192,7 @@ import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
 import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
 import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
+import { guardPlanFrameNavigation } from './planFrameNavigation'
 import {
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
@@ -5595,6 +5596,7 @@ app.on('web-contents-created', (_e, contents) => {
   contents.on('will-navigate', (e, url) => {
     if (!isAppNavigation(url)) e.preventDefault()
   })
+  guardPlanFrameNavigation(contents)
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }

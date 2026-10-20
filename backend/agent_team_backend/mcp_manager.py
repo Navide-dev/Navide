@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import osplat
 from .mcp_settings import MCPSettingsStore, default_mcp_servers
 
 log = logging.getLogger("agent_team_backend.mcp_manager")
@@ -33,6 +34,33 @@ except ImportError:
     streamablehttp_client = None  # type: ignore[assignment]
 
 _CALL_TIMEOUT = 30.0  # seconds per tool call
+# Bounds on a shutdown that would otherwise hang, not on work: the mcp library's
+# own stdio teardown ends within ~4 s on POSIX (2 s for the server to exit on
+# stdin EOF, then SIGTERM to its group, 2 s, then SIGKILL) and ~2 s on Windows,
+# and the backend cannot exit until MCPManager.shutdown returns.
+_STOP_TIMEOUT = 5.0  # seconds per session/transport __aexit__
+_STOP_GRACE = 1.0  # seconds between the deadline's steps (kill, then cancels)
+_SHUTDOWN_LOCK_TIMEOUT = 5.0  # seconds shutdown waits for a cancelled startup
+
+
+def _stdio_server_pid(transport_cm: Any) -> int | None:
+    """The pid of the server a live `stdio_client` spawned, or None.
+
+    stdio_client does not expose its process; it is a local of the suspended
+    generator. Read once at start so a stuck teardown can still kill it.
+
+    This reads a private detail of mcp (checked against 1.30): the async
+    generator behind `stdio_client` and its local named `process`. Should an
+    mcp upgrade rename or restructure either, this returns None — no error —
+    and the deadline only cancels the teardown again instead of also ending
+    the server tree: stop() still returns, but a server that ignores EOF and
+    SIGTERM is then left to the library (and to the backend's own exit).
+    """
+    frame = getattr(getattr(transport_cm, "gen", None), "ag_frame", None)
+    f_locals = getattr(frame, "f_locals", None)
+    process = f_locals.get("process") if isinstance(f_locals, dict) else None
+    pid = getattr(process, "pid", None)
+    return pid if isinstance(pid, int) else None
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -73,6 +101,8 @@ class MCPClient:
         self._session: Any = None
         self._transport_cm: Any = None
         self._session_cm: Any = None
+        self._server_pid: int | None = None
+        self._server_start = ""  # the server's start time, to tell a reused pid
         self._lock = asyncio.Lock()
         self.ready = False
 
@@ -105,6 +135,13 @@ class MCPClient:
                 raise ValueError(f"unsupported MCP transport: {self._config.transport}")
             streams = await transport_cm.__aenter__()
             self._transport_cm = transport_cm
+            if self._config.transport == "stdio":
+                self._server_pid = _stdio_server_pid(transport_cm)
+                if self._server_pid is not None:
+                    # A ps probe on POSIX (5 s cap), so off the event loop.
+                    self._server_start = await asyncio.to_thread(
+                        osplat.process_tree.start_time, self._server_pid
+                    )
             # mcp>=1.27 streamable HTTP yields (read, write, get_session_id),
             # while stdio and SSE yield only (read, write).
             read, write = streams[:2]
@@ -123,18 +160,92 @@ class MCPClient:
             await self.stop()  # ensure spawned subprocess is cleaned up
 
     async def stop(self) -> None:
-        """Tear down the session and its underlying transport."""
-        for cm in (self._session_cm, self._transport_cm):
+        """Tear down the session and its underlying transport.
+
+        A cancellation (shutdown cancelling a startup that is cleaning up a
+        failed server) still exits both contexts, then propagates: swallowing it
+        let the startup carry on while shutdown waited on the lifecycle lock.
+        """
+        cancelled: asyncio.CancelledError | None = None
+        for label, cm in (("session", self._session_cm), ("transport", self._transport_cm)):
             if cm is not None:
                 try:
-                    await cm.__aexit__(None, None, None)
-                except (Exception, asyncio.CancelledError):  # noqa: BLE001
+                    await self._exit_bounded(label, cm)
+                except asyncio.CancelledError as err:
+                    cancelled = err
+                except Exception:  # noqa: BLE001
                     pass
         self._session = None
         self._session_cm = None
         self._transport_cm = None
+        self._server_pid = None
+        self._server_start = ""
         self.ready = False
         log.info("MCP '%s' stopped", self.name)
+        if cancelled is not None:
+            raise cancelled
+
+    async def _exit_bounded(self, label: str, cm: Any) -> None:
+        """`cm.__aexit__`, ended if it outlives _STOP_TIMEOUT.
+
+        Past the deadline the stdio server's process group is SIGKILLed first,
+        which lets the library's own teardown finish normally. Only if it still
+        has not, the task is cancelled every _STOP_GRACE: a single cancel is not
+        enough, since anyio's Process.aclose waits for a second one before it
+        kills, and a cancel landing before the library's SIGKILL step skips it.
+        A cancel from outside (shutdown) still propagates to the caller.
+        """
+        task = asyncio.current_task()
+        assert task is not None
+        loop = asyncio.get_running_loop()
+        outside = task.cancelling()
+        ours = 0
+        handle: asyncio.TimerHandle
+
+        def cancel_again() -> None:
+            nonlocal ours, handle
+            ours += 1
+            task.cancel()
+            handle = loop.call_later(_STOP_GRACE, cancel_again)
+
+        def on_deadline() -> None:
+            nonlocal handle
+            log.warning(
+                "MCP '%s' %s exit timed out after %.0fs", self.name, label, _STOP_TIMEOUT
+            )
+            if label == "transport":
+                self._kill_server_group()
+            handle = loop.call_later(_STOP_GRACE, cancel_again)
+
+        handle = loop.call_later(_STOP_TIMEOUT, on_deadline)
+        try:
+            await cm.__aexit__(None, None, None)
+        except asyncio.CancelledError:
+            handle.cancel()
+            for _ in range(ours):
+                task.uncancel()
+            if task.cancelling() > outside:
+                raise
+        finally:
+            handle.cancel()
+
+    def _kill_server_group(self) -> None:
+        """End the stdio server and everything it started. stdio_client spawns
+        it with start_new_session (a Job object on Windows), the shape
+        osplat's end_contained ends: the group on POSIX, the tree on Windows."""
+        pid = self._server_pid
+        if pid is None:
+            return
+        # Only while the pid is still that server: Windows reuses pids fast,
+        # and a tree kill on a reused one ends someone else's process. A start
+        # time that cannot be read, then or now, leaves it to the library's own
+        # teardown (its Job object on Windows).
+        start = self._server_start
+        if not start or osplat.process_tree.start_time(pid) != start:
+            log.warning("MCP '%s' server %d not ended: no longer the server it started", self.name, pid)
+            return
+        osplat.process_tree.end_contained(pid)
+        log.warning("MCP '%s' server tree %d ended", self.name, pid)
 
     async def list_tools(self) -> list[dict[str, str]]:
         """Return the tools exposed by this server (best-effort, empty on failure)."""
@@ -192,14 +303,27 @@ class MCPManager:
         # server on cancellation; the ones already up are stopped below.
         if self._starting is not None:
             self._starting.cancel()
-        async with self._lifecycle_lock:
+        try:
+            await asyncio.wait_for(self._lifecycle_lock.acquire(), timeout=_SHUTDOWN_LOCK_TIMEOUT)
+        except TimeoutError:
+            # The startup did not end on cancel. Stop what it has registered so
+            # far rather than keep the backend from exiting.
+            log.warning(
+                "MCPManager: shutdown gave up waiting for the lifecycle lock after %.0fs",
+                _SHUTDOWN_LOCK_TIMEOUT,
+            )
             await self._shutdown_unlocked()
+            return
+        try:
+            await self._shutdown_unlocked()
+        finally:
+            self._lifecycle_lock.release()
 
     async def reload(self, config_path: Path | None = None) -> None:
         await self.startup(config_path or self._config_path)
 
     async def _shutdown_unlocked(self) -> None:
-        for client in self._clients.values():
+        for client in list(self._clients.values()):
             await client.stop()
         self._clients.clear()
 

@@ -39,7 +39,7 @@ A pane may show a vendor message such as `✘ Auto-update failed`. Several panes
 
 ## A pane remains on “detecting session”
 
-Codex, Antigravity, and Grok rely on log or database discovery to bind a new CLI session to a Navide pane.
+Codex and Antigravity rely on log or database discovery to bind a new CLI session to a Navide pane. (Grok Build panes start with their own session id and never wait here.)
 
 For Codex, open `/hooks` to inspect pending hook reviews. An MCP startup failure or a third-party `SessionEnd` timeout warning needs separate investigation and does not by itself indicate a session ID collision. Codex 0.154 queues `SessionStart` for the first turn; opening the TUI alone does not guarantee that event has run.
 
@@ -53,6 +53,19 @@ Some Codex builds treat the `SessionStart` hook Navide passes on the command lin
 - Confirm the CLI can write to its normal session directory.
 - Do not immediately rebuild or resume before the first session is detected.
 - If detection never completes, preserve the pane output and relevant backend log before filing an issue.
+
+## Grok Build panes
+
+- **"Do you trust the contents of this directory?"** Navide answers it for every Grok pane it starts, when it asks about the pane's own workspace, and shares the answer with your other Grok panes through `~/.grok/trusted_folders.toml` (convenience feature `grok.folder-trust`, see [Convenience features](convenience-features.md)). A prompt still on screen shows the pane as waiting, and messages wait instead of being typed into it. Trusting a folder lasts, so an agent or a chat relay can only refuse it (`cli_answer_prompt` "deny", which is Grok's "No, quit"); accept it yourself in the pane.
+- **`[startup probe] … does not identify as Grok Build`** means the `grok` on your `PATH` is another program with the same name (for example the community `grok-cli`). Install the official CLI with `curl -fsSL https://x.ai/cli/install.sh | bash`.
+- **Credits show as unavailable.** Grok Build does not report its credits to other programs; type `/usage` in the Grok pane.
+- **A slash command sent while Grok is working runs later.** Grok Build queues it until the current turn ends, so a reply you wait for with `cli_send_and_wait` may belong to the earlier turn.
+- **Turns end slowly.** Grok Build imports your `~/.claude` hooks, skills and MCP servers by default, and runs Claude's stop hooks at the end of every turn. If you do not want that, add this to `~/.grok/config.toml`:
+
+  ```toml
+  [compat.claude]
+  hooks = false
+  ```
 
 ## Resume does not work
 

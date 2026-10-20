@@ -114,6 +114,13 @@
         "writes": "~/.codex/auth.json (a hard link to the pane's sign-in)",
         "cost": "A sign-in made inside a pane stays in that pane."
       },
+      "grok_folder-trust": {
+        "name": "Grok folder trust shared",
+        "benefit": "A folder you trusted in one Grok pane is trusted in every Grok pane, including ones you open or rebuild later.",
+        "purpose": "Grok panes do not ask you to trust the same folder again",
+        "writes": "~/.grok/trusted_folders.toml: when a Grok pane records that you trusted a folder, Navide appends that folder's entry to the end of this file. Only folders the file does not already mention are added; your own entries, comments and layout are never changed. The file is backed up before every change, and turning this off removes exactly the text Navide appended, so the file is back to what it was (or removes the file if Navide created it)",
+        "cost": "A folder you trusted in one Grok pane is asked about again in every new or rebuilt Grok pane."
+      },
       "cursor_project-mcp": {
         "name": "Navide MCP tools for Cursor",
         "benefit": "Cursor panes get Navide's MCP tools, such as messaging, plans and scheduling.",
@@ -8624,6 +8631,8 @@
   },
   "error": {
     "pipeline-start-refused": "The pipeline did not start: {reason}",
+    "pipeline-kickoff-failed": "Pipeline failed: stage {stage}, slot {slot} — {reason}. Its panes are still open.",
+    "pipeline-kickoff-held": "Pipeline failed: stage {stage}, slot {slot} — its kickoff is waiting in the input box. Leave it there and resume will submit it, or clear it. Its panes are still open.",
     "workspace-create-exists": "An item named “{name}” is already there. Pick another name.",
     "workspace-create-denied": "No permission to create a folder at {path}.",
     "workspace-create-failed": "Could not create the workspace folder at {path}.",

@@ -4494,7 +4494,7 @@ async def cli_answer_prompt(
 
     request = relay.RelayRequest(
         id="", pane_id=pane.pane_id, kind="question" if choice.isdigit() else "permission",
-        options=options, loc=relay.Location("mcp", "", ""), prompt=prompt)
+        options=options, loc=relay.Location("mcp", "", ""), prompt=prompt, agent_key=pane.agent_key or "")
     if any(relay.is_multi_select(o) for o in options):
         return _answer_refusal(pane, "computer-only", relay.COMPUTER_ONLY)
     if relay.refuses_permanent(request, choice):
@@ -6384,7 +6384,7 @@ _PIPELINE_SLOT_FIELDS = ("agent_key", "role_key", "label", "is_commander")
 _ROLE_FIELDS = ("key", "label", "one_line", "is_default")
 # NodeRunState (src/renderer/src/lib/pipelineGraph.ts) minus `summary`, which
 # is a whole output tail.
-_NODE_STATE_FIELDS = ("status", "startedAt", "endedAt", "tokens", "paneId", "attempts", "pinned")
+_NODE_STATE_FIELDS = ("status", "startedAt", "endedAt", "tokens", "paneId", "attempts", "pinned", "error")
 
 #: Execution state of a project: the run, not the window it is drawn in.
 #: workspace_path is left out on purpose — the resolved one is reported instead.
@@ -6824,8 +6824,10 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     where every pane is listed.
 
     Per graph node it also carries `nodes` — {node_id: {status, startedAt,
-    endedAt, tokens, paneId, attempts, pinned}}, status one of pending /
-    running / done / awaiting / rejected / failed / skipped / aborted — and
+    endedAt, tokens, paneId, attempts, pinned, error}}, status one of pending /
+    running / done / awaiting / rejected / failed / skipped / aborted, and
+    `error` saying why a failed node failed (e.g. its kickoff never reached
+    the agent, which also ends the run as aborted) — and
     `gate`, the gate the run is paused on ({gateId, label, prompt, nextIndex},
     or {} when it is not paused). Node ids are the ones pipeline_graph op
     "get" returns; a pipeline without a stored graph uses n-<stage_id>-<slot
