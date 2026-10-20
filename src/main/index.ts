@@ -1004,6 +1004,8 @@ try {
 const pluginTestplaceStore = new PluginTestplaceStore(pluginsRoot())
 const keepsExpiredTestplace = (packageId: string, artifactDigest: string): boolean =>
   pluginTestplaceStore.keepsExpired(packageId, artifactDigest)
+const withdrawnTestplace = (packageId: string, version: string): boolean =>
+  pluginTestplaceStore.isWithdrawn(packageId, version)
 const installedPluginTrust = {
   pinnedRootKey: installedRegistryRootKey,
   snapshot: readRegistryTrustSnapshot(pluginsRoot()),
@@ -1011,6 +1013,7 @@ const installedPluginTrust = {
   officialRegistryUrl: installedOfficialRegistryUrl,
   expectedTarget: currentPluginHostTarget(),
   keepsExpiredTestplace,
+  withdrawnTestplace,
 }
 
 function currentInstalledRegistryTrust() {
@@ -1023,6 +1026,7 @@ function currentInstalledRegistryTrust() {
     expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
     now: marketplace.trust.now,
     keepsExpiredTestplace,
+    withdrawnTestplace,
   }
 }
 

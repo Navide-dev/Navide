@@ -42,9 +42,11 @@ interface PersistedTestplaceState {
   schemaVersion: 1
   joins: Record<string, TestplaceJoin>
   keptExpired: Record<string, TestplaceKeptExpired>
+  /** S8 T-MED-1: versions the tester detail last listed as withdrawn. */
+  withdrawn: Record<string, string[]>
 }
 
-const empty = (): PersistedTestplaceState => ({ schemaVersion: 1, joins: {}, keptExpired: {} })
+const empty = (): PersistedTestplaceState => ({ schemaVersion: 1, joins: {}, keptExpired: {}, withdrawn: {} })
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -79,6 +81,14 @@ function readState(path: string): { state: PersistedTestplaceState; valid: boole
         artifactDigest: kept.artifactDigest,
         expiresAt: kept.expiresAt,
         acceptedAt: kept.acceptedAt,
+      }
+    }
+    // Absent in a file written before S8: nothing withdrawn known yet.
+    if (parsed.withdrawn !== undefined) {
+      if (!isRecord(parsed.withdrawn)) throw new Error('invalid state')
+      for (const [id, versions] of Object.entries(parsed.withdrawn)) {
+        if (!Array.isArray(versions) || versions.some((v) => typeof v !== 'string')) throw new Error('invalid state')
+        state.withdrawn[id] = [...versions] as string[]
       }
     }
     return { state, valid: true }
@@ -130,6 +140,22 @@ export class PluginTestplaceStore {
     this.write(state)
   }
 
+  /** True when the tester detail last listed this version as withdrawn. */
+  isWithdrawn(pluginId: string, version: string): boolean {
+    return this.read().withdrawn[pluginId]?.includes(version) === true
+  }
+
+  /** Record what the tester detail lists as withdrawn for this plugin (it replaces the last answer). */
+  setWithdrawn(pluginId: string, versions: readonly string[]): void {
+    const state = this.read()
+    const next = [...new Set(versions)].sort()
+    const current = state.withdrawn[pluginId] ?? []
+    if (next.length === current.length && next.every((v, i) => v === current[i])) return
+    if (next.length === 0) delete state.withdrawn[pluginId]
+    else state.withdrawn[pluginId] = next
+    this.write(state)
+  }
+
   /** Forget the join only (leaving a test keeps an installed, kept build kept). */
   forgetJoin(pluginId: string): void {
     const state = this.read()
@@ -141,9 +167,10 @@ export class PluginTestplaceStore {
   /** Forget everything about a plugin (it was removed). */
   forget(pluginId: string): void {
     const state = this.read()
-    if (!(pluginId in state.joins) && !(pluginId in state.keptExpired)) return
+    if (!(pluginId in state.joins) && !(pluginId in state.keptExpired) && !(pluginId in state.withdrawn)) return
     delete state.joins[pluginId]
     delete state.keptExpired[pluginId]
+    delete state.withdrawn[pluginId]
     this.write(state)
   }
 

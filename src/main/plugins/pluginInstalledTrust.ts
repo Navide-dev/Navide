@@ -74,6 +74,9 @@ export interface InstalledRegistryTrustContext {
   now?: Date
   /** D3: true when the user chose to keep using this expired testplace artifact. */
   keepsExpiredTestplace?: (packageId: string, artifactDigest: string) => boolean
+  /** S8 T-MED-1: true when the tester detail listed this test build as taken
+   *  back. It wins over keepsExpiredTestplace. */
+  withdrawnTestplace?: (packageId: string, version: string) => boolean
 }
 
 export type InstalledTrustDecision =
@@ -252,6 +255,15 @@ export function verifyInstalledRegistryPackage(
       receipt.artifactDigest !== digest
     ) {
       throw new Error('Registry receipt identity does not match the retained artifact')
+    }
+    if (
+      (receipt.envelope as { channel?: unknown }).channel === 'testplace' &&
+      trust.withdrawnTestplace?.(receipt.packageId, receipt.version) === true
+    ) {
+      throw new RegistryTrustError(
+        'TESTPLACE_WITHDRAWN',
+        `testplace version '${receipt.packageId}@${receipt.version}' was withdrawn`
+      )
     }
     const verified = verifyRegistryPackageTrust({
       envelope: receipt.envelope,

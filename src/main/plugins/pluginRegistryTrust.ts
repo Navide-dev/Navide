@@ -84,6 +84,9 @@ export type RegistryTrustErrorCode =
   | 'DISCLOSURE_MISMATCH'
   | 'CHANNEL_UNSUPPORTED'
   | 'TESTPLACE_EXPIRED'
+  /** Its developer (or Navide) took a test build back; its testers learn it
+   *  from the tester detail, never from public metadata (S8 T-MED-1). */
+  | 'TESTPLACE_WITHDRAWN'
 
 export class RegistryTrustError extends Error {
   constructor(
