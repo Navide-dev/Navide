@@ -122,6 +122,12 @@ class Dep:
     # pattern — so Navide detected grok as Cursor and spawned it as Cursor.
     # '' = the name is unambiguous and no probe is run (every other dep).
     identity_regex: str = ""
+    # Output `check_cmd` prints only for the vendor's own CLI, where a
+    # same-named one from someone else installs to the same path (grok). A
+    # mismatch is reported in the pane's startup probe line, never refused —
+    # unlike identity_regex it does not decide which binary is used.
+    # '' = no such check.
+    official_regex: str = ""
     min_version: str = ""            # '' = any version is fine
     install_cmd: str = ""            # shell command (whitelist); '' = no auto-install
     needs_terminal: bool = False     # interactive (sudo / OAuth) → external Terminal

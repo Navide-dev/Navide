@@ -36,17 +36,49 @@ function sourceText(source: string): string {
   return text === key ? source : text
 }
 
+// Display only: a chat channel delivers with source "remote", which Guard's
+// rules key on, but the user reads it as the chat app it came from.
+const CHAT_DETAIL = 'chat message from '
+
+function shownSource(source: string, detail: string | null | undefined): string {
+  return source === 'remote' && detail?.startsWith(CHAT_DETAIL) ? 'relay' : source
+}
+
+/** The chat account, pane or device a marking delivery names; '' when it names nobody readable. */
+function senderOf(detail: string): string {
+  return /^(?:chat message from|message from device|message from) (.+)$/.exec(detail)?.[1] ?? ''
+}
+
 function formatTime(ts: number | null | undefined): string {
   if (!ts) return ''
   return new Date(ts < 1e12 ? ts * 1000 : ts).toLocaleString()
 }
 
+const label = computed(() => {
+  const since = entry.value?.since
+  if (!since) return t('guard.pane.badge')
+  const date = new Date(since < 1e12 ? since * 1000 : since).toLocaleDateString(i18n.global.locale.value, { month: 'numeric', day: 'numeric' })
+  return t('guard.pane.badge-since', { date })
+})
+
 const why = computed(() => {
   const e = entry.value
   if (!e) return ''
-  const sources = (e.sources ?? []).map(sourceText).join(', ')
-  return t('guard.pane.tooltip', { sources, since: formatTime(e.since) }) + (e.detail ? ` — ${e.detail}` : '')
+  // The row's detail is the delivery that added its newest source.
+  const detail = e.detail ?? ''
+  const who = senderOf(detail) || detail
+  const list = e.sources ?? []
+  const sources = list
+    .map((source, i) => {
+      if (i !== list.length - 1) return sourceText(source)
+      const text = sourceText(shownSource(source, detail))
+      return who ? t('guard.pane.source-who', { source: text, who }) : text
+    })
+    .join(', ')
+  return `${t('guard.pane.tooltip', { sources, since: formatTime(e.since) })} ${t('guard.pane.typing')}`
 })
+
+const title = computed(() => (why.value ? `${why.value} ${explain.value}` : ''))
 
 // Loaded each time the popover opens: every delivery that marked the pane.
 const events = ref<GuardTaintEvent[] | null>(null)
@@ -64,7 +96,7 @@ const consoleLines = computed(() => {
   if (!e) return []
   if (!events.value?.length) {
     // A mark made before deliveries were recorded, or the list failed to load.
-    return [{ key: 'since', ts: e.since, source: (e.sources ?? []).map(sourceText).join(', '), text: e.detail, whole: e.detail, full: null as string | null }]
+    return [{ key: 'since', ts: e.since, source: (e.sources ?? []).map((source) => sourceText(shownSource(source, e.detail))).join(', '), text: e.detail, whole: e.detail, full: null as string | null }]
   }
   return events.value.map((ev) => {
     const message = ev.message
@@ -72,7 +104,7 @@ const consoleLines = computed(() => {
       ? `${message.sender || ev.detail}: "${preview(message.content)}"`
       : `${ev.detail} (${t(ev.msg_key ? 'guard.pane.text-missing' : 'guard.pane.text-none')})`
     const whole = message ? `${message.sender || ev.detail}: "${message.content}"` : text
-    return { key: String(ev.id), ts: ev.ts, source: sourceText(ev.source), text, whole, full: message ? message.content : null }
+    return { key: String(ev.id), ts: ev.ts, source: sourceText(shownSource(ev.source, ev.detail)), text, whole, full: message ? message.content : null }
   })
 })
 
@@ -164,12 +196,12 @@ async function clear(): Promise<void> {
       class="pgd-badge"
       :class="{ compact }"
       data-testid="guard-taint-badge"
-      :title="why"
+      :title="title"
       :aria-expanded="open"
       @click.stop="toggle"
       @mousedown.stop
       @dblclick.stop
-    ><svg class="pgd-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8 13 3.6v4c0 3.1-2.1 5.4-5 6.6-2.9-1.2-5-3.5-5-6.6v-4Z" /><path d="M8 5.2v3.2M8 10.6v0.01" /></svg><span class="pgd-label">{{ t('guard.pane.badge') }}</span></button>
+    ><svg class="pgd-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8 13 3.6v4c0 3.1-2.1 5.4-5 6.6-2.9-1.2-5-3.5-5-6.6v-4Z" /><path d="M8 5.2v3.2M8 10.6v0.01" /></svg><span class="pgd-label">{{ label }}</span></button>
     <Teleport to="body">
       <div
         v-if="open"

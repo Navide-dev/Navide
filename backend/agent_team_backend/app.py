@@ -3893,6 +3893,16 @@ def _probe_agent_cli_for_spawn(agent_key: str, requested_command: Any = None) ->
             message += f" — {hint}"
             error_details["hint"] = hint
         raise AgentCliProbeError(message, error_details)
+    if dep.official_regex and re.search(dep.official_regex, output) is None:
+        # A same-named CLI from someone else (issue #402: a community `grok`
+        # at ~/.grok/bin/grok). The spawn goes ahead — it may be what the user
+        # wants — but the pane says what it is running.
+        install = dep.install_for(osplat.platform_id).command or dep.docs_url
+        details["warning"] = (
+            f"{executable_display} does not identify as {dep.label} "
+            f"(--version printed {output.splitlines()[0][:60] if output else 'nothing'!r}); "
+            f"to use {dep.label}, install it with: {install}"
+        )
     return details
 
 

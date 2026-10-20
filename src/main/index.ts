@@ -195,6 +195,7 @@ import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import { isFirstPartyAgentToolPlugin, isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
 import { isPluginWebGuest } from './plugins/pluginWebViews'
+import { guardPlanFrameNavigation } from './planFrameNavigation'
 import {
   firstPartyAgentToolSpec,
   firstPartyBackendLaunchSpec,
@@ -5678,6 +5679,7 @@ app.on('web-contents-created', (_e, contents) => {
     if (isPluginWebGuest(contents)) return
     if (!isAppNavigation(url)) e.preventDefault()
   })
+  guardPlanFrameNavigation(contents)
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }

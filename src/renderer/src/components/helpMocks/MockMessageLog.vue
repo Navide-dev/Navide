@@ -7,8 +7,8 @@
 // title and the Pause delivery / Clear log buttons (:99), and a `.msg-row`
 // made of `.msg-route` (`.msg-party` → `.msg-arrow` → `.msg-party`, :128),
 // `.msg-meta` (`.msg-time`, the `.msg-st[data-st]` pill, `.msg-xws` badge,
-// :144) and `.msg-preview` (:198). The real pill uses literal hex; here the
-// same four states map onto the theme's status tokens so the picture follows
+// :144) and `.msg-preview` (:198). The real pill uses the theme's status
+// tokens, and the same four states map onto them here so the picture follows
 // the user's theme.
 defineProps<{
   title: string

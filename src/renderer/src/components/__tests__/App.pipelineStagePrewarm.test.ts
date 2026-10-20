@@ -177,7 +177,12 @@ describe('pressing Start pre-spawns stage 01 only', () => {
 
 /** The prewarm bookkeeping plus the REAL activateStage, with preSpawnStage
  *  stubbed so the pre-warms it triggers can be counted (and deferred). */
-async function loadActivate(over: { stageCount?: number } = {}) {
+async function loadActivate(over: {
+  stageCount?: number
+  /** Per-pane kickoff injection; default: every kickoff lands. */
+  injectPane?: (paneId: string, text: string, tag: string, preserve: boolean, x: unknown, evidence?: { echo?: unknown }) => Promise<boolean>
+  heldKickoffCopy?: (paneId: string, text: string) => unknown
+} = {}) {
   const { code } = await transformWithEsbuild(
     `${prewarmSource}\n${activateSource}\nreturn { activateStage, awaitStagePrewarm, prewarmNextStage }`,
     'AppPipelineActivate.ts',
@@ -190,7 +195,16 @@ async function loadActivate(over: { stageCount?: number } = {}) {
     prewarmed.push(index)
     if (gate) await gate
   })
-  const pipeline = { state: 'running' as string, workspacePath: '/tmp/ws', task: 'ship it', log: [] as string[] }
+  const pipeline = { state: 'running' as string, stageIndex: 0, workspacePath: '/tmp/ws', task: 'ship it', log: [] as string[] }
+  /** Backend sends, kickoff failures and watcher arms, in the order they happened. */
+  const events: string[] = []
+  const heldKickoffPanes = new Set<string>()
+  const failRunOnKickoff = vi.fn(async (index: number, label: string, reason: string, _held?: boolean) => {
+    events.push(`fail ${index}/${label}: ${reason}`)
+    // What tearDownPipelineOrchestration does first, synchronously.
+    pipeline.state = 'aborted'
+  })
+  const startStageWatcher = vi.fn((index: number, paneId: string) => { events.push(`watch ${index} ${paneId}`) })
   // Every slot already has a live, role-injected pane, which is the state a
   // pre-spawn leaves behind — so activateStage takes its normal path rather
   // than the never-pre-spawned fallback.
@@ -245,6 +259,9 @@ async function loadActivate(over: { stageCount?: number } = {}) {
     'runPipelineKickoff',
     'MAX_KICKOFF_ATTEMPTS',
     'pipelineDag',
+    'failRunOnKickoff',
+    'heldKickoffCopy',
+    'heldKickoffPanes',
     code,
   )
   const api = factory(
@@ -267,11 +284,14 @@ async function loadActivate(over: { stageCount?: number } = {}) {
     vi.fn(),
     vi.fn(),
     () => true,
-    vi.fn(async () => true),
+    vi.fn(over.injectPane ?? (async () => true)),
     vi.fn(),
-    vi.fn(async () => null),
+    vi.fn(async (type: string, payload: Record<string, unknown>) => {
+      events.push(`send ${type}${type === 'pipeline.stage_spawn' ? ` ${payload.stage_index} ${payload.pane_id}` : ''}`)
+      return null
+    }),
     vi.fn(),
-    vi.fn(),
+    startStageWatcher,
     vi.fn(),
     vi.fn(),
     vi.fn(),
@@ -284,10 +304,17 @@ async function loadActivate(over: { stageCount?: number } = {}) {
     runPipelineKickoff,
     MAX_KICKOFF_ATTEMPTS,
     linearPipelineDag().dag,
+    failRunOnKickoff,
+    vi.fn(over.heldKickoffCopy ?? (() => undefined)),
+    heldKickoffPanes,
   )
   return {
     api,
     prewarmed,
+    events,
+    failRunOnKickoff,
+    startStageWatcher,
+    heldKickoffPanes,
     pipeline,
     preSpawnStage,
     /** Make every pre-spawn from here on hang until the returned resolver runs. */
@@ -310,7 +337,9 @@ describe('activating a stage warms the next one', () => {
   })
 
   it('warms the stage after this one, not the same one again', async () => {
-    const { api, prewarmed } = await loadActivate()
+    const { api, prewarmed, pipeline } = await loadActivate()
+    // Every caller points the run at the stage before activating it.
+    pipeline.stageIndex = 1
     await api.activateStage(1)
     expect(prewarmed).toEqual([2])
   })
@@ -319,7 +348,8 @@ describe('activating a stage warms the next one', () => {
     // index + 1 === stages.length. A missing bounds check here either throws
     // out of the fire-and-forget promise (an unhandled rejection with no caller)
     // or registers a pre-warm for a stage that does not exist.
-    const { api, prewarmed } = await loadActivate()
+    const { api, prewarmed, pipeline } = await loadActivate()
+    pipeline.stageIndex = 2
     await expect(api.activateStage(2)).resolves.toBeUndefined()
     expect(prewarmed).toEqual([])
   })
@@ -350,5 +380,86 @@ describe('activating a stage warms the next one', () => {
     release()
     await pending
     expect(settled).toBe(true)
+  })
+})
+
+// ── #448 (review of #453): a kickoff that failed ends the run safely ─────────
+
+describe('a stage whose kickoff fails', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('records the stage as spawned before failing the run, so a resume continues at this stage', async () => {
+    // pipeline.stage_spawn is the only thing that marks the previous stage
+    // completed and this one running. Aborting first left the previous stage
+    // `running`, the abort marked it `aborted`, and resume re-ran it.
+    const { api, pipeline, events } = await loadActivate({ injectPane: async () => false })
+    pipeline.stageIndex = 1
+    await api.activateStage(1)
+    const spawn = events.findIndex((e) => e.startsWith('send pipeline.stage_spawn 1'))
+    const fail = events.findIndex((e) => e.startsWith('fail 1/'))
+    expect(spawn, 'stage_spawn for the failed stage').toBeGreaterThan(-1)
+    expect(fail, 'the run fails').toBeGreaterThan(spawn)
+  })
+
+  it('does not warm the next stage of a run that failed', async () => {
+    const { api, pipeline, prewarmed } = await loadActivate({ injectPane: async () => false })
+    pipeline.stageIndex = 0
+    await api.activateStage(0)
+    expect(pipeline.state).toBe('aborted')
+    expect(prewarmed).toEqual([])
+  })
+
+  it('a sibling whose kickoff lands after the run failed records and arms nothing', async () => {
+    let releaseSibling = (): void => {}
+    const siblingMayLand = new Promise<void>((r) => { releaseSibling = r })
+    const { api, pipeline, events, startStageWatcher, failRunOnKickoff } = await loadActivate({
+      injectPane: async (paneId, _text, _tag, _p, _x, evidence) => {
+        if (paneId === 'S1-0') {
+          // Held: reached the input box, never submitted. Stops after one attempt.
+          if (evidence) evidence.echo = 'tail'
+          return false
+        }
+        await siblingMayLand
+        return true
+      },
+    })
+    failRunOnKickoff.mockImplementation(async (index: number, label: string, reason: string) => {
+      events.push(`fail ${index}/${label}: ${reason}`)
+      pipeline.state = 'aborted'
+      releaseSibling()
+    })
+    pipeline.stageIndex = 0
+    await api.activateStage(0)
+    expect(events.filter((e) => e.startsWith('send pipeline.stage_spawn'))).toEqual(['send pipeline.stage_spawn 0 S1-0'])
+    expect(startStageWatcher).not.toHaveBeenCalled()
+  })
+
+  it('remembers a held kickoff, so a resume does not paste it again', async () => {
+    const { api, pipeline, heldKickoffPanes, failRunOnKickoff } = await loadActivate({
+      injectPane: async (_paneId, _text, _tag, _p, _x, evidence) => {
+        if (evidence) evidence.echo = 'tail'
+        return false
+      },
+    })
+    pipeline.stageIndex = 0
+    await api.activateStage(0)
+    expect([...heldKickoffPanes].sort()).toEqual(['S1-0', 'S1-1'])
+    expect(failRunOnKickoff.mock.calls[0][2]).toContain('input box')
+    expect(failRunOnKickoff.mock.calls[0][2]).toContain('resume submits it')
+    expect(failRunOnKickoff.mock.calls[0][3]).toBe(true)
+  })
+
+  it('a resumed slot whose kickoff was held submits the copy in its input box instead of pasting another', async () => {
+    const inject = vi.fn(async (_paneId: string, ..._rest: unknown[]) => true)
+    const submit = vi.fn(async () => true)
+    const { api, pipeline, events } = await loadActivate({
+      injectPane: inject,
+      heldKickoffCopy: (paneId) => (paneId === 'S1-0' ? { holds: () => true, submit } : undefined),
+    })
+    pipeline.stageIndex = 0
+    await api.activateStage(0)
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(inject.mock.calls.map((c) => c[0])).toEqual(['S1-1'])
+    expect(events).toContain('watch 0 S1-0')
   })
 })
