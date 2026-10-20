@@ -25,7 +25,7 @@ import { convenienceText } from '../lib/convenienceText'
  */
 
 export type AnnouncementKind =
-  | 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience' | 'plugin-agent'
+  | 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience' | 'plugin-agent' | 'plugin-staged'
 /** The button an update row offers, when its status affords one. */
 export type AnnouncementAction = 'download' | 'install'
 
@@ -72,6 +72,8 @@ export type ConvenienceAnnouncementAction =
 export type PluginAgentAnnouncementAction =
   | { kind: 'plugin-agent-undo'; pluginId: string; disable: boolean }
   | { kind: 'plugin-agent-downgrade'; pluginId: string; fromVersion: string; toVersion: string }
+  /** A package staged beside the active one: apply it, as Restart does. */
+  | { kind: 'plugin-staged-apply'; pluginId: string; activeVersion: string; stagedVersion: string }
 
 export type AnnouncementActionSpec =
   | { kind: AnnouncementAction }
@@ -638,6 +640,55 @@ function notePluginAgentNotice(notice: PluginAgentNotice, at: number = Date.now(
   pluginAgentNotices.value = [{ notice, at }, ...pluginAgentNotices.value]
 }
 
+// ── Staged plugin packages ──────────────────────────────────────────────────
+
+/** A package staged beside the active one, as the Host found it at launch. */
+export interface PluginStagedUpdate {
+  pluginId: string
+  activeVersion: string
+  stagedVersion: string
+}
+
+/** One row per staged package, kept until it is applied or found changed.
+ *  Not persisted: the Host reports them again on the next launch. */
+const pluginStagedUpdates = ref<PluginStagedUpdate[]>([])
+
+function pluginStagedItems(): Announcement[] {
+  const t = i18n.global.t
+  return pluginStagedUpdates.value.map((update) => ({
+    id: `plugin-staged:${update.pluginId}:${update.stagedVersion}`,
+    kind: 'plugin-staged' as const,
+    title: t('plugin-staged.notice.title', {
+      plugin: update.pluginId,
+      staged: update.stagedVersion,
+      active: update.activeVersion,
+    }),
+    highlights: [t('plugin-staged.notice.detail')],
+    read: false,
+    actions: [{ kind: 'plugin-staged-apply' as const, ...update }],
+  }))
+}
+
+/** Whether applying still means what the row says: the same version is still
+ *  staged beside the same active one. */
+export function pluginStagedApplyApplies(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-staged-apply' }>,
+  installed: ReadonlyArray<{ id: string; packageVersion?: string; pendingCandidateVersion?: string }>,
+): boolean {
+  const current = installed.find((pkg) => pkg.id === action.pluginId)
+  return current?.pendingCandidateVersion === action.stagedVersion && current.packageVersion === action.activeVersion
+}
+
+/** Replace the staged packages with what the Host found. */
+function notePluginStagedUpdates(updates: PluginStagedUpdate[]): void {
+  pluginStagedUpdates.value = updates.filter((update) => update?.pluginId)
+}
+
+/** Drop the row of a package that was applied or changed since. */
+function dropPluginStagedUpdate(pluginId: string): void {
+  pluginStagedUpdates.value = pluginStagedUpdates.value.filter((update) => update.pluginId !== pluginId)
+}
+
 // ── Convenience features ────────────────────────────────────────────────────
 
 /** The last `convenience.list` useConvenience read. Not persisted: the
@@ -1101,6 +1152,7 @@ const items: ComputedRef<Announcement[]> = computed(() => {
   const merged = [
     ...convenienceItems(seen),
     ...pluginAgentItems(),
+    ...pluginStagedItems(),
     ...shareItems(),
     ...evolveItems(),
     ...schedulerItems(),
@@ -1182,6 +1234,11 @@ export function __resetPluginAgentAnnouncementsForTest(): void {
   pluginAgentNotices.value = []
 }
 
+/** Test-only: forget every staged package row (the module is a singleton). */
+export function __resetPluginStagedAnnouncementsForTest(): void {
+  pluginStagedUpdates.value = []
+}
+
 /** Test-only: forget the convenience snapshot (the module is a singleton). */
 export function __resetConvenienceAnnouncementsForTest(): void {
   convenienceState.value = null
@@ -1206,6 +1263,8 @@ export function useAnnouncements() {
     noteEvolveNotice,
     noteShareNotice,
     notePluginAgentNotice,
+    notePluginStagedUpdates,
+    dropPluginStagedUpdate,
     noteConvenience,
     setConvenienceAgentLabel,
     noteQuotaIncident,

@@ -103,9 +103,20 @@ export const SPEC = {
   // A numbered cursor row (`❯ 1. Yes`)
   // is a live dialog's own option, not a prompt. Bash mode draws `!` for the
   // prompt, so it counts as one in both directions.
+  //
+  // Two more anchors are the dialogs Claude Code 2.1.304 can raise when a
+  // pane is resumed (`--resume <id>` with no prompt, which is how boot restore
+  // starts it): "Resume this conversation?" (cold cache, "Resuming it will use
+  // about N% of your 5-hour usage limit", options Resume / Start a new
+  // conversation) and the stale-session one (Resume from summary / Resume full
+  // session as-is / Don't ask me again). Neither fires the Notification hook
+  // and neither uses the footers above, so without these a resumed pane parked
+  // on one read as idle and a delivered message's Enter picked an option
+  // (/compact or /clear) for the user. Anchored on the option rows, taken from
+  // the strings in the 2.1.304 binary; not yet seen on a live pane.
   awaitingInput: {
     pattern:
-      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend)(?<![─-╿] ?(?:[❯>](?! ?\d+[.)])|!(?= ))(?:[^─-╿]|[─-╿](?![─-╿]{15}))*)(?!.*[─-╿] ?(?:[❯>]|!(?= )))(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
+      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend|Resume this conversation\?.{0,600}?Start a new conversation|Resume full session as-is.{0,40}?Don't ask me again)(?<![─-╿] ?(?:[❯>](?! ?\d+[.)])|!(?= ))(?:[^─-╿]|[─-╿](?![─-╿]{15}))*)(?!.*[─-╿] ?(?:[❯>]|!(?= )))(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
     // Additive to the hook, never authoritative over it: an MCP elicitation
     // draws no option box, so a non-match here says nothing about a wait the
     // hook raised. See the field's own doc comment.

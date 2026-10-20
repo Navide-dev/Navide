@@ -1175,13 +1175,13 @@ defineExpose({
     <div v-if="!embedded" class="ep-tabs">
       <div class="ep-tab active">
         <span class="ep-tab-name">{{ name }}</span>
-        <span v-if="dirty" class="ep-dirty" title="Unsaved">●</span>
+        <span v-if="dirty" class="ep-dirty" :title="$t('label.unsaved')">●</span>
       </div>
       <div class="ep-spacer" />
-      <button class="ep-act" title="AI complete (⌘I)" :disabled="ghostBusy || !loaded" @click="requestGhost">
-        {{ ghostBusy ? '…' : '✦ Complete' }}
+      <button class="ep-act" :title="$t('editorWindow.pane.ai-complete-title')" :disabled="ghostBusy || !loaded" @click="requestGhost">
+        {{ ghostBusy ? '…' : '✦ ' + $t('editorWindow.pane.complete') }}
       </button>
-      <button class="ep-act" title="AI rewrite selection (⌘K)" :disabled="!loaded" @click="openCmdK">✦ Cmd+K</button>
+      <button class="ep-act" :title="$t('editorWindow.pane.ai-rewrite-title')" :disabled="!loaded" @click="openCmdK">✦ Cmd+K</button>
     </div>
 
     <!-- Editor -->
@@ -1231,7 +1231,7 @@ defineExpose({
           <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0">
             <path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l.72 1.5h1.47a.75.75 0 0 1 0 1.5H4.75a.75.75 0 0 1 0-1.5h1.47L6.94 12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
           </svg>
-          Add to Chat
+          {{ $t('action.add-to-ai-chat') }}
         </button>
       </Transition>
 
@@ -1248,16 +1248,16 @@ defineExpose({
           <button class="ep-ctx-item" @click="() => { const sel = editorRef?.getSelectionText?.() ?? ''; closeContextMenu(); emit('addToChat', sel || editorRef?.getValue?.() || '') }">{{ $t('action.add-to-ai-chat') }}</button>
           <button class="ep-ctx-item ep-ctx-ai" @click="() => { const sel = editorRef?.getSelectionText?.() ?? ''; closeContextMenu(); emit('explainWithAI', sel || editorRef?.getValue?.() || '') }">{{ $t('action.explain-with-ai') }}</button>
           <button class="ep-ctx-item ep-ctx-ai" @click="() => { const sel = editorRef?.getSelectionText?.() ?? ''; closeContextMenu(); emit('fixWithAI', sel || editorRef?.getValue?.() || '') }">{{ $t('action.fix-with-ai') }}</button>
-          <button class="ep-ctx-item ep-ctx-ai" @click="() => { const sel = editorRef?.getSelectionText?.() ?? ''; closeContextMenu(); emit('writeTestsWithAI', sel || editorRef?.getValue?.() || '') }">Generate Tests</button>
+          <button class="ep-ctx-item ep-ctx-ai" @click="() => { const sel = editorRef?.getSelectionText?.() ?? ''; closeContextMenu(); emit('writeTestsWithAI', sel || editorRef?.getValue?.() || '') }">{{ $t('editorWindow.pane.generate-tests') }}</button>
           <div class="ep-ctx-sep" />
-          <button class="ep-ctx-item" @click="() => { closeContextMenu(); editorRef?.selectAll() }">Select All</button>
+          <button class="ep-ctx-item" @click="() => { closeContextMenu(); editorRef?.selectAll() }">{{ $t('settings.keybindings.cmd.editor_action_selectAll') }}</button>
         </div>
       </div>
 
       <!-- Go-to-line overlay -->
       <div v-if="gotoOpen" class="ep-goto-overlay">
         <div class="ep-goto-box">
-          <span class="ep-goto-label">Go to line</span>
+          <span class="ep-goto-label">{{ $t('editorWindow.pane.go-to-line') }}</span>
           <input
             ref="gotoInputEl"
             v-model="gotoLineInput"
@@ -1267,7 +1267,7 @@ defineExpose({
             min="1"
             @keydown="onGotoKeydown"
           />
-          <button class="ep-act" @click="submitGoto">Go</button>
+          <button class="ep-act" @click="submitGoto">{{ $t('editorWindow.pane.go') }}</button>
         </div>
       </div>
     </div>
@@ -1283,8 +1283,8 @@ defineExpose({
         @keydown.enter="submitCmdK"
         @keydown.esc="closeCmdK"
       />
-      <button class="ep-act primary" :disabled="cmdk.busy" @click="submitCmdK">{{ cmdk.busy ? 'Thinking…' : QUESTION_RE.test(cmdk.instruction.trim()) ? 'Ask' : 'Rewrite' }}</button>
-      <button class="ep-act" @click="closeCmdK">Cancel</button>
+      <button class="ep-act primary" :disabled="cmdk.busy" @click="submitCmdK">{{ cmdk.busy ? $t('editorWindow.pane.thinking') : QUESTION_RE.test(cmdk.instruction.trim()) ? $t('editorWindow.pane.ask') : $t('editorWindow.pane.rewrite') }}</button>
+      <button class="ep-act" @click="closeCmdK">{{ $t('action.cancel') }}</button>
     </div>
 
     <!-- AI diff proposal -->
@@ -1297,10 +1297,10 @@ defineExpose({
       @keydown.esc.prevent="rejectProposal"
     >
       <div class="ep-prop-head">
-        <span>AI suggested rewrite <span class="ep-prop-hint">Tab to accept · Esc to reject</span></span>
+        <span>{{ $t('editorWindow.pane.proposal-title') }} <span class="ep-prop-hint">{{ $t('editorWindow.pane.proposal-hint') }}</span></span>
         <div class="ep-prop-actions">
-          <button class="ep-act success" @click="acceptProposal">✓ Accept</button>
-          <button class="ep-act" @click="rejectProposal">✕ Reject</button>
+          <button class="ep-act success" @click="acceptProposal">✓ {{ $t('editorWindow.pane.accept') }}</button>
+          <button class="ep-act" @click="rejectProposal">✕ {{ $t('editorWindow.pane.reject') }}</button>
         </div>
       </div>
       <div class="ep-prop-diff">
@@ -1345,15 +1345,15 @@ defineExpose({
           <template v-if="findQuery && findMatches.length === 0">{{ $t('label.no-results') }}</template>
           <template v-else-if="findMatches.length">{{ findIdx + 1 }}/{{ findMatches.length }}{{ findLimited ? '+' : '' }}</template>
         </span>
-        <button class="ep-find-nav" title="Previous match (⇧↵)" :disabled="!findMatches.length" @click="prevMatch">↑</button>
-        <button class="ep-find-nav" title="Next match (↵)" :disabled="!findMatches.length" @click="nextMatch">↓</button>
+        <button class="ep-find-nav" :title="$t('action.prev-match') + ' (⇧↵)'" :disabled="!findMatches.length" @click="prevMatch">↑</button>
+        <button class="ep-find-nav" :title="$t('action.next-match') + ' (↵)'" :disabled="!findMatches.length" @click="nextMatch">↓</button>
         <button
           class="ep-find-btn"
           :class="{ active: replaceOpen }"
           :title="$t('action.toggle-replace')"
           @click="replaceOpen = !replaceOpen"
         >ab</button>
-        <button class="ep-find-close" title="Close (Esc)" @click="closeFind">✕</button>
+        <button class="ep-find-close" :title="$t('action.close-esc')" @click="closeFind">✕</button>
       </div>
       <div v-if="replaceOpen" class="ep-find-row">
         <input
@@ -1363,8 +1363,8 @@ defineExpose({
           :placeholder="$t('label.replace-in-editor')"
           @keydown="onReplaceKeydown"
         />
-        <button class="ep-find-nav" title="Replace (↵)" :disabled="findIdx < 0" @click="replaceNext">⇥</button>
-        <button class="ep-find-nav" title="Replace all (⌥↵)" :disabled="!findMatches.length" @click="replaceAll">⇥⇥</button>
+        <button class="ep-find-nav" :title="$t('editorWindow.pane.replace-title')" :disabled="findIdx < 0" @click="replaceNext">⇥</button>
+        <button class="ep-find-nav" :title="$t('editorWindow.pane.replace-all-title')" :disabled="!findMatches.length" @click="replaceAll">⇥⇥</button>
       </div>
     </div>
 
@@ -1377,31 +1377,31 @@ defineExpose({
 
     <!-- Status bar -->
     <div class="ep-statusbar">
-      <span class="ep-status-pos">Ln {{ cursorLine }}, Col {{ cursorCol }}</span>
+      <span class="ep-status-pos">{{ $t('editorWindow.pane.cursor-position', { line: cursorLine, col: cursorCol }) }}</span>
       <span v-if="selectionInfo" class="ep-status-sel">{{ selectionInfo }}</span>
       <span class="ep-status-right">
-        <button class="ep-status-eol" :title="`Line Ending: ${eol} — click to toggle`" @click="changeEOL(eol === 'LF' ? 'CRLF' : 'LF')">{{ eol }}</button>
+        <button class="ep-status-eol" :title="$t('editorWindow.pane.eol-title', { eol })" @click="changeEOL(eol === 'LF' ? 'CRLF' : 'LF')">{{ eol }}</button>
         <span class="ep-status-sep">·</span>
-        <button class="ep-status-indent" :title="`Indentation: ${editorUseSpaces ? editorTabSize + ' Spaces' : 'Tabs'} — click to change`" @click="openIndentPicker">{{ editorUseSpaces ? `Spaces: ${editorTabSize}` : 'Tab Size: ' + editorTabSize }}</button>
+        <button class="ep-status-indent" :title="editorUseSpaces ? $t('editorWindow.pane.indent-spaces-title', { size: editorTabSize }) : $t('editorWindow.pane.indent-tabs-title')" @click="openIndentPicker">{{ editorUseSpaces ? $t('editorWindow.pane.spaces-size', { size: editorTabSize }) : $t('editorWindow.pane.tab-size', { size: editorTabSize }) }}</button>
         <span class="ep-status-sep">·</span>
         <span class="ep-status-lang">{{ langDisplay }}</span>
         <span class="ep-status-sep">·</span>
         <button
           class="ep-status-enc"
-          :title="`File encoding: ${fileEncoding}${fileBom ? ' (BOM)' : ''} — click to re-open with different encoding`"
+          :title="$t('editorWindow.pane.encoding-title', { encoding: fileEncoding + (fileBom ? ' (BOM)' : '') })"
           @click="openEncodingPicker"
         >{{ fileEncoding }}{{ fileBom ? ' BOM' : '' }}</button>
       </span>
       <!-- Indent picker -->
       <div v-if="indentPickerOpen" class="ep-indent-picker">
-        <div class="ep-indent-header">Indentation</div>
-        <button v-for="n in [2, 4, 6, 8]" :key="n" class="ep-indent-opt" :class="{ active: editorUseSpaces && editorTabSize === n }" @click="setIndent(n, true); indentPickerOpen = false">{{ n }} Spaces</button>
+        <div class="ep-indent-header">{{ $t('editorWindow.pane.indentation') }}</div>
+        <button v-for="n in [2, 4, 6, 8]" :key="n" class="ep-indent-opt" :class="{ active: editorUseSpaces && editorTabSize === n }" @click="setIndent(n, true); indentPickerOpen = false">{{ $t('editorWindow.pane.n-spaces', { n }) }}</button>
         <div class="ep-indent-sep" />
-        <button v-for="n in [2, 4, 8]" :key="'t' + n" class="ep-indent-opt" :class="{ active: !editorUseSpaces && editorTabSize === n }" @click="setIndent(n, false); indentPickerOpen = false">Tabs ({{ n }})</button>
+        <button v-for="n in [2, 4, 8]" :key="'t' + n" class="ep-indent-opt" :class="{ active: !editorUseSpaces && editorTabSize === n }" @click="setIndent(n, false); indentPickerOpen = false">{{ $t('editorWindow.pane.n-tabs', { n }) }}</button>
       </div>
       <!-- Encoding picker -->
       <div v-if="encodingPickerOpen" class="ep-indent-picker ep-enc-picker">
-        <div class="ep-indent-header">Reopen with Encoding</div>
+        <div class="ep-indent-header">{{ $t('editorWindow.pane.reopen-encoding') }}</div>
         <button
           v-for="enc in ENCODING_OPTIONS"
           :key="enc"
