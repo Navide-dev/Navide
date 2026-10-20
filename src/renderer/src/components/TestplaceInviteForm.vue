@@ -120,6 +120,8 @@ async function discard(): Promise<void> {
         {{ $t('marketplace-developer.form.agent-filled', { agent: requesterName }) }}
         <div v-if="reasonText" class="dev-reason">{{ $t('plugin-request.reason') }}: {{ reasonText }}</div>
       </template>
+      <!-- S8-M1: disclosure only; the user still decides whether to send. -->
+      <div v-if="form.requester?.tainted === true" class="dev-tainted" data-testid="testplace-invite-tainted">{{ $t('plugin-request.tainted') }}</div>
     </div>
 
     <template v-if="created.length === 0">
@@ -170,6 +172,7 @@ async function discard(): Promise<void> {
 .dev-title { margin: 0; font-size: var(--font-md); color: var(--text-bright); }
 .dev-notice { margin: 0; font-size: var(--font-xs); color: var(--text-primary); }
 .dev-callout { border-left: 3px solid var(--accent-fg); padding: var(--space-2) var(--space-3); background: var(--accent-subtle); font-size: var(--font-xs); }
+.dev-tainted { margin-top: var(--space-1, 4px); color: var(--risk-fg, var(--text-primary)); font-weight: 600; }
 .dev-reason { margin-top: var(--space-1, 4px); white-space: pre-wrap; color: var(--text-secondary); }
 .dev-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .dev-field { display: flex; flex-direction: column; gap: var(--space-1, 4px); font-size: var(--font-xs); }

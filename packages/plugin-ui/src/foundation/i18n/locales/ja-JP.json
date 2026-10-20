@@ -11599,6 +11599,10 @@
     "application": {
       "title": "開発者の申請",
       "open": "申請を記入",
+      "reclaimed": {
+        "title": "このアカウントから回収された名前空間",
+        "no-reason": "Navide マーケットプレイスは理由を示していません"
+      },
       "notice": "送信すると、これらの情報は Navide Cloud の開発者審査に送られ、Navide のスタッフが Navide プラグインを公開できるかを判断します。",
       "sent": "申請を審査に送りました",
       "individual": "個人",

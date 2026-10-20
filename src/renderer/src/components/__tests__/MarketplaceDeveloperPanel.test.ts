@@ -49,6 +49,30 @@ describe('MarketplaceDeveloperPanel', () => {
     expect(line.text()).toBe(i18n.global.t('plugin-request.tainted'))
   })
 
+  it('lists the namespaces the Registry took back, with the reason (W2)', async () => {
+    ;(window as unknown as { agentTeam: unknown }).agentTeam = {
+      developer: {
+        state: vi.fn(async () => ({ ...state, signedIn: { account: true, publisher: false } })),
+        application: vi.fn(async () => ({
+          ok: true, status: 200,
+          body: { status: 'rejected', reason: null, fields: {}, namespaces: [
+            { namespace: 'acme', frozen_at: '2026-10-20T01:00:00Z', frozen_reason: 'not claimed again within 30 days' },
+            { namespace: 'old-tools', frozen_at: null, frozen_reason: null },
+          ] },
+        })),
+        versions: vi.fn(async () => ({ ok: true, status: 200, body: { namespace: null, items: [] } })),
+      },
+    }
+    closeMarketplaceForm()
+    wrapper = mount(MarketplaceDeveloperPanel, { props: { backend: createMockBackend('connected').backend }, global: { plugins: [i18n] } })
+    await flushPromises()
+    const list = wrapper.find('[data-testid="developer-reclaimed-namespaces"]')
+    expect(list.exists()).toBe(true)
+    expect(list.text()).toContain('acme')
+    expect(list.text()).toContain('not claimed again within 30 days')
+    expect(list.text()).toContain(i18n.global.t('marketplace-developer.application.reclaimed.no-reason'))
+  })
+
   it('shows no such line for a clean pane', async () => {
     wrapper = await open({ paneId: 'p', paneName: 'helper', workspace: null, callerKind: 'pane' })
     expect(wrapper.find('[data-testid="developer-form-tainted"]').exists()).toBe(false)
