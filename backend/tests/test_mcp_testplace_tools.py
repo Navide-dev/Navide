@@ -34,7 +34,8 @@ def window(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[dict[str, An
     skills_approvals.registry._reset_for_test()
     agent_messaging.register("p-41", "dev", str(tmp_path), agent_key="claude")
     caller = mcp._Caller(kind="pane", pane_id="p-41")
-    monkeypatch.setattr(marketplace_forms, "_resolve_caller", lambda ctx: caller)
+    # marketplace_forms resolves the caller through the server module (W3).
+    monkeypatch.setattr(mcp, "_resolve_caller", lambda ctx: caller)
     monkeypatch.setattr(app, "broadcast_main_windows", broadcast_main_windows)
     monkeypatch.setattr(app, "has_main_window", lambda: True)
     monkeypatch.setattr(app, "plugin_audit_log", PluginAuditLog(Database(tmp_path / "navide.db")))
