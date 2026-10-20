@@ -51,6 +51,8 @@ def test_permanent_allow_wording() -> None:
         "Yes, allow all edits during this session (shift+tab)",
         "Always allow Bash(rm:*)",
         "Yes, and do not ask again",
+        "Don't ask me again",  # claude 2.1.304 stale-resume dialog
+        "Do not ask me again",
         "Auto-accept edits",
         "Yes, and switch to auto mode · auto mode handles these prompts for",
         "是，並且不再詢問",
