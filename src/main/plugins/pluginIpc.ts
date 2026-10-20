@@ -69,6 +69,11 @@ import { swapRegistryReceipt } from './pluginReceiptPromotion'
 import { pluginDeveloperModeEnabled } from './pluginDeveloperMode'
 import { developerPermissionsDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './pluginDeveloperModeStore'
 import {
+  PluginDeveloperFolderMetaStore,
+  type DeveloperFolderLoadedBy,
+  type DeveloperFolderLoadTrigger,
+} from './pluginDeveloperFolderMeta'
+import {
   currentPluginHostTarget,
   isPluginTargetCompatible,
   selectPluginArtifact,
@@ -2531,7 +2536,7 @@ export function registerPluginIpc(
   }
   ipcMain.handle('plugins:commitInstall', async (event, args: CommitInstallArgs) => {
     assertAuthorized(event)
-    return commitRegistryInstall(args)
+    return activateIfFirstInstall(await commitRegistryInstall(args))
   })
 
   // DX report A1 (card K3): install a `.vsix` the user picked in this window.
@@ -2724,6 +2729,7 @@ export function registerPluginIpc(
       activeTransactions.add(id)
       preparedLocal.delete(id)
       const candidateRecord = localTrustRecordPath(pluginsRoot, id, 'candidate')
+      let committed: { id: string; requires: string[]; restartRequired: true }
       try {
         const staged = stageInstallCandidate(pkg, pluginsRoot)
         const scanned = loadPluginDir(staged.candidateDir)
@@ -2797,7 +2803,7 @@ export function registerPluginIpc(
         lifecycleSelector.stageCandidate(id, candidate, {
           candidateGrant: { selection: candidate, grant: candidateGrant },
         })
-        return { id, requires: scanned.packageSummary.requires, restartRequired: true }
+        committed = { id, requires: scanned.packageSummary.requires, restartRequired: true }
       } catch (error) {
         try {
           forgetLocalTrustRecords(pluginsRoot, id, ['candidate'])
@@ -2808,6 +2814,7 @@ export function registerPluginIpc(
       } finally {
         activeTransactions.delete(id)
       }
+      return activateIfFirstInstall(committed)
     }
   )
 
@@ -2820,7 +2827,10 @@ export function registerPluginIpc(
   const developerMode = new PluginDeveloperModeStore(pluginsRoot, options.developerModeIntegrity)
   const developerModeOn = (): boolean =>
     pluginDeveloperModeEnabled(process.env, app.isPackaged, developerMode.isEnabled())
-  const preparedFolders = new Map<string, { dir: string; permissionsDigest: string }>()
+  // DESIGN-A2 G3: who asked for each prepared folder travels with it to the
+  // consent, and the record beside the store keeps it after the load.
+  const preparedFolders = new Map<string, { dir: string; permissionsDigest: string; loadedBy: DeveloperFolderLoadedBy }>()
+  const folderMeta = new PluginDeveloperFolderMetaStore(pluginsRoot)
 
   /** What the consent dialog shows for a developer folder, from its manifest. */
   const describeFolder = (dir: string): {
@@ -2900,7 +2910,7 @@ export function registerPluginIpc(
 
   /** Load one consented folder: the view's grant and the backend activation.
    * Returns false, loading nothing, when its permissions or backend changed. */
-  const activateDeveloperFolder = (pluginId: string): boolean => {
+  const activateDeveloperFolder = (pluginId: string, trigger: DeveloperFolderLoadTrigger = 'startup'): boolean => {
     const consent = developerMode.folder(pluginId)
     if (!consent) return false
     const described = describeFolder(consent.path)
@@ -2925,6 +2935,7 @@ export function registerPluginIpc(
         activation: { ...scanned.activation, provenance: 'developer-local-unpacked' },
       })
     }
+    folderMeta.recordLoad(pluginId, consent.path, { at: new Date().toISOString(), trigger })
     return true
   }
 
@@ -2943,6 +2954,9 @@ export function registerPluginIpc(
       pluginId: folder.pluginId,
       path: folder.path,
       consentedAt: folder.consentedAt,
+      ...(({ loadedBy, autoReload, lastLoad }) => ({ loadedBy, autoReload, ...(lastLoad ? { lastLoad } : {}) }))(
+        folderMeta.get(folder.pluginId, folder.path),
+      ),
       loaded: manager.listInstalledPackages().some(
         (pkg) => pkg.id === folder.pluginId && pkg.provenance === 'developer-local-unpacked',
       ),
@@ -2971,11 +2985,18 @@ export function registerPluginIpc(
       developerMode.setEnabled(enabled)
       manager.recordDeveloperModeChange(enabled, hostAppVersion())
       if (!developerModeOn()) {
-        for (const folder of [...developerMode.folders(), ...developerMode.untrustedFolders()]) {
-          await unloadDeveloperFolder(folder.pluginId)
+        try {
+          for (const folder of [...developerMode.folders(), ...developerMode.untrustedFolders()]) {
+            await unloadDeveloperFolder(folder.pluginId)
+          }
+        } finally {
+          // G4: a folder chosen but not yet consented to does not outlive the
+          // switch, even when an unload fails; turning it on again means
+          // choosing the folder again.
+          preparedFolders.clear()
         }
       } else {
-        await loadDeveloperFolders()
+        await loadDeveloperFolders('developer-mode-on')
       }
     } else if (!enabled) {
       // A2-5: off already, but another program's "on" may still be in the
@@ -2994,7 +3015,7 @@ export function registerPluginIpc(
     if (!dir) return null
     const described = describeFolder(dir)
     assertFolderIdFree(described.pluginId, dir)
-    preparedFolders.set(described.pluginId, { dir, permissionsDigest: described.permissionsDigest })
+    preparedFolders.set(described.pluginId, { dir, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
     return described.summary
   })
 
@@ -3039,7 +3060,8 @@ export function registerPluginIpc(
       permissionsDigest: pending.permissionsDigest,
       consentedAt: new Date().toISOString(),
     })
-    activateDeveloperFolder(id)
+    folderMeta.setLoadedBy(id, pending.dir, pending.loadedBy)
+    activateDeveloperFolder(id, 'user-load')
     return developerModeState()
   })
 
@@ -3051,7 +3073,7 @@ export function registerPluginIpc(
   // a path. Nothing is installed here: the same consent dialog and commit as
   // the user's own pick (plugins:commitLocalInstall / plugins:commitFolderLoad)
   // install it, after the user presses. Developer Mode stays the user's switch.
-  ipcMain.handle('plugins:prepareAgentFileInstall', async (event, args: { stagingId?: unknown } | null) => {
+  ipcMain.handle('plugins:prepareAgentFileInstall', async (event, args: { stagingId?: unknown; requester?: unknown } | null) => {
     assertAuthorized(event)
     const stagingId = typeof args?.stagingId === 'string' ? args.stagingId : ''
     const staged = takeAgentStaged(stagingId)
@@ -3066,7 +3088,20 @@ export function registerPluginIpc(
       }
       const described = describeFolder(meta.path)
       assertFolderIdFree(described.pluginId, meta.path)
-      preparedFolders.set(described.pluginId, { dir: meta.path, permissionsDigest: described.permissionsDigest })
+      // G3: the caller the approval card named; the main window approved it now.
+      const requester = args?.requester !== null && typeof args?.requester === 'object'
+        ? args.requester as { callerKind?: unknown; paneName?: unknown }
+        : {}
+      preparedFolders.set(described.pluginId, {
+        dir: meta.path,
+        permissionsDigest: described.permissionsDigest,
+        loadedBy: {
+          kind: 'agent',
+          callerKind: typeof requester.callerKind === 'string' ? requester.callerKind : 'unknown',
+          ...(typeof requester.paneName === 'string' ? { paneName: requester.paneName } : {}),
+          approvedAt: new Date().toISOString(),
+        },
+      })
       return described.summary
     }
     return prepareLocalFile(staged.bytes!, meta.signature)
@@ -3089,7 +3124,7 @@ export function registerPluginIpc(
       const described = describeFolder(untrusted.path)
       if (described.pluginId !== id) throw new Error(`DEVELOPER_FOLDER_CHANGED [${id}]: the permissions or backend of ${id} changed; choose the folder again`)
       await unloadDeveloperFolder(id)
-      preparedFolders.set(id, { dir: untrusted.path, permissionsDigest: described.permissionsDigest })
+      preparedFolders.set(id, { dir: untrusted.path, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
       return { reloaded: false, requiresConsent: true, prepared: described.summary }
     }
     const consent = developerMode.folder(id)
@@ -3099,11 +3134,11 @@ export function registerPluginIpc(
       // Changed permissions or backend: unload and ask again. File content
       // alone never asks; it is expected to change during development.
       await unloadDeveloperFolder(id)
-      preparedFolders.set(described.pluginId, { dir: consent.path, permissionsDigest: described.permissionsDigest })
+      preparedFolders.set(described.pluginId, { dir: consent.path, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
       return { reloaded: false, requiresConsent: true, prepared: described.summary }
     }
     await unloadDeveloperFolder(id)
-    activateDeveloperFolder(id)
+    activateDeveloperFolder(id, 'manual-reload')
     return { reloaded: true, requiresConsent: false }
   })
 
@@ -3117,6 +3152,7 @@ export function registerPluginIpc(
       recordKeptNativeBackendDataSource(options.nativeBackendDataRoot, id, 'local-unsigned')
     }
     developerMode.forget(id)
+    folderMeta.forget(id)
     return developerModeState()
   })
 
@@ -3368,11 +3404,11 @@ export function registerPluginIpc(
     return { ok: true }
   })
 
-  async function loadDeveloperFolders(): Promise<void> {
+  async function loadDeveloperFolders(trigger: DeveloperFolderLoadTrigger = 'startup'): Promise<void> {
     if (!developerModeOn()) return
     for (const folder of developerMode.folders()) {
       try {
-        activateDeveloperFolder(folder.pluginId)
+        activateDeveloperFolder(folder.pluginId, trigger)
       } catch (error) {
         console.warn(`[plugins] developer folder ${folder.pluginId} was not loaded: ${errorText(error)}`)
       }
@@ -3381,8 +3417,43 @@ export function registerPluginIpc(
 
   ipcMain.handle('plugins:restart', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
-    return restartStagedCandidate(assertPluginRemovalTarget(pluginsRoot, args?.id))
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    // L1: a first install is active once approved, so a Restart that still
+    // follows the commit (an older flow, a second click) has nothing to do.
+    const selected = lifecycleSelector.read(id)
+    if (selected?.active && !selected.candidate && !selected.activation && !activeTransactions.has(id)) {
+      return { id, packageVersion: selected.active.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
+    }
+    return restartStagedCandidate(id)
   })
+
+  /** A first install staged and not yet promoted: a candidate with no active
+   * package, no activation in progress and nothing loaded under its id (a
+   * factory rollback also leaves only a candidate; the bundled package runs). */
+  function isStagedFirstInstall(
+    record: ReturnType<PluginActivationSelector['read']>,
+  ): record is NonNullable<ReturnType<PluginActivationSelector['read']>> & { candidate: PluginPackageSelection } {
+    if (!record?.candidate || record.active || record.activation) return false
+    return !manager.getDescriptor(record.pluginId) &&
+      !manager.listInstalledPackages().some((pkg) => pkg.id === record.pluginId)
+  }
+
+  /** L1: a first install takes effect when the user approves it, through the
+   * same cutover Restart runs; nothing runs under the id yet, so nothing is
+   * drained. A native backend still asks for its own consent before it
+   * starts. One that cannot be activated stays staged (Restart and Discard
+   * remain) and the answer says why. An update is left for Restart. */
+  async function activateIfFirstInstall<T extends { id: string }>(
+    committed: T,
+  ): Promise<T | (T & { restartRequired: false; activatedVersion: string }) | (T & { activationError: string })> {
+    if (!isStagedFirstInstall(lifecycleSelector.read(committed.id))) return committed
+    try {
+      const activated = await restartStagedCandidate(committed.id)
+      return { ...committed, restartRequired: false, activatedVersion: activated.packageVersion }
+    } catch (error) {
+      return { ...committed, activationError: errorText(error) }
+    }
+  }
 
   /** Promote the staged candidate of `id`: what the Restart button does, and
    * what a launch does for a first install the user never restarted. */
@@ -3802,10 +3873,7 @@ export function registerPluginIpc(
   async function activateStagedFirstInstalls(): Promise<Array<{ pluginId: string; version: string; reason: string }>> {
     const failures: Array<{ pluginId: string; version: string; reason: string }> = []
     for (const record of lifecycleSelector.list()) {
-      if (!record.candidate || record.active || record.activation) continue
-      // A factory rollback also leaves only a candidate; the bundled package runs.
-      if (manager.getDescriptor(record.pluginId) ||
-          manager.listInstalledPackages().some((pkg) => pkg.id === record.pluginId)) continue
+      if (!isStagedFirstInstall(record)) continue
       try {
         await restartStagedCandidate(record.pluginId)
       } catch (error) {
@@ -4189,6 +4257,7 @@ export function registerPluginIpc(
       // agent's request) forgets its consent, so the next start does not load
       // it again. The folder itself is never touched.
       developerMode.forget(id)
+      folderMeta.forget(id)
       // HIGH-3: kept data remembers whose it is, so only an install of the
       // same source takes it over. If that cannot be recorded, the data is
       // set aside instead of being left for any later install of the id.

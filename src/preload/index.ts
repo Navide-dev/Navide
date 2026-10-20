@@ -1418,19 +1418,22 @@ contextBridge.exposeInMainWorld('agentTeam', {
     commitInstall: (
       id: string,
       approval: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean } = {}
-    ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
+    ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
       ipcRenderer.invoke('plugins:commitInstall', { id, ...approval }),
     /** Card K3: the main process opens its own file dialog; nothing names a path. */
     installFromFile: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:installFromFile'),
     commitLocalInstall: (
       id: string,
       approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
-    ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
+    ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
     /** W1 (S2): the copy the Host staged for an agent's file request, named
      *  by its stagingId; never a path. Installs nothing. */
-    prepareAgentFileInstall: (stagingId: string): Promise<PreparedInstallSummary> =>
-      ipcRenderer.invoke('plugins:prepareAgentFileInstall', { stagingId }),
+    prepareAgentFileInstall: (
+      stagingId: string,
+      requester?: { callerKind: string; paneName?: string },
+    ): Promise<PreparedInstallSummary> =>
+      ipcRenderer.invoke('plugins:prepareAgentFileInstall', requester ? { stagingId, requester } : { stagingId }),
     /** The user rejected an agent's file request: drop its staged copy. */
     discardAgentStaged: (stagingId: string): Promise<void> =>
       ipcRenderer.invoke('plugins:discardAgentStaged', { stagingId }),

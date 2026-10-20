@@ -90,6 +90,13 @@ describe('pickText', () => {
 
   it('falls back to zh-TW for an unknown locale', () => {
     expect(pickText(text, 'ja-JP')).toBe('你好')
+    expect(pickText(text, 'it-IT')).toBe('你好')
+  })
+
+  it('falls back to en-US for a later UI language', () => {
+    expect(pickText(text, 'ko-KR')).toBe('hi')
+    expect(pickText(text, 'zh-CN')).toBe('hi')
+    expect(pickText({ ...text, 'ko-KR': '안녕' }, 'ko-KR')).toBe('안녕')
   })
 })
 

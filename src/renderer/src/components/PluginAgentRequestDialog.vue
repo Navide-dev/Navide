@@ -202,7 +202,11 @@ function applyDeps(): PluginRequestApplyDeps {
     // W1 (S2): the copy the Host staged when the agent asked, through the same
     // consent dialog as the user's own "Install from file".
     async installStaged(stagingId: string, digest: string | null): Promise<void> {
-      await flow.prepareAgentFile(stagingId, digest, requesterText.value)
+      const requester = current.value?.requester
+      await flow.prepareAgentFile(stagingId, digest, requesterText.value, requester ? {
+        callerKind: requester.callerKind ?? 'unknown',
+        ...(requester.paneName ? { paneName: requester.paneName } : {}),
+      } : undefined)
       await installSettled()
       if (flow.error.value) throw new Error(flow.error.value)
     },

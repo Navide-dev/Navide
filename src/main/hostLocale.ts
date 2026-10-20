@@ -1,17 +1,32 @@
-export type SupportedLocale = 'zh-TW' | 'en-US' | 'ja-JP'
-export const SUPPORTED_LOCALES: readonly SupportedLocale[] = ['zh-TW', 'en-US', 'ja-JP'] as const
+import {
+  UI_LOCALES,
+  isUiLocale,
+  normalizeSystemLocale as normalizeUiSystemLocale,
+  type UiLocale,
+} from '../../packages/plugin-ui/src/foundation/i18n/uiLocales'
+
+// Main has no catalogs of its own; each main-process string table falls back
+// to en-US for a locale it has no entry for.
+export type SupportedLocale = UiLocale
+export const SUPPORTED_LOCALES: readonly SupportedLocale[] = UI_LOCALES
 
 export function normalizeSystemLocale(rawLocale: string | null | undefined): SupportedLocale {
-  if (!rawLocale || typeof rawLocale !== 'string') return 'zh-TW'
-  const normalized = rawLocale.trim()
-  if (/^zh-(TW|Hant|HK)/i.test(normalized) || /^zh/i.test(normalized)) return 'zh-TW'
-  if (/^en/i.test(normalized)) return 'en-US'
-  if (/^ja/i.test(normalized)) return 'ja-JP'
-  return 'zh-TW'
+  return normalizeUiSystemLocale(rawLocale)
+}
+
+/**
+ * A main-process string table: the three translated locales are required,
+ * every other UI locale is optional until its translation lands. Read it
+ * through hostStrings() so a missing locale falls back to en-US.
+ */
+export type HostStringTable<T> = Record<'en-US' | 'zh-TW' | 'ja-JP', T> & Partial<Record<SupportedLocale, T>>
+
+export function hostStrings<T>(table: HostStringTable<T>, locale: string): T {
+  return (table as Partial<Record<string, T>>)[locale] ?? table['en-US']
 }
 
 export function validateSupportedLocale(value: unknown): SupportedLocale | null {
-  return value === 'zh-TW' || value === 'en-US' || value === 'ja-JP' ? value : null
+  return isUiLocale(value) ? value : null
 }
 
 export function readPersistedLocaleFromSettings(

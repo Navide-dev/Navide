@@ -88,7 +88,7 @@ import {
   getContributionWindowConfig,
   getContributionWindowKey,
 } from './plansWindowRouting'
-import { MENU_STRINGS } from './menuStrings'
+import { menuStringsFor } from './menuStrings'
 import { HostLocaleManager, readPersistedLocaleFromSettings, type SupportedLocale } from './hostLocale'
 import {
   activateFactoryGitWithLegacyFallback,
@@ -2819,9 +2819,9 @@ ipcMain.handle('backend:stop', async () => {
 
 async function pickWorkspacePath(defaultPath?: string): Promise<string | null> {
   const opts: Electron.OpenDialogOptions = {
-    title: MENU_STRINGS[currentUiLocale()].pickWorkspace,
+    title: menuStringsFor(currentUiLocale()).pickWorkspace,
     properties: ['openDirectory', 'createDirectory'],
-    buttonLabel: MENU_STRINGS[currentUiLocale()].useFolder
+    buttonLabel: menuStringsFor(currentUiLocale()).useFolder
   }
   if (defaultPath && typeof defaultPath === 'string') opts.defaultPath = defaultPath
 
@@ -2841,10 +2841,10 @@ ipcMain.handle('workspace:new', async (): Promise<NewWorkspaceResult> => {
   // workspace in the same step that places it. `defaultPath` seeds both — the
   // home directory and an editable placeholder name.
   const opts: Electron.SaveDialogOptions = {
-    title: MENU_STRINGS[currentUiLocale()].createWorkspace,
+    title: menuStringsFor(currentUiLocale()).createWorkspace,
     defaultPath: join(app.getPath('home'), 'navide-workspace'),
-    nameFieldLabel: MENU_STRINGS[currentUiLocale()].workspaceName,
-    buttonLabel: MENU_STRINGS[currentUiLocale()].create,
+    nameFieldLabel: menuStringsFor(currentUiLocale()).workspaceName,
+    buttonLabel: menuStringsFor(currentUiLocale()).create,
     // `showOverwriteConfirmation` is Linux-only and deliberately left off:
     // nothing here overwrites, so asking "replace it?" would promise something
     // the mkdir below refuses to do. macOS and Windows ask anyway and cannot
@@ -5823,7 +5823,7 @@ app.on('web-contents-created', (_e, contents) => {
     if (isPluginWebGuest(contents)) return
     if (!isAppNavigation(url)) e.preventDefault()
   })
-  guardPlanFrameNavigation(contents)
+  guardPlanFrameNavigation(contents, () => isPluginWebGuest(contents))
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
