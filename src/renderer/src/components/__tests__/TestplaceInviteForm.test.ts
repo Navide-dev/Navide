@@ -105,10 +105,24 @@ describe('TestplaceInviteForm (W5b)', () => {
   })
 
   it('says why the Registry refused, without a raw code', async () => {
-    testplaceInvite.mockResolvedValue({ ok: false, status: 409, code: 'INVITE_LIMIT', message: 'limit' })
+    testplaceInvite.mockResolvedValue({ ok: false, status: 401, code: 'NOT_SIGNED_IN', message: 'sign in' })
     wrapper = mount(TestplaceInviteForm, { props: { backend: fakeBackend() as never, form: form() }, global: { plugins: [i18n] } })
     await wrapper.get('.nv-btn--primary').trigger('click')
     await flushPromises()
-    expect(wrapper.get('.dev-error').text()).toBe('This would exceed the tester limit of this Navide plugin.')
+    expect(wrapper.get('.dev-error').text()).toBe('Not signed in to Navide Cloud, or the sign-in expired.')
+  })
+
+  it('sends more than the former 100 testers and states the two expiries instead of a cap', async () => {
+    const invitees = Array.from({ length: 150 }, (_, i) => `t${i}@example.com`)
+    const many = { ...request, draft: { fields: { invitees }, field_sources: {} } }
+    wrapper = mount(TestplaceInviteForm, { props: { backend: fakeBackend() as never, form: form({ request: many }) }, global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(wrapper.get('.dev-notice').text()).toContain('no limit on the number of testers')
+    expect(wrapper.get('.dev-notice').text()).toContain('90 days')
+    expect(wrapper.get('.dev-notice').text()).toContain('30 days')
+    expect(wrapper.get('.nv-btn--primary').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.nv-btn--primary').trigger('click')
+    await flushPromises()
+    expect(testplaceInvite).toHaveBeenCalledWith('acme.demo', invitees)
   })
 })

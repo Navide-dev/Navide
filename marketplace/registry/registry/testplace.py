@@ -7,8 +7,7 @@ only through the member-authenticated endpoints in testplace_api.py, and only
 while holding a live seat:
 
 - a personal invite: the developer creates a single-use join token and sends
-  it; the first Cloud member to redeem it owns the seat (at most
-  MAX_INVITES live invites per extension);
+  it; the first Cloud member to redeem it owns the seat;
 - a public test code: reusable up to its cap, usable only after the first code
   of the extension passed a light admin review (D2).
 
@@ -54,10 +53,6 @@ from .versions import (
     version_channel,
 )
 
-MAX_INVITES = 100
-"""Live personal invites per extension (D5)."""
-MAX_CODE_TESTERS = 1000
-"""Upper bound of one public code's cap (D5)."""
 MAX_LABEL_LENGTH = 120
 INVITE_PREFIX = "tpi_"
 CODE_PREFIX = "tpc_"
@@ -167,19 +162,6 @@ def create_invites(
     if not labels:
         raise TestplaceError("BAD_REQUEST", "name at least one invitee")
     clean = [_label(label) for label in labels]
-    live = session.exec(
-        select(func.count()).select_from(TestplaceInvite).where(
-            TestplaceInvite.extension_id == extension.id,
-            TestplaceInvite.revoked_at.is_(None),
-            TestplaceInvite.code_id.is_(None),
-        )
-    ).one()
-    if live + len(clean) > MAX_INVITES:
-        raise TestplaceError(
-            "INVITE_LIMIT",
-            f"an extension has at most {MAX_INVITES} invites ({live} in use)",
-            status=409,
-        )
     created = []
     for label in clean:
         plain = INVITE_PREFIX + secrets.token_urlsafe(24)
@@ -224,8 +206,8 @@ def revoke_invite(session: Session, extension: Extension, invite_id: int) -> Tes
 def create_code(
     session: Session, extension: Extension, max_testers: int
 ) -> tuple[str, TestplaceCode]:
-    if not 1 <= max_testers <= MAX_CODE_TESTERS:
-        raise TestplaceError("BAD_REQUEST", f"max_testers must be 1-{MAX_CODE_TESTERS}")
+    if max_testers < 1:
+        raise TestplaceError("BAD_REQUEST", "max_testers must be at least 1")
     if not live_rows(session, extension):
         raise TestplaceError(
             "NO_TESTPLACE_VERSION", "publish a testplace version before opening a code", status=409

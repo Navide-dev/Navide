@@ -11550,7 +11550,6 @@
       "notFound": "This invite or test code was not found or no longer works.",
       "codeFull": "This public test code is full.",
       "badCode": "This is not a Testplace invite or public test code.",
-      "inviteLimit": "This would exceed the tester limit of this Navide plugin.",
       "other": "Testplace request failed: {error}"
     },
     "expired": {
@@ -11568,7 +11567,7 @@
       "open": "Invite testers",
       "plugin": "Navide plugin (namespace.name)",
       "invitees": "Testers, one per line (an email address or a note, up to 120 characters)",
-      "limit": "Up to {limit} testers per Navide plugin. Invite builds have the automated scan only.",
+      "validity": "There is no limit on the number of testers. A test build expires 90 days after it is published, and its testers lose it then. Testers sign in with a Navide Cloud account token, which lasts 30 days before they sign in again. Invite builds have the automated scan only.",
       "submit": "Send invitations",
       "sent": "{count} invitations created. Give each code to its tester; the codes are shown only this once.",
       "copy": "Copy",

@@ -17,7 +17,6 @@ from registry.config import VERIFIER_ACCEPTING, Settings
 from registry.db import create_db_engine
 from registry.migrations import MIGRATIONS, applied_migrations, run_migrations
 from registry.models import DeveloperQualification, ExtensionVersion, Publisher, RegistryAudit
-from registry.testplace import MAX_INVITES
 
 from tests.fixtures import build_v2_package, contract_manifest
 
@@ -161,19 +160,18 @@ def test_an_invited_member_lists_and_downloads_the_build(client: TestClient) -> 
     assert client.get("/api/testplace/acme/files", headers=other).status_code == 404
 
 
-def test_invites_are_capped_at_100_and_a_revoked_one_frees_a_seat(client: TestClient) -> None:
+def test_invites_and_code_caps_have_no_upper_limit(client: TestClient) -> None:
+    # The former caps (100 live invites per extension, 100 per request,
+    # 1-1000 testers per code) are gone; going past each still succeeds.
     assert _publish(client).status_code == 201
-    _invite(client, [f"t{i}" for i in range(MAX_INVITES)])
-    resp = client.post(
-        "/api/testplace/acme/files/invites", json={"labels": ["one-more"]}, headers=_publisher()
-    )
-    assert resp.status_code == 409
-    assert resp.json()["detail"]["code"] == "INVITE_LIMIT"
-    first = client.get("/api/testplace/acme/files/invites", headers=_publisher()).json()["invites"][0]
-    assert client.post(
-        f"/api/testplace/acme/files/invites/{first['id']}/revoke", headers=_publisher()
-    ).json()["state"] == "revoked"
-    _invite(client, ["one-more"])
+    assert len(_invite(client, [f"t{i}" for i in range(150)])) == 150
+    assert len(_invite(client, ["one-more"])) == 1
+    listed = client.get("/api/testplace/acme/files/invites", headers=_publisher()).json()
+    assert len(listed["invites"]) == 151 and "limit" not in listed
+    code = client.post("/api/testplace/acme/files/codes", json={"max_testers": 5000}, headers=_publisher())
+    assert code.status_code == 201 and code.json()["max_testers"] == 5000
+    zero = client.post("/api/testplace/acme/files/codes", json={"max_testers": 0}, headers=_publisher())
+    assert zero.status_code == 400
 
 
 def test_a_revoked_invite_removes_access(client: TestClient) -> None:

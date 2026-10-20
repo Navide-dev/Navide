@@ -11550,7 +11550,6 @@
       "notFound": "找不到這個邀請或測試碼，或它已經失效。",
       "codeFull": "這個公開測試碼的名額已滿。",
       "badCode": "這不是 Testplace 的邀請碼或公開測試碼。",
-      "inviteLimit": "超過這個 Navide 外掛的測試者上限。",
       "other": "Testplace 要求失敗：{error}"
     },
     "expired": {
@@ -11568,7 +11567,7 @@
       "open": "邀請測試者",
       "plugin": "Navide 外掛（namespace.name）",
       "invitees": "測試者：每行一位（email 或備註，最多 120 字）",
-      "limit": "每個 Navide 外掛最多 {limit} 位測試者。邀請制的測試版只經過自動掃描。",
+      "validity": "測試者人數沒有上限。測試版在發佈 90 天後到期，到期後測試者就不能再用。測試者用 Navide Cloud 帳號的 token 登入，token 30 天後要重新登入。邀請制的測試版只經過自動掃描。",
       "submit": "送出邀請",
       "sent": "已建立 {count} 個邀請。把每個邀請碼交給對應的測試者；邀請碼只會顯示這一次。",
       "copy": "複製",

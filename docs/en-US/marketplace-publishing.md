@@ -453,7 +453,7 @@ Testplace needs Navide 0.2.27 or later on the tester's side.
 
 | | Pre-release | Testplace | Local install |
 |---|---|---|---|
-| Who can install it | Everyone who turns on **Get pre-releases** for your Navide plugin, or picks **Install *version* (pre-release)** | Only the testers you invite (up to 100 per Navide plugin) | Anyone you send the `.vsix` file to |
+| Who can install it | Everyone who turns on **Get pre-releases** for your Navide plugin, or picks **Install *version* (pre-release)** | Only the testers you invite (no limit on how many) | Anyone you send the `.vsix` file to |
 | Review | Same review as a stable version | Automated scan only for invited testers; a public test code adds a light human review | None; Navide does not scan it |
 | Signed by the Navide Marketplace | Yes | Yes | No (your publisher signature at most) |
 | Label in Navide | **Pre-release (reviewed)** | **Test build, no human review, expires *date*** | **Local file**, with "not reviewed by Navide" |
@@ -501,15 +501,19 @@ navide-plugin testplace invite list acme.files
 - `invite add` creates one single-use join token per label and prints each
   once. A label is your own note (for example the address you send it to); it
   is never shown to the tester. Send the token yourself; the tester pastes it
-  in Navide while signed in to Navide Cloud. At most 100 invites per Navide
-  plugin; revoking one (`invite revoke`) frees its seat and removes that
-  tester's access.
-- `code create --max-testers <n>` opens a public test code for up to 1,000
-  testers. The first code of a Navide plugin waits for a light review by
+  in Navide while signed in to Navide Cloud. There is no limit on the number
+  of invites or testers; revoking one (`invite revoke`) removes that tester's
+  access.
+- `code create --max-testers <n>` opens a public test code for up to `n`
+  testers, any positive number you choose. The first code of a Navide plugin waits for a light review by
   Navide; later ones open at once. `code revoke` stops new joins; testers who
   already joined keep their access.
 - `revoke <id> <version>` withdraws a test build early. Navide turns it off for
   its testers within 24 hours.
+- Two things still expire. A test build expires 90 days after it is published;
+  its testers lose it then unless you publish a newer one or promote it.
+  Testers sign in with a Navide Cloud account token that lasts 30 days, after
+  which they sign in again in Navide.
 - `promote <id> <version>` sends the same package to Marketplace review. When
   it is approved it becomes an ordinary stable or pre-release version (by its
   SemVer), and testers keep it without reinstalling.
@@ -610,7 +614,7 @@ navide-plugin logout [--registry <url>]
 navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]
 navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]
 navide-plugin testplace invite add <namespace.name> <label>... | invite list <namespace.name> | invite revoke <namespace.name> <invite-id>
-navide-plugin testplace code create <namespace.name> --max-testers <1-1000> | code list <namespace.name> | code revoke <namespace.name> <code-id>
+navide-plugin testplace code create <namespace.name> --max-testers <n> | code list <namespace.name> | code revoke <namespace.name> <code-id>
 navide-plugin testplace versions <namespace.name> | revoke <namespace.name> <version> [--reason <text>] | promote <namespace.name> <version>
 navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]
 ```
