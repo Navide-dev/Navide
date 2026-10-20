@@ -446,8 +446,11 @@ caller stays its parent: the child reports to the caller's `<folder>/<pane>`
 address and the caller reclaims it by the `address` the tool returns.
 `window: "current"` (the default) has the caller's window take the project
 into its sidebar without switching to it; `window: "new"` opens it in a
-window of its own without taking focus. One project lives in one window, so a
-project another window already holds is refused with
+window of its own without taking focus; `window: "existing"` opens it in the
+window that already holds the project (any window), or with `window_id` (from
+`window_list`) in that window, which adopts the project when no window holds
+it (a detached group window cannot: `window-cannot-hold`). One project lives
+in one window, so a project another window already holds is refused with
 `workspace-in-other-window` and `holding_window_id`. The child's sidebar row
 says who opened it ("Opened by alpha/lead"), because the tree cannot draw a
 parent that lives in another project. Naming your own workspace is the same as

@@ -496,6 +496,8 @@
     "paused-banner": "配信は一時停止中です。メッセージはキューに追加されますが、送信されません",
     "spawn-toast": "「{parent}」が「{child}」を起動しました",
     "window-focused-by": "「{caller}」がこのウィンドウを前面に表示しました",
+    "agent-moved-pane": "「{caller}」が {name} を専用のウィンドウに移動しました",
+    "agent-moved-workspace": "「{caller}」が {name} を別のウィンドウに移動しました。CLI は動作を続けています",
     "agent-close-workspace-title": "「{caller}」が {name} を閉じようとしています",
     "agent-close-workspace-body": "ペイン「{caller}」のエージェントが {name} を閉じ、その {count} 個の CLI ペインを終了するよう求めています。ペインは再開できるカードとして戻りますが、実行中のターンは完了しません。エージェントがこれを求めるたびに Navide は確認します。",
     "agent-closed-workspace-kept": "「{caller}」が {name} を閉じました。CLI は動作を続けています",

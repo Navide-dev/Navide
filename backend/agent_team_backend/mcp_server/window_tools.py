@@ -11,6 +11,7 @@ Registered on the core server by the import at the end of server.py.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from typing import Any
 
@@ -411,4 +412,209 @@ async def workspace_close(path: str, ctx: Context, keep_panes: bool = True) -> d
         undo = None
         out["panes_ended"] = panes
     agent_window_actions.record("workspace_close", who, target, ok=True, undo=undo)
+    return out
+
+
+# ── window_move_pane (DESIGN-C S4b) ─────────────────────────────────────────
+# A pane lives only in a window holding its project, so there are two real
+# moves and no third (approval (d)): a pane alone (into a detached window of
+# its own, or from one back to its project's main window), or its whole
+# project with every pane of it. Nothing is closed or ended, so moving your own
+# pane or project is allowed; the answer says so.
+
+_MOVE_MODES = ("pane", "workspace")
+
+
+async def _wait_for_new_window(pane_id: str, from_window: str, timeout: float = 15.0) -> tuple[str, str]:
+    """Where a moved pane came back: (its live id, its window id), or what is
+    known when it has not re-registered within *timeout*."""
+    from agent_team_backend import agent_messaging
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        entry = agent_messaging.current(pane_id)
+        live = entry.pane_id if entry else pane_id
+        window_id = core._pane_window_id(live)
+        if window_id and window_id != from_window:
+            return live, window_id
+        await asyncio.sleep(0.25)
+    entry = agent_messaging.current(pane_id)
+    return (entry.pane_id if entry else pane_id), ""
+
+
+@core.server.tool()
+async def window_move_pane(
+    ctx: Context,
+    to_window: str,
+    target: str = "",
+    pane_id: str = "",
+    mode: str = "pane",
+) -> dict[str, Any]:
+    """Move a pane, or its whole project, to another Navide window.
+
+    Name the pane with `target` (as cli_send) or `pane_id`. `to_window` is
+    "new" or a window_id from window_list. A pane can live only in a window
+    holding its project, so:
+
+    - mode "pane" (default) moves the pane alone: "new" opens it in a detached
+      window of its own (its tab group, split off if it shares one); from a
+      detached window, the id of the main window holding its project merges
+      that group back. Any other window is refused with
+      "pane-needs-workspace-move" — a single pane cannot move into another
+      project's window; move its project instead.
+    - mode "workspace" moves the pane's project with every pane of it: "new"
+      gives it a window of its own; a window id has that window take it (the
+      source window lets go of it first, keeping every CLI running). The
+      source window must keep at least one project ("last-workspace").
+
+    Nothing is closed and no CLI ends; moving your own pane or project is
+    allowed (`advisories` says so). A pane that comes back in another window
+    may get a new pane_id (the old one keeps resolving to it). After a project
+    move its panes can show as cards until opened — their CLIs are running;
+    cli_send(open_target=true) or a click opens them. A pipeline running in
+    the project or the pane's run is refused ("pipeline-running").
+
+    Recorded with the caller; the windows show which pane did it. Returns
+    {ok, mode, pane_id, address, from_window_id, to_window_id, moved_panes
+    [address], undo {tool, args}, advisories?} or {ok: false, error,
+    error_code} ("pane-needs-workspace-move", "unknown-window",
+    "window-local-only", "last-workspace", "pipeline-running",
+    "window-cannot-hold", "ui_action_timeout", or a target error).
+    """
+    from agent_team_backend import agent_messaging, agent_window_actions
+
+    try:
+        caller = core._resolve_caller(ctx)
+    except core.CallerUnknown as err:
+        return {"ok": False, "error": str(err), "error_code": "caller-unknown"}
+    who = core._caller_view(caller)
+    record_target: dict[str, Any] = {"target": target or pane_id, "to_window": to_window, "mode": mode}
+
+    def refused(result: dict[str, Any]) -> dict[str, Any]:
+        agent_window_actions.record("window_move_pane", who, record_target, ok=False, error=str(result.get("error") or ""))
+        return result
+
+    if mode not in _MOVE_MODES:
+        return refused({"ok": False, "error": 'mode must be "pane" or "workspace"', "error_code": "invalid-mode"})
+    if "/" in to_window:
+        return refused({
+            "ok": False,
+            "error": "window ids name windows on this machine only; panes cannot move to another device",
+            "error_code": "window-local-only",
+        })
+    me = caller.pane_id if caller.kind == "pane" else ""
+    if not (target or pane_id):
+        return refused({"ok": False, "error": "name the pane with target or pane_id", "error_code": "missing-target"})
+    resolved, failure = core._resolve_pane_target(caller, me, target, pane_id)
+    if failure is not None:
+        return refused(failure)
+    pane = resolved.pane
+    record_target["pane_id"] = pane.pane_id
+    source = agent_messaging.owner(pane.pane_id)
+    from_window = core._pane_window_id(pane.pane_id)
+    if not from_window or source is None:
+        return refused({
+            "ok": False,
+            "error": f"{pane.qualified_name} is not in a Navide window that can be named (it may be offline or in a panel)",
+            "error_code": "pane-not-in-window",
+        })
+    destination = None if to_window == "new" else core._window_session(to_window)
+    if to_window != "new" and destination is None:
+        return refused({
+            "ok": False,
+            "error": f"no Navide window has id {to_window!r} — call window_list for the current ids",
+            "error_code": "unknown-window",
+        })
+    if destination is source:
+        return refused({"ok": False, "error": f"{pane.qualified_name} is already in window {to_window}", "error_code": "already-there"})
+    advisories: list[str] = []
+    mine = agent_messaging.get(caller.pane_id) if caller.kind == "pane" else None
+    if mine is not None and (
+        pane.pane_id == mine.pane_id
+        or (mode == "workspace" and core._same_directory(pane.workspace_path, mine.workspace_path))
+    ):
+        advisories.append(
+            "this moves your own pane or project: nothing is closed, but your pane may answer to a new pane_id afterwards"
+        )
+
+    if mode == "pane":
+        described = dict(await core._describe_windows(caller))
+        src = (described.get(source) or {}).get("result") or {}
+        if to_window == "new":
+            if src.get("kind") == "detached-group":
+                return refused({
+                    "ok": False,
+                    "error": f"{pane.qualified_name} is already in a detached window",
+                    "error_code": "already-there",
+                })
+            answer = await core._window_request(source, "ui.pane.moveToWindow", {"paneId": pane.pane_id, "to": "new", "caller_address": who.get("address") or ""}, caller)
+        else:
+            dst = (described.get(destination) or {}).get("result") or {}
+            holds = any(core._same_directory(str(p), pane.workspace_path) for p in dst.get("workspaces") or [])
+            if not (src.get("kind") == "detached-group" and dst.get("kind") == "main" and holds):
+                return refused({
+                    "ok": False,
+                    "error": (
+                        f"a single pane can move only into a detached window of its own (to_window \"new\") or, from "
+                        f"one, back to the main window holding its project; {to_window} is neither. Move its project "
+                        "instead: mode \"workspace\""
+                    ),
+                    "error_code": "pane-needs-workspace-move",
+                })
+            answer = await core._window_request(source, "ui.pane.moveToWindow", {"paneId": pane.pane_id, "to": to_window, "caller_address": who.get("address") or ""}, caller)
+    else:
+        args = {"path": pane.workspace_path, "to": to_window, "caller_address": who.get("address") or ""}
+        answer = await core._window_request(source, "ui.workspace.moveToWindow", args, caller)
+        if answer is not None and answer.get("ok") and destination is not None:
+            adopted = await core._window_request(destination, "ui.workspace.adopt", {"path": pane.workspace_path}, caller)
+            if adopted is None or not adopted.get("ok"):
+                # Put it back where it was rather than leave it in no window.
+                await core._window_request(source, "ui.workspace.adopt", {"path": pane.workspace_path}, caller)
+                error = str((adopted or {}).get("error") or f"window {to_window} did not take the project")
+                code, sep, _ = error.partition(":")
+                return refused({
+                    "ok": False,
+                    "error": f"{error}; the project went back to window {from_window}",
+                    "error_code": code.strip() if sep and " " not in code.strip() else "window-cannot-hold",
+                })
+    if answer is None:
+        return refused({
+            "ok": False,
+            "error": f"window {from_window} did not answer within {core._UI_INVOKE_TIMEOUT_S:.0f}s",
+            "error_code": "ui_action_timeout",
+        })
+    if not answer.get("ok"):
+        error = str(answer.get("error") or "the window did not move it")
+        return refused({"ok": False, "error": error, "error_code": _window_error_code(error, "move-failed")})
+    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+    moved = _addresses(result.get("panes"))
+    live_id, landed = await _wait_for_new_window(pane.pane_id, from_window)
+    to_id = landed or (to_window if to_window != "new" else "")
+    entry = agent_messaging.get(live_id)
+    # Back where it came from: for a pane split into a new window that is the
+    # main window it left, which merges its group back.
+    undo = {"tool": "window_move_pane", "args": {"pane_id": live_id, "to_window": from_window, "mode": mode}}
+    agent_window_actions.record(
+        "window_move_pane", who, {**record_target, "to_window_id": to_id}, ok=True, undo=undo
+    )
+    out: dict[str, Any] = {
+        "ok": True,
+        "mode": mode,
+        "pane_id": live_id,
+        "address": entry.qualified_name if entry else pane.qualified_name,
+        "from_window_id": from_window,
+        "to_window_id": to_id,
+        "moved_panes": moved or [pane.qualified_name],
+        "undo": undo,
+    }
+    if mode == "workspace":
+        advisories.append(
+            "the moved project's panes may show as cards until opened; their CLIs are running — "
+            "cli_send(open_target=true) or a click opens them"
+        )
+    if not landed:
+        advisories.append("the pane had not re-registered in its new window yet; read window_list for where it is now")
+    if advisories:
+        out["advisories"] = advisories
     return out
