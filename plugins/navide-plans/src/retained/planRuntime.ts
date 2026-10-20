@@ -702,6 +702,10 @@ function buildPlanCspMeta(nonce: string): string {
  * document scripts, inject a nonce'd CSP meta (only the runtime may execute;
  * inline styles and data: images stay allowed for self-contained docs), and
  * append the runtime script before `</body>`.
+ *
+ * @deprecated Unused copy that predates the Plans CSP fix (#462). Plans
+ * renders through `preparePlanDocHtml` in `../planSecurity`; import that one,
+ * never this.
  */
 export function preparePlanDocHtml(
   content: string,
