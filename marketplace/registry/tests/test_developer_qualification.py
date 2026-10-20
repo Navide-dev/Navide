@@ -482,7 +482,8 @@ def test_invalid_digest_entries_are_refused(client):
 # -- (4) the existing signed shapes are unchanged ----------------------------------
 def test_stable_envelope_and_trust_metadata_shapes_are_unchanged(client):
     signer = client.app.state.registry.trust_signer
-    when = datetime(2026, 10, 20, 1, 0, tzinfo=timezone.utc)
+    # Inside the signer's validity window (it starts a minute before the app does).
+    when = datetime.now(timezone.utc)
     envelope, _signature = signer.sign_envelope(
         artifact_digest="a" * 64,
         package_id="mei-tools.hello",
