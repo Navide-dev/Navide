@@ -99,6 +99,8 @@ describe('PlanDocPreview', () => {
     const frame = wrapper.find('iframe')
     expect(frame.exists()).toBe(true)
     expect(frame.attributes('sandbox')).toBe('allow-scripts')
+    // The main process keeps a frame by this name on its srcdoc (planFrameNavigation.ts).
+    expect(frame.attributes('name')).toBe('navide-plan-doc')
     const srcdoc = frame.attributes('srcdoc') ?? ''
     // Document scripts are stripped, the data island survives, the CSP meta
     // and the nonce'd runtime are injected.

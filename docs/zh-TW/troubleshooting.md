@@ -39,7 +39,7 @@ Pane 內可能出現 CLI 自己的訊息，例如 `✘ Auto-update failed`。同
 
 ## Pane 一直停在「detecting session」
 
-Codex、Antigravity 與 Grok 依賴 Log 或 Database Discovery，將新的 CLI Session 綁定到 Navide Pane。
+Codex 與 Antigravity 依賴 Log 或 Database Discovery，將新的 CLI Session 綁定到 Navide Pane。（Grok Build pane 啟動時就帶著自己的 Session ID，不會停在這裡。）
 
 Codex 可開啟 `/hooks` 檢查待審核的 Hook。MCP 啟動失敗或第三方 `SessionEnd` Timeout 警告需要分別調查，不能單憑這些訊息認定 Session ID 發生碰撞。Codex 0.154 會將 `SessionStart` 排入第一輪執行佇列；只開啟 TUI 並不保證該事件已執行。
 
@@ -53,6 +53,19 @@ Codex 可開啟 `/hooks` 檢查待審核的 Hook。MCP 啟動失敗或第三方 
 - 確認 CLI 能寫入其正常 Session Directory。
 - 第一次 Session 被偵測前，不要立即 Rebuild 或 Resume。
 - 如果偵測始終沒有完成，在建立 Issue 前保留 Pane Output 與相關 Backend Log。
+
+## Grok Build Pane
+
+- **「Do you trust the contents of this directory?」** 提示問的是 pane 自己的工作區時，Navide 會替它開的每個 Grok pane 回答，並透過 `~/.grok/trusted_folders.toml` 讓其他 Grok pane 共用這個答案（便利功能 `grok.folder-trust`，可在便利功能總覽關閉並收回）；只有 pane 開啟的工作區或它底下的資料夾，才會共享到 `~/.grok`。提示還留在畫面上時 pane 會顯示為等待中，訊息會先等著，不會被打進提示裡。信任資料夾是永久的，所以 agent 或聊天轉送只能拒絕（`cli_answer_prompt` 的 "deny"，也就是 Grok 的 "No, quit"）；要接受請自己在 pane 裡按。
+- **`[startup probe] … does not identify as Grok Build`** 表示 `PATH` 上的 `grok` 是另一個同名程式（例如社群版 `grok-cli`）。請用 `curl -fsSL https://x.ai/cli/install.sh | bash` 安裝官方 CLI。
+- **額度顯示為無法取得。** Grok Build 不對其他程式回報額度；請在 Grok pane 裡輸入 `/usage`。
+- **Grok 工作中送出的斜線指令會晚點才執行。** Grok Build 會把它排到目前回合結束，所以用 `cli_send_and_wait` 等到的回覆可能屬於前一個回合。
+- **回合結束得很慢。** Grok Build 預設會匯入你的 `~/.claude` hooks、skills 與 MCP 伺服器，每個回合結束時都會跑 Claude 的 stop hooks。不想這樣的話，在 `~/.grok/config.toml` 加上：
+
+  ```toml
+  [compat.claude]
+  hooks = false
+  ```
 
 ## Resume 無法運作
 

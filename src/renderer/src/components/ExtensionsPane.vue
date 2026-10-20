@@ -25,6 +25,7 @@ import NativeBackendPanel from './NativeBackendPanel.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 import PluginSourceBadge from './PluginSourceBadge.vue'
+import { isTestplaceExpired, testplaceDaysLeft } from '../lib/pluginSourceMark'
 
 const { t } = useI18n()
 
@@ -284,6 +285,15 @@ async function uninstallPack(members: string[]): Promise<void> {
   }
 }
 
+// d5: the label for a local install whose file Navide blocked since; no
+// reason (or one this release does not know) reads as a plain block.
+function digestBlockKey(reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null): string {
+  if (reason === 'security') return 'security'
+  if (reason === 'qualification-revoked') return 'qualificationRevoked'
+  if (reason === 'developer-withdrawn') return 'developerWithdrawn'
+  return 'blocked'
+}
+
 // The user's "Disabled" switch. A disabled package keeps its files, grant and
 // stored data; the Host only stops loading its views and backend. The row says
 // so with a badge and an Enable button, never silently.
@@ -410,6 +420,73 @@ async function removeDeveloperFolder(id: string): Promise<void> {
   }
 }
 
+// D3: expired Testplace builds, stopped with their data kept. Each is listed
+// with three choices and never removed without the user: the Navide
+// Marketplace version (the normal verified install), keep using it marked
+// expired (only when it failed on its expiry alone), or remove it.
+const expiredTestplace = ref<ExpiredTestplaceBuild[]>([])
+// S8 LOW-R3-2: each reason "keep using" is refused has its own advice.
+const KEEP_REFUSAL_KEYS: Record<NonNullable<ExpiredTestplaceBuild['keepRefusal']>, string> = {
+  withdrawn: 'cannotKeepWithdrawn',
+  'signed-out': 'cannotKeepSignedOut',
+  'not-a-tester': 'cannotKeepNotTester',
+  'registry-outdated': 'cannotKeepRegistryOutdated',
+  unreachable: 'cannotKeepUnreachable',
+}
+async function refreshExpiredTestplace(): Promise<void> {
+  try {
+    expiredTestplace.value = (await pluginsApi()?.expiredTestplace?.()) ?? []
+  } catch {
+    expiredTestplace.value = []
+  }
+}
+async function keepExpiredTestplace(id: string): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.keepExpiredTestplace) return
+  const confirmed = await notify.confirm(t('testplace.expired.keepConfirm', { id: reveal(id) }), {
+    title: t('testplace.expired.keepTitle'),
+    confirmText: t('testplace.expired.keep'),
+  })
+  if (!confirmed) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api.keepExpiredTestplace(id)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+    await refreshExpiredTestplace()
+  }
+}
+// "Install the Navide Marketplace version": a promoted build of the same digest
+// only takes its new receipt (nothing downloaded, nothing to consent to again);
+// otherwise the normal verified install runs.
+async function expiredToMarketplace(id: string): Promise<void> {
+  const api = pluginsApi()
+  busy.value = true
+  error.value = ''
+  let adopted = false
+  try {
+    adopted = (await api?.adoptTestplaceRelease?.(id))?.adopted === true
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+  if (adopted) {
+    await refreshInstalled()
+    await refreshExpiredTestplace()
+    return
+  }
+  if (!error.value) await updateFlow.install(idParts(id).namespace, idParts(id).name)
+}
+async function removeExpiredTestplace(id: string): Promise<void> {
+  await remove(id)
+  await refreshExpiredTestplace()
+}
+
 // A developer folder consented to or reloaded changes the inventory.
 watch(() => updateFlow.pendingConfirm.value, (pending) => {
   if (!pending) void refreshDeveloperMode()
@@ -421,9 +498,13 @@ onMounted(() => {
   void pluginUpdates.refresh()
   void refreshPacks()
   void refreshDeveloperMode()
+  void refreshExpiredTestplace()
 })
 // A pack installed from the Marketplace page shows up here without a remount.
-watch(installed, () => void refreshPacks())
+watch(installed, () => {
+  void refreshPacks()
+  void refreshExpiredTestplace()
+})
 </script>
 
 <template>
@@ -439,6 +520,33 @@ watch(installed, () => void refreshPacks())
     <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
       {{ $t('settings.extensions.developerMode.selfHostedQuarantine', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
     </p>
+    <!-- D3: an expired test build is stopped, never silently dropped. -->
+    <div v-for="item in expiredTestplace" :key="`expired:${item.id}`" class="ext-testplace-expired ext-risk-banner" role="alert" :data-expired-id="item.id">
+      <p v-if="item.withdrawn">{{ $t('testplace.expired.withdrawnBanner', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}</p>
+      <p v-else>{{ $t('testplace.expired.banner', { id: reveal(item.id), version: reveal(item.version ?? ''), date: (item.expiresAt ?? '').slice(0, 10) }) }}</p>
+      <!-- S8 T-MED-1: say why "keep using" is not offered. -->
+      <p v-if="!item.canKeep" class="ext-testplace-cannot-keep">
+        {{ $t(item.keepRefusal ? `testplace.expired.${KEEP_REFUSAL_KEYS[item.keepRefusal]}` : 'testplace.expired.cannotKeep') }}
+      </p>
+      <div class="ext-actions">
+        <button
+          class="ext-testplace-marketplace nv-btn nv-btn--primary nv-btn--sm"
+          :disabled="busy || updateFlow.busy.value"
+          @click="expiredToMarketplace(item.id)"
+        >{{ $t('testplace.expired.toMarketplace') }}</button>
+        <button
+          v-if="item.canKeep"
+          class="ext-testplace-keep nv-btn nv-btn--sm"
+          :disabled="busy || updateFlow.busy.value"
+          @click="keepExpiredTestplace(item.id)"
+        >{{ $t('testplace.expired.keep') }}</button>
+        <button
+          class="ext-testplace-remove nv-btn nv-btn--sm ext-btn-danger"
+          :disabled="busy || updateFlow.busy.value"
+          @click="removeExpiredTestplace(item.id)"
+        >{{ $t('testplace.expired.remove') }}</button>
+      </div>
+    </div>
 
     <section class="ext-section">
       <h3 class="ext-section-title">
@@ -543,7 +651,7 @@ watch(installed, () => void refreshPacks())
       </ul>
     </section>
 
-    <section class="ext-section">
+    <section class="ext-section" data-settings-section="extensions-install-from-file">
       <h3 class="ext-section-title">
         {{ $t('settings.extensions.installed') }}
         <span class="ext-section-count">{{ packs.length + nonFactoryInstalled.length }}</span>
@@ -592,8 +700,25 @@ watch(installed, () => void refreshPacks())
             <div class="ext-card-title">
               <span class="ext-id" v-truncate>{{ reveal(p.id) }}</span>
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
-              <!-- K2: the Host's source only; none (an unknown channel) shows no badge. -->
-              <PluginSourceBadge v-if="p.source" :source="p.source" :expires-at="p.expiresAt" />
+              <!-- K2: the Host's source only; none (an unknown channel) shows no badge.
+                   A3: a signed local file names the publisher its id names, the one whose key signed it. -->
+              <PluginSourceBadge
+                v-if="p.source"
+                :source="p.source"
+                :expires-at="p.expiresAt"
+                :via="p.testplaceVia"
+                :signature="p.localSignature"
+                :publisher="p.localSignature ? p.id.split('.')[0] : undefined"
+              />
+              <!-- d5: Navide blocked the file this local install came from; the label stays. -->
+              <span
+                v-if="p.digestBlock"
+                class="ext-badge ext-digest-blocked-badge"
+                :data-reason="p.digestBlock.reason ?? 'none'"
+                :title="$t('settings.extensions.digestBlock.note')"
+              >
+                {{ $t(`settings.extensions.digestBlock.${digestBlockKey(p.digestBlock.reason)}`) }}
+              </span>
               <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                 {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}
               </span>
@@ -631,6 +756,13 @@ watch(installed, () => void refreshPacks())
               </span>
             </div>
             <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
+            <!-- D3: remind from 7 days before a test build expires; once kept past it, say so. -->
+            <p v-if="p.source === 'testplace' && testplaceDaysLeft(p.expiresAt) !== null" class="ext-disabled-note ext-testplace-expiring" role="status">
+              {{ $t('testplace.expiring', { days: testplaceDaysLeft(p.expiresAt), date: (p.expiresAt ?? '').slice(0, 10) }) }}
+            </p>
+            <p v-if="p.source === 'testplace' && isTestplaceExpired(p.expiresAt)" class="ext-disabled-note ext-testplace-kept">
+              {{ $t('testplace.expired.kept') }}
+            </p>
             <p v-if="p.engineCompatible === false" class="ext-incompatible-reason">
               {{ $t('settings.extensions.incompatibleReason', { version: p.minNavideVersion ?? '' }) }}
             </p>
@@ -747,9 +879,12 @@ watch(installed, () => void refreshPacks())
             >
               {{ $t('settings.extensions.enable') }}
             </button>
-            <!-- `navide.` packages ship with Navide: they are disabled, never removed. -->
+            <!-- `navide.` packages ship with Navide: they are disabled, never removed.
+                 A Marketplace first-party package (navide.browser) is the
+                 exception: the Host offers its Disabled switch, and it is
+                 removed like any Marketplace package. -->
             <button
-              v-if="!isFirstPartyId(p.id)"
+              v-if="!isFirstPartyId(p.id) || p.disabled !== undefined"
               class="ext-remove nv-btn nv-btn--sm ext-btn-danger"
               :disabled="busy || updateFlow.busy.value"
               @click="developerMode.folders.some((folder) => folder.pluginId === p.id) ? removeDeveloperFolder(p.id) : remove(p.id)"
@@ -762,7 +897,7 @@ watch(installed, () => void refreshPacks())
       </ul>
     </section>
 
-    <section class="ext-section ext-devmode">
+    <section class="ext-section ext-devmode" data-settings-section="extensions-developer-mode">
       <h3 class="ext-section-title">{{ $t('settings.extensions.developerMode.title') }}</h3>
       <label class="ext-devmode-switch">
         <input
@@ -1173,6 +1308,10 @@ watch(installed, () => void refreshPacks())
 .ext-badge.ext-disabled-badge {
   color: var(--risk-fg);
   background: var(--risk-subtle);
+}
+.ext-badge.ext-digest-blocked-badge {
+  color: var(--danger-bright);
+  background: var(--danger-subtle, var(--risk-subtle));
 }
 .ext-store-restored {
   margin: 0 0 var(--space-2, 8px);

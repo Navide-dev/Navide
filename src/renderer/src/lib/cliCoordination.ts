@@ -12,7 +12,15 @@ export async function runPipelineKickoff(input: {
   paneAlive: () => boolean
   onHeld?: () => void
   onRetry?: (attempt: number) => void
+  /** This pane's last kickoff was held in its input box (#448). A copy still
+   *  there is submitted with Enter, never pasted a second time. */
+  heldCopy?: { holds: () => boolean; submit: () => Promise<boolean> }
 }): Promise<{ sent: boolean; cancelled: boolean }> {
+  if (input.heldCopy?.holds()) {
+    if (await input.heldCopy.submit()) return { sent: true, cancelled: false }
+    input.onHeld?.()
+    return { sent: false, cancelled: false }
+  }
   for (let attempt = 1; attempt <= MAX_KICKOFF_ATTEMPTS; attempt++) {
     const result = await input.inject()
     if (result.injected) return { sent: true, cancelled: false }

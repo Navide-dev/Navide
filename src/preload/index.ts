@@ -23,8 +23,9 @@ import type { PluginActivityReport } from '../shared/pluginActivity'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
-import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
+import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
 import type { PluginSource } from '../shared/pluginSource'
+import type { DeveloperApi, DeveloperCallResult } from '../shared/marketplaceDeveloper'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
 export interface ClearElectronCachesOptions {
@@ -106,11 +107,13 @@ function isPlansBackendStopped(payload: unknown): payload is PlansBackendStopped
   )
 }
 
-/** An agent disabled or enabled a Navide plugin (B2-c), as the Host reports it. */
+/** An agent disabled, enabled (B2-c) or updated (O1) a Navide plugin, as the Host reports it. */
 export interface PluginAgentActionNotice {
-  action: 'disable' | 'enable'
+  action: 'disable' | 'enable' | 'update'
   pluginId: string
   pluginVersion: string
+  /** `update` only: the version it was updated from. */
+  fromVersion?: string
   requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
 }
 
@@ -120,7 +123,8 @@ function isPluginAgentActionNotice(payload: unknown): payload is PluginAgentActi
   const requester = record.requester as Record<string, unknown> | null
   const nullableString = (value: unknown): boolean => value === null || typeof value === 'string'
   return (
-    (record.action === 'disable' || record.action === 'enable') &&
+    (record.action === 'disable' || record.action === 'enable' ||
+      (record.action === 'update' && typeof record.fromVersion === 'string')) &&
     typeof record.pluginId === 'string' &&
     typeof record.pluginVersion === 'string' &&
     typeof requester === 'object' && requester !== null &&
@@ -168,6 +172,14 @@ export interface InstalledPluginSummary {
   source?: PluginSource
   /** Registry-signed expiry; present only when `source` is `testplace`. */
   expiresAt?: string
+  /** How the user joined that test, when recorded; `source` testplace only. */
+  testplaceVia?: 'invite' | 'code'
+  /** A3: a local file a vetted publisher signed, and whether that key is
+   *  still active (`verified`) or revoked since (`revoked`). */
+  localSignature?: 'verified' | 'revoked'
+  /** Decision d5: Navide blocked the `.vsix` this local install came from;
+   *  `reason` null when its list names none. */
+  digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -445,6 +457,29 @@ export interface MarketplaceListResponse {
 }
 
 /** Card K4: the Developer Mode switch and the developer folders consented to. */
+/** One test the user joined (Testplace, W5b). */
+export interface TestplaceListing {
+  id: string
+  namespace: string
+  name: string
+  displayName: string | null
+  description: string | null
+  publisher: string
+  via: 'invite' | 'code' | null
+  versions: Array<{ version: string; target: string; expiresAt: string | null; installable: boolean; compatible: boolean | null }>
+}
+
+/** D3: an installed Testplace build stopped because it expired; its data is kept. */
+export interface ExpiredTestplaceBuild {
+  id: string
+  version: string | null
+  expiresAt: string | null
+  artifactDigest?: string
+  canKeep: boolean
+  withdrawn?: true
+  keepRefusal?: 'withdrawn' | 'signed-out' | 'not-a-tester' | 'registry-outdated' | 'unreachable'
+}
+
 export interface DeveloperModeState {
   enabled: boolean
   folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
@@ -486,6 +521,9 @@ export interface PreparedInstallSummary {
   /** Source and review state from the verified Registry envelope; absent for
    *  a channel this App does not know. */
   source?: PluginSource
+  /** A Testplace build: its signed expiry and how the user joined the test. */
+  expiresAt?: string
+  testplaceVia?: 'invite' | 'code'
   /** Card K3: sha256 of the picked file, shown in the consent dialog. */
   digest?: string
   /** Card K3 (D7): the installed package of the same id a file install replaces. */
@@ -494,12 +532,17 @@ export interface PreparedInstallSummary {
   replacesLocal?: { version: string | null }
   /** Card K4: the developer folder this summary was read from. */
   folder?: string
+  /** W1: whether the shared static scan ran on a local file (`scan` holds it). */
+  localScan?: 'ran' | 'unavailable'
   /** D7: the replaced package's native backend data will be set aside. */
   backendDataSetAside?: boolean
   /** D7: data set aside earlier from the incoming source, which the user may take back. */
   reattachableBackendData?: true
   /** MED-1 on #425: false when the takedown list could not be checked. */
   takedownChecked?: boolean
+  /** A3: what the `<file>.sig` beside a local file shows against the
+   *  Navide-vetted publisher keys; `none` when there is no signature. */
+  localSignature?: { state: 'none' } | { state: 'verified' | 'revoked' | 'unverifiable'; publisherId: string; keyId?: string }
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []
@@ -1160,13 +1203,18 @@ contextBridge.exposeInMainWorld('agentTeam', {
       return () => ipcRenderer.removeListener(FN_KEY_STATUS_CHANNEL, listener)
     },
   } satisfies FnKeyApi,
-  // navide://extension/<id> links routed by src/main/deep-link.ts.
+  // navide://extension/<id> and navide://publish links routed by src/main/deep-link.ts.
   deepLink: {
     ready: () => ipcRenderer.invoke(DEEP_LINK_READY_CHANNEL),
     onOpenExtension: (handler) => {
       const listener = (_e: unknown, target: Parameters<typeof handler>[0]): void => handler(target)
       ipcRenderer.on(DEEP_LINK_OPEN_CHANNEL, listener)
       return () => ipcRenderer.removeListener(DEEP_LINK_OPEN_CHANNEL, listener)
+    },
+    onOpenPublish: (handler) => {
+      const listener = (_e: unknown, target: Parameters<typeof handler>[0]): void => handler(target)
+      ipcRenderer.on(DEEP_LINK_PUBLISH_CHANNEL, listener)
+      return () => ipcRenderer.removeListener(DEEP_LINK_PUBLISH_CHANNEL, listener)
     },
   } satisfies DeepLinkApi,
   executionPolicy: {
@@ -1194,6 +1242,19 @@ contextBridge.exposeInMainWorld('agentTeam', {
       return () => ipcRenderer.removeListener('execution-policy:changed', listener)
     },
   },
+  /** Navide Marketplace developer (W3): the Host keeps the token and key; this sees states only. */
+  developer: {
+    state: () => ipcRenderer.invoke('developer:state'),
+    signIn: (scope) => ipcRenderer.invoke('developer:signIn', scope),
+    signOut: () => ipcRenderer.invoke('developer:signOut'),
+    registerKey: () => ipcRenderer.invoke('developer:registerKey'),
+    application: () => ipcRenderer.invoke('developer:application'),
+    submitApplication: (input) => ipcRenderer.invoke('developer:submitApplication', input),
+    versions: () => ipcRenderer.invoke('developer:versions'),
+    stagePackage: (path) => ipcRenderer.invoke('developer:stagePackage', path ?? null),
+    publish: (input) => ipcRenderer.invoke('developer:publish', input),
+    yank: (input) => ipcRenderer.invoke('developer:yank', input),
+  } satisfies DeveloperApi,
   plugins: {
     listInstalled: (): Promise<InstalledPluginSummary[]> =>
       ipcRenderer.invoke('plugins:listInstalled'),
@@ -1235,10 +1296,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
        *  current text colour rather than the shade baked into the artwork. */
       iconMonochrome: boolean
       kind: 'custom'
-      location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
+      location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window' | 'detail'
       manifestOrder: number
       /** Source and review state of the package that contributes this view. */
       source?: PluginSource
+      /** A test build: its signed expiry and how the user joined the test. */
+      expiresAt?: string
+      testplaceVia?: 'invite' | 'code'
     }>> => ipcRenderer.invoke('plugins:listContributions'),
     hostThemeChanged: (theme: string): void =>
       ipcRenderer.send('plugins:hostThemeChanged', theme),
@@ -1301,6 +1365,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       namespace: string
       name: string
       version?: string
+      /** A Testplace build, fetched with the user's Navide Cloud account. */
+      testplace?: boolean
     }): Promise<PreparedInstallSummary> => ipcRenderer.invoke('plugins:prepareInstall', args),
     commitInstall: (
       id: string,
@@ -1311,16 +1377,23 @@ contextBridge.exposeInMainWorld('agentTeam', {
     installFromFile: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:installFromFile'),
     commitLocalInstall: (
       id: string,
-      approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
+      approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
     ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
+    /** W1 (S2): the copy the Host staged for an agent's file request, named
+     *  by its stagingId; never a path. Installs nothing. */
+    prepareAgentFileInstall: (stagingId: string): Promise<PreparedInstallSummary> =>
+      ipcRenderer.invoke('plugins:prepareAgentFileInstall', { stagingId }),
+    /** The user rejected an agent's file request: drop its staged copy. */
+    discardAgentStaged: (stagingId: string): Promise<void> =>
+      ipcRenderer.invoke('plugins:discardAgentStaged', { stagingId }),
     /** Card K4: the Developer Mode switch and the developer folders. The main
      *  process owns the switch; it opens its own folder dialog. */
     developerMode: (): Promise<DeveloperModeState> => ipcRenderer.invoke('plugins:developerMode'),
     setDeveloperMode: (enabled: boolean): Promise<DeveloperModeState> =>
       ipcRenderer.invoke('plugins:setDeveloperMode', { enabled }),
     loadFromFolder: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:loadFromFolder'),
-    commitFolderLoad: (id: string, approval: { riskConfirmed: boolean }): Promise<DeveloperModeState> =>
+    commitFolderLoad: (id: string, approval: { riskConfirmed: boolean; expectedFolder?: string }): Promise<DeveloperModeState> =>
       ipcRenderer.invoke('plugins:commitFolderLoad', { id, ...approval }),
     reloadDeveloperPlugin: (id: string): Promise<
       { reloaded: true; requiresConsent: false } | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
@@ -1329,6 +1402,18 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:removeDeveloperFolder', { id }),
     selfHostedQuarantine: (): Promise<Array<{ id: string; version: string | null }>> =>
       ipcRenderer.invoke('plugins:selfHostedQuarantine'),
+    /** Testplace (W5b): the tests the user joined, join by invite or test code, leave. */
+    testplaceList: (): Promise<TestplaceListing[]> => ipcRenderer.invoke('plugins:testplaceList'),
+    testplaceJoin: (code: string): Promise<{ id: string }> => ipcRenderer.invoke('plugins:testplaceJoin', { code }),
+    testplaceLeave: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugins:testplaceLeave', { id }),
+    /** The invite form's Send: the join tokens come back to that form only. */
+    testplaceInvite: (id: string, labels: string[]): Promise<DeveloperCallResult> =>
+      ipcRenderer.invoke('plugins:testplaceInvite', { id, labels }),
+    /** D3: expired Testplace builds, stopped with their data kept, and "keep using". */
+    expiredTestplace: (): Promise<ExpiredTestplaceBuild[]> => ipcRenderer.invoke('plugins:expiredTestplace'),
+    keepExpiredTestplace: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugins:keepExpiredTestplace', { id }),
+    /** A promoted test build of the same digest takes the Marketplace receipt in place (no reinstall). */
+    adoptTestplaceRelease: (id: string): Promise<{ adopted: boolean }> => ipcRenderer.invoke('plugins:adoptTestplaceRelease', { id }),
     restart: (id: string): Promise<{
       id: string
       packageVersion: string
@@ -1341,6 +1426,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       restoredInstances: number
       skippedDestroyedHostWindows: number
     }> => ipcRenderer.invoke('plugins:rollback', { id }),
+    /** Drop the version staged for the next restart (the downgrade of an agent's O1 update). */
+    discardCandidate: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:discardCandidate', { id }),
     remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('plugins:remove', nativeBackendData === undefined ? { id } : { id, nativeBackendData }),
     nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
