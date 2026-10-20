@@ -173,7 +173,7 @@ onMounted(async () => {
             <div v-for="(out, oi) in cell.outputs" :key="oi" class="nbp-output">
               <pre v-if="out.kind === 'text'" class="nbp-out-text">{{ out.text }}</pre>
               <pre v-else-if="out.kind === 'error'" class="nbp-out-error">{{ out.text }}</pre>
-              <img v-else-if="out.kind === 'image'" class="nbp-out-img" :src="out.src" alt="cell output" />
+              <img v-else-if="out.kind === 'image'" class="nbp-out-img" :src="out.src" :alt="$t('editorWindow.notebook.cell-output')" />
               <!-- Sandboxed HTML output: opaque origin, scripts/forms blocked -->
               <iframe
                 v-else-if="out.kind === 'html'"
