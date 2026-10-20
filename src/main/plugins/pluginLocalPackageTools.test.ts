@@ -124,7 +124,7 @@ describe('plugins_validate_package', () => {
     writeFileSync(`${path}.sig`, edSign(null, Buffer.from(sha256Hex(readFileSync(path)), 'ascii'), vetted.privateKey).toString('base64'))
     const trust: LocalInstallTrustMetadata = {
       schemaVersion: 1, kind: 'local-install-trust', registryProfile: 'official',
-      generatedAt: '2026-10-20T00:00:00Z', expiresAt: '2026-10-21T00:00:00Z', blockedDigests: [],
+      generatedAt: '2026-10-20T00:00:00Z', expiresAt: '2099-01-01T00:00:00Z', blockedDigests: [],
       publisherKeys: [{ publisherId: 'acme', keyId: publisherKeyId(vettedPem), publicKey: vettedPem, status: 'active', revokedAt: null }],
     }
     expect(await validateLocalPackage(path, deps(trust))).toMatchObject({ valid: true, packageKind: 'file', signature: 'verified', id: 'acme.todo' })
