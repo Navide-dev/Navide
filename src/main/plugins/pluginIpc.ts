@@ -585,6 +585,16 @@ export interface PluginIpcOptions {
    *  their private data in `<root>/<pluginId>/`. Removal deletes that directory
    *  only when the caller passes `nativeBackendData: 'delete'`. */
   nativeBackendDataRoot?: string
+  /** L3: a restart switched an installed plugin from one version to another
+   *  (an approved update taking effect, or Restart). The main window records
+   *  every switch with a one-click way back. */
+  onPackageSwitched?: (notice: {
+    pluginId: string
+    fromVersion: string
+    toVersion: string
+    source: 'marketplace' | 'local-unsigned'
+    at: number
+  }) => void
   factoryPackageIds?: readonly string[]
   /** Why rolling this id back to its factory package is refused right now, or
    *  undefined when it is allowed. Checked before a rollback is offered or its
@@ -3390,6 +3400,23 @@ export function registerPluginIpc(
     }
   }
 
+  /** L3: record a version switch for the main window. A first install is not
+   * a switch, and a failure to report never undoes the switch. */
+  function reportSwitch(id: string, fromVersion: string | undefined, toVersion: string, local: boolean): void {
+    if (!fromVersion || fromVersion === toVersion) return
+    try {
+      options.onPackageSwitched?.({
+        pluginId: id,
+        fromVersion,
+        toVersion,
+        source: local ? 'local-unsigned' : 'marketplace',
+        at: Date.now(),
+      })
+    } catch (error) {
+      console.warn(`[plugins] version switch of ${id} was not reported: ${errorText(error)}`)
+    }
+  }
+
   /** Promote the staged candidate of `id`: what the Restart button does, and
    * what a launch does for a first install the user never restarted. */
   async function restartStagedCandidate(id: string) {
@@ -3642,6 +3669,7 @@ export function registerPluginIpc(
         if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
         if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
+        reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate)
         return {
           id,
           packageVersion: selected.active!.packageVersion,
@@ -3654,6 +3682,7 @@ export function registerPluginIpc(
       if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
       if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
+      reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
       // A failed data move back is reported with the restart's own error,

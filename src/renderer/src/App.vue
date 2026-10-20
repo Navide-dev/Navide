@@ -363,6 +363,7 @@ import {
   pluginAgentUndoApplies,
   pluginAgentDowngradeStep,
   pluginStagedApplyApplies,
+  pluginSwitchBackApplies,
   releaseAnnouncementId,
   useAnnouncements,
   type SchedulerDisabledNotice,
@@ -6322,6 +6323,7 @@ let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
 let stopPluginStagedCandidate: (() => void) | null = null
 let stopPluginStagedUpdates: (() => void) | null = null
+let stopPluginSwitched: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
   stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
@@ -6349,6 +6351,15 @@ onMounted(() => {
   }) ?? null
   // Packages staged beside an active one: a row with "Apply now" stays in the
   // announcements centre until it is applied.
+  // L3: an approved update took effect at once; record it with its way back.
+  stopPluginSwitched = window.agentTeam?.onPluginSwitched?.((notice) => {
+    announcements.notePluginSwitch(notice)
+    notifyRestore.toast(i18n.global.t('plugin-switch.notice.title', {
+      plugin: notice.pluginId,
+      from: notice.fromVersion,
+      to: notice.toVersion,
+    }), { type: 'info' })
+  }) ?? null
   stopPluginStagedUpdates = window.agentTeam?.onPluginStagedUpdates?.((updates) => {
     announcements.notePluginStagedUpdates(updates)
     for (const update of updates) {
@@ -6379,6 +6390,8 @@ onUnmounted(() => {
   stopPluginStagedCandidate = null
   stopPluginStagedUpdates?.()
   stopPluginStagedUpdates = null
+  stopPluginSwitched?.()
+  stopPluginSwitched = null
   stopPluginContributionChanges?.()
   stopPluginContributionChanges = null
 })
@@ -15394,6 +15407,7 @@ const convenience = useConvenience(backend, {
  *  user's own Extensions switch, set back (B2-c). */
 async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise<void> {
   if (action.kind === 'plugin-staged-apply') return applyStagedPluginPackage(action)
+  if (action.kind === 'plugin-switch-back') return revertPluginSwitch(action)
   try {
     // Only what the agent did: if the user changed it since, leave it be.
     const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
@@ -15420,6 +15434,33 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   } catch (error) {
     notifyRestore.toast(
       i18n.global.t('plugin-agent.notice.undo-failed', { error: error instanceof Error ? error.message : String(error) }),
+      { type: 'error' },
+    )
+  }
+}
+
+/** "Back to vA" on a switch row (L3): the rollback in Settings → Navide
+ *  Plugins, only while the switch it names is still what is installed. */
+async function revertPluginSwitch(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-switch-back' }>,
+): Promise<void> {
+  try {
+    const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (!pluginSwitchBackApplies(action, installed)) {
+      notifyRestore.toast(i18n.global.t('plugin-switch.notice.stale'), { type: 'info' })
+      return
+    }
+    const reverted = await window.agentTeam?.plugins?.rollback?.(action.pluginId)
+    notifyRestore.toast(
+      i18n.global.t('plugin-switch.notice.reverted', {
+        plugin: action.pluginId,
+        version: reverted?.packageVersion ?? action.fromVersion,
+      }),
+      { type: 'info' },
+    )
+  } catch (error) {
+    notifyRestore.toast(
+      i18n.global.t('plugin-switch.notice.failed', { error: error instanceof Error ? error.message : String(error) }),
       { type: 'error' },
     )
   }

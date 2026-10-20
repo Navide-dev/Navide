@@ -153,6 +153,23 @@ export interface PluginStagedUpdate {
   stagedVersion: string
 }
 
+/** L3: an approved update switched versions. */
+export interface PluginSwitchNotice {
+  pluginId: string
+  fromVersion: string
+  toVersion: string
+  source: 'marketplace' | 'local-unsigned'
+  at: number
+}
+
+function isPluginSwitchNotice(payload: unknown): payload is PluginSwitchNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  return typeof record.pluginId === 'string' && typeof record.fromVersion === 'string' &&
+    typeof record.toVersion === 'string' && (record.source === 'marketplace' || record.source === 'local-unsigned') &&
+    typeof record.at === 'number'
+}
+
 function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[] {
   return Array.isArray(payload) && payload.every((item) => {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) return false
@@ -675,6 +692,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }
     ipcRenderer.on('plugins:stagedUpdates', listener)
     return () => ipcRenderer.removeListener('plugins:stagedUpdates', listener)
+  },
+  // L3: an approved update switched versions.
+  onPluginSwitched: (cb: (notice: PluginSwitchNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginSwitchNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:switched', listener)
+    return () => ipcRenderer.removeListener('plugins:switched', listener)
   },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))

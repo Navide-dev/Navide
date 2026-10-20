@@ -636,3 +636,40 @@ describe('staged plugin packages found at launch', () => {
     expect(pluginStagedApplyApplies(action, [])).toBe(false)
   })
 })
+
+describe('plugin version switches (L3)', () => {
+  beforeEach(() => {
+    store.clear()
+    ;(window as unknown as { agentTeam?: unknown }).agentTeam = { version: '0.1.77' }
+  })
+
+  afterEach(() => {
+    delete (window as unknown as { agentTeam?: unknown }).agentTeam
+  })
+
+  const switched = { pluginId: 'acme.todo', fromVersion: '1.0.0', toVersion: '1.1.0', source: 'local-unsigned' as const, at: 1_000 }
+
+  it('records each switch with both versions and offers the way back', async () => {
+    const { useAnnouncements, i18n } = await load()
+    i18n.global.locale.value = 'en-US'
+    const a = useAnnouncements()
+    a.notePluginSwitch(switched)
+    const rows = a.items.value.filter((item) => item.kind === 'plugin-switch')
+    expect(rows.map((row) => row.title)).toEqual(['acme.todo switched from 1.0.0 to 1.1.0'])
+    expect(rows[0].highlights[0]).toContain('local file')
+    expect(rows[0].actions).toEqual([{ kind: 'plugin-switch-back', pluginId: 'acme.todo', fromVersion: '1.0.0', toVersion: '1.1.0' }])
+    i18n.global.locale.value = 'zh-TW'
+    expect(a.items.value.find((item) => item.kind === 'plugin-switch')?.title).toBe('acme.todo 已從 1.0.0 切換到 1.1.0')
+    i18n.global.locale.value = 'en-US'
+  })
+
+  it('goes back only while the switch it names is still installed with its previous version kept', async () => {
+    const { pluginSwitchBackApplies } = await load()
+    const action = { kind: 'plugin-switch-back' as const, pluginId: 'acme.todo', fromVersion: '1.0.0', toVersion: '1.1.0' }
+    expect(pluginSwitchBackApplies(action, [{ id: 'acme.todo', packageVersion: '1.1.0', rollbackToVersion: '1.0.0' }])).toBe(true)
+    // No earlier version kept (a file update before L4), switched again, or another update waiting.
+    expect(pluginSwitchBackApplies(action, [{ id: 'acme.todo', packageVersion: '1.1.0' }])).toBe(false)
+    expect(pluginSwitchBackApplies(action, [{ id: 'acme.todo', packageVersion: '1.2.0', rollbackToVersion: '1.1.0' }])).toBe(false)
+    expect(pluginSwitchBackApplies(action, [{ id: 'acme.todo', packageVersion: '1.1.0', rollbackToVersion: '1.0.0', pendingCandidateVersion: '1.2.0' }])).toBe(false)
+  })
+})

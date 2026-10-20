@@ -66,7 +66,7 @@ export function usePluginInstallFlow() {
     // prepare of the same id meanwhile (an agent's request, a second pick)
     // is refused instead of installed.
     const shown = pendingConfirm.value?.prepared.id === id ? pendingConfirm.value.prepared : undefined
-    let committed: { activationError?: string } | undefined
+    let committed: { restartRequired?: boolean; activationError?: string } | undefined
     if (pendingSource === 'developer-unpacked') {
       if (!plugins.commitFolderLoad) throw new Error('loading from a folder is unavailable')
       await plugins.commitFolderLoad(id, {
@@ -86,6 +86,17 @@ export function usePluginInstallFlow() {
     pendingConfirm.value = null
     pendingStep.value = null
     await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
+    // L3: an approved update takes effect now, through the same Restart the
+    // list offers (the dialog said so before approval, and the switch is
+    // recorded with a way back). The main window refreshes once it is done.
+    if (committed?.restartRequired === true && !committed.activationError && plugins.restart) {
+      try {
+        await plugins.restart(id)
+      } catch (err) {
+        committed = { ...committed, activationError: ipcErrorMessage(err) }
+      }
+      await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
+    }
     // L1: a first install is activated on approval; one that could not be
     // stays staged with Restart and Discard, and the reason is shown.
     if (committed?.activationError) {

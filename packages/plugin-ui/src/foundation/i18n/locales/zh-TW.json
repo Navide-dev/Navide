@@ -1772,6 +1772,7 @@
       "restore": "還原",
       "candidateReady": "更新 {version} 已就緒",
       "activationFailed": "{plugin} 已安裝，但無法啟用：{reason}。請在下方清單重新啟動或捨棄它。",
+      "switchNow": "核准後，{id} 會立即切換到 {version}。開著的畫面會重新載入，畫面裡沒存的內容會遺失。這次切換會記錄在公告中心，可以一鍵退回。",
       "restartPlugin": "重新啟動 Navide 外掛",
       "disable": "停用",
       "enable": "啟用",
@@ -11556,6 +11557,22 @@
     },
     "button": {
       "apply": "立即套用"
+    }
+  },
+  "plugin-switch": {
+    "notice": {
+      "title": "{plugin} 已從 {from} 切換到 {to}",
+      "detail": "於 {time} 切換（來源：{source}），開著的畫面已重新載入。",
+      "reverted": "{plugin} 已退回版本 {version}。",
+      "stale": "沒有變更：這個 Navide 外掛之後又被變更過，或沒有保留較早的版本。",
+      "failed": "無法退回：{error}"
+    },
+    "button": {
+      "back": "退回 {version}"
+    },
+    "source": {
+      "marketplace": "Navide Marketplace",
+      "local": "本機檔案"
     }
   },
   "testplace": {

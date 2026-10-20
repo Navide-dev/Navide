@@ -7,6 +7,15 @@ export interface PluginStagedCandidateNotice {
   reason: string
 }
 
+/** L3: an approved update switched versions. */
+export interface PluginSwitchNotice {
+  pluginId: string
+  fromVersion: string
+  toVersion: string
+  source: 'marketplace' | 'local-unsigned'
+  at: number
+}
+
 /** A package staged beside the active one, found at launch. */
 export interface PluginStagedUpdate {
   pluginId: string
@@ -28,6 +37,7 @@ export function createPluginStagedCandidateRelay(deps: {
 }): {
   notify(notice: PluginStagedCandidateNotice): void
   notifyStagedUpdates(updates: PluginStagedUpdate[]): void
+  notifySwitched(notice: PluginSwitchNotice): void
   flush(win: NoticeWindow): void
 } {
   const held: Array<{ channel: string; payload: unknown }> = []
@@ -44,6 +54,9 @@ export function createPluginStagedCandidateRelay(deps: {
     },
     notifyStagedUpdates(updates) {
       deliver('plugins:stagedUpdates', updates)
+    },
+    notifySwitched(notice) {
+      deliver('plugins:switched', notice)
     },
     flush(win) {
       if (!usable(win)) return

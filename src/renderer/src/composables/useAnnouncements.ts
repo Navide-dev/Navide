@@ -25,7 +25,7 @@ import { convenienceText } from '../lib/convenienceText'
  */
 
 export type AnnouncementKind =
-  | 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience' | 'plugin-agent' | 'plugin-staged'
+  | 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience' | 'plugin-agent' | 'plugin-staged' | 'plugin-switch'
 /** The button an update row offers, when its status affords one. */
 export type AnnouncementAction = 'download' | 'install'
 
@@ -74,6 +74,8 @@ export type PluginAgentAnnouncementAction =
   | { kind: 'plugin-agent-downgrade'; pluginId: string; fromVersion: string; toVersion: string }
   /** A package staged beside the active one: apply it, as Restart does. */
   | { kind: 'plugin-staged-apply'; pluginId: string; activeVersion: string; stagedVersion: string }
+  /** L3: back to the version an approved update switched away from. */
+  | { kind: 'plugin-switch-back'; pluginId: string; fromVersion: string; toVersion: string }
 
 export type AnnouncementActionSpec =
   | { kind: AnnouncementAction }
@@ -689,6 +691,61 @@ function dropPluginStagedUpdate(pluginId: string): void {
   pluginStagedUpdates.value = pluginStagedUpdates.value.filter((update) => update.pluginId !== pluginId)
 }
 
+// ── Plugin version switches (L3) ────────────────────────────────────────────
+
+/** An update the user approved took effect at once, as the Host reported it. */
+export interface PluginSwitchNotice {
+  pluginId: string
+  fromVersion: string
+  toVersion: string
+  source: 'marketplace' | 'local-unsigned'
+  at: number
+}
+
+/** Switches this window heard, newest first. Not persisted: the plugin
+ *  activity record and the installed list are the durable state. */
+const pluginSwitchNotices = ref<PluginSwitchNotice[]>([])
+
+function pluginSwitchItems(): Announcement[] {
+  const t = i18n.global.t
+  return pluginSwitchNotices.value.map((notice) => ({
+    id: `plugin-switch:${notice.pluginId}:${notice.toVersion}:${notice.at}`,
+    kind: 'plugin-switch' as const,
+    title: t('plugin-switch.notice.title', { plugin: notice.pluginId, from: notice.fromVersion, to: notice.toVersion }),
+    highlights: [
+      t('plugin-switch.notice.detail', {
+        time: new Date(notice.at).toLocaleTimeString(),
+        source: t(notice.source === 'local-unsigned' ? 'plugin-switch.source.local' : 'plugin-switch.source.marketplace'),
+      }),
+    ],
+    createdAt: notice.at,
+    read: false,
+    actions: [{
+      kind: 'plugin-switch-back' as const,
+      pluginId: notice.pluginId,
+      fromVersion: notice.fromVersion,
+      toVersion: notice.toVersion,
+    }],
+  }))
+}
+
+/** Whether going back still means what the row says: the switched-to version
+ *  is the one running and the one it replaced is the rollback target. */
+export function pluginSwitchBackApplies(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-switch-back' }>,
+  installed: ReadonlyArray<{ id: string; packageVersion?: string; pendingCandidateVersion?: string; rollbackToVersion?: string }>,
+): boolean {
+  const current = installed.find((pkg) => pkg.id === action.pluginId)
+  return current?.packageVersion === action.toVersion && !current.pendingCandidateVersion &&
+    current.rollbackToVersion === action.fromVersion
+}
+
+/** Record that an approved update switched versions. */
+function notePluginSwitch(notice: PluginSwitchNotice): void {
+  if (!notice?.pluginId) return
+  pluginSwitchNotices.value = [notice, ...pluginSwitchNotices.value]
+}
+
 // ── Convenience features ────────────────────────────────────────────────────
 
 /** The last `convenience.list` useConvenience read. Not persisted: the
@@ -1153,6 +1210,7 @@ const items: ComputedRef<Announcement[]> = computed(() => {
     ...convenienceItems(seen),
     ...pluginAgentItems(),
     ...pluginStagedItems(),
+    ...pluginSwitchItems(),
     ...shareItems(),
     ...evolveItems(),
     ...schedulerItems(),
@@ -1239,6 +1297,11 @@ export function __resetPluginStagedAnnouncementsForTest(): void {
   pluginStagedUpdates.value = []
 }
 
+/** Test-only: forget every version switch row (the module is a singleton). */
+export function __resetPluginSwitchAnnouncementsForTest(): void {
+  pluginSwitchNotices.value = []
+}
+
 /** Test-only: forget the convenience snapshot (the module is a singleton). */
 export function __resetConvenienceAnnouncementsForTest(): void {
   convenienceState.value = null
@@ -1265,6 +1328,7 @@ export function useAnnouncements() {
     notePluginAgentNotice,
     notePluginStagedUpdates,
     dropPluginStagedUpdate,
+    notePluginSwitch,
     noteConvenience,
     setConvenienceAgentLabel,
     noteQuotaIncident,

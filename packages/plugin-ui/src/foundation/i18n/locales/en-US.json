@@ -1772,6 +1772,7 @@
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
       "activationFailed": "{plugin} was installed but could not be activated: {reason}. Restart or discard it in the list below.",
+      "switchNow": "Approving switches {id} to {version} right away. Its open views reload, and anything not saved in them is lost. The switch is recorded in the announcements, where you can go back in one click.",
       "restartPlugin": "Restart Navide plugin",
       "disable": "Disable",
       "enable": "Enable",
@@ -11556,6 +11557,22 @@
     },
     "button": {
       "apply": "Apply now"
+    }
+  },
+  "plugin-switch": {
+    "notice": {
+      "title": "{plugin} switched from {from} to {to}",
+      "detail": "Switched at {time} ({source}). Its open views reloaded.",
+      "reverted": "{plugin} is back to version {version}.",
+      "stale": "Nothing was changed: the Navide plugin was changed since, or no earlier version is kept.",
+      "failed": "Could not go back: {error}"
+    },
+    "button": {
+      "back": "Back to {version}"
+    },
+    "source": {
+      "marketplace": "Navide Marketplace",
+      "local": "local file"
     }
   },
   "testplace": {

@@ -53,3 +53,18 @@ describe('plugin staged update relay', () => {
     ])
   })
 })
+
+describe('plugin switch relay (L3)', () => {
+  it('sends a version switch to a loaded main window, or holds it until one loads', () => {
+    const switched = { pluginId: 'acme.todo', fromVersion: '1.0.0', toVersion: '1.1.0', source: 'marketplace' as const, at: 5 }
+    const win = fakeWindow()
+    createPluginStagedCandidateRelay({ window: () => win }).notifySwitched(switched)
+    expect(win.send).toHaveBeenCalledWith('plugins:switched', switched)
+
+    const relay = createPluginStagedCandidateRelay({ window: () => null })
+    relay.notifySwitched(switched)
+    const ready = fakeWindow()
+    relay.flush(ready)
+    expect(ready.send).toHaveBeenCalledWith('plugins:switched', switched)
+  })
+})
