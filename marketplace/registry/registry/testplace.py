@@ -33,7 +33,7 @@ from sqlalchemy import func, insert, literal, update
 from sqlalchemy import select as sa_select
 from sqlmodel import Session, select
 
-from . import blocklist, review
+from . import review
 from .disclosure import sign_disclosure
 from .models import (
     Extension,
