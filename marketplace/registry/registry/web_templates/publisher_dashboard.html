@@ -21,8 +21,8 @@
   <p class="warn warn-block" role="alert">This namespace was frozen on {{ publisher.frozen_at.strftime('%Y-%m-%d') }}:
     {{ publisher.frozen_reason or 'developer qualification revoked' }}. Its tokens and signing key are revoked,
     every version is taken down, and their package digests are blocked as <code>qualification-revoked</code>.
-    A frozen namespace is not released: it stays yours and still counts toward the namespace limit, and an
-    approved application does not unfreeze it. After approval, claim a new namespace.</p>
+    A frozen namespace is not released: it stays yours and no other account can claim it, it no longer counts
+    toward the namespace limit, and an approved application does not unfreeze it. After approval, claim a new namespace.</p>
   {% endif %}
   {% if grandfather %}
   {# Namespace claimed before developer qualification existed (decision d4(a)). #}
