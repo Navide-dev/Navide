@@ -114,6 +114,13 @@
         "writes": "~/.codex/auth.json（pane のログインへのハードリンク）",
         "cost": "pane 内のログインはその pane の中だけに残ります。"
       },
+      "grok_folder-trust": {
+        "name": "Grok のフォルダー信頼を共有",
+        "benefit": "ある Grok pane で信頼したフォルダーは、後から開く・再構築する pane も含め、すべての Grok pane で信頼済みになります。",
+        "purpose": "Grok pane が同じフォルダーの信頼を再確認しなくなる",
+        "writes": "~/.grok/trusted_folders.toml：Grok pane がフォルダーを信頼したと記録すると、Navide はそのフォルダーの設定をこのファイルの末尾に追記します。ファイルにまだないフォルダーだけを追加し、ご自身の設定・コメント・書式は変更しません。変更のたびにバックアップを取り、オフにすると Navide が追記したテキストだけを取り除き、ファイルを元の内容に戻します（Navide が作成したファイルなら削除します）",
+        "cost": "ある Grok pane で信頼したフォルダーについて、新しく開く・再構築する Grok pane ごとに再度確認されます。"
+      },
       "cursor_project-mcp": {
         "name": "Cursor 用 Navide MCP ツール",
         "benefit": "Cursor pane で、メッセージ、プラン、スケジュールなどの Navide MCP ツールを使えます。",

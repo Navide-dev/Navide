@@ -205,6 +205,7 @@ import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
+import { acceptStartupTrust } from './lib/startupTrust'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
 import {
@@ -6448,7 +6449,45 @@ async function waitForActivityThenSettle(
   return 'timeout'
 }
 
+// Panes whose vendor declares `startupTrust` (grok): one watcher per spawn
+// answers the prompt with the vendor's own key, and every other startup path
+// waits on it rather than pressing Enter on its own — two answerers could put
+// the second key into the composer, ahead of a kickoff typed next (#402).
+const startupTrustWatches = new Map<string, Promise<boolean>>()
+
+function paneAcceptsStartupTrust(paneId: string): boolean {
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  return !!agentSpecs.find((s) => s.agentKey === agentKey)?.startupTrust
+}
+
+function watchStartupTrust(paneId: string, agentKey: string, folder: string): void {
+  const watch = acceptStartupTrust(agentKey, {
+    readScreen: () => {
+      try {
+        return (paneRefs[paneId]?.readScreenTail?.(AWAITING_SCREEN_LINES) as unknown as string) ?? ''
+      } catch {
+        return ''
+      }
+    },
+    outputBytes: () => paneCleanBytes(paneId),
+    alive: () => paneAlive(paneId),
+    send: async (keys) => {
+      const sid = paneRefs[paneId]?.sessionId
+      if (!sid) return
+      await backend.send('terminal.input', { terminal_session_id: sid as string, data: keys })
+      pipelineLog(`✓ accepted startup trust prompt (pane ${paneId.slice(0, 8)})`)
+    },
+    sleep,
+    now: Date.now,
+    timeoutMs: DISMISS_TIMEOUT_MS,
+    quietMs: NO_DIALOG_QUIET_MS,
+    folder,
+  }).finally(() => startupTrustWatches.delete(paneId))
+  startupTrustWatches.set(paneId, watch)
+}
+
 async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_MS): Promise<boolean> {
+  if (paneAcceptsStartupTrust(paneId)) return (await startupTrustWatches.get(paneId)) ?? false
   const deadline = Date.now() + timeoutMs
   let lastSize = -1
   let stableSince = Date.now()
@@ -6741,7 +6780,7 @@ function scheduleInjection(pane: ActivePane): void {
       await sleep(MIN_INJECTION_LEAD_MS - lead)
       if (!paneAlive(pane.id)) return
     }
-    if (!dismissed) {
+    if (!dismissed && !paneAcceptsStartupTrust(pane.id)) {
       const lateBuf = ((paneRefs[pane.id]?.cleanBuffer as unknown as string) ?? '')
       if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf))) {
         pipelineLog(`${tag} late startup dialog detected — dismissing`)
@@ -7104,8 +7143,8 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     : undefined
   // Codex keeps a marker fallback during rollout. Antigravity can't pin an id
   // at launch (`agy --conversation` only resumes existing ids), so the marker
-  // is its ONLY session-binding path. Grok likewise can't pin an id (`grok -s`
-  // only resumes existing ids) — marker-based binding via ~/.grok/grok.db.
+  // is its ONLY session-binding path. (Grok left this camp: `--session-id`
+  // names a NEW session, so it pins at launch like Claude — see agents/grok.ts.)
   // Kimi likewise can't pin an id (`kimi --session` only resumes existing ids);
   // its session id is captured from the wire.jsonl containing the marker.
   // OpenCode likewise can't pin an id (`opencode --session` only resumes
@@ -7356,6 +7395,9 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     startPaneHealthWatcher(id)
 
     if ((ref.status as unknown as string) === 'running') {
+      // Fresh or resumed, with a task or without: a resumed pane gets no other
+      // startup handling at all, and sat on the prompt with every message held.
+      if (spec.startupTrust) watchStartupTrust(id, spec.agentKey, opts.workspacePath ?? '')
       if (pane.origin !== 'pipeline' && !pane.roleKey && !pane.kickoffPrompt) {
         pane.injectionStatus = 'skipped'
         setPrepStatus(pane, 'ready')
