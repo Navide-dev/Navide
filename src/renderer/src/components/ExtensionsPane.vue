@@ -366,6 +366,19 @@ async function restoreFactoryPackage(id: string): Promise<void> {
 const developerMode = ref<DeveloperModeState>({ enabled: false, folders: [] })
 const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>([])
 const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
+/** DESIGN-A2 G3: who had a loaded developer folder loaded, in the wording of agent request cards. */
+function folderLoadedByText(pluginId: string): string {
+  const loadedBy = developerMode.value.folders.find((folder) => folder.pluginId === pluginId)?.loadedBy
+  if (!loadedBy) return ''
+  if (loadedBy.kind === 'user') return t('settings.extensions.developerMode.loadedByUser')
+  if (loadedBy.kind === 'unknown') return t('settings.extensions.developerMode.loadedByUnknown')
+  const requester = loadedBy.callerKind === 'pane'
+    ? (loadedBy.paneName ? t('plugin-agent.caller.pane', { pane: reveal(loadedBy.paneName) }) : t('plugin-agent.caller.pane-unknown'))
+    : loadedBy.callerKind === 'external' ? t('plugin-agent.caller.external')
+      : loadedBy.callerKind === 'host' ? t('plugin-agent.caller.host')
+        : t('plugin-request.caller-unknown')
+  return t('settings.extensions.developerMode.loadedByAgent', { requester, at: new Date(loadedBy.approvedAt).toLocaleString() })
+}
 
 async function refreshDeveloperMode(): Promise<void> {
   const api = pluginsApi()
@@ -756,6 +769,9 @@ watch(installed, () => {
               </span>
             </div>
             <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
+            <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
+              {{ folderLoadedByText(p.id) }}
+            </p>
             <!-- D3: remind from 7 days before a test build expires; once kept past it, say so. -->
             <p v-if="p.source === 'testplace' && testplaceDaysLeft(p.expiresAt) !== null" class="ext-disabled-note ext-testplace-expiring" role="status">
               {{ $t('testplace.expiring', { days: testplaceDaysLeft(p.expiresAt), date: (p.expiresAt ?? '').slice(0, 10) }) }}

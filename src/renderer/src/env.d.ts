@@ -497,7 +497,10 @@ declare global {
           id: string,
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
         ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
-        prepareAgentFileInstall?: (stagingId: string) => Promise<PreparedInstallSummary>
+        prepareAgentFileInstall?: (
+          stagingId: string,
+          requester?: { callerKind: string; paneName?: string },
+        ) => Promise<PreparedInstallSummary>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
         setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
@@ -897,7 +900,25 @@ declare global {
   /** Card K4: the Developer Mode switch and the developer folders consented to. */
   interface DeveloperModeState {
     enabled: boolean
-    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
+    folders: Array<{
+      pluginId: string
+      path: string
+      consentedAt: string
+      loaded: boolean
+      unavailable?: string
+      /** DESIGN-A2 G3: who had the folder loaded. */
+      loadedBy?:
+        | { kind: 'user' }
+        | { kind: 'agent'; callerKind: string; paneName?: string; approvedAt: string }
+        | { kind: 'unknown' }
+      autoReload?: boolean
+      lastLoad?: {
+        at: string
+        trigger: 'user-load' | 'manual-reload' | 'auto-reload' | 'startup' | 'developer-mode-on'
+        fingerprint?: string
+        fileCount?: number
+      }
+    }>
   }
 }
 

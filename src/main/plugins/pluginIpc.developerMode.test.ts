@@ -273,6 +273,45 @@ describe('loading a developer folder', () => {
     expect(activations.at(-1)).toEqual({ pluginId: 'acme.devtodo' })
   })
 
+  it('G3: records who loaded the folder and every load beside the store, whose format stays as on main', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    expect(call('plugins:developerMode')).toMatchObject({
+      folders: [{ pluginId: 'acme.devtodo', loadedBy: { kind: 'user' }, autoReload: true, lastLoad: { trigger: 'user-load' } }],
+    })
+    await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })
+    expect(call('plugins:developerMode')).toMatchObject({
+      folders: [{ loadedBy: { kind: 'user' }, lastLoad: { trigger: 'manual-reload' } }],
+    })
+    await call('plugins:setDeveloperMode', { enabled: false })
+    await call('plugins:setDeveloperMode', { enabled: true })
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ lastLoad: { trigger: 'developer-mode-on' } }] })
+    handlers.clear()
+    const restarted = register()
+    await restarted.controller.loadDeveloperFolders()
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loadedBy: { kind: 'user' }, lastLoad: { trigger: 'startup' } }] })
+
+    const store = JSON.parse(readFileSync(join(pluginsRoot, '.navide-plugin-developer-mode.json'), 'utf8')) as { folders: Array<Record<string, unknown>> }
+    expect(Object.keys(store.folders[0]!).sort()).toEqual(['consentedAt', 'path', 'permissionsDigest', 'pluginId'])
+
+    await call('plugins:removeDeveloperFolder', { id: 'acme.devtodo' })
+    const meta = JSON.parse(readFileSync(join(pluginsRoot, '.navide-plugin-developer-folders-meta.json'), 'utf8')) as { folders: Record<string, unknown> }
+    expect(meta.folders).toEqual({})
+  })
+
+  it('G3: a folder consented to before the record existed reads as loaded by an unknown party and still loads', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    rmSync(join(pluginsRoot, '.navide-plugin-developer-folders-meta.json'))
+    handlers.clear()
+    const restarted = register()
+    await restarted.controller.loadDeveloperFolders()
+    expect(restarted.manager.listInstalledPackages()).toMatchObject([{ id: 'acme.devtodo' }])
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loadedBy: { kind: 'unknown' }, lastLoad: { trigger: 'startup' } }] })
+  })
+
   it('refuses the navide. namespace and a folder that changed while the dialog was open', async () => {
     register()
     await call('plugins:setDeveloperMode', { enabled: true })

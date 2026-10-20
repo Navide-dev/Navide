@@ -235,6 +235,24 @@ describe('plugins_install_file_fill: an agent prefills, the user approves', () =
     await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
     expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo', source: 'developer-unpacked' }])
   })
+
+  it('G3: a folder an agent asked for stays marked as that agent\'s request the user approved', async () => {
+    register()
+    const dir = join(base, 'dev-todo')
+    mkdirSync(join(dir, 'frontend', 'left'), { recursive: true })
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifestFor('acme.devtodo', '0.1.0', false)))
+    writeFileSync(join(dir, 'frontend', 'left', 'index.html'), '<!doctype html>')
+    await call('plugins:setDeveloperMode', { enabled: true })
+    const staged = await stage(dir)
+    await call('plugins:prepareAgentFileInstall', {
+      stagingId: staged.result!.report.stagingId,
+      requester: { callerKind: 'pane', paneName: 'builder' },
+    })
+    await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
+    const state = call('plugins:developerMode') as { folders: Array<{ loadedBy: Record<string, unknown> }> }
+    expect(state.folders[0]!.loadedBy).toMatchObject({ kind: 'agent', callerKind: 'pane', paneName: 'builder' })
+    expect(Date.parse(String(state.folders[0]!.loadedBy.approvedAt))).not.toBeNaN()
+  })
 })
 
 describe('MED-5: staged copies live as long as their request', () => {
