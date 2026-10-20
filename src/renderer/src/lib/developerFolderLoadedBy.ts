@@ -13,8 +13,8 @@ export function developerFolderLoadedByText(
 ): string {
   if (!loadedBy || loadedBy.kind === 'unknown') return t('settings.extensions.developerMode.loadedByUnknown')
   if (loadedBy.kind === 'user') return t('settings.extensions.developerMode.loadedByUser')
-  const requester = loadedBy.callerKind === 'pane' && loadedBy.paneName
-    ? t('plugin-agent.caller.pane', { name: reveal(loadedBy.paneName) })
+  const requester = loadedBy.callerKind === 'pane'
+    ? (loadedBy.paneName ? t('plugin-agent.caller.pane', { pane: reveal(loadedBy.paneName) }) : t('plugin-agent.caller.pane-unknown'))
     : loadedBy.callerKind === 'external' ? t('plugin-agent.caller.external')
       : loadedBy.callerKind === 'host' ? t('plugin-agent.caller.host')
         : t('plugin-request.caller-unknown')
