@@ -2121,10 +2121,9 @@ export function registerPluginIpc(
     return { ...result, registryFacts: jsonObjectOrNull(versionRow.registry) }
   }
 
-  ipcMain.handle(
-    'plugins:prepareInstall',
-    async (event, args: { namespace: string; name: string; version?: string; testplace?: boolean }) => {
-      assertAuthorized(event)
+  // Shared by the window's install flow and an agent's update whose
+  // disclosure is unchanged (O1, setPluginAgentActionHandler below).
+  const prepareRegistryInstall = async (args: { namespace: string; name: string; version?: string; testplace?: boolean }) => {
       const result = await verifyRegistryPackage({
         namespace: args.namespace,
         name: args.name,
@@ -2189,6 +2188,12 @@ export function registerPluginIpc(
                 : backendDataOnReplace(result.id, 'marketplace')
         })(),
       }
+  }
+  ipcMain.handle(
+    'plugins:prepareInstall',
+    async (event, args: { namespace: string; name: string; version?: string; testplace?: boolean }) => {
+      assertAuthorized(event)
+      return prepareRegistryInstall(args)
     }
   )
 
@@ -2337,13 +2342,11 @@ export function registerPluginIpc(
     }
   }
 
-  ipcMain.handle(
-    'plugins:commitInstall',
-    async (
-      event,
-      args: { id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
-    ) => {
-      assertAuthorized(event)
+  type CommitInstallArgs = {
+    id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean
+  }
+  // Shared by the window's install flow and an agent's unchanged update (O1).
+  const commitRegistryInstall = async (args: CommitInstallArgs) => {
       assertNoDeveloperFolder(args.id)
       // D7: never replace a local install with the Marketplace version unasked.
       if (installedLocalPackage(args.id) && args.replaceConfirmed !== true) {
@@ -2453,8 +2456,11 @@ export function registerPluginIpc(
       } finally {
         activeTransactions.delete(pkg.id)
       }
-    }
-  )
+  }
+  ipcMain.handle('plugins:commitInstall', async (event, args: CommitInstallArgs) => {
+    assertAuthorized(event)
+    return commitRegistryInstall(args)
+  })
 
   // DX report A1 (card K3): install a `.vsix` the user picked in this window.
   // The file comes only from the Host's own dialog; the call takes no
@@ -4202,6 +4208,34 @@ export function registerPluginIpc(
       isDisabled: (pluginId) => disabledPlugins.has(pluginId),
       disableSource: (pluginId) => disableSources.get(pluginId),
       now: () => Date.now(),
+      // O1: the same verification, disclosure diff and commit as the window's
+      // own update; only the confirmation is skipped, and only when
+      // agentUpdateNeedsApproval finds nothing that changed.
+      prepareUpdate: async (pluginId, version) => {
+        // A user's install of the same id in progress is theirs to finish.
+        if (prepared.has(pluginId) || activeTransactions.has(pluginId)) {
+          throw new Error(`an install of ${pluginId} is in progress`)
+        }
+        const dot = pluginId.indexOf('.')
+        const summary = await prepareRegistryInstall({
+          namespace: pluginId.slice(0, dot),
+          name: pluginId.slice(dot + 1),
+          version,
+        })
+        const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+        return {
+          installedSource: installed ? sourceFields(installed).source : undefined,
+          installedHasViews: activeHasViews(pluginId).hasViews,
+          candidatePending: Boolean(lifecycleSelector.read(pluginId)?.candidate),
+          prepared: summary,
+        }
+      },
+      commitUpdate: async (pluginId) => {
+        await commitRegistryInstall({ id: pluginId, riskConfirmed: true })
+      },
+      discardUpdate: (pluginId) => {
+        prepared.delete(pluginId)
+      },
     })
   )
 

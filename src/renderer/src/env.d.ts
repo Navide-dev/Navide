@@ -96,9 +96,11 @@ declare global {
       onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void) => () => void
       onPlansBackendStopped: (cb: (stopped: { workspacePath: string }) => void) => () => void
       onPluginAgentAction?: (cb: (notice: {
-        action: 'disable' | 'enable'
+        action: 'disable' | 'enable' | 'update'
         pluginId: string
         pluginVersion: string
+        /** `update` only: the version it was updated from. */
+        fromVersion?: string
         requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
       }) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
@@ -525,6 +527,7 @@ declare global {
           restoredInstances: number
           skippedDestroyedHostWindows: number
         }>
+        discardCandidate?: (id: string) => Promise<{ ok: boolean }>
         remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<{ ok: boolean }>
         nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
         /** The installed version's disclosure (Manifest v2), or null. */
@@ -589,6 +592,9 @@ declare global {
     expiresAt?: string
     /** How the user joined that test, when recorded; testplace only. */
     testplaceVia?: 'invite' | 'code'
+    /** A3: a local file a vetted publisher signed, and whether that key is
+     *  still active (`verified`) or revoked since (`revoked`). */
+    localSignature?: 'verified' | 'revoked'
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'
@@ -850,11 +856,11 @@ declare global {
     reattachableBackendData?: true
     /** MED-1 on #425: false when the takedown list could not be checked. */
     takedownChecked?: boolean
+    /** A3: what the `<file>.sig` beside a local file shows against the
+     *  Navide-vetted publisher keys; `none` when there is no signature. */
+    localSignature?: { state: 'none' } | { state: 'verified' | 'revoked' | 'unverifiable'; publisherId: string; keyId?: string }
     /** Card K4: the developer folder this summary was read from. */
     folder?: string
-    /** W1 (A3): the `<file>.sig` beside a local file against the vetted
-     *  publisher keys; `none` when there is no signature. */
-    localSignature?: { state: 'none' | 'verified' | 'revoked' | 'unverifiable'; publisherId?: string; keyId?: string }
     /** W1: whether the shared static scan ran on a local file (`scan` holds it). */
     localScan?: 'ran' | 'unavailable'
   }

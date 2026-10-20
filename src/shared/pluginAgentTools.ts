@@ -823,7 +823,9 @@ export const PLUGIN_APPROVAL_RECOVER_EVENT = 'plugins.agent_requests.recover'
 
 export const PLUGIN_AGENT_ACTION_REQUEST_EVENT = 'plugins.agent_action.request'
 export const PLUGIN_AGENT_ACTION_RESULT_MESSAGE = 'plugins.agent_action.result'
-export type PluginAgentActionKind = 'disable' | 'enable'
+/** `update`: marketplace_request_update, carried out at once only when the
+ *  new version discloses exactly what the installed one does (O1). */
+export type PluginAgentActionKind = 'disable' | 'enable' | 'update'
 export type PluginAgentActionErrorCode =
   | 'BAD_REQUEST' | 'NOT_INSTALLED' | 'BUILTIN_PLUGIN' | 'ACTION_FAILED' | 'HOST_UNAVAILABLE' | 'APPROVAL_REQUIRED'
 
@@ -838,6 +840,8 @@ export interface PluginAgentActionRequest {
   request_id: string
   action: PluginAgentActionKind
   plugin_id: string
+  /** `update` only: the version to update to. */
+  version?: string
   requester: PluginApprovalRequest['requester']
 }
 
@@ -846,4 +850,8 @@ export type PluginAgentActionAnswer =
   | { ok: false; error: string; error_code: Exclude<PluginAgentActionErrorCode, 'APPROVAL_REQUIRED'> }
   /** enable of a package the user disabled (or with no recorded source): the backend files a plugin-enable request. */
   | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string; disabled: PluginDisabledBy }
+  /** update (O1): carried out at once; the disclosure did not change. */
+  | { ok: true; updated: true; pluginId: string; fromVersion: string; pluginVersion: string }
+  /** update (O1): something changed or could not be compared; the backend files a plugin-update request. */
+  | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string }
 export const PLUGIN_APPROVAL_TTL_MS = 15 * 60_000

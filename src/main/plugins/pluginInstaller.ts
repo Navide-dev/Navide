@@ -621,7 +621,7 @@ export function prepareLocalInstall(bytes: Uint8Array, trust: LocalInstallTrust)
   }
   const digest = sha256Hex(bytes)
   if (isDigestBlocked(trust.localInstallTrust ?? null, digest)) {
-    throw new InstallError(`DIGEST_BLOCKED: this file of '${manifest.id}' was taken down by Navide and cannot be installed`)
+    throw new InstallError(`DIGEST_BLOCKED [${manifest.id}]: this file of '${manifest.id}' was taken down by Navide and cannot be installed`)
   }
   const localSignature = localSignatureDecision(trust.localInstallTrust ?? null, manifest.id, digest, trust.signature ?? null)
   const packageVerification = verifyPackage({

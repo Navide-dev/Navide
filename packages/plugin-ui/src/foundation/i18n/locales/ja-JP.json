@@ -1956,6 +1956,16 @@
         "replaceDataSetAside": "新しい版は空のデータフォルダーから始まります。これまでのデータは別に保管され、新しい版からは読めません。",
         "reattachData": "以前この提供元から別に保管したデータを戻す（既定では戻さない）",
         "takedownUnknown": "この Navide プラグインが Navide によって取り下げられていないか、現在は確認できません：Navide の取り下げリストを取得できませんでした。",
+        "signatureState": {
+          "verified": "Navide の開発者資格審査を通過した開発者 {publisher} の署名があります。このバージョン自体は Navide の審査を受けていません。",
+          "revoked": "署名は無効になりました：Navide が {publisher} の署名鍵または開発者資格を取り消しました。",
+          "unverifiable": "署名はありますが、Navide は審査済みの開発者（{publisher}）と照合できません：このファイルは署名なしとして扱ってください。",
+          "warningVerified": "この Navide プラグインは、このコンピューター上のファイルから読み込まれます。Navide の開発者資格審査を通過した開発者 {publisher} の署名がありますが、このバージョンは Navide の審査を受けていません。信頼できる相手から受け取ったファイルだけをインストールしてください。",
+          "warningRevoked": "この Navide プラグインは、このコンピューター上のファイルから読み込まれ、その署名は無効になっています：Navide が {publisher} の署名鍵または開発者資格を取り消しました。Navide の審査も受けていません。入手元を信頼できる場合にだけインストールしてください。"
+        },
+        "errors": {
+          "digestBlocked": "{id} のこのファイルはインストールできません：Navide がこのファイルそのものを取り下げました（ダイジェストが Navide のブロックリストにあります）。"
+        },
         "confirmReplace": "置き換える"
       },
       "trust": {
@@ -11319,7 +11329,9 @@
       "factory-bundled": "Navide に組み込み",
       "notScanned": "未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）",
       "publisher": "発行者：{publisher}",
-      "selfDeclared": "自称：{publisher}"
+      "selfDeclared": "自称：{publisher}",
+      "localSignedBy": "開発者 {publisher}（Navide の資格審査済み）の署名あり。このバージョンは Navide の審査を受けていません",
+      "signatureRevoked": "署名は無効になりました"
     },
     "diff": {
       "heading": "この更新での権限の変化",
@@ -11487,7 +11499,10 @@
       "enabled": "{caller}が Navide プラグイン {plugin} を有効にしました",
       "version": "バージョン {version}。ファイル、許可、データは保持されます。",
       "undo-failed": "元に戻せませんでした：{error}",
-      "undo-stale": "元に戻していません：その後 Navide プラグインが変更されています。"
+      "undo-stale": "元に戻していません：その後 Navide プラグインが変更されています。",
+      "updated": "{caller} が Navide プラグイン {plugin} を {from} から {to} に更新しました",
+      "updated-detail": "確認せずに適用しました：{to} が開示する権限、バックエンド、エージェントツール、ネットワークアクセスは {from} とまったく同じです。",
+      "downgraded": "{plugin} をバージョン {version} に戻しました。"
     },
     "caller": {
       "pane": "エージェント pane「{pane}」",
@@ -11497,7 +11512,8 @@
     },
     "button": {
       "enable": "再度有効にする",
-      "disable": "再度無効にする"
+      "disable": "再度無効にする",
+      "downgrade": "{version} に戻す"
     }
   },
   "testplace": {

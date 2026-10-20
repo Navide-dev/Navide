@@ -9924,6 +9924,10 @@ async def _file_plugin_request(
         return refuse("BAD_REQUEST", f"{version} is not newer than the installed {from_version}")
     if kind == "plugin-rollback" and _semver_key(version) >= _semver_key(from_version):
         return refuse("BAD_REQUEST", f"{version} is not older than the installed {from_version}")
+    if kind == "plugin-update":
+        applied = await _unchanged_update(caller, requester, plugin_id, version, from_version)
+        if applied is not None:
+            return applied
     card = None
     if kind != "plugin-remove":
         card, error = await _registry_card(caller, plugin_id, version)
@@ -9952,6 +9956,51 @@ async def _file_plugin_request(
     }
 
 
+async def _unchanged_update(
+    caller: _Caller, requester: dict[str, Any], plugin_id: str, version: str, from_version: str,
+) -> dict[str, Any] | None:
+    """O1 (user 2026-10-20 01:40): ask the Host to update at once when the new
+    version discloses exactly what the installed one does. The Host decides
+    and does it; None for anything but a confirmed update, and the caller then
+    files the request as before (fail closed)."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    request_id = f"pa:{secrets.token_hex(16)}"
+    future = _agent_action_pending.register(request_id)
+    try:
+        sent = await app.unicast_host(make_event(contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT, {
+            "request_id": request_id, "action": "update", "plugin_id": plugin_id, "version": version,
+            "requester": requester,
+        }))
+        result = await _agent_action_pending.wait(request_id, future, timeout=_AGENT_ACTION_TIMEOUT_S) if sent else TIMEOUT
+    finally:
+        _agent_action_pending.discard(request_id)
+    if result is TIMEOUT:
+        return None
+    if (result.get("ok") is True and result.get("updated") is True
+            and result.get("pluginVersion") == version and result.get("fromVersion") == from_version):
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
+                            outcome="allowed")
+        return {
+            "ok": True,
+            "status": "completed",
+            "applied": True,
+            "pluginId": plugin_id,
+            "fromVersion": from_version,
+            "pluginVersion": version,
+            "note": (
+                "Updated without asking: this version discloses exactly the same permissions, backend, agent tools "
+                "and network access as the installed one. The user was told, with a one-click downgrade."
+            ),
+        }
+    if result.get("error_code") == "ACTION_FAILED":
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
+                            outcome="error", error_code="ACTION_FAILED")
+    return None
+
+
 @server.tool()
 async def marketplace_request_install(
     ctx: Context, namespace: str, name: str, version: str, reason: str = "",
@@ -9975,13 +10024,18 @@ async def marketplace_request_install(
 async def marketplace_request_update(
     ctx: Context, namespace: str, name: str, version: str, reason: str = "",
 ) -> dict[str, Any]:
-    """Ask the user to update an installed Navide plugin to a newer version.
+    """Update an installed Navide plugin to a newer version, or ask the user to.
 
-    Like marketplace_request_install: files a request for the user's
-    decision in Navide and changes nothing by itself. `version` must be newer
-    than the installed one and listed in the Navide Marketplace.
-
-    Returns {ok, approval_id, status: "pending", expires_at, note}.
+    `version` must be newer than the installed one and listed in the Navide
+    Marketplace. When that version discloses exactly the same permissions,
+    backend, agent tools and network access as the installed one, Navide
+    updates it at once: the user is told which agent did it, with a one-click
+    downgrade, and the change is recorded. The answer is then {ok: true,
+    status: "completed", applied: true, pluginId, fromVersion, pluginVersion,
+    note}. Any change in what it discloses, or anything Navide cannot compare,
+    files a request for the user's decision in Navide instead, like
+    marketplace_request_install: {ok, approval_id, status: "pending",
+    expires_at, note}.
     """
     return await _file_plugin_request(ctx, "plugin-update", namespace, name, version, reason)
 

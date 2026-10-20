@@ -24,6 +24,27 @@ const local = computed(() =>
   props.pending.prepared.source === 'local-unsigned' || props.pending.prepared.source === 'developer-unpacked'
 )
 const folder = computed(() => props.pending.prepared.source === 'developer-unpacked')
+// A3: what the signature beside a local file shows. Only `verified` (the
+// active key of a Navide-vetted publisher signed exactly these bytes) changes
+// the warning; any other signature reads as one that cannot be trusted.
+const signature = computed(() => props.pending.prepared.localSignature ?? { state: 'none' as const })
+// The source row names the signer, not the publisher the manifest claims.
+const rowSignature = computed(() =>
+  signature.value.state === 'verified' || signature.value.state === 'revoked' ? signature.value.state : undefined
+)
+const signerId = computed(() => ('publisherId' in signature.value ? signature.value.publisherId : ''))
+const signaturePublisher = computed(() => reveal(signerId.value))
+const localWarningKey = computed(() => {
+  if (folder.value) return 'settings.extensions.developerMode.folderWarning'
+  if (signature.value.state === 'verified') return 'settings.extensions.localInstall.signatureState.warningVerified'
+  if (signature.value.state === 'revoked') return 'settings.extensions.localInstall.signatureState.warningRevoked'
+  return 'settings.extensions.localInstall.warning'
+})
+const signatureText = computed(() =>
+  signature.value.state === 'none'
+    ? t('settings.extensions.localInstall.signature')
+    : t(`settings.extensions.localInstall.signatureState.${signature.value.state}`, { publisher: signaturePublisher.value })
+)
 const acknowledged = ref(false)
 // D7: taking back data set aside earlier is the user's choice, off by default.
 const reattach = ref(false)
@@ -114,7 +135,7 @@ function capabilityHint(cap: string): string {
         <!-- Card K3: what a file install is, always above everything else. -->
         <template v-if="step === 'risk' && local">
           <p class="ext-local-warning ext-risk-callout" role="note">
-            {{ $t(folder ? 'settings.extensions.developerMode.folderWarning' : 'settings.extensions.localInstall.warning') }}
+            {{ $t(localWarningKey, { publisher: signaturePublisher }) }}
           </p>
           <p v-if="pending.prepared.takedownChecked === false" class="ext-local-takedown ext-risk-callout" role="note">
             {{ $t('settings.extensions.localInstall.takedownUnknown') }}
@@ -125,7 +146,7 @@ function capabilityHint(cap: string): string {
           </p>
           <dl class="ext-local-facts">
             <dt>{{ $t('settings.extensions.localInstall.signatureLabel') }}</dt>
-            <dd>{{ $t('settings.extensions.localInstall.signature') }}</dd>
+            <dd class="ext-local-signature" :data-signature="signature.state">{{ signatureText }}</dd>
             <template v-if="pending.prepared.folder">
               <dt>{{ $t('settings.extensions.developerMode.folderLabel') }}</dt>
               <dd><code class="ext-local-digest">{{ reveal(pending.prepared.folder) }}</code></dd>
@@ -203,7 +224,8 @@ function capabilityHint(cap: string): string {
           row
           class="ext-trust-source"
           :source="pending.prepared.source"
-          :publisher="pending.prepared.publisherId"
+          :publisher="rowSignature ? signerId : pending.prepared.publisherId"
+          :signature="rowSignature"
           :expires-at="pending.prepared.expiresAt"
           :via="pending.prepared.testplaceVia"
         />

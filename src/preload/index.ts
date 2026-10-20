@@ -107,11 +107,13 @@ function isPlansBackendStopped(payload: unknown): payload is PlansBackendStopped
   )
 }
 
-/** An agent disabled or enabled a Navide plugin (B2-c), as the Host reports it. */
+/** An agent disabled, enabled (B2-c) or updated (O1) a Navide plugin, as the Host reports it. */
 export interface PluginAgentActionNotice {
-  action: 'disable' | 'enable'
+  action: 'disable' | 'enable' | 'update'
   pluginId: string
   pluginVersion: string
+  /** `update` only: the version it was updated from. */
+  fromVersion?: string
   requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
 }
 
@@ -121,7 +123,8 @@ function isPluginAgentActionNotice(payload: unknown): payload is PluginAgentActi
   const requester = record.requester as Record<string, unknown> | null
   const nullableString = (value: unknown): boolean => value === null || typeof value === 'string'
   return (
-    (record.action === 'disable' || record.action === 'enable') &&
+    (record.action === 'disable' || record.action === 'enable' ||
+      (record.action === 'update' && typeof record.fromVersion === 'string')) &&
     typeof record.pluginId === 'string' &&
     typeof record.pluginVersion === 'string' &&
     typeof requester === 'object' && requester !== null &&
@@ -171,6 +174,9 @@ export interface InstalledPluginSummary {
   expiresAt?: string
   /** How the user joined that test, when recorded; `source` testplace only. */
   testplaceVia?: 'invite' | 'code'
+  /** A3: a local file a vetted publisher signed, and whether that key is
+   *  still active (`verified`) or revoked since (`revoked`). */
+  localSignature?: 'verified' | 'revoked'
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -521,9 +527,6 @@ export interface PreparedInstallSummary {
   replacesLocal?: { version: string | null }
   /** Card K4: the developer folder this summary was read from. */
   folder?: string
-  /** W1 (A3): the `<file>.sig` beside a local file against the vetted
-   *  publisher keys; `none` when there is no signature. */
-  localSignature?: { state: 'none' | 'verified' | 'revoked' | 'unverifiable'; publisherId?: string; keyId?: string }
   /** W1: whether the shared static scan ran on a local file (`scan` holds it). */
   localScan?: 'ran' | 'unavailable'
   /** D7: the replaced package's native backend data will be set aside. */
@@ -532,6 +535,9 @@ export interface PreparedInstallSummary {
   reattachableBackendData?: true
   /** MED-1 on #425: false when the takedown list could not be checked. */
   takedownChecked?: boolean
+  /** A3: what the `<file>.sig` beside a local file shows against the
+   *  Navide-vetted publisher keys; `none` when there is no signature. */
+  localSignature?: { state: 'none' } | { state: 'verified' | 'revoked' | 'unverifiable'; publisherId: string; keyId?: string }
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []
@@ -1412,6 +1418,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       restoredInstances: number
       skippedDestroyedHostWindows: number
     }> => ipcRenderer.invoke('plugins:rollback', { id }),
+    /** Drop the version staged for the next restart (the downgrade of an agent's O1 update). */
+    discardCandidate: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:discardCandidate', { id }),
     remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('plugins:remove', nativeBackendData === undefined ? { id } : { id, nativeBackendData }),
     nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
