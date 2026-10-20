@@ -176,6 +176,23 @@ def _no_real_claude_cli():
 
 
 @pytest.fixture(autouse=True)
+def _no_claude_version_probe():
+    """Installing the Claude hooks into the real settings file starts a
+    once-per-process ``claude --version`` probe in a daemon thread. Where Claude
+    Code is installed that resolves the developer's real CLI, the guard above
+    refuses the spawn, and whichever test installed first fails at teardown.
+    Mark the probe as already started; the probe's own tests reset the flag or
+    call ``_refresh_claude_version`` with ``_probe_claude_version`` stubbed."""
+    # Its own MonkeyPatch, undone at this fixture's teardown: a test calling
+    # ``monkeypatch.undo()`` must not undo the isolation along with its own.
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        from agent_team_backend import claude_hooks
+
+        monkeypatch.setattr(claude_hooks, "_version_refresh_started", True)
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _isolated_data_dir(tmp_path):
     """Keep app-data side effects (e.g. pty-registry.json written on every
     TerminalService.create) out of the real app-data dir during tests."""
