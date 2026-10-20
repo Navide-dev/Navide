@@ -1888,8 +1888,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 <span class="file-name-only" v-truncate :title="row.file!.path">{{ row.name }}</span>
                 <div class="row-actions">
                   <template v-if="row.file!.status === 'U'">
-                    <button class="row-btn" title="Accept Ours" @click.stop="doResolveOurs(row.file!.path)">↰</button>
-                    <button class="row-btn" title="Accept Theirs" @click.stop="doResolveTheirs(row.file!.path)">↱</button>
+                    <button class="row-btn" :title="$t('action.accept-ours')" @click.stop="doResolveOurs(row.file!.path)">↰</button>
+                    <button class="row-btn" :title="$t('action.accept-theirs')" @click.stop="doResolveTheirs(row.file!.path)">↱</button>
                   </template>
                   <template v-else>
                     <button class="row-btn" :title="$t('action.file-history-blame')" @click.stop="toggleHistoryPanel(row.file!.path, true)">⊡</button>
@@ -1906,15 +1906,15 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 </div>
               </div>
               <div v-if="diffBlamePath === row.file!.path && diffBlameStaged" class="subpanel green-border diffblame-inline">
-                <div v-if="diffBlameLoading" class="loading-text">Loading…</div>
-                <div v-else-if="!diffBlameHunks.length" class="loading-text">No changes to display</div>
+                <div v-if="diffBlameLoading" class="loading-text">{{ $t('label.loading') }}</div>
+                <div v-else-if="!diffBlameHunks.length" class="loading-text">{{ $t('git.pane.no-changes-to-display') }}</div>
                 <template v-else v-for="(dh, dhi) in diffBlameHunks" :key="dhi">
                   <div class="db-hunk-head">{{ dh.header }}</div>
                   <div v-for="(dl, dli) in dh.lines" :key="dhi + ':' + dli" class="db-line" :class="`db-${dl.kind === '+' ? 'add' : dl.kind === '-' ? 'del' : 'ctx'}`">
                     <span class="db-no">{{ dl.new_no ?? dl.old_no ?? '' }}</span>
                     <span class="db-sign">{{ dl.kind === ' ' ? '' : dl.kind }}</span>
                     <code class="db-code">{{ dl.text }}</code>
-                    <span class="db-annot">{{ dl.committed ? `${dl.author}, ${dl.date}` : 'uncommitted' }}</span>
+                    <span class="db-annot">{{ dl.committed ? `${dl.author}, ${dl.date}` : $t('label.uncommitted') }}</span>
                   </div>
                 </template>
               </div>
@@ -1938,8 +1938,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
               <span class="file-path-dim" v-truncate :title="f.path">{{ fileDir(f.path) }}</span>
               <div class="row-actions">
                 <template v-if="f.status === 'U'">
-                  <button class="row-btn" title="Accept Ours" @click.stop="doResolveOurs(f.path)">↰</button>
-                  <button class="row-btn" title="Accept Theirs" @click.stop="doResolveTheirs(f.path)">↱</button>
+                  <button class="row-btn" :title="$t('action.accept-ours')" @click.stop="doResolveOurs(f.path)">↰</button>
+                  <button class="row-btn" :title="$t('action.accept-theirs')" @click.stop="doResolveTheirs(f.path)">↱</button>
                 </template>
                 <template v-else>
                   <button class="row-btn" :title="$t('action.file-history-blame')" @click.stop="toggleHistoryPanel(f.path, true)">⊡</button>
@@ -1947,23 +1947,23 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
               </div>
             </div>
             <div v-if="fileHistoryPath === f.path" class="subpanel blue-border">
-              <div v-if="fileHistoryLoading" class="loading-text">Loading…</div>
-              <div v-else-if="!fileHistoryCommits.length" class="loading-text">No commit history</div>
+              <div v-if="fileHistoryLoading" class="loading-text">{{ $t('label.loading') }}</div>
+              <div v-else-if="!fileHistoryCommits.length" class="loading-text">{{ $t('label.no-commits') }}</div>
               <div v-for="hc in fileHistoryCommits" :key="hc.hash" class="mini-row">
                 <code class="hash-tag">{{ hc.short_hash }}</code>
                 <span class="mini-msg" v-truncate>{{ hc.message }}</span>
               </div>
             </div>
             <div v-if="diffBlamePath === f.path && diffBlameStaged" class="subpanel green-border diffblame-inline">
-              <div v-if="diffBlameLoading" class="loading-text">Loading…</div>
-              <div v-else-if="!diffBlameHunks.length" class="loading-text">No changes to display</div>
+              <div v-if="diffBlameLoading" class="loading-text">{{ $t('label.loading') }}</div>
+              <div v-else-if="!diffBlameHunks.length" class="loading-text">{{ $t('git.pane.no-changes-to-display') }}</div>
               <template v-else v-for="(dh, dhi) in diffBlameHunks" :key="dhi">
                 <div class="db-hunk-head">{{ dh.header }}</div>
                 <div v-for="(dl, dli) in dh.lines" :key="dhi + ':' + dli" class="db-line" :class="`db-${dl.kind === '+' ? 'add' : dl.kind === '-' ? 'del' : 'ctx'}`">
                   <span class="db-no">{{ dl.new_no ?? dl.old_no ?? '' }}</span>
                   <span class="db-sign">{{ dl.kind === ' ' ? '' : dl.kind }}</span>
                   <code class="db-code">{{ dl.text }}</code>
-                  <span class="db-annot">{{ dl.committed ? `${dl.author}, ${dl.date}` : 'uncommitted' }}</span>
+                  <span class="db-annot">{{ dl.committed ? `${dl.author}, ${dl.date}` : $t('label.uncommitted') }}</span>
                 </div>
               </template>
             </div>
@@ -2018,7 +2018,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
 
 
       <div v-if="changesExpanded">
-        <div v-if="!hasChanges" class="empty-msg">No changes</div>
+        <div v-if="!hasChanges" class="empty-msg">{{ $t('label.no-changes') }}</div>
 
         <div v-else class="file-group">
           <!-- Tree mode -->
@@ -2056,23 +2056,23 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                   </div>
                 </div>
                 <div v-if="fileHistoryPath === row.file!.path" class="subpanel blue-border">
-                  <div v-if="fileHistoryLoading" class="loading-text">Loading…</div>
-                  <div v-else-if="!fileHistoryCommits.length" class="loading-text">No commit history</div>
+                  <div v-if="fileHistoryLoading" class="loading-text">{{ $t('label.loading') }}</div>
+                  <div v-else-if="!fileHistoryCommits.length" class="loading-text">{{ $t('label.no-commits') }}</div>
                   <div v-for="hc in fileHistoryCommits" :key="hc.hash" class="mini-row">
                     <code class="hash-tag">{{ hc.short_hash }}</code>
                     <span class="mini-msg" v-truncate>{{ hc.message }}</span>
                   </div>
                 </div>
                 <div v-if="diffBlamePath === row.file!.path && !diffBlameStaged" class="subpanel green-border diffblame-inline">
-                  <div v-if="diffBlameLoading" class="loading-text">Loading…</div>
-                  <div v-else-if="!diffBlameHunks.length" class="loading-text">No changes to display</div>
+                  <div v-if="diffBlameLoading" class="loading-text">{{ $t('label.loading') }}</div>
+                  <div v-else-if="!diffBlameHunks.length" class="loading-text">{{ $t('git.pane.no-changes-to-display') }}</div>
                   <template v-else v-for="(dh, dhi) in diffBlameHunks" :key="dhi">
                     <div class="db-hunk-head">{{ dh.header }}</div>
                     <div v-for="(dl, dli) in dh.lines" :key="dhi + ':' + dli" class="db-line" :class="`db-${dl.kind === '+' ? 'add' : dl.kind === '-' ? 'del' : 'ctx'}`">
                       <span class="db-no">{{ dl.new_no ?? dl.old_no ?? '' }}</span>
                       <span class="db-sign">{{ dl.kind === ' ' ? '' : dl.kind }}</span>
                       <code class="db-code">{{ dl.text }}</code>
-                      <span class="db-annot">{{ dl.committed ? `${dl.author}, ${dl.date}` : 'uncommitted' }}</span>
+                      <span class="db-annot">{{ dl.committed ? `${dl.author}, ${dl.date}` : $t('label.uncommitted') }}</span>
                     </div>
                   </template>
                 </div>
@@ -2109,15 +2109,15 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 </div>
               </div>
               <div v-if="diffBlamePath === f.path && !diffBlameStaged" class="subpanel green-border diffblame-inline">
-                <div v-if="diffBlameLoading" class="loading-text">Loading…</div>
-                <div v-else-if="!diffBlameHunks.length" class="loading-text">No changes to display</div>
+                <div v-if="diffBlameLoading" class="loading-text">{{ $t('label.loading') }}</div>
+                <div v-else-if="!diffBlameHunks.length" class="loading-text">{{ $t('git.pane.no-changes-to-display') }}</div>
                 <template v-else v-for="(dh, dhi) in diffBlameHunks" :key="dhi">
                   <div class="db-hunk-head">{{ dh.header }}</div>
                   <div v-for="(dl, dli) in dh.lines" :key="dhi + ':' + dli" class="db-line" :class="`db-${dl.kind === '+' ? 'add' : dl.kind === '-' ? 'del' : 'ctx'}`">
                     <span class="db-no">{{ dl.new_no ?? dl.old_no ?? '' }}</span>
                     <span class="db-sign">{{ dl.kind === ' ' ? '' : dl.kind }}</span>
                     <code class="db-code">{{ dl.text }}</code>
-                    <span class="db-annot">{{ dl.committed ? `${dl.author}, ${dl.date}` : 'uncommitted' }}</span>
+                    <span class="db-annot">{{ dl.committed ? `${dl.author}, ${dl.date}` : $t('label.uncommitted') }}</span>
                   </div>
                 </template>
               </div>
@@ -2134,10 +2134,10 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         <div class="spacer" />
       </div>
       <div v-if="showIgnored && ignoredExpanded">
-        <div v-if="!gitStatus.ignored?.length" class="empty-msg">No ignored files</div>
+        <div v-if="!gitStatus.ignored?.length" class="empty-msg">{{ $t('git.pane.no-ignored-files') }}</div>
         <template v-for="f in sortFiles(gitStatus.ignored ?? [])" :key="'ig:' + f.path">
           <div class="file-row ignored-row" @contextmenu="openCtxMenu($event, f, false)">
-            <span class="file-status" :title="'ignored'">!</span>
+            <span class="file-status" :title="$t('label.ignored')">!</span>
             <span class="file-name-main" v-truncate :title="f.path">{{ fileName(f.path) }}</span>
             <span class="file-path-dim" v-truncate :title="f.path">{{ fileDir(f.path) }}</span>
           </div>
@@ -2148,14 +2148,14 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
 
       <!-- ── selection action bar ──────────────────────────────── -->
       <div v-if="selectedKeys.size > 1" class="selection-bar" @click.stop>
-        <span class="sel-count">{{ selectedKeys.size }} selected</span>
+        <span class="sel-count">{{ $t('action.selected-count', { count: selectedKeys.size }) }}</span>
         <button class="sel-btn sel-clear" @click="clearSelection">✕</button>
       </div>
 
       <!-- ══════════════════════════════════════════════════════
            PART 2 — REMOTE / HISTORY
            ══════════════════════════════════════════════════════ -->
-      <div class="part-resize" title="Drag to resize" @mousedown="onGitDividerStart">
+      <div class="part-resize" :title="$t('git.pane.drag-to-resize')" @mousedown="onGitDividerStart">
         <div class="part-resize-grip" />
       </div>
 
@@ -2334,15 +2334,15 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
               </div>
             </div>
             <div v-if="expandedCommitHash === c.hash" class="commit-detail">
-              <div v-if="commitDetailLoading" class="loading-text">Loading…</div>
+              <div v-if="commitDetailLoading" class="loading-text">{{ $t('label.loading') }}</div>
               <div v-else-if="!commitDetailData && commitDetailError" class="read-error" role="alert">{{ $t('git.read-failed', { reason: commitDetailError }) }}</div>
               <template v-else-if="commitDetailData">
                 <div class="cd-body">{{ commitDetailData.message }}</div>
-                <div class="cd-row"><span class="cd-key">Author</span><span>{{ commitDetailData.author_name }} &lt;{{ commitDetailData.author_email }}&gt;</span></div>
-                <div class="cd-row"><span class="cd-key">Date</span><span>{{ new Date(commitDetailData.date).toLocaleString() }}</span></div>
+                <div class="cd-row"><span class="cd-key">{{ $t('label.col-author') }}</span><span>{{ commitDetailData.author_name }} &lt;{{ commitDetailData.author_email }}&gt;</span></div>
+                <div class="cd-row"><span class="cd-key">{{ $t('label.col-date') }}</span><span>{{ new Date(commitDetailData.date).toLocaleString() }}</span></div>
                 <div v-if="commitDetailData.body" class="cd-body">{{ commitDetailData.body }}</div>
                 <div v-if="commitDetailData.files.length">
-                  <div class="cd-key">Files ({{ commitDetailData.files.length }})</div>
+                  <div class="cd-key">{{ $t('git.pane.commit-files', { count: commitDetailData.files.length }) }}</div>
                   <template v-for="f in commitDetailData.files" :key="f">
                     <div class="cd-file cd-file-clickable cd-file-row" @click="toggleCommitFileDiff(c.hash, f)">
                       <span class="cd-file-label" v-truncate><span class="expand-caret">{{ commitDiffFile === f ? '▾' : '▸' }}</span> {{ f }}</span>
@@ -2351,8 +2351,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                       </button>
                     </div>
                     <div v-if="commitDiffFile === f" class="subpanel green-border diffblame-inline">
-                      <div v-if="commitDiffLoading" class="loading-text">Loading…</div>
-                      <div v-else-if="!commitDiffHunks.length" class="loading-text">No changes to display</div>
+                      <div v-if="commitDiffLoading" class="loading-text">{{ $t('label.loading') }}</div>
+                      <div v-else-if="!commitDiffHunks.length" class="loading-text">{{ $t('git.pane.no-changes-to-display') }}</div>
                       <template v-else v-for="(dh, dhi) in commitDiffHunks" :key="dhi">
                         <div class="db-hunk-head">{{ dh.header }}</div>
                         <div v-for="(dl, dli) in dh.lines" :key="dhi + ':' + dli" class="db-line" :class="`db-${dl.kind === '+' ? 'add' : dl.kind === '-' ? 'del' : 'ctx'}`">
@@ -2383,14 +2383,14 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <div class="spacer" />
         </div>
         <div v-if="stashExpanded" class="card-body">
-        <div v-if="!gitStashes.length" class="empty-msg">No draft</div>
+        <div v-if="!gitStashes.length" class="empty-msg">{{ $t('git.pane.no-draft') }}</div>
         <div v-for="s in gitStashes" :key="s.ref" class="generic-row">
           <span class="stash-ref">{{ s.ref }}</span>
           <span class="stash-msg" v-truncate>{{ s.message }}</span>
           <div class="row-actions always">
             <button class="row-btn always" :title="$t('action.stash-apply')" :disabled="stashBusy" @click.stop="doStashApply(s.index)">⎘</button>
             <button class="row-btn always" :title="$t('action.stash-pop')" :disabled="stashBusy" @click.stop="doStashPop(s.index)">↑</button>
-            <button class="row-btn always danger" title="Drop" :disabled="stashBusy" @click.stop="doStashDrop(s.index)">✕</button>
+            <button class="row-btn always danger" :title="$t('action.drop')" :disabled="stashBusy" @click.stop="doStashDrop(s.index)">✕</button>
           </div>
         </div>
         <p v-if="stashError" class="err-text">{{ stashError }}</p>
@@ -2406,7 +2406,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <div class="spacer" />
         </div>
         <div v-if="remoteExpanded" class="card-body collapsible-body">
-        <div v-if="!gitRemotes.length" class="empty-msg" style="padding:2px 0">No remotes</div>
+        <div v-if="!gitRemotes.length" class="empty-msg" style="padding:2px 0">{{ $t('label.no-remotes') }}</div>
         <div v-for="r in gitRemotes" :key="r.name" class="generic-row">
           <span class="remote-name">{{ r.name }}</span>
           <span class="remote-url" v-truncate>{{ r.fetch_url }}</span>
@@ -2414,8 +2414,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <button class="row-btn always danger" @click.stop="doRemoveRemote(r.name)">✕</button>
         </div>
         <div class="input-row" style="margin-top:6px">
-          <input v-model="newRemoteName" class="git-input" placeholder="Name" style="width:72px;flex:0 0 auto" />
-          <input v-model="newRemoteUrl" class="git-input" placeholder="URL" />
+          <input v-model="newRemoteName" class="git-input" :placeholder="$t('label.name')" style="width:72px;flex:0 0 auto" />
+          <input v-model="newRemoteUrl" class="git-input" :placeholder="$t('label.url')" />
           <button class="btn-ghost sm nv-btn nv-btn--ghost" :disabled="!newRemoteName.trim() || !newRemoteUrl.trim()" @click="doAddRemote">＋</button>
         </div>
         <p v-if="remotesMgrError" class="err-text">{{ remotesMgrError }}</p>
@@ -2431,7 +2431,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <div class="spacer" />
         </div>
         <div v-if="tagExpanded" class="card-body collapsible-body">
-        <div v-if="!gitTags.length" class="empty-msg" style="padding:2px 0">No tags</div>
+        <div v-if="!gitTags.length" class="empty-msg" style="padding:2px 0">{{ $t('label.no-tags') }}</div>
         <div v-for="t in gitTags" :key="t.name" class="generic-row">
           <span class="b-name" v-truncate>{{ t.name }}</span>
           <code class="chash" style="margin-left:4px">{{ t.commit_hash }}</code>
@@ -2441,7 +2441,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         </div>
         <div class="input-row" style="margin-top:6px; flex-wrap:wrap; gap:4px">
           <input v-model="newTagName" class="git-input" placeholder="v1.0.0" style="flex:1;min-width:72px" />
-          <input v-model="newTagMessage" class="git-input" placeholder="Message" style="flex:2;min-width:80px" />
+          <input v-model="newTagMessage" class="git-input" :placeholder="$t('label.message')" style="flex:2;min-width:80px" />
           <button class="btn-ghost sm nv-btn nv-btn--ghost" :disabled="!newTagName.trim()" @click="doCreateTag">＋</button>
         </div>
         <p v-if="tagError" class="err-text">{{ tagError }}</p>
@@ -2546,45 +2546,45 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <span class="sec-caret">{{ issuesExpanded ? '▾' : '▸' }}</span>
           <span class="sec-label">{{ $t('label.issues') }}</span>
           <span v-if="issuesExpanded && issueProviderLabel()" class="sec-badge">{{ issueProviderLabel() }}</span>
-          <span v-if="issuesExpanded && openIssueCount" class="sec-badge">{{ openIssueCount }} open</span>
+          <span v-if="issuesExpanded && openIssueCount" class="sec-badge">{{ $t('git.pane.issues-open-count', { count: openIssueCount }) }}</span>
           <div class="spacer" />
           <button
             v-if="issuesExpanded && issueProvider.authenticated && !selectedIssue"
-            class="row-btn always" title="New issue"
+            class="row-btn always" :title="$t('action.new-issue')"
             @click.stop="showNewIssue = !showNewIssue"
           >＋</button>
           <button
             v-if="issuesExpanded"
-            class="row-btn always" title="Refresh" @click.stop="refreshIssues"
+            class="row-btn always" :title="$t('action.refresh')" @click.stop="refreshIssues"
           >↻</button>
         </div>
         <div v-if="issuesExpanded" class="card-body collapsible-body">
           <!-- unsupported host -->
           <div v-if="issueProvider.provider === 'unknown'" class="empty-msg" style="padding:2px 0">
-            No supported issue host detected for this repo (needs a GitHub or GitLab origin remote).
+            {{ $t('git.pane.issue-host-unsupported') }}
           </div>
           <!-- CLI missing / not authenticated -->
           <div v-else-if="!issueProvider.cli_available" class="empty-msg" style="padding:2px 0">
-            {{ issueProvider.provider === 'github' ? 'GitHub CLI (gh)' : 'GitLab CLI (glab)' }} is not installed.
+            {{ $t('git.pane.issue-cli-missing', { cli: issueProvider.provider === 'github' ? 'GitHub CLI (gh)' : 'GitLab CLI (glab)' }) }}
           </div>
           <div v-else-if="!issueProvider.authenticated" class="empty-msg" style="padding:2px 0">
-            Not authenticated. Run
+            {{ $t('git.pane.issue-auth-before') }}
             <code>{{ issueProvider.provider === 'github' ? 'gh auth login' : 'glab auth login' }}</code>
-            in a terminal, then refresh.
+            {{ $t('git.pane.issue-auth-after') }}
           </div>
 
           <!-- detail view -->
           <template v-else-if="selectedIssue">
             <div class="input-row" style="margin-bottom:6px">
-              <button class="btn-ghost sm nv-btn nv-btn--ghost" @click="closeIssueDetail">← Back</button>
+              <button class="btn-ghost sm nv-btn nv-btn--ghost" @click="closeIssueDetail">{{ $t('git.issue-back') }}</button>
               <div class="spacer" />
               <div class="dispatch-wrap">
                 <button
                   class="btn-ghost sm nv-btn nv-btn--sm"
                   :disabled="!dispatchTargets.length"
-                  :title="dispatchTargets.length ? 'Send this issue to a running agent' : 'No running agent'"
+                  :title="dispatchTargets.length ? $t('git.pane.issue-dispatch-title') : $t('git.pane.issue-no-running-agent')"
                   @click="onDispatchClick"
-                >Dispatch to Agent</button>
+                >{{ $t('git.pane.issue-dispatch') }}</button>
                 <div v-if="showDispatchMenu" class="dispatch-menu">
                   <button
                     v-for="t in dispatchTargets" :key="t.id"
@@ -2592,9 +2592,9 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                   >{{ t.label }}</button>
                 </div>
               </div>
-              <a class="btn-ghost sm nv-btn nv-btn--sm" :href="selectedIssue.url" target="_blank" rel="noopener">Open ↗</a>
+              <a class="btn-ghost sm nv-btn nv-btn--sm" :href="selectedIssue.url" target="_blank" rel="noopener">{{ $t('action.open') }} ↗</a>
               <button class="btn-ghost sm nv-btn nv-btn--sm" :disabled="isIssueSubmitting" @click="toggleIssueState">
-                {{ selectedIssue.state === 'open' ? 'Close' : 'Reopen' }}
+                {{ selectedIssue.state === 'open' ? $t('action.close') : $t('action.reopen') }}
               </button>
             </div>
             <div class="issue-detail-title">
@@ -2602,29 +2602,29 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
               #{{ selectedIssue.number }} · {{ selectedIssue.title }}
             </div>
             <div class="b-track" style="margin-bottom:6px">{{ selectedIssue.author }} · {{ selectedIssue.created_at }}</div>
-            <pre class="issue-body">{{ selectedIssue.body || '(no description)' }}</pre>
+            <pre class="issue-body">{{ selectedIssue.body || $t('label.no-description') }}</pre>
             <div v-for="(c, i) in selectedIssue.comments" :key="i" class="issue-comment">
               <div class="b-track">{{ c.author }} · {{ c.created_at }}</div>
               <pre class="issue-body">{{ c.body }}</pre>
             </div>
             <div class="input-row" style="margin-top:6px; flex-direction:column; gap:4px">
-              <textarea v-model="newComment" class="git-input" rows="2" placeholder="Add a comment…" />
-              <button class="btn-ghost sm nv-btn nv-btn--sm" :disabled="!newComment.trim() || isIssueSubmitting" @click="submitComment">Comment</button>
+              <textarea v-model="newComment" class="git-input" rows="2" :placeholder="$t('label.add-comment-placeholder')" />
+              <button class="btn-ghost sm nv-btn nv-btn--sm" :disabled="!newComment.trim() || isIssueSubmitting" @click="submitComment">{{ $t('git.issue-comment') }}</button>
             </div>
           </template>
 
           <!-- list view -->
           <template v-else>
             <div v-if="showNewIssue" class="input-row" style="margin-bottom:6px; flex-direction:column; gap:4px">
-              <input v-model="newIssueTitle" class="git-input" placeholder="Issue title" />
-              <textarea v-model="newIssueBody" class="git-input" rows="3" placeholder="Description (optional)" />
+              <input v-model="newIssueTitle" class="git-input" :placeholder="$t('label.issue-title-placeholder')" />
+              <textarea v-model="newIssueBody" class="git-input" rows="3" :placeholder="$t('label.description-optional')" />
               <div class="input-row">
-                <button class="btn-ghost sm nv-btn nv-btn--sm" :disabled="!newIssueTitle.trim() || isIssueSubmitting" @click="submitNewIssue">Create</button>
-                <button class="btn-ghost sm nv-btn nv-btn--sm" @click="showNewIssue = false">Cancel</button>
+                <button class="btn-ghost sm nv-btn nv-btn--sm" :disabled="!newIssueTitle.trim() || isIssueSubmitting" @click="submitNewIssue">{{ $t('git.issue-create') }}</button>
+                <button class="btn-ghost sm nv-btn nv-btn--sm" @click="showNewIssue = false">{{ $t('action.cancel') }}</button>
               </div>
             </div>
-            <div v-if="isLoadingIssues" class="empty-msg" style="padding:2px 0">Loading…</div>
-            <div v-else-if="!issues.length" class="empty-msg" style="padding:2px 0">No issues</div>
+            <div v-if="isLoadingIssues" class="empty-msg" style="padding:2px 0">{{ $t('label.loading') }}</div>
+            <div v-else-if="!issues.length" class="empty-msg" style="padding:2px 0">{{ $t('label.no-issues') }}</div>
             <div
               v-for="it in issues" :key="it.number"
               class="generic-row clickable" :class="{ loading: isLoadingDetail }"
@@ -2642,7 +2642,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 v-if="props.issueHandoffs?.[it.url]"
                 class="issue-handoff-badge"
                 :class="props.issueHandoffs[it.url].state"
-                :title="props.issueHandoffs[it.url].state === 'handling' ? 'Being handled by agent' : 'Agent pane closed'"
+                :title="props.issueHandoffs[it.url].state === 'handling' ? $t('git.pane.issue-handoff-handling') : $t('git.pane.issue-handoff-closed')"
                 @click.stop="props.issueHandoffs![it.url].state === 'handling' && emit('focus-pane', props.issueHandoffs![it.url].paneId)"
               >{{ props.issueHandoffs[it.url].state === 'handling' ? '🤖' : '✓' }}</span>
             </div>
@@ -2704,10 +2704,10 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         <div class="menu-item has-sub" @mouseenter="placeSubmenu($event, '.ctx-submenu')">
           <span>{{ $t('action.add-to-ignore') }}</span><span class="sub-caret">▸</span>
           <div class="ctx-submenu">
-            <button class="menu-item" @click="ctxAddToGitignore('project')">.gitignore (project root)</button>
-            <button class="menu-item" @click="ctxAddToGitignore('nested')">.gitignore (current folder)</button>
-            <button class="menu-item" @click="ctxAddToGitignore('local')">.git/info/exclude (local only)</button>
-            <button class="menu-item" @click="ctxAddToGitignore('global')">Global .gitignore</button>
+            <button class="menu-item" @click="ctxAddToGitignore('project')">{{ $t('git.pane.ignore-target.project') }}</button>
+            <button class="menu-item" @click="ctxAddToGitignore('nested')">{{ $t('git.pane.ignore-target.nested') }}</button>
+            <button class="menu-item" @click="ctxAddToGitignore('local')">{{ $t('git.pane.ignore-target.local') }}</button>
+            <button class="menu-item" @click="ctxAddToGitignore('global')">{{ $t('git.pane.ignore-target.global') }}</button>
           </div>
         </div>
         <button v-if="ctxIsIgnored" class="menu-item" @click="ctxWhyIgnored">{{ $t('action.why-ignored') }}</button>
@@ -2727,10 +2727,10 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <div class="menu-item has-sub" @mouseenter="placeSubmenu($event, '.ctx-submenu')">
             <span>{{ $t('action.add-to-ignore') }}</span><span class="sub-caret">▸</span>
             <div class="ctx-submenu">
-              <button class="menu-item" @click="ctxFolderAddIgnore('project')">.gitignore (project root)</button>
-              <button class="menu-item" @click="ctxFolderAddIgnore('nested')">.gitignore (current folder)</button>
-              <button class="menu-item" @click="ctxFolderAddIgnore('local')">.git/info/exclude (local only)</button>
-              <button class="menu-item" @click="ctxFolderAddIgnore('global')">Global .gitignore</button>
+              <button class="menu-item" @click="ctxFolderAddIgnore('project')">{{ $t('git.pane.ignore-target.project') }}</button>
+              <button class="menu-item" @click="ctxFolderAddIgnore('nested')">{{ $t('git.pane.ignore-target.nested') }}</button>
+              <button class="menu-item" @click="ctxFolderAddIgnore('local')">{{ $t('git.pane.ignore-target.local') }}</button>
+              <button class="menu-item" @click="ctxFolderAddIgnore('global')">{{ $t('git.pane.ignore-target.global') }}</button>
             </div>
           </div>
         </template>
