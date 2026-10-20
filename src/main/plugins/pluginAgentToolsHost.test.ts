@@ -405,13 +405,18 @@ describe('PluginAgentToolsHost review fixes', () => {
       },
     }, { enabled: true })
     await h.host.refresh()
-    await new Promise((done) => setTimeout(done, 20))
+    // Wait on the retries themselves, not a fixed delay (flaky under load);
+    // the settle after it only gives an extra retry the chance to show.
+    const settle = () => new Promise((done) => setTimeout(done, 20))
+    await vi.waitFor(() => expect(attempts).toEqual([1, 1, 1]))
+    await settle()
     expect(attempts).toEqual([1, 1, 1])
     attempts.length = 0
     failures = 1
     await h.host.refresh()
     await h.host.refresh()
-    await new Promise((done) => setTimeout(done, 20))
+    await vi.waitFor(() => expect(attempts).toEqual([2, 3]))
+    await settle()
     // Revision 2 failed once, but 3 superseded it: 2 is not retried.
     expect(attempts).toEqual([2, 3])
   })
