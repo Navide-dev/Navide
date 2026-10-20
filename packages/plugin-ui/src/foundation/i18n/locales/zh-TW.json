@@ -2011,6 +2011,8 @@
         "reload": "重新載入",
         "loadedByUser": "你自己載入",
         "loadedByAgent": "由 {requester} 提出，你在主視窗核准（{at}）",
+        "loadedByKeyChanged": "載入者不明：簽章金鑰已更換，這筆紀錄無法驗證",
+        "loadedByUnsigned": "（這台電腦沒有安全儲存，載入者紀錄沒有簽章）",
         "loadedByUnverified": "載入者不明：這筆紀錄可能被 Navide 以外的程式改過，或沒有簽章",
         "loadedByUnknown": "載入者不明（在 Navide 開始記錄之前載入）",
         "removeFolder": "移除",

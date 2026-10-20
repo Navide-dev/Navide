@@ -78,7 +78,10 @@ describe('PluginDeveloperFolderMetaStore', () => {
 })
 
 describe('signed loader record (review MED-1 on #536)', () => {
-  const signer = { entryMac: (entry: string) => createHmac('sha256', 'test-key').update(entry).digest('hex') }
+  const signerWith = (key: string) => ({
+    recordSigning: () => ({ state: 'ready' as const, keyId: `id-${key}`, mac: (entry: string) => createHmac('sha256', key).update(entry).digest('hex') }),
+  })
+  const signer = signerWith('test-key')
   const agent = { kind: 'agent', callerKind: 'pane', paneName: 'builder', approvedAt: '2026-10-21T01:00:00.000Z' } as const
   const rewrite = (change: (folders: Record<string, Record<string, unknown>>) => void) => {
     const saved = JSON.parse(readFileSync(join(root, FILE), 'utf8')) as { schemaVersion: 1; folders: Record<string, Record<string, unknown>> }
@@ -99,9 +102,22 @@ describe('signed loader record (review MED-1 on #536)', () => {
     const store = new PluginDeveloperFolderMetaStore(root, signer)
     store.setLoadedBy('acme.todo', '/dev/todo', agent)
     rewrite((folders) => { folders['acme.todo']!.loadedBy = { kind: 'user' } })
-    expect(store.get('acme.todo', '/dev/todo')).toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: true })
-    rewrite((folders) => { delete folders['acme.todo']!.loadedByMac; folders['acme.todo']!.loadedBy = agent })
-    expect(store.get('acme.todo', '/dev/todo')).toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: true })
+    expect(store.get('acme.todo', '/dev/todo')).toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: 'changed' })
+    rewrite((folders) => { delete folders['acme.todo']!.loadedByMac; delete folders['acme.todo']!.loadedByKeyId; folders['acme.todo']!.loadedBy = agent })
+    expect(store.get('acme.todo', '/dev/todo')).toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: 'changed' })
+  })
+
+  it('review MED-1 on #552: secure storage without a usable key (signature file gone) reads as unknown, never as written', () => {
+    new PluginDeveloperFolderMetaStore(root, signer).setLoadedBy('acme.todo', '/dev/todo', agent)
+    rewrite((folders) => { folders['acme.todo']!.loadedBy = { kind: 'user' } })
+    const noKey = new PluginDeveloperFolderMetaStore(root, { recordSigning: () => ({ state: 'no-key' as const }) })
+    expect(noKey.get('acme.todo', '/dev/todo')).toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: 'no-key' })
+  })
+
+  it('review LOW-2 on #552: a record signed under an earlier key says the key changed, not that it was tampered with', () => {
+    new PluginDeveloperFolderMetaStore(root, signerWith('old-key')).setLoadedBy('acme.todo', '/dev/todo', agent)
+    expect(new PluginDeveloperFolderMetaStore(root, signerWith('new-key')).get('acme.todo', '/dev/todo'))
+      .toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: 'key-changed' })
   })
 
   it('a signature moved to another folder or id does not verify', () => {
@@ -109,14 +125,14 @@ describe('signed loader record (review MED-1 on #536)', () => {
     store.setLoadedBy('acme.one', '/dev/one', { kind: 'user' })
     store.setLoadedBy('acme.two', '/dev/two', agent)
     rewrite((folders) => { folders['acme.two']!.loadedBy = { kind: 'user' }; folders['acme.two']!.loadedByMac = folders['acme.one']!.loadedByMac })
-    expect(store.get('acme.two', '/dev/two')).toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: true })
+    expect(store.get('acme.two', '/dev/two')).toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: 'changed' })
   })
 
-  it('without a key (no secure storage) the record reads as written, as before', () => {
-    const store = new PluginDeveloperFolderMetaStore(root, { entryMac: () => null })
+  it('without secure storage the record reads as written and says it is not signed', () => {
+    const store = new PluginDeveloperFolderMetaStore(root, { recordSigning: () => ({ state: 'no-secure-storage' as const }) })
     store.setLoadedBy('acme.todo', '/dev/todo', agent)
     rewrite((folders) => { folders['acme.todo']!.loadedBy = { kind: 'user' } })
-    expect(store.get('acme.todo', '/dev/todo')).toMatchObject({ loadedBy: { kind: 'user' } })
+    expect(store.get('acme.todo', '/dev/todo')).toMatchObject({ loadedBy: { kind: 'user' }, loadedByUnsigned: true })
     expect(store.get('acme.todo', '/dev/todo').loadedByUnverified).toBeUndefined()
   })
 })

@@ -2011,6 +2011,8 @@
         "reload": "再読み込み",
         "loadedByUser": "あなたが読み込みました",
         "loadedByAgent": "{requester} が依頼し、あなたがメインウィンドウで承認しました（{at}）",
+        "loadedByKeyChanged": "読み込んだのが誰かは不明です：署名の鍵が置き換えられたため、この記録は検証できません",
+        "loadedByUnsigned": "（このコンピューターには安全な保存領域がないため、この記録には署名がありません）",
         "loadedByUnverified": "読み込んだのが誰かは不明です：この記録は Navide 以外のプログラムに変更されたか、署名がありません",
         "loadedByUnknown": "読み込んだのが誰かは不明です（Navide が記録を始める前に読み込まれました）",
         "removeFolder": "削除",

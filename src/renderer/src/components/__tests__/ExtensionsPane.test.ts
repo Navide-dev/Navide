@@ -84,6 +84,7 @@ describe('ExtensionsPane', () => {
         { id: 'acme.asked', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
         { id: 'acme.older', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
         { id: 'acme.changed', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.rekeyed', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
       ]),
       developerMode: vi.fn().mockResolvedValue({
         enabled: true,
@@ -91,7 +92,8 @@ describe('ExtensionsPane', () => {
           folder('acme.mine', { kind: 'user' }),
           folder('acme.asked', { kind: 'agent', callerKind: 'pane', paneName: 'builder', approvedAt: '2026-10-21T01:00:00.000Z' }),
           folder('acme.older', { kind: 'unknown' }),
-          { ...folder('acme.changed', { kind: 'unknown' }), loadedByUnverified: true },
+          { ...folder('acme.changed', { kind: 'unknown' }), loadedByUnverified: 'changed' },
+          { ...folder('acme.rekeyed', { kind: 'unknown' }), loadedByUnverified: 'key-changed' },
         ],
       }),
       selfHostedQuarantine: vi.fn().mockResolvedValue([]),
@@ -104,6 +106,7 @@ describe('ExtensionsPane', () => {
     expect(asked).toContain('builder')
     expect(wrapper.get('[data-id="acme.older"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUnknown'))
     expect(wrapper.get('[data-id="acme.changed"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUnverified'))
+    expect(wrapper.get('[data-id="acme.rekeyed"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByKeyChanged'))
   })
 
   it('labels an installed version this Navide release is too old for, without disabling it', async () => {

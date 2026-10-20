@@ -2954,9 +2954,10 @@ export function registerPluginIpc(
       pluginId: folder.pluginId,
       path: folder.path,
       consentedAt: folder.consentedAt,
-      ...(({ loadedBy, loadedByUnverified, autoReload, lastLoad }) => ({
+      ...(({ loadedBy, loadedByUnverified, loadedByUnsigned, autoReload, lastLoad }) => ({
         loadedBy,
         ...(loadedByUnverified ? { loadedByUnverified } : {}),
+        ...(loadedByUnsigned ? { loadedByUnsigned } : {}),
         autoReload,
         ...(lastLoad ? { lastLoad } : {}),
       }))(
@@ -3152,8 +3153,9 @@ export function registerPluginIpc(
     const id = typeof args?.id === 'string' ? args.id : ''
     await unloadDeveloperFolder(id)
     // Its backend data stays, recorded as local, so no later install of the
-    // id takes it over.
-    if (developerMode.folder(id) && options.nativeBackendDataRoot) {
+    // id takes it over. Review LOW-3 on #552: also for an entry another
+    // program wrote.
+    if (developerMode.anyFolder(id) && options.nativeBackendDataRoot) {
       recordKeptNativeBackendDataSource(options.nativeBackendDataRoot, id, 'local-unsigned')
     }
     developerMode.forget(id)

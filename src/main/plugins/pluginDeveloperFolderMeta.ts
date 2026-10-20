@@ -22,9 +22,14 @@ import { canonicalContractJson } from '../../shared/pluginDisclosure'
 // or damaged file shows "unknown", and a write that fails never blocks a load.
 // Review MED-1 on #536: who loaded a folder is signed with the Developer
 // Mode store's key (G5). A loader another program wrote, or one without a
-// signature, reads as "unknown, the record may have been changed"; the load
-// is not affected. Without secure storage there is no key and the record
-// reads as written, as the Developer Mode store does then.
+// signature, reads as "unknown, the record may have been changed"; one
+// signed under an earlier key says the key changed. With secure storage but
+// no usable key (the signature file gone) nothing verifies (review MED-1 on
+// #552). Without secure storage there is no key: the record reads as
+// written and says it is not signed, as the Developer Mode store does then.
+// A record restored from earlier for the same id and folder still verifies
+// (no counter; the same as the store's own entries). The load is never
+// affected.
 const DEVELOPER_FOLDER_META_FILE = '.navide-plugin-developer-folders-meta.json'
 
 /** Who had a developer folder loaded: the user's own pick in the main window,
@@ -52,16 +57,23 @@ export interface DeveloperFolderLastLoad {
 
 /** Signs the loader record; the Developer Mode store with its key. */
 export interface DeveloperFolderRecordSigner {
-  entryMac(entry: string): string | null
+  recordSigning():
+    | { state: 'no-secure-storage' }
+    | { state: 'no-key' }
+    | { state: 'ready'; keyId: string; mac(entry: string): string }
 }
 
 export interface DeveloperFolderMeta {
   path: string
   loadedBy: DeveloperFolderLoadedBy
-  /** HMAC of the loader record (pluginId, folder, loadedBy). */
+  /** HMAC of the loader record (pluginId, folder, loadedBy), and the
+   *  fingerprint of the key it was made with. */
   loadedByMac?: string
-  /** Set on read when the loader did not verify; never stored. */
-  loadedByUnverified?: true
+  loadedByKeyId?: string
+  /** Set on read, never stored: why the loader did not verify. */
+  loadedByUnverified?: 'changed' | 'key-changed' | 'no-key'
+  /** Set on read, never stored: no secure storage, so nothing is signed. */
+  loadedByUnsigned?: true
   /** Reload when a file in the folder changes (A2-4); on unless turned off. */
   autoReload: boolean
   lastLoad?: DeveloperFolderLastLoad
@@ -101,6 +113,7 @@ function validMeta(value: unknown): value is DeveloperFolderMeta {
     typeof value.path === 'string' && value.path.length > 0 &&
     validLoadedBy(value.loadedBy) &&
     (value.loadedByMac === undefined || typeof value.loadedByMac === 'string') &&
+    (value.loadedByKeyId === undefined || typeof value.loadedByKeyId === 'string') &&
     typeof value.autoReload === 'boolean' &&
     (value.lastLoad === undefined || validLastLoad(value.lastLoad))
 }
@@ -123,6 +136,9 @@ function readFolders(path: string): Record<string, DeveloperFolderMeta> {
   }
 }
 
+const loaderEntry = (pluginId: string, path: string, loadedBy: DeveloperFolderLoadedBy): string =>
+  canonicalContractJson({ pluginId, path: resolve(path), loadedBy })
+
 export class PluginDeveloperFolderMetaStore {
   private readonly file: string
 
@@ -134,15 +150,23 @@ export class PluginDeveloperFolderMetaStore {
    *  is stale and reads as the default. A loader that does not verify reads
    *  as unknown and says so. */
   get(pluginId: string, path: string): DeveloperFolderMeta {
-    const { loadedByMac, ...meta } = this.stored(pluginId, path)
-    const expected = this.loaderMac(pluginId, path, meta.loadedBy)
-    if (expected === null || meta.loadedBy.kind === 'unknown' || loadedByMac === expected) return meta
-    return { ...meta, loadedBy: { kind: 'unknown' }, loadedByUnverified: true }
+    const { loadedByMac, loadedByKeyId, ...meta } = this.stored(pluginId, path)
+    if (!this.signer || meta.loadedBy.kind === 'unknown') return meta
+    const signing = this.signing()
+    if (signing.state === 'no-secure-storage') return { ...meta, loadedByUnsigned: true }
+    const unverified = (reason: 'changed' | 'key-changed' | 'no-key'): DeveloperFolderMeta =>
+      ({ ...meta, loadedBy: { kind: 'unknown' }, loadedByUnverified: reason })
+    if (signing.state === 'no-key') return unverified('no-key')
+    if (loadedByKeyId !== undefined && loadedByMac !== undefined && loadedByKeyId !== signing.keyId) return unverified('key-changed')
+    return loadedByMac === signing.mac(loaderEntry(pluginId, path, meta.loadedBy)) ? meta : unverified('changed')
   }
 
   setLoadedBy(pluginId: string, path: string, loadedBy: DeveloperFolderLoadedBy): void {
-    const loadedByMac = this.loaderMac(pluginId, path, loadedBy)
-    this.update(pluginId, path, ({ loadedByMac: _old, ...meta }) => ({ ...meta, loadedBy, ...(loadedByMac ? { loadedByMac } : {}) }))
+    const signing = this.signer ? this.signing() : null
+    const signed = signing?.state === 'ready'
+      ? { loadedByMac: signing.mac(loaderEntry(pluginId, path, loadedBy)), loadedByKeyId: signing.keyId }
+      : {}
+    this.update(pluginId, path, ({ loadedByMac: _mac, loadedByKeyId: _keyId, ...meta }) => ({ ...meta, loadedBy, ...signed }))
   }
 
   private stored(pluginId: string, path: string): DeveloperFolderMeta {
@@ -151,11 +175,11 @@ export class PluginDeveloperFolderMetaStore {
     return { path, loadedBy: { kind: 'unknown' }, autoReload: true }
   }
 
-  private loaderMac(pluginId: string, path: string, loadedBy: DeveloperFolderLoadedBy): string | null {
+  private signing(): ReturnType<DeveloperFolderRecordSigner['recordSigning']> {
     try {
-      return this.signer?.entryMac(canonicalContractJson({ pluginId, path: resolve(path), loadedBy })) ?? null
+      return this.signer!.recordSigning()
     } catch {
-      return null
+      return { state: 'no-key' }
     }
   }
 
