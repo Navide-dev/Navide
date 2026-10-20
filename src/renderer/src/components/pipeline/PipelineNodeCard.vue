@@ -43,7 +43,7 @@ const statusText = computed(() => {
   return t(`pipelineEditor.status.${s}`)
 })
 const aria = computed(() =>
-  [title.value, subtitle.value, props.agentLabel, statusText.value, elapsed.value].filter(Boolean).join(', ')
+  [title.value, subtitle.value, props.agentLabel, statusText.value, props.run?.error, elapsed.value].filter(Boolean).join(', ')
 )
 
 function badgeText(b: LaneBadge): string {
@@ -84,7 +84,7 @@ function badgeText(b: LaneBadge): string {
         <span v-if="agentTag" class="pnc-agent" :title="agentLabel">{{ agentTag }}</span>
       </span>
     </span>
-    <span v-if="statusText" class="pnc-status">
+    <span v-if="statusText" class="pnc-status" :title="run?.error">
       <span class="pnc-dot" aria-hidden="true"></span>
       <span>{{ statusText }}</span>
       <span class="pnc-nums">
