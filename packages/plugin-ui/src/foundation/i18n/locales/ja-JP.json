@@ -11437,7 +11437,12 @@
       "publisher": "発行者：{publisher}",
       "selfDeclared": "自称：{publisher}",
       "localSignedBy": "開発者 {publisher}（Navide の資格審査済み）の署名あり。このバージョンは Navide の審査を受けていません",
-      "signatureRevoked": "署名は無効になりました"
+      "signatureRevoked": "署名は無効になりました",
+      "unsignedNote": "作成者を確認できません。ファイルが改変されている可能性があります。",
+      "showDetails": "提供元、SHA-256、インストール日時を表示",
+      "fileDigest": "インストールしたファイルの SHA-256：{digest}",
+      "contentDigest": "インストールした内容の SHA-256：{digest}",
+      "installedAt": "インストール日時：{time}"
     },
     "diff": {
       "heading": "この更新での権限の変化",

@@ -11437,7 +11437,12 @@
       "publisher": "Publisher: {publisher}",
       "selfDeclared": "Self-declared: {publisher}",
       "localSignedBy": "Signed by developer {publisher} (vetted by Navide); this version was not reviewed by Navide",
-      "signatureRevoked": "Signature no longer valid"
+      "signatureRevoked": "Signature no longer valid",
+      "unsignedNote": "The author cannot be confirmed; the file may have been changed.",
+      "showDetails": "Show the source, SHA-256 and install time",
+      "fileDigest": "SHA-256 of the installed file: {digest}",
+      "contentDigest": "SHA-256 of the installed contents: {digest}",
+      "installedAt": "Installed: {time}"
     },
     "diff": {
       "heading": "What this update changes",
