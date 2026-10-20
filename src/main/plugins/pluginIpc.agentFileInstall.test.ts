@@ -282,6 +282,21 @@ describe('MED-5: staged copies live as long as their request', () => {
     expect(call('plugins:listInstalled')).toEqual([])
   })
 
+  it('R1: a staging folder that cannot be made fails only the agent request, which says why', async () => {
+    // A file where the folder belongs: mkdir fails as it would without permission.
+    writeFileSync(join(base, 'userData', 'plugin-staging'), 'in the way')
+    expect(() => register()).not.toThrow()
+    // Every other Navide plugin IPC works as before.
+    expect(call('plugins:listInstalled')).toEqual([])
+    writeFileSync(picked, vsix())
+    await expect(call('plugins:installFromFile')).resolves.toMatchObject({ id: 'acme.todo' })
+    // The agent's request reports the failure instead of staging nothing silently.
+    const staged = await stage(picked)
+    expect(staged).toMatchObject({ ok: false })
+    expect(staged.error).toMatch(/plugin-staging/)
+    expect(staged.result?.report.stagingId).toBeUndefined()
+  })
+
   it('LOW-2: clears what an earlier run left as soon as the Host starts', () => {
     mkdirSync(stagingDir(), { recursive: true })
     writeFileSync(join(stagingDir(), `${'e'.repeat(64)}.vsix`), 'orphan')
