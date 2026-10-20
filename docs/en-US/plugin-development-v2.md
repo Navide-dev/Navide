@@ -6,8 +6,8 @@
 > `navide.plans` and `navide.mini-ide` packages run on this contract, and so do
 > third-party packages installed from a Registry.
 >
-> Installing a v2 package from a Registry and choosing **Restart Plugin**
-> writes an exact package-version grant for the declared `permissions` plus
+> Installing a v2 package from a Registry writes, as soon as the user
+> approves it, an exact package-version grant for the declared `permissions` plus
 > Host-managed storage, so a third-party view can call the public catalog and
 > `storage.*` (see [Host-managed storage partitions](#host-managed-storage-partitions)).
 > Third-party native backends run only under the OS sandbox and consent rules
@@ -2147,14 +2147,25 @@ have a package-relative HTML `entry`. The initial v2 contract does not accept
 additive contract only after authors can implement and test the complete
 provider Interface.
 
-An update is downloaded and verified in the background but is not a live code
-swap. The update is staged at an immutable target-specific package directory,
-receives current trust verification plus restricted frontend and backend
-preflight, and is then offered through **Restart Plugin**. Navide drains only that plugin,
+What the user approves takes effect at once; it is never a live code swap
+inside a running view. An install or update is staged at an immutable
+target-specific package directory and receives current trust verification
+plus restricted frontend and backend preflight. A first install is then
+activated as soon as it is approved. An approved update, and an agent's
+automatic update whose disclosure is identical to the running version's
+(O1), switches right away through the same per-plugin switch as
+**Restart Plugin**: the consent dialog says beforehand that the plugin's open
+views reload and lose what is not saved in them. Navide drains only that plugin,
 atomically selects one complete frontend/backend package version and its
 matching storage selection, then restores native view placements from fresh
 Host-owned descriptor and Grant data. Navide itself and unrelated plugins do
-not restart. An older mutable Registry installation is adopted as the previous
+not restart. In-window views come back on the new version in place. Every
+switch is recorded in the main window's announcements with a one-click way
+back to the version it replaced; a failed switch keeps the previous version
+running and leaves a row with the reason and **Apply now**. A first install
+or update that is still staged when Navide starts (the App closed before it
+switched) is activated, or disclosed with **Apply now**, on that launch.
+An older mutable Registry installation is adopted as the previous
 version only after its retained archive, receipt, grant, and current Registry
 trust verify; a failed check cannot turn it into an active selection.
 Interrupted activation recovery, rollback to a retained previous
@@ -2277,9 +2288,13 @@ runs only inside the OS sandbox described in
   the user always consents in a dialog that shows a fixed warning, the
   self-declared publisher and "not scanned", starts on Cancel and enables its
   consent button only after an explicit acknowledgement. The package is staged
-  like a Registry candidate and its grant takes effect on **Restart Plugin**;
+  like a Registry candidate and takes effect, with its grant, as soon as the
+  user approves it (the same per-plugin switch as **Restart Plugin**);
   a native backend still asks for its own consent and runs in the same
-  sandbox. A file install never updates automatically. Installing a file over
+  sandbox. A file install never updates automatically. A file installed over
+  a file install keeps the replaced file version as the rollback target;
+  going back to it asks for the user's consent again, and its native backend
+  asks again before it runs. Installing a file over
   an installed package of the same id (or a Marketplace version over a file
   install) asks first, and the replacement keeps none of the replaced
   package's permissions: its capability grant and rollback grant, its native

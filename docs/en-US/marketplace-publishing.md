@@ -219,8 +219,8 @@ your working folder with its view and backend and reloads it as you edit. There
 is no `navide-plugin dev` command, and the development-build variable
 `AGENT_TEAM_PLUGIN_DEV_PATH` writes no capability grant, so it cannot open a
 Manifest v2 view and refuses a backend. A Registry or file install
-grants the declared permissions and storage for that exact version when you
-choose **Restart Plugin**.
+grants the declared permissions and storage for that exact version as soon as
+you approve it; it takes effect without **Restart Plugin** or relaunching Navide.
 
 ## 4. Publish to the Marketplace
 
