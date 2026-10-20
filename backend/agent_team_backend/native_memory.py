@@ -147,6 +147,15 @@ MEMORY_SOURCES: tuple[MemorySource, ...] = (
     MemorySource("droid", PROJECT_SCOPE, ("CLAUDE.md",)),
     MemorySource("droid", PROJECT_SCOPE, (".factory", "AGENTS.md")),
     MemorySource("droid", PROJECT_SCOPE, (".agents", "AGENTS.md")),
+    # -- goose: CONTEXT_FILE_NAMES (default .goosehints, AGENTS.md) in the
+    # config dir ($XDG_CONFIG_HOME/goose, or $GOOSE_PATH_ROOT/config) and
+    # ~/.agents/AGENTS.md, then per directory from the git root down
+    # (crates/goose/src/hints/load_hints.rs, 1.55.0).
+    MemorySource("goose", USER_SCOPE, (".config", "goose", ".goosehints"), canonical=True),
+    MemorySource("goose", USER_SCOPE, (".config", "goose", "AGENTS.md")),
+    MemorySource("goose", USER_SCOPE, (".agents", "AGENTS.md")),
+    MemorySource("goose", PROJECT_SCOPE, (".goosehints",), canonical=True),
+    MemorySource("goose", PROJECT_SCOPE, ("AGENTS.md",)),
     # -- grok: ~/.grok/AGENTS.md, then AGENTS.override.md/AGENTS.md per level.
     MemorySource("grok", USER_SCOPE, (".grok", "AGENTS.md"), canonical=True),
     MemorySource("grok", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),

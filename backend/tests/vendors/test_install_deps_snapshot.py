@@ -16,7 +16,8 @@ snapshot is here to catch.
 `identity_regex` was added 2026-09-18 for the one binary name another vendor
 also ships (`agent`: Cursor's, and xAI grok's symlink to itself). It is empty
 for every entry but cursor, whose version pattern is anchored for the same
-reason.
+reason, and goose (2026-10-21), whose name pressly's migration tool also
+ships.
 
 `official_regex` was added 2026-10-20 (issue #402) for grok, whose path a
 community CLI of the same name also installs to: a mismatch is named in the
@@ -343,6 +344,32 @@ SNAPSHOT = [{'id': 'claude',
   'autoupdate_env': '',
   'platforms': [],
   'install_cmds': {'win32': {'command': 'irm https://app.factory.ai/cli/windows | iex', 'requires_binaries': (), 'needs_terminal': True}}},
+ {'id': 'goose',
+  'label': 'Goose (AAIF)',
+  'description': 'Goose open-source AI agent',
+  'group': 'agent_cli',
+  'check_cmd': ['goose', '--version'],
+  'version_regex': '(\\d+\\.\\d+\\.\\d+)',
+  'alt_commands': [],
+  'identity_regex': '^\\s*\\d+\\.\\d+\\.\\d+\\s*$',
+  'official_regex': '',
+  'min_version': '',
+  'install_cmd': 'curl -fsSL '
+                 'https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | '
+                 'bash',
+  'needs_terminal': True,
+  'optional': True,
+  'docs_url': 'https://goose-docs.ai/docs/getting-started/installation',
+  'requires_binaries': ['curl'],
+  'update_cmd': 'goose update',
+  'doctor_cmd': 'goose doctor',
+  'npm_package': '',
+  'update_state_file': '',
+  'config_home_env': '',
+  'config_home_default': '',
+  'autoupdate_env': '',
+  'platforms': [],
+  'install_cmds': {'win32': {'command': '', 'requires_binaries': (), 'needs_terminal': False}}},
  {'id': 'mcode',
   'label': 'MiniMax Code',
   'description': 'MiniMax terminal coding agent',

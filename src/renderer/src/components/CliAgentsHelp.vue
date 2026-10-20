@@ -45,7 +45,7 @@ interface VendorRow {
 // "signIn" mirrors each vendor's `login_command_args` (cli_vendors/*.py), which
 // is what `_login_spawn_command` appends when the Accounts pane's sign-in
 // button spawns a login pane. Checked against the registry on 2026-09-18; the
-// seven vendors that declare none launch normally and sign in inside the CLI.
+// eight vendors that declare none launch normally and sign in inside the CLI.
 // test_help_panel_sign_in_column_matches_login_command_args keeps the two in
 // step, so this table cannot quietly drift from what the button runs.
 const vendors: VendorRow[] = [
@@ -64,6 +64,7 @@ const vendors: VendorRow[] = [
   { name: 'Muse Code (Meta)', bin: 'muse', agentKey: 'muse', skipFlag: '--disable-approval', usage: false, multiAccount: false, signIn: 'login' },
   { name: 'Droid CLI (Factory)', bin: 'droid', agentKey: 'droid', skipFlag: '--auto high', usage: false, multiAccount: false, signIn: '' },
   { name: 'MiniMax Code', bin: 'mcode', agentKey: 'mcode', skipFlag: '', usage: false, multiAccount: false, signIn: 'login' },
+  { name: 'Goose (AAIF)', bin: 'goose', agentKey: 'goose', skipFlag: '', usage: false, multiAccount: false, signIn: '' },
 ]
 
 // Backend truth for the multi-account column. `supported` alone is not
