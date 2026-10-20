@@ -1686,6 +1686,10 @@ async def test_a_helper_that_died_while_idle_has_its_group_ended_only_while_its_
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
     for reused in (False, True):
         proxy._result_worker.stop()  # noqa: SLF001
+        # The previous round's replacement is still alive: end it now, not
+        # from its grace timer while this round runs (it would land in ended).
+        for leftover in list(worker._stopping):  # noqa: SLF001
+            worker._kill_tree(leftover)  # noqa: SLF001
         proxy._result_worker._start_failed = None  # noqa: SLF001
         ended.clear()
         assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
