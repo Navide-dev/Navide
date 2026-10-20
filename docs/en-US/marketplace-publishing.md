@@ -471,8 +471,9 @@ navide-plugin testplace invite list acme.files
   testers. The first code of a Navide plugin waits for a light review by
   Navide; later ones open at once. `code revoke` stops new joins; testers who
   already joined keep their access.
-- `revoke <id> <version>` withdraws a test build early. Navide turns it off for
-  its testers within 24 hours.
+- `revoke <id> <version>` withdraws a test build early. Each tester's Navide
+  turns it off the next time it checks in while signed in to Navide Cloud, and
+  never offers to keep it after it expires. A yank does the same.
 - `promote <id> <version>` sends the same package to Marketplace review. When
   it is approved it becomes an ordinary stable or pre-release version (by its
   SemVer), and testers keep it without reinstalling.

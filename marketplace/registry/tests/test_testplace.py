@@ -246,8 +246,12 @@ def test_revoking_a_version_blocks_it_in_the_signed_trust_metadata(client: TestC
     )
     assert resp.status_code == 200, resp.text
     assert client.get("/api/testplace/acme/files/1.0.0/download", headers=tester).status_code == 404
-    (item,) = client.get("/api/testplace", headers=tester).json()["items"]
-    assert {"packageId": "acme.files", "version": "1.0.0"} in item["trust_metadata"]["blockedPackages"]
+    # R-MED-3: the public signed metadata names nothing an outsider could probe
+    # for; the invited tester learns of it from the tester detail instead.
+    assert all(blocked.get("packageId") != "acme.files" for blocked in _public_trust_metadata(client)["blockedPackages"])
+    detail = client.get("/api/testplace/acme/files", headers=tester)
+    assert detail.status_code == 200
+    assert detail.json()["withdrawn"] == [{"version": "1.0.0", "target": "universal"}]
 
 
 # -- public codes ----------------------------------------------------------
@@ -479,3 +483,49 @@ def test_admin_page_reviews_a_code_and_a_promotion_and_revokes(tmp_path) -> None
         rows = session.exec(select(ExtensionVersion).where(ExtensionVersion.version == "1.1.0")).all()
     assert {"testplace.code.approve", "testplace.promotion.approve", "testplace.version.revoke"} <= set(actions)
     assert all(r.yanked for r in rows)
+
+
+def _public_trust_metadata(client: TestClient) -> dict:
+    """The root-signed trust metadata every public detail carries."""
+    assert _publish(client, "9.0.0", channel="stable", ident="acme.public").status_code == 201
+    resp = client.get("/api/extensions/acme/public")
+    assert resp.status_code == 200, resp.text
+    return resp.json()["trust_metadata"]
+
+
+def test_a_developer_yank_of_a_testplace_build_reaches_its_testers_only(client: TestClient) -> None:
+    """T-MED-1: a yanked test build must not read like one that merely expired."""
+    assert _publish(client).status_code == 201
+    (token,) = _invite(client)
+    tester = _member(client, "member-tester")
+    assert _join(client, tester, token).status_code == 200
+    assert client.get("/api/testplace/acme/files", headers=tester).json()["withdrawn"] == []
+    yank = client.post("/api/extensions/acme/files/1.0.0/yank", headers=_publisher())
+    assert yank.status_code == 200, yank.text
+    assert client.get("/api/testplace/acme/files", headers=tester).json()["withdrawn"] == [
+        {"version": "1.0.0", "target": "universal"}
+    ]
+    # Outsiders: the same 404 as before, and nothing in the public metadata.
+    assert client.get("/api/testplace/acme/files", headers=_member(client, "member-out")).status_code == 404
+    assert all(blocked.get("packageId") != "acme.files" for blocked in _public_trust_metadata(client)["blockedPackages"])
+
+
+def test_the_public_report_form_cannot_tell_a_testplace_version_exists(client: TestClient) -> None:
+    """R-MED-4: reporting a testplace-only version answers like a missing one."""
+    from registry import reports
+    from registry.models import Extension
+
+    assert _publish(client, "9.0.0", channel="stable", ident="acme.files").status_code == 201
+    assert _publish(client, "9.1.0").status_code == 201
+    with _session(client) as session:
+        extension = session.exec(select(Extension).where(Extension.identity == "acme.files")).one()
+        answers = []
+        for version in ("9.1.0", "7.7.7"):
+            try:
+                reports.create_report(
+                    session, extension=extension, member_id="member-out", reason="malware", detail="", version=version
+                )
+                answers.append("accepted")
+            except reports.ReportError as exc:
+                answers.append(str(exc))
+        assert answers == ["that version does not exist", "that version does not exist"]

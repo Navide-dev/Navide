@@ -197,6 +197,9 @@ class TestplaceExtension(BaseModel):
     trust_metadata_signature: str
     versions: list[TestplaceVersionInfo]
     """Installable testplace artifacts, newest version first."""
+    withdrawn: list[dict[str, str]] = []
+    """`{version, target}` of every testplace artifact taken back (yanked or
+    revoked), so a tester's App never keeps one (T-MED-1). Testers only."""
 
 
 class TestplaceListResponse(BaseModel):

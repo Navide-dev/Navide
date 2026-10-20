@@ -101,6 +101,10 @@ def register_testplace_routes(
                 )
                 for row in rows
             ],
+            withdrawn=[
+                {"version": row.version, "target": row.target}
+                for row in testplace.withdrawn_rows(session, extension)
+            ],
         )
 
     @app.get("/api/testplace", response_model=TestplaceListResponse)

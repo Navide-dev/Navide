@@ -162,7 +162,7 @@ export async function runTestplace(argv, { log = console.log } = {}) {
   if (group === 'revoke' && action !== undefined && rest.length === 1) {
     const reason = options.get('--reason')
     const body = await call(registry, auth(), 'POST', `${extensionPath(action)}/versions/${encodeURIComponent(rest[0])}/revoke`, reason ? { reason } : {})
-    log(`Revoked ${action}@${body.version} (${body.targets.join(', ')}). Navide turns it off for testers within 24 hours.`)
+    log(`Revoked ${action}@${body.version} (${body.targets.join(', ')}). Each tester's Navide turns it off the next time it checks in while signed in to Navide Cloud.`)
     return
   }
   if (group === 'promote' && action !== undefined && rest.length === 1) {

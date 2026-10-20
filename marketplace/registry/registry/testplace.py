@@ -13,10 +13,10 @@ while holding a live seat:
   of the extension passed a light admin review (D2).
 
 Revoking a code stops new joins; seats already taken stay, like a TestFlight
-public link. Revoking a version yanks it and adds `ns.name@version` to the
-blocklist, which reaches every App through the signed trust metadata within
-its TTL (released Apps reject any new metadata field, so there is no
-separate list).
+public link. Revoking or yanking a version takes it back; its testers see
+it in the tester detail's `withdrawn` list, and their App stops it and never
+offers to keep it. Nothing goes into the public signed blocklist, where
+`ns.name@version` would tell anyone the test build exists (R-MED-3).
 
 Promotion sends the same artifact (digest unchanged) to an admin; approval
 re-signs it on the channel its SemVer implies, so a tester's installed copy
@@ -33,7 +33,6 @@ from sqlalchemy import func, insert, literal, update
 from sqlalchemy import select as sa_select
 from sqlmodel import Session, select
 
-from . import blocklist
 from .disclosure import sign_disclosure
 from .models import (
     Extension,
@@ -102,6 +101,24 @@ def live_rows(
         )
     ).all()
     return [r for r in rows if r.expires_at is not None and _aware(r.expires_at) > now]
+
+
+def withdrawn_rows(session: Session, extension: Extension) -> list[ExtensionVersion]:
+    """Testplace artifacts taken back: yanked by the developer, revoked by the
+    developer or an admin, or withdrawn with the publisher's qualification.
+    Listed to the extension's testers only, so an expired build that was
+    taken back is never offered to keep (T-MED-1)."""
+    return list(
+        session.exec(
+            select(ExtensionVersion)
+            .where(
+                ExtensionVersion.extension_id == extension.id,
+                ExtensionVersion.channel == TESTPLACE_CHANNEL,
+                ExtensionVersion.yanked == True,  # noqa: E712
+            )
+            .order_by(ExtensionVersion.version, ExtensionVersion.target)
+        ).all()
+    )
 
 
 def version_rows(
@@ -417,21 +434,13 @@ def revoke_version(
     rows = version_rows(session, extension, version)
     if not rows:
         raise TestplaceError("NOT_FOUND", "testplace version not found", status=404)
+    # R-MED-3: no `ns.name@version` entry in the public signed blocklist, which
+    # would tell anyone the test build exists. Its testers learn of it from
+    # the tester detail's `withdrawn` (withdrawn_rows), as for a yank.
     for row in rows:
         row.yanked = True
         session.add(row)
     session.commit()
-    try:
-        blocklist.add_entry(
-            session,
-            kind="package",
-            value=f"{extension.identity}@{version}",
-            reason=reason.strip() or "testplace version revoked",
-            created_by=actor,
-        )
-    except blocklist.BlocklistError as exc:
-        if "already blocked" not in str(exc):
-            raise TestplaceError("BAD_REQUEST", str(exc)) from exc
     return rows
 
 
