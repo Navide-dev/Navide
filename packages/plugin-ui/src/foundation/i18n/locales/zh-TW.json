@@ -10521,7 +10521,7 @@
       "title": "Guard 怎麼處理",
       "hint": "每個動作先分級，再依要求來自哪裡決定處置。",
       "source": "要求來源",
-      "levels": "嚴重：刪除 workspace 或家目錄以外的檔案、磁碟與系統指令、sudo、curl | sh、讀寫憑證、強制推送到 main、雲端資源刪除。高：workspace 內 rm -rf、git push／reset --hard、發布套件、修改 CI 或 git hooks。",
+      "levels": "嚴重：刪除 workspace 或家目錄以外的檔案、磁碟與系統指令、sudo、curl {'|'} sh、讀寫憑證、強制推送到 main、雲端資源刪除。高：workspace 內 rm -rf、git push／reset --hard、發布套件、修改 CI 或 git hooks。",
       "row": {
         "local": "你本人，在這台電腦上",
         "relay": "從聊天室核准",

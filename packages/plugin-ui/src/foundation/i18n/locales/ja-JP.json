@@ -10521,7 +10521,7 @@
       "title": "Guard の動作",
       "hint": "各操作を分類し、依頼元に応じて処理します。",
       "source": "依頼元",
-      "levels": "重大：workspace やホーム外の削除、ディスク・システム操作、sudo、curl | sh、認証情報の読み書き、main への強制プッシュ、クラウドリソースの削除。高：workspace 内の rm -rf、git push／reset --hard、パッケージ公開、CI や git hooks の変更。",
+      "levels": "重大：workspace やホーム外の削除、ディスク・システム操作、sudo、curl {'|'} sh、認証情報の読み書き、main への強制プッシュ、クラウドリソースの削除。高：workspace 内の rm -rf、git push／reset --hard、パッケージ公開、CI や git hooks の変更。",
       "row": {
         "local": "このコンピューターのあなた",
         "relay": "チャットアプリで承認",

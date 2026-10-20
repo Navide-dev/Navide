@@ -10521,7 +10521,7 @@
       "title": "What Guard does",
       "hint": "Each action is graded, then handled by where the request came from.",
       "source": "Request source",
-      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl | sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
+      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl {'|'} sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
       "row": {
         "local": "You, on this computer",
         "relay": "Approved from a chat app",
