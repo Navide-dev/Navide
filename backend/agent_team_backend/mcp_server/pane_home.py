@@ -572,21 +572,24 @@ def _grok_trust_seeds_path() -> Path:
 
 
 def _record_grok_workspace(pane_id: str, workspace: str) -> None:
+    """Record the folder the pane is started in, as given and resolved now:
+    a link in it changed later must not move what the pane may share."""
     path = _grok_trust_record(GROK_TRUST_WORKSPACES)
     workspaces = _read_json_object(path)
-    if workspace:
-        workspaces[pane_id] = workspace
+    try:
+        real = os.path.realpath(workspace, strict=True) if workspace else ""
+    except (OSError, ValueError):
+        real = ""
+    if real:
+        workspaces[pane_id] = {"path": os.path.normpath(workspace), "real": real}
     elif workspaces.pop(pane_id, None) is None:
         return
     _write_json(path, workspaces)
 
 
 def _path_within(path: str, root: str) -> bool:
-    """Whether ``path`` or a folder above it is the folder ``root`` names.
-
-    Compared by file identity, one path component at a time: ``/ws-other`` is
-    not below ``/ws``, while a different spelling of the same folder (letter
-    case on a case-insensitive disk, a Windows short name) still is."""
+    """Whether ``path`` or a folder above it is the folder ``root`` names,
+    by file identity (a different spelling of the same folder counts)."""
     for candidate in (Path(path), *Path(path).parents):
         try:
             if os.path.samefile(candidate, root):
@@ -599,26 +602,33 @@ def _path_within(path: str, root: str) -> bool:
 def _trust_in_workspace(folder: Any, workspace: Any) -> bool:
     """Whether a folder a pane trusted is its workspace or inside it.
 
-    Relative and ``~`` keys, device-namespace prefixes, and folders that do
-    not exist are refused. The key is checked both as written (``..``, ``.``
-    and repeated or trailing separators collapsed) and with its symlinks
-    resolved; the workspace is resolved first. The root of a drive, the home
-    folder and every folder above it are never trusted this way, and a
-    workspace that is one of them shares nothing."""
-    if not isinstance(folder, str) or not isinstance(workspace, str) or not workspace:
+    ``workspace`` is the record _record_grok_workspace made at spawn. The key
+    must be absolute (not ``~``, not a device-namespace path) and, with
+    ``..``, ``.`` and repeated or trailing separators collapsed, start with
+    the workspace as given or as resolved then, component by component
+    (``/ws-other`` is not inside ``/ws``). What follows must exist and hold
+    no link, so the key names the same folder now and later. A workspace that
+    is a drive root, the home folder or a folder above it shares nothing."""
+    if not isinstance(folder, str) or not isinstance(workspace, dict):
+        return False
+    given, real = workspace.get("path"), workspace.get("real")
+    if not isinstance(given, str) or not isinstance(real, str) or not real:
         return False
     if folder.startswith(("~", "\\\\?\\", "\\\\.\\", "//?/", "//./")) or not os.path.isabs(folder):
         return False
-    try:
-        resolved = os.path.realpath(folder, strict=True)
-        root = os.path.realpath(workspace, strict=True)
-        home = os.path.realpath(real_home())
-    except (OSError, ValueError):
+    home = os.path.realpath(real_home())
+    if Path(real).parent == Path(real) or _path_within(home, real):
         return False
-    for path in (resolved, root):
-        if Path(path).parent == Path(path) or _path_within(home, path):
+    parts = Path(os.path.normpath(folder)).parts
+    for base in {Path(given).parts, Path(real).parts}:
+        if parts[: len(base)] != base:
+            continue
+        target = str(Path(real).joinpath(*parts[len(base):]))
+        try:
+            return os.path.realpath(target, strict=True) == target
+        except (OSError, ValueError):
             return False
-    return _path_within(resolved, root) and _path_within(os.path.normpath(folder), root)
+    return False
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:

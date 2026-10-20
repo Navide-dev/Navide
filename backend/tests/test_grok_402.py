@@ -287,15 +287,33 @@ def test_a_link_into_the_workspace_is_judged_by_where_it_points(gate, home: Path
     (workspace / "out").symlink_to(home)
     (workspace / "top").symlink_to("/")
     (workspace / "dangling").symlink_to(tmp_path / "gone")
+    (workspace / "sideways").symlink_to(workspace / "inside")  # may be pointed elsewhere later
     (tmp_path / "ws-link").symlink_to(workspace)
     _prepare("p1", str(tmp_path / "ws-link") + "/")
-    for name in ("out", "top", "dangling"):
+    for name in ("out", "top", "dangling", "sideways"):
         _grok_trusts(_shim_trust("p1"), str(workspace / name))
     _grok_trusts(_shim_trust("p1"), str(workspace / "inside") + "/")
+    _grok_trusts(_shim_trust("p1"), str(tmp_path / "ws-link" / "inside"))
 
     _prepare("p2")
 
-    assert set(_folders(home / ".grok" / TRUST)) == {str(workspace / "inside") + "/"}
+    assert set(_folders(home / ".grok" / TRUST)) == {
+        str(workspace / "inside") + "/", str(tmp_path / "ws-link" / "inside")
+    }
+
+
+def test_a_workspace_link_moved_after_the_spawn_shares_nothing_new(gate, home: Path, tmp_path: Path) -> None:
+    (tmp_path / "ws" / "inside").mkdir(parents=True)
+    (tmp_path / "ws-link").symlink_to(tmp_path / "ws")
+    _prepare("p1", str(tmp_path / "ws-link"))
+    (tmp_path / "ws-link").unlink()
+    (tmp_path / "ws-link").symlink_to(home)
+    _grok_trusts(_shim_trust("p1"), str(home))
+    _grok_trusts(_shim_trust("p1"), str(tmp_path / "ws-link" / ".grok"))
+
+    _prepare("p2")
+
+    assert not (home / ".grok" / TRUST).exists()
 
 
 @pytest.mark.parametrize("workspace", ["/", "HOME", "HOME/..", ""])
@@ -325,13 +343,13 @@ def test_the_workspace_itself_and_folders_below_it_are_shared(gate, home: Path) 
 def test_the_home_folder_in_another_case_is_still_refused(gate, home: Path) -> None:
     _prepare("p1", str(home).upper())
     _grok_trusts(_shim_trust("p1"), str(home).upper())
-    _prepare("p2", f"{WS}".upper())
-    _grok_trusts(_shim_trust("p2"), str(home).swapcase())
-    _grok_trusts(_shim_trust("p2"), f"{WS}/A")
+    _grok_trusts(_shim_trust("p1"), str(home / ".grok").upper())
+    _prepare("p2", str(home.parent).swapcase())
+    _grok_trusts(_shim_trust("p2"), f"{WS}/a")
 
     _prepare("p3")
 
-    assert set(_folders(home / ".grok" / TRUST)) == {f"{WS}/A"}
+    assert not (home / ".grok" / TRUST).exists()
 
 
 def test_only_trusted_and_decided_at_reach_the_users_file(gate, home: Path) -> None:
@@ -367,7 +385,9 @@ def test_navides_records_live_in_its_own_folder_and_old_ones_are_read_once(
     own = tmp_path / "grok-folder-trust"
     assert f"{WS}/a" in json.loads((own / ".folder-trust-merged.json").read_text(encoding="utf-8"))["rows"]
     assert "p1" in json.loads((own / ".folder-trust-seeds.json").read_text(encoding="utf-8"))
-    assert json.loads((own / ".folder-trust-workspaces.json").read_text(encoding="utf-8")) == {"p1": WS}
+    assert json.loads((own / ".folder-trust-workspaces.json").read_text(encoding="utf-8")) == {
+        "p1": {"path": WS, "real": WS}
+    }
     assert (old / ".folder-trust-merged.json").exists(), "the old file is left where it was"
     assert not (old / ".folder-trust-seeds.json").exists()
     _off()
