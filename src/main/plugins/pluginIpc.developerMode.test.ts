@@ -326,6 +326,16 @@ describe('loading a developer folder', () => {
     expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loadedBy: { kind: 'unknown' }, lastLoad: { trigger: 'startup' } }] })
   })
 
+  it('review MED-2 on #536: a record that cannot be written never blocks loading a folder', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    mkdirSync(join(pluginsRoot, '.navide-plugin-developer-folders-meta.json'))
+    await loadFolder()
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+    expect(await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).toEqual({ reloaded: true, requiresConsent: false })
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loaded: true, loadedBy: { kind: 'unknown' } }] })
+  })
+
   it('refuses the navide. namespace and a folder that changed while the dialog was open', async () => {
     register()
     await call('plugins:setDeveloperMode', { enabled: true })
