@@ -12,7 +12,9 @@ from typing import Any
 
 from mcp.server.fastmcp import Context
 
-from agent_team_backend.mcp_server.marketplace_forms import _file_form_draft, _open_form
+# The module, not its names: server.py imports both modules at its end, so
+# when marketplace_forms is imported first it is still loading here.
+from agent_team_backend.mcp_server import marketplace_forms as _forms
 from agent_team_backend.mcp_server.server import _marketplace_error, _package_id, server
 
 MAX_LABEL_LENGTH = 120
@@ -45,7 +47,7 @@ async def marketplace_testplace_invite_open(
         if error:
             return _marketplace_error("BAD_REQUEST", error)
         prefill = {"id": target["id"]}
-    return await _open_form(ctx, "testplace-invite", prefill)
+    return await _forms._open_form(ctx, "testplace-invite", prefill)
 
 
 @server.tool()
@@ -78,4 +80,4 @@ async def marketplace_testplace_invite_fill(
             f"invitees must be at least one non-empty string of up to {MAX_LABEL_LENGTH} characters",
         )
     fields = {"invitees": [item.strip() for item in invitees]}
-    return await _file_form_draft(ctx, "testplace-invite", target, fields, reason)
+    return await _forms._file_form_draft(ctx, "testplace-invite", target, fields, reason)
