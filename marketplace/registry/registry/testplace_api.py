@@ -281,16 +281,13 @@ def register_testplace_routes(
         session: Session = Depends(session_dep),
     ) -> dict:
         extension, _ = developer(session, authorization, namespace, name)
-        return {
-            "limit": testplace.MAX_INVITES,
-            "invites": [invite_view(r) for r in testplace.list_invites(session, extension)],
-        }
+        return {"invites": [invite_view(r) for r in testplace.list_invites(session, extension)]}
 
     @app.post("/api/testplace/{namespace}/{name}/invites", status_code=201)
     def developer_invite(
         namespace: str,
         name: str,
-        labels: list[str] = Body(..., embed=True, max_length=testplace.MAX_INVITES),
+        labels: list[str] = Body(..., embed=True),
         authorization: str | None = Header(default=None),
         session: Session = Depends(session_dep),
     ) -> dict:

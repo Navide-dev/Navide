@@ -9,7 +9,7 @@ const USAGE = [
   '  navide-plugin testplace invite add <namespace.name> <label>... [options]',
   '  navide-plugin testplace invite list <namespace.name> [options]',
   '  navide-plugin testplace invite revoke <namespace.name> <invite-id> [options]',
-  '  navide-plugin testplace code create <namespace.name> --max-testers <1-1000> [options]',
+  '  navide-plugin testplace code create <namespace.name> --max-testers <n> [options]',
   '  navide-plugin testplace code list <namespace.name> [options]',
   '  navide-plugin testplace code revoke <namespace.name> <code-id> [options]',
   '  navide-plugin testplace versions <namespace.name> [options]',
@@ -124,7 +124,7 @@ export async function runTestplace(argv, { log = console.log } = {}) {
   if (group === 'invite' && action === 'list' && rest.length === 1) {
     const body = await call(registry, auth(), 'GET', `${extensionPath(rest[0])}/invites`)
     printInvites(body.invites, log)
-    log(`${body.invites.filter((i) => i.state !== 'revoked' && i.source === 'invite').length}/${body.limit} invites in use.`)
+    log(`${body.invites.filter((i) => i.state !== 'revoked' && i.source === 'invite').length} invites in use.`)
     return
   }
   if (group === 'invite' && action === 'revoke' && rest.length === 2) {
@@ -134,7 +134,7 @@ export async function runTestplace(argv, { log = console.log } = {}) {
   }
   if (group === 'code' && action === 'create' && rest.length === 1) {
     const maxTesters = Number(options.get('--max-testers'))
-    if (!Number.isInteger(maxTesters)) throw new TestplaceUsageError(`--max-testers <1-1000> is required\n\n${USAGE}`)
+    if (!Number.isInteger(maxTesters)) throw new TestplaceUsageError(`--max-testers <n> is required\n\n${USAGE}`)
     const code = await call(registry, auth(), 'POST', `${extensionPath(rest[0])}/codes`, { max_testers: maxTesters })
     log(`Test code #${code.id} (${code.state}, up to ${code.max_testers} testers), shown only now: ${code.code}`)
     if (code.state === 'in-review') log("This is the Navide plugin's first test code: it opens after a light review by Navide.")
