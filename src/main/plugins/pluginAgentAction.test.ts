@@ -159,7 +159,7 @@ describe('O1: an agent update whose disclosure is unchanged', () => {
     ...extra,
   })
   function updateDeps(result: unknown = check()) {
-    const commitUpdate = vi.fn(async (): Promise<void | { switchError?: string }> => {})
+    const commitUpdate = vi.fn(async (): Promise<void | { switched?: true; switchError?: string }> => {})
     const discardUpdate = vi.fn()
     const prepareUpdate = vi.fn(async () => result)
     return { d: deps({ prepareUpdate, commitUpdate, discardUpdate } as never), prepareUpdate, commitUpdate, discardUpdate }
@@ -184,6 +184,15 @@ describe('O1: an agent update whose disclosure is unchanged', () => {
     expect(d.notify).toHaveBeenCalledWith({
       action: 'update', pluginId: 'nerdtechnic.devmap', pluginVersion: '0.3.0', fromVersion: '0.2.0', requester,
     })
+  })
+
+  it('leaves a switched update to the switch row: no second "updated" notice (review r2)', async () => {
+    const { d, commitUpdate } = updateDeps()
+    commitUpdate.mockResolvedValueOnce({ switched: true })
+    await expect(answerPluginAgentAction(update, d)).resolves.toEqual({
+      ok: true, updated: true, pluginId: 'nerdtechnic.devmap', fromVersion: '0.2.0', pluginVersion: '0.3.0',
+    })
+    expect(d.notify).not.toHaveBeenCalled()
   })
 
   it('says a staged update whose switch failed as it is, and never announces it as updated (review M2)', async () => {

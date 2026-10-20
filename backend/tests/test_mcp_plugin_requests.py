@@ -238,6 +238,17 @@ async def test_a_staged_update_whose_switch_failed_is_said_as_it_is(host, broadc
     assert (row["action"], row["outcome"], row["error_code"]) == ("update", "error", "ACTION_FAILED")
 
 
+async def test_a_switch_failure_naming_other_versions_still_fails_closed(host, broadcasts, audit, caller) -> None:
+    # Review r2 LOW-516-1: "switched: false" is a failure whatever versions it names.
+    host.installed = [{"id": "nerdtechnic.devmap", "version": "0.2.0", "enabled": True}]
+    host.action_answer = {"ok": True, "updated": True, "switched": False, "switchError": "x",
+                          "pluginId": "nerdtechnic.devmap", "fromVersion": "0.1.0", "pluginVersion": "0.9.9"}
+    out = await mcp.marketplace_request_update(None, "nerdtechnic", "devmap", "0.3.0", "why")
+    assert out["ok"] is False and out["error_code"] == "SWITCH_FAILED" and out["applied"] is False
+    assert (out["fromVersion"], out["pluginVersion"]) == ("0.2.0", "0.3.0")
+    assert skills_approvals.registry.plugin_requests() == []
+
+
 @pytest.mark.parametrize("answer", [
     # The Host found a change, or could not compare: it says so.
     {"ok": False, "error": "the disclosure changed", "error_code": "APPROVAL_REQUIRED",

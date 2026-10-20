@@ -2827,9 +2827,10 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     const manager = new FrontendPluginManager()
     const captureHandler = vi.spyOn(manager, 'setPluginAgentActionHandler')
     const onPackageSwitched = vi.fn()
+    const onPluginAgentAction = vi.fn()
     const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
     try {
-      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, { ...TEST_PREFLIGHT_OPTIONS, onPackageSwitched })
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, { ...TEST_PREFLIGHT_OPTIONS, onPackageSwitched, onPluginAgentAction })
       const agentAction = captureHandler.mock.calls[0]![0]
       installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
       await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
@@ -2856,6 +2857,8 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
         { id: 'acme.demo', packageVersion: '1.0.1', rollbackKind: 'previous', rollbackToVersion: '1.0.0' },
       ])
       await expect(handlers.get('plugins:rollback')!(null, { id: 'acme.demo' })).resolves.toMatchObject({ packageVersion: '1.0.0' })
+      // One row in the window: the switch record names the agent; no separate "updated" notice.
+      expect(onPluginAgentAction).not.toHaveBeenCalled()
     } finally {
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
