@@ -10,9 +10,11 @@ import {
   permissionHoldActionFor,
   keysAnswerPermissionBox,
   holdOutlivedBox,
+  activityStampsTurnClocks,
   HOLD_PAINT_GRACE_MS,
   QUESTION_DETAIL,
 } from '../cliAwaitingInput'
+import { isTurnInFlight } from '../agentMessaging'
 
 // AWAITING means "the CLI stopped and cannot continue until the user answers".
 // Getting that wrong in either direction is costly: a missed prompt looks
@@ -138,6 +140,30 @@ describe('permissionHoldActionFor — the permission box, by hook events', () =>
     for (const detail of ['hook:pre_tool_use', 'hook:notification', 'assistant', 'user', 'hook:subagent_stop']) {
       expect(permissionHoldActionFor({ detail, tool_key: 'Bash:aaaa' }, held), detail).toBeNull()
     }
+  })
+})
+
+describe('activityStampsTurnClocks — a late tool result does not re-open the turn', () => {
+  it('keeps a finished pane idle when an async PostToolUse lands after the Stop hook', () => {
+    // The Post hooks run async: under load the last tool's result can arrive
+    // after turn_complete. Replays the clock update the agent_active branch does.
+    for (const detail of ['hook:post_tool_use', 'hook:post_tool_use_failure']) {
+      const turnCompleteAt = 1_000
+      let lastActiveAt = 900
+      if (activityStampsTurnClocks({ detail })) lastActiveAt = 1_050
+      expect(isTurnInFlight(lastActiveAt, turnCompleteAt, 1_100), detail).toBe(false)
+    }
+  })
+
+  it('keeps idle_prompt off the clocks', () => {
+    expect(activityStampsTurnClocks({ detail: 'hook:notification', notification_type: 'idle_prompt' })).toBe(false)
+  })
+
+  it('still stamps every real work signal', () => {
+    for (const detail of ['hook:pre_tool_use', 'hook:permission_request', 'hook:subagent_stop', 'assistant', 'user']) {
+      expect(activityStampsTurnClocks({ detail }), detail).toBe(true)
+    }
+    expect(activityStampsTurnClocks({ detail: 'hook:notification', notification_type: 'permission_prompt' })).toBe(true)
   })
 })
 

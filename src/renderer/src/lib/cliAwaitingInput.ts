@@ -173,6 +173,21 @@ export function permissionHoldActionFor(
   return null
 }
 
+/** True when an `agent_active` event should stamp the pane's activity clocks
+ *  (last active, last working, turn start).
+ *
+ *  Two kinds never do. idle_prompt fires about a minute after EVERY finished
+ *  turn: the pane is waiting, not working. PostToolUse(Failure) run async, so
+ *  under load the last tool's result can land after the Stop hook's
+ *  turn_complete; stamping it would make isTurnInFlight read the finished pane
+ *  as mid-turn (queued messages held, the loop's turn-end check stalled). They
+ *  add no activity signal anyway — PreToolUse already stamped the tool's start —
+ *  and exist only to release a permission hold (permissionHoldActionFor). */
+export function activityStampsTurnClocks(ev: { detail?: string; notification_type?: string }): boolean {
+  if (ev.notification_type === 'idle_prompt') return false
+  return ev.detail !== 'hook:post_tool_use' && ev.detail !== 'hook:post_tool_use_failure'
+}
+
 /** True when `data` — what a pane is sent, from the keyboard (xterm's onData
  *  hands over one keystroke at a time) or from the chat relay (a short run such
  *  as `y\r`) — contains a key that answers a permission box: Enter, a lone Esc,

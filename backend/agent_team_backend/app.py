@@ -3054,7 +3054,14 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # it as agent_active would replace the turn_complete entry for good —
     # cli_get_status would show a finished pane as active, with no turn text.
     # The broadcast below still carries it for the renderer to judge.
-    if pane_id and notification_type != "idle_prompt":
+    # PostToolUse(Failure) are installed async, so the last tool's result can
+    # land after the Stop hook; recording it would re-open the finished turn
+    # the same way. PreToolUse already recorded the tool's start.
+    if (
+        pane_id
+        and notification_type != "idle_prompt"
+        and event_kind not in ("post_tool_use", "post_tool_use_failure")
+    ):
         # The log-reader sink is not the only writer of _pane_activity any
         # more: for the hook vendors the Stop hook is the earliest and most
         # reliable end-of-turn signal there is, and cli_wait_idle could not see
@@ -3088,9 +3095,13 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # Dev time: only real work signals. A notification (idle_prompt /
     # permission_prompt) or a permission_request is mapped to agent_active above
     # for the busy-state path, but it marks the agent WAITING — beating on it would open an agent
-    # interval at exactly the moment nothing is running. Guarded like the
-    # preview record: this endpoint's response must not depend on the store.
-    if event_kind not in ("notification", "permission_request"):
+    # interval at exactly the moment nothing is running. The async tool-result
+    # hooks can land after the turn ended and would re-open an interval then.
+    # Guarded like the preview record: this endpoint's response must not
+    # depend on the store.
+    if event_kind not in (
+        "notification", "permission_request", "post_tool_use", "post_tool_use_failure",
+    ):
         try:
             if dev_time_store.agent_event(ws_path or cwd, pane_id or "", event_type, ""):
                 await broadcast(

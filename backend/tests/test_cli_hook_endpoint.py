@@ -693,3 +693,47 @@ def test_permission_prompt_still_records_the_turn_as_active(
         assert app_module._pane_activity["pw"]["event_type"] == "agent_active"
     finally:
         app_module._pane_activity.clear()
+
+
+@pytest.mark.parametrize("kind", ["post_tool_use", "post_tool_use_failure"])
+def test_a_late_async_tool_result_does_not_reopen_the_finished_turn(
+    client: TestClient, events: list[dict], monkeypatch, kind: str
+) -> None:
+    """The Post hooks run async, so the last tool's result can land after the
+    Stop hook. It still reaches the renderer (it releases a permission hold),
+    but must neither replace turn_complete nor open a dev-time interval."""
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
+    )
+    dev_time_calls: list[tuple] = []
+    monkeypatch.setattr(
+        app_module.dev_time_store,
+        "agent_event",
+        lambda *args: dev_time_calls.append(args) or False,
+    )
+    try:
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": "stop"},
+            json={"session_id": "s-1", "cwd": "/ws/alpha"},
+        )
+        dev_time_calls.clear()
+        events.clear()
+
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": kind},
+            json={
+                "session_id": "s-1",
+                "cwd": "/ws/alpha",
+                "tool_name": "Bash",
+                "tool_input": {"command": "ls"},
+            },
+        )
+
+        assert _payload(events)["detail"] == f"hook:{kind}"
+        assert app_module._pane_activity["pw"]["event_type"] == "turn_complete"
+        assert dev_time_calls == []
+    finally:
+        app_module._pane_activity.clear()

@@ -338,6 +338,7 @@ import { usePromptSkills } from './composables/usePromptSkills'
 import { loginCommandFor, matchLoginExpired } from './lib/cliLoginExpired'
 import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, quotaExhaustedPayload, usageLimitDue } from './lib/cliUsageLimit'
 import {
+  activityStampsTurnClocks,
   awaitingClearsOnMiss,
   hasAwaitingPattern,
   holdOutlivedBox,
@@ -14907,10 +14908,9 @@ backend.on('agent.activity', (raw) => {
       }
     }
   } else if (ev.event_type === 'agent_active') {
-    // idle_prompt fires about a minute after EVERY finished turn: the pane is
-    // waiting, not working. Stamping the clocks with it made isTurnInFlight
-    // read a finished pane as mid-turn and hold its queued messages.
-    if (ev.notification_type !== 'idle_prompt') {
+    // idle_prompt and the async tool-result hooks can land after the turn
+    // ended; see activityStampsTurnClocks for why they never stamp the clocks.
+    if (activityStampsTurnClocks(ev)) {
       // First activity after the last turn end = this turn's start. The quota
       // failover's settle needs it: a turn that began under the old account and
       // finished under the new one is the old account's work.
