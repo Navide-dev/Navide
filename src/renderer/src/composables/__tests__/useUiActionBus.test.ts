@@ -656,10 +656,41 @@ describe('useUiActionBus — account actions', () => {
 
   it('refuses an unknown account action', async () => {
     const { signIn, sent, emit } = setup()
-    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args: {}, caller_pane_id: 'pa', addressed: true }))
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.remove', args: {}, caller_pane_id: 'pa', addressed: true }))
     await flush()
     expect(signIn).not.toHaveBeenCalled()
     expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
+  })
+
+  // Plan mcp_614482 P3: cli_account_switch reaches the window's switch the
+  // same way, with the caller pane and the withdrawal signal.
+  it('hands ui.accounts.switch to the account actions with the caller pane', async () => {
+    const { backend, emit, sent } = createMockBackend()
+    const signIn = vi.fn()
+    const switchAccount = vi.fn(async () => ({ status: 'switched', from: 'A', to: 'B' }))
+    useUiActionBus({ backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), accountActions: { signIn, switch: switchAccount } })
+    const args = { agentKey: 'claude', profileId: 'p-2', reason: 'out of quota' }
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args, caller_pane_id: 'pa', addressed: true }))
+    await flush()
+    expect(switchAccount).toHaveBeenCalledWith(args, 'pa', expect.any(AbortSignal))
+    expect(signIn).not.toHaveBeenCalled()
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: true, result: { status: 'switched' } })
+  })
+
+  it('refuses ui.accounts.switch from a caller with no pane, or with no switch action', async () => {
+    const { backend, emit, sent } = createMockBackend()
+    const switchAccount = vi.fn()
+    useUiActionBus({ backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), accountActions: { signIn: vi.fn(), switch: switchAccount } })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args: {}, addressed: true }))
+    await flush()
+    expect(switchAccount).not.toHaveBeenCalled()
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
+
+    const other = createMockBackend()
+    useUiActionBus({ backend: other.backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), accountActions: { signIn: vi.fn() } })
+    other.emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args: {}, caller_pane_id: 'pa', addressed: true }))
+    await flush()
+    expect(other.sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
   })
 
   it('acts only on the project the window is showing', async () => {

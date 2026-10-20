@@ -5588,6 +5588,9 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     # confirmation ends one ordinary wait before this one, leaving a pane
     # create its wait.
     "ui.accounts.signIn",
+    # Asks the user, then runs the window's own switch, which may restart
+    # panes (cli_account_switch): the same budget as the sign-in.
+    "ui.accounts.switch",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
 
@@ -5730,7 +5733,7 @@ def _ui_timeout_error(
 #: nobody waits for the answer any more (review #438 LOW-1): a sign-in
 #: confirmation must not open a pane after its tool call was cancelled or
 #: timed out. Other actions finish on their own and get no withdrawal.
-_UI_INVOKE_WITHDRAWN_ACTIONS = frozenset({"ui.accounts.signIn"})
+_UI_INVOKE_WITHDRAWN_ACTIONS = frozenset({"ui.accounts.signIn", "ui.accounts.switch"})
 
 
 def _withdraw_ui_request(action: str | None, request_id: str, owner: Any) -> None:
@@ -5969,7 +5972,7 @@ async def ui_invoke(
         return {
             "ok": False,
             "result": None,
-            "error": f"{action} is not a ui_invoke action; use cli_account_sign_in",
+            "error": f"{action} is not a ui_invoke action; use cli_account_sign_in or cli_account_switch",
             "error_code": "ui_dedicated_tool",
         }
     return await _ui_request(
@@ -10314,8 +10317,10 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
 
     The same accounts Settings → Accounts shows, read from Navide's account
     store only: it says which accounts exist and which is active, not who is
-    signed in to them — no email and no signed-in flag, since both would mean
-    reading the credentials themselves. Read-only: nothing is switched or
+    signed in to them — no signed-in flag, since that would mean reading the
+    credentials themselves. An account's `name` is the name the user gave it,
+    and an account Navide added on its own is named after the email it was
+    signed in with, so a name can be an email. Read-only: nothing is switched or
     refreshed. Quota is in cli_usage, the failover state in
     cli_failover_state.
 
@@ -10468,7 +10473,7 @@ async def cli_account_sign_in(
     if not answer.get("ok"):
         return {
             "ok": False,
-            "error": str(answer.get("error") or "the Navide window did not answer"),
+            "error": "the Navide window did not answer",
             "error_code": "window-unavailable",
         }
     if status != "started":
@@ -10484,6 +10489,125 @@ async def cli_account_sign_in(
         "profile_id": profile_id,
         "mode": mode,
         "login_pane_id": str(result.get("loginPaneId") or ""),
+    }
+
+
+# ── CLI account switch (plan mcp_614482 P3) ─────────────────────────────────
+
+
+@server.tool()
+async def cli_account_switch(
+    ctx: Context, agent: str, profile_id: str, reason: str,
+) -> dict[str, Any]:
+    """Ask the user to switch one CLI to another of its accounts — for
+    example when the active account's quota ran out and another account of
+    the same vendor still has some.
+
+    Your window first asks the user, naming which agent asked, the account it
+    switches from and to, and your `reason` (required; cut at 300
+    characters); nothing switches until they agree, and a no or no answer in
+    time is a refusal. If this call is cancelled or times out, the window
+    closes the question unanswered. On a yes it is the same switch Settings →
+    Accounts makes, never forced: if panes are running on that CLI, the window
+    asks the user again before restarting them, and a no there is
+    "restart-declined". Once the user says yes in time, the switch runs to
+    the end even if this call has timed out by then. If your own pane runs
+    on that CLI, the restart includes it and this call's result never
+    reaches you — after a restart, read cli_accounts_list to see where the
+    switch stands.
+
+    agent is the vendor key ("claude", "codex", ...); profile_id is an
+    account of that vendor as cli_accounts_list lists it, "__default__" for
+    the built-in Default. Only a CLI pane can call it.
+
+    Returns {ok: true, status, agent, profile_id, from, to}: status
+    "switched", or "switched-signed-out" when the account switched to has no
+    usable sign-in (the window then starts one for the user); from and to are
+    the accounts' display names: the alias or name the user gave them, and an
+    account Navide added on its own is named after its email, so either can be
+    an email. Otherwise {ok: false, error,
+    error_code}: "pane-only", "bad-request", "reason-required",
+    "unknown-profile", "already-active", "unknown-caller", "declined" (the
+    user said no), "confirm-timeout" (the user did not answer in time),
+    "busy" (another agent's switch is waiting for the user),
+    "restart-declined", "refused" (Navide refused the switch; `code` says
+    why, e.g. SWITCH_RATE_LIMITED or UNRECONCILED_STATE) or
+    "window-unavailable". No credential or token ever comes back.
+    """
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    if caller.kind != "pane":
+        return {
+            "ok": False,
+            "error": "only a CLI pane can ask for an account switch; the user is told which pane asked",
+            "error_code": "pane-only",
+        }
+    agent = str(agent or "").strip().lower()
+    profile_id = str(profile_id or "").strip()
+    if not agent or not profile_id:
+        return {"ok": False, "error": "agent and profile_id are required", "error_code": "bad-request"}
+    reason = " ".join(str(reason or "").split())
+    reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
+    reason = reason[:_SIGN_IN_REASON_MAX]
+    if not reason:
+        return {
+            "ok": False,
+            "error": "say why: the reason is shown to the user with the switch",
+            "error_code": "reason-required",
+        }
+    from agent_team_backend import agent_messaging
+
+    pane = agent_messaging.get(caller.pane_id)
+    # As for the sign-in: the user's yes is due one ordinary action's wait
+    # before this action's slow wait ends, leaving the window time to switch.
+    confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
+    answer = await _ui_request(
+        pane.workspace_path if pane else "",
+        "invoke",
+        caller=caller,
+        action="ui.accounts.switch",
+        args={
+            "agentKey": agent, "profileId": profile_id, "reason": reason,
+            "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
+        },
+    )
+    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+    status = str(result.get("status") or "") if answer.get("ok") else ""
+    _log.info(
+        "cli_account_switch from pane %s: agent=%s profile=%s -> %s%s",
+        caller.pane_id, agent, profile_id, status or "window-unavailable",
+        f" ({result.get('code')})" if result.get("code") else "",
+    )
+    if not answer.get("ok"):
+        return {
+            "ok": False,
+            "error": "the Navide window did not answer",
+            "error_code": "window-unavailable",
+        }
+    if status in ("switched", "switched-signed-out"):
+        return {
+            "ok": True,
+            "status": status,
+            "agent": agent,
+            "profile_id": profile_id,
+            "from": str(result.get("from") or ""),
+            "to": str(result.get("to") or ""),
+        }
+    if status == "refused":
+        # The backend's refusal code only; its message is unreviewed text.
+        code = str(result.get("code") or "unknown")
+        return {
+            "ok": False,
+            "error": f"the switch was refused: {code}",
+            "error_code": "refused",
+            "code": code,
+        }
+    return {
+        "ok": False,
+        "error": str(result.get("message") or "the window refused the switch"),
+        "error_code": status or "refused",
     }
 
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
