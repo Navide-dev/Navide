@@ -158,16 +158,19 @@ navide-plugin dev-backend dist/package
 - It uses the exact sandbox profile Navide uses: `sandbox-exec` on macOS;
   `bwrap` on Linux, and a clear refusal when bubblewrap or unprivileged user
   namespaces are unavailable; Windows is not supported yet.
-- The backend's `HOME` and `TMPDIR` are a private data directory
-  (`<directory>/.navide-dev/data`, or `--data <directory>`), which is also the
-  only writable place. It has no network access and cannot read your home
-  folder.
+- The backend's `HOME` and `TMPDIR` are a private data directory, by default
+  `.navide-dev/<package directory name>/data` beside the package directory
+  (`dist/.navide-dev/package/data` for `dist/package`), or `--data <directory>`.
+  It is never inside the package directory, so a build cannot package it, and
+  `validate` refuses any `.navide-dev` entry. It is also the only writable
+  place. The backend has no network access and cannot read your home folder.
 - Calls to methods, and subscriptions to events, that `manifest.json` does not
   declare are refused before they reach the backend, as in Navide.
 - The Host bridge is not emulated: each `navide/host/call` the backend makes
   is printed and answered with `CAPABILITY_DENIED`.
 - Results print as `← result`, events as `← event`, and the backend's stderr
-  as `[backend]` lines.
+  as `[backend]` lines. When the backend ends, `• backend exited` means exit
+  code 0 and `× backend exited` means it failed or was killed.
 
 ## 3. Test against a local registry
 
@@ -595,7 +598,10 @@ publisher. Removals, and why, are listed publicly at
 |---|---|
 | `navide-plugin: ... is not a safe package-relative path` / `is outside the frontend/assets/backend package boundary` | A path in `artifact-files.json` escapes the package layout. Keep files under `frontend/`, `assets/` or `backend/`, plus `manifest.json` and `README.md`. |
 | `... is source-only or secret material` | A `.ts`, `.vue`, `.map`, `package.json`, lock file, `node_modules`, `tests`, `.env` or key file is listed. Ship build output only. |
-| `manifest references '...', but that file does not exist` | A view `entry`, icon or the backend entry is missing from the staging directory or from `artifact-files.json`. |
+| `manifest references '...', but that file does not exist` | A view `entry`, icon or the backend entry is missing from the staging directory. |
+| `manifest references '...', but artifact-files.json does not list it` | The file is there but not in the `files` array; add it. |
+| `package entry '...' is listed in artifact-files.json but does not exist` | The `files` array names a file the staging directory does not have; build it or remove it from the list. |
+| `package entry '...' is dev-backend data (.navide-dev)` | `navide-plugin dev-backend` data was listed; remove it from `artifact-files.json`. |
 | `backend package target '...' must match the build host target '...'` | Package each backend target on a machine of that platform and architecture. |
 | `frontend-only package target must be 'universal'` | Drop `--target` for a plugin without a backend. |
 | `private key must have owner-only permissions` | `chmod 600 keys/acme.key`. |

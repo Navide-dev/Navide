@@ -8,7 +8,7 @@ import {
   buildSeatbeltProfile as hostSeatbeltProfile,
 } from '../../../src/main/plugins/pluginBackendSandbox'
 // @ts-expect-error - plain ESM module without type declarations
-import { buildBubblewrapArgs, buildSeatbeltProfile, resolveDevSandbox, startDevBackend } from './dev-backend.mjs'
+import { buildBubblewrapArgs, buildSeatbeltProfile, defaultDataDir, formatOutput, resolveDevSandbox, startDevBackend } from './dev-backend.mjs'
 
 const cli = join(process.cwd(), 'packages/plugin-sdk/bin/navide-plugin.mjs')
 const fixtureSource = join(process.cwd(), 'packages/plugin-sdk/test-fixtures/dev-backend-echo.c')
@@ -185,4 +185,19 @@ describe.runIf(canRunLive)('dev-backend against a tiny fixture backend (live)', 
     expect(refused.status).toBe(1)
     expect(refused.stderr).toContain('not declared in backend.methods')
   }, 30_000)
+})
+
+describe('dev-backend output and data (DX-REPORT 7.1 #6, #9)', () => {
+  it('keeps its data out of the package directory it runs', () => {
+    const data = defaultDataDir('/work/acme/dist/package')
+    expect(data).toBe(join('/work/acme/dist', '.navide-dev', 'package', 'data'))
+    expect(data.startsWith('/work/acme/dist/package/')).toBe(false)
+  })
+
+  it('marks a clean exit neutrally and a failed one with a cross', () => {
+    expect(formatOutput('exit', { code: 0, signal: null })).toBe('• backend exited {"code":0,"signal":null}')
+    expect(formatOutput('exit', { code: 1, signal: null })).toBe('× backend exited {"code":1,"signal":null}')
+    expect(formatOutput('exit', { code: null, signal: 'SIGKILL' })).toBe('× backend exited {"code":null,"signal":"SIGKILL"}')
+    expect(formatOutput('result', { count: 2 })).toBe('← result {"count":2}')
+  })
 })
