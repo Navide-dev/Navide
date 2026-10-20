@@ -25,8 +25,8 @@ describe('manifestHasViews', () => {
 describe('every disclosure card source passes hasViews', () => {
   const ipc = readFileSync(resolve(process.cwd(), 'src/main/plugins/pluginIpc.ts'), 'utf8')
 
-  it('sets it on the Marketplace, file and folder install summaries', () => {
-    expect(ipc.match(/^\s+hasViews: manifestHasViews\(/gm)).toHaveLength(3)
+  it('sets it on the Marketplace, file and folder install summaries, and on the kept-version rollback consent (L4)', () => {
+    expect(ipc.match(/^\s+hasViews: manifestHasViews\(/gm)).toHaveLength(4)
   })
 
   it('sets it on the installed disclosures the Disclosure overview reads', () => {
