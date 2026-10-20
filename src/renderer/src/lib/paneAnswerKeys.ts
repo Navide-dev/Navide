@@ -39,8 +39,8 @@ const MENU_LINE = /^\s*(?:[❯›>]\s*)?(\d)\.\s+(.+?)\s*$/
 // Keep in sync with _PERMANENT_ALLOW_RE in backend/agent_team_backend/channels/relay.py.
 const PERMANENT_ALLOW = new RegExp(
   [
-    "\\bdon['’]?t ask again\\b",
-    '\\bdo not ask again\\b',
+    "\\bdon['’]?t ask (?:me )?again\\b",
+    '\\bdo not ask (?:me )?again\\b',
     '\\balways\\b',
     '\\b(?:this|the) session\\b',
     '\\bauto[- ]?accept',

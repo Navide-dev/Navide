@@ -206,7 +206,74 @@
     "search-shortcuts": "搜尋鍵盤快捷鍵…",
     "select-language": "選擇語言模式…",
     "workspace-symbol": "前往工作區符號…",
-    "symbol": "前往符號…"
+    "symbol": "前往符號…",
+    "pane": {
+      "ai-complete-title": "AI 補全（⌘I）",
+      "ai-rewrite-title": "AI 改寫選取內容（⌘K）",
+      "complete": "補全",
+      "replace-title": "取代（↵）",
+      "replace-all-title": "全部取代（⌥↵）",
+      "generate-tests": "產生測試",
+      "go-to-line": "跳至行",
+      "go-to-line-n": "跳至第 {line} 行",
+      "go": "前往",
+      "thinking": "思考中…",
+      "ask": "詢問",
+      "rewrite": "改寫",
+      "proposal-title": "AI 建議的改寫",
+      "proposal-hint": "Tab 接受 · Esc 拒絕",
+      "accept": "接受",
+      "reject": "拒絕",
+      "cursor-position": "第 {line} 行，第 {col} 欄",
+      "eol-title": "行尾序列：{eol}，點擊切換",
+      "indent-spaces-title": "縮排：{size} 個空格，點擊變更",
+      "indent-tabs-title": "縮排：Tab，點擊變更",
+      "spaces-size": "空格：{size}",
+      "tab-size": "Tab 大小：{size}",
+      "encoding-title": "檔案編碼：{encoding}，點擊以其他編碼重新開啟",
+      "indentation": "縮排",
+      "n-spaces": "{n} 個空格",
+      "n-tabs": "Tab（{n}）",
+      "reopen-encoding": "以其他編碼重新開啟"
+    },
+    "app": {
+      "empty-hint": "從左側的檔案總管或搜尋面板開啟檔案",
+      "line-n": "第 {line} 行",
+      "new-file-placeholder": "例如 src/components/MyComponent.vue",
+      "breadcrumb-empty": "（空）",
+      "switch-to-plan-view": "切換到計畫檢視",
+      "toggle-plan": "計畫"
+    },
+    "search": {
+      "whole-word": "完整比對單字",
+      "regex": "使用正規表達式",
+      "replace-all": "全部取代",
+      "files-include": "要包含的檔案",
+      "files-exclude": "要排除的檔案",
+      "include-placeholder": "例如 *.ts, src/**",
+      "exclude-placeholder": "例如 *.test.ts, dist/**",
+      "summary": "{results} 個結果 · {files} 個檔案",
+      "truncated": "已截斷"
+    },
+    "problems": {
+      "errors": "{count} 個錯誤",
+      "warnings": "{count} 個警告"
+    },
+    "notebook": {
+      "cell-output": "儲存格輸出"
+    },
+    "aiDock": {
+      "interrupt-title": "傳送 Ctrl+C 給 CLI",
+      "stop-title": "強制結束 CLI 程序",
+      "no-workspace": "沒有可用的工作區",
+      "starting": "啟動中…",
+      "reattaching": "重新連接中…",
+      "spawn-title": "在 {path} 啟動 CLI"
+    },
+    "plan-body": {
+      "no-content": "尚無內容。",
+      "no-body": "這份計畫沒有文件內文。"
+    }
   },
   "cli-risk": {
     "details": "CLI 觀測紀錄",
@@ -8189,6 +8256,7 @@
     "plans-retry-failed": "重試失敗：{reason}",
     "plans-recovery-reason": "本次啟動已停用 Plans v2（{reason}）。",
     "plans-backend-stopped": "「{folder}」的 Plans 後端多次失敗後已停止。開啟此工作區的 Plans 即可重新啟動其後端，或重新啟動 Navide。",
+    "plugin-staged-not-activated": "Navide 外掛 {plugin} {version} 已安裝，但 Navide 啟動時無法啟用：{reason}。請到「設定 → Navide 外掛」重新啟動或捨棄它。",
     "yolo-mode": "YOLO 模式",
     "yolo-bypass": "— 自動略過權限提示",
     "default": "預設",
@@ -11594,6 +11662,18 @@
       "enable": "重新啟用",
       "disable": "再次停用",
       "downgrade": "降回 {version}"
+    }
+  },
+  "plugin-staged": {
+    "notice": {
+      "title": "Navide 外掛 {plugin} 有版本 {staged} 等待套用，目前執行的是 {active}。",
+      "detail": "這個版本是安裝後沒有按「重新啟動」，或回退時保留下來的。按「立即套用」會切換過去，效果和重新啟動相同。",
+      "applied": "{plugin} 現在執行版本 {version}。",
+      "stale": "沒有套用：這個 Navide 外掛之後又被變更過。",
+      "failed": "無法套用：{error}"
+    },
+    "button": {
+      "apply": "立即套用"
     }
   },
   "testplace": {

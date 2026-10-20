@@ -101,6 +101,21 @@ describe('useTerminal — wiring warnings from the create ack', () => {
   it('prints nothing extra when the ack carries no warnings', async () => {
     const { scope } = await spawned({})
     expect(writes.some((line) => line.includes('[mcp]'))).toBe(false)
+    expect(writes.some((line) => line.includes('has not been tested'))).toBe(false)
+    scope.stop()
+  })
+
+  it('prints the untested-version line after the probe line (version drift)', async () => {
+    const note = 'Claude Code 2.1.304 is newer than the last version Navide verified (2.1.278); '
+      + 'it should work, but this version has not been tested'
+    const { result, scope } = await spawned({
+      startup_probe: { binary_path: '/usr/bin/claude', version: '2.1.304', untested_version: note },
+    })
+    expect(result.status.value).toBe('running')
+    const probe = writes.findIndex((line) => line.includes('[startup probe] /usr/bin/claude v2.1.304'))
+    const drift = writes.findIndex((line) => line.includes(`[startup probe] ${note}`))
+    expect(probe).toBeGreaterThanOrEqual(0)
+    expect(drift).toBeGreaterThan(probe)
     scope.stop()
   })
 })
