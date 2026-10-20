@@ -13,15 +13,25 @@
 // appears. How to write one: docs/en-US/release-announcements.md.
 //
 // Content lives here (not in the i18n JSON) so an announcement is one self
-// contained edit. Each field carries zh-TW and en-US, and may carry ja-JP;
-// pickText falls back to the default locale (zh-TW) for anything missing.
+// contained edit. Each field carries zh-TW and en-US, and may carry ja-JP or
+// any later UI language; pickText falls back to en-US for a later language
+// and to the default locale (zh-TW) for anything else missing.
 
+import { isBetaUiLocale } from '@navide/plugin-ui/foundation'
 import type { TourStep } from './tours'
 
 export type WhatsNewText = {
   'zh-TW': string
   'en-US': string
   'ja-JP'?: string
+  'zh-CN'?: string
+  'ko-KR'?: string
+  'es-ES'?: string
+  'fr-FR'?: string
+  'de-DE'?: string
+  'pt-BR'?: string
+  'ru-RU'?: string
+  'vi-VN'?: string
 }
 
 /**
@@ -2232,9 +2242,11 @@ export function pickWhatsNewOnDemand(currentVersion: string, dev: boolean): What
   return pickWhatsNew(currentVersion, '')
 }
 
-/** Resolve localized text, falling back to the default locale then en-US. */
+/** Resolve localized text. A later UI language falls back to en-US; every
+ *  other locale falls back to the default locale (zh-TW) then en-US. */
 export function pickText(text: WhatsNewText, locale: string): string {
-  return (
-    (text as Record<string, string>)[locale] ?? text['zh-TW'] ?? text['en-US'] ?? ''
-  )
+  const own = (text as Record<string, string | undefined>)[locale]
+  if (own !== undefined) return own
+  if (isBetaUiLocale(locale)) return text['en-US'] ?? text['zh-TW'] ?? ''
+  return text['zh-TW'] ?? text['en-US'] ?? ''
 }

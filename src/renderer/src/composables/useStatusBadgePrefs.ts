@@ -14,9 +14,15 @@
 // the user never touched keeps following the shipped default even if that
 // default changes in a later version:
 //   { "idle": { "labelZh": "待命", "color": "cyan" }, "error": { "color": "pink" } }
+// zh-TW, en-US and ja-JP labels keep their original fields (labelZh / labelEn
+// / labelJa), so an older version still reads them; labels for every other UI
+// locale go in a `labels` map keyed by locale:
+//   { "idle": { "labelEn": "Ready", "labels": { "ko-KR": "대기" } } }
+// In memory every label lives in `labels`, whichever field it was stored in.
 
 import { computed, ref } from 'vue'
 
+import { isUiLocale, type UiLocale } from '@navide/plugin-ui/foundation'
 import { onSettingsChanged, settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 
 import type { PaneStatusValue } from '../lib/paneStatusLabel'
@@ -30,21 +36,46 @@ import {
 
 const STORAGE_KEY = 'agentTeam.statusBadges'
 
+export type StatusBadgeLabels = Partial<Record<UiLocale, string>>
+
 /** One status's overrides. Every field is optional: an absent field means
  *  "use the shipped default", which is what makes a partial edit survive a
  *  change to the defaults. */
 export interface StatusBadgePref {
-  /** Traditional Chinese label. Blank/absent → the i18n string. */
-  labelZh?: string
-  /** English label. Blank/absent → the i18n string. */
-  labelEn?: string
-  /** Japanese label. Blank/absent → the i18n string. */
-  labelJa?: string
+  /** Label per UI locale. Blank/absent → the i18n string. */
+  labels?: StatusBadgeLabels
   /** Palette colour. Absent or unknown → DEFAULT_STATUS_COLORS. */
   color?: StatusColorKey
 }
 
+/** A change to one status. The legacy per-language fields are accepted as
+ *  shorthands for `labels['zh-TW' | 'en-US' | 'ja-JP']`; `labels` entries are
+ *  merged one locale at a time. */
+export interface StatusBadgePrefPatch {
+  labels?: StatusBadgeLabels
+  labelZh?: string
+  labelEn?: string
+  labelJa?: string
+  color?: StatusColorKey
+}
+
 export type StatusBadgePrefs = Partial<Record<PaneStatusValue, StatusBadgePref>>
+
+/** The stored field each original locale keeps, for older versions to read. */
+const LEGACY_LABEL_FIELDS = [
+  ['zh-TW', 'labelZh'],
+  ['en-US', 'labelEn'],
+  ['ja-JP', 'labelJa'],
+] as const satisfies readonly (readonly [UiLocale, string])[]
+
+function cleanLabels(raw: unknown): StatusBadgeLabels {
+  const labels: StatusBadgeLabels = {}
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return labels
+  for (const [locale, label] of Object.entries(raw as Record<string, unknown>)) {
+    if (isUiLocale(locale) && typeof label === 'string' && label.trim()) labels[locale] = label.trim()
+  }
+  return labels
+}
 
 /** Drop anything we do not recognise rather than repairing it. A settings blob
  *  written by a newer version (or hand-edited) must degrade to the defaults, not
@@ -57,19 +88,37 @@ function sanitize(raw: unknown): StatusBadgePrefs {
     if (!value || typeof value !== 'object' || Array.isArray(value)) continue
     const entry = value as Record<string, unknown>
     const pref: StatusBadgePref = {}
-    if (typeof entry.labelZh === 'string' && entry.labelZh.trim()) {
-      pref.labelZh = entry.labelZh.trim()
+    const labels = cleanLabels(entry.labels)
+    // The legacy fields are authoritative for their locales: an older version
+    // that edited them rewrote the entry without `labels`.
+    for (const [locale, field] of LEGACY_LABEL_FIELDS) {
+      const legacy = entry[field]
+      if (typeof legacy === 'string' && legacy.trim()) labels[locale] = legacy.trim()
     }
-    if (typeof entry.labelEn === 'string' && entry.labelEn.trim()) {
-      pref.labelEn = entry.labelEn.trim()
-    }
-    if (typeof entry.labelJa === 'string' && entry.labelJa.trim()) {
-      pref.labelJa = entry.labelJa.trim()
-    }
+    if (Object.keys(labels).length) pref.labels = labels
     if (isStatusColorKey(entry.color)) pref.color = entry.color
-    if (pref.labelZh || pref.labelEn || pref.labelJa || pref.color) out[status] = pref
+    if (pref.labels || pref.color) out[status] = pref
   }
   return out
+}
+
+/** The stored shape: original locales in their legacy fields, the rest in
+ *  `labels`. Field order matches what earlier versions wrote. */
+function serialize(prefs: StatusBadgePrefs): string {
+  const out: Record<string, Record<string, unknown>> = {}
+  for (const [status, pref] of Object.entries(prefs)) {
+    if (!pref) continue
+    const entry: Record<string, unknown> = {}
+    const rest: StatusBadgeLabels = { ...pref.labels }
+    for (const [locale, field] of LEGACY_LABEL_FIELDS) {
+      if (rest[locale]) entry[field] = rest[locale]
+      delete rest[locale]
+    }
+    if (Object.keys(rest).length) entry.labels = rest
+    if (pref.color) entry.color = pref.color
+    out[status] = entry
+  }
+  return JSON.stringify(out)
 }
 
 function load(): StatusBadgePrefs {
@@ -86,10 +135,10 @@ const prefs = ref<StatusBadgePrefs>(load())
 /** Last string this window wrote or read back. Comparing the serialized value
  *  — rather than raising a boolean flag — is what stops a broadcast we caused
  *  from re-entering as a remote change; the same guard useLayoutStore uses. */
-let lastSynced = JSON.stringify(prefs.value)
+let lastSynced = serialize(prefs.value)
 
 function persist(next: StatusBadgePrefs): void {
-  const serialized = JSON.stringify(next)
+  const serialized = serialize(next)
   if (serialized === lastSynced) return
   lastSynced = serialized
   settingsSet(STORAGE_KEY, serialized)
@@ -100,7 +149,7 @@ function persist(next: StatusBadgePrefs): void {
 onSettingsChanged((keys) => {
   if (!keys.includes(STORAGE_KEY)) return
   const incoming = load()
-  const serialized = JSON.stringify(incoming)
+  const serialized = serialize(incoming)
   if (serialized === lastSynced) return
   lastSynced = serialized
   prefs.value = incoming
@@ -130,14 +179,17 @@ export function statusBadgeStyle(
 
 /** The user's label for a status in `locale`, or '' when they have not set one.
  *  Blank is meaningful — it is how the settings page clears an override back to
- *  the translated default. */
+ *  the translated default.
+ *
+ *  zh-TW, en-US and ja-JP only ever use their own label (as they always have).
+ *  Any other locale uses its own label, else the en-US one, else the zh-TW one. */
 export function statusBadgeLabelOverride(status: PaneStatusValue, locale: string): string {
-  const pref = prefs.value[status]
-  if (!pref) return ''
-  const label = locale.startsWith('zh') ? pref.labelZh
-    : locale.startsWith('en') ? pref.labelEn
-      : locale.startsWith('ja') ? pref.labelJa : undefined
-  return label?.trim() ?? ''
+  const labels = prefs.value[status]?.labels
+  if (!labels || !isUiLocale(locale)) return ''
+  const own = labels[locale]?.trim()
+  if (own) return own
+  if (LEGACY_LABEL_FIELDS.some(([legacy]) => legacy === locale)) return ''
+  return labels['en-US']?.trim() || labels['zh-TW']?.trim() || ''
 }
 
 /** Set one field of one status. An empty label or the default colour removes
@@ -145,17 +197,22 @@ export function statusBadgeLabelOverride(status: PaneStatusValue, locale: string
  *  that say "same as default". */
 export function setStatusBadgePref(
   status: PaneStatusValue,
-  patch: Partial<StatusBadgePref>
+  patch: StatusBadgePrefPatch
 ): void {
   const next: StatusBadgePrefs = { ...prefs.value }
-  const merged: StatusBadgePref = { ...next[status], ...patch }
-
-  if (!merged.labelZh?.trim()) delete merged.labelZh
-  if (!merged.labelEn?.trim()) delete merged.labelEn
-  if (!merged.labelJa?.trim()) delete merged.labelJa
+  const current = next[status]
+  const labels: Record<string, string | undefined> = { ...current?.labels, ...patch.labels }
+  for (const [locale, field] of LEGACY_LABEL_FIELDS) {
+    if (field in patch) labels[locale] = patch[field]
+  }
+  const merged: StatusBadgePref = { ...current }
+  if ('color' in patch) merged.color = patch.color
+  const cleaned = cleanLabels(labels)
+  if (Object.keys(cleaned).length) merged.labels = cleaned
+  else delete merged.labels
   if (!merged.color || merged.color === DEFAULT_STATUS_COLORS[status]) delete merged.color
 
-  if (merged.labelZh || merged.labelEn || merged.labelJa || merged.color) next[status] = merged
+  if (merged.labels || merged.color) next[status] = merged
   else delete next[status]
 
   prefs.value = next
@@ -182,7 +239,7 @@ export function resetAllStatusBadgePrefs(): void {
  *  settings broadcast keeps the ref current. */
 export function __reloadStatusBadgePrefsForTest(): void {
   prefs.value = load()
-  lastSynced = JSON.stringify(prefs.value)
+  lastSynced = serialize(prefs.value)
 }
 
 export function useStatusBadgePrefs() {

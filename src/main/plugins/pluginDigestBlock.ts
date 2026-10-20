@@ -14,7 +14,7 @@
 
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { SupportedLocale } from '../hostLocale'
+import { hostStrings, type HostStringTable, type SupportedLocale } from '../hostLocale'
 import { revealUnsafeLineText } from '../../shared/pluginAgentTools'
 import { digestBlock, type LocalBlockReason, type LocalInstallTrustMetadata } from './pluginLocalInstallTrust'
 import type { PluginLocalTrustRecord } from './pluginLocalTrust'
@@ -110,7 +110,7 @@ interface DigestBlockStrings {
   disabledButtons: [string, string]
 }
 
-const STRINGS: Record<SupportedLocale, DigestBlockStrings> = {
+const STRINGS: HostStringTable<DigestBlockStrings> = {
   'zh-TW': {
     title: 'Navide 外掛已被封鎖',
     warned: (plugin) => `你從檔案安裝的 Navide 外掛 ${plugin} 已列入 Navide 的封鎖清單。`,
@@ -167,7 +167,7 @@ export function digestBlockDialogText(
   prompt: DigestBlockPrompt,
   locale: SupportedLocale,
 ): { title: string; message: string; detail: string; buttons: string[]; choices: DigestBlockChoice[] } {
-  const strings = STRINGS[locale] ?? STRINGS['en-US']
+  const strings = hostStrings(STRINGS, locale)
   const plugin = `${revealUnsafeLineText(prompt.pluginId)} ${revealUnsafeLineText(prompt.version)}`
   const reasonLine = strings.reasons[prompt.reason ?? 'none'](revealUnsafeLineText(prompt.pluginId.split('.')[0]))
   if (prompt.action === 'disable') {
