@@ -103,6 +103,8 @@ declare global {
         fromVersion?: string
         requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
       }) => void) => () => void
+      onPluginStagedCandidateNotActivated?: (cb: (notice: { pluginId: string; version: string; reason: string }) => void) => () => void
+      onPluginStagedUpdates?: (cb: (updates: { pluginId: string; activeVersion: string; stagedVersion: string }[]) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
       onSystemResumed: (cb: () => void) => () => void
       setRecentWorkspaces: (list: { path: string; name: string; exists: boolean }[]) => void
@@ -134,6 +136,9 @@ declare global {
       detachGroup: (args: { groupId: string; workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }) => Promise<{ ok: boolean }>
       detachWorkspace: (args: { workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }) => Promise<{ ok: boolean }>
       getDetachedGroups: () => Promise<string[]>
+      focusSelf?: () => Promise<{ ok: boolean }>
+      closeSelf?: () => Promise<{ ok: boolean; error?: string }>
+      canCloseSelf?: () => Promise<{ ok: boolean; error?: string }>
       reattachGroup: (args?: { groupId?: string }) => Promise<{ ok: boolean }>
       onGroupDetached: (cb: (groupId: string) => void) => void
       onGroupReattached: (cb: (groupId: string) => void) => void

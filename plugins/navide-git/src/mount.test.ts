@@ -70,9 +70,13 @@ describe('Git plugin composition root', () => {
     expect(i18n.global.locale.value).toBe('ja-JP')
     await nextTick()
     expect(document.querySelector('#app button')?.textContent).toBe('閉じる')
-    state.language = 'fr-FR'
+    state.language = 'it-IT'
     state.languageListener?.(['agent-team:language'])
     expect(i18n.global.locale.value).toBe('ja-JP')
+    // A UI locale without a catalog renders in en-US
+    state.language = 'ko-KR'
+    state.languageListener?.(['agent-team:language'])
+    expect(i18n.global.locale.value).toBe('en-US')
     expect((window as unknown as { nav?: { ready: ReturnType<typeof vi.fn> } }).nav?.ready)
       .toHaveBeenCalledTimes(1)
   })

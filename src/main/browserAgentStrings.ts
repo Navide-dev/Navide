@@ -1,4 +1,4 @@
-import type { SupportedLocale } from './hostLocale'
+import { hostStrings, type HostStringTable, type SupportedLocale } from './hostLocale'
 
 /**
  * Main-process text for agents using Navide plugin web views. Main has no
@@ -6,7 +6,7 @@ import type { SupportedLocale } from './hostLocale'
  * settings.nav.extensions and settings.nav.executionPolicy, and the glossary.
  */
 
-const POLICY: Record<SupportedLocale, { allowlist: string; denylist: string }> = {
+const POLICY: HostStringTable<{ allowlist: string; denylist: string }> = {
   'en-US': {
     allowlist: 'Your agent Execution Policy allowlist does not include web. Add web in Settings → Navide Plugins → Execution Policy.',
     denylist: 'Your agent Execution Policy is a denylist, which never allows web. Use an allowlist that includes web in Settings → Navide Plugins → Execution Policy.',
@@ -23,7 +23,7 @@ const POLICY: Record<SupportedLocale, { allowlist: string; denylist: string }> =
 
 /** Why an agent call that needs `web` was refused by the user's own policy. */
 export function webPolicyDeniedMessage(locale: SupportedLocale, mode: 'allowlist' | 'denylist'): string {
-  return (POLICY[locale] ?? POLICY['en-US'])[mode]
+  return hostStrings(POLICY, locale)[mode]
 }
 
 interface WritePromptStrings {
@@ -33,7 +33,7 @@ interface WritePromptStrings {
   buttons: [string, string]
 }
 
-const WRITE_PROMPT: Record<SupportedLocale, WritePromptStrings> = {
+const WRITE_PROMPT: HostStringTable<WritePromptStrings> = {
   'en-US': {
     title: 'Agent wants to use web pages',
     message: (tool, name, version) =>
@@ -65,7 +65,7 @@ export function webAgentWritePrompt(
   name: string,
   version: string,
 ): { title: string; message: string; origin: string; buttons: [string, string] } {
-  const strings = WRITE_PROMPT[locale] ?? WRITE_PROMPT['en-US']
+  const strings = hostStrings(WRITE_PROMPT, locale)
   return {
     title: strings.title,
     message: strings.message(tool, name, version),

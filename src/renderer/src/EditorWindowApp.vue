@@ -26,7 +26,7 @@ import FilePreviewPane from './editor/FilePreviewPane.vue'
 import { previewKind, isMarkdownFile } from './editor/previewTypes'
 import { rebindTabs } from './editor/tabRebind'
 import { initKeybindingsPort, useKeybindings, registerCommand, setContext, executeCommand } from '@navide/plugin-ui/shared'
-import { i18n, useTheme, BUILTIN_THEMES, vTruncate } from '@navide/plugin-ui/foundation'
+import { i18n, resolveAvailableUiLocale, useTheme, BUILTIN_THEMES, vTruncate } from '@navide/plugin-ui/foundation'
 import { initSettingsBackend, settingsGet, settingsSet, onSettingsChanged } from '@navide/plugin-ui/shared'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { allDiagnosticsSorted, setDiagnostics, diagnosticsKey } from './editor/diagnostics'
@@ -37,8 +37,9 @@ import type { ListConflictsResult } from './composables/useGit'
 // ── window params (Electron appends ?window=editor&workspace_path=…&filepath=…) ──
 const params = new URLSearchParams(window.location.search)
 function applyEditorLocale(value: unknown): void {
-  if (value === 'zh-TW' || value === 'en-US' || value === 'ja-JP') {
-    i18n.global.locale.value = value
+  const resolved = resolveAvailableUiLocale(value)
+  if (resolved) {
+    i18n.global.locale.value = resolved
   }
 }
 applyEditorLocale(params.get('locale') ?? settingsGet<string>('agent-team:language', ''))
@@ -2084,9 +2085,9 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
           <button
             v-if="activeFile && isPlanFile(activeFile.relPath)"
             class="ide-tab-act ide-tab-act--plan-toggle"
-            :title="planViewFiles.has(activeKey) ? 'Switch to raw editor' : 'Switch to plan view'"
+            :title="planViewFiles.has(activeKey) ? $t('preview.switch-to-raw') : $t('editorWindow.app.switch-to-plan-view')"
             @click="togglePlanView(activeKey)"
-          >{{ planViewFiles.has(activeKey) ? 'Raw' : 'Plan' }}</button>
+          >{{ planViewFiles.has(activeKey) ? $t('preview.toggle-raw') : $t('editorWindow.app.toggle-plan') }}</button>
           <button
             v-if="activeFile && isPreviewToggleFile(activeFile.relPath)"
             class="ide-tab-act ide-tab-act--preview-toggle"
@@ -2094,8 +2095,8 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
             @click="togglePreview(activeKey)"
           >{{ previewFiles.has(activeKey) ? $t('preview.toggle-raw') : $t('preview.toggle-preview') }}</button>
           <template v-if="!isPlanFile(activeFile?.relPath ?? '')">
-            <button class="ide-tab-act" :title="'AI complete (⌘I)'" @click="activeEditor()?.requestGhost()">✦ Complete</button>
-            <button class="ide-tab-act" :title="'AI rewrite selection (⌘K)'" @click="activeEditor()?.openCmdK()">✦ Cmd+K</button>
+            <button class="ide-tab-act" :title="$t('editorWindow.pane.ai-complete-title')" @click="activeEditor()?.requestGhost()">✦ {{ $t('editorWindow.pane.complete') }}</button>
+            <button class="ide-tab-act" :title="$t('editorWindow.pane.ai-rewrite-title')" @click="activeEditor()?.openCmdK()">✦ Cmd+K</button>
           </template>
         </div>
       </div>
@@ -2211,7 +2212,7 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
           </BranchDiffPane>
         </template>
         <div v-if="!openFiles.length" class="ide-empty">
-          Open a file from the Explorer or Search pane on the left
+          {{ $t('editorWindow.app.empty-hint') }}
         </div>
       </div>
       </div><!-- end ide-main primary -->
@@ -2377,7 +2378,7 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
           @click="confirmGotoSymbol"
         >
           <span class="ide-palette-label">{{ s.name }}</span>
-          <span class="ide-palette-key" style="opacity:.6; font-size:.85em">{{ s.kind }} · Line {{ s.line }}</span>
+          <span class="ide-palette-key" style="opacity:.6; font-size:.85em">{{ s.kind }} · {{ $t('editorWindow.app.line-n', { line: s.line }) }}</span>
         </li>
       </ul>
       <div v-else class="ide-palette-empty">{{ $t('label.no-symbols-detected') }}</div>
@@ -2410,11 +2411,11 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
               <span class="ide-palette-key" style="opacity:.6; font-size:.85em">{{ tabDisplayPath(item) }}</span>
             </template>
             <template v-else-if="item.qoKind === 'line'">
-              <span class="ide-palette-label">Go to line {{ item.line }}</span>
+              <span class="ide-palette-label">{{ $t('editorWindow.pane.go-to-line-n', { line: item.line }) }}</span>
             </template>
             <template v-else-if="item.qoKind === 'symbol'">
               <span class="ide-palette-label">{{ item.name }}</span>
-              <span class="ide-palette-key" style="opacity:.6; font-size:.85em">{{ item.kind }} · Line {{ item.line }}</span>
+              <span class="ide-palette-key" style="opacity:.6; font-size:.85em">{{ item.kind }} · {{ $t('editorWindow.app.line-n', { line: item.line }) }}</span>
             </template>
           </li>
         </template>
@@ -2460,7 +2461,7 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
         ref="newFileInputEl"
         v-model="newFilePath"
         class="ide-palette-input"
-        placeholder="e.g. src/components/MyComponent.vue"
+        :placeholder="$t('editorWindow.app.new-file-placeholder')"
         @keydown.enter.prevent="confirmNewFile"
         @keydown.escape.prevent="closeNewFileDialog"
       />

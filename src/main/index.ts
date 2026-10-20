@@ -88,7 +88,7 @@ import {
   getContributionWindowConfig,
   getContributionWindowKey,
 } from './plansWindowRouting'
-import { MENU_STRINGS } from './menuStrings'
+import { menuStringsFor } from './menuStrings'
 import { HostLocaleManager, readPersistedLocaleFromSettings, type SupportedLocale } from './hostLocale'
 import {
   activateFactoryGitWithLegacyFallback,
@@ -177,6 +177,7 @@ import { watchRendererCrashes } from './renderer-crash-reload'
 import { recordMainFault, setMainLedgerDataDir } from './error-ledger'
 import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
+import { createPluginStagedCandidateRelay } from './pluginStagedCandidateRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
@@ -768,6 +769,7 @@ async function createWindow(
   // A Plans notice that found no loaded main window is handed to this one.
   win.webContents.on('did-finish-load', () => plansBackendStoppedRelay.flush(win))
   win.webContents.on('did-finish-load', () => pluginAgentActionRelay.flush(win))
+  win.webContents.on('did-finish-load', () => pluginStagedCandidateRelay.flush(win))
   win.on('focus', () => { mainWindow = win })
   win.on('closed', () => {
     mainWindows.delete(win)
@@ -1654,6 +1656,9 @@ const plansBackendStoppedRelay = createPlansBackendStoppedRelay({
 // An agent disabled or enabled a Navide plugin (B2-c): the main window names
 // the caller and offers the undo; held until one has loaded.
 const pluginAgentActionRelay = createPluginAgentActionRelay({ window: () => mainWindow })
+// A plugin installed without Restart that the launch could not activate: the
+// main window says why and where Restart and Discard are; held until one has loaded.
+const pluginStagedCandidateRelay = createPluginStagedCandidateRelay({ window: () => mainWindow })
 frontendPluginManager.setPlansBackendStoppedHandler(({ workspacePath }) => {
   // A headless (agent) Plans child failed too often to be restarted. Nothing
   // on screen shows it, so the workspace's window tells the user how to bring
@@ -2172,6 +2177,21 @@ const pluginTrustRefresh = registerPluginIpc(
 )
 // Card K4: the developer folders the user consented to, when Developer Mode is on.
 void pluginTrustRefresh.loadDeveloperFolders()
+// A first install the user did not restart is activated now, as Restart would
+// have done it; one that cannot be stays staged and the main window says why.
+// A package staged beside an active one is not applied for the user: the main
+// window says which version waits and which runs, and offers to apply it.
+void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
+  for (const failure of failures) {
+    console.warn(`[main] plugin ${failure.pluginId} ${failure.version} installed without Restart was not activated: ${failure.reason}`)
+    pluginStagedCandidateRelay.notify(failure)
+  }
+}, (error) => {
+  console.warn(`[main] staged plugin activation failed: ${error instanceof Error ? error.message : String(error)}`)
+}).finally(() => {
+  const staged = pluginTrustRefresh.stagedUpdates()
+  if (staged.length > 0) pluginStagedCandidateRelay.notifyStagedUpdates(staged)
+})
 
 // Navide Marketplace developer (W3): sign-in, publish, yank and the developer
 // application. Tokens and the signing key are safeStorage ciphertext in their
@@ -2787,9 +2807,9 @@ ipcMain.handle('backend:stop', async () => {
 
 async function pickWorkspacePath(defaultPath?: string): Promise<string | null> {
   const opts: Electron.OpenDialogOptions = {
-    title: MENU_STRINGS[currentUiLocale()].pickWorkspace,
+    title: menuStringsFor(currentUiLocale()).pickWorkspace,
     properties: ['openDirectory', 'createDirectory'],
-    buttonLabel: MENU_STRINGS[currentUiLocale()].useFolder
+    buttonLabel: menuStringsFor(currentUiLocale()).useFolder
   }
   if (defaultPath && typeof defaultPath === 'string') opts.defaultPath = defaultPath
 
@@ -2809,10 +2829,10 @@ ipcMain.handle('workspace:new', async (): Promise<NewWorkspaceResult> => {
   // workspace in the same step that places it. `defaultPath` seeds both — the
   // home directory and an editable placeholder name.
   const opts: Electron.SaveDialogOptions = {
-    title: MENU_STRINGS[currentUiLocale()].createWorkspace,
+    title: menuStringsFor(currentUiLocale()).createWorkspace,
     defaultPath: join(app.getPath('home'), 'navide-workspace'),
-    nameFieldLabel: MENU_STRINGS[currentUiLocale()].workspaceName,
-    buttonLabel: MENU_STRINGS[currentUiLocale()].create,
+    nameFieldLabel: menuStringsFor(currentUiLocale()).workspaceName,
+    buttonLabel: menuStringsFor(currentUiLocale()).create,
     // `showOverwriteConfirmation` is Linux-only and deliberately left off:
     // nothing here overwrites, so asking "replace it?" would promise something
     // the mkdir below refuses to do. macOS and Windows ask anyway and cannot
@@ -4030,6 +4050,40 @@ ipcMain.handle('window:reattachGroup', (event, arg: { groupId?: string } | undef
   const child = detachedGroups.get(groupId)
   if (!child || child.isDestroyed()) return { ok: false }
   child.close()
+  return { ok: true }
+})
+
+// MCP window_focus (DESIGN-C S3): a window brings ITSELF to the front. The
+// window is the sender's, never an argument, so a renderer cannot focus (or
+// name) any other window through this.
+ipcMain.handle('window:focusSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return { ok: false }
+  revealMainWindow(win)
+  return { ok: true }
+})
+
+// MCP window_close (DESIGN-C S4a): a window closes ITSELF, the same close its
+// own title-bar button makes (so the last-window guard still applies). The
+// window is the sender's, never an argument.
+// Off macOS the last main window cannot be closed this way: that would quit
+// Navide and end every CLI. Asked before the window lets go of anything
+// (window:canCloseSelf), and again at the close itself.
+function agentCloseRefusal(win: BrowserWindow | null): string | null {
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return 'not-a-main-window'
+  const others = [...mainWindows].filter((w) => w !== win && !w.isDestroyed() && !detachedWindowIds.has(w.id))
+  if (!isMac() && !detachedWindowIds.has(win.id) && others.length === 0) return 'last-window'
+  return null
+}
+ipcMain.handle('window:canCloseSelf', (event) => {
+  const refusal = agentCloseRefusal(BrowserWindow.fromWebContents(event.sender))
+  return refusal ? { ok: false, error: refusal } : { ok: true }
+})
+ipcMain.handle('window:closeSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const refusal = agentCloseRefusal(win)
+  if (refusal || !win) return { ok: false, error: refusal ?? 'not-a-main-window' }
+  win.close()
   return { ok: true }
 })
 

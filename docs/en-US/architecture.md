@@ -120,6 +120,31 @@ way at least once:
 A detached window is one run group's view of a single workspace and does
 neither of these.
 
+Agents see windows through the MCP `window_*` tools. A window is named by its
+page-load id (the `window_id` it sends with `ui.invoke.ready`), which a reload
+replaces on purpose, so a stale id answers `unknown-window` instead of reaching
+the new page. `window_list` asks each main window to describe itself
+(`ui.window.describe`, addressed to that window alone; a window that does not
+answer in time is listed as `answered: false`). `window_focus` asks one window
+to switch to a project it already holds (through `ui.workspace.switch`) and to
+bring itself to the front; Electron main focuses the window that sent the IPC
+and takes no window argument. Each window action is recorded with the calling
+pane in `<app data>/logs/agent-window-actions.jsonl`, and the affected window
+says which pane did it. `cli_list_targets` and `cli_whoami` carry each pane's
+`window_id`.
+
+`window_close` and `workspace_close` are for CLI panes only and never act on
+the caller's own window or workspace (`_self_scope_refusal` in the backend and
+`selfCloseRefusal` in the window, both from the credential). Neither ends a CLI
+unless the user agrees: `window_close` lets go of each project the way the
+sidebar's plain "Close workspace" does and then closes the window
+(`window:closeSelf`, the sender's own window); `workspace_close` keeps the
+panes by default, and with `keep_panes: false` the window asks the user every
+time, naming the pane. A PTY outlives its window: the backend only drops the
+window's ownership on disconnect, so the CLI keeps running and re-attaches when
+the project is opened again. Until then its output is not read (a bare-line
+report written meanwhile reaches nobody) and it is out of the messaging roster.
+
 ## Runtime workflow
 
 ### Evolution session
