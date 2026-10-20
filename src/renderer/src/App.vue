@@ -40,7 +40,7 @@ import { formatCpuPercent, machineCpuShare, machineMemoryShare } from './lib/res
 import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composables/useResourceUsage'
 import { channelsKey, useChannels } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
-import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, type PaneAnswer } from './lib/paneAnswerKeys'
+import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
 import TurnStatsModal from './components/TurnStatsModal.vue'
@@ -4068,6 +4068,8 @@ onUnmounted(() => {
 // never reports — so a miss there is not evidence the wait ended and must not
 // clear what the hook raised.
 const AWAITING_SCREEN_LINES = 25
+// Between the steps of a free-text or multi-select answer (lib/paneAnswerKeys).
+const ANSWER_STEP_GAP_MS = 60
 
 /** Flag a pane whose turn is in flight but whose log and screen have both been
  *  quiet past the threshold, and record it once per episode. Reminder only:
@@ -10647,7 +10649,20 @@ registerCommand('ui.pane.sendKeys', async (args) => {
   if (!resolved.ok) {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }
   }
-  const resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data: resolved.keys })
+  // A free-text or multi-select answer goes in one step at a time, so the CLI
+  // reads arrows, typed text and Enter as separate keys rather than one paste.
+  // Each later step goes in only while the same menu is still up (writeAnswerSteps).
+  const screenTail = () => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
+  const resp = await writeAnswerSteps({
+    steps: resolved.steps ?? [resolved.keys],
+    menu: screenTail(),
+    read: () => ({ displayStatus: ref.displayStatus as string | undefined, screen: screenTail() }),
+    write: (data) => backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data }),
+    gapMs: ANSWER_STEP_GAP_MS,
+  })
+  if (resp === 'prompt-changed') {
+    return { ok: false, sent: false, error: 'the prompt changed while the answer was going in', error_code: 'prompt-changed' }
+  }
   // This write goes straight to the PTY, not through the terminal's onData, so
   // tell the pane its held permission box was just answered.
   if (resp.ok) ref.noteAnswerKeys?.(resolved.keys)
