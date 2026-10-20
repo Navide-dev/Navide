@@ -2140,9 +2140,10 @@ runs only inside the OS sandbox described in
   record counts as Marketplace data, the only kind that could run a
   third-party backend before file installs existed.
   The package's own name is shown in the native backend consent with every
-  line break and invisible character spelled out, below the source line. The takedown check covers id and publisher only: a package
-  renamed to a new id is not caught, because the trust metadata carries no
-  blocked-digest list. Files extracted from a `.vsix` carry no quarantine
+  line break and invisible character spelled out, below the source line. The takedown check of the Registry trust metadata covers id and
+  publisher only; a package renamed to a new id is caught only by the file's
+  digest, on the blocked-digest list of the local-install trust document
+  (next item). Files extracted from a `.vsix` carry no quarantine
   attribute, the same as a Registry install.
 - A package installed from a local file or folder is trusted through a local
   trust record, not the Registry root: the record holds the package id and
@@ -2163,6 +2164,24 @@ runs only inside the OS sandbox described in
   does not protect against other processes of the same user. A plugin's own
   backend (inside its sandbox) and plugin frames cannot write it. It is
   evidence of consent, not a verification by Navide.
+- **Blocked digests** (decision d5): the root-signed local-install trust
+  document (`GET /api/trust/local-install`) lists the SHA-256 of `.vsix` files
+  Navide took down as `blockedDigests: [{digest, reason}]`; a bare digest, sent
+  by a Registry before 0.2.27, reads as having no reason, and so does a reason
+  this release does not know. A file on the list is refused at install. A file
+  install records the digest of its `.vsix` in the local trust record
+  (`artifactDigest`), and every load and every trust refresh (at start, then
+  every 15 minutes) checks it again, graded by the reason: `security`
+  quarantines the copy, tells the user why and lets it be removed but never
+  enabled again; `admin`, `qualification-revoked` or no reason asks the user
+  once to keep using, disable or remove it; `developer-withdrawn` is only
+  labelled. Extensions keeps a label with the reason on each one.
+  Limits: a file installed before 0.2.27 that was not signed has no recorded
+  digest, so a later block cannot reach it (a signed one is checked through
+  the digest in its signature evidence); a developer folder has no `.vsix` and
+  is never checked by digest. A record that carries the digest or a signature
+  is refused by 0.2.26, so going back to 0.2.26 quarantines those local
+  installs; they load again on 0.2.27 or later.
   Navide Guard grades an agent's write to these stores as critical (rule
   `plugin-store-write`, which can be lowered to high but not switched off):
   writing, deleting, moving, linking or changing the mode of the plugin
