@@ -68,7 +68,12 @@ log = logging.getLogger("agent_team_backend.log_readers.qwen")
 # these never affect it — but they are not human prompts and must not count as
 # user activity (cron/notification are injected by the CLI itself; a mid-turn
 # message arrives while assistant records already carry the activity signal).
-_EXCLUDED_USER_SUBTYPES = ("mid_turn_user_message", "cron", "notification")
+# agent_mention / agent_message (Qwen Code 0.25) are session multi-agent
+# records another agent writes into the transcript; upstream never treats them
+# as a prompt or a turn boundary (chatRecordingService.rebuildTurnBoundaries).
+_EXCLUDED_USER_SUBTYPES = (
+    "mid_turn_user_message", "cron", "notification", "agent_mention", "agent_message",
+)
 
 # Qwen writes no end-of-turn record, so a turn is closed either by the next
 # real user prompt or — for the latest turn, which has no successor — once the

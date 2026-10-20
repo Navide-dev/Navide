@@ -205,7 +205,12 @@ the same reason.
 
 A publisher created with the admin token is trusted, so its versions are
 listed at once; a namespace claimed on the Marketplace is reviewed first
-(section 5). To install from the local Registry in a development build of
+(section 5). A package with a native backend still meets the Marketplace's
+package rules here (`backend.methods`, no `shell: "full"`, the minimum
+`engines.navide`), so a refusal shows up locally rather than on the
+Marketplace. The two publisher gates a local Registry cannot run, the admin
+allowlist and a verified domain, are named in the `notices` of the publish
+response. To install from the local Registry in a development build of
 Navide, point the app at it as described under **Registry endpoints** in the
 [Plugin development guide](plugin-development.md#packaging-and-publishing). A
 packaged build honors those settings only while Developer Mode is on
