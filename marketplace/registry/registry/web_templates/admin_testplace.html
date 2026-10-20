@@ -44,6 +44,8 @@
     <form method="post" action="{{ base }}/admin/testplace/promotions/{{ p.extension.namespace }}/{{ p.extension.name }}/{{ p.version }}" class="row">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       {% for d in p.artifacts %}<input type="hidden" name="artifact" value="{{ d }}">{% endfor %}
+      {% if p.secrets %}<label class="muted"><input type="checkbox" name="acknowledge" value="yes"> secret scan findings are false positives</label>{% endif %}
+      {% if p.native %}<label class="muted"><input type="checkbox" name="inspected_backend" value="yes"> I inspected the native backend of every target</label>{% endif %}
       <input class="wide-input" name="reason" placeholder="Reason (required to reject; shown to the developer)" maxlength="500">
       <button type="submit" name="decision" value="approve">Approve and publish</button>
       <button type="submit" name="decision" value="reject">Reject</button>

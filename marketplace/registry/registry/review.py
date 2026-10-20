@@ -176,24 +176,22 @@ def _claim(session: Session, rows: list[ExtensionVersion], status: str, **values
         )
 
 
-def approve(
+def check_approvable(
     session: Session,
     signer: RegistryTrustSigner,
     *,
     extension: Extension,
     version: str,
-    reviewer: str,
-    artifacts: Sequence[str],
+    rows: list[ExtensionVersion],
     acknowledge_secret_findings: bool = False,
     inspected_native_backend: bool = False,
     rescan: Callable[[ExtensionVersion], dict | None] | None = None,
-) -> list[ExtensionVersion]:
-    """Sign and publish the pending artifacts of `extension@version`, which
-    must be exactly `artifacts` (the package digests the reviewer saw).
-    `rescan` scans a row's stored package with the current scanner (contract
-    3.8: the report signed is the one made at approval); without it the
-    submission's report is signed."""
-    rows = _reviewed_rows(session, extension, version, artifacts)
+) -> tuple[str, dict[int, dict | None]]:
+    """Every check a reviewer's approval must pass before `rows` are signed
+    and made public: blocklist, pack nesting, similarity, secret and native
+    backend confirmations, and (with `rescan`) a fresh scan bound to each
+    stored digest. Returns (publisher id, rescans by row id). Shared by
+    `approve` and Testplace promotion, so a promoted build meets the same bar."""
     publisher = session.get(Publisher, extension.publisher_id)
     publisher_id = publisher.name if publisher else extension.namespace
     reason = signer.block_reason(
@@ -224,6 +222,46 @@ def approve(
                 "this version ships a native backend; confirm every target's "
                 "executable was inspected to approve"
             )
+    # Rescan before anything is claimed: a stored package that no longer
+    # matches its digest is refused here, not halfway through signing.
+    scans = {}
+    if rescan is not None:
+        for row in rows:
+            scans[row.id] = rescan(row)
+            report = scans[row.id]
+            if report is not None and report.get("artifactDigest") != row.package_digest:
+                raise ReviewError("stored package does not match its digest; it cannot be approved")
+    return publisher_id, scans
+
+
+def approve(
+    session: Session,
+    signer: RegistryTrustSigner,
+    *,
+    extension: Extension,
+    version: str,
+    reviewer: str,
+    artifacts: Sequence[str],
+    acknowledge_secret_findings: bool = False,
+    inspected_native_backend: bool = False,
+    rescan: Callable[[ExtensionVersion], dict | None] | None = None,
+) -> list[ExtensionVersion]:
+    """Sign and publish the pending artifacts of `extension@version`, which
+    must be exactly `artifacts` (the package digests the reviewer saw).
+    `rescan` scans a row's stored package with the current scanner (contract
+    3.8: the report signed is the one made at approval); without it the
+    submission's report is signed."""
+    rows = _reviewed_rows(session, extension, version, artifacts)
+    publisher_id, scans = check_approvable(
+        session,
+        signer,
+        extension=extension,
+        version=version,
+        rows=rows,
+        acknowledge_secret_findings=acknowledge_secret_findings,
+        inspected_native_backend=inspected_native_backend,
+        rescan=rescan,
+    )
     previously_public = [
         v.version
         for v in session.exec(
@@ -234,15 +272,6 @@ def approve(
             )
         ).all()
     ]
-    # Rescan before anything is claimed: a stored package that no longer
-    # matches its digest is refused here, not halfway through signing.
-    scans = {}
-    if rescan is not None:
-        for row in rows:
-            scans[row.id] = rescan(row)
-            report = scans[row.id]
-            if report is not None and report.get("artifactDigest") != row.package_digest:
-                raise ReviewError("stored package does not match its digest; it cannot be approved")
     now = _now()
     # Claim first: only rows this decision moved out of pending get signed.
     _claim(session, rows, APPROVED, reviewed_at=now, reviewed_by=reviewer)
