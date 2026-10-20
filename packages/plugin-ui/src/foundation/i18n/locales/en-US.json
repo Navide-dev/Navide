@@ -1955,6 +1955,8 @@
         },
         "reloadFailed": "The latest change could not be loaded; the previous version keeps running: {error}",
         "autoReloadNeedsConsent": "The permissions or backend of {id} changed, so it was unloaded. Consent again in Settings → Navide Plugins.",
+        "autoReloadMixedHint": "A reload while a build or save is still writing files may load an incomplete mix of old and new files.",
+        "reloadFailedNothingRunning": "The last reload failed and no version is running now: {error}",
         "removeFolder": "Remove",
         "needsConsent": "Permissions or backend changed; consent again",
         "folderWarning": "This Navide plugin is loaded straight from the folder you picked. Navide has not reviewed it and it is not signed. The folder can change at any time and Navide does not compare its content: you are asked again only when its permissions or backend change.",

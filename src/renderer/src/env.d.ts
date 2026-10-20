@@ -515,7 +515,7 @@ declare global {
         removeDeveloperFolder?: (id: string) => Promise<DeveloperModeState>
         setDeveloperFolderAutoReload?: (id: string, enabled: boolean) => Promise<DeveloperModeState>
         onDeveloperFolderEvent?: (
-          handler: (event: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string }) => void,
+          handler: (event: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string; running?: boolean }) => void,
         ) => () => void
         selfHostedQuarantine?: () => Promise<Array<{ id: string; version: string | null }>>
         testplaceList?: () => Promise<TestplaceListing[]>

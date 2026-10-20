@@ -12,8 +12,10 @@ export interface FolderWatch {
   close(): void
 }
 
-/** Watches `dir` and calls `onChange` once a burst of changes settles. */
-export type WatchDeveloperFolder = (dir: string, onChange: () => void) => FolderWatch
+/** Watches `dir` and calls `onChange` once a burst of changes settles;
+ *  `onError` when the watch stops working (the folder went, the system ran
+ *  out of watches), after which it calls nothing more. */
+export type WatchDeveloperFolder = (dir: string, onChange: () => void, onError?: (error: Error) => void) => FolderWatch
 
 /** How long a folder must be quiet before one reload runs: one save often
  *  writes several files and events. Merges events; drops none. */
@@ -26,7 +28,7 @@ export function ignoredDeveloperFolderChange(relativePath: string | null): boole
   return parts.includes('.git')
 }
 
-export const watchDeveloperFolder: WatchDeveloperFolder = (dir, onChange) => {
+export const watchDeveloperFolder: WatchDeveloperFolder = (dir, onChange, onError) => {
   let timer: ReturnType<typeof setTimeout> | null = null
   let closed = false
   const watcher = watch(dir, { recursive: true, persistent: false }, (_event, filename) => {
@@ -38,9 +40,12 @@ export const watchDeveloperFolder: WatchDeveloperFolder = (dir, onChange) => {
       if (!closed) onChange()
     }, DEVELOPER_FOLDER_SETTLE_MS)
   })
-  // A folder that disappears ends its watch; the next Reload says why.
+  // A folder that disappears ends its watch; the Host says so on the card.
   watcher.on('error', (error) => {
     console.warn(`[plugins] watching developer folder ${dir} stopped: ${error instanceof Error ? error.message : String(error)}`)
+    closed = true
+    if (timer) clearTimeout(timer)
+    onError?.(error instanceof Error ? error : new Error(String(error)))
   })
   return {
     close() {

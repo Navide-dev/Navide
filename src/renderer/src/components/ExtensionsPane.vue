@@ -814,6 +814,7 @@ watch(installed, () => {
                 />
                 {{ $t('settings.extensions.developerMode.autoReload') }}
               </label>
+              <span class="ext-requires ext-devmode-mixed-hint">{{ $t('settings.extensions.developerMode.autoReloadMixedHint') }}</span>
               <span v-if="lastLoadText(p.id)" class="ext-requires ext-devmode-last-load">{{ lastLoadText(p.id) }}</span>
               <span v-if="developerFolder(p.id)?.reloadError" class="ext-badge ext-dev-warning ext-devmode-reload-error">
                 {{ $t('settings.extensions.developerMode.reloadFailed', { error: reveal(developerFolder(p.id)?.reloadError ?? '') }) }}
@@ -986,6 +987,10 @@ watch(installed, () => {
           <span class="ext-id" v-truncate>{{ reveal(folder.pluginId) }}</span>
           <code class="ext-devmode-path">{{ reveal(folder.path) }}</code>
           <span v-if="folder.unavailable" class="ext-badge ext-dev-warning ext-devmode-unavailable">{{ localizeDeveloperModeError(folder.unavailable, t) }}</span>
+          <!-- Review MED-3 on #543: a reload that unloaded the old version and could not load the new one. -->
+          <span v-else-if="folder.reloadError" class="ext-badge ext-dev-warning ext-devmode-reload-error">
+            {{ $t('settings.extensions.developerMode.reloadFailedNothingRunning', { error: reveal(folder.reloadError) }) }}
+          </span>
           <span v-else class="ext-badge ext-dev-warning">{{ $t('settings.extensions.developerMode.needsConsent') }}</span>
           <button class="ext-devmode-reload nv-btn nv-btn--sm" :disabled="busy || updateFlow.busy.value" @click="updateFlow.reloadDeveloperPlugin(folder.pluginId)">
             {{ $t('settings.extensions.developerMode.reload') }}

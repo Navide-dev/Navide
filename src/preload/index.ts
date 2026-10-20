@@ -1452,11 +1452,11 @@ contextBridge.exposeInMainWorld('agentTeam', {
     setDeveloperFolderAutoReload: (id: string, enabled: boolean): Promise<DeveloperModeState> =>
       ipcRenderer.invoke('plugins:setDeveloperFolderAutoReload', { id, enabled }),
     onDeveloperFolderEvent: (
-      handler: (event: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string }) => void,
+      handler: (event: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string; running?: boolean }) => void,
     ): (() => void) => {
       const listener = (
         _event: unknown,
-        folderEvent: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string },
+        folderEvent: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string; running?: boolean },
       ): void => handler(folderEvent)
       ipcRenderer.on('plugins:developerFolderEvent', listener)
       return () => ipcRenderer.removeListener('plugins:developerFolderEvent', listener)

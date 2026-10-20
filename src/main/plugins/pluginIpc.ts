@@ -535,7 +535,9 @@ export interface PluginUpdateInfo {
 export type DeveloperFolderEvent =
   | { pluginId: string; kind: 'reloaded' }
   | { pluginId: string; kind: 'needs-consent' }
-  | { pluginId: string; kind: 'reload-failed'; error: string }
+  /** `running`: whether a version of the folder still runs (the previous one
+   *  when the new one did not load), so the card says what runs. */
+  | { pluginId: string; kind: 'reload-failed'; error: string; running: boolean }
 
 export interface PluginTrustRefreshController {
   refreshRegistryTrust(): Promise<{
@@ -2915,10 +2917,23 @@ export function registerPluginIpc(
   // mid-edit keeps its running version. One reload runs at a time per folder,
   // and changes made during it run one more.
   const folderWatches = new Map<string, FolderWatch>()
-  const autoReloadRuns = new Map<string, { again: boolean }>()
+  // Review MED-2 on #543: one queue per folder for every reload, manual and
+  // automatic, so an unload and a load of the same id never interleave.
+  const folderQueues = new Map<string, Promise<void>>()
+  const autoReloadQueued = new Set<string>()
   const autoReloading = new Set<string>()
   const reloadErrors = new Map<string, string>()
   const startFolderWatch = options.watchDeveloperFolder ?? watchDeveloperFolder
+  const enqueueFolderTask = <T>(pluginId: string, task: () => Promise<T>): Promise<T> => {
+    const prior = folderQueues.get(pluginId)
+    const run = prior ? prior.then(task) : task()
+    const tail = run.then(() => undefined, () => undefined)
+    folderQueues.set(pluginId, tail)
+    void tail.then(() => {
+      if (folderQueues.get(pluginId) === tail) folderQueues.delete(pluginId)
+    })
+    return run
+  }
   const stopWatchingFolder = (pluginId: string): void => {
     folderWatches.get(pluginId)?.close()
     folderWatches.delete(pluginId)
@@ -2934,63 +2949,106 @@ export function registerPluginIpc(
     }
     if (folderWatches.has(pluginId)) return
     try {
-      folderWatches.set(pluginId, startFolderWatch(consent.path, () => scheduleAutoReload(pluginId)))
+      const watched = startFolderWatch(
+        consent.path,
+        () => scheduleAutoReload(pluginId),
+        // Review LOW-3 on #543: a watch that fails is dropped and said on the
+        // card; the next load of the folder starts a new one.
+        (error) => {
+          if (folderWatches.get(pluginId) !== watched) return
+          stopWatchingFolder(pluginId)
+          reloadErrors.set(pluginId, `automatic reload stopped: ${errorText(error)}`)
+          options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: reloadErrors.get(pluginId)!, running: true })
+        },
+      )
+      folderWatches.set(pluginId, watched)
     } catch (error) {
-      console.warn(`[plugins] cannot watch developer folder ${consent.path}: ${errorText(error)}`)
+      reloadErrors.set(pluginId, `automatic reload unavailable: ${errorText(error)}`)
     }
   }
+  const developerFolderLoaded = (pluginId: string): boolean => manager.listInstalledPackages().some(
+    (pkg) => pkg.id === pluginId && pkg.provenance === 'developer-local-unpacked',
+  )
   const autoReloadDeveloperFolder = async (pluginId: string): Promise<void> => {
     const consent = developerMode.folder(pluginId)
-    if (!consent || !developerModeOn()) return
+    if (!consent || !developerModeOn() || !folderWatches.has(pluginId)) return
+    const failed = (error: unknown): void => {
+      const running = developerFolderLoaded(pluginId)
+      reloadErrors.set(pluginId, errorText(error))
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: errorText(error), running })
+    }
+    // Review MED-3 on #543: the whole folder is checked (manifest, entries,
+    // backend executable) before the running version is touched; a folder
+    // that fails keeps it.
     let described: ReturnType<typeof describeFolder>
     try {
       described = describeFolder(consent.path)
     } catch (error) {
-      reloadErrors.set(pluginId, errorText(error))
-      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: errorText(error) })
+      failed(error)
       return
     }
-    reloadErrors.delete(pluginId)
-    if (described.pluginId !== pluginId || described.permissionsDigest !== consent.permissionsDigest) {
+    // Review LOW-2 on #543: a file change has no proposer; whoever proposed
+    // the folder stays named on the consent it now needs again.
+    const needsConsent = async (): Promise<void> => {
       stopWatchingFolder(pluginId)
       await unloadDeveloperFolder(pluginId)
-      preparedFolders.set(described.pluginId, { dir: consent.path, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
+      preparedFolders.set(pluginId, {
+        dir: consent.path,
+        permissionsDigest: describeFolder(consent.path).permissionsDigest,
+        loadedBy: folderMeta.get(pluginId, consent.path).loadedBy,
+      })
+      reloadErrors.delete(pluginId)
       options.onDeveloperFolderEvent?.({ pluginId, kind: 'needs-consent' })
+    }
+    if (described.pluginId !== pluginId || described.permissionsDigest !== consent.permissionsDigest) {
+      await needsConsent()
       return
     }
     autoReloading.add(pluginId)
+    let loaded = false
     try {
       await unloadDeveloperFolder(pluginId)
-      activateDeveloperFolder(pluginId, 'auto-reload')
+      loaded = activateDeveloperFolder(pluginId, 'auto-reload')
     } catch (error) {
-      reloadErrors.set(pluginId, errorText(error))
-      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: errorText(error) })
+      failed(error)
       return
     } finally {
       autoReloading.delete(pluginId)
     }
-    options.onDeveloperFolderEvent?.({ pluginId, kind: 'reloaded' })
-  }
-  const scheduleAutoReload = (pluginId: string): void => {
-    const running = autoReloadRuns.get(pluginId)
-    if (running) {
-      running.again = true
+    if (loaded) {
+      reloadErrors.delete(pluginId)
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reloaded' })
       return
     }
-    const run = { again: false }
-    autoReloadRuns.set(pluginId, run)
-    void (async () => {
-      try {
-        do {
-          run.again = false
-          await autoReloadDeveloperFolder(pluginId)
-        } while (run.again && folderWatches.has(pluginId))
-      } catch (error) {
-        console.warn(`[plugins] automatic reload of ${pluginId} failed: ${errorText(error)}`)
-      } finally {
-        autoReloadRuns.delete(pluginId)
-      }
-    })()
+    // Review MED-1/MED-3 on #543: activate refused. Say why, honestly: the
+    // switch went off, the consent went, or the declaration changed after
+    // the check (consent needed); nothing claims "reloaded".
+    stopWatchingFolder(pluginId)
+    if (!developerModeOn()) {
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: 'DEVELOPER_MODE_OFF: Developer Mode was turned off during the reload', running: false })
+      return
+    }
+    if (!developerMode.folder(pluginId)) {
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: `${pluginId} is no longer a developer folder`, running: false })
+      return
+    }
+    try {
+      await needsConsent()
+    } catch (error) {
+      failed(error)
+    }
+  }
+  const scheduleAutoReload = (pluginId: string): void => {
+    // Changes before a queued run starts are covered by it; changes during a
+    // run queue exactly one more.
+    if (autoReloadQueued.has(pluginId)) return
+    autoReloadQueued.add(pluginId)
+    void enqueueFolderTask(pluginId, async () => {
+      autoReloadQueued.delete(pluginId)
+      await autoReloadDeveloperFolder(pluginId)
+    }).catch((error: unknown) => {
+      console.warn(`[plugins] automatic reload of ${pluginId} failed: ${errorText(error)}`)
+    })
   }
 
   const unloadDeveloperFolder = async (pluginId: string): Promise<void> => {
@@ -3006,6 +3064,9 @@ export function registerPluginIpc(
   /** Load one consented folder: the view's grant and the backend activation.
    * Returns false, loading nothing, when its permissions or backend changed. */
   const activateDeveloperFolder = (pluginId: string, trigger: DeveloperFolderLoadTrigger = 'startup'): boolean => {
+    // Review MED-1 on #543: callers await an unload first, during which the
+    // user may turn Developer Mode off or remove the folder; nothing loads then.
+    if (!developerModeOn()) return false
     const consent = developerMode.folder(pluginId)
     if (!consent) return false
     const described = describeFolder(consent.path)
@@ -3072,7 +3133,11 @@ export function registerPluginIpc(
       developerMode.setEnabled(enabled)
       manager.recordDeveloperModeChange(enabled, hostAppVersion())
       if (!developerModeOn()) {
-        for (const folder of developerMode.folders()) await unloadDeveloperFolder(folder.pluginId)
+        // Review MED-1 on #543: each unload waits behind that folder's reload,
+        // which sees the switch off and loads nothing.
+        for (const folder of developerMode.folders()) {
+          await enqueueFolderTask(folder.pluginId, () => unloadDeveloperFolder(folder.pluginId))
+        }
         for (const pluginId of [...folderWatches.keys()]) stopWatchingFolder(pluginId)
         reloadErrors.clear()
       } else {
@@ -3193,19 +3258,32 @@ export function registerPluginIpc(
     assertAuthorized(event)
     if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to reload a developer folder')
     const id = typeof args?.id === 'string' ? args.id : ''
-    const consent = developerMode.folder(id)
-    if (!consent) throw new Error(`${id} is not a developer folder`)
-    const described = describeFolder(consent.path)
-    if (described.pluginId !== id || described.permissionsDigest !== consent.permissionsDigest) {
-      // Changed permissions or backend: unload and ask again. File content
-      // alone never asks; it is expected to change during development.
+    if (!developerMode.folder(id)) throw new Error(`${id} is not a developer folder`)
+    // Review MED-2 on #543: behind any automatic reload of the same folder.
+    return await enqueueFolderTask(id, async () => {
+      const consent = developerMode.folder(id)
+      if (!consent) throw new Error(`${id} is not a developer folder`)
+      if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to reload a developer folder')
+      const described = describeFolder(consent.path)
+      if (described.pluginId !== id || described.permissionsDigest !== consent.permissionsDigest) {
+        // Changed permissions or backend: unload and ask again. File content
+        // alone never asks; it is expected to change during development.
+        await unloadDeveloperFolder(id)
+        preparedFolders.set(described.pluginId, { dir: consent.path, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
+        return { reloaded: false as const, requiresConsent: true as const, prepared: described.summary }
+      }
       await unloadDeveloperFolder(id)
-      preparedFolders.set(described.pluginId, { dir: consent.path, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
-      return { reloaded: false, requiresConsent: true, prepared: described.summary }
-    }
-    await unloadDeveloperFolder(id)
-    activateDeveloperFolder(id, 'manual-reload')
-    return { reloaded: true, requiresConsent: false }
+      if (activateDeveloperFolder(id, 'manual-reload')) {
+        reloadErrors.delete(id)
+        return { reloaded: true as const, requiresConsent: false as const }
+      }
+      // Review MED-3 on #543: activate refused after the unload; say why.
+      if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: Developer Mode was turned off during the reload')
+      if (!developerMode.folder(id)) throw new Error(`${id} is no longer a developer folder`)
+      const changed = describeFolder(consent.path)
+      preparedFolders.set(changed.pluginId, { dir: consent.path, permissionsDigest: changed.permissionsDigest, loadedBy: { kind: 'user' } })
+      return { reloaded: false as const, requiresConsent: true as const, prepared: changed.summary }
+    })
   })
 
   // G1: the per-folder automatic reload switch, on by default.

@@ -1955,6 +1955,8 @@
         },
         "reloadFailed": "最近一次變更無法載入，仍在執行上一版：{error}",
         "autoReloadNeedsConsent": "{id} 的權限或後端改了，已停止載入；請到「設定 → Navide 外掛」重新同意。",
+        "autoReloadMixedHint": "建置或存檔進行到一半時重新載入，可能載入新舊檔案混雜、不完整的版本。",
+        "reloadFailedNothingRunning": "最近一次重新載入失敗，目前沒有任何版本在執行：{error}",
         "removeFolder": "移除",
         "needsConsent": "權限或後端已變更，需要重新同意",
         "folderWarning": "這個 Navide 外掛直接從你選的資料夾載入，沒有經過 Navide 審核，也沒有簽章。資料夾內容隨時可能變動，Navide 不做內容比對：只有權限或後端宣告改變時才會再問你。",
