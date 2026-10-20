@@ -30,6 +30,7 @@ DISCLOSURE_RISK_RULES = (
     ("system.ui", "low"),
     ("system.fs", "medium"),
     ("system.aiCli", "high"),
+    ("system.web", "high"),
     ("shell.allowlist", "high"),
     ("nativeBackend", "high"),
     ("agentTools.write", "high"),
@@ -152,6 +153,8 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         present.add("system.fs")
     if "aiCli" in system:
         present.add("system.aiCli")
+    if "web" in system:
+        present.add("system.web")
     if shell and shell["mode"] == "allowlist":
         present.add("shell.allowlist")
     if native is not None:
@@ -175,6 +178,8 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         clauses.append({"key": "networkViaShell", "params": {}})
     if "aiCli" in system:
         clauses.append({"key": "aiCli", "params": {}})
+    if "web" in system:
+        clauses.append({"key": "web", "params": {}})
     if "ui" in system:
         clauses.append({"key": "ui", "params": {}})
     if tools:

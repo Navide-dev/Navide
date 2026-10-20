@@ -11,7 +11,8 @@ import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents
 import { warnMain } from '../main-log'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
-import { validateSupportedLocale } from '../hostLocale'
+import { validateSupportedLocale, type SupportedLocale } from '../hostLocale'
+import { webPolicyDeniedMessage } from '../browserAgentStrings'
 import { composePluginFrameQuery } from './pluginContributionQuery'
 import { systemFrameUnlessMac } from '../window-controls'
 import { createHash, randomUUID } from 'node:crypto'
@@ -48,6 +49,11 @@ import {
   type PublicCapabilityExecutionPlan,
   type TerminalOutputBatcher,
 } from './pluginCapabilityBroker'
+import { WebViewError, type PluginWebViewRegistry, type WebGuestView, type WebHostSurface } from './pluginWebViews'
+import { pluginWebViewRegistry, setPluginWebViewChangedHook } from './pluginWebViewHost'
+import { dispatchWebBridge } from './webBridge'
+import { firstPartyBridgePorts, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
+import type { WebViewInfo, WebViewOwner, WebViewRect } from './webCapability'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
@@ -1038,6 +1044,20 @@ export const BUILTIN_PLUGIN_NAMES: ReadonlyMap<string, string> = new Map([
   ['navide.mini-ide', 'Mini-IDE'],
 ])
 
+/** A web view refusal as a capability error. The view-side contract has no
+ *  USER_IN_CONTROL code, so it is CAPABILITY_DENIED with the reason in the
+ *  message; the registry's messages are Host-authored. */
+function webViewCapabilityError(reqId: string, error: WebViewError): CapabilityResponse {
+  switch (error.code) {
+    case 'INVALID_ARGUMENT':
+      return buildError(reqId, 'INVALID_ARGUMENT', 'invalid web view request')
+    case 'USER_IN_CONTROL':
+      return buildError(reqId, 'CAPABILITY_DENIED', `the user is in control of this web view (${error.reason ?? 'user-owned'})`)
+    default:
+      return buildError(reqId, 'CAPABILITY_DENIED', error.message === error.code ? 'web view request denied' : error.message)
+  }
+}
+
 /** What the Host tells the user (and an agent) when it refuses to act through
  *  a disabled built-in plugin. */
 export function builtinPluginDisabledMessage(pluginId: string): string {
@@ -1568,6 +1588,8 @@ export class FrontendPluginManager {
   /** Last transport status, replayed to late-loading plugin views so their
    *  useBackend shims start from real liveness instead of assuming it. */
   private wsStatus: WsClientStatus = 'disconnected'
+  /** Plugin browser views (`web`); created on first use. */
+  private webViewRegistry: PluginWebViewRegistry | null = null
   /** Host-owned executor seam for cataloged v2 plans. */
   private publicCapabilityHandler:
     | ((plan: PublicCapabilityExecutionPlan) => unknown | Promise<unknown>)
@@ -1596,6 +1618,8 @@ export class FrontendPluginManager {
   private executionPolicyResolver:
     | ((workspacePath?: string) => ExecutionPolicySnapshot)
     | null = null
+  /** The Host UI locale, for refusals the user reads through their agent. */
+  private uiLocaleResolver: (() => SupportedLocale) | null = null
   /** Exact package-version tuples whose complete runtime is being revoked. */
   private readonly stoppingPlugins = new Set<string>()
   private readonly packageRevocationTasks = new Map<string, Promise<void>>()
@@ -2405,14 +2429,33 @@ export class FrontendPluginManager {
   /** A disabled package stays in the installed inventory, but the Host
    *  registers neither its views nor its backend. First-party ids are not
    *  governed by this switch. */
-  isPluginDisabled(pluginId: string): boolean {
-    return this.canDisablePlugin(pluginId) && (this.disabledPluginResolver?.(pluginId) ?? false)
+  isPluginDisabled(
+    pluginId: string,
+    provenance: InstalledPluginPackageSummary['provenance'] = this.installedPackages.get(pluginId)?.provenance,
+  ): boolean {
+    return this.canDisablePlugin(pluginId, provenance) && (this.disabledPluginResolver?.(pluginId) ?? false)
   }
 
   /** The bundled first-party packages (Plans, Git, Mini-IDE) have their own
-   *  factory and recovery paths and are outside the "Disabled" switch. */
-  canDisablePlugin(pluginId: string): boolean {
-    return !isReservedPluginId(pluginId)
+   *  factory and recovery paths and are outside the "Disabled" switch. A
+   *  Marketplace first-party package ({@link isMarketplaceFirstPartyPackage})
+   *  is disabled like any installed package. */
+  canDisablePlugin(
+    pluginId: string,
+    provenance: InstalledPluginPackageSummary['provenance'] = this.installedPackages.get(pluginId)?.provenance,
+  ): boolean {
+    return !isReservedPluginId(pluginId) || this.isMarketplaceFirstPartyPackage(pluginId, provenance)
+  }
+
+  /** A first-party package the Official Registry installed that is not
+   *  bundled with the App (navide.browser; never Plans): the user disables
+   *  and removes it like any Marketplace package. Every other reserved
+   *  `navide.` id keeps its own rules. */
+  isMarketplaceFirstPartyPackage(
+    pluginId: string,
+    provenance: InstalledPluginPackageSummary['provenance'] = this.installedPackages.get(pluginId)?.provenance,
+  ): boolean {
+    return isFirstPartyAgentToolPlugin(pluginId) && provenance === 'official-registry'
   }
 
   /** The user's Disabled switch for the built-in Plans, Git and Mini-IDE
@@ -2787,6 +2830,10 @@ export class FrontendPluginManager {
     resolver: ((workspacePath?: string) => ExecutionPolicySnapshot) | null
   ): void {
     this.executionPolicyResolver = resolver
+  }
+
+  setUiLocaleResolver(resolver: (() => SupportedLocale) | null): void {
+    this.uiLocaleResolver = resolver
   }
 
   setTerminalShell(shell: string | null): void {
@@ -5333,6 +5380,7 @@ export class FrontendPluginManager {
         try {
           return buildSuccess(call.reqId, await handler(plan))
         } catch (error) {
+          if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
           // The Plugin keeps the fixed opaque message (it must not learn Host
           // paths or internals); the Host console keeps the cause.
           console.error(`[plugins] public capability '${plan.address}' failed:`, error)
@@ -6209,8 +6257,34 @@ export class FrontendPluginManager {
     this.pluginBackendHost.setBridgeDispatcher(
       createProductionPlansBridgeDispatcher({
         filesystem: filesystemPort ?? this.plansFilesystemPort(),
+        web: {
+          dispatch: async (operation, arguments_, context) => {
+            if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+            if (!this.webBridgeGrantAllows(context)) {
+              throw new PlansBridgeError('CAPABILITY_DENIED', 'Web capability is denied.')
+            }
+            const initiator = context.runtime.initiator
+            const caller = initiator.kind === 'agent' && initiator.caller
+              ? { paneId: initiator.caller.paneId, workspace: initiator.caller.workspace }
+              : undefined
+            return dispatchWebBridge(this.pluginWebViews(), context.runtime.pluginId, operation, arguments_, caller)
+          },
+        },
       }),
     )
+  }
+
+  /** The `web` Bridge port serves a first-party backend that carries the port
+   *  and whose user Grant for the bound package version includes `web`. The
+   *  supervisor has already checked the approved ports and an agent's
+   *  Execution Policy; the plugin id is the authenticated binding's. */
+  private webBridgeGrantAllows(context: PlansBridgeContext): boolean {
+    const runtime = context.runtime
+    if (!firstPartyBridgePorts(runtime.pluginId)?.includes('web') || !nonEmptyString(runtime.packageVersion)) {
+      return false
+    }
+    const grant = this.capabilityGrantResolver?.(runtime.pluginId, runtime.packageVersion) ?? null
+    return Boolean(grant && grant.packageVersion === runtime.packageVersion && grant.system.includes('web'))
   }
 
   /** The Plans child reads and writes its plan files itself and asks for the
@@ -6677,7 +6751,107 @@ export class FrontendPluginManager {
       }
     }
 
+    if (plan.address.startsWith('web.')) {
+      if (!this.publicPlanCanDispatch(plan, plugin)) {
+        throw new Error('agent execution policy denied the operation')
+      }
+      return this.executeWebCapability(plan, plugin)
+    }
+
     throw new Error(`unsupported public capability '${plan.address}'`)
+  }
+
+  /** The plugin web view registry, wired to `web.changed` on first use. The
+   *  native backend's `web` Bridge port must reach the registry through here
+   *  so the change hook is installed before any view exists. */
+  pluginWebViews(): PluginWebViewRegistry {
+    if (!this.webViewRegistry) {
+      setPluginWebViewChangedHook((pluginId, views) => this.dispatchWebChanged(pluginId, views))
+      this.webViewRegistry = pluginWebViewRegistry()
+    }
+    return this.webViewRegistry
+  }
+
+  /** Uninstall: wipe the package's browser partition when it declares `web`. */
+  async clearPluginWebData(pluginId: string): Promise<void> {
+    const policy = this.descriptors.get(pluginId)?.capabilityPolicy
+    // A disabled package has no descriptor; its installed summary still says
+    // what its manifest declares.
+    const system = policy?.kind === 'manifest-v2'
+      ? policy.system
+      : this.installedPackages.get(pluginId)?.manifestPermissions?.system
+    if (!system?.includes('web')) return
+    await this.pluginWebViews().clearData(pluginId)
+  }
+
+  /** `web.*` view capabilities. The plugin id is the Host binding's, never the
+   *  request's; the registry keeps each plugin inside its own views. */
+  private async executeWebCapability(plan: PublicCapabilityExecutionPlan, plugin: RunningPlugin): Promise<unknown> {
+    const registry = this.pluginWebViews()
+    const pluginId = plan.runtime.pluginId
+    const args = plan.args
+    const viewId = typeof args.viewId === 'string' ? args.viewId : ''
+    switch (plan.address) {
+      case 'web.list':
+        return { views: registry.list(pluginId) }
+      case 'web.create':
+        return registry.create(pluginId, {
+          space: String(args.space),
+          ...(typeof args.url === 'string' ? { url: args.url } : {}),
+        }, 'user')
+      case 'web.attach':
+        registry.attach(pluginId, viewId, args.rect as WebViewRect, this.webHostSurface(plugin))
+        return { ok: true }
+      case 'web.detach':
+        registry.detach(pluginId, viewId)
+        return { ok: true }
+      case 'web.navigate':
+        registry.navigate(pluginId, {
+          viewId,
+          ...(typeof args.url === 'string' ? { url: args.url } : {}),
+          ...(typeof args.action === 'string' ? { action: args.action as 'back' | 'forward' | 'reload' | 'stop' } : {}),
+        })
+        return { ok: true }
+      case 'web.setOwner':
+        registry.setOwner(pluginId, viewId, args.owner as WebViewOwner)
+        return { ok: true }
+      case 'web.takeControl':
+        registry.takeControl(pluginId, viewId)
+        return { ok: true }
+      case 'web.returnControl':
+        registry.returnControl(pluginId, viewId)
+        return { ok: true }
+      case 'web.close':
+        registry.close(pluginId, viewId, false)
+        return { ok: true }
+      case 'web.capture':
+        return registry.capture(pluginId, viewId, typeof args.maxWidth === 'number' ? args.maxWidth : undefined)
+      case 'web.clearData':
+        await registry.clearData(pluginId)
+        return { ok: true }
+      default:
+        throw new Error(`unsupported public capability '${plan.address}'`)
+    }
+  }
+
+  /** The calling instance's native plugin view as a web view host. A frame or
+   *  `<webview>` carrier is laid out by the renderer, so the Host cannot stack
+   *  a native view on it. */
+  private webHostSurface(plugin: RunningPlugin): WebHostSurface {
+    const native = plugin.view.nativeView
+    if (plugin.carrier === 'frame' || !native) {
+      throw new WebViewError('CAPABILITY_DENIED', { message: 'this view cannot host a web view' })
+    }
+    const hostWindow = plugin.hostWindow
+    return {
+      key: plugin.instanceId,
+      addChildView: (view: WebGuestView) => hostWindow.contentView.addChildView(view as unknown as WebContentsView),
+      removeChildView: (view: WebGuestView) => {
+        if (!hostWindow.isDestroyed()) hostWindow.contentView.removeChildView(view as unknown as WebContentsView)
+      },
+      bounds: () => (hostWindow.isDestroyed() ? null : native.getBounds()),
+      visible: () => plugin.visible && !hostWindow.isDestroyed(),
+    }
   }
 
   /** Card K4: audit one change of the Developer Mode switch in the plugin
@@ -6804,7 +6978,8 @@ export class FrontendPluginManager {
           return undispatched(buildError(call.reqId, 'BACKEND_UNAVAILABLE', 'public capability broker is not connected'))
         }
         return buildSuccess(call.reqId, await this.publicCapabilityHandler(plan))
-      } catch {
+      } catch (error) {
+        if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
         return buildError(call.reqId, 'INTERNAL_ERROR', 'public capability failed')
       }
     }
@@ -7211,7 +7386,7 @@ export class FrontendPluginManager {
       }),
     })
     if (!this.agentToolPolicyAllows(root!, initiator, spec)) {
-      return agentToolError('EXECUTION_POLICY_DENIED', 'The agent execution policy denied the operation.')
+      return agentToolError('EXECUTION_POLICY_DENIED', this.agentToolPolicyDeniedMessage(root!, spec))
     }
     const crossWorkspace = parsed.caller.workspace !== null &&
       (canonicalExistingDirectory(parsed.caller.workspace) ?? resolve(parsed.caller.workspace)) !== root
@@ -7386,6 +7561,23 @@ export class FrontendPluginManager {
       .every((namespace) => executionPolicyAllows(initiator, snapshot, namespace))
   }
 
+  /** Why the policy refused a tool: a user policy that leaves out `web` says
+   * so and where to add it; anything else keeps the generic text. */
+  private agentToolPolicyDeniedMessage(workspacePath: string, spec: ThirdPartyLaunchSpec): string {
+    const generic = 'The agent execution policy denied the operation.'
+    if (!spec.thirdParty.system.includes('web')) return generic
+    let snapshot: ExecutionPolicySnapshot | undefined
+    try {
+      snapshot = this.executionPolicyResolver?.(workspacePath)
+    } catch {
+      return generic
+    }
+    if (!snapshot || snapshot.state === 'corrupt') return generic
+    const { mode, system } = snapshot.policy
+    if (mode === 'full' || (mode === 'allowlist' && system.includes('web'))) return generic
+    return webPolicyDeniedMessage(this.uiLocaleResolver?.() ?? 'en-US', mode)
+  }
+
   /** One headless binding per package version and workspace, made for agent
    * tool calls only. A binding the Host has since stopped is replaced. */
   private bindHeadlessAgentToolBackend(
@@ -7522,7 +7714,7 @@ export class FrontendPluginManager {
     const initiator = plan.initiator
     if (!initiator || initiator.kind !== 'agent') return true
     const namespace = plan.address.split('.', 1)[0]
-    if (namespace !== 'fs' && namespace !== 'ui' && namespace !== 'aiCli' && namespace !== 'shell') {
+    if (namespace !== 'fs' && namespace !== 'ui' && namespace !== 'aiCli' && namespace !== 'web' && namespace !== 'shell') {
       return true
     }
     let snapshot: ExecutionPolicySnapshot | undefined
@@ -8455,6 +8647,18 @@ export class FrontendPluginManager {
       ) continue
       if (this.isPublicEventAllowedForInstance(receiver, 'ui.pluginStorageChanged', payload, binding)) {
         this.emitToInstance(receiver.instanceId, 'ui.pluginStorageChanged', payload)
+      }
+    }
+  }
+
+  /** `web.changed` to every live instance of the plugin whose grant allows it. */
+  private dispatchWebChanged(pluginId: string, views: WebViewInfo[]): void {
+    const payload = { views }
+    for (const receiver of this.running.values()) {
+      const binding = receiver.capabilityContext?.runtimeBinding
+      if (!binding || binding.pluginId !== pluginId || this.isPluginStopping(receiver)) continue
+      if (this.isPublicEventAllowedForInstance(receiver, 'web.changed', payload, binding)) {
+        this.emitToInstance(receiver.instanceId, 'web.changed', payload)
       }
     }
   }
@@ -9930,6 +10134,8 @@ export class FrontendPluginManager {
     // destroyInstance(); keep the owner gate live while the release request
     // drains so its marker is not stranded.
     plugin.releasing = true
+    // Its web views leave the closed view and keep running in the background.
+    this.webViewRegistry?.hostClosed(instanceId)
     if (plugin.carrier === 'frame') this.revokePluginFrameInstance(instanceId)
     this.filePickerHost?.cancelInstance(instanceId)
     this.aiTerminalOutputDecoder.dropInstance(instanceId)
@@ -10976,6 +11182,7 @@ export class FrontendPluginManager {
     } else {
       record.view.setBounds(bounds)
     }
+    this.webViewRegistry?.hostChanged(record.instanceId)
   }
 
   /** (Re)attach the host `resize` listener for a fill view — the overlay tracks
@@ -11043,6 +11250,7 @@ export class FrontendPluginManager {
     }
     plugin.view.setVisible(true)
     plugin.visible = true
+    this.webViewRegistry?.hostChanged(plugin.instanceId)
   }
 
   /** Focus one exact live Host-owned instance without changing its visibility
@@ -11068,6 +11276,7 @@ export class FrontendPluginManager {
     plugin.detachHostResize = null
     plugin.view.setVisible(false)
     plugin.visible = false
+    this.webViewRegistry?.hostChanged(plugin.instanceId)
   }
 
   /** Update the plugin view's rect (host-driven layout). */
@@ -11077,6 +11286,7 @@ export class FrontendPluginManager {
     plugin.fill = false
     plugin.restartBounds = { ...bounds }
     plugin.view.setBounds(bounds)
+    this.webViewRegistry?.hostChanged(plugin.instanceId)
   }
 
   /** Host-driven incremental entry target update for one exact v2 instance.
@@ -11641,7 +11851,7 @@ export class FrontendPluginManager {
     this.destroyPluginInstances(summary.id)
     this.clearTerminalRoutes(summary.id)
     this.descriptors.delete(summary.id)
-    if (descriptor && !this.isPluginDisabled(summary.id)) this.registerDescriptor(descriptor, opts)
+    if (descriptor && !this.isPluginDisabled(summary.id, summary.provenance)) this.registerDescriptor(descriptor, opts)
     const canonicalPackageDir = canonicalBackendPackageDir(packageDir ?? descriptor?.packageDir)
     if (canonicalPackageDir) this.installedPackageDirectories.set(summary.id, canonicalPackageDir)
     else this.installedPackageDirectories.delete(summary.id)
@@ -12902,6 +13112,7 @@ export class FrontendPluginManager {
     if (surface && !this.builtinFallbacks.has(id)) this.endDockSurface(surface)
     this.destroyPluginInstances(id)
     this.clearTerminalRoutes(id)
+    this.webViewRegistry?.destroyPlugin(id)
   }
 
   /** Revoke one exact package-version Grant and drain the complete runtime
@@ -12948,6 +13159,8 @@ export class FrontendPluginManager {
             // Electron may already be tearing the view down; Host state is gone.
           }
         }
+        // Its web views go with the revoked grant, agent-created ones included.
+        this.webViewRegistry?.destroyPlugin(pluginId)
         await this.pluginBackendHost.revokePackageVersion(pluginId, packageVersion)
         if (hadActivation) this.refreshHostSessionRegistration()
       })

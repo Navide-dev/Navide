@@ -7,6 +7,7 @@
 import { eventNamespace, resolveWsType } from './capabilityMap'
 import { EDITOR_AI_EVENTS, validateEditorAiEvent } from './editorAiCapability'
 import { isPreferenceJsonValue, validateEditorPreferencesEvent } from './editorPreferenceCapability'
+import { validateWebChangedEvent } from './webCapability'
 import {
   HOST_SHELL_EXECUTABLE_ALLOWLIST,
   publicCapabilityEntry,
@@ -778,6 +779,10 @@ export function executionPolicyAllows(
         HOST_SHELL_EXECUTABLE_ALLOWLIST.includes(executable) && !policy.shell.includes(executable),
     )
   }
+  // `web` reaches every page and sign-in the plugin's browser partition holds,
+  // and a denylist written before the namespace existed never mentions it. So
+  // it is never allowed by omission: only full mode or an allowlist naming it.
+  if (namespace === 'web') return policy.mode === 'allowlist' && policy.system.includes('web')
   return policy.mode === 'allowlist'
     ? policy.system.includes(namespace)
     : !policy.system.includes(namespace)
@@ -1118,6 +1123,9 @@ export function isPublicCapabilityEventAllowed(
       (payload.scope === 'plugin' || payload.scope === 'workspace') &&
       typeof payload.key === 'string' && payload.key.length > 0 && typeof payload.deleted === 'boolean' &&
       isPreferenceJsonValue(payload.value))
+  }
+  if (event === 'web.changed') {
+    return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && validateWebChangedEvent(payload))
   }
   if ((EDITOR_AI_EVENTS as readonly string[]).includes(event)) {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) &&

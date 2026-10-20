@@ -747,9 +747,12 @@ watch(installed, () => void refreshPacks())
             >
               {{ $t('settings.extensions.enable') }}
             </button>
-            <!-- `navide.` packages ship with Navide: they are disabled, never removed. -->
+            <!-- `navide.` packages ship with Navide: they are disabled, never removed.
+                 A Marketplace first-party package (navide.browser) is the
+                 exception: the Host offers its Disabled switch, and it is
+                 removed like any Marketplace package. -->
             <button
-              v-if="!isFirstPartyId(p.id)"
+              v-if="!isFirstPartyId(p.id) || p.disabled !== undefined"
               class="ext-remove nv-btn nv-btn--sm ext-btn-danger"
               :disabled="busy || updateFlow.busy.value"
               @click="developerMode.folders.some((folder) => folder.pluginId === p.id) ? removeDeveloperFolder(p.id) : remove(p.id)"

@@ -154,12 +154,28 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     for (const text of texts) expect(text['ja-JP'], text['en-US']).toBeTruthy()
   })
 
-  it('shows once to someone updating from 0.2.25, as the newest entry', () => {
+  it('shows once to someone updating from 0.2.25', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[0].version).toBe('0.2.26')
-    expect(WHATS_NEW[1].version).toBe('0.2.25')
+    expect(WHATS_NEW[1].version).toBe('0.2.26')
+    expect(WHATS_NEW[2].version).toBe('0.2.25')
+  })
+})
+
+// Authored ahead of the 0.2.27 bump, like 0.2.26 above.
+describe('0.2.27 — Navide Browser', () => {
+  const entry = whatsNewFor('0.2.27')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('shows once to someone updating from 0.2.26, as the newest entry', () => {
+    expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
+    expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
+    expect(WHATS_NEW[0].version).toBe('0.2.27')
   })
 })
 
