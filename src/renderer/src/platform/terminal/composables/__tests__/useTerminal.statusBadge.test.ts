@@ -574,6 +574,23 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     scope.stop()
   })
 
+  it('reports live background tasks to the pipeline on the badge fuse', async () => {
+    // The pipeline reads this instead of the badge: AWAITING outranks RUNNING
+    // on the badge, but a slot parked on a prompt still has its work running.
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    expect(result.hasLiveBackgroundTasks()).toBe(false)
+    result.noteBackgroundTasks('start', ['ae01b1c4'])
+    result.markTurnComplete()
+    expect(result.hasLiveBackgroundTasks()).toBe(true)
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    expect(result.hasLiveBackgroundTasks()).toBe(false)
+    result.noteBackgroundTasks('start', ['b2'])
+    result.noteBackgroundTasks('end', ['b2'])
+    expect(result.hasLiveBackgroundTasks()).toBe(false)
+    scope.stop()
+  })
+
   it('still lets AWAITING outrank a running background task', async () => {
     const { result, mock, scope } = await spawnedFake()
     await chunkThenWait(mock, 0, 100)

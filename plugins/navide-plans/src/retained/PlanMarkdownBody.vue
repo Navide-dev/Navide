@@ -245,7 +245,7 @@ defineExpose({ isEditing, cancelEdit, scrollToAnchor })
 
 <template>
   <div ref="root" class="pmb">
-    <div v-if="loading" class="pmb-state">Loading…</div>
+    <div v-if="loading" class="pmb-state">{{ t('label.loading') }}</div>
     <div v-else-if="loadError" class="pmb-state pmb-state--error">{{ loadError }}</div>
 
     <div v-else-if="parsed" class="pmb-inner">
@@ -333,7 +333,7 @@ defineExpose({ isEditing, cancelEdit, scrollToAnchor })
         </ul>
       </div>
 
-      <div v-if="sections.length === 0 && todos.length === 0" class="pmb-state nv-empty">No content yet.</div>
+      <div v-if="sections.length === 0 && todos.length === 0" class="pmb-state nv-empty">{{ t('editorWindow.plan-body.no-content') }}</div>
     </div>
 
     <!-- Fallback: no frontmatter — render the whole file as read-only markdown. -->
@@ -352,7 +352,7 @@ defineExpose({ isEditing, cancelEdit, scrollToAnchor })
       </template>
     </div>
 
-    <div v-else class="pmb-state">This plan has no document body.</div>
+    <div v-else class="pmb-state">{{ t('editorWindow.plan-body.no-body') }}</div>
   </div>
 </template>
 
