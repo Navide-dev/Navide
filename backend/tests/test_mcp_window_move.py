@@ -176,3 +176,15 @@ async def test_ui_invoke_cannot_reach_the_move_commands(world: dict[str, Any], a
 
     assert result["ok"] is False and result["error_code"] == "ui_dedicated_tool"
     assert "window_move_pane" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_a_project_move_hands_both_windows_the_registry_spelling(world: dict[str, Any]) -> None:
+    # The pane's workspace as its window registered it is the spelling that
+    # window holds (it matches exactly); the destination adopts that one.
+    result = await window_tools.window_move_pane(_ctx(), to_window="m2", pane_id="pb", mode="workspace")
+
+    assert result["ok"] is True
+    sent = {(w, a): x for w, a, x in world["requests"]}
+    assert sent[("m1", "ui.workspace.moveToWindow")]["path"] == "/ws/beta"
+    assert sent[("m2", "ui.workspace.adopt")] == {"path": "/ws/beta"}

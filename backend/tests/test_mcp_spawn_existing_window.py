@@ -190,3 +190,32 @@ async def test_window_id_without_existing_is_refused(windows: dict[str, Any]) ->
     )
 
     assert result["ok"] is False and result["error_code"] == "invalid-window"
+
+
+@pytest.mark.asyncio
+async def test_existing_recognises_a_held_project_under_another_spelling(windows: dict[str, Any], tmp_path: Any) -> None:
+    # Same folder, other spelling (a symlink): one project, one window, so it
+    # is the one w2 holds, compared by folder identity like S2's checks.
+    link = tmp_path / "gamma-link"
+    link.symlink_to(windows["paths"]["gamma"])
+
+    result = await _open(windows, str(link), window="existing", window_id="w2")
+
+    assert result["ok"] is True and result["prepared"] == "already-open"
+    assert not any(a == "ui.workspace.adopt" for _w, a, _x in windows["requests"])
+
+
+@pytest.mark.asyncio
+async def test_existing_refuses_another_windows_id_for_a_held_project_under_another_spelling(
+    windows: dict[str, Any], tmp_path: Any
+) -> None:
+    link = tmp_path / "gamma-link"
+    link.symlink_to(windows["paths"]["gamma"])
+
+    result = await plan_mcp.cli_open_agent(
+        ctx=_ctx(), agent="claude", name="reviewer", task="go",
+        workspace_path=str(link), window="existing", window_id="w1",
+    )
+
+    assert result["ok"] is False and result["error_code"] == "workspace-in-other-window"
+    assert result["holding_window_id"] == "w2"
