@@ -438,7 +438,7 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
         })
         expect(await new Promise((resolve) => child.on('close', resolve))).toBe(0)
         expect(stdout.includes(hint), `${version}: ${stdout}`).toBe(shown)
-        if (shown) expect(stdout).toContain('wait for Testplace (Navide 0.2.27)')
+        if (shown) expect(stdout).toContain('publish with --channel testplace instead')
       } finally {
         await registry.close()
       }

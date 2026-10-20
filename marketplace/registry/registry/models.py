@@ -41,6 +41,18 @@ class Publisher(SQLModel, table=True):
     """Set once the TXT record matched; cleared when the domain changes."""
     native_backend_allowed: bool = Field(default=False, sa_column_kwargs={"server_default": text("0")})
     """Admin allowlist for publishing native backends (see native_backend.py)."""
+    frozen_at: datetime | None = None
+    """Set when the owner's developer qualification is revoked: nothing more
+    can be published or issued under this namespace (qualification.py)."""
+    frozen_reason: str | None = None
+    grandfather_until: datetime | None = None
+    """A namespace self-claimed before developer qualification existed
+    (migration 13) may keep publishing until this time while its owner
+    applies; past it, an owner with no approved or pending application has the
+    namespace reclaimed (qualification.reclaim_expired). None: no grace."""
+    grandfather_paused_at: datetime | None = None
+    """Set while the owner's application is pending: the grace period is
+    paused and resumes, extended by the pending time, if it is rejected."""
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -133,6 +145,14 @@ class ExtensionVersion(SQLModel, table=True):
     scan: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     """Static scan report (contract 3.8) signed through `scanDigest`; None
     until the Registry has a scanner (DS8)."""
+    promotion_status: str | None = None
+    """Testplace -> Marketplace promotion (testplace.py): 'requested' |
+    'approved' | 'rejected'; None when never sent for review."""
+    promotion_requested_at: datetime | None = None
+    promotion_reviewed_at: datetime | None = None
+    promotion_reviewed_by: str | None = None
+    promotion_reason: str | None = None
+    """Rejection reason shown to the publisher."""
 
 
 class ExtensionAsset(SQLModel, table=True):
@@ -172,6 +192,10 @@ class BlocklistEntry(SQLModel, table=True):
     """'publisher' (a namespace) or 'package' (`ns.name` or `ns.name@version`)."""
     value: str
     reason: str
+    digest_reason: str | None = None
+    """For a 'digest' entry, why it was blocked (blocklist.DIGEST_REASONS);
+    the local-install trust document lists it so the app can grade what it
+    does to an installed copy. None for the other kinds."""
     created_at: datetime = Field(default_factory=_now)
     created_by: str | None = None
 
@@ -262,3 +286,139 @@ class ReportAuditEntry(SQLModel, table=True):
     action: str
     note: str | None = None
     created_at: datetime = Field(default_factory=_now)
+
+
+class DeveloperQualification(SQLModel, table=True):
+    """One developer application and its decision per Navide Cloud account
+    (qualification.py). Cloud's own `members` table is never touched."""
+
+    __tablename__ = "developer_qualification"
+
+    navide_member_id: str = Field(primary_key=True)
+    status: str = Field(index=True)
+    """'pending' | 'approved' | 'rejected' | 'revoked'."""
+    application: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    """The submitted fields (real-name identity); shown to the applicant and admins only."""
+    field_sources: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    """Who filled each field: 'user' or 'agent-draft'."""
+    source: str | None = None
+    """Where the application came from (for example 'navide-app' or 'web')."""
+    submitted_at: datetime = Field(default_factory=_now)
+    decided_at: datetime | None = None
+    decided_by: str | None = None
+    reason: str | None = None
+    """Rejection or revocation reason, shown to the applicant."""
+
+
+class AccountToken(SQLModel, table=True):
+    """Account-scoped bearer token: proves which Cloud account is calling
+    (developer application, own versions, testplace). It cannot publish."""
+
+    __tablename__ = "account_token"
+
+    id: int | None = Field(default=None, primary_key=True)
+    navide_member_id: str = Field(index=True)
+    label: str
+    token_hash: str = Field(index=True, unique=True)
+    created_at: datetime = Field(default_factory=_now)
+    expires_at: datetime
+    revoked_at: datetime | None = None
+    last_used_at: datetime | None = None
+
+
+class AccountAuthCode(SQLModel, table=True):
+    """One-time PKCE code for `/cli/authorize?scope=account`."""
+
+    __tablename__ = "account_auth_code"
+
+    id: int | None = Field(default=None, primary_key=True)
+    code_hash: str = Field(index=True, unique=True)
+    navide_member_id: str
+    code_challenge: str
+    label: str
+    expires_at: datetime
+    used_at: datetime | None = None
+
+
+class PublisherKey(SQLModel, table=True):
+    """Every Ed25519 key a publisher has registered; a replaced or revoked
+    key keeps its row so a client can tell a revoked signature from none."""
+
+    __tablename__ = "publisher_key"
+    __table_args__ = (UniqueConstraint("publisher_id", "key_id", name="uq_publisher_key"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    publisher_id: int = Field(foreign_key="publisher.id", index=True)
+    key_id: str
+    """`sha256:<hex>` of the SPKI DER (signing.public_key_fingerprint)."""
+    public_key: str
+    created_at: datetime = Field(default_factory=_now)
+    revoked_at: datetime | None = None
+    revoked_reason: str | None = None
+
+
+class RegistryAudit(SQLModel, table=True):
+    """Append-only trail of qualification, namespace, token, key, publish,
+    yank and blocklist actions: who did what to which target."""
+
+    __tablename__ = "registry_audit"
+
+    id: int | None = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=_now, index=True)
+    actor: str = Field(index=True)
+    """'member:<id>', 'admin:member:<id>', 'admin-token' or 'system:<why>'."""
+    action: str = Field(index=True)
+    target: str = Field(index=True)
+    reason: str | None = None
+    detail: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    """Facts about the action; never a token, key or other secret."""
+
+
+class TestplaceInvite(SQLModel, table=True):
+    """One tester seat of a testplace extension (testplace.py). A personal
+    invite is created with a single-use join token and bound to the Cloud
+    member who redeems it; a public-code seat is created already bound."""
+
+    __tablename__ = "testplace_invite"
+    __table_args__ = (
+        # One live seat per member per extension, whichever way they joined.
+        Index(
+            "uq_testplace_invite_member",
+            "extension_id",
+            "member_id",
+            unique=True,
+            sqlite_where=text("member_id IS NOT NULL AND revoked_at IS NULL"),
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    extension_id: int = Field(foreign_key="extension.id", index=True)
+    label: str = ""
+    """The developer's note for this seat (for example the address the link
+    was sent to). Never shown to the tester or to anyone else."""
+    token_hash: str | None = Field(default=None, index=True, unique=True)
+    """sha256 of the join token; None for a seat taken through a public code."""
+    code_id: int | None = Field(default=None, foreign_key="testplace_code.id", index=True)
+    member_id: str | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=_now)
+    claimed_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+class TestplaceCode(SQLModel, table=True):
+    """A public test code with a tester cap (testplace.py). The first code of
+    an extension waits for a light admin review (D2) before it can be used."""
+
+    __tablename__ = "testplace_code"
+
+    id: int | None = Field(default=None, primary_key=True)
+    extension_id: int = Field(foreign_key="extension.id", index=True)
+    code_hash: str = Field(index=True, unique=True)
+    max_testers: int
+    review_status: str = Field(default="pending", index=True)
+    """'pending' | 'approved' | 'rejected' (review.py statuses)."""
+    review_reason: str | None = None
+    reviewed_at: datetime | None = None
+    reviewed_by: str | None = None
+    created_at: datetime = Field(default_factory=_now)
+    revoked_at: datetime | None = None

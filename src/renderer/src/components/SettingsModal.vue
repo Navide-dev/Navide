@@ -126,6 +126,9 @@ import CrossPlatformHelp from './CrossPlatformHelp.vue'
 import ExtensionsPane from './ExtensionsPane.vue'
 import ExecutionPolicyPane from './ExecutionPolicyPane.vue'
 import MarketplacePane from './MarketplacePane.vue'
+import MarketplaceDeveloperPanel from './MarketplaceDeveloperPanel.vue'
+import TestplacePane from './TestplacePane.vue'
+import { marketplaceView, setMarketplaceView } from '../composables/useMarketplaceForms'
 import PluginDisclosureOverview from './PluginDisclosureOverview.vue'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import LayoutSettingsPane from '../layout/LayoutSettingsPane.vue'
@@ -4557,8 +4560,33 @@ watch(activeTab, (tab) => {
         <!-- ── MARKETPLACE TAB ───────────────────────────────────────────── -->
         <div v-show="activeTab === 'marketplace'" class="s-body s-body--bleed marketplace-body" data-settings-section="marketplace">
           <h1 class="s-page-title">{{ $t('settings.nav.marketplace') }}</h1>
+          <div class="marketplace-view-switch" role="tablist" :aria-label="$t('marketplace-developer.view.label')">
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'browse' }"
+              :aria-selected="marketplaceView === 'browse'"
+              @click="setMarketplaceView('browse')"
+            >{{ $t('marketplace-developer.view.browse') }}</button>
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'developer' }"
+              :aria-selected="marketplaceView === 'developer'"
+              @click="setMarketplaceView('developer')"
+            >{{ $t('marketplace-developer.view.developer') }}</button>
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'testplace' }"
+              :aria-selected="marketplaceView === 'testplace'"
+              @click="setMarketplaceView('testplace')"
+            >{{ $t('testplace.view') }}</button>
+          </div>
           <div class="marketplace-scroll">
-            <MarketplacePane />
+            <MarketplacePane v-show="marketplaceView === 'browse'" />
+            <MarketplaceDeveloperPanel v-if="marketplaceView === 'developer'" :backend="backend" />
+            <TestplacePane v-if="marketplaceView === 'testplace'" />
           </div>
         </div>
 
@@ -5163,6 +5191,24 @@ watch(activeTab, (tab) => {
    inventory, so the page owns the one scrollbar and both panes inside it are
    plain blocks. Marketplace matches it so the two plugin pages scroll alike. */
 .extensions-scroll,
+.marketplace-view-switch {
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-5) var(--space-2);
+}
+.marketplace-view-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--space-1, 4px) var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+.marketplace-view-tab--active {
+  color: var(--text-bright);
+  border-bottom-color: var(--accent-fg);
+}
 .marketplace-scroll {
   flex: 1;
   min-height: 0;

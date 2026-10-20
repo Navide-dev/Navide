@@ -17,8 +17,8 @@ from .js_tokens import Token, iter_tokens
 from .limits import NO_DEADLINE, Deadline
 
 #: Capability namespaces whose addresses the comparison of contract 3.9 uses.
-CAPABILITY_NAMESPACES = frozenset({"aiCli", "fs", "shell", "storage", "ui", "workspace"})
-CAPABILITY_ADDRESS_RE = _ADDRESS_RE = re.compile(r"^(aiCli|fs|shell|storage|ui|workspace)\.[a-z][A-Za-z0-9]{0,63}$")
+CAPABILITY_NAMESPACES = frozenset({"aiCli", "fs", "shell", "storage", "ui", "web", "workspace"})
+CAPABILITY_ADDRESS_RE = _ADDRESS_RE = re.compile(r"^(aiCli|fs|shell|storage|ui|web|workspace)\.[a-z][A-Za-z0-9]{0,63}$")
 FS_READ_ADDRESSES = frozenset({
     "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.glob", "fs.stat", "fs.statPath",
 })

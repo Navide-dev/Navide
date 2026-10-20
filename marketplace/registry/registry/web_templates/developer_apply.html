@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Developer application — Navide Marketplace{% endblock %}
+{% block content %}
+<div class="narrow-page">
+<nav class="crumbs"><a href="{{ base }}/publisher">← Publisher dashboard</a></nav>
+<section class="panel narrow">
+  <h1>Developer application</h1>
+  <p class="muted">Publishing on the Navide Marketplace needs an approved developer
+    qualification. Review checks who you are and that you can be reached — never
+    which permissions your plugins ask for. Your legal name and contact details are
+    seen only by you and the reviewers; the marketplace shows your display name.</p>
+  <table class="version-table cli-request">
+    <tr><th>Status</th><td><b>{{ current.status }}</b></td></tr>
+    {% if current.submitted_at %}<tr><th>Submitted</th><td>{{ current.submitted_at[:10] }}</td></tr>{% endif %}
+    {% if current.reason %}<tr><th>Reason</th><td>{{ current.reason }}</td></tr>{% endif %}
+  </table>
+  {% if current.status == 'approved' %}
+    <p class="ok-line">✓ Approved. <a href="{{ base }}/publisher/claim">Claim a namespace</a></p>
+  {% elif current.status == 'pending' %}
+    <p>Your application is waiting for review.</p>
+  {% elif current.status == 'revoked' %}
+    <p class="field-error" role="alert">This account's developer qualification was revoked.</p>
+  {% endif %}
+  {% if can_apply %}
+  {% if error %}<p class="field-error" role="alert">✕ {{ error }}</p>{% endif %}
+  <form method="post" action="{{ base }}/developer/apply" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="dev-type">Applying as</label>
+    <select id="dev-type" name="applicant_type">
+      <option value="individual" {% if values.applicant_type != 'organization' %}selected{% endif %}>an individual</option>
+      <option value="organization" {% if values.applicant_type == 'organization' %}selected{% endif %}>an organization</option>
+    </select>
+    <label for="dev-legal">Legal name (person, or the organization's representative)</label>
+    <input id="dev-legal" name="legal_name" value="{{ values.legal_name or '' }}" required maxlength="200">
+    <label for="dev-org">Organization name (organizations only)</label>
+    <input id="dev-org" name="organization_name" value="{{ values.organization_name or '' }}" maxlength="200">
+    <label for="dev-orgid">Organization registration number (organizations only)</label>
+    <input id="dev-orgid" name="organization_id" value="{{ values.organization_id or '' }}" maxlength="200">
+    <label for="dev-display">Display name shown on the marketplace</label>
+    <input id="dev-display" name="display_name" value="{{ values.display_name or '' }}" required maxlength="200">
+    <label for="dev-email">Contact email</label>
+    <input id="dev-email" name="contact_email" type="email" value="{{ values.contact_email or '' }}" required maxlength="200">
+    <label for="dev-country">Country or region ({{ countries_hint }})</label>
+    <input id="dev-country" name="country" value="{{ values.country or '' }}" required maxlength="2" pattern="[A-Za-z]{2}">
+    <label for="dev-ns">Namespace you intend to claim</label>
+    <input id="dev-ns" name="intended_namespace" value="{{ values.intended_namespace or '' }}" required
+           pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]">
+    <label for="dev-desc">What will you publish? (one or two sentences)</label>
+    <textarea id="dev-desc" name="description" required maxlength="1000">{{ values.description or '' }}</textarea>
+    <label for="dev-source">Source code or portfolio link (optional)</label>
+    <input id="dev-source" name="source_url" type="url" value="{{ values.source_url or '' }}" maxlength="500">
+    <label for="dev-web">Website (optional)</label>
+    <input id="dev-web" name="website" type="url" value="{{ values.website or '' }}" maxlength="500">
+    <label for="dev-domain">Domain you will verify later (optional)</label>
+    <input id="dev-domain" name="domain" value="{{ values.domain or '' }}" maxlength="200">
+    <label><input type="checkbox" name="needs_native_backend" value="yes" {% if values.needs_native_backend %}checked{% endif %}>
+      I plan to publish plugins with a native backend</label>
+    <label><input type="checkbox" name="agreed_terms" value="yes" required> I accept the Navide developer terms</label>
+    <div class="button-row"><button type="submit" class="install-button">Submit application</button></div>
+  </form>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

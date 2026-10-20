@@ -17,7 +17,23 @@
     <input type="hidden" name="state" value="{{ state }}">
     <input type="hidden" name="code_challenge" value="{{ code_challenge }}">
   </form>
-  {% if namespaces %}
+  {% if scope == 'account' %}
+  <form method="post" action="{{ base }}/cli/authorize" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="port" value="{{ port }}">
+    <input type="hidden" name="state" value="{{ state }}">
+    <input type="hidden" name="code_challenge" value="{{ code_challenge }}">
+    <input type="hidden" name="label" value="{{ label }}">
+    <input type="hidden" name="scope" value="account">
+    <p>This token identifies your Navide Cloud account. It can read and submit your
+      developer application and list your submitted versions. It cannot publish.</p>
+    <p class="muted">The token lasts 30 days. Cancel denies the request.</p>
+    <div class="button-row">
+      <button type="submit" class="install-button">Authorize</button>
+      <button type="submit" form="cli-deny">Cancel</button>
+    </div>
+  </form>
+  {% elif namespaces %}
   <form method="post" action="{{ base }}/cli/authorize" class="stack">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="hidden" name="port" value="{{ port }}">
@@ -36,7 +52,12 @@
     </div>
   </form>
   {% else %}
+  {% if qualification != 'approved' %}
+  <p>Publishing needs an approved developer qualification
+    (yours: <b>{{ qualification }}</b>). <a href="{{ base }}/developer/apply">Developer application</a></p>
+  {% else %}
   <p>You need a namespace first. <a href="{{ base }}/publisher/claim">Claim a namespace</a></p>
+  {% endif %}
   <div class="button-row">
     <button type="submit" form="cli-deny">Cancel</button>
     <span class="muted">Denies the request; the CLI stops waiting.</span>

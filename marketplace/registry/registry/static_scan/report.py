@@ -205,8 +205,10 @@ def scan_package(
         return kept
 
     calls = []
+    # Category breaks ties: the same command seen read-only and as a write
+    # would otherwise follow set order, which changes with PYTHONHASHSEED.
     for (executable, subcommand, category, evidence, source), files in sorted(
-        call_files.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][4], item[0][3])
+        call_files.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][4], item[0][3], item[0][2])
     ):
         command = executable if subcommand is None else f"{executable} {subcommand}"
         if _redacted(command):

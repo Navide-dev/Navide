@@ -1531,7 +1531,7 @@ const genericPluginTabs = computed(() => pluginTabs.value.filter((entry) =>
 /** K2: a local or test package names its source on its sidebar tab. */
 function pluginTabLabel(entry: PluginRegionContribution): string {
   const mark = chromeSourceMark(entry.source)
-  return mark ? `${entry.title} · ${pluginSourceLabel(i18n.global.t, mark)}` : entry.title
+  return mark ? `${entry.title} · ${pluginSourceLabel(i18n.global.t, mark, entry.expiresAt, entry.testplaceVia)}` : entry.title
 }
 
 async function projectPlansPreferencesBeforePrepare(): Promise<void> {

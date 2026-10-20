@@ -11,6 +11,7 @@ import {
 import {
   closeSync,
   constants as fsConstants,
+  existsSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -24,15 +25,30 @@ import { deflateRawSync } from 'node:zlib'
 import {
   canonicalArchivePath,
   comparePortableArchivePaths,
+  deriveAgentToolPrefix,
   manifestReferencedFiles,
   parseManifestJson,
   parseManifestV2,
+  validateAgentTools,
   validatePortableArchiveEntries,
 } from '@navide/plugin-contracts'
 import { runDevBackend } from './dev-backend.mjs'
 import { initPlugin } from './init-template.mjs'
 import { readRegularFileNoFollow } from './package-files.mjs'
-import { assertSecureTransport, credentialsPath, login, publish, registryUrl, removeCredentials, storedCredentials } from './registry-client.mjs'
+import {
+  TOKEN_ENV,
+  assertSecureTransport,
+  credentialsPath,
+  getJson,
+  login,
+  openBrowser,
+  publish,
+  registryUrl,
+  removeCredentials,
+  resolveToken,
+} from './registry-client.mjs'
+import { runTestplace } from './testplace.mjs'
+import { formatScan, readZipEntries, scanFiles } from './scan.mjs'
 
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
 
@@ -54,11 +70,38 @@ function assertSafePath(path, label) {
   }
 }
 
+/** One `validateAgentTools` error as the Registry would refuse it, with the value that would pass. */
+function agentToolMessage(raw, error) {
+  const tools = raw.backend?.agentTools
+  const tool = error.index === null || !Array.isArray(tools) ? undefined : tools[error.index]
+  const where = `manifest backend.agentTools${error.index === null ? '' : `[${error.index}]`}${error.index !== null && error.field ? `.${error.field}` : ''}`
+  const value = (field) => JSON.stringify(tool && typeof tool === 'object' ? tool[field] : undefined)
+  const prefix = deriveAgentToolPrefix(raw.id)
+  const methods = Array.isArray(raw.backend?.methods) ? raw.backend.methods : []
+  const detail = {
+    AGENT_TOOL_PREFIX_UNDERIVABLE: `: id ${JSON.stringify(raw.id)} cannot declare agent tools; the last segment of the id, without hyphens, must be 2-16 lower-case letters or digits starting with a letter`,
+    AGENT_TOOL_NAME_INVALID: ` ${value('name')} must be '${prefix}_' followed by 1-40 of a-z, 0-9 and _, for example '${prefix}_list'`,
+    AGENT_TOOL_PREFIX_MISMATCH: ` ${value('name')} must start with '${prefix}_', the prefix Navide derives from id ${JSON.stringify(raw.id)} (its last segment without hyphens)`,
+    AGENT_TOOL_PREFIX_RESERVED: `: the prefix '${prefix}_' that id ${JSON.stringify(raw.id)} derives is reserved for Navide; change the last segment of the id`,
+    AGENT_TOOL_NAME_RESERVED: ` ${value('name')} is a built-in Navide tool name; choose another '${prefix}_' name`,
+    AGENT_TOOL_NAME_DUPLICATE: ` ${value('name')} is declared twice`,
+    AGENT_TOOL_METHOD_UNDECLARED: ` ${value('method')} is not listed in backend.methods (declared: ${methods.length ? methods.join(', ') : 'none'})`,
+    AGENT_TOOL_RISK_INVALID: ` ${value('risk')} must be 'read' or 'write'`,
+    AGENT_TOOL_TIMEOUT_INVALID: ` ${value('timeoutMs')} must be an integer from 1 to 120000`,
+    AGENT_TOOL_FIELD_MISSING: ' is required',
+    AGENT_TOOL_FIELD_UNKNOWN: ' is not a known field (allowed: name, method, risk, title, description, inputSchema, timeoutMs)',
+  }[error.code] ?? ' is invalid'
+  return `${where}${detail} [${error.code}]`
+}
+
 function readManifest(directory) {
   const path = join(directory, 'manifest.json')
   const stat = lstatSync(path, { bigint: true })
   if (!stat.isFile()) fail('manifest.json must be a regular file')
   const raw = parseManifestJson(decodeUtf8(readRegularFileNoFollow(path), 'manifest.json'))
+  // The Registry checks agent tools on the raw manifest before anything else.
+  const toolErrors = raw && typeof raw === 'object' ? validateAgentTools(raw) : []
+  if (toolErrors.length) fail(toolErrors.map((error) => agentToolMessage(raw, error)).join('\n'))
   return parseManifestV2(raw)
 }
 
@@ -210,7 +253,13 @@ function validateFiles(manifest, files, target, root) {
   const backendEntry = manifest.backend ? backendEntryForTarget(manifest.backend.entry, target) : null
   for (const path of manifestReferencedFiles(manifest)) {
     const referenced = path === manifest.backend?.entry ? backendEntry : path
-    if (!paths.has(referenced)) fail(`manifest references '${referenced}', but that file does not exist`)
+    if (!paths.has(referenced)) {
+      fail(
+        existsSync(join(root, referenced))
+          ? `manifest references '${referenced}', but ${CANONICAL_FILE_LIST} does not list it; add it to the files array`
+          : `manifest references '${referenced}', but that file does not exist`,
+      )
+    }
   }
   const backendEntries = [...paths].filter((path) => path.startsWith('backend/'))
   const frontendEntries = [...paths].filter((path) => path.startsWith('frontend/'))
@@ -362,16 +411,80 @@ function makeZip(files) {
   ])
 }
 
+/** The archive `package` writes for a validated directory. */
+function archiveOf(result) {
+  return makeZip(result.files.map((file) => ({
+    ...file,
+    executable: result.manifest.backend && backendEntryForTarget(result.manifest.backend.entry, result.target) === file.path,
+  })))
+}
+
 function packageDirectory(directory, output, target) {
   const result = validateDirectory(directory, target)
   const outputPath = resolve(output ?? `${result.manifest.id}-${result.manifest.version}-${result.target}.vsix`)
   mkdirSync(dirname(outputPath), { recursive: true })
-  const files = result.files.map((file) => ({
-    ...file,
-    executable: result.manifest.backend && backendEntryForTarget(result.manifest.backend.entry, result.target) === file.path,
-  }))
-  writeFileSync(outputPath, makeZip(files))
+  writeFileSync(outputPath, archiveOf(result))
   return { outputPath, manifest: result.manifest, target: result.target }
+}
+
+/** Scan a .vsix, or a directory as `package` would build it. A package
+ *  without a native backend is universal; one with a backend defaults to the
+ *  build host's target, as `package` does. */
+function scanPath(path, targetOption) {
+  if (lstatSync(resolve(path), { bigint: true }).isDirectory()) {
+    const result = validateDirectory(path, targetOption ?? 'universal')
+    return scanFiles({
+      files: new Map(result.files.map((file) => [file.path, file.bytes])),
+      artifactDigest: createHash('sha256').update(archiveOf(result)).digest('hex'),
+      target: result.target,
+    })
+  }
+  const bytes = readRegularFileNoFollow(path)
+  const files = readZipEntries(bytes)
+  const manifest = files.has('manifest.json') ? parseManifestJson(decodeUtf8(files.get('manifest.json'), 'manifest.json')) : null
+  return scanFiles({
+    files,
+    artifactDigest: createHash('sha256').update(bytes).digest('hex'),
+    target: targetOption ?? (manifest?.backend ? `${process.platform}-${process.arch}` : 'universal'),
+  })
+}
+
+/** The navide://publish link that opens Navide's publish form with this package (agreed with the App's W3 form). */
+function navidePublishLink(packagePath, target) {
+  const path = realpathSync(resolve(packagePath))
+  if (!lstatSync(path, { bigint: true }).isFile()) fail(`package '${packagePath}' must be a regular file`)
+  if (!path.endsWith('.vsix')) fail(`--via-navide hands over a .vsix package; build one with \`navide-plugin package\``)
+  if (path.length > 1024) fail('the package path is longer than 1024 characters; move the .vsix to a shorter path')
+  if (target !== undefined && !/^[a-z0-9][a-z0-9-]*$/.test(target)) fail(`target '${target}' is not a package target such as 'universal' or 'darwin-arm64'`)
+  return `navide://publish?path=${encodeURIComponent(path)}${target === undefined ? '' : `&target=${encodeURIComponent(target)}`}`
+}
+
+/** A Registry error as one line: its stable code and message when it sends one. */
+function registryFailure(registry, path, status, body) {
+  const detail = body?.detail
+  if (status === 404 && detail === 'Not Found') return `${registry} does not offer ${path}; it predates this command`
+  if (detail && typeof detail === 'object' && typeof detail.code === 'string') {
+    return `${registry} refused (${status} ${detail.code}): ${detail.message ?? ''}`
+  }
+  return `${registry} refused (${status})${typeof detail === 'string' ? `: ${detail}` : ''}`
+}
+
+function statusLines(body) {
+  if (!body.items.length) return [`No versions submitted${body.namespace ? ` in ${body.namespace}` : ''} yet.`]
+  const lines = []
+  for (const item of body.items) {
+    const state = item.yanked ? 'yanked' : item.status
+    const channel = item.channel && item.channel !== 'stable' ? ` [${item.channel}]` : ''
+    lines.push(`${item.identity}@${item.version}${channel}  ${state}  ${item.targets.join(', ')}  submitted ${item.submitted_at}`)
+    if (item.status === 'rejected' && item.reason) lines.push(`  reason: ${item.reason}`)
+    if (item.status === 'pending') lines.push('  waiting for review; the scan summary appears once it is approved')
+    for (const [target, scan] of Object.entries(item.scan_by_target ?? {})) {
+      if (!scan || scan.risk === null) continue
+      const undeclared = scan.declared_vs_scanned?.undeclared ?? []
+      lines.push(`  ${target}: risk ${scan.risk}${undeclared.length ? `; found but not declared: ${undeclared.map((entry) => `${entry.kind} ${entry.key}`).join(', ')}` : ''}`)
+    }
+  }
+  return lines
 }
 
 function packageDigest(path) {
@@ -429,33 +542,40 @@ function usage() {
     'Usage:',
     '  navide-plugin init <directory> --id <namespace.name> [--name <display name>]',
     '  navide-plugin validate <directory> [--target <target>]',
+    '  navide-plugin scan <package.vsix | directory> [--target <target>] [--json]',
     '  navide-plugin package <directory> [--target <target>] [--out <file>]',
     '  navide-plugin keygen [--out-dir <directory>] [--name <name>]',
     '  navide-plugin sign <package> --key <private-key> [--out <signature>]',
     '  navide-plugin verify <package> --key <public-key> --signature <signature>',
     '  navide-plugin login [--registry <url>] [--label <label>] [--no-browser] [--insecure-http]',
     '  navide-plugin whoami [--registry <url>]',
+    '  navide-plugin status [<namespace.name>[@<version>]] [--registry <url>] [--json]',
     '  navide-plugin logout [--registry <url>]',
-    '  navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--insecure-http]',
+    '  navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]',
+    '  navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]',
+    '  navide-plugin testplace invite|code|versions|revoke|promote ... (run `navide-plugin testplace` for details)',
     '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]',
     '',
     `The registry defaults to $NAVIDE_REGISTRY_URL, then https://server.navide.dev/registry.`,
-    'publish reads its token from NAVIDE_PLUGIN_TOKEN, then `navide-plugin login`. Registries must use https unless they are on loopback.',
+    'publish, whoami and status read the token from NAVIDE_PLUGIN_TOKEN, then `navide-plugin login`. Registries must use https unless they are on loopback.',
+    'publish --via-navide hands the package to the running Navide, where you sign in and submit it; the CLI reads no token.',
   ].join('\n')
 }
 
-// command -> [positional argument count, value options, boolean flags]
+// command -> [positional argument count, value options, boolean flags, positional is optional]
 const COMMANDS = {
   init: [1, ['--id', '--name'], []],
   validate: [1, ['--target'], []],
+  scan: [1, ['--target'], ['--json']],
   package: [1, ['--target', '--out'], []],
   keygen: [0, ['--out-dir', '--name'], []],
   sign: [1, ['--key', '--out'], []],
   verify: [1, ['--key', '--signature'], []],
   login: [0, ['--registry', '--label'], ['--no-browser', '--insecure-http']],
   whoami: [0, ['--registry'], []],
+  status: [1, ['--registry'], ['--json'], true],
   logout: [0, ['--registry'], []],
-  publish: [1, ['--registry', '--target', '--signature', '--token'], ['--insecure-http']],
+  publish: [1, ['--registry', '--target', '--signature', '--token', '--channel'], ['--insecure-http', '--via-navide', '--no-browser']],
   'dev-backend': [1, ['--call', '--args', '--subscribe', '--data'], []],
 }
 
@@ -463,7 +583,8 @@ function parseArgs(argv) {
   const [command, ...rest] = argv
   const spec = COMMANDS[command]
   if (!spec) fail(usage())
-  const [positionalCount, valueOptions, flags] = spec
+  const [declaredCount, valueOptions, flags, optional] = spec
+  const positionalCount = optional && (rest[0] === undefined || rest[0].startsWith('--')) ? 0 : declaredCount
   const positional = rest.slice(0, positionalCount)
   if (positional.length !== positionalCount || positional.some((value) => value.startsWith('--'))) fail(usage())
   const options = new Map()
@@ -498,6 +619,8 @@ function isPrereleaseVersion(version) {
 }
 
 async function main(argv) {
+  // Subcommands with their own arguments (testplace.mjs).
+  if (argv[0] === 'testplace') return runTestplace(argv.slice(1))
   const { command, positional, options } = parseArgs(argv)
   const [argument] = positional
   if (command === 'init') {
@@ -544,6 +667,28 @@ async function main(argv) {
     })
     return
   }
+  if (command === 'scan') {
+    const scanned = scanPath(argument, options.get('--target'))
+    if (options.get('--json') === true) console.log(JSON.stringify(scanned, null, 2))
+    else for (const line of formatScan(scanned)) console.log(line)
+    return
+  }
+  if (command === 'publish' && options.get('--via-navide') === true) {
+    for (const option of ['--registry', '--token', '--signature', '--insecure-http']) {
+      if (options.has(option)) fail(`--via-navide cannot be combined with ${option}: Navide's publish form chooses the registry, signs you in and submits`)
+    }
+    // Navide's publish form has no channel: a Testplace build handed over
+    // would go to ordinary Marketplace review and be public once approved.
+    if (options.has('--channel')) {
+      fail(`--via-navide cannot be combined with --channel: Navide's publish form sends every build to Marketplace review, where an approved build is public. Publish a Testplace build directly with \`navide-plugin publish ${argument} --channel testplace\` (it reads your publisher token).`)
+    }
+    const link = navidePublishLink(argument, options.get('--target'))
+    console.log(`Handing ${argument} to Navide: ${link}`)
+    if (options.get('--no-browser') !== true) openBrowser(link)
+    console.log('Review and submit it in Navide\'s publish form; the CLI sends nothing and reads no token. If Navide did not open, open the link above. Afterwards, `navide-plugin status` shows the review.')
+    return
+  }
+  if (options.has('--no-browser') && command === 'publish') fail('--no-browser applies to publish --via-navide only')
   const registry = registryUrl(options.get('--registry'))
   if (command === 'login' || command === 'publish') {
     assertSecureTransport(registry, { insecureHttp: options.get('--insecure-http') === true })
@@ -557,13 +702,41 @@ async function main(argv) {
     return
   }
   if (command === 'whoami') {
-    const entry = storedCredentials(registry)
-    if (!entry) fail(`not logged in to ${registry}; run \`navide-plugin login --registry ${registry}\``)
+    const resolved = resolveToken(registry)
+    if (!resolved) fail(`not logged in to ${registry}; run \`navide-plugin login --registry ${registry}\``)
+    if (!resolved.entry) {
+      // NAVIDE_PLUGIN_TOKEN, which publish would send: only the Registry knows whose it is.
+      assertSecureTransport(registry)
+      const { status, body } = await getJson(registry, '/api/publisher/me', resolved.token)
+      if (status !== 200 || !body) fail(registryFailure(registry, '/api/publisher/me', status, body))
+      console.log(`${body.namespace} on ${registry}; token from ${TOKEN_ENV} ${body.token_expires_at ? `expires ${body.token_expires_at}` : 'does not expire'}`)
+      if (body.qualification && body.qualification !== 'approved') console.log(`developer qualification: ${body.qualification}`)
+      if (body.frozen) console.log(`${body.namespace} is frozen: it cannot publish`)
+      return
+    }
+    const entry = resolved.entry
     // The Registry writes expires_at as naive UTC; read an offset-less value as UTC.
     const expiresAt = typeof entry.expires_at === 'string' && !/(?:Z|[+-]\d\d:\d\d)$/i.test(entry.expires_at) ? `${entry.expires_at}Z` : entry.expires_at
     const expired = expiresAt && Date.parse(expiresAt) <= Date.now()
     console.log(`${entry.namespace} on ${registry}; token ${expired ? 'expired' : 'expires'} ${entry.expires_at}`)
     if (expired) process.exitCode = 1
+    return
+  }
+  if (command === 'status') {
+    const resolved = resolveToken(registry)
+    if (!resolved) fail(`status needs ${TOKEN_ENV} or \`navide-plugin login --registry ${registry}\``)
+    assertSecureTransport(registry)
+    const query = new URLSearchParams()
+    if (argument) {
+      const [extension, version] = argument.split('@', 2)
+      query.set('extension', extension)
+      if (version) query.set('version', version)
+    }
+    const path = `/api/publisher/me/versions${argument ? `?${query}` : ''}`
+    const { status, body } = await getJson(registry, path, resolved.token)
+    if (status !== 200 || !body || !Array.isArray(body.items)) fail(registryFailure(registry, '/api/publisher/me/versions', status, body))
+    if (options.get('--json') === true) console.log(JSON.stringify(body, null, 2))
+    else for (const line of statusLines(body)) console.log(line)
     return
   }
   if (command === 'logout') {
@@ -584,12 +757,17 @@ async function main(argv) {
     target,
     signature: options.get('--signature'),
     token: options.get('--token'),
+    channel: options.get('--channel'),
   })
   console.log(`${result.status} ${result.body}`)
   if (result.status < 200 || result.status >= 300) process.exitCode = 1
-  else if (isPrereleaseVersion(publishedVersion(result.body))) {
+  else if (options.get('--channel') === 'testplace') {
     console.log(
-      'This version is a pre-release: it will be public to everyone who turns on Get pre-releases for this Navide plugin, and it goes through review. To test with specific people only, wait for Testplace (Navide 0.2.27).',
+      'This is a Testplace build: only testers you invite can install it, and it expires in 90 days. Invite them with `navide-plugin testplace invite add`.',
+    )
+  } else if (isPrereleaseVersion(publishedVersion(result.body))) {
+    console.log(
+      'This version is a pre-release: it will be public to everyone who turns on Get pre-releases for this Navide plugin, and it goes through review. To test with specific people only, publish with --channel testplace instead.',
     )
   }
 }

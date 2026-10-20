@@ -67,8 +67,11 @@ export type ConvenienceAnnouncementAction =
   | { kind: 'convenience-upgrade-ack' }
 
 /** The undo on a "an agent disabled / enabled a Navide plugin" row (B2-c):
- *  the user's own Extensions switch, set back. */
-export type PluginAgentAnnouncementAction = { kind: 'plugin-agent-undo'; pluginId: string; disable: boolean }
+ *  the user's own Extensions switch, set back. On "an agent updated a Navide
+ *  plugin" (O1): back to the version it was updated from. */
+export type PluginAgentAnnouncementAction =
+  | { kind: 'plugin-agent-undo'; pluginId: string; disable: boolean }
+  | { kind: 'plugin-agent-downgrade'; pluginId: string; fromVersion: string; toVersion: string }
 
 export type AnnouncementActionSpec =
   | { kind: AnnouncementAction }
@@ -539,11 +542,13 @@ function noteShareNotice(notice: ShareNotice, at: number = Date.now()): void {
 
 // ── Agent plugin actions (B2-c) ─────────────────────────────────────────────
 
-/** An agent disabled or enabled a Navide plugin, as the Host reported it. */
+/** An agent disabled, enabled or updated a Navide plugin, as the Host reported it. */
 export interface PluginAgentNotice {
-  action: 'disable' | 'enable'
+  action: 'disable' | 'enable' | 'update'
   pluginId: string
   pluginVersion: string
+  /** `update` only: the version it was updated from. */
+  fromVersion?: string
   requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
 }
 
@@ -561,6 +566,14 @@ export function pluginAgentCaller(requester: PluginAgentNotice['requester']): st
 
 /** One line naming the caller, what it did and the plugin. */
 export function pluginAgentNoticeTitle(notice: PluginAgentNotice): string {
+  if (notice.action === 'update') {
+    return i18n.global.t('plugin-agent.notice.updated', {
+      caller: pluginAgentCaller(notice.requester),
+      plugin: notice.pluginId,
+      from: notice.fromVersion ?? '',
+      to: notice.pluginVersion,
+    })
+  }
   return i18n.global.t(`plugin-agent.notice.${notice.action === 'disable' ? 'disabled' : 'enabled'}`, {
     caller: pluginAgentCaller(notice.requester),
     plugin: notice.pluginId,
@@ -572,22 +585,51 @@ function pluginAgentItems(): Announcement[] {
     id: `plugin-agent:${notice.action}:${notice.pluginId}:${at}`,
     kind: 'plugin-agent' as const,
     title: pluginAgentNoticeTitle(notice),
-    highlights: [i18n.global.t('plugin-agent.notice.version', { version: notice.pluginVersion })],
+    highlights: [
+      notice.action === 'update'
+        ? i18n.global.t('plugin-agent.notice.updated-detail', { from: notice.fromVersion ?? '', to: notice.pluginVersion })
+        : i18n.global.t('plugin-agent.notice.version', { version: notice.pluginVersion }),
+    ],
     createdAt: at,
     read: false,
-    actions: [{ kind: 'plugin-agent-undo' as const, pluginId: notice.pluginId, disable: notice.action === 'enable' }],
+    actions: [
+      notice.action === 'update'
+        ? {
+            kind: 'plugin-agent-downgrade' as const,
+            pluginId: notice.pluginId,
+            fromVersion: notice.fromVersion ?? '',
+            toVersion: notice.pluginVersion,
+          }
+        : { kind: 'plugin-agent-undo' as const, pluginId: notice.pluginId, disable: notice.action === 'enable' },
+    ],
   }))
 }
 
 /** Whether the undo still sets back what the agent did: the package is still
  *  in the state the agent left it in (the user has not changed it since). */
 export function pluginAgentUndoApplies(
-  action: PluginAgentAnnouncementAction,
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-agent-undo' }>,
   installed: ReadonlyArray<{ id: string; disabled?: boolean }>,
 ): boolean {
   const current = installed.find((pkg) => pkg.id === action.pluginId)
   // The undo enables when the agent disabled, and the other way round.
   return current !== undefined && current.disabled === !action.disable
+}
+
+/** How the downgrade of an agent's update (O1) sets it back, or null when the
+ *  package was changed since: the update still waiting for a restart is
+ *  dropped, an update in use is rolled back to the version it replaced. */
+export function pluginAgentDowngradeStep(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-agent-downgrade' }>,
+  installed: ReadonlyArray<{ id: string; packageVersion?: string; pendingCandidateVersion?: string; rollbackToVersion?: string }>,
+): 'discard' | 'rollback' | null {
+  const current = installed.find((pkg) => pkg.id === action.pluginId)
+  if (!current) return null
+  if (current.pendingCandidateVersion === action.toVersion && current.packageVersion === action.fromVersion) return 'discard'
+  if (!current.pendingCandidateVersion && current.packageVersion === action.toVersion && current.rollbackToVersion === action.fromVersion) {
+    return 'rollback'
+  }
+  return null
 }
 
 /** Record that an agent disabled or enabled a Navide plugin. */

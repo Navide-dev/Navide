@@ -5588,6 +5588,9 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     # confirmation ends one ordinary wait before this one, leaving a pane
     # create its wait.
     "ui.accounts.signIn",
+    # Asks the user, then runs the window's own switch, which may restart
+    # panes (cli_account_switch): the same budget as the sign-in.
+    "ui.accounts.switch",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
 
@@ -5730,7 +5733,7 @@ def _ui_timeout_error(
 #: nobody waits for the answer any more (review #438 LOW-1): a sign-in
 #: confirmation must not open a pane after its tool call was cancelled or
 #: timed out. Other actions finish on their own and get no withdrawal.
-_UI_INVOKE_WITHDRAWN_ACTIONS = frozenset({"ui.accounts.signIn"})
+_UI_INVOKE_WITHDRAWN_ACTIONS = frozenset({"ui.accounts.signIn", "ui.accounts.switch"})
 
 
 def _withdraw_ui_request(action: str | None, request_id: str, owner: Any) -> None:
@@ -5969,7 +5972,7 @@ async def ui_invoke(
         return {
             "ok": False,
             "result": None,
-            "error": f"{action} is not a ui_invoke action; use cli_account_sign_in",
+            "error": f"{action} is not a ui_invoke action; use cli_account_sign_in or cli_account_switch",
             "error_code": "ui_dedicated_tool",
         }
     return await _ui_request(
@@ -9434,16 +9437,21 @@ _MQ_CURSOR = re.compile(r"0|[1-9][0-9]{0,8}")
 _MQ_ENUMS = frozenset({
     "search", "detail", "installed",
     "read", "write", "readWrite", "low", "medium", "high", "highest",
-    "nativeBackend", "files", "shell", "aiCli", "ui", "agentTools", "network", "networkViaShell", "noPermissions",
-    "system.ui", "system.fs", "system.aiCli", "shell.allowlist", "shell.full", "agentTools.write",
+    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agentTools", "network", "networkViaShell", "noPermissions",
+    "system.ui", "system.fs", "system.aiCli", "system.web", "shell.allowlist", "shell.full", "agentTools.write",
     "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared", "via-shell",
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
     "available", "consent-required", "plugin-disabled", "plugin-quarantined", "plugin-revoked", "name-collision",
+    # PluginSource (src/shared/pluginSource.ts), for plugins_list_installed (W1).
+    "marketplace", "prerelease", "testplace", "local-signed", "local-unsigned", "developer-unpacked",
+    "factory-bundled",
 })
 _MQ_ENUM_KEYS = frozenset({
     "kind", "risk", "level", "key", "mode", "access", "status", "secretScan", "network", "template",
     "state", "root", "projectWrites", "system", "executables",
+    # An installed package's source (W1); a scan's `source` stays fenced.
+    "source",
 })
 _MQ_KNOWN_KEYS = frozenset({
     "kind", "items", "nextCursor", "item", "versions", "card",
@@ -9454,7 +9462,7 @@ _MQ_KNOWN_KEYS = frozenset({
     "timeoutMs", "inputSchema", "dataLocations", "hostStorage", "backendDataDirectory", "projectWrites",
     "patterns", "domainVerifiedAt", "signature", "keyId", "review", "status", "reviewedAt",
     "nativeCodeInspected", "scan", "secretScan", "secretFindings", "similarityWarning", "similarTo",
-    "scannedAt", "enabled", "quarantined", "hasBackend", "state",
+    "scannedAt", "enabled", "quarantined", "hasBackend", "state", "signatureRevoked",
     # The card's scan report (contract 3.4, 3.8); its strings are fenced like any other.
     "scanner", "artifactDigest", "target", "coverage", "filesTotal", "filesScanned", "bytesScanned",
     "skipped", "reason", "count", "truncated", "timedOut", "calls", "executable", "subcommand", "category",
@@ -9704,8 +9712,15 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
 
     The same inventory Settings → Navide Plugins shows. Returns {ok, kind:
     "installed", items}; each item is {id, version, enabled, quarantined,
-    hasBackend, agentTools: [{name, state}]}. Enabling, disabling, updating
-    or removing a plugin is the user's decision and is not possible from here.
+    hasBackend, agentTools: [{name, state}], source, signatureRevoked?}.
+    `source` says where it came from and what review it passed:
+    marketplace / prerelease / testplace (Navide Marketplace), local-signed
+    (a local file a vetted publisher signed; this version not reviewed),
+    local-unsigned (a local file, unsigned and unreviewed), developer-unpacked
+    (a Developer Mode folder) or factory-bundled. `signatureRevoked: true`
+    marks a local file whose publisher key Navide has since revoked. Enabling,
+    disabling, updating or removing a plugin is the user's decision and is not
+    possible from here.
     """
     caller, out = await _marketplace_query(ctx, {"kind": "installed"})
     if out.get("ok") is not True or caller is None:
@@ -9778,12 +9793,28 @@ def _approval_requester(caller: _Caller) -> dict[str, Any]:
     if caller.kind != "pane":
         return {"paneId": None, "paneName": None, "workspace": None, "callerKind": caller.kind}
     pane = agent_messaging.get(caller.pane_id)
-    return {
+    requester: dict[str, Any] = {
         "paneId": caller.pane_id,
         "paneName": neutralize_external_text(pane.name) if pane else None,
         "workspace": neutralize_external_text(pane.workspace_path) if pane and pane.workspace_path else None,
         "callerKind": "pane",
     }
+    # S8-M1: a pane that read third-party content says so on the card and the
+    # form (disclosure only: the request is filed and decided exactly the same).
+    if _pane_tainted(caller.pane_id):
+        requester["tainted"] = True
+    return requester
+
+
+def _pane_tainted(pane_id: str | None) -> bool:
+    """Whether the pane is marked tainted; False when the taint store cannot answer."""
+    from agent_team_backend.guard import taint
+
+    try:
+        return bool(pane_id) and taint.is_tainted(pane_id)
+    except Exception as err:  # noqa: BLE001 - a disclosure line never fails the request
+        _log.warning("could not read the taint of pane %s: %s", pane_id, err)
+        return False
 
 
 def _audit_agent_action(
@@ -9912,6 +9943,10 @@ async def _file_plugin_request(
         return refuse("BAD_REQUEST", f"{version} is not newer than the installed {from_version}")
     if kind == "plugin-rollback" and _semver_key(version) >= _semver_key(from_version):
         return refuse("BAD_REQUEST", f"{version} is not older than the installed {from_version}")
+    if kind == "plugin-update":
+        applied = await _unchanged_update(caller, requester, plugin_id, version, from_version)
+        if applied is not None:
+            return applied
     card = None
     if kind != "plugin-remove":
         card, error = await _registry_card(caller, plugin_id, version)
@@ -9940,6 +9975,51 @@ async def _file_plugin_request(
     }
 
 
+async def _unchanged_update(
+    caller: _Caller, requester: dict[str, Any], plugin_id: str, version: str, from_version: str,
+) -> dict[str, Any] | None:
+    """O1 (user 2026-10-20 01:40): ask the Host to update at once when the new
+    version discloses exactly what the installed one does. The Host decides
+    and does it; None for anything but a confirmed update, and the caller then
+    files the request as before (fail closed)."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    request_id = f"pa:{secrets.token_hex(16)}"
+    future = _agent_action_pending.register(request_id)
+    try:
+        sent = await app.unicast_host(make_event(contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT, {
+            "request_id": request_id, "action": "update", "plugin_id": plugin_id, "version": version,
+            "requester": requester,
+        }))
+        result = await _agent_action_pending.wait(request_id, future, timeout=_AGENT_ACTION_TIMEOUT_S) if sent else TIMEOUT
+    finally:
+        _agent_action_pending.discard(request_id)
+    if result is TIMEOUT:
+        return None
+    if (result.get("ok") is True and result.get("updated") is True
+            and result.get("pluginVersion") == version and result.get("fromVersion") == from_version):
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
+                            outcome="allowed")
+        return {
+            "ok": True,
+            "status": "completed",
+            "applied": True,
+            "pluginId": plugin_id,
+            "fromVersion": from_version,
+            "pluginVersion": version,
+            "note": (
+                "Updated without asking: this version discloses exactly the same permissions, backend, agent tools "
+                "and network access as the installed one. The user was told, with a one-click downgrade."
+            ),
+        }
+    if result.get("error_code") == "ACTION_FAILED":
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
+                            outcome="error", error_code="ACTION_FAILED")
+    return None
+
+
 @server.tool()
 async def marketplace_request_install(
     ctx: Context, namespace: str, name: str, version: str, reason: str = "",
@@ -9963,13 +10043,18 @@ async def marketplace_request_install(
 async def marketplace_request_update(
     ctx: Context, namespace: str, name: str, version: str, reason: str = "",
 ) -> dict[str, Any]:
-    """Ask the user to update an installed Navide plugin to a newer version.
+    """Update an installed Navide plugin to a newer version, or ask the user to.
 
-    Like marketplace_request_install: files a request for the user's
-    decision in Navide and changes nothing by itself. `version` must be newer
-    than the installed one and listed in the Navide Marketplace.
-
-    Returns {ok, approval_id, status: "pending", expires_at, note}.
+    `version` must be newer than the installed one and listed in the Navide
+    Marketplace. When that version discloses exactly the same permissions,
+    backend, agent tools and network access as the installed one, Navide
+    updates it at once: the user is told which agent did it, with a one-click
+    downgrade, and the change is recorded. The answer is then {ok: true,
+    status: "completed", applied: true, pluginId, fromVersion, pluginVersion,
+    note}. Any change in what it discloses, or anything Navide cannot compare,
+    files a request for the user's decision in Navide instead, like
+    marketplace_request_install: {ok, approval_id, status: "pending",
+    expires_at, note}.
     """
     return await _file_plugin_request(ctx, "plugin-update", namespace, name, version, reason)
 
@@ -10314,8 +10399,10 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
 
     The same accounts Settings → Accounts shows, read from Navide's account
     store only: it says which accounts exist and which is active, not who is
-    signed in to them — no email and no signed-in flag, since both would mean
-    reading the credentials themselves. Read-only: nothing is switched or
+    signed in to them — no signed-in flag, since that would mean reading the
+    credentials themselves. An account's `name` is the name the user gave it,
+    and an account Navide added on its own is named after the email it was
+    signed in with, so a name can be an email. Read-only: nothing is switched or
     refreshed. Quota is in cli_usage, the failover state in
     cli_failover_state.
 
@@ -10468,7 +10555,7 @@ async def cli_account_sign_in(
     if not answer.get("ok"):
         return {
             "ok": False,
-            "error": str(answer.get("error") or "the Navide window did not answer"),
+            "error": "the Navide window did not answer",
             "error_code": "window-unavailable",
         }
     if status != "started":
@@ -10484,6 +10571,125 @@ async def cli_account_sign_in(
         "profile_id": profile_id,
         "mode": mode,
         "login_pane_id": str(result.get("loginPaneId") or ""),
+    }
+
+
+# ── CLI account switch (plan mcp_614482 P3) ─────────────────────────────────
+
+
+@server.tool()
+async def cli_account_switch(
+    ctx: Context, agent: str, profile_id: str, reason: str,
+) -> dict[str, Any]:
+    """Ask the user to switch one CLI to another of its accounts — for
+    example when the active account's quota ran out and another account of
+    the same vendor still has some.
+
+    Your window first asks the user, naming which agent asked, the account it
+    switches from and to, and your `reason` (required; cut at 300
+    characters); nothing switches until they agree, and a no or no answer in
+    time is a refusal. If this call is cancelled or times out, the window
+    closes the question unanswered. On a yes it is the same switch Settings →
+    Accounts makes, never forced: if panes are running on that CLI, the window
+    asks the user again before restarting them, and a no there is
+    "restart-declined". Once the user says yes in time, the switch runs to
+    the end even if this call has timed out by then. If your own pane runs
+    on that CLI, the restart includes it and this call's result never
+    reaches you — after a restart, read cli_accounts_list to see where the
+    switch stands.
+
+    agent is the vendor key ("claude", "codex", ...); profile_id is an
+    account of that vendor as cli_accounts_list lists it, "__default__" for
+    the built-in Default. Only a CLI pane can call it.
+
+    Returns {ok: true, status, agent, profile_id, from, to}: status
+    "switched", or "switched-signed-out" when the account switched to has no
+    usable sign-in (the window then starts one for the user); from and to are
+    the accounts' display names: the alias or name the user gave them, and an
+    account Navide added on its own is named after its email, so either can be
+    an email. Otherwise {ok: false, error,
+    error_code}: "pane-only", "bad-request", "reason-required",
+    "unknown-profile", "already-active", "unknown-caller", "declined" (the
+    user said no), "confirm-timeout" (the user did not answer in time),
+    "busy" (another agent's switch is waiting for the user),
+    "restart-declined", "refused" (Navide refused the switch; `code` says
+    why, e.g. SWITCH_RATE_LIMITED or UNRECONCILED_STATE) or
+    "window-unavailable". No credential or token ever comes back.
+    """
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    if caller.kind != "pane":
+        return {
+            "ok": False,
+            "error": "only a CLI pane can ask for an account switch; the user is told which pane asked",
+            "error_code": "pane-only",
+        }
+    agent = str(agent or "").strip().lower()
+    profile_id = str(profile_id or "").strip()
+    if not agent or not profile_id:
+        return {"ok": False, "error": "agent and profile_id are required", "error_code": "bad-request"}
+    reason = " ".join(str(reason or "").split())
+    reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
+    reason = reason[:_SIGN_IN_REASON_MAX]
+    if not reason:
+        return {
+            "ok": False,
+            "error": "say why: the reason is shown to the user with the switch",
+            "error_code": "reason-required",
+        }
+    from agent_team_backend import agent_messaging
+
+    pane = agent_messaging.get(caller.pane_id)
+    # As for the sign-in: the user's yes is due one ordinary action's wait
+    # before this action's slow wait ends, leaving the window time to switch.
+    confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
+    answer = await _ui_request(
+        pane.workspace_path if pane else "",
+        "invoke",
+        caller=caller,
+        action="ui.accounts.switch",
+        args={
+            "agentKey": agent, "profileId": profile_id, "reason": reason,
+            "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
+        },
+    )
+    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+    status = str(result.get("status") or "") if answer.get("ok") else ""
+    _log.info(
+        "cli_account_switch from pane %s: agent=%s profile=%s -> %s%s",
+        caller.pane_id, agent, profile_id, status or "window-unavailable",
+        f" ({result.get('code')})" if result.get("code") else "",
+    )
+    if not answer.get("ok"):
+        return {
+            "ok": False,
+            "error": "the Navide window did not answer",
+            "error_code": "window-unavailable",
+        }
+    if status in ("switched", "switched-signed-out"):
+        return {
+            "ok": True,
+            "status": status,
+            "agent": agent,
+            "profile_id": profile_id,
+            "from": str(result.get("from") or ""),
+            "to": str(result.get("to") or ""),
+        }
+    if status == "refused":
+        # The backend's refusal code only; its message is unreviewed text.
+        code = str(result.get("code") or "unknown")
+        return {
+            "ok": False,
+            "error": f"the switch was refused: {code}",
+            "error_code": "refused",
+            "code": code,
+        }
+    return {
+        "ok": False,
+        "error": str(result.get("message") or "the window refused the switch"),
+        "error_code": status or "refused",
     }
 
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
@@ -10567,3 +10773,10 @@ async def shutdown() -> None:
     global _session_manager
     _session_manager = None
     await _lifecycle.aclose()
+
+
+# The Navide Marketplace developer tools (W3) register on `server` from their own module.
+from agent_team_backend.mcp_server import marketplace_forms as _marketplace_forms  # noqa: E402,F401
+from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  # noqa: E402,F401
+# W1: local Navide plugin package tools (open, validate, package, fill).
+from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401

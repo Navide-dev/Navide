@@ -23,11 +23,12 @@ two processes starting against one data directory apply each step once.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from sqlalchemy import Engine
 
+from .signing import public_key_fingerprint
 from .versions import version_channel
 
 MIGRATIONS_TABLE = "schema_migrations"
@@ -336,6 +337,240 @@ def _add_version_channel_expiry(connection: sqlite3.Connection) -> None:
         )
 
 
+def _developer_qualification(connection: sqlite3.Connection) -> None:
+    """Developer qualification, account tokens, publisher key history, the
+    registry audit trail and namespace freezing. Every existing public key
+    gets a history row; no account is grandfathered as approved."""
+    columns = _columns(connection, "publisher")
+    for column, ddl in (("frozen_at", "DATETIME"), ("frozen_reason", "VARCHAR")):
+        if column not in columns:
+            connection.execute(f"ALTER TABLE publisher ADD COLUMN {column} {ddl}")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS developer_qualification (
+            navide_member_id VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            application JSON,
+            field_sources JSON,
+            source VARCHAR,
+            submitted_at DATETIME NOT NULL,
+            decided_at DATETIME,
+            decided_by VARCHAR,
+            reason VARCHAR,
+            PRIMARY KEY (navide_member_id)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_developer_qualification_status "
+        "ON developer_qualification (status)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS account_token (
+            id INTEGER NOT NULL,
+            navide_member_id VARCHAR NOT NULL,
+            label VARCHAR NOT NULL,
+            token_hash VARCHAR NOT NULL,
+            created_at DATETIME NOT NULL,
+            expires_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            last_used_at DATETIME,
+            PRIMARY KEY (id)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_account_token_navide_member_id "
+        "ON account_token (navide_member_id)"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_account_token_token_hash "
+        "ON account_token (token_hash)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS account_auth_code (
+            id INTEGER NOT NULL,
+            code_hash VARCHAR NOT NULL,
+            navide_member_id VARCHAR NOT NULL,
+            code_challenge VARCHAR NOT NULL,
+            label VARCHAR NOT NULL,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME,
+            PRIMARY KEY (id)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_account_auth_code_code_hash "
+        "ON account_auth_code (code_hash)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS publisher_key (
+            id INTEGER NOT NULL,
+            publisher_id INTEGER NOT NULL,
+            key_id VARCHAR NOT NULL,
+            public_key VARCHAR NOT NULL,
+            created_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            revoked_reason VARCHAR,
+            PRIMARY KEY (id),
+            CONSTRAINT uq_publisher_key UNIQUE (publisher_id, key_id),
+            FOREIGN KEY(publisher_id) REFERENCES publisher (id)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_publisher_key_publisher_id "
+        "ON publisher_key (publisher_id)"
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS registry_audit (
+            id INTEGER NOT NULL,
+            created_at DATETIME NOT NULL,
+            actor VARCHAR NOT NULL,
+            action VARCHAR NOT NULL,
+            target VARCHAR NOT NULL,
+            reason VARCHAR,
+            detail JSON,
+            PRIMARY KEY (id)
+        )
+        """
+    )
+    for column in ("created_at", "actor", "action", "target"):
+        connection.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_registry_audit_{column} "
+            f"ON registry_audit ({column})"
+        )
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")
+    rows = connection.execute(
+        "SELECT id, public_key FROM publisher WHERE public_key IS NOT NULL"
+    ).fetchall()
+    for publisher_id, public_key in rows:
+        try:
+            key_id = public_key_fingerprint(public_key)
+        except Exception:  # noqa: BLE001 - an unparsable key gets no history row
+            continue
+        connection.execute(
+            "INSERT OR IGNORE INTO publisher_key "
+            "(publisher_id, key_id, public_key, created_at) VALUES (?, ?, ?, ?)",
+            (publisher_id, key_id, public_key, now),
+        )
+
+
+def _testplace(connection: sqlite3.Connection) -> None:
+    """Testplace invites, public codes and promotion review (B2-B5).
+    Existing versions get no promotion state."""
+    columns = _columns(connection, "extension_version")
+    for column, ddl in (
+        ("promotion_status", "VARCHAR"),
+        ("promotion_requested_at", "DATETIME"),
+        ("promotion_reviewed_at", "DATETIME"),
+        ("promotion_reviewed_by", "VARCHAR"),
+        ("promotion_reason", "VARCHAR"),
+    ):
+        if column not in columns:
+            connection.execute(f"ALTER TABLE extension_version ADD COLUMN {column} {ddl}")
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS testplace_code ("
+        "id INTEGER NOT NULL PRIMARY KEY, "
+        "extension_id INTEGER NOT NULL REFERENCES extension (id), "
+        "code_hash VARCHAR NOT NULL, "
+        "max_testers INTEGER NOT NULL, "
+        "review_status VARCHAR NOT NULL DEFAULT 'pending', "
+        "review_reason VARCHAR, "
+        "reviewed_at DATETIME, "
+        "reviewed_by VARCHAR, "
+        "created_at DATETIME NOT NULL, "
+        "revoked_at DATETIME)"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_testplace_code_code_hash "
+        "ON testplace_code (code_hash)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_testplace_code_extension_id "
+        "ON testplace_code (extension_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_testplace_code_review_status "
+        "ON testplace_code (review_status)"
+    )
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS testplace_invite ("
+        "id INTEGER NOT NULL PRIMARY KEY, "
+        "extension_id INTEGER NOT NULL REFERENCES extension (id), "
+        "label VARCHAR NOT NULL DEFAULT '', "
+        "token_hash VARCHAR, "
+        "code_id INTEGER REFERENCES testplace_code (id), "
+        "member_id VARCHAR, "
+        "created_at DATETIME NOT NULL, "
+        "claimed_at DATETIME, "
+        "revoked_at DATETIME)"
+    )
+    for name, column in (
+        ("extension_id", "extension_id"),
+        ("code_id", "code_id"),
+        ("member_id", "member_id"),
+    ):
+        connection.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_testplace_invite_{name} "
+            f"ON testplace_invite ({column})"
+        )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_testplace_invite_token_hash "
+        "ON testplace_invite (token_hash)"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_testplace_invite_member "
+        "ON testplace_invite (extension_id, member_id) "
+        "WHERE member_id IS NOT NULL AND revoked_at IS NULL"
+    )
+
+
+GRANDFATHER_DAYS = 30
+"""Grace period for namespaces self-claimed before qualification existed."""
+
+
+def _grandfather_block_reason(connection: sqlite3.Connection) -> None:
+    """Grandfather self-claimed namespaces (decision d4(a)) and give digest
+    blocklist entries a reason (decision d5).
+
+    Every namespace an account claimed before this step whose owner is not
+    approved keeps publishing for GRANDFATHER_DAYS from now; an owner whose
+    application is pending starts with the period paused. Every existing
+    digest entry was added by an admin, so its reason is 'admin'."""
+    columns = _columns(connection, "publisher")
+    for column in ("grandfather_until", "grandfather_paused_at"):
+        if column not in columns:
+            connection.execute(f"ALTER TABLE publisher ADD COLUMN {column} DATETIME")
+    if "digest_reason" not in _columns(connection, "blocklist_entry"):
+        connection.execute("ALTER TABLE blocklist_entry ADD COLUMN digest_reason VARCHAR")
+    connection.execute(
+        "UPDATE blocklist_entry SET digest_reason = 'admin' "
+        "WHERE kind = 'digest' AND digest_reason IS NULL"
+    )
+    now = datetime.now(timezone.utc)
+    stamp = "%Y-%m-%d %H:%M:%S.%f"
+    until = (now + timedelta(days=GRANDFATHER_DAYS)).strftime(stamp)
+    rows = connection.execute(
+        "SELECT p.id, q.status FROM publisher p "
+        "LEFT JOIN developer_qualification q ON q.navide_member_id = p.navide_member_id "
+        "WHERE p.navide_member_id IS NOT NULL AND p.frozen_at IS NULL "
+        "AND p.grandfather_until IS NULL"
+    ).fetchall()
+    for publisher_id, status in rows:
+        if status in ("approved", "revoked"):
+            continue
+        connection.execute(
+            "UPDATE publisher SET grandfather_until = ?, grandfather_paused_at = ? WHERE id = ?",
+            (until, now.strftime(stamp) if status == "pending" else None, publisher_id),
+        )
+
+
 MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = (
     (1, "discovery-columns", _add_discovery_columns),
     (2, "registry-signing-columns", _add_registry_signing_columns),
@@ -347,6 +582,9 @@ MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = 
     (8, "publisher-native-backend", _add_publisher_native_backend),
     (9, "version-disclosure", _add_version_disclosure),
     (10, "version-channel-expiry", _add_version_channel_expiry),
+    (11, "developer-qualification", _developer_qualification),
+    (12, "testplace", _testplace),
+    (13, "grandfather-block-reason", _grandfather_block_reason),
 )
 
 

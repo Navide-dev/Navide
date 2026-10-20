@@ -16,6 +16,9 @@ export interface PendingInstall {
   /** `namespace.name`, shown in the risk copy. */
   label: string
   prepared: PreparedInstallSummary
+  /** W1 (S2): an agent's file request this consent carries out; the dialog
+   *  names who asked. Absent for the user's own pick. */
+  agentRequest?: { requester: string }
 }
 
 /** Card K3: the extra step a package of the same id asks for before it is
@@ -59,12 +62,23 @@ export function usePluginInstallFlow() {
     const replace = replaceConfirmed.value
       ? { replaceConfirmed: true, ...(reattachBackendData.value ? { reattachBackendData: true } : {}) }
       : {}
+    // The commit names the folder or file digest the dialog showed, so another
+    // prepare of the same id meanwhile (an agent's request, a second pick)
+    // is refused instead of installed.
+    const shown = pendingConfirm.value?.prepared.id === id ? pendingConfirm.value.prepared : undefined
     if (pendingSource === 'developer-unpacked') {
       if (!plugins.commitFolderLoad) throw new Error('loading from a folder is unavailable')
-      await plugins.commitFolderLoad(id, { riskConfirmed: approval.riskConfirmed === true })
+      await plugins.commitFolderLoad(id, {
+        riskConfirmed: approval.riskConfirmed === true,
+        ...(shown?.folder ? { expectedFolder: shown.folder } : {}),
+      })
     } else if (local) {
       if (!plugins.commitLocalInstall) throw new Error('installing from a file is unavailable')
-      await plugins.commitLocalInstall(id, { riskConfirmed: approval.riskConfirmed === true, ...replace })
+      await plugins.commitLocalInstall(id, {
+        riskConfirmed: approval.riskConfirmed === true,
+        ...replace,
+        ...(shown?.digest ? { expectedDigest: shown.digest } : {}),
+      })
     } else {
       await plugins.commitInstall(id, { ...approval, ...replace })
     }
@@ -75,18 +89,23 @@ export function usePluginInstallFlow() {
 
   // `version` pins the artifact (an update names the newest version this Host
   // can install); omitted, the main process installs the Registry's latest.
-  async function install(namespace: string, name: string, version?: string): Promise<void> {
+  // `testplace` installs an invited test build with the user's Navide Cloud account.
+  async function install(namespace: string, name: string, version?: string, options: { testplace?: boolean } = {}): Promise<void> {
     const plugins = api()
     if (!plugins) return
     busy.value = true
     error.value = ''
     try {
-      const prepared = await plugins.prepareInstall(
-        version ? { namespace, name, version } : { namespace, name }
-      )
+      const prepared = await plugins.prepareInstall({
+        namespace,
+        name,
+        ...(version ? { version } : {}),
+        ...(options.testplace ? { testplace: true } : {}),
+      })
       const requiresPublisherTrust = prepared.requiresPublisherTrust === true
+      // A test build is never installed unseen: its source row says what review it had.
       const requiresRiskConfirmation =
-        prepared.requiresRiskConfirmation ?? prepared.requiresConfirmation
+        (prepared.requiresRiskConfirmation ?? prepared.requiresConfirmation) || prepared.source === 'testplace'
       if (requiresPublisherTrust || requiresRiskConfirmation || replacesAnother(prepared)) {
         // Hold for the trust dialog — nothing is written until the user confirms.
         pendingConfirm.value = { label: `${namespace}.${name}`, prepared }
@@ -115,6 +134,32 @@ export function usePluginInstallFlow() {
       const prepared = await plugins.installFromFile()
       if (!prepared) return
       pendingConfirm.value = { label: prepared.id, prepared }
+      pendingStep.value = replacesAnother(prepared) ? 'replace' : 'risk'
+      publisherConfirmed.value = false
+      replaceConfirmed.value = false
+      reattachBackendData.value = false
+    } catch (err) {
+      fail(err)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** W1 (S2): an approved agent file request. The Host staged the file (or
+   *  folder) when the agent asked; this holds that copy for the same consent
+   *  dialog as the user's own pick, naming who asked. A file whose digest is
+   *  not the one the request card showed is refused. */
+  async function prepareAgentFile(stagingId: string, expectedDigest: string | null, requester: string): Promise<void> {
+    const plugins = api()
+    if (!plugins?.prepareAgentFileInstall) throw new Error('installing from a file is unavailable')
+    busy.value = true
+    error.value = ''
+    try {
+      const prepared = await plugins.prepareAgentFileInstall(stagingId)
+      if (expectedDigest !== null && prepared.digest !== expectedDigest) {
+        throw new Error(t('plugin-request.file.digestChanged'))
+      }
+      pendingConfirm.value = { label: prepared.id, prepared, agentRequest: { requester } }
       pendingStep.value = replacesAnother(prepared) ? 'replace' : 'risk'
       publisherConfirmed.value = false
       replaceConfirmed.value = false
@@ -257,6 +302,7 @@ export function usePluginInstallFlow() {
     install,
     installFromFile,
     loadFromFolder,
+    prepareAgentFile,
     reloadDeveloperPlugin,
     uninstall,
     confirmReplace,
@@ -267,12 +313,24 @@ export function usePluginInstallFlow() {
 }
 
 /** In-app confirmation before an installed plugin is removed. */
+/** Removal always clears the browser data (site sign-ins, cookies, cache) of a
+ *  Navide plugin that declares `web`; the confirmation says so. */
+function withWebDataNote(
+  t: (key: string, values?: Record<string, unknown>) => string,
+  id: string,
+  body: string,
+): string {
+  const declaresWeb = usePluginInventory().installed.value
+    .find((plugin) => plugin.id === id)?.manifestPermissions?.system?.includes('web') === true
+  return declaresWeb ? `${body} ${t('settings.extensions.marketplace.uninstallClearsWebData', { name: id })}` : body
+}
+
 export function confirmUninstall(
   t: (key: string, values?: Record<string, unknown>) => string,
   notify: ReturnType<typeof useNotify>,
   id: string
 ): Promise<boolean> {
-  return notify.confirm(t('settings.extensions.marketplace.uninstallConfirmBody', { name: id }), {
+  return notify.confirm(withWebDataNote(t, id, t('settings.extensions.marketplace.uninstallConfirmBody', { name: id })), {
     title: t('settings.extensions.marketplace.uninstallConfirmTitle'),
     confirmText: t('settings.extensions.marketplace.uninstall'),
     cancelText: t('settings.extensions.trust.cancel'),
@@ -305,7 +363,7 @@ export async function askUninstall(
   }
   if (!data?.exists) return (await confirmUninstall(t, notify, id)) ? {} : null
   const confirmed = await notify.confirm(
-    t('settings.extensions.marketplace.uninstallConfirmBodyWithData', { name: id, size: formatBytes(data.bytes) }),
+    withWebDataNote(t, id, t('settings.extensions.marketplace.uninstallConfirmBodyWithData', { name: id, size: formatBytes(data.bytes) })),
     {
       title: t('settings.extensions.marketplace.uninstallConfirmTitle'),
       confirmText: t('settings.extensions.marketplace.uninstall'),

@@ -277,4 +277,49 @@ describe('verifyRegistryPackageTrust release channel', () => {
       'REGISTRY_SIGNATURE_INVALID'
     )
   })
+
+  // D3: the user kept an expired test build; only the expiry check is skipped.
+  function verifyKept(envelopeValue: RegistryPackageEnvelope, trustValue = trust()) {
+    return verifyRegistryPackageTrust({
+      envelope: envelopeValue,
+      envelopeSignature: signature(envelopeValue),
+      trustMetadata: trustValue,
+      trustMetadataSignature: signature(trustValue, root.privateKey),
+      pinnedRootKey: rootPublicKey,
+      expected: {
+        artifactDigest: 'a'.repeat(64),
+        packageId: 'acme.demo',
+        version: '1.0.0',
+        target: 'universal',
+        publisherId: 'acme',
+      },
+      now: new Date(NOW),
+      allowExpiredTestplace: true,
+    })
+  }
+
+  it('allows a kept expired testplace envelope and says it is expired', () => {
+    const expired = envelope({ channel: 'testplace', expiresAt: '2026-08-16T11:59:59Z' })
+    expect(verifyKept(expired)).toEqual({ publisherId: 'acme', keyId: 'registry-2026', expired: true })
+    // Not expired yet: nothing to mark.
+    const live = envelope({ channel: 'testplace', expiresAt: '2026-11-14T11:00:00Z' })
+    expect(verifyKept(live)).toEqual({ publisherId: 'acme', keyId: 'registry-2026' })
+  })
+
+  it('still refuses a kept expired testplace version that was taken down', () => {
+    const expired = envelope({ channel: 'testplace', expiresAt: '2026-08-16T11:59:59Z' })
+    const blocked = trust({ blockedPackages: [{ packageId: 'acme.demo', version: '1.0.0' }] })
+    expect(codeOf(() => verifyKept(expired, blocked))).toBe('PACKAGE_BLOCKED')
+    const tampered = { ...expired, expiresAt: '2099-01-01T00:00:00Z' }
+    expect(codeOf(() => verifyRegistryPackageTrust({
+      envelope: tampered,
+      envelopeSignature: signature(expired),
+      trustMetadata: trust(),
+      trustMetadataSignature: signature(trust(), root.privateKey),
+      pinnedRootKey: rootPublicKey,
+      expected: { artifactDigest: 'a'.repeat(64), packageId: 'acme.demo', version: '1.0.0', target: 'universal', publisherId: 'acme' },
+      now: new Date(NOW),
+      allowExpiredTestplace: true,
+    }))).toBe('REGISTRY_SIGNATURE_INVALID')
+  })
 })

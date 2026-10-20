@@ -63,6 +63,7 @@ export const RESERVED_TOOL_PREFIXES = [
 /** tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned. */
 export const CORE_TOOL_NAMES = [
   'cli_account_sign_in',
+  'cli_account_switch',
   'cli_accounts_list',
   'cli_answer_prompt', 'cli_cancel_message', 'cli_check_message', 'cli_close_agent', 'cli_extensions_list',
   'cli_failover_state',
@@ -70,13 +71,24 @@ export const CORE_TOOL_NAMES = [
   'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
   'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',
   'cli_usage', 'cli_wait_idle', 'cli_whoami', 'credentials_findings', 'credentials_list', 'evolve_report',
-  'marketplace_detail', 'marketplace_request_install', 'marketplace_request_rollback',
-  'marketplace_request_status', 'marketplace_request_update', 'marketplace_search', 'mcp_list', 'memory_list',
+  'marketplace_detail',
+  'marketplace_developer_application_fill', 'marketplace_developer_application_open',
+  'marketplace_developer_status', 'marketplace_open', 'marketplace_publish_fill', 'marketplace_publish_open',
+  'marketplace_publish_status', 'marketplace_publish_yank_fill', 'marketplace_publish_yank_open',
+  'marketplace_request_install', 'marketplace_request_rollback',
+  'marketplace_request_status', 'marketplace_request_update', 'marketplace_search',
+  'marketplace_testplace_invite_fill', 'marketplace_testplace_invite_open', 'mcp_list', 'memory_list',
   'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
   'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
   'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
-  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo', 'plugins_disable', 'plugins_enable',
-  'plugins_list_installed', 'plugins_request_remove',
+  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo',
+  'plugins_developer_mode_open',
+  'plugins_disable', 'plugins_enable',
+  'plugins_install_file_fill', 'plugins_install_file_open',
+  'plugins_list_installed',
+  'plugins_package',
+  'plugins_request_remove',
+  'plugins_validate_package',
   'preview_clear', 'preview_list',
   'preview_record', 'preview_show', 'prompt_list', 'role_define', 'scheduler_list', 'scheduler_remove',
   'scheduler_run_now', 'scheduler_runs', 'scheduler_set_enabled', 'scheduler_upsert', 'share_create',
@@ -617,6 +629,13 @@ export type MarketplaceQuery =
   | { kind: 'search'; text: string; category?: string; cursor?: string; limit?: number }
   | { kind: 'detail'; id: string; version?: string }
   | { kind: 'installed' }
+  /** plugins_validate_package (W1, S1): check a `.vsix` or a plugin folder. */
+  | { kind: 'localValidate'; path: string }
+  /** plugins_package (W1, S1b): build a `.vsix` from a plugin folder. */
+  | { kind: 'localPackage'; path: string; target?: string; out?: string }
+  /** plugins_install_file_fill (W1, S2): read once, check and hold a package
+   * for the user's approval; nothing is installed. */
+  | { kind: 'localStage'; path: string }
 
 export interface MarketplaceQueryRequest {
   request_id: string
@@ -639,6 +658,11 @@ export interface MarketplaceListingItem {
 export interface MarketplaceInstalledItem {
   id: string
   version: string
+  /** Where it came from and what review it passed (`PluginSource`); a local
+   * file a vetted publisher signed is `local-signed`. Absent when unknown. */
+  source?: string
+  /** A local file whose publisher key the Registry has since revoked. */
+  signatureRevoked?: boolean
   enabled: boolean
   quarantined: boolean
   hasBackend: boolean
@@ -649,6 +673,26 @@ export type MarketplaceQueryResult =
   | { kind: 'search'; items: MarketplaceListingItem[]; nextCursor: string | null }
   | { kind: 'detail'; item: MarketplaceListingItem; versions: string[]; card: DisclosureCard }
   | { kind: 'installed'; items: MarketplaceInstalledItem[] }
+  | { kind: 'localValidate' | 'localPackage' | 'localStage'; report: LocalPackageQueryReport }
+
+/** A local package check or build (W1). Package-chosen strings (id, version,
+ * errors quoting the manifest) are third-party text to the backend. */
+export interface LocalPackageQueryReport {
+  path: string
+  packageKind: 'file' | 'folder'
+  valid: boolean
+  errors: string[]
+  id: string | null
+  version: string | null
+  target: string | null
+  digest: string | null
+  signature: 'none' | 'verified' | 'revoked' | 'unverifiable'
+  disclosure: unknown
+  risk: DisclosureRiskLevel | null
+  scan: unknown
+  /** localStage only: the Host's handle on the held copy, for the approval. */
+  stagingId?: string
+}
 
 export type MarketplaceQueryResponse =
   | { request_id: string; ok: true; result: MarketplaceQueryResult }
@@ -668,10 +712,58 @@ export const PLUGIN_ACTIVITY_FORGET_MESSAGE = 'plugin.activity.forget'
 
 // ── approval registry (B2) ──────────────────────────────────────────────────
 
+export type FormApprovalKind = 'developer-application' | 'plugin-publish' | 'plugin-yank' | 'testplace-invite'
 export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
+  /** W1 (S2): a local `.vsix` or developer folder an agent named, staged by the Host. */
+  | 'plugin-install-file'
+  | FormApprovalKind
 export const APPROVAL_KINDS: readonly ApprovalKind[] = [
   'skill', 'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable',
+  'plugin-install-file',
+  'developer-application', 'plugin-publish', 'plugin-yank', 'testplace-invite',
 ]
+/** Requests that are a draft for a main-window form (P4 *_fill), not an approval
+ *  card: the user edits the draft and presses Submit; closing the form rejects it. */
+export const FORM_APPROVAL_KINDS: readonly FormApprovalKind[] = ['developer-application', 'plugin-publish', 'plugin-yank', 'testplace-invite']
+export function isFormApprovalKind(kind: string): kind is FormApprovalKind {
+  return (FORM_APPROVAL_KINDS as readonly string[]).includes(kind)
+}
+/** created_at + this for a form request (a card's is 15 minutes). */
+export const FORM_APPROVAL_TTL_S = 60 * 60
+/** Backend -> main windows: open a form for the user to fill in (P4 *_open). */
+export const MARKETPLACE_FORM_OPEN_EVENT = 'marketplace.form_open'
+export type MarketplaceForm = 'developer-application' | 'publish' | 'publish-yank' | 'testplace-invite'
+export const MARKETPLACE_FORMS: readonly MarketplaceForm[] = ['developer-application', 'publish', 'publish-yank', 'testplace-invite']
+export interface MarketplaceFormOpen {
+  form: MarketplaceForm
+  /** Locating data only (a package path, an id and version), never a field value the agent wrote. */
+  prefill: Record<string, string>
+  requester: PluginApprovalRequest['requester']
+}
+/** Backend -> Host: `{request_id, query}` for the developer status tools; the Host
+ *  answers `marketplace.developer.result` `{request_id, ok, result | error, error_code}`. */
+export const MARKETPLACE_DEVELOPER_REQUEST_EVENT = 'marketplace.developer.request'
+export const MARKETPLACE_DEVELOPER_RESULT_MESSAGE = 'marketplace.developer.result'
+export type MarketplaceDeveloperQuery =
+  | { kind: 'developer-status' }
+  | { kind: 'publish-status'; id: string }
+  /** O3: publish at once when the Host's Registry is this computer's; else `{loopback: false}`. */
+  | { kind: 'publish-direct'; path: string; target: string }
+export const DEVELOPER_ERROR_CODES = ['NOT_SIGNED_IN', 'QUALIFICATION_REQUIRED'] as const
+/** Which side wrote a form field (the Registry's field_sources spelling). */
+export type FormFieldSource = 'user' | 'agent-draft'
+/** A form request's draft: the agent's field values and, per field, who wrote it. */
+export interface FormDraft {
+  /** Strings and switches; a Testplace invitation's `invitees` is a list. */
+  fields: Record<string, string | boolean | string[]>
+  field_sources: Record<string, FormFieldSource>
+}
+/** The developer application's fields (Registry W2, real-name per DX 5.4). */
+export const DEVELOPER_APPLICATION_FIELDS = [
+  'applicant_type', 'legal_name', 'display_name', 'contact_email', 'country', 'intended_namespace',
+  'description', 'agreed_terms', 'organization_name', 'organization_id', 'website', 'source_url',
+  'needs_native_backend', 'domain',
+] as const
 
 export type PluginApprovalStatus = 'pending' | 'applying' | 'completed' | 'rejected' | 'failed' | 'expired'
 
@@ -680,18 +772,33 @@ export interface PluginApprovalRequest {
   kind: Exclude<ApprovalKind, 'skill'>
   /** Coalescing key: kind + plugin id + version; a duplicate returns the pending record. */
   owner: string
-  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: AgentToolCaller['kind'] }
+  /** `tainted`: present (true) only when the asking pane read third-party content (S8-M1, a disclosure). */
+  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: AgentToolCaller['kind']; tainted?: true }
   /** Written by the agent; the card labels it as such. */
   reason: string
-  target: { id: string; namespace: string; name: string; version: string | null; fromVersion: string | null }
+  target: {
+    id: string
+    namespace: string
+    name: string
+    version: string | null
+    fromVersion: string | null
+    /** plugin-install-file (W1, S2): what the Host staged for the agent. */
+    path?: string
+    digest?: string | null
+    stagingId?: string
+    packageKind?: 'file' | 'folder'
+    signature?: 'none' | 'verified' | 'revoked' | 'unverifiable'
+  }
   card: DisclosureCard | null
   diff: DisclosureDiff | null
+  /** Form kinds: the agent's draft for the form; null for every other kind. */
+  draft?: FormDraft | null
   /** plugin-enable: who disabled the package (`at` in Unix seconds, null when not recorded); null for every other kind. */
   disabled: { by: 'user' | 'agent'; at: number | null; agent: PluginDisabledBy['agent'] } | null
   status: PluginApprovalStatus
   error: string | null
   created_at: number
-  /** created_at + 15 minutes. */
+  /** created_at + 15 minutes (a form request: FORM_APPROVAL_TTL_S). */
   expires_at: number
 }
 
@@ -718,7 +825,9 @@ export const PLUGIN_APPROVAL_RECOVER_EVENT = 'plugins.agent_requests.recover'
 
 export const PLUGIN_AGENT_ACTION_REQUEST_EVENT = 'plugins.agent_action.request'
 export const PLUGIN_AGENT_ACTION_RESULT_MESSAGE = 'plugins.agent_action.result'
-export type PluginAgentActionKind = 'disable' | 'enable'
+/** `update`: marketplace_request_update, carried out at once only when the
+ *  new version discloses exactly what the installed one does (O1). */
+export type PluginAgentActionKind = 'disable' | 'enable' | 'update'
 export type PluginAgentActionErrorCode =
   | 'BAD_REQUEST' | 'NOT_INSTALLED' | 'BUILTIN_PLUGIN' | 'ACTION_FAILED' | 'HOST_UNAVAILABLE' | 'APPROVAL_REQUIRED'
 
@@ -733,6 +842,8 @@ export interface PluginAgentActionRequest {
   request_id: string
   action: PluginAgentActionKind
   plugin_id: string
+  /** `update` only: the version to update to. */
+  version?: string
   requester: PluginApprovalRequest['requester']
 }
 
@@ -741,4 +852,8 @@ export type PluginAgentActionAnswer =
   | { ok: false; error: string; error_code: Exclude<PluginAgentActionErrorCode, 'APPROVAL_REQUIRED'> }
   /** enable of a package the user disabled (or with no recorded source): the backend files a plugin-enable request. */
   | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string; disabled: PluginDisabledBy }
+  /** update (O1): carried out at once; the disclosure did not change. */
+  | { ok: true; updated: true; pluginId: string; fromVersion: string; pluginVersion: string }
+  /** update (O1): something changed or could not be compared; the backend files a plugin-update request. */
+  | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string }
 export const PLUGIN_APPROVAL_TTL_MS = 15 * 60_000
