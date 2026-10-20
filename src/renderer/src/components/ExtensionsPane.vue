@@ -285,6 +285,15 @@ async function uninstallPack(members: string[]): Promise<void> {
   }
 }
 
+// d5: the label for a local install whose file Navide blocked since; no
+// reason (or one this release does not know) reads as a plain block.
+function digestBlockKey(reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null): string {
+  if (reason === 'security') return 'security'
+  if (reason === 'qualification-revoked') return 'qualificationRevoked'
+  if (reason === 'developer-withdrawn') return 'developerWithdrawn'
+  return 'blocked'
+}
+
 // The user's "Disabled" switch. A disabled package keeps its files, grant and
 // stored data; the Host only stops loading its views and backend. The row says
 // so with a badge and an Enable button, never silently.
@@ -689,6 +698,15 @@ watch(installed, () => {
                 :signature="p.localSignature"
                 :publisher="p.localSignature ? p.id.split('.')[0] : undefined"
               />
+              <!-- d5: Navide blocked the file this local install came from; the label stays. -->
+              <span
+                v-if="p.digestBlock"
+                class="ext-badge ext-digest-blocked-badge"
+                :data-reason="p.digestBlock.reason ?? 'none'"
+                :title="$t('settings.extensions.digestBlock.note')"
+              >
+                {{ $t(`settings.extensions.digestBlock.${digestBlockKey(p.digestBlock.reason)}`) }}
+              </span>
               <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                 {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}
               </span>
@@ -1275,6 +1293,10 @@ watch(installed, () => {
 .ext-badge.ext-disabled-badge {
   color: var(--risk-fg);
   background: var(--risk-subtle);
+}
+.ext-badge.ext-digest-blocked-badge {
+  color: var(--danger-bright);
+  background: var(--danger-subtle, var(--risk-subtle));
 }
 .ext-store-restored {
   margin: 0 0 var(--space-2, 8px);

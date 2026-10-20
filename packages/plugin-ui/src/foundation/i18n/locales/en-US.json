@@ -1783,6 +1783,13 @@
       "builtinSwitchBusy": "Applying… Navide first lets current work finish, which can take about half a minute for Plans.",
       "disabledBadge": "Disabled",
       "disabledNote": "Disabled: its views and backend do not run. Its files, permissions and stored data are kept.",
+      "digestBlock": {
+        "blocked": "Blocked by Navide",
+        "security": "Taken down by Navide (security)",
+        "qualificationRevoked": "Developer qualification revoked",
+        "developerWithdrawn": "Withdrawn by its developer",
+        "note": "Navide put the file this Navide plugin was installed from on its blocked list after you installed it."
+      },
       "rollback": {
         "toBundled": "Roll back to bundled",
         "toVersion": "Roll back to {version}",

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   LOCAL_INSTALL_TRUST_SNAPSHOT_NAME,
+  digestBlock,
   isDigestBlocked,
   localSignatureDecision,
   publisherKeyId,
@@ -93,6 +94,38 @@ describe('local install trust metadata', () => {
     expect(isDigestBlocked(metadata({ blockedDigests: [digest] }), digest)).toBe(true)
     expect(isDigestBlocked(metadata(), digest)).toBe(false)
     expect(isDigestBlocked(null, digest)).toBe(false)
+  })
+
+  // Decision d5: the Registry now lists `{digest, reason}`; a bare string
+  // from an older Registry reads as a block with no reason.
+  it('reads both the {digest, reason} and the bare-string shapes, signed as received', () => {
+    const other = 'b'.repeat(64)
+    const doc = metadata({ blockedDigests: [{ digest, reason: 'security' }, other] })
+    writeLocalInstallTrust(pluginsRoot, doc, signRoot(doc), rootPem)
+    const stored = readLocalInstallTrust(pluginsRoot, rootPem)
+    expect(stored?.blockedDigests).toEqual([{ digest, reason: 'security' }, other])
+    expect(digestBlock(stored, digest)).toEqual({ reason: 'security' })
+    expect(digestBlock(stored, other)).toEqual({ reason: null })
+    expect(digestBlock(stored, 'c'.repeat(64))).toBeNull()
+    expect(isDigestBlocked(stored, digest)).toBe(true)
+    for (const reason of ['admin', 'qualification-revoked', 'developer-withdrawn'] as const) {
+      expect(digestBlock(metadata({ blockedDigests: [{ digest, reason }] }), digest)).toEqual({ reason })
+    }
+  })
+
+  it('reads a reason it does not know as none, and refuses a malformed entry', () => {
+    const future = metadata({ blockedDigests: [{ digest, reason: 'court-order' }] })
+    expect(() => verifyLocalInstallTrustMetadata(future, signRoot(future), rootPem)).not.toThrow()
+    expect(digestBlock(future, digest)).toEqual({ reason: null })
+    for (const entry of [
+      { digest: digest.toUpperCase(), reason: 'admin' },
+      { digest, reason: 'admin', note: 'x' },
+      { digest },
+      { digest, reason: 3 },
+    ]) {
+      const bad = metadata({ blockedDigests: [entry as never] })
+      expect(() => verifyLocalInstallTrustMetadata(bad, signRoot(bad), rootPem)).toThrow(/blockedDigests/)
+    }
   })
 })
 

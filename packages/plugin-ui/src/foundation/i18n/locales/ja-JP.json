@@ -1783,6 +1783,13 @@
       "builtinSwitchBusy": "適用中… 進行中の処理が終わるのを待っています。Plans では 30 秒ほどかかることがあります。",
       "disabledBadge": "無効",
       "disabledNote": "無効：ビューとバックエンドは実行されません。ファイル、権限、保存データは保持されます。",
+      "digestBlock": {
+        "blocked": "Navide がブロック",
+        "security": "Navide が取り下げ（セキュリティ）",
+        "qualificationRevoked": "開発者資格が取り消されました",
+        "developerWithdrawn": "開発者が取り下げ",
+        "note": "この Navide プラグインをインストールした後、Navide がそのインストール元のファイルをブロックリストに追加しました。"
+      },
       "rollback": {
         "toBundled": "同梱版に戻す",
         "toVersion": "{version} に戻す",

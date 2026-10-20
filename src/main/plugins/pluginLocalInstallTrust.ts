@@ -5,8 +5,11 @@
 // for field by every released Navide, so nothing is added to it; this
 // document carries what only a local install needs:
 //
-// - `blockedDigests`: SHA-256 of `.vsix` files Navide has taken down. A file
-//   whose bytes match is refused, whatever id it claims.
+// - `blockedDigests`: SHA-256 of `.vsix` files Navide has taken down, each as
+//   `{digest, reason}` (decision d5; a Registry before it sent bare strings,
+//   read as having no reason). A file whose bytes match is refused, whatever
+//   id it claims; an installed copy is graded by the reason
+//   (`pluginDigestBlock.ts`).
 // - `publisherKeys`: the Ed25519 keys of vetted publishers. A `.vsix` with a
 //   `<file>.sig` beside it, signed (`navide-plugin sign`) by the active key of
 //   the publisher its id names, is shown as signed by a vetted publisher. A
@@ -37,13 +40,21 @@ export interface LocalPublisherKey {
   revokedAt: string | null
 }
 
+/** Why Navide blocked a digest (decision d5). */
+export type LocalBlockReason = 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn'
+const BLOCK_REASONS: readonly LocalBlockReason[] = ['security', 'admin', 'qualification-revoked', 'developer-withdrawn']
+
+/** One `blockedDigests` entry as signed: a bare digest (no reason) or
+ * `{digest, reason}`. Kept as received, since the root signed these bytes. */
+export type LocalBlockedDigestEntry = string | { digest: string; reason: string }
+
 export interface LocalInstallTrustMetadata {
   schemaVersion: 1
   kind: 'local-install-trust'
   registryProfile: 'official' | 'self-hosted-dev'
   generatedAt: string
   expiresAt: string
-  blockedDigests: string[]
+  blockedDigests: LocalBlockedDigestEntry[]
   publisherKeys: LocalPublisherKey[]
 }
 
@@ -78,9 +89,21 @@ export function assertLocalInstallTrustMetadataShape(
   if (!isTimestamp(metadata.generatedAt) || !isTimestamp(metadata.expiresAt)) {
     throw new Error(`${label} timestamps are invalid`)
   }
-  if (!Array.isArray(metadata.blockedDigests) || metadata.blockedDigests.some((d) => typeof d !== 'string' || !HEX_DIGEST.test(d))) {
-    throw new Error(`${label}.blockedDigests must be lowercase SHA-256 hex digests`)
-  }
+  if (!Array.isArray(metadata.blockedDigests)) throw new Error(`${label}.blockedDigests must be an array`)
+  metadata.blockedDigests.forEach((entry, index) => {
+    if (typeof entry === 'string') {
+      if (!HEX_DIGEST.test(entry)) throw new Error(`${label}.blockedDigests must be lowercase SHA-256 hex digests`)
+      return
+    }
+    const item = requireTrustObject(entry, `${label}.blockedDigests[${index}]`)
+    assertExactTrustFields(item, `${label}.blockedDigests[${index}]`, ['digest', 'reason'])
+    if (typeof item.digest !== 'string' || !HEX_DIGEST.test(item.digest)) {
+      throw new Error(`${label}.blockedDigests must be lowercase SHA-256 hex digests`)
+    }
+    // A reason this release does not know is read as none (warned about),
+    // so a newer Registry never makes the whole list unreadable.
+    if (typeof item.reason !== 'string') throw new Error(`${label}.blockedDigests[${index}].reason must be a string`)
+  })
   if (!Array.isArray(metadata.publisherKeys)) throw new Error(`${label}.publisherKeys must be an array`)
   metadata.publisherKeys.forEach((entry, index) => {
     const key = requireTrustObject(entry, `${label}.publisherKeys[${index}]`)
@@ -169,9 +192,27 @@ export function writeLocalInstallTrust(
   renameSync(temporary, path)
 }
 
+/** The block on a file with this SHA-256: `{reason}` (null when the list
+ * names none or one this release does not know), or null when not blocked. */
+export function digestBlock(
+  trust: LocalInstallTrustMetadata | null,
+  digest: string,
+): { reason: LocalBlockReason | null } | null {
+  if (trust === null) return null
+  for (const entry of trust.blockedDigests) {
+    if (typeof entry === 'string') {
+      if (entry === digest) return { reason: null }
+    } else if (entry.digest === digest) {
+      const reason = BLOCK_REASONS.find((known) => known === entry.reason)
+      return { reason: reason ?? null }
+    }
+  }
+  return null
+}
+
 /** Whether Navide has taken down a file with this SHA-256. */
 export function isDigestBlocked(trust: LocalInstallTrustMetadata | null, digest: string): boolean {
-  return trust !== null && trust.blockedDigests.includes(digest)
+  return digestBlock(trust, digest) !== null
 }
 
 /** What a local signature shows:

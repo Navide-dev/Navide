@@ -13,6 +13,8 @@ import { existsSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { REGISTRY_RECEIPT_NAME, type InstalledTrustDecision } from './pluginInstalledTrust'
 import { readLocalTrustRecord, verifyLocalPackage, type PluginLocalTrustContext } from './pluginLocalTrust'
+import { readLocalInstallTrust } from './pluginLocalInstallTrust'
+import { recordDigestBlock, securityBlockReason } from './pluginDigestBlock'
 import { parseManifestJson } from './pluginManifest'
 import { pluginSourceFromLegacyProvenance, type LegacyPluginProvenance, type PluginSource } from '../../shared/pluginSource'
 import { revealUnsafeLineText } from '../../shared/pluginAgentTools'
@@ -66,7 +68,8 @@ function localRecordForDir(pluginsRoot: string, packageDir: string, pluginId: st
  * shape the Registry verifier returns, or null when the directory is not a
  * local install (the caller then verifies it as a Registry package, as on
  * main). A taken-down local package is refused like a quarantined one, with
- * the takedown reason.
+ * the takedown reason, and so is one whose `.vsix` digest Navide blocked for a
+ * security reason since it was installed (decision d5, `pluginDigestBlock.ts`).
  */
 export function verifyLocalInstalledPackage(
   pluginsRoot: string,
@@ -78,6 +81,8 @@ export function verifyLocalInstalledPackage(
   if (recordPath === null) return null
   const decision = verifyLocalPackage(packageDir, pluginId, recordPath, trust)
   if (decision.action !== 'allow') return { action: 'quarantine', reason: `${decision.code}: ${decision.reason}` }
+  const block = recordDigestBlock(readLocalTrustRecord(recordPath), readLocalInstallTrust(pluginsRoot, trust.pinnedRootKey))
+  if (block?.action === 'disable') return { action: 'quarantine', reason: securityBlockReason(pluginId) }
   // Immutable layout: <root>/<id>/<version>/<target>/package.
   return { action: 'allow', artifactDigest: decision.contentDigest, target: basename(dirname(packageDir)) }
 }

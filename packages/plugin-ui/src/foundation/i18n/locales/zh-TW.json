@@ -1783,6 +1783,13 @@
       "builtinSwitchBusy": "正在套用…Navide 會先讓進行中的工作完成，Plans 可能需要約半分鐘。",
       "disabledBadge": "已停用",
       "disabledNote": "已停用：它的畫面與後端不會執行，檔案、權限與儲存的資料都會保留。",
+      "digestBlock": {
+        "blocked": "已被 Navide 封鎖",
+        "security": "已被 Navide 下架（安全問題）",
+        "qualificationRevoked": "開發者資格已撤銷",
+        "developerWithdrawn": "開發者已撤回",
+        "note": "你安裝這個 Navide 外掛之後，Navide 把它的安裝檔列入了封鎖清單。"
+      },
       "rollback": {
         "toBundled": "回復為內建版本",
         "toVersion": "回復到 {version}",

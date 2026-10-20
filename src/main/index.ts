@@ -69,6 +69,7 @@ import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/inst
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
 import { localTakedownDecision } from './plugins/pluginLocalTrust'
 import { agentApprovalSourceNote, installedPackageSource, nativeBackendConsentDialog } from './plugins/pluginLocalInstall'
+import { digestBlockDialogText, type DigestBlockChoice, type DigestBlockPrompt } from './plugins/pluginDigestBlock'
 import { revealUnsafeLineText } from '../shared/pluginAgentTools'
 import {
   BackendPluginError,
@@ -1328,6 +1329,24 @@ async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): P
   return result.response === 1
 }
 
+// Decision d5: a local install whose `.vsix` Navide blocked since, told once.
+async function promptDigestBlock(prompt: DigestBlockPrompt): Promise<DigestBlockChoice> {
+  const { title, message, detail, buttons, choices } = digestBlockDialogText(prompt, currentUiLocale())
+  const options: Electron.MessageBoxOptions = {
+    type: 'warning',
+    title,
+    message,
+    detail,
+    buttons,
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  }
+  const parent = nativeBackendDialogParent()
+  const result = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options)
+  return choices[result.response] ?? 'keep'
+}
+
 async function promptNativeBackendWorkspaceWrite(prompt: NativeBackendWritePrompt): Promise<boolean> {
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
@@ -1847,6 +1866,7 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    promptDigestBlock,
     preflightCandidateFrontend,
     preflightCandidateBackend,
     // Card K3: the only source of a local package path is this dialog, opened
@@ -2231,12 +2251,33 @@ async function refreshInstalledPluginTrust(): Promise<void> {
     )
   }
 }
+// Decision d5: after each Registry trust refresh, local installs are checked
+// against the refreshed blocked digests; a security block leaves the backend
+// catalog the way a takedown does.
+async function revalidateLocalInstalls(): Promise<void> {
+  try {
+    const { quarantined } = await pluginTrustRefresh.revalidateLocalInstalls()
+    if (quarantined.length === 0) return
+    const ids = new Set(quarantined)
+    approvedInstalledPluginActivations = approvedInstalledPluginActivations.filter((entry) => !ids.has(entry.pluginId))
+    for (const pluginId of ids) {
+      agentToolsHost?.mark(pluginId, 'quarantined')
+      console.warn(`[main] local plugin quarantined: its file was taken down by Navide for a security reason: ${pluginId}`)
+    }
+    void agentToolsHost?.refresh().catch(() => undefined)
+  } catch (error) {
+    console.warn(`[main] local install revalidation failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
 // Update reminder: runs after each trust refresh settles, never inside it, so
 // a failed check cannot touch trust state or quarantine decisions. Detection
 // only — installing an update still goes through the consent dialogs.
 const refreshInstalledPluginTrustAndUpdates = (): void => {
   void refreshTrustThenUpdates({
-    refreshTrust: refreshInstalledPluginTrust,
+    refreshTrust: async () => {
+      await refreshInstalledPluginTrust()
+      await revalidateLocalInstalls()
+    },
     checkUpdates: () => pluginTrustRefresh.checkUpdates(),
     publish: (updates) => {
       for (const hostWindow of mainWindows) {

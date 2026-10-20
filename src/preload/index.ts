@@ -177,6 +177,9 @@ export interface InstalledPluginSummary {
   /** A3: a local file a vetted publisher signed, and whether that key is
    *  still active (`verified`) or revoked since (`revoked`). */
   localSignature?: 'verified' | 'revoked'
+  /** Decision d5: Navide blocked the `.vsix` this local install came from;
+   *  `reason` null when its list names none. */
+  digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
