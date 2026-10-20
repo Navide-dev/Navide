@@ -11413,10 +11413,11 @@
       "system": "{key}"
     },
     "scanHeading": "What the publish-time scan found",
+    "scanHeadingLocal": "What Navide's scan of this file found",
     "declaredHeading": "What this Navide plugin declares",
     "registryHeading": "Navide Registry records (unsigned)",
     "provenance": {
-      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and was not scanned by Navide.",
+      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and Navide has not reviewed it.",
       "unverified": "Provided by the Navide Registry, not yet verified; before installing, Navide verifies the signature and compares it with the package.",
       "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid.",
       "verifiedNoScan": "Verified: the disclosure matches the downloaded package. This version has no system scan."
@@ -11424,7 +11425,9 @@
     "noDisclosure": "This version was published without disclosure data.",
     "signedByRegistry": "The scan was run and signed by the Navide Registry.",
     "scannedByRegistry": "The scan was run by the Navide Registry.",
+    "scannedLocally": "The scan informs this card; it never decides the install.",
     "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
+    "limitsWithoutScanLocal": "Navide did not scan this file; the above is only this Navide plugin's own declaration.",
     "viewNetwork": "A Navide plugin's views can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "viewNetworkIfViews": "If this Navide plugin has views, they can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "summary": {
@@ -11475,7 +11478,8 @@
       },
       "coverage": {
         "base": "Scanned by the Navide Registry at publish (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list.",
-        "incomplete": "Scan incomplete: {reasons}."
+        "incomplete": "Scan incomplete: {reasons}.",
+        "local": "Scanned by Navide on this computer (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list."
       },
       "notFound": {
         "shell": "The static scan found no commands.",
@@ -11483,7 +11487,8 @@
         "files": "The static scan found no file paths.",
         "dynamicCode": "The static scan found no code built at run time."
       },
-      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration."
+      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration.",
+      "noScanLocal": "Navide did not scan this file; below is only this Navide plugin's own declaration."
     },
     "incompleteReason": {
       "timedOut": "the scan ran out of time",
