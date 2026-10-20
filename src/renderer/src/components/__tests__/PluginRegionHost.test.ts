@@ -359,7 +359,7 @@ describe('PluginRegionHost source strip (K2)', () => {
     const wrapper = await render('developer-unpacked')
     const strip = wrapper.get('.plugin-region-host__source')
     expect(strip.get('.plugin-region-host__title').text()).toBe('Files')
-    expect(strip.get('.nv-source-badge').text()).toBe('Developer folder; its contents can change at any time')
+    expect(strip.get('.nv-source-badge').text()).toBe('Local folder')
     expect(strip.element.nextElementSibling?.tagName).toBe('WEBVIEW')
     expect(wrapper.get('webview').find('.plugin-region-host__source').exists()).toBe(false)
     wrapper.unmount()

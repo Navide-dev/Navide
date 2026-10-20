@@ -117,7 +117,7 @@ export function installedPackageSource(
  * never read like a Marketplace one's. */
 const AGENT_APPROVAL_SOURCE_NOTE: Partial<Record<PluginSource, string>> = {
   'local-unsigned': 'Source: a local file, not reviewed by Navide.',
-  'developer-unpacked': 'Source: a developer folder, not reviewed by Navide; its contents can change at any time.',
+  'developer-unpacked': 'Source: a local folder, not reviewed by Navide; its contents can change at any time.',
 }
 
 export function agentApprovalSourceNote(source: PluginSource | undefined): string {
@@ -134,9 +134,9 @@ const LOCAL_SOURCE_CONSENT_LINE: Record<string, string> = {
 }
 
 const DEVELOPER_SOURCE_CONSENT_LINE: Record<string, string> = {
-  'zh-TW': '來源與審核：開發者資料夾，內容隨時可能變動，未經 Navide 審核',
-  'en-US': 'Source and review: Developer folder; its contents can change at any time, not reviewed by Navide',
-  'ja-JP': '提供元と審査：開発者フォルダー。内容はいつでも変わる可能性があります。Navide の審査なし',
+  'zh-TW': '來源與審核：本機資料夾，內容隨時可能變動，未經 Navide 審核',
+  'en-US': 'Source and review: Local folder; its contents can change at any time, not reviewed by Navide',
+  'ja-JP': '提供元と審査：ローカルフォルダー。内容はいつでも変わる可能性があります。Navide の審査なし',
 }
 
 export function localSourceConsentLine(source: PluginSource | undefined, locale: string): string {
