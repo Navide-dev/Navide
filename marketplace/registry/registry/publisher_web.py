@@ -38,6 +38,7 @@ from .self_service import (
     check_claim,
     check_domain,
     claim_namespace,
+    counted_namespaces,
     create_token,
     exchange_cli_code,
     issue_cli_code,
@@ -297,10 +298,15 @@ def create_publisher_router() -> APIRouter:
                 }
                 for p in publishers
             ]
+            counted = session.exec(select(counted_namespaces(viewer.member_id))).one()
         return page(
             request,
             "publisher_home.html",
-            {"items": items, "can_claim": len(items) < MAX_NAMESPACES_PER_ACCOUNT, "max": MAX_NAMESPACES_PER_ACCOUNT},
+            {
+                "items": items,
+                "can_claim": counted < MAX_NAMESPACES_PER_ACCOUNT,
+                "max": MAX_NAMESPACES_PER_ACCOUNT,
+            },
         )
 
     @router.get("/publisher/claim", response_class=HTMLResponse)
