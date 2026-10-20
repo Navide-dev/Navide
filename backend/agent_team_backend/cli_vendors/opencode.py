@@ -206,20 +206,35 @@ ORDER BY seq DESC
 LIMIT 1
 """
 
-# Errors that pass with the next cycle: opencode holding a write lock, or the
-# db file vanishing between the watcher's event and this read.
-_TRANSIENT_SQLITE_ERRORS = ("locked", "busy", "unable to open")
+# Errors that pass with the next cycle: opencode holding a write lock. "unable
+# to open" is transient only while the file is gone (deleted between the
+# watcher's event and this read); on a file that is there it is a db this
+# process may not read, and that is reported.
+_TRANSIENT_SQLITE_ERRORS = ("locked", "busy")
 
-# vendor → the reason its reader cannot read its db right now. Kilo inherits
-# the reader, so it keeps its own entry.
-_READ_PROBLEMS: dict[str, dict] = {}
+# Newest write on each side of a db that holds both schemas. OpenCode 2's
+# v1 migration copies time_updated across, so the two are equal once it has
+# run, and only a 1.x binary still writing makes the 1.x side newer.
+_NEWEST_WRITES_SQL = (
+    "SELECT (SELECT COALESCE(MAX(time_updated), 0) FROM message),"
+    " (SELECT COALESCE(MAX(time_updated), 0) FROM session_message)"
+)
+
+# vendor → {what failed → why}. One entry per failing read (a query, or the
+# schema check), cleared only when that same read works again, so a problem
+# that persists stays put however many other reads succeed around it. Kilo
+# inherits the reader, so it keeps its own entries.
+_READ_PROBLEMS: dict[str, dict[str, dict]] = {}
 
 
 def read_problem(vendor: str) -> dict | None:
-    """Why `vendor`'s db cannot be read ({status, reason, path, detail,
-    since}), or None while it reads fine."""
-    problem = _READ_PROBLEMS.get(vendor)
-    return dict(problem) if problem else None
+    """Why `vendor`'s db cannot be fully read — the oldest problem still open,
+    {status, reason, path, detail, since, problems} where `problems` counts
+    every open one — or None while it reads fine."""
+    entries = _READ_PROBLEMS.get(vendor)
+    if not entries:
+        return None
+    return {**next(iter(entries.values())), "problems": len(entries)}
 
 
 def _v2_directory(directory: str) -> str:
@@ -313,77 +328,125 @@ class OpencodeLogReader(LogReader):
         for db in self._db_paths():
             if not db.is_file():
                 continue
-            schema = self._schema(db)
-            if schema is None:
+            if self._schema(db) is None:
                 continue
-            table = "session_v2" if schema == "v2" else "session"
-            rows = self._query(
-                db, f"SELECT 1 FROM {table} WHERE id = ?", (session_id,)
-            )
-            if rows:
-                return True
+            # Every session table there is: on a db holding both schemas a
+            # valid id may live on either side, and refusing it would block
+            # a resume that works.
+            tables = self._tables(db) or set()
+            for table in ("session_v2", "session"):
+                if table not in tables:
+                    continue
+                rows = self._query(
+                    db, f"SELECT 1 FROM {table} WHERE id = ?", (session_id,)
+                )
+                if rows:
+                    return True
         return False
 
     def _query(
-        self, path: Path, sql: str, params: tuple = (), *, report: bool = True
+        self,
+        path: Path,
+        sql: str,
+        params: tuple = (),
+        *,
+        report: bool = True,
+        key: str = "",
     ) -> list[tuple] | None:
         """Short-lived read-only query. None = no rows to work with: the db is
         busy / locked / gone this cycle (callers treat it as no data), or the
-        query failed outright, which is recorded as a read problem."""
+        query failed outright, which is recorded as a read problem under
+        `key` (the SQL itself unless the caller names it) and cleared by the
+        next run of that read that works."""
+        key = key or sql
         try:
             con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
             try:
                 con.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
-                return con.execute(sql, params).fetchall()
+                rows = con.execute(sql, params).fetchall()
             finally:
                 con.close()
         except (sqlite3.Error, OSError) as err:
-            if not report or isinstance(err, OSError) or any(
-                word in str(err).lower() for word in _TRANSIENT_SQLITE_ERRORS
-            ):
+            message = str(err).lower()
+            transient = (
+                isinstance(err, OSError)
+                or any(word in message for word in _TRANSIENT_SQLITE_ERRORS)
+                or ("unable to open" in message and not path.exists())
+            )
+            if not report or transient:
                 log.debug("sqlite read %s failed: %s", path, err)
             else:
-                self._report_problem(path, "query-failed", str(err))
+                self._report_problem(key, path, "query-failed", str(err))
             return None
+        if report:
+            self._read_ok(key)
+        return rows
+
+    def _tables(self, path: Path) -> set[str] | None:
+        rows = self._query(path, _TABLES_SQL)
+        return None if rows is None else {str(name) for (name,) in rows}
 
     def _schema(self, path: Path) -> str | None:
         """"v2" (OpenCode 2), "v1", or None when the db cannot be read this
-        cycle or holds neither schema — the latter is recorded."""
-        rows = self._query(path, _TABLES_SQL)
-        if rows is None:
+        cycle or holds neither schema — the latter is recorded.
+
+        A db with both schemas is read as v2 unless its 1.x tables took the
+        newest write — a downgrade, or a 1.x binary sharing the db. That is
+        read as v1 and disclosed, since the 2.x side then goes unread."""
+        names = self._tables(path)
+        if names is None:
             return None
-        names = {str(name) for (name,) in rows}
         if _V2_TABLES <= names:
+            newest = self._query(path, _NEWEST_WRITES_SQL) if "message" in names else None
+            if newest and _int(newest[0][0]) > _int(newest[0][1]):
+                self._report_problem(
+                    "schema", path, "mixed-schema",
+                    "both OpenCode 1.x and OpenCode 2 tables are present and the 1.x "
+                    "ones were written last; reading the 1.x tables, OpenCode 2 "
+                    "sessions are not seen",
+                    status="partial",
+                )
+                return "v1"
+            self._read_ok("schema")
             return "v2"
         if _V1_TABLES <= names:
+            self._read_ok("schema")
             return "v1"
         self._report_problem(
-            path, "unrecognized-schema",
+            "schema", path, "unrecognized-schema",
             "tables: " + (", ".join(sorted(names)) or "none"),
         )
         return None
 
-    def _report_problem(self, path: Path, reason: str, detail: str) -> None:
-        """Record why this vendor's db cannot be read; logged once per
-        distinct problem rather than once per watcher cycle."""
-        current = _READ_PROBLEMS.get(self.vendor)
+    def _report_problem(
+        self, key: str, path: Path, reason: str, detail: str, *, status: str = "unreadable",
+    ) -> None:
+        """Record why one read of this vendor's db fails; logged once per
+        distinct problem rather than once per watcher cycle, and `since`
+        keeps the first sighting."""
+        entries = _READ_PROBLEMS.setdefault(self.vendor, {})
+        current = entries.get(key)
         if current and (current["reason"], current["path"], current["detail"]) == (
             reason, str(path), detail,
         ):
             return
         log.warning("%s db %s cannot be read (%s): %s", self.vendor, path, reason, detail)
-        _READ_PROBLEMS[self.vendor] = {
-            "status": "unreadable",
+        entries[key] = {
+            "status": status,
             "reason": reason,
             "path": str(path),
             "detail": detail,
-            "since": _epoch_to_iso(time.time()) or "",
+            "since": current["since"] if current else _epoch_to_iso(time.time()) or "",
         }
 
-    def _read_ok(self) -> None:
-        """A data read went through: whatever was recorded no longer holds."""
-        if _READ_PROBLEMS.pop(self.vendor, None) is not None:
-            log.info("%s db is readable again", self.vendor)
+    def _read_ok(self, key: str) -> None:
+        """That read went through: its recorded problem no longer holds."""
+        entries = _READ_PROBLEMS.get(self.vendor)
+        if not entries or entries.pop(key, None) is None:
+            return
+        log.info("%s db: a read that failed works again", self.vendor)
+        if not entries:
+            del _READ_PROBLEMS[self.vendor]
 
     def _session_versions(self, path: Path, schema: str = "v1") -> dict[str, str]:
         """session id → the CLI version that wrote it (``session.version``).
@@ -437,10 +500,9 @@ class OpencodeLogReader(LogReader):
         if schema is None:
             return []
         usage_sql = _V2_USAGE_SQL if schema == "v2" else _USAGE_SQL
-        rows = self._query(path, usage_sql.format(where=""))
+        rows = self._query(path, usage_sql.format(where=""), key="usage")
         if rows is None:
             return []
-        self._read_ok()
         if schema == "v2":
             rows = [(*row[:4], _v2_directory(row[4])) for row in rows]
         versions = self._session_versions(path, schema) if rows else {}
@@ -518,10 +580,9 @@ class OpencodeLogReader(LogReader):
                 clause += f" OR m.rowid IN ({','.join(str(r) for r in sorted(pend))})"
             return clause
 
-        rows = self._query(path, usage_sql.format(where=_where(last_row_id, pending)))
+        rows = self._query(path, usage_sql.format(where=_where(last_row_id, pending)), key="usage")
         if rows is None:
             return IncrementalParseResult([], dict(checkpoint))
-        self._read_ok()
         if v2:
             rows = [(*row[:4], _v2_directory(row[4])) for row in rows]
         if not rows and last_row_id:
@@ -618,8 +679,6 @@ class OpencodeLogReader(LogReader):
                 path,
                 "SELECT MAX(rowid) FROM session_message" if v2 else "SELECT MAX(rowid) FROM part",
             )
-            if newest is not None:
-                self._read_ok()
             if newest and newest[0][0] is not None:
                 remember(int(newest[0][0]))
             elif v2 and newest is not None:
@@ -630,8 +689,6 @@ class OpencodeLogReader(LogReader):
         rows = self._query(
             path, _V2_ACTIVITY_SQL if v2 else _ACTIVITY_SQL, (int(prev), _MAX_PARTS_PER_PASS)
         )
-        if rows is not None:
-            self._read_ok()
         if not rows:
             return []
         remember(int(rows[-1][0]))

@@ -51,7 +51,8 @@ pytestmark = pytest.mark.asyncio
 #: change; the same digest on a probe of main (review of #352). A core tool added or edited on
 #: purpose updates it: print _tools_list_text()'s digest and paste it here.
 #: Re-pinned for #448, which documents pipeline_status' new per-node `error`.
-MAIN_TOOLS_LIST_SHA256 = "2f720532c7ea3d7008e0f1c010cf54bb946247e5ffdcd5b4202f51120fc7ccd1"
+#: Re-pinned for #485, which documents cli_get_status' new `log_reader`.
+MAIN_TOOLS_LIST_SHA256 = "5bef21a8773a0396ea12f61c4ea8d75a93bc4a971961b146d5fe7f8d08aca489"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

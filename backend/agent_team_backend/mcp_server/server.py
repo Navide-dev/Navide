@@ -3752,13 +3752,17 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     cli_list_targets gives it: branch, worktree, dirty count and drift against
     origin/main, cached for up to ~30 s. Absent outside a repository, when git
     did not answer in time, and for a remote target.
-    `log_reader` appears only while Navide cannot read this vendor's own
-    conversation store, today OpenCode's or Kilo's shared db: {status:
-    "unreadable", reason ("unrecognized-schema" for a CLI version whose
-    tables Navide does not know, "query-failed" for an sqlite error), path,
-    detail, since}. While it is there, turn ends, token counts and session
-    binding for that vendor are not seen, so `busy` / `last_activity` can be
-    stale; it clears on the first read that works.
+    `log_reader` appears only while Navide cannot fully read this vendor's
+    own conversation store, today OpenCode's or Kilo's shared db: {status,
+    reason, path, detail, since, problems} for the oldest open problem, with
+    `problems` counting all of them. status "unreadable" with reason
+    "unrecognized-schema" (a CLI version whose tables Navide does not know)
+    or "query-failed" (an sqlite error, a db it may not open included);
+    status "partial" with reason "mixed-schema" (OpenCode 1.x and 2 tables
+    both present and the 1.x ones written last, so OpenCode 2 sessions go
+    unread). While it is there, turn ends, token counts and session binding
+    for that vendor can be missed, so `busy` / `last_activity` can be stale;
+    each problem clears when the read that hit it works again.
 
     While `ui.status` is "awaiting", `ui` also carries what the pane is
     waiting on, read off its screen: `awaitingPrompt` (the prompt text) and,

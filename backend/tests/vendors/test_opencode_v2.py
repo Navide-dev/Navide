@@ -32,7 +32,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
+import sys
 from pathlib import Path
 
 import pytest
@@ -355,6 +357,95 @@ def test_an_upgraded_db_is_read_through_its_v2_tables(data_dir: Path) -> None:
 
     assert reader.has_session(_SID) is True
     assert reader.find_sessions_by_marker(["at-pane:p9"]) == {"at-pane:p9": (_SID, "/ws")}
+    # Both schemas, the 2.x side written last: the normal upgraded state.
+    assert opencode_mod.read_problem("opencode") is None
+
+
+def _write_1x_turn(db: _Db, sid: str, when_ms: int) -> None:
+    """What a 1.x binary writes into the leftover tables of a shared db."""
+    db.con.execute(
+        "INSERT INTO session VALUES (?, 'proj1', NULL, 'slug', '/ws', 't', '1.19.3', ?, ?)",
+        (sid, when_ms, when_ms),
+    )
+    data = {"role": "assistant", "modelID": "m", "time": {"created": when_ms, "completed": when_ms},
+            "tokens": _tokens()}
+    db.con.execute(
+        "INSERT INTO message VALUES ('msg_v1', ?, ?, ?, ?)", (sid, when_ms, when_ms, json.dumps(data)),
+    )
+    db.con.commit()
+
+
+def test_a_db_a_1x_binary_still_writes_is_read_as_1x_and_disclosed(data_dir: Path) -> None:
+    """A downgrade, or a 1.x and a 2.x binary sharing the db: the 1.x tables
+    took the newest write, so reading only the 2.x side would drop that
+    session and refuse its resume without a word."""
+    reader = OpencodeLogReader()
+    db = _Db(data_dir / "opencode.db", upgraded_from_v1=True)
+    db.session(_SID, "/ws")
+    db.user(_SID, "a 2.x turn")
+    _write_1x_turn(db, "ses_v1", _NOW_MS + 500_000)
+
+    (usage,) = reader.parse_session_file(db.path, set())
+    assert usage.session_id == "ses_v1"
+    # Resume preflight accepts a session on either side.
+    assert reader.has_session("ses_v1") is True
+    assert reader.has_session(_SID) is True
+    problem = opencode_mod.read_problem("opencode")
+    assert problem is not None
+    assert (problem["status"], problem["reason"]) == ("partial", "mixed-schema")
+
+    # Once OpenCode 2 writes again, its side is newer: read as 2.x, all clear.
+    db.assistant(_SID, tokens=_tokens())
+    db.con.execute("UPDATE session_message SET time_updated = ?", (_NOW_MS + 900_000,))
+    db.con.commit()
+    reader.parse_session_file(db.path, set())
+    assert opencode_mod.read_problem("opencode") is None
+
+
+def test_a_persistent_problem_is_disclosed_once_and_holds_still(data_dir: Path, caplog) -> None:
+    """Reads that work must not clear a problem another read keeps hitting:
+    the disclosure would flicker and `since` would move every cycle."""
+    reader = OpencodeLogReader()
+    con = sqlite3.connect(data_dir / "opencode.db")
+    con.executescript(
+        "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, parent_id TEXT, version TEXT);"
+        "CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, data TEXT);"
+    )  # no `part`: usage reads, activity cannot
+    con.commit()
+    con.close()
+    db = data_dir / "opencode.db"
+    seen: set[str] = set()
+
+    with caplog.at_level(logging.INFO, logger="agent_team_backend.log_readers.opencode"):
+        reader.parse_session_file(db, set())
+        reader.parse_activity(db, seen)
+        first = opencode_mod.read_problem("opencode")
+        lines = len(caplog.records)
+        for _ in range(5):
+            reader.parse_session_file(db, set())
+            reader.parse_activity(db, seen)
+            assert opencode_mod.read_problem("opencode") == first
+
+    assert first is not None and first["reason"] == "query-failed"
+    assert "no such table: part" in first["detail"]
+    assert len(caplog.records) == lines  # nothing logged after the first cycle
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or os.geteuid() == 0, reason="needs POSIX permissions and a non-root user",
+)
+def test_a_db_this_process_may_not_open_is_reported(data_dir: Path) -> None:
+    reader = OpencodeLogReader()
+    db = _Db(data_dir / "opencode.db")
+    db.session(_SID, "/ws")
+    db.con.close()
+    db.path.chmod(0)
+    try:
+        assert reader.parse_session_file(db.path, set()) == []
+        problem = opencode_mod.read_problem("opencode")
+    finally:
+        db.path.chmod(0o600)
+    assert problem is not None and problem["reason"] == "query-failed"
 
 
 # ── disclosure ───────────────────────────────────────────────────────────────
@@ -457,10 +548,10 @@ async def test_cli_get_status_says_the_opencode_db_cannot_be_read(monkeypatch) -
         ctx = SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
 
         assert "log_reader" not in await plan_mcp.cli_get_status("oc", ctx)
-        opencode_mod._READ_PROBLEMS["opencode"] = {
+        opencode_mod._READ_PROBLEMS["opencode"] = {"schema": {
             "status": "unreadable", "reason": "unrecognized-schema",
             "path": "/x/opencode.db", "detail": "tables: kv", "since": "2026-10-20T01:00:00Z",
-        }
+        }}
         status = await plan_mcp.cli_get_status("oc", ctx)
         assert status["log_reader"]["status"] == "unreadable"
         assert status["log_reader"]["reason"] == "unrecognized-schema"
