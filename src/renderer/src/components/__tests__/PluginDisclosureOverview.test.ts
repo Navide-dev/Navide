@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
@@ -116,6 +116,10 @@ describe('PluginDisclosureOverview (D5, D-f)', () => {
 
 describe('PluginDisclosureOverview source row (K2)', () => {
   it('gives a card the source row the Host names, and never guesses one', async () => {
+    // The Testplace row's expiry is read against the clock: pin it.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
+    onTestFinished(() => vi.useRealTimers())
     ;(window as unknown as Record<string, unknown>).agentTeam = {
       plugins: {
         installedDisclosures: vi.fn().mockResolvedValue([

@@ -28,7 +28,7 @@ function trustDoc(blockedDigests: LocalInstallTrustMetadata['blockedDigests']): 
     kind: 'local-install-trust',
     registryProfile: 'official',
     generatedAt: '2026-10-20T00:00:00Z',
-    expiresAt: '2026-10-21T00:00:00Z',
+    expiresAt: '2099-01-01T00:00:00Z',
     blockedDigests,
     publisherKeys: [],
   }

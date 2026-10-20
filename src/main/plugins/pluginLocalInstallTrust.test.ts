@@ -37,7 +37,7 @@ function metadata(overrides: Partial<LocalInstallTrustMetadata> = {}): LocalInst
     kind: 'local-install-trust',
     registryProfile: 'official',
     generatedAt: '2026-10-20T00:00:00Z',
-    expiresAt: '2026-10-21T00:00:00Z',
+    expiresAt: '2099-01-01T00:00:00Z',
     blockedDigests: [],
     publisherKeys: [
       { publisherId: 'acme', keyId: publisherKeyId(pem(activeKey.publicKey)), publicKey: pem(activeKey.publicKey), status: 'active', revokedAt: null },

@@ -80,7 +80,7 @@ function localTrust(overrides: Partial<LocalInstallTrustMetadata> = {}): LocalIn
     kind: 'local-install-trust',
     registryProfile: 'official',
     generatedAt: '2026-10-20T10:00:00Z',
-    expiresAt: '2026-10-21T10:00:00Z',
+    expiresAt: '2099-01-01T10:00:00Z',
     blockedDigests: [],
     publisherKeys: [
       { publisherId: 'acme', keyId: publisherKeyId(vetted.pubPem), publicKey: vetted.pubPem, status: 'active', revokedAt: null },

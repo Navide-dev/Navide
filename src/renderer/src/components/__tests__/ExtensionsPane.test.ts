@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import ExtensionsPane from '../ExtensionsPane.vue'
@@ -1269,6 +1269,10 @@ describe('ExtensionsPane source badge (K2)', () => {
   })
 
   it('badges each installed row by the Host\'s source and never guesses one', async () => {
+    // The Testplace row's expiry is read against the clock: pin it.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
+    onTestFinished(() => vi.useRealTimers())
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
         { id: 'acme.registry', requires: [], sensitive: [], provenance: 'official-registry' },
