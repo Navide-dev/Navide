@@ -66,6 +66,7 @@ export function usePluginInstallFlow() {
     // prepare of the same id meanwhile (an agent's request, a second pick)
     // is refused instead of installed.
     const shown = pendingConfirm.value?.prepared.id === id ? pendingConfirm.value.prepared : undefined
+    let committed: { activationError?: string } | undefined
     if (pendingSource === 'developer-unpacked') {
       if (!plugins.commitFolderLoad) throw new Error('loading from a folder is unavailable')
       await plugins.commitFolderLoad(id, {
@@ -74,17 +75,22 @@ export function usePluginInstallFlow() {
       })
     } else if (local) {
       if (!plugins.commitLocalInstall) throw new Error('installing from a file is unavailable')
-      await plugins.commitLocalInstall(id, {
+      committed = await plugins.commitLocalInstall(id, {
         riskConfirmed: approval.riskConfirmed === true,
         ...replace,
         ...(shown?.digest ? { expectedDigest: shown.digest } : {}),
       })
     } else {
-      await plugins.commitInstall(id, { ...approval, ...replace })
+      committed = await plugins.commitInstall(id, { ...approval, ...replace })
     }
     pendingConfirm.value = null
     pendingStep.value = null
     await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
+    // L1: a first install is activated on approval; one that could not be
+    // stays staged with Restart and Discard, and the reason is shown.
+    if (committed?.activationError) {
+      error.value = t('settings.extensions.activationFailed', { plugin: id, reason: committed.activationError })
+    }
   }
 
   // `version` pins the artifact (an update names the newest version this Host

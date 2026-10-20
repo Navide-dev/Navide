@@ -5,10 +5,10 @@ import { guardPlanFrameNavigation, PLAN_DOC_FRAME_NAME } from './planFrameNaviga
 
 type Frame = { name: string; frameTreeNodeId: number }
 
-function guarded() {
+function guarded(exempt?: () => boolean) {
   const frames: Frame[] = []
   const contents = Object.assign(new EventEmitter(), { mainFrame: { framesInSubtree: frames } })
-  guardPlanFrameNavigation(contents as unknown as WebContents)
+  guardPlanFrameNavigation(contents as unknown as WebContents, exempt)
   const create = (frame: Frame) => {
     frames.push(frame)
     contents.emit('frame-created', {}, { frame })
@@ -62,5 +62,13 @@ describe('guardPlanFrameNavigation', () => {
     expect(navigate({ url, isMainFrame: false, frame: { name: '', frameTreeNodeId: 9 } })).toBe(false)
     expect(navigate({ url, isMainFrame: false, frame: null })).toBe(false)
     expect(navigate({ url, isMainFrame: true, frame: planFrame })).toBe(false)
+  })
+
+  it('leaves a website alone when the contents turn out to be a plugin web guest', () => {
+    let webGuest = false
+    const { create, navigate } = guarded(() => webGuest)
+    webGuest = true // registered after the contents were created
+    create(planFrame)
+    expect(navigate({ url: 'https://example.com/', isMainFrame: false, frame: planFrame })).toBe(false)
   })
 })

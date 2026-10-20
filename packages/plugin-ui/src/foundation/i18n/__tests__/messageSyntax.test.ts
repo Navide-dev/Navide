@@ -25,7 +25,9 @@ const PLURAL_KEYS = [
   'time.ago-months',
   'pipelineEditor.lane.more',
   'editorWindow.problems.errors',
-  'editorWindow.problems.warnings'
+  'editorWindow.problems.warnings',
+  'git.branch-diff.file-count',
+  'git.branch-diff.hidden-lines'
 ]
 
 function leaves(value: unknown, prefix = ''): Array<[string, string]> {

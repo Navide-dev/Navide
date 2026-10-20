@@ -291,8 +291,15 @@ def _parse_strict(line: bytes) -> Any:
     )
 
 
+def _wire_json(value: Any, **kwargs: Any) -> str:
+    """JSON as it goes on the wire. The Host refuses a frame holding a raw
+    U+FEFF anywhere (parseBackendWireFrame), and a plan may start with a BOM,
+    so it is written as the escape `\\ufeff`: the same value, read back."""
+    return json.dumps(value, ensure_ascii=False, **kwargs).replace("\ufeff", "\\ufeff")
+
+
 def _write_frame(frame: Any) -> None:
-    encoded = json.dumps(frame, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    encoded = _wire_json(frame, separators=(",", ":"), allow_nan=False).encode("utf-8")
     if b"\n" in encoded or b"\r" in encoded:
         raise ValueError("frame contains a line break")
     if len(encoded) > MAX_FRAME_BYTES:
@@ -676,7 +683,7 @@ def _read_text_chunk(origin: dict[str, Any], rel_path: str, offset: int) -> dict
     text, consumed = _decode_chunk(data, reached_end)
     # JSON escaping can inflate a chunk (control characters cost six bytes);
     # halve it until it fits rather than send a frame the Host would reject.
-    while consumed > 4096 and len(json.dumps(text, ensure_ascii=False).encode("utf-8")) > FRAME_TEXT_BUDGET_BYTES:
+    while consumed > 4096 and len(_wire_json(text).encode("utf-8")) > FRAME_TEXT_BUDGET_BYTES:
         data = data[: consumed // 2]
         text, consumed = _decode_chunk(data, False)
         reached_end = False
@@ -1323,7 +1330,7 @@ def _list_plans_single_flight(origin: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _encoded_size(value: Any) -> int:
-    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return len(_wire_json(value, separators=(",", ":")).encode("utf-8"))
 
 
 _PAGED_META_KEYS = ("name", "stage", "overview", "archivedAt")

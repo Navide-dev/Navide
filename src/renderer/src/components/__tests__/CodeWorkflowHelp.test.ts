@@ -109,9 +109,9 @@ describe('CodeWorkflowHelp', () => {
     expect(mockText).toContain('已暫存的變更')
     expect(mockText).toContain('採用他們的版本')
     expect(mockText).toContain('暫存此區塊')
-    // Paths, hunk headers and the two English-only buttons are the same in
-    // both locales — the product prints them that way.
-    expect(mockText).toContain('Apply & Stage')
+    // The conflict apply button is localized in the product, so the mock
+    // follows it; paths and hunk headers are the same in both locales.
+    expect(mockText).toContain('套用並暫存')
     expect(mockText).toContain('@@ -12,7 +12,9 @@')
 
     expect(unexpectedWarnings(warn)).toEqual([])
