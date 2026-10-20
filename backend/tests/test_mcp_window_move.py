@@ -9,6 +9,7 @@ running) and the destination adopts it, or it goes back to the source.
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 
@@ -54,6 +55,14 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> dict[str, Any]:
         answer = state["answers"].get((session.window_id, action))
         if answer is not None:
             return answer
+        if action == "ui.workspace.moveToWindow":
+            # pb was attached in the source; pz was a card there.
+            return {"ok": True, "result": {"panes": [
+                {"pane_id": "pb", "workspace_path": "/ws/beta", "realized": True},
+                {"pane_id": "pz", "workspace_path": "/ws/beta", "realized": False},
+            ]}, "error": None}
+        if action == "ui.workspace.receive":
+            return {"ok": True, "result": {"opened": list(args.get("paneIds") or []), "not_opened": []}, "error": None}
         return {"ok": True, "result": {"panes": [{"pane_id": (args or {}).get("paneId") or "pb"}]}, "error": None}
 
     async def landed(pane_id: str, from_window: str, timeout: float = 15.0) -> tuple[str, str]:
@@ -126,20 +135,82 @@ async def test_a_project_moves_with_its_panes_to_an_existing_window(world: dict[
     result = await window_tools.window_move_pane(_ctx(), to_window="m2", target="beta/worker", mode="workspace")
 
     assert result["ok"] is True and result["mode"] == "workspace"
-    order = [(w, a) for w, a, _x in world["requests"] if a in ("ui.workspace.moveToWindow", "ui.workspace.adopt")]
+    order = [(w, a) for w, a, _x in world["requests"] if a in ("ui.workspace.moveToWindow", "ui.workspace.receive")]
     # The source lets go first (one project, one window), then the destination takes it.
-    assert order == [("m1", "ui.workspace.moveToWindow"), ("m2", "ui.workspace.adopt")]
-    assert any("cards" in a for a in result["advisories"])
+    assert order == [("m1", "ui.workspace.moveToWindow"), ("m2", "ui.workspace.receive")]
+    # Every pane that was attached in the source is attached again at once
+    # (review #548 MEDIUM-1); a card stays a card.
+    receive = next(x for w, a, x in world["requests"] if a == "ui.workspace.receive")
+    assert receive["paneIds"] == ["pb"]
+    assert "not_reattached" not in result
+    assert not any("cards" in a for a in result.get("advisories") or [])
 
 
 @pytest.mark.asyncio
 async def test_a_project_the_destination_cannot_take_goes_back(world: dict[str, Any]) -> None:
-    world["answers"][("m2", "ui.workspace.adopt")] = {"ok": False, "result": None, "error": "window-cannot-hold: no"}
+    world["answers"][("m2", "ui.workspace.receive")] = {"ok": False, "result": None, "error": "window-cannot-hold: no"}
 
     result = await window_tools.window_move_pane(_ctx(), to_window="m2", target="beta/worker", mode="workspace")
 
     assert result["ok"] is False and result["error_code"] == "window-cannot-hold"
-    assert ("m1", "ui.workspace.adopt", {"path": "/ws/beta"}) in world["requests"]
+    assert "went back to window m1" in result["error"]
+    back = [x for w, a, x in world["requests"] if (w, a) == ("m1", "ui.workspace.receive")]
+    assert back and back[0]["path"] == "/ws/beta" and back[0]["paneIds"] == ["pb"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_put_back_is_said_and_points_at_workspace_open(world: dict[str, Any]) -> None:
+    # review #548 MEDIUM-2: the put-back reply is checked.
+    world["answers"][("m2", "ui.workspace.receive")] = {"ok": False, "result": None, "error": "window-cannot-hold: no"}
+    world["answers"][("m1", "ui.workspace.receive")] = {"ok": False, "result": None, "error": "move-failed: no"}
+
+    result = await window_tools.window_move_pane(_ctx(), to_window="m2", target="beta/worker", mode="workspace")
+
+    assert result["ok"] is False and result["error_code"] == "move-left-unheld"
+    assert "in no window" in result["error"] and "workspace_open" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_the_destination_is_asked_only_after_the_source_let_go(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    # review #548 MEDIUM-2: the source's held list is what says it let go.
+    source = world["w"]["m1"]
+    source.held_workspaces = ("/ws/alpha", "/ws/beta")
+    seen: list[tuple[str, ...]] = []
+    request = plan_mcp._window_request
+
+    async def watching(session: Any, action: str, args: Any, caller: Any, **kw: Any) -> Any:
+        if action == "ui.workspace.moveToWindow":
+            answer = await request(session, action, args, caller, **kw)
+
+            async def let_go() -> None:
+                await asyncio.sleep(0.2)
+                source.held_workspaces = ("/ws/alpha",)
+
+            asyncio.ensure_future(let_go())
+            return answer
+        if action == "ui.workspace.receive":
+            seen.append(tuple(source.held_workspaces))
+        return await request(session, action, args, caller, **kw)
+
+    monkeypatch.setattr(plan_mcp, "_window_request", watching)
+
+    result = await window_tools.window_move_pane(_ctx(), to_window="m2", target="beta/worker", mode="workspace")
+
+    assert result["ok"] is True
+    assert seen and seen[0] == ("/ws/alpha",)
+
+
+@pytest.mark.asyncio
+async def test_panes_the_destination_could_not_attach_are_named(world: dict[str, Any]) -> None:
+    world["answers"][("m2", "ui.workspace.receive")] = {
+        "ok": True, "result": {"opened": [], "not_opened": [{"paneId": "pb", "error": "spawn failed"}]}, "error": None,
+    }
+
+    result = await window_tools.window_move_pane(_ctx(), to_window="m2", target="beta/worker", mode="workspace")
+
+    assert result["ok"] is True
+    assert result["not_reattached"] == ["beta/worker"]
+    assert any("cards" in a for a in result["advisories"])
 
 
 @pytest.mark.asyncio
@@ -170,7 +241,7 @@ async def test_bad_destinations(world: dict[str, Any], to_window: str, code: str
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["ui.pane.moveToWindow", "ui.workspace.moveToWindow"])
+@pytest.mark.parametrize("action", ["ui.pane.moveToWindow", "ui.workspace.moveToWindow", "ui.workspace.receive"])
 async def test_ui_invoke_cannot_reach_the_move_commands(world: dict[str, Any], action: str) -> None:
     result = await plan_mcp.ui_invoke("", action, _ctx(), args={"paneId": "pb", "to": "new"})
 
@@ -187,4 +258,4 @@ async def test_a_project_move_hands_both_windows_the_registry_spelling(world: di
     assert result["ok"] is True
     sent = {(w, a): x for w, a, x in world["requests"]}
     assert sent[("m1", "ui.workspace.moveToWindow")]["path"] == "/ws/beta"
-    assert sent[("m2", "ui.workspace.adopt")] == {"path": "/ws/beta"}
+    assert sent[("m2", "ui.workspace.receive")]["path"] == "/ws/beta"

@@ -11236,9 +11236,10 @@ registerCommand('ui.workspace.moveToWindow', async (args) => {
     throw new Error(`pipeline-running: a pipeline is running in ${held}; only the user can move it`)
   }
   const caller = a.caller_address || 'an agent'
+  // `realized`: the destination attaches exactly these again at once.
   const moved = panes.value
     .filter((p) => normWs(p.workspacePath) === normWs(held))
-    .map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath }))
+    .map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath, realized: p.realized }))
   if (a.to === 'new') await detachWorkspace(held, 120, 120)
   else await closeWorkspaceKeepPanes(held)
   if (workspaceOrder.value.some((w) => normWs(w) === normWs(held))) {
@@ -11247,6 +11248,46 @@ registerCommand('ui.workspace.moveToWindow', async (args) => {
   recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} moved ${held} to another window; its CLIs keep running` })
   notifyRestore.toast(i18n.global.t('msg.agent-moved-workspace', { caller, name: wsDisplayName(held) }), { type: 'info', duration: 8000 })
   return { path: held, panes: moved }
+})
+// MCP window_move_pane, mode "workspace" into an EXISTING window (DESIGN-C
+// S4b, §3.4): this window takes the project the source just let go of and
+// attaches its panes again at once, as a detachWorkspace hand-off does — the
+// panes that were attached in the source are opened the way a click on their
+// card opens them (ui.pane.open: a live PTY is re-attached, nothing is
+// respawned), so none of them goes unread. Also the way back when the
+// destination refused. ui_invoke cannot reach this (window_move_pane only).
+registerCommand('ui.workspace.receive', async (args) => {
+  const a = (args ?? {}) as { path?: string; paneIds?: unknown; caller_address?: string }
+  const path = typeof a.path === 'string' ? a.path : ''
+  if (!path) throw new Error('path-required: ui.workspace.receive requires path')
+  if (isDetachedWindow) throw new Error('window-cannot-hold: this is a detached group window, which shows one workspace only')
+  if (!isLocalWorkspace(path)) {
+    // The source let go of it a moment ago; main may not have heard yet. Wait
+    // for that rather than refuse a move that is about to be legal.
+    let elsewhere = (await window.agentTeam?.workspaceHolder?.(path)) ?? ''
+    for (let i = 0; elsewhere && i < 15; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      elsewhere = (await window.agentTeam?.workspaceHolder?.(path)) ?? ''
+    }
+    if (elsewhere) throw new Error(`workspace-in-other-window: ${elsewhere}`)
+    adoptWorkspace(path)
+    if (!isLocalWorkspace(path)) throw new Error(`move-failed: this window did not take ${path}`)
+  }
+  const resp = await sendQuiet<ProjectPayload>('project.peek', { workspace_path: path })
+  if (resp) await restoreWorkspacePanes(resp, path)
+  const ids = Array.isArray(a.paneIds) ? a.paneIds.filter((id): id is string => typeof id === 'string' && !!id) : []
+  const opened: string[] = []
+  const notOpened: { paneId: string; error: string }[] = []
+  for (const id of ids) {
+    const outcome = await invokeCommand('ui.pane.open', { paneId: id })
+    const answer = outcome.result as { paneId?: string; realized?: boolean } | undefined
+    if (outcome.ok && answer?.realized) opened.push(answer.paneId ?? id)
+    else notOpened.push({ paneId: id, error: outcome.error ?? 'not opened' })
+  }
+  const caller = a.caller_address || 'an agent'
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} moved ${path} into this window` })
+  notifyRestore.toast(i18n.global.t('msg.agent-moved-workspace-in', { caller, name: wsDisplayName(path) }), { type: 'info', duration: 8000 })
+  return { path, prepared: 'adopted', opened, not_opened: notOpened }
 })
 registerCommand('ui.layout.setMode', (args) => {
   const mode = (args as { mode?: LayoutMode } | undefined)?.mode

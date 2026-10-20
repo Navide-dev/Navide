@@ -70,3 +70,37 @@ describe('ui.workspace.moveToWindow', () => {
     expect(body).toContain('pipeline-running:')
   })
 })
+
+describe('ui.workspace.receive', () => {
+  const body = block("registerCommand('ui.workspace.receive'")
+
+  it('waits for main to hear the source let go before refusing', () => {
+    expect(body).toContain('for (let i = 0; elsewhere && i < 15; i++) {')
+    expect(body).toContain("throw new Error(`workspace-in-other-window: ${elsewhere}`)")
+    expect(body.indexOf('adoptWorkspace(path)')).toBeGreaterThan(body.indexOf('for (let i = 0; elsewhere'))
+  })
+
+  it('attaches the moved panes again at once, the way a click on their card does', () => {
+    const restore = body.indexOf('await restoreWorkspacePanes(resp, path)')
+    const open = body.indexOf("invokeCommand('ui.pane.open', { paneId: id })")
+    expect(restore).toBeGreaterThan(-1)
+    expect(open).toBeGreaterThan(restore)
+    expect(body).toContain('not_opened: notOpened')
+  })
+
+  it('kills and respawns nothing itself', () => {
+    expect(body).not.toContain('onKill')
+    expect(body).not.toContain('terminal.kill')
+  })
+
+  it('says in this window which pane moved the project in', () => {
+    expect(body).toContain("i18n.global.t('msg.agent-moved-workspace-in'")
+    expect(body).toContain("code: 'agent.window-action'")
+  })
+})
+
+describe('ui.workspace.moveToWindow hands over which panes were attached', () => {
+  it('reports realized with every pane it lets go of', () => {
+    expect(block("registerCommand('ui.workspace.moveToWindow'")).toContain('realized: p.realized')
+  })
+})

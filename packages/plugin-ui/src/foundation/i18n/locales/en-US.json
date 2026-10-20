@@ -498,6 +498,7 @@
     "window-focused-by": "“{caller}” brought this window to the front",
     "agent-moved-pane": "“{caller}” moved {name} to a window of its own",
     "agent-moved-workspace": "“{caller}” moved {name} to another window; its CLIs keep running",
+    "agent-moved-workspace-in": "“{caller}” moved {name} into this window",
     "agent-close-workspace-title": "“{caller}” wants to close {name}",
     "agent-close-workspace-body": "The agent in pane “{caller}” asks to close {name} and end its {count} CLI pane(s). The panes come back as cards you can resume, but the turn each one is in will not finish. Navide asks every time an agent wants this.",
     "agent-closed-workspace-kept": "“{caller}” closed {name}; its CLIs keep running",

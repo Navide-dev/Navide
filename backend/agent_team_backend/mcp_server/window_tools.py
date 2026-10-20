@@ -426,6 +426,20 @@ async def workspace_close(path: str, ctx: Context, keep_panes: bool = True) -> d
 _MOVE_MODES = ("pane", "workspace")
 
 
+async def _wait_released(session: Any, path: str, timeout: float = 5.0) -> None:
+    """Wait until the source window says it no longer holds *path* (its
+    held-workspaces announcement), so the destination's own holder check does
+    not still see it there. Returns at the deadline either way: the
+    destination re-checks for itself."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        held = getattr(session, "held_workspaces", ()) or ()
+        if not any(core._same_directory(str(p), path) for p in held):
+            return
+        await asyncio.sleep(0.1)
+
+
 async def _wait_for_new_window(pane_id: str, from_window: str, timeout: float = 15.0) -> tuple[str, str]:
     """Where a moved pane came back: (its live id, its window id), or what is
     known when it has not re-registered within *timeout*."""
@@ -466,19 +480,24 @@ async def window_move_pane(
       project's window; move its project instead.
     - mode "workspace" moves the pane's project with every pane of it: "new"
       gives it a window of its own; a window id has that window take it (the
-      source window lets go of it first, keeping every CLI running). The
-      source window must keep at least one project ("last-workspace").
+      source window lets go of it first, keeping every CLI running, and the
+      destination attaches every pane that was attached again at once). If
+      the destination cannot take it, it goes back to the source; if even
+      that fails the answer says so ("move-left-unheld") and workspace_open
+      brings it back. The source window must keep at least one project
+      ("last-workspace").
 
     Nothing is closed and no CLI ends; moving your own pane or project is
     allowed (`advisories` says so). A pane that comes back in another window
-    may get a new pane_id (the old one keeps resolving to it). After a project
-    move its panes can show as cards until opened — their CLIs are running;
-    cli_send(open_target=true) or a click opens them. A pipeline running in
-    the project or the pane's run is refused ("pipeline-running").
+    may get a new pane_id (the old one keeps resolving to it). A pane that
+    could not be attached again at once after a project move is listed in
+    `not_reattached` and shows as a card — its CLI is running;
+    cli_send(open_target=true) or a click opens it. A pipeline running in the
+    project or the pane's run is refused ("pipeline-running").
 
     Recorded with the caller; the windows show which pane did it. Returns
     {ok, mode, pane_id, address, from_window_id, to_window_id, moved_panes
-    [address], undo {tool, args}, advisories?} or {ok: false, error,
+    [address], undo {tool, args}, not_reattached?, advisories?} or {ok: false, error,
     error_code} ("pane-needs-workspace-move", "unknown-window",
     "window-local-only", "last-workspace", "pipeline-running",
     "window-cannot-hold", "ui_action_timeout", or a target error).
@@ -568,17 +587,45 @@ async def window_move_pane(
         args = {"path": pane.workspace_path, "to": to_window, "caller_address": who.get("address") or ""}
         answer = await core._window_request(source, "ui.workspace.moveToWindow", args, caller)
         if answer is not None and answer.get("ok") and destination is not None:
-            adopted = await core._window_request(destination, "ui.workspace.adopt", {"path": pane.workspace_path}, caller)
-            if adopted is None or not adopted.get("ok"):
-                # Put it back where it was rather than leave it in no window.
-                await core._window_request(source, "ui.workspace.adopt", {"path": pane.workspace_path}, caller)
-                error = str((adopted or {}).get("error") or f"window {to_window} did not take the project")
+            released = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+            # The panes whose CLIs were attached in the source: the destination
+            # attaches them again at once (DESIGN-C §3.4, as detachWorkspace's
+            # hand-off does), so none of them goes unread — the caller's own
+            # included, when it moves its own project.
+            live = [
+                str(p.get("pane_id")) for p in released.get("panes") or []
+                if isinstance(p, dict) and p.get("pane_id") and p.get("realized")
+            ]
+            receive = {"path": pane.workspace_path, "paneIds": live, "caller_address": who.get("address") or ""}
+            await _wait_released(source, pane.workspace_path)
+            received = await core._window_request(
+                destination, "ui.workspace.receive", receive, caller, timeout=core._UI_INVOKE_SLOW_TIMEOUT_S
+            )
+            if received is None or not received.get("ok"):
+                error = str((received or {}).get("error") or f"window {to_window} did not take the project")
                 code, sep, _ = error.partition(":")
+                # Put it back where it was rather than leave it in no window,
+                # and say so only when that worked.
+                back = await core._window_request(
+                    source, "ui.workspace.receive", receive,
+                    caller, timeout=core._UI_INVOKE_SLOW_TIMEOUT_S,
+                )
+                if back is None or not back.get("ok"):
+                    return refused({
+                        "ok": False,
+                        "error": (
+                            f"{error}; putting it back into window {from_window} failed too "
+                            f"({str((back or {}).get('error') or 'no answer')}), so {pane.workspace_path} is in no "
+                            "window right now. Its CLIs keep running: workspace_open on it brings it and its panes back"
+                        ),
+                        "error_code": "move-left-unheld",
+                    })
                 return refused({
                     "ok": False,
                     "error": f"{error}; the project went back to window {from_window}",
                     "error_code": code.strip() if sep and " " not in code.strip() else "window-cannot-hold",
                 })
+            answer = {**answer, "received": received.get("result")}
     if answer is None:
         return refused({
             "ok": False,
@@ -609,11 +656,15 @@ async def window_move_pane(
         "moved_panes": moved or [pane.qualified_name],
         "undo": undo,
     }
-    if mode == "workspace":
-        advisories.append(
-            "the moved project's panes may show as cards until opened; their CLIs are running — "
-            "cli_send(open_target=true) or a click opens them"
-        )
+    received_result = answer.get("received") if isinstance(answer.get("received"), dict) else None
+    if mode == "workspace" and received_result is not None:
+        unopened = [str(x.get("paneId") or "") for x in received_result.get("not_opened") or [] if isinstance(x, dict)]
+        if unopened:
+            out["not_reattached"] = _addresses([{"pane_id": i} for i in unopened])
+            advisories.append(
+                "some moved panes could not be attached again at once and show as cards; their CLIs are "
+                "running — cli_send(open_target=true) or a click opens them"
+            )
     if not landed:
         advisories.append("the pane had not re-registered in its new window yet; read window_list for where it is now")
     if advisories:

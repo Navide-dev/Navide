@@ -57,7 +57,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned by DESIGN-C S3: the cli_list_targets and cli_whoami descriptions
 #: now document `window_id`. With their old descriptions the list still hashes
 #: to the previous pin (6410398f…), so no other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "e5270f54841aa8f8e0d73089f36711288f1fe0a0738831d65ca6f53ebdeb0652"
+#: Re-pinned again by DESIGN-C S2 + S4b: cli_open_agent gained `window`
+#: ("current" / "new" / "existing") and `window_id`. Against the S3 pin
+#: (e5270f54…) that is the only tool whose entry differs.
+MAIN_TOOLS_LIST_SHA256 = "898f834e896a2139d75cb075dc9ee3138543f97b58ecf87f33b2fb30b094382c"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -84,7 +87,7 @@ W1_CORE_TOOLS = frozenset({
     "plugins_validate_package", "plugins_package",
 })
 #: Core tools added after that digest by DESIGN-C S3 (mcp_server/window_tools.py).
-DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", "workspace_close"})
+DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", "workspace_close", "window_move_pane"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server).
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"

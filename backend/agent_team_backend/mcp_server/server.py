@@ -6107,6 +6107,7 @@ _DEDICATED_CLOSE_ACTIONS = {
     # it; half of it alone would be a silent close (DESIGN-C S4b).
     "ui.pane.moveToWindow": "window_move_pane",
     "ui.workspace.moveToWindow": "window_move_pane",
+    "ui.workspace.receive": "window_move_pane",
     # Takes a project into a window's sidebar; only cli_open_agent's cross-
     # workspace spawn asks for it, and that path records the action (review #546).
     "ui.workspace.adopt": "cli_open_agent with workspace_path",
