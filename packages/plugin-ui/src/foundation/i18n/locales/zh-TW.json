@@ -8212,6 +8212,7 @@
     "plans-retry-failed": "重試失敗：{reason}",
     "plans-recovery-reason": "本次啟動已停用 Plans v2（{reason}）。",
     "plans-backend-stopped": "「{folder}」的 Plans 後端多次失敗後已停止。開啟此工作區的 Plans 即可重新啟動其後端，或重新啟動 Navide。",
+    "plugin-staged-not-activated": "Navide 外掛 {plugin} {version} 已安裝，但 Navide 啟動時無法啟用：{reason}。請到「設定 → Navide 外掛」重新啟動或捨棄它。",
     "yolo-mode": "YOLO 模式",
     "yolo-bypass": "— 自動略過權限提示",
     "default": "預設",
@@ -11568,6 +11569,18 @@
       "enable": "重新啟用",
       "disable": "再次停用",
       "downgrade": "降回 {version}"
+    }
+  },
+  "plugin-staged": {
+    "notice": {
+      "title": "Navide 外掛 {plugin} 有版本 {staged} 等待套用，目前執行的是 {active}。",
+      "detail": "這個版本是安裝後沒有按「重新啟動」，或回退時保留下來的。按「立即套用」會切換過去，效果和重新啟動相同。",
+      "applied": "{plugin} 現在執行版本 {version}。",
+      "stale": "沒有套用：這個 Navide 外掛之後又被變更過。",
+      "failed": "無法套用：{error}"
+    },
+    "button": {
+      "apply": "立即套用"
     }
   },
   "testplace": {

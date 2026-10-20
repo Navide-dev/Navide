@@ -585,3 +585,54 @@ describe('agent plugin notices (B2-c)', () => {
     expect(pluginAgentDowngradeStep(action, [])).toBeNull()
   })
 })
+
+describe('staged plugin packages found at launch', () => {
+  beforeEach(() => {
+    store.clear()
+    ;(window as unknown as { agentTeam?: unknown }).agentTeam = { version: '0.1.77' }
+  })
+
+  afterEach(() => {
+    delete (window as unknown as { agentTeam?: unknown }).agentTeam
+  })
+
+  const update = { pluginId: 'acme.todo', activeVersion: '1.0.0', stagedVersion: '1.1.0' }
+
+  it('keeps one row per staged package, naming both versions, with "Apply now"', async () => {
+    const { useAnnouncements, i18n } = await load()
+    i18n.global.locale.value = 'en-US'
+    const a = useAnnouncements()
+    a.notePluginStagedUpdates([update])
+    const rows = a.items.value.filter((item) => item.kind === 'plugin-staged')
+    expect(rows.map((row) => row.title)).toEqual([
+      'The Navide plugin acme.todo has version 1.1.0 waiting to be applied; version 1.0.0 is running.',
+    ])
+    expect(rows[0].actions).toEqual([{ kind: 'plugin-staged-apply', ...update }])
+    // Read is not dismissed: the row stays until it is applied.
+    a.markAllRead()
+    expect(a.items.value.filter((item) => item.kind === 'plugin-staged')).toHaveLength(1)
+    a.dropPluginStagedUpdate('acme.todo')
+    expect(a.items.value.filter((item) => item.kind === 'plugin-staged')).toEqual([])
+  })
+
+  it('says it in each language', async () => {
+    const { useAnnouncements, i18n } = await load()
+    const a = useAnnouncements()
+    a.notePluginStagedUpdates([update])
+    const title = () => a.items.value.find((item) => item.kind === 'plugin-staged')?.title
+    i18n.global.locale.value = 'zh-TW'
+    expect(title()).toBe('Navide 外掛 acme.todo 有版本 1.1.0 等待套用，目前執行的是 1.0.0。')
+    i18n.global.locale.value = 'ja-JP'
+    expect(title()).toBe('Navide プラグイン acme.todo のバージョン 1.1.0 が適用待ちです。現在実行中のバージョンは 1.0.0 です。')
+    i18n.global.locale.value = 'en-US'
+  })
+
+  it('applies only while the same version is still staged beside the same active one', async () => {
+    const { pluginStagedApplyApplies } = await load()
+    const action = { kind: 'plugin-staged-apply' as const, ...update }
+    expect(pluginStagedApplyApplies(action, [{ id: 'acme.todo', packageVersion: '1.0.0', pendingCandidateVersion: '1.1.0' }])).toBe(true)
+    expect(pluginStagedApplyApplies(action, [{ id: 'acme.todo', packageVersion: '1.1.0' }])).toBe(false)
+    expect(pluginStagedApplyApplies(action, [{ id: 'acme.todo', packageVersion: '1.0.0', pendingCandidateVersion: '1.2.0' }])).toBe(false)
+    expect(pluginStagedApplyApplies(action, [])).toBe(false)
+  })
+})
