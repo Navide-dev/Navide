@@ -448,7 +448,11 @@ settings below are set; without them the registry behaves exactly as before
 - **Namespaces** (`/publisher/claim`): first come, first served; reserved words
   (`navide`, `official`, …) and look-alikes (`nav1de`, or a folded match of an
   existing namespace) are refused; at most 3 per account
-  (`Publisher.navide_member_id`). A claimed namespace is review-required.
+  (`Publisher.navide_member_id`), not counting namespaces frozen by a
+  qualification revocation or a reclaim. A frozen namespace keeps its name: no
+  other account can claim it. `self_service.counted_namespaces` is the one
+  count both the claim pre-check and the claim's `INSERT ... SELECT` use. A
+  claimed namespace is review-required.
 - **Review** (`/admin/review`, `GET /api/admin/review`,
   `POST /api/admin/review/{ns}/{name}/{version}/approve|reject`): uploads to a
   review-required namespace are stored `pending`, unsigned and invisible to

@@ -1,7 +1,8 @@
 """Self-service publishing for Navide Cloud accounts (D6, D7, D9).
 
 - Namespace claims: first come, first served; reserved words and look-alikes
-  are refused (similarity.py); at most MAX_NAMESPACES_PER_ACCOUNT per account.
+  are refused (similarity.py); at most MAX_NAMESPACES_PER_ACCOUNT per account,
+  not counting namespaces frozen by a qualification revocation.
   A claimed namespace is review-required: nothing it publishes is public
   before an admin approves it.
 - Publish tokens: random, stored as sha256, scoped to one namespace, with an
@@ -89,6 +90,19 @@ def owned_publisher(session: Session, member_id: str, namespace: str) -> Publish
     ).first()
 
 
+def counted_namespaces(member_id: str):
+    """Scalar subquery: the namespaces that count toward the per-account cap.
+    A namespace frozen by a qualification revocation keeps its name for the
+    account but no longer counts. check_claim and claim_namespace's INSERT
+    both use this, so the pre-check and the write cannot disagree."""
+    return (
+        select(func.count())
+        .select_from(Publisher)
+        .where(Publisher.navide_member_id == member_id, Publisher.frozen_at.is_(None))
+        .scalar_subquery()
+    )
+
+
 def check_claim(session: Session, member_id: str, namespace: str) -> ClaimVerdict:
     namespace = namespace.strip().lower()
     if not qualification.is_approved(session, member_id):
@@ -97,7 +111,7 @@ def check_claim(session: Session, member_id: str, namespace: str) -> ClaimVerdic
             "Only an approved developer can claim a namespace. Apply for developer "
             "qualification first and wait for review.",
         )
-    if len(owned_publishers(session, member_id)) >= MAX_NAMESPACES_PER_ACCOUNT:
+    if session.exec(select(counted_namespaces(member_id))).one() >= MAX_NAMESPACES_PER_ACCOUNT:
         return ClaimVerdict(
             False, f"An account can own at most {MAX_NAMESPACES_PER_ACCOUNT} namespaces."
         )
@@ -117,12 +131,7 @@ def claim_namespace(session: Session, *, member_id: str, display_name: str, name
     # One INSERT ... SELECT: SQLite evaluates the per-account count under the
     # statement's write lock, so two concurrent claims cannot both pass the
     # cap; the unique name index settles a race for the same namespace.
-    owned = (
-        select(func.count())
-        .select_from(Publisher)
-        .where(Publisher.navide_member_id == member_id)
-        .scalar_subquery()
-    )
+    owned = counted_namespaces(member_id)
     source = select(
         literal(namespace, String),
         literal(display_name or None, String),
