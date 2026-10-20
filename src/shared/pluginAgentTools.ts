@@ -701,13 +701,18 @@ export interface MarketplaceFormOpen {
  *  answers `marketplace.developer.result` `{request_id, ok, result | error, error_code}`. */
 export const MARKETPLACE_DEVELOPER_REQUEST_EVENT = 'marketplace.developer.request'
 export const MARKETPLACE_DEVELOPER_RESULT_MESSAGE = 'marketplace.developer.result'
-export type MarketplaceDeveloperQuery = { kind: 'developer-status' } | { kind: 'publish-status'; id: string }
+export type MarketplaceDeveloperQuery =
+  | { kind: 'developer-status' }
+  | { kind: 'publish-status'; id: string }
+  /** O3: publish at once when the Host's Registry is this computer's; else `{loopback: false}`. */
+  | { kind: 'publish-direct'; path: string; target: string }
 export const DEVELOPER_ERROR_CODES = ['NOT_SIGNED_IN', 'QUALIFICATION_REQUIRED'] as const
 /** Which side wrote a form field (the Registry's field_sources spelling). */
 export type FormFieldSource = 'user' | 'agent-draft'
 /** A form request's draft: the agent's field values and, per field, who wrote it. */
 export interface FormDraft {
-  fields: Record<string, string | boolean>
+  /** Strings and switches; a Testplace invitation's `invitees` is a list. */
+  fields: Record<string, string | boolean | string[]>
   field_sources: Record<string, FormFieldSource>
 }
 /** The developer application's fields (Registry W2, real-name per DX 5.4). */

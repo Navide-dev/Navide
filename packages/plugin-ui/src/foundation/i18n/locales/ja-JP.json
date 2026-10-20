@@ -11486,5 +11486,107 @@
       "enable": "再度有効にする",
       "disable": "再度無効にする"
     }
+  },
+  "marketplace-developer": {
+    "unavailable": "このウィンドウでは Navide マーケットプレイスの開発者機能を使えません。",
+    "view": {
+      "label": "Navide マーケットプレイスの表示",
+      "browse": "閲覧",
+      "developer": "開発者"
+    },
+    "account": {
+      "title": "開発者アカウント",
+      "desc": "Navide Cloud アカウントでサインインすると、開発者の申請、Navide プラグインの公開、審査状況の確認ができます。サインイン情報と署名鍵は Navide がこのコンピュータの安全な保存領域に保管し、エージェントには見えません。",
+      "namespace": "名前空間",
+      "no-namespace": "まだありません（申請が承認されると付与されます）",
+      "key": "署名鍵",
+      "no-key": "公開者として初めてサインインしたときに作成されます",
+      "key-registered": "登録済み",
+      "key-unregistered": "未登録",
+      "expires": "サインインの期限",
+      "sign-in": "Navide Cloud でサインイン",
+      "sign-in-publish": "公開者としてサインイン",
+      "sign-out": "サインアウト",
+      "waiting": "ブラウザーでの操作を待っています…"
+    },
+    "application": {
+      "title": "開発者の申請",
+      "open": "申請を記入",
+      "notice": "送信すると、これらの情報は Navide Cloud の開発者審査に送られ、Navide のスタッフが Navide プラグインを公開できるかを判断します。",
+      "sent": "申請を審査に送りました",
+      "individual": "個人",
+      "organization": "組織",
+      "status": {
+        "none": "まだ申請していません。",
+        "pending": "申請は審査待ちです。",
+        "approved": "承認済み：Navide プラグインを公開できます。",
+        "rejected": "申請は承認されませんでした。",
+        "revoked": "開発者資格は取り消されました。"
+      },
+      "field": {
+        "applicant_type": "申請区分",
+        "legal_name": "法的氏名",
+        "display_name": "表示名",
+        "contact_email": "連絡先メール",
+        "country": "国（ISO コード、例: TW）",
+        "intended_namespace": "希望する名前空間",
+        "description": "公開する予定の内容",
+        "agreed_terms": "Navide マーケットプレイスの開発者規約に同意します",
+        "organization_name": "組織名",
+        "organization_id": "組織の登録番号",
+        "website": "ウェブサイト",
+        "source_url": "作品またはソースコードのリンク",
+        "needs_native_backend": "Navide プラグインにネイティブバックエンドが必要",
+        "domain": "確認するドメイン"
+      }
+    },
+    "form": {
+      "developer-application": "開発者の申請",
+      "publish": "Navide プラグインのバージョンを公開",
+      "publish-yank": "公開済みバージョンの取り下げ（yank）",
+      "from-link": "このフォームは Navide の外のリンク（ターミナルなど）から開かれました。送信前にパッケージを確認してください。",
+      "agent-opened": "{agent} が開きました。ご自身で記入してください。送信するまで何も送られません。",
+      "agent-filled": "{agent} が記入しました。「エージェントが記入」と表示された欄はその下書きです。確認して修正してください。送信するまで何も送られません。",
+      "by-agent": "エージェントが記入",
+      "submit": "送信",
+      "cancel": "キャンセル"
+    },
+    "publish": {
+      "open": "バージョンを公開",
+      "sign-in-first": "先に公開者としてサインインしてください。Navide が保管している鍵でパッケージに署名してアップロードします。",
+      "choose": ".vsix パッケージを選択…",
+      "package": "Navide プラグイン",
+      "file": "ファイル",
+      "digest": "SHA-256",
+      "target": "プラットフォームのターゲット",
+      "changelog-hint": "リリースノートはパッケージの CHANGELOG.md に書いてください。Navide マーケットプレイスに表示され、パッケージと一緒に署名されます。",
+      "submit": "署名して審査に送る",
+      "sent": "{plugin} {version} を審査に送りました"
+    },
+    "yank": {
+      "title": "このバージョンを取り下げますか？",
+      "notice": "取り下げ（yank）ると、すべてのプラットフォームで新規インストールできなくなります。インストール済みの人には影響しません。",
+      "version": "バージョン",
+      "submit": "取り下げ",
+      "confirm": "{plugin} {version} を Navide マーケットプレイスから取り下げますか？",
+      "done": "{plugin} {version} を取り下げました"
+    },
+    "versions": {
+      "title": "公開したバージョン",
+      "refresh": "再読み込み",
+      "empty": "まだバージョンはありません。",
+      "state": "審査",
+      "status": {
+        "pending": "審査待ち",
+        "approved": "承認済み",
+        "rejected": "却下",
+        "yanked": "取り下げ済み"
+      }
+    },
+    "error": {
+      "not-signed-in": "先に「開発者アカウント」でサインインしてください。",
+      "qualification": "開発者の申請が承認されている必要があります。",
+      "registry": "Navide マーケットプレイスが拒否しました（{status} {code}）：{message}"
+    }
   }
 }

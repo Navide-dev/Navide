@@ -41,7 +41,7 @@ export interface DeveloperAccountDeps {
 
 const NOT_SIGNED_IN = { detail: { code: 'NOT_SIGNED_IN', message: 'sign in as a developer under Settings > Navide Marketplace > Developer' } }
 // Registry tokens and PEM keys: never echoed in an error a caller can show or log.
-const SECRET_TEXT = /\bnv[a-z]_[A-Za-z0-9_-]{8,}|-----BEGIN [A-Z ]*KEY-----[\s\S]*?-----END [A-Z ]*KEY-----/g
+const SECRET_TEXT = /\bnv[a-z]_[A-Za-z0-9_-]{8,}|-----BEGIN [A-Z ]*KEY-----[\s\S]*?(?:-----END [A-Z ]*KEY-----|$)/g
 
 export function redactDeveloperSecrets(text: string): string {
   return text.replace(SECRET_TEXT, '[redacted]')
@@ -200,8 +200,8 @@ export class DeveloperAccount {
       const { code, message } = registryError(res.body)
       throw new Error(`the signing key was not registered (${res.status}${code ? ` ${code}` : ''}): ${message}`)
     }
-    const reported = (res.body as { public_key_fingerprint?: unknown }).public_key_fingerprint
-    this.deps.vault.markKeyRegistered(base, typeof reported === 'string' ? reported : publicKeyFingerprint(publicKeyPem))
+    // The key this Navide sent is the one registered, whatever format the Registry reports its fingerprint in.
+    this.deps.vault.markKeyRegistered(base, publicKeyFingerprint(publicKeyPem))
     return this.state()
   }
 
@@ -284,7 +284,8 @@ export class DeveloperAccount {
     const digest = packageDigest(bytes)
     const signature = signPackageDigest(digest, this.deps.vault.signingKey(base).privateKeyPem)
     const form = new FormData()
-    form.append('package', new Blob([bytes], { type: 'application/zip' }), fileName)
+    // A copy backed by a plain ArrayBuffer: a Blob part may not be a SharedArrayBuffer view.
+    form.append('package', new Blob([new Uint8Array(bytes)], { type: 'application/zip' }), fileName)
     const query = new URLSearchParams({ target, signature })
     const res = await this.registryFetch(`/api/publish?${query}`, { method: 'POST', body: form }, 'publisher')
     return { ...res, digest }
