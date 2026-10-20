@@ -234,11 +234,57 @@ def test_an_expired_period_refuses_at_once_and_the_sweep_reclaims_the_namespace(
     assert reclaim["actor"] == "system:grandfather-expired"
     assert reclaim["target"] == f"member:{MEMBER}"
     assert ("namespace.freeze", "system:grandfather-expired") in {(r["action"], r["actor"]) for r in rows}
+    # The owner is told why, on the dashboard.
+    page = client.get("/publisher/mei-tools").text
+    assert "This namespace was frozen on" in page
+    assert "30-day grace period" in page and "qualification-revoked" in page
+    assert "claim a new namespace" in page
     # The account may still apply; it keeps its account token.
     assert apply(client, account).status_code == 201
     # A second sweep finds nothing more to reclaim.
     with Session(_engine(client)) as session:
         assert qualification.reclaim_expired(session) == []
+
+
+def test_an_application_filed_after_the_deadline_does_not_revive_the_namespace(client):
+    """S8 R-MED-2: applying once the grace period is over must not bring the
+    namespace back, and the sweep still reclaims it."""
+    token = grandfathered_publisher(client, until=_now() - timedelta(days=5))
+    client.app.state.registry.grandfather_swept_at = 10**12  # no sweep yet
+    assert apply(client, account_token(client)).status_code == 201
+    assert _publisher(client).grandfather_paused_at is None
+    resp = publish(client, token, package_for("mei-tools", "hello"))
+    assert resp.status_code == 403 and resp.json()["detail"]["code"] == "QUALIFICATION_REQUIRED"
+    _sweep(client)
+    assert _publisher(client).frozen_at is not None
+
+
+def test_reject_and_reapply_cannot_extend_the_grace_period_forever(client):
+    """S8 R-MED-2: only the first application filed inside the period pauses
+    it; after a rejection the clock runs on through every re-application."""
+    token = grandfathered_publisher(client, until=_now() + timedelta(days=3))
+    account = account_token(client)
+    assert apply(client, account).status_code == 201
+    assert admin(client, "reject", reason="Name does not match.").status_code == 200
+    assert apply(client, account).status_code == 201
+    assert _publisher(client).grandfather_paused_at is None
+    # The resumed period runs out while the second application waits.
+    with Session(_engine(client)) as session:
+        publisher = session.exec(select(Publisher).where(Publisher.name == "mei-tools")).one()
+        publisher.grandfather_until = _now() - timedelta(minutes=1)
+        session.add(publisher)
+        session.commit()
+    client.app.state.registry.grandfather_swept_at = 10**12
+    resp = publish(client, token, package_for("mei-tools", "hello"))
+    assert resp.status_code == 403 and resp.json()["detail"]["code"] == "QUALIFICATION_REQUIRED"
+    _sweep(client)
+    publisher = _publisher(client)
+    assert publisher.frozen_at is not None
+    assert "30-day grace period" in publisher.frozen_reason
+    # Approving the late application later gives the namespace back only
+    # through a new claim; the reclaimed one stays frozen.
+    assert admin(client, "approve").status_code == 200
+    assert _publisher(client).frozen_at is not None
 
 
 def test_an_approved_owner_is_never_reclaimed(client):

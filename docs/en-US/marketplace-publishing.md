@@ -224,10 +224,47 @@ choose **Restart Plugin**.
 
 ## 4. Publish to the Marketplace
 
+### Apply for developer qualification
+
+Only an approved developer can claim a namespace or get a publish token.
+Apply once per Navide account, at **Developer application**
+(`/developer/apply`) or from Navide. The application is real-name (legal
+name, contact email, country, the namespace you intend to claim, what you
+will publish); reviewers and you see those details, the Marketplace shows
+only your display name. Review checks who is publishing and that you can be
+reached, never which permissions your plugins ask for. A rejection comes with
+a reason and you can apply again.
+
+Revoking a qualification freezes every namespace of the account, revokes all
+of its tokens and signing keys, takes every version down and blocks their
+package digests as `qualification-revoked`. The reason is shown on each
+namespace's dashboard.
+
+#### Namespaces claimed before developer qualification existed
+
+A namespace you claimed before qualification existed keeps publishing for a
+30-day grace period while you apply. Your namespace's dashboard shows the
+deadline and warns in the last seven days.
+
+- Your **first** application, submitted **before** the deadline, pauses the
+  period until it is decided. If it is approved, the grace period no longer
+  applies. If it is rejected, the period resumes with the days it had left.
+- Nothing else pauses it. An application submitted after the deadline, or a
+  new application after a rejection, leaves the clock running.
+- When the period runs out with no approved qualification and no paused
+  application, publishing is refused at once and the namespace is reclaimed
+  within minutes: it is frozen, its tokens and signing key are revoked, every
+  version is taken down and their digests are blocked as
+  `qualification-revoked`. The dashboard shows when and why.
+- A reclaimed namespace is **not** released and is **not** unfrozen by a later
+  approval. It stays in your account and still counts toward the three
+  namespaces an account can hold. After approval, claim a new namespace.
+
 ### Sign in and claim a namespace
 
 1. Open <https://server.navide.dev/registry/publish> and sign in with your
-   Navide account.
+   Navide account, and make sure your developer qualification is approved
+   (above).
 2. Open **Claim a namespace** (`/publisher/claim`), check a name and claim it.
    Namespaces are first come, first served; reserved words (`navide`,
    `official`, …) and look-alikes of an existing namespace are refused, and an

@@ -482,12 +482,14 @@ approved by default.
 
 - **Grandfathered namespaces** (migration 13): a namespace self-claimed before
   qualification existed keeps publishing for 30 days from the migration
-  (`publisher.grandfather_until`) while its owner applies. A pending
-  application pauses the period; a rejection resumes it, extended by the
-  pending time. `GET /api/publisher/me` reports `grandfather: {until, paused,
+  (`publisher.grandfather_until`) while its owner applies. The owner's first
+  application, filed before the deadline, pauses the period; a rejection
+  resumes it, extended by the pending time. Nothing else pauses it — an
+  application filed after the deadline or a re-application after a rejection
+  leaves the clock running — so the period cannot be stretched indefinitely. `GET /api/publisher/me` reports `grandfather: {until, paused,
   days_left, remind, expired}` (null when none applies) and the dashboard shows
-  it, as a warning in the last 7 days. Past the deadline with no approved or
-  pending application, publishing is refused at once and a sweep (at most every
+  it, as a warning in the last 7 days. Past the deadline with no approved owner and
+  no paused application, publishing is refused at once and a sweep (at most every
   10 minutes, on request traffic) reclaims the namespace the way a revocation
   tears one down, audited as `namespace.reclaim` by
   `system:grandfather-expired`; the account keeps its account token and may

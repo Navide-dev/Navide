@@ -25,6 +25,7 @@ becomes the Marketplace version without a reinstall.
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -32,13 +33,12 @@ from sqlalchemy import func, insert, literal, update
 from sqlalchemy import select as sa_select
 from sqlmodel import Session, select
 
-from . import blocklist
+from . import blocklist, review
 from .disclosure import sign_disclosure
 from .models import (
     Extension,
     ExtensionReport,
     ExtensionVersion,
-    Publisher,
     TestplaceCode,
     TestplaceInvite,
 )
@@ -505,17 +505,30 @@ def approve_promotion(
     version: str,
     reviewer: str,
     artifacts: list[str],
+    acknowledge_secret_findings: bool = False,
+    inspected_native_backend: bool = False,
+    rescan: Callable[[ExtensionVersion], dict | None] | None = None,
 ) -> list[ExtensionVersion]:
     """Re-sign the same artifacts (digest unchanged) on the channel their
-    SemVer implies, without an expiry, and make them public."""
+    SemVer implies, without an expiry, and make them public. The approval
+    passes exactly the checks a pending stable submission does
+    (`review.check_approvable`: blocklist, pack nesting, similarity, the
+    secret and native backend confirmations, a rescan), since a testplace
+    build itself only had the automatic checks."""
     rows = _requested_rows(session, extension, version, artifacts)
-    publisher = session.get(Publisher, extension.publisher_id)
-    publisher_id = publisher.name if publisher else extension.namespace
-    reason = signer.block_reason(
-        publisher_id=publisher_id, package_id=extension.identity, version=version
-    )
-    if reason is not None:
-        raise TestplaceError("BLOCKED", reason, status=409)
+    try:
+        publisher_id, scans = review.check_approvable(
+            session,
+            signer,
+            extension=extension,
+            version=version,
+            rows=rows,
+            acknowledge_secret_findings=acknowledge_secret_findings,
+            inspected_native_backend=inspected_native_backend,
+            rescan=rescan,
+        )
+    except review.ReviewError as exc:
+        raise TestplaceError("REVIEW_REFUSED", str(exc), status=409) from exc
     previously_public = [
         v.version
         for v in session.exec(
@@ -552,12 +565,16 @@ def approve_promotion(
         )
         row.registry_envelope = envelope
         row.registry_signature = signature
+        if rescan is not None:
+            row.scan = scans[row.id]
         row.disclosure, row.disclosure_envelope, row.disclosure_signature = sign_disclosure(
             signer, row.manifest or {}, envelope, row.scan
         )
         row.trust_tier = compute_trust_tier(signed=True)
         row.channel = channel
         row.expires_at = None
+        row.reviewed_at = now
+        row.reviewed_by = reviewer
         row.promotion_status = APPROVED
         row.promotion_reviewed_at = now
         row.promotion_reviewed_by = reviewer

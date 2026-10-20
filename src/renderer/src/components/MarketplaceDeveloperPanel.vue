@@ -324,6 +324,7 @@ onMounted(() => {
           {{ $t('marketplace-developer.form.agent-filled', { agent: requesterName }) }}
           <div v-if="reasonText" class="dev-reason">{{ $t('plugin-request.reason') }}: {{ reasonText }}</div>
         </template>
+        <div v-if="form.requester?.tainted === true" class="dev-tainted" data-testid="developer-form-tainted">{{ $t('plugin-request.tainted') }}</div>
       </div>
 
       <template v-if="form.form === 'developer-application'">
@@ -445,6 +446,7 @@ onMounted(() => {
 .dev-muted { margin: 0; color: var(--text-secondary); font-size: var(--font-xs); }
 .dev-notice { margin: 0; font-size: var(--font-xs); color: var(--text-primary); }
 .dev-callout { border-left: 3px solid var(--accent-fg); padding: var(--space-2) var(--space-3); background: var(--accent-subtle); font-size: var(--font-xs); }
+.dev-tainted { margin-top: var(--space-1, 4px); color: var(--risk-fg, var(--text-primary)); font-weight: 600; }
 .dev-reason { margin-top: var(--space-1, 4px); white-space: pre-wrap; color: var(--text-secondary); }
 .dev-facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1, 4px) var(--space-3); margin: 0; font-size: var(--font-xs); }
 .dev-facts dt { color: var(--text-secondary); }
