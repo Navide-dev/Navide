@@ -73,6 +73,7 @@ import {
   type DeveloperFolderLoadedBy,
   type DeveloperFolderLoadTrigger,
 } from './pluginDeveloperFolderMeta'
+import { watchDeveloperFolder, type FolderWatch, type WatchDeveloperFolder } from './pluginDeveloperWatch'
 import {
   currentPluginHostTarget,
   isPluginTargetCompatible,
@@ -531,6 +532,11 @@ export interface PluginUpdateInfo {
   permissionChange?: 'more' | 'same'
 }
 
+export type DeveloperFolderEvent =
+  | { pluginId: string; kind: 'reloaded' }
+  | { pluginId: string; kind: 'needs-consent' }
+  | { pluginId: string; kind: 'reload-failed'; error: string }
+
 export interface PluginTrustRefreshController {
   refreshRegistryTrust(): Promise<{
     decisions: Array<{ pluginId: string; action: 'allow' | 'quarantine'; reason?: string }>
@@ -637,6 +643,14 @@ export interface PluginIpcOptions {
   /** Card K4: the Host's own folder dialog, parented to the window that
    * asked. Absent, loading from a folder is unavailable. */
   pickDeveloperFolder?: (event: IpcMainInvokeEvent) => Promise<string | null>
+  /** DESIGN-A2 G1: watch a loaded developer folder for automatic reload.
+   *  Defaults to a recursive file system watch. */
+  watchDeveloperFolder?: WatchDeveloperFolder
+  /** DESIGN-A2 G1: an automatic reload ran (`reloaded`), stopped because the
+   *  permissions or backend changed (`needs-consent`; nothing is loaded until
+   *  the user consents again), or could not read the folder and kept the
+   *  running version (`reload-failed`). */
+  onDeveloperFolderEvent?: (event: DeveloperFolderEvent) => void
   /** The static scan run on a package installed from a file (the scanner the
    * Registry and `navide-plugin scan` share). Absent, the consent dialog says
    * the scan is not available. Never decides the install. */
@@ -2892,7 +2906,95 @@ export function registerPluginIpc(
     }
   }
 
+  // ---- DESIGN-A2 G1: automatic reload on file change ----
+  // A loaded folder whose record says autoReload (on unless the user turned
+  // it off) is watched while Developer Mode is on. A change runs the same
+  // checks as the Reload button: same permissions and backend reload it with
+  // no consent; anything else unloads it and waits for the user's consent in
+  // the main window, however often files change. A folder that cannot be read
+  // mid-edit keeps its running version. One reload runs at a time per folder,
+  // and changes made during it run one more.
+  const folderWatches = new Map<string, FolderWatch>()
+  const autoReloadRuns = new Map<string, { again: boolean }>()
+  const autoReloading = new Set<string>()
+  const reloadErrors = new Map<string, string>()
+  const startFolderWatch = options.watchDeveloperFolder ?? watchDeveloperFolder
+  const stopWatchingFolder = (pluginId: string): void => {
+    folderWatches.get(pluginId)?.close()
+    folderWatches.delete(pluginId)
+  }
+  const syncFolderWatch = (pluginId: string): void => {
+    const consent = developerMode.folder(pluginId)
+    const loaded = manager.listInstalledPackages().some(
+      (pkg) => pkg.id === pluginId && pkg.provenance === 'developer-local-unpacked',
+    )
+    if (!consent || !loaded || !developerModeOn() || !folderMeta.get(pluginId, consent.path).autoReload) {
+      stopWatchingFolder(pluginId)
+      return
+    }
+    if (folderWatches.has(pluginId)) return
+    try {
+      folderWatches.set(pluginId, startFolderWatch(consent.path, () => scheduleAutoReload(pluginId)))
+    } catch (error) {
+      console.warn(`[plugins] cannot watch developer folder ${consent.path}: ${errorText(error)}`)
+    }
+  }
+  const autoReloadDeveloperFolder = async (pluginId: string): Promise<void> => {
+    const consent = developerMode.folder(pluginId)
+    if (!consent || !developerModeOn()) return
+    let described: ReturnType<typeof describeFolder>
+    try {
+      described = describeFolder(consent.path)
+    } catch (error) {
+      reloadErrors.set(pluginId, errorText(error))
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: errorText(error) })
+      return
+    }
+    reloadErrors.delete(pluginId)
+    if (described.pluginId !== pluginId || described.permissionsDigest !== consent.permissionsDigest) {
+      stopWatchingFolder(pluginId)
+      await unloadDeveloperFolder(pluginId)
+      preparedFolders.set(described.pluginId, { dir: consent.path, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'needs-consent' })
+      return
+    }
+    autoReloading.add(pluginId)
+    try {
+      await unloadDeveloperFolder(pluginId)
+      activateDeveloperFolder(pluginId, 'auto-reload')
+    } catch (error) {
+      reloadErrors.set(pluginId, errorText(error))
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: errorText(error) })
+      return
+    } finally {
+      autoReloading.delete(pluginId)
+    }
+    options.onDeveloperFolderEvent?.({ pluginId, kind: 'reloaded' })
+  }
+  const scheduleAutoReload = (pluginId: string): void => {
+    const running = autoReloadRuns.get(pluginId)
+    if (running) {
+      running.again = true
+      return
+    }
+    const run = { again: false }
+    autoReloadRuns.set(pluginId, run)
+    void (async () => {
+      try {
+        do {
+          run.again = false
+          await autoReloadDeveloperFolder(pluginId)
+        } while (run.again && folderWatches.has(pluginId))
+      } catch (error) {
+        console.warn(`[plugins] automatic reload of ${pluginId} failed: ${errorText(error)}`)
+      } finally {
+        autoReloadRuns.delete(pluginId)
+      }
+    })()
+  }
+
   const unloadDeveloperFolder = async (pluginId: string): Promise<void> => {
+    if (!autoReloading.has(pluginId)) stopWatchingFolder(pluginId)
     const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
     if (installed?.provenance !== 'developer-local-unpacked') return
     await revokeInstalledPackageRuntime(manager, pluginsRoot, pluginId)
@@ -2929,6 +3031,7 @@ export function registerPluginIpc(
       })
     }
     folderMeta.recordLoad(pluginId, consent.path, { at: new Date().toISOString(), trigger })
+    syncFolderWatch(pluginId)
     return true
   }
 
@@ -2941,6 +3044,7 @@ export function registerPluginIpc(
       ...(({ loadedBy, autoReload, lastLoad }) => ({ loadedBy, autoReload, ...(lastLoad ? { lastLoad } : {}) }))(
         folderMeta.get(folder.pluginId, folder.path),
       ),
+      ...(reloadErrors.has(folder.pluginId) ? { reloadError: reloadErrors.get(folder.pluginId) } : {}),
       loaded: manager.listInstalledPackages().some(
         (pkg) => pkg.id === folder.pluginId && pkg.provenance === 'developer-local-unpacked',
       ),
@@ -2969,6 +3073,8 @@ export function registerPluginIpc(
       manager.recordDeveloperModeChange(enabled, hostAppVersion())
       if (!developerModeOn()) {
         for (const folder of developerMode.folders()) await unloadDeveloperFolder(folder.pluginId)
+        for (const pluginId of [...folderWatches.keys()]) stopWatchingFolder(pluginId)
+        reloadErrors.clear()
       } else {
         await loadDeveloperFolders('developer-mode-on')
       }
@@ -3102,6 +3208,18 @@ export function registerPluginIpc(
     return { reloaded: true, requiresConsent: false }
   })
 
+  // G1: the per-folder automatic reload switch, on by default.
+  ipcMain.handle('plugins:setDeveloperFolderAutoReload', async (event, args: { id?: unknown; enabled?: unknown } | null) => {
+    assertAuthorized(event)
+    const id = typeof args?.id === 'string' ? args.id : ''
+    if (typeof args?.enabled !== 'boolean') throw new Error('invalid automatic reload switch value')
+    const consent = developerMode.folder(id)
+    if (!consent) throw new Error(`${id} is not a developer folder`)
+    folderMeta.setAutoReload(id, consent.path, args.enabled)
+    syncFolderWatch(id)
+    return developerModeState()
+  })
+
   ipcMain.handle('plugins:removeDeveloperFolder', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     const id = typeof args?.id === 'string' ? args.id : ''
@@ -3113,6 +3231,8 @@ export function registerPluginIpc(
     }
     developerMode.forget(id)
     folderMeta.forget(id)
+    stopWatchingFolder(id)
+    reloadErrors.delete(id)
     return developerModeState()
   })
 
@@ -4186,6 +4306,7 @@ export function registerPluginIpc(
       // it again. The folder itself is never touched.
       developerMode.forget(id)
       folderMeta.forget(id)
+      stopWatchingFolder(id)
       // HIGH-3: kept data remembers whose it is, so only an install of the
       // same source takes it over. If that cannot be recorded, the data is
       // set aside instead of being left for any later install of the id.

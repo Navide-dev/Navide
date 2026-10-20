@@ -1448,6 +1448,19 @@ contextBridge.exposeInMainWorld('agentTeam', {
     > => ipcRenderer.invoke('plugins:reloadDeveloperPlugin', { id }),
     removeDeveloperFolder: (id: string): Promise<DeveloperModeState> =>
       ipcRenderer.invoke('plugins:removeDeveloperFolder', { id }),
+    /** DESIGN-A2 G1: reload a developer folder when its files change (on by default). */
+    setDeveloperFolderAutoReload: (id: string, enabled: boolean): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:setDeveloperFolderAutoReload', { id, enabled }),
+    onDeveloperFolderEvent: (
+      handler: (event: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string }) => void,
+    ): (() => void) => {
+      const listener = (
+        _event: unknown,
+        folderEvent: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string },
+      ): void => handler(folderEvent)
+      ipcRenderer.on('plugins:developerFolderEvent', listener)
+      return () => ipcRenderer.removeListener('plugins:developerFolderEvent', listener)
+    },
     selfHostedQuarantine: (): Promise<Array<{ id: string; version: string | null }>> =>
       ipcRenderer.invoke('plugins:selfHostedQuarantine'),
     /** Testplace (W5b): the tests the user joined, join by invite or test code, leave. */

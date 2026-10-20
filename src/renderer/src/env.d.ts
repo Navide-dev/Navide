@@ -513,6 +513,10 @@ declare global {
           | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
         >
         removeDeveloperFolder?: (id: string) => Promise<DeveloperModeState>
+        setDeveloperFolderAutoReload?: (id: string, enabled: boolean) => Promise<DeveloperModeState>
+        onDeveloperFolderEvent?: (
+          handler: (event: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string }) => void,
+        ) => () => void
         selfHostedQuarantine?: () => Promise<Array<{ id: string; version: string | null }>>
         testplaceList?: () => Promise<TestplaceListing[]>
         testplaceJoin?: (code: string) => Promise<{ id: string }>
@@ -914,6 +918,8 @@ declare global {
         | { kind: 'agent'; callerKind: string; paneName?: string; approvedAt: string }
         | { kind: 'unknown' }
       autoReload?: boolean
+      /** G1: the last automatic reload could not read the folder; the running version stays. */
+      reloadError?: string
       lastLoad?: {
         at: string
         trigger: 'user-load' | 'manual-reload' | 'auto-reload' | 'startup' | 'developer-mode-on'

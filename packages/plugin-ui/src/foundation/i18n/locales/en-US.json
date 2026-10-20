@@ -1944,6 +1944,17 @@
         "loadedByUser": "Loaded by you",
         "loadedByAgent": "Requested by {requester}; you approved it in the main window ({at})",
         "loadedByUnknown": "Loaded by an unknown party (before Navide recorded it)",
+        "autoReload": "Reload when files change",
+        "lastLoad": "Last loaded {at} ({trigger})",
+        "loadTrigger": {
+          "user-load": "loaded by you",
+          "manual-reload": "reloaded by hand",
+          "auto-reload": "reloaded automatically",
+          "startup": "at startup",
+          "developer-mode-on": "when Developer Mode was turned on"
+        },
+        "reloadFailed": "The latest change could not be loaded; the previous version keeps running: {error}",
+        "autoReloadNeedsConsent": "The permissions or backend of {id} changed, so it was unloaded. Consent again in Settings → Navide Plugins.",
         "removeFolder": "Remove",
         "needsConsent": "Permissions or backend changed; consent again",
         "folderWarning": "This Navide plugin is loaded straight from the folder you picked. Navide has not reviewed it and it is not signed. The folder can change at any time and Navide does not compare its content: you are asked again only when its permissions or backend change.",

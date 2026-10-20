@@ -7,7 +7,7 @@
 // All privileged work is brokered through the main process via
 // `window.agentTeam.plugins`; this component holds no secrets and never touches
 // package bytes.
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
 import type {
@@ -366,6 +366,27 @@ async function restoreFactoryPackage(id: string): Promise<void> {
 const developerMode = ref<DeveloperModeState>({ enabled: false, folders: [] })
 const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>([])
 const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
+/** DESIGN-A2 G1: the developer folder record of a loaded package. */
+function developerFolder(pluginId: string): DeveloperModeState['folders'][number] | undefined {
+  return developerMode.value.folders.find((folder) => folder.pluginId === pluginId)
+}
+function lastLoadText(pluginId: string): string {
+  const lastLoad = developerFolder(pluginId)?.lastLoad
+  if (!lastLoad) return ''
+  return t('settings.extensions.developerMode.lastLoad', {
+    at: new Date(lastLoad.at).toLocaleString(),
+    trigger: t(`settings.extensions.developerMode.loadTrigger.${lastLoad.trigger}`),
+  })
+}
+async function setFolderAutoReload(pluginId: string, enabled: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setDeveloperFolderAutoReload) return
+  try {
+    developerMode.value = await api.setDeveloperFolderAutoReload(pluginId, enabled)
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  }
+}
 /** DESIGN-A2 G3: who had a loaded developer folder loaded, in the wording of agent request cards. */
 function folderLoadedByText(pluginId: string): string {
   const loadedBy = developerMode.value.folders.find((folder) => folder.pluginId === pluginId)?.loadedBy
@@ -505,7 +526,17 @@ watch(() => updateFlow.pendingConfirm.value, (pending) => {
   if (!pending) void refreshDeveloperMode()
 })
 
+// G1: an automatic reload refreshes the list; changed permissions stop it and say so.
+let stopDeveloperFolderEvents: (() => void) | undefined
+onBeforeUnmount(() => stopDeveloperFolderEvents?.())
+
 onMounted(() => {
+  stopDeveloperFolderEvents = pluginsApi()?.onDeveloperFolderEvent?.((folderEvent) => {
+    void refreshDeveloperMode()
+    if (folderEvent.kind === 'needs-consent') {
+      notify.toast(t('settings.extensions.developerMode.autoReloadNeedsConsent', { id: reveal(folderEvent.pluginId) }), { type: 'info' })
+    }
+  })
   void reloadInventory()
   void refreshDisabledStoreStatus()
   void pluginUpdates.refresh()
@@ -772,6 +803,22 @@ watch(installed, () => {
             <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
               {{ folderLoadedByText(p.id) }}
             </p>
+            <!-- G1: reload on file change (on by default), the last load, and a change that could not be read. -->
+            <div v-if="p.provenance === 'developer-local-unpacked' && developerFolder(p.id)" class="ext-card-sub ext-devmode-auto">
+              <label class="ext-devmode-auto-reload">
+                <input
+                  type="checkbox"
+                  :checked="developerFolder(p.id)?.autoReload !== false"
+                  :disabled="busy"
+                  @change="setFolderAutoReload(p.id, ($event.target as HTMLInputElement).checked)"
+                />
+                {{ $t('settings.extensions.developerMode.autoReload') }}
+              </label>
+              <span v-if="lastLoadText(p.id)" class="ext-requires ext-devmode-last-load">{{ lastLoadText(p.id) }}</span>
+              <span v-if="developerFolder(p.id)?.reloadError" class="ext-badge ext-dev-warning ext-devmode-reload-error">
+                {{ $t('settings.extensions.developerMode.reloadFailed', { error: reveal(developerFolder(p.id)?.reloadError ?? '') }) }}
+              </span>
+            </div>
             <!-- D3: remind from 7 days before a test build expires; once kept past it, say so. -->
             <p v-if="p.source === 'testplace' && testplaceDaysLeft(p.expiresAt) !== null" class="ext-disabled-note ext-testplace-expiring" role="status">
               {{ $t('testplace.expiring', { days: testplaceDaysLeft(p.expiresAt), date: (p.expiresAt ?? '').slice(0, 10) }) }}

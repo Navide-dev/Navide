@@ -1944,6 +1944,17 @@
         "loadedByUser": "你自己載入",
         "loadedByAgent": "由 {requester} 提出，你在主視窗核准（{at}）",
         "loadedByUnknown": "載入者不明（在 Navide 開始記錄之前載入）",
+        "autoReload": "檔案變更時自動重新載入",
+        "lastLoad": "上次載入 {at}（{trigger}）",
+        "loadTrigger": {
+          "user-load": "你載入",
+          "manual-reload": "手動重新載入",
+          "auto-reload": "自動重新載入",
+          "startup": "啟動時",
+          "developer-mode-on": "開啟開發者模式時"
+        },
+        "reloadFailed": "最近一次變更無法載入，仍在執行上一版：{error}",
+        "autoReloadNeedsConsent": "{id} 的權限或後端改了，已停止載入；請到「設定 → Navide 外掛」重新同意。",
         "removeFolder": "移除",
         "needsConsent": "權限或後端已變更，需要重新同意",
         "folderWarning": "這個 Navide 外掛直接從你選的資料夾載入，沒有經過 Navide 審核，也沒有簽章。資料夾內容隨時可能變動，Navide 不做內容比對：只有權限或後端宣告改變時才會再問你。",
