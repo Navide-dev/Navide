@@ -40,6 +40,21 @@ The rule behind every term: **name a thing by who owns its files.**
 - Do not introduce "add-on" or "mod" as generic terms. "Claude mod" is a vendor
   term and stays as a type label.
 
+### How the guard test encodes each locale
+
+`glossary.test.ts` keeps one rule set per UI locale (`UI_LOCALES`): the terms
+that need a qualifier, the banned words, phrases that are not about packages
+("file extension") and the name of the CLI extensions page. A locale file with
+no rule set fails the test. Each term also says where its qualifier goes:
+**before** it (en, zh, ja, ko: "Navide plugin", "CLI 확장"), **after** it,
+optionally through a connector word (es, fr, pt, ru, vi: "complemento de
+Navide", "plugin Navide", "расширение CLI"), or **hyphen**-joined (de:
+"Navide-Plug-in", "CLI-Erweiterung"). Matching is Unicode-aware: text and
+patterns are NFC-normalized, word boundaries mean "no letter, digit or
+underscore next to it" in any script, and Latin and Cyrillic terms match
+case-insensitively. vi-VN strings must already be NFC, and fr-FR needs a
+no-break space before `: ; ? !`.
+
 ## What stays as it is
 
 Identifiers are contracts, not prose, and keep their names: the Settings tab ids
