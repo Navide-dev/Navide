@@ -1,6 +1,6 @@
 import { LEGAL_LABELS } from '../shared/legalLinks'
 import type { LegalRoute } from '../shared/legalLinks'
-import type { SupportedLocale } from './hostLocale'
+import { hostStrings, type HostStringTable } from './hostLocale'
 
 /**
  * Native application-menu strings, one table per supported locale.
@@ -57,7 +57,7 @@ export interface MenuStrings {
   legal: Record<LegalRoute, string>
 }
 
-export const MENU_STRINGS: Record<SupportedLocale, MenuStrings> = {
+export const MENU_STRINGS: HostStringTable<MenuStrings> = {
   'en-US': {
     file: 'File',
     edit: 'Edit',
@@ -164,4 +164,9 @@ export const MENU_STRINGS: Record<SupportedLocale, MenuStrings> = {
       legal: '法律資訊'
     }
   }
+}
+
+/** The menu strings for a locale, en-US when it has no table yet. */
+export function menuStringsFor(locale: string): MenuStrings {
+  return hostStrings(MENU_STRINGS, locale)
 }
