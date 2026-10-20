@@ -469,10 +469,7 @@ def prepare(
         return None
     real_vendor = home / spec.vendor_dir
     if agent_key == "grok":
-        try:
-            _record_grok_workspace(pane_id, workspace)
-        except OSError as err:
-            log.warning("could not record grok pane %s's workspace: %s", pane_id, err)
+        _record_grok_workspace(pane_id, workspace)
         # Before this shim is seeded, so it starts from the merged file.
         from ..convenience_wiring import merge_grok_folder_trust_gated
 
@@ -532,10 +529,12 @@ GROK_TRUST_LEDGER = ".folder-trust-merged.json"
 #: Per pane, the rows its copy was seeded with from the user's file: anything
 #: else in the copy is the pane's own decision.
 GROK_TRUST_SEEDS = ".folder-trust-seeds.json"
-#: Per pane Navide started, the working directory it was started in: a folder
-#: the pane trusted leaves its copy only when it is that directory or inside
-#: it, and a shim with no entry here is not merged at all.
-GROK_TRUST_WORKSPACES = ".folder-trust-workspaces.json"
+#: Per pane this backend started, the working directory it was started in,
+#: resolved then: a folder the pane trusted leaves its copy only when it is
+#: that directory or inside it, and a shim with no entry is not merged at all.
+#: Memory only — any file could be rewritten by whatever runs in a pane. After
+#: a restart each pane is recorded again when it is next started.
+_GROK_WORKSPACES: dict[str, dict[str, str]] = {}
 #: Present once the records earlier builds kept beside the shims were copied.
 GROK_TRUST_MIGRATED = ".migrated"
 #: The only keys of a pane's row that reach the user's file.
@@ -574,17 +573,19 @@ def _grok_trust_seeds_path() -> Path:
 def _record_grok_workspace(pane_id: str, workspace: str) -> None:
     """Record the folder the pane is started in, resolved now: a link in it
     changed later must not move what the pane may share."""
-    path = _grok_trust_record(GROK_TRUST_WORKSPACES)
-    workspaces = _read_json_object(path)
     try:
         real = os.path.realpath(workspace, strict=True) if workspace else ""
     except (OSError, ValueError):
         real = ""
     if real:
-        workspaces[pane_id] = {"real": real}
-    elif workspaces.pop(pane_id, None) is None:
-        return
-    _write_json(path, workspaces)
+        _GROK_WORKSPACES[pane_id] = {"real": real}
+    else:
+        _GROK_WORKSPACES.pop(pane_id, None)
+
+
+def forget_grok_workspace(pane_id: str) -> None:
+    """The pane is closed: nothing in its copy is shared any more."""
+    _GROK_WORKSPACES.pop(pane_id, None)
 
 
 def _path_within(path: str, root: str) -> bool:
@@ -697,7 +698,7 @@ def merge_grok_folder_trust(real_vendor: Path) -> None:
     if not real_vendor.is_dir():
         return
     seeds = _read_json_object(_grok_trust_seeds_path())
-    workspaces = _read_json_object(_grok_trust_record(GROK_TRUST_WORKSPACES))
+    workspaces = dict(_GROK_WORKSPACES)
     pending: dict[str, tuple[Any, str]] = {}
     for pane, workspace in sorted(workspaces.items()):
         root = shim_root("grok", pane)

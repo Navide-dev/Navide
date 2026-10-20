@@ -77,8 +77,9 @@ WS = ""
 
 
 @pytest.fixture(autouse=True)
-def workspace(tmp_path: Path) -> Path:
+def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     global WS
+    monkeypatch.setattr(pane_home, "_GROK_WORKSPACES", {})  # this backend has started no pane yet
     ws = tmp_path.resolve() / "work"
     for name in ("a", "b", "dt", "old", "../work-other", "../etc", "../elsewhere"):
         (ws / name).mkdir(parents=True, exist_ok=True)
@@ -386,9 +387,7 @@ def test_navides_records_live_in_its_own_folder_and_old_ones_are_read_once(
     own = tmp_path / "grok-folder-trust"
     assert f"{WS}/a" in json.loads((own / ".folder-trust-merged.json").read_text(encoding="utf-8"))["rows"]
     assert "p1" in json.loads((own / ".folder-trust-seeds.json").read_text(encoding="utf-8"))
-    assert json.loads((own / ".folder-trust-workspaces.json").read_text(encoding="utf-8")) == {
-        "p1": {"real": WS}
-    }
+    assert not (own / ".folder-trust-workspaces.json").exists(), "which pane may share what is never on disk"
     assert (old / ".folder-trust-merged.json").exists(), "the old file is left where it was"
     assert not (old / ".folder-trust-seeds.json").exists()
     _off()
@@ -397,6 +396,70 @@ def test_navides_records_live_in_its_own_folder_and_old_ones_are_read_once(
     (home / ".grok" / TRUST).write_text(block, encoding="utf-8")
     _prepare("p1")
     assert pane_home.grok_trust_ledger_rows() == {}
+
+
+def test_a_forged_workspace_record_on_disk_is_never_read(gate, home: Path, tmp_path: Path) -> None:
+    # R2 §P0 fix review probe: an earlier revision kept the pane → workspace
+    # map in the data folder, where any process of the user's could rewrite it.
+    _prepare("p1")
+    secrets = home / "secrets"
+    secrets.mkdir()
+    for folder in (tmp_path / "grok-folder-trust", pane_home.panes_root() / "grok"):
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / ".folder-trust-workspaces.json").write_text(
+            json.dumps({"p1": {"real": str(secrets)}, "p9": {"real": str(secrets)}}), encoding="utf-8"
+        )
+    _grok_trusts(_shim_trust("p1"), str(secrets))
+
+    _prepare("p2")
+
+    assert not (home / ".grok" / TRUST).exists()
+
+
+def test_records_forged_before_the_upgrade_promote_nothing(gate, home: Path) -> None:
+    # The one-time migration reads the old ledger and seeds from beside the
+    # shims, where anything could have written them. Neither decides what is
+    # shared: seeds only hold rows back, the ledger only lists what to take back.
+    old = pane_home.panes_root() / "grok"
+    old.mkdir(parents=True)
+    root_block = tomli_w.dumps({"folders": {"/": {"trusted": True}}})
+    (old / ".folder-trust-seeds.json").write_text(json.dumps({"p1": {"/": "forged"}}), encoding="utf-8")
+    (old / ".folder-trust-merged.json").write_text(
+        json.dumps({"created": True, "rows": {"/": {"chunk": root_block, "block": root_block, "pane": "p1"}}}),
+        encoding="utf-8",
+    )
+    _prepare("p1")
+    _grok_trusts(_shim_trust("p1"), "/")
+    _grok_trusts(_shim_trust("p1"), str(home))
+
+    _prepare("p2")
+
+    assert not (home / ".grok" / TRUST).exists()
+
+
+def test_a_closed_pane_shares_nothing_more(gate, home: Path) -> None:
+    from agent_team_backend.mcp_server import wiring
+
+    wiring.caller_token("p1")
+    _prepare("p1")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
+
+    wiring.release_pane_token("p1")
+    _prepare("p2")
+
+    assert not (home / ".grok" / TRUST).exists()
+
+
+def test_after_a_restart_a_pane_shares_again_once_it_is_started(gate, home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _prepare("p1")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
+    monkeypatch.setattr(pane_home, "_GROK_WORKSPACES", {})  # a new backend process
+
+    _prepare("p2")
+    assert not (home / ".grok" / TRUST).exists()
+
+    _prepare("p1")
+    assert f"{WS}/a" in _folders(home / ".grok" / TRUST)
 
 
 def test_each_pane_promotes_only_its_own_workspace(gate, home: Path) -> None:
