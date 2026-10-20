@@ -269,9 +269,9 @@ async def marketplace_developer_status(ctx: Context) -> dict[str, Any]:
 async def marketplace_publish_open(ctx: Context, path: str = "") -> dict[str, Any]:
     """Open the Navide Marketplace publish form in Navide for the user.
 
-    Use this when the user wants to publish themselves: call it, then stop and
-    wait for them. `path` optionally brings in a .vsix package (an absolute
-    path); the user chooses the rest and presses Submit. When the user has
+    Use this when the user wants to publish themselves: call it, then
+    stop and wait for them. `path` optionally brings in a .vsix package (an
+    absolute path); the user chooses the rest and presses Submit. When the user has
     not signed in as a developer, Navide shows the sign-in first.
 
     Returns {ok, opened: true, form: "publish", note}.
@@ -398,8 +398,9 @@ async def marketplace_publish_yank_fill(
 ) -> dict[str, Any]:
     """Ask the user to yank one of their published Navide plugin versions, as a draft.
 
-    Use this when the user asked you to yank a version for them. Navide opens
-    the yank form with this version chosen; the user confirms it themselves.
+    Use this when the user asked you to yank a version for them; you need not
+    call marketplace_publish_yank_open first. Navide opens the yank form with
+    this version chosen; the user confirms it there themselves.
     Yanking withdraws the version from new installs on every target.
 
     Returns {ok, approval_id, status: "pending", expires_at, note}; follow it

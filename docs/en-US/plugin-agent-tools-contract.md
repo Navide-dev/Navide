@@ -1479,7 +1479,7 @@ starts as usual.
 | `id` | INTEGER PK | autoincrement |
 | `at` | INTEGER | when |
 | `plugin_id`, `plugin_version` | TEXT | `plugin_version` `''` when not known |
-| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` / `finish-late-completed` / `finish-late-failed` |
+| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` / `finish-late-completed` / `finish-late-failed` / `request-developer-application` / `request-plugin-publish` / `request-plugin-yank` / `request-testplace-invite` / `publish-loopback` |
 | `caller_kind` | TEXT | `pane` / `external` / `host`, or `user` (a person in a Navide window: decide, finish) |
 | `caller_pane_id`, `caller_pane_name`, `caller_workspace` | TEXT | `''` when not a pane |
 | `approval_id` | TEXT | the request's id, `''` when none |

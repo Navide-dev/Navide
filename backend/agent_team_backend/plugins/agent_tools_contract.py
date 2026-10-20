@@ -866,6 +866,9 @@ PLUGIN_AGENT_ACTIONS = (
     "request-enable", "decide-approve", "decide-reject", "finish-completed", "finish-failed",
     # The carrying window's own result, after another window had settled the request.
     "finish-late-completed", "finish-late-failed",
+    # W3: an agent's draft for a main-window form, and O3's upload to a loopback Registry.
+    "request-developer-application", "request-plugin-publish", "request-plugin-yank", "request-testplace-invite",
+    "publish-loopback",
 )
 #: ``user`` is a person in a Navide window (deciding or finishing a request).
 PLUGIN_AGENT_ACTION_CALLER_KINDS = ("pane", "external", "host", "user")
