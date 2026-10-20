@@ -50,8 +50,10 @@ describe('locale message syntax', () => {
 
   it.each(LOCALES)('renders guard.policy.levels in %s with the literal curl | sh', (locale) => {
     const messages = load(localeDirs[0], locale)
-    const i18n = createI18n({ legacy: false, locale, messages: { [locale]: messages } as never })
-    const text = i18n.global.t('guard.policy.levels')
+    const i18n = createI18n({ legacy: false, locale, messages: { [locale]: messages } as Record<string, Record<string, string>> })
+    // The full message tree is too deep for vue-i18n's key typing (TS2589).
+    const { t } = i18n.global as unknown as { t: (key: string) => string }
+    const text = t('guard.policy.levels')
     expect(text).toContain('curl | sh')
     expect(text).toContain('rm -rf')
   })
