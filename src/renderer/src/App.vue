@@ -20673,6 +20673,9 @@ function setPaneAutoName(paneId: string, name: string, source: 'heuristic' | 'll
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || !name) return
   if (pane.customName || pane.nameLocked) return
+  // A pipeline slot pane keeps its slot label: the name is its messaging
+  // handle, and kickoffs address slots by label (#448).
+  if (pane.slotLabel) return
   if (pane.autoName && !(source === 'llm' && pane.autoNameSource !== 'llm')) return
   pane.autoName = name
   pane.autoNameSource = source
@@ -20725,6 +20728,8 @@ function requestLlmPaneName(paneId: string, rawMaterial: string): void {
   const material = stripCliSessionContext(rawMaterial)
   if (!pane || !pane.workspacePath || !material.trim()) return
   if (pane.customName || pane.nameLocked || pane.autoNameSource === 'llm') return
+  // The backend stores the model's title, so a slot pane must not ask (#448).
+  if (pane.slotLabel) return
   if (llmNameRequested.has(paneId)) return
   llmNameRequested.add(paneId)
   void (async () => {
