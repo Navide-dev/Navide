@@ -275,6 +275,7 @@ describe('PluginRegionHost', () => {
     stubPlugins(prepare)
     const wrapper = mount(PluginRegionHost, {
       props: { contribution, workspacePath: '/ws', visible: false },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
     expect(wrapper.find('webview').exists()).toBe(false)
