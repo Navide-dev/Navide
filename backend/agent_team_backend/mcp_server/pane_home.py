@@ -604,9 +604,10 @@ def _trust_in_workspace(folder: Any, workspace: Any) -> bool:
     """Whether a folder a pane trusted is its workspace or inside it.
 
     ``workspace`` is the record _record_grok_workspace made at spawn. The key
-    must be absolute (not ``~``, not a device-namespace path), already in its
-    plain form (no ``.``, ``..`` or repeated separators; one trailing
-    separator is fine), and start with the workspace as resolved at spawn,
+    must be absolute (not ``~``, not a device-namespace path) with no ``.``,
+    ``..`` or empty component (one trailing separator is fine; on Windows
+    ``/`` and ``\\`` both separate, as Grok's own spelling is not known), and,
+    normalised, start with the workspace as resolved at spawn,
     component by component (``/ws-other`` is not inside ``/ws``). The whole
     key must exist and hold no link, so the row names the same folder now and
     later. A workspace that is a drive root, the home folder or a folder above
@@ -619,8 +620,10 @@ def _trust_in_workspace(folder: Any, workspace: Any) -> bool:
     if folder.startswith(("~", "\\\\?\\", "\\\\.\\", "//?/", "//./")) or not os.path.isabs(folder):
         return False
     plain = folder.rstrip("/\\") or folder
-    if os.path.normpath(plain) != plain:
+    components = re.split(r"[/\\]", os.path.splitdrive(plain)[1])
+    if components[0] or any(part in ("", ".", "..") for part in components[1:]):
         return False
+    plain = os.path.normpath(plain)
     home = os.path.realpath(real_home())
     if Path(real).parent == Path(real) or _path_within(home, real):
         return False

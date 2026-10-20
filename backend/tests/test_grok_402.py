@@ -355,6 +355,20 @@ def test_the_home_folder_in_another_case_is_still_refused(gate, home: Path) -> N
     assert not (home / ".grok" / TRUST).exists()
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows takes / and \\ alike")
+def test_a_windows_key_written_with_either_separator_is_shared(gate, home: Path) -> None:
+    forward = WS.replace("\\", "/") + "/a"
+    mixed = WS + "/b"
+    _prepare("p1")
+    _grok_trusts(_shim_trust("p1"), forward)
+    _grok_trusts(_shim_trust("p1"), mixed)
+    _grok_trusts(_shim_trust("p1"), WS + "/b/../a")
+
+    _prepare("p2")
+
+    assert set(_folders(home / ".grok" / TRUST)) == {forward, mixed}
+
+
 def test_only_trusted_and_decided_at_reach_the_users_file(gate, home: Path) -> None:
     _prepare("p1")
     shim = _shim_trust("p1")
