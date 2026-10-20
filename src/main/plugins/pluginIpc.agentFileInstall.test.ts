@@ -275,8 +275,8 @@ describe('MED-5: staged copies live as long as their request', () => {
     register()
     writeFileSync(picked, vsix())
     const stagingId = (await stage(picked)).result!.report.stagingId!
-    expect(stagedFiles()).toEqual([`${stagingId}.vsix`])
-    writeFileSync(join(stagingDir(), `${stagingId}.vsix`), vsix('acme.todo', '1.0.0', '<p>swapped</p>'))
+    expect(stagedFiles()).toEqual([`${sha256Hex(vsix())}.vsix`])
+    writeFileSync(join(stagingDir(), `${sha256Hex(vsix())}.vsix`), vsix('acme.todo', '1.0.0', '<p>swapped</p>'))
     await expect(call('plugins:prepareAgentFileInstall', { stagingId })).rejects.toThrow(/^STAGING_DIGEST_MISMATCH/)
     expect(stagedFiles()).toEqual([])
     expect(call('plugins:listInstalled')).toEqual([])
@@ -290,9 +290,11 @@ describe('MED-5: staged copies live as long as their request', () => {
     const approved = (await stage(picked)).result!.report.stagingId!
     const rejected = (await stage(picked)).result!.report.stagingId!
     const expired = (await stage(picked)).result!.report.stagingId!
+    // Three requests for the same file share one staged copy.
+    expect(stagedFiles()).toEqual([`${sha256Hex(vsix())}.vsix`])
     await call('plugins:prepareAgentFileInstall', { stagingId: approved })
     await call('plugins:discardAgentStaged', { stagingId: rejected })
-    expect(stagedFiles()).toEqual([`${expired}.vsix`])
+    expect(stagedFiles()).toEqual([`${sha256Hex(vsix())}.vsix`])
     vi.setSystemTime(new Date('2026-10-20T10:17:00Z'))
     await expect(call('plugins:prepareAgentFileInstall', { stagingId: expired })).rejects.toThrow(/^AGENT_STAGING_EXPIRED/)
     expect(stagedFiles()).toEqual([])

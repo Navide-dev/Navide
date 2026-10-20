@@ -618,7 +618,13 @@ always installs its own copy. When the request expires the copy is dropped
 and the card reads "This request expired.", not a failure; an approval after
 that installs nothing, and `marketplace_request_status` reports the request
 `expired` (or `failed` with `AGENT_STAGING_EXPIRED` when the window caught
-it). Ask again with `plugins_install_file_fill`. The package's own text (id, version, errors quoting its
+it). Ask again with `plugins_install_file_fill`. Staged copies are files in
+Navide's data folder, one per distinct file however often it is requested.
+There is no count or size quota, but Navide never fills the disk: a request
+whose copy would leave less than 5 GiB free (or that runs out of space while
+writing) is refused with `STAGING_DISK_LOW`, naming the free space and the
+file's size, and nothing is written; copies staged earlier and their cards
+are not touched. The package's own text (id, version, errors quoting its
 manifest, the disclosure) is fenced as above and marks the reading pane.
 `plugins_list_installed` also returns each item's `source` (`marketplace`,
 `prerelease`, `testplace`, `local-signed`, `local-unsigned`,

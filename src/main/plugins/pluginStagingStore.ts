@@ -7,6 +7,11 @@
 // when it expires (`ttlMs`), and an expired id is remembered so its form or
 // card can say "expired" instead of failing.
 //
+// Copies of the same bytes share one file (named by its digest, counted per
+// entry), and no copy is written that would leave the disk with less than
+// MIN_FREE_BYTES: such a request is refused with STAGING_DISK_LOW and nothing
+// staged before it is touched. That protects the machine; it is not a quota.
+//
 // The folder lives under Navide's own data folder, where an agent tool cannot
 // name a path (pluginLocalPackageTools' protected roots). A process of the
 // same user can still write there, which the digest check turns into a
@@ -16,6 +21,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import {
   closeSync,
   constants,
+  existsSync,
   fstatSync,
   mkdirSync,
   openSync,
@@ -23,11 +29,23 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  statfsSync,
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
 
-const STAGED_FILE = /^[0-9a-f]{32}\.vsix(?:\.tmp)?$/
+const STAGED_FILE = /^[0-9a-f]{64}\.vsix(?:\.[0-9a-f]{16}\.tmp)?$/
+/** A staged write never leaves the disk with less free space than this. */
+export const MIN_FREE_BYTES = 5 * 1024 * 1024 * 1024
+
+const GIB = 1024 * 1024 * 1024
+const gib = (bytes: number): string => `${(bytes / GIB).toFixed(2)} GiB`
+
+/** Free bytes for an unprivileged writer on the file system holding `path`. */
+export function diskFreeBytes(path: string): number {
+  const stat = statfsSync(path)
+  return Number(stat.bavail) * Number(stat.bsize)
+}
 /** How long an expired id is remembered after its copy is gone. */
 const EXPIRED_MEMORY_MS = 24 * 60 * 60 * 1000
 
@@ -41,17 +59,21 @@ export interface StagedEntry<M> {
 export class PackageStagingStore<M> {
   private readonly entries = new Map<string, { digest: string | null; at: number; meta: M }>()
   private readonly expired = new Map<string, number>()
+  /** Entries per staged file, by digest. */
+  private readonly references = new Map<string, number>()
 
   /**
    * @param root folder for the staged files, created owner-only; leftovers of
    *   an earlier run are removed (their requests did not survive it).
    * @param expiredCode prefix of the error a late use of an expired id gets.
+   * @param freeBytes the free space the disk check reads (tests inject it).
    */
   constructor(
     private readonly root: string,
     private readonly ttlMs: number,
     private readonly expiredCode: string,
     private readonly now: () => number = () => Date.now(),
+    private readonly freeBytes: () => number = () => diskFreeBytes(root),
   ) {
     mkdirSync(root, { recursive: true, mode: 0o700 })
     for (const name of readdirSync(root)) {
@@ -59,13 +81,41 @@ export class PackageStagingStore<M> {
     }
   }
 
-  private file(id: string): string {
-    return join(this.root, `${id}.vsix`)
+  private file(digest: string): string {
+    return join(this.root, `${digest}.vsix`)
   }
 
+  /** Forget an entry; its file goes with the last entry that used it. */
   private drop(id: string): void {
+    const digest = this.entries.get(id)?.digest ?? null
     this.entries.delete(id)
-    rmSync(this.file(id), { force: true })
+    if (digest === null) return
+    const left = (this.references.get(digest) ?? 1) - 1
+    if (left > 0) {
+      this.references.set(digest, left)
+      return
+    }
+    this.references.delete(digest)
+    rmSync(this.file(digest), { force: true })
+  }
+
+  /** Write a new staged file, refusing one that would leave too little disk. */
+  private write(digest: string, bytes: Uint8Array): void {
+    const lowDisk = (free: number): Error =>
+      new Error(`STAGING_DISK_LOW: ${gib(free)} free on the disk holding Navide's data, and this package is ${gib(bytes.byteLength)}; ` +
+        `Navide keeps at least ${gib(MIN_FREE_BYTES)} free, so nothing was staged. Free some space and ask again`)
+    const free = this.freeBytes()
+    if (free - bytes.byteLength < MIN_FREE_BYTES) throw lowDisk(free)
+    const temporary = `${this.file(digest)}.${randomBytes(8).toString('hex')}.tmp`
+    try {
+      writeFileSync(temporary, bytes, { mode: 0o600, flag: 'wx' })
+      renameSync(temporary, this.file(digest))
+    } catch (error) {
+      // Never leave half a copy behind.
+      rmSync(temporary, { force: true })
+      if ((error as NodeJS.ErrnoException).code === 'ENOSPC') throw lowDisk(this.freeBytes())
+      throw error
+    }
   }
 
   /** Remove every expired copy now. */
@@ -86,9 +136,10 @@ export class PackageStagingStore<M> {
     let digest: string | null = null
     if (bytes !== null) {
       digest = createHash('sha256').update(bytes).digest('hex')
-      const temporary = `${this.file(id)}.tmp`
-      writeFileSync(temporary, bytes, { mode: 0o600, flag: 'wx' })
-      renameSync(temporary, this.file(id))
+      // The same bytes already staged: share that file (rewritten if a
+      // refused copy took it away meanwhile).
+      if (!this.references.has(digest) || !existsSync(this.file(digest))) this.write(digest, bytes)
+      this.references.set(digest, (this.references.get(digest) ?? 0) + 1)
     }
     this.entries.set(id, { digest, at: this.now(), meta })
     return { id, digest }
@@ -115,7 +166,7 @@ export class PackageStagingStore<M> {
     if (entry.digest === null) return { bytes: null, digest: null, meta: entry.meta }
     let bytes: Uint8Array
     try {
-      const fd = openSync(this.file(id), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+      const fd = openSync(this.file(entry.digest), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
       try {
         if (!fstatSync(fd).isFile()) throw new Error('not a regular file')
         bytes = new Uint8Array(readFileSync(fd))
@@ -127,6 +178,8 @@ export class PackageStagingStore<M> {
       throw new Error(`STAGING_DIGEST_MISMATCH: the staged copy cannot be read (${error instanceof Error ? error.message : String(error)}); ask again`)
     }
     if (createHash('sha256').update(bytes).digest('hex') !== entry.digest) {
+      // The file is bad for every entry sharing it; each refuses it on use.
+      rmSync(this.file(entry.digest), { force: true })
       this.drop(id)
       throw new Error('STAGING_DIGEST_MISMATCH: the staged copy changed on disk; nothing was used. Ask again')
     }

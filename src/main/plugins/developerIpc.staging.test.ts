@@ -63,7 +63,7 @@ describe('developer publish stages (MED-5)', () => {
     register()
     const tampered = await call('developer:stagePackage', vsixAt(1)) as { stageId: string }
     const late = await call('developer:stagePackage', vsixAt(2)) as { stageId: string }
-    writeFileSync(join(stagingRoot(), `${tampered.stageId}.vsix`), 'swapped')
+    writeFileSync(join(stagingRoot(), `${createHash('sha256').update('package 1').digest('hex')}.vsix`), 'swapped')
     await expect(call('developer:publish', { stageId: tampered.stageId })).rejects.toThrow(/^STAGING_DIGEST_MISMATCH/)
     vi.setSystemTime(new Date('2026-10-20T11:01:00Z'))
     await expect(call('developer:publish', { stageId: late.stageId })).rejects.toThrow(/^PUBLISH_STAGE_EXPIRED/)

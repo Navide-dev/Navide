@@ -1,16 +1,26 @@
+import { createHash } from 'node:crypto'
+import * as fs from 'node:fs'
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { PackageStagingStore } from './pluginStagingStore'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MIN_FREE_BYTES, PackageStagingStore } from './pluginStagingStore'
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return { ...actual, writeFileSync: vi.fn(actual.writeFileSync) }
+})
 
 let root = ''
 let clock = 0
-const store = () => new PackageStagingStore<{ name: string }>(root, 1000, 'TEST_EXPIRED', () => clock)
+let free = 100 * 1024 * 1024 * 1024
+const store = () => new PackageStagingStore<{ name: string }>(root, 1000, 'TEST_EXPIRED', () => clock, () => free)
+const digestOf = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex')
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'navide-staging-'))
   clock = 0
+  free = 100 * 1024 * 1024 * 1024
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
@@ -23,7 +33,8 @@ describe('PackageStagingStore (MED-5 / S8 Q3)', () => {
   })
 
   it('removes an earlier run\'s leftovers, and only its own files', () => {
-    writeFileSync(join(root, `${'a'.repeat(32)}.vsix`), 'old')
+    writeFileSync(join(root, `${'a'.repeat(64)}.vsix`), 'old')
+    writeFileSync(join(root, `${'b'.repeat(64)}.vsix.${'c'.repeat(16)}.tmp`), 'half')
     writeFileSync(join(root, 'keep.txt'), 'not ours')
     store()
     expect(readdirSync(root)).toEqual(['keep.txt'])
@@ -34,11 +45,48 @@ describe('PackageStagingStore (MED-5 / S8 Q3)', () => {
     const { id } = s.stage(new Uint8Array([1]), { name: 'x' })
     const folder = s.stage(null, { name: 'folder' })
     expect(folder.digest).toBeNull()
-    expect(readdirSync(root)).toEqual([`${id}.vsix`])
+    expect(readdirSync(root)).toEqual([`${digestOf(new Uint8Array([1]))}.vsix`])
     expect(s.take(folder.id)).toEqual({ bytes: null, digest: null, meta: { name: 'folder' } })
     clock = 1001
     expect(() => s.take(id)).toThrow(/^TEST_EXPIRED/)
     expect(s.take('f'.repeat(32))).toBeUndefined()
     expect(readdirSync(root)).toEqual([])
+  })
+
+  it('keeps one file for the same bytes staged twice, until the last entry goes', () => {
+    const s = store()
+    const bytes = new Uint8Array([7, 7, 7])
+    const first = s.stage(bytes, { name: 'a' })
+    const second = s.stage(bytes, { name: 'b' })
+    expect(first.id).not.toBe(second.id)
+    expect(readdirSync(root)).toEqual([`${digestOf(bytes)}.vsix`])
+    s.discard(first.id)
+    expect(s.take(second.id)?.bytes).toEqual(bytes)
+    s.discard(second.id)
+    expect(readdirSync(root)).toEqual([])
+  })
+
+  it('refuses a copy that would leave less than 5 GiB free, naming both sizes; nothing staged before is touched', () => {
+    const s = store()
+    const kept = s.stage(new Uint8Array([1]), { name: 'kept' })
+    free = MIN_FREE_BYTES + 2
+    expect(() => s.stage(new Uint8Array([1, 2, 3]), { name: 'new' }))
+      .toThrow(/^STAGING_DISK_LOW: 5\.00 GiB free .* this package is 0\.00 GiB/)
+    expect(s.take(kept.id)?.meta).toEqual({ name: 'kept' })
+    expect(readdirSync(root)).toEqual([`${digestOf(new Uint8Array([1]))}.vsix`])
+    // Bytes already staged need no new file, so they still stage.
+    expect(s.stage(new Uint8Array([1]), { name: 'same' }).digest).toBe(digestOf(new Uint8Array([1])))
+  })
+
+  it('removes half a copy and says STAGING_DISK_LOW when the disk fills during the write', () => {
+    const s = store()
+    const kept = s.stage(new Uint8Array([9]), { name: 'kept' })
+    vi.mocked(fs.writeFileSync).mockImplementationOnce((path) => {
+      fs.appendFileSync(path as string, 'half')
+      throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' })
+    })
+    expect(() => s.stage(new Uint8Array([4, 5]), { name: 'new' })).toThrow(/^STAGING_DISK_LOW/)
+    expect(readdirSync(root)).toEqual([`${digestOf(new Uint8Array([9]))}.vsix`])
+    expect(s.take(kept.id)?.meta).toEqual({ name: 'kept' })
   })
 })
