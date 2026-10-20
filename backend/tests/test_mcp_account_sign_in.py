@@ -208,7 +208,21 @@ async def test_sign_in_reports_an_unanswering_window(ui: _UiRequests) -> None:
 
     result = await plan_mcp.cli_account_sign_in(_ctx(), agent="claude", profile_id="p-1", reason="x")
 
-    assert result == {"ok": False, "error": "no window answered", "error_code": "window-unavailable"}
+    assert result == {
+        "ok": False, "error": "the Navide window did not answer", "error_code": "window-unavailable",
+    }
+
+
+@pytest.mark.asyncio
+async def test_sign_in_never_passes_on_the_bus_error(ui: _UiRequests) -> None:
+    # Same as cli_account_switch: the bus error is whatever the renderer threw.
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.signIn"] = {"ok": False, "result": None, "error": "TypeError: raw renderer text"}
+
+    result = await plan_mcp.cli_account_sign_in(_ctx(), agent="claude", profile_id="p-1", reason="x")
+
+    assert "raw renderer text" not in result["error"]
+    assert result["error_code"] == "window-unavailable"
 
 
 @pytest.mark.asyncio

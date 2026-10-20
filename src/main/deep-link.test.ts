@@ -25,10 +25,12 @@ import {
 } from './deep-link'
 import {
   DEEP_LINK_OPEN_CHANNEL,
+  DEEP_LINK_PUBLISH_CHANNEL,
   DEEP_LINK_READY_CHANNEL,
   MAX_DEEP_LINK_LENGTH,
   deepLinkFromArgv,
   parseDeepLink,
+  parsePublishDeepLink,
 } from '../shared/deepLink'
 
 interface FakeContents {
@@ -328,5 +330,66 @@ describe('main-process wiring', () => {
   it('packaged builds declare the navide scheme', () => {
     const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'))
     expect(pkg.build.protocols).toEqual([{ name: 'Navide', schemes: ['navide'] }])
+  })
+})
+
+describe('parsePublishDeepLink (navide-plugin publish --via-navide)', () => {
+  it('decodes the fixture the CLI line tests with', () => {
+    // Shared with 27-CLI線 (#463): the same string on both sides keeps the encoding in step.
+    expect(parsePublishDeepLink('navide://publish?path=%2Ftmp%2Fa%20b%2Fx-1.0.0-universal.vsix&target=darwin-arm64')).toEqual({
+      ok: true,
+      target: { kind: 'publish', path: '/tmp/a b/x-1.0.0-universal.vsix', target: 'darwin-arm64' },
+    })
+  })
+
+  it('takes a Windows path and no target', () => {
+    expect(parsePublishDeepLink('navide://publish?path=C%3A%5Cpkg%5Cx-1.0.0-win32-x64.vsix')).toEqual({
+      ok: true,
+      target: { kind: 'publish', path: 'C:\\pkg\\x-1.0.0-win32-x64.vsix', target: null },
+    })
+  })
+
+  it.each([
+    ['no path', 'navide://publish?target=universal'],
+    ['relative path', 'navide://publish?path=x.vsix'],
+    ['not a vsix', 'navide://publish?path=%2Fetc%2Fpasswd'],
+    ['two paths', 'navide://publish?path=%2Fa.vsix&path=%2Fb.vsix'],
+    ['extra parameter', 'navide://publish?path=%2Fa.vsix&registry=http%3A%2F%2Fevil'],
+    ['token parameter', 'navide://publish?path=%2Fa.vsix&token=x'],
+    ['bad target', 'navide://publish?path=%2Fa.vsix&target=..%2F..'],
+    ['control character', 'navide://publish?path=%2Fa%0A.vsix'],
+    ['other host', 'navide://publishx?path=%2Fa.vsix'],
+    ['raw space', 'navide://publish?path=/a b.vsix'],
+    ['too long', `navide://publish?path=%2F${'a'.repeat(4100)}.vsix`],
+  ])('rejects %s', (_label, url) => {
+    expect(parsePublishDeepLink(url).ok).toBe(false)
+  })
+
+  it('routes a publish link on its own channel, and never as an extension', () => {
+    const contents = fakeContents(7)
+    const router = createDeepLinkRouter({
+      pickTarget: () => contents as never,
+      reveal: () => {},
+      ensureWindow: () => {},
+      log: () => {},
+    })
+    router.ready(contents as never)
+    router.handle('navide://publish?path=%2Ftmp%2Fx-1.0.0-universal.vsix')
+    expect(contents.sent).toEqual([[DEEP_LINK_PUBLISH_CHANNEL, { kind: 'publish', path: '/tmp/x-1.0.0-universal.vsix', target: null }]])
+    expect(contents.sent.some(([channel]) => channel === DEEP_LINK_OPEN_CHANNEL)).toBe(false)
+  })
+
+  it('queues a publish link until a window is ready', () => {
+    const contents = fakeContents(8)
+    let ready = false
+    const router = createDeepLinkRouter({
+      pickTarget: () => (ready ? (contents as never) : null),
+      reveal: () => {},
+      ensureWindow: () => {},
+      log: () => {},
+    })
+    router.handle('navide://publish?path=%2Ftmp%2Fx-1.0.0-universal.vsix')
+    ready = true
+    expect(router.ready(contents as never)).toEqual([{ kind: 'publish', path: '/tmp/x-1.0.0-universal.vsix', target: null }])
   })
 })

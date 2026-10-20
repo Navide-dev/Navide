@@ -26,12 +26,14 @@ import { DEFAULT_BACKEND_RESOURCE_LIMITS, watchBackendResources } from './plugin
 import { stdoutPendingOf } from './pluginThirdPartyBackends'
 import {
   PLANS_BRIDGE_PORTS,
+  PlansBridgeError,
   createInMemoryPlansBridgeDispatcher,
   createProductionPlansBridgeDispatcher,
   createTestPlansFilesystemPort,
   type PlansBridgePort,
 } from './plansBridge'
 import { MAX_IGNORED_REQUEST_IDS } from './pluginBackendSupervisor'
+import type { ExecutionPolicySnapshot } from './executionPolicy'
 import { MAX_BACKEND_BRIDGE_RESULT_BYTES } from './pluginBackendLimits'
 import { verifyInstalledBackendSpawnTrust } from './pluginBackendSpawnTrust'
 import { immutablePluginPackageDir, PluginActivationSelector } from './pluginActivationSelector'
@@ -423,6 +425,8 @@ function bridgeOperationForPort(port: PlansBridgePort): string {
       return 'transform'
     case 'shell':
       return 'run'
+    case 'web':
+      return 'list'
   }
   const exhaustive: never = port
   return exhaustive
@@ -914,7 +918,8 @@ describe('PluginBackendSupervisor', () => {
     expect(bridgeDispatcher).not.toHaveBeenCalled()
   })
 
-  it.each(PLANS_BRIDGE_PORTS.filter((port) => port !== 'filesystem' && port !== 'shell'))(
+  // `web` is mapped to its own policy namespace, like filesystem and shell.
+  it.each(PLANS_BRIDGE_PORTS.filter((port) => port !== 'filesystem' && port !== 'shell' && port !== 'web'))(
     'rejects agent Bridge use of unmapped %s even in full policy',
     async (port) => {
       const bridgeDispatcher = vi.fn(async () => ({ ok: true }))
@@ -982,6 +987,70 @@ describe('PluginBackendSupervisor', () => {
       }
     },
   )
+
+  it('refuses the web Bridge port to a backend without it and checks agents against the web namespace', async () => {
+    const bridgeDispatcher = vi.fn(async () => ({ views: [] }))
+    const run = async (ports: PlansBridgePort[], initiator: BackendRuntimeContext['initiator'], system: string[]) => {
+      bridgeDispatcher.mockClear()
+      const supervisor = new PluginBackendSupervisor(
+        { ...activation, approvedBridgePorts: ports },
+        {
+          environment: { NAVIDE_FIXTURE: 'backend-wire' },
+          spawnProcess: () => makeBridgeChild(undefined, 'web', 'list', {}),
+          resolveExecutionPolicy: () => ({
+            policy: { schemaVersion: 1, mode: 'allowlist', system, shell: [] },
+            revision: 1,
+            state: 'user',
+          }) as ExecutionPolicySnapshot,
+          bridgeDispatcher: { dispatch: bridgeDispatcher },
+        },
+      )
+      supervisors.push(supervisor)
+      await supervisor.start()
+      return supervisor
+        .clientFor(createAuthenticatedBackendRuntime({ ...runtime, initiator }), { workspacePath: '/workspace' })
+        .call('fixture.bridge', null)
+    }
+    const agent = { kind: 'agent', source: 'mcp', id: 'web-agent' } as const
+    await expect(run(['filesystem'], authenticatedRuntime.initiator, ['web']))
+      .rejects.toMatchObject({ code: 'PLUGIN_ERROR', pluginCode: 'CAPABILITY_DENIED' })
+    expect(bridgeDispatcher).not.toHaveBeenCalled()
+    await expect(run(['web'], agent, ['fs', 'ui']))
+      .rejects.toMatchObject({ code: 'PLUGIN_ERROR', pluginCode: 'CAPABILITY_DENIED' })
+    expect(bridgeDispatcher).not.toHaveBeenCalled()
+    await expect(run(['web'], agent, ['web'])).resolves.toEqual({ views: [] })
+    expect(bridgeDispatcher).toHaveBeenCalledOnce()
+  })
+
+  it('passes a Bridge refusal reason and message on to the child, keeping data.code', async () => {
+    for (const [thrown, data] of [
+      [new PlansBridgeError('USER_IN_CONTROL', undefined, { reason: 'manual_takeover' }), { code: 'USER_IN_CONTROL', reason: 'manual_takeover' }],
+      [new PlansBridgeError('CDP_ERROR', undefined, { message: 'x'.repeat(600) }), { code: 'CDP_ERROR', message: 'x'.repeat(500) }],
+      [new PlansBridgeError('CAPABILITY_DENIED', 'not for the child'), { code: 'CAPABILITY_DENIED' }],
+    ] as const) {
+      const hostFrames: string[] = []
+      const supervisor = new PluginBackendSupervisor(
+        { ...activation, approvedBridgePorts: ['web'] },
+        {
+          environment: { NAVIDE_FIXTURE: 'backend-wire' },
+          spawnProcess: () => {
+            const child = makeBridgeChild(undefined, 'web', 'cdp', { viewId: 'v1', method: 'Page.reload' })
+            child.stdin.on('data', (chunk: Buffer) => { hostFrames.push(chunk.toString('utf8')) })
+            return child
+          },
+          bridgeDispatcher: { dispatch: async () => { throw thrown } },
+        },
+      )
+      supervisors.push(supervisor)
+      await supervisor.start()
+      await expect(
+        supervisor.clientFor(authenticatedRuntime, { workspacePath: '/workspace' }).call('fixture.bridge', null)
+      ).rejects.toMatchObject({ code: 'PLUGIN_ERROR', pluginCode: data.code })
+      const error = hostFrames.join('').split('\n').filter(Boolean).map((line) => JSON.parse(line))
+        .find((frame) => frame.id === 'bridge:child-request')?.error
+      expect(error).toEqual({ code: 1000, message: 'Host Bridge request failed.', data })
+    }
+  })
 
   it('refuses the shell Bridge port to an activation that was not projected it', async () => {
     const bridgeDispatcher = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }))

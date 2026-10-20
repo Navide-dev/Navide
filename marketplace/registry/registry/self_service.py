@@ -1,7 +1,8 @@
 """Self-service publishing for Navide Cloud accounts (D6, D7, D9).
 
 - Namespace claims: first come, first served; reserved words and look-alikes
-  are refused (similarity.py); at most MAX_NAMESPACES_PER_ACCOUNT per account.
+  are refused (similarity.py); at most MAX_NAMESPACES_PER_ACCOUNT per account,
+  not counting namespaces frozen by a qualification revocation.
   A claimed namespace is review-required: nothing it publishes is public
   before an admin approves it.
 - Publish tokens: random, stored as sha256, scoped to one namespace, with an
@@ -23,6 +24,7 @@ from sqlalchemy import Boolean, DateTime, String, func, insert, literal, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from . import audit, qualification
 from .dns_verify import TxtResolver, is_verified, new_token, normalize_domain
 from .models import CliAuthCode, Publisher, PublisherToken
 from .repository import hash_token
@@ -40,6 +42,27 @@ TOKEN_PREFIX = "nvp_"
 
 class SelfServiceError(ValueError):
     pass
+
+
+class QualificationRequired(SelfServiceError):
+    """The account's developer qualification is not approved, or the
+    namespace is frozen; `code` is QUALIFICATION_REQUIRED or NAMESPACE_FROZEN."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _require_vetted(session: Session, publisher: Publisher) -> None:
+    problem = qualification.publisher_problem(session, publisher)
+    if problem is not None:
+        raise QualificationRequired(*problem)
+
+
+def _owner_actor(publisher: Publisher) -> str:
+    if publisher.navide_member_id is None:
+        return f"publisher:{publisher.name}"
+    return audit.member_actor(publisher.navide_member_id)
 
 
 def _now() -> datetime:
@@ -67,9 +90,28 @@ def owned_publisher(session: Session, member_id: str, namespace: str) -> Publish
     ).first()
 
 
+def counted_namespaces(member_id: str):
+    """Scalar subquery: the namespaces that count toward the per-account cap.
+    A namespace frozen by a qualification revocation keeps its name for the
+    account but no longer counts. check_claim and claim_namespace's INSERT
+    both use this, so the pre-check and the write cannot disagree."""
+    return (
+        select(func.count())
+        .select_from(Publisher)
+        .where(Publisher.navide_member_id == member_id, Publisher.frozen_at.is_(None))
+        .scalar_subquery()
+    )
+
+
 def check_claim(session: Session, member_id: str, namespace: str) -> ClaimVerdict:
     namespace = namespace.strip().lower()
-    if len(owned_publishers(session, member_id)) >= MAX_NAMESPACES_PER_ACCOUNT:
+    if not qualification.is_approved(session, member_id):
+        return ClaimVerdict(
+            False,
+            "Only an approved developer can claim a namespace. Apply for developer "
+            "qualification first and wait for review.",
+        )
+    if session.exec(select(counted_namespaces(member_id))).one() >= MAX_NAMESPACES_PER_ACCOUNT:
         return ClaimVerdict(
             False, f"An account can own at most {MAX_NAMESPACES_PER_ACCOUNT} namespaces."
         )
@@ -79,18 +121,17 @@ def check_claim(session: Session, member_id: str, namespace: str) -> ClaimVerdic
 
 def claim_namespace(session: Session, *, member_id: str, display_name: str, namespace: str) -> Publisher:
     namespace = namespace.strip().lower()
+    if not qualification.is_approved(session, member_id):
+        raise QualificationRequired(
+            "QUALIFICATION_REQUIRED", check_claim(session, member_id, namespace).message
+        )
     verdict = check_claim(session, member_id, namespace)
     if not verdict.ok:
         raise SelfServiceError(verdict.message)
     # One INSERT ... SELECT: SQLite evaluates the per-account count under the
     # statement's write lock, so two concurrent claims cannot both pass the
     # cap; the unique name index settles a race for the same namespace.
-    owned = (
-        select(func.count())
-        .select_from(Publisher)
-        .where(Publisher.navide_member_id == member_id)
-        .scalar_subquery()
-    )
+    owned = counted_namespaces(member_id)
     source = select(
         literal(namespace, String),
         literal(display_name or None, String),
@@ -109,6 +150,10 @@ def claim_namespace(session: Session, *, member_id: str, display_name: str, name
         raise SelfServiceError(f"“{namespace}” is already taken.") from exc
     if inserted.rowcount != 1:
         raise SelfServiceError(f"An account can own at most {MAX_NAMESPACES_PER_ACCOUNT} namespaces.")
+    audit.record(
+        session, actor=audit.member_actor(member_id), action="namespace.claim", target=f"publisher:{namespace}"
+    )
+    session.commit()
     return session.exec(select(Publisher).where(Publisher.name == namespace)).one()
 
 
@@ -118,8 +163,17 @@ def set_public_key(session: Session, publisher: Publisher, pem: str) -> str:
         fingerprint = public_key_fingerprint(pem)
     except Exception as exc:  # noqa: BLE001 - any parse failure is a bad key
         raise SelfServiceError("That is not an Ed25519 public key in PEM form.") from exc
+    _require_vetted(session, publisher)
     publisher.public_key = pem
     session.add(publisher)
+    qualification.record_key(session, publisher, pem)
+    audit.record(
+        session,
+        actor=_owner_actor(publisher),
+        action="publisher-key.set",
+        target=f"publisher:{publisher.name}",
+        detail={"key_id": fingerprint},
+    )
     session.commit()
     return fingerprint
 
@@ -136,6 +190,7 @@ def create_token(session: Session, publisher: Publisher, *, label: str, days: in
     """Return (plain token, row). The plain token is shown once, never stored."""
     if not 1 <= days <= MAX_TOKEN_DAYS:
         raise SelfServiceError(f"A token can last 1-{MAX_TOKEN_DAYS} days.")
+    _require_vetted(session, publisher)
     plain = TOKEN_PREFIX + secrets.token_urlsafe(32)
     row = PublisherToken(
         publisher_id=publisher.id,
@@ -144,6 +199,14 @@ def create_token(session: Session, publisher: Publisher, *, label: str, days: in
         expires_at=_now() + timedelta(days=days),
     )
     session.add(row)
+    session.flush()
+    audit.record(
+        session,
+        actor=_owner_actor(publisher),
+        action="publisher-token.issue",
+        target=f"publisher:{publisher.name}",
+        detail={"token_id": row.id, "label": row.label, "days": days},
+    )
     session.commit()
     session.refresh(row)
     return plain, row
@@ -166,6 +229,13 @@ def revoke_token(session: Session, publisher: Publisher, token_id: int) -> bool:
     if row.revoked_at is None:
         row.revoked_at = _now()
         session.add(row)
+        audit.record(
+            session,
+            actor=_owner_actor(publisher),
+            action="publisher-token.revoke",
+            target=f"publisher:{publisher.name}",
+            detail={"token_id": row.id},
+        )
         session.commit()
     return True
 
@@ -201,6 +271,7 @@ def pkce_challenge(verifier: str) -> str:
 def issue_cli_code(session: Session, publisher: Publisher, *, code_challenge: str, label: str) -> str:
     if not (43 <= len(code_challenge) <= 128):
         raise SelfServiceError("invalid code_challenge")
+    _require_vetted(session, publisher)
     code = secrets.token_urlsafe(32)
     session.add(
         CliAuthCode(

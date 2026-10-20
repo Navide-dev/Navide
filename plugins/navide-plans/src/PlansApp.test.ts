@@ -1129,6 +1129,8 @@ describe('PlansApp', () => {
     const view = await mountPlans()
     const iframe = view.find('iframe.plan-doc-frame')
     expect(iframe.exists()).toBe(true)
+    // The Host keeps a frame by this name on its srcdoc (its planFrameNavigation guard).
+    expect(iframe.attributes('name')).toBe('navide-plan-doc')
 
     const srcdoc = iframe.attributes('srcdoc') ?? ''
     expect(srcdoc).not.toContain('alert("evil")')

@@ -351,6 +351,7 @@ in this order, each only when it applies:
 | `shell` | `shell` is not `null` | the `permissions.shell` object |
 | `networkViaShell` | `shell` is not `null` (`network` is `"via-shell"`) | `{}` |
 | `aiCli` | `system` contains `aiCli` | `{}` |
+| `web` | `system` contains `web` | `{}` |
 | `ui` | `system` contains `ui` | `{}` |
 | `agentTools` | at least one tool | `{read: <count>, write: <count>}` |
 | `network` | reserved for DB10; never produced in v1 | `{}` |
@@ -366,6 +367,7 @@ none apply. Reasons are listed in this fixed order:
 | `system.ui` | `system` contains `ui` | low |
 | `system.fs` | `system` contains `fs` (workspace read/write) | medium |
 | `system.aiCli` | `system` contains `aiCli` | high |
+| `system.web` | `system` contains `web` (plugin browser views and their saved sign-ins) | high |
 | `shell.allowlist` | `shell` is `allowlist` | high |
 | `nativeBackend` | the manifest has `backend` | high |
 | `agentTools.write` | at least one tool has `risk: "write"` | high |
@@ -522,7 +524,7 @@ package envelope as before.
 
 | `kind` | `key` | One per |
 |---|---|---|
-| `system` | `fs` / `ui` / `aiCli` | system namespace |
+| `system` | `fs` / `ui` / `aiCli` / `web` | system namespace |
 | `shell` | `allowlist` / `full` | shell mode |
 | `shellExecutable` | executable name | allowlisted executable |
 | `fsScopeRoot` | `workspace` / `repository` | declared scopes |
@@ -709,7 +711,7 @@ publish (DS3).
 | dynamic commands while `permissions.shell` is absent | `shellDynamic` / `dynamic` |
 | `shell.*` capability address while `permissions.shell` is absent | `shell` / `shell.run` |
 | an executable outside the allowlist while shell is `allowlist` | `shellExecutable` / the executable |
-| an `fs`, `ui` or `aiCli` capability address whose namespace is not in `system` | `system` / the namespace |
+| an `fs`, `ui`, `aiCli` or `web` capability address whose namespace is not in `system` | `system` / the namespace |
 | read or write paths while `system` lacks `fs` | `system` / `fs` |
 | a write path matching no `scopes.fs.write` pattern (scopes declared) | `fsScopeWrite` / the path |
 | a read path matching no `scopes.fs.read` or `write` pattern (scopes declared) | `fsScopeRead` / the path |
@@ -962,6 +964,26 @@ the backend files a `plugin-enable` request (section 6) for the user's
 decision and answers the agent `{ok: false, error_code: "APPROVAL_REQUIRED",
 error, approval_id, status: "pending", expires_at}`. A second `enable` returns
 the same pending request.
+
+`update` (O1, user ruling 2026-10-20) is asked by `marketplace_request_update`
+after its own checks (installed, newer, not bundled) and before it files a
+request. It carries one more key, `version`. The Host verifies that Registry
+version exactly as the window's install does and updates at once only when
+nothing it discloses changes: the disclosure diff against the installed
+version adds and removes nothing and keeps the risk level, and the source,
+the views, an already trusted publisher and the absence of a local install or
+a version waiting for a restart are all unchanged. It then commits through the
+window's own commit, tells the user which caller updated the package from
+which version with a one-click downgrade (it drops the version waiting for a
+restart, or rolls back to the replaced version; it does nothing once the
+package changed again), and answers `{ok: true, updated: true, pluginId,
+fromVersion, pluginVersion}`; the backend audits `update` and answers the
+agent `{ok: true, status: "completed", applied: true, pluginId, fromVersion,
+pluginVersion, note}`. Anything else — a change, a diff that cannot be
+computed, a preparation failure, an install of the same id in progress, a
+failed commit (`ACTION_FAILED`, audited as `error`), no answer — files the
+`plugin-update` request exactly as before (fail closed). The Host's refusal is
+`{ok: false, error_code: "APPROVAL_REQUIRED", error, pluginId, pluginVersion}`.
 
 ### 4.4 Chunked transfer of results and arguments
 
@@ -1479,7 +1501,7 @@ starts as usual.
 | `id` | INTEGER PK | autoincrement |
 | `at` | INTEGER | when |
 | `plugin_id`, `plugin_version` | TEXT | `plugin_version` `''` when not known |
-| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` / `finish-late-completed` / `finish-late-failed` |
+| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` / `finish-late-completed` / `finish-late-failed` / `request-developer-application` / `request-plugin-publish` / `request-plugin-yank` / `request-testplace-invite` / `publish-loopback` |
 | `caller_kind` | TEXT | `pane` / `external` / `host`, or `user` (a person in a Navide window: decide, finish) |
 | `caller_pane_id`, `caller_pane_name`, `caller_workspace` | TEXT | `''` when not a pane |
 | `approval_id` | TEXT | the request's id, `''` when none |

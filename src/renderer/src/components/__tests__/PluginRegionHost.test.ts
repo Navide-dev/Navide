@@ -365,6 +365,22 @@ describe('PluginRegionHost source strip (K2)', () => {
     wrapper.unmount()
   })
 
+  it("shows a test build's expiry, read from its signed envelope, instead of \"expiry unknown\" (W5b)", async () => {
+    i18n.global.locale.value = 'en-US'
+    stubPlugins(vi.fn(async () => ({ ok: true, url: URL_A })))
+    const wrapper = mount(PluginRegionHost, {
+      props: {
+        contribution: { ...contribution, source: 'testplace', expiresAt: '2099-01-31T00:00:00Z', testplaceVia: 'invite' } as never,
+        workspacePath: '/ws',
+        visible: true,
+      },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    expect(wrapper.get('.plugin-region-host__source .nv-source-badge').text()).toBe('Test build: automated scan only, expires 2099-01-31')
+    wrapper.unmount()
+  })
+
   it('renders a Marketplace, built-in or unknown source exactly as before', async () => {
     const plain = await render()
     const html = plain.html()

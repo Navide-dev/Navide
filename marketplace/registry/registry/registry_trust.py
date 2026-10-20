@@ -27,6 +27,10 @@ def _timestamp(value: datetime) -> str:
     )
 
 
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
 def _blocked_package(value: str) -> dict[str, str]:
     package_id, separator, version = value.partition("@")
     result = {"packageId": package_id}
@@ -378,3 +382,37 @@ class RegistryTrustSigner:
             ],
         }
         return metadata, sign_json(self.root_private_key, metadata)
+
+    def signed_local_install(
+        self,
+        *,
+        publisher_keys: list[dict],
+        blocked_digests: list[dict],
+        now: datetime | None = None,
+    ) -> tuple[dict, str]:
+        """Root-signed document for locally installed packages (A3): approved
+        publisher keys, revoked ones included, and blocked package digests,
+        each with its reason (`{digest, reason}`; decision d5).
+        A separate document because released Apps reject any new field in
+        `signed_metadata`, which stays byte-for-byte unchanged; `kind` keeps
+        the two apart under the same root key."""
+        generated_at = now or datetime.now(timezone.utc)
+        document = {
+            "schemaVersion": 1,
+            "kind": "local-install-trust",
+            "registryProfile": self.registry_profile,
+            "generatedAt": _timestamp(generated_at),
+            "expiresAt": _timestamp(generated_at + self.metadata_ttl),
+            "blockedDigests": [{"digest": d["digest"], "reason": d["reason"]} for d in blocked_digests],
+            "publisherKeys": [
+                {
+                    "publisherId": key["publisherId"],
+                    "keyId": key["keyId"],
+                    "publicKey": key["publicKey"],
+                    "status": key["status"],
+                    "revokedAt": _timestamp(_aware(key["revokedAt"])) if key["revokedAt"] else None,
+                }
+                for key in publisher_keys
+            ],
+        }
+        return document, sign_json(self.root_private_key, document)

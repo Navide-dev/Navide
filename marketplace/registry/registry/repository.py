@@ -19,6 +19,7 @@ from .models import (
     ExtensionVersion,
     Publisher,
 )
+from .qualification import record_key
 from .versions import TESTPLACE_CHANNEL, version_channel
 
 APPROVED = "approved"
@@ -33,6 +34,10 @@ def hash_token(token: str) -> str:
     """Stable sha256 hash of a bearer token (we never store it in the clear)."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+
+
+class VersionConflictError(Exception):
+    """A publish lost a race for its version (RegistryRepository.add_version)."""
 
 class RegistryRepository:
     def __init__(self, session: Session) -> None:
@@ -75,6 +80,12 @@ class RegistryRepository:
             publisher.display_name = display_name
         if public_key is not None:
             publisher.public_key = public_key
+            self.session.add(publisher)
+            self.session.flush()
+            try:
+                record_key(self.session, publisher, public_key)
+            except Exception:  # noqa: BLE001 - an unparsable key keeps no history (as before)
+                pass
         if token is not None:
             publisher.token_hash = hash_token(token)
         self.session.add(publisher)
@@ -301,7 +312,17 @@ class RegistryRepository:
         disclosure_envelope: dict | None = None,
         disclosure_signature: str | None = None,
         scan: dict | None = None,
+        channel: str | None = None,
+        expires_at: datetime | None = None,
+        recheck: Callable[[Session], str | None] | None = None,
     ) -> ExtensionVersion:
+        """`channel` defaults to the one the SemVer implies; only a testplace
+        publish passes it, together with `expires_at`.
+
+        `recheck` runs after the row is written and before it commits, while
+        SQLite holds the write lock: a reason it returns rolls the row back
+        and raises VersionConflictError, so two racing publishes cannot both
+        pass a check made before either wrote (S8 R4-L3)."""
         record = ExtensionVersion(
             extension_id=extension.id,
             version=version,
@@ -313,7 +334,8 @@ class RegistryRepository:
             registry_envelope=registry_envelope,
             registry_signature=registry_signature,
             trust_tier=trust_tier,
-            channel=version_channel(version),
+            channel=channel or version_channel(version),
+            expires_at=expires_at,
             review_status=review_status,
             review_report=review_report or {},
             disclosure=disclosure,
@@ -322,6 +344,12 @@ class RegistryRepository:
             scan=scan,
         )
         self.session.add(record)
+        if recheck is not None:
+            self.session.flush()
+            problem = recheck(self.session)
+            if problem is not None:
+                self.session.rollback()
+                raise VersionConflictError(problem)
         self.session.commit()
         self.session.refresh(record)
         for path, size, content_type in assets:

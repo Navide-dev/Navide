@@ -23,7 +23,7 @@ _V2_BACKEND_NAME_RE = re.compile(r"^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$")
 # src/main/plugins/pluginBackendSupervisor.ts); an agent tool forwarded to any
 # other name could never be served, so publish refuses it.
 _AGENT_TOOL_METHOD_RE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
-V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli"})
+V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli", "web"})
 V2_SHELL_MODES: frozenset[str] = frozenset({"allowlist", "full"})
 MAX_EXTENSION_PACK_MEMBERS = 20
 # Manifest-level guard for recognizable source/script filenames. Proving that
@@ -270,8 +270,8 @@ class ManifestV2Scopes(ManifestV2Model):
 class ManifestV2Permissions(ManifestV2Model):
     """Coarse Manifest v2 grants; method access remains Host-catalog-owned."""
 
-    system: list[Literal["fs", "ui", "aiCli"]] | None = Field(
-        default=None, min_length=1, max_length=3
+    system: list[Literal["fs", "ui", "aiCli", "web"]] | None = Field(
+        default=None, min_length=1, max_length=4
     )
     shell: Literal["allowlist", "full"] | None = None
     scopes: ManifestV2Scopes | None = None

@@ -376,7 +376,7 @@ export function declaredVsScanned(
   if (shell === null && scan.shell.dynamic.count) add(undeclared, 'shellDynamic', 'dynamic')
   const namespaces = new Set(scan.capabilities.map((entry) => entry.address.split('.')[0]))
   if (shell === null && namespaces.has('shell')) add(undeclared, 'shell', 'shell.run')
-  for (const namespace of ['aiCli', 'fs', 'ui']) {
+  for (const namespace of ['aiCli', 'fs', 'ui', 'web']) {
     if (namespaces.has(namespace) && !declared.has(namespace)) add(undeclared, 'system', namespace)
   }
   const files = scan.files

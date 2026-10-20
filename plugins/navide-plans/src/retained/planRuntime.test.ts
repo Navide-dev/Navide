@@ -11,6 +11,20 @@ afterEach(async () => {
 })
 
 describe('packaged Plans runtime', () => {
+  it('injects layout overrides so wide tables wrap and the document uses the frame width', () => {
+    const window = new Window()
+    windows.push(window)
+    window.document.body.innerHTML = '<div class="wrap"><div class="tablewrap"><table><tr><td>x</td></tr></table></div></div>'
+    window.eval(buildPlanRuntimeScript({
+      documentToken: 'current', anchors: {}, scrollY: 0,
+      commentLabel: 'Comment', editLabel: 'Edit', deleteLabel: 'Delete', saveLabel: 'Save', cancelLabel: 'Cancel',
+    }))
+    const css = [...window.document.querySelectorAll('style')].map(s => s.textContent).join('')
+    expect(css).toContain('.tablewrap td,.tablewrap td code{overflow-wrap:anywhere}')
+    expect(css).toContain('.wrap{max-width:1180px}')
+    expect(css).toContain('.wrap td ul,.wrap td p{max-width:none}')
+  })
+
   it('updates and removes note badges only for the authenticated current preview', () => {
     const window = new Window()
     windows.push(window)

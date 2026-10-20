@@ -52,13 +52,31 @@ uv --project marketplace/registry run pytest marketplace/registry/tests
 |---|---|---|
 | GET | `/api/health` | Liveness probe. |
 | POST | `/api/publishers` | Register/update a publisher's Ed25519 public key + bearer token. Admin-gated by `X-Admin-Token`; `401` while `REGISTRY_ADMIN_TOKEN` is unset or blank (unless `REGISTRY_ALLOW_OPEN_ADMIN`) and on a missing or wrong token. |
-| POST | `/api/publish` | Upload a `.vsix` package (multipart field `package`); requires a `Bearer` publisher token and (in strict mode) a valid `signature`. Validates manifest, verifies signature, stores blob + assets, appends a version artifact for `?target=` (default `universal`) with a trust tier. 409 on a duplicate (version, target), on mixing `universal` with platform targets in one version, or on a yanked version, and `409 TESTPLACE_NOT_OPEN` for `?channel=testplace`; 400 on a `?channel=` that is unknown or does not match the version's SemVer channel; 403 on cross-namespace/bad-signature, 401 on bad/missing token. |
+| POST | `/api/publish` | Upload a `.vsix` package (multipart field `package`); requires a `Bearer` publisher token and (in strict mode) a valid `signature`. Validates manifest, verifies signature, stores blob + assets, appends a version artifact for `?target=` (default `universal`) with a trust tier. 409 on a duplicate (version, target), on mixing `universal` with platform targets in one version, or on a yanked version; `?channel=testplace` needs a token and a vetted namespace (401/403), runs the automatic checks only (422 when one blocks) and signs a 90-day `expiresAt`; 400 on a `?channel=` that is unknown or does not match the version's SemVer channel; 403 on cross-namespace/bad-signature, 401 on bad/missing token. |
 | GET | `/api/extensions` | Search (`q`) over name/description/categories, newest first, paginated (`offset`, `limit`). |
 | GET | `/api/extensions/{namespace}/{name}` | Extension detail + full version list, registry envelopes/signatures, and root-signed trust metadata. |
 | GET | `/api/extensions/{namespace}/{name}/{version}/download` | Stream one artifact's blob **and increment** its download counter plus the aggregate one. `?target=` picks the artifact exactly (no fallback to `universal`); it may be omitted only when the version has a single artifact, else `400` lists the available targets. |
-| POST | `/api/extensions/{namespace}/{name}/{version}/yank` | Soft-yank a version — every target's artifact of it (excluded from latest resolution, still downloadable by exact version). |
+| POST | `/api/extensions/{namespace}/{name}/{version}/yank` | Soft-yank a version — every target's artifact of it on one channel (excluded from latest resolution, still downloadable by exact version). `?channel=testplace` yanks the test build; otherwise the public artifacts, or the test build when the version has no public one. A version number belongs to one channel until promotion: publishing it on the other channel is refused (409). |
 | POST | `/api/extensions/{namespace}/{name}/rating` | Retired: returns 401. Rating needs a Navide Cloud sign-in on the website (see below). |
+| GET | `/api/testplace` | Testplace builds the calling Cloud account was invited to (account token). An uninvited account gets an empty list; 401 without a token. |
+| GET | `/api/testplace/{namespace}/{name}` | One invited extension's live (unexpired, not revoked) testplace versions with their signed envelopes and the trust metadata; 404 exactly like a missing extension when the caller holds no seat. |
+| GET | `/api/testplace/{namespace}/{name}/{version}/download` | Stream a live testplace artifact to an invited account (`?target=` as for public downloads). |
+| POST | `/api/testplace/join` | `{ "token": "tpi_…" \| "tpc_…" }`: redeem a single-use invite token or an open public test code for the calling account. Every failure is the same 404; 409 `CODE_FULL` when a code has no seats left. |
+| POST | `/api/testplace/{namespace}/{name}/leave` | Give up the caller's seat. |
+| GET | `/api/testplace/{namespace}/{name}/withdrawn` | `{withdrawn: [{version, target}]}`: the test builds taken back (yanked or revoked; all of them when the publisher is frozen or disqualified). For any account that ever held a seat, revoked or not; anyone else gets the 404 of a missing extension. The App's kill switch for installed test builds. |
+| GET/POST | `/api/testplace/{namespace}/{name}/invites` | Developer (publisher token of the namespace, or the owning account's token): list invites, or create `{ "labels": [...] }` single-use join tokens, returned once. At most 100 live invites per extension (409 `INVITE_LIMIT`). |
+| POST | `/api/testplace/{namespace}/{name}/invites/{id}/revoke` | Developer: revoke an invite; a tester who joined through it loses access. |
+| GET/POST | `/api/testplace/{namespace}/{name}/codes` | Developer: list public test codes, or create `{ "max_testers": n }` (any positive number; there is no upper limit). The extension's first code waits for a light admin review (`in-review`); later ones open at once. The code is returned once. |
+| POST | `/api/testplace/{namespace}/{name}/codes/{id}/revoke` | Developer: stop new joins through a code; testers already in keep their seat. |
+| GET | `/api/testplace/{namespace}/{name}/versions` | Developer: testplace versions with expiry and promotion state. |
+| POST | `/api/testplace/{namespace}/{name}/versions/{version}/revoke` | Developer: revoke a testplace version early: it is yanked and listed in the tester detail's `withdrawn`, so each tester's Navide stops it at its next trust refresh and never offers to keep it. Nothing goes into the public blocklist, which would tell anyone the version exists. |
+| POST | `/api/testplace/{namespace}/{name}/versions/{version}/promote` | Developer: send the same artifact (digest unchanged) for Marketplace review. |
+| GET | `/api/admin/testplace/codes`, `/api/admin/testplace/promotions` | Admin (`X-Admin-Token`): codes waiting for the light review, and promotion requests with tester count, testing period and report count. |
+| POST | `/api/admin/testplace/codes/{id}/decision`, `/api/admin/testplace/promotions/{namespace}/{name}/{version}/decision` | Admin: `{ "approve": bool, "reason": "…" }` (a reason is required to reject; a promotion also names the reviewed `artifacts` digests). An approved promotion is re-signed on its SemVer channel with no expiry and becomes public. |
+| POST | `/api/admin/testplace/{namespace}/{name}/versions/{version}/revoke` | Admin: force-revoke a testplace version (`{ "reason": "…" }`). |
 | POST | `/api/extensions/{namespace}/{name}/featured` | Set the curation flag `{ "featured": bool }`. Admin-gated by `X-Admin-Token` (same gate as `/api/publishers`). |
+
+**Security incidents.** A revoke or yank reaches a test build's testers only, through `/withdrawn`: online and signed in, within 15 minutes; offline or signed out, at the latest when the build expires (up to 90 days). For a security problem an admin does not rely on that: block the package or publisher globally (signed `blockedPackages` / `blockedPublishers`, the existing takedown). Every App applies it at its next trust refresh (within 15 minutes while online), testers and everyone else alike; the tester routes stop serving it at once and list it as withdrawn. The cost is that the public learns the Navide plugin id exists; a security incident is worth it. An ordinary withdrawal goes through `/withdrawn`.
 
 `GET /api/extensions` also accepts `category` (exact category filter) and
 `sort` (`updated` default, `downloads`, `rating`). Each summary now carries
@@ -430,7 +448,11 @@ settings below are set; without them the registry behaves exactly as before
 - **Namespaces** (`/publisher/claim`): first come, first served; reserved words
   (`navide`, `official`, …) and look-alikes (`nav1de`, or a folded match of an
   existing namespace) are refused; at most 3 per account
-  (`Publisher.navide_member_id`). A claimed namespace is review-required.
+  (`Publisher.navide_member_id`), not counting namespaces frozen by a
+  qualification revocation or a reclaim. A frozen namespace keeps its name: no
+  other account can claim it. `self_service.counted_namespaces` is the one
+  count both the claim pre-check and the claim's `INSERT ... SELECT` use. A
+  claimed namespace is review-required.
 - **Review** (`/admin/review`, `GET /api/admin/review`,
   `POST /api/admin/review/{ns}/{name}/{version}/approve|reject`): uploads to a
   review-required namespace are stored `pending`, unsigned and invisible to
@@ -457,6 +479,61 @@ settings below are set; without them the registry behaves exactly as before
   `~/.config/navide-plugin/credentials.json` (0600). `publish` uses it when no
   `--token`/`NAVIDE_PLUGIN_TOKEN` is given. No password is ever typed into the
   CLI.
+
+### Developer qualification (0.2.27)
+
+Only an approved developer can claim a namespace or obtain a publish token
+(`qualification.py`). The record is keyed by `navide_member_id` and lives only
+here; Cloud's `members` table is untouched, and no existing account is
+approved by default.
+
+- **Grandfathered namespaces** (migration 13): a namespace self-claimed before
+  qualification existed keeps publishing for 30 days from the migration
+  (`publisher.grandfather_until`) while its owner applies. The owner's first
+  application, filed before the deadline, pauses the period; a rejection
+  resumes it, extended by the pending time. Nothing else pauses it — an
+  application filed after the deadline or a re-application after a rejection
+  leaves the clock running — so the period cannot be stretched indefinitely. `GET /api/publisher/me` reports `grandfather: {until, paused,
+  days_left, remind, expired}` (null when none applies) and the dashboard shows
+  it, as a warning in the last 7 days. Past the deadline with no approved owner and
+  no paused application, publishing is refused at once and a sweep (at most every
+  10 minutes, on request traffic) reclaims the namespace the way a revocation
+  tears one down, audited as `namespace.reclaim` by
+  `system:grandfather-expired`; the account keeps its account token and may
+  still apply.
+
+- **Account token**: `/cli/authorize?scope=account` (same loopback + PKCE flow)
+  issues an `nva_` token that names the Cloud account only. It can read and
+  submit the account's developer application and list its versions; it never
+  publishes. `/api/cli/token` answers `{token, scope, namespace, expires_at}`.
+- **Application**: `GET|POST /api/developer/me/application` (account or
+  publisher token) or the website form `/developer/apply`. Real-name fields;
+  `field_sources` marks each field `user` or `agent-draft`. The GET answer
+  also lists the account's frozen namespaces as `namespaces: [{namespace,
+  frozen_at, frozen_reason}]`.
+- **Admin queue**: `/admin/developers`, `GET /api/admin/developers`,
+  `POST /api/admin/developers/{member_id}/approve|reject|revoke` (a reason is
+  required to reject or revoke). Revoking, in one transaction, revokes every
+  token of the account, freezes its namespaces, yanks all of their versions in
+  every channel and revokes their publisher keys, and blocks the digest of
+  every version they published with reason `qualification-revoked`.
+- **Own data**: `GET /api/publisher/me`, `PUT /api/publisher/me/key`,
+  `GET /api/publisher/me/versions` (`?extension=&version=`).
+- **Local-install trust**: `GET /api/trust/local-install` returns a separate
+  root-signed document (`kind: local-install-trust`) with the keys of approved
+  and first-party publishers (replaced or revoked ones as `revoked`) and the
+  blocked package digests (blocklist kind `digest`) as `[{digest, reason}]`.
+  `reason` is one of `security`, `admin` (the default for an admin entry),
+  `qualification-revoked` or `developer-withdrawn`; the app disables, warns
+  about or only labels an installed copy by it. The existing trust
+  metadata is unchanged: released Apps reject any new field in it.
+- **Errors**: new and changed JSON errors carry `detail: {code, message}` —
+  `TOKEN_MISSING|INVALID|REVOKED|EXPIRED` (401), `TOKEN_SCOPE`,
+  `QUALIFICATION_REQUIRED`, `NAMESPACE_FROZEN`, `DIGEST_BLOCKED` (403), yank
+  `NOT_OWNER` (403) and `NOT_FOUND` (404).
+- **Audit**: every application, decision, revocation, claim, token issue or
+  revoke, key change, submission, yank and blocklist change is a
+  `registry_audit` row naming the actor; `GET /api/admin/audit` reads it.
 
 | Variable | Default | Meaning |
 |---|---|---|

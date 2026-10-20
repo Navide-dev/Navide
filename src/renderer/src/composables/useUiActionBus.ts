@@ -70,6 +70,8 @@ export interface UseUiActionBusOptions {
    *  backend. Absent (tests, plugin hosts): refused. */
   accountActions?: {
     signIn: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
+    /** ui.accounts.switch (cli_account_switch). Absent: refused. */
+    switch?: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
   }
 }
 
@@ -188,15 +190,17 @@ export async function handleUiInvokeRequest(
         ok = false
         error = 'action is required for op "invoke"'
       } else if (req.action.startsWith(ACCOUNT_ACTION_PREFIX)) {
-        const signIn = opts.accountActions?.signIn
+        const handler = req.action === 'ui.accounts.signIn'
+          ? opts.accountActions?.signIn
+          : req.action === 'ui.accounts.switch' ? opts.accountActions?.switch : undefined
         if (!req.caller_pane_id) {
           ok = false
           error = `${req.action} is reachable only from a CLI pane, through its own MCP tool`
-        } else if (req.action !== 'ui.accounts.signIn' || !signIn) {
+        } else if (!handler) {
           ok = false
           error = `unknown account action: ${req.action}`
         } else {
-          result = await signIn(req.args ?? {}, req.caller_pane_id, signal)
+          result = await handler(req.args ?? {}, req.caller_pane_id, signal)
         }
       } else {
         const outcome = await invokeCommand(req.action, req.args ?? undefined)
