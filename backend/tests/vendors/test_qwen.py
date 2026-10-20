@@ -600,3 +600,120 @@ def test_workspace_attribution_via_record_cwd(
     _write_jsonl(f2, [_assistant("a2", cwd="/elsewhere")])
     usage2 = reader.parse_session_file(f2, set())[0]
     assert attr.attribute(usage2).workspace_path is None
+
+
+# ---- background work outliving the turn (pipeline hand-off) ---------------
+# Record shapes follow qwen-code 0.22.2's own writers (bundle, read-only):
+# ChatRecordingService.recordToolResult writes a `tool_result` record whose
+# message.parts carry functionResponse.response.output = the tool's llmContent;
+# the agent tool returns "Background agent launched successfully.\ntask_id: <id>"
+# and the shell tool "Background shell started.\nid: <id>". A finished task
+# comes back as a `user` record, subtype "notification", whose part text is the
+# <task-notification> XML (BackgroundTaskRegistry / BackgroundShellRegistry
+# emitNotification). Top-level subagents run in the background BY DEFAULT.
+
+
+def _tool_result(uuid: str, name: str, output: str) -> dict:
+    return _rec("tool_result", uuid, message={"role": "user", "parts": [
+        {"functionResponse": {"id": f"call_{uuid}", "name": name, "response": {"output": output}}},
+    ]})
+
+
+def _notification(uuid: str, xml: str) -> dict:
+    rec = _rec("user", uuid, subtype="notification", provenance="system",
+               message={"role": "user", "parts": [{"text": xml}]})
+    rec["systemPayload"] = {"displayText": "Background agent finished."}
+    return rec
+
+
+def _qwen_bg_events(events: list) -> list[tuple[str, str]]:
+    return [(e.detail, e.text) for e in events if e.detail.startswith("background:")]
+
+
+def test_parse_activity_reports_background_agent_and_shell_starts(
+    fake_qwen_root: Path,
+) -> None:
+    reader = QwenLogReader()
+    f = _chat_file(fake_qwen_root)
+    _write_jsonl(f, [
+        _user("u1", "review the branch"),
+        _tool_result("t1", "agent",
+                     "Background agent launched successfully.\n"
+                     "task_id: reviewer-7f3a (internal ID — do not mention to the user.)\n"
+                     "The agent is working in the background."),
+        _tool_result("t2", "run_shell_command",
+                     "Background shell started.\nid: bg_4c21\npid: 4242\noutput file: /tmp/x.out"),
+        # a foreground tool result is not background work
+        _tool_result("t3", "read_file", "file contents"),
+        _assistant_saying("a1", "launched the reviewer"),
+    ])
+    events = reader.parse_activity(f, set())
+    assert _qwen_bg_events(events) == [
+        ("background:start", "reviewer-7f3a"),
+        ("background:start", "bg_4c21"),
+    ]
+    assert all(e.event_type == "agent_active" for e in events if e.detail.startswith("background:"))
+    assert len({e.dedup_key for e in events}) == len(events)
+
+
+def test_parse_activity_reports_background_task_ends_from_notifications(
+    fake_qwen_root: Path,
+) -> None:
+    reader = QwenLogReader()
+    f = _chat_file(fake_qwen_root)
+    _write_jsonl(f, [
+        _notification("n1", "<task-notification>\n<task-id>reviewer-7f3a</task-id>\n"
+                            "<tool-use-id>call_t1</tool-use-id>\n<status>completed</status>\n"
+                            "<summary>Agent \"review\" completed.</summary>\n</task-notification>"),
+        _notification("n2", "<task-notification>\n<task-id>bg_4c21</task-id>\n<kind>shell</kind>\n"
+                            "<status>cancelled</status>\n</task-notification>"),
+        # a Monitor event is status=running: its task keeps going
+        _notification("n3", "<task-notification>\n<task-id>mon_1</task-id>\n<kind>monitor</kind>\n"
+                            "<status>running</status>\n<event-count>3</event-count>\n</task-notification>"),
+        # a cron prompt is not a task end
+        _user("c1", "<task-notification><task-id>x</task-id><status>completed</status></task-notification>",
+              subtype="cron"),
+    ])
+    events = reader.parse_activity(f, set())
+    assert _qwen_bg_events(events) == [
+        ("background:end", "reviewer-7f3a"),
+        ("background:end", "bg_4c21"),
+    ]
+
+
+def test_parse_activity_background_events_do_not_touch_the_turn_state(
+    fake_qwen_root: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The silence-based turn end is unchanged: the foreground turn still ends
+    (the frontend's pipeline verdict is what holds on the running task), and
+    the notification opens no turn of its own."""
+    reader = QwenLogReader()
+    f = _chat_file(fake_qwen_root)
+    _write_jsonl(f, [
+        _user("u1", "go"),
+        _tool_result("t1", "agent", "Background agent launched successfully.\ntask_id: a-1\n"),
+        _assistant_saying("a1", "launched"),
+        _notification("n1", "<task-notification>\n<task-id>a-1</task-id>\n<status>completed</status>\n</task-notification>"),
+    ])
+    _go_quiet(f, monkeypatch)
+    events = reader.parse_activity(f, set())
+    assert [(e.dedup_key, e.detail, e.text) for e in events if e.event_type == "turn_complete"] == [
+        ("turn:0", "idle", "launched"),
+    ]
+    assert _qwen_bg_events(events) == [("background:start", "a-1"), ("background:end", "a-1")]
+
+
+def test_parse_activity_without_background_work_emits_no_background_events(
+    fake_qwen_root: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reader = QwenLogReader()
+    f = _chat_file(fake_qwen_root)
+    _write_jsonl(f, [
+        _user("u1", "go"),
+        _tool_result("t1", "read_file", "Background shell started. is just file text here"),
+        _assistant_saying("a1", "done"),
+    ])
+    _go_quiet(f, monkeypatch)
+    events = reader.parse_activity(f, set())
+    assert _qwen_bg_events(events) == []
+    assert [e.detail for e in events] == ["user", "assistant", "idle"]

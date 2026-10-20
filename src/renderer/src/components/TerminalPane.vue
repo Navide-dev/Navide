@@ -406,6 +406,7 @@ defineExpose({
   markDeliveredPending: terminal.markDeliveredPending,
   clearDeliveredPending: terminal.clearDeliveredPending,
   noteBackgroundTasks: terminal.noteBackgroundTasks,
+  hasLiveBackgroundTasks: terminal.hasLiveBackgroundTasks,
   markBufferPosition: terminal.markBufferPosition,
   recleanBuffer: terminal.recleanBuffer,
   flushPendingClean: terminal.flushPendingClean,
