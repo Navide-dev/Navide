@@ -4033,6 +4033,16 @@ ipcMain.handle('window:reattachGroup', (event, arg: { groupId?: string } | undef
   return { ok: true }
 })
 
+// MCP window_focus (DESIGN-C S3): a window brings ITSELF to the front. The
+// window is the sender's, never an argument, so a renderer cannot focus (or
+// name) any other window through this.
+ipcMain.handle('window:focusSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return { ok: false }
+  revealMainWindow(win)
+  return { ok: true }
+})
+
 ipcMain.handle('window:getDetachedGroups', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   const ws = win ? mainWindowWorkspaces.get(win) : undefined

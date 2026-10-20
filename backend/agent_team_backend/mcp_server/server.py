@@ -571,7 +571,23 @@ def _target_view(entry: Any, same_workspace: bool) -> dict[str, Any]:
         view["surface"] = entry.surface
     if entry.window_kind:
         view["window_kind"] = entry.window_kind
+    # The main window mirroring the pane (window_list / window_focus take it).
+    # Absent when no main window with an id holds it, so such a pane keeps
+    # exactly the keys it always had.
+    window_id = _pane_window_id(entry.pane_id)
+    if window_id:
+        view["window_id"] = window_id
     return view
+
+
+def _pane_window_id(pane_id: str) -> str:
+    """The page-load id of the main window mirroring *pane_id*, or ''."""
+    from agent_team_backend import agent_messaging, app
+
+    session = agent_messaging.owner(pane_id)
+    if session is None or getattr(session, "dead", False) or not app.is_main_window(session):
+        return ""
+    return str(getattr(session, "window_id", "") or "")
 
 
 #: How long a read waits for one pane's git snapshot before leaving `git` off
@@ -657,6 +673,9 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
 
     `offline` marks a pane whose Navide window has lost its connection: it still
     exists and is expected back, but sending to it fails until it returns.
+
+    `window_id` names the Navide window the pane runs in — the id window_list
+    and window_focus use. Absent when no main window is known to hold it.
 
     `git` appears on a local target whose pane works inside a git checkout:
     {branch, worktreeRoot, isLinkedWorktree, dirty, ahead, behind, fetchedAt}.
@@ -800,7 +819,7 @@ async def cli_whoami(ctx: Context) -> dict[str, Any]:
     and has none of these: it gets {ok, caller} only.
     Returns {ok, caller, name, address, pane_id, workspace_path, agent_key,
     busy, offline, delegation_hint, hold_reason?, surface?, window_kind?,
-    spawned_by?, waiting_on_me?,
+    window_id?, spawned_by?, waiting_on_me?,
     cloud?} or {ok: false, error}.
     """
     from agent_team_backend import agent_messaging
@@ -6277,6 +6296,110 @@ async def _wait_window_ready(workspace_path: str) -> bool:
     return False
 
 
+# ── Window tools (window_list / window_focus) ──────────────────────────────
+# A window is named by its page-load id (`ui.invoke.ready` window_id). A reload
+# mints a new one on purpose: the page an old id named is gone, so the old id
+# answers "unknown-window" instead of reaching the new page. Every request here
+# is addressed to one window's own WS session, never broadcast.
+
+#: One window's budget to describe itself. A window that misses it is listed
+#: with answered false rather than holding up the others.
+_WINDOW_DESCRIBE_TIMEOUT_S = 5.0
+
+
+def _window_session(window_id: str) -> Any | None:
+    """The live main window whose page-load id is *window_id*, or None."""
+    from agent_team_backend import app
+
+    if not window_id:
+        return None
+    for session in app.main_window_sessions():
+        if session.window_id == window_id:
+            return session
+    return None
+
+
+def _caller_view(caller: _Caller) -> dict[str, Any]:
+    """Who is acting, from the credential: {pane_id, address} or {kind}."""
+    from agent_team_backend import agent_messaging
+
+    if caller.kind != "pane":
+        return {"kind": caller.kind}
+    entry = agent_messaging.get(caller.pane_id)
+    return {"pane_id": caller.pane_id, "address": entry.qualified_name if entry else ""}
+
+
+async def _window_request(
+    session: Any,
+    action: str,
+    args: dict[str, Any] | None,
+    caller: _Caller,
+    *,
+    timeout: float = _UI_INVOKE_TIMEOUT_S,
+) -> dict[str, Any] | None:
+    """Ask one window to run *action*; its ui.invoke.result, or None when it
+    could not be reached or did not answer within *timeout*."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    request_id = secrets.token_hex(16)
+    fut = _ui_invoke_pending.register(request_id)
+    payload: dict[str, Any] = {
+        "request_id": request_id,
+        "workspace_path": "",
+        "op": "invoke",
+        "action": action,
+        "args": args,
+        "global": False,
+        # This window and no other: it answers without the ownership test.
+        "addressed": True,
+        "caller_pane_id": caller.pane_id if caller.kind == "pane" else "",
+    }
+    if not await app.unicast_to(session, make_event("ui.invoke.request", payload)):
+        _ui_invoke_pending.discard(request_id)
+        return None
+    result = await _ui_invoke_pending.wait(request_id, fut, timeout=timeout)
+    return None if result is TIMEOUT else result
+
+
+async def _describe_windows(caller: _Caller) -> list[tuple[Any, dict[str, Any] | None]]:
+    """Every main window with its own description (None: did not answer),
+    asked in parallel."""
+    from agent_team_backend import app
+
+    sessions = app.main_window_sessions()
+    answers = await asyncio.gather(*(
+        _window_request(s, "ui.window.describe", None, caller, timeout=_WINDOW_DESCRIBE_TIMEOUT_S)
+        for s in sessions
+    ))
+    return list(zip(sessions, answers))
+
+
+def _display_self_windows(caller: _Caller, described: list[tuple[Any, dict[str, Any] | None]]) -> set[str]:
+    """The caller's windows, FOR DISPLAY ONLY (window_list's is_yours).
+
+    The window mirroring the pane, plus every main window holding the pane's
+    workspace. No refusal is decided on this: every "is it your own" check
+    belongs to the self-scope guard (DESIGN-C §2, S1), never to this copy.
+    """
+    from agent_team_backend import agent_messaging
+
+    if caller.kind != "pane":
+        return set()
+    own = {_pane_window_id(caller.pane_id)} - {""}
+    entry = agent_messaging.get(caller.pane_id)
+    if entry is None:
+        return own
+    mine = _norm_workspace(entry.workspace_path)
+    for session, answer in described:
+        result = (answer or {}).get("result") if (answer or {}).get("ok") else None
+        if not isinstance(result, dict) or result.get("kind") == "detached-group":
+            continue
+        if any(_norm_workspace(str(p)) == mine for p in result.get("workspaces") or []):
+            own.add(session.window_id)
+    return own
+
+
 @server.tool()
 async def ui_list_actions(workspace_path: str, ctx: Context) -> dict[str, Any]:
     """List the UI actions registered by the Navide window for workspace_path.
@@ -6364,6 +6487,12 @@ async def ui_invoke(
         refused = _login_pane_input_refusal(named, named)
         if refused is not None:
             return {**refused, "result": None}
+    if action == "ui.window.focus":
+        # The focused window says who did it; that name comes from the
+        # credential, never from what the caller wrote (window_focus does
+        # the same).
+        who = _caller_view(caller)
+        args = {**(args or {}), "caller_address": who.get("address") or who.get("kind", "")}
     if action.startswith("ui.accounts."):
         # Reached through their own tools only, which check the caller and
         # tell the user who asked; the window refuses them off that path too.
@@ -11385,3 +11514,5 @@ from agent_team_backend.mcp_server import marketplace_forms as _marketplace_form
 from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  # noqa: E402,F401
 # W1: local Navide plugin package tools (open, validate, package, fill).
 from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401
+# DESIGN-C S3: window_list / window_focus.
+from . import window_tools as _window_tools  # noqa: E402,F401

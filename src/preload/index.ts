@@ -679,6 +679,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
   detachWorkspace: (args: { workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('window:detachWorkspace', args),
   getDetachedGroups: (): Promise<string[]> => ipcRenderer.invoke('window:getDetachedGroups'),
+  /** Bring the calling window itself to the front (MCP window_focus). Main
+   *  resolves the window from the sender; no other window can be named. */
+  focusSelf: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:focusSelf'),
   /** Merge a detached group back. Omit groupId from the detached window itself
    *  — main resolves it from the sender. */
   reattachGroup: (args?: { groupId?: string }): Promise<{ ok: boolean }> =>

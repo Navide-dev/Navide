@@ -134,6 +134,7 @@ declare global {
       detachGroup: (args: { groupId: string; workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }) => Promise<{ ok: boolean }>
       detachWorkspace: (args: { workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }) => Promise<{ ok: boolean }>
       getDetachedGroups: () => Promise<string[]>
+      focusSelf?: () => Promise<{ ok: boolean }>
       reattachGroup: (args?: { groupId?: string }) => Promise<{ ok: boolean }>
       onGroupDetached: (cb: (groupId: string) => void) => void
       onGroupReattached: (cb: (groupId: string) => void) => void
