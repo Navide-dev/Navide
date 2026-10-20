@@ -217,6 +217,19 @@ async def test_a_free_text_row_takes_the_text_after_the_id(env: Env) -> None:
     assert env.tg.texts()[-1] == "✅ 已送出：選項 3（自由輸入）"
 
 
+async def test_a_long_free_text_reaches_the_pane_whole(env: Env) -> None:
+    rid = await _question(env, ["Keep", "Discard", "Type something."])
+    long = " ".join(["word"] * 1200)
+    await env.inbound(f"3 {rid} {long}")
+    assert env.fake.answers == [("pane-1", {"kind": "question", "option": 3, "text": long})]
+
+
+async def test_invisible_characters_are_dropped_from_free_text(env: Env) -> None:
+    rid = await _question(env, ["Keep", "Discard", "Type something."])
+    await env.inbound(f"3 {rid} a\u202eb\u200bc\ufeff\u2066d\u2028e")
+    assert env.fake.answers == [("pane-1", {"kind": "question", "option": 3, "text": "abcd e"})]
+
+
 async def test_a_bare_free_text_answer_needs_the_free_text_row(env: Env) -> None:
     await _question(env, ["Keep", "Discard", "Type something."])
     await env.inbound("2 and also something")  # option 2 takes no text: not an answer

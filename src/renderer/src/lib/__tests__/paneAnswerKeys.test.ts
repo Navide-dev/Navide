@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { awaitingPromptText, isPermanentAllow, parseMenuOptions, resolveAnswerKeys, stillOnMenu, type PaneAnswer } from '../paneAnswerKeys'
+import { awaitingPromptText, isPermanentAllow, parseMenuOptions, resolveAnswerKeys, stillOnMenu, writeAnswerSteps, type PaneAnswer } from '../paneAnswerKeys'
 
 const CLAUDE_PERMISSION = [
   'Do you want to make this edit to useTerminal.ts?',
@@ -278,5 +278,68 @@ describe('stillOnMenu', () => {
     expect(stillOnMenu(before, 'awaiting', `${'─'.repeat(40)}\n❯ `)).toBe(false)
     expect(stillOnMenu(before, 'awaiting', CLAUDE_SINGLE_WITH_OTHER)).toBe(false)
     expect(stillOnMenu(before, 'running', claudeMulti(0))).toBe(false)
+  })
+})
+
+describe('free text is typed whole', () => {
+  it('never shortens a long text', () => {
+    const long = 'word '.repeat(1200).trim()
+    const r = resolve('claude', { kind: 'question', option: 3, text: long }, CLAUDE_SINGLE_WITH_OTHER, 'permission')
+    expect(r.ok && r.steps?.[2]).toBe(long)
+  })
+
+  it('drops bidi controls and zero-width characters, and treats U+2028 as a break', () => {
+    const r = resolve('claude', { kind: 'question', option: 3, text: 'a‮b​c﻿⁦d e f' }, CLAUDE_SINGLE_WITH_OTHER, 'permission')
+    expect(r.ok && r.steps?.[2]).toBe('abcd e f')
+  })
+})
+
+describe('writeAnswerSteps', () => {
+  const menu = parseMenuOptions(claudeMulti(0))
+  const steps = ['1', DOWN, DOWN, 'docs', DOWN, '\r']
+
+  function run(screens: string[]) {
+    const written: string[] = []
+    let reads = 0
+    const result = writeAnswerSteps({
+      steps,
+      menu,
+      read: () => ({ displayStatus: 'awaiting', screen: screens[Math.min(reads++, screens.length - 1)] }),
+      write: async (data) => (written.push(data), { ok: true }),
+      gapMs: 0,
+    })
+    return { result, written, reads: () => reads }
+  }
+
+  it('checks the screen before every step after the first, and writes them all while it holds', async () => {
+    const r = run([claudeMulti(0, [1])])
+    expect(await r.result).toEqual({ ok: true })
+    expect(r.written).toEqual(steps)
+    expect(r.reads()).toBe(steps.length - 1)
+  })
+
+  it('never types the text once the menu is gone', async () => {
+    const idle = `${'─'.repeat(40)}\n❯ `
+    const r = run([claudeMulti(0, [1]), claudeMulti(1, [1]), idle])
+    expect(await r.result).toBe('prompt-changed')
+    expect(r.written).toEqual(['1', DOWN, DOWN])
+  })
+
+  it('never presses Enter once the menu is gone', async () => {
+    const typed = claudeMulti(2, [1, 3]).replace('Type something', 'docs')
+    const r = run([claudeMulti(0, [1]), claudeMulti(1, [1]), claudeMulti(2, [1]), typed, 'Next question?\n❯ 1. Yes\n  2. No'])
+    expect(await r.result).toBe('prompt-changed')
+    expect(r.written).toEqual(['1', DOWN, DOWN, 'docs', DOWN])
+  })
+
+  it('stops after a failed write', async () => {
+    const written: string[] = []
+    const result = await writeAnswerSteps({
+      steps, menu, gapMs: 0,
+      read: () => ({ displayStatus: 'awaiting', screen: claudeMulti(0) }),
+      write: async (data) => (written.push(data), { ok: false }),
+    })
+    expect(result).toEqual({ ok: false })
+    expect(written).toEqual(['1'])
   })
 })

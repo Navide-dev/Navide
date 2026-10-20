@@ -54,7 +54,6 @@ const PERMANENT_ALLOW_VENDORS = new Set(['grok'])
 const ESC = '\x1b'
 const UP = '\x1b[A'
 const DOWN = '\x1b[B'
-const MAX_ANSWER_TEXT = 500
 const MENU_LINE = /^\s*(?:[❯›>]\s*)?(\d)\.\s+(.+?)\s*$/
 const CURSOR_LINE = /^\s*[❯›>]/
 // Keep in sync with _MULTI_SELECT_RE and _FREE_TEXT_RE in backend/agent_team_backend/channels/relay.py.
@@ -117,10 +116,20 @@ function parseMenu(screen: string): { options: string[]; cursor: number } {
 
 const isFreeText = (option: string) => FREE_TEXT.test(option.replace(CHECKBOX, ''))
 
-/** Free text as it is typed into a pane: one line, no control characters, capped. */
+// Bidi controls and zero-width characters. Keep in sync with _INVISIBLE_RE in
+// backend/agent_team_backend/channels/relay.py.
+const INVISIBLE = /[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g
+
+/** Free text as it is typed into a pane: one line (U+2028 / U+2029 too), no
+ *  control or invisible characters. Never shortened: the pane gets all of it. */
 function typedText(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/[\x00-\x1f\x7f-\x9f]/g, ' ').split(/\s+/).filter(Boolean).join(' ').slice(0, MAX_ANSWER_TEXT)
+  return text
+    .replace(INVISIBLE, '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(' ')
 }
 
 /** Arrow presses that move the cursor from row `from` to row `to`. */
@@ -137,6 +146,29 @@ export function stillOnMenu(before: string[], displayStatus: string | undefined,
   const now = parseMenuOptions(screen)
   const label = (o: string) => squash(o.replace(CHECKBOX, ''))
   return now.length === before.length && before.every((o, i) => isFreeText(o) || label(o) === label(now[i]))
+}
+
+/** Writes an answer's steps in order, `gapMs` apart. Every step after the first
+ *  (each typed text and each Enter included) goes in only while `stillOnMenu`
+ *  holds for the screen `read` returns then; otherwise it stops with
+ *  'prompt-changed' and nothing more is written. */
+export async function writeAnswerSteps<R extends { ok: boolean }>(opts: {
+  steps: string[]
+  menu: string[]
+  read: () => { displayStatus: string | undefined; screen: string }
+  write: (data: string) => Promise<R>
+  gapMs: number
+}): Promise<R | 'prompt-changed'> {
+  const [first, ...rest] = opts.steps
+  let resp = await opts.write(first)
+  for (const data of rest) {
+    if (!resp.ok) break
+    await new Promise((resolve) => setTimeout(resolve, opts.gapMs))
+    const { displayStatus, screen } = opts.read()
+    if (!stillOnMenu(opts.menu, displayStatus, screen)) return 'prompt-changed'
+    resp = await opts.write(data)
+  }
+  return resp
 }
 
 function steps(keys: string[]): AnswerKeys {

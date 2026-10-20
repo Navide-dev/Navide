@@ -33,7 +33,6 @@ REQUEST_TTL_S = 1800.0
 MAX_BUTTON_OPTIONS = 9
 CALLBACK_PREFIX = "nv1:"
 
-MAX_ANSWER_TEXT = 500
 _CHOICE = r"yes|y|no|n|[1-9](?:\s*[,，、]\s*[1-9])*"
 _TEXT_ANSWER_RE = re.compile(
     rf"^\s*({_CHOICE})\s+([{ID_ALPHABET}]{{{ID_LENGTH}}})(?:\s+(.+?))?\s*$", re.IGNORECASE | re.DOTALL)
@@ -135,10 +134,17 @@ def _choice(m: re.Match[str] | None, text_group: int) -> str:
     return ",".join(re.split(r"\s*[,，、]\s*", word))
 
 
+# Bidi controls and zero-width characters: invisible in the chat, they could make
+# the typed text read differently from what lands in the pane.
+# Keep in sync with INVISIBLE in src/renderer/src/lib/paneAnswerKeys.ts.
+_INVISIBLE_RE = re.compile("[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+
+
 def answer_text(text: str) -> str:
-    """Free text as it may be typed into a pane: one line, no control characters, capped."""
-    flat = " ".join(re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", text).split())
-    return flat[:MAX_ANSWER_TEXT]
+    """Free text as it may be typed into a pane: one line (U+2028 / U+2029 too), no
+    control or invisible characters. Never shortened: the pane gets all of it."""
+    visible = _INVISIBLE_RE.sub("", text)
+    return " ".join(re.sub(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]", " ", visible).split())
 
 
 def choice_numbers(choice: str) -> list[int]:
