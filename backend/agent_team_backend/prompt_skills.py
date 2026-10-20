@@ -20,6 +20,10 @@ LEGACY_PROMPT_KEY = "loop-prompt-text"  # LOOP_PROMPT_SETTING_KEY in loopPrompt.
 LANGUAGE_KEY = "agent-team:language"  # LANGUAGE_KEY in plugin-ui's i18n
 LANGUAGES = ("zh-TW", "en-US", "ja-JP")
 DEFAULT_LANGUAGE = "zh-TW"  # the renderer's fallbackLocale
+# UI locales the renderer recognizes (UI_LOCALES in plugin-ui's uiLocales.ts)
+# that have no backend strings yet: their bot/channel text is English.
+UNTRANSLATED_UI_LANGUAGES = ("zh-CN", "ko-KR", "es-ES", "fr-FR", "de-DE", "pt-BR", "ru-RU", "vi-VN")
+UNTRANSLATED_FALLBACK = "en-US"
 
 _SEED_PATH = Path(__file__).with_name("prompt_skill_seed.json")
 
@@ -31,7 +35,11 @@ def load_seed() -> dict[str, Any]:
 
 def language(settings: dict[str, Any]) -> str:
     saved = settings.get(LANGUAGE_KEY)
-    return saved if saved in LANGUAGES else DEFAULT_LANGUAGE
+    if saved in LANGUAGES:
+        return saved
+    if saved in UNTRANSLATED_UI_LANGUAGES:
+        return UNTRANSLATED_FALLBACK
+    return DEFAULT_LANGUAGE
 
 
 def builtin(settings: dict[str, Any]) -> list[dict[str, Any]]:

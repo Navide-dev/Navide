@@ -1,6 +1,6 @@
 import { app, clipboard, Menu, webContents, type BrowserWindow, type MenuItemConstructorOptions, type WebContents } from 'electron'
 import { LEGAL_LABELS, LEGAL_ROUTES, type LegalRoute } from '../shared/legalLinks'
-import { MENU_STRINGS } from './menuStrings'
+import { menuStringsFor } from './menuStrings'
 import type { SupportedLocale } from './hostLocale'
 import { isMac } from '../shared/osplat'
 import { getTerminalSelection } from './terminal-selection-cache'
@@ -138,7 +138,7 @@ export function installApplicationMenu(
   const mac = isMac()
   // Required, with no default: a caller that forgot to pass one would build an
   // English menu for a zh-TW user, and that failure looks exactly like success.
-  const s = MENU_STRINGS[locale]
+  const s = menuStringsFor(locale)
 
   // `role: 'copy'` copies the DOM selection, which a terminal pane never has
   // (`.xterm` is user-select: none), so Edit > Copy was inert while a CLI was
