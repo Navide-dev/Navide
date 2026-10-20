@@ -138,23 +138,18 @@ describe('useTerminal — fit to pane width', () => {
     scope.stop()
   })
 
-  // xterm keeps no scrollback for the alternate buffer and never reflows it, so
-  // there is nothing for a cap to protect: that pane fills the stage at once.
-  it('never caps a pane that is showing its alternate screen', () => {
+  // xterm 6.0 resizes (and reflows) the normal buffer even while the alternate
+  // one is active (BufferSet.resize). A pane that enters a stage mode on its
+  // alternate screen ($EDITOR from claude's Ctrl+G, less, vim) and leaves it
+  // mid-mode must still be at its grid cols, or claude repaints at the stage
+  // width and the return to grid is a narrowing reflow of those rows.
+  it('caps a pane that enters a stage mode on its alternate screen, and keeps the cap after it leaves', () => {
     bufferType.value = 'alternate'
-    const { result, scope } = mountedTerminal()
-    result.lockCols(true)
-    expect(ctrl.setColsCap).toHaveBeenLastCalledWith(null)
-    scope.stop()
-  })
-
-  it('clears a stale cap when the pane has since moved to its alternate screen', () => {
     const { result, scope } = mountedTerminal()
     result.lockCols(true)
     expect(ctrl.setColsCap).toHaveBeenLastCalledWith(80)
-    bufferType.value = 'alternate'
-    result.lockCols(true)
-    expect(ctrl.setColsCap).toHaveBeenLastCalledWith(null)
+    bufferType.value = 'normal' // the editor exits back to claude, still on the stage
+    expect(ctrl.setColsCap).not.toHaveBeenCalledWith(null)
     scope.stop()
   })
 })

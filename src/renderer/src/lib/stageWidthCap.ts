@@ -6,9 +6,9 @@
  * that paints absolute-positioned full-width rows (claude) can never repaint
  * what reflow strands there, so each pane is capped at the column count it had
  * and the extra stage space stays blank. A mode switch alone therefore never
- * changes the cols of a normal-buffer pane. A pane on its alternate screen has
- * no scrollback and is never reflowed, so the pane itself declines the cap
- * (useTerminal.lockCols) and fills the stage at once.
+ * changes the cols of a pane. That includes a pane on its alternate screen:
+ * xterm still reflows the normal buffer underneath it, which the pane returns
+ * to when the full-screen app exits.
  *
  * Widening the WINDOW is different: the user asked for width. The cap is lifted
  * once the window is wider than it was when the mode was entered. Comparing the

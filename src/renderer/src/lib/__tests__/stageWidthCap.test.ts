@@ -5,8 +5,7 @@ import { createStageWidthCap, type CappablePane } from '../stageWidthCap'
 // width its container offers. It follows useTerminal's contract (lockCols sets
 // or clears the cap at the current cols, and never fits by itself; unlockCols
 // lifts the cap and fits) so assertions are on cols and cap state, not on which
-// calls happened. A pane on its alternate screen declining the cap is the pane's
-// own rule and is pinned in useTerminal.fitWidth.test.ts.
+// calls happened.
 function fakePane(opts: { cols: number; container: number }) {
   let { cols, container } = opts
   let cap: number | null = null

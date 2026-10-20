@@ -3303,10 +3303,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // the terminal. Switching back then needs no resize, which is what keeps
   // xterm from reflowing (and permanently garbling) the scrollback. Passing
   // false lifts the cap and lets the next fit use the full container.
-  // A pane showing its alternate screen is never capped: that buffer has no
-  // scrollback and xterm does not reflow it, so it can fill the stage at once.
   function lockCols(locked: boolean): void {
-    resizeCtrl.setColsCap(locked && term.buffer.active.type === 'normal' ? term.cols : null)
+    resizeCtrl.setColsCap(locked ? term.cols : null)
   }
 
   // True while a cols cap leaves part of the visible container blank — what the

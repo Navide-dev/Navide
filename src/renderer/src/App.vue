@@ -20684,8 +20684,7 @@ const effectiveLayoutMode = computed<'grid' | 'spotlight' | 'sidebar' | 'fullscr
 // modes) on the way in: the extra space is left blank instead of becoming
 // columns, and switching back to grid is then a no-op resize. Set before the
 // fit below, which is what reads the cap. Panes stay uncapped in grid mode,
-// where the container is the width the user actually chose, and so do panes on
-// their alternate screen (see lockCols). Widening the window itself past the
+// where the container is the width the user actually chose. Widening the window itself past the
 // width it had on entry lifts the cap (see onWindowResize) — and a pane that
 // was lifted reflows when it goes back to grid, the accepted cost of widening.
 watch(effectiveLayoutMode, (mode) => {
