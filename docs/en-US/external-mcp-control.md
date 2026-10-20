@@ -624,7 +624,9 @@ There is no count or size quota, but Navide never fills the disk: a request
 whose copy would leave less than 5 GiB free (or that runs out of space while
 writing) is refused with `STAGING_DISK_LOW`, naming the free space and the
 file's size, and nothing is written; copies staged earlier and their cards
-are not touched. The package's own text (id, version, errors quoting its
+are not touched. Expired copies are removed every minute, a rejected
+request's copy at once (in whichever window it was rejected), and whatever an
+earlier run left is removed when Navide starts. The package's own text (id, version, errors quoting its
 manifest, the disclosure) is fenced as above and marks the reading pane.
 `plugins_list_installed` also returns each item's `source` (`marketplace`,
 `prerelease`, `testplace`, `local-signed`, `local-unsigned`,

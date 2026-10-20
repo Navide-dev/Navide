@@ -46,8 +46,12 @@ export function diskFreeBytes(path: string): number {
   const stat = statfsSync(path)
   return Number(stat.bavail) * Number(stat.bsize)
 }
-/** How long an expired id is remembered after its copy is gone. */
+/** How long an expired or refused id is remembered after its copy is gone. */
 const EXPIRED_MEMORY_MS = 24 * 60 * 60 * 1000
+/** Expired copies are also removed on this timer, not only on the next use. */
+export const SWEEP_INTERVAL_MS = 60 * 1000
+
+const MISMATCH = 'STAGING_DIGEST_MISMATCH: the staged copy changed on disk; nothing was used. Ask again'
 
 export interface StagedEntry<M> {
   /** Null for an entry without bytes (a developer folder, loaded in place). */
@@ -61,6 +65,9 @@ export class PackageStagingStore<M> {
   private readonly expired = new Map<string, number>()
   /** Entries per staged file, by digest. */
   private readonly references = new Map<string, number>()
+  /** Ids whose shared file failed its digest check, so each says so on use. */
+  private readonly refused = new Map<string, number>()
+  private readonly timer: ReturnType<typeof setInterval>
 
   /**
    * @param root folder for the staged files, created owner-only; leftovers of
@@ -79,6 +86,14 @@ export class PackageStagingStore<M> {
     for (const name of readdirSync(root)) {
       if (STAGED_FILE.test(name)) rmSync(join(root, name), { force: true })
     }
+    // Unref'd: the sweep never keeps Navide from quitting.
+    this.timer = setInterval(() => this.sweep(), SWEEP_INTERVAL_MS)
+    this.timer.unref?.()
+  }
+
+  /** Stop the periodic sweep (tests, shutdown). */
+  close(): void {
+    clearInterval(this.timer)
   }
 
   private file(digest: string): string {
@@ -127,6 +142,7 @@ export class PackageStagingStore<M> {
       this.expired.set(id, now)
     }
     for (const [id, at] of this.expired) if (now - at > EXPIRED_MEMORY_MS) this.expired.delete(id)
+    for (const [id, at] of this.refused) if (now - at > EXPIRED_MEMORY_MS) this.refused.delete(id)
   }
 
   /** Keep `bytes` (or, with null, only `meta`); returns the id and the digest. */
@@ -161,6 +177,7 @@ export class PackageStagingStore<M> {
     const entry = this.entries.get(id)
     if (!entry) {
       if (this.expired.has(id)) throw new Error(`${this.expiredCode}: the staged package expired; ask again`)
+      if (this.refused.has(id)) throw new Error(MISMATCH)
       return undefined
     }
     if (entry.digest === null) return { bytes: null, digest: null, meta: entry.meta }
@@ -174,16 +191,28 @@ export class PackageStagingStore<M> {
         closeSync(fd)
       }
     } catch (error) {
-      this.drop(id)
+      this.refuseDigest(entry.digest)
       throw new Error(`STAGING_DIGEST_MISMATCH: the staged copy cannot be read (${error instanceof Error ? error.message : String(error)}); ask again`)
     }
     if (createHash('sha256').update(bytes).digest('hex') !== entry.digest) {
-      // The file is bad for every entry sharing it; each refuses it on use.
-      rmSync(this.file(entry.digest), { force: true })
-      this.drop(id)
-      throw new Error('STAGING_DIGEST_MISMATCH: the staged copy changed on disk; nothing was used. Ask again')
+      this.refuseDigest(entry.digest)
+      throw new Error(MISMATCH)
     }
     return { bytes, digest: entry.digest, meta: entry.meta }
+  }
+
+  /** A shared file failed its check: it is bad for every entry using it.
+   * All of them go (each says so on use) and so does the file, so the same
+   * bytes staged again are written afresh. */
+  private refuseDigest(digest: string): void {
+    const now = this.now()
+    for (const [id, entry] of this.entries) {
+      if (entry.digest !== digest) continue
+      this.entries.delete(id)
+      this.refused.set(id, now)
+    }
+    this.references.delete(digest)
+    rmSync(this.file(digest), { force: true })
   }
 
   /** The user decided (or the copy was used): remove it now. */

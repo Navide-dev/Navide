@@ -282,6 +282,13 @@ describe('MED-5: staged copies live as long as their request', () => {
     expect(call('plugins:listInstalled')).toEqual([])
   })
 
+  it('LOW-2: clears what an earlier run left as soon as the Host starts', () => {
+    mkdirSync(stagingDir(), { recursive: true })
+    writeFileSync(join(stagingDir(), `${'e'.repeat(64)}.vsix`), 'orphan')
+    register()
+    expect(stagedFiles()).toEqual([])
+  })
+
   it('deletes the copy once the user decides, and once its request expires', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-20T10:00:00Z'))

@@ -1562,14 +1562,14 @@ export function registerPluginIpc(
     })
   )
   // Staged copies of agent file requests, on disk under Navide's data folder
-  // (never the plugins root), created on first use.
-  let agentStagingStore: PackageStagingStore<AgentStagedMeta> | null = null
-  const agentStaging = (): PackageStagingStore<AgentStagedMeta> =>
-    (agentStagingStore ??= new PackageStagingStore<AgentStagedMeta>(
-      join(dirname(pluginsRoot), 'plugin-staging', 'agent-file'),
-      AGENT_STAGED_TTL_MS,
-      'AGENT_STAGING_EXPIRED',
-    ))
+  // (never the plugins root). Made when the Host starts, which removes what an
+  // earlier run left: its requests did not survive the restart.
+  const agentStagingStore = new PackageStagingStore<AgentStagedMeta>(
+    join(dirname(pluginsRoot), 'plugin-staging', 'agent-file'),
+    AGENT_STAGED_TTL_MS,
+    'AGENT_STAGING_EXPIRED',
+  )
+  const agentStaging = (): PackageStagingStore<AgentStagedMeta> => agentStagingStore
   const takeAgentStaged = (stagingId: string) => agentStaging().take(stagingId)
   const stageAgentPackage = async (requested: string): Promise<LocalPackageQueryReport & { stagingId?: string }> => {
     await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])

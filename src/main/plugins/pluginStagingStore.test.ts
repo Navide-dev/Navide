@@ -89,4 +89,36 @@ describe('PackageStagingStore (MED-5 / S8 Q3)', () => {
     expect(readdirSync(root)).toEqual([`${digestOf(new Uint8Array([9]))}.vsix`])
     expect(s.take(kept.id)?.meta).toEqual({ name: 'kept' })
   })
+
+  it('LOW-1: after a digest mismatch the same bytes stage afresh, and every card that shared the bad file says why', () => {
+    const s = store()
+    const bytes = new Uint8Array([3, 1, 4])
+    const a = s.stage(bytes, { name: 'a' })
+    const b = s.stage(bytes, { name: 'b' })
+    writeFileSync(join(root, `${digestOf(bytes)}.vsix`), 'tampered')
+    expect(() => s.take(a.id)).toThrow(/^STAGING_DIGEST_MISMATCH/)
+    expect(() => s.take(b.id)).toThrow(/^STAGING_DIGEST_MISMATCH/)
+    expect(readdirSync(root)).toEqual([])
+    const again = s.stage(bytes, { name: 'again' })
+    expect(readdirSync(root)).toEqual([`${digestOf(bytes)}.vsix`])
+    expect(s.take(again.id)?.bytes).toEqual(bytes)
+  })
+
+  it('LOW-3: removes expired copies every 60 seconds on an unref timer, without waiting for the next use', () => {
+    vi.useFakeTimers()
+    try {
+      const unref = vi.spyOn(globalThis, 'setInterval')
+      const s = store()
+      const timer = unref.mock.results.at(-1)?.value as { hasRef?: () => boolean }
+      expect(timer?.hasRef?.()).toBe(false)
+      const { id } = s.stage(new Uint8Array([5]), { name: 'x' })
+      clock = 1001
+      vi.advanceTimersByTime(60_000)
+      expect(readdirSync(root)).toEqual([])
+      expect(() => s.take(id)).toThrow(/^TEST_EXPIRED/)
+      s.close()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

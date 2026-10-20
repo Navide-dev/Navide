@@ -307,7 +307,13 @@ onMounted(() => {
   clock = setInterval(() => { now.value = Date.now() }, 5_000)
   offs.push(props.backend.on(PLUGIN_APPROVAL_REQUEST_EVENT, (raw) => enqueue(raw as PluginAgentRequest)))
   offs.push(props.backend.on(PLUGIN_APPROVAL_RESOLVED_EVENT, (raw) => {
-    const { approval_id: approvalId } = raw as { approval_id: string }
+    const { approval_id: approvalId, status } = raw as { approval_id: string; status?: string }
+    // MED-5: a file request rejected in another window, or expired, drops its
+    // staged copy at once. Never on approval: the approving window takes it.
+    const resolvedFile = queue.value.find((r) => r.approval_id === approvalId && r.kind === 'plugin-install-file')
+    if (resolvedFile?.target.stagingId && (status === 'rejected' || status === 'expired')) {
+      void window.agentTeam?.plugins?.discardAgentStaged?.(resolvedFile.target.stagingId)?.catch(() => undefined)
+    }
     // The request this window is carrying out stays until its own result shows,
     // and a shown failed result stays until dismissed; any other request goes.
     if (approvalId === busyId.value) return

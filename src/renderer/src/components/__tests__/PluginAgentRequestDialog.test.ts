@@ -181,6 +181,28 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect(plugins.discardAgentStaged).toHaveBeenCalledWith('cd'.repeat(16))
   })
 
+  it('LOW-3: a file request rejected in another window, or expired, drops its copy; one approved there does not', async () => {
+    plugins.discardAgentStaged = vi.fn(async () => undefined)
+    const file = (id: string, stagingId: string) => request({
+      approval_id: id,
+      kind: 'plugin-install-file' as PluginAgentRequest['kind'],
+      target: {
+        id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.2.0', fromVersion: null,
+        path: '/x.vsix', digest: 'ab'.repeat(32), stagingId, packageKind: 'file',
+      },
+    })
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', {
+      requests: [file('r1', '11'.repeat(16)), file('r2', '22'.repeat(16)), file('r3', '33'.repeat(16))],
+    })
+    wrapper = await open(mock)
+    mock.emit('plugins.agent_request_resolved', { approval_id: 'r1', status: 'rejected', error: null })
+    mock.emit('plugins.agent_request_resolved', { approval_id: 'r2', status: 'applying', error: null })
+    mock.emit('plugins.agent_request_resolved', { approval_id: 'r3', status: 'expired', error: null })
+    await flushPromises()
+    expect(plugins.discardAgentStaged.mock.calls).toEqual([['11'.repeat(16)], ['33'.repeat(16)]])
+  })
+
   it('approves with a window confirmation, installs, reports completed and closes', async () => {
     plugins.listInstalled.mockResolvedValue([{ id: 'acme.indexer', packageVersion: '1.2.0' }])
     const mock = createMockBackend('connected')

@@ -1,6 +1,6 @@
 // Review MED-5 / S8 Q3 on W3: publish stages are files with no count limit.
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -68,6 +68,13 @@ describe('developer publish stages (MED-5)', () => {
     vi.setSystemTime(new Date('2026-10-20T11:01:00Z'))
     await expect(call('developer:publish', { stageId: late.stageId })).rejects.toThrow(/^PUBLISH_STAGE_EXPIRED/)
     expect(publish).not.toHaveBeenCalled()
+    expect(readdirSync(stagingRoot())).toEqual([])
+  })
+
+  it('LOW-2: clears what an earlier run left as soon as it is registered', () => {
+    mkdirSync(stagingRoot(), { recursive: true })
+    writeFileSync(join(stagingRoot(), `${'e'.repeat(64)}.vsix`), 'orphan')
+    register()
     expect(readdirSync(stagingRoot())).toEqual([])
   })
 })
