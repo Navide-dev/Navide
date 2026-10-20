@@ -2528,7 +2528,7 @@ export function registerPluginIpc(
   }
   ipcMain.handle('plugins:commitInstall', async (event, args: CommitInstallArgs) => {
     assertAuthorized(event)
-    return commitRegistryInstall(args)
+    return activateIfFirstInstall(await commitRegistryInstall(args))
   })
 
   // DX report A1 (card K3): install a `.vsix` the user picked in this window.
@@ -2721,6 +2721,7 @@ export function registerPluginIpc(
       activeTransactions.add(id)
       preparedLocal.delete(id)
       const candidateRecord = localTrustRecordPath(pluginsRoot, id, 'candidate')
+      let committed: { id: string; requires: string[]; restartRequired: true }
       try {
         const staged = stageInstallCandidate(pkg, pluginsRoot)
         const scanned = loadPluginDir(staged.candidateDir)
@@ -2794,7 +2795,7 @@ export function registerPluginIpc(
         lifecycleSelector.stageCandidate(id, candidate, {
           candidateGrant: { selection: candidate, grant: candidateGrant },
         })
-        return { id, requires: scanned.packageSummary.requires, restartRequired: true }
+        committed = { id, requires: scanned.packageSummary.requires, restartRequired: true }
       } catch (error) {
         try {
           forgetLocalTrustRecords(pluginsRoot, id, ['candidate'])
@@ -2805,6 +2806,7 @@ export function registerPluginIpc(
       } finally {
         activeTransactions.delete(id)
       }
+      return activateIfFirstInstall(committed)
     }
   )
 
@@ -3350,8 +3352,43 @@ export function registerPluginIpc(
 
   ipcMain.handle('plugins:restart', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
-    return restartStagedCandidate(assertPluginRemovalTarget(pluginsRoot, args?.id))
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    // L1: a first install is active once approved, so a Restart that still
+    // follows the commit (an older flow, a second click) has nothing to do.
+    const selected = lifecycleSelector.read(id)
+    if (selected?.active && !selected.candidate && !selected.activation && !activeTransactions.has(id)) {
+      return { id, packageVersion: selected.active.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
+    }
+    return restartStagedCandidate(id)
   })
+
+  /** A first install staged and not yet promoted: a candidate with no active
+   * package, no activation in progress and nothing loaded under its id (a
+   * factory rollback also leaves only a candidate; the bundled package runs). */
+  function isStagedFirstInstall(
+    record: ReturnType<PluginActivationSelector['read']>,
+  ): record is NonNullable<ReturnType<PluginActivationSelector['read']>> & { candidate: PluginPackageSelection } {
+    if (!record?.candidate || record.active || record.activation) return false
+    return !manager.getDescriptor(record.pluginId) &&
+      !manager.listInstalledPackages().some((pkg) => pkg.id === record.pluginId)
+  }
+
+  /** L1: a first install takes effect when the user approves it, through the
+   * same cutover Restart runs; nothing runs under the id yet, so nothing is
+   * drained. A native backend still asks for its own consent before it
+   * starts. One that cannot be activated stays staged (Restart and Discard
+   * remain) and the answer says why. An update is left for Restart. */
+  async function activateIfFirstInstall<T extends { id: string }>(
+    committed: T,
+  ): Promise<T | (T & { restartRequired: false; activatedVersion: string }) | (T & { activationError: string })> {
+    if (!isStagedFirstInstall(lifecycleSelector.read(committed.id))) return committed
+    try {
+      const activated = await restartStagedCandidate(committed.id)
+      return { ...committed, restartRequired: false, activatedVersion: activated.packageVersion }
+    } catch (error) {
+      return { ...committed, activationError: errorText(error) }
+    }
+  }
 
   /** Promote the staged candidate of `id`: what the Restart button does, and
    * what a launch does for a first install the user never restarted. */
@@ -3771,10 +3808,7 @@ export function registerPluginIpc(
   async function activateStagedFirstInstalls(): Promise<Array<{ pluginId: string; version: string; reason: string }>> {
     const failures: Array<{ pluginId: string; version: string; reason: string }> = []
     for (const record of lifecycleSelector.list()) {
-      if (!record.candidate || record.active || record.activation) continue
-      // A factory rollback also leaves only a candidate; the bundled package runs.
-      if (manager.getDescriptor(record.pluginId) ||
-          manager.listInstalledPackages().some((pkg) => pkg.id === record.pluginId)) continue
+      if (!isStagedFirstInstall(record)) continue
       try {
         await restartStagedCandidate(record.pluginId)
       } catch (error) {

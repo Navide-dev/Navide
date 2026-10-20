@@ -1771,6 +1771,7 @@
       },
       "restore": "復元",
       "candidateReady": "アップデート {version} の準備ができました",
+      "activationFailed": "{plugin} はインストールされましたが、有効化できませんでした：{reason}。下の一覧で再起動するか破棄してください。",
       "restartPlugin": "Navide プラグインを再起動",
       "disable": "無効化",
       "enable": "有効化",

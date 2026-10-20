@@ -493,12 +493,12 @@ declare global {
         commitInstall: (
           id: string,
           approval?: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
-        ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
         installFromFile?: () => Promise<PreparedInstallSummary | null>
         commitLocalInstall?: (
           id: string,
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
-        ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
         prepareAgentFileInstall?: (stagingId: string) => Promise<PreparedInstallSummary>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>

@@ -1771,6 +1771,7 @@
       },
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
+      "activationFailed": "{plugin} was installed but could not be activated: {reason}. Restart or discard it in the list below.",
       "restartPlugin": "Restart Navide plugin",
       "disable": "Disable",
       "enable": "Enable",
