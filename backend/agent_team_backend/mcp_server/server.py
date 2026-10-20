@@ -3715,7 +3715,7 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 
     `target` uses the same addressing as cli_send, and `pane_id` names one
     exact pane instead. Returns {ok, name,
-    agent_key, busy, last_activity?, usage?, git?, ui?, prompt_fingerprint?}. `last_activity`, when known,
+    agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
     is {type: "agent_active"|"turn_complete", text? (turn_complete only),
     age_seconds}. `ui`, when the owning Navide window answers in time, is
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
@@ -3752,6 +3752,13 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     cli_list_targets gives it: branch, worktree, dirty count and drift against
     origin/main, cached for up to ~30 s. Absent outside a repository, when git
     did not answer in time, and for a remote target.
+    `log_reader` appears only while Navide cannot read this vendor's own
+    conversation store, today OpenCode's or Kilo's shared db: {status:
+    "unreadable", reason ("unrecognized-schema" for a CLI version whose
+    tables Navide does not know, "query-failed" for an sqlite error), path,
+    detail, since}. While it is there, turn ends, token counts and session
+    binding for that vendor are not seen, so `busy` / `last_activity` can be
+    stale; it clears on the first read that works.
 
     While `ui.status` is "awaiting", `ui` also carries what the pane is
     waiting on, read off its screen: `awaitingPrompt` (the prompt text) and,
@@ -3827,6 +3834,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     git = await pane_git(pane.pane_id, pane.workspace_path)
     if git is not None:
         status["git"] = git
+    from agent_team_backend.cli_vendors import opencode as opencode_vendor
+
+    log_reader = opencode_vendor.read_problem(pane.agent_key)
+    if log_reader is not None:
+        status["log_reader"] = log_reader
 
     ui_result = await _ui_request(
         pane.workspace_path,
