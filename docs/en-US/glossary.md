@@ -55,6 +55,74 @@ underscore next to it" in any script, and Latin and Cyrillic terms match
 case-insensitively. vi-VN strings must already be NFC, and fr-FR needs a
 no-break space before `: ; ? !`.
 
+## Capitalization (en-US)
+
+Commands and menus use Title Case; everything else uses sentence case (the
+user's call, 2026-10-21). Other locales never copy English Title Case.
+
+**Title Case:** command names (keybindings list, command picker), menu-bar,
+context-menu and overflow-menu items that run an action (checkable items
+too), every button that runs an action (dialog buttons including Cancel,
+toolbar and inline buttons), the tooltip of an icon-only button when that
+tooltip is just the command name (verb first, six words or fewer, no closing
+period), **tab titles** ("Source Control", "Voice Input"), and **dialog
+titles**, which repeat the name of the command that opens them ("Delete
+Completed Plans").
+
+**Sentence case:** pane, panel and window titles; section headings;
+settings, field, checkbox, radio and toggle labels; option values in a
+dropdown; placeholders; descriptive tooltips; status text and badges; toasts;
+errors; empty states; inline links; help prose. Help prose quotes an
+on-screen label exactly as the label is written.
+
+**Feature names are proper nouns** and keep their capitals everywhere, in
+any of the above: Turn Stats, Navide Cloud, Navide Marketplace, Navide Plugin
+Pack, Agent Assets, Pipeline Manager, Resource Manager, Execution Policy,
+Auto Commit, Developer Mode, Navide Guard, Navide Browser, Loop.
+
+**Title Case mechanics (Apple Style Guide):** capitalize the first and last
+word and every noun, pronoun, verb, adjective and adverb; lowercase a, an,
+the, and, but, or, nor, for, yet, so, to, as, and prepositions of four
+letters or fewer (at, by, for, from, in, into, of, off, on, onto, out, over,
+up, with, via, per, vs.) unless first or last. Capitalize the particle of a
+phrasal verb (Sign In, Set Up, Turn On). Capitalize both parts of a
+hyphenated compound (To-Do) except Built-in and Plug-in; keep a prefix's
+second part lowercase (Re-detect). A placeholder counts as a word: "Merge
+Current Branch into {branch}". Never change product names, acronyms or
+identifiers (Navide, GitHub, macOS, CLI, MCP, `git push`); "API key" becomes
+"API Key" in Title Case.
+
+## Terms in Chinese and Japanese UI text
+
+Follow the wording the existing zh-TW and ja-JP files already use most
+(the user's call, 2026-10-21: "按照現有的習慣為主"). Translators do not coin
+new renderings; a term written two ways is unified to its majority form.
+New locales have no existing usage and follow the per-locale research, but a
+term kept in English here stays English in zh-CN too.
+
+**Kept in English in zh-TW and zh-CN:** AI, agent, CLI, MCP, MCP server, Git,
+PR, API, JSON, SSH, OAuth, LLM, token, session, hook, bot, stash, Loop, Guard,
+pane, pipeline, worktree, repo, URL, plus product and vendor names. Common
+nouns are lowercase even at the start of a string (agent, token, session,
+hook, bot, pane, pipeline, worktree, repo); acronyms and feature names keep
+their form. Put a half-width space between the English word and Chinese
+text. 面板 is reserved for "panel" and never means a pane.
+
+**zh-TW renderings:** workspace 工作區, plan 計畫, commit 提交, branch 分支,
+diff 差異, skill 技能, terminal 終端機, tab 分頁, quota 額度, Settings 設定,
+merge 合併, role 角色, model 模型, server 伺服器, push 推送, pull 拉取,
+shortcut 快捷鍵, process 程序, memory 記憶, log 紀錄, template 範本,
+open 開啟, save 儲存, refresh 重新整理, run 執行. Not used: 打開, 保存, 刷新,
+日誌, 運行, 進程, 模板, a bare 終端.
+
+**ja-JP renderings:** pane ペイン, agent エージェント, workspace
+ワークスペース, plan プラン (not 計画), quota 利用枠 (not クォータ), default
+既定 (not デフォルト), folder フォルダー, category カテゴリー, interface
+インターフェース, memory メモリ; hook and bot stay English. Long-vowel rule
+(Microsoft): words ending in -er/-or/-ar take ー (フォルダー, エディター,
+ブラウザー). Quote with 「」, not ASCII double quotes; use a full-width colon
+after Japanese text.
+
 ## What stays as it is
 
 Identifiers are contracts, not prose, and keep their names: the Settings tab ids
