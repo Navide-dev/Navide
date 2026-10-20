@@ -14,7 +14,7 @@ import { sha256Hex } from './pluginVerify'
 import { canonicalTrustJson, type RegistryPackageEnvelope, type RegistryTrustMetadata } from './pluginRegistryTrust'
 import { REGISTRY_TRUST_SNAPSHOT_NAME } from './pluginInstalledTrust'
 import type { InstallerTrustConfig } from './pluginInstaller'
-import { backendEntryOnDisk, type PluginActivationCatalogEntry } from './installedPlugins'
+import { backendEntryOnDisk, scanInstalledPlugins, type PluginActivationCatalogEntry } from './installedPlugins'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginActivationSelector } from './pluginActivationSelector'
 import { localTrustRecordPath } from './pluginLocalInstall'
@@ -430,5 +430,86 @@ describe('entry points that must not install from a file', () => {
     writeFileSync(picked, vsix())
     await call('plugins:installFromFile')
     await expect(call('plugins:commitInstall', { id: 'acme.todo', riskConfirmed: true })).rejects.toThrow(/no prepared install/)
+  })
+})
+
+describe('a first install the user did not restart, on the next launch', () => {
+  /** The Host after a relaunch: a fresh manager over the same plugins root. */
+  function relaunch() {
+    handlers.clear()
+    const manager = new FrontendPluginManager()
+    const controller = registerPluginIpc(manager, pluginsRoot, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: async () => undefined,
+      preflightCandidateFrontend: async () => undefined,
+      preflightCandidateBackend: async () => undefined,
+      onActivationChange: (change) => activations.push(change),
+      pickLocalPackageFile: pick,
+      forgetBackendConsent,
+    })
+    return { manager, controller }
+  }
+
+  async function stageLocal(bytes: Uint8Array): Promise<void> {
+    register()
+    writeFileSync(picked, bytes)
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })
+  }
+
+  it('is not reported as a broken package by the startup scan', async () => {
+    await stageLocal(vsix())
+    const scanned = scanInstalledPlugins(pluginsRoot)
+    expect(scanned.filter((entry) => entry.error)).toEqual([])
+  })
+
+  it('is activated exactly as Restart would have done it', async () => {
+    await stageLocal(vsix('acme.todo', '1.0.0', { withBackend: true }))
+    const { controller } = relaunch()
+    expect(await controller.activateStagedFirstInstalls()).toEqual([])
+
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({
+      active: { packageVersion: '1.0.0' },
+    })
+    // Promoted, so nothing is left waiting beside it.
+    expect(controller.stagedUpdates()).toEqual([])
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.candidate).toBeUndefined()
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', source: 'local-unsigned' }])
+    expect(call('plugins:listInstalled')).not.toMatchObject([{ pendingCandidateVersion: '1.0.0' }])
+    expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.todo', '1.0.0')).toMatchObject({ packageVersion: '1.0.0', storage: true })
+    expect(activations.at(-1)?.activation).toMatchObject({ pluginId: 'acme.todo', source: 'local-unsigned' })
+    // The launch after that loads it like any active package.
+    relaunch()
+    expect(scanInstalledPlugins(pluginsRoot)).toMatchObject([{ activation: { pluginId: 'acme.todo', packageVersion: '1.0.0' } }])
+  })
+
+  it('leaves an update staged next to the active package for the user to restart', async () => {
+    register()
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    writeFileSync(picked, vsix('acme.todo', '1.1.0'))
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    const { controller } = relaunch()
+
+    expect(await controller.activateStagedFirstInstalls()).toEqual([])
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({
+      active: { packageVersion: '1.0.0' },
+      candidate: { packageVersion: '1.1.0' },
+    })
+    // Disclosed, for the main window to offer "Apply now".
+    expect(controller.stagedUpdates()).toEqual([{ pluginId: 'acme.todo', activeVersion: '1.0.0', stagedVersion: '1.1.0' }])
+  })
+
+  it('reports a candidate that can no longer be activated and keeps it staged', async () => {
+    await stageLocal(vsix())
+    const selector = new PluginActivationSelector(pluginsRoot)
+    const candidateDir = selector.packageDir('acme.todo', selector.read('acme.todo')!.candidate!)
+    writeFileSync(join(candidateDir, 'frontend', 'left', 'index.html'), '<!doctype htmL>')
+    const { controller } = relaunch()
+
+    const failures = await controller.activateStagedFirstInstalls()
+    expect(failures).toMatchObject([{ pluginId: 'acme.todo', version: '1.0.0' }])
+    expect(failures[0]!.reason).toMatch(/quarantined/)
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({ candidate: { packageVersion: '1.0.0' } })
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.active).toBeUndefined()
   })
 })

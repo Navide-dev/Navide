@@ -19,7 +19,7 @@ from sqlmodel import Session
 
 from . import audit, cloud_auth, qualification
 from .auth import PublisherIdentity, get_publisher_identity
-from .config import VERIFIER_ACCEPTING, Settings, load_settings
+from .config import TRUST_PROFILE_SELF_HOSTED_DEV, VERIFIER_ACCEPTING, Settings, load_settings
 from . import review
 from .qualification import publisher_problem
 from .testplace import expiry as testplace_expiry
@@ -43,7 +43,7 @@ from .discovery import (
     pack_members,
 )
 from .models import Extension, ExtensionVersion, Publisher
-from .native_backend import native_backend_publish_problem
+from .native_backend import local_native_backend_notices, native_backend_publish_problem
 from .manifest import ManifestV2, manifest_capabilities, manifest_icon
 from .package import MAX_ARCHIVE_SIZE, PackageError, read_package
 from .packs import pack_conflict
@@ -674,8 +674,9 @@ def _register_routes(app: FastAPI) -> None:
         if pack_conflict is not None:
             raise HTTPException(status_code=400, detail=pack_conflict)
 
+        local = settings.trust_profile == TRUST_PROFILE_SELF_HOSTED_DEV
         if isinstance(manifest, ManifestV2):
-            backend_problem = native_backend_publish_problem(publisher, manifest)
+            backend_problem = native_backend_publish_problem(publisher, manifest, local=local)
             if backend_problem is not None:
                 raise HTTPException(status_code=403, detail=backend_problem)
 
@@ -858,6 +859,11 @@ def _register_routes(app: FastAPI) -> None:
             package_digest=row.package_digest,
             yanked=row.yanked,
             review_status=row.review_status,
+            notices=(
+                local_native_backend_notices(publisher, manifest, local=local)
+                if isinstance(manifest, ManifestV2)
+                else []
+            ),
         )
 
     @app.get("/api/extensions", response_model=ExtensionListResponse)
