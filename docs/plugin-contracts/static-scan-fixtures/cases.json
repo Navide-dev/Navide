@@ -208,7 +208,7 @@
       {
        "executable": "gh",
        "subcommand": "api",
-       "category": "remoteWrite",
+       "category": "remoteRead",
        "source": "frontend",
        "evidence": "callSite",
        "files": 1
@@ -216,7 +216,7 @@
       {
        "executable": "gh",
        "subcommand": "api",
-       "category": "remoteRead",
+       "category": "remoteWrite",
        "source": "frontend",
        "evidence": "callSite",
        "files": 1

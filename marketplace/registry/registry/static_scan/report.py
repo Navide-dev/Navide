@@ -205,8 +205,11 @@ def scan_package(
         return kept
 
     calls = []
+    # The category breaks the last tie: without it two calls of one command
+    # (gh api reading and writing) kept the order they were found in, which
+    # follows set iteration and so changed with PYTHONHASHSEED.
     for (executable, subcommand, category, evidence, source), files in sorted(
-        call_files.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][4], item[0][3])
+        call_files.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][4], item[0][3], item[0][2])
     ):
         command = executable if subcommand is None else f"{executable} {subcommand}"
         if _redacted(command):
