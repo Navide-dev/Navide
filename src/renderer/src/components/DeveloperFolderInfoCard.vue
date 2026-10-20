@@ -6,8 +6,10 @@
 // then and who loaded it. The fingerprint is only disclosed; Navide never
 // compares it or refuses a load over it.
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import { revealPath } from '../composables/hostShell'
+import { developerFolderLoadedByText, type DeveloperFolderLoadedBy } from '../lib/developerFolderLoadedBy'
 
 export interface DeveloperFolderInfo {
   pluginId: string
@@ -18,12 +20,13 @@ export interface DeveloperFolderInfo {
     fingerprint?: string
     fileCount?: number
   } | null
-  loadedBy?: { kind: 'user' } | { kind: 'agent'; requester: string; requestId?: string; approvedAt?: string } | null
+  loadedBy?: DeveloperFolderLoadedBy
 }
 
 const props = defineProps<{ folder: DeveloperFolderInfo }>()
 defineEmits<{ close: [] }>()
 
+const { t } = useI18n()
 const TRIGGERS = ['user-load', 'manual-reload', 'auto-reload', 'startup', 'developer-mode-on']
 const copied = ref(false)
 
@@ -33,6 +36,7 @@ const trigger = computed(() => {
   return value && TRIGGERS.includes(value) ? value : null
 })
 const fingerprint = computed(() => props.folder.lastLoad?.fingerprint ?? '')
+const loadedByText = computed(() => developerFolderLoadedByText(props.folder.loadedBy, t))
 
 async function copyFingerprint(): Promise<void> {
   try {
@@ -84,16 +88,7 @@ async function copyFingerprint(): Promise<void> {
         <template v-else>{{ $t('settings.extensions.developerMode.infoCard.notRecorded') }}</template>
       </dd>
       <dt>{{ $t('settings.extensions.developerMode.infoCard.loadedBy') }}</dt>
-      <dd class="nv-folder-card-loader">
-        <template v-if="folder.loadedBy?.kind === 'agent'">
-          {{ $t('settings.extensions.developerMode.infoCard.byAgent', {
-            requester: reveal(folder.loadedBy.requester),
-            time: folder.loadedBy.approvedAt ? new Date(folder.loadedBy.approvedAt).toLocaleString() : '',
-          }) }}
-        </template>
-        <template v-else-if="folder.loadedBy?.kind === 'user'">{{ $t('settings.extensions.developerMode.infoCard.byUser') }}</template>
-        <template v-else>{{ $t('settings.extensions.developerMode.infoCard.byUnknown') }}</template>
-      </dd>
+      <dd class="nv-folder-card-loader">{{ loadedByText }}</dd>
     </dl>
     <p class="nv-folder-card-note">{{ $t('settings.extensions.developerMode.infoCard.notReviewed') }}</p>
     <p class="nv-folder-card-note">{{ $t('settings.extensions.developerMode.infoCard.mayChange') }}</p>

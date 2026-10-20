@@ -1967,9 +1967,6 @@
           "fileCount": "{count} 個檔案",
           "computing": "計算中…",
           "loadedBy": "載入者",
-          "byUser": "你自己載入",
-          "byAgent": "由 {requester} 提出，你在主視窗核准（{time}）",
-          "byUnknown": "不明（Navide 0.2.28 以前載入）",
           "notReviewed": "沒有經過 Navide 審核、沒有簽章、未掃描。",
           "mayChange": "內容隨時可能變動；指紋只記錄載入當下的內容，Navide 不拿它擋載入。"
         },

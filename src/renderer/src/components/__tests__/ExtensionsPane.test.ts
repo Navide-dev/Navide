@@ -1433,3 +1433,38 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
     expect(wrapper.get('[data-id="acme.past"] .nv-source-badge').text()).toBe('Test build, expired 2026-10-01 (kept in use)')
   })
 })
+
+describe('ExtensionsPane: the Local folder card (A2-3)', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('opens from a developer folder badge with its path and last load; other sources have no card', async () => {
+    const developerMode = vi.fn().mockResolvedValue({
+      enabled: true,
+      folders: [{
+        pluginId: 'acme.devtodo', path: '/Users/me/dev-todo', consentedAt: '', loaded: true, loadedBy: { kind: 'user' }, autoReload: true,
+        lastLoad: { at: '2026-10-21T01:00:00.000Z', trigger: 'user-load', fingerprint: 'f'.repeat(64), fileCount: 3 },
+      }],
+    })
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.devtodo', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.file', requires: [], sensitive: [], source: 'local-unsigned' },
+      ]),
+      developerMode,
+    })
+    const wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.devtodo"] .nv-source-badge').text()).toBe('Local folder')
+    expect(wrapper.find('[data-id="acme.file"] .ext-folder-info-toggle').exists()).toBe(false)
+    await wrapper.get('[data-id="acme.devtodo"] .ext-folder-info-toggle').trigger('click')
+    await flushPromises()
+    const folderCard = wrapper.get('[data-id="acme.devtodo"] .nv-folder-card')
+    expect(folderCard.get('.nv-folder-card-path').text()).toBe('/Users/me/dev-todo')
+    expect(folderCard.get('.nv-folder-card-fingerprint code').text()).toBe('ffffffffffff')
+    await folderCard.get('.nv-folder-card-close').trigger('click')
+    expect(wrapper.find('.nv-folder-card').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})

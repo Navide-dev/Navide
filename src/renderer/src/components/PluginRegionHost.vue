@@ -17,6 +17,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { PluginSource } from '../../../shared/pluginSource'
 import { chromeSourceMark } from '../lib/pluginSourceMark'
 import PluginSourceBadge from './PluginSourceBadge.vue'
+import DeveloperFolderInfoCard, { type DeveloperFolderInfo } from './DeveloperFolderInfoCard.vue'
 
 export interface PluginRegionContribution {
   pluginId: string
@@ -48,6 +49,22 @@ const props = defineProps<{
 const src = ref<string | null>(null)
 const error = ref<string | null>(null)
 const sourceMark = computed(() => chromeSourceMark(props.contribution.source))
+
+// A2-3: a developer folder's badge opens its "Local folder" info card, read
+// from the main process when opened (Host chrome, outside the guest).
+const folderInfo = ref<DeveloperFolderInfo | null>(null)
+async function toggleFolderInfo(): Promise<void> {
+  if (folderInfo.value) {
+    folderInfo.value = null
+    return
+  }
+  try {
+    const state = await window.agentTeam?.plugins?.developerMode?.()
+    folderInfo.value = state?.folders.find((folder) => folder.pluginId === props.contribution.pluginId) ?? null
+  } catch {
+    folderInfo.value = null
+  }
+}
 let generation = 0
 let themeObserver: MutationObserver | null = null
 /** True once a Host-side instance may exist for this contribution key. */
@@ -178,8 +195,23 @@ onBeforeUnmount(() => {
     <!-- K2: a persistent source strip in Navide's own chrome, above the guest. -->
     <div v-if="sourceMark" class="plugin-region-host__source">
       <span class="plugin-region-host__title" v-text="contribution.title" />
-      <PluginSourceBadge :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" />
+      <button
+        v-if="sourceMark === 'developer-unpacked'"
+        type="button"
+        class="plugin-region-host__folder-toggle"
+        :aria-expanded="folderInfo !== null"
+        @click="toggleFolderInfo"
+      >
+        <PluginSourceBadge :source="sourceMark" />
+      </button>
+      <PluginSourceBadge v-else :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" />
     </div>
+    <DeveloperFolderInfoCard
+      v-if="sourceMark && folderInfo"
+      class="plugin-region-host__folder-card"
+      :folder="folderInfo"
+      @close="folderInfo = null"
+    />
     <div v-if="error" class="plugin-region-host__error" role="status">
       {{ contribution.title }} unavailable
     </div>
@@ -227,6 +259,19 @@ onBeforeUnmount(() => {
   padding: 3px 8px;
   border-bottom: 1px solid var(--border-muted);
   font-size: var(--font-2xs);
+}
+
+.plugin-region-host__folder-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* A2-3: in the flow between the strip and the guest, never over the guest. */
+.plugin-region-host__folder-card {
+  flex: none;
+  margin: 6px 8px;
 }
 
 .plugin-region-host__title {
