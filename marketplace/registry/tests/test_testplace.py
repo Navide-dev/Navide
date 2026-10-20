@@ -809,3 +809,40 @@ def test_a_missing_extension_and_an_uninvited_member_run_the_same_queries(client
 
     for suffix in ("", "/withdrawn"):
         assert statements(f"/api/testplace/acme/files{suffix}") == statements(f"/api/testplace/acme/nothing{suffix}")
+
+
+def test_a_globally_blocked_test_build_is_not_served_to_testers_but_reads_as_withdrawn(client: TestClient) -> None:
+    """S8 R5-M1: package, publisher and digest blocks apply to tester routes too."""
+    from registry import blocklist
+
+    assert _publish(client).status_code == 201
+    assert _publish(client, "1.1.0").status_code == 201
+    (token,) = _invite(client)
+    tester = _member(client, "member-tester")
+    assert _join(client, tester, token).status_code == 200
+    missing_version = client.get("/api/testplace/acme/files/9.9.9/download", headers=tester)
+
+    # One version blocked by digest: gone from the detail and the download, listed as withdrawn.
+    with _session(client) as session:
+        digest = session.exec(
+            select(ExtensionVersion).where(ExtensionVersion.version == "1.1.0")
+        ).one().package_digest
+        blocklist.block_digests(session, [digest], reason="malware", digest_reason="security", created_by="admin")
+        session.commit()
+    detail = client.get("/api/testplace/acme/files", headers=tester).json()
+    assert [v["version"] for v in detail["versions"]] == ["1.0.0"]
+    blocked_download = client.get("/api/testplace/acme/files/1.1.0/download", headers=tester)
+    assert (blocked_download.status_code, blocked_download.json()) == (missing_version.status_code, missing_version.json())
+    withdrawn = client.get("/api/testplace/acme/files/withdrawn", headers=tester).json()["withdrawn"]
+    assert {"version": "1.1.0", "target": "universal"} in withdrawn
+
+    # The whole package blocked: the same 404 as a missing extension, every build withdrawn.
+    missing = client.get("/api/testplace/acme/nothing", headers=tester)
+    with _session(client) as session:
+        blocklist.add_entry(session, kind="package", value="acme.files", reason="malware", created_by="admin")
+    blocked = client.get("/api/testplace/acme/files", headers=tester)
+    assert (blocked.status_code, blocked.json()) == (missing.status_code, missing.json())
+    assert client.get("/api/testplace", headers=tester).json() == {"items": []}
+    assert client.get("/api/testplace/acme/files/1.0.0/download", headers=tester).status_code == 404
+    withdrawn = client.get("/api/testplace/acme/files/withdrawn", headers=tester).json()["withdrawn"]
+    assert {row["version"] for row in withdrawn} == {"1.0.0", "1.1.0"}
