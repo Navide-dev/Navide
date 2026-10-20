@@ -15443,22 +15443,21 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   }
 }
 
-/** L4: going back to a kept file version is consented to again. Returns the
- *  rollback options, or null when the user declined. */
+/** L4: going back to a kept file version is consented to again, with its
+ *  disclosure, in Settings → Navide Plugins. Returns the rollback options for
+ *  any other target, or null after sending the user there. */
 async function confirmLocalRollback(
   installed: ReadonlyArray<{ id: string; rollbackNeedsConsent?: true }>,
   pluginId: string,
   version: string,
 ): Promise<{ consentConfirmed?: boolean } | null> {
   if (installed.find((pkg) => pkg.id === pluginId)?.rollbackNeedsConsent !== true) return {}
-  const ok = await notifyRestore.confirm(
-    i18n.global.t('settings.extensions.rollback.confirmLocalConsent', { id: pluginId, version }),
-    {
-      title: i18n.global.t('settings.extensions.rollback.title'),
-      confirmText: i18n.global.t('settings.extensions.rollback.confirm'),
-    },
-  )
-  return ok ? { consentConfirmed: true } : null
+  // Review M3: that consent shows the kept version's disclosure, which lives
+  // in Settings → Navide Plugins; this row only takes the user there.
+  closePopover()
+  openSettingsAt('extensions')
+  notifyRestore.toast(i18n.global.t('settings.extensions.rollback.consentInSettings', { id: pluginId, version }), { type: 'info' })
+  return null
 }
 
 /** "Back to vA" on a switch row (L3): the rollback in Settings → Navide

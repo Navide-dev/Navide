@@ -1463,6 +1463,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
      *  by its stagingId; never a path. Installs nothing. */
     prepareAgentFileInstall: (stagingId: string): Promise<PreparedInstallSummary> =>
       ipcRenderer.invoke('plugins:prepareAgentFileInstall', { stagingId }),
+    /** L4: the disclosure of a kept file version, for consenting to go back to it. */
+    prepareLocalRollback: (id: string): Promise<PreparedInstallSummary & { rollbackFrom: string }> =>
+      ipcRenderer.invoke('plugins:prepareLocalRollback', { id }),
     /** The user rejected an agent's file request: drop its staged copy. */
     discardAgentStaged: (stagingId: string): Promise<void> =>
       ipcRenderer.invoke('plugins:discardAgentStaged', { stagingId }),

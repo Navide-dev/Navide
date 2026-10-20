@@ -1800,6 +1800,7 @@
         "confirmFactory": "要將 {id} 回復為 Navide 內建的版本嗎？你安裝的套件會保留為待啟用版本，之後可以重新啟動切回。",
         "confirmPrevious": "要將 {id} 回復到 {version} 嗎？目前的版本會保留為待啟用版本，之後可以重新啟動切回。",
         "confirmLocalConsent": "{id} {version} 是未經 Navide 審核的本機檔案版本。退回到這一版需要你在這裡重新同意；如果它有原生後端，執行前也會再問一次。",
+        "consentInSettings": "退回到 {id} {version}（本機檔案版本）需要看過它的揭露後重新同意。請到「設定 → Navide 外掛」確認。",
         "previousVersion": "上一個版本",
         "errors": {
           "transactionInProgress": "{id} 正在安裝、更新或回復中，請等它完成後再試。",

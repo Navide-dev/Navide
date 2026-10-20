@@ -501,6 +501,7 @@ declare global {
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
         ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
         prepareAgentFileInstall?: (stagingId: string) => Promise<PreparedInstallSummary>
+        prepareLocalRollback?: (id: string) => Promise<PreparedInstallSummary & { rollbackFrom: string }>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
         setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>

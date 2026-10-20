@@ -4055,6 +4055,72 @@ export function registerPluginIpc(
     }
   }
 
+  /** The grant a consent to a file package writes for exactly this version:
+   * its declared policy plus Host storage (the dialog asked the risk
+   * acknowledgement, which covers a declared full shell). */
+  function localConsentGrant(scanned: ReturnType<typeof loadPluginDir>, packageVersion: string): HostCapabilityGrant {
+    const policy = scanned.descriptor?.capabilityPolicy
+    if (scanned.descriptor && policy?.kind === 'manifest-v2') {
+      return {
+        packageVersion,
+        system: [...policy.system],
+        ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
+        storage: true,
+      }
+    }
+    return { packageVersion, system: [], storage: true }
+  }
+
+  /** L4 (review M3, D7): going back to a kept file version is consented to
+   * again with that version's own disclosure, in the dialog a file install
+   * shows: permissions, backend, agent tools, source and digest. Read only. */
+  ipcMain.handle('plugins:prepareLocalRollback', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    const selected = lifecycleSelector.read(id)
+    const previous = selected?.previous
+    if (!selected?.active || !previous || selected.candidate || selected.activation) {
+      throw new Error(`plugin ${id} has no completed activation to roll back`)
+    }
+    const previousDir = lifecycleSelector.packageDir(id, previous)
+    const recordPath = localTrustRecordFor(pluginsRoot, id, previous.packageVersion)
+    if (!recordPath || !isLocalInstalledPackage(pluginsRoot, previousDir, id)) {
+      throw new Error(`${id} ${previous.packageVersion} is not a kept file version`)
+    }
+    const scanned = loadPluginDir(previousDir)
+    if (scanned.error || !scanned.packageSummary) {
+      throw new Error(`previous package is unavailable for rollback${scanned.error ? `: ${scanned.error}` : ''}`)
+    }
+    const manifest = parseInstalledManifest(parseManifestJson(readFileSync(join(previousDir, 'manifest.json'), 'utf8')))
+    const disclosure = isManifestV2(manifest) ? computeDisclosure(manifest as unknown as DisclosureManifestInput) : null
+    const record = readLocalTrustRecord(recordPath)
+    const signature = recordedLocalSignature({ id, packageVersion: previous.packageVersion })
+    return {
+      id,
+      version: previous.packageVersion,
+      trustTier: 'unsigned' as const,
+      sensitive: sensitiveCapabilities(scanned.packageSummary.requires),
+      containsBackendExecutable: Boolean(scanned.activation?.backend),
+      hasViews: manifestHasViews(manifest),
+      ...(disclosure && disclosure.agentTools.length > 0 ? { agentTools: disclosure.agentTools } : {}),
+      requiresConfirmation: true,
+      publisherId: record.signer?.publisherId ?? id.split('.')[0],
+      requiresPublisherTrust: false,
+      requiresRiskConfirmation: true,
+      disclosure,
+      scan: null,
+      localScan: 'unavailable' as const,
+      registry: null,
+      source: 'local-unsigned' as const,
+      localSignature: signature && record.signer
+        ? { state: signature, publisherId: record.signer.publisherId, keyId: record.signer.keyId }
+        : { state: 'none' as const },
+      ...(record.artifactDigest ? { digest: record.artifactDigest } : {}),
+      rollbackFrom: selected.active.packageVersion,
+    }
+  })
+
   ipcMain.handle('plugins:rollback', async (event, args: { id?: unknown; consentConfirmed?: unknown } | null) => {
     assertAuthorized(event)
     const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
@@ -4134,7 +4200,12 @@ export function registerPluginIpc(
         swapLocalRecordsForRollback(pluginsRoot, id)
         options.forgetBackendConsent?.(id)
       }
-      capabilityGrants.set(id, selectedBeforeRollback.previousGrant!)
+      // L4 (review M3): the renewed consent writes the grant of what the kept
+      // version declares, as a file install's consent does; the grant it had
+      // before is not carried back.
+      capabilityGrants.set(id, previousIsLocal
+        ? localConsentGrant(previousScanned, previous.packageVersion)
+        : selectedBeforeRollback.previousGrant!)
       const previousSource = evidenceSource(previousDir, id)
       manager.registerInstalledPackage(
         { ...previousScanned.packageSummary, ...previousSource.fields },

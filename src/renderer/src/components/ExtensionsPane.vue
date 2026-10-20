@@ -185,6 +185,12 @@ async function remove(id: string): Promise<void> {
 async function rollback(id: string, kind: 'factory' | 'previous', version?: string, needsConsent = false): Promise<void> {
   const api = pluginsApi()
   if (!api) return
+  // L4 (review M3): a kept file version is consented to again with its own
+  // disclosure, in the install consent dialog.
+  if (needsConsent) {
+    await updateFlow.rollbackWithConsent(id)
+    return
+  }
   const previousText = t('settings.extensions.rollback.confirmPrevious', {
     id,
     version: version ?? t('settings.extensions.rollback.previousVersion'),
@@ -192,10 +198,7 @@ async function rollback(id: string, kind: 'factory' | 'previous', version?: stri
   const confirmed = await notify.confirm(
     kind === 'factory'
       ? t('settings.extensions.rollback.confirmFactory', { id })
-      : needsConsent
-        // L4: a kept file version is consented to again, here.
-        ? `${previousText}\n\n${t('settings.extensions.rollback.confirmLocalConsent', { id, version: version ?? '' })}`
-        : previousText,
+      : previousText,
     {
       title: t('settings.extensions.rollback.title'),
       confirmText: t('settings.extensions.rollback.confirm'),
@@ -206,8 +209,7 @@ async function rollback(id: string, kind: 'factory' | 'previous', version?: stri
   busy.value = true
   error.value = ''
   try {
-    if (needsConsent) await api.rollback(id, { consentConfirmed: true })
-    else await api.rollback(id)
+    await api.rollback(id)
     await refreshInstalled()
     void pluginUpdates.refresh()
   } catch (err) {

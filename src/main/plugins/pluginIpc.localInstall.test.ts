@@ -699,6 +699,36 @@ describe('L4: a file update keeps the replaced file version to go back to', () =
     await expect(call('plugins:rollback', { id: 'acme.todo', consentConfirmed: true })).resolves.toMatchObject({ packageVersion: '1.0.0' })
   })
 
+  it('discloses the kept version for the renewed consent, and writes its grant afresh on going back (review M3)', async () => {
+    await updateFromFile()
+    const prepared = await call('plugins:prepareLocalRollback', { id: 'acme.todo' }) as Record<string, unknown>
+    expect(prepared).toMatchObject({
+      id: 'acme.todo',
+      version: '1.0.0',
+      rollbackFrom: '1.1.0',
+      source: 'local-unsigned',
+      trustTier: 'unsigned',
+      containsBackendExecutable: true,
+      requiresRiskConfirmation: true,
+    })
+    expect(prepared.digest).toMatch(/^[0-9a-f]{64}$/)
+    // Preparing changes nothing.
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.active?.packageVersion).toBe('1.1.0')
+
+    await call('plugins:rollback', { id: 'acme.todo', consentConfirmed: true })
+    expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.todo', '1.0.0')).toEqual({
+      packageVersion: '1.0.0',
+      system: [],
+      storage: true,
+    })
+  })
+
+  it('has nothing to disclose for a rollback that is not to a kept file version', async () => {
+    register()
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    await expect(call('plugins:prepareLocalRollback', { id: 'acme.todo' })).rejects.toThrow(/no completed activation to roll back/)
+  })
+
   it('removes every kept consent record with the plugin', async () => {
     await updateFromFile()
     await call('plugins:remove', { id: 'acme.todo' })
