@@ -339,6 +339,7 @@ import {
   awaitingClearsOnMiss,
   hasAwaitingPattern,
   holdOutlivedBox,
+  isToolResultHook,
   matchAwaitingInput,
   notificationEndsAwaiting,
   notificationMeansAwaiting,
@@ -14661,8 +14662,10 @@ backend.on('agent.activity', (raw) => {
   } else if (ev.event_type === 'agent_active') {
     // idle_prompt fires about a minute after EVERY finished turn: the pane is
     // waiting, not working. Stamping the clocks with it made isTurnInFlight
-    // read a finished pane as mid-turn and hold its queued messages.
-    if (ev.notification_type !== 'idle_prompt') {
+    // read a finished pane as mid-turn and hold its queued messages. A tool
+    // result (async hook) can land after Stop for the same effect, and only
+    // releases a permission hold below.
+    if (ev.notification_type !== 'idle_prompt' && !isToolResultHook(ev.detail)) {
       // First activity after the last turn end = this turn's start. The quota
       // failover's settle needs it: a turn that began under the old account and
       // finished under the new one is the old account's work.

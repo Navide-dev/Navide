@@ -2787,6 +2787,11 @@ _SUBAGENT_COUNTING_VENDORS = frozenset({"claude"})
 # a fingerprint of its input — both Post events repeat the same tool_input.
 _TOOL_KEYED_EVENTS = frozenset({"permission_request", "post_tool_use", "post_tool_use_failure"})
 
+# The two tool results. Both hooks are installed async, so the last tool's result
+# can land after Stop: they only release a permission hold and must never count
+# as the agent working, or a finished pane would read as mid-turn again.
+_TOOL_RESULT_EVENTS = frozenset({"post_tool_use", "post_tool_use_failure"})
+
 
 # Tools whose answer is written into their input (AskUserQuestion's `answers`,
 # ExitPlanMode's approved plan), so the input a Post event repeats differs from
@@ -3048,8 +3053,9 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # composer or not). It reports the pane waiting, not working, so recording
     # it as agent_active would replace the turn_complete entry for good —
     # cli_get_status would show a finished pane as active, with no turn text.
-    # The broadcast below still carries it for the renderer to judge.
-    if pane_id and notification_type != "idle_prompt":
+    # The broadcast below still carries it for the renderer to judge. A tool
+    # result is left out for the same reason: it can arrive after Stop.
+    if pane_id and notification_type != "idle_prompt" and event_kind not in _TOOL_RESULT_EVENTS:
         # The log-reader sink is not the only writer of _pane_activity any
         # more: for the hook vendors the Stop hook is the earliest and most
         # reliable end-of-turn signal there is, and cli_wait_idle could not see
@@ -3085,7 +3091,8 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # for the busy-state path, but it marks the agent WAITING — beating on it would open an agent
     # interval at exactly the moment nothing is running. Guarded like the
     # preview record: this endpoint's response must not depend on the store.
-    if event_kind not in ("notification", "permission_request"):
+    # A late tool result is no work signal either: it can follow Stop.
+    if event_kind not in ("notification", "permission_request", *_TOOL_RESULT_EVENTS):
         try:
             if dev_time_store.agent_event(ws_path or cwd, pane_id or "", event_type, ""):
                 await broadcast(

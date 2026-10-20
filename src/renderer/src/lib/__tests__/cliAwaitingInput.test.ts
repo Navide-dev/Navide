@@ -8,6 +8,7 @@ import {
   textEndsOnQuestion,
   questionActionFor,
   permissionHoldActionFor,
+  isToolResultHook,
   keysAnswerPermissionBox,
   holdOutlivedBox,
   HOLD_PAINT_GRACE_MS,
@@ -111,6 +112,14 @@ describe('permissionHoldActionFor — the permission box, by hook events', () =>
   it('releases when the tool the box was for finishes, whether it succeeded or failed', () => {
     for (const detail of ['hook:post_tool_use', 'hook:post_tool_use_failure']) {
       expect(permissionHoldActionFor({ detail, tool_key: 'Bash:aaaa' }, held), detail).toBe('release')
+    }
+  })
+
+  it('names exactly the two tool-result hooks', () => {
+    expect(isToolResultHook('hook:post_tool_use')).toBe(true)
+    expect(isToolResultHook('hook:post_tool_use_failure')).toBe(true)
+    for (const detail of ['hook:pre_tool_use', 'hook:permission_request', 'hook:stop', 'assistant', undefined]) {
+      expect(isToolResultHook(detail), String(detail)).toBe(false)
     }
   })
 

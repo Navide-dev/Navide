@@ -142,6 +142,14 @@ export const USER_RECORD_DETAILS: ReadonlySet<string> = new Set(['user', 'prompt
 /** The reader's name for an assistant message that opened a question box. */
 export const QUESTION_DETAIL = 'assistant:question'
 
+/** True for Claude's two tool-result hooks. They are installed async, so the
+ *  last tool's result can land after Stop: they only release a permission hold
+ *  and must not stamp the activity clocks, or a finished pane reads as mid-turn
+ *  again for up to TURN_STALE_MS. */
+export function isToolResultHook(detail: string | undefined): boolean {
+  return detail === 'hook:post_tool_use' || detail === 'hook:post_tool_use_failure'
+}
+
 /** What one `agent.activity` event means for a held permission wait.
  *
  *  Claude's PermissionRequest hook runs only when its permission dialog is about
@@ -167,9 +175,7 @@ export function permissionHoldActionFor(
 ): 'hold' | 'release' | null {
   if (ev.detail === 'hook:permission_request') return 'hold'
   if (held.since <= 0 || held.key === '') return null
-  if (ev.detail === 'hook:post_tool_use' || ev.detail === 'hook:post_tool_use_failure') {
-    return ev.tool_key === held.key ? 'release' : null
-  }
+  if (isToolResultHook(ev.detail)) return ev.tool_key === held.key ? 'release' : null
   return null
 }
 

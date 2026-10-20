@@ -318,6 +318,44 @@ def test_stop_hook_does_not_blank_the_turn_text_the_log_reader_recorded(
         app_module._pane_activity.clear()
 
 
+@pytest.mark.parametrize("kind", ["post_tool_use", "post_tool_use_failure"])
+def test_a_late_tool_result_after_stop_is_not_recorded_as_activity_or_dev_time(
+    client: TestClient, events: list[dict], monkeypatch, kind: str
+) -> None:
+    """Both result hooks are async, so the last tool's result can land after
+    Stop. It still reaches the frontend (it releases a permission hold), but
+    recording it would turn the finished pane back into agent_active for
+    cli_get_status and open a dev-time interval after the turn ended."""
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
+    )
+    beats: list[tuple] = []
+    monkeypatch.setattr(
+        app_module.dev_time_store, "agent_event", lambda *args: beats.append(args) or False
+    )
+    try:
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": "stop"},
+            json={"session_id": "s-1", "cwd": "/ws/alpha"},
+        )
+        events.clear()
+        beats.clear()
+
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": kind},
+            json={"session_id": "s-1", "cwd": "/ws/alpha", "tool_name": "Bash"},
+        )
+
+        assert _payload(events)["detail"] == f"hook:{kind}"
+        assert app_module._pane_activity["pw"]["event_type"] == "turn_complete"
+        assert beats == []
+    finally:
+        app_module._pane_activity.clear()
+
+
 def test_a_reattached_panes_hook_keeps_the_text_recorded_under_its_old_id(
     client: TestClient, events: list[dict], monkeypatch
 ) -> None:
