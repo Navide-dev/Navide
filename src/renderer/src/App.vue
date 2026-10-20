@@ -40,7 +40,7 @@ import { formatCpuPercent, machineCpuShare, machineMemoryShare } from './lib/res
 import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composables/useResourceUsage'
 import { channelsKey, useChannels } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
-import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, type PaneAnswer } from './lib/paneAnswerKeys'
+import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, stillOnMenu, type PaneAnswer } from './lib/paneAnswerKeys'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
 import TurnStatsModal from './components/TurnStatsModal.vue'
@@ -10614,11 +10614,17 @@ registerCommand('ui.pane.sendKeys', async (args) => {
   }
   // A free-text or multi-select answer goes in one step at a time, so the CLI
   // reads arrows, typed text and Enter as separate keys rather than one paste.
+  // Each later step goes in only while the same menu is still up (stillOnMenu).
   const [first, ...rest] = resolved.steps ?? [resolved.keys]
+  const menu = parseMenuOptions((ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '')
   let resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data: first })
   for (const data of rest) {
     if (!resp.ok) break
     await new Promise((resolve) => setTimeout(resolve, ANSWER_STEP_GAP_MS))
+    const screen = (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
+    if (!stillOnMenu(menu, ref.displayStatus as string | undefined, screen)) {
+      return { ok: false, sent: false, error: 'the prompt changed while the answer was going in', error_code: 'prompt-changed' }
+    }
     resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data })
   }
   // This write goes straight to the PTY, not through the terminal's onData, so

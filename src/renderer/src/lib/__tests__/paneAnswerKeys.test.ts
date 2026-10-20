@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { awaitingPromptText, isPermanentAllow, parseMenuOptions, resolveAnswerKeys, type PaneAnswer } from '../paneAnswerKeys'
+import { awaitingPromptText, isPermanentAllow, parseMenuOptions, resolveAnswerKeys, stillOnMenu, type PaneAnswer } from '../paneAnswerKeys'
 
 const CLAUDE_PERMISSION = [
   'Do you want to make this edit to useTerminal.ts?',
@@ -262,5 +262,21 @@ describe('resolveAnswerKeys for free text and multi-select (claude)', () => {
 
   it('refuses when no row on screen has the cursor', () => {
     expect(resolve('claude', { kind: 'multi', options: [1] }, claudeMulti(-1), 'permission').ok).toBe(false)
+  })
+})
+
+describe('stillOnMenu', () => {
+  const before = parseMenuOptions(claudeMulti(0))
+
+  it('holds while only the boxes and the typed text changed', () => {
+    const typed = claudeMulti(2, [1, 3]).replace('Type something', 'docs')
+    expect(stillOnMenu(before, 'awaiting', claudeMulti(1, [1]))).toBe(true)
+    expect(stillOnMenu(before, 'awaiting', typed)).toBe(true)
+  })
+
+  it('fails once the box is gone, replaced, or the pane stopped waiting', () => {
+    expect(stillOnMenu(before, 'awaiting', `${'─'.repeat(40)}\n❯ `)).toBe(false)
+    expect(stillOnMenu(before, 'awaiting', CLAUDE_SINGLE_WITH_OTHER)).toBe(false)
+    expect(stillOnMenu(before, 'running', claudeMulti(0))).toBe(false)
   })
 })

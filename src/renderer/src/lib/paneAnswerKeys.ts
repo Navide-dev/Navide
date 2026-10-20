@@ -128,6 +128,17 @@ function moves(from: number, to: number): string[] {
   return Array<string>(Math.abs(to - from)).fill(to > from ? DOWN : UP)
 }
 
+/** Between the steps of an answer: the pane still waits on the menu the steps
+ *  were worked out for. Only box marks and the "Other" row's text may change;
+ *  anything else (answered at the keyboard, the next prompt, the idle input
+ *  box) stops the rest, so typed text and Enter never land outside the box. */
+export function stillOnMenu(before: string[], displayStatus: string | undefined, screen: string): boolean {
+  if (displayStatus !== 'awaiting') return false
+  const now = parseMenuOptions(screen)
+  const label = (o: string) => squash(o.replace(CHECKBOX, ''))
+  return now.length === before.length && before.every((o, i) => isFreeText(o) || label(o) === label(now[i]))
+}
+
 function steps(keys: string[]): AnswerKeys {
   return { ok: true, keys: keys.join(''), steps: keys }
 }
