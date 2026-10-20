@@ -80,6 +80,13 @@ async def _answer(result: Any) -> None:
     raise AssertionError("no pending ui.invoke request appeared")
 
 
+def _refusal(pane_id: str, action: str, args: dict[str, Any], workspace_path: str = "") -> dict[str, Any]:
+    """The self check S4's window_close / workspace_close run, called directly:
+    ui_invoke no longer reaches those two actions at all."""
+    caller = plan_mcp._resolve_caller(_pane_ctx(pane_id))
+    return plan_mcp._self_scope_refusal(caller, action, args, workspace_path) or {"ok": True}
+
+
 @pytest.fixture
 def workspace(tmp_path: Any) -> str:
     path = tmp_path / "alpha"
@@ -175,24 +182,36 @@ async def test_closing_your_own_workspace_is_refused_however_the_path_is_spelled
     if workspace.startswith(home):
         spellings.append("~" + workspace[len(home):])
     for path in spellings:
-        result = await plan_mcp.ui_invoke("", "ui.workspace.close", _pane_ctx("pa"), {"path": path})
+        result = _refusal("pa", "ui.workspace.close", {"path": path})
         assert result["ok"] is False, path
         assert result["error_code"] == "self-workspace-close", path
 
 
-@pytest.mark.asyncio
-async def test_closing_another_workspace_is_not_refused(
-    sent: list[dict[str, Any]], workspace: str, tmp_path: Any
-) -> None:
+def test_closing_another_workspace_is_not_refused(workspace: str, tmp_path: Any) -> None:
     other = tmp_path / "beta"
     other.mkdir()
     agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
-    task = asyncio.create_task(_answer({}))
-    result = await plan_mcp.ui_invoke(
-        str(other), "ui.workspace.close", _pane_ctx("pa"), {"path": str(other)}
-    )
-    await task
-    assert result["ok"] is True
+    assert _refusal("pa", "ui.workspace.close", {"path": str(other)})["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_ui_invoke_sends_the_window_and_workspace_close_actions_to_their_own_tools(
+    monkeypatch: pytest.MonkeyPatch, workspace: str, tmp_path: Any
+) -> None:
+    """Review #541 MED-1: closing through ui_invoke would leave no action record
+    and no notice of which pane did it, so it is not a route at all."""
+    _no_window_reached(monkeypatch)
+    other = tmp_path / "beta"
+    other.mkdir()
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
+    agent_messaging.register("pb", "else", str(other), agent_key="claude", owner=_Window("w2"))
+    for action, args, tool in (
+        ("ui.window.close", {"windowId": "w2"}, "window_close"),
+        ("ui.workspace.close", {"path": str(other)}, "workspace_close"),
+    ):
+        result = await plan_mcp.ui_invoke(str(other), action, _pane_ctx("pa"), args)
+        assert result["error_code"] == "ui_dedicated_tool", action
+        assert tool in result["error"], action
 
 
 # ── ui.window.close ──────────────────────────────────────────────────────────
@@ -202,10 +221,8 @@ async def test_closing_another_workspace_is_not_refused(
 async def test_closing_the_window_that_hosts_you_is_refused(
     monkeypatch: pytest.MonkeyPatch, workspace: str
 ) -> None:
-    _no_window_reached(monkeypatch)
     agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
-    result = await plan_mcp.ui_invoke("", "ui.window.close", _pane_ctx("pa"), {"windowId": "w1"})
-    assert result["error_code"] == "self-window-close"
+    assert _refusal("pa", "ui.window.close", {"windowId": "w1"})["error_code"] == "self-window-close"
 
 
 @pytest.mark.asyncio
@@ -214,25 +231,43 @@ async def test_a_window_holding_your_workspace_is_yours_even_if_you_sit_elsewher
 ) -> None:
     """A pane in a detached group window: the main window holding its workspace
     is just as much its own — closing it closes the caller's workspace."""
-    _no_window_reached(monkeypatch)
     agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("detached"))
     agent_messaging.register("pb", "sibling", workspace, agent_key="claude", owner=_Window("main"))
-    result = await plan_mcp.ui_invoke("", "ui.window.close", _pane_ctx("pa"), {"windowId": "main"})
-    assert result["error_code"] == "self-window-close"
+    assert _refusal("pa", "ui.window.close", {"windowId": "main"})["error_code"] == "self-window-close"
 
 
-@pytest.mark.asyncio
-async def test_closing_a_window_of_another_workspace_is_not_refused(
-    sent: list[dict[str, Any]], workspace: str, tmp_path: Any
+class _MainWindow:
+    """A connected main window as app.main_window_sessions() lists it."""
+
+    def __init__(self, window_id: str, held: tuple[str, ...]) -> None:
+        self.dead = False
+        self.window_id = window_id
+        self.held_workspaces = held
+
+
+def test_a_main_window_holding_your_workspace_with_none_of_its_panes_is_yours(
+    monkeypatch: pytest.MonkeyPatch, workspace: str, tmp_path: Any
 ) -> None:
+    """All the caller's workspace's panes sit in detached group windows; the
+    main window that holds the workspace has none of them. It is still the
+    caller's own, and the backend alone must refuse closing it."""
+    variant = workspace[:-len("alpha")] + "ALPHA"
+    held_spelling = variant if os.path.isdir(variant) else workspace + "/"
+    monkeypatch.setattr(
+        app, "main_window_sessions",
+        lambda: [_MainWindow("main", (held_spelling,)), _MainWindow("other", (str(tmp_path),))],
+    )
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("detached"))
+    assert _refusal("pa", "ui.window.close", {"windowId": "main"})["error_code"] == "self-window-close"
+    assert _refusal("pa", "ui.window.close", {"windowId": "other"})["ok"] is True
+
+
+def test_closing_a_window_of_another_workspace_is_not_refused(workspace: str, tmp_path: Any) -> None:
     other = tmp_path / "beta"
     other.mkdir()
     agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
     agent_messaging.register("pb", "else", str(other), agent_key="claude", owner=_Window("w2"))
-    task = asyncio.create_task(_answer({}))
-    result = await plan_mcp.ui_invoke(str(other), "ui.window.close", _pane_ctx("pa"), {"windowId": "w2"})
-    await task
-    assert result["ok"] is True
+    assert _refusal("pa", "ui.window.close", {"windowId": "w2"})["ok"] is True
 
 
 # ── identity travels to the window ───────────────────────────────────────────
@@ -315,8 +350,7 @@ async def test_a_case_variant_of_your_own_workspace_is_still_yours(
     _no_window_reached(monkeypatch)
     agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
     for path in (variant, variant + "/"):
-        result = await plan_mcp.ui_invoke("", "ui.workspace.close", _pane_ctx("pa"), {"path": path})
-        assert result["error_code"] == "self-workspace-close", path
+        assert _refusal("pa", "ui.workspace.close", {"path": path})["error_code"] == "self-workspace-close", path
 
 
 @pytest.mark.asyncio
@@ -329,8 +363,7 @@ async def test_a_case_variant_registration_still_counts_its_window_as_yours(
     _no_window_reached(monkeypatch)
     agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("detached"))
     agent_messaging.register("pb", "sibling", variant, agent_key="claude", owner=_Window("main"))
-    result = await plan_mcp.ui_invoke("", "ui.window.close", _pane_ctx("pa"), {"windowId": "main"})
-    assert result["error_code"] == "self-window-close"
+    assert _refusal("pa", "ui.window.close", {"windowId": "main"})["error_code"] == "self-window-close"
 
 
 @pytest.mark.asyncio
@@ -358,3 +391,22 @@ async def test_s4_contract_an_empty_workspace_close_path_counts_as_your_own() ->
     """S4 must either require `path` or treat an empty one as the caller's own
     workspace — whichever it picks, `{}` must not close the caller's workspace.
     Turn this on with S4's handler."""
+
+
+@pytest.mark.asyncio
+async def test_a_window_announces_the_workspaces_it_holds() -> None:
+    """ui.invoke.ready carries the held list the self checks read; anything
+    that is not a non-empty string is dropped."""
+    from agent_team_backend import ws_handlers
+
+    replies: list[Any] = []
+
+    async def send_json(message: Any) -> None:
+        replies.append(message)
+
+    session = SimpleNamespace(ui_bus_ready=False, window_id="", ui_focused_at=0, held_workspaces=(), send_json=send_json)
+    await ws_handlers.ui_invoke_ready(
+        session, "m1", "ui.invoke.ready", {"window_id": "abcdef12-3456", "workspaces": ["/ws/a", "", 3, "/ws/b"]}
+    )
+    assert session.held_workspaces == ("/ws/a", "/ws/b")
+    assert session.window_id == "abcdef12-3456"

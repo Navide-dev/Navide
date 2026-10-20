@@ -5604,7 +5604,7 @@ def _same_directory(a: str, b: str) -> bool:
 def _self_scope(caller: _Caller) -> _SelfScope | None:
     """The caller's own pane, workspace and windows; None for a caller with no
     pane (host / external), which has nothing of its own to protect."""
-    from agent_team_backend import agent_messaging
+    from agent_team_backend import agent_messaging, app
 
     if caller.kind != "pane":
         return None
@@ -5618,6 +5618,15 @@ def _self_scope(caller: _Caller) -> _SelfScope | None:
             continue
         window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
         if window_id:
+            windows.add(window_id)
+    # A main window holding the caller's workspace with none of its panes in
+    # it — they all sit in detached group windows — is still the caller's
+    # own: closing it closes the caller's workspace. Windows report what they
+    # hold with ui.invoke.ready.
+    for session in app.main_window_sessions():
+        window_id = str(getattr(session, "window_id", "") or "")
+        held = getattr(session, "held_workspaces", ()) or ()
+        if window_id and any(_same_directory(path, workspace) for path in held):
             windows.add(window_id)
     return _SelfScope(entry.pane_id, workspace, frozenset(windows))
 
@@ -5712,6 +5721,11 @@ def _self_scope_refusal(
             "error_code": "self-window-close",
         }
     return None
+
+
+#: Close actions reachable only through their dedicated tools (S4), which
+#: record the action and show the user who did it. ui_invoke refuses them.
+_DEDICATED_CLOSE_ACTIONS = {"ui.window.close": "window_close", "ui.workspace.close": "workspace_close"}
 
 
 def _self_reclaim_entry(pane_id: str) -> dict[str, str]:
@@ -6153,6 +6167,16 @@ async def ui_invoke(
             "ok": False,
             "result": None,
             "error": f"{action} is not a ui_invoke action; use cli_account_sign_in or cli_account_switch",
+            "error_code": "ui_dedicated_tool",
+        }
+    if action in _DEDICATED_CLOSE_ACTIONS:
+        # Closing a window or a workspace leaves an action record and tells
+        # the user which pane did it; only the dedicated tools do that, so this
+        # route is closed rather than left as a silent way around them.
+        return {
+            "ok": False,
+            "result": None,
+            "error": f"{action} is not a ui_invoke action; use {_DEDICATED_CLOSE_ACTIONS[action]}",
             "error_code": "ui_dedicated_tool",
         }
     refused_self = _self_scope_refusal(caller, action, args, workspace_path)

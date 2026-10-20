@@ -10973,6 +10973,7 @@ useUiActionBus({
   // aimed at the calling pane by way of the user's focus.
   focusedPaneIds: () => [focusPaneId.value, effectiveFocusPaneId.value].filter((id): id is string => !!id),
   isPipelineSlot: (id) => panes.value.some((p) => p.id === id && p.origin === 'pipeline'),
+  heldWorkspaces: () => (isDetachedWindow ? [] : workspaceOrder.value),
   connectionStatus: backend.status,
   accountActions: { signIn: agentSignIn, switch: agentAccountSwitch },
 })

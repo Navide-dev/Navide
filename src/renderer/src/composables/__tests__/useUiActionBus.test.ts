@@ -755,6 +755,42 @@ describe('useUiActionBus — self protection, review #534', () => {
   })
 })
 
+describe('useUiActionBus — announcing the workspaces a window holds', () => {
+  it('announces them once setup is done, and again when they change', async () => {
+    const { backend, sent } = createMockBackend()
+    const held = ref<string[]>(['/ws'])
+    useUiActionBus({
+      backend,
+      currentWorkspace: ref('/ws'),
+      buildSnapshot: () => ({}),
+      connectionStatus: ref('connected'),
+      heldWorkspaces: () => held.value,
+    })
+    await flush()
+    const ready = () => sent.filter((s) => s.type === 'ui.invoke.ready').map((s) => (s.payload as { workspaces?: string[] }).workspaces)
+    expect(ready().at(-1)).toEqual(['/ws'])
+    held.value = ['/ws', '/other']
+    await flush()
+    expect(ready().at(-1)).toEqual(['/ws', '/other'])
+  })
+
+  it('leaves the field out while the held list cannot be read yet', async () => {
+    const { backend, sent } = createMockBackend()
+    let ready = false
+    useUiActionBus({
+      backend,
+      currentWorkspace: ref('/ws'),
+      buildSnapshot: () => ({}),
+      connectionStatus: ref('connected'),
+      heldWorkspaces: () => { if (!ready) throw new ReferenceError('not declared yet'); return ['/ws'] },
+    })
+    const first = sent.find((s) => s.type === 'ui.invoke.ready')?.payload as Record<string, unknown>
+    expect(first).toBeDefined()
+    expect('workspaces' in first).toBe(false)
+    ready = true
+  })
+})
+
 describe('useUiActionBus — announcing the bus to the backend', () => {
   // The backend hands a global request (ui.workspace.open) only to a window
   // that announced it runs this bus; plugin and editor windows never answer.

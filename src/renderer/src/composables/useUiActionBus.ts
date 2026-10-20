@@ -66,6 +66,12 @@ export interface UseUiActionBusOptions {
    *  refuse a slot restarting, resetting or aborting the run it belongs to,
    *  which would end the caller. Absent: not checked. */
   isPipelineSlot?: (paneId: string) => boolean
+  /** The workspaces this window holds, announced with ui.invoke.ready and
+   *  again whenever the list changes. The backend counts a window holding an
+   *  agent's workspace as that agent's own for the self-close checks. A
+   *  detached group window returns []: closing it does not close the
+   *  workspace. Absent: nothing is announced (older behaviour). */
+  heldWorkspaces?: () => string[]
   /** The backend connection's status. When given, this window announces
    *  `ui.invoke.ready` on every transition to 'connected' (each reconnect is
    *  a new backend session): the backend sends a global request such as
@@ -375,9 +381,24 @@ export function useUiActionBus(opts: UseUiActionBusOptions): () => void {
     },
   )
 
+  // The window may wire the bus before the state behind heldWorkspaces exists
+  // (App.vue declares its workspace list further down its setup), so a read
+  // that cannot be answered yet is left out rather than thrown; the watch
+  // below announces again once it can be.
+  const readHeld = (): string[] | undefined => {
+    if (!opts.heldWorkspaces) return undefined
+    try {
+      return [...opts.heldWorkspaces()]
+    } catch {
+      return undefined
+    }
+  }
   const announce = (focused: boolean) => {
     if (status.value !== 'connected') return
-    opts.backend.send('ui.invoke.ready', { focused, window_id: WINDOW_INSTANCE_ID })
+    const payload: Record<string, unknown> = { focused, window_id: WINDOW_INSTANCE_ID }
+    const held = readHeld()
+    if (held) payload.workspaces = held
+    opts.backend.send('ui.invoke.ready', payload)
       .catch(() => { /* best-effort — announced again on reconnect and focus */ })
   }
   const stopWatch = watch(
@@ -385,6 +406,17 @@ export function useUiActionBus(opts: UseUiActionBusOptions): () => void {
     (s) => { if (s === 'connected') announce(typeof document !== 'undefined' && document.hasFocus()) },
     { immediate: true },
   )
+  // Re-announced on change so the backend's view of what this window holds
+  // never lags an adopt or a close.
+  // Created after the current setup finishes, for the same reason as readHeld.
+  let stopHeldWatch: () => void = () => {}
+  let disposed = false
+  if (opts.heldWorkspaces) {
+    void Promise.resolve().then(() => {
+      if (disposed) return
+      stopHeldWatch = watch(() => (readHeld() ?? []).join('\n'), () => announce(false), { immediate: true })
+    })
+  }
   const focusTarget = opts.focusTarget ?? (typeof window !== 'undefined' ? window : undefined)
   const onFocus = () => announce(true)
   focusTarget?.addEventListener('focus', onFocus)
@@ -393,6 +425,8 @@ export function useUiActionBus(opts: UseUiActionBusOptions): () => void {
     offCancel?.()
     stopAbortWatch()
     stopWatch()
+    disposed = true
+    stopHeldWatch()
     focusTarget?.removeEventListener('focus', onFocus)
   }
 }
