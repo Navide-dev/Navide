@@ -29,6 +29,7 @@ export type DisclosureRiskReasonKey =
   | 'system.ui'
   | 'system.fs'
   | 'system.aiCli'
+  | 'system.web'
   | 'shell.allowlist'
   | 'nativeBackend'
   | 'agentTools.write'
@@ -40,6 +41,7 @@ export const DISCLOSURE_RISK_RULES: ReadonlyArray<readonly [DisclosureRiskReason
   ['system.ui', 'low'],
   ['system.fs', 'medium'],
   ['system.aiCli', 'high'],
+  ['system.web', 'high'],
   ['shell.allowlist', 'high'],
   ['nativeBackend', 'high'],
   ['agentTools.write', 'high'],
@@ -52,6 +54,7 @@ export type DisclosureSummaryClause =
   | { key: 'files'; params: { access: 'read' | 'readWrite' } }
   | { key: 'shell'; params: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } }
   | { key: 'aiCli'; params: Record<string, never> }
+  | { key: 'web'; params: Record<string, never> }
   | { key: 'ui'; params: Record<string, never> }
   | { key: 'agentTools'; params: { read: number; write: number } }
   | { key: 'network'; params: Record<string, never> }
@@ -64,7 +67,7 @@ export interface DisclosureSummary {
 }
 
 export interface DisclosurePermissions {
-  system: Array<'aiCli' | 'fs' | 'ui'>
+  system: Array<'aiCli' | 'fs' | 'ui' | 'web'>
   shell: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } | null
   scopes: { fs: { root: 'workspace' | 'repository'; read: string[]; write: string[] } } | null
 }
@@ -235,6 +238,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (system.includes('ui')) present.add('system.ui')
   if (hasFs) present.add('system.fs')
   if (system.includes('aiCli')) present.add('system.aiCli')
+  if (system.includes('web')) present.add('system.web')
   if (shell?.mode === 'allowlist') present.add('shell.allowlist')
   if (nativeBackend) present.add('nativeBackend')
   if (writeTools > 0) present.add('agentTools.write')
@@ -250,6 +254,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (shell) clauses.push({ key: 'shell', params: shell })
   if (shell) clauses.push({ key: 'networkViaShell', params: {} })
   if (system.includes('aiCli')) clauses.push({ key: 'aiCli', params: {} })
+  if (system.includes('web')) clauses.push({ key: 'web', params: {} })
   if (system.includes('ui')) clauses.push({ key: 'ui', params: {} })
   if (agentTools.length > 0) clauses.push({ key: 'agentTools', params: { read: readTools, write: writeTools } })
   if (clauses.length === 0) clauses.push({ key: 'noPermissions', params: {} })

@@ -33,7 +33,7 @@ export type StorageGetResult =
 
 export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'window', 'detail'] as const
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
-export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli'] as const
+export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
 /** Most members one Extension Pack may list. */
 export const MAX_EXTENSION_PACK_MEMBERS = 20
@@ -487,7 +487,7 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
   assertOnlyKeys(permissions, ['system', 'shell', 'scopes'], 'manifest permissions')
   let system: PluginSystemNamespace[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'system')) {
-    const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, 3)
+    const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, 4)
     if (values.some((item) => !V2_SYSTEM_NAMESPACES.includes(item as PluginSystemNamespace))) {
       fail('manifest permissions.system contains an unknown namespace')
     }

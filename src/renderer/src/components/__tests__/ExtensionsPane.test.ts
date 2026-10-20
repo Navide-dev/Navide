@@ -315,6 +315,23 @@ describe('ExtensionsPane', () => {
     expect(wrapper.find('[data-id="acme.demo"] .ext-remove').exists()).toBe(true)
   })
 
+  it('offers Uninstall for the Marketplace navide.browser and says removal deletes its sign-ins', async () => {
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([{
+        id: 'navide.browser', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry',
+        manifestPermissions: { system: ['ui', 'web'] }, disabled: false,
+      }]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    await wrapper.get('[data-id="navide.browser"] .ext-remove').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.message).toContain('also deletes its site sign-ins, cookies and cache')
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenCalledWith('navide.browser')
+  })
+
   it('shows an active factory Git package only in the Bundled section', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([

@@ -1,0 +1,65 @@
+{
+  "browser": {
+    "app": { "title": "Navide Browser" },
+    "overview": {
+      "title": "Navide Browser Spaces",
+      "new": "New Space",
+      "pending": "{count} need your action",
+      "open-count": "{count} open, each using memory",
+      "empty": "No Spaces yet. Create one with ＋, or an agent opens its own the first time it browses. Agents use your sign-ins in Navide Browser (they can send requests on websites for you)."
+    },
+    "state": {
+      "idle": "Idle",
+      "running": "Running",
+      "need-action": "Need your action",
+      "done": "Done"
+    },
+    "owner": { "agent": "Agent", "user": "You" },
+    "space": {
+      "all": "All Spaces",
+      "yours": "Your Space: agents cannot use it unless you let them",
+      "default-name": "My Space {n}"
+    },
+    "nav": {
+      "back": "Back",
+      "forward": "Forward",
+      "reload": "Reload",
+      "stop": "Stop",
+      "address": "Enter a URL"
+    },
+    "control": {
+      "agent": "Agent in control",
+      "user": "You are in control",
+      "yours": "Your Space"
+    },
+    "action": {
+      "take-over": "Take over",
+      "hand-back": "Hand back to agent",
+      "delegate": "Let the agent use this Space",
+      "reclaim": "Take this Space back",
+      "close": "Close Space",
+      "delegate-note": "Agents in any pane and any workspace can use it"
+    },
+    "agent-script": {
+      "warning": "Agent scripts may still be running in this page. Reload it before you type a password or a verification code.",
+      "reload": "Reload",
+      "keep": "Keep page"
+    },
+    "settings": {
+      "title": "Settings",
+      "shared-sign-in": "All Spaces share the same sign-ins, kept on this computer. Agents use your sign-ins in Navide Browser (they can send requests on websites for you). After you take over, agent scripts already running in a page stop only when you reload it.",
+      "clear-data": "Clear all sign-in data",
+      "clear-data-confirm": "Click again to sign out of every site in Navide Browser",
+      "clear-data-done": "Sign-in data cleared.",
+      "cancel": "Cancel"
+    },
+    "left": {
+      "open": "Open Navide Browser",
+      "empty": "No Spaces yet."
+    },
+    "errors": {
+      "generic": "Something went wrong ({code}).",
+      "invalid-address": "Enter an http or https address."
+    }
+  }
+}

@@ -465,7 +465,7 @@ describe('execution policy IPC', () => {
         defaultPolicy: {
           schemaVersion: 1,
           mode: 'allowlist',
-          system: ['fs', 'ui', 'aiCli'],
+          system: ['fs', 'ui', 'aiCli', 'web'],
           shell: ['git', 'gh', 'glab'],
         },
         userPolicy: null,

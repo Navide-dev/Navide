@@ -915,7 +915,7 @@ matches.
 | `contributes` | no | Object with a required views array (1–16 views) | At least one of `contributes`, `backend` or `extensionPack` |
 | `backend` | no | Object | See [Backend source, development, and publish contract](#backend-source-development-and-publish-contract) |
 | `extensionPack` | no | 1–20 member plugin ids | See [Extension Packs](#extension-packs) |
-| `permissions.system` | no | `fs`, `ui`, `aiCli` | 1–3 unique entries |
+| `permissions.system` | no | `fs`, `ui`, `aiCli`, `web` | 1–4 unique entries |
 | `permissions.shell` | no | `allowlist`, `full` | Omission denies `shell.run` |
 | `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
 | `contributes.views[].id` | yes | Lowercase view id | |
@@ -1111,7 +1111,7 @@ The policy has exactly these fields:
 ```
 
 `mode` is exactly `full`, `allowlist`, or `denylist`. `system` contains only
-first-level public namespaces (`fs`, `ui`, and `aiCli`). `shell` contains exact
+first-level public namespaces (`fs`, `ui`, `aiCli`, and `web`). `shell` contains exact
 top-level executable names, not command strings or paths. The normative JSON
 Schema describes the canonical persisted spelling
 `[a-z0-9][a-z0-9._+-]*`. The contract parser also accepts ASCII uppercase
@@ -1131,8 +1131,8 @@ both allowlist and denylist modes. Entries are unique.
 }
 ```
 
-The initial Host default is `allowlist` with all three system namespaces and
-only `git`, `gh`, and `glab` in `shell`. Wrappers and interpreters are not in
+The initial Host default is `allowlist` with every system namespace (`fs`,
+`ui`, `aiCli`, and `web`) and only `git`, `gh`, and `glab` in `shell`. Wrappers and interpreters are not in
 that default. A user policy replaces the single global default and persists at
 `<userData>/execution-policy/policy.json`. The Host-owned companion
 `<userData>/execution-policy/revision.json` stores the durable revision
@@ -1256,15 +1256,17 @@ Manifest permissions, the capability catalog, the explicit package-version
 Grant, publisher eligibility, request schemas, workspace binding, and runtime
 state remain mandatory for both initiators. `full` mode bypasses only the
 agent-specific namespace and executable filters. `allowlist` and `denylist`
-operate on first-level `fs`, `ui`, and `aiCli` namespaces and on every resolved
+operate on first-level `fs`, `ui`, `aiCli`, and `web` namespaces and on every resolved
 top-level executable in a shell pipeline or command chain. Policy v1 does not
 express subcommands, arguments, path patterns, or wrappers. The v1 shell parser
 fails closed on unquoted grouping or negation syntax (`(`, `)`, `{`, `}`, `!`)
 and assignment-prefixed commands (`NAME=value`); this applies to both direct
 user and agent shell execution, so quote these characters or assignment-shaped
 arguments when they are intended as command data. For the private Backend
-Bridge, only the `filesystem` port currently maps to the `fs` Execution Policy
-namespace. All other current Bridge ports fail closed for agent Initiators until
+Bridge, the `filesystem` port maps to the `fs` Execution Policy namespace, the
+`shell` port is judged on its command, and the `web` port maps to `web`. `web`
+is never admitted by omission: a `denylist` does not admit it, only `full` or
+an `allowlist` that names it. All other current Bridge ports fail closed for agent Initiators until
 an explicit namespace mapping is assigned; user Initiators continue through
 their existing checks.
 
@@ -1397,7 +1399,7 @@ Manifest v2 uses one coarse system namespace array and one shell mode:
 }
 ```
 
-`system` accepts only `fs`, `ui`, and `aiCli`. It is not a map of methods or
+`system` accepts only `fs`, `ui`, `aiCli`, and `web`. It is not a map of methods or
 read/write accesses: declaring `fs` allows catalog validation to consider the
 filesystem methods, but does not bypass method schemas, scope checks, or Host
 policy. `shell` accepts only `allowlist` or `full`; omission denies
@@ -1410,6 +1412,7 @@ are not Manifest v2 permissions.
 | `system:ui` | `ui.openInEditor` | `workspace` |
 | `system:ui` | `ui.openExternal` | `plugin` (HTTP/HTTPS web links; Host user-gesture gate) |
 | `system:aiCli` | `aiCli.listProfiles`, `startSession`, `resumeSession`, `cancelStart`, `reattachSession`, `sendInput`, `resizeSession`, `redrawSession`, `interruptSession`, `stopSession`, `output`, `exited` | `workspace` |
+| `system:web` | `web.list`, `create`, `attach`, `detach`, `navigate`, `setOwner`, `takeControl`, `returnControl`, `close`, `capture`, `clearData`, `changed` | `plugin` (see [Plugin browser views](#plugin-browser-views-web)) |
 | `shell` | `shell.run` | `workspace` |
 
 **`shell.run` output size.** The Host shell broker returns at most 8000
@@ -1453,6 +1456,168 @@ packages.
 Host derives `workspaceId` from authenticated runtime binding. There is no
 public `runtime` scope. Workspace events also require a Host-authenticated
 event source for the same workspace; an unbound shared event is dropped.
+
+### Plugin browser views (`web`)
+
+Declaring `web` lets a package open real web pages inside Navide: browser
+views the Host creates, owns and draws over the package's own view. The
+package UI and the package's native backend share the same views, so a user
+and an agent can work in one page and hand it back and forth. The request
+contract lives in `src/main/plugins/webCapability.ts`; the catalog entries are
+in `capabilities-v1.json`.
+
+**Disclosure.** `web` is disclosed at risk level **high** (reason
+`system.web`, summary clause `web`): the package can open and browse any
+website, the sites' sign-ins are kept on this computer, an agent driving the
+package uses the user's sign-ins in it (it can send requests on websites as the
+user) and can read every page the package opened and its signed-in state, and
+agent script already running in a page stops only when the page is reloaded
+after the user takes over. All of a package's views share one partition, so an
+agent's Space is signed in wherever the user signed in.
+`web` is in the sensitive set (`SENSITIVE_CAPABILITIES`), so installing asks
+for the second confirmation.
+
+**Agent Execution Policy.** An agent-initiated `web` call (a view capability
+or the `web` Bridge port) is admitted only in `full` mode or by an `allowlist`
+that names `web`. A `denylist` never admits `web`, because a denylist written
+before the namespace existed would otherwise allow it by omission. The Host
+default allowlist includes `web`; a saved allowlist that predates it does not,
+so such a user's agents are refused until they add `web`. Direct user actions
+are not filtered.
+
+#### View capabilities
+
+Every address is `plugin`-scoped: the views and their browser data belong to
+the package, not to a workspace. Addresses marked with a gesture are refused
+with `USER_CANCELLED` unless the Host observed the user gesture itself, so an
+agent or a backend can never perform them.
+
+| Address | Request → result | Rule |
+|---|---|---|
+| `web.list` | `{}` → `{views: WebViewInfo[]}` | Every view of this package |
+| `web.create` | `{space, url?}` → `{viewId}` | User gesture. `owner` and `control` start as `user` |
+| `web.attach` | `{viewId, rect: {x, y, width, height}}` → `{ok}` | Draws the view over the caller's own view at `rect`, in coordinates relative to that view; one attached view per caller at a time |
+| `web.detach` | `{viewId}` → `{ok}` | Takes the view off screen; it keeps running |
+| `web.navigate` | `{viewId, url?, action?}` → `{ok}` | Exactly one of `url` or `action` (`back`, `forward`, `reload`, `stop`). A user action: on an agent-owned view, `control` passes to `user` |
+| `web.setOwner` | `{viewId, owner: "agent" \| "user"}` → `{ok}` | User gesture; hands a space to an agent or takes it back |
+| `web.takeControl` | `{viewId}` → `{ok}` | User gesture; an agent-owned view passes to the user, reason `manual_takeover` |
+| `web.returnControl` | `{viewId}` → `{ok}` | User gesture; `control` goes back to `agent` |
+| `web.close` | `{viewId}` → `{ok}` | Destroys the view |
+| `web.capture` | `{viewId, maxWidth?}` → `{dataUrl}` | A thumbnail for an overview card; `maxWidth` is an integer from 64 to 2048 |
+| `web.clearData` | `{}` → `{ok}` | User gesture; clears every cookie, sign-in, cache, HTTP auth answer and cached host lookup in this package's browser partition |
+
+`space` and `viewId` are non-empty strings of at most 128 characters. A `url`
+is accepted only when it is `http:` or `https:` without a user name or
+password in it, or exactly `about:blank`, at most 8192 characters; any other
+scheme (`javascript:`, `file:`, `data:`, `blob:`, `chrome:`, `devtools:`,
+`view-source:`, …) is `INVALID_ARGUMENT`. A `rect` holds finite numbers, `x`
+and `y` at least 0, `width` and `height` from 1 to 16384. Unknown fields are
+`INVALID_ARGUMENT` everywhere.
+
+The `web.changed` event carries `{views: WebViewInfo[]}` whenever any view of
+the package changes. It is delivered only to views of the same package.
+
+<!-- docs-typecheck: skip (shape reference; the SDK does not export WebViewInfo yet) -->
+```ts
+interface WebViewInfo {
+  viewId: string
+  space: string
+  owner: 'agent' | 'user'      // who the space belongs to
+  control: 'agent' | 'user'    // who may drive it right now
+  state: 'idle' | 'running' | 'need-action' | 'done'
+  note?: string                // the agent's note, for example what it needs
+  url: string
+  title: string
+  loading: boolean
+  attached: boolean
+  agentScriptSinceLoad: boolean // the agent ran Runtime.evaluate or callFunctionOn
+                                // since the main frame last loaded a document
+}
+```
+
+#### Backend Bridge port `web`
+
+A native backend whose package declares `web` reaches the same views through
+the Bridge port `web`. The port maps to the `web` Execution Policy namespace.
+
+Every operation runs for the pane behind the agent call: the pane id and
+workspace the Host verified for that call, never an argument. A view created
+through the port belongs to that pane in that workspace. Another pane, the same
+pane in another workspace, and a caller that is not a pane all get
+`INVALID_ARGUMENT` for it, as for an unknown `viewId`, and `list` leaves it out.
+A Space the user owns, or one the user handed to agents with `web.setOwner`,
+belongs to no pane: every pane sees it, and may drive it while `owner` and
+`control` are `agent`. Handing a Space to agents does not pick a pane.
+
+| Operation | Arguments → result | Rule |
+|---|---|---|
+| `list` | `{}` → `{views}` | A view whose `owner` is `user` is listed with `url` and `title` empty and no `note`: the agent learns that the user's Space exists and who controls it, not what is open in it. `web.list` in the package UI is unredacted |
+| `create` | `{space, url?}` → `{viewId}` | `owner` and `control` are `agent`, `state` is `running`; the view runs in the background, unattached and without background throttling |
+| `close` | `{viewId}` | Only a view whose `owner` is `agent` |
+| `cdp` | `{viewId, method, params?}` → `{result}` | One Chrome DevTools Protocol command (`Domain.method`, at most 128 characters; `params` a plain object) from the Host allowlist (see [Host-enforced boundaries](#host-enforced-boundaries)); any other method is `CAPABILITY_DENIED`. The debugger attaches to that one view only. Refused with `USER_IN_CONTROL` while `owner` or `control` is `user`, with `reason` `user-owned`, `manual_takeover` or `permission` |
+| `setState` | `{viewId, state, note?}` | `note` at most 500 characters; `need-action` also sets `control` to `user`, and reloads the page first when `agentScriptSinceLoad` is set |
+
+#### Host-enforced boundaries
+
+These rules are protection against deception, not limits on what an honest
+package may do: each one keeps a page, a package or an agent from acting as
+someone it is not.
+
+- **One partition per package.** Every view of a package uses the persistent
+  partition `persist:navide-web:<pluginId>`. It survives restarts and is
+  cleared when the package is removed. Packages never share sign-ins, so one
+  package cannot read the sessions another package's user signed in to.
+- **The page is only a page.** Guests run sandboxed with context isolation, no
+  preload and no Node.js. Only `http(s)` and `about:blank` load; that keeps
+  `file:` and Host-internal pages out of a view an agent can read.
+  `window.open` loads in the same view instead of opening a new window.
+- **CDP is a per-method allowlist.** The Bridge `cdp` operation accepts only
+  these methods, which are what the Navide Browser backend uses to read and
+  drive a page: `Accessibility.getFullAXTree`, `DOM.focus`, `DOM.getBoxModel`,
+  `DOM.resolveNode`, `DOM.scrollIntoViewIfNeeded`,
+  `DOMSnapshot.captureSnapshot`, `Input.dispatchKeyEvent`,
+  `Input.dispatchMouseEvent`, `Input.insertText`, `Page.captureScreenshot`,
+  `Page.getNavigationHistory`, `Page.navigate` (its `url` follows the same
+  `http(s)` rule as `web.create`), `Page.navigateToHistoryEntry`,
+  `Runtime.callFunctionOn` and `Runtime.evaluate`. Every other method is
+  `CAPABILITY_DENIED`. That keeps out the cookie jar (`Network.getCookies`,
+  `getAllCookies`, `setCookie`, `clearBrowserCookies`, …, which would hand an
+  agent the HttpOnly session tokens of sites the user signed in to), the cache,
+  request interception (`Fetch.*`, `Network.setRequestInterception`), scripts
+  and bindings that outlive a page (`Page.addScriptToEvaluateOnNewDocument`,
+  `Runtime.addBinding`), `DOMStorage`, file chooser paths, the download
+  directory and other targets. Script run with `Runtime.evaluate` still acts
+  inside the page with the page's own sign-in, as the disclosure says.
+- **Permission requests are denied.** Camera, microphone, location,
+  notifications and other permission prompts are denied in this first
+  version; on an agent-controlled view the `state` becomes `need-action` with
+  reason `permission`, so the user sees why the agent stopped. Allowing them
+  with disclosure is a later product decision.
+- **No device or identity is handed over.** A site that asks for a client
+  certificate gets none, a Bluetooth device chooser is cancelled, and HTTP
+  authentication prompts are cancelled, instead of Electron's defaults (the
+  first certificate in the store, the first device found).
+- **The user always wins.** Any keyboard or mouse input from the user on an
+  agent-controlled view sets `control` to `user` (reason `manual_takeover`);
+  the agent cannot drive the view again until the user returns control. Every
+  takeover (input, `web.navigate`, `web.takeControl`, a permission request,
+  `need-action`) and `web.setOwner` to `user` also detaches the agent's
+  debugger from the view; the agent's next `cdp` after control returns
+  attaches it again. Residual risk: script the agent already started in the
+  page (for example a timer from `Runtime.evaluate`) keeps running after the
+  detach, because the page itself is not reloaded. A new document (a reload
+  or another full navigation; not an in-page one) clears it, and the
+  disclosure says so. The Host tracks it per view as `agentScriptSinceLoad`:
+  set by every `Runtime.evaluate` or `Runtime.callFunctionOn`, cleared by a
+  main-frame `did-navigate`. When the agent hands the view over
+  (`setState` `need-action`) with the flag set, the Host reloads the page
+  first. A takeover by the user (input, `web.takeControl`, a permission
+  request) never reloads, so nothing the user typed is lost; while the user
+  is in control with the flag set, Navide Browser shows a warning with
+  "Reload" (`web.navigate {action: "reload"}`) and "Keep page".
+- **Views follow the package.** Disabling or removing the package destroys all
+  its views. Closing the package's window does not: views keep running in the
+  background until the package closes them.
 
 ### Declared filesystem scopes (disclosure only)
 
