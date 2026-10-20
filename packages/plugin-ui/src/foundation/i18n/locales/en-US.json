@@ -9328,7 +9328,9 @@
       "digest": "File SHA-256",
       "unreviewed": "An agent asked to install this file. Navide has not reviewed it. Approving opens the same install dialog as \"Install from file\", and what installs is the copy Navide read when the agent asked, with the SHA-256 above.",
       "unreviewed-folder": "An agent asked to load this developer folder. Navide has not reviewed it and its contents can change at any time. Approving opens the same dialog as loading a folder yourself.",
-      "digestChanged": "The file Navide holds for this request is not the one shown on the request; nothing was installed. Ask the agent to send it again."
+      "digestChanged": "The file Navide holds for this request is not the one shown on the request; nothing was installed. Ask the agent to send it again.",
+      "card": "What this package declares (from a local file, not the Navide Marketplace)",
+      "no-card": "There is no disclosure for this local package. It comes from a local file, not the Navide Marketplace, and Navide has not reviewed it."
     },
     "kicker": "Navide plugin request",
     "title": {

@@ -131,6 +131,37 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect(wrapper.find('[data-testid="ext-trust-agent-request"]').text()).toContain('dev')
   })
 
+  it('W1: a file request discloses a local file as its source, never the Navide Marketplace', async () => {
+    const file = (card: PluginAgentRequest['card']) => request({
+      kind: 'plugin-install-file' as PluginAgentRequest['kind'],
+      target: {
+        id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.2.0', fromVersion: null,
+        path: '/x.vsix', digest: 'ab'.repeat(32), stagingId: 'cd'.repeat(16), packageKind: 'file',
+      },
+      card,
+    })
+    const t = (key: string) => i18n.global.t(key)
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [file(request().card)] })
+    wrapper = await open(mock)
+    expect(wrapper.text()).toContain(t('plugin-request.file.card'))
+    expect(wrapper.text()).toContain(t('pluginDisclosure.provenance.local'))
+    expect(wrapper.text()).not.toContain(t('plugin-request.card'))
+    expect(wrapper.text()).not.toContain(t('pluginDisclosure.provenance.unverified'))
+    wrapper.unmount()
+    const bare = createMockBackend('connected')
+    bare.setResponse('plugins.agent_requests.list', { requests: [file(null)] })
+    wrapper = await open(bare)
+    expect(wrapper.find('[data-testid="plugin-request-no-card"]').text()).toBe(t('plugin-request.file.no-card'))
+    // A Marketplace install keeps its wording.
+    wrapper.unmount()
+    const registry = createMockBackend('connected')
+    registry.setResponse('plugins.agent_requests.list', { requests: [request()] })
+    wrapper = await open(registry)
+    expect(wrapper.text()).toContain(t('plugin-request.card'))
+    expect(wrapper.text()).toContain(t('pluginDisclosure.provenance.unverified'))
+  })
+
   it('MED-5: a file request whose time ran out reads as expired, never as failed', async () => {
     const file = (over: Partial<PluginAgentRequest> = {}) => request({
       kind: 'plugin-install-file' as PluginAgentRequest['kind'],
