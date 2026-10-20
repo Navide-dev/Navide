@@ -356,6 +356,8 @@ def create_publisher_router() -> APIRouter:
                     "record_value": record_value(publisher.domain_token) if publisher.domain_token else None,
                     "key_fingerprint": fingerprint,
                     "review_required": publisher.review_required,
+                    "frozen_at": publisher.frozen_at,
+                    "frozen_reason": publisher.frozen_reason,
                 },
                 "grandfather": qualification.grandfather_view(session, publisher),
                 "rows": rows,
