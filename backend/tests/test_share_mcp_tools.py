@@ -33,7 +33,7 @@ MARKETPLACE_REQUEST_TOOLS = [
 ]
 #: Core tools registered after those: plan mcp_614482's read-only failover state and accounts (P1)
 #: and account sign-in (P2).
-ACCOUNT_TOOLS = ["cli_failover_state", "cli_accounts_list", "cli_account_sign_in"]
+ACCOUNT_TOOLS = ["cli_failover_state", "cli_accounts_list", "cli_account_sign_in", "cli_account_switch"]
 #: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills).
 PLUGIN_PREFIXES = ("plan_", "skills_")
 BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"

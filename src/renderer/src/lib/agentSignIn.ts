@@ -107,16 +107,18 @@ export type AgentSignInConfirmAnswer = 'confirmed' | 'declined' | 'expired' | 'b
 /** One agent sign-in waiting for the user at a time: `pending` is what the
  *  dialog shows, `answer` is the user's click. The request closes itself at
  *  its deadline, or when `signal` aborts (the backend withdrew it or the
- *  window lost the backend), and an answer after that changes nothing. */
-export function createSignInConfirm(): {
-  pending: Readonly<ShallowRef<AgentSignInConfirmRequest | null>>
-  ask: (request: AgentSignInConfirmRequest, signal?: AbortSignal) => Promise<AgentSignInConfirmAnswer>
+ *  window lost the backend), and an answer after that changes nothing.
+ *  Also holds an agent's account switch (lib/agentAccountSwitch). */
+export function createSignInConfirm<T extends { confirmBy: number } = AgentSignInConfirmRequest>(): {
+  pending: Readonly<ShallowRef<T | null>>
+  ask: (request: T, signal?: AbortSignal) => Promise<AgentSignInConfirmAnswer>
   answer: (confirmed: boolean) => void
 } {
-  const pending = shallowRef<AgentSignInConfirmRequest | null>(null)
+  // Annotated, not inferred: shallowRef's overloads do not resolve for a generic T.
+  const pending: ShallowRef<T | null> = shallowRef(null)
   let settle: ((answer: AgentSignInConfirmAnswer) => void) | null = null
 
-  function ask(request: AgentSignInConfirmRequest, signal?: AbortSignal): Promise<AgentSignInConfirmAnswer> {
+  function ask(request: T, signal?: AbortSignal): Promise<AgentSignInConfirmAnswer> {
     if (signal?.aborted) return Promise.resolve('expired')
     if (pending.value) return Promise.resolve('busy')
     return new Promise((resolve) => {
