@@ -224,6 +224,7 @@ describe('release workflow verifies the Plans artifact it signs', () => {
 
   it('runs the production Plans verifier before signing', () => {
     expect(buildStep).toContain('node scripts/verify-plans-production.mjs')
+    expect(buildStep).toContain('bun run electron-builder')
     // Ahead of electron-builder: an empty backend must fail the release before
     // the notarization leg, not silently ship.
     expect(buildStep.indexOf('verify-plans-production.mjs'))
