@@ -93,13 +93,38 @@ export const UI_LOCALE_FALLBACK: Record<string, string[]> = {
 type PluralRule = (choice: number, choicesLength: number, orgRule?: PluralRule) => number
 
 const pluralRulesCache = new Map<string, Intl.PluralRules>()
-function pluralCategory(locale: string, n: number): Intl.LDMLPluralRule {
+function pluralRules(locale: string): Intl.PluralRules {
   let rules = pluralRulesCache.get(locale)
   if (!rules) {
     rules = new Intl.PluralRules(locale)
     pluralRulesCache.set(locale, rules)
   }
-  return rules.select(n)
+  return rules
+}
+
+/** CLDR plural category of `count` in `locale` (Intl.PluralRules). */
+export function pluralCategory(count: number, locale: string): Intl.LDMLPluralRule {
+  return pluralRules(locale).select(count)
+}
+
+/**
+ * Whether code that picks between a singular and a plural message key
+ * (`foo-one` / `foo-many`) should take the singular one. Use this instead of
+ * `count === 1`.
+ *
+ * CLDR decides: French and Brazilian Portuguese treat 0 as singular, Russian
+ * 21 is singular, English 0 is plural. Locales whose CLDR rules have no "one"
+ * category at all (ja, zh, ko, vi) answer "other" for every count; for them
+ * count === 1 still selects the singular key, so the text en-US, zh-TW and
+ * ja-JP show is exactly what `count === 1` showed before.
+ *
+ * A two-key pair cannot express Russian few/many; both land on the plural
+ * key. Messages that need more forms use vue-i18n pipe forms (UI_PLURAL_RULES).
+ */
+export function isSingular(count: number, locale: string): boolean {
+  const rules = pluralRules(locale)
+  if (!rules.resolvedOptions().pluralCategories.includes('one')) return count === 1
+  return rules.select(count) === 'one'
 }
 
 // Mirrors vue-i18n's built-in rule, used when a message's form count is not
@@ -120,7 +145,7 @@ function defaultPluralIndex(choice: number, choicesLength: number): number {
  */
 function russianPluralIndex(choice: number, choicesLength: number): number {
   const n = Math.abs(choice)
-  const category = pluralCategory('ru-RU', n)
+  const category = pluralCategory(n, 'ru-RU')
   const index = category === 'one' ? 0 : category === 'many' ? 2 : 1
   if (choicesLength === 3) return index
   if (choicesLength === 4) return n === 0 ? 0 : index + 1
@@ -134,7 +159,7 @@ function russianPluralIndex(choice: number, choicesLength: number): number {
 function zeroIsSingularPluralIndex(locale: string): PluralRule {
   return (choice, choicesLength) => {
     if (choicesLength !== 2) return defaultPluralIndex(choice, choicesLength)
-    return pluralCategory(locale, Math.abs(choice)) === 'one' ? 0 : 1
+    return pluralCategory(Math.abs(choice), locale) === 'one' ? 0 : 1
   }
 }
 
