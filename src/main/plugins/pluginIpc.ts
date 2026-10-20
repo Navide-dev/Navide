@@ -129,7 +129,7 @@ import {
 } from '../../shared/pluginDisclosure'
 import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
 import type { LocalPackageQueryReport } from '../../shared/pluginAgentTools'
-import { pluginSourceFromLegacyProvenance, type PluginSource } from '../../shared/pluginSource'
+import { pluginSourceFromLegacyProvenance, type LocalInstallDetails, type PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
@@ -256,6 +256,8 @@ interface InstalledSummary {
   /** Decision d5, a local file only: Navide blocked the `.vsix` it was
    * installed from since; `reason` null when the list names none. */
   digestBlock?: { reason: LocalBlockReason | null }
+  /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+  localInstall?: LocalInstallDetails
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -875,6 +877,22 @@ export function registerPluginIpc(
       return null
     }
   }
+  // DX 9.4 A1: what the user consented to for a local file, and when.
+  const localInstallFor = (summary: { id: string; packageVersion?: string }): LocalInstallDetails | null => {
+    if (!summary.packageVersion) return null
+    const path = localTrustRecordFor(pluginsRoot, summary.id, summary.packageVersion)
+    if (!path) return null
+    try {
+      const record = readLocalTrustRecord(path)
+      return {
+        ...(record.artifactDigest ? { fileDigest: record.artifactDigest } : {}),
+        contentDigest: record.contentDigest,
+        installedAt: record.consentedAt,
+      }
+    } catch {
+      return null
+    }
+  }
   const sourceFields = (summary: {
     id: string
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
@@ -886,16 +904,19 @@ export function registerPluginIpc(
     testplaceVia?: TestplaceJoinVia
     localSignature?: 'verified' | 'revoked'
     digestBlock?: { reason: LocalBlockReason | null }
+    localInstall?: LocalInstallDetails
   } => {
     const source = installedSource(summary, activeRegistryChannel(summary))
     if (!source) return {}
     if (source === 'local-unsigned') {
       const signature = recordedLocalSignature(summary)
       const block = localDigestBlockFor(summary)
+      const install = localInstallFor(summary)
       return {
         source,
         ...(signature ? { localSignature: signature } : {}),
         ...(block ? { digestBlock: { reason: block.reason } } : {}),
+        ...(install ? { localInstall: install } : {}),
       }
     }
     const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined

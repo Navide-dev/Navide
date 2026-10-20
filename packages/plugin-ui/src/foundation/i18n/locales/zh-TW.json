@@ -11358,7 +11358,12 @@
       "publisher": "發佈者：{publisher}",
       "selfDeclared": "自稱：{publisher}",
       "localSignedBy": "開發者 {publisher}（已通過 Navide 資格審核）簽章，這一版未經 Navide 審核",
-      "signatureRevoked": "簽章已失效"
+      "signatureRevoked": "簽章已失效",
+      "unsignedNote": "無法確認作者，檔案可能被改過。",
+      "showDetails": "顯示來源、SHA-256 與安裝時間",
+      "fileDigest": "安裝檔案的 SHA-256：{digest}",
+      "contentDigest": "安裝內容的 SHA-256：{digest}",
+      "installedAt": "安裝時間：{time}"
     },
     "diff": {
       "heading": "這次更新的權限變化",
