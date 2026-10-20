@@ -525,7 +525,7 @@ declare global {
           restoredInstances: number
           skippedDestroyedHostWindows: number
         }>
-        rollback: (id: string) => Promise<{
+        rollback: (id: string, options?: { consentConfirmed?: boolean }) => Promise<{
           id: string
           packageVersion: string
           restoredInstances: number
@@ -606,6 +606,8 @@ declare global {
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'
     rollbackToVersion?: string
+    /** L4: the rollback target is a kept file version; going back asks again. */
+    rollbackNeedsConsent?: true
     /** Lowest Navide release the installed version needs (label only). */
     minNavideVersion?: string
     /** False when this Navide release is older; the Host still runs it. */

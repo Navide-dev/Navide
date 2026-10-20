@@ -1490,12 +1490,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
       restoredInstances: number
       skippedDestroyedHostWindows: number
     }> => ipcRenderer.invoke('plugins:restart', { id }),
-    rollback: (id: string): Promise<{
+    // L4: going back to a kept file version carries the user's renewed consent.
+    rollback: (id: string, options: { consentConfirmed?: boolean } = {}): Promise<{
       id: string
       packageVersion: string
       restoredInstances: number
       skippedDestroyedHostWindows: number
-    }> => ipcRenderer.invoke('plugins:rollback', { id }),
+    }> => ipcRenderer.invoke('plugins:rollback', { id, ...(options.consentConfirmed === true ? { consentConfirmed: true } : {}) }),
     /** Drop the version staged for the next restart (the downgrade of an agent's O1 update). */
     discardCandidate: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:discardCandidate', { id }),
     remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
