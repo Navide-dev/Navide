@@ -35,7 +35,7 @@ import re
 import secrets
 import time
 from collections.abc import Iterator
-from contextlib import AsyncExitStack, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape as html_escape
@@ -10711,7 +10711,59 @@ async def cli_account_switch(
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
 
 _session_manager: StreamableHTTPSessionManager | None = None
-_lifecycle = AsyncExitStack()
+
+
+@dataclass
+class _Runner:
+    """A session manager and the task it runs in (see _start_runner)."""
+
+    manager: StreamableHTTPSessionManager
+    task: asyncio.Task[None]
+    ready: asyncio.Event
+    stop: asyncio.Event
+
+
+_runner: _Runner | None = None
+# (pane or client, reason) pairs already logged as refused (see _PlanMcpASGI).
+_logged_refusals: set[tuple[str, str]] = set()
+# The exceptions the SDK logged while handling the current request: it answers
+# every failure before a tool runs with the same "-32603 Error handling POST
+# request" and keeps the cause in its own log only (issue #490).
+_sdk_failures: contextvars.ContextVar[list[BaseException] | None] = contextvars.ContextVar(
+    "plan_mcp_sdk_failures", default=None
+)
+# How much of a request body is kept to name its JSON-RPC method in an error.
+_METHOD_PEEK_BYTES = 4096
+_METHOD_RE = re.compile(rb'"method"\s*:\s*"([^"\\]{1,100})"')
+
+
+class _SdkFailureCapture(logging.Handler):
+    """Hands the exception the SDK logs to the request whose task logged it."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        failures = _sdk_failures.get()
+        if failures is not None and record.exc_info and record.exc_info[1] is not None:
+            failures.append(record.exc_info[1])
+
+
+logging.getLogger("mcp.server.streamable_http").addHandler(_SdkFailureCapture())
+
+
+def _caller_label(caller: _Caller | None) -> str:
+    if caller is None:
+        return "unknown caller"
+    return f"pane {caller.pane_id}" if caller.kind == "pane" else caller.kind
+
+
+def _explained_failure(body: bytes, failure: BaseException, method: str, caller: str) -> bytes:
+    """The SDK's generic JSON-RPC error with its cause, method and caller added."""
+    detail = f"{type(failure).__name__}: {failure} (method {method or 'unknown'}; {caller})"
+    try:
+        document = json.loads(body)
+        document["error"]["message"] = f"{document['error']['message']}: {detail}"
+    except (ValueError, TypeError, KeyError):
+        return body
+    return json.dumps(document).encode("utf-8")
 
 
 class _PlanMcpASGI:
@@ -10719,18 +10771,34 @@ class _PlanMcpASGI:
     ASGI, not a request-response function); 503 until startup() has run."""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        manager = _session_manager
-        if manager is None:
+        runner = _runner
+        if runner is None:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
             return
+        if runner.task.done():
+            runner = _replace_stopped_runner(runner)
+        await runner.ready.wait()
+        if runner.task.done():
+            response = PlainTextResponse("plan MCP server failed to start; see the backend log", status_code=503)
+            await response(scope, receive, send)
+            return
+        manager = runner.manager
         # The credential is checked before any of the body is read: a request
         # without a valid one is answered 401 and its body never received, so
         # only an authenticated caller's body is read, of any size.
+        caller: _Caller | None = None
         if scope.get("type") == "http":
             try:
-                _credential(Request(scope))
+                caller = _credential(Request(scope))
             except CallerUnknown as err:
+                params = Request(scope).query_params
+                who = str(params.get("pane") or params.get("client") or "")
+                if (who, str(err)) not in _logged_refusals:
+                    # Once per caller and reason: a CLI that keeps calling would
+                    # otherwise write the same line on every call.
+                    _logged_refusals.add((who, str(err)))
+                    _log.warning("plan-mcp: refused %s — %s", who or "a caller with no id", err)
                 await PlainTextResponse(str(err), status_code=401)(scope, receive, send)
                 return
         # Request bodies have no size limit (agent-tools contract 4.4, A1). Their
@@ -10740,16 +10808,48 @@ class _PlanMcpASGI:
         # body size (_request_body_bytes), set before the call's tasks start.
         received = [0]
         token = _request_body_bytes.set(received)
+        head = bytearray()
 
         async def counting_receive() -> Any:
             message = await receive()
             if message.get("type") == "http.request":
-                received[0] += len(message.get("body", b""))
+                chunk = message.get("body", b"")
+                received[0] += len(chunk)
+                if len(head) < _METHOD_PEEK_BYTES:
+                    head.extend(chunk[: _METHOD_PEEK_BYTES - len(head)])
             return message
 
+        failures: list[BaseException] = []
+        failures_token = _sdk_failures.set(failures)
+        held: dict[str, Any] | None = None
+
+        async def explaining_send(message: dict[str, Any]) -> None:
+            # A failure the SDK caught is answered with a 5xx whose body names
+            # nothing; hold its start until the body can carry the cause.
+            nonlocal held
+            if message["type"] == "http.response.start" and message.get("status", 200) >= 500 and failures:
+                held = message
+                return
+            if held is not None and message["type"] == "http.response.body":
+                start, held = held, None
+                match = _METHOD_RE.search(bytes(head))
+                method = match.group(1).decode("utf-8", "replace") if match else ""
+                who = _caller_label(caller)
+                _log.error(
+                    "plan-mcp: %s request from %s failed before reaching a tool",
+                    method or "a", who, exc_info=failures[-1],
+                )
+                body = _explained_failure(message.get("body", b""), failures[-1], method, who)
+                headers = [(k, v) for k, v in start.get("headers", []) if k.lower() != b"content-length"]
+                await send({**start, "headers": [*headers, (b"content-length", str(len(body)).encode())]})
+                await send({**message, "body": body})
+                return
+            await send(message)
+
         try:
-            await manager.handle_request(scope, counting_receive, send)
+            await manager.handle_request(scope, counting_receive, explaining_send)
         finally:
+            _sdk_failures.reset(failures_token)
             _request_body_bytes.reset(token)
             from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
 
@@ -10760,14 +10860,18 @@ class _PlanMcpASGI:
 asgi_app = _PlanMcpASGI()
 
 
-async def startup() -> None:
-    """Start a fresh streamable-HTTP session manager for the mounted endpoint.
+def _start_runner() -> _Runner:
+    """Run a fresh streamable-HTTP session manager in a task of its own.
 
     Stateless + JSON responses: every tool call is an independent POST, no
-    server-side session table. A fresh manager per startup keeps app lifespan
-    cycles (tests) restartable — the SDK's run() is once-only per instance.
+    server-side session table. The SDK runs each request's server task in the
+    manager's one task group, so anything escaping a request ends the whole
+    group (issue #490). In a task of its own that ends this task only, where
+    the endpoint sees it and starts a new one (_replace_stopped_runner) —
+    rather than the group being cancelled inside the app's lifespan task,
+    whose cancellation uvicorn swallows, leaving every later request's server
+    task cancelled before it reads anything.
     """
-    global _session_manager
     manager = StreamableHTTPSessionManager(
         # Same low-level-server access the SDK's own in-memory test helper
         # (mcp.shared.memory) uses; FastMCP has no public accessor.
@@ -10780,15 +10884,73 @@ async def startup() -> None:
         # message; its size is logged by _PlanMcpASGI.
         max_request_body_size=sys.maxsize,
     )
-    await _lifecycle.enter_async_context(manager.run())
-    _session_manager = manager
+    ready = asyncio.Event()
+    stop = asyncio.Event()
+
+    async def run() -> None:
+        try:
+            async with manager.run():
+                ready.set()
+                await stop.wait()
+        finally:
+            ready.set()
+
+    runner = _Runner(manager, asyncio.create_task(run(), name="plan-mcp-session-manager"), ready, stop)
+    runner.task.add_done_callback(lambda task: _note_runner_end(runner, task))
+    return runner
+
+
+def _note_runner_end(runner: _Runner, task: asyncio.Task[None]) -> None:
+    """Log a session manager that stopped without being asked to."""
+    if runner.stop.is_set():
+        return
+    if task.cancelled():
+        _log.error("plan-mcp: the MCP session manager was cancelled; it restarts on the next call")
+        return
+    exc = task.exception()
+    _log.error(
+        "plan-mcp: the MCP session manager stopped (%s); it restarts on the next call",
+        f"{type(exc).__name__}: {exc}" if exc is not None else "it returned",
+        exc_info=exc,
+    )
+
+
+def _replace_stopped_runner(stopped: _Runner) -> _Runner:
+    """The running session manager, started anew if ``stopped`` is still it."""
+    global _runner, _session_manager
+    if _runner is stopped:
+        _log.warning("plan-mcp: restarting the MCP session manager")
+        _runner = _start_runner()
+        _session_manager = _runner.manager
+    assert _runner is not None
+    return _runner
+
+
+async def startup() -> None:
+    """Start a fresh session manager for the mounted endpoint (_start_runner).
+    A fresh manager per startup keeps app lifespan cycles (tests) restartable
+    — the SDK's run() is once-only per instance."""
+    global _runner, _session_manager
+    runner = _start_runner()
+    _runner = runner
+    _session_manager = runner.manager
+    await runner.ready.wait()
+    if runner.task.done():
+        runner.task.result()
 
 
 async def shutdown() -> None:
     """Stop the session manager started by startup(). Idempotent."""
-    global _session_manager
+    global _runner, _session_manager
+    runner, _runner = _runner, None
     _session_manager = None
-    await _lifecycle.aclose()
+    if runner is None:
+        return
+    runner.stop.set()
+    await asyncio.wait([runner.task])
+    if not runner.task.cancelled() and runner.task.exception() is not None:
+        # Already logged by _note_runner_end when it ended on its own.
+        _log.debug("plan-mcp: the stopped session manager had failed", exc_info=runner.task.exception())
 
 
 # The Navide Marketplace developer tools (W3) register on `server` from their own module.
