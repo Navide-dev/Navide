@@ -172,6 +172,51 @@ describe('verifyInstalledRegistryPackage', () => {
     })
   })
 
+  it('quarantines an expired test build with its code, and allows it once the user kept that digest (D3)', () => {
+    const expired = { ...envelope, channel: 'testplace', expiresAt: '2026-08-16T11:30:00.000Z' }
+    writeFileSync(
+      join(pluginDir, REGISTRY_RECEIPT_NAME),
+      JSON.stringify(
+        registryReceiptFromEvidence({
+          packageId: 'acme.demo',
+          version: '1.0.0',
+          publisherId: 'acme',
+          target: 'universal',
+          artifactDigest: sha256Hex(archive),
+          envelope: expired,
+          envelopeSignature: signed(expired),
+        })
+      )
+    )
+    expect(verifyInstalledRegistryPackage(pluginDir, 'acme.demo', context())).toMatchObject({
+      action: 'quarantine',
+      code: 'TESTPLACE_EXPIRED',
+    })
+    const kept = (digest: string) => ({
+      ...context(),
+      keepsExpiredTestplace: (id: string, artifactDigest: string) => id === 'acme.demo' && artifactDigest === digest,
+    })
+    expect(verifyInstalledRegistryPackage(pluginDir, 'acme.demo', kept(sha256Hex(archive)))).toEqual({
+      action: 'allow',
+      artifactDigest: sha256Hex(archive),
+      target: 'universal',
+      expired: true,
+    })
+    // Kept for another artifact: this one stays quarantined.
+    expect(verifyInstalledRegistryPackage(pluginDir, 'acme.demo', kept('b'.repeat(64)))).toMatchObject({
+      action: 'quarantine',
+      code: 'TESTPLACE_EXPIRED',
+    })
+    // A takedown wins over the user's choice.
+    const blocked = { ...metadata, blockedPackages: [{ packageId: 'acme.demo', version: '1.0.0' }] }
+    expect(
+      verifyInstalledRegistryPackage(pluginDir, 'acme.demo', {
+        ...context(blocked),
+        keepsExpiredTestplace: () => true,
+      })
+    ).toMatchObject({ action: 'quarantine', code: 'PACKAGE_BLOCKED' })
+  })
+
   it('revalidates a retained Registry v1 package after restart', () => {
     const legacyDir = join(root, 'acme.legacy')
     mkdirSync(legacyDir, { recursive: true })

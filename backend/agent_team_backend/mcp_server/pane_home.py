@@ -46,7 +46,7 @@ import tomli_w
 
 from agent_team_backend.cli_vendors import registry
 from agent_team_backend.cli_vendors.base import McpWiring, mcp_document
-from agent_team_backend import osplat
+from agent_team_backend import applog, osplat
 from agent_team_backend.osplat import secret_files
 
 log = logging.getLogger("agent_team_backend.mcp_server.pane_home")
@@ -434,14 +434,16 @@ def prepare(
     server_name: str,
     server_label: str = "",
     legacy_names: Sequence[str] = (),
+    workspace: str = "",
 ) -> tuple[str, str] | None:
     """Build (or refresh) the pane's shim and return ``(env_var, path)``.
 
     None when the vendor has no shim, the pane id is unusable as a path
     segment, or the filesystem work fails — the caller then spawns unwired.
     The server's name, display label and former names are the caller's: this
-    module must not import the one that serves the endpoint. Blocking I/O:
-    call off the event loop.
+    module must not import the one that serves the endpoint. ``workspace`` is
+    the pane's working directory: the only folders a grok pane's trust may
+    leave its shim for. Blocking I/O: call off the event loop.
     """
     spec = SHIM_SPECS.get(agent_key)
     root = shim_root(agent_key, pane_id)
@@ -467,6 +469,7 @@ def prepare(
         return None
     real_vendor = home / spec.vendor_dir
     if agent_key == "grok":
+        _record_grok_workspace(pane_id, workspace)
         # Before this shim is seeded, so it starts from the merged file.
         from ..convenience_wiring import merge_grok_folder_trust_gated
 
@@ -521,19 +524,115 @@ def prepare(
 #: pane — and no later pane for the same folder — could see it (issue #402).
 GROK_TRUST_FILE = "trusted_folders.toml"
 #: The text Navide appended to the user's file, so the switch can take back
-#: exactly those bytes. Lives beside the grok shims, in Navide's own tree.
+#: exactly those bytes.
 GROK_TRUST_LEDGER = ".folder-trust-merged.json"
 #: Per pane, the rows its copy was seeded with from the user's file: anything
 #: else in the copy is the pane's own decision.
 GROK_TRUST_SEEDS = ".folder-trust-seeds.json"
+#: Per pane this backend started, the working directory it was started in,
+#: resolved then: a folder the pane trusted leaves its copy only when it is
+#: that directory or inside it, and a shim with no entry is not merged at all.
+#: Memory only — any file could be rewritten by whatever runs in a pane. After
+#: a restart each pane is recorded again when it is next started.
+_GROK_WORKSPACES: dict[str, dict[str, str]] = {}
+#: Present once the records earlier builds kept beside the shims were copied.
+GROK_TRUST_MIGRATED = ".migrated"
+#: The only keys of a pane's row that reach the user's file.
+GROK_TRUST_ROW_KEYS = ("trusted", "decided_at")
+
+
+def _grok_trust_record(name: str) -> Path:
+    """One of Navide's grok trust records, in its own data folder: anything
+    running in a pane can write under the shims, so nothing there may decide
+    what reaches the user's file. Earlier builds kept the ledger and the seeds
+    beside the shims; the first call copies them over once (the old files stay
+    where they are)."""
+    folder = applog.app_data_dir() / "grok-folder-trust"
+    marker = folder / GROK_TRUST_MIGRATED
+    if not marker.exists():
+        try:
+            secret_files.make_private_dir(folder)
+            for old_name in (GROK_TRUST_LEDGER, GROK_TRUST_SEEDS):
+                old = panes_root() / "grok" / old_name
+                if old.is_file() and not (folder / old_name).exists():
+                    _write_json(folder / old_name, _read_json_object(old))
+            _write_text(marker, "")
+        except OSError as err:
+            log.warning("could not move grok trust records into %s: %s", folder, err)
+    return folder / name
 
 
 def _grok_trust_ledger() -> Path:
-    return panes_root() / "grok" / GROK_TRUST_LEDGER
+    return _grok_trust_record(GROK_TRUST_LEDGER)
 
 
 def _grok_trust_seeds_path() -> Path:
-    return panes_root() / "grok" / GROK_TRUST_SEEDS
+    return _grok_trust_record(GROK_TRUST_SEEDS)
+
+
+def _record_grok_workspace(pane_id: str, workspace: str) -> None:
+    """Record the folder the pane is started in, resolved now: a link in it
+    changed later must not move what the pane may share."""
+    try:
+        real = os.path.realpath(workspace, strict=True) if workspace else ""
+    except (OSError, ValueError):
+        real = ""
+    if real:
+        _GROK_WORKSPACES[pane_id] = {"real": real}
+    else:
+        _GROK_WORKSPACES.pop(pane_id, None)
+
+
+def forget_grok_workspace(pane_id: str) -> None:
+    """The pane is closed: nothing in its copy is shared any more."""
+    _GROK_WORKSPACES.pop(pane_id, None)
+
+
+def _path_within(path: str, root: str) -> bool:
+    """Whether ``path`` or a folder above it is the folder ``root`` names,
+    by file identity (a different spelling of the same folder counts)."""
+    for candidate in (Path(path), *Path(path).parents):
+        try:
+            if os.path.samefile(candidate, root):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _trust_in_workspace(folder: Any, workspace: Any) -> bool:
+    """Whether a folder a pane trusted is its workspace or inside it.
+
+    ``workspace`` is the record _record_grok_workspace made at spawn. The key
+    must be absolute (not ``~``, not a device-namespace path) with no ``.``,
+    ``..`` or empty component (one trailing separator is fine; on Windows
+    ``/`` and ``\\`` both separate, as Grok's own spelling is not known), and,
+    normalised, start with the workspace as resolved at spawn,
+    component by component (``/ws-other`` is not inside ``/ws``). The whole
+    key must exist and hold no link, so the row names the same folder now and
+    later. A workspace that is a drive root, the home folder or a folder above
+    it shares nothing."""
+    if not isinstance(folder, str) or not isinstance(workspace, dict):
+        return False
+    real = workspace.get("real")
+    if not isinstance(real, str) or not real:
+        return False
+    if folder.startswith(("~", "\\\\?\\", "\\\\.\\", "//?/", "//./")) or not os.path.isabs(folder):
+        return False
+    plain = folder.rstrip("/\\") or folder
+    components = re.split(r"[/\\]", os.path.splitdrive(plain)[1])
+    if components[0] or any(part in ("", ".", "..") for part in components[1:]):
+        return False
+    plain = os.path.normpath(plain)
+    home = os.path.realpath(real_home())
+    if Path(real).parent == Path(real) or _path_within(home, real):
+        return False
+    if Path(plain).parts[: len(Path(real).parts)] != Path(real).parts:
+        return False
+    try:
+        return os.path.realpath(plain, strict=True) == plain
+    except (OSError, ValueError):
+        return False
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:
@@ -592,22 +691,36 @@ def merge_grok_folder_trust(real_vendor: Path) -> None:
     layout stay byte for byte, and the switch's takeback removes exactly the
     appended text. Only folders the file does not mention are added — a
     decision made outside Navide always wins — and only a pane's own
-    decisions, never the rows its copy was seeded with. A file that cannot be
-    parsed, or that would not parse with the addition, is left alone. The
+    decisions, never the rows its copy was seeded with. Only panes Navide
+    started are read, only folders in the workspace each was started in, and
+    only a row's ``trusted`` and ``decided_at`` (see _trust_in_workspace):
+    whatever runs in a pane can write its copy, and must not be able to make
+    a folder trusted everywhere. A file that cannot be parsed, or that would not parse with the addition, is left alone. The
     ledger is written before the file, and put back if the file write fails.
     """
     if not real_vendor.is_dir():
         return
     seeds = _read_json_object(_grok_trust_seeds_path())
+    workspaces = dict(_GROK_WORKSPACES)
     pending: dict[str, tuple[Any, str]] = {}
-    for path in sorted((panes_root() / "grok").glob(f"*/.grok/{GROK_TRUST_FILE}")):
-        if path.is_symlink() or not path.is_file():
+    for pane, workspace in sorted(workspaces.items()):
+        root = shim_root("grok", pane)
+        path = None if root is None else root / ".grok" / GROK_TRUST_FILE
+        if path is None or path.is_symlink() or not path.is_file():
             continue
-        pane = path.parent.parent.name
         seed = seeds.get(pane) if isinstance(seeds.get(pane), dict) else {}
         for key, row in (_grok_trust_folders(path) or {}).items():
             block = _trust_block(key, row)
-            if block and seed.get(key) != block:
+            if not block or seed.get(key) == block:
+                continue
+            if not _trust_in_workspace(key, workspace):
+                log.warning(
+                    "grok pane %s trusted %s, which is not in its workspace %s; kept in that pane's copy only",
+                    pane, key, workspace,
+                )
+                continue
+            row = {name: row[name] for name in GROK_TRUST_ROW_KEYS if name in row}
+            if "trusted" in row:
                 pending.setdefault(key, (row, pane))
     if not pending:
         return

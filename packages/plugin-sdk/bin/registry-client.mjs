@@ -96,7 +96,7 @@ function base64Url(bytes) {
   return Buffer.from(bytes).toString('base64url')
 }
 
-function openBrowser(url) {
+export function openBrowser(url) {
   const [command, args] =
     process.platform === 'darwin'
       ? ['open', [url]]
@@ -197,14 +197,15 @@ function readSignature(value) {
 }
 
 /** Upload to `<registry>/api/publish`. Returns { status, body }. */
-export async function publish(registry, packagePath, { target, signature, token }) {
-  const resolvedToken = token || process.env[TOKEN_ENV] || storedCredentials(registry)?.token
+export async function publish(registry, packagePath, { target, signature, token, channel }) {
+  const resolvedToken = resolveToken(registry, token)?.token
   if (!resolvedToken) {
     throw new Error(`publish needs ${TOKEN_ENV} or \`navide-plugin login --registry ${registry}\``)
   }
   const params = new URLSearchParams({ target })
   const signatureValue = readSignature(signature)
   if (signatureValue) params.set('signature', signatureValue)
+  if (channel) params.set('channel', channel)
   const form = new FormData()
   form.append('package', new Blob([readRegularFileNoFollow(packagePath)], { type: 'application/zip' }), basename(packagePath))
   const response = await fetch(`${registry}/api/publish?${params}`, {
@@ -213,4 +214,27 @@ export async function publish(registry, packagePath, { target, signature, token 
     body: form,
   })
   return { status: response.status, body: await response.text() }
+}
+
+/** The token publish sends: --token, then NAVIDE_PLUGIN_TOKEN, then the stored
+ *  login. Returns { token, source, entry? } or null. */
+export function resolveToken(registry, token) {
+  if (token) return { token, source: '--token' }
+  if (process.env[TOKEN_ENV]) return { token: process.env[TOKEN_ENV], source: TOKEN_ENV }
+  const entry = storedCredentials(registry)
+  return entry ? { token: entry.token, source: credentialsPath(), entry } : null
+}
+
+/** GET `<registry><path>` with the publisher token. Returns { status, body }:
+ *  the parsed JSON, or null when the response is not JSON. */
+export async function getJson(registry, path, token) {
+  const response = await fetch(`${registry}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  })
+  const text = await response.text()
+  try {
+    return { status: response.status, body: JSON.parse(text) }
+  } catch {
+    return { status: response.status, body: null }
+  }
 }

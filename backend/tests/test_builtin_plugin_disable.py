@@ -85,7 +85,7 @@ async def test_host_register_carries_the_disabled_built_ins(host_session) -> Non
     assert app.plans_plugin_disabled() is False
 
 
-@pytest.mark.parametrize("value", [["acme.demo"], "navide.plans", [1], ["navide.plans"] * 4])
+@pytest.mark.parametrize("value", [["acme.demo"], ["navide.browser"], "navide.plans", [1], ["navide.plans"] * 4])
 async def test_host_register_refuses_anything_but_built_in_ids(host_session, value) -> None:
     reply = await _register(host_session, {"plans_backend_v2": False, "disabled_plugins": value})
     assert reply["error"]["code"] == "UNAUTHORIZED"

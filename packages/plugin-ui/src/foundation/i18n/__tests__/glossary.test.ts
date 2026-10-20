@@ -9,7 +9,8 @@ import { describe, expect, it } from 'vitest'
 // extensions and marketplaces too.
 const localeDirs = [
   'packages/plugin-ui/src/foundation/i18n/locales',
-  'plugins/navide-plans/src/locales'
+  'plugins/navide-plans/src/locales',
+  'plugins/navide-browser/src/locales'
 ]
 
 const TERMS: Record<string, RegExp> = {

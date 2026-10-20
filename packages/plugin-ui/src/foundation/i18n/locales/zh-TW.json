@@ -118,7 +118,7 @@
         "name": "Grok 資料夾信任共用",
         "benefit": "在一個 Grok pane 信任過的資料夾，所有 Grok pane 都會沿用，包括之後新開或重建的。",
         "purpose": "讓 Grok pane 不必為同一個資料夾再問一次信任",
-        "writes": "~/.grok/trusted_folders.toml：Grok pane 記下你信任某個資料夾後，Navide 會把那個資料夾的設定接在這個檔的最後面。只加入檔案裡還沒有的資料夾，你自己的設定、註解與排版都不會變動。每次修改前都會備份；關閉這項會只移除 Navide 接上去的那段文字，檔案回到原本的內容（檔案是 Navide 建立的就整個移除）",
+        "writes": "~/.grok/trusted_folders.toml：Grok pane 記下你信任某個資料夾後，Navide 會把那個資料夾的設定接在這個檔的最後面。只有 pane 開啟的工作區或它底下的資料夾，才會共享到 ~/.grok。只加入檔案裡還沒有的資料夾，你自己的設定、註解與排版都不會變動。每次修改前都會備份；關閉這項會只移除 Navide 接上去的那段文字，檔案回到原本的內容（檔案是 Navide 建立的就整個移除）",
         "cost": "在一個 Grok pane 信任過的資料夾，每個新開或重建的 Grok pane 都會再問一次。"
       },
       "cursor_project-mcp": {
@@ -1783,6 +1783,13 @@
       "builtinSwitchBusy": "正在套用…Navide 會先讓進行中的工作完成，Plans 可能需要約半分鐘。",
       "disabledBadge": "已停用",
       "disabledNote": "已停用：它的畫面與後端不會執行，檔案、權限與儲存的資料都會保留。",
+      "digestBlock": {
+        "blocked": "已被 Navide 封鎖",
+        "security": "已被 Navide 下架（安全問題）",
+        "qualificationRevoked": "開發者資格已撤銷",
+        "developerWithdrawn": "開發者已撤回",
+        "note": "你安裝這個 Navide 外掛之後，Navide 把它的安裝檔列入了封鎖清單。"
+      },
       "rollback": {
         "toBundled": "回復為內建版本",
         "toVersion": "回復到 {version}",
@@ -1849,6 +1856,7 @@
         "uninstallConfirmBody": "將從這台裝置移除 {name}。之後仍可從 Navide 市集重新安裝。",
         "uninstallConfirmBodyWithData": "將從這台裝置移除 {name}。{name} 的原生後端還在這台裝置上存了 {size} 的私有資料，位置如下。除非你選擇保留，Navide 會一併刪除這些資料。",
         "uninstallKeepNativeData": "保留這些資料，重新安裝時可以繼續使用",
+        "uninstallClearsWebData": "移除 {name} 也會刪除它在這台電腦上的網站登入、Cookie 與快取。",
         "updatesCount": "可用更新：{count} 個",
         "retry": "重試",
         "featured": "精選",
@@ -1940,6 +1948,7 @@
         "selfHostedQuarantine": "{id} {version} 來自自架 Registry，目前沒有載入。請開啟開發者模式，或改從 Navide 市集安裝。"
       },
       "localInstall": {
+        "agentRequest": "由 {requester} 提出。Navide 沒有審核過這個 Navide 外掛，要不要安裝由你決定。",
         "button": "從檔案安裝 .vsix…",
         "backToMarketplace": "換回 Navide 市集版本",
         "warning": "這個 Navide 外掛來自你選的本機檔案，沒有經過 Navide 審核，也沒有簽章：無法確認作者，檔案也可能被改過。只安裝你信任的人給你的檔案。",
@@ -1955,6 +1964,16 @@
         "replaceDataSetAside": "新版本會從空的資料夾開始，原本的資料會保留在一旁，不會被新版本讀到。",
         "reattachData": "接回這個來源之前保留在一旁的資料（預設不接回）",
         "takedownUnknown": "目前無法確認這個 Navide 外掛是否已被 Navide 下架：沒有取得 Navide 的下架清單。",
+        "signatureState": {
+          "verified": "開發者 {publisher}（已通過 Navide 資格審核）簽章，這一版本身未經 Navide 審核。",
+          "revoked": "簽章已失效：Navide 已撤銷 {publisher} 的簽章金鑰或開發者資格。",
+          "unverifiable": "有簽章，但 Navide 無法對應到已審核的開發者（{publisher}）：請把這個檔案當作未簽章。",
+          "warningVerified": "這個 Navide 外掛來自本機檔案，由已通過 Navide 資格審核的開發者 {publisher} 簽章，但這一版沒有經過 Navide 審核。只安裝你信任的人給你的檔案。",
+          "warningRevoked": "這個 Navide 外掛來自本機檔案，而且簽章已失效：Navide 已撤銷 {publisher} 的簽章金鑰或開發者資格。這個檔案沒有經過 Navide 審核。只有在你信任它的來源時才安裝。"
+        },
+        "errors": {
+          "digestBlocked": "無法安裝 {id} 的這個檔案：Navide 已下架這一份檔案（它的 digest 在 Navide 的封鎖清單上）。"
+        },
         "confirmReplace": "取代"
       },
       "trust": {
@@ -1973,6 +1992,7 @@
         "capability": {
           "fs": "讀寫工作區中的檔案。",
           "aiCli": "執行 Navide 中已設定的 AI CLI 代理。",
+          "web": "可開啟並瀏覽任何網站；網站登入資料會保存在本機；agent 會使用你在此 Navide 外掛中的登入身分（可代你在網頁上發送請求），並可讀取它開啟的所有網頁內容與登入狀態；你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止；可同時開啟多個網頁，每個網頁都會占用記憶體。",
           "shell": "在你的電腦上執行指令。",
           "terminal": "開啟並操作 Navide 終端機。"
         }
@@ -5098,7 +5118,7 @@
         },
         "s1": {
           "title": "方向一：Navide 提供給 CLI agent 的工具",
-          "p1": "pane 一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。目前一共 <strong>63 個</strong>（核心 56 個，加上 Navide 外掛「Plans」註冊的 7 個），另外還有 3 份唯讀資源與 3 個提示樣板。",
+          "p1": "pane 一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。目前一共 <strong>64 個</strong>（核心 57 個，加上 Navide 外掛「Plans」註冊的 7 個），另外還有 3 份唯讀資源與 3 個提示樣板。",
           "h1": "計畫文件",
           "planTools": {
             "plan_list": "列出這個工作區的所有計畫，含階段與待辦進度",
@@ -5165,8 +5185,9 @@
             "cli_message_log": "自己收送過的訊息歷史；訊息一旦送達就從 inbox_summary 與 pending_incoming 消失，這裡是唯一還查得到的地方",
             "cli_usage": "各家 CLI 還剩多少額度；派工前先看，否則訊息會送達到一個已經用完額度的 CLI 手上",
             "cli_failover_state": "Navide 的額度用完自動切換目前狀態：政策、進行中的事件、自動切換預算還剩幾次，以及哪家廠商因切換做到一半而被擋住、要等使用者處理。唯讀；帳號只以 slot 表示，不含 email",
-            "cli_accounts_list": "Navide 保存的 CLI 帳號，以及每家 CLI 目前用哪一個；只讀帳號設定檔：名稱與 id，不含 email 與是否已登入，因為那得讀取憑證本身。唯讀",
+            "cli_accounts_list": "Navide 保存的 CLI 帳號，以及每家 CLI 目前用哪一個；只讀帳號設定檔：名稱與 id（Navide 自動登記的帳號會用 email 當名稱），不含是否已登入，因為那得讀取憑證本身。唯讀",
             "cli_account_sign_in": "開啟 Navide 本來就有的某個 CLI 帳號登入流程（停用中的帳號在它自己的私有 home 登入，或 claude 帳號在它自己的資料夾登入），使用者只需要在瀏覽器完成；使用者要先在確認框同意，框裡會列出是哪個 agent 要求、理由是什麼；拒絕或沒回答就什麼都不開。不回傳任何 token、代碼或網址，不切換帳號；目前使用中的帳號，或會取代 live 憑證的登入，留給使用者自己做",
+            "cli_account_switch": "請使用者把某個 CLI 切換到它的另一個帳號；使用者要先在確認框同意，框裡列出是哪個 agent、從哪個帳號切到哪個帳號、理由是什麼；拒絕或沒回答就什麼都不切換。走主視窗自己的切換流程，不強制；只回傳結果與帳號的顯示名稱（可能是 email），不回傳任何憑證",
             "cli_token_stats": "這個工作區目前的 token 用量",
             "cli_list_sessions": "這個工作區還留得住、可以接續的 CLI 對話有哪些——對話比 pane 活得久，pane 關掉、App 重開、pane 重建過，紀錄都還在磁碟上。每一列會說它還接不接得起來，以及當初擁有它的 pane 是不是還開著：還開著的別去接，那會分岔或弄壞它，直接傳訊給那個 pane 就好",
             "cli_place_pane": "搬動一個 pane：換分頁群組、或改掛在另一個 pane 底下（等同你在側欄拖放，走同一組寫入路徑，所以重開也還在原位）。兩半各自獨立，回傳會說哪一半成功了。不會動到那個 pane 的 CLI——不送訊息、不中斷、不重啟。只能搬本機的 pane",
@@ -7861,6 +7882,19 @@
         "agent-login-confirm-reason-truncated": "agent 的理由超過 300 字，只顯示前 300 字。",
         "agent-login-confirm-cancel": "取消",
         "agent-login-confirm-ok": "開啟登入",
+        "agent-switch-confirm-title": "有 agent 要求切換 CLI 帳號",
+        "agent-switch-confirm-body": "你同意之前什麼都不會切換。這和 Settings → Accounts 的切換是同一個：CLI 會改用另一個帳號；如果有 pane 正在用它，重啟 pane 之前會再問你一次。沒有回答的話，這個要求會自動關閉。",
+        "agent-switch-confirm-late": "你同意之後，就算 agent 已經不再等待，切換仍會完成。如果要重啟 pane，而提出要求的 agent 也跑在這個 CLI 上，它自己的 pane 也會被重啟；它收不到結果，重啟後要再查一次帳號狀態。",
+        "agent-switch-confirm-vendor": "CLI",
+        "agent-switch-confirm-from": "切換前帳號",
+        "agent-switch-confirm-to": "切換後帳號",
+        "agent-switch-confirm-caller": "提出要求的 pane",
+        "agent-switch-confirm-workspace": "pane 所在的 workspace",
+        "agent-switch-confirm-reason": "理由（由 agent 提供）",
+        "agent-switch-confirm-reason-truncated": "agent 的理由超過 300 字，只顯示前 300 字。",
+        "agent-switch-confirm-cancel": "取消",
+        "agent-switch-confirm-ok": "切換帳號",
+        "agent-switch-done": "{agent} 把 {vendor} 從 {from} 切換到 {to}。agent 給的理由：{reason}",
         "login-complete": "已登入 {email}，帳號已儲存。",
         "login-complete-no-email": "登入完成，帳號已儲存。",
         "login-step2": "第 1 步完成：{email} 已儲存。還要再授權一次，讓這個帳號登入到自己的資料夾，請在新開的登入 pane 裡完成瀏覽器授權。",
@@ -9288,8 +9322,17 @@
     "dont-ask": "不要再詢問 {label}"
   },
   "plugin-request": {
+    "file": {
+      "path": "檔案",
+      "folder": "資料夾",
+      "digest": "檔案 SHA-256",
+      "unreviewed": "有 agent 要求安裝這個檔案。Navide 沒有審核過它。核准後會打開和「從檔案安裝」相同的安裝對話框，裝進去的是 agent 提出要求時 Navide 讀到的那一份，SHA-256 就是上面這一串。",
+      "unreviewed-folder": "有 agent 要求載入這個開發者資料夾。Navide 沒有審核過它，內容也可能隨時改變。核准後會打開和你自己載入資料夾時相同的對話框。",
+      "digestChanged": "Navide 為這個請求保存的檔案和請求上顯示的不一樣，所以沒有安裝。請 agent 重新送出。"
+    },
     "kicker": "Navide 外掛請求",
     "title": {
+      "install-file": "要從檔案安裝 Navide 外掛 {plugin} {version} 嗎？",
       "install": "要安裝 Navide 外掛 {plugin} {version} 嗎？",
       "update": "要把 Navide 外掛 {plugin} 從 {from} 更新到 {version} 嗎？",
       "rollback": "要把 Navide 外掛 {plugin} 從 {from} 回退到 {version} 嗎？",
@@ -9299,6 +9342,7 @@
     "desc": "有 agent 要求這項變更。你在這裡核准之前，什麼都不會改變；agent 無法代你核准。",
     "queue": "{count} 筆待處理",
     "requester": "請求者",
+    "tainted": "這個 pane 有「外部影響」標記：它讀過 Navide 以外的內容（例如網頁或 Navide 外掛的文字），這個請求可能受到那些內容影響。請仔細確認後再決定。",
     "workspace": "工作區",
     "expires": "到期時間",
     "caller-unknown": "不明的呼叫端",
@@ -11300,13 +11344,19 @@
       "prerelease": "預覽版（已審核）",
       "testplace": "測試版，沒有人工審核，{date} 到期",
       "testplaceNoExpiry": "測試版，沒有人工審核，到期日不明",
+      "testplaceRevokeNote": "離線或未登入 Navide Cloud 時，開發者撤回這個版本，最晚要到它到期（最多 90 天）才會生效。",
+      "testplaceInvite": "測試版：只經過自動掃描，{date} 到期",
+      "testplaceCode": "測試版：公開測試碼已經過輕量人工審核，這一版沒有人工審核，{date} 到期",
+      "testplaceExpired": "測試版，已於 {date} 到期（繼續使用中）",
       "local-signed": "本機檔案，發佈者已簽章，這個版本未經 Navide 審核",
       "local-unsigned": "本機檔案，未經 Navide 審核，未簽章",
       "developer-unpacked": "開發者資料夾，內容隨時可能變動",
       "factory-bundled": "Navide 內建",
       "notScanned": "未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）",
       "publisher": "發佈者：{publisher}",
-      "selfDeclared": "自稱：{publisher}"
+      "selfDeclared": "自稱：{publisher}",
+      "localSignedBy": "開發者 {publisher}（已通過 Navide 資格審核）簽章，這一版未經 Navide 審核",
+      "signatureRevoked": "簽章已失效"
     },
     "diff": {
       "heading": "這次更新的權限變化",
@@ -11387,6 +11437,7 @@
       },
       "networkViaShell": "可以透過這些指令連到遠端",
       "aiCli": "操作 AI CLI 工作階段",
+      "web": "可開啟並瀏覽任何網站；網站登入資料會保存在本機；agent 會使用你在此 Navide 外掛中的登入身分（可代你在網頁上發送請求），並可讀取它開啟的所有網頁內容與登入狀態；你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止；可同時開啟多個網頁，每個網頁都會占用記憶體。",
       "ui": "顯示自己的畫面",
       "agentTools": "提供 agent 可呼叫的工具（唯讀 {read} 個、寫入 {write} 個）",
       "network": "可以連網",
@@ -11474,7 +11525,10 @@
       "enabled": "{caller}啟用了 Navide 外掛 {plugin}",
       "version": "版本 {version}。檔案、授權和資料都保留。",
       "undo-failed": "無法還原：{error}",
-      "undo-stale": "沒有還原：這個 Navide 外掛之後已經被改過。"
+      "undo-stale": "沒有還原：這個 Navide 外掛之後已經被改過。",
+      "updated": "{caller} 把 Navide 外掛 {plugin} 從 {from} 升級到 {to}",
+      "updated-detail": "沒有詢問你就直接升級：{to} 揭露的權限、後端、agent 工具和網路存取，和 {from} 完全相同。",
+      "downgraded": "{plugin} 已降回 {version}。"
     },
     "caller": {
       "pane": "Agent pane「{pane}」",
@@ -11484,7 +11538,171 @@
     },
     "button": {
       "enable": "重新啟用",
-      "disable": "再次停用"
+      "disable": "再次停用",
+      "downgrade": "降回 {version}"
+    }
+  },
+  "testplace": {
+    "view": "Testplace（受邀）",
+    "title": "受邀測試",
+    "intro": "Navide 外掛的測試版只有受邀的人看得到、裝得到，沒有經過 Navide 人工審核，到期後會停用。",
+    "signInNeeded": "要加入測試，請先登入 Navide Cloud 帳號。",
+    "joinLabel": "邀請碼或公開測試碼",
+    "joinPlaceholder": "貼上 tpi_… 或 tpc_…，也可以貼整段邀請訊息",
+    "join": "加入",
+    "joined": "已加入 {id} 的測試。",
+    "empty": "還沒有加入任何測試。",
+    "refresh": "重新整理",
+    "viaInvite": "以邀請加入",
+    "viaCode": "以公開測試碼加入",
+    "install": "安裝測試版 {version}",
+    "installedVersion": "已安裝 {version}",
+    "noVersion": "目前沒有可安裝的測試版。",
+    "notForThisComputer": "這個測試版不支援這台電腦。",
+    "leave": "退出測試",
+    "leaveTitle": "退出測試",
+    "leaveConfirm": "退出 {id} 的測試？已安裝的版本會保留，但不會再收到新的測試版。",
+    "expiring": "這個測試版 {days} 天後（{date}）到期。到期後會停用，但設定和資料都會保留。",
+    "error": {
+      "notSignedIn": "Navide Cloud 帳號尚未登入，或登入已過期。",
+      "notFound": "找不到這個邀請或測試碼，或它已經失效。",
+      "codeFull": "這個公開測試碼的名額已滿。",
+      "badCode": "這不是 Testplace 的邀請碼或公開測試碼。",
+      "other": "Testplace 要求失敗：{error}"
+    },
+    "expired": {
+      "banner": "{id} {version} 的測試版已於 {date} 到期，已經停用；設定和資料都保留著。請選擇接下來要怎麼做。",
+      "toMarketplace": "改裝 Navide 市集版本",
+      "keep": "繼續使用（標示已過期）",
+      "remove": "移除",
+      "cannotKeep": "這個版本已被下架或無法驗證，不能繼續使用。",
+      "withdrawnBanner": "{id} {version} 的測試版已被開發者或 Navide 撤回，已經停用；設定和資料都保留著。請選擇接下來要怎麼做。",
+      "cannotKeepWithdrawn": "這個版本已被開發者或 Navide 撤回，不能繼續使用。",
+      "cannotKeepSignedOut": "要繼續使用前，必須先確認這個版本沒有被撤回。請先登入 Navide Cloud 帳號，再回到這裡。",
+      "cannotKeepNotTester": "你已經不是這個測試的測試者，無法確認這個版本沒有被撤回，所以不能繼續使用。可以改裝 Navide 市集版本，或移除。",
+      "cannotKeepRegistryOutdated": "目前連線的 Navide 市集版本太舊，無法確認這個版本有沒有被撤回，所以不能繼續使用。",
+      "cannotKeepUnreachable": "暫時連不上 Navide 市集，無法確認這個版本沒有被撤回，所以目前不能繼續使用。請稍後再試。",
+      "keepTitle": "繼續使用已過期的測試版",
+      "keepConfirm": "繼續使用已過期的測試版 {id}？它沒有經過 Navide 人工審核，也不會再收到更新；被下架時仍會停用。",
+      "kept": "已過期的測試版，繼續使用中：不會再收到更新，被下架時仍會停用。"
+    },
+    "invite": {
+      "title": "邀請測試者",
+      "open": "邀請測試者",
+      "plugin": "Navide 外掛（namespace.name）",
+      "invitees": "測試者：每行一位（email 或備註，最多 120 字）",
+      "validity": "測試者人數沒有上限。測試版在發佈 90 天後到期，到期後測試者就不能再用。測試者用 Navide Cloud 帳號的 token 登入，token 30 天後要重新登入。邀請制的測試版只經過自動掃描。",
+      "submit": "送出邀請",
+      "sent": "已建立 {count} 個邀請。把每個邀請碼交給對應的測試者；邀請碼只會顯示這一次。",
+      "copy": "複製",
+      "done": "完成"
+    }
+  },
+  "marketplace-developer": {
+    "unavailable": "這個視窗無法使用 Navide 市集的開發者功能。",
+    "view": {
+      "label": "Navide 市集檢視",
+      "browse": "瀏覽",
+      "developer": "開發者"
+    },
+    "account": {
+      "title": "開發者帳號",
+      "desc": "用 Navide Cloud 帳號登入，就能申請開發者資格、上架 Navide 外掛並追蹤審核。登入憑證和簽章金鑰由 Navide 存在這台電腦的安全儲存區，agent 看不到。",
+      "namespace": "命名空間",
+      "no-namespace": "尚未取得（申請核准後發給）",
+      "key": "簽章金鑰",
+      "no-key": "第一次以發佈者身分登入時建立",
+      "key-registered": "已登記",
+      "key-unregistered": "尚未登記",
+      "expires": "登入到期",
+      "sign-in": "用 Navide Cloud 登入",
+      "sign-in-publish": "以發佈者身分登入",
+      "sign-out": "登出",
+      "waiting": "等待瀏覽器完成…"
+    },
+    "application": {
+      "title": "開發者申請",
+      "open": "填寫申請",
+      "reclaimed": {
+        "title": "已被收回的命名空間",
+        "no-reason": "Navide 市集沒有附上原因"
+      },
+      "notice": "按下送出後，這些資料會送到 Navide Cloud 的開發者審核，由 Navide 人員判斷你是否可以上架 Navide 外掛。",
+      "sent": "申請已送出審核",
+      "individual": "個人",
+      "organization": "組織",
+      "status": {
+        "none": "你還沒有申請。",
+        "pending": "申請正在等待審核。",
+        "approved": "已核准：你可以上架 Navide 外掛。",
+        "rejected": "申請未獲核准。",
+        "revoked": "你的開發者資格已被撤銷。"
+      },
+      "field": {
+        "applicant_type": "申請身分",
+        "legal_name": "法定姓名",
+        "display_name": "顯示名稱",
+        "contact_email": "聯絡 email",
+        "country": "國家（ISO 代碼，例如 TW）",
+        "intended_namespace": "想使用的命名空間",
+        "description": "打算上架的內容",
+        "agreed_terms": "我同意 Navide 市集開發者條款",
+        "organization_name": "組織名稱",
+        "organization_id": "組織登記編號",
+        "website": "網站",
+        "source_url": "作品或原始碼連結",
+        "needs_native_backend": "我的 Navide 外掛需要原生後端",
+        "domain": "要驗證的網域"
+      }
+    },
+    "form": {
+      "developer-application": "開發者申請",
+      "publish": "上架 Navide 外掛版本",
+      "publish-yank": "下架（yank）已上架的版本",
+      "from-link": "這個表單是由 Navide 以外的連結開啟的（例如從終端機）。送出前請確認套件內容。",
+      "agent-opened": "由 {agent} 幫你開啟。請自己填寫；按下送出前不會送出任何資料。",
+      "agent-filled": "由 {agent} 預填。標示「由 agent 填寫」的欄位是它的草稿，請檢查並修改；按下送出前不會送出任何資料。",
+      "by-agent": "由 agent 填寫",
+      "submit": "送出",
+      "cancel": "取消"
+    },
+    "publish": {
+      "stage-expired": "這個套件暫存超過一小時，已經過期。請重新選擇。",
+      "open": "上架新版本",
+      "sign-in-first": "請先以發佈者身分登入：Navide 會用它保管的金鑰簽章並上傳套件。",
+      "choose": "選擇 .vsix 套件…",
+      "package": "Navide 外掛",
+      "file": "檔案",
+      "digest": "SHA-256",
+      "target": "平台 target",
+      "changelog-hint": "版本說明請寫在套件的 CHANGELOG.md；Navide 市集會顯示它，而且它會和套件一起被簽章。",
+      "submit": "簽章並送審",
+      "sent": "{plugin} {version} 已送出審核"
+    },
+    "yank": {
+      "title": "要下架這個版本嗎？",
+      "notice": "下架（yank）後，所有平台都不能再新安裝這個版本；已經安裝的人不受影響。",
+      "version": "版本",
+      "submit": "下架",
+      "confirm": "要從 Navide 市集下架 {plugin} {version} 嗎？",
+      "done": "{plugin} {version} 已下架"
+    },
+    "versions": {
+      "title": "你上架的版本",
+      "refresh": "重新整理",
+      "empty": "還沒有任何版本。",
+      "state": "審核",
+      "status": {
+        "pending": "等待審核",
+        "approved": "已核准",
+        "rejected": "已退件",
+        "yanked": "已下架"
+      }
+    },
+    "error": {
+      "not-signed-in": "請先在「開發者帳號」登入。",
+      "qualification": "開發者申請需要先通過審核。",
+      "registry": "Navide 市集拒絕了這個動作（{status} {code}）：{message}"
     }
   }
 }

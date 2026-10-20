@@ -32,6 +32,9 @@ export interface PluginRegionContribution {
   manifestOrder: number
   /** Source and review state of the contributing package (K1). */
   source?: PluginSource
+  /** A test build: its signed expiry and how the user joined the test. */
+  expiresAt?: string
+  testplaceVia?: 'invite' | 'code'
 }
 
 const props = defineProps<{
@@ -175,7 +178,7 @@ onBeforeUnmount(() => {
     <!-- K2: a persistent source strip in Navide's own chrome, above the guest. -->
     <div v-if="sourceMark" class="plugin-region-host__source">
       <span class="plugin-region-host__title" v-text="contribution.title" />
-      <PluginSourceBadge :source="sourceMark" />
+      <PluginSourceBadge :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" />
     </div>
     <div v-if="error" class="plugin-region-host__error" role="status">
       {{ contribution.title }} unavailable

@@ -388,6 +388,29 @@ async def marketplace_query_result(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 
 
+@handler("marketplace.developer.result")
+async def marketplace_developer_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``marketplace.developer.request`` (W3 status tools)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import marketplace_forms
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "marketplace.developer.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = marketplace_forms.resolve_developer_query(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
 @handler("plugins.agent_action.result")
 async def plugins_agent_action_result(
     session: "Session", msg_id: str, msg_type: str, payload: dict

@@ -111,6 +111,41 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.27',
+    title: {
+      'zh-TW': 'Navide 瀏覽器：agent 在自己的 Space 上網，你的分頁不會被搶走',
+      'en-US': 'Navide Browser: Agents Browse in Their Own Spaces, Yours Stay Yours',
+      'ja-JP': 'Navide ブラウザー：agent は自分の Space でブラウズし、あなたのタブは奪われません',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Navide 瀏覽器：在 Navide 裡開真正的網頁，從 Navide 市集安裝（不隨 App 內建）。每個 agent pane 在自己的背景 Space 工作，你的 Space 有釘選標記，agent 預設碰不到；總覽卡片顯示縮圖和狀態（執行中、需要你處理、完成）。',
+        'en-US': 'Navide Browser opens real web pages inside Navide. Install it from the Navide Marketplace; it does not ship with the App. Each agent pane works in its own background Space; your own Spaces are pinned and off limits to agents unless you let them in. The overview shows every Space with a thumbnail and its state (Running, Need your action, Done).',
+        'ja-JP': 'Navide ブラウザーで Navide の中に本物の Web ページを開けます。Navide マーケットプレイスからインストールします（App には同梱されません）。agent の pane はそれぞれ自分のバックグラウンド Space で作業し、あなたの Space はピン留めされ、許可しない限り agent は使えません。一覧では各 Space のサムネイルと状態（実行中・対応が必要・完了）が表示されます。',
+      },
+      {
+        'zh-TW': '人機交接：agent 需要你登入、過驗證碼或付款時會把 Space 交給你；你也可以隨時按「接手」。交還前 agent 的操作一律被擋下。',
+        'en-US': 'Hand-offs: an agent hands you its Space when it needs you to sign in, solve a captcha or pay, and you can take over any time; its commands are refused until you hand the Space back.',
+        'ja-JP': '受け渡し：ログインや CAPTCHA、支払いが必要になると agent が Space をあなたに渡します。いつでも操作を引き継ぐこともでき、戻すまで agent の操作はすべて拒否されます。',
+      },
+      {
+        'zh-TW': '所有 Space 共用同一份登入資料，保存在這台電腦上；可在 Navide 瀏覽器的設定裡一鍵清除。',
+        'en-US': 'All Spaces share one set of sign-ins kept on this computer; clear them from the Navide Browser settings.',
+        'ja-JP': 'すべての Space は同じログイン情報を共有し、このコンピューターに保存されます。Navide ブラウザーの設定から消去できます。',
+      },
+      {
+        'zh-TW': '從 .vsix 檔案安裝的 Navide 外掛，每次啟動和每次更新信任清單時都會再檢查一次。Navide 因安全問題下架的會被停用，只能移除；因其他原因被封鎖的會問你一次要繼續使用、停用或移除；開發者撤回的只會標示。「設定 → Navide 外掛」會一直標示它被封鎖的原因。',
+        'en-US': 'A Navide plugin installed from a .vsix file is checked again at every start and every trust refresh. One Navide took down for a security reason is disabled and can only be removed; one blocked for another reason asks you once whether to keep using, disable or remove it; one its developer withdrew is only labelled. Settings → Navide Plugins keeps showing why it is blocked.',
+        'ja-JP': '.vsix ファイルからインストールした Navide プラグインは、起動するたびと信頼リストを更新するたびに再確認されます。Navide がセキュリティ上の理由で取り下げたものは無効になり、削除だけができます。ほかの理由でブロックされたものは、使い続けるか、無効にするか、削除するかを一度だけ尋ねます。開発者が取り下げたものは表示だけです。「設定 → Navide プラグイン」には、ブロックされた理由が表示され続けます。',
+      },
+      {
+        'zh-TW': '行為改變：從檔案安裝的 Navide 外掛現在會記下安裝檔的 digest。降回 0.2.26 時，記有 digest 或開發者簽章的本機安裝會被隔離，不會載入；回到 0.2.27 或之後的版本就會恢復。',
+        'en-US': 'Behaviour change: a Navide plugin installed from a file now records the digest of its file. If you go back to 0.2.26, local installs that carry a digest or a developer signature are quarantined and not loaded; they come back on 0.2.27 or later.',
+        'ja-JP': '動作の変更：ファイルからインストールした Navide プラグインは、インストール元ファイルのダイジェストを記録するようになりました。0.2.26 に戻すと、ダイジェストや開発者の署名が記録されたローカルインストールは隔離され、読み込まれません。0.2.27 以降に戻すと元に戻ります。',
+      },
+    ],
+  },
+  {
     version: '0.2.26',
     title: {
       'zh-TW': '從聊天室喚醒 pane、只接回上次開著的 pane、從檔案或資料夾安裝 Navide 外掛（清楚標示來源）',

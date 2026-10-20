@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from fastapi import Header, HTTPException, Request
 from sqlmodel import Session
 
-from .repository import RegistryRepository
-from .self_service import publisher_for_token
+from . import qualification
+from .account_auth import BearerError, parse_bearer, resolve
 
 DEV_PUBLISHER = "dev"
 
@@ -25,15 +25,12 @@ DEV_PUBLISHER = "dev"
 class PublisherIdentity:
     publisher: str | None
     authenticated: bool
+    actor: str | None = None
+    """Audit actor for an authenticated caller (account_auth.Bearer.actor)."""
 
 
 def _parse_bearer(authorization: str | None) -> str | None:
-    if not authorization:
-        return None
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        return None
-    return token.strip()
+    return parse_bearer(authorization)
 
 
 def get_publisher_identity(
@@ -41,23 +38,36 @@ def get_publisher_identity(
     authorization: str | None = Header(default=None),
     x_publisher: str | None = Header(default=None),
 ) -> PublisherIdentity:
-    """Resolve the calling publisher from a bearer token, or dev fallback."""
+    """Resolve the calling publisher from a bearer token, or dev fallback.
+
+    Errors carry a stable code in `detail.code`: 401 TOKEN_MISSING /
+    TOKEN_INVALID / TOKEN_REVOKED / TOKEN_EXPIRED, 403 TOKEN_SCOPE (an
+    account token), QUALIFICATION_REQUIRED or NAMESPACE_FROZEN."""
     state = request.app.state.registry
     token = _parse_bearer(authorization)
     if token is not None:
         with Session(state.engine) as session:
-            # Admin-issued publisher token first, then a short-lived token
-            # from the publisher dashboard or `navide-plugin login`.
-            publisher = RegistryRepository(session).get_publisher_by_token(
-                token
-            ) or publisher_for_token(session, token)
-        if publisher is None:
-            raise HTTPException(status_code=401, detail="invalid publisher token")
-        return PublisherIdentity(publisher=publisher.name, authenticated=True)
+            try:
+                bearer = resolve(session, token)
+            except BearerError as exc:
+                raise exc.http() from exc
+            if bearer.publisher is None:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "TOKEN_SCOPE",
+                        "message": "an account token cannot publish or yank; use a publisher token",
+                    },
+                )
+            problem = qualification.publisher_problem(session, bearer.publisher)
+            if problem is not None:
+                raise HTTPException(status_code=403, detail={"code": problem[0], "message": problem[1]})
+            return PublisherIdentity(publisher=bearer.publisher.name, authenticated=True, actor=bearer.actor)
 
     if state.settings.require_auth:
         raise HTTPException(
-            status_code=401, detail="missing publisher bearer token"
+            status_code=401,
+            detail={"code": "TOKEN_MISSING", "message": "missing publisher bearer token"},
         )
     # Dev fallback: anonymous; publisher comes from the manifest downstream.
     return PublisherIdentity(publisher=x_publisher, authenticated=False)
