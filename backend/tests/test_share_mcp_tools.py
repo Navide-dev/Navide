@@ -33,7 +33,7 @@ MARKETPLACE_REQUEST_TOOLS = [
 ]
 #: Core tools registered after those: plan mcp_614482's read-only failover state and accounts (P1)
 #: and account sign-in (P2).
-ACCOUNT_TOOLS = ["cli_failover_state", "cli_accounts_list", "cli_account_sign_in"]
+ACCOUNT_TOOLS = ["cli_failover_state", "cli_accounts_list", "cli_account_sign_in", "cli_account_switch"]
 #: Core tools registered after those: plan mcp-navide-0-2-27 W3's developer forms (marketplace_forms.py).
 FORM_TOOLS = [
     "marketplace_developer_application_open",

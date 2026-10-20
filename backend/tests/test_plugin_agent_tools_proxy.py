@@ -50,16 +50,17 @@ pytestmark = pytest.mark.asyncio
 #: d435c7426 (after #345 added the read-only Marketplace tools), before this
 #: change; the same digest on a probe of main (review of #352). A core tool added or edited on
 #: purpose updates it: print _tools_list_text()'s digest and paste it here.
-#: W1 then documented plugins_list_installed's `source` on purpose (its
-#: description only; every other tool still matches main).
-MAIN_TOOLS_LIST_SHA256 = "8d640231edfecfa4b12e1173277169547e941cb6c1352cc0ddf77492c2771cb9"
+#: Re-pinned on integration/mcp-0227 for both documented changes: #448's
+#: pipeline_status `error` (main pinned it without W1's change) and W1's
+#: plugins_list_installed `source` (W1 pinned it without #448's).
+MAIN_TOOLS_LIST_SHA256 = "93ee01c3b9c70938a38f0dfcbfe3d26c2c264cdc03a52ca96e5bc9197b9f0d83"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
     "plugins_request_remove", "marketplace_request_status", "plugins_disable", "plugins_enable",
 })
 #: Core tools added after that digest by plan mcp_614482 (read-only failover state and accounts, account sign-in).
-ACCOUNT_CORE_TOOLS = frozenset({"cli_failover_state", "cli_accounts_list", "cli_account_sign_in"})
+ACCOUNT_CORE_TOOLS = frozenset({"cli_failover_state", "cli_accounts_list", "cli_account_sign_in", "cli_account_switch"})
 #: Core tools added after that digest by plan mcp-navide-0-2-27 W3 (developer forms, marketplace_forms.py).
 FORM_CORE_TOOLS = frozenset({
     "marketplace_developer_application_open",

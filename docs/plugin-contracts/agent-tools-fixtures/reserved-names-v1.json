@@ -26,6 +26,7 @@
   ],
   "coreToolNames": [
     "cli_account_sign_in",
+    "cli_account_switch",
     "cli_accounts_list",
     "cli_answer_prompt",
     "cli_cancel_message",
