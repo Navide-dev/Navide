@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   isPluginWebGuest,
-  MAX_WEB_VIEWS_PER_PLUGIN,
   PluginWebViewRegistry,
   WebViewError,
   webPartitionFor,
@@ -623,10 +622,17 @@ describe('attach and lifecycle', () => {
     expect(registry.list('navide.browser')).toEqual([])
   })
 
-  it('caps the number of views per plugin', () => {
-    const { registry } = setup()
-    for (let index = 0; index < MAX_WEB_VIEWS_PER_PLUGIN; index += 1) registry.create('navide.browser', { space: `s${index}` }, 'agent')
-    expect(errorOf(() => registry.create('navide.browser', { space: 'one-more' }, 'agent')).code).toBe('RESOURCE_LIMIT')
+  it('creates a 17th Space and more, each in the plugin partition and kept to the pane that created it', () => {
+    const { registry, views } = setup()
+    const panes = Array.from({ length: 20 }, (_, index) => ({ paneId: `p-${index}`, workspace: '/w' }))
+    const created = panes.map((pane, index) => registry.create('navide.browser', { space: `pane-${index}` }, 'agent', pane).viewId)
+    registry.create('acme.web', { space: 'other' }, 'user')
+    expect(new Set(created).size).toBe(20)
+    expect(views.slice(0, 20).map((view) => view.options.partition)).toEqual(Array(20).fill(webPartitionFor('navide.browser')))
+    expect(views[20].options.partition).toBe(webPartitionFor('acme.web'))
+    for (const [index, pane] of panes.entries()) {
+      expect(registry.list('navide.browser', pane).map((view) => view.viewId)).toEqual([created[index]])
+    }
   })
 
   it('coalesces change notifications per plugin', async () => {

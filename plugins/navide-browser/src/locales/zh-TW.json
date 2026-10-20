@@ -5,6 +5,7 @@
       "title": "Navide 瀏覽器 Spaces",
       "new": "新增 Space",
       "pending": "{count} 個等你處理",
+      "open-count": "{count} 個開著，每個都會占用記憶體",
       "empty": "還沒有 Space。按 ＋ 新增一個；agent 第一次瀏覽網頁時也會自動開一個自己的 Space。agent 會使用你在 Navide 瀏覽器中的登入身分（可代你在網頁上發送請求）。"
     },
     "state": {

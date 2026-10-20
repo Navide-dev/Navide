@@ -1051,8 +1051,6 @@ function webViewCapabilityError(reqId: string, error: WebViewError): CapabilityR
   switch (error.code) {
     case 'INVALID_ARGUMENT':
       return buildError(reqId, 'INVALID_ARGUMENT', 'invalid web view request')
-    case 'RESOURCE_LIMIT':
-      return buildError(reqId, 'RESOURCE_LIMIT', 'too many web views')
     case 'USER_IN_CONTROL':
       return buildError(reqId, 'CAPABILITY_DENIED', `the user is in control of this web view (${error.reason ?? 'user-owned'})`)
     default:

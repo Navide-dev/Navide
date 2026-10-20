@@ -5,6 +5,7 @@
       "title": "Navide Browser Spaces",
       "new": "New Space",
       "pending": "{count} need your action",
+      "open-count": "{count} open, each using memory",
       "empty": "No Spaces yet. Create one with ＋, or an agent opens its own the first time it browses. Agents use your sign-ins in Navide Browser (they can send requests on websites for you)."
     },
     "state": {

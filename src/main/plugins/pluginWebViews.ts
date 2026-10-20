@@ -26,7 +26,6 @@ export type WebViewErrorCode =
   | 'USER_IN_CONTROL'
   | 'CAPABILITY_DENIED'
   | 'CDP_ERROR'
-  | 'RESOURCE_LIMIT'
 
 export class WebViewError extends Error {
   readonly code: WebViewErrorCode
@@ -99,7 +98,6 @@ export interface PluginWebViewDeps {
   onChanged(pluginId: string, views: WebViewInfo[]): void
 }
 
-export const MAX_WEB_VIEWS_PER_PLUGIN = 16
 export const DEFAULT_CAPTURE_WIDTH = 480
 const CDP_PROTOCOL_VERSION = '1.3'
 const MAX_CDP_ERROR_MESSAGE = 500
@@ -194,7 +192,6 @@ export class PluginWebViewRegistry {
   ): { viewId: string } {
     const partition = webPartitionFor(pluginId)
     if (request.url !== undefined && !isAllowedWebUrl(request.url)) throw new WebViewError('INVALID_ARGUMENT')
-    if (this.list(pluginId).length >= MAX_WEB_VIEWS_PER_PLUGIN) throw new WebViewError('RESOURCE_LIMIT')
     this.guardSession(partition)
     // An agent's view runs in the background, never attached: it must not be
     // throttled while nobody watches it.

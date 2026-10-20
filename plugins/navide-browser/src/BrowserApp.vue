@@ -262,6 +262,7 @@ onBeforeUnmount(() => {
     <header class="overview-header">
       <h1>{{ t('browser.overview.title') }}</h1>
       <span v-if="pending > 0" class="pending-badge">{{ t('browser.overview.pending', { count: pending }) }}</span>
+      <span v-if="views.length > 0" class="open-count">{{ t('browser.overview.open-count', { count: views.length }) }}</span>
       <span class="spacer" />
       <button type="button" class="ghost" @click="showSettings = !showSettings">{{ t('browser.settings.title') }}</button>
     </header>
@@ -335,6 +336,7 @@ button.icon { width: 28px; padding: 4px 0; }
 .chip.state-need-action { background: var(--attention-subtle); color: var(--attention-bright); }
 .chip.state-done { background: var(--bg-muted); color: var(--success-fg); }
 .agent-frame { box-shadow: 0 0 0 2px var(--accent-color), 0 0 12px var(--accent-color); }
+.open-count { color: var(--text-muted); font-size: var(--font-xs); }
 .pending-badge {
   background: var(--attention-subtle);
   color: var(--attention-bright);
