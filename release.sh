@@ -106,6 +106,12 @@ fi
 for command in git node bun uv; do
   command -v "$command" >/dev/null || fail "required command not found: $command"
 done
+# Not used to install or build: `bun run test:run` includes
+# src/main/plugins/pluginExternalWorkspace.test.ts, which simulates an external
+# plugin author who uses pnpm and fails without a real pnpm on PATH. Checked up
+# front so the release gate does not fail late.
+command -v pnpm >/dev/null || \
+  fail "pnpm is required only by pluginExternalWorkspace.test.ts (it simulates external plugin authors who use pnpm); install pnpm 10.x"
 
 [[ "$(git branch --show-current)" == "main" ]] || fail "releases must be prepared from main"
 [[ -z "$(git status --porcelain --untracked-files=all)" ]] || \

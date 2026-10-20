@@ -3,7 +3,7 @@
 # touch Dependabot branches.
 version: 2
 updates:
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -16,9 +16,9 @@ updates:
     # Majors escape the dev-tooling group and land as one PR each. These two
     # must not be bumped by a bot:
     ignore:
-      # The whole toolchain is pinned to Node 22 (package.json engines,
-      # CI and release workflows). @types/node has to track that major, or
-      # typecheck starts accepting APIs the runtime does not have.
+      # The Node-side tooling is pinned to Node 22 (package.json engines and
+      # the Node steps in the release workflows). @types/node has to track that
+      # major, or typecheck starts accepting APIs the runtime does not have.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
       # A vitest major is a breaking migration (v5 splits the browser
