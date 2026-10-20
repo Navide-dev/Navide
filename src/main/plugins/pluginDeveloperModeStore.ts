@@ -226,6 +226,22 @@ export class PluginDeveloperModeStore {
     return this.folder(pluginId) ?? this.untrustedFolders().find((folder) => folder.pluginId === pluginId)
   }
 
+  /** An HMAC of `entry` under this store's key, for the developer folder
+   * record beside it (review MED-1 on #536). The key never leaves the store;
+   * a domain prefix keeps these MACs apart from the store's own entries.
+   * Null without secure storage, before Navide signed anything, or when the
+   * key cannot be unwrapped. Never throws. */
+  entryMac(entry: string): string | null {
+    if (!this.integrity?.available) return null
+    try {
+      const signature = readSignature(this.signatureFile)
+      const key = signature?.keyEnc ? this.key(signature) : null
+      return key ? createHmac('sha256', key).update(`developer-folder-record\u0000${entry}`).digest('hex') : null
+    } catch {
+      return null
+    }
+  }
+
   /** G5: when Navide first saw entries it did not write, while any is left. */
   externalChange(): DeveloperModeExternalChange | null {
     return this.evaluate().externalChange

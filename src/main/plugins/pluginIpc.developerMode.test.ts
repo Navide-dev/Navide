@@ -708,3 +708,27 @@ describe('Developer Mode settings another program wrote (A2-5, G5)', () => {
     expect(call('plugins:listInstalled')).toEqual([])
   })
 })
+
+describe('review MED-1 on #536: the loader record is signed', () => {
+  beforeEach(() => {
+    integrity = {
+      available: true,
+      encrypt: (plain) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`,
+      decrypt: (enc) => Buffer.from(enc.slice(4), 'base64').toString('utf8'),
+    }
+  })
+
+  it('a loader another program rewrites on disk reads as unknown, may have been changed; the folder still loads', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loadedBy: { kind: 'user' } }] })
+    const file = join(pluginsRoot, '.navide-plugin-developer-folders-meta.json')
+    const saved = JSON.parse(readFileSync(file, 'utf8')) as { folders: Record<string, Record<string, unknown>> }
+    saved.folders['acme.devtodo']!.loadedBy = { kind: 'agent', callerKind: 'pane', paneName: 'someone', approvedAt: '2026-10-21T01:00:00.000Z' }
+    writeFileSync(file, JSON.stringify(saved))
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loaded: true, loadedBy: { kind: 'unknown' }, loadedByUnverified: true }] })
+    expect(await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).toEqual({ reloaded: true, requiresConsent: false })
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+  })
+})

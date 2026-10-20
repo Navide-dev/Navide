@@ -11,6 +11,7 @@ import {
 import { randomUUID } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { fsyncFileSync, syncDirectorySync } from './fsSync'
+import { canonicalContractJson } from '../../shared/pluginDisclosure'
 
 // What Navide discloses about each developer folder beyond its consent
 // (DESIGN-A2 §2.0): who had it loaded, whether it reloads on file changes,
@@ -19,9 +20,11 @@ import { fsyncFileSync, syncDirectorySync } from './fsSync'
 // not know this file keeps reading the store as before (downgrade-safe).
 // Disclosure only: nothing here decides whether a folder loads, so a missing
 // or damaged file shows "unknown", and a write that fails never blocks a load.
-// The file is not signed: any program running as the user can rewrite it
-// (disclosed in plugin-development-v2.md), the same as the Developer Mode
-// store before its signature (G5).
+// Review MED-1 on #536: who loaded a folder is signed with the Developer
+// Mode store's key (G5). A loader another program wrote, or one without a
+// signature, reads as "unknown, the record may have been changed"; the load
+// is not affected. Without secure storage there is no key and the record
+// reads as written, as the Developer Mode store does then.
 const DEVELOPER_FOLDER_META_FILE = '.navide-plugin-developer-folders-meta.json'
 
 /** Who had a developer folder loaded: the user's own pick in the main window,
@@ -47,9 +50,18 @@ export interface DeveloperFolderLastLoad {
   fileCount?: number
 }
 
+/** Signs the loader record; the Developer Mode store with its key. */
+export interface DeveloperFolderRecordSigner {
+  entryMac(entry: string): string | null
+}
+
 export interface DeveloperFolderMeta {
   path: string
   loadedBy: DeveloperFolderLoadedBy
+  /** HMAC of the loader record (pluginId, folder, loadedBy). */
+  loadedByMac?: string
+  /** Set on read when the loader did not verify; never stored. */
+  loadedByUnverified?: true
   /** Reload when a file in the folder changes (A2-4); on unless turned off. */
   autoReload: boolean
   lastLoad?: DeveloperFolderLastLoad
@@ -88,6 +100,7 @@ function validMeta(value: unknown): value is DeveloperFolderMeta {
   return isRecord(value) &&
     typeof value.path === 'string' && value.path.length > 0 &&
     validLoadedBy(value.loadedBy) &&
+    (value.loadedByMac === undefined || typeof value.loadedByMac === 'string') &&
     typeof value.autoReload === 'boolean' &&
     (value.lastLoad === undefined || validLastLoad(value.lastLoad))
 }
@@ -113,20 +126,37 @@ function readFolders(path: string): Record<string, DeveloperFolderMeta> {
 export class PluginDeveloperFolderMetaStore {
   private readonly file: string
 
-  constructor(private readonly root: string) {
+  constructor(private readonly root: string, private readonly signer?: DeveloperFolderRecordSigner) {
     this.file = join(root, DEVELOPER_FOLDER_META_FILE)
   }
 
   /** The record of `pluginId` loaded from `path`; a record of another folder
-   *  is stale and reads as the default. */
+   *  is stale and reads as the default. A loader that does not verify reads
+   *  as unknown and says so. */
   get(pluginId: string, path: string): DeveloperFolderMeta {
+    const { loadedByMac, ...meta } = this.stored(pluginId, path)
+    const expected = this.loaderMac(pluginId, path, meta.loadedBy)
+    if (expected === null || meta.loadedBy.kind === 'unknown' || loadedByMac === expected) return meta
+    return { ...meta, loadedBy: { kind: 'unknown' }, loadedByUnverified: true }
+  }
+
+  setLoadedBy(pluginId: string, path: string, loadedBy: DeveloperFolderLoadedBy): void {
+    const loadedByMac = this.loaderMac(pluginId, path, loadedBy)
+    this.update(pluginId, path, ({ loadedByMac: _old, ...meta }) => ({ ...meta, loadedBy, ...(loadedByMac ? { loadedByMac } : {}) }))
+  }
+
+  private stored(pluginId: string, path: string): DeveloperFolderMeta {
     const meta = readFolders(this.file)[pluginId]
     if (meta && resolve(meta.path) === resolve(path)) return structuredClone(meta)
     return { path, loadedBy: { kind: 'unknown' }, autoReload: true }
   }
 
-  setLoadedBy(pluginId: string, path: string, loadedBy: DeveloperFolderLoadedBy): void {
-    this.update(pluginId, path, (meta) => ({ ...meta, loadedBy }))
+  private loaderMac(pluginId: string, path: string, loadedBy: DeveloperFolderLoadedBy): string | null {
+    try {
+      return this.signer?.entryMac(canonicalContractJson({ pluginId, path: resolve(path), loadedBy })) ?? null
+    } catch {
+      return null
+    }
   }
 
   setAutoReload(pluginId: string, path: string, autoReload: boolean): void {
@@ -146,7 +176,7 @@ export class PluginDeveloperFolderMetaStore {
 
   private update(pluginId: string, path: string, change: (meta: DeveloperFolderMeta) => DeveloperFolderMeta): void {
     const folders = readFolders(this.file)
-    folders[pluginId] = change(this.get(pluginId, path))
+    folders[pluginId] = change(this.stored(pluginId, path))
     this.write({ schemaVersion: 1, folders })
   }
 

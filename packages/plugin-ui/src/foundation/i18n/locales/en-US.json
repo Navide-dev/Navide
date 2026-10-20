@@ -2011,6 +2011,7 @@
         "reload": "Reload",
         "loadedByUser": "Loaded by you",
         "loadedByAgent": "Requested by {requester}; you approved it in the main window ({at})",
+        "loadedByUnverified": "Loaded by an unknown party: this record may have been changed outside Navide, or is not signed",
         "loadedByUnknown": "Loaded by an unknown party (before Navide recorded it)",
         "removeFolder": "Remove",
         "needsConsent": "Permissions or backend changed; consent again",

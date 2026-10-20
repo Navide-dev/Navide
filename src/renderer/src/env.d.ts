@@ -916,6 +916,8 @@ declare global {
         | { kind: 'user' }
         | { kind: 'agent'; callerKind: string; paneName?: string; approvedAt: string }
         | { kind: 'unknown' }
+      /** Review MED-1 on #536: the loader record did not verify (changed outside Navide, or never signed). */
+      loadedByUnverified?: true
       autoReload?: boolean
       lastLoad?: {
         at: string

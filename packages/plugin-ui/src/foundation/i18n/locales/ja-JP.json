@@ -2011,6 +2011,7 @@
         "reload": "再読み込み",
         "loadedByUser": "あなたが読み込みました",
         "loadedByAgent": "{requester} が依頼し、あなたがメインウィンドウで承認しました（{at}）",
+        "loadedByUnverified": "読み込んだのが誰かは不明です：この記録は Navide 以外のプログラムに変更されたか、署名がありません",
         "loadedByUnknown": "読み込んだのが誰かは不明です（Navide が記録を始める前に読み込まれました）",
         "removeFolder": "削除",
         "needsConsent": "権限またはバックエンドが変わりました。もう一度同意が必要です",

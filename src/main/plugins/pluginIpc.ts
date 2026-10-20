@@ -2830,7 +2830,7 @@ export function registerPluginIpc(
   // DESIGN-A2 G3: who asked for each prepared folder travels with it to the
   // consent, and the record beside the store keeps it after the load.
   const preparedFolders = new Map<string, { dir: string; permissionsDigest: string; loadedBy: DeveloperFolderLoadedBy }>()
-  const folderMeta = new PluginDeveloperFolderMetaStore(pluginsRoot)
+  const folderMeta = new PluginDeveloperFolderMetaStore(pluginsRoot, developerMode)
 
   /** What the consent dialog shows for a developer folder, from its manifest. */
   const describeFolder = (dir: string): {
@@ -2954,7 +2954,12 @@ export function registerPluginIpc(
       pluginId: folder.pluginId,
       path: folder.path,
       consentedAt: folder.consentedAt,
-      ...(({ loadedBy, autoReload, lastLoad }) => ({ loadedBy, autoReload, ...(lastLoad ? { lastLoad } : {}) }))(
+      ...(({ loadedBy, loadedByUnverified, autoReload, lastLoad }) => ({
+        loadedBy,
+        ...(loadedByUnverified ? { loadedByUnverified } : {}),
+        autoReload,
+        ...(lastLoad ? { lastLoad } : {}),
+      }))(
         folderMeta.get(folder.pluginId, folder.path),
       ),
       loaded: manager.listInstalledPackages().some(

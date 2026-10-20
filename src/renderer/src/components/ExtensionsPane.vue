@@ -368,8 +368,10 @@ const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>(
 const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
 /** DESIGN-A2 G3: who had a loaded developer folder loaded, in the wording of agent request cards. */
 function folderLoadedByText(pluginId: string): string {
-  const loadedBy = developerMode.value.folders.find((folder) => folder.pluginId === pluginId)?.loadedBy
+  const folder = developerMode.value.folders.find((entry) => entry.pluginId === pluginId)
+  const loadedBy = folder?.loadedBy
   if (!loadedBy) return ''
+  if (folder.loadedByUnverified) return t('settings.extensions.developerMode.loadedByUnverified')
   if (loadedBy.kind === 'user') return t('settings.extensions.developerMode.loadedByUser')
   if (loadedBy.kind === 'unknown') return t('settings.extensions.developerMode.loadedByUnknown')
   const requester = loadedBy.callerKind === 'pane'

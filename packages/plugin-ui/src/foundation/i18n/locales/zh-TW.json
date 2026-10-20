@@ -2011,6 +2011,7 @@
         "reload": "重新載入",
         "loadedByUser": "你自己載入",
         "loadedByAgent": "由 {requester} 提出，你在主視窗核准（{at}）",
+        "loadedByUnverified": "載入者不明：這筆紀錄可能被 Navide 以外的程式改過，或沒有簽章",
         "loadedByUnknown": "載入者不明（在 Navide 開始記錄之前載入）",
         "removeFolder": "移除",
         "needsConsent": "權限或後端已變更，需要重新同意",

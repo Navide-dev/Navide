@@ -244,3 +244,28 @@ describe('Developer Mode settings changed outside Navide (G5)', () => {
     expect(existsSync(join(root, SIGNATURE))).toBe(false)
   })
 })
+
+describe('entryMac: the key signs the developer folder record, never leaves the store', () => {
+  it('is null without secure storage, and before Navide signed anything', () => {
+    expect(new PluginDeveloperModeStore(root).entryMac('x')).toBeNull()
+    expect(new PluginDeveloperModeStore(root, integrity({ available: false })).entryMac('x')).toBeNull()
+    expect(new PluginDeveloperModeStore(root, integrity()).entryMac('x')).toBeNull()
+  })
+
+  it('is a stable HMAC per entry once a consent is signed, and differs from every store entry MAC', () => {
+    const store = new PluginDeveloperModeStore(root, integrity())
+    store.consent(folder('acme.one'))
+    const mac = store.entryMac('record')
+    expect(mac).toMatch(/^[0-9a-f]{64}$/)
+    expect(new PluginDeveloperModeStore(root, integrity()).entryMac('record')).toBe(mac)
+    expect(store.entryMac('other')).not.toBe(mac)
+    const signature = JSON.parse(readFileSync(join(root, SIGNATURE), 'utf8')) as { macs: string[] }
+    expect(signature.macs).not.toContain(mac)
+  })
+
+  it('is null when the key cannot be unwrapped, and never throws', () => {
+    new PluginDeveloperModeStore(root, integrity()).consent(folder('acme.one'))
+    const broken = new PluginDeveloperModeStore(root, integrity({ decrypt: () => { throw new Error('locked') } }))
+    expect(broken.entryMac('record')).toBeNull()
+  })
+})
