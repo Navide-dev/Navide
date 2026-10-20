@@ -114,6 +114,13 @@
         "writes": "~/.codex/auth.json（指向 pane 登入的硬連結）",
         "cost": "在 pane 內完成的登入只留在那個 pane。"
       },
+      "grok_folder-trust": {
+        "name": "Grok 資料夾信任共用",
+        "benefit": "在一個 Grok pane 信任過的資料夾，所有 Grok pane 都會沿用，包括之後新開或重建的。",
+        "purpose": "讓 Grok pane 不必為同一個資料夾再問一次信任",
+        "writes": "~/.grok/trusted_folders.toml：Grok pane 記下你信任某個資料夾後，Navide 會把那個資料夾的設定接在這個檔的最後面。只加入檔案裡還沒有的資料夾，你自己的設定、註解與排版都不會變動。每次修改前都會備份；關閉這項會只移除 Navide 接上去的那段文字，檔案回到原本的內容（檔案是 Navide 建立的就整個移除）",
+        "cost": "在一個 Grok pane 信任過的資料夾，每個新開或重建的 Grok pane 都會再問一次。"
+      },
       "cursor_project-mcp": {
         "name": "Cursor 的 Navide MCP 工具",
         "benefit": "Cursor pane 可以使用 Navide 的 MCP 工具，例如傳訊、計畫與排程。",
@@ -8610,6 +8617,8 @@
   },
   "error": {
     "pipeline-start-refused": "流程沒有啟動：{reason}",
+    "pipeline-kickoff-failed": "流程失敗：階段 {stage}、slot {slot} — {reason}。它的 pane 仍保持開啟。",
+    "pipeline-kickoff-held": "流程失敗：階段 {stage}、slot {slot} — 它的 kickoff 停在輸入框。保持不動，resume 會幫你送出；或者把它清掉。它的 pane 仍保持開啟。",
     "workspace-create-exists": "該位置已有名為「{name}」的項目，請換個名稱。",
     "workspace-create-denied": "沒有權限在 {path} 建立資料夾。",
     "workspace-create-failed": "無法在 {path} 建立工作區資料夾。",

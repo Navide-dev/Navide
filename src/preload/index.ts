@@ -1254,7 +1254,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
        *  current text colour rather than the shade baked into the artwork. */
       iconMonochrome: boolean
       kind: 'custom'
-      location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
+      location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window' | 'detail'
       manifestOrder: number
       /** Source and review state of the package that contributes this view. */
       source?: PluginSource

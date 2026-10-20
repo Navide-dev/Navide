@@ -403,6 +403,11 @@ def _write_config(path: Path, document: dict[str, Any]) -> None:
     not. Their own file is never written — only this copy.
     """
     content = tomli_w.dumps(document) if _is_toml(path) else json.dumps(document, indent=2) + "\n"
+    _write_text(path, content)
+
+
+def _write_text(path: Path, content: str) -> None:
+    """Atomically write ``content`` to ``path``, 0600, unless it is already that."""
     try:
         if path.read_text(encoding="utf-8") == content:
             return
@@ -461,6 +466,11 @@ def prepare(
         log.warning("home %s is itself a shim — not preparing another", home)
         return None
     real_vendor = home / spec.vendor_dir
+    if agent_key == "grok":
+        # Before this shim is seeded, so it starts from the merged file.
+        from ..convenience_wiring import merge_grok_folder_trust_gated
+
+        merge_grok_folder_trust_gated(real_vendor)
     try:
         # Created before anything is written into them: a grok shim holds a
         # copy of the API key, so no part of the path may be world-readable,
@@ -480,7 +490,10 @@ def prepare(
         # leaf is ours and every sibling stays a link to the user's.
         src, dst = real_vendor, vendor_root
         for name in spec.config_relpath:
-            _mirror(dst, src, {name}, adopt=True, volatile=spec.volatile)
+            skip = {name}
+            if agent_key == "grok" and dst == vendor_root:
+                skip.add(GROK_TRUST_FILE)  # the pane's own copy, written below
+            _mirror(dst, src, skip, adopt=True, volatile=spec.volatile)
             src, dst = src / name, dst / name
         existing = _base_config(src, dst)
         document = mcp_document(
@@ -492,7 +505,254 @@ def prepare(
             drop=legacy_names,
         )
         _write_config(dst, document)
+        if agent_key == "grok":
+            _seed_grok_shim_trust(real_vendor, vendor_root, pane_id)
     except OSError as err:
         log.warning("could not prepare %s shim home for pane %s: %s", agent_key, pane_id, err)
         return None
     return spec.env_var, str(root)
+
+
+# ---- grok folder trust (convenience feature grok.folder-trust) ----
+
+#: Where Grok Build records the folders the user trusted (its docs,
+#: 18-sandbox.md). Every grok shim holds its own copy, seeded from the user's
+#: file; a pane's answer to the trust prompt lands in that copy, where no other
+#: pane — and no later pane for the same folder — could see it (issue #402).
+GROK_TRUST_FILE = "trusted_folders.toml"
+#: The text Navide appended to the user's file, so the switch can take back
+#: exactly those bytes. Lives beside the grok shims, in Navide's own tree.
+GROK_TRUST_LEDGER = ".folder-trust-merged.json"
+#: Per pane, the rows its copy was seeded with from the user's file: anything
+#: else in the copy is the pane's own decision.
+GROK_TRUST_SEEDS = ".folder-trust-seeds.json"
+
+
+def _grok_trust_ledger() -> Path:
+    return panes_root() / "grok" / GROK_TRUST_LEDGER
+
+
+def _grok_trust_seeds_path() -> Path:
+    return panes_root() / "grok" / GROK_TRUST_SEEDS
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _write_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_text(path, json.dumps(value, indent=2) + "\n")
+
+
+def grok_trust_ledger_rows() -> dict[str, Any]:
+    """What Navide appended and has not taken back, keyed by folder."""
+    rows = _read_json_object(_grok_trust_ledger()).get("rows")
+    return rows if isinstance(rows, dict) else {}
+
+
+def _grok_trust_folders(path: Path) -> dict[str, Any] | None:
+    """A trust file's ``folders`` table; ``{}`` when it does not exist, None
+    when it cannot be read or parsed (never written over)."""
+    if not path.exists():
+        return {}
+    try:
+        folders = tomllib.loads(path.read_text(encoding="utf-8")).get("folders", {})
+    except (OSError, ValueError):
+        return None
+    return folders if isinstance(folders, dict) else None
+
+
+def _trust_block(folder: str, row: Any) -> str:
+    """One folder's table as TOML text — what Navide appends, and how two rows
+    are compared (a datetime included)."""
+    if not isinstance(row, dict):
+        return ""
+    return tomli_w.dumps({"folders": {folder: row}})
+
+
+def grok_trust_rows_present(rows: dict[str, Any], real_vendor: Path) -> bool:
+    """Whether every row Navide appended is still in the user's file."""
+    folders = _grok_trust_folders(real_vendor / GROK_TRUST_FILE)
+    return bool(rows) and folders is not None and all(
+        isinstance(entry, dict) and _trust_block(key, folders.get(key)) == entry.get("block")
+        for key, entry in rows.items()
+    )
+
+
+def merge_grok_folder_trust(real_vendor: Path) -> None:
+    """Append the folders grok panes decided on in their own copies to the
+    user's ``~/.grok/trusted_folders.toml``.
+
+    Text is appended, never re-emitted: the user's comments, key order and
+    layout stay byte for byte, and the switch's takeback removes exactly the
+    appended text. Only folders the file does not mention are added — a
+    decision made outside Navide always wins — and only a pane's own
+    decisions, never the rows its copy was seeded with. A file that cannot be
+    parsed, or that would not parse with the addition, is left alone. The
+    ledger is written before the file, and put back if the file write fails.
+    """
+    if not real_vendor.is_dir():
+        return
+    seeds = _read_json_object(_grok_trust_seeds_path())
+    pending: dict[str, tuple[Any, str]] = {}
+    for path in sorted((panes_root() / "grok").glob(f"*/.grok/{GROK_TRUST_FILE}")):
+        if path.is_symlink() or not path.is_file():
+            continue
+        pane = path.parent.parent.name
+        seed = seeds.get(pane) if isinstance(seeds.get(pane), dict) else {}
+        for key, row in (_grok_trust_folders(path) or {}).items():
+            block = _trust_block(key, row)
+            if block and seed.get(key) != block:
+                pending.setdefault(key, (row, pane))
+    if not pending:
+        return
+    real = real_vendor / GROK_TRUST_FILE
+    created = not real.exists()
+    text = "" if created else real.read_text(encoding="utf-8")
+    folders = _grok_trust_folders(real)
+    if folders is None:
+        log.warning("%s cannot be parsed; leaving the panes' trust where it is", real)
+        return
+    entries: dict[str, Any] = {}
+    merged = text
+    for key, (row, pane) in pending.items():
+        if key in folders:
+            continue
+        block = _trust_block(key, row)
+        chunk = ("" if not merged else "\n" if merged.endswith("\n") else "\n\n") + block
+        merged += chunk
+        entries[key] = {"chunk": chunk, "block": block, "pane": pane}
+    if not entries:
+        return
+    try:
+        after = tomllib.loads(merged).get("folders", {})
+    except ValueError:
+        after = None
+    if not isinstance(after, dict) or any(
+        _trust_block(key, after.get(key)) != entry["block"] for key, entry in entries.items()
+    ):
+        log.warning("%s is laid out so a folder table cannot be appended; left alone", real)
+        return
+    ledger = _grok_trust_ledger()
+    state = _read_json_object(ledger)
+    previous = dict(state) if state else None
+    state.setdefault("created", created)
+    rows = state.get("rows") if isinstance(state.get("rows"), dict) else {}
+    state["rows"] = {**rows, **entries}
+    _write_json(ledger, state)
+    try:
+        mode = None if created else real.stat().st_mode & 0o777
+        _write_text(real, merged)
+        if mode is not None:
+            os.chmod(real, mode)
+    except BaseException:
+        if previous is None:
+            ledger.unlink(missing_ok=True)
+        else:
+            _write_json(ledger, previous)
+        raise
+
+
+def _seed_grok_shim_trust(real_vendor: Path, vendor_root: Path, pane_id: str) -> None:
+    """Give the pane its own trust file: the user's rows plus the pane's own
+    decisions (the user's win). Never a link to the user's file — a pane
+    writing through one would change it with no backup and no ledger."""
+    real_rows = _grok_trust_folders(real_vendor / GROK_TRUST_FILE)
+    if real_rows is None:
+        return  # cannot read the user's decisions: keep the copy as it is
+    shim = vendor_root / GROK_TRUST_FILE
+    seeds_path = _grok_trust_seeds_path()
+    seeds = _read_json_object(seeds_path)
+    seed = seeds.get(pane_id) if isinstance(seeds.get(pane_id), dict) else {}
+    own: dict[str, Any] = {}
+    if shim.is_symlink():
+        shim.unlink()  # an earlier build linked the user's file here
+    elif shim.is_file():
+        own = {
+            key: row for key, row in (_grok_trust_folders(shim) or {}).items()
+            if _trust_block(key, row) and seed.get(key) != _trust_block(key, row)
+        }
+    rows = {**own, **real_rows}
+    if rows or shim.exists():
+        _write_config(shim, {"folders": rows} if rows else {})
+    seeds[pane_id] = {key: _trust_block(key, row) for key, row in real_rows.items()}
+    _write_json(seeds_path, seeds)
+
+
+def take_back_grok_folder_trust(real_vendor: Path) -> None:
+    """The switch's takeback: remove the text Navide appended (where the user
+    has not changed it since), and the file itself when Navide created it and
+    nothing else is left in it. Every pane keeps its own file: a link left by
+    an earlier build becomes a copy, and a pane whose decision is taken out of
+    the user's file keeps it in its own."""
+    real = real_vendor / GROK_TRUST_FILE
+    for path in sorted((panes_root() / "grok").glob(f"*/.grok/{GROK_TRUST_FILE}")):
+        if path.is_symlink():
+            content = path.read_text(encoding="utf-8") if path.exists() else ""
+            path.unlink()
+            if content:
+                _write_text(path, content)
+    ledger = _grok_trust_ledger()
+    state = _read_json_object(ledger)
+    rows = state.get("rows") if isinstance(state.get("rows"), dict) else {}
+    kept: dict[str, Any] = {}
+    reasons: list[str] = []
+    if rows and real.exists():
+        text = real.read_text(encoding="utf-8")
+        seeds = _read_json_object(_grok_trust_seeds_path())
+        for key, entry in reversed(list(rows.items())):
+            chunk = entry.get("chunk") if isinstance(entry, dict) else None
+            if not chunk or chunk not in text:
+                kept[key] = entry
+                reasons.append(f"the table for {key} was changed since Navide added it")
+                continue
+            at = text.rfind(chunk)
+            cut = text[:at] + text[at + len(chunk):]
+            if not _only_folder_removed(text, cut, key):
+                # Something typed inside Navide's table would land under the
+                # user's own table above it: keep the table, change nothing.
+                kept[key] = entry
+                reasons.append(f"removing the table for {key} would change your own entries"
+                               " (something was added inside it)")
+                continue
+            text = cut
+            seed = seeds.get(entry.get("pane"))
+            if isinstance(seed, dict):
+                seed.pop(key, None)
+        if state.get("created") and not text.strip():
+            real.unlink()
+        else:
+            mode = real.stat().st_mode & 0o777
+            _write_text(real, text)
+            os.chmod(real, mode)
+        _write_json(_grok_trust_seeds_path(), seeds)
+    if not kept:
+        ledger.unlink(missing_ok=True)
+        return
+    state["rows"] = {key: rows[key] for key in rows if key in kept}
+    _write_json(ledger, state)
+    reason = f"{real}: kept what Navide added — " + "; ".join(reversed(reasons))
+    log.warning("%s", reason)
+    raise OSError(reason)
+
+
+def _only_folder_removed(before: str, after: str, folder: str) -> bool:
+    """Whether ``after`` reads exactly as ``before`` without ``folder``'s
+    table — every other entry the same."""
+    try:
+        was = tomllib.loads(before)
+        now = tomllib.loads(after)
+    except ValueError:
+        return False
+    folders = was.get("folders")
+    if not isinstance(folders, dict) or folder not in folders:
+        return False
+    del folders[folder]
+    if not folders and "folders" not in now:
+        del was["folders"]
+    return was == now
