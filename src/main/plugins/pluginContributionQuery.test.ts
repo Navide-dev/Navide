@@ -121,6 +121,12 @@ describe('composePluginContributionQuery', () => {
       contributionKey: 'navide.plans.window',
       workspacePath: '/workspace',
       theme: 'dark',
+      locale: 'it-IT',
+    }))
+    const recognizedLocale = new URLSearchParams(composePluginContributionQuery({
+      contributionKey: 'navide.plans.window',
+      workspacePath: '/workspace',
+      theme: 'dark',
       locale: 'fr-FR',
     }))
     const missingLocale = new URLSearchParams(composePluginContributionQuery({
@@ -130,6 +136,9 @@ describe('composePluginContributionQuery', () => {
     }))
 
     expect(invalidLocale.get('locale')).toBe('zh-TW')
+    // A recognized UI locale passes through; the view falls back to en-US
+    // itself when it has no catalog for it.
+    expect(recognizedLocale.get('locale')).toBe('fr-FR')
     expect(missingLocale.get('locale')).toBeNull()
   })
 

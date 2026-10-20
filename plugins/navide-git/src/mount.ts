@@ -10,7 +10,7 @@ import {
   createAiCliSessionController,
   type AiCliPluginContext,
 } from '@navide/plugin-ui'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, resolveAvailableUiLocale } from '@navide/plugin-ui/foundation'
 import { useBackend } from './capabilityBackend'
 import { createPluginGitTransport, type PluginGitSdk } from './sdkGitTransport'
 import {
@@ -47,7 +47,7 @@ import GitDetailApp from './GitDetailApp.vue'
 // keeps it; the connect-time `ui.settings.get` reconcile then takes over.
 // Mirrors plugins/plans/mount.ts.
 const query = new URLSearchParams(window.location.search)
-const initialLocale = query.get('locale')
+const initialLocale = resolveAvailableUiLocale(query.get('locale'))
 const initialTheme = query.get('theme')
 const initialThemeCustom = query.get('git_theme_custom')
 const initialYolo = query.get('git_yolo') ?? '1'
@@ -61,15 +61,15 @@ if (initialTheme) {
   initialSettings['agent-team:theme'] = JSON.stringify(initialTheme)
 }
 if (initialThemeCustom) initialSettings['agent-team:theme-custom'] = initialThemeCustom
-if (initialLocale === 'zh-TW' || initialLocale === 'en-US' || initialLocale === 'ja-JP') {
+if (initialLocale) {
   initialSettings['agent-team:language'] = initialLocale
   i18n.global.locale.value = initialLocale
 }
 seedSettings(initialSettings)
 const offLanguageSettings = onSettingsChanged((keys) => {
   if (!keys.includes('agent-team:language')) return
-  const language = settingsGet<string>('agent-team:language', '')
-  if (language === 'zh-TW' || language === 'en-US' || language === 'ja-JP') {
+  const language = resolveAvailableUiLocale(settingsGet<string>('agent-team:language', ''))
+  if (language) {
     i18n.global.locale.value = language
   }
 })

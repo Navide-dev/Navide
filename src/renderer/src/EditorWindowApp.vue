@@ -26,7 +26,7 @@ import FilePreviewPane from './editor/FilePreviewPane.vue'
 import { previewKind, isMarkdownFile } from './editor/previewTypes'
 import { rebindTabs } from './editor/tabRebind'
 import { initKeybindingsPort, useKeybindings, registerCommand, setContext, executeCommand } from '@navide/plugin-ui/shared'
-import { i18n, useTheme, BUILTIN_THEMES, vTruncate } from '@navide/plugin-ui/foundation'
+import { i18n, resolveAvailableUiLocale, useTheme, BUILTIN_THEMES, vTruncate } from '@navide/plugin-ui/foundation'
 import { initSettingsBackend, settingsGet, settingsSet, onSettingsChanged } from '@navide/plugin-ui/shared'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { allDiagnosticsSorted, setDiagnostics, diagnosticsKey } from './editor/diagnostics'
@@ -37,8 +37,9 @@ import type { ListConflictsResult } from './composables/useGit'
 // ── window params (Electron appends ?window=editor&workspace_path=…&filepath=…) ──
 const params = new URLSearchParams(window.location.search)
 function applyEditorLocale(value: unknown): void {
-  if (value === 'zh-TW' || value === 'en-US' || value === 'ja-JP') {
-    i18n.global.locale.value = value
+  const resolved = resolveAvailableUiLocale(value)
+  if (resolved) {
+    i18n.global.locale.value = resolved
   }
 }
 applyEditorLocale(params.get('locale') ?? settingsGet<string>('agent-team:language', ''))
