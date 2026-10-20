@@ -20,6 +20,7 @@ import {
 } from '../../../shared/pluginActivity'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import { formatBytes } from '../lib/formatBytes'
+import { disclosureList } from '../lib/disclosureText'
 import { createQueueTrend, pluginBackendUsage, type PluginBackendUsage } from '../lib/backendQueueTrend'
 
 // `paused` stops the live polling while the panel is out of view.
@@ -141,7 +142,7 @@ function caller(call: PluginActivityToolCall): string {
 }
 
 function list(values: string[]): string {
-  return values.join(locale.value.startsWith('en') ? ', ' : '、')
+  return disclosureList(locale.value, values)
 }
 
 const sizes = computed(() => {

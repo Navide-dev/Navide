@@ -206,7 +206,74 @@
     "search-shortcuts": "キーボードショートカットを検索…",
     "select-language": "言語モードを選択…",
     "workspace-symbol": "ワークスペース内のシンボルに移動…",
-    "symbol": "シンボルに移動…"
+    "symbol": "シンボルに移動…",
+    "pane": {
+      "ai-complete-title": "AI 補完 (⌘I)",
+      "ai-rewrite-title": "選択範囲を AI で書き換え (⌘K)",
+      "complete": "補完",
+      "replace-title": "置換 (↵)",
+      "replace-all-title": "すべて置換 (⌥↵)",
+      "generate-tests": "テストを生成",
+      "go-to-line": "行へ移動",
+      "go-to-line-n": "{line} 行目へ移動",
+      "go": "移動",
+      "thinking": "考え中…",
+      "ask": "質問",
+      "rewrite": "書き換え",
+      "proposal-title": "AI による書き換えの提案",
+      "proposal-hint": "Tab で適用 · Esc で却下",
+      "accept": "適用",
+      "reject": "却下",
+      "cursor-position": "{line} 行、{col} 列",
+      "eol-title": "改行コード: {eol} — クリックで切り替え",
+      "indent-spaces-title": "インデント: スペース {size} 個 — クリックで変更",
+      "indent-tabs-title": "インデント: タブ — クリックで変更",
+      "spaces-size": "スペース: {size}",
+      "tab-size": "タブのサイズ: {size}",
+      "encoding-title": "ファイルのエンコード: {encoding} — クリックすると別のエンコードで開き直します",
+      "indentation": "インデント",
+      "n-spaces": "スペース {n} 個",
+      "n-tabs": "タブ ({n})",
+      "reopen-encoding": "エンコードを指定して開き直す"
+    },
+    "app": {
+      "empty-hint": "左側のエクスプローラーまたは検索ペインからファイルを開いてください",
+      "line-n": "{line} 行目",
+      "new-file-placeholder": "例: src/components/MyComponent.vue",
+      "breadcrumb-empty": "（空）",
+      "switch-to-plan-view": "プランビューに切り替え",
+      "toggle-plan": "プラン"
+    },
+    "search": {
+      "whole-word": "単語単位で検索",
+      "regex": "正規表現を使用",
+      "replace-all": "すべて置換",
+      "files-include": "含めるファイル",
+      "files-exclude": "除外するファイル",
+      "include-placeholder": "例: *.ts, src/**",
+      "exclude-placeholder": "例: *.test.ts, dist/**",
+      "summary": "{results} 件の結果 · {files} ファイル",
+      "truncated": "一部省略"
+    },
+    "problems": {
+      "errors": "エラー {count} 件",
+      "warnings": "警告 {count} 件"
+    },
+    "notebook": {
+      "cell-output": "セルの出力"
+    },
+    "aiDock": {
+      "interrupt-title": "CLI に Ctrl+C を送信",
+      "stop-title": "CLI プロセスを強制終了",
+      "no-workspace": "利用できるワークスペースがありません",
+      "starting": "起動中…",
+      "reattaching": "再接続中…",
+      "spawn-title": "{path} で CLI を起動"
+    },
+    "plan-body": {
+      "no-content": "まだ内容がありません。",
+      "no-body": "このプランには本文がありません。"
+    }
   },
   "cli-risk": {
     "details": "CLI の観測記録",
@@ -2258,6 +2325,16 @@
       "reset-colors-hint": "カスタムカラーをすべて組み込みテーマの色に戻す",
       "language-en-US": "English",
       "language-ja-JP": "日本語",
+      "language-zh-CN": "简体中文",
+      "language-ko-KR": "한국어",
+      "language-es-ES": "Español (España)",
+      "language-fr-FR": "Français",
+      "language-de-DE": "Deutsch",
+      "language-pt-BR": "Português (Brasil)",
+      "language-ru-RU": "Русский",
+      "language-vi-VN": "Tiếng Việt",
+      "language-beta": "Beta",
+      "language-beta-hint": "機械翻訳です。ネイティブによるレビューはまだ行われていません。",
       "language-hint": "言語はユーザー単位の設定で、すべてのワークスペースに適用されます。",
       "ui-scale": "表示倍率",
       "ui-scale-hint": "すべてのウィンドウで、文字、アイコン、余白を含むインターフェース全体の倍率を変更します。ターミナルとエディターのフォントサイズは個別の設定で、従来どおり ⌘= / ⌘- のショートカットで調整できます。",
@@ -8188,6 +8265,7 @@
     "plans-retry-failed": "再試行に失敗しました：{reason}",
     "plans-recovery-reason": "このセッションでは Plans v2 が無効化されました（{reason}）。",
     "plans-backend-stopped": "「{folder}」の Plans バックエンドは失敗が繰り返されたため停止しました。このワークスペースで Plans を開くと再起動できます。または Navide を再起動してください。",
+    "plugin-staged-not-activated": "Navide プラグイン {plugin} {version} はインストール済みですが、Navide の起動時に有効化できませんでした：{reason}。「設定 → Navide プラグイン」で再起動するか破棄してください。",
     "yolo-mode": "YOLO モード",
     "yolo-bypass": "— 許可の確認を自動でスキップ",
     "default": "デフォルト",
@@ -11543,6 +11621,18 @@
       "enable": "再度有効にする",
       "disable": "再度無効にする",
       "downgrade": "{version} に戻す"
+    }
+  },
+  "plugin-staged": {
+    "notice": {
+      "title": "Navide プラグイン {plugin} のバージョン {staged} が適用待ちです。現在実行中のバージョンは {active} です。",
+      "detail": "このバージョンは再起動せずにインストールされたか、ロールバックで保持されたものです。「今すぐ適用」で切り替えます（再起動と同じ動作です）。",
+      "applied": "{plugin} はバージョン {version} で実行中です。",
+      "stale": "適用しませんでした：この Navide プラグインはその後変更されています。",
+      "failed": "適用できませんでした：{error}"
+    },
+    "button": {
+      "apply": "今すぐ適用"
     }
   },
   "testplace": {

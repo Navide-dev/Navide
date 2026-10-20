@@ -148,6 +148,12 @@
   --chrome-trafficlight: 80px;
 }
 
+/* Simplified Chinese takes Simplified glyph forms. <html lang> follows the UI
+ * locale (foundation/i18n), so every other locale keeps the stack above. */
+:root:lang(zh-CN) {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+}
+
 /* Zero out motion tokens when the OS asks for reduced motion; covers
  * every consumer of --motion-* in one place. */
 @media (prefers-reduced-motion: reduce) {

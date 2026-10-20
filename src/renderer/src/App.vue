@@ -363,6 +363,7 @@ import {
   pluginAgentNoticeTitle,
   pluginAgentUndoApplies,
   pluginAgentDowngradeStep,
+  pluginStagedApplyApplies,
   releaseAnnouncementId,
   useAnnouncements,
   type SchedulerDisabledNotice,
@@ -432,6 +433,7 @@ import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } fr
 import { usePermissions } from './composables/usePermissions'
 import { useDisabledBuiltins } from './composables/useDisabledBuiltins'
 import { plansBackendStoppedNotice } from './composables/plansBackendStoppedNotice'
+import { pluginStagedCandidateNotice } from './composables/pluginStagedCandidateNotice'
 import navideMark from './assets/navide-mark.png'
 
 // Modals/wizard that only render behind a v-if (settings opened, run completed,
@@ -6319,6 +6321,8 @@ let stopGitRecoveryChanged: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
+let stopPluginStagedCandidate: (() => void) | null = null
+let stopPluginStagedUpdates: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
   stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
@@ -6340,6 +6344,22 @@ onMounted(() => {
     announcements.notePluginAgentNotice(notice)
     notifyRestore.toast(pluginAgentNoticeTitle(notice), { type: 'info' })
   }) ?? null
+  // A plugin installed without Restart could not be activated at launch.
+  stopPluginStagedCandidate = window.agentTeam?.onPluginStagedCandidateNotActivated?.((notice) => {
+    notifyRestore.toast(pluginStagedCandidateNotice(notice), { type: 'error' })
+  }) ?? null
+  // Packages staged beside an active one: a row with "Apply now" stays in the
+  // announcements centre until it is applied.
+  stopPluginStagedUpdates = window.agentTeam?.onPluginStagedUpdates?.((updates) => {
+    announcements.notePluginStagedUpdates(updates)
+    for (const update of updates) {
+      notifyRestore.toast(i18n.global.t('plugin-staged.notice.title', {
+        plugin: update.pluginId,
+        staged: update.stagedVersion,
+        active: update.activeVersion,
+      }), { type: 'info' })
+    }
+  }) ?? null
   void refreshPluginContributions()
   stopPluginContributionChanges = window.agentTeam?.plugins?.onContributionsChanged?.(() => {
     void refreshPluginContributions()
@@ -6356,6 +6376,10 @@ onUnmounted(() => {
   stopPlansBackendStopped = null
   stopPluginAgentAction?.()
   stopPluginAgentAction = null
+  stopPluginStagedCandidate?.()
+  stopPluginStagedCandidate = null
+  stopPluginStagedUpdates?.()
+  stopPluginStagedUpdates = null
   stopPluginContributionChanges?.()
   stopPluginContributionChanges = null
 })
@@ -15406,6 +15430,7 @@ const convenience = useConvenience(backend, {
 /** The undo on an "an agent disabled / enabled a Navide plugin" row: the
  *  user's own Extensions switch, set back (B2-c). */
 async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise<void> {
+  if (action.kind === 'plugin-staged-apply') return applyStagedPluginPackage(action)
   try {
     // Only what the agent did: if the user changed it since, leave it be.
     const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
@@ -15432,6 +15457,35 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   } catch (error) {
     notifyRestore.toast(
       i18n.global.t('plugin-agent.notice.undo-failed', { error: error instanceof Error ? error.message : String(error) }),
+      { type: 'error' },
+    )
+  }
+}
+
+/** "Apply now" on a staged package row: what Restart does in Settings →
+ *  Navide Plugins, for exactly the version the row names. */
+async function applyStagedPluginPackage(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-staged-apply' }>,
+): Promise<void> {
+  try {
+    const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (!pluginStagedApplyApplies(action, installed)) {
+      announcements.dropPluginStagedUpdate(action.pluginId)
+      notifyRestore.toast(i18n.global.t('plugin-staged.notice.stale'), { type: 'info' })
+      return
+    }
+    const applied = await window.agentTeam?.plugins?.restart?.(action.pluginId)
+    announcements.dropPluginStagedUpdate(action.pluginId)
+    notifyRestore.toast(
+      i18n.global.t('plugin-staged.notice.applied', {
+        plugin: action.pluginId,
+        version: applied?.packageVersion ?? action.stagedVersion,
+      }),
+      { type: 'info' },
+    )
+  } catch (error) {
+    notifyRestore.toast(
+      i18n.global.t('plugin-staged.notice.failed', { error: error instanceof Error ? error.message : String(error) }),
       { type: 'error' },
     )
   }

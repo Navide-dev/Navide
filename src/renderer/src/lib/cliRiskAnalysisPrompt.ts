@@ -16,6 +16,14 @@ const LANGUAGE_NAMES: Record<string, string> = {
   'en-US': 'English',
   'ja-JP': 'Japanese',
   'zh-TW': 'Traditional Chinese',
+  'zh-CN': 'Simplified Chinese',
+  'ko-KR': 'Korean',
+  'es-ES': 'Spanish (Spain)',
+  'fr-FR': 'French',
+  'de-DE': 'German',
+  'pt-BR': 'Brazilian Portuguese',
+  'ru-RU': 'Russian',
+  'vi-VN': 'Vietnamese',
 }
 
 function value(v: string | number | boolean | undefined): string {

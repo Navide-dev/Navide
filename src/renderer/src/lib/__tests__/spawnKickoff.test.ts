@@ -66,6 +66,18 @@ describe('kickoffAttemptOutcome', () => {
     })
   })
 
+  // Issue #402 point 1: a growth-only echo (Grok Build's paste chip) whose
+  // Enter the CLI answered with a new turn is a kickoff that ran. Retyping it
+  // ran the task a second time, and the last attempt then reported 'failed',
+  // which tells the caller to resend it a third time.
+  it('settles sent, never retyped, when a new turn followed a growth-only echo', () => {
+    const composerHolds = vi.fn(() => false)
+    expect(kickoffAttemptOutcome({ ...base, submit: 'turn', promptReady: true, composerHolds })).toEqual({
+      outcome: 'sent', next: 'stop', retriedOut: false,
+    })
+    expect(composerHolds).not.toHaveBeenCalled()
+  })
+
   // The one the retry loop exists for. Typing a second copy on top of the
   // first submits both as one prompt, and so does a cli_send resend — which is
   // why this settles 'unverified' (the caller is told to look, not to resend)
@@ -135,6 +147,15 @@ describe('runKickoffAttempts', () => {
   // While the loop lived inline this was one mutable object reset by hand at
   // the top of each iteration; forget the reset and a pane that finally echoed
   // its task on the retype still reported the first attempt's "nothing seen".
+  it('types a turn-confirmed kickoff once, never a second copy (#402 point 1)', async () => {
+    const inject = vi.fn(async () => ({ injected: true, echo: 'growth', submit: 'turn' } as const))
+    const onRetry = vi.fn()
+    const result = await runKickoffAttempts(deps({ inject, onRetry, promptReady: true }))
+    expect(result).toMatchObject({ settled: true, outcome: 'sent', retriedOut: false })
+    expect(inject).toHaveBeenCalledTimes(1)
+    expect(onRetry).not.toHaveBeenCalled()
+  })
+
   it('judges each attempt on its own evidence, not the previous one', async () => {
     const seen: Array<KickoffAttemptEvidence> = [
       { injected: true, echo: 'growth', submit: 'growth' },
