@@ -176,7 +176,7 @@ import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
-import { isMac } from '../shared/osplat'
+import { isLinux, isMac } from '../shared/osplat'
 import { installMediaPermissionHandlers } from './media-permissions'
 import { registerFnKeyIpc } from './fn-key-ipc'
 import { registerSpotlightSettingsIpc } from './spotlight-settings-ipc'
@@ -2062,7 +2062,7 @@ const developerAccount = new DeveloperAccount({
     get available(): boolean {
       // A Linux basic_text store is not encryption: Navide keeps no developer secret in it.
       return !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
-        (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+        (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
     },
     encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
     decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),

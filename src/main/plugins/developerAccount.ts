@@ -284,7 +284,8 @@ export class DeveloperAccount {
     const digest = packageDigest(bytes)
     const signature = signPackageDigest(digest, this.deps.vault.signingKey(base).privateKeyPem)
     const form = new FormData()
-    form.append('package', new Blob([bytes], { type: 'application/zip' }), fileName)
+    // A copy backed by a plain ArrayBuffer: a Blob part may not be a SharedArrayBuffer view.
+    form.append('package', new Blob([new Uint8Array(bytes)], { type: 'application/zip' }), fileName)
     const query = new URLSearchParams({ target, signature })
     const res = await this.registryFetch(`/api/publish?${query}`, { method: 'POST', body: form }, 'publisher')
     return { ...res, digest }
