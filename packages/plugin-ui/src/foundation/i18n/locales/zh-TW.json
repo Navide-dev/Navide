@@ -815,7 +815,7 @@
       "auto-named-tooltip": "此名稱由系統依這個 session 的第一句指令自動產生 — 只要你改過名，就不會再被自動命名",
       "loop-tag-tooltip": "此 pane 正在執行 Loop",
       "subtree-tooltip": "底下有 {count} 個派生 pane 處於 {status}",
-      "subtree-summary": "sub {status} {count}",
+      "subtree-summary": "子 pane {status} {count}",
       "location-minimized": "已縮到側欄",
       "location-tab": "分頁：{name}",
       "location-workspace": "工作區：{name}",
@@ -1340,7 +1340,7 @@
         "intercept-tools": "攔截工具呼叫",
         "rewrite-prompt": "改寫 prompt",
         "ui": "畫介面",
-        "telemetry": "Telemetry"
+        "telemetry": "遙測"
       },
       "consent": {
         "none": "CLI 執行前不會先詢問",
@@ -2397,9 +2397,9 @@
             }
           },
           "sample": {
-            "query": "reclaim",
-            "hit1": "Idle reclaim",
-            "hit2": "Reclaim threshold",
+            "query": "回收",
+            "hit1": "回收閒置的 CLI",
+            "hit2": "閒置多久後回收",
             "paneA": "reviewer",
             "paneB": "builder",
             "paneC": "docs",
@@ -2566,7 +2566,7 @@
             },
             "resumeOnOpen": {
               "desc": "開啟工作區時舊面板怎麼辦：總是恢復／一律開新對話／每次詢問。",
-              "fallback": "Always"
+              "fallback": "總是恢復"
             },
             "resumeScope": {
               "desc": "接續範圍：單一 CLI／目前 Grid 頁面／目前分頁／全部 CLI／自動（只接續上次關閉 Navide 時仍在執行的 CLI）。",
@@ -2908,7 +2908,7 @@
             },
             "standard": {
               "value": "標準 macOS 視窗操作。Zoom 是把視窗框放到最大，跟面板內容的字級縮放無關。",
-              "label": "Minimize / Zoom / Bring All to Front"
+              "label": "縮到最小 / 縮放 / 將全部移到最前面"
             },
             "turnStats": {
               "value": "開「每輪消耗」對話框（本頁第 8 章）。"
@@ -3239,11 +3239,11 @@
             "message": "fix(git): keep the hunk selection after a stage",
             "hunk": "{'@'}{'@'} -12,7 +12,9 {'@'}{'@'}",
             "conflictNo": "#1",
-            "ours": "HEAD (ours)",
-            "theirs": "theirs",
-            "progress": "1 / 3 resolved",
+            "ours": "HEAD（我方）",
+            "theirs": "對方",
+            "progress": "已解決 1 / 3",
             "apply": "Apply & Stage",
-            "base": "Base"
+            "base": "共同基準"
           }
         },
         "intro": "Git 面板、計畫文件、內建編輯器與預覽——把 agent 做出來的變更看清楚、審過、提交出去。這裡沿用「工作區／面板」這組名詞。",
@@ -3859,14 +3859,14 @@
             "chain1": "Homebrew",
             "chain2": "Node.js",
             "plan": "Pro",
-            "window1": "5-hour window",
-            "window2": "Weekly",
+            "window1": "5 小時窗口",
+            "window2": "每週",
             "pct1": "62%",
             "pct2": "18%",
             "reset1": "2h 40m",
             "reset2": "3d",
-            "acct1": "work",
-            "acct2": "personal",
+            "acct1": "工作",
+            "acct2": "個人",
             "acctPct1": "62%",
             "acctPct2": "9%",
             "model": "opus-5",
@@ -4727,8 +4727,8 @@
           },
           "sample": {
             "workspace": "my-project",
-            "group": "Main",
-            "group2": "Review",
+            "group": "主要",
+            "group2": "審查",
             "pane1": "reviewer",
             "pane2": "builder",
             "pane3": "tester",
@@ -6610,7 +6610,7 @@
       "view-browse": "瀏覽",
       "view-compare": "對照",
       "source-navide": "Navide",
-      "matrix-server": "Server",
+      "matrix-server": "伺服器",
       "matrix-legend-here": "已在此設定",
       "matrix-legend-disabled": "已設定但已關閉",
       "matrix-legend-off": "不在使用者層級設定裡",
@@ -6835,7 +6835,7 @@
       "error-save": "無法儲存 skill；草稿仍保留在編輯器中。",
       "error-toggle": "無法更新啟用狀態，請再試一次。",
       "error-delete": "無法將 skill 移至垃圾桶；未刪除任何內容。",
-      "matrix-skill": "Skill",
+      "matrix-skill": "技能",
       "matrix-legend-on": "已送達",
       "matrix-legend-off": "未送達",
       "matrix-legend-planned": "支援但尚未接線",
@@ -7511,7 +7511,7 @@
         "signed-out": "未登入",
         "custom-binary": "自訂執行檔",
         "model": "模型 {model}",
-        "effort": "effort {effort}",
+        "effort": "推理強度 {effort}",
         "custom-command": "自訂啟動指令",
         "custom-env": "自訂 env {count}"
       }
@@ -9692,19 +9692,19 @@
       "title": "系統 crontab"
     },
     "launchagents": {
-      "title": "macOS Agents"
+      "title": "macOS 代理程式"
     },
     "daemons": {
-      "title": "macOS Daemons"
+      "title": "macOS 常駐服務"
     },
     "scope": {
       "user": "使用者",
       "system-agent": "系統",
-      "system-daemon": "Daemon"
+      "system-daemon": "常駐服務"
     },
     "tag": {
       "pid": "PID {pid}",
-      "exit": "exit {code}"
+      "exit": "結束碼 {code}"
     },
     "state": {
       "loaded-not-running": "已載入但未執行",
@@ -9723,7 +9723,7 @@
       "schedule": "排程",
       "command": "指令",
       "raw": "原始內容",
-      "label": "Label",
+      "label": "標籤",
       "scope": "層級",
       "plist": "plist 路徑",
       "exit-code": "上次結束碼",
@@ -9825,7 +9825,7 @@
       "freq-weekly": "每週",
       "freq-once": "一次",
       "minutes": "分鐘",
-      "workspace": "Workspace",
+      "workspace": "工作區",
       "pick-workspace": "選擇 workspace",
       "target": "目標 pane",
       "pick-pane": "選擇 pane",
@@ -9878,7 +9878,7 @@
     "pane": "Pane",
     "pane-placeholder": "尚未啟動",
     "no-token-usage": "不提供 token 用量",
-    "session": "Session",
+    "session": "工作階段",
     "summary": "{turns} 輪 · {calls} 次呼叫 · 總計 {total}",
     "rescan": "重新掃描",
     "export": "匯出 CSV",
@@ -9888,10 +9888,10 @@
     "method-unsupported": "此 CLI 不提供 token 用量。",
     "col-time": "時間",
     "col-prompt": "提示摘要",
-    "col-input": "In",
-    "col-cache-read": "Cache R",
-    "col-cache-write": "Cache W",
-    "col-output": "Out",
+    "col-input": "輸入",
+    "col-cache-read": "快取讀取",
+    "col-cache-write": "快取寫入",
+    "col-output": "輸出",
     "col-total": "總計",
     "col-calls": "呼叫",
     "row-total": "合計",
@@ -9941,9 +9941,9 @@
   },
   "account-dim": {
     "unknown": "未知",
-    "default": "Default",
+    "default": "預設",
     "removed": "帳號已移除",
-    "active": "active",
+    "active": "作用中",
     "inactive": "非 active"
   },
   "quota-cycles": {
@@ -10389,14 +10389,14 @@
     "needs": "需要：{fields}",
     "imessage-note": "不需要 token，僅限 macOS。",
     "field": {
-      "token": "Bot token",
-      "app_token": "App-level token",
-      "bot_token": "Bot token",
+      "token": "Bot 權杖",
+      "app_token": "App 層級權杖",
+      "bot_token": "Bot 權杖",
       "app_id": "App ID",
       "app_secret": "App Secret",
       "client_id": "Client ID",
       "client_secret": "Client Secret",
-      "access_token": "Access token",
+      "access_token": "存取權杖",
       "server_url": "伺服器 URL",
       "homeserver": "Homeserver URL",
       "domain": "區域",
