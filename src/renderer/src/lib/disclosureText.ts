@@ -1,11 +1,15 @@
+import { formatList } from '@navide/plugin-ui/foundation'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 
 type Translate = (key: string, values?: Record<string, unknown>) => string
 
-/** A list in the reader's language: "a, b" in English, "a、b" otherwise. */
+/** A list in the reader's language. en-US, zh-TW and ja-JP keep their
+ *  established "a, b" / "a、b" joins; every other locale uses Intl.ListFormat. */
 export function disclosureList(locale: string, values: unknown): string {
   const items = Array.isArray(values) ? values.map(String) : []
-  return items.join(locale.startsWith('en') ? ', ' : '、')
+  if (locale === 'en-US') return items.join(', ')
+  if (locale === 'zh-TW' || locale === 'ja-JP') return items.join('、')
+  return formatList(items, locale)
 }
 
 /** The summary clauses of a disclosure (contract 3.2), each worded from its
@@ -24,5 +28,5 @@ export function disclosureClauses(t: Translate, locale: string, disclosure: Mani
 
 /** The one-line plain summary every card opens with (D1, D5). */
 export function disclosureSummaryLine(t: Translate, locale: string, disclosure: ManifestDisclosure): string {
-  return disclosureClauses(t, locale, disclosure).join(locale.startsWith('en') ? '; ' : '；')
+  return disclosureClauses(t, locale, disclosure).join(/^(zh|ja)(-|$)/i.test(locale) ? '；' : '; ')
 }

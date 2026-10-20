@@ -217,7 +217,8 @@ describe('builtinPromptSkills', () => {
     expect(skill.id).toBe(PROMPT_SKILL_SEED.id)
     expect(DEFAULT_LOOP_PROMPT).toBe(PROMPT_SKILL_SEED.prompt)
     expect(skill.name).toBe(seedText('name', i18n.global.locale.value))
-    expect(seedText('name', 'fr')).toBe(PROMPT_SKILL_SEED.name['zh-TW'])
+    expect(seedText('name', 'it-IT')).toBe(PROMPT_SKILL_SEED.name['zh-TW'])
+    expect(seedText('name', 'ko-KR')).toBe(PROMPT_SKILL_SEED.name['en-US'])
   })
 })
 

@@ -9673,7 +9673,7 @@ export class FrontendPluginManager {
           } else if (plugin.id === PLANS_PLUGIN_ID && (isV2Ui || isLegacyPlans)) {
             if (source === 'host') {
               const language = (rawSettings as Record<string, unknown>)['agent-team:language']
-              if (language === 'zh-TW' || language === 'en-US' || language === 'ja-JP') {
+              if (validateSupportedLocale(language)) {
                 this.emitToInstance(plugin.instanceId, event, {
                   source: 'host',
                   settings: { 'agent-team:language': language },
