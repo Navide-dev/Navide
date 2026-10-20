@@ -11,7 +11,7 @@
 // swatches render their real resolved colour under the current theme by binding
 // the palette's token expressions straight into the button.
 import { useI18n } from 'vue-i18n'
-import { vTruncate } from '@navide/plugin-ui/foundation'
+import { AVAILABLE_UI_LOCALES, vTruncate, type UiLocale } from '@navide/plugin-ui/foundation'
 
 import { paneStatusLabelKey, type PaneStatusValue } from '../lib/paneStatusLabel'
 import {
@@ -67,21 +67,30 @@ function isCustomized(status: PaneStatusValue): boolean {
   return !!prefs.value[status]
 }
 
-function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', value: string): void {
-  setStatusBadgePref(status, locale === 'zh-TW' ? { labelZh: value }
-    : locale === 'ja-JP' ? { labelJa: value } : { labelEn: value })
+/** One label column per UI language that has a catalog. The original three
+ *  keep their column headings; a later language is headed by its own name. */
+const LEGACY_COLUMN_KEYS: Partial<Record<UiLocale, string>> = {
+  'zh-TW': 'statusBadges.col.zh',
+  'en-US': 'statusBadges.col.en',
+  'ja-JP': 'statusBadges.col.ja',
+}
+const LABEL_COLUMNS = AVAILABLE_UI_LOCALES.map((code) => ({
+  code,
+  headingKey: LEGACY_COLUMN_KEYS[code] ?? `settings.appearance.language-${code}`,
+}))
+
+function onLabel(status: PaneStatusValue, locale: UiLocale, value: string): void {
+  setStatusBadgePref(status, { labels: { [locale]: value } })
 }
 </script>
 
 <template>
-  <div class="sb">
+  <div class="sb" :style="{ '--sb-label-cols': LABEL_COLUMNS.length }">
     <p class="sb-intro">{{ $t('statusBadges.intro') }}</p>
 
     <div class="sb-head">
       <span class="sb-h-status">{{ $t('statusBadges.col.status') }}</span>
-      <span class="sb-h-label">{{ $t('statusBadges.col.zh') }}</span>
-      <span class="sb-h-label">{{ $t('statusBadges.col.en') }}</span>
-      <span class="sb-h-label">{{ $t('statusBadges.col.ja') }}</span>
+      <span v-for="column in LABEL_COLUMNS" :key="column.code" class="sb-h-label">{{ $t(column.headingKey) }}</span>
       <span class="sb-h-color">{{ $t('statusBadges.col.color') }}</span>
       <span class="sb-h-reset"></span>
     </div>
@@ -105,36 +114,14 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
         <span class="sb-when">{{ $t(`statusBadges.when.${status}`) }}</span>
       </div>
 
-      <label class="sb-field">
-        <span class="sb-sr">{{ $t('statusBadges.col.zh') }} — {{ status }}</span>
+      <label v-for="column in LABEL_COLUMNS" :key="column.code" class="sb-field">
+        <span class="sb-sr">{{ $t(column.headingKey) }} — {{ status }}</span>
         <input
           type="text"
           maxlength="24"
-          :value="prefs[status]?.labelZh ?? ''"
-          :placeholder="defaultLabel(status, 'zh-TW')"
-          @change="onLabel(status, 'zh-TW', ($event.target as HTMLInputElement).value)"
-        />
-      </label>
-
-      <label class="sb-field">
-        <span class="sb-sr">{{ $t('statusBadges.col.en') }} — {{ status }}</span>
-        <input
-          type="text"
-          maxlength="24"
-          :value="prefs[status]?.labelEn ?? ''"
-          :placeholder="defaultLabel(status, 'en-US')"
-          @change="onLabel(status, 'en-US', ($event.target as HTMLInputElement).value)"
-        />
-      </label>
-
-      <label class="sb-field">
-        <span class="sb-sr">{{ $t('statusBadges.col.ja') }} — {{ status }}</span>
-        <input
-          type="text"
-          maxlength="24"
-          :value="prefs[status]?.labelJa ?? ''"
-          :placeholder="defaultLabel(status, 'ja-JP')"
-          @change="onLabel(status, 'ja-JP', ($event.target as HTMLInputElement).value)"
+          :value="prefs[status]?.labels?.[column.code] ?? ''"
+          :placeholder="defaultLabel(status, column.code)"
+          @change="onLabel(status, column.code, ($event.target as HTMLInputElement).value)"
         />
       </label>
 
@@ -181,7 +168,7 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
 <style scoped>
 .sb {
   display: grid;
-  grid-template-columns: max-content minmax(120px, 2fr) repeat(3, minmax(108px, 1fr)) max-content max-content;
+  grid-template-columns: max-content minmax(120px, 2fr) repeat(var(--sb-label-cols, 3), minmax(108px, 1fr)) max-content max-content;
   column-gap: 12px;
   row-gap: 2px;
 }
