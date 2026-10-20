@@ -4030,6 +4030,16 @@ ipcMain.handle('window:focusSelf', (event) => {
   return { ok: true }
 })
 
+// MCP window_close (DESIGN-C S4a): a window closes ITSELF, the same close its
+// own title-bar button makes (so the last-window guard still applies). The
+// window is the sender's, never an argument.
+ipcMain.handle('window:closeSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return { ok: false }
+  win.close()
+  return { ok: true }
+})
+
 ipcMain.handle('window:getDetachedGroups', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   const ws = win ? mainWindowWorkspaces.get(win) : undefined

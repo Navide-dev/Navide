@@ -6219,8 +6219,17 @@ async def ui_invoke(
         refused = _login_pane_input_refusal(named, named)
         if refused is not None:
             return {**refused, "result": None}
-    if action == "ui.window.focus":
-        # The focused window says who did it; that name comes from the
+    if action in ("ui.window.close", "ui.workspace.close") and caller.kind != "pane":
+        # window_close / workspace_close are pane-only (the record names the
+        # pane that did it); this route reaches the same window commands.
+        return {
+            "ok": False,
+            "result": None,
+            "error": f"{action} can be invoked only from a CLI pane; ask the user to do it in Navide instead",
+            "error_code": "pane-caller-required",
+        }
+    if action in ("ui.window.focus", "ui.window.close", "ui.workspace.close"):
+        # The affected window says who did it; that name comes from the
         # credential, never from what the caller wrote (window_focus does
         # the same).
         who = _caller_view(caller)
