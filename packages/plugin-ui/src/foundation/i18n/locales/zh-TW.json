@@ -1999,7 +1999,7 @@
         },
         "title": "開發者模式",
         "switch": "開啟開發者模式",
-        "hint": "開啟後可以從你選的資料夾載入 Navide 外掛來開發與測試，也會套用自架 Registry 的設定（AGENT_TEAM_MARKETPLACE_URL）。只有在這個設定頁可以切換，每次變更都會記錄。",
+        "hint": "開啟後可以從你選的資料夾載入 Navide 外掛來開發與測試，也會套用自架 Registry 的設定（AGENT_TEAM_MARKETPLACE_URL）。只有在這個設定頁可以切換，每次變更都會記錄。關閉時會卸下所有從資料夾載入的 Navide 外掛，選了但還沒同意的資料夾也會清掉；你同意過的資料夾清單會保留，再開啟時自動接回，也可以在這裡移除。",
         "banner": "開發者模式已開啟，從資料夾載入的 Navide 外掛沒有經過審核。",
         "reminder": "開發者模式已開啟：從資料夾載入的 Navide 外掛沒有經過審核。不用時請到「設定 → Navide 外掛」關閉。",
         "reminderClose": "知道了",
