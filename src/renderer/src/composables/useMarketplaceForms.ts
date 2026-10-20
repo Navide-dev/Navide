@@ -52,11 +52,11 @@ const FORM_OF_KIND: Record<FormApprovalKind, MarketplaceForm> = {
 
 /** The form showing (or about to show) on the Developer page. */
 export const openMarketplaceForm = shallowRef<OpenMarketplaceForm | null>(null)
-/** Which view the Navide Marketplace page shows. */
-export const marketplaceView = shallowRef<'browse' | 'developer'>('browse')
+/** Which view the Navide Marketplace page shows (`testplace`: the tests the user joined, W5b). */
+export const marketplaceView = shallowRef<'browse' | 'developer' | 'testplace'>('browse')
 let seq = 0
 
-export function setMarketplaceView(view: 'browse' | 'developer'): void {
+export function setMarketplaceView(view: 'browse' | 'developer' | 'testplace'): void {
   marketplaceView.value = view
 }
 

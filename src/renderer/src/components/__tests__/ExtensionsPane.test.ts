@@ -1270,3 +1270,80 @@ describe('ExtensionsPane source badge (K2)', () => {
     expect(source('acme.unknown').exists()).toBe(false)
   })
 })
+
+describe('ExtensionsPane expired Testplace builds (D3)', () => {
+  let wrapper: VueWrapper | undefined
+  beforeEach(() => {
+    i18n.global.locale.value = 'en-US'
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    vi.useRealTimers()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('lists an expired build with its three choices and never removes it unasked', async () => {
+    const keepExpiredTestplace = vi.fn().mockResolvedValue({ ok: true })
+    const adoptTestplaceRelease = vi.fn().mockResolvedValue({ adopted: false })
+    const prepareInstall = vi.fn().mockRejectedValue(new Error('extension not found: HTTP 404'))
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([]),
+      expiredTestplace: vi.fn().mockResolvedValue([
+        { id: 'acme.kept', version: '1.0.0', expiresAt: '2026-10-01T00:00:00Z', artifactDigest: 'a'.repeat(64), canKeep: true },
+        { id: 'acme.down', version: '2.0.0', expiresAt: '2026-10-02T00:00:00Z', canKeep: false },
+      ]),
+      keepExpiredTestplace,
+      prepareInstall,
+      adoptTestplaceRelease,
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const kept = wrapper.get('[data-expired-id="acme.kept"]')
+    expect(kept.text()).toContain('The test build acme.kept 1.0.0 expired on 2026-10-01 and was stopped; its settings and data are kept.')
+    expect(kept.find('.ext-testplace-marketplace').exists()).toBe(true)
+    expect(kept.find('.ext-testplace-remove').exists()).toBe(true)
+    // A takedown (or any failure besides the expiry) is never offered "keep using".
+    const down = wrapper.get('[data-expired-id="acme.down"]')
+    expect(down.find('.ext-testplace-keep').exists()).toBe(false)
+    expect(down.text()).toContain('cannot be kept')
+    expect(api.remove).not.toHaveBeenCalled()
+
+    await kept.get('.ext-testplace-keep').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.message).toContain('acme.kept')
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(keepExpiredTestplace).toHaveBeenCalledWith('acme.kept')
+
+    // "Install the Navide Marketplace version": a promoted build of the same
+    // digest is adopted in place; otherwise the normal verified install runs.
+    adoptTestplaceRelease.mockResolvedValueOnce({ adopted: true })
+    await kept.get('.ext-testplace-marketplace').trigger('click')
+    await flushPromises()
+    expect(adoptTestplaceRelease).toHaveBeenCalledWith('acme.kept')
+    expect(prepareInstall).not.toHaveBeenCalled()
+    await kept.get('.ext-testplace-marketplace').trigger('click')
+    await flushPromises()
+    expect(prepareInstall).toHaveBeenCalledWith({ namespace: 'acme', name: 'kept' })
+  })
+
+  it('reminds from 7 days before expiry and marks a kept build as expired', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.soon', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2026-10-25T00:00:00Z', testplaceVia: 'invite' },
+        { id: 'acme.later', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2026-12-25T00:00:00Z' },
+        { id: 'acme.past', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2026-10-01T00:00:00Z' },
+      ]),
+      expiredTestplace: vi.fn().mockResolvedValue([]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.soon"] .ext-testplace-expiring').text()).toContain('expires in 5 days (2026-10-25)')
+    expect(wrapper.get('[data-id="acme.soon"] .nv-source-badge').text()).toBe('Test build: automated scan only, expires 2026-10-25')
+    expect(wrapper.find('[data-id="acme.later"] .ext-testplace-expiring').exists()).toBe(false)
+    expect(wrapper.get('[data-id="acme.past"] .ext-testplace-kept').text()).toContain('kept in use')
+    expect(wrapper.get('[data-id="acme.past"] .nv-source-badge').text()).toBe('Test build, expired 2026-10-01 (kept in use)')
+  })
+})

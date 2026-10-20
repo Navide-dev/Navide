@@ -25,7 +25,7 @@ import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
 import type { PluginSource } from '../shared/pluginSource'
-import type { DeveloperApi } from '../shared/marketplaceDeveloper'
+import type { DeveloperApi, DeveloperCallResult } from '../shared/marketplaceDeveloper'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
 export interface ClearElectronCachesOptions {
@@ -169,6 +169,8 @@ export interface InstalledPluginSummary {
   source?: PluginSource
   /** Registry-signed expiry; present only when `source` is `testplace`. */
   expiresAt?: string
+  /** How the user joined that test, when recorded; `source` testplace only. */
+  testplaceVia?: 'invite' | 'code'
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -446,6 +448,27 @@ export interface MarketplaceListResponse {
 }
 
 /** Card K4: the Developer Mode switch and the developer folders consented to. */
+/** One test the user joined (Testplace, W5b). */
+export interface TestplaceListing {
+  id: string
+  namespace: string
+  name: string
+  displayName: string | null
+  description: string | null
+  publisher: string
+  via: 'invite' | 'code' | null
+  versions: Array<{ version: string; target: string; expiresAt: string | null; installable: boolean; compatible: boolean | null }>
+}
+
+/** D3: an installed Testplace build stopped because it expired; its data is kept. */
+export interface ExpiredTestplaceBuild {
+  id: string
+  version: string | null
+  expiresAt: string | null
+  artifactDigest?: string
+  canKeep: boolean
+}
+
 export interface DeveloperModeState {
   enabled: boolean
   folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
@@ -487,6 +510,9 @@ export interface PreparedInstallSummary {
   /** Source and review state from the verified Registry envelope; absent for
    *  a channel this App does not know. */
   source?: PluginSource
+  /** A Testplace build: its signed expiry and how the user joined the test. */
+  expiresAt?: string
+  testplaceVia?: 'invite' | 'code'
   /** Card K3: sha256 of the picked file, shown in the consent dialog. */
   digest?: string
   /** Card K3 (D7): the installed package of the same id a file install replaces. */
@@ -1258,6 +1284,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
       manifestOrder: number
       /** Source and review state of the package that contributes this view. */
       source?: PluginSource
+      /** A test build: its signed expiry and how the user joined the test. */
+      expiresAt?: string
+      testplaceVia?: 'invite' | 'code'
     }>> => ipcRenderer.invoke('plugins:listContributions'),
     hostThemeChanged: (theme: string): void =>
       ipcRenderer.send('plugins:hostThemeChanged', theme),
@@ -1320,6 +1349,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       namespace: string
       name: string
       version?: string
+      /** A Testplace build, fetched with the user's Navide Cloud account. */
+      testplace?: boolean
     }): Promise<PreparedInstallSummary> => ipcRenderer.invoke('plugins:prepareInstall', args),
     commitInstall: (
       id: string,
@@ -1348,6 +1379,18 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:removeDeveloperFolder', { id }),
     selfHostedQuarantine: (): Promise<Array<{ id: string; version: string | null }>> =>
       ipcRenderer.invoke('plugins:selfHostedQuarantine'),
+    /** Testplace (W5b): the tests the user joined, join by invite or test code, leave. */
+    testplaceList: (): Promise<TestplaceListing[]> => ipcRenderer.invoke('plugins:testplaceList'),
+    testplaceJoin: (code: string): Promise<{ id: string }> => ipcRenderer.invoke('plugins:testplaceJoin', { code }),
+    testplaceLeave: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugins:testplaceLeave', { id }),
+    /** The invite form's Send: the join tokens come back to that form only. */
+    testplaceInvite: (id: string, labels: string[]): Promise<DeveloperCallResult> =>
+      ipcRenderer.invoke('plugins:testplaceInvite', { id, labels }),
+    /** D3: expired Testplace builds, stopped with their data kept, and "keep using". */
+    expiredTestplace: (): Promise<ExpiredTestplaceBuild[]> => ipcRenderer.invoke('plugins:expiredTestplace'),
+    keepExpiredTestplace: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugins:keepExpiredTestplace', { id }),
+    /** A promoted test build of the same digest takes the Marketplace receipt in place (no reinstall). */
+    adoptTestplaceRelease: (id: string): Promise<{ adopted: boolean }> => ipcRenderer.invoke('plugins:adoptTestplaceRelease', { id }),
     restart: (id: string): Promise<{
       id: string
       packageVersion: string

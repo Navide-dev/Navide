@@ -15,8 +15,10 @@ import {
 } from './pluginManifest'
 import { readManifestFromEntries, readZipEntries } from './pluginPackage'
 import {
+  RegistryTrustError,
   verifyRegistryPackageTrust,
   type RegistryAuthority,
+  type RegistryTrustErrorCode,
   type RegistryPackageEnvelope,
   type RegistryTrustMetadata,
 } from './pluginRegistryTrust'
@@ -70,11 +72,13 @@ export interface InstalledRegistryTrustContext {
   /** Host-derived target expected during every load/refresh revalidation. */
   expectedTarget?: string
   now?: Date
+  /** D3: true when the user chose to keep using this expired testplace artifact. */
+  keepsExpiredTestplace?: (packageId: string, artifactDigest: string) => boolean
 }
 
 export type InstalledTrustDecision =
-  | { action: 'allow'; artifactDigest: string; target?: string }
-  | { action: 'quarantine'; reason: string }
+  | { action: 'allow'; artifactDigest: string; target?: string; expired?: true }
+  | { action: 'quarantine'; reason: string; code?: RegistryTrustErrorCode }
 
 export function assertRegistryTrustSnapshotDoesNotRollback(
   existingBytes: Uint8Array | null,
@@ -249,7 +253,7 @@ export function verifyInstalledRegistryPackage(
     ) {
       throw new Error('Registry receipt identity does not match the retained artifact')
     }
-    verifyRegistryPackageTrust({
+    const verified = verifyRegistryPackageTrust({
       envelope: receipt.envelope,
       envelopeSignature: receipt.envelopeSignature,
       trustMetadata: trust.snapshot.metadata,
@@ -264,17 +268,20 @@ export function verifyInstalledRegistryPackage(
       },
       expectedHostTarget: trust.expectedTarget ?? currentPluginHostTarget(),
       now: trust.now,
+      allowExpiredTestplace: trust.keepsExpiredTestplace?.(manifest.id, digest) === true,
     })
     if (receipt.registryAuthority !== (trust.registryAuthority ?? 'self-hosted')) {
       throw new Error('Registry authority does not match the current Host configuration')
     }
     assertExtractedContent(pluginDir, archiveBytes)
-    return { action: 'allow', artifactDigest: digest, target: receipt.target }
+    return verified.expired
+      ? { action: 'allow', artifactDigest: digest, target: receipt.target, expired: true }
+      : { action: 'allow', artifactDigest: digest, target: receipt.target }
   } catch (error) {
-    return {
-      action: 'quarantine',
-      reason: error instanceof Error ? error.message : String(error),
-    }
+    // The code tells an expired test build (D3) apart from a takedown.
+    return error instanceof RegistryTrustError
+      ? { action: 'quarantine', reason: error.message, code: error.code }
+      : { action: 'quarantine', reason: error instanceof Error ? error.message : String(error) }
   }
 }
 

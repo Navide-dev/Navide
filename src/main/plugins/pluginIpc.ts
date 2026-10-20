@@ -22,16 +22,20 @@ import {
   commitInstallTransaction,
   removePlugin,
   isUpdateAvailable,
+  defaultInstallerDeps,
+  InstallError,
   type PreparedInstall,
   type InstallerTrustConfig,
 } from './pluginInstaller'
+import { developerRegistryDownload, developerRegistryFetch, registryError } from './developerAccount'
+import type { DeveloperCallResult } from '../../shared/marketplaceDeveloper'
 import {
   sensitiveCapabilities,
   assertRegistryUrlAllowed,
   sha256Hex,
 } from './pluginVerify'
 import type { RegistryPackageEnvelope, RegistryTrustMetadata } from './pluginRegistryTrust'
-import { verifyRegistryTrustMetadata } from './pluginRegistryTrust'
+import { verifyRegistryPackageTrust, verifyRegistryTrustMetadata } from './pluginRegistryTrust'
 import {
   loadOfficialRegistryRootKey,
   resolveMarketplaceRegistryRoot,
@@ -57,8 +61,11 @@ import {
   REGISTRY_RECEIPT_NAME,
   REGISTRY_TRUST_SNAPSHOT_NAME,
   assertRegistryTrustSnapshotDoesNotRollback,
+  registryReceiptFromEvidence,
   type InstalledTrustDecision,
+  type RegistryInstallReceipt,
 } from './pluginInstalledTrust'
+import { swapRegistryReceipt } from './pluginReceiptPromotion'
 import { pluginDeveloperModeEnabled } from './pluginDeveloperMode'
 import { developerPermissionsDigest, PluginDeveloperModeStore } from './pluginDeveloperModeStore'
 import {
@@ -70,6 +77,7 @@ import { assertEngineCompatible, isEngineCompatible, minNavideVersion } from './
 import { compareSemver } from './pluginManifestV2'
 import { MAX_EXTENSION_PACK_MEMBERS } from '../../../packages/plugin-contracts/src/index'
 import { PluginPrereleaseStore } from './pluginPrereleaseStore'
+import { PluginTestplaceStore, testplaceJoinVia, type TestplaceJoinVia } from './pluginTestplaceStore'
 import {
   forgetKeptNativeBackendDataSource,
   inspectNativeBackendData,
@@ -214,6 +222,8 @@ interface InstalledSummary {
   source?: PluginSource
   /** Registry-signed expiry; present only when `source` is `testplace`. */
   expiresAt?: string
+  /** How the user joined that test, when recorded; `source` testplace only. */
+  testplaceVia?: TestplaceJoinVia
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -227,6 +237,29 @@ interface InstalledSummary {
   getsPrereleases?: boolean
   /** The user's "Disabled" switch; present only on rows it applies to. */
   disabled?: boolean
+}
+
+/** One test the user joined (plugins:testplaceList). */
+export interface TestplaceListing {
+  id: string
+  namespace: string
+  name: string
+  displayName: string | null
+  description: string | null
+  publisher: string
+  /** How the user joined, when this App recorded it. */
+  via: TestplaceJoinVia | null
+  versions: Array<{ version: string; target: string; expiresAt: string | null; installable: boolean; compatible: boolean | null }>
+}
+
+/** D3: an installed Testplace build stopped because it expired. */
+export interface ExpiredTestplaceBuild {
+  id: string
+  version: string | null
+  expiresAt: string | null
+  /** Present when it can be kept: it fails on its expiry alone. */
+  artifactDigest?: string
+  canKeep: boolean
 }
 
 export interface FactoryPackageSummary {
@@ -727,12 +760,17 @@ export function registerPluginIpc(
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
     source?: PluginSource
     packageVersion?: string
-  }): { source?: PluginSource; expiresAt?: string } => {
+  }): { source?: PluginSource; expiresAt?: string; testplaceVia?: TestplaceJoinVia } => {
     const source = installedSource(summary, activeRegistryChannel(summary))
     if (!source) return {}
     const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined
     const expiresAt = dir === undefined ? undefined : readRegistryReceiptExpiresAt(dir)
-    return expiresAt === undefined ? { source } : { source, expiresAt }
+    const via = source === 'testplace' ? testplaceStore.joinVia(summary.id) : null
+    return {
+      source,
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
+      ...(via ? { testplaceVia: via } : {}),
+    }
   }
   // Plan B D2 (D-d): what an update changes, computed by the Host from the
   // active version's installed manifest and the verified package's own
@@ -774,6 +812,10 @@ export function registerPluginIpc(
   }
   const hostAppVersion = options.appVersion ?? ((): string => app.getVersion())
   const prereleases = new PluginPrereleaseStore(pluginsRoot)
+  // Testplace joins and kept expired builds (D3).
+  const testplaceStore = new PluginTestplaceStore(pluginsRoot)
+  const keepsExpiredTestplace = (packageId: string, artifactDigest: string): boolean =>
+    testplaceStore.keepsExpired(packageId, artifactDigest)
   // D-f: the scan verified at install, per version; a record for the rescan
   // notice only. Its failures never fail an install or a removal.
   const installScans = new PluginInstallScanStore(pluginsRoot)
@@ -1022,17 +1064,18 @@ export function registerPluginIpc(
     return manager.listContributionCatalog().map(({ iconFile, ...entry }) => {
       const icon = iconFile ? options.resolveContributionIcon?.(iconFile) ?? null : null
       const pkg = installed.get(entry.pluginId)
-      // Only the selected package's own record may label its views.
-      const source = pkg && pkg.packageVersion === (entry.packageVersion ?? undefined)
-        ? installedSource(pkg, activeRegistryChannel(pkg))
-        : undefined
+      // Only the selected package's own record may label its views. A test
+      // build also carries its signed expiry and how the user joined (W5b).
+      const fields = pkg && pkg.packageVersion === (entry.packageVersion ?? undefined)
+        ? sourceFields(pkg)
+        : {}
       return {
         ...entry,
         icon: icon?.url ?? null,
         // A silhouette is painted in the current text colour by the renderer,
         // so it follows the theme the way the built-in SVG icons do.
         iconMonochrome: icon?.monochrome ?? false,
-        ...(source ? { source } : {}),
+        ...fields,
       }
     })
   })
@@ -1419,6 +1462,8 @@ export function registerPluginIpc(
           const res = await fetch(
             `${base}/api/extensions/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
           )
+          // A Testplace build is not listed publicly until it is promoted.
+          if (res.status === 404 && activeRegistryChannel(pkg) === 'testplace') return null
           if (!res.ok) return { failed: pkg.id, reason: `HTTP ${res.status}` }
           const detail = (await res.json()) as {
             versions?: Array<{
@@ -1722,17 +1767,138 @@ export function registerPluginIpc(
 
   /** Download and verify one Registry package (digest, Registry signature,
    *  trust metadata, target and engine) without writing anything. */
+  // Testplace (DX report §9.5, plan mcp-navide-0-2-27 W5b). A tester's calls
+  // carry the user's Navide Cloud account, which the Host keeps
+  // (developerAccount.ts): the renderer never holds the token. Registry
+  // refusals reach the window as `TESTPLACE_ERROR [code]: message`.
+  const testplaceRegistryCall = async <T = unknown>(
+    path: string,
+    init: { method?: string; json?: unknown } = {},
+  ): Promise<T> => {
+    const res = await developerRegistryFetch<T>(path, init, 'account')
+    if (res.status >= 200 && res.status < 300) return res.body
+    const { code, message } = registryError(res.body)
+    throw new Error(`TESTPLACE_ERROR [${code ?? `HTTP_${res.status}`}]: ${message}`)
+  }
+  const testplaceInstallerDeps = (namespace: string, name: string, version: string, target: string) => ({
+    ...defaultInstallerDeps,
+    async download() {
+      const query = target && target !== 'universal' ? `?target=${encodeURIComponent(target)}` : ''
+      const res = await developerRegistryDownload(
+        `/api/testplace/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/${encodeURIComponent(version)}/download${query}`,
+        'account',
+      )
+      if (res.status !== 200) throw new InstallError(`download failed: HTTP ${res.status}`)
+      return { bytes: new Uint8Array(res.body), digestHeader: res.digest }
+    },
+  })
+
+  /** The tests the user joined, newest version first, as the Testplace page shows them. */
+  ipcMain.handle('plugins:testplaceList', async (event): Promise<TestplaceListing[]> => {
+    assertAuthorized(event)
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const hostTarget = marketplace.trust.expectedTarget ?? currentPluginHostTarget()
+    const appVersion = hostAppVersion()
+    const body = await testplaceRegistryCall<{ items?: Array<Record<string, unknown>> }>('/api/testplace')
+    return (body.items ?? []).flatMap((item) => {
+      if (typeof item.namespace !== 'string' || typeof item.name !== 'string') return []
+      const id = `${item.namespace}.${item.name}`
+      const versions = Array.isArray(item.versions) ? (item.versions as Array<Record<string, unknown>>) : []
+      return [{
+        id,
+        namespace: item.namespace,
+        name: item.name,
+        displayName: typeof item.display_name === 'string' ? item.display_name : null,
+        description: typeof item.description === 'string' ? item.description : null,
+        publisher: typeof item.publisher === 'string' ? item.publisher : item.namespace,
+        via: testplaceStore.joinVia(id),
+        versions: versions.flatMap((v) => typeof v.version === 'string' ? [{
+          version: v.version,
+          target: typeof v.target === 'string' ? v.target : 'universal',
+          expiresAt: typeof v.expires_at === 'string' ? v.expires_at : null,
+          installable: isPluginTargetCompatible(v.target, hostTarget),
+          compatible: isEngineCompatible(v.engines_navide, appVersion),
+        }] : []),
+      }]
+    })
+  })
+
+  /** Join with what the user pasted: a personal invite (`tpi_`) or a public test code (`tpc_`). */
+  ipcMain.handle('plugins:testplaceJoin', async (event, args: { code?: unknown } | null): Promise<{ id: string }> => {
+    assertAuthorized(event)
+    const token = typeof args?.code === 'string' ? /\btp[ic]_[A-Za-z0-9_-]+/.exec(args.code)?.[0] : undefined
+    const via = token ? testplaceJoinVia(token) : null
+    if (!token || !via) throw new Error('TESTPLACE_ERROR [BAD_CODE]: not a Testplace invite or test code')
+    const joined = await testplaceRegistryCall<{ namespace?: unknown; name?: unknown }>(
+      '/api/testplace/join',
+      { method: 'POST', json: { token } },
+    )
+    const id = `${joined.namespace}.${joined.name}`
+    if (!isValidManifestV2PluginId(id)) throw new Error('TESTPLACE_ERROR [BAD_RESPONSE]: the Registry did not name a Navide plugin')
+    testplaceStore.recordJoin(id, via)
+    return { id }
+  })
+
+  /** Leave a test. An installed build stays installed; it just stops getting new test builds. */
+  ipcMain.handle('plugins:testplaceLeave', async (event, args: { id?: unknown } | null): Promise<{ ok: true }> => {
+    assertAuthorized(event)
+    if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+    const dot = args.id.indexOf('.')
+    await testplaceRegistryCall(
+      `/api/testplace/${encodeURIComponent(args.id.slice(0, dot))}/${encodeURIComponent(args.id.slice(dot + 1))}/leave`,
+      { method: 'POST' },
+    )
+    testplaceStore.forgetJoin(args.id)
+    return { ok: true }
+  })
+
+  /** The invite form's Send (the user's, never an agent's): one invitation per
+   *  label. The join tokens go back to that form only; nothing here logs them. */
+  ipcMain.handle(
+    'plugins:testplaceInvite',
+    async (event, args: { id?: unknown; labels?: unknown } | null): Promise<DeveloperCallResult> => {
+      assertAuthorized(event)
+      if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+      const labels = args?.labels
+      if (
+        !Array.isArray(labels) ||
+        labels.length < 1 ||
+        labels.length > 100 ||
+        labels.some((label) => typeof label !== 'string' || !label.trim() || label.length > 120)
+      ) {
+        throw new Error('invitees must be 1-100 non-empty labels of up to 120 characters')
+      }
+      const dot = args.id.indexOf('.')
+      const res = await developerRegistryFetch(
+        `/api/testplace/${encodeURIComponent(args.id.slice(0, dot))}/${encodeURIComponent(args.id.slice(dot + 1))}/invites`,
+        { method: 'POST', json: { labels: labels.map((label: string) => label.trim()) } },
+        'account',
+      )
+      if (res.status === 201 || res.status === 200) return { ok: true, status: res.status, body: res.body }
+      const { code, message } = registryError(res.body)
+      return { ok: false, status: res.status, code, message }
+    }
+  )
+
   const verifyRegistryPackage = async (args: {
     namespace: string
     name: string
     version?: string
+    /** A Testplace build: detail and download use the user's Navide Cloud
+     *  account (held by the Host), and only an invited tester gets either. */
+    testplace?: boolean
   }): Promise<PreparedInstall & { registryFacts: Record<string, unknown> | null }> => {
     const marketplace = resolveConfiguredMarketplace(trust)
     const base = marketplace.registryUrl.replace(/\/+$/, '')
-    const detailRes = await fetch(`${base}/api/extensions/${args.namespace}/${args.name}`)
-    if (!detailRes.ok) throw new Error(`extension not found: HTTP ${detailRes.status}`)
-    const detail = (await detailRes.json()) as {
-      latest_version: string | null
+    const detail = (args.testplace
+      ? await testplaceRegistryCall(`/api/testplace/${args.namespace}/${args.name}`)
+      : await (async () => {
+          const detailRes = await fetch(`${base}/api/extensions/${args.namespace}/${args.name}`)
+          if (!detailRes.ok) throw new Error(`extension not found: HTTP ${detailRes.status}`)
+          return detailRes.json()
+        })()) as {
+      /** Absent on a Testplace detail, whose versions come newest first. */
+      latest_version?: string | null
       trust_metadata: RegistryTrustMetadata
       trust_metadata_signature: string
       versions: Array<{
@@ -1751,7 +1917,7 @@ export function registerPluginIpc(
         registry?: unknown
       }>
     }
-    const wanted = args.version ?? detail.latest_version
+    const wanted = args.version ?? (args.testplace ? detail.versions[0]?.version : detail.latest_version)
     const artifacts = detail.versions.filter((v) => v.version === wanted && !v.yanked)
     if (artifacts.length === 0) throw new Error(`no installable version ${wanted ?? '(latest)'} found`)
     // One row per target artifact: take this Host's platform build, else the
@@ -1789,7 +1955,7 @@ export function registerPluginIpc(
       disclosureSignature: versionRow.disclosure_signature,
       scan: versionRow.scan,
       provenance: 'official-registry',
-    }, undefined, marketplace.trust)
+    }, args.testplace ? testplaceInstallerDeps(args.namespace, args.name, versionRow.version, versionRow.target) : undefined, marketplace.trust)
     assertEngineCompatible(result.id, result.version, result.manifest, appVersion)
     // The `registry` facts are unsigned Registry information (contract 3.4).
     return { ...result, registryFacts: jsonObjectOrNull(versionRow.registry) }
@@ -1797,9 +1963,14 @@ export function registerPluginIpc(
 
   ipcMain.handle(
     'plugins:prepareInstall',
-    async (event, args: { namespace: string; name: string; version?: string }) => {
+    async (event, args: { namespace: string; name: string; version?: string; testplace?: boolean }) => {
       assertAuthorized(event)
-      const result = await verifyRegistryPackage(args)
+      const result = await verifyRegistryPackage({
+        namespace: args.namespace,
+        name: args.name,
+        ...(args.version !== undefined ? { version: args.version } : {}),
+        ...(args.testplace === true ? { testplace: true } : {}),
+      })
       assertNoDeveloperFolder(result.id)
       // A pack is never installed as a package: its members are installed one
       // by one through plugins:preparePack and the ordinary install flow.
@@ -1840,6 +2011,12 @@ export function registerPluginIpc(
         scan: result.scan ?? null,
         registry: result.registryFacts,
         ...(source ? { source } : {}),
+        ...(source === 'testplace' && result.registryEvidence?.receipt.envelope.expiresAt
+          ? { expiresAt: result.registryEvidence.receipt.envelope.expiresAt }
+          : {}),
+        ...(source === 'testplace' && testplaceStore.joinVia(result.id)
+          ? { testplaceVia: testplaceStore.joinVia(result.id)! }
+          : {}),
         // D7: a Marketplace install over a local one asks first.
         ...(() => {
           const local = installedLocalPackage(result.id)
@@ -2584,6 +2761,171 @@ export function registerPluginIpc(
         return []
       }
     })
+  })
+
+  // D3 (DX report §9.5): an expired Testplace build is stopped, never
+  // silently dropped. Its files, storage and grants stay; the Extensions page
+  // lists it with three choices: install the Marketplace version, keep using
+  // it (marked expired), or remove it. Keeping is offered only when the build
+  // fails on its expiry alone, so a takedown is never kept.
+  const currentRegistryTrustContext = (keepAnyExpired = false) => {
+    const marketplace = resolveConfiguredMarketplace(trust)
+    return {
+      pinnedRootKey: marketplace.trust.pinnedRegistryRootKey,
+      snapshot: readRegistryTrustSnapshot(pluginsRoot),
+      registryAuthority: marketplace.trust.registryAuthority,
+      officialRegistryUrl: marketplace.trust.officialRegistryUrl,
+      expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
+      now: marketplace.trust.now,
+      keepsExpiredTestplace: keepAnyExpired ? () => true : keepsExpiredTestplace,
+    }
+  }
+  const expiredTestplaceBuilds = (): ExpiredTestplaceBuild[] => {
+    const loaded = new Set(manager.listInstalledPackages().map((pkg) => pkg.id))
+    return discoverInstalledRegistryPackageIds(pluginsRoot).flatMap((id) => {
+      if (loaded.has(id)) return []
+      try {
+        const active = lifecycleSelector.read(id)?.active
+        const dir = active ? lifecycleSelector.packageDir(id, active) : join(pluginsRoot, id)
+        const decision = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext())
+        if (decision.action !== 'quarantine' || decision.code !== 'TESTPLACE_EXPIRED') return []
+        const expiresAt = readRegistryReceiptExpiresAt(dir)
+        const receipt = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as Record<string, unknown>
+        const kept = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext(true))
+        return [{
+          id,
+          version: typeof receipt.version === 'string' ? receipt.version : null,
+          expiresAt: expiresAt ?? null,
+          ...(kept.action === 'allow' ? { artifactDigest: kept.artifactDigest } : {}),
+          canKeep: kept.action === 'allow',
+        }]
+      } catch {
+        return []
+      }
+    })
+  }
+
+  // DX report §9.5: a Testplace build the Registry promoted keeps its bytes,
+  // so testers do not reinstall. When the public listing has this exact
+  // version, target and digest under a non-testplace envelope that verifies,
+  // only the receipt is swapped (pluginReceiptPromotion.ts): a staged copy
+  // with the new receipt, verified, then renamed into place. The selection,
+  // grant and stored data stay; the source reads marketplace from then on.
+  // Answers whether it adopted the release; never installs anything else.
+  const adoptTestplaceRelease = async (id: string, reload: boolean): Promise<boolean> => {
+    const active = lifecycleSelector.read(id)?.active
+    if (!active || active.layout === 'legacy-mutable') return false
+    const dir = lifecycleSelector.packageDir(id, active)
+    if (readRegistryReceiptChannel(dir) !== 'testplace') return false
+    const current = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as RegistryInstallReceipt
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const base = marketplace.registryUrl.replace(/\/+$/, '')
+    const dot = id.indexOf('.')
+    const res = await fetch(`${base}/api/extensions/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}`)
+    if (!res.ok) return false
+    const detail = (await res.json()) as {
+      trust_metadata: RegistryTrustMetadata
+      trust_metadata_signature: string
+      versions?: Array<{ version?: unknown; target?: unknown; package_digest?: unknown; yanked?: unknown; registry_envelope?: RegistryPackageEnvelope; registry_signature?: string }>
+    }
+    const row = (detail.versions ?? []).find((v) =>
+      v.version === current.version && v.target === current.target && v.package_digest === current.artifactDigest && v.yanked !== true)
+    const envelope = row?.registry_envelope
+    if (!row || !envelope || !row.registry_signature || envelope.channel === 'testplace') return false
+    verifyRegistryPackageTrust({
+      envelope,
+      envelopeSignature: row.registry_signature,
+      trustMetadata: detail.trust_metadata,
+      trustMetadataSignature: detail.trust_metadata_signature,
+      pinnedRootKey: marketplace.trust.pinnedRegistryRootKey,
+      expected: {
+        artifactDigest: current.artifactDigest,
+        packageId: current.packageId,
+        version: current.version,
+        target: current.target,
+        publisherId: current.publisherId,
+      },
+      expectedHostTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
+      now: marketplace.trust.now,
+    })
+    const snapshot = { schemaVersion: 1 as const, metadata: detail.trust_metadata, metadataSignature: detail.trust_metadata_signature }
+    let stored: Uint8Array | null = null
+    try {
+      stored = new Uint8Array(readFileSync(join(pluginsRoot, REGISTRY_TRUST_SNAPSHOT_NAME)))
+    } catch {
+      stored = null
+    }
+    assertRegistryTrustSnapshotDoesNotRollback(stored, snapshot)
+    writeRegistryTrustSnapshot(pluginsRoot, snapshot)
+    swapRegistryReceipt(
+      pluginsRoot,
+      dir,
+      id,
+      registryReceiptFromEvidence({
+        packageId: current.packageId,
+        version: current.version,
+        publisherId: current.publisherId,
+        target: current.target,
+        artifactDigest: current.artifactDigest,
+        envelope,
+        envelopeSignature: row.registry_signature,
+        registryAuthority: current.registryAuthority,
+      }),
+      (staged) => verifyInstalledRegistryPackage(staged, id, currentRegistryTrustContext()),
+    )
+    testplaceStore.forget(id)
+    if (reload && !manager.listInstalledPackages().some((pkg) => pkg.id === id)) {
+      const reloaded = manager.loadInstalledPlugins(
+        pluginsRoot,
+        { provenance: 'official-registry', trust: currentRegistryTrustContext() },
+        new Set([id])
+      )
+      for (const activation of reloaded.activationCatalog) {
+        options.onActivationChange?.({ pluginId: activation.pluginId, activation })
+      }
+    }
+    return true
+  }
+
+  /** "Install the Navide Marketplace version" first tries this: no download, no new consent. */
+  ipcMain.handle('plugins:adoptTestplaceRelease', async (event, args: { id?: unknown } | null): Promise<{ adopted: boolean }> => {
+    assertAuthorized(event)
+    if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+    if (activeTransactions.has(args.id)) throw new Error(`plugin transaction already in progress for ${args.id}`)
+    activeTransactions.add(args.id)
+    try {
+      return { adopted: await adoptTestplaceRelease(args.id, true) }
+    } finally {
+      activeTransactions.delete(args.id)
+    }
+  })
+
+  ipcMain.handle('plugins:expiredTestplace', (event): ExpiredTestplaceBuild[] => {
+    assertAuthorized(event)
+    return expiredTestplaceBuilds()
+  })
+
+  // "Keep using (expired)": the user's choice for this exact artifact. It is
+  // loaded again at once; an update or a new install of the id asks again.
+  ipcMain.handle('plugins:keepExpiredTestplace', (event, args: { id?: unknown } | null): { ok: true } => {
+    assertAuthorized(event)
+    if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+    const id = args.id
+    const build = expiredTestplaceBuilds().find((item) => item.id === id)
+    if (!build) throw new Error(`${id} is not an expired Testplace build`)
+    if (!build.canKeep || !build.artifactDigest) {
+      throw new Error(`${id} cannot be kept: it was taken down or no longer verifies`)
+    }
+    testplaceStore.keepExpired(id, build.artifactDigest, build.expiresAt ?? '')
+    const reloaded = manager.loadInstalledPlugins(
+      pluginsRoot,
+      { provenance: 'official-registry', trust: currentRegistryTrustContext() },
+      new Set([id])
+    )
+    for (const activation of reloaded.activationCatalog) {
+      options.onActivationChange?.({ pluginId: activation.pluginId, activation })
+    }
+    return { ok: true }
   })
 
   async function loadDeveloperFolders(): Promise<void> {
@@ -3353,6 +3695,7 @@ export function registerPluginIpc(
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
       forgetLocalTrustRecords(pluginsRoot, id)
+      testplaceStore.forget(id)
       // Review LOW-1 on #428: removing a developer folder's plugin (also by an
       // agent's request) forgets its consent, so the next start does not load
       // it again. The folder itself is never touched.
@@ -3642,6 +3985,16 @@ export function registerPluginIpc(
         })
       }
       if (packageIds.length === 0) return { decisions, activationCatalog: [] }
+      // A promoted Testplace build takes its new receipt before the trust
+      // check below, which then loads it again if it had expired (W5b).
+      for (const packageId of packageIds) {
+        if (activeTransactions.has(packageId)) continue
+        try {
+          await adoptTestplaceRelease(packageId, false)
+        } catch (error) {
+          console.warn(`[plugins] promoted Testplace build of ${packageId} not adopted: ${errorText(error)}`)
+        }
+      }
 
       const marketplace = resolveConfiguredMarketplace(trust)
       const base = marketplace.registryUrl.replace(/\/+$/, '')
@@ -3654,6 +4007,7 @@ export function registerPluginIpc(
           officialRegistryUrl: marketplace.trust.officialRegistryUrl,
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
+          keepsExpiredTestplace,
         }, new Set([...packageIds, ...activeRegistryPackages]))
         for (const decision of refreshed) {
           if (decision.action === 'quarantine') {
@@ -3716,6 +4070,7 @@ export function registerPluginIpc(
           officialRegistryUrl: marketplace.trust.officialRegistryUrl,
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
+          keepsExpiredTestplace,
         }
         const activeBeforeRefresh = new Set(
           manager
