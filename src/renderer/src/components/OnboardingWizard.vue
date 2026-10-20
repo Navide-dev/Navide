@@ -466,7 +466,7 @@ async function saveComplete(): Promise<boolean> {
                   <input
                     v-model="customModel"
                     class="ob-input"
-                    placeholder="e.g. codellama:7b, gemma3:4b"
+                    :placeholder="t('onboard.custom-model-placeholder')"
                     spellcheck="false"
                   />
                 </label>

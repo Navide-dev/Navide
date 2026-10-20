@@ -181,7 +181,7 @@ onBeforeUnmount(() => {
       <PluginSourceBadge :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" />
     </div>
     <div v-if="error" class="plugin-region-host__error" role="status">
-      {{ contribution.title }} unavailable
+      {{ $t('label.region-unavailable', { title: contribution.title }) }}
     </div>
     <webview
       v-else-if="src"

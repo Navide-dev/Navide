@@ -120,7 +120,7 @@ onUnmounted(() => {
       <div class="comp-card nv-modal-shell nv-modal-shell--compact">
         <div class="comp-emoji">🎉</div>
         <h1 class="comp-title">{{ $t('label.pipeline-completed-modal') }}</h1>
-        <p class="comp-sub">All {{ totalStages }} stages finished successfully</p>
+        <p class="comp-sub">{{ $t('label.all-stages-finished', { count: totalStages }) }}</p>
         <p class="comp-sub2">{{ $t('hint.completion-modal-body') }}</p>
         <button class="comp-btn nv-btn" @click="emit('close')">{{ $t('action.completion-close') }}</button>
       </div>

@@ -1218,7 +1218,8 @@
       "unstage-folder": "Unstage folder",
       "discard-folder": "Discard folder",
       "file-history-blame": "File history + blame",
-      "open-diff-in-editor": "Open diff in editor"
+      "open-diff-in-editor": "Open diff in editor",
+    "resume-from-stage": "▶ Resume from Stage {n}"
   },
   "share": {
     "notice": {
@@ -6636,7 +6637,8 @@
       "catalog-search": "Search MCP servers by name",
       "catalog-hint": "This catalog lists only <strong>\"Orchestrator context-reading\"</strong> MCPs — tools that read workspace / docs / external service data and inject it into kickoff prompts to ground agent knowledge. Execution actions (tests, browser automation, etc.) are handled by the CLI agents themselves.",
       "catalog-requires-env": "Requires env vars: {vars}",
-      "catalog-empty": "No matching MCP servers found"
+      "catalog-empty": "No matching MCP servers found",
+      "header-name-placeholder": "Header"
     },
     "credentials": {
       "title": "Credentials & keys",
@@ -8611,7 +8613,47 @@
       "backend-stop": "Stop",
       "pipeline-pill-stage": "Stage {current} / {total}",
       "pipeline-pill-completed": "completed",
-      "pipeline-pill-aborted": "aborted"
+      "pipeline-pill-aborted": "aborted",
+    "legacy-recovery": "Legacy recovery",
+    "pipeline-runs-done": "{count} done",
+    "resume-existing-pipeline": "↻ Resume existing pipeline",
+    "resume-stages-done": "{done}/{total} stages done",
+    "focus-pane": "Focus pane",
+    "manager-badge": "🎯 Mgr",
+    "docked": "Docked",
+    "pane-origin-stage": "stage {id}",
+    "pane-origin-manual": "manual",
+    "session-id-tooltip": "CLI session id — used to resume this agent's memory on restart",
+    "role-system-prompt": "{role} system prompt",
+    "project-completed": "✓ Project completed",
+    "all-stages-done": "All {count} stages done · {time}",
+    "refresh-ollama-tooltip": "Refresh Ollama health + model list",
+    "retry-connection-tooltip": "Retry connection",
+    "minimized-sidebar": "sidebar",
+    "loop-badge": "∞ Loop",
+    "review-model-placeholder": "Model name (e.g. llama-3.3-70b)",
+    "review-working-changes": "Working Changes",
+    "current-branch-suffix": "{branch} (current)",
+    "review-dismissed": "Dismissed",
+    "review-general-finding": "(general)",
+    "review-ask-ai-fix": "Ask AI to fix",
+    "review-restore-finding": "Restore",
+    "review-no-findings": "No findings — looks good!",
+    "review-no-findings-filtered": "No findings to show.",
+    "question-is-asking": "is asking",
+    "question-dismiss-tooltip": "Dismiss without answering",
+    "question-auto-answering": "🤖 Auto-answering via LLM…",
+    "question-auto-answer": "🤖 Auto-answer: {text}",
+    "question-auto-mode": "🤖 Auto mode — submitting automatically",
+    "question-answer-all": "Answer all {count} question(s) to send.",
+    "question-send-hint": "{key} to send",
+    "question-send-all": "Send all {count} answers",
+    "question-send-one": "Send answer",
+    "console": "Console",
+    "drag-resize-log": "Drag to resize log panel",
+    "filter-by-type": "Filter by type",
+    "all-stages-finished": "All {count} stages finished successfully",
+    "region-unavailable": "{title} unavailable"
   },
   "layout": {
     "expand": "Expand panel",
@@ -9179,8 +9221,13 @@
     "info": {
       "runtime": "Runtime",
       "paths": "Paths",
-      "open": "Open"
-    }
+      "open": "Open",
+      "app": "App",
+      "backend": "Backend",
+      "started": "Started",
+      "shell": "Shell"
+    },
+    "backend-status": "backend {status}"
   },
   "orphans": {
     "title": "Leftover CLI processes",
@@ -9652,7 +9699,8 @@
     "run-by-hand": "You can also run this yourself in a terminal: {cmd}",
     "installed-not-detected": "The command finished, but {label} is still not detected. It may need a new shell session, or it landed outside PATH.",
     "installed-still-outdated": "The install finished, but the {label} found on PATH is still the old {version}. The new one may sit behind the system copy — move its directory ahead on PATH, then re-detect. A corrected PATH order takes effect on re-detect, no restart needed.",
-    "installed-still-outdated-python": "The install finished, but the {label} found on PATH is still the old {version}. Fix it either way, then re-detect: run brew link --overwrite python{'@'}3.x (with the version you installed), or add eval \"$(/opt/homebrew/bin/brew shellenv)\" to ~/.zprofile so Homebrew comes before the system copy."
+    "installed-still-outdated-python": "The install finished, but the {label} found on PATH is still the old {version}. Fix it either way, then re-detect: run brew link --overwrite python{'@'}3.x (with the version you installed), or add eval \"$(/opt/homebrew/bin/brew shellenv)\" to ~/.zprofile so Homebrew comes before the system copy.",
+    "custom-model-placeholder": "e.g. codellama:7b, gemma3:4b"
   },
   "executions": {
     "last-scan": "Last scan {time}",
@@ -11060,7 +11108,9 @@
       "ledger-open-failed": "Could not open the ledger plan",
       "pending-catch-up": "A missed run is waiting for this workspace to be opened.",
       "system-pane": "✦ system",
-      "system-pane-title": "Opened by self-evolution"
+      "system-pane-title": "Opened by self-evolution",
+      "run-tokens": "{tokens} token",
+      "run-pane": "pane “{name}”"
     },
     "field": {
       "time": "Time",
@@ -11095,7 +11145,8 @@
       "rules-hide": "Hide",
       "extra-placeholder": "Extra instructions (this workspace only)…",
       "ledger": "Ledger",
-      "ledger-placeholder": "Plan path, e.g. .agent-team/plans/xxx.html; empty = none"
+      "ledger-placeholder": "Plan path, e.g. .agent-team/plans/xxx.html; empty = none",
+      "effort-option": "effort: {effort}"
     },
     "error": {
       "at": "Use HH:MM",
@@ -11117,7 +11168,8 @@
       "date": "Date",
       "result": "Result",
       "fixes": "Fixes",
-      "proposals": "Proposals"
+      "proposals": "Proposals",
+      "tokens": "Tokens"
     },
     "reason": {
       "busy": "A run is already in progress for this workspace",

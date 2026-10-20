@@ -1218,7 +1218,8 @@
     "unstage-folder": "フォルダーのステージングを解除",
     "discard-folder": "フォルダー内の変更を破棄",
     "file-history-blame": "ファイル履歴 + blame",
-    "open-diff-in-editor": "差分をエディターで開く"
+    "open-diff-in-editor": "差分をエディターで開く",
+    "resume-from-stage": "▶ ステージ {n} から再開"
   },
   "share": {
     "notice": {
@@ -6636,7 +6637,8 @@
       "catalog-search": "MCP サーバーを名前で検索",
       "catalog-hint": "このカタログには、<strong>「オーケストレーターのコンテキスト読み取り用」</strong> MCP のみを掲載しています。ワークスペース、ドキュメント、外部サービスのデータを読み取り、開始時のプロンプトに組み込むことで、エージェントの知識に根拠を与えるツールです。テストやブラウザー自動操作などの実行処理は、CLI エージェント自身が担当します。",
       "catalog-requires-env": "必要な環境変数：{vars}",
-      "catalog-empty": "一致する MCP サーバーが見つかりません"
+      "catalog-empty": "一致する MCP サーバーが見つかりません",
+      "header-name-placeholder": "ヘッダー名"
     },
     "credentials": {
       "title": "認証情報とキー",
@@ -8611,7 +8613,47 @@
     "backend-stop": "停止",
     "pipeline-pill-stage": "ステージ {current} / {total}",
     "pipeline-pill-completed": "完了",
-    "pipeline-pill-aborted": "中止"
+    "pipeline-pill-aborted": "中止",
+    "legacy-recovery": "旧版で復旧",
+    "pipeline-runs-done": "{count} 回完了",
+    "resume-existing-pipeline": "↻ 既存のパイプラインを再開",
+    "resume-stages-done": "{done}/{total} ステージ完了",
+    "focus-pane": "このペインにフォーカス",
+    "manager-badge": "🎯 マネージャー",
+    "docked": "収納済み",
+    "pane-origin-stage": "ステージ {id}",
+    "pane-origin-manual": "手動",
+    "session-id-tooltip": "CLI セッション ID — 再起動時にこのエージェントの記憶を引き継ぐために使います",
+    "role-system-prompt": "{role} のシステムプロンプト",
+    "project-completed": "✓ プロジェクト完了",
+    "all-stages-done": "全 {count} ステージ完了 · {time}",
+    "refresh-ollama-tooltip": "Ollama の状態とモデル一覧を再取得",
+    "retry-connection-tooltip": "接続を再試行",
+    "minimized-sidebar": "サイドバー",
+    "loop-badge": "∞ ループ",
+    "review-model-placeholder": "モデル名（例：llama-3.3-70b）",
+    "review-working-changes": "作業中の変更",
+    "current-branch-suffix": "{branch}（現在）",
+    "review-dismissed": "無視済み",
+    "review-general-finding": "（全般）",
+    "review-ask-ai-fix": "AI に修正を依頼",
+    "review-restore-finding": "元に戻す",
+    "review-no-findings": "指摘はありません。問題なさそうです！",
+    "review-no-findings-filtered": "表示する指摘はありません。",
+    "question-is-asking": "が質問しています",
+    "question-dismiss-tooltip": "回答せずに閉じる",
+    "question-auto-answering": "🤖 LLM で自動回答中…",
+    "question-auto-answer": "🤖 自動回答：{text}",
+    "question-auto-mode": "🤖 自動モード — 自動的に送信します",
+    "question-answer-all": "送信するには {count} 件の質問すべてに回答してください。",
+    "question-send-hint": "{key} で送信",
+    "question-send-all": "{count} 件の回答をすべて送信",
+    "question-send-one": "回答を送信",
+    "console": "コンソール",
+    "drag-resize-log": "ドラッグしてログパネルのサイズを変更",
+    "filter-by-type": "種類で絞り込み",
+    "all-stages-finished": "全 {count} ステージが正常に完了しました",
+    "region-unavailable": "{title} は利用できません"
   },
   "layout": {
     "expand": "パネルを展開",
@@ -9179,8 +9221,13 @@
     "info": {
       "runtime": "ランタイム",
       "paths": "パス",
-      "open": "開く"
-    }
+      "open": "開く",
+      "app": "アプリ",
+      "backend": "バックエンド",
+      "started": "起動時刻",
+      "shell": "シェル"
+    },
+    "backend-status": "バックエンド {status}"
   },
   "orphans": {
     "title": "残存する CLI プロセス",
@@ -9652,7 +9699,8 @@
     "run-by-hand": "ターミナルで自分で実行することもできます：{cmd}",
     "installed-not-detected": "コマンドは完了しましたが、{label} はまだ検出されていません。新しいシェルセッションが必要か、PATH 外にインストールされた可能性があります。",
     "installed-still-outdated": "インストールは完了しましたが、PATH 上の {label} は古い {version} のままです。システム側のコピーが優先されている可能性があります。そのディレクトリを PATH の前方に移してから、再検出してください。PATH の順序を直せば、再起動しなくても再検出で反映されます。",
-    "installed-still-outdated-python": "インストールは完了しましたが、PATH 上の {label} は古い {version} のままです。次のどちらかで直してから再検出してください：brew link --overwrite python{'@'}3.x を実行する（インストールしたバージョンに置き換えてください）、または ~/.zprofile に eval \"$(/opt/homebrew/bin/brew shellenv)\" を追加して Homebrew をシステム側より前にする。"
+    "installed-still-outdated-python": "インストールは完了しましたが、PATH 上の {label} は古い {version} のままです。次のどちらかで直してから再検出してください：brew link --overwrite python{'@'}3.x を実行する（インストールしたバージョンに置き換えてください）、または ~/.zprofile に eval \"$(/opt/homebrew/bin/brew shellenv)\" を追加して Homebrew をシステム側より前にする。",
+    "custom-model-placeholder": "例：codellama:7b、gemma3:4b"
   },
   "executions": {
     "last-scan": "最終スキャン {time}",
@@ -11060,7 +11108,9 @@
       "ledger-open-failed": "台帳の計画を開けませんでした",
       "pending-catch-up": "逃した実行が 1 回、この workspace が開かれるのを待っています。",
       "system-pane": "✦ システム起動",
-      "system-pane-title": "自己改善が開いた pane です"
+      "system-pane-title": "自己改善が開いた pane です",
+      "run-tokens": "{tokens} トークン",
+      "run-pane": "ペイン「{name}」"
     },
     "field": {
       "time": "実行時刻",
@@ -11095,7 +11145,8 @@
       "rules-hide": "閉じる",
       "extra-placeholder": "追加の指示（この workspace のみ）…",
       "ledger": "台帳",
-      "ledger-placeholder": "plan の相対パス（例：.agent-team/plans/xxx.html）。空欄＝なし"
+      "ledger-placeholder": "plan の相対パス（例：.agent-team/plans/xxx.html）。空欄＝なし",
+      "effort-option": "推論の強度：{effort}"
     },
     "error": {
       "at": "HH:MM 形式で入力してください",
@@ -11117,7 +11168,8 @@
       "date": "日付",
       "result": "結果",
       "fixes": "修正",
-      "proposals": "提案"
+      "proposals": "提案",
+      "tokens": "トークン"
     },
     "reason": {
       "busy": "この workspace ではすでに実行中です",

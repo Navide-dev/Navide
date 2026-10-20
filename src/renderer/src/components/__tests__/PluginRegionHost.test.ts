@@ -157,10 +157,12 @@ describe('PluginRegionHost', () => {
   })
 
   it('shows the unavailable state when the Host refuses to prepare', async () => {
+    i18n.global.locale.value = 'en-US'
     const prepare = vi.fn(async () => ({ ok: false, error: 'grant is missing' }))
     stubPlugins(prepare)
     const wrapper = mount(PluginRegionHost, {
       props: { contribution, workspacePath: '/ws', visible: true },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 
