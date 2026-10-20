@@ -111,6 +111,23 @@ describe('CliAgentsHelp', () => {
     expect(unexpectedWarnings(warn)).toEqual([])
   })
 
+  // review-524 MEDIUM-1: Goose has no bypass flag because it approves tools by
+  // itself by default; its row must not read like the CLIs that ask first.
+  it.each([
+    ['en-US', 'GOOSE_MODE=auto', "Navide's Guard does not cover Goose"],
+    ['zh-TW', 'GOOSE_MODE=auto', 'Navide 的 Guard'],
+    ['ja-JP', 'GOOSE_MODE=auto', 'Navide の Guard'],
+  ] as const)('says Goose approves tools by itself unless GOOSE_MODE asks (%s)', (locale, mode, guard) => {
+    i18n.global.locale.value = locale
+    const row = mountHelp().findAll('tbody tr').find((tr) => tr.text().includes('Goose (AAIF)'))!
+    const flagCell = row.findAll('td')[2].text()
+    expect(flagCell).toContain(mode)
+    expect(flagCell).toContain('approve')
+    expect(flagCell).toContain('smart_approve')
+    expect(flagCell).toContain(guard)
+    expect(unexpectedWarnings(warn)).toEqual([])
+  })
+
   it('names the sign-in command each vendor actually runs', () => {
     i18n.global.locale.value = 'en-US'
     const wrapper = mountHelp()

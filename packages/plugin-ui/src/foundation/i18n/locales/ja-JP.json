@@ -3885,7 +3885,8 @@
             "usage": "利用枠",
             "multi": "複数アカウント",
             "signIn": "ログインコマンド",
-            "signInInside": "CLI 内で操作"
+            "signInInside": "CLI 内で操作",
+            "flagNoteGoose": "なし — Goose は既定ですべてのツールを自動で承認します（GOOSE_MODE=auto）。確認を求めさせるには GOOSE_MODE を approve か smart_approve に設定してください。Navide の Guard はまだ Goose を対象にしていません。"
           },
           "note": "「利用枠」は Navide が残りの利用枠を読み取れることを示します（第 6 章）。「複数アカウント」は、複数のログイン情報を設定に保存して切り替えられることを示します（第 5 章）。権限確認をスキップするフラグがない 4 つの CLI（Grok CLI、OpenCode、Pi、MiniMax Code）は、元々そのフラグを持っていません。Navide 側の対応漏れではありません。「ログインコマンド」は「設定 ▸ アカウント」で「ログイン」を押したときに実際に実行するコマンドです。「CLI 内で操作」とある CLI は独立したログインコマンドを定義していないため、通常どおり起動し、その画面内でログインします。",
           "callout": {

@@ -24,6 +24,9 @@ interface VendorRow {
   /** Registry key, to look the vendor up in the backend's switch capabilities. */
   agentKey: string
   skipFlag: string
+  /** Locale key shown instead of "—" when a CLI has no bypass flag for a
+   *  reason the reader needs (Goose approves tools by itself by default). */
+  flagNote?: string
   usage: boolean
   /** Static fallback for the multi-account column, used only until the
    *  backend's capabilities have loaded (see multiAccountCell). */
@@ -64,7 +67,7 @@ const vendors: VendorRow[] = [
   { name: 'Muse Code (Meta)', bin: 'muse', agentKey: 'muse', skipFlag: '--disable-approval', usage: false, multiAccount: false, signIn: 'login' },
   { name: 'Droid CLI (Factory)', bin: 'droid', agentKey: 'droid', skipFlag: '--auto high', usage: false, multiAccount: false, signIn: '' },
   { name: 'MiniMax Code', bin: 'mcode', agentKey: 'mcode', skipFlag: '', usage: false, multiAccount: false, signIn: 'login' },
-  { name: 'Goose (AAIF)', bin: 'goose', agentKey: 'goose', skipFlag: '', usage: false, multiAccount: false, signIn: '' },
+  { name: 'Goose (AAIF)', bin: 'goose', agentKey: 'goose', skipFlag: '', flagNote: 'settings.help.cliAgents.s1.table.flagNoteGoose', usage: false, multiAccount: false, signIn: '' },
 ]
 
 // Backend truth for the multi-account column. `supported` alone is not
@@ -245,6 +248,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
               <td><code>{{ row.bin }}</code></td>
               <td>
                 <code v-if="row.skipFlag">{{ row.skipFlag }}</code>
+                <span v-else-if="row.flagNote">{{ $t(row.flagNote) }}</span>
                 <span v-else class="cah-no">—</span>
               </td>
               <td :class="row.usage ? 'cah-yes' : 'cah-no'">{{ row.usage ? '✓' : '—' }}</td>
