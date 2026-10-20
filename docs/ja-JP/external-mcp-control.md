@@ -557,6 +557,21 @@ Navide プラグインの変更を依頼する、またはプラグインを無�
 
 エラーは `{ok: false, error, error_code}` で、`BAD_REQUEST`、`BUILTIN_PLUGIN`、`NOT_INSTALLED`、`NOT_FOUND`、`ACTION_FAILED`、`REGISTRY_UNAVAILABLE`、`HOST_UNAVAILABLE` のいずれかです。依頼、判断、結果、無効化、有効化はすべて、呼び出し元（pane 名、外部クライアント、Navide Host）とともに navide.db の `plugin_agent_actions` テーブルに記録されます。
 
+### ローカルの Navide プラグインパッケージ：開く、確認する、パッケージ化する、ファイルからインストールする
+
+各ステップにツールがあり、「開く」と「入力する」は別々に使えます。ユーザーが自分で操作したいときは、agent は `_open` ツールを呼んで止まり、ユーザーを待ちます。ユーザーが agent に任せたいときは `plugins_install_file_fill` を呼びます（先に開く必要はありません）。どのツールもインストール、送信、切り替えは行いません。ユーザーがリクエストを承認し、「ファイルからインストール」と同じ同意ダイアログで確認したときだけインストールされます。開発者モードは引き続きユーザーだけが切り替えられ、plugin frame や環境変数からファイルをインストールすることもできません。
+
+| ツール | パラメーター | 内容 |
+|---|---|---|
+| `marketplace_open` | `id=""` | 呼び出し元の Navide ウィンドウで Navide マーケットプレイス、またはその中のプラグインのページを表示 |
+| `plugins_install_file_open` | — | 設定 → Navide プラグインを表示。ユーザーはそこで「ファイルからインストール」で `.vsix` を選ぶ |
+| `plugins_developer_mode_open` | — | 開発者モードのスイッチを表示 |
+| `plugins_validate_package` | `path` | `.vsix` またはプラグインフォルダー（絶対パス）を読み取り専用で確認。フォルダーは `navide-plugin package` のルールで確認したあと、ファイルと同じくローカルインストールのルール（アーカイブと manifest、`navide.` 名前空間、Navide の取り下げ・ブロック済みファイル一覧、`<file>.sig` 署名）を適用。`{ok, path, packageKind, valid, errors, id, version, target, digest, signature, risk, disclosure, scan, reviewedByNavide: false}` を返す。`signature` は `none`、`verified`（審査済み開発者の有効な鍵）、`revoked`、`unverifiable` |
+| `plugins_package` | `dir`、`target=""`、`out=""` | フォルダーの `artifact-files.json` から `navide-plugin package` と同じバイト列の `.vsix` を作り、`out` またはフォルダーの隣の `<id>-<version>-<target>.vsix` に書き出す。既存ファイルは置き換えず、Navide のデータフォルダーには書かず、署名もしない。書き出したファイルの確認結果を返す |
+| `plugins_install_file_fill` | `path`、`reason=""` | Navide が `.vsix` を一度だけ読み込み、確認して保持し（フォルダーは開発者モードが必要）、`plugin-install-file` リクエストを作成。ユーザーには依頼者、理由（agent が書いたものとして表示）、パス、SHA-256、Navide 未審査であることが表示され、承認すると保持したものを使う「ファイルからインストール」の同意ダイアログが開く。`{ok, approval_id, status: "pending", expires_at, id, version, digest, packageKind, signature, reviewedByNavide: false, note}` を返す。ローカルインストールが拒否するパッケージは `PACKAGE_INVALID` と `errors`。続けて `marketplace_request_status` で確認 |
+
+Navide のデータフォルダー内のパスや、どのパッケージよりも大きいファイルは拒否されます。パッケージ自身のテキスト（id、バージョン、manifest を引用するエラー、開示内容）は上と同じく囲まれ、読み込んだ pane はマークされます。`plugins_list_installed` は各項目の `source`（`marketplace`、`prerelease`、`testplace`、`local-signed`、`local-unsigned`、`developer-unpacked`、`factory-bundled`）と、開発者の鍵があとから Navide に取り消されたローカルファイルの `signatureRevoked: true` も返します。
+
 ### Pipeline
 
 Pipeline は保存された多段階の実行です: 順序付けられた Stage の集合で、各 Stage は

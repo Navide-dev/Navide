@@ -1353,7 +1353,8 @@ export function scanPackageFiles(input: ScanPackageFilesInput): StaticScanReport
 
   let calls: StaticScanReport['shell']['calls'] = []
   const orderedCalls = [...callFiles.values()].sort((a, b) =>
-    compareTuples([a[0], a[1] ?? '', a[4], a[3]], [b[0], b[1] ?? '', b[4], b[3]]))
+    // The category breaks the last tie, as in the Registry's scanner.
+    compareTuples([a[0], a[1] ?? '', a[4], a[3], a[2]], [b[0], b[1] ?? '', b[4], b[3], b[2]]))
   for (const [executable, subcommand, category, evidence, source, files] of orderedCalls) {
     const command = subcommand === null ? executable : `${executable} ${subcommand}`
     if (redacted(command)) {

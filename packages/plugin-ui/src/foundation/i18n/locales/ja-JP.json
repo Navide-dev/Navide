@@ -1940,6 +1940,7 @@
         "selfHostedQuarantine": "{id} {version} は自前の Registry から入れたもので、読み込まれていません。開発者モードをオンにするか、Navide マーケットプレイスからインストールしてください。"
       },
       "localInstall": {
+        "agentRequest": "{requester} からのリクエストです。Navide はこの Navide プラグインを審査していません。インストールするかどうかはあなたが決めます。",
         "button": ".vsix ファイルからインストール…",
         "backToMarketplace": "Navide マーケットプレイス版に戻す",
         "warning": "この Navide プラグインは、このコンピューター上のファイルから読み込まれます。Navide の審査を受けておらず署名もないため、作成者を確認できず、ファイルが改変されている可能性もあります。信頼できる相手から受け取ったファイルだけをインストールしてください。",
@@ -9296,8 +9297,17 @@
     "dont-ask": "{label} について今後確認しない"
   },
   "plugin-request": {
+    "file": {
+      "path": "ファイル",
+      "folder": "フォルダー",
+      "digest": "ファイルの SHA-256",
+      "unreviewed": "agent がこのファイルのインストールを求めています。Navide はこのファイルを審査していません。承認すると「ファイルからインストール」と同じダイアログが開き、インストールされるのは agent が求めた時点で Navide が読み込んだもの（上の SHA-256）です。",
+      "unreviewed-folder": "agent がこの開発者フォルダーの読み込みを求めています。Navide は審査しておらず、内容はいつでも変わる可能性があります。承認すると、自分でフォルダーを読み込むときと同じダイアログが開きます。",
+      "digestChanged": "このリクエストのために Navide が保持しているファイルが、リクエストに表示されたものと一致しないため、インストールしませんでした。agent にもう一度送ってもらってください。"
+    },
     "kicker": "Navide プラグインのリクエスト",
     "title": {
+      "install-file": "ファイルから Navide プラグイン {plugin} {version} をインストールしますか？",
       "install": "Navide プラグイン {plugin} {version} をインストールしますか？",
       "update": "Navide プラグイン {plugin} を {from} から {version} に更新しますか？",
       "rollback": "Navide プラグイン {plugin} を {from} から {version} に戻しますか？",
