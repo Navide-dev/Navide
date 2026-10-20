@@ -159,7 +159,7 @@ describe('O1: an agent update whose disclosure is unchanged', () => {
     ...extra,
   })
   function updateDeps(result: unknown = check()) {
-    const commitUpdate = vi.fn(async () => {})
+    const commitUpdate = vi.fn(async (): Promise<void | { switchError?: string }> => {})
     const discardUpdate = vi.fn()
     const prepareUpdate = vi.fn(async () => result)
     return { d: deps({ prepareUpdate, commitUpdate, discardUpdate } as never), prepareUpdate, commitUpdate, discardUpdate }
