@@ -7,7 +7,7 @@ import { WINDOW_INSTANCE_ID } from '../lib/windowInstanceId'
  * Bridges an external MCP client's `ui.invoke.request` broadcasts into this
  * window's command registry and replies with `ui.invoke.result`. Backend
  * contract (do not change without updating the backend side):
- *   request:  { request_id, workspace_path, op, action, args, global, addressed, caller_pane_id }
+ *   request:  { request_id, workspace_path, op, action, args, global, addressed, caller_pane_id, caller_workspace_path }
  *   response: backend.send('ui.invoke.result', { request_id, ok, result, error, warnings? })
  * `warnings` is a string array and is only present when uiDiagnostics recorded
  * something during the action (e.g. injectText resending content) — it lets
@@ -31,8 +31,11 @@ export interface UiInvokeRequest {
   addressed?: boolean
   /** The pane the credential behind this request belongs to — taken from the
    *  credential by the backend, never from args. Empty for host / external
-   *  callers. Read only for PANE_PRIVATE_ACTIONS. */
+   *  callers. Read for PANE_PRIVATE_ACTIONS and SELF_GUARDED_ACTIONS. */
   caller_pane_id?: string
+  /** The caller pane's workspace, from the backend's registry — never from
+   *  args. Empty for host / external callers. Read for SELF_GUARDED_ACTIONS. */
+  caller_workspace_path?: string
 }
 
 export interface UiActionBusBackend {
@@ -51,6 +54,10 @@ export interface UseUiActionBusOptions {
    *  trailing slash or a symlinked path defeats. Defaults to that narrow test
    *  for callers (tests, plugin hosts) that have nothing better. */
   ownsWorkspace?: (path: string) => boolean
+  /** Whether a pane with this id lives in this window. Used to refuse
+   *  ui.window.close from a pane this window hosts. Absent: only the
+   *  workspace half of that check applies. */
+  hostsPane?: (paneId: string) => boolean
   /** The backend connection's status. When given, this window announces
    *  `ui.invoke.ready` on every transition to 'connected' (each reconnect is
    *  a new backend session): the backend sends a global request such as
@@ -116,12 +123,54 @@ const ACCOUNT_ACTION_PREFIX = 'ui.accounts.'
  *  are cross-pane by design and must keep working across panes. */
 const PANE_PRIVATE_ACTIONS = new Set(['ui.messaging.readIncoming', 'ui.messaging.settleRead'])
 
+/** Actions that can close something: an agent may never aim them at its own
+ *  pane, its own workspace or its own window. The backend refuses these first
+ *  (_self_scope_refusal); this is the same rule again in the window, for any
+ *  route a request can take here. "Own" comes from caller_pane_id and
+ *  caller_workspace_path, which the backend fills from the credential. */
+const SELF_GUARDED_ACTIONS = new Set(['ui.pane.close', 'ui.pane.reclaim', 'ui.workspace.close', 'ui.window.close'])
+
+const SELF_RECLAIM_DETAIL = 'that is your own pane — reclaiming it would end the CLI making this call'
+
+/** Why this request would close the caller's own pane, workspace or window, or
+ *  null. ui.pane.reclaim is not refused here — the caller's own id is taken out
+ *  of its batch instead (see handleUiInvokeRequest). */
+function selfCloseRefusal(req: Partial<UiInvokeRequest>, opts: UseUiActionBusOptions): string | null {
+  const caller = req.caller_pane_id ?? ''
+  if (!caller || !req.action || !SELF_GUARDED_ACTIONS.has(req.action)) return null
+  const callerWs = req.caller_workspace_path ?? ''
+  if (req.action === 'ui.pane.close' && namedPaneId(req.args) === caller) {
+    return 'self-close: that is your own pane — an agent cannot close the pane it runs in'
+  }
+  if (req.action === 'ui.workspace.close') {
+    const path = typeof req.args?.path === 'string' ? req.args.path : ''
+    if (path && callerWs && normWs(path) === normWs(callerWs)) {
+      return 'self-workspace-close: that is your own workspace — an agent cannot close the workspace it runs in'
+    }
+  }
+  if (req.action === 'ui.window.close') {
+    const owns = opts.ownsWorkspace ?? ((path: string) => path === opts.currentWorkspace.value)
+    if (opts.hostsPane?.(caller) || (callerWs && owns(callerWs))) {
+      return 'self-window-close: this window holds your own pane or workspace — an agent cannot close it'
+    }
+  }
+  return null
+}
+
 const namedPaneId = (args: Record<string, unknown> | null | undefined): string => {
   const v = args?.paneId
   return typeof v === 'string' ? v : ''
 }
 
 const normWs = (p: string): string => p.replace(/\/+$/, '')
+
+const reclaimIds = (args: Record<string, unknown> | null | undefined): string[] => {
+  const v = args?.paneId
+  return (Array.isArray(v) ? v : [v]).filter((id): id is string => typeof id === 'string' && !!id)
+}
+
+const reclaimNamesCaller = (req: Partial<UiInvokeRequest>): boolean =>
+  reclaimIds(req.args).includes(req.caller_pane_id ?? '')
 
 /** Handles a single ui.invoke.request payload; exported for direct unit testing
  *  without going through a fake backend.on subscription. */
@@ -168,6 +217,8 @@ export async function handleUiInvokeRequest(
     PANE_PRIVATE_ACTIONS.has(req.action) &&
     (!req.caller_pane_id || req.caller_pane_id !== namedPaneId(req.args))
 
+  const selfRefusal = req.op === 'invoke' ? selfCloseRefusal(req, opts) : null
+
   const diagnosticSeq = currentDiagnosticSeq()
   let ok = true
   let result: unknown
@@ -185,6 +236,9 @@ export async function handleUiInvokeRequest(
         `${req.action} reads a pane's own inbox and can only be invoked by that pane ` +
         `for itself; the caller ${req.caller_pane_id ? `"${req.caller_pane_id}"` : 'has no pane'} ` +
         `and asked for "${namedPaneId(req.args)}".`
+    } else if (selfRefusal) {
+      ok = false
+      error = selfRefusal
     } else if (req.op === 'invoke') {
       if (!req.action) {
         ok = false
@@ -201,6 +255,21 @@ export async function handleUiInvokeRequest(
           error = `unknown account action: ${req.action}`
         } else {
           result = await handler(req.args ?? {}, req.caller_pane_id, signal)
+        }
+      } else if (req.action === 'ui.pane.reclaim' && req.caller_pane_id && reclaimNamesCaller(req)) {
+        // A batch can half succeed: the caller's own pane becomes one more
+        // refused row and the rest are reclaimed as asked.
+        const caller = req.caller_pane_id
+        const rest = reclaimIds(req.args).filter((id) => id !== caller)
+        const own = { paneId: caller, reason: 'self', detail: SELF_RECLAIM_DETAIL }
+        if (!rest.length) {
+          result = { reclaimed: [], refused: [own] }
+        } else {
+          const outcome = await invokeCommand(req.action, { ...(req.args ?? {}), paneId: rest })
+          ok = outcome.ok
+          error = outcome.error
+          const answer = outcome.result as { reclaimed?: unknown[]; refused?: unknown[] } | undefined
+          result = ok && answer ? { ...answer, refused: [...(answer.refused ?? []), own] } : outcome.result
         }
       } else {
         const outcome = await invokeCommand(req.action, req.args ?? undefined)

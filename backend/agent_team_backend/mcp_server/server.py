@@ -5581,6 +5581,117 @@ _UI_INVOKE_SLOW_TIMEOUT_S = 60.0
 _PANE_PRIVATE_UI_ACTIONS = frozenset({"ui.messaging.readIncoming", "ui.messaging.settleRead"})
 
 
+@dataclass(frozen=True)
+class _SelfScope:
+    """What "your own" means for a pane caller: its pane, its workspace, and
+    every window that holds that workspace.
+
+    Built from the credential alone — the pane id its token names, the
+    workspace the registry recorded for that pane when its window registered
+    it, and the windows mirroring that workspace's panes — so nothing in a
+    call's arguments can move it. The windows include the one mirroring the
+    caller AND any other window holding its workspace: a pane sitting in a
+    detached group window still has its workspace held by the main window, and
+    closing that window closes the caller's workspace.
+    """
+
+    pane_id: str
+    workspace: str
+    window_ids: frozenset[str]
+
+
+def _self_scope(caller: _Caller) -> _SelfScope | None:
+    """The caller's own pane, workspace and windows; None for a caller with no
+    pane (host / external), which has nothing of its own to protect."""
+    from agent_team_backend import agent_messaging
+
+    if caller.kind != "pane":
+        return None
+    entry = agent_messaging.get(caller.pane_id)
+    if entry is None:
+        return None
+    workspace = _norm_workspace(entry.workspace_path) if entry.workspace_path else ""
+    windows: set[str] = set()
+    for pane in agent_messaging.list_panes():
+        if pane.pane_id != entry.pane_id and not (
+            workspace and pane.workspace_path and _norm_workspace(pane.workspace_path) == workspace
+        ):
+            continue
+        window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
+        if window_id:
+            windows.add(window_id)
+    return _SelfScope(entry.pane_id, workspace, frozenset(windows))
+
+
+def _named_pane_id(value: Any) -> str:
+    """A pane id from args, followed to the pane it names today: a re-attach
+    leaves the old id as an alias of the live pane, and naming yourself by it
+    is still naming yourself."""
+    from agent_team_backend import agent_messaging
+
+    named = str(value or "")
+    entry = agent_messaging.current(named) if named else None
+    return entry.pane_id if entry is not None else named
+
+
+def _self_scope_refusal(caller: _Caller, action: str, args: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Refuse closing the caller's own pane, workspace or window.
+
+    The same rule as cli_close_agent's "self-close" and cli_reclaim_agent's
+    "self-reclaim", applied to every route that reaches the window's close
+    commands, so ui_invoke is not a way around the dedicated tools. The window
+    makes the same check again with the identity this request carries.
+    """
+    scope = _self_scope(caller)
+    if scope is None:
+        return None
+    a = args or {}
+    if action == "ui.pane.close" and _named_pane_id(a.get("paneId")) == scope.pane_id:
+        return {
+            "ok": False,
+            "result": None,
+            "error": (
+                "that is your own pane — closing it would take away the turn making "
+                "this call, so you would never see the answer. Ask the user to close it instead."
+            ),
+            "error_code": "self-close",
+        }
+    if action == "ui.workspace.close":
+        path = str(a.get("path") or "")
+        if path.startswith("~"):
+            path = os.path.expanduser(path)
+        if path and scope.workspace and _norm_workspace(path) == scope.workspace:
+            return {
+                "ok": False,
+                "result": None,
+                "error": (
+                    "that is your own workspace — closing it would take your own pane "
+                    "with it. Ask the user to close it instead."
+                ),
+                "error_code": "self-workspace-close",
+            }
+    if action == "ui.window.close" and str(a.get("windowId") or "") in scope.window_ids:
+        return {
+            "ok": False,
+            "result": None,
+            "error": (
+                "that window holds your own pane or workspace — closing it would close "
+                "you with it. Ask the user to close it instead."
+            ),
+            "error_code": "self-window-close",
+        }
+    return None
+
+
+def _self_reclaim_entry(pane_id: str) -> dict[str, str]:
+    """ui.pane.reclaim's refusal row for the caller's own pane."""
+    return {
+        "paneId": pane_id,
+        "reason": "self",
+        "detail": "that is your own pane — reclaiming it would end the CLI making this call",
+    }
+
+
 def _human_only_refusal(action: str, args: dict[str, Any] | None) -> dict[str, Any] | None:
     """Refuse what only the user at the computer may do, for any MCP caller.
 
@@ -5817,6 +5928,9 @@ async def _ui_request(
         # refuses the pane-private actions when this is not the pane named in
         # args.paneId. Empty for host / external callers, which have no inbox.
         "caller_pane_id": caller.pane_id if caller is not None and caller.kind == "pane" else "",
+        # The caller's workspace from the registry, never from args: the window
+        # repeats the self-close checks (_self_scope_refusal) with it.
+        "caller_workspace_path": _caller_workspace(caller) if caller is not None else "",
     }
     # The event is built inside each branch, after `addressed` has settled:
     # make_event stores the payload by reference today, so mutating it after
@@ -6120,6 +6234,31 @@ async def ui_invoke(
             "error": f"{action} is not a ui_invoke action; use cli_account_sign_in or cli_account_switch",
             "error_code": "ui_dedicated_tool",
         }
+    refused_self = _self_scope_refusal(caller, action, args)
+    if refused_self is not None:
+        return refused_self
+    if action == "ui.pane.reclaim":
+        # A batch can half succeed, so the caller's own pane is taken out and
+        # answered as one more refused row rather than failing the others.
+        scope = _self_scope(caller)
+        raw = (args or {}).get("paneId")
+        ids = raw if isinstance(raw, list) else [raw]
+        if scope is not None and any(_named_pane_id(i) == scope.pane_id for i in ids):
+            rest = [i for i in ids if _named_pane_id(i) != scope.pane_id]
+            own = _self_reclaim_entry(scope.pane_id)
+            if not rest:
+                return {"ok": True, "result": {"reclaimed": [], "refused": [own]}, "error": None}
+            reply = await _ui_request(
+                workspace_path,
+                "invoke",
+                caller=caller,
+                action=action,
+                args={**(args or {}), "paneId": rest},
+            )
+            result = reply.get("result")
+            if reply.get("ok") and isinstance(result, dict):
+                reply["result"] = {**result, "refused": [*(result.get("refused") or []), own]}
+            return reply
     return await _ui_request(
         workspace_path,
         "invoke",
