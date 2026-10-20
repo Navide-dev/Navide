@@ -58,7 +58,7 @@ import {
   type DisclosureManifestInput,
 } from '../../shared/pluginDisclosure'
 import type { JsonValue } from './pluginBackendSupervisor'
-import type { SupportedLocale } from '../hostLocale'
+import { hostStrings, type HostStringTable, type SupportedLocale } from '../hostLocale'
 
 /**
  * Admission control for third-party package backends (every package backend
@@ -477,7 +477,7 @@ interface NativeBackendConsentStrings {
 /** Plan B D-g: the dialog in the user's language (main has no i18n of its
  * own; see menuStrings.ts), now also listing the methods the backend serves.
  * The en-US wording is unchanged except the Settings page name. */
-const NATIVE_BACKEND_CONSENT_STRINGS: Record<SupportedLocale, NativeBackendConsentStrings> = {
+const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentStrings> = {
   'en-US': {
     title: 'Native code',
     messageNew: (name) => `${name} contains native code that runs on your computer. Allow it to run?`,
@@ -584,7 +584,7 @@ export function nativeBackendConsentText(
   prompt: NativeBackendConsentPrompt,
   locale: SupportedLocale = 'en-US'
 ): { title: string; message: string; detail: string; buttons: [string, string] } {
-  const s = NATIVE_BACKEND_CONSENT_STRINGS[locale] ?? NATIVE_BACKEND_CONSENT_STRINGS['en-US']
+  const s = hostStrings(NATIVE_BACKEND_CONSENT_STRINGS, locale)
   // With shell, git reads and changes workspace files without the separate
   // file-change grant, so neither "no access" nor "separate permission" holds.
   const access = prompt.shell

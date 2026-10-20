@@ -336,6 +336,33 @@ describe('loading a developer folder', () => {
     expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loaded: true, loadedBy: { kind: 'unknown' } }] })
   })
 
+  it('turning Developer Mode off also drops a folder chosen but not yet consented to (G4)', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await call('plugins:loadFromFolder')
+    await call('plugins:setDeveloperMode', { enabled: false })
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await expect(call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true }))
+      .rejects.toThrow(/no prepared developer folder/)
+    expect(call('plugins:listInstalled')).toEqual([])
+    expect(new PluginDeveloperModeStore(pluginsRoot).folders()).toEqual([])
+  })
+
+  it('G4: the chosen folder is dropped even when unloading a consented folder throws', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const second = join(base, 'dev-other')
+    writeFolder(second, manifest('acme.other'))
+    pickFolder.mockResolvedValueOnce(second)
+    await call('plugins:loadFromFolder')
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementationOnce(() => { throw new Error('unload failed') })
+    await expect(call('plugins:setDeveloperMode', { enabled: false })).rejects.toThrow(/unload failed/)
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await expect(call('plugins:commitFolderLoad', { id: 'acme.other', riskConfirmed: true }))
+      .rejects.toThrow(/no prepared developer folder/)
+  })
+
   it('refuses the navide. namespace and a folder that changed while the dialog was open', async () => {
     register()
     await call('plugins:setDeveloperMode', { enabled: true })
@@ -683,6 +710,34 @@ describe('G1: automatic reload on file change', () => {
       .toMatchObject({ reloadError: expect.stringMatching(/EMFILE/) })
     await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })
     expect(openWatches()).toHaveLength(1)
+  })
+
+  it('review R2 LOW-2 on #543: turning Developer Mode off unloads, stops every watch and drops chosen folders, even when an unload throws', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const second = join(base, 'dev-other')
+    writeFolder(second, manifest('acme.other'))
+    pickFolder.mockResolvedValueOnce(second)
+    await call('plugins:commitFolderLoad', { id: (await call('plugins:loadFromFolder') as { id: string }).id, riskConfirmed: true })
+    const third = join(base, 'dev-third')
+    writeFolder(third, manifest('acme.third'))
+    pickFolder.mockResolvedValueOnce(third)
+    await call('plugins:loadFromFolder')
+    openWatches()[0]!.onError!(new Error('EMFILE'))
+    expect(openWatches()).toHaveLength(1)
+    const remove = manager.removeInstalledPlugin.bind(manager)
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementation((id: string) => {
+      if (id === 'acme.devtodo') throw new Error('unload failed')
+      return remove(id)
+    })
+    await expect(call('plugins:setDeveloperMode', { enabled: false })).rejects.toThrow(/unload failed/)
+    expect(openWatches()).toEqual([])
+    expect((call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders.every((folder) => folder.reloadError === undefined)).toBe(true)
+    vi.mocked(manager.removeInstalledPlugin).mockImplementation(remove)
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await expect(call('plugins:commitFolderLoad', { id: 'acme.third', riskConfirmed: true }))
+      .rejects.toThrow(/no prepared developer folder/)
   })
 
   it('only the main window turns it on or off', async () => {

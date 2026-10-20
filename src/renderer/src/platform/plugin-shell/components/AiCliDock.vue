@@ -646,16 +646,16 @@ defineExpose({ start, stop, interrupt, pasteText, injectNow, toggle, terminal: t
       <button
         class="ai-cli-btn primary"
         :disabled="!workspacePath || starting || reattaching || terminalPort.status.value !== 'connected'"
-        :title="workspacePath ? 'Spawn the CLI in ' + workspacePath : 'No workspace available'"
+        :title="workspacePath ? t('editorWindow.aiDock.spawn-title', { path: workspacePath }) : t('editorWindow.aiDock.no-workspace')"
         @click="start"
-      >{{ starting ? 'Starting…' : reattaching ? 'Reattaching…' : 'Start' }}</button>
+      >{{ starting ? t('editorWindow.aiDock.starting') : reattaching ? t('editorWindow.aiDock.reattaching') : t('ai-cli.start') }}</button>
     </div>
     <div v-else class="ai-cli-controls">
       <span class="ai-cli-running-label" v-truncate>{{ agentLabel }}</span>
-      <button class="ai-cli-btn ghost" title="Send Ctrl+C to the CLI" @click="interrupt">Interrupt</button>
-      <button class="ai-cli-btn danger" title="Kill the CLI process" @click="stop">Stop</button>
+      <button class="ai-cli-btn ghost" :title="t('editorWindow.aiDock.interrupt-title')" @click="interrupt">{{ t('ai-cli.interrupt') }}</button>
+      <button class="ai-cli-btn danger" :title="t('editorWindow.aiDock.stop-title')" @click="stop">{{ t('ai-cli.stop') }}</button>
     </div>
-    <p v-if="workspaceResolved && !workspacePath" class="ai-cli-empty">No workspace available</p>
+    <p v-if="workspaceResolved && !workspacePath" class="ai-cli-empty">{{ t('editorWindow.aiDock.no-workspace') }}</p>
     <!-- Mounted eagerly once a workspace exists (even while the panel is
          closed) so the connect-time reattach claims PTY ownership before the
          backend janitor reaps it. Keyed by paneId: useTerminal captures

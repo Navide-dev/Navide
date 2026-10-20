@@ -874,8 +874,9 @@ describe('plugins:remove boundary validation', () => {
         /capability and backend risk confirmation/
       )
       expect(grants.get('acme.demo', '1.0.0')).toBeNull()
+      // L1: the new answer itself writes the grant, on approval.
       await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
-      expect(grants.get('acme.demo', '1.0.0')).toBeNull()
+      expect(grants.get('acme.demo', '1.0.0')).toMatchObject({ shell: 'full', highRiskShellConfirmed: true })
       await restart(null, { id: 'acme.demo' })
       expect(grants.get('acme.demo', '1.0.0')).toMatchObject({ shell: 'full', highRiskShellConfirmed: true })
     } finally {
@@ -1514,7 +1515,8 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       ).toEqual({
         id: 'acme.demo',
         requires: [],
-        restartRequired: true,
+        restartRequired: false,
+        activatedVersion: '1.0.0',
       })
       expect(existsSync(immutablePluginPackageDir(root, 'acme.demo', '1.0.0', 'universal') + '/backend/entry')).toBe(true)
 
@@ -1584,12 +1586,17 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
         publisherConfirmed: true,
       })).rejects.toThrow(/capability and backend risk confirmation/)
 
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')).toBeNull()
+      // L1: approved, so active and granted at once.
       await commitHandler(null, {
         id: 'acme.demo',
         publisherConfirmed: true,
         riskConfirmed: true,
       })
-      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')).toBeNull()
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')).toMatchObject({
+        shell: 'full',
+        highRiskShellConfirmed: true,
+      })
       const restartHandler = handlers.get('plugins:restart')
       if (!restartHandler) throw new Error('restart handler not registered')
       await restartHandler(null, { id: 'acme.demo' })
@@ -1920,11 +1927,12 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
       vi.setSystemTime(1_000_000)
       await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      // L1: a fresh install is activated on approval, so that is its install time.
       await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true })
-      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBe(1_000_000)
       vi.setSystemTime(2_000_000)
       await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
-      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBe(2_000_000)
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBe(1_000_000)
     } finally {
       vi.useRealTimers()
       await manager.closeBackendPlugins()
@@ -3192,8 +3200,14 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
           publisherConfirmed: true,
           riskConfirmed: true,
         })
-      ).toEqual({ id: 'acme.demo', requires: ['fs', 'ui', 'shell'], restartRequired: true })
-      expect(grants.get('acme.demo', '1.0.0')).toBeNull()
+      ).toEqual({ id: 'acme.demo', requires: ['fs', 'ui', 'shell'], restartRequired: false, activatedVersion: '1.0.0' })
+      // L1: the grant is written when the approved first install is activated.
+      expect(grants.get('acme.demo', '1.0.0')).toEqual({
+        packageVersion: '1.0.0',
+        system: ['fs', 'ui'],
+        shell: 'allowlist',
+        storage: true,
+      })
       const restartHandler = handlers.get('plugins:restart')
       if (!restartHandler) throw new Error('restart handler not registered')
       await restartHandler(null, { id: 'acme.demo' })
@@ -3280,7 +3294,7 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
           publisherConfirmed: true,
           riskConfirmed: true,
         })
-      ).toEqual({ id: 'acme.demo', requires: [], restartRequired: true })
+      ).toEqual({ id: 'acme.demo', requires: [], restartRequired: false, activatedVersion: '1.0.0' })
       const restartHandler = handlers.get('plugins:restart')
       if (!restartHandler) throw new Error('restart handler not registered')
       await restartHandler(null, { id: 'acme.demo' })
@@ -3340,7 +3354,7 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
           publisherConfirmed: true,
           riskConfirmed: true,
         })
-      ).toEqual({ id: 'acme.demo', requires: [], restartRequired: true })
+      ).toEqual({ id: 'acme.demo', requires: [], restartRequired: false, activatedVersion: '1.0.0' })
       const restartHandler = handlers.get('plugins:restart')
       if (!restartHandler) throw new Error('restart handler not registered')
       await restartHandler(null, { id: 'acme.demo' })
@@ -3937,7 +3951,7 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       expect(prepared.requiresPublisherTrust).toBe(true)
       expect(
         await commitHandler(null, { id: 'acme.demo', publisherConfirmed: true })
-      ).toEqual({ id: 'acme.demo', requires: [], restartRequired: true })
+      ).toEqual({ id: 'acme.demo', requires: [], restartRequired: false, activatedVersion: '1.0.0' })
       const restartHandler = handlers.get('plugins:restart')
       if (!restartHandler) throw new Error('restart handler not registered')
       await restartHandler(null, { id: 'acme.demo' })

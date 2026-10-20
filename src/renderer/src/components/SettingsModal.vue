@@ -10,7 +10,7 @@ import type { useStages } from '../composables/useStages'
 import type { useAnalyzer } from '../composables/useAnalyzer'
 import type { usePipelines } from '../composables/usePipelines'
 import { MCP_CATALOG, isMcpInstalled, type McpCatalogEntry } from '../data/mcpCatalog'
-import { useTheme, vTruncate } from '@navide/plugin-ui/foundation'
+import { AVAILABLE_UI_LOCALES, isBetaUiLocale, useTheme, vTruncate } from '@navide/plugin-ui/foundation'
 import { useSettings } from '../composables/useSettings'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import {
@@ -965,7 +965,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     title: t('settings.search.item.appearance-language.title'),
     group: t('settings.nav.language'),
     summary: t('settings.search.item.appearance-language.summary'),
-    keywords: 'language locale 語言 繁體中文 english 日本語 japanese en-us zh-tw ja-jp',
+    keywords: 'language locale 語言 繁體中文 english 日本語 japanese en-us zh-tw ja-jp 简体中文 한국어 español français deutsch português русский tiếng việt zh-cn ko-kr es-es fr-fr de-de pt-br ru-ru vi-vn',
   },
   {
     id: 'appearance-ui-scale',
@@ -1331,12 +1331,15 @@ function onUiScaleChange(value: string): void {
 }
 
 // Locale catalogs keep language names in their native form, so the labels
-// come from those keys rather than a second hardcoded copy.
-const SUPPORTED_LANGUAGES = [
-  { value: 'zh-TW', labelKey: 'settings.appearance.language-zh-TW' },
-  { value: 'en-US', labelKey: 'settings.appearance.language-en-US' },
-  { value: 'ja-JP', labelKey: 'settings.appearance.language-ja-JP' },
-]
+// come from those keys rather than a second hardcoded copy. Every language
+// with a registered catalog is listed, in registration order; a language added
+// later appears here (with a Beta tag while it is machine-translated) without
+// touching this file.
+const SUPPORTED_LANGUAGES = AVAILABLE_UI_LOCALES.map((value) => ({
+  value,
+  labelKey: `settings.appearance.language-${value}`,
+  beta: isBetaUiLocale(value),
+}))
 
 function onHealthTimeoutChange(raw: string): void {
   const n = Number(raw)
@@ -4482,6 +4485,11 @@ watch(activeTab, (tab) => {
                       @click="setLanguage(lang.value)"
                     >
                       {{ $t(lang.labelKey) }}
+                      <span
+                        v-if="lang.beta"
+                        class="scope-badge"
+                        :title="$t('settings.appearance.language-beta-hint')"
+                      >{{ $t('settings.appearance.language-beta') }}</span>
                       <span v-if="currentLanguage === lang.value" class="ap-check">✓</span>
                     </button>
                   </div>
