@@ -4529,7 +4529,7 @@ export function registerPluginIpc(
           // Review M2: the agent is told the switch failed, not that it is updated.
           return { switchError: errorText(error) }
         }
-        return undefined
+        return { switched: true as const }
       },
       discardUpdate: (pluginId) => {
         prepared.delete(pluginId)

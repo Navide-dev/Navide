@@ -10014,11 +10014,13 @@ async def _unchanged_update(
         _agent_action_pending.discard(request_id)
     if result is TIMEOUT:
         return None
-    if (result.get("ok") is True and result.get("updated") is True and result.get("switched") is False
-            and result.get("pluginVersion") == version and result.get("fromVersion") == from_version):
+    if result.get("switched") is False:
         # Staged, but switching to it failed and the installed version runs
         # again (review M2). Said as it is, without the Host's error text;
         # the user already has a row in Navide to apply it, so nothing is filed.
+        # Fail-closed (review r2 LOW-516-1): any answer that says the switch did
+        # not happen is a failure, whatever versions it names; the versions
+        # reported are the ones the agent asked about.
         # The audit log keeps its own closed set of codes: the switch is a failed action.
         _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
                             outcome="error", error_code="ACTION_FAILED")
