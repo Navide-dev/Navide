@@ -5808,7 +5808,7 @@ app.on('web-contents-created', (_e, contents) => {
     if (isPluginWebGuest(contents)) return
     if (!isAppNavigation(url)) e.preventDefault()
   })
-  guardPlanFrameNavigation(contents)
+  guardPlanFrameNavigation(contents, () => isPluginWebGuest(contents))
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
