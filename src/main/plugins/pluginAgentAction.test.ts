@@ -31,12 +31,22 @@ describe('plugins.agent_action request shape (contract 4.3.1)', () => {
       { ...request, requester: { ...requester, callerKind: 'user' } },
       { ...request, requester: { ...requester, extra: 'x' } },
       { ...request, requester: { ...requester, paneName: 3 } },
+      // S8-M1: tainted is optional, and only ever true.
+      { ...request, requester: { ...requester, tainted: false } },
+      { ...request, requester: { ...requester, tainted: 'yes' } },
       { request_id: 'pa:1', action: 'disable', plugin_id: 'nerdtechnic.devmap' },
       null,
       [],
     ]) {
       expect(parsePluginAgentActionRequest(bad)).toBeNull()
     }
+  })
+
+  it("accepts a tainted pane's request and keeps the flag (S8-M1)", () => {
+    const tainted = { ...requester, tainted: true as const }
+    expect(parsePluginAgentActionRequest({ ...request, requester: tainted })).toEqual({
+      action: 'disable', pluginId: 'nerdtechnic.devmap', requester: tainted,
+    })
   })
 })
 

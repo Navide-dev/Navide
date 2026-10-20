@@ -153,9 +153,11 @@
             "paneId": "p-41",
             "paneName": "dev",
             "workspace": "/Users/me/project",
-            "callerKind": "pane"
+            "callerKind": "pane",
+            "tainted": true
           }
-        }
+        },
+        "optional": ["requester.tainted"]
       }
     ],
     "plugins.agent_action.result": [
