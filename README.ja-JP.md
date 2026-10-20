@@ -81,7 +81,7 @@ Navide はすでに、創設者がこのプロジェクトを進化させるた�
 
 ## 現在利用できる機能
 
-- **Multi-agent Workspace：** 対応する 14 種類のコーディング CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code）または通常の Terminal を、それぞれ独立した Pane で実行できます。
+- **Multi-agent Workspace：** 対応する 15 種類のコーディング CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、Pi、Qwen Code）または通常の Terminal を、それぞれ独立した Pane で実行できます。
 - **CLI 管理：** Install 済みの Coding CLI とそのバージョン・Install 方法を検出し、各 CLI 公式の更新コマンドと診断コマンドを実行できます。
 - **Session Lifecycle：** 対応 CLI の Session を検出、保存、再構築、再開できます。
 - **設定可能な Pipeline：** Stage、並列 Slot、Agent、Role、Kickoff Prompt、Question、Documentation Query、完了 Sentinel を定義できます。

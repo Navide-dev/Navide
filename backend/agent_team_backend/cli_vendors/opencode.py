@@ -22,10 +22,21 @@ Responsibilities:
     sessions (subagent child sessions are excluded) — used by Attribution to
     emit session.detected (resume id = session.id, `opencode --session <id>`).
 
+OpenCode 2 keeps the same db file but its own tables (anomalyco/opencode,
+packages/core/src/session/sql.ts): `session_v2` (1.x's `session`, renamed)
+and `session_message` (id, session_id, type, seq, data = the message JSON
+minus id/type). A user message's prompt is data.text; an assistant step has
+data.tokens (1.x's shape), data.model.id and data.time.completed; an `idle`
+message ends the turn. An upgraded db still holds the 1.x tables, frozen, so
+the schema is told by which tables exist and `session_v2` wins.
+
 Concurrency: the opencode process owns the WAL writer, so every connection
 here is read-only (`file:…?mode=ro` URI), short-lived, and busy/locked-
-tolerant — any sqlite error is treated as "no new data this cycle". A missing
-db just means the CLI isn't installed → silently skip.
+tolerant — a busy, locked or vanished db is "no new data this cycle". Any
+other sqlite error, and a db with neither schema, is a reader that cannot
+work: it is logged and kept in `read_problem()` (cli_get_status shows it)
+until a read succeeds again. A missing db just means the CLI isn't
+installed → silently skip.
 """
 
 from __future__ import annotations
@@ -34,6 +45,7 @@ import json
 import logging
 import os
 import sqlite3
+import time
 from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
@@ -139,6 +151,100 @@ LIMIT ?
 # Text blocks of one message, for the reply a completed turn carries.
 _TURN_TEXT_SQL = "SELECT data FROM part WHERE message_id = ? ORDER BY rowid"
 
+# ── OpenCode 2 ──────────────────────────────────────────────────────────────
+# The tables that tell the two schemas apart. An upgraded db carries both
+# sets; the 1.x ones are left behind and never change again. 1.x is told by
+# `session` alone, as main has always read it: a 1.x table that is missing
+# fails its own query and is reported there.
+_V1_TABLES = frozenset({"session"})
+_V2_TABLES = frozenset({"session_v2", "session_message"})
+_TABLES_SQL = "SELECT name FROM sqlite_master WHERE type = 'table'"
+
+# The 1.x row shapes, read off session_message: `role` is the row's `type`
+# and `modelID` is data.model.id, so _event_from_row serves both schemas.
+# Assistant rows are UPDATEd in place while a step streams, as in 1.x, so
+# the rowid watermark and its `pending` list carry over unchanged.
+_V2_USAGE_SQL = """
+SELECT m.rowid, m.id, m.session_id,
+       json_set(m.data, '$.role', m.type, '$.modelID', json_extract(m.data, '$.model.id')),
+       COALESCE(s.directory, '')
+FROM session_message m
+JOIN session_v2 s ON s.id = m.session_id
+{where}
+ORDER BY m.rowid
+"""
+_V2_ANCHOR_SQL = "SELECT id, session_id FROM session_message WHERE rowid = ?"
+
+# The prompt as typed is data.text of a `user` message.
+_V2_MARKER_SQL = """
+SELECT m.session_id, json_extract(m.data, '$.text'), json_object('role', m.type),
+       COALESCE(s.directory, '')
+FROM session_message m
+JOIN session_v2 s ON s.id = m.session_id
+WHERE m.type = 'user' AND m.data LIKE '%at-pane:%' AND s.parent_id IS NULL
+ORDER BY m.time_created
+"""
+
+# One event per new message row (2.x has no append-only part table). Its
+# own watermark key: a 1.x `part` rowid means nothing in `session_message`.
+_V2_ACTIVITY_PREFIX = "opencode_message::"
+_V2_ACTIVITY_SQL = """
+SELECT m.rowid, m.session_id, m.type, m.seq, m.data,
+       COALESCE(s.directory, ''), s.parent_id, m.time_created
+FROM session_message m
+JOIN session_v2 s ON s.id = m.session_id
+WHERE m.rowid > ?
+ORDER BY m.rowid
+LIMIT ?
+"""
+
+# The last assistant step before a turn's `idle` marker carries its reply.
+_V2_TURN_TEXT_SQL = """
+SELECT data FROM session_message
+WHERE session_id = ? AND type = 'assistant' AND seq < ?
+ORDER BY seq DESC
+LIMIT 1
+"""
+
+# Errors that pass with the next cycle: opencode holding a write lock. "unable
+# to open" is transient only while the file is gone (deleted between the
+# watcher's event and this read); on a file that is there it is a db this
+# process may not read, and that is reported.
+_TRANSIENT_SQLITE_ERRORS = ("locked", "busy")
+
+# Newest write on each side of a db that holds both schemas. OpenCode 2's
+# v1 migration copies time_updated across, so the two are equal once it has
+# run, and only a 1.x binary still writing makes the 1.x side newer.
+_NEWEST_WRITES_SQL = (
+    "SELECT (SELECT COALESCE(MAX(time_updated), 0) FROM message),"
+    " (SELECT COALESCE(MAX(time_updated), 0) FROM session_message)"
+)
+
+# vendor → {what failed → why}. One entry per failing read (a query, or the
+# schema check), cleared only when that same read works again, so a problem
+# that persists stays put however many other reads succeed around it. Kilo
+# inherits the reader, so it keeps its own entries.
+_READ_PROBLEMS: dict[str, dict[str, dict]] = {}
+
+
+def read_problem(vendor: str) -> dict | None:
+    """Why `vendor`'s db cannot be fully read — the oldest problem still open,
+    {status, reason, path, detail, since, problems} where `problems` counts
+    every open one — or None while it reads fine."""
+    entries = _READ_PROBLEMS.get(vendor)
+    if not entries:
+        return None
+    return {**next(iter(entries.values())), "problems": len(entries)}
+
+
+def _v2_directory(directory: str) -> str:
+    """OpenCode 2 stores a Windows path with forward slashes
+    (packages/core/src/database/path.ts); hand back the platform form the
+    pane's cwd is compared against."""
+    if os.name != "nt" or not re.match(r"^(?:[A-Za-z]:/|//)", directory):
+        return directory
+    return directory.replace("/", "\\")
+
 
 def _int(v) -> int:  # noqa: ANN001
     try:
@@ -222,34 +328,132 @@ class OpencodeLogReader(LogReader):
         for db in self._db_paths():
             if not db.is_file():
                 continue
-            rows = self._query(
-                db, "SELECT 1 FROM session WHERE id = ?", (session_id,)
-            )
-            if rows:
-                return True
+            if self._schema(db) is None:
+                continue
+            # Every session table there is: on a db holding both schemas a
+            # valid id may live on either side, and refusing it would block
+            # a resume that works.
+            tables = self._tables(db) or set()
+            for table in ("session_v2", "session"):
+                if table not in tables:
+                    continue
+                rows = self._query(
+                    db, f"SELECT 1 FROM {table} WHERE id = ?", (session_id,)
+                )
+                if rows:
+                    return True
         return False
 
     def _query(
-        self, path: Path, sql: str, params: tuple = ()
+        self,
+        path: Path,
+        sql: str,
+        params: tuple = (),
+        *,
+        report: bool = True,
+        key: str = "",
     ) -> list[tuple] | None:
-        """Short-lived read-only query. None = db unreadable this cycle
-        (missing / busy / locked / mid-write) — callers treat it as no data."""
+        """Short-lived read-only query. None = no rows to work with: the db is
+        busy / locked / gone this cycle (callers treat it as no data), or the
+        query failed outright, which is recorded as a read problem under
+        `key` (the SQL itself unless the caller names it) and cleared by the
+        next run of that read that works."""
+        key = key or sql
         try:
             con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
             try:
                 con.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
-                return con.execute(sql, params).fetchall()
+                rows = con.execute(sql, params).fetchall()
             finally:
                 con.close()
         except (sqlite3.Error, OSError) as err:
-            log.debug("sqlite read %s failed: %s", path, err)
+            message = str(err).lower()
+            transient = (
+                isinstance(err, OSError)
+                or any(word in message for word in _TRANSIENT_SQLITE_ERRORS)
+                or ("unable to open" in message and not path.exists())
+            )
+            if not report or transient:
+                log.debug("sqlite read %s failed: %s", path, err)
+            else:
+                self._report_problem(key, path, "query-failed", str(err))
             return None
+        if report:
+            self._read_ok(key)
+        return rows
 
-    def _session_versions(self, path: Path) -> dict[str, str]:
+    def _tables(self, path: Path) -> set[str] | None:
+        rows = self._query(path, _TABLES_SQL)
+        return None if rows is None else {str(name) for (name,) in rows}
+
+    def _schema(self, path: Path) -> str | None:
+        """"v2" (OpenCode 2), "v1", or None when the db cannot be read this
+        cycle or holds neither schema — the latter is recorded.
+
+        A db with both schemas is read as v2 unless its 1.x tables took the
+        newest write — a downgrade, or a 1.x binary sharing the db. That is
+        read as v1 and disclosed, since the 2.x side then goes unread."""
+        names = self._tables(path)
+        if names is None:
+            return None
+        if _V2_TABLES <= names:
+            newest = self._query(path, _NEWEST_WRITES_SQL) if "message" in names else None
+            if newest and _int(newest[0][0]) > _int(newest[0][1]):
+                self._report_problem(
+                    "schema", path, "mixed-schema",
+                    "both OpenCode 1.x and OpenCode 2 tables are present and the 1.x "
+                    "ones were written last; reading the 1.x tables, OpenCode 2 "
+                    "sessions are not seen",
+                    status="partial",
+                )
+                return "v1"
+            self._read_ok("schema")
+            return "v2"
+        if _V1_TABLES <= names:
+            self._read_ok("schema")
+            return "v1"
+        self._report_problem(
+            "schema", path, "unrecognized-schema",
+            "tables: " + (", ".join(sorted(names)) or "none"),
+        )
+        return None
+
+    def _report_problem(
+        self, key: str, path: Path, reason: str, detail: str, *, status: str = "unreadable",
+    ) -> None:
+        """Record why one read of this vendor's db fails; logged once per
+        distinct problem rather than once per watcher cycle, and `since`
+        keeps the first sighting."""
+        entries = _READ_PROBLEMS.setdefault(self.vendor, {})
+        current = entries.get(key)
+        if current and (current["reason"], current["path"], current["detail"]) == (
+            reason, str(path), detail,
+        ):
+            return
+        log.warning("%s db %s cannot be read (%s): %s", self.vendor, path, reason, detail)
+        entries[key] = {
+            "status": status,
+            "reason": reason,
+            "path": str(path),
+            "detail": detail,
+            "since": current["since"] if current else _epoch_to_iso(time.time()) or "",
+        }
+
+    def _read_ok(self, key: str) -> None:
+        """That read went through: its recorded problem no longer holds."""
+        entries = _READ_PROBLEMS.get(self.vendor)
+        if not entries or entries.pop(key, None) is None:
+            return
+        log.info("%s db: a read that failed works again", self.vendor)
+        if not entries:
+            del _READ_PROBLEMS[self.vendor]
+
+    def _session_versions(self, path: Path, schema: str = "v1") -> dict[str, str]:
         """session id → the CLI version that wrote it (``session.version``).
         A schema without the column (older CLIs) simply yields no versions;
         the usage query itself must not depend on it."""
-        rows = self._query(path, "SELECT id, version FROM session")
+        table = "session_v2" if schema == "v2" else "session"
+        rows = self._query(path, f"SELECT id, version FROM {table}", report=False)
         if not rows:
             return {}
         return {str(sid): str(ver or "") for sid, ver in rows if sid}
@@ -292,10 +496,16 @@ class OpencodeLogReader(LogReader):
         # auth.json, legacy storage/); only the shared db carries sessions.
         if path.name != self._db_name:
             return []
-        rows = self._query(path, _USAGE_SQL.format(where=""))
+        schema = self._schema(path)
+        if schema is None:
+            return []
+        usage_sql = _V2_USAGE_SQL if schema == "v2" else _USAGE_SQL
+        rows = self._query(path, usage_sql.format(where=""), key="usage")
         if rows is None:
             return []
-        versions = self._session_versions(path) if rows else {}
+        if schema == "v2":
+            rows = [(*row[:4], _v2_directory(row[4])) for row in rows]
+        versions = self._session_versions(path, schema) if rows else {}
         out: list[TokenUsage] = []
         for row in rows:
             key = f"msg:{row[1]}"
@@ -320,6 +530,16 @@ class OpencodeLogReader(LogReader):
             stat = path.stat()
         except OSError:
             return IncrementalParseResult([], dict(checkpoint))
+        schema = self._schema(path)
+        if schema is None:
+            return IncrementalParseResult([], dict(checkpoint))
+        v2 = schema == "v2"
+        usage_sql = _V2_USAGE_SQL if v2 else _USAGE_SQL
+        anchor_sql = _V2_ANCHOR_SQL if v2 else _ANCHOR_SQL
+        max_sql = (
+            "SELECT COALESCE(MAX(rowid), 0) FROM session_message"
+            if v2 else "SELECT COALESCE(MAX(rowid), 0) FROM message"
+        )
         identity = f"{stat.st_dev}:{stat.st_ino}"
         replaced = bool(checkpoint.get("identity") and checkpoint.get("identity") != identity)
         last_row_id = 0 if replaced else max(0, int(checkpoint.get("row_id") or 0))
@@ -329,6 +549,17 @@ class OpencodeLogReader(LogReader):
             if replaced
             else {int(r) for r in (checkpoint.get("pending") or []) if int(r) > 0}
         )
+        if v2 and last_row_id and checkpoint.get("schema") != "v2":
+            # A mark taken on 1.x's `message` table, and OpenCode 2 has copied
+            # those conversations into `session_message`: start from its
+            # newest row rather than credit the copies a second time.
+            max_rows = self._query(path, max_sql)
+            if max_rows is None:
+                return IncrementalParseResult([], dict(checkpoint))
+            last_row_id = int(max_rows[0][0])
+            pending = set()
+            current = self._query(path, anchor_sql, (last_row_id,))
+            anchor = _anchor(current[0]) if current else ""
         if last_row_id and anchor:
             # Same dev:ino is not proof of the same db. A row standing under
             # the watermark rowid that is not the message the mark was taken
@@ -337,7 +568,7 @@ class OpencodeLogReader(LogReader):
             # below it; anything further down is left alone, as for a drop,
             # so a stale mark can never re-credit history. A missing row is
             # left to the drop check below.
-            current = self._query(path, _ANCHOR_SQL, (last_row_id,))
+            current = self._query(path, anchor_sql, (last_row_id,))
             if current and _anchor(current[0]) != anchor:
                 last_row_id -= 1
                 anchor = ""
@@ -349,11 +580,13 @@ class OpencodeLogReader(LogReader):
                 clause += f" OR m.rowid IN ({','.join(str(r) for r in sorted(pend))})"
             return clause
 
-        rows = self._query(path, _USAGE_SQL.format(where=_where(last_row_id, pending)))
+        rows = self._query(path, usage_sql.format(where=_where(last_row_id, pending)), key="usage")
         if rows is None:
             return IncrementalParseResult([], dict(checkpoint))
+        if v2:
+            rows = [(*row[:4], _v2_directory(row[4])) for row in rows]
         if not rows and last_row_id:
-            max_rows = self._query(path, "SELECT COALESCE(MAX(rowid), 0) FROM message")
+            max_rows = self._query(path, max_sql)
             max_row_id = int(max_rows[0][0]) if max_rows else last_row_id
             if max_row_id < last_row_id:
                 # Watermark dropped (session deleted with ON DELETE CASCADE, or
@@ -364,22 +597,25 @@ class OpencodeLogReader(LogReader):
                 # strictly preferable to re-crediting the whole history.
                 last_row_id = max_row_id
                 pending = set()
-                current = self._query(path, _ANCHOR_SQL, (last_row_id,))
+                current = self._query(path, anchor_sql, (last_row_id,))
                 anchor = _anchor(current[0]) if current else ""
 
         out: list[TokenUsage] = []
         next_row_id = last_row_id
-        versions = self._session_versions(path) if rows else {}
+        versions = self._session_versions(path, schema) if rows else {}
 
         def _cursor() -> dict:
             trimmed = sorted(pending)[-_PENDING_CAP:]
-            return {
+            cursor = {
                 "kind": "sqlite",
                 "row_id": next_row_id,
                 "pending": trimmed,
                 "identity": identity,
                 "anchor": anchor,
             }
+            if v2:
+                cursor["schema"] = "v2"
+            return cursor
 
         for row in rows:
             row_id = int(row[0])
@@ -412,18 +648,26 @@ class OpencodeLogReader(LogReader):
         Without this, opencode and kilo emitted no activity at all, leaving the
         inter-CLI messaging gate permanently open — a message could land in the
         composer mid-turn, where the TUI leaves it unsent.
+
+        OpenCode 2 has no `part` table: one event per new `session_message`
+        row instead, and its `idle` message is the turn end.
         """
         if path.name != self._db_name:
             return []
+        schema = self._schema(path)
+        if schema is None:
+            return []
+        v2 = schema == "v2"
+        prefix = _V2_ACTIVITY_PREFIX if v2 else _ACTIVITY_PREFIX
         prev = next(
-            (k[len(_ACTIVITY_PREFIX):] for k in seen_keys if k.startswith(_ACTIVITY_PREFIX)),
+            (k[len(prefix):] for k in seen_keys if k.startswith(prefix)),
             None,
         )
         def remember(row_id: int) -> None:
             seen_keys.difference_update(
-                {k for k in seen_keys if k.startswith(_ACTIVITY_PREFIX)}
+                {k for k in seen_keys if k.startswith(prefix)}
             )
-            seen_keys.add(_ACTIVITY_PREFIX + str(row_id))
+            seen_keys.add(prefix + str(row_id))
 
         # First sight of the db: everything in it is history, not activity
         # happening now. The db is shared across every session this CLI has
@@ -431,15 +675,75 @@ class OpencodeLogReader(LogReader):
         # nothing. Skip to the LAST row rather than the last row of one capped
         # page — otherwise the pages after it read as fresh activity next pass.
         if prev is None:
-            newest = self._query(path, "SELECT MAX(rowid) FROM part")
+            newest = self._query(
+                path,
+                "SELECT MAX(rowid) FROM session_message" if v2 else "SELECT MAX(rowid) FROM part",
+            )
             if newest and newest[0][0] is not None:
                 remember(int(newest[0][0]))
+            elif v2 and newest is not None:
+                # An empty table is a watermark too, or the first messages
+                # ever written would be skipped as history next pass.
+                remember(0)
             return []
-        rows = self._query(path, _ACTIVITY_SQL, (int(prev), _MAX_PARTS_PER_PASS))
+        rows = self._query(
+            path, _V2_ACTIVITY_SQL if v2 else _ACTIVITY_SQL, (int(prev), _MAX_PARTS_PER_PASS)
+        )
         if not rows:
             return []
         remember(int(rows[-1][0]))
+        if v2:
+            return [ev for row in rows for ev in self._activity_from_message(path, row)]
         return [ev for row in rows for ev in self._activity_from_part(path, row)]
+
+    def _activity_from_message(self, path: Path, row: tuple) -> list[ActivityEvent]:
+        """One OpenCode 2 `session_message` row as activity."""
+        row_id, session_id, msg_type, seq, data_json, directory, parent_id, created_ms = row
+        data = _json_obj(data_json)
+
+        def make(event_type: str, detail: str, text: str = "") -> ActivityEvent:
+            return ActivityEvent(
+                vendor=self.vendor,
+                event_type=event_type,
+                cwd=_v2_directory(str(directory or "")),
+                session_id=str(session_id or ""),
+                file_path=str(path),
+                dedup_key=f"message:{int(row_id)}",
+                timestamp=_epoch_to_iso(_int(created_ms) / 1000) or "",
+                detail=detail,
+                text=text,
+            )
+
+        if msg_type == "idle":
+            if parent_id:
+                # As for 1.x: a subagent's turn end is not the pane's.
+                return [make("agent_active", "subagent:done")]
+            return [make(
+                "turn_complete", "assistant",
+                self._v2_turn_reply_text(path, str(session_id or ""), _int(seq)),
+            )]
+        if msg_type == "user":
+            return [make(
+                "agent_active", "user",
+                user_prompt_text(str(data.get("text") or "")),
+            )]
+        if msg_type == "assistant":
+            return [make("agent_active", "assistant")]
+        return [make("agent_active", str(msg_type or "message"))]
+
+    def _v2_turn_reply_text(self, path: Path, session_id: str, idle_seq: int) -> str:
+        """The text of the last assistant step before a turn's `idle`."""
+        rows = self._query(path, _V2_TURN_TEXT_SQL, (session_id, idle_seq))
+        if not rows:
+            return ""
+        content = _json_obj(rows[0][0]).get("content")
+        chunks: list[str] = []
+        for block in content if isinstance(content, list) else []:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = str(block.get("text") or "").strip()
+                if text:
+                    chunks.append(text)
+        return "\n".join(chunks)
 
     def _turn_reply_text(self, path: Path, message_id: str) -> str:
         """The assistant text of one message, joined across its text parts."""
@@ -516,9 +820,14 @@ class OpencodeLogReader(LogReader):
         for db in self._db_paths():
             if not db.is_file():
                 continue
-            rows = self._query(db, _MARKER_SQL)
+            schema = self._schema(db)
+            if schema is None:
+                continue
+            rows = self._query(db, _V2_MARKER_SQL if schema == "v2" else _MARKER_SQL)
             if rows is None:
                 continue
+            if schema == "v2":
+                rows = [(*row[:3], _v2_directory(str(row[3] or ""))) for row in rows]
             for session_id, part_json, message_json, directory in rows:
                 try:
                     message = json.loads(str(message_json or ""))
