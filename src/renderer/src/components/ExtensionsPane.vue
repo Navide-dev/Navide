@@ -206,7 +206,8 @@ async function rollback(id: string, kind: 'factory' | 'previous', version?: stri
   busy.value = true
   error.value = ''
   try {
-    await api.rollback(id, needsConsent ? { consentConfirmed: true } : {})
+    if (needsConsent) await api.rollback(id, { consentConfirmed: true })
+    else await api.rollback(id)
     await refreshInstalled()
     void pluginUpdates.refresh()
   } catch (err) {

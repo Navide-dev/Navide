@@ -664,6 +664,41 @@ describe('L4: a file update keeps the replaced file version to go back to', () =
     expect(JSON.parse(readFileSync(localTrustRecordPath(pluginsRoot, 'acme.todo', 'candidate'), 'utf8')).version).toBe('1.1.0')
   })
 
+  it('keeps the way back when a file switch fails and is applied again (review M1)', async () => {
+    const version = (role: 'active' | 'candidate' | 'previous') => {
+      const path = localTrustRecordPath(pluginsRoot, 'acme.todo', role)
+      return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).version : null
+    }
+    let failOnce = true
+    register(() => true, {
+      onActivationChange: (change: { pluginId: string; activation?: PluginActivationCatalogEntry }) => {
+        if (failOnce && change.activation?.packageVersion === '1.1.0') {
+          failOnce = false
+          throw new Error('the switch failed for the test')
+        }
+        activations.push(change)
+      },
+    })
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    writeFileSync(picked, vsix('acme.todo', '1.1.0'))
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await expect(call('plugins:restart', { id: 'acme.todo' })).rejects.toThrow(/the switch failed for the test/)
+
+    // Failed: 1.0.0 runs again and the records are as before the switch.
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({
+      active: { packageVersion: '1.0.0' },
+      candidate: { packageVersion: '1.1.0' },
+    })
+    expect({ a: version('active'), c: version('candidate'), p: version('previous') }).toEqual({ a: '1.0.0', c: '1.1.0', p: null })
+
+    // Applied again: 1.1.0 runs and 1.0.0 is still the kept version.
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect({ a: version('active'), c: version('candidate'), p: version('previous') }).toEqual({ a: '1.1.0', c: null, p: '1.0.0' })
+    expect(call('plugins:listInstalled')).toMatchObject([{ rollbackToVersion: '1.0.0', rollbackNeedsConsent: true }])
+    await expect(call('plugins:rollback', { id: 'acme.todo', consentConfirmed: true })).resolves.toMatchObject({ packageVersion: '1.0.0' })
+  })
+
   it('removes every kept consent record with the plugin', async () => {
     await updateFromFile()
     await call('plugins:remove', { id: 'acme.todo' })

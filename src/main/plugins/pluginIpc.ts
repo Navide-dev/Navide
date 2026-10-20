@@ -3733,6 +3733,19 @@ export function registerPluginIpc(
           moveErrors.push(forgetError)
         }
       }
+      // L4 (review M1): a file-over-file switch renamed the consent records at
+      // promotion; put them back (the kept version's active again, the
+      // candidate's candidate again), so a retry neither overwrites the kept
+      // version's record nor loses the one-click way back.
+      if (promoted && localToLocal) {
+        try {
+          swapLocalRecordsForRollback(pluginsRoot, id)
+        } catch (recordError) {
+          // Fail-closed: a version without its record verifies as a Registry
+          // package, which it is not, so it cannot load or be rolled back to.
+          console.warn(`[plugins] consent records of ${id} were not restored: ${errorText(recordError)}`)
+        }
+      }
       if (promoted) {
         try {
           const promotedSelection = lifecycleSelector.read(id)
