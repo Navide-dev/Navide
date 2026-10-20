@@ -121,4 +121,19 @@ describe('PackageStagingStore (MED-5 / S8 Q3)', () => {
       vi.useRealTimers()
     }
   })
+
+  it('creates no folder until the first copy, and a failing cleanup only warns', () => {
+    const missing = join(root, 'not-yet')
+    const s = new PackageStagingStore<{ name: string }>(missing, 1000, 'TEST_EXPIRED', () => clock, () => free)
+    expect(fs.existsSync(missing)).toBe(false)
+    s.stage(new Uint8Array([1]), { name: 'x' })
+    expect(readdirSync(missing)).toHaveLength(1)
+    s.close()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const notADir = join(root, 'file')
+    writeFileSync(notADir, 'x')
+    expect(() => new PackageStagingStore(notADir, 1000, 'TEST_EXPIRED').close()).not.toThrow()
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/not removed/))
+    warn.mockRestore()
+  })
 })

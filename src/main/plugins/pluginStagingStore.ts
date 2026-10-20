@@ -70,8 +70,9 @@ export class PackageStagingStore<M> {
   private readonly timer: ReturnType<typeof setInterval>
 
   /**
-   * @param root folder for the staged files, created owner-only; leftovers of
-   *   an earlier run are removed (their requests did not survive it).
+   * @param root folder for the staged files, created owner-only on the first
+   *   copy; when it already exists, an earlier run's leftovers are removed now
+   *   (their requests did not survive it). A failing cleanup only warns.
    * @param expiredCode prefix of the error a late use of an expired id gets.
    * @param freeBytes the free space the disk check reads (tests inject it).
    */
@@ -82,9 +83,14 @@ export class PackageStagingStore<M> {
     private readonly now: () => number = () => Date.now(),
     private readonly freeBytes: () => number = () => diskFreeBytes(root),
   ) {
-    mkdirSync(root, { recursive: true, mode: 0o700 })
-    for (const name of readdirSync(root)) {
-      if (STAGED_FILE.test(name)) rmSync(join(root, name), { force: true })
+    try {
+      if (existsSync(root)) {
+        for (const name of readdirSync(root)) {
+          if (STAGED_FILE.test(name)) rmSync(join(root, name), { force: true })
+        }
+      }
+    } catch (error) {
+      console.warn(`[plugins] staged copies left by an earlier run were not removed: ${error instanceof Error ? error.message : String(error)}`)
     }
     // Unref'd: the sweep never keeps Navide from quitting.
     this.timer = setInterval(() => this.sweep(), SWEEP_INTERVAL_MS)
@@ -119,6 +125,7 @@ export class PackageStagingStore<M> {
     const lowDisk = (free: number): Error =>
       new Error(`STAGING_DISK_LOW: ${gib(free)} free on the disk holding Navide's data, and this package is ${gib(bytes.byteLength)}; ` +
         `Navide keeps at least ${gib(MIN_FREE_BYTES)} free, so nothing was staged. Free some space and ask again`)
+    mkdirSync(this.root, { recursive: true, mode: 0o700 })
     const free = this.freeBytes()
     if (free - bytes.byteLength < MIN_FREE_BYTES) throw lowDisk(free)
     const temporary = `${this.file(digest)}.${randomBytes(8).toString('hex')}.tmp`
