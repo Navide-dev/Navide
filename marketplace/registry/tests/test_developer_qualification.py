@@ -541,3 +541,17 @@ def test_a_blocked_digest_of_a_published_version_is_not_served(client):
     # Unblocking restores it: the block is reversible, unlike a yank.
     client.delete(f"/api/admin/blocklist/{added.json()['id']}", headers=ADMIN_HEADERS)
     assert client.get("/api/extensions/mei-tools/hello/1.0.0/download").status_code == 200
+
+
+def test_a_concurrent_second_first_application_gets_409_not_500(client, monkeypatch):
+    """S8 R3-L2: two first applications racing (both read 'no row' before
+    either commits); the loser hits the primary key and must get 409."""
+    from registry import qualification
+
+    sign_in(client, MEMBER, approved=False)
+    token = account_token(client)
+    assert apply(client, token).status_code == 201
+    monkeypatch.setattr(qualification, "get", lambda session, member_id: None)
+    resp = apply(client, token)
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"]["code"] == "APPLICATION_EXISTS"

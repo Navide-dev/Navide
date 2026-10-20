@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from . import audit, blocklist
@@ -371,7 +372,13 @@ def submit_application(
             "agent_drafted_fields": sorted(k for k, v in sources.items() if v == SOURCE_AGENT_DRAFT),
         },
     )
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        # Two first applications raced: the other one committed first, and
+        # this whole transaction (pause included) rolls back.
+        session.rollback()
+        raise QualificationError("APPLICATION_EXISTS", "an application is already pending") from exc
     session.refresh(row)
     return row
 
