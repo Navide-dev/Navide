@@ -56,6 +56,7 @@ const UP = '\x1b[A'
 const DOWN = '\x1b[B'
 const MENU_LINE = /^\s*(?:[❯›>]\s*)?(\d)\.\s+(.+?)\s*$/
 const CURSOR_LINE = /^\s*[❯›>]/
+const MENU_HEADING_LINES = 3
 // Keep in sync with _MULTI_SELECT_RE and _FREE_TEXT_RE in backend/agent_team_backend/channels/relay.py.
 const CHECKBOX = /^\s*(?:\[[^\]]?\]|[☐☑☒□■◻◼✓✔✗])/
 const CHECKED = /^\s*(?:\[[^\s\]]\]|[☑☒■◼✓✔✗])/
@@ -90,18 +91,22 @@ export function parseMenuOptions(screen: string): string[] {
 }
 
 /** The last numbered run and the index of the row the cursor is on (-1: none). */
-function parseMenu(screen: string): { options: string[]; cursor: number } {
+function parseMenu(screen: string): { options: string[]; cursor: number; heading: string } {
+  const lines = screen.split('\n')
   let run: string[] = []
   let runCursor = -1
+  let runStart = 0
   let best: string[] = []
   let cursor = -1
-  for (const line of screen.split('\n')) {
+  let start = 0
+  for (const [at, line] of lines.entries()) {
     const m = MENU_LINE.exec(line)
     if (!m) continue
     const n = Number(m[1])
     if (n === 1) {
       run = [m[2]]
       runCursor = -1
+      runStart = at
     } else if (n === run.length + 1) {
       run.push(m[2])
     } else {
@@ -110,8 +115,17 @@ function parseMenu(screen: string): { options: string[]; cursor: number } {
     if (CURSOR_LINE.test(line)) runCursor = run.length - 1
     best = run
     cursor = runCursor
+    start = runStart
   }
-  return { options: [...best], cursor }
+  // The question above the menu: its nearest non-empty lines, without the
+  // marks the tab header flips as the box's questions are answered.
+  const heading = lines
+    .slice(0, best.length ? start : 0)
+    .filter((l) => l.trim())
+    .slice(-MENU_HEADING_LINES)
+    .map((l) => squash(l.replace(/[☐☑☒✓✔]/g, '')))
+    .join('\n')
+  return { options: [...best], cursor, heading }
 }
 
 const isFreeText = (option: string) => FREE_TEXT.test(option.replace(CHECKBOX, ''))
@@ -137,15 +151,22 @@ function moves(from: number, to: number): string[] {
   return Array<string>(Math.abs(to - from)).fill(to > from ? DOWN : UP)
 }
 
-/** Between the steps of an answer: the pane still waits on the menu the steps
- *  were worked out for. Only box marks and the "Other" row's text may change;
- *  anything else (answered at the keyboard, the next prompt, the idle input
- *  box) stops the rest, so typed text and Enter never land outside the box. */
-export function stillOnMenu(before: string[], displayStatus: string | undefined, screen: string): boolean {
+/** Between the steps of an answer: the pane still waits on the question and
+ *  menu the steps were worked out for (`before`, the screen they were read
+ *  from). Only box marks, the cursor and the "Other" row's text may change;
+ *  anything else (answered at the keyboard, the box's next question even with
+ *  the same options, the idle input box) stops the rest, so typed text and
+ *  Enter never land outside the box. */
+export function stillOnMenu(before: string, displayStatus: string | undefined, screen: string): boolean {
   if (displayStatus !== 'awaiting') return false
-  const now = parseMenuOptions(screen)
+  const was = parseMenu(before)
+  const now = parseMenu(screen)
   const label = (o: string) => squash(o.replace(CHECKBOX, ''))
-  return now.length === before.length && before.every((o, i) => isFreeText(o) || label(o) === label(now[i]))
+  return (
+    now.heading === was.heading &&
+    now.options.length === was.options.length &&
+    was.options.every((o, i) => isFreeText(o) || label(o) === label(now.options[i]))
+  )
 }
 
 /** Writes an answer's steps in order, `gapMs` apart. Every step after the first
@@ -154,7 +175,8 @@ export function stillOnMenu(before: string[], displayStatus: string | undefined,
  *  'prompt-changed' and nothing more is written. */
 export async function writeAnswerSteps<R extends { ok: boolean }>(opts: {
   steps: string[]
-  menu: string[]
+  /** The screen the steps were worked out from. */
+  menu: string
   read: () => { displayStatus: string | undefined; screen: string }
   write: (data: string) => Promise<R>
   gapMs: number

@@ -10618,7 +10618,7 @@ registerCommand('ui.pane.sendKeys', async (args) => {
   const screenTail = () => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
   const resp = await writeAnswerSteps({
     steps: resolved.steps ?? [resolved.keys],
-    menu: parseMenuOptions(screenTail()),
+    menu: screenTail(),
     read: () => ({ displayStatus: ref.displayStatus as string | undefined, screen: screenTail() }),
     write: (data) => backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data }),
     gapMs: ANSWER_STEP_GAP_MS,

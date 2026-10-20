@@ -266,7 +266,17 @@ describe('resolveAnswerKeys for free text and multi-select (claude)', () => {
 })
 
 describe('stillOnMenu', () => {
-  const before = parseMenuOptions(claudeMulti(0))
+  const before = claudeMulti(0)
+
+  it('fails on the next question of the box even when its options read the same', () => {
+    const next = claudeMulti(0).replace('Which checks should run?', 'Which checks should run in CI?')
+    expect(stillOnMenu(before, 'awaiting', next)).toBe(false)
+  })
+
+  it('holds when only the tab header marked the question answered', () => {
+    const marked = claudeMulti(1, [1]).replace('☐ Checks', '☒ Checks')
+    expect(stillOnMenu(before, 'awaiting', marked)).toBe(true)
+  })
 
   it('holds while only the boxes and the typed text changed', () => {
     const typed = claudeMulti(2, [1, 3]).replace('Type something', 'docs')
@@ -295,7 +305,7 @@ describe('free text is typed whole', () => {
 })
 
 describe('writeAnswerSteps', () => {
-  const menu = parseMenuOptions(claudeMulti(0))
+  const menu = claudeMulti(0)
   const steps = ['1', DOWN, DOWN, 'docs', DOWN, '\r']
 
   function run(screens: string[]) {
