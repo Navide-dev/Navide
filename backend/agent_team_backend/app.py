@@ -500,14 +500,6 @@ def live_main_window_ids() -> set[str]:
     }
 
 
-def main_window_sessions() -> list["Session"]:
-    """The main windows connected now that announced a page-load id."""
-    return [
-        s for s in list(_SESSIONS)
-        if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
-    ]
-
-
 async def unicast_host(event: dict[str, Any]) -> bool:
     """Send one internal agent request to the authenticated Electron Host."""
     for session in list(_SESSIONS):
