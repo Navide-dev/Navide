@@ -10969,6 +10969,10 @@ useUiActionBus({
   buildSnapshot: buildUiActionSnapshot,
   ownsWorkspace: isLocalWorkspace,
   hostsPane: (id) => panes.value.some((p) => p.id === id),
+  // What closeActivePane / rebuildFocusedPane would act on, so neither can be
+  // aimed at the calling pane by way of the user's focus.
+  focusedPaneIds: () => [focusPaneId.value, effectiveFocusPaneId.value].filter((id): id is string => !!id),
+  isPipelineSlot: (id) => panes.value.some((p) => p.id === id && p.origin === 'pipeline'),
   connectionStatus: backend.status,
   accountActions: { signIn: agentSignIn, switch: agentAccountSwitch },
 })

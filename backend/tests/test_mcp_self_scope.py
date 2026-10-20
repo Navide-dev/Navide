@@ -254,3 +254,107 @@ async def test_the_request_carries_the_callers_workspace_from_the_registry(
 
 def test_a_host_caller_has_no_self_scope() -> None:
     assert plan_mcp._self_scope(plan_mcp._Caller(kind="host")) is None
+
+
+# ── review #534 ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_the_close_window_keybinding_command_cannot_close_your_own_window(
+    monkeypatch: pytest.MonkeyPatch, workspace: str
+) -> None:
+    """HIGH-1: workbench.action.closeWindow runs window.close() in whichever
+    window the request lands in; for a pane caller with no workspace_path, or
+    naming its own, that is the caller's own window."""
+    _no_window_reached(monkeypatch)
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
+    for target in ("", workspace, workspace + "/"):
+        result = await plan_mcp.ui_invoke(target, "workbench.action.closeWindow", _pane_ctx("pa"), None)
+        assert result["error_code"] == "self-window-close", target
+
+
+@pytest.mark.asyncio
+async def test_the_close_window_command_aimed_at_another_project_still_goes_through(
+    sent: list[dict[str, Any]], workspace: str, tmp_path: Any
+) -> None:
+    other = tmp_path / "beta"
+    other.mkdir()
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
+    agent_messaging.register("pb", "else", str(other), agent_key="claude", owner=_Window("w2"))
+    task = asyncio.create_task(_answer({}))
+    result = await plan_mcp.ui_invoke(str(other), "workbench.action.closeWindow", _pane_ctx("pa"), None)
+    await task
+    assert result["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_the_close_window_command_aimed_at_another_project_your_window_also_holds_is_refused(
+    monkeypatch: pytest.MonkeyPatch, workspace: str, tmp_path: Any
+) -> None:
+    """One window, two projects: naming the other project still lands in the
+    caller's own window."""
+    _no_window_reached(monkeypatch)
+    other = tmp_path / "beta"
+    other.mkdir()
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
+    agent_messaging.register("pb", "else", str(other), agent_key="claude", owner=_Window("w1"))
+    result = await plan_mcp.ui_invoke(str(other), "workbench.action.closeWindow", _pane_ctx("pa"), None)
+    assert result["error_code"] == "self-window-close"
+
+
+@pytest.mark.asyncio
+async def test_a_case_variant_of_your_own_workspace_is_still_yours(
+    monkeypatch: pytest.MonkeyPatch, workspace: str
+) -> None:
+    """MED-2: on a case-insensitive volume (macOS, Windows) Path.resolve keeps
+    the case it is given, so a string compare missed it. Compared by identity
+    of the directory instead."""
+    variant = workspace[:-len("alpha")] + "ALPHA"
+    if not os.path.isdir(variant):
+        pytest.skip("case-sensitive volume: the variant is a different (missing) folder")
+    _no_window_reached(monkeypatch)
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
+    for path in (variant, variant + "/"):
+        result = await plan_mcp.ui_invoke("", "ui.workspace.close", _pane_ctx("pa"), {"path": path})
+        assert result["error_code"] == "self-workspace-close", path
+
+
+@pytest.mark.asyncio
+async def test_a_case_variant_registration_still_counts_its_window_as_yours(
+    monkeypatch: pytest.MonkeyPatch, workspace: str
+) -> None:
+    variant = workspace[:-len("alpha")] + "ALPHA"
+    if not os.path.isdir(variant):
+        pytest.skip("case-sensitive volume")
+    _no_window_reached(monkeypatch)
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("detached"))
+    agent_messaging.register("pb", "sibling", variant, agent_key="claude", owner=_Window("main"))
+    result = await plan_mcp.ui_invoke("", "ui.window.close", _pane_ctx("pa"), {"windowId": "main"})
+    assert result["error_code"] == "self-window-close"
+
+
+@pytest.mark.asyncio
+async def test_a_reclaim_batch_keeps_your_refused_row_when_the_window_errors(
+    monkeypatch: pytest.MonkeyPatch, workspace: str
+) -> None:
+    """LOW-2: the caller's own row must not vanish with an error reply."""
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
+    agent_messaging.register("pb", "child", workspace, agent_key="claude", owner=_Window("w1"))
+
+    async def failing(*_a: Any, **_k: Any) -> dict[str, Any]:
+        return {"ok": False, "result": None, "error": "boom", "error_code": "ui_action_failed"}
+
+    monkeypatch.setattr(plan_mcp, "_ui_request", failing)
+    result = await plan_mcp.ui_invoke(
+        workspace, "ui.pane.reclaim", _pane_ctx("pa"), {"paneId": ["pa", "pb"]}
+    )
+    assert result["ok"] is False
+    assert [(r["paneId"], r["reason"]) for r in result["result"]["refused"]] == [("pa", "self")]
+
+
+@pytest.mark.skip(reason="TODO(S4, review #534 MED-3): ui.workspace.close is registered in S4")
+@pytest.mark.asyncio
+async def test_s4_contract_an_empty_workspace_close_path_counts_as_your_own() -> None:
+    """S4 must either require `path` or treat an empty one as the caller's own
+    workspace — whichever it picks, `{}` must not close the caller's workspace.
+    Turn this on with S4's handler."""

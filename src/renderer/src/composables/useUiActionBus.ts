@@ -58,6 +58,14 @@ export interface UseUiActionBusOptions {
    *  ui.window.close from a pane this window hosts. Absent: only the
    *  workspace half of that check applies. */
   hostsPane?: (paneId: string) => boolean
+  /** The panes the "focused pane" commands act on right now
+   *  (workbench.action.closeActivePane, workbench.action.rebuildFocusedPane).
+   *  Used to refuse them when that is the caller itself. Absent: not checked. */
+  focusedPaneIds?: () => string[]
+  /** Whether this pane is a slot of the pipeline run in this window. Used to
+   *  refuse a slot restarting, resetting or aborting the run it belongs to,
+   *  which would end the caller. Absent: not checked. */
+  isPipelineSlot?: (paneId: string) => boolean
   /** The backend connection's status. When given, this window announces
    *  `ui.invoke.ready` on every transition to 'connected' (each reconnect is
    *  a new backend session): the backend sends a global request such as
@@ -123,12 +131,33 @@ const ACCOUNT_ACTION_PREFIX = 'ui.accounts.'
  *  are cross-pane by design and must keep working across panes. */
 const PANE_PRIVATE_ACTIONS = new Set(['ui.messaging.readIncoming', 'ui.messaging.settleRead'])
 
+/** Pipeline actions that end the run's slot panes (restart / restart_from kill
+ *  the old panes, reset and abort tear the run down). */
+const PIPELINE_TEARDOWN_ACTIONS = ['ui.pipeline.abort', 'ui.pipeline.reset', 'ui.pipeline.restart', 'ui.pipeline.restart_from']
+
+/** Workspace paths compared for the self checks. Case-folded: on macOS and
+ *  Windows two spellings differing in case are one folder, and refusing a
+ *  same-but-for-case folder on a case-sensitive volume errs on the safe side.
+ *  The backend compares the folders themselves (device + inode). */
+const sameWorkspace = (a: string, b: string): boolean =>
+  !!a && !!b && normWs(a).toLowerCase() === normWs(b).toLowerCase()
+
 /** Actions that can close something: an agent may never aim them at its own
  *  pane, its own workspace or its own window. The backend refuses these first
  *  (_self_scope_refusal); this is the same rule again in the window, for any
  *  route a request can take here. "Own" comes from caller_pane_id and
  *  caller_workspace_path, which the backend fills from the credential. */
-const SELF_GUARDED_ACTIONS = new Set(['ui.pane.close', 'ui.pane.reclaim', 'ui.workspace.close', 'ui.window.close'])
+const SELF_GUARDED_ACTIONS = new Set([
+  'ui.pane.close',
+  'ui.pane.reclaim',
+  'ui.workspace.close',
+  'ui.window.close',
+  // Keybinding commands are reachable through ui_invoke too (review #534).
+  'workbench.action.closeWindow',
+  'workbench.action.closeActivePane',
+  'workbench.action.rebuildFocusedPane',
+  ...PIPELINE_TEARDOWN_ACTIONS,
+])
 
 const SELF_RECLAIM_DETAIL = 'that is your own pane — reclaiming it would end the CLI making this call'
 
@@ -144,15 +173,24 @@ function selfCloseRefusal(req: Partial<UiInvokeRequest>, opts: UseUiActionBusOpt
   }
   if (req.action === 'ui.workspace.close') {
     const path = typeof req.args?.path === 'string' ? req.args.path : ''
-    if (path && callerWs && normWs(path) === normWs(callerWs)) {
+    if (path && sameWorkspace(path, callerWs)) {
       return 'self-workspace-close: that is your own workspace — an agent cannot close the workspace it runs in'
     }
   }
-  if (req.action === 'ui.window.close') {
+  if (req.action === 'ui.window.close' || req.action === 'workbench.action.closeWindow') {
     const owns = opts.ownsWorkspace ?? ((path: string) => path === opts.currentWorkspace.value)
     if (opts.hostsPane?.(caller) || (callerWs && owns(callerWs))) {
       return 'self-window-close: this window holds your own pane or workspace — an agent cannot close it'
     }
+  }
+  if (
+    (req.action === 'workbench.action.closeActivePane' || req.action === 'workbench.action.rebuildFocusedPane') &&
+    (opts.focusedPaneIds?.() ?? []).includes(caller)
+  ) {
+    return `self-close: ${req.action} acts on the focused pane, which is your own pane right now`
+  }
+  if (PIPELINE_TEARDOWN_ACTIONS.includes(req.action) && opts.isPipelineSlot?.(caller)) {
+    return `self-close: ${req.action} would end the run your own pane is a slot of`
   }
   return null
 }
@@ -269,7 +307,9 @@ export async function handleUiInvokeRequest(
           ok = outcome.ok
           error = outcome.error
           const answer = outcome.result as { reclaimed?: unknown[]; refused?: unknown[] } | undefined
-          result = ok && answer ? { ...answer, refused: [...(answer.refused ?? []), own] } : outcome.result
+          // Kept on a failure too: the caller must still learn its own id was taken out.
+          const base = ok && answer ? answer : { reclaimed: [] }
+          result = { ...base, refused: [...(base.refused ?? []), own] }
         }
       } else {
         const outcome = await invokeCommand(req.action, req.args ?? undefined)
