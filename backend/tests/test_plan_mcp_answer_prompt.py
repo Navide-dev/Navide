@@ -159,6 +159,7 @@ async def test_a_missing_fingerprint_is_refused_too(monkeypatch) -> None:
 @pytest.mark.parametrize(("options", "answer"), [
     (["Yes", "Yes, and don't ask again for this command", "No"], "2"),
     (["Yes, allow all edits during this session", "No"], "allow"),
+    (["Resume from summary (recommended)", "Resume full session as-is", "Don't ask me again"], "3"),
 ])
 async def test_a_permanent_allow_is_refused(monkeypatch, options, answer) -> None:
     _seed()
