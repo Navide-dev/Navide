@@ -156,6 +156,48 @@ describe('PluginRegionHost', () => {
     wrapper.unmount()
   })
 
+  it('prepares a fresh guest in place when the package version changes (L2)', async () => {
+    const prepare = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, url: URL_A })
+      .mockResolvedValueOnce({ ok: true, url: URL_B })
+    const { closeContribution } = stubPlugins(prepare)
+    const wrapper = mount(PluginRegionHost, {
+      props: { contribution, workspacePath: '/ws', visible: true },
+    })
+    await flushPromises()
+
+    // Restart, an update taking effect or a rollback: the Host drained the old guest.
+    await wrapper.setProps({ contribution: { ...contribution, packageVersion: '1.1.0' } })
+    await flushPromises()
+
+    expect(prepare).toHaveBeenCalledTimes(2)
+    expect(prepare).toHaveBeenLastCalledWith({
+      contributionKey: 'acme.files.left',
+      workspace_path: '/ws',
+      theme: 'dark-github',
+    })
+    // The old instance is released before the new guest replaces it.
+    expect(closeContribution).toHaveBeenCalledWith({ contributionKey: 'acme.files.left' })
+    expect(wrapper.find('webview').attributes('src')).toBe(URL_B)
+    wrapper.unmount()
+  })
+
+  it('keeps the guest when the contribution list refreshes without a version change', async () => {
+    const prepare = vi.fn(async () => ({ ok: true, url: URL_A }))
+    stubPlugins(prepare)
+    const wrapper = mount(PluginRegionHost, {
+      props: { contribution, workspacePath: '/ws', visible: true },
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ contribution: { ...contribution, title: 'Files (renamed)' } })
+    await flushPromises()
+
+    expect(prepare).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('shows the unavailable state when the Host refuses to prepare', async () => {
     const prepare = vi.fn(async () => ({ ok: false, error: 'grant is missing' }))
     stubPlugins(prepare)
