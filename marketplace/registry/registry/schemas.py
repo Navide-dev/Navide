@@ -177,3 +177,27 @@ class FeaturedResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class TestplaceVersionInfo(VersionInfo):
+    """A testplace artifact as its tester sees it (testplace_api.py)."""
+
+    expires_at: datetime | None = None
+    promotion_status: str | None = None
+
+
+class TestplaceExtension(BaseModel):
+    namespace: str
+    name: str
+    identity: str
+    display_name: str | None
+    description: str | None
+    publisher: str
+    trust_metadata: dict
+    trust_metadata_signature: str
+    versions: list[TestplaceVersionInfo]
+    """Installable testplace artifacts, newest version first."""
+
+
+class TestplaceListResponse(BaseModel):
+    items: list[TestplaceExtension]

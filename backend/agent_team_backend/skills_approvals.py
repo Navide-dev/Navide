@@ -20,13 +20,13 @@ import time
 import uuid
 from typing import Any
 
-from .plugins.agent_tools_contract import APPROVAL_KINDS, PLUGIN_APPROVAL_TTL_S
+from .plugins.agent_tools_contract import APPROVAL_KINDS, FORM_APPROVAL_KINDS, FORM_APPROVAL_TTL_S, PLUGIN_APPROVAL_TTL_S
 from .plugins.external_content import neutralize_external_text
 from .skills_store import SkillsStoreError, SkillValidationError
 
 MAX_FINISHED = 32
 TERMINAL = frozenset({"installed", "rejected", "failed", "expired"})
-PLUGIN_KINDS = frozenset(APPROVAL_KINDS) - {"skill"}
+PLUGIN_KINDS = frozenset(APPROVAL_KINDS) - {"skill"} - frozenset(FORM_APPROVAL_KINDS)
 _REQUESTER_KEYS = frozenset({"paneId", "paneName", "workspace", "callerKind"})
 
 log = logging.getLogger(__name__)
@@ -183,6 +183,61 @@ class ApprovalRegistry:
                 "error": None,
                 "created_at": created_at,
                 "expires_at": created_at + PLUGIN_APPROVAL_TTL_S,
+            }
+            return copy.deepcopy(self._records[approval_id])
+
+    def request_form(
+        self,
+        *,
+        kind: str,
+        requester: dict[str, Any],
+        reason: str,
+        target: dict[str, Any],
+        draft: dict[str, Any],
+    ) -> dict[str, Any]:
+        """File an agent's draft for a main-window form (P4 *_fill).
+
+        Nothing is sent anywhere by filing: the window opens the form with the
+        draft, and only the user's Submit moves it to ``applying`` (the same
+        decide/finish path as a plugin request). A second draft for the same
+        form and target while one is pending replaces that draft and reason.
+        """
+        if kind not in FORM_APPROVAL_KINDS:
+            raise SkillApprovalError("BAD_REQUEST", f"unknown form request kind: {kind!r}")
+        if not isinstance(target, dict) or not all(
+            isinstance(target.get(key), str) for key in ("id", "namespace", "name")
+        ):
+            raise SkillApprovalError("BAD_REQUEST", "a form request needs a target id, namespace and name")
+        if not isinstance(reason, str):
+            raise SkillApprovalError("BAD_REQUEST", "the reason must be a string")
+        if not isinstance(draft, dict) or not isinstance(draft.get("fields"), dict):
+            raise SkillApprovalError("BAD_REQUEST", "a form request needs draft fields")
+        requester = _plugin_requester(requester)
+        owner = f"{kind}:{target['id']}@{target.get('version') or ''}"
+        with self._lock:
+            self._expire()
+            for record in self._records.values():
+                if record["status"] == "pending" and record["owner"] == owner:
+                    record.update(reason=_agent_text(reason), draft=copy.deepcopy(draft), requester=requester)
+                    return copy.deepcopy(record)
+            approval_id = uuid.uuid4().hex
+            created_at = time.time()
+            self._records[approval_id] = {
+                "approval_id": approval_id,
+                "kind": kind,
+                "owner": owner,
+                "requester": requester,
+                "reason": _agent_text(reason),
+                "target": {"version": None, "fromVersion": None, **copy.deepcopy(target)},
+                "card": None,
+                "diff": None,
+                "disabled": None,
+                # The agent's field values; the form marks each as written by an agent.
+                "draft": copy.deepcopy(draft),
+                "status": "pending",
+                "error": None,
+                "created_at": created_at,
+                "expires_at": created_at + FORM_APPROVAL_TTL_S,
             }
             return copy.deepcopy(self._records[approval_id])
 

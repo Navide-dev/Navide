@@ -47,6 +47,7 @@ import {
   removeCredentials,
   resolveToken,
 } from './registry-client.mjs'
+import { runTestplace } from './testplace.mjs'
 import { formatScan, readZipEntries, scanFiles } from './scan.mjs'
 
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
@@ -550,8 +551,9 @@ function usage() {
     '  navide-plugin whoami [--registry <url>]',
     '  navide-plugin status [<namespace.name>[@<version>]] [--registry <url>] [--json]',
     '  navide-plugin logout [--registry <url>]',
-    '  navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--insecure-http]',
+    '  navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]',
     '  navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]',
+    '  navide-plugin testplace invite|code|versions|revoke|promote ... (run `navide-plugin testplace` for details)',
     '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]',
     '',
     `The registry defaults to $NAVIDE_REGISTRY_URL, then https://server.navide.dev/registry.`,
@@ -573,7 +575,7 @@ const COMMANDS = {
   whoami: [0, ['--registry'], []],
   status: [1, ['--registry'], ['--json'], true],
   logout: [0, ['--registry'], []],
-  publish: [1, ['--registry', '--target', '--signature', '--token'], ['--insecure-http', '--via-navide', '--no-browser']],
+  publish: [1, ['--registry', '--target', '--signature', '--token', '--channel'], ['--insecure-http', '--via-navide', '--no-browser']],
   'dev-backend': [1, ['--call', '--args', '--subscribe', '--data'], []],
 }
 
@@ -617,6 +619,8 @@ function isPrereleaseVersion(version) {
 }
 
 async function main(argv) {
+  // Subcommands with their own arguments (testplace.mjs).
+  if (argv[0] === 'testplace') return runTestplace(argv.slice(1))
   const { command, positional, options } = parseArgs(argv)
   const [argument] = positional
   if (command === 'init') {
@@ -748,12 +752,17 @@ async function main(argv) {
     target,
     signature: options.get('--signature'),
     token: options.get('--token'),
+    channel: options.get('--channel'),
   })
   console.log(`${result.status} ${result.body}`)
   if (result.status < 200 || result.status >= 300) process.exitCode = 1
-  else if (isPrereleaseVersion(publishedVersion(result.body))) {
+  else if (options.get('--channel') === 'testplace') {
     console.log(
-      'This version is a pre-release: it will be public to everyone who turns on Get pre-releases for this Navide plugin, and it goes through review. To test with specific people only, wait for Testplace (Navide 0.2.27).',
+      'This is a Testplace build: only testers you invite can install it, and it expires in 90 days. Invite them with `navide-plugin testplace invite add`.',
+    )
+  } else if (isPrereleaseVersion(publishedVersion(result.body))) {
+    console.log(
+      'This version is a pre-release: it will be public to everyone who turns on Get pre-releases for this Navide plugin, and it goes through review. To test with specific people only, publish with --channel testplace instead.',
     )
   }
 }

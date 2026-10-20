@@ -461,6 +461,76 @@ def _developer_qualification(connection: sqlite3.Connection) -> None:
         )
 
 
+def _testplace(connection: sqlite3.Connection) -> None:
+    """Testplace invites, public codes and promotion review (B2-B5).
+    Existing versions get no promotion state."""
+    columns = _columns(connection, "extension_version")
+    for column, ddl in (
+        ("promotion_status", "VARCHAR"),
+        ("promotion_requested_at", "DATETIME"),
+        ("promotion_reviewed_at", "DATETIME"),
+        ("promotion_reviewed_by", "VARCHAR"),
+        ("promotion_reason", "VARCHAR"),
+    ):
+        if column not in columns:
+            connection.execute(f"ALTER TABLE extension_version ADD COLUMN {column} {ddl}")
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS testplace_code ("
+        "id INTEGER NOT NULL PRIMARY KEY, "
+        "extension_id INTEGER NOT NULL REFERENCES extension (id), "
+        "code_hash VARCHAR NOT NULL, "
+        "max_testers INTEGER NOT NULL, "
+        "review_status VARCHAR NOT NULL DEFAULT 'pending', "
+        "review_reason VARCHAR, "
+        "reviewed_at DATETIME, "
+        "reviewed_by VARCHAR, "
+        "created_at DATETIME NOT NULL, "
+        "revoked_at DATETIME)"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_testplace_code_code_hash "
+        "ON testplace_code (code_hash)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_testplace_code_extension_id "
+        "ON testplace_code (extension_id)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_testplace_code_review_status "
+        "ON testplace_code (review_status)"
+    )
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS testplace_invite ("
+        "id INTEGER NOT NULL PRIMARY KEY, "
+        "extension_id INTEGER NOT NULL REFERENCES extension (id), "
+        "label VARCHAR NOT NULL DEFAULT '', "
+        "token_hash VARCHAR, "
+        "code_id INTEGER REFERENCES testplace_code (id), "
+        "member_id VARCHAR, "
+        "created_at DATETIME NOT NULL, "
+        "claimed_at DATETIME, "
+        "revoked_at DATETIME)"
+    )
+    for name, column in (
+        ("extension_id", "extension_id"),
+        ("code_id", "code_id"),
+        ("member_id", "member_id"),
+    ):
+        connection.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_testplace_invite_{name} "
+            f"ON testplace_invite ({column})"
+        )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_testplace_invite_token_hash "
+        "ON testplace_invite (token_hash)"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_testplace_invite_member "
+        "ON testplace_invite (extension_id, member_id) "
+        "WHERE member_id IS NOT NULL AND revoked_at IS NULL"
+    )
+
+
 GRANDFATHER_DAYS = 30
 """Grace period for namespaces self-claimed before qualification existed."""
 
@@ -513,6 +583,7 @@ MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = 
     (9, "version-disclosure", _add_version_disclosure),
     (10, "version-channel-expiry", _add_version_channel_expiry),
     (11, "developer-qualification", _developer_qualification),
+    (12, "testplace", _testplace),
     (13, "grandfather-block-reason", _grandfather_block_reason),
 )
 

@@ -34,6 +34,7 @@ import {
   PLUGIN_APPROVAL_LIST_MESSAGE,
   PLUGIN_APPROVAL_REQUEST_EVENT,
   PLUGIN_APPROVAL_RESOLVED_EVENT,
+  isFormApprovalKind,
   revealInvisibleText,
   type PluginApprovalRequest,
 } from '../../../shared/pluginAgentTools'
@@ -77,6 +78,8 @@ const appliable = computed(() => !!current.value && isAppliableKind(current.valu
 
 function enqueue(request: PluginAgentRequest): void {
   if (!request?.approval_id || request.status !== 'pending') return
+  // A form request (an agent's draft) opens its form in Settings, not this card.
+  if (isFormApprovalKind(request.kind)) return
   if (queue.value.some((r) => r.approval_id === request.approval_id)) return
   queue.value.push(request)
 }

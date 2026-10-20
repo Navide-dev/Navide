@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Testplace — Navide Marketplace{% endblock %}
+{% block content %}
+<nav class="crumbs"><a href="{{ base }}/admin/review">← Review queue</a> · <a href="{{ base }}/admin/blocklist">Blocklist</a> · <a href="{{ base }}/admin/reports">Reports</a></nav>
+<section class="panel">
+  <h1>Testplace</h1>
+  <p class="muted">Invite-only test builds. Invited testers get the automatic checks only; the first public
+    test code of a Navide plugin waits here for a light review. A promotion sends the same package
+    (digest unchanged) to the Marketplace: approving it re-signs it as a public version.</p>
+  <ul class="summary-bar" aria-label="Testplace summary">
+    <li class="{{ 'is-alert' if codes else '' }}"><b>{{ codes|length }}</b><span>codes in review</span></li>
+    <li class="{{ 'is-alert' if promotions else '' }}"><b>{{ promotions|length }}</b><span>promotion requests</span></li>
+  </ul>
+  {% if error %}<p class="warn warn-block" role="alert">{{ error }}</p>{% endif %}
+
+  <h2 class="section-title">Public test codes in review ({{ codes|length }})</h2>
+  {% for c in codes %}
+  <div class="review-item">
+    <h3 class="review-title"><span class="mini-tile hue-{{ c.identity|tile_hue }}" aria-hidden="true">{{ c.identity.split('.')[-1][:1]|upper }}</span>#{{ c.row.id }} · {{ c.identity }}
+      <span class="tag">up to {{ c.row.max_testers }} testers</span></h3>
+    <div class="muted">Requested {{ c.row.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</div>
+    <form method="post" action="{{ base }}/admin/testplace/codes/{{ c.row.id }}" class="row">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input class="wide-input" name="reason" placeholder="Reason (required to reject; shown to the developer)" maxlength="500">
+      <button type="submit" name="decision" value="approve">Open the code</button>
+      <button type="submit" name="decision" value="reject">Reject</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="empty">No public test codes waiting.</p>
+  {% endfor %}
+
+  <h2 class="section-title">Promotion requests ({{ promotions|length }})</h2>
+  {% for p in promotions %}
+  <div class="review-item">
+    <h3 class="review-title"><span class="mini-tile hue-{{ p.extension.identity|tile_hue }}" aria-hidden="true">{{ p.extension.name[:1]|upper }}</span>{{ p.extension.identity }} @ {{ p.version }}
+      <span class="tag">{{ p.targets|join(', ') }}</span></h3>
+    <ul class="summary-bar" aria-label="Test facts">
+      <li><b>{{ p.facts.testers }}</b><span>testers</span></li>
+      <li><b>{{ p.facts.first_published_at.strftime('%Y-%m-%d') if p.facts.first_published_at else '—' }}</b><span>testing since</span></li>
+      <li class="{{ 'is-alert' if p.facts.reports else '' }}"><b>{{ p.facts.reports }}</b><span>reports</span></li>
+    </ul>
+    <div class="muted">Requested {{ p.requested_at.strftime('%Y-%m-%d %H:%M') }} UTC · digests {% for d in p.artifacts %}<code>{{ d[:12] }}</code> {% endfor %}</div>
+    <form method="post" action="{{ base }}/admin/testplace/promotions/{{ p.extension.namespace }}/{{ p.extension.name }}/{{ p.version }}" class="row">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% for d in p.artifacts %}<input type="hidden" name="artifact" value="{{ d }}">{% endfor %}
+      <input class="wide-input" name="reason" placeholder="Reason (required to reject; shown to the developer)" maxlength="500">
+      <button type="submit" name="decision" value="approve">Approve and publish</button>
+      <button type="submit" name="decision" value="reject">Reject</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="empty">No promotion requests.</p>
+  {% endfor %}
+
+  <h2 class="section-title">Revoke a testplace version</h2>
+  <p class="muted">Yanks the version and adds it to the signed takedown list; Navide turns it off for
+    testers within the trust metadata's lifetime (24 hours).</p>
+  <form method="post" action="{{ base }}/admin/testplace/revoke" class="row">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="identity" placeholder="namespace.name" required maxlength="129">
+    <input name="version" placeholder="1.2.0" required maxlength="64">
+    <input class="wide-input" name="reason" placeholder="Reason (recorded in the audit trail)" required maxlength="500">
+    <button type="submit">Revoke</button>
+  </form>
+</section>
+{% endblock %}

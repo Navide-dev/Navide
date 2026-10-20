@@ -145,6 +145,14 @@ class ExtensionVersion(SQLModel, table=True):
     scan: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     """Static scan report (contract 3.8) signed through `scanDigest`; None
     until the Registry has a scanner (DS8)."""
+    promotion_status: str | None = None
+    """Testplace -> Marketplace promotion (testplace.py): 'requested' |
+    'approved' | 'rejected'; None when never sent for review."""
+    promotion_requested_at: datetime | None = None
+    promotion_reviewed_at: datetime | None = None
+    promotion_reviewed_by: str | None = None
+    promotion_reason: str | None = None
+    """Rejection reason shown to the publisher."""
 
 
 class ExtensionAsset(SQLModel, table=True):
@@ -364,3 +372,53 @@ class RegistryAudit(SQLModel, table=True):
     reason: str | None = None
     detail: dict = Field(default_factory=dict, sa_column=Column(JSON))
     """Facts about the action; never a token, key or other secret."""
+
+
+class TestplaceInvite(SQLModel, table=True):
+    """One tester seat of a testplace extension (testplace.py). A personal
+    invite is created with a single-use join token and bound to the Cloud
+    member who redeems it; a public-code seat is created already bound."""
+
+    __tablename__ = "testplace_invite"
+    __table_args__ = (
+        # One live seat per member per extension, whichever way they joined.
+        Index(
+            "uq_testplace_invite_member",
+            "extension_id",
+            "member_id",
+            unique=True,
+            sqlite_where=text("member_id IS NOT NULL AND revoked_at IS NULL"),
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    extension_id: int = Field(foreign_key="extension.id", index=True)
+    label: str = ""
+    """The developer's note for this seat (for example the address the link
+    was sent to). Never shown to the tester or to anyone else."""
+    token_hash: str | None = Field(default=None, index=True, unique=True)
+    """sha256 of the join token; None for a seat taken through a public code."""
+    code_id: int | None = Field(default=None, foreign_key="testplace_code.id", index=True)
+    member_id: str | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=_now)
+    claimed_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+class TestplaceCode(SQLModel, table=True):
+    """A public test code with a tester cap (testplace.py). The first code of
+    an extension waits for a light admin review (D2) before it can be used."""
+
+    __tablename__ = "testplace_code"
+
+    id: int | None = Field(default=None, primary_key=True)
+    extension_id: int = Field(foreign_key="extension.id", index=True)
+    code_hash: str = Field(index=True, unique=True)
+    max_testers: int
+    review_status: str = Field(default="pending", index=True)
+    """'pending' | 'approved' | 'rejected' (review.py statuses)."""
+    review_reason: str | None = None
+    reviewed_at: datetime | None = None
+    reviewed_by: str | None = None
+    created_at: datetime = Field(default_factory=_now)
+    revoked_at: datetime | None = None

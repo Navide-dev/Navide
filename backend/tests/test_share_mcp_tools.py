@@ -34,6 +34,19 @@ MARKETPLACE_REQUEST_TOOLS = [
 #: Core tools registered after those: plan mcp_614482's read-only failover state and accounts (P1)
 #: and account sign-in (P2).
 ACCOUNT_TOOLS = ["cli_failover_state", "cli_accounts_list", "cli_account_sign_in"]
+#: Core tools registered after those: plan mcp-navide-0-2-27 W3's developer forms (marketplace_forms.py).
+FORM_TOOLS = [
+    "marketplace_developer_application_open",
+    "marketplace_developer_application_fill",
+    "marketplace_developer_status",
+    "marketplace_publish_open",
+    "marketplace_publish_fill",
+    "marketplace_publish_status",
+    "marketplace_publish_yank_open",
+    "marketplace_publish_yank_fill",
+]
+#: Core tools registered last: plan mcp-navide-0-2-27 W5's Testplace invitations (testplace_tools.py).
+TESTPLACE_TOOLS = ["marketplace_testplace_invite_open", "marketplace_testplace_invite_fill"]
 #: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills).
 PLUGIN_PREFIXES = ("plan_", "skills_")
 BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"
@@ -53,7 +66,7 @@ def test_the_existing_tools_are_exactly_mains_and_the_share_tools_come_after() -
     # onto the same server; those are left out by their known prefixes, and
     # anything else that is not main's must make this fail.
     tools = [t for t in _tools() if t["name"] in core or not t["name"].startswith(PLUGIN_PREFIXES)]
-    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS + ACCOUNT_TOOLS
+    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS + ACCOUNT_TOOLS + FORM_TOOLS + TESTPLACE_TOOLS
     existing = [t for t in tools if t["name"] not in added]
     assert json.loads(json.dumps(existing, sort_keys=True)) == baseline
     assert [t["name"] for t in tools[-len(added):]] == added

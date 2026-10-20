@@ -224,7 +224,9 @@ def test_audit_and_activity_ddl_is_valid_sqlite() -> None:
 def test_approval_kinds_and_decide_action() -> None:
     assert tools.APPROVAL_KINDS == (
         "skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable",
+        "developer-application", "plugin-publish", "plugin-yank", "testplace-invite",
     )
+    assert set(tools.FORM_APPROVAL_KINDS) < set(tools.APPROVAL_KINDS)
     assert tools.PLUGIN_APPROVAL_DECIDE_ACTION == "plugins.agent_request.decide"
 
 

@@ -21,6 +21,9 @@ from . import audit, cloud_auth, qualification
 from .auth import PublisherIdentity, get_publisher_identity
 from .config import VERIFIER_ACCEPTING, Settings, load_settings
 from . import review
+from .qualification import publisher_problem
+from .testplace import expiry as testplace_expiry
+from .testplace_api import register_testplace_routes
 from .blocklist import db_blocklists, digest_blocked
 from .db import create_db_engine
 from .dns_verify import TxtResolver, doh_txt_resolver
@@ -202,6 +205,12 @@ def create_app(
         return await call_next(request)
 
     _register_routes(app)
+    register_testplace_routes(
+        app,
+        version_info=_version_info,
+        file_chunks=_file_chunks,
+        require_admin_token=_require_admin_token,
+    )
 
     # Discovery website (p3-discovery): server-rendered pages + self-hosted
     # static assets, mounted alongside the /api/* JSON API on the same app.
@@ -215,6 +224,9 @@ def create_app(
     from .publisher_web import create_publisher_router
 
     app.include_router(create_publisher_router())
+    from .testplace_web import create_testplace_admin_router
+
+    app.include_router(create_testplace_admin_router())
     app.add_middleware(_HtmlSecurityHeadersMiddleware, csp=html_content_security_policy(settings))
     return app
 
@@ -557,12 +569,14 @@ def _register_routes(app: FastAPI) -> None:
     ) -> PublishResponse:
         state: RegistryState = request.app.state.registry
         settings = state.settings
-        # Testplace opens in 0.2.27 (invites, Cloud-identity downloads). Until
-        # then no testplace row can exist, so no released App can be served one.
-        if channel == TESTPLACE_CHANNEL:
+        testplace_publish = channel == TESTPLACE_CHANNEL
+        # Testplace (0.2.27): only an authenticated, vetted publisher; the
+        # row is signed with `channel`/`expiresAt` (which released Apps
+        # reject) and reaches testers only through testplace_api.py.
+        if testplace_publish and not identity.authenticated:
             raise HTTPException(
-                status_code=409,
-                detail="TESTPLACE_NOT_OPEN: testplace publishing is not open yet",
+                status_code=401,
+                detail="testplace publishing needs a publisher token",
             )
         if channel is not None and channel not in VERSION_CHANNELS:
             raise HTTPException(status_code=400, detail=f"unknown channel '{channel}'")
@@ -581,7 +595,11 @@ def _register_routes(app: FastAPI) -> None:
         manifest = loaded.manifest
         namespace = manifest.namespace
         name = manifest.extension_name
-        if channel is not None and channel != version_channel(manifest.version):
+        if (
+            channel is not None
+            and not testplace_publish
+            and channel != version_channel(manifest.version)
+        ):
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -612,6 +630,12 @@ def _register_routes(app: FastAPI) -> None:
         if block_reason is not None:
             raise HTTPException(status_code=403, detail=block_reason)
         publisher = repo.get_or_create_publisher(publisher_name)
+        if testplace_publish:
+            problem = publisher_problem(repo.session, publisher)
+            if problem is not None:
+                raise HTTPException(
+                    status_code=403, detail={"code": problem[0], "message": problem[1]}
+                )
 
         # Signature gate (p3-security): reject a bad signature; allow unsigned
         # only when the config explicitly permits it (dev).
@@ -657,7 +681,8 @@ def _register_routes(app: FastAPI) -> None:
             display_name=display_name,
             description=description,
             categories=categories,
-            update_existing=not publisher.review_required,
+            # A testplace build never changes the public listing.
+            update_existing=not publisher.review_required and not testplace_publish,
         )
 
         conflict = _publish_conflict(
@@ -676,7 +701,54 @@ def _register_routes(app: FastAPI) -> None:
         # for the reviewer; approval scans again and signs that report.
         scan = run_scan(data, artifact_digest=loaded.digest, target=target,
                         manifest=manifest.model_dump(exclude_none=True))
-        if publisher.review_required:
+        expires_at = None
+        if testplace_publish:
+            # D2: an invite-list build gets the automatic checks only, so a
+            # blocking one refuses it instead of waiting for a reviewer.
+            review_report = review.submission_report(
+                repo.session,
+                namespace=namespace,
+                name=name,
+                data=data,
+                manifest=manifest.model_dump(exclude_none=True),
+                signature_present=signature is not None,
+                size_limit=MAX_ARCHIVE_SIZE,
+            )
+            if review.blocking_similarity(review_report):
+                raise HTTPException(
+                    status_code=422,
+                    detail="name similarity check blocks this testplace build",
+                )
+            if review.secret_findings(review_report):
+                raise HTTPException(
+                    status_code=422,
+                    detail="secret scan found likely credentials in this testplace build",
+                )
+            expires_at = testplace_expiry()
+            try:
+                registry_envelope, registry_signature = state.trust_signer.sign_envelope(
+                    artifact_digest=loaded.digest,
+                    package_id=f"{namespace}.{name}",
+                    version=manifest.version,
+                    target=target,
+                    publisher_id=publisher_name,
+                    channel=TESTPLACE_CHANNEL,
+                    expires_at=expires_at,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            try:
+                disclosure, disclosure_envelope, disclosure_signature = sign_disclosure(
+                    state.trust_signer,
+                    manifest.model_dump(exclude_none=True),
+                    registry_envelope,
+                    scan,
+                )
+            except CanonicalJsonError as exc:
+                raise HTTPException(status_code=400, detail=f"manifest cannot be disclosed: {exc}") from exc
+            trust_tier = compute_trust_tier(signed=True)
+            review_status = review.APPROVED
+        elif publisher.review_required:
             # Review before publish (D3): a self-claimed namespace's upload
             # waits unsigned and invisible until an admin approves it, which
             # is when the registry signs it (review.approve).
@@ -741,6 +813,8 @@ def _register_routes(app: FastAPI) -> None:
             disclosure_envelope=disclosure_envelope,
             disclosure_signature=disclosure_signature,
             scan=scan,
+            channel=TESTPLACE_CHANNEL if testplace_publish else None,
+            expires_at=expires_at,
         )
         if identity.authenticated:
             audit.record(

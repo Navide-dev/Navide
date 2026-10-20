@@ -59,6 +59,19 @@ B2C_CORE_TOOLS = frozenset({
 })
 #: Core tools added after that digest by plan mcp_614482 (read-only failover state and accounts, account sign-in).
 ACCOUNT_CORE_TOOLS = frozenset({"cli_failover_state", "cli_accounts_list", "cli_account_sign_in"})
+#: Core tools added after that digest by plan mcp-navide-0-2-27 W3 (developer forms, marketplace_forms.py).
+FORM_CORE_TOOLS = frozenset({
+    "marketplace_developer_application_open",
+    "marketplace_developer_application_fill",
+    "marketplace_developer_status",
+    "marketplace_publish_open",
+    "marketplace_publish_fill",
+    "marketplace_publish_status",
+    "marketplace_publish_yank_open",
+    "marketplace_publish_yank_fill",
+})
+#: Core tools added after that digest by plan mcp-navide-0-2-27 W5 (Testplace invitations, testplace_tools.py).
+TESTPLACE_CORE_TOOLS = frozenset({"marketplace_testplace_invite_open", "marketplace_testplace_invite_fill"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server).
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"
@@ -230,8 +243,8 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     pristine = await _tools_list_text()
     builtin = await _builtin_package_tool_names()
     module_only = [t for t in json.loads(pristine) if t["name"] not in builtin]
-    assert B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS <= {t["name"] for t in module_only}
-    existing = [t for t in module_only if t["name"] not in B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS]
+    assert B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS <= {t["name"] for t in module_only}
+    existing = [t for t in module_only if t["name"] not in B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS]
     module_text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     assert hashlib.sha256(module_text.encode()).hexdigest() == MAIN_TOOLS_LIST_SHA256
 

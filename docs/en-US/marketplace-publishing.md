@@ -393,9 +393,10 @@ version a pre-release.
 A publish may name its channel with `?channel=stable` or
 `?channel=pre-release`; it must match the version (`400` otherwise). Leaving
 it out derives the channel from the version as above. `?channel=testplace`
-(invite-only test builds that expire after 90 days) is answered with
-`409 TESTPLACE_NOT_OPEN` until Testplace opens in Navide 0.2.27. Public
-listings, details and downloads never include a testplace version. Its
+publishes an invite-only test build that expires after 90 days (see
+[Testplace](#testplace) below); it needs a publisher token of a namespace
+whose developer qualification is approved. Public listings, details and
+downloads never include a testplace version. Its
 Registry envelope carries `channel` and `expiresAt` inside the signature, so
 an App released before Testplace refuses it, and a current App refuses it
 after it expires (`TESTPLACE_EXPIRED`) or when the channel is one it does not
@@ -411,8 +412,7 @@ way. Navide labels a pre-release **Pre-release (reviewed)**, never unreviewed.
 ### Pre-release, Testplace or a local install
 
 Pick by who should get the build and whether it must be reviewed first.
-Testplace is planned for Navide 0.2.27; until then, use a pre-release or send
-the package file.
+Testplace needs Navide 0.2.27 or later on the tester's side.
 
 | | Pre-release | Testplace | Local install |
 |---|---|---|---|
@@ -444,6 +444,38 @@ the package file.
 | Navide での表示 | 「プレリリース版（審査済み）」 | 「テスト版。人による審査なし。*日付* に期限切れ」 | 「ローカルファイル」、Navide の審査を受けていない旨を表示 |
 | 有効期限 | なし | 90 日後。Navide プラグインは無効になり、データは残ります | なし |
 | 入手方法 | Navide マーケットプレイスからの更新、または「*バージョン* をインストール（プレリリース）」 | 招待を受け入れたあと Navide マーケットプレイスから | 別途同意したうえで「ファイルからインストール」 |
+
+### Testplace
+
+Testplace hands a build to the testers you pick before it is reviewed for
+the Marketplace. Only a namespace whose developer qualification is approved
+can use it, and testers sign in to Navide Cloud: nobody else can see or
+download the build, and it never appears in search or listings.
+
+```sh
+navide-plugin publish acme.files-1.3.0.vsix --channel testplace
+navide-plugin testplace invite add acme.files alice@example.com "Bob (QA)"
+navide-plugin testplace invite list acme.files
+```
+
+- `publish --channel testplace` runs the automatic checks only (a likely
+  credential or a name too close to another Navide plugin refuses the build)
+  and signs it with an expiry 90 days out.
+- `invite add` creates one single-use join token per label and prints each
+  once. A label is your own note (for example the address you send it to); it
+  is never shown to the tester. Send the token yourself; the tester pastes it
+  in Navide while signed in to Navide Cloud. At most 100 invites per Navide
+  plugin; revoking one (`invite revoke`) frees its seat and removes that
+  tester's access.
+- `code create --max-testers <n>` opens a public test code for up to 1,000
+  testers. The first code of a Navide plugin waits for a light review by
+  Navide; later ones open at once. `code revoke` stops new joins; testers who
+  already joined keep their access.
+- `revoke <id> <version>` withdraws a test build early. Navide turns it off for
+  its testers within 24 hours.
+- `promote <id> <version>` sends the same package to Marketplace review. When
+  it is approved it becomes an ordinary stable or pre-release version (by its
+  SemVer), and testers keep it without reinstalling.
 
 ## 7. Extension packs
 
@@ -538,7 +570,10 @@ navide-plugin login [--registry <url>] [--label <label>] [--no-browser] [--insec
 navide-plugin whoami [--registry <url>]
 navide-plugin status [<namespace.name>[@<version>]] [--registry <url>] [--json]
 navide-plugin logout [--registry <url>]
-navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--insecure-http]
+navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]
 navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]
+navide-plugin testplace invite add <namespace.name> <label>... | invite list <namespace.name> | invite revoke <namespace.name> <invite-id>
+navide-plugin testplace code create <namespace.name> --max-testers <1-1000> | code list <namespace.name> | code revoke <namespace.name> <code-id>
+navide-plugin testplace versions <namespace.name> | revoke <namespace.name> <version> [--reason <text>] | promote <namespace.name> <version>
 navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]
 ```

@@ -70,8 +70,13 @@ export const CORE_TOOL_NAMES = [
   'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
   'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',
   'cli_usage', 'cli_wait_idle', 'cli_whoami', 'credentials_findings', 'credentials_list', 'evolve_report',
-  'marketplace_detail', 'marketplace_request_install', 'marketplace_request_rollback',
-  'marketplace_request_status', 'marketplace_request_update', 'marketplace_search', 'mcp_list', 'memory_list',
+  'marketplace_detail',
+  'marketplace_developer_application_fill', 'marketplace_developer_application_open',
+  'marketplace_developer_status', 'marketplace_publish_fill', 'marketplace_publish_open',
+  'marketplace_publish_status', 'marketplace_publish_yank_fill', 'marketplace_publish_yank_open',
+  'marketplace_request_install', 'marketplace_request_rollback',
+  'marketplace_request_status', 'marketplace_request_update', 'marketplace_search',
+  'marketplace_testplace_invite_fill', 'marketplace_testplace_invite_open', 'mcp_list', 'memory_list',
   'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
   'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
   'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
@@ -668,10 +673,49 @@ export const PLUGIN_ACTIVITY_FORGET_MESSAGE = 'plugin.activity.forget'
 
 // ── approval registry (B2) ──────────────────────────────────────────────────
 
-export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
+export type FormApprovalKind = 'developer-application' | 'plugin-publish' | 'plugin-yank' | 'testplace-invite'
+export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable' | FormApprovalKind
 export const APPROVAL_KINDS: readonly ApprovalKind[] = [
   'skill', 'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable',
+  'developer-application', 'plugin-publish', 'plugin-yank', 'testplace-invite',
 ]
+/** Requests that are a draft for a main-window form (P4 *_fill), not an approval
+ *  card: the user edits the draft and presses Submit; closing the form rejects it. */
+export const FORM_APPROVAL_KINDS: readonly FormApprovalKind[] = ['developer-application', 'plugin-publish', 'plugin-yank', 'testplace-invite']
+export function isFormApprovalKind(kind: string): kind is FormApprovalKind {
+  return (FORM_APPROVAL_KINDS as readonly string[]).includes(kind)
+}
+/** created_at + this for a form request (a card's is 15 minutes). */
+export const FORM_APPROVAL_TTL_S = 60 * 60
+/** Backend -> main windows: open a form for the user to fill in (P4 *_open). */
+export const MARKETPLACE_FORM_OPEN_EVENT = 'marketplace.form_open'
+export type MarketplaceForm = 'developer-application' | 'publish' | 'publish-yank' | 'testplace-invite'
+export const MARKETPLACE_FORMS: readonly MarketplaceForm[] = ['developer-application', 'publish', 'publish-yank', 'testplace-invite']
+export interface MarketplaceFormOpen {
+  form: MarketplaceForm
+  /** Locating data only (a package path, an id and version), never a field value the agent wrote. */
+  prefill: Record<string, string>
+  requester: PluginApprovalRequest['requester']
+}
+/** Backend -> Host: `{request_id, query}` for the developer status tools; the Host
+ *  answers `marketplace.developer.result` `{request_id, ok, result | error, error_code}`. */
+export const MARKETPLACE_DEVELOPER_REQUEST_EVENT = 'marketplace.developer.request'
+export const MARKETPLACE_DEVELOPER_RESULT_MESSAGE = 'marketplace.developer.result'
+export type MarketplaceDeveloperQuery = { kind: 'developer-status' } | { kind: 'publish-status'; id: string }
+export const DEVELOPER_ERROR_CODES = ['NOT_SIGNED_IN', 'QUALIFICATION_REQUIRED'] as const
+/** Which side wrote a form field (the Registry's field_sources spelling). */
+export type FormFieldSource = 'user' | 'agent-draft'
+/** A form request's draft: the agent's field values and, per field, who wrote it. */
+export interface FormDraft {
+  fields: Record<string, string | boolean>
+  field_sources: Record<string, FormFieldSource>
+}
+/** The developer application's fields (Registry W2, real-name per DX 5.4). */
+export const DEVELOPER_APPLICATION_FIELDS = [
+  'applicant_type', 'legal_name', 'display_name', 'contact_email', 'country', 'intended_namespace',
+  'description', 'agreed_terms', 'organization_name', 'organization_id', 'website', 'source_url',
+  'needs_native_backend', 'domain',
+] as const
 
 export type PluginApprovalStatus = 'pending' | 'applying' | 'completed' | 'rejected' | 'failed' | 'expired'
 
@@ -686,12 +730,14 @@ export interface PluginApprovalRequest {
   target: { id: string; namespace: string; name: string; version: string | null; fromVersion: string | null }
   card: DisclosureCard | null
   diff: DisclosureDiff | null
+  /** Form kinds: the agent's draft for the form; null for every other kind. */
+  draft?: FormDraft | null
   /** plugin-enable: who disabled the package (`at` in Unix seconds, null when not recorded); null for every other kind. */
   disabled: { by: 'user' | 'agent'; at: number | null; agent: PluginDisabledBy['agent'] } | null
   status: PluginApprovalStatus
   error: string | null
   created_at: number
-  /** created_at + 15 minutes. */
+  /** created_at + 15 minutes (a form request: FORM_APPROVAL_TTL_S). */
   expires_at: number
 }
 
