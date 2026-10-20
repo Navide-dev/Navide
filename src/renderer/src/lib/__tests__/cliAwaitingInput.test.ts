@@ -7,6 +7,11 @@ import {
   matchAwaitingInput,
   textEndsOnQuestion,
   questionActionFor,
+  permissionHoldActionFor,
+  isToolResultHook,
+  keysAnswerPermissionBox,
+  holdOutlivedBox,
+  HOLD_PAINT_GRACE_MS,
   QUESTION_DETAIL,
 } from '../cliAwaitingInput'
 
@@ -95,6 +100,130 @@ describe('notificationEndsAwaiting — releasing a hook-set wait', () => {
 
 // The strings below are verbatim captures from each CLI, not paraphrases —
 // they are what the pattern has to survive.
+
+describe('permissionHoldActionFor — the permission box, by hook events', () => {
+  const NOT_HELD = { since: 0, key: '' }
+  const held = { since: Date.parse('2026-10-19T06:00:00.000Z'), key: 'Bash:aaaa' }
+
+  it('holds on PermissionRequest', () => {
+    expect(permissionHoldActionFor({ detail: 'hook:permission_request' }, NOT_HELD)).toBe('hold')
+  })
+
+  it('releases when the tool the box was for finishes, whether it succeeded or failed', () => {
+    for (const detail of ['hook:post_tool_use', 'hook:post_tool_use_failure']) {
+      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:aaaa' }, held), detail).toBe('release')
+    }
+  })
+
+  it('names exactly the two tool-result hooks', () => {
+    expect(isToolResultHook('hook:post_tool_use')).toBe(true)
+    expect(isToolResultHook('hook:post_tool_use_failure')).toBe(true)
+    for (const detail of ['hook:pre_tool_use', 'hook:permission_request', 'hook:stop', 'assistant', undefined]) {
+      expect(isToolResultHook(detail), String(detail)).toBe(false)
+    }
+  })
+
+  it('keeps the hold when a different tool finishes while the box is open', () => {
+    // A parallel tool, or another subagent's: not this box's answer.
+    for (const detail of ['hook:post_tool_use', 'hook:post_tool_use_failure']) {
+      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:bbbb' }, held), detail).toBeNull()
+      expect(permissionHoldActionFor({ detail, tool_key: 'Read:aaaa' }, held), detail).toBeNull()
+      expect(permissionHoldActionFor({ detail, tool_key: '' }, held), detail).toBeNull()
+    }
+  })
+
+  it('a hold without a key matches no tool result', () => {
+    const unkeyed = { since: held.since, key: '' }
+    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use', tool_key: '' }, unkeyed)).toBeNull()
+  })
+
+  it('releases nothing when nothing is held', () => {
+    // A wait the Notification hook or the screen raised is not this hold's to end.
+    expect(permissionHoldActionFor({ detail: 'hook:post_tool_use', tool_key: 'Bash:aaaa' }, NOT_HELD)).toBeNull()
+  })
+
+  it('leaves the hold alone on everything else, including the next PreToolUse', () => {
+    // PreToolUse of a parallel tool can fire while the box is still open.
+    for (const detail of ['hook:pre_tool_use', 'hook:notification', 'assistant', 'user', 'hook:subagent_stop']) {
+      expect(permissionHoldActionFor({ detail, tool_key: 'Bash:aaaa' }, held), detail).toBeNull()
+    }
+  })
+})
+
+describe('keysAnswerPermissionBox — what answers a held box', () => {
+  it('Enter, a lone Esc, Ctrl+C and digits 1-9 answer it', () => {
+    for (const keys of ['\r', '\x1b', '\x03', '1', '2', '9', 'y\r', 'n\r']) {
+      expect(keysAnswerPermissionBox(keys), JSON.stringify(keys)).toBe(true)
+    }
+  })
+
+  it('navigation, ordinary letters and 0 do not', () => {
+    for (const keys of ['\x1b[A', '\x1b[B', '\x1b[C', '\x1b[D', '\x1bOA', '\t', '\x1b[Z', 'a', 'y', ' ', '0', '\x7f']) {
+      expect(keysAnswerPermissionBox(keys), JSON.stringify(keys)).toBe(false)
+    }
+  })
+
+  it('terminal reports are not answers, even when their bytes are digits', () => {
+    // X10 mouse: ESC [ M then button/col/row as printable bytes — '1' is col 17.
+    for (const report of ['\x1b[I', '\x1b[O', '\x1b[<0;12;3M', '\x1b[<0;12;3m', '\x1b[M 1!', '\x1b[M!1\r']) {
+      expect(keysAnswerPermissionBox(report), JSON.stringify(report)).toBe(false)
+    }
+  })
+
+  it('the terminal\'s replies to a CLI query are not answers, even full of digits', () => {
+    for (const reply of [
+      '\x1b]11;rgb:1e1e/1e1e/1e1e\x07', // OSC 11 colour, BEL-terminated
+      '\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\', // the same, ST-terminated
+      '\x1bP1$r0m\x1b\\', // DCS: DECRQSS reply
+      '\x1bP>|xterm.js(5.5.0)\x1b\\', // DCS: XTVERSION
+      '\x1b[?2004;1$y', // DECRQM
+      '\x1b[?1;2c', // device attributes
+      '\x1b[12;40R', // cursor position
+    ]) {
+      expect(keysAnswerPermissionBox(reply), JSON.stringify(reply)).toBe(false)
+    }
+  })
+
+  it('still finds a key typed right after a reply', () => {
+    expect(keysAnswerPermissionBox('\x1b]11;rgb:1e1e/1e1e/1e1e\x07\r')).toBe(true)
+    expect(keysAnswerPermissionBox('\x1bP1$r0m\x1b\\2')).toBe(true)
+  })
+
+  it('an unterminated string swallows the rest rather than reading its digits', () => {
+    expect(keysAnswerPermissionBox('\x1b]11;rgb:1e1e')).toBe(false)
+  })
+
+  it('an Alt chord and a bracketed paste are not answers', () => {
+    expect(keysAnswerPermissionBox('\x1bb')).toBe(false)
+    expect(keysAnswerPermissionBox('\x1b[200~ls 1 2\r\x1b[201~')).toBe(false)
+  })
+
+  it('finds an answer after a navigation key in the same run', () => {
+    expect(keysAnswerPermissionBox('\x1b[B\r')).toBe(true)
+  })
+})
+
+describe('holdOutlivedBox — the safety net under a held wait', () => {
+  const past = HOLD_PAINT_GRACE_MS + 1
+
+  it('keeps holding while the box is on screen', () => {
+    expect(holdOutlivedBox({ heldMs: past, turnInFlight: true, boxOnScreen: true })).toBe(false)
+    expect(holdOutlivedBox({ heldMs: past, turnInFlight: false, boxOnScreen: true })).toBe(false)
+  })
+
+  it('releases mid-turn once the box has been missing past the paint grace', () => {
+    // A hook approved the call and rewrote its input: no box, no matching result.
+    expect(holdOutlivedBox({ heldMs: past, turnInFlight: true, boxOnScreen: false })).toBe(true)
+  })
+
+  it('waits out the paint grace mid-turn — the hook fires before the box is drawn', () => {
+    expect(holdOutlivedBox({ heldMs: HOLD_PAINT_GRACE_MS - 1, turnInFlight: true, boxOnScreen: false })).toBe(false)
+  })
+
+  it('releases at once on a pane that is not mid-turn, where nothing is left to paint', () => {
+    expect(holdOutlivedBox({ heldMs: 0, turnInFlight: false, boxOnScreen: false })).toBe(true)
+  })
+})
 
 describe('matchAwaitingInput — aider (line-mode prompts)', () => {
   it('matches every confirmation shape aider asks', () => {

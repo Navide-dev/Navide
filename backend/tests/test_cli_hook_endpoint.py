@@ -65,6 +65,76 @@ def test_notification_forwards_the_type_that_distinguishes_waiting_from_done(
     assert payload["notification_type"] == "permission_prompt"
 
 
+@pytest.mark.parametrize("kind", ["permission_request", "post_tool_use", "post_tool_use_failure"])
+def test_permission_box_events_reach_the_frontend_as_activity(
+    client: TestClient, events: list[dict], kind: str
+) -> None:
+    # The frontend holds AWAITING from permission_request until one of the
+    # others (or the transcript's denial record) says the box was answered.
+    resp = client.post(
+        "/hooks/claude",
+        headers={"X-Agent-Team-Event": kind},
+        json={"session_id": "s-1", "cwd": "/tmp/ws", "tool_name": "Bash"},
+    )
+    assert resp.json() == {"ok": True}
+    payload = _payload(events)
+    assert payload["event_type"] == "agent_active"
+    assert payload["detail"] == f"hook:{kind}"
+
+
+def _tool_key_of(client: TestClient, events: list[dict], kind: str, body: dict) -> str:
+    events.clear()
+    client.post(
+        "/hooks/claude",
+        headers={"X-Agent-Team-Event": kind},
+        json={"session_id": "s-1", "cwd": "/tmp/ws", **body},
+    )
+    return _payload(events)["tool_key"]
+
+
+def test_permission_box_and_its_tool_result_share_a_tool_key(
+    client: TestClient, events: list[dict]
+) -> None:
+    # PermissionRequest has no tool_use_id; the frontend pairs the box with its
+    # tool by name + input, so the same call must key identically on every event
+    # (whatever the key order of tool_input) and another call must not.
+    box = _tool_key_of(client, events, "permission_request",
+                       {"tool_name": "Bash", "tool_input": {"command": "rm x", "description": "d"}})
+    done = _tool_key_of(client, events, "post_tool_use",
+                        {"tool_name": "Bash", "tool_input": {"description": "d", "command": "rm x"},
+                         "tool_response": {"stdout": ""}})
+    failed = _tool_key_of(client, events, "post_tool_use_failure",
+                          {"tool_name": "Bash", "tool_input": {"command": "rm x", "description": "d"},
+                           "error": "boom"})
+    other = _tool_key_of(client, events, "post_tool_use",
+                         {"tool_name": "Bash", "tool_input": {"command": "ls", "description": "d"}})
+    assert box and box == done == failed
+    assert other != box
+
+
+def test_tool_key_ignores_the_input_of_tools_whose_answer_is_written_into_it(
+    client: TestClient, events: list[dict]
+) -> None:
+    # AskUserQuestion's answers (and ExitPlanMode's plan) land in tool_input, so
+    # the Post event no longer repeats what the box was raised with. Keyed by
+    # name alone or the hold would never find its release.
+    questions = [{"question": "Which?"}]
+    box = _tool_key_of(client, events, "permission_request",
+                       {"tool_name": "AskUserQuestion", "tool_input": {"questions": questions}})
+    done = _tool_key_of(client, events, "post_tool_use",
+                        {"tool_name": "AskUserQuestion",
+                         "tool_input": {"questions": questions, "answers": {"Which?": "A"}}})
+    assert box == done != ""
+
+
+def test_tool_key_is_empty_without_a_tool_and_off_the_paired_events(
+    client: TestClient, events: list[dict]
+) -> None:
+    assert _tool_key_of(client, events, "permission_request", {}) == ""
+    assert _tool_key_of(client, events, "pre_tool_use",
+                        {"tool_name": "Bash", "tool_input": {"command": "ls"}}) == ""
+
+
 def test_idle_prompt_is_forwarded_verbatim_for_the_frontend_to_reject(
     client: TestClient, events: list[dict]
 ) -> None:
@@ -244,6 +314,44 @@ def test_stop_hook_does_not_blank_the_turn_text_the_log_reader_recorded(
             json={"session_id": "s-1", "cwd": "/ws/alpha"},
         )
         assert app_module._pane_activity["pw"]["text"] == "what the agent said"
+    finally:
+        app_module._pane_activity.clear()
+
+
+@pytest.mark.parametrize("kind", ["post_tool_use", "post_tool_use_failure"])
+def test_a_late_tool_result_after_stop_is_not_recorded_as_activity_or_dev_time(
+    client: TestClient, events: list[dict], monkeypatch, kind: str
+) -> None:
+    """Both result hooks are async, so the last tool's result can land after
+    Stop. It still reaches the frontend (it releases a permission hold), but
+    recording it would turn the finished pane back into agent_active for
+    cli_get_status and open a dev-time interval after the turn ended."""
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
+    )
+    beats: list[tuple] = []
+    monkeypatch.setattr(
+        app_module.dev_time_store, "agent_event", lambda *args: beats.append(args) or False
+    )
+    try:
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": "stop"},
+            json={"session_id": "s-1", "cwd": "/ws/alpha"},
+        )
+        events.clear()
+        beats.clear()
+
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": kind},
+            json={"session_id": "s-1", "cwd": "/ws/alpha", "tool_name": "Bash"},
+        )
+
+        assert _payload(events)["detail"] == f"hook:{kind}"
+        assert app_module._pane_activity["pw"]["event_type"] == "turn_complete"
+        assert beats == []
     finally:
         app_module._pane_activity.clear()
 
