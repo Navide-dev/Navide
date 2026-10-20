@@ -476,6 +476,8 @@ export interface ExpiredTestplaceBuild {
   expiresAt: string | null
   artifactDigest?: string
   canKeep: boolean
+  withdrawn?: true
+  keepRefusal?: 'withdrawn' | 'unconfirmed'
 }
 
 export interface DeveloperModeState {

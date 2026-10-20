@@ -292,6 +292,11 @@ export interface ExpiredTestplaceBuild {
   /** Present when it can be kept: it fails on its expiry alone. */
   artifactDigest?: string
   canKeep: boolean
+  /** Its developer or Navide took it back (S8 T-MED-1); never kept. */
+  withdrawn?: true
+  /** Why "keep using" is not offered: taken back, or the Registry could not
+   *  confirm it was not (not signed in, offline, no longer a tester). */
+  keepRefusal?: 'withdrawn' | 'unconfirmed'
 }
 
 export interface FactoryPackageSummary {
@@ -935,6 +940,8 @@ export function registerPluginIpc(
   const testplaceStore = new PluginTestplaceStore(pluginsRoot)
   const keepsExpiredTestplace = (packageId: string, artifactDigest: string): boolean =>
     testplaceStore.keepsExpired(packageId, artifactDigest)
+  const withdrawnTestplace = (packageId: string, version: string): boolean =>
+    testplaceStore.isWithdrawn(packageId, version)
   // D-f: the scan verified at install, per version; a record for the rescan
   // notice only. Its failures never fail an install or a removal.
   const installScans = new PluginInstallScanStore(pluginsRoot)
@@ -3092,23 +3099,29 @@ export function registerPluginIpc(
       expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
       now: marketplace.trust.now,
       keepsExpiredTestplace: keepAnyExpired ? () => true : keepsExpiredTestplace,
+      withdrawnTestplace,
     }
   }
   const expiredTestplaceBuilds = (): ExpiredTestplaceBuild[] => {
     const loaded = new Set(manager.listInstalledPackages().map((pkg) => pkg.id))
-    return discoverInstalledRegistryPackageIds(pluginsRoot).flatMap((id) => {
+    return discoverInstalledRegistryPackageIds(pluginsRoot).flatMap((id): ExpiredTestplaceBuild[] => {
       if (loaded.has(id)) return []
       try {
         const active = lifecycleSelector.read(id)?.active
         const dir = active ? lifecycleSelector.packageDir(id, active) : join(pluginsRoot, id)
         const decision = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext())
-        if (decision.action !== 'quarantine' || decision.code !== 'TESTPLACE_EXPIRED') return []
+        if (decision.action !== 'quarantine') return []
+        if (decision.code !== 'TESTPLACE_EXPIRED' && decision.code !== 'TESTPLACE_WITHDRAWN') return []
         const expiresAt = readRegistryReceiptExpiresAt(dir)
         const receipt = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as Record<string, unknown>
+        const version = typeof receipt.version === 'string' ? receipt.version : null
+        if (decision.code === 'TESTPLACE_WITHDRAWN') {
+          return [{ id, version, expiresAt: expiresAt ?? null, canKeep: false, withdrawn: true as const, keepRefusal: 'withdrawn' as const }]
+        }
         const kept = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext(true))
         return [{
           id,
-          version: typeof receipt.version === 'string' ? receipt.version : null,
+          version,
           expiresAt: expiresAt ?? null,
           ...(kept.action === 'allow' ? { artifactDigest: kept.artifactDigest } : {}),
           canKeep: kept.action === 'allow',
@@ -3118,6 +3131,41 @@ export function registerPluginIpc(
       }
     })
   }
+
+  // S8 T-MED-1 / R-MED-3: whether a test build was taken back, from the
+  // Registry's withdrawal list for this tester (never public metadata). The
+  // answer is recorded, so every load and spawn refuses a withdrawn build.
+  // `unconfirmed` (not signed in, offline, no longer a tester) records nothing.
+  const checkTestplaceWithdrawn = async (id: string, version: string): Promise<'withdrawn' | 'live' | 'unconfirmed'> => {
+    const dot = id.indexOf('.')
+    let res: { status: number; body: { withdrawn?: unknown } | null }
+    try {
+      res = await developerRegistryFetch<{ withdrawn?: unknown } | null>(
+        `/api/testplace/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}/withdrawn`,
+        {},
+        'account',
+      )
+    } catch {
+      return 'unconfirmed'
+    }
+    if (res.status !== 200 || !Array.isArray(res.body?.withdrawn)) return 'unconfirmed'
+    const versions = (res.body.withdrawn as Array<{ version?: unknown }>).flatMap((row) =>
+      typeof row?.version === 'string' ? [row.version] : [])
+    testplaceStore.setWithdrawn(id, versions)
+    return versions.includes(version) ? 'withdrawn' : 'live'
+  }
+  /** The D3 list, with "keep using" offered only when the Registry confirms
+   *  this tester's build was not taken back (fail closed). */
+  const checkedExpiredTestplaceBuilds = async (): Promise<ExpiredTestplaceBuild[]> =>
+    Promise.all(expiredTestplaceBuilds().map(async (build) => {
+      if (!build.canKeep || !build.version) return build
+      const state = await checkTestplaceWithdrawn(build.id, build.version)
+      if (state === 'live') return build
+      const { artifactDigest: _digest, ...rest } = build
+      return state === 'withdrawn'
+        ? { ...rest, canKeep: false, withdrawn: true as const, keepRefusal: 'withdrawn' as const }
+        : { ...rest, canKeep: false, keepRefusal: 'unconfirmed' as const }
+    }))
 
   // DX report §9.5: a Testplace build the Registry promoted keeps its bytes,
   // so testers do not reinstall. When the public listing has this exact
@@ -3214,19 +3262,23 @@ export function registerPluginIpc(
     }
   })
 
-  ipcMain.handle('plugins:expiredTestplace', (event): ExpiredTestplaceBuild[] => {
+  ipcMain.handle('plugins:expiredTestplace', async (event): Promise<ExpiredTestplaceBuild[]> => {
     assertAuthorized(event)
-    return expiredTestplaceBuilds()
+    return checkedExpiredTestplaceBuilds()
   })
 
   // "Keep using (expired)": the user's choice for this exact artifact. It is
   // loaded again at once; an update or a new install of the id asks again.
-  ipcMain.handle('plugins:keepExpiredTestplace', (event, args: { id?: unknown } | null): { ok: true } => {
+  ipcMain.handle('plugins:keepExpiredTestplace', async (event, args: { id?: unknown } | null): Promise<{ ok: true }> => {
     assertAuthorized(event)
     if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
     const id = args.id
-    const build = expiredTestplaceBuilds().find((item) => item.id === id)
+    const build = (await checkedExpiredTestplaceBuilds()).find((item) => item.id === id)
     if (!build) throw new Error(`${id} is not an expired Testplace build`)
+    if (build.keepRefusal === 'withdrawn') throw new Error(`${id} cannot be kept: its developer or Navide withdrew it`)
+    if (build.keepRefusal === 'unconfirmed') {
+      throw new Error(`${id} cannot be kept: the Navide Marketplace could not confirm it was not withdrawn`)
+    }
     if (!build.canKeep || !build.artifactDigest) {
       throw new Error(`${id} cannot be kept: it was taken down or no longer verifies`)
     }
@@ -4397,8 +4449,21 @@ export function registerPluginIpc(
         })
       }
       if (packageIds.length === 0) return { decisions, activationCatalog: [] }
-      // A promoted Testplace build takes its new receipt before the trust
-      // check below, which then loads it again if it had expired (W5b).
+      // S8 T-MED-1: learn which installed test builds were taken back, so
+      // the trust check below stops them; then a promoted Testplace build
+      // takes its new receipt before that check, which loads it again if it
+      // had expired (W5b).
+      for (const packageId of packageIds) {
+        try {
+          const active = lifecycleSelector.read(packageId)?.active
+          if (!active || active.layout === 'legacy-mutable') continue
+          const dir = lifecycleSelector.packageDir(packageId, active)
+          if (readRegistryReceiptChannel(dir) !== 'testplace') continue
+          await checkTestplaceWithdrawn(packageId, active.packageVersion)
+        } catch (error) {
+          console.warn(`[plugins] withdrawal of the Testplace build ${packageId} not checked: ${errorText(error)}`)
+        }
+      }
       for (const packageId of packageIds) {
         if (activeTransactions.has(packageId)) continue
         try {
@@ -4420,6 +4485,7 @@ export function registerPluginIpc(
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
           keepsExpiredTestplace,
+          withdrawnTestplace,
         }, new Set([...packageIds, ...activeRegistryPackages]))
         for (const decision of refreshed) {
           if (decision.action === 'quarantine') {
@@ -4483,6 +4549,7 @@ export function registerPluginIpc(
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
           keepsExpiredTestplace,
+          withdrawnTestplace,
         }
         const activeBeforeRefresh = new Set(
           manager

@@ -107,6 +107,8 @@ let base = ''
 let pluginsRoot = ''
 let activations: Array<{ pluginId: string; activation?: PluginActivationCatalogEntry }>
 let controller: ReturnType<typeof registerPluginIpc>
+/** What the Registry's withdrawal list answers this tester (S8 T-MED-1). */
+let withdrawnAnswer: { status: number; body: unknown }
 
 function register(now = INSTALL_AT) {
   handlers.clear()
@@ -137,6 +139,7 @@ beforeEach(() => {
   pluginsRoot = join(base, 'plugins')
   mkdirSync(pluginsRoot)
   activations = []
+  withdrawnAnswer = { status: 200, body: { withdrawn: [] } }
   registry.fetch = vi.fn(async (path: string, init?: { method?: string; json?: { token?: string } }) => {
     if (path === '/api/testplace/join') {
       return init?.json?.token?.startsWith('tpc_')
@@ -145,6 +148,7 @@ beforeEach(() => {
     }
     if (path === '/api/testplace') return { status: 200, body: { items: [testplaceDetail] } }
     if (path === '/api/testplace/acme/beta') return { status: 200, body: testplaceDetail }
+    if (path === '/api/testplace/acme/beta/withdrawn') return withdrawnAnswer
     if (path === '/api/testplace/acme/beta/leave') return { status: 204, body: null }
     return { status: 404, body: { detail: { code: 'NOT_FOUND', message: path } } }
   })
@@ -209,16 +213,16 @@ describe('an expired Testplace build (D3)', () => {
     const manager = register(AFTER_EXPIRY)
     expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(false)
     expect(existsSync(join(pluginsRoot, ID))).toBe(true)
-    expect(call('plugins:expiredTestplace')).toEqual([
+    expect(await call('plugins:expiredTestplace')).toEqual([
       { id: ID, version: '0.3.0', expiresAt: EXPIRES_AT, artifactDigest: digest, canKeep: true },
     ])
-    expect(call('plugins:keepExpiredTestplace', { id: ID })).toEqual({ ok: true })
+    expect(await call('plugins:keepExpiredTestplace', { id: ID })).toEqual({ ok: true })
     expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(true)
     expect(activations.some((change) => change.pluginId === ID && change.activation)).toBe(true)
-    expect(call('plugins:expiredTestplace')).toEqual([])
+    expect(await call('plugins:expiredTestplace')).toEqual([])
     // Kept for this digest across a restart too: it verifies, so it is not listed as stopped.
     const restarted = register(AFTER_EXPIRY)
-    expect(call('plugins:expiredTestplace')).toEqual([])
+    expect(await call('plugins:expiredTestplace')).toEqual([])
     const loaded = restarted.loadInstalledPlugins(pluginsRoot, {
       provenance: 'official-registry',
       trust: {
@@ -251,15 +255,15 @@ describe('an expired Testplace build (D3)', () => {
     })
     register(AFTER_EXPIRY)
     // A takedown is not an expiry: it is not offered as an expired build at all.
-    expect(call('plugins:expiredTestplace')).toEqual([])
-    expect(() => call('plugins:keepExpiredTestplace', { id: ID })).toThrow(/not an expired Testplace build/)
+    expect(await call('plugins:expiredTestplace')).toEqual([])
+    await expect(call('plugins:keepExpiredTestplace', { id: ID })).rejects.toThrow(/not an expired Testplace build/)
   })
 
   it('forgets the choice when the plugin is removed', async () => {
     register()
     await installTestBuild()
     register(AFTER_EXPIRY)
-    call('plugins:keepExpiredTestplace', { id: ID })
+    await call('plugins:keepExpiredTestplace', { id: ID })
     expect(readFileSync(join(pluginsRoot, '.navide-testplace.json'), 'utf8')).toContain(digest)
     await call('plugins:remove', { id: ID })
     expect(readFileSync(join(pluginsRoot, '.navide-testplace.json'), 'utf8')).not.toContain(ID)
@@ -317,11 +321,58 @@ describe('a promoted Testplace build (same digest, no reinstall)', () => {
     register()
     await installTestBuild()
     register(AFTER_EXPIRY)
-    expect(call('plugins:expiredTestplace')).toHaveLength(1)
+    expect(await call('plugins:expiredTestplace')).toHaveLength(1)
     publicListing()
     const refreshed = await controller.refreshRegistryTrust()
     expect(refreshed.activationCatalog.map((entry) => entry.pluginId)).toEqual([ID])
     expect(receipt().envelope).toEqual(stable)
-    expect(call('plugins:expiredTestplace')).toEqual([])
+    expect(await call('plugins:expiredTestplace')).toEqual([])
+  })
+})
+
+describe('a withdrawn Testplace build (S8 T-MED-1)', () => {
+  it('is never kept once its developer took it back, and says so', async () => {
+    register()
+    await installTestBuild()
+    register(AFTER_EXPIRY)
+    withdrawnAnswer = { status: 200, body: { withdrawn: [{ version: '0.3.0', target: 'universal' }] } }
+    expect(await call('plugins:expiredTestplace')).toEqual([
+      { id: ID, version: '0.3.0', expiresAt: EXPIRES_AT, canKeep: false, withdrawn: true, keepRefusal: 'withdrawn' },
+    ])
+    await expect(call('plugins:keepExpiredTestplace', { id: ID })).rejects.toThrow(/withdrew it/)
+    expect(readFileSync(join(pluginsRoot, '.navide-testplace.json'), 'utf8')).not.toContain(digest)
+  })
+
+  it('is not kept when the Registry cannot confirm it was not taken back (fail closed)', async () => {
+    register()
+    await installTestBuild()
+    register(AFTER_EXPIRY)
+    withdrawnAnswer = { status: 404, body: { detail: { code: 'NOT_FOUND', message: 'extension not found' } } }
+    expect(await call('plugins:expiredTestplace')).toEqual([
+      { id: ID, version: '0.3.0', expiresAt: EXPIRES_AT, canKeep: false, keepRefusal: 'unconfirmed' },
+    ])
+    await expect(call('plugins:keepExpiredTestplace', { id: ID })).rejects.toThrow(/could not confirm/)
+    // Signed out or offline: the same answer.
+    registry.fetch.mockImplementation(async () => { throw new Error('the Navide Marketplace developer account is not available') })
+    expect(((await call('plugins:expiredTestplace')) as Array<{ keepRefusal?: string }>)[0].keepRefusal).toBe('unconfirmed')
+  })
+
+  it('stops a running build at the next trust refresh and lists it, without the public blocklist', async () => {
+    register()
+    await installTestBuild()
+    const manager = register()
+    manager.loadInstalledPlugins(pluginsRoot, {
+      provenance: 'official-registry',
+      trust: { pinnedRootKey: root.pubPem, snapshot: JSON.parse(readFileSync(join(pluginsRoot, '.navide-registry-trust.json'), 'utf8')), now: INSTALL_AT },
+    }, new Set([ID]))
+    expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(true)
+    withdrawnAnswer = { status: 200, body: { withdrawn: [{ version: '0.3.0', target: 'universal' }] } }
+    // The public Registry is unreachable here; the refresh falls back to the cached metadata.
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(false)
+    expect(activations.some((change) => change.pluginId === ID && !change.activation)).toBe(true)
+    expect(await call('plugins:expiredTestplace')).toEqual([
+      { id: ID, version: '0.3.0', expiresAt: EXPIRES_AT, canKeep: false, withdrawn: true, keepRefusal: 'withdrawn' },
+    ])
   })
 })

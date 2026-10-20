@@ -888,6 +888,9 @@ declare global {
     artifactDigest?: string
     /** False when it was taken down or fails for another reason: no "keep using". */
     canKeep: boolean
+    /** Its developer or Navide took it back (S8 T-MED-1). */
+    withdrawn?: true
+    keepRefusal?: 'withdrawn' | 'unconfirmed'
   }
 
   /** Card K4: the Developer Mode switch and the developer folders consented to. */
