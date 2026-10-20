@@ -747,6 +747,7 @@ def wire_command(
                 SERVER_NAME,
                 SERVER_LABEL,
                 LEGACY_SERVER_NAMES,
+                workspace=cwd,
             )
             if prepared is not None:
                 _, root = prepared

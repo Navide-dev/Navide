@@ -161,12 +161,20 @@ asked again (issue #402). Each Grok pane now has its own copy of the file,
 seeded with your decisions. Before each Grok pane starts, Navide appends the
 folders the panes trusted in their copies to your file:
 
+- Only the workspace a pane was opened in, or a folder inside it, is shared
+  to `~/.grok`. Any other folder a pane's copy names — the root of a disk,
+  your home folder or a folder above it, a folder elsewhere, one that does
+  not exist, or one reached through a link that leads out of the workspace —
+  stays in that pane's copy, and the backend log says so. Only a folder's
+  `trusted` and `decided_at` are copied, and only from panes Navide started.
 - Only folders your file does not mention are added, as text at its end. A
   decision you made outside Navide is never changed, and neither are your
   comments, key order or layout.
 - Your file is backed up before every change. The first change is announced;
   later ones are logged quietly.
-- The text Navide appended is listed in `~/.navide-panes/grok/.folder-trust-merged.json`.
+- The text Navide appended is listed in `grok-folder-trust/.folder-trust-merged.json`
+  in Navide's data folder, out of reach of the panes (earlier builds kept it
+  beside the pane homes; it is copied over once and the old file is left).
   Turning the switch off removes exactly that text, so the file is back to
   its own bytes. Text you changed since, or a table you added something
   inside (removing it would move that under your own table), is kept, and

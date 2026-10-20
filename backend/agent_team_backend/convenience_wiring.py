@@ -579,7 +579,8 @@ def merge_grok_folder_trust_gated(real_vendor: Path) -> None:
             write=lambda: pane_home.merge_grok_folder_trust(real_vendor),
             present=lambda: pane_home.grok_trust_rows_present(pane_home.grok_trust_ledger_rows(), real_vendor),
             file=real, quiet_repairs=True, reset_folder=real_vendor,
-            detail="merged the folders Grok panes were told to trust",
+            detail="merged the folders Grok panes were told to trust; only the workspace"
+            " a pane was opened in, or a folder inside it, is shared to ~/.grok",
         )
     except Exception as err:  # noqa: BLE001 — the spawn goes ahead whatever happens here
         log.warning("could not merge grok folder trust into %s: %s", real, err)

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import tomllib
 from pathlib import Path
@@ -70,8 +71,23 @@ def _folders(path: Path) -> dict:
     return tomllib.loads(path.read_text(encoding="utf-8")).get("folders", {})
 
 
-def _prepare(pane: str) -> None:
-    assert pane_home.prepare("grok", pane, URL, SERVER, LABEL) is not None
+#: Every test pane's working directory unless a test says otherwise: a real
+#: folder, since a folder that does not exist is never shared.
+WS = ""
+
+
+@pytest.fixture(autouse=True)
+def workspace(tmp_path: Path) -> Path:
+    global WS
+    ws = tmp_path.resolve() / "work"
+    for name in ("a", "b", "dt", "old", "../work-other", "../etc", "../elsewhere"):
+        (ws / name).mkdir(parents=True, exist_ok=True)
+    WS = str(ws)
+    return ws
+
+
+def _prepare(pane: str, workspace: str | None = None) -> None:
+    assert pane_home.prepare("grok", pane, URL, SERVER, LABEL, workspace=WS if workspace is None else workspace) is not None
 
 
 #: A file the user wrote by hand: comments, their own key order and spacing.
@@ -98,13 +114,13 @@ def test_a_merge_keeps_the_users_comments_order_and_layout(gate, home: Path) -> 
     real = home / ".grok" / TRUST
     real.write_text(USERS_OWN, encoding="utf-8")
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
 
     _prepare("p2")
 
     text = real.read_text(encoding="utf-8")
     assert text.startswith(USERS_OWN), "the user's own bytes come first, unchanged"
-    assert _folders(real)["/work/a"] == {"trusted": True, "decided_at": 1789832073}
+    assert _folders(real)[f"{WS}/a"] == {"trusted": True, "decided_at": 1789832073}
     assert _folders(real)["/mine"] == {"trusted": True, "decided_at": 1}
 
 
@@ -112,11 +128,11 @@ def test_the_switch_restores_the_users_file_byte_for_byte(gate, home: Path) -> N
     real = home / ".grok" / TRUST
     real.write_text(USERS_OWN, encoding="utf-8")
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
     _prepare("p2")
-    _grok_trusts(_shim_trust("p2"), "/work/b")
+    _grok_trusts(_shim_trust("p2"), f"{WS}/b")
     _prepare("p3")
-    assert "/work/b" in _folders(real)
+    assert f"{WS}/b" in _folders(real)
 
     _off()
 
@@ -128,7 +144,7 @@ def test_a_key_the_user_put_inside_navides_table_keeps_that_table(gate, home: Pa
     real = home / ".grok" / TRUST
     real.write_text(USERS_OWN, encoding="utf-8")
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
     _prepare("p2")
     # Typed under Navide's table: cutting that table out would leave the key
     # under the user's own last table and change what it says.
@@ -141,16 +157,16 @@ def test_a_key_the_user_put_inside_navides_table_keeps_that_table(gate, home: Pa
     assert real.read_text(encoding="utf-8") == edited
     assert _folders(real)["/also-mine"] == {"decided_at": 2, "trusted": False}
     failed = [e for e in gate.history("grok.folder-trust") if e["action"] == "cleanup-failed"]
-    assert failed and "/work/a" in failed[-1]["detail"]
+    assert failed and f"{WS}/a" in failed[-1]["detail"]
     assert gate.state("grok.folder-trust")[0] != "off", "what could not be taken back still works"
-    assert "/work/a" in pane_home.grok_trust_ledger_rows(), "kept for a later takeback"
+    assert f"{WS}/a" in pane_home.grok_trust_ledger_rows(), "kept for a later takeback"
 
 
 def test_a_file_without_a_final_newline_comes_back_exactly(gate, home: Path) -> None:
     real = home / ".grok" / TRUST
     real.write_text(USERS_OWN.rstrip("\n"), encoding="utf-8")
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
     _prepare("p2")
 
     _off()
@@ -163,12 +179,12 @@ def test_the_users_own_rows_win_over_a_panes(gate, home: Path) -> None:
     real.write_text(USERS_OWN, encoding="utf-8")
     _prepare("p1")
     _grok_trusts(_shim_trust("p1"), "/also-mine")  # the pane said yes, the user had said no
-    _grok_trusts(_shim_trust("p1"), "/work/b")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/b")
 
     _prepare("p2")
 
     assert _folders(real)["/also-mine"] == {"decided_at": 2, "trusted": False}
-    assert "/work/b" in _folders(real)
+    assert f"{WS}/b" in _folders(real)
 
 
 def test_a_pane_never_writes_through_a_link_to_the_users_file(gate, home: Path) -> None:
@@ -180,13 +196,13 @@ def test_a_pane_never_writes_through_a_link_to_the_users_file(gate, home: Path) 
     shim = _shim_trust("p1")
     assert shim.is_file() and not shim.is_symlink(), "the pane's own copy, not a link"
     assert set(_folders(shim)) == {"/mine", "/also-mine"}, "seeded with the user's decisions"
-    _grok_trusts(shim, "/work/a")
+    _grok_trusts(shim, f"{WS}/a")
     assert real.read_text(encoding="utf-8") == USERS_OWN, "a pane's answer reaches it only through the merge"
 
     _prepare("p2")
 
-    assert pane_home.grok_trust_ledger_rows().keys() == {"/work/a"}
-    assert "/work/a" in _folders(_shim_trust("p2"))
+    assert pane_home.grok_trust_ledger_rows().keys() == {f"{WS}/a"}
+    assert f"{WS}/a" in _folders(_shim_trust("p2"))
 
 
 def test_a_link_left_by_an_earlier_build_becomes_the_panes_own_copy(gate, home: Path) -> None:
@@ -204,7 +220,7 @@ def test_a_link_left_by_an_earlier_build_becomes_the_panes_own_copy(gate, home: 
 
 def test_the_switch_leaves_every_pane_its_own_file(gate, home: Path) -> None:
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
     _prepare("p2")
     stale = _shim_trust("p3")
     _prepare("p3")
@@ -216,7 +232,7 @@ def test_the_switch_leaves_every_pane_its_own_file(gate, home: Path) -> None:
     for pane in ("p1", "p2", "p3"):
         assert not _shim_trust(pane).is_symlink(), pane
     _prepare("p1")
-    assert "/work/a" in _folders(_shim_trust("p1")), "the pane that decided keeps its decision"
+    assert f"{WS}/a" in _folders(_shim_trust("p1")), "the pane that decided keeps its decision"
     assert not (home / ".grok" / TRUST).exists()
 
 
@@ -225,11 +241,152 @@ def test_rows_stranded_by_earlier_versions_are_rescued(gate, home: Path) -> None
     # pane was never prepared again.
     stranded = pane_home.panes_root() / "grok" / "old-pane" / ".grok"
     stranded.mkdir(parents=True)
-    _grok_trusts(stranded / TRUST, "/work/old")
+    _grok_trusts(stranded / TRUST, f"{WS}/old")
+    _prepare("old-pane")
 
     _prepare("p1")
 
-    assert "/work/old" in _folders(home / ".grok" / TRUST)
+    assert f"{WS}/old" in _folders(home / ".grok" / TRUST)
+
+
+def test_a_shim_with_no_recorded_workspace_keeps_its_trust(gate, home: Path) -> None:
+    # Nothing says which folder that pane was opened in, so nothing it
+    # trusted can be shown to be its own.
+    stranded = pane_home.panes_root() / "grok" / "old-pane" / ".grok"
+    stranded.mkdir(parents=True)
+    _grok_trusts(stranded / TRUST, f"{WS}/old")
+
+    _prepare("p1")
+
+    assert not (home / ".grok" / TRUST).exists()
+    assert f"{WS}/old" in _folders(stranded / TRUST)
+
+
+@pytest.mark.parametrize(
+    "folder",
+    ["/", "WS/../", "HOME", "HOME/", "WS/../elsewhere", "WS-other", "WS/a/../../etc", "relative/path", "~/x", "/nowhere"],
+)
+def test_only_a_folder_in_the_panes_own_workspace_reaches_the_users_file(
+    gate, home: Path, folder: str
+) -> None:
+    folder = folder.replace("HOME", str(home)).replace("WS", WS)
+    _prepare("p1")
+    _grok_trusts(_shim_trust("p1"), folder)
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
+
+    _prepare("p2")
+
+    assert set(_folders(home / ".grok" / TRUST)) == {f"{WS}/a"}
+    assert folder in _folders(_shim_trust("p1")), "the pane keeps its own answer"
+    assert set(pane_home.grok_trust_ledger_rows()) == {f"{WS}/a"}
+
+
+def test_a_link_into_the_workspace_is_judged_by_where_it_points(gate, home: Path, tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    (workspace / "inside").mkdir(parents=True)
+    (workspace / "out").symlink_to(home)
+    (workspace / "top").symlink_to("/")
+    (workspace / "dangling").symlink_to(tmp_path / "gone")
+    (tmp_path / "ws-link").symlink_to(workspace)
+    _prepare("p1", str(tmp_path / "ws-link") + "/")
+    for name in ("out", "top", "dangling"):
+        _grok_trusts(_shim_trust("p1"), str(workspace / name))
+    _grok_trusts(_shim_trust("p1"), str(workspace / "inside") + "/")
+
+    _prepare("p2")
+
+    assert set(_folders(home / ".grok" / TRUST)) == {str(workspace / "inside") + "/"}
+
+
+@pytest.mark.parametrize("workspace", ["/", "HOME", "HOME/..", ""])
+def test_a_pane_opened_at_the_root_or_home_promotes_nothing(gate, home: Path, workspace: str) -> None:
+    (home / "proj").mkdir()
+    _prepare("p1", workspace.replace("HOME", str(home)))
+    _grok_trusts(_shim_trust("p1"), str(home / "proj"))
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
+
+    _prepare("p2")
+
+    assert not (home / ".grok" / TRUST).exists()
+
+
+def test_the_workspace_itself_and_folders_below_it_are_shared(gate, home: Path) -> None:
+    (Path(WS) / "a" / "deep").mkdir()
+    _prepare("p1")
+    for folder in (WS, f"{WS}/", f"{WS}/a/deep", f"{WS}/./b//"):
+        _grok_trusts(_shim_trust("p1"), folder)
+
+    _prepare("p2")
+
+    assert set(_folders(home / ".grok" / TRUST)) == {WS, f"{WS}/", f"{WS}/a/deep", f"{WS}/./b//"}
+
+
+@pytest.mark.skipif(sys.platform not in ("darwin", "win32"), reason="case-insensitive paths")
+def test_the_home_folder_in_another_case_is_still_refused(gate, home: Path) -> None:
+    _prepare("p1", str(home).upper())
+    _grok_trusts(_shim_trust("p1"), str(home).upper())
+    _prepare("p2", f"{WS}".upper())
+    _grok_trusts(_shim_trust("p2"), str(home).swapcase())
+    _grok_trusts(_shim_trust("p2"), f"{WS}/A")
+
+    _prepare("p3")
+
+    assert set(_folders(home / ".grok" / TRUST)) == {f"{WS}/A"}
+
+
+def test_only_trusted_and_decided_at_reach_the_users_file(gate, home: Path) -> None:
+    _prepare("p1")
+    shim = _shim_trust("p1")
+    shim.write_text(
+        tomli_w.dumps({"folders": {
+            f"{WS}/a": {"trusted": True, "decided_at": 5, "sandbox": "off"},
+            f"{WS}/b": {"sandbox": "off"},
+        }}),
+        encoding="utf-8",
+    )
+
+    _prepare("p2")
+
+    assert _folders(home / ".grok" / TRUST) == {f"{WS}/a": {"trusted": True, "decided_at": 5}}
+
+
+def test_navides_records_live_in_its_own_folder_and_old_ones_are_read_once(
+    gate, home: Path, tmp_path: Path
+) -> None:
+    old = pane_home.panes_root() / "grok"
+    old.mkdir(parents=True)
+    block = tomli_w.dumps({"folders": {f"{WS}/a": {"trusted": True}}})
+    (old / ".folder-trust-merged.json").write_text(
+        json.dumps({"created": True, "rows": {f"{WS}/a": {"chunk": block, "block": block, "pane": "p0"}}}),
+        encoding="utf-8",
+    )
+    (home / ".grok" / TRUST).write_text(block, encoding="utf-8")
+
+    _prepare("p1")
+
+    own = tmp_path / "grok-folder-trust"
+    assert f"{WS}/a" in json.loads((own / ".folder-trust-merged.json").read_text(encoding="utf-8"))["rows"]
+    assert "p1" in json.loads((own / ".folder-trust-seeds.json").read_text(encoding="utf-8"))
+    assert json.loads((own / ".folder-trust-workspaces.json").read_text(encoding="utf-8")) == {"p1": WS}
+    assert (old / ".folder-trust-merged.json").exists(), "the old file is left where it was"
+    assert not (old / ".folder-trust-seeds.json").exists()
+    _off()
+    assert not (home / ".grok" / TRUST).exists()
+    # A ledger planted beside the shims later is never read again.
+    (home / ".grok" / TRUST).write_text(block, encoding="utf-8")
+    _prepare("p1")
+    assert pane_home.grok_trust_ledger_rows() == {}
+
+
+def test_each_pane_promotes_only_its_own_workspace(gate, home: Path) -> None:
+    _prepare("p1", f"{WS}/a")
+    _prepare("p2", f"{WS}/b")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/b")
+    _grok_trusts(_shim_trust("p2"), f"{WS}/b")
+
+    _prepare("p3")
+
+    assert pane_home.grok_trust_ledger_rows()[f"{WS}/b"]["pane"] == "p2"
 
 
 def test_a_row_the_user_deletes_is_not_brought_back(gate, home: Path) -> None:
@@ -247,12 +404,12 @@ def test_a_datetime_row_is_merged_and_ledgered(gate, home: Path) -> None:
     import datetime
 
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/dt", datetime.datetime(2026, 10, 20, 5, 0, tzinfo=datetime.UTC))
+    _grok_trusts(_shim_trust("p1"), f"{WS}/dt", datetime.datetime(2026, 10, 20, 5, 0, tzinfo=datetime.UTC))
 
     _prepare("p2")
 
-    assert "/work/dt" in _folders(home / ".grok" / TRUST)
-    assert "/work/dt" in pane_home.grok_trust_ledger_rows()
+    assert f"{WS}/dt" in _folders(home / ".grok" / TRUST)
+    assert f"{WS}/dt" in pane_home.grok_trust_ledger_rows()
     _off()
     assert not (home / ".grok" / TRUST).exists()
 
@@ -263,7 +420,7 @@ def test_the_ledger_never_misses_a_row_in_the_users_file(
     real = home / ".grok" / TRUST
     real.write_text(USERS_OWN, encoding="utf-8")
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
     original = pane_home._write_text
 
     def fail_on_the_users_file(path: Path, content: str) -> None:
@@ -285,7 +442,7 @@ def test_a_failing_merge_never_blocks_the_spawn(gate, home: Path, monkeypatch: p
 
     monkeypatch.setattr(pane_home, "merge_grok_folder_trust", broken)
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
 
     _prepare("p2")
 
@@ -293,7 +450,7 @@ def test_a_failing_merge_never_blocks_the_spawn(gate, home: Path, monkeypatch: p
 def test_nothing_is_written_without_the_gate(home: Path) -> None:
     convenience_wiring.install(None)  # conftest installs one for every test
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
 
     _prepare("p2")
 
@@ -313,11 +470,11 @@ def test_the_merge_is_backed_up_announced_and_taken_back_by_the_switch(gate, hom
     real = home / ".grok" / TRUST
     real.write_text(USERS_OWN, encoding="utf-8")
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
 
     _prepare("p2")
 
-    assert "/work/a" in _folders(real)
+    assert f"{WS}/a" in _folders(real)
     history = gate.history("grok.folder-trust")
     assert [(e["action"], e["notify"]) for e in history] == [("first", True)]
     assert history[0]["backup"], "the user's file is backed up before Navide writes it"
@@ -329,7 +486,7 @@ def test_the_merge_is_backed_up_announced_and_taken_back_by_the_switch(gate, hom
 
 def test_the_switch_removes_a_file_navide_created(gate, home: Path) -> None:
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
     _prepare("p2")
     assert (home / ".grok" / TRUST).exists()
 
@@ -341,14 +498,14 @@ def test_the_switch_removes_a_file_navide_created(gate, home: Path) -> None:
 def test_switched_off_trust_stays_in_the_pane(gate, home: Path) -> None:
     _off()
     _prepare("p1")
-    _grok_trusts(_shim_trust("p1"), "/work/a")
+    _grok_trusts(_shim_trust("p1"), f"{WS}/a")
 
     _prepare("p2")
     _prepare("p1")
 
     assert not (home / ".grok" / TRUST).exists()
-    assert "/work/a" in _folders(_shim_trust("p1"))
-    assert "/work/a" not in _folders(_shim_trust("p2")) if _shim_trust("p2").exists() else True
+    assert f"{WS}/a" in _folders(_shim_trust("p1"))
+    assert f"{WS}/a" not in _folders(_shim_trust("p2")) if _shim_trust("p2").exists() else True
 
 
 def test_the_feature_is_registered_and_switchable() -> None:

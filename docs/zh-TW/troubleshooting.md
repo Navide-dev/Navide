@@ -56,7 +56,7 @@ Codex 可開啟 `/hooks` 檢查待審核的 Hook。MCP 啟動失敗或第三方 
 
 ## Grok Build Pane
 
-- **「Do you trust the contents of this directory?」** 提示問的是 pane 自己的工作區時，Navide 會替它開的每個 Grok pane 回答，並透過 `~/.grok/trusted_folders.toml` 讓其他 Grok pane 共用這個答案（便利功能 `grok.folder-trust`，可在便利功能總覽關閉並收回）。提示還留在畫面上時 pane 會顯示為等待中，訊息會先等著，不會被打進提示裡。信任資料夾是永久的，所以 agent 或聊天轉送只能拒絕（`cli_answer_prompt` 的 "deny"，也就是 Grok 的 "No, quit"）；要接受請自己在 pane 裡按。
+- **「Do you trust the contents of this directory?」** 提示問的是 pane 自己的工作區時，Navide 會替它開的每個 Grok pane 回答，並透過 `~/.grok/trusted_folders.toml` 讓其他 Grok pane 共用這個答案（便利功能 `grok.folder-trust`，可在便利功能總覽關閉並收回）；只有 pane 開啟的工作區或它底下的資料夾，才會共享到 `~/.grok`。提示還留在畫面上時 pane 會顯示為等待中，訊息會先等著，不會被打進提示裡。信任資料夾是永久的，所以 agent 或聊天轉送只能拒絕（`cli_answer_prompt` 的 "deny"，也就是 Grok 的 "No, quit"）；要接受請自己在 pane 裡按。
 - **`[startup probe] … does not identify as Grok Build`** 表示 `PATH` 上的 `grok` 是另一個同名程式（例如社群版 `grok-cli`）。請用 `curl -fsSL https://x.ai/cli/install.sh | bash` 安裝官方 CLI。
 - **額度顯示為無法取得。** Grok Build 不對其他程式回報額度；請在 Grok pane 裡輸入 `/usage`。
 - **Grok 工作中送出的斜線指令會晚點才執行。** Grok Build 會把它排到目前回合結束，所以用 `cli_send_and_wait` 等到的回覆可能屬於前一個回合。
