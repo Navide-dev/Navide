@@ -603,6 +603,24 @@ def reclaim_expired(session: Session, now: datetime | None = None) -> list[str]:
     return reclaimed
 
 
+def _held_by_other_frozen(session: Session, digest: str, publisher_id: int) -> bool:
+    """Whether a version with this digest belongs to another namespace that is
+    still frozen, whose block must then stay."""
+    return (
+        session.exec(
+            select(ExtensionVersion.id)
+            .join(Extension, Extension.id == ExtensionVersion.extension_id)
+            .join(Publisher, Publisher.id == Extension.publisher_id)
+            .where(
+                ExtensionVersion.package_digest == digest,
+                Publisher.id != publisher_id,
+                Publisher.frozen_at.is_not(None),
+            )
+        ).first()
+        is not None
+    )
+
+
 @dataclass(frozen=True)
 class UnfreezeResult:
     namespace: str
@@ -621,7 +639,14 @@ def unfreeze(session: Session, namespace: str, *, actor: str, reason: str, resto
     the `qualification-revoked` digest entries its `namespace.freeze` audit
     row added (still as that freeze wrote them), and the versions it yanked
     whose digest is then no longer blocked. A version yanked or a digest
-    blocked for any other reason is left as it is."""
+    blocked for any other reason is left as it is, and so is a digest that a
+    version of another namespace still frozen also has (review-550 LOW-3).
+
+    Only the latest freeze is undone: digests a freeze before an unfreeze
+    without restore left blocked stay blocked (fail-closed; review-550
+    LOW-2). The checks and writes rely on SQLite serialising writers; on a
+    database that does not, lock the publisher and qualification rows
+    (SELECT ... FOR UPDATE) first (review-550 LOW-1)."""
     from .self_service import MAX_NAMESPACES_PER_ACCOUNT, counted_namespaces  # self_service imports this module
 
     publisher = session.exec(select(Publisher).where(Publisher.name == namespace.strip().lower())).first()
@@ -655,6 +680,7 @@ def unfreeze(session: Session, namespace: str, *, actor: str, reason: str, resto
                 entry is not None
                 and entry.digest_reason == blocklist.DIGEST_QUALIFICATION_REVOKED
                 and entry.created_by == freeze.actor
+                and not _held_by_other_frozen(session, digest, publisher.id)
             ):
                 session.delete(entry)
                 unblocked.append(digest)

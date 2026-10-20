@@ -531,8 +531,11 @@ approved by default.
   unless `restore_versions`, which removes only the `qualification-revoked`
   digest entries this freeze added (per its `namespace.freeze` audit row) and
   un-yanks only the versions it yanked whose digest is then unblocked; a
-  version yanked or a digest blocked for another reason stays. Audited as
-  `namespace.unfreeze` with the reason and what was restored.
+  version yanked or a digest blocked for another reason stays, and so does a
+  digest that a version of another, still frozen namespace has. Only the
+  latest freeze is undone: a block left by an earlier freeze that was unfrozen
+  without restoring stays (fail-closed); remove it on the blocklist if wanted.
+  Audited as `namespace.unfreeze` with the reason and what was restored.
 - **Own data**: `GET /api/publisher/me`, `PUT /api/publisher/me/key`,
   `GET /api/publisher/me/versions` (`?extension=&version=`).
 - **Local-install trust**: `GET /api/trust/local-install` returns a separate

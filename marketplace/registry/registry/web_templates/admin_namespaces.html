@@ -10,7 +10,9 @@
     account only, once that account is an approved developer again; it never goes to
     another account. The old publisher tokens and keys stay revoked: the owner issues a
     new token and registers a new key. Versions stay yanked and their digests blocked
-    unless you tick "Restore versions", which undoes only what this freeze did.</p>
+    unless you tick "Restore versions", which undoes only what this freeze did: a block
+    left from an earlier freeze (unfrozen without restoring) stays, and so does a digest
+    that a namespace still frozen also uses. Remove those on the Blocklist page if needed.</p>
   {% if error %}<p class="warn warn-block" role="alert">{{ error }}</p>{% endif %}
   <table class="version-table">
     <thead><tr><th>Namespace</th><th>Account</th><th>Qualification</th><th>Frozen</th><th>Why</th><th></th></tr></thead>

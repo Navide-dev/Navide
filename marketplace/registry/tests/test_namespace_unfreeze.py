@@ -295,3 +295,30 @@ def test_a_reclaimed_then_unfrozen_namespace_is_not_reclaimed_again(client):
     assert _publisher(client).frozen_at is None
     with Session(_engine(client)) as session:
         assert session.exec(select(Extension)).first() is not None
+
+
+def test_restore_keeps_a_digest_another_frozen_namespace_still_has(client):
+    """review-550 LOW-3: a digest shared with a namespace that is still frozen
+    stays blocked, and so its version here stays yanked."""
+    state = reclaimed_namespace(client)
+    shared = state["digests"]["1.0.0"]
+    with Session(_engine(client)) as session:
+        other = Publisher(name="other-ns", navide_member_id="mem-other", frozen_at=_now(), frozen_reason="x")
+        session.add(other)
+        session.flush()
+        extension = Extension(publisher_id=other.id, namespace="other-ns", name="copy", identity="other-ns.copy")
+        session.add(extension)
+        session.flush()
+        session.add(
+            ExtensionVersion(
+                extension_id=extension.id, version="1.0.0", package_digest=shared, package_key="k", yanked=True
+            )
+        )
+        session.commit()
+
+    body = unfreeze(client, restore_versions=True).json()
+    assert shared not in body["digests_unblocked"]
+    assert body["digests_unblocked"] == [state["digests"]["1.1.0"]]
+    assert body["restored_versions"] == []
+    assert _digest_entries(client)[shared].digest_reason == blocklist.DIGEST_QUALIFICATION_REVOKED
+    assert _versions(client)["1.0.0"].yanked is True
