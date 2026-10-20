@@ -96,6 +96,41 @@ describe('useStatusBadgePrefs', () => {
     expect(JSON.parse(String(store.get(KEY)))).toEqual({})
   })
 
+  it('reads legacy per-language fields into the labels map', () => {
+    seed({ idle: { labelZh: '待命', labelEn: 'Ready', labelJa: '待機', color: 'cyan' } })
+    expect(useStatusBadgePrefs().prefs.value.idle).toEqual({
+      labels: { 'zh-TW': '待命', 'en-US': 'Ready', 'ja-JP': '待機' },
+      color: 'cyan',
+    })
+  })
+
+  it('stores a later language in `labels` and keeps the original three in their legacy fields', () => {
+    setStatusBadgePref('idle', { labels: { 'en-US': 'Ready', 'ko-KR': '대기' } })
+    expect(JSON.parse(String(store.get(KEY)))).toEqual({ idle: { labelEn: 'Ready', labels: { 'ko-KR': '대기' } } })
+    __reloadStatusBadgePrefsForTest()
+    expect(statusBadgeLabelOverride('idle', 'ko-KR')).toBe('대기')
+    expect(statusBadgeLabelOverride('idle', 'en-US')).toBe('Ready')
+    setStatusBadgePref('idle', { labels: { 'ko-KR': '' } })
+    expect(JSON.parse(String(store.get(KEY)))).toEqual({ idle: { labelEn: 'Ready' } })
+  })
+
+  it('drops unknown locales in a stored labels map', () => {
+    seed({ idle: { labels: { 'it-IT': 'Pronto', 'de-DE': 'Bereit' } } })
+    expect(useStatusBadgePrefs().prefs.value.idle).toEqual({ labels: { 'de-DE': 'Bereit' } })
+  })
+
+  it('falls back to en-US then zh-TW only for a later language', () => {
+    setStatusBadgePref('idle', { labelZh: '待命' })
+    // zh-CN is not zh-TW: no prefix match, it only reaches zh-TW as last resort.
+    expect(statusBadgeLabelOverride('idle', 'zh-CN')).toBe('待命')
+    setStatusBadgePref('idle', { labelEn: 'Ready' })
+    expect(statusBadgeLabelOverride('idle', 'zh-CN')).toBe('Ready')
+    expect(statusBadgeLabelOverride('idle', 'ko-KR')).toBe('Ready')
+    // The original three keep exact matching.
+    expect(statusBadgeLabelOverride('idle', 'ja-JP')).toBe('')
+    expect(statusBadgeLabelOverride('idle', 'it-IT')).toBe('')
+  })
+
   it('stores nothing for a choice that equals the shipped default', () => {
     // Otherwise the blob fills up with entries that say "same as default", and
     // a status the user never meant to pin stops following a later change to
