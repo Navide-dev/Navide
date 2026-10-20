@@ -12,7 +12,6 @@ Registered on the core server by the import at the end of server.py.
 from __future__ import annotations
 
 import asyncio
-import sys
 from typing import Any
 
 from mcp.server.fastmcp import Context
@@ -165,7 +164,9 @@ _KEPT_PANES_NOTES = [
 
 def _last_window_quits() -> bool:
     """Off macOS, closing the last window quits Navide and ends every CLI."""
-    return sys.platform != "darwin"
+    from agent_team_backend import osplat
+
+    return osplat.platform_id != "darwin"
 
 
 def _pane_caller_required(tool: str) -> dict[str, Any]:
