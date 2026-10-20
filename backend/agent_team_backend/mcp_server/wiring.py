@@ -184,6 +184,7 @@ def release_pane_token(pane_id: str) -> None:
         if agent_messaging.names_pane(pane_id) or _pane_has_live_pty(pane_id):
             return
         token = _PANE_TOKENS.pop(pane_id, None)
+        pane_home.forget_grok_workspace(pane_id)
     if token:
         log_redaction.remove_secret(token)
 
@@ -747,6 +748,7 @@ def wire_command(
                 SERVER_NAME,
                 SERVER_LABEL,
                 LEGACY_SERVER_NAMES,
+                workspace=cwd,
             )
             if prepared is not None:
                 _, root = prepared
