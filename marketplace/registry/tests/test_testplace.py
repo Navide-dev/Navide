@@ -555,7 +555,8 @@ def test_a_withdrawal_reaches_every_member_who_ever_held_a_seat(client: TestClie
     assert revoked.status_code == 200, revoked.text
     assert withdrawn(removed).json() == {"withdrawn": [{"version": "1.0.0", "target": "universal"}]}
 
-    # A frozen publisher: every one of its test builds reads as withdrawn.
+    # A frozen publisher: every one of its test builds reads as withdrawn, but
+    # a removed tester never hears of a build published after their seat ended.
     assert _publish(client, "1.1.0").status_code == 201
     with _session(client) as session:
         publisher = session.exec(select(Publisher).where(Publisher.name == "acme")).one()
@@ -563,6 +564,7 @@ def test_a_withdrawal_reaches_every_member_who_ever_held_a_seat(client: TestClie
         session.add(publisher)
         session.commit()
     assert {row["version"] for row in withdrawn(stayed).json()["withdrawn"]} == {"1.0.0", "1.1.0"}
+    assert {row["version"] for row in withdrawn(removed).json()["withdrawn"]} == {"1.0.0"}
 
     # Outsiders, anonymous callers and a missing extension: the same answers.
     outsider = withdrawn(_member(client, "member-out"))

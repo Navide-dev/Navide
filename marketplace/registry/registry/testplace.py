@@ -121,18 +121,21 @@ def withdrawn_rows(session: Session, extension: Extension) -> list[ExtensionVers
     )
 
 
-def ever_seated(session: Session, extension: Extension, member_id: str) -> bool:
-    """True when `member_id` holds or ever held a seat, revoked or not: the
-    members who may still run one of its test builds."""
-    return (
-        session.exec(
-            select(TestplaceInvite).where(
-                TestplaceInvite.extension_id == extension.id,
-                TestplaceInvite.member_id == member_id,
-            )
-        ).first()
-        is not None
-    )
+def seat_ended(session: Session, extension: Extension, member_id: str) -> datetime | None:
+    """When `member_id`'s access to the extension's test builds ended: now
+    for a live seat, the latest revocation otherwise; None when the member
+    never held a seat. Builds published after it are none of theirs."""
+    seats = session.exec(
+        select(TestplaceInvite).where(
+            TestplaceInvite.extension_id == extension.id,
+            TestplaceInvite.member_id == member_id,
+        )
+    ).all()
+    if not seats:
+        return None
+    if any(seat.revoked_at is None for seat in seats):
+        return _now()
+    return max(_aware(seat.revoked_at) for seat in seats)
 
 
 def testplace_rows(session: Session, extension: Extension) -> list[ExtensionVersion]:

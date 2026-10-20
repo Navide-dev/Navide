@@ -180,7 +180,8 @@ def register_testplace_routes(
         test builds all read as withdrawn. Anyone else gets the 404 of a
         missing extension, so it tells nobody a test build exists."""
         extension = extension_or_404(session, namespace, name)
-        if not testplace.ever_seated(session, extension, member_id):
+        ended = testplace.seat_ended(session, extension, member_id)
+        if ended is None:
             raise NOT_FOUND
         publisher = session.get(Publisher, extension.publisher_id)
         rows = (
@@ -188,6 +189,9 @@ def register_testplace_routes(
             if publisher is None or publisher_problem(session, publisher) is not None
             else testplace.withdrawn_rows(session, extension)
         )
+        # Only builds the member could have had: published before their seat
+        # ended, so a removed tester learns nothing about later ones.
+        rows = [row for row in rows if testplace._aware(row.published_at) <= ended]
         return {"withdrawn": [{"version": row.version, "target": row.target} for row in rows]}
 
     @app.post("/api/testplace/join")
