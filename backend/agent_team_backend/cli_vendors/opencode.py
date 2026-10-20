@@ -226,6 +226,19 @@ _NEWEST_WRITES_SQL = (
 # inherits the reader, so it keeps its own entries.
 _READ_PROBLEMS: dict[str, dict[str, dict]] = {}
 
+# Reads that run only on some passes (re-anchoring, a dropped watermark, a
+# turn's reply text). Their entry also clears once a usage pass over the same
+# db works, or a problem they hit once would stay open on a healthy db. The
+# reads that run on every pass are left out: they clear themselves.
+_CONDITIONAL_READS = frozenset({
+    _ANCHOR_SQL,
+    _V2_ANCHOR_SQL,
+    _TURN_TEXT_SQL,
+    _V2_TURN_TEXT_SQL,
+    "SELECT COALESCE(MAX(rowid), 0) FROM message",
+    "SELECT COALESCE(MAX(rowid), 0) FROM session_message",
+})
+
 
 def read_problem(vendor: str) -> dict | None:
     """Why `vendor`'s db cannot be fully read — the oldest problem still open,
@@ -410,6 +423,15 @@ class OpencodeLogReader(LogReader):
             self._read_ok("schema")
             return "v2"
         if _V1_TABLES <= names:
+            partial = names & _V2_TABLES
+            if partial:
+                self._report_problem(
+                    "schema", path, "partial-v2-schema",
+                    f"OpenCode 2 table(s) {', '.join(sorted(partial))} without "
+                    f"{', '.join(sorted(_V2_TABLES - names))}; reading the 1.x tables",
+                    status="partial",
+                )
+                return "v1"
             self._read_ok("schema")
             return "v1"
         self._report_problem(
@@ -447,6 +469,13 @@ class OpencodeLogReader(LogReader):
         log.info("%s db: a read that failed works again", self.vendor)
         if not entries:
             del _READ_PROBLEMS[self.vendor]
+
+    def _conditional_reads_ok(self, path: Path) -> None:
+        """A usage pass over `path` worked: the reads that only run on some
+        passes no longer hold a problem against it (review-485 NEW-1)."""
+        entries = _READ_PROBLEMS.get(self.vendor) or {}
+        for key in [k for k, entry in entries.items() if k in _CONDITIONAL_READS and entry["path"] == str(path)]:
+            self._read_ok(key)
 
     def _session_versions(self, path: Path, schema: str = "v1") -> dict[str, str]:
         """session id → the CLI version that wrote it (``session.version``).
@@ -583,6 +612,7 @@ class OpencodeLogReader(LogReader):
         rows = self._query(path, usage_sql.format(where=_where(last_row_id, pending)), key="usage")
         if rows is None:
             return IncrementalParseResult([], dict(checkpoint))
+        self._conditional_reads_ok(path)
         if v2:
             rows = [(*row[:4], _v2_directory(row[4])) for row in rows]
         if not rows and last_row_id:

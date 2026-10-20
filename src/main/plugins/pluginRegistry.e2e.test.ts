@@ -399,15 +399,16 @@ describe.skipIf(!REGISTRY_AVAILABLE)('real Registry → App install pipeline', (
     expect(tree(main.root)).toEqual(before)
   })
 
-  it('(3) commitInstall + restart grants exactly the installed version', async () => {
+  it('(3) an approved commitInstall grants exactly the installed version', async () => {
     await main.call('plugins:prepareInstall', { namespace: PUBLISHER, name: NAME })
     await expect(main.call('plugins:commitInstall', { id: ID, publisherConfirmed: true }))
       .rejects.toThrow(/risk confirmation/)
     await main.call('plugins:prepareInstall', { namespace: PUBLISHER, name: NAME })
+    // L1: a first install is activated, and its grant written, on approval.
     await expect(main.call('plugins:commitInstall', { id: ID, publisherConfirmed: true, riskConfirmed: true }))
-      .resolves.toMatchObject({ id: ID, restartRequired: true })
-    // Staged only: no grant until the candidate is activated.
-    expect(new PluginCapabilityGrantStore(main.root).get(ID, '0.1.0')).toBeNull()
+      .resolves.toMatchObject({ id: ID, restartRequired: false, activatedVersion: '0.1.0' })
+    expect(new PluginCapabilityGrantStore(main.root).get(ID, '0.1.0')).toMatchObject({ packageVersion: '0.1.0' })
+    // A Restart that still follows has nothing left to do.
     await expect(main.call('plugins:restart', { id: ID })).resolves.toMatchObject({ id: ID, packageVersion: '0.1.0' })
     expect(new PluginCapabilityGrantStore(main.root).get(ID, '0.1.0')).toMatchObject({
       packageVersion: '0.1.0',
