@@ -50,7 +50,7 @@ from .packs import pack_conflict
 from .ratelimit import SlidingWindowLimiter
 from .ratings import RATING_LIMIT_PER_HOUR
 from .reports import REPORT_LIMIT_PER_HOUR
-from .repository import RegistryRepository, rating_average
+from .repository import RegistryRepository, VersionConflictError, rating_average
 from .registry_trust import RegistryTrustSigner
 from .schemas import (
     CategoryInfo,
@@ -356,6 +356,15 @@ def _publish_conflict(
             f"{', '.join(targets)}; a version is either universal or "
             "per-platform"
         )
+    return None
+
+
+def _other_channel_conflict(session, extension, version: str, *, testplace: bool) -> str | None:
+    """The one-channel rule again, inside the publish's own write (S8 R4-L3)."""
+    rows = RegistryRepository(session).list_version_artifacts(extension.id, version, public_only=False)
+    if any((row.channel == TESTPLACE_CHANNEL) != testplace for row in rows):
+        held = "testplace" if not testplace else "the public channel"
+        return f"version {version} of {extension.identity} already exists on {held}; a version belongs to one channel until promotion"
     return None
 
 
@@ -804,27 +813,34 @@ def _register_routes(app: FastAPI) -> None:
 
         key = _package_key(namespace, name, manifest.version, target)
         state.storage.put(key, data)
-        row = repo.add_version(
-            extension=extension,
-            version=manifest.version,
-            manifest=manifest.model_dump(exclude_none=True),
-            package_digest=loaded.digest,
-            package_key=key,
-            signature=signature,
-            target=target,
-            registry_envelope=registry_envelope,
-            registry_signature=registry_signature,
-            trust_tier=trust_tier,
-            assets=[(a.path, a.size, a.content_type) for a in loaded.assets],
-            review_status=review_status,
-            review_report=review_report,
-            disclosure=disclosure,
-            disclosure_envelope=disclosure_envelope,
-            disclosure_signature=disclosure_signature,
-            scan=scan,
-            channel=TESTPLACE_CHANNEL if testplace_publish else None,
-            expires_at=expires_at,
-        )
+        try:
+            row = repo.add_version(
+                extension=extension,
+                version=manifest.version,
+                manifest=manifest.model_dump(exclude_none=True),
+                package_digest=loaded.digest,
+                package_key=key,
+                signature=signature,
+                target=target,
+                registry_envelope=registry_envelope,
+                registry_signature=registry_signature,
+                trust_tier=trust_tier,
+                assets=[(a.path, a.size, a.content_type) for a in loaded.assets],
+                review_status=review_status,
+                review_report=review_report,
+                disclosure=disclosure,
+                disclosure_envelope=disclosure_envelope,
+                disclosure_signature=disclosure_signature,
+                scan=scan,
+                channel=TESTPLACE_CHANNEL if testplace_publish else None,
+                expires_at=expires_at,
+                recheck=lambda session: _other_channel_conflict(
+                    session, extension, manifest.version, testplace=testplace_publish
+                ),
+            )
+        except VersionConflictError as exc:
+            # The blob stays: in a same-target race its key may be the winner's.
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         if identity.authenticated:
             audit.record(
                 repo.session,

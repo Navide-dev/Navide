@@ -23,6 +23,7 @@ from sqlmodel import Session, select
 
 from . import audit, testplace
 from .account_auth import BearerError, require_bearer, require_member
+from .blocklist import digest_blocked
 from .models import Extension, ExtensionVersion, Publisher
 from .qualification import publisher_problem
 from .repository import RegistryRepository
@@ -35,6 +36,10 @@ from .versions import TESTPLACE_CHANNEL, version_key
 NOT_FOUND = HTTPException(
     status_code=404, detail={"code": "NOT_FOUND", "message": "extension not found"}
 )
+
+
+# No extension has this id: the seat query a missing extension still runs.
+NO_EXTENSION_ID = -1
 
 
 def _http(exc: testplace.TestplaceError) -> HTTPException:
@@ -63,21 +68,53 @@ def register_testplace_routes(
         return extension
 
     # -- testers -----------------------------------------------------------
-    def tester_extension(session: Session, member_id: str, namespace: str, name: str) -> Extension:
-        extension = extension_or_404(session, namespace, name)
+    # S8 R5-M1: the global blocklist (package, publisher, digest) applies to
+    # testers too. A wholly blocked extension answers like a missing one; a
+    # blocked version is not served, and reads as withdrawn so the App stops it.
+    def wholly_blocked(request: Request, extension: Extension) -> bool:
+        # An empty version matches only whole-package and publisher entries.
+        return request.app.state.registry.trust_signer.block_reason(
+            publisher_id=extension.namespace, package_id=extension.identity, version=""
+        ) is not None
+
+    def row_blocked(request: Request, session: Session, extension: Extension, row: ExtensionVersion) -> bool:
+        return (
+            request.app.state.registry.trust_signer.block_reason(
+                publisher_id=extension.namespace, package_id=extension.identity, version=row.version
+            ) is not None
+            or digest_blocked(session, row.package_digest) is not None
+        )
+
+    def served_rows(request: Request, session: Session, extension: Extension) -> list[ExtensionVersion]:
+        return [r for r in testplace.live_rows(session, extension) if not row_blocked(request, session, extension, r)]
+
+    def withdrawn_view(request: Request, session: Session, extension: Extension) -> list[ExtensionVersion]:
+        taken_back = {row.id: row for row in testplace.withdrawn_rows(session, extension)}
+        for row in testplace.testplace_rows(session, extension):
+            if row.id not in taken_back and row_blocked(request, session, extension, row):
+                taken_back[row.id] = row
+        return sorted(taken_back.values(), key=lambda r: (r.version, r.target))
+
+    def tester_extension(
+        session: Session, member_id: str, namespace: str, name: str, request: Request | None = None
+    ) -> Extension:
+        # A missing extension runs the same seat query as an uninvited member
+        # (S8 R4-L1), so neither answers faster than the other.
+        extension = RegistryRepository(session).get_extension(namespace, name, public_only=False)
+        seated = testplace.is_tester_id(session, extension.id if extension else NO_EXTENSION_ID, member_id)
+        if extension is None or not seated:
+            raise NOT_FOUND
         publisher = session.get(Publisher, extension.publisher_id)
-        if (
-            publisher is None
-            or publisher_problem(session, publisher) is not None
-            or not testplace.is_tester(session, extension, member_id)
-        ):
+        if publisher is None or publisher_problem(session, publisher) is not None:
+            raise NOT_FOUND
+        if request is not None and wholly_blocked(request, extension):
             raise NOT_FOUND
         return extension
 
     def view(request: Request, session: Session, extension: Extension) -> TestplaceExtension:
         publisher = session.get(Publisher, extension.publisher_id)
         rows = sorted(
-            testplace.live_rows(session, extension),
+            served_rows(request, session, extension),
             key=lambda r: (version_key(r.version), r.target),
             reverse=True,
         )
@@ -104,7 +141,7 @@ def register_testplace_routes(
             ],
             withdrawn=[
                 {"version": row.version, "target": row.target}
-                for row in testplace.withdrawn_rows(session, extension)
+                for row in withdrawn_view(request, session, extension)
             ],
         )
 
@@ -119,6 +156,8 @@ def register_testplace_routes(
             publisher = session.get(Publisher, extension.publisher_id)
             if publisher is None or publisher_problem(session, publisher) is not None:
                 continue
+            if wholly_blocked(request, extension):
+                continue
             items.append(view(request, session, extension))
         return TestplaceListResponse(items=items)
 
@@ -130,7 +169,7 @@ def register_testplace_routes(
         member_id: str = Depends(require_member),
         session: Session = Depends(session_dep),
     ) -> TestplaceExtension:
-        return view(request, session, tester_extension(session, member_id, namespace, name))
+        return view(request, session, tester_extension(session, member_id, namespace, name, request))
 
     @app.get("/api/testplace/{namespace}/{name}/{version}/download")
     def tester_download(
@@ -142,8 +181,8 @@ def register_testplace_routes(
         member_id: str = Depends(require_member),
         session: Session = Depends(session_dep),
     ) -> StreamingResponse:
-        extension = tester_extension(session, member_id, namespace, name)
-        rows = [r for r in testplace.live_rows(session, extension) if r.version == version]
+        extension = tester_extension(session, member_id, namespace, name, request)
+        rows = [r for r in served_rows(request, session, extension) if r.version == version]
         if target is None:
             row = rows[0] if len(rows) == 1 else None
         else:
@@ -170,6 +209,7 @@ def register_testplace_routes(
 
     @app.get("/api/testplace/{namespace}/{name}/withdrawn")
     def tester_withdrawn(
+        request: Request,
         namespace: str,
         name: str,
         member_id: str = Depends(require_member),
@@ -180,15 +220,16 @@ def register_testplace_routes(
         whatever the publisher's state: a frozen or disqualified publisher's
         test builds all read as withdrawn. Anyone else gets the 404 of a
         missing extension, so it tells nobody a test build exists."""
-        extension = extension_or_404(session, namespace, name)
-        ended = testplace.seat_ended(session, extension, member_id)
-        if ended is None:
+        # Same queries for a missing extension as for a never-seated member (S8 R4-L1).
+        extension = RegistryRepository(session).get_extension(namespace, name, public_only=False)
+        ended = testplace.seat_ended(session, extension.id if extension else NO_EXTENSION_ID, member_id)
+        if extension is None or ended is None:
             raise NOT_FOUND
         publisher = session.get(Publisher, extension.publisher_id)
         rows = (
             testplace.testplace_rows(session, extension)
-            if publisher is None or publisher_problem(session, publisher) is not None
-            else testplace.withdrawn_rows(session, extension)
+            if publisher is None or publisher_problem(session, publisher) is not None or wholly_blocked(request, extension)
+            else withdrawn_view(request, session, extension)
         )
         # Only builds the member could have had: published before their seat
         # ended, so a removed tester learns nothing about later ones.

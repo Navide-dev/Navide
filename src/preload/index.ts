@@ -477,7 +477,7 @@ export interface ExpiredTestplaceBuild {
   artifactDigest?: string
   canKeep: boolean
   withdrawn?: true
-  keepRefusal?: 'withdrawn' | 'unconfirmed'
+  keepRefusal?: 'withdrawn' | 'signed-out' | 'not-a-tester' | 'registry-outdated' | 'unreachable'
 }
 
 export interface DeveloperModeState {

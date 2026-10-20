@@ -35,6 +35,10 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+
+class VersionConflictError(Exception):
+    """A publish lost a race for its version (RegistryRepository.add_version)."""
+
 class RegistryRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -310,9 +314,15 @@ class RegistryRepository:
         scan: dict | None = None,
         channel: str | None = None,
         expires_at: datetime | None = None,
+        recheck: Callable[[Session], str | None] | None = None,
     ) -> ExtensionVersion:
         """`channel` defaults to the one the SemVer implies; only a testplace
-        publish passes it, together with `expires_at`."""
+        publish passes it, together with `expires_at`.
+
+        `recheck` runs after the row is written and before it commits, while
+        SQLite holds the write lock: a reason it returns rolls the row back
+        and raises VersionConflictError, so two racing publishes cannot both
+        pass a check made before either wrote (S8 R4-L3)."""
         record = ExtensionVersion(
             extension_id=extension.id,
             version=version,
@@ -334,6 +344,12 @@ class RegistryRepository:
             scan=scan,
         )
         self.session.add(record)
+        if recheck is not None:
+            self.session.flush()
+            problem = recheck(self.session)
+            if problem is not None:
+                self.session.rollback()
+                raise VersionConflictError(problem)
         self.session.commit()
         self.session.refresh(record)
         for path, size, content_type in assets:

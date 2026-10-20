@@ -891,7 +891,7 @@ declare global {
     canKeep: boolean
     /** Its developer or Navide took it back (S8 T-MED-1). */
     withdrawn?: true
-    keepRefusal?: 'withdrawn' | 'unconfirmed'
+    keepRefusal?: 'withdrawn' | 'signed-out' | 'not-a-tester' | 'registry-outdated' | 'unreachable'
   }
 
   /** Card K4: the Developer Mode switch and the developer folders consented to. */

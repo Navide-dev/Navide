@@ -596,6 +596,7 @@ def _mixed_legacy_version(client: TestClient, monkeypatch) -> None:
 
     assert _publish_native(client, "darwin-arm64", channel="testplace").status_code == 201
     monkeypatch.setattr(app_module, "_publish_conflict", lambda *args, **kwargs: None)
+    monkeypatch.setattr(app_module, "_other_channel_conflict", lambda *args, **kwargs: None)
     stable = _publish_native(client, "win32-x64", channel="stable")
     assert stable.status_code == 201, stable.text
     monkeypatch.undo()
@@ -759,3 +760,89 @@ def test_promotion_is_refused_while_the_version_is_blocked(client: TestClient) -
     with _session(client) as session:
         row = session.exec(select(ExtensionVersion)).one()
     assert row.promotion_status == "requested" and row.channel == "testplace"
+
+
+def test_two_publishes_racing_on_one_version_never_hold_both_channels(client: TestClient, monkeypatch) -> None:
+    """S8 R4-L3: the one-channel rule holds when two publishes race past the first check."""
+    from registry import app as app_module
+
+    real = app_module.run_scan
+    answers: list[int] = []
+
+    def scan_then_race(*args, **kwargs):
+        # The testplace publish has passed its conflict check; a stable one of
+        # the same version on another target runs to completion meanwhile.
+        monkeypatch.setattr(app_module, "run_scan", real)
+        answers.append(_publish_native(client, "win32-x64", channel="stable").status_code)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "run_scan", scan_then_race)
+    late = _publish_native(client, "darwin-arm64", channel="testplace")
+    assert answers == [201]
+    assert late.status_code == 409, late.text
+    rows = _rows(client)
+    assert set(rows) == {"win32-x64"}
+    assert all(row.channel != "testplace" for row in rows.values())
+
+
+def test_a_missing_extension_and_an_uninvited_member_run_the_same_queries(client: TestClient) -> None:
+    """S8 R4-L1: neither tester route answers a missing extension faster."""
+    from sqlalchemy import event
+
+    assert _publish(client).status_code == 201
+    outsider = _member(client, "member-out")
+    engine = client.app.state.registry.engine
+
+    def statements(path: str) -> list[str]:
+        seen: list[str] = []
+
+        def record(conn, cursor, statement, *args):  # noqa: ANN001
+            seen.append(statement.split(" WHERE")[0])
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            resp = client.get(path, headers=outsider)
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+        assert resp.status_code == 404
+        return seen
+
+    for suffix in ("", "/withdrawn"):
+        assert statements(f"/api/testplace/acme/files{suffix}") == statements(f"/api/testplace/acme/nothing{suffix}")
+
+
+def test_a_globally_blocked_test_build_is_not_served_to_testers_but_reads_as_withdrawn(client: TestClient) -> None:
+    """S8 R5-M1: package, publisher and digest blocks apply to tester routes too."""
+    from registry import blocklist
+
+    assert _publish(client).status_code == 201
+    assert _publish(client, "1.1.0").status_code == 201
+    (token,) = _invite(client)
+    tester = _member(client, "member-tester")
+    assert _join(client, tester, token).status_code == 200
+    missing_version = client.get("/api/testplace/acme/files/9.9.9/download", headers=tester)
+
+    # One version blocked by digest: gone from the detail and the download, listed as withdrawn.
+    with _session(client) as session:
+        digest = session.exec(
+            select(ExtensionVersion).where(ExtensionVersion.version == "1.1.0")
+        ).one().package_digest
+        blocklist.block_digests(session, [digest], reason="malware", digest_reason="security", created_by="admin")
+        session.commit()
+    detail = client.get("/api/testplace/acme/files", headers=tester).json()
+    assert [v["version"] for v in detail["versions"]] == ["1.0.0"]
+    blocked_download = client.get("/api/testplace/acme/files/1.1.0/download", headers=tester)
+    assert (blocked_download.status_code, blocked_download.json()) == (missing_version.status_code, missing_version.json())
+    withdrawn = client.get("/api/testplace/acme/files/withdrawn", headers=tester).json()["withdrawn"]
+    assert {"version": "1.1.0", "target": "universal"} in withdrawn
+
+    # The whole package blocked: the same 404 as a missing extension, every build withdrawn.
+    missing = client.get("/api/testplace/acme/nothing", headers=tester)
+    with _session(client) as session:
+        blocklist.add_entry(session, kind="package", value="acme.files", reason="malware", created_by="admin")
+    blocked = client.get("/api/testplace/acme/files", headers=tester)
+    assert (blocked.status_code, blocked.json()) == (missing.status_code, missing.json())
+    assert client.get("/api/testplace", headers=tester).json() == {"items": []}
+    assert client.get("/api/testplace/acme/files/1.0.0/download", headers=tester).status_code == 404
+    withdrawn = client.get("/api/testplace/acme/files/withdrawn", headers=tester).json()["withdrawn"]
+    assert {row["version"] for row in withdrawn} == {"1.0.0", "1.1.0"}

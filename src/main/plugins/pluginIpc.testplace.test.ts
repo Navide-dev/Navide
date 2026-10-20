@@ -16,6 +16,7 @@ import { canonicalTrustJson, type RegistryPackageEnvelope, type RegistryTrustMet
 import type { InstallerTrustConfig } from './pluginInstaller'
 import type { PluginActivationCatalogEntry } from './installedPlugins'
 import { writeRegistryTrustSnapshot } from './pluginInstalledTrust'
+import { PluginTestplaceStore } from './pluginTestplaceStore'
 
 const { handlers, registry } = vi.hoisted(() => ({
   handlers: new Map<string, (...a: unknown[]) => unknown>(),
@@ -118,6 +119,7 @@ function register(now = INSTALL_AT) {
     preflightCandidateFrontend: async () => undefined,
     preflightCandidateBackend: async () => undefined,
     onActivationChange: (change) => activations.push(change),
+    testplaceWithdrawalTimeoutMs: 50,
   })
   return manager
 }
@@ -349,12 +351,12 @@ describe('a withdrawn Testplace build (S8 T-MED-1)', () => {
     register(AFTER_EXPIRY)
     withdrawnAnswer = { status: 404, body: { detail: { code: 'NOT_FOUND', message: 'extension not found' } } }
     expect(await call('plugins:expiredTestplace')).toEqual([
-      { id: ID, version: '0.3.0', expiresAt: EXPIRES_AT, canKeep: false, keepRefusal: 'unconfirmed' },
+      { id: ID, version: '0.3.0', expiresAt: EXPIRES_AT, canKeep: false, keepRefusal: 'not-a-tester' },
     ])
     await expect(call('plugins:keepExpiredTestplace', { id: ID })).rejects.toThrow(/could not confirm/)
     // Signed out or offline: the same answer.
     registry.fetch.mockImplementation(async () => { throw new Error('the Navide Marketplace developer account is not available') })
-    expect(((await call('plugins:expiredTestplace')) as Array<{ keepRefusal?: string }>)[0].keepRefusal).toBe('unconfirmed')
+    expect(((await call('plugins:expiredTestplace')) as Array<{ keepRefusal?: string }>)[0].keepRefusal).toBe('signed-out')
   })
 
   it('stops a running build at the next trust refresh and lists it, without the public blocklist', async () => {
@@ -374,5 +376,73 @@ describe('a withdrawn Testplace build (S8 T-MED-1)', () => {
     expect(await call('plugins:expiredTestplace')).toEqual([
       { id: ID, version: '0.3.0', expiresAt: EXPIRES_AT, canKeep: false, withdrawn: true, keepRefusal: 'withdrawn' },
     ])
+  })
+})
+
+describe('the withdrawal check fails safe (S8 round 7)', () => {
+  const load = (manager: FrontendPluginManager, now: Date) => manager.loadInstalledPlugins(pluginsRoot, {
+    provenance: 'official-registry',
+    trust: {
+      pinnedRootKey: root.pubPem,
+      snapshot: JSON.parse(readFileSync(join(pluginsRoot, '.navide-registry-trust.json'), 'utf8')),
+      now,
+      withdrawnTestplace: (id, version) => new PluginTestplaceStore(pluginsRoot).isWithdrawn(id, version),
+    },
+  }, new Set([ID]))
+
+  it('keeps a build that has not expired running when the withdrawal list cannot be read', async () => {
+    register()
+    await installTestBuild()
+    const manager = register()
+    load(manager, INSTALL_AT)
+    withdrawnAnswer = { status: 503, body: { detail: 'unavailable' } }
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(true)
+  })
+
+  it('keeps a withdrawn build stopped when the next read fails and Navide restarts', async () => {
+    register()
+    await installTestBuild()
+    withdrawnAnswer = { status: 200, body: { withdrawn: [{ version: '0.3.0', target: 'universal' }] } }
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    withdrawnAnswer = { status: 503, body: { detail: 'unavailable' } }
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    // Restart: the start-up load reads the recorded withdrawal.
+    const restarted = register()
+    expect(load(restarted, INSTALL_AT).activationCatalog).toEqual([])
+    expect(await call('plugins:expiredTestplace')).toEqual([
+      expect.objectContaining({ id: ID, withdrawn: true, keepRefusal: 'withdrawn' }),
+    ])
+  })
+
+  it('does not let a stuck Registry hold up the trust refresh, and refuses to keep then', async () => {
+    register()
+    await installTestBuild()
+    const manager = register()
+    load(manager, INSTALL_AT)
+    registry.fetch.mockImplementation(async (path: string) =>
+      path.endsWith('/withdrawn') ? new Promise(() => {}) : { status: 404, body: null })
+    const started = Date.now()
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    expect(Date.now() - started).toBeLessThan(5_000)
+    expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(true)
+    register(AFTER_EXPIRY)
+    expect(((await call('plugins:expiredTestplace')) as Array<{ keepRefusal?: string }>)[0].keepRefusal).toBe('unreachable')
+  })
+
+  it('names why it could not confirm (S8 LOW-R3-2)', async () => {
+    register()
+    await installTestBuild()
+    register(AFTER_EXPIRY)
+    const refusal = async (answer: { status: number; body: unknown }) => {
+      withdrawnAnswer = answer
+      return ((await call('plugins:expiredTestplace')) as Array<{ keepRefusal?: string }>)[0].keepRefusal
+    }
+    expect(await refusal({ status: 401, body: { detail: { code: 'NOT_SIGNED_IN', message: 'sign in' } } })).toBe('signed-out')
+    expect(await refusal({ status: 404, body: { detail: { code: 'NOT_FOUND', message: 'extension not found' } } })).toBe('not-a-tester')
+    expect(await refusal({ status: 404, body: { detail: 'Not Found' } })).toBe('registry-outdated')
+    expect(await refusal({ status: 200, body: { items: [] } })).toBe('registry-outdated')
+    expect(await refusal({ status: 503, body: null })).toBe('unreachable')
+    expect(await refusal({ status: 200, body: { withdrawn: [] } })).toBeUndefined()
   })
 })

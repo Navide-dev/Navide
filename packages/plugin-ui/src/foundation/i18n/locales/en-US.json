@@ -11575,7 +11575,10 @@
       "cannotKeep": "This version was taken down or no longer verifies, so it cannot be kept.",
       "withdrawnBanner": "The test build {id} {version} was withdrawn by its developer or by Navide and was stopped; its settings and data are kept. Choose what to do next.",
       "cannotKeepWithdrawn": "This version was withdrawn by its developer or by Navide, so it cannot be kept.",
-      "cannotKeepUnconfirmed": "The Navide Marketplace could not confirm this version was not withdrawn (sign in with your Navide Cloud account, or try again later), so it cannot be kept for now.",
+      "cannotKeepSignedOut": "Before it can be kept, Navide must confirm this version was not withdrawn. Sign in with your Navide Cloud account, then come back here.",
+      "cannotKeepNotTester": "You are no longer a tester of this test, so Navide cannot confirm this version was not withdrawn, and it cannot be kept. You can install the Navide Marketplace version or remove it.",
+      "cannotKeepRegistryOutdated": "The Navide Marketplace this Navide uses is too old to say whether this version was withdrawn, so it cannot be kept.",
+      "cannotKeepUnreachable": "The Navide Marketplace cannot be reached right now, so Navide cannot confirm this version was not withdrawn, and it cannot be kept for now. Try again later.",
       "keepTitle": "Keep an expired test build",
       "keepConfirm": "Keep using the expired test build {id}? It had no Navide human review and gets no more updates; a takedown still stops it.",
       "kept": "Expired test build, kept in use: it gets no updates, and a takedown still stops it."
