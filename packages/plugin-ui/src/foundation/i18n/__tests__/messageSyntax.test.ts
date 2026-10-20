@@ -23,7 +23,9 @@ const PLURAL_KEYS = [
   'time.ago-hours',
   'time.ago-days',
   'time.ago-months',
-  'pipelineEditor.lane.more'
+  'pipelineEditor.lane.more',
+  'editorWindow.problems.errors',
+  'editorWindow.problems.warnings'
 ]
 
 function leaves(value: unknown, prefix = ''): Array<[string, string]> {
