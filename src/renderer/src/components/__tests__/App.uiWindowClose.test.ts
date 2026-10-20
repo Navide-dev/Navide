@@ -44,6 +44,13 @@ describe('ui.window.close', () => {
     expect(body).not.toContain('terminal.kill')
   })
 
+  it('asks main whether it may close before letting anything go', () => {
+    const ask = body.indexOf('await window.agentTeam?.canCloseSelf?.()')
+    expect(ask).toBeGreaterThan(-1)
+    expect(ask).toBeLessThan(body.indexOf('dropWorkspacePanes(path)'))
+    expect(body).toContain('if (can && !can.ok) {')
+  })
+
   it('closes itself only after answering, through the window itself', () => {
     expect(body).toContain('setTimeout(() => { void window.agentTeam?.closeSelf?.() }, 300)')
   })
@@ -87,8 +94,10 @@ describe('ui.workspace.close', () => {
     expect(body).toContain('danger: true')
   })
 
-  it('gives up waiting before the backend does, as a no', () => {
-    expect(body).toContain('notifyRestore.resolveDialog(false); resolve(false) }, 55_000)')
+  it('gives up waiting before the backend does, as a no, answering only its own dialog', () => {
+    expect(body).toContain('}, 55_000)')
+    expect(body).toContain('ownDialog = notifyRestore.dialog.value')
+    expect(body).toContain('if (ownDialog && notifyRestore.dialog.value === ownDialog) notifyRestore.resolveDialog(false)')
   })
 
   it('says which pane did it, with an undo when the CLIs kept running', () => {
@@ -115,13 +124,27 @@ describe('agent.window_action', () => {
   })
 })
 
+describe('agentCloseRefusal (main)', () => {
+  const start = mainSource.indexOf('function agentCloseRefusal(')
+  const body = mainSource.slice(start, mainSource.indexOf('\n}\n', start))
+
+  it('refuses the last main window off macOS', () => {
+    expect(start).toBeGreaterThan(-1)
+    expect(body).toContain("if (!isMac() && !detachedWindowIds.has(win.id) && others.length === 0) return 'last-window'")
+  })
+
+  it('is asked both before and at the close', () => {
+    expect(block(mainSource, "ipcMain.handle('window:canCloseSelf'")).toContain('agentCloseRefusal(BrowserWindow.fromWebContents(event.sender))')
+    expect(block(mainSource, "ipcMain.handle('window:closeSelf'")).toContain('const refusal = agentCloseRefusal(win)')
+  })
+})
+
 describe('window:closeSelf (main)', () => {
   const body = block(mainSource, "ipcMain.handle('window:closeSelf'")
 
   it('closes the sender window and takes no window argument', () => {
     expect(body).toContain("ipcMain.handle('window:closeSelf', (event) => {")
     expect(body).toContain('BrowserWindow.fromWebContents(event.sender)')
-    expect(body).toContain('!mainWindows.has(win)')
     // close(), not destroy(): the last-window guard still sees it.
     expect(body).toContain('win.close()')
     expect(body).not.toContain('destroy()')

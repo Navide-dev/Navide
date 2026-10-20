@@ -11,6 +11,7 @@ Registered on the core server by the import at the end of server.py.
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 from mcp.server.fastmcp import Context
@@ -161,6 +162,11 @@ _KEPT_PANES_NOTES = [
 ]
 
 
+def _last_window_quits() -> bool:
+    """Off macOS, closing the last window quits Navide and ends every CLI."""
+    return sys.platform != "darwin"
+
+
 def _pane_caller_required(tool: str) -> dict[str, Any]:
     return {
         "ok": False,
@@ -220,7 +226,9 @@ async def window_close(window_id: str, ctx: Context) -> dict[str, Any]:
     an undo. Returns {ok, window_id, workspaces, panes_left_running
     [address], undo [{tool, args}], notes} or {ok: false, error, error_code}
     ("pane-caller-required", "self-window-close", "window-local-only",
-    "unknown-window", "pipeline-running", "ui_action_timeout").
+    "unknown-window", "last-window", "pipeline-running", "ui_action_timeout").
+    A paused pipeline does not block it: nothing is ended, and the run is
+    still there when the project is opened again.
     """
     from agent_team_backend import agent_window_actions
 
@@ -254,6 +262,18 @@ async def window_close(window_id: str, ctx: Context) -> dict[str, Any]:
             "ok": False,
             "error": f"no Navide window has id {window_id!r} — it may have closed or reloaded; call window_list for the current ids",
             "error_code": "unknown-window",
+        })
+    # Your own window can never be closed, so another one stays open — but
+    # that rests on the caller's window being known. Checked outright too:
+    # closing the last window off macOS would quit Navide.
+    from agent_team_backend import app
+
+    others = [s for s in app.main_window_sessions() if s is not session and getattr(s, "window_id", "")]
+    if not others and _last_window_quits():
+        return refused({
+            "ok": False,
+            "error": "that is the last Navide window; closing it would quit Navide and end every CLI",
+            "error_code": "last-window",
         })
     args = {"windowId": window_id, "caller_address": who.get("address") or ""}
     answer = await core._window_request(session, "ui.window.close", args, caller)

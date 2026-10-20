@@ -727,7 +727,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
   focusSelf: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:focusSelf'),
   /** Close the calling window itself (MCP window_close). Main resolves the
    *  window from the sender; no other window can be named. */
-  closeSelf: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:closeSelf'),
+  closeSelf: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('window:closeSelf'),
+  /** Whether closeSelf would close this window ('last-window' off macOS). */
+  canCloseSelf: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('window:canCloseSelf'),
   /** Merge a detached group back. Omit groupId from the detached window itself
    *  — main resolves it from the sender. */
   reattachGroup: (args?: { groupId?: string }): Promise<{ ok: boolean }> =>

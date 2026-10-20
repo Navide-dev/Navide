@@ -11001,6 +11001,11 @@ registerCommand('ui.window.close', async (args) => {
   if (pipeline.state === 'running') {
     throw new Error('pipeline-running: a pipeline is running in this window; only the user can stop it')
   }
+  // Asked before anything is let go of: main refuses the last window off macOS.
+  const can = await window.agentTeam?.canCloseSelf?.()
+  if (can && !can.ok) {
+    throw new Error(`${can.error ?? 'window-close-failed'}: this window cannot be closed (closing the last window would quit Navide)`)
+  }
   const caller = a.caller_address || 'an agent'
   const left = panes.value.map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath }))
   const held = [...workspaceOrder.value]
@@ -11041,21 +11046,27 @@ registerCommand('ui.workspace.close', async (args) => {
     .map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath }))
   if (a.keepPanes === false) {
     let timer: ReturnType<typeof setTimeout> | undefined
+    // The deadline answers THIS dialog only: if another one has replaced it
+    // since, that one is left alone (and this one was already answered no).
+    let ownDialog: unknown = null
     const noAnswer = new Promise<boolean>((resolve) => {
-      timer = setTimeout(() => { notifyRestore.resolveDialog(false); resolve(false) }, 55_000)
+      timer = setTimeout(() => {
+        if (ownDialog && notifyRestore.dialog.value === ownDialog) notifyRestore.resolveDialog(false)
+        resolve(false)
+      }, 55_000)
     })
-    const agreed = await Promise.race([
-      notifyRestore.confirm(
-        i18n.global.t('msg.agent-close-workspace-body', { caller, name, count: mine.length }),
-        {
-          title: i18n.global.t('msg.agent-close-workspace-title', { caller, name }),
-          confirmText: i18n.global.t('confirm-close.sidebar-ws-confirm'),
-          cancelText: i18n.global.t('action.cancel'),
-          danger: true,
-        },
-      ),
-      noAnswer,
-    ])
+    const asked = notifyRestore.confirm(
+      i18n.global.t('msg.agent-close-workspace-body', { caller, name, count: mine.length }),
+      {
+        title: i18n.global.t('msg.agent-close-workspace-title', { caller, name }),
+        confirmText: i18n.global.t('confirm-close.sidebar-ws-confirm'),
+        cancelText: i18n.global.t('action.cancel'),
+        danger: true,
+      },
+    )
+    // confirm() puts its dialog up synchronously.
+    ownDialog = notifyRestore.dialog.value
+    const agreed = await Promise.race([asked, noAnswer])
     clearTimeout(timer)
     if (!agreed) throw new Error(`user-declined: the user did not agree to end the CLIs in ${held}`)
     await closeWorkspace(held, { confirmed: true })

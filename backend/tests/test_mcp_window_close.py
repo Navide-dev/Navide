@@ -294,12 +294,12 @@ async def test_workspace_close_of_a_workspace_no_window_holds() -> None:
     assert result["ok"] is False and result["error_code"] == "workspace-not-open"
 
 
-# ── ui_invoke routes to the same window commands ────────────────────────────
+# ── ui_invoke does not reach the close commands (S1: ui_dedicated_tool) ────
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["ui.window.close", "ui.workspace.close"])
-async def test_ui_invoke_close_actions_need_a_pane_and_carry_its_name(monkeypatch: pytest.MonkeyPatch, action: str) -> None:
+async def test_ui_invoke_close_actions_point_at_the_tools(monkeypatch: pytest.MonkeyPatch, action: str) -> None:
     sent: list[dict[str, Any]] = []
 
     async def fake_ui_request(workspace_path: str, op: str, **kwargs: Any) -> dict[str, Any]:
@@ -308,11 +308,61 @@ async def test_ui_invoke_close_actions_need_a_pane_and_carry_its_name(monkeypatc
 
     monkeypatch.setattr(plan_mcp, "_ui_request", fake_ui_request)
     await _two_windows()
-    args = {"windowId": "win-bbbb-2222", "path": "/ws/beta", "caller_address": "someone/else"}
+    args = {"windowId": "win-bbbb-2222", "path": "/ws/beta"}
 
     host = await plan_mcp.ui_invoke("", action, _host_ctx(), args=dict(args))
     pane = await plan_mcp.ui_invoke("", action, _pane_ctx("pa"), args=dict(args))
 
-    assert host["ok"] is False and host["error_code"] == "pane-caller-required"
-    assert len(sent) == 1 and sent[0]["args"]["caller_address"] == "alpha/asker"
-    assert pane["ok"] is True
+    assert host["error_code"] == pane["error_code"] == "ui_dedicated_tool"
+    assert sent == []
+
+
+# ── the last window, and windows that are yours without your pane in them ──
+
+
+@pytest.mark.asyncio
+async def test_window_close_refuses_the_last_window_off_macos(monkeypatch: pytest.MonkeyPatch) -> None:
+    only = await _main_window("win-only-0001")
+    # The caller's own window is not a main window Navide knows (a panel), so
+    # the self check alone would let the only window go.
+    agent_messaging.register("pa", "asker", "/ws/alpha", agent_key="claude", owner=object())
+    monkeypatch.setattr(window_tools, "_last_window_quits", lambda: True)
+
+    result = await window_tools.window_close("win-only-0001", _pane_ctx("pa"))
+
+    assert result["ok"] is False and result["error_code"] == "last-window"
+    assert _requests(only, "ui.window.close") == []
+
+
+@pytest.mark.asyncio
+async def test_window_close_of_the_last_window_on_macos_is_left_to_the_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    only = await _main_window("win-only-0001")
+    panel = app.Session(FakeWebSocket())  # type: ignore[arg-type]  # not a main window
+    agent_messaging.register("pa", "asker", "/ws/alpha", agent_key="claude", owner=panel)
+    monkeypatch.setattr(window_tools, "_last_window_quits", lambda: False)
+    task = _answer(only, "ui.window.close", {"workspaces": ["/ws/beta"], "panes": []})
+
+    result = await window_tools.window_close("win-only-0001", _pane_ctx("pa"))
+    await task
+
+    assert result["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_main_window_holding_your_workspace_is_yours_even_without_your_panes() -> None:
+    # The caller sits in a detached group window; the main window holds its
+    # workspace (announced with ui.invoke.ready) but none of its panes.
+    detached = await _main_window("win-dddd-0001")
+    main = app.Session(FakeWebSocket())  # type: ignore[arg-type]
+    main.navide_window = True
+    app._SESSIONS.add(main)
+    await app.handle_message(main, {
+        "id": "r", "type": "ui.invoke.ready",
+        "payload": {"focused": False, "window_id": "win-mmmm-0002", "workspaces": ["/ws/alpha", "/ws/beta"]},
+    })
+    agent_messaging.register("pa", "asker", "/ws/alpha", agent_key="claude", owner=detached)
+
+    result = await window_tools.window_close("win-mmmm-0002", _pane_ctx("pa"))
+
+    assert result["ok"] is False and result["error_code"] == "self-window-close"
+    assert _requests(main, "ui.window.close") == []

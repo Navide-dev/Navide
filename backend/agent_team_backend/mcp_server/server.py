@@ -6193,7 +6193,7 @@ async def _describe_windows(caller: _Caller) -> list[tuple[Any, dict[str, Any] |
     asked in parallel."""
     from agent_team_backend import app
 
-    sessions = app.main_window_sessions()
+    sessions = [s for s in app.main_window_sessions() if getattr(s, "window_id", "")]
     answers = await asyncio.gather(*(
         _window_request(s, "ui.window.describe", None, caller, timeout=_WINDOW_DESCRIBE_TIMEOUT_S)
         for s in sessions
@@ -6313,16 +6313,7 @@ async def ui_invoke(
         refused = _login_pane_input_refusal(named, named)
         if refused is not None:
             return {**refused, "result": None}
-    if action in ("ui.window.close", "ui.workspace.close") and caller.kind != "pane":
-        # window_close / workspace_close are pane-only (the record names the
-        # pane that did it); this route reaches the same window commands.
-        return {
-            "ok": False,
-            "result": None,
-            "error": f"{action} can be invoked only from a CLI pane; ask the user to do it in Navide instead",
-            "error_code": "pane-caller-required",
-        }
-    if action in ("ui.window.focus", "ui.window.close", "ui.workspace.close"):
+    if action == "ui.window.focus":
         # The affected window says who did it; that name comes from the
         # credential, never from what the caller wrote (window_focus does
         # the same).
