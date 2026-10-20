@@ -306,6 +306,22 @@ describe('blockingDialogShown', () => {
     expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: picker })).toBe(true)
   })
 
+  // The frame test is shared by every vendor: two box-only rows with no prompt
+  // glyph between them are no longer an input box, so codex's dialog above
+  // them is read and the extra Enter is not sent.
+  it('reads a codex dialog above two rules that frame no prompt row', () => {
+    const rule = '────────────────────────────────────────'
+    const screen = [
+      'Would you like to run the following command?',
+      '› 1. Yes, proceed (y)',
+      '  2. No, and tell Codex what to do differently (esc)',
+      rule,
+      '  Press enter to confirm or esc to cancel',
+      rule,
+    ].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'codex', screen })).toBe(true)
+  })
+
   // Frameless (codex): the composer is the prompt row and what wraps below
   // it. An unsent message quoting a dialog's wording must not read as one —
   // main resends the Enter there and the message is delivered.
