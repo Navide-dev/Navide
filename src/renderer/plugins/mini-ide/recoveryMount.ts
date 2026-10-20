@@ -13,7 +13,7 @@
 // the host sets when it loads this entry — no injection needed here.
 
 import { createApp } from 'vue'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, resolveAvailableUiLocale } from '@navide/plugin-ui/foundation'
 
 // Theme token layers — order matters: primitives → semantic roles → themes.
 import '@navide/plugin-ui/styles.css'
@@ -32,8 +32,8 @@ if (initialTheme) {
   seedSettings({ 'agent-team:theme': JSON.stringify(initialTheme) })
 }
 
-const initialLocale = new URLSearchParams(window.location.search).get('locale')
-if (initialLocale === 'zh-TW' || initialLocale === 'en-US' || initialLocale === 'ja-JP') {
+const initialLocale = resolveAvailableUiLocale(new URLSearchParams(window.location.search).get('locale'))
+if (initialLocale) {
   i18n.global.locale.value = initialLocale
   seedSettings({ 'agent-team:language': initialLocale })
 }
