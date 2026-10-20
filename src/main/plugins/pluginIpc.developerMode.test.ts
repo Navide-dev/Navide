@@ -273,6 +273,18 @@ describe('loading a developer folder', () => {
     expect(activations.at(-1)).toEqual({ pluginId: 'acme.devtodo' })
   })
 
+  it('turning Developer Mode off also drops a folder chosen but not yet consented to (G4)', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await call('plugins:loadFromFolder')
+    await call('plugins:setDeveloperMode', { enabled: false })
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await expect(call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true }))
+      .rejects.toThrow(/no prepared developer folder/)
+    expect(call('plugins:listInstalled')).toEqual([])
+    expect(new PluginDeveloperModeStore(pluginsRoot).folders()).toEqual([])
+  })
+
   it('refuses the navide. namespace and a folder that changed while the dialog was open', async () => {
     register()
     await call('plugins:setDeveloperMode', { enabled: true })
