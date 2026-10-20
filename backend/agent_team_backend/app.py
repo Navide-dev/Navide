@@ -485,8 +485,11 @@ def has_main_window() -> bool:
 
 
 def main_window_sessions() -> list["Session"]:
-    """The main windows connected now."""
-    return [s for s in list(_SESSIONS) if not s.dead and is_main_window(s)]
+    """The main windows connected now that announced a page-load id."""
+    return [
+        s for s in list(_SESSIONS)
+        if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
+    ]
 
 
 def live_main_window_ids() -> set[str]:
