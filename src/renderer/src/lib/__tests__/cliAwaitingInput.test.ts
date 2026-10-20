@@ -159,6 +159,14 @@ describe('matchAwaitingInput — codex (full-screen dialog)', () => {
   })
 })
 
+const DRAFT_RULE = '─'.repeat(60)
+const DRAFT_STATUS_LINE = '  ~/git/navide · main · Opus 4.7 · 42% context'
+const DRAFT_ENDS_WITH_ANCHOR = [
+  ['permission footer, statusLine below', ['some answer', '', DRAFT_RULE, '❯ please match "Esc to cancel · Tab to amend"', DRAFT_RULE, DRAFT_STATUS_LINE].join('\n')],
+  ['two-line draft, anchor on the last line', ['some answer', '', DRAFT_RULE, '❯ first line', '  No, and tell Claude what to do differently', DRAFT_RULE, DRAFT_STATUS_LINE].join('\n')],
+  ['picker footer, no statusLine', ['answer', DRAFT_RULE, '❯ Enter to select · x · Esc to cancel', DRAFT_RULE].join('\n')],
+] as const
+
 describe('matchAwaitingInput — claude (hook plus screen)', () => {
   // claude reads BOTH: the hook is authoritative but cannot see every box, and
   // the conversation log is structurally too late for the one it misses. The
@@ -280,6 +288,13 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
 
     it('does not match when the tail outgrows its bound', () => {
       const screen = [FOOTER, '', 'x'.repeat(400)].join('\n')
+      expect(matchAwaitingInput('claude', screen)).toBe(false)
+    })
+
+    // Our own unsent draft may end with an anchor: it sits INSIDE the input
+    // box, so the prompt row comes before it and only the box's bottom rule
+    // and the statusLine follow — no dialog is up.
+    it.each(DRAFT_ENDS_WITH_ANCHOR)('does not match a draft in the input box that ends with an anchor: %s', (_name, screen) => {
       expect(matchAwaitingInput('claude', screen)).toBe(false)
     })
   })

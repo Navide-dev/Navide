@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { matchAwaitingInput } from '../cliAwaitingInput'
 import type { SubmitEvidence } from '../injectEcho'
 import { AGENT_SPECS } from '../../platform/plugin-shell/agents'
 import { kickoffAttemptOutcome } from '../spawnKickoff'
@@ -304,6 +305,38 @@ describe('blockingDialogShown', () => {
     ].join('\n')
     expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: bash })).toBe(true)
     expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: picker })).toBe(true)
+  })
+
+  // Our unsent draft ending with an anchor sits inside the input box: neither
+  // the screen pattern nor this guard may read it as a dialog (#416 keeps the
+  // two in agreement).
+  it('agrees with matchAwaitingInput on a draft that ends with an anchor', () => {
+    const rule = '─'.repeat(60)
+    const statusLine = '  ~/git/navide · main · Opus 4.7 · 42% context'
+    for (const screen of [
+      ['some answer', '', rule, '❯ please match "Esc to cancel · Tab to amend"', rule, statusLine].join('\n'),
+      ['some answer', '', rule, '❯ first line', '  No, and tell Claude what to do differently', rule, statusLine].join('\n'),
+      ['answer', rule, '❯ Enter to select · x · Esc to cancel', rule].join('\n'),
+    ]) {
+      expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen }), screen).toBe(false)
+      expect(matchAwaitingInput('claude', screen), screen).toBe(false)
+    }
+  })
+
+  // The prompt-row test for the frame is Claude's: another vendor's framed
+  // composer may draw no glyph, a heavy bar, or hold a draft starting "1.",
+  // and is still read below its frame as on main.
+  it('keeps a non-claude framed composer without a prompt glyph framed', () => {
+    const rule = '─'.repeat(60)
+    const transcript = ['codex said: "Hooks need review" earlier', '']
+    for (const box of [
+      ['┏' + rule + '┓', '┃ my draft', '┗' + rule + '┛'],
+      ['╭' + rule + '╮', '│ my draft │', '╰' + rule + '╯'],
+      [rule, '› 1. first item', rule],
+    ]) {
+      const screen = [...transcript, ...box].join('\n')
+      expect(blockingDialogShown({ awaitingKind: null, agentKey: 'codex', screen }), screen).toBe(false)
+    }
   })
 
   // Frameless (codex): the composer is the prompt row and what wraps below
