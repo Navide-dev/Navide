@@ -95,10 +95,14 @@ export const SPEC = {
   // spans the pane width and the #416 guard reads the screen with them kept.
   // The same words quoted in conversation sit above the idle input box, so the
   // prompt row after them rules the match out — matching those parked an idle
-  // pane on AWAITING. Gap: bash mode's `!` prompt is not excluded.
+  // pane on AWAITING. Nor may the anchor sit inside the input box itself (our
+  // unsent draft ending with those words): looking back from the anchor, the
+  // idle prompt row is reached with no frame character in between. A dialog's
+  // own cursor row (`│ ❯ 1. Yes` in the older framed box) is not that row.
+  // Gap: bash mode's `!` prompt is not excluded.
   awaitingInput: {
     pattern:
-      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend)(?!.*[─-╿] ?[❯>])(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
+      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend)(?<![─-╿] ?[❯>](?! ?\d+[.)])[^─-╿]*)(?!.*[─-╿] ?[❯>])(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
     // Additive to the hook, never authoritative over it: an MCP elicitation
     // draws no option box, so a non-match here says nothing about a wait the
     // hook raised. See the field's own doc comment.
