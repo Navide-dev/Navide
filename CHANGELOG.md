@@ -34,6 +34,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Extensions: the disclosure card of a Navide plugin with views now says that its views can reach the network and show external websites, which Navide does not filter or record; the card's network entries cover only commands and the native backend. A Navide plugin without views gets no such line, and where only Registry listing data is shown (the Navide Marketplace detail page, an agent's install request) it is said conditionally.
 - Channels: the offline reply now says the pane's Navide window is not open or the pane was closed (it no longer suggests another workspace), in the Navide language. (#412)
 - MCP: `cli_accounts_list` no longer says its answer holds no email. An account's name is the name the user gave it, and an account Navide added on its own is named after the email it was signed in with, so a name can be an email; the tool and its documentation now say so. The answer itself is unchanged.
+- MCP: the `cli_account_sign_in` entry said its confirmation dialog shows the account never as an email. The dialog shows the account's name, and an account Navide added on its own is named after the email it was signed in with, so it can show an email; the documentation now says so. Behaviour is unchanged.
 
 ### Fixed
 
