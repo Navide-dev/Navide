@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import ExtensionsPane from '../ExtensionsPane.vue'
@@ -302,6 +302,26 @@ describe('ExtensionsPane', () => {
     expect(wrapper.find('.ext-store-unreadable').exists()).toBe(false)
   })
 
+  // Decision d5: a local install whose file Navide blocked keeps a label naming the reason.
+  it('labels a local install whose file Navide blocked, by reason', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.one', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: 'qualification-revoked' }, disabled: false },
+        { id: 'acme.two', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: null }, disabled: true },
+        { id: 'acme.three', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: 'developer-withdrawn' }, disabled: false },
+        { id: 'acme.four', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned' },
+      ]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const badge = (id: string) => wrapper!.find(`[data-id="${id}"] .ext-digest-blocked-badge`)
+    expect(badge('acme.one').text()).toBe('Developer qualification revoked')
+    expect(badge('acme.two').text()).toBe('Blocked by Navide')
+    expect(badge('acme.two').attributes('data-reason')).toBe('none')
+    expect(badge('acme.three').text()).toBe('Withdrawn by its developer')
+    expect(badge('acme.four').exists()).toBe(false)
+  })
+
   it('offers no Uninstall for a Marketplace copy of a built-in', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
@@ -313,6 +333,23 @@ describe('ExtensionsPane', () => {
     await flushPromises()
     expect(wrapper.find('[data-id="navide.git"] .ext-remove').exists()).toBe(false)
     expect(wrapper.find('[data-id="acme.demo"] .ext-remove').exists()).toBe(true)
+  })
+
+  it('offers Uninstall for the Marketplace navide.browser and says removal deletes its sign-ins', async () => {
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([{
+        id: 'navide.browser', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry',
+        manifestPermissions: { system: ['ui', 'web'] }, disabled: false,
+      }]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    await wrapper.get('[data-id="navide.browser"] .ext-remove').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.message).toContain('also deletes its site sign-ins, cookies and cache')
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenCalledWith('navide.browser')
   })
 
   it('shows an active factory Git package only in the Bundled section', async () => {
@@ -1249,6 +1286,12 @@ describe('ExtensionsPane source badge (K2)', () => {
   })
 
   it('badges each installed row by the Host\'s source and never guesses one', async () => {
+    // The Testplace row's expiry is read against the clock: pin it.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
         { id: 'acme.registry', requires: [], sensitive: [], provenance: 'official-registry' },
@@ -1268,5 +1311,99 @@ describe('ExtensionsPane source badge (K2)', () => {
     expect(source('acme.test').attributes('data-source')).toBe('testplace')
     expect(source('acme.test').text()).toContain('2027-01-17')
     expect(source('acme.unknown').exists()).toBe(false)
+  })
+})
+
+describe('ExtensionsPane expired Testplace builds (D3)', () => {
+  let wrapper: VueWrapper | undefined
+  beforeEach(() => {
+    i18n.global.locale.value = 'en-US'
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    vi.useRealTimers()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('lists an expired build with its three choices and never removes it unasked', async () => {
+    const keepExpiredTestplace = vi.fn().mockResolvedValue({ ok: true })
+    const adoptTestplaceRelease = vi.fn().mockResolvedValue({ adopted: false })
+    const prepareInstall = vi.fn().mockRejectedValue(new Error('extension not found: HTTP 404'))
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([]),
+      expiredTestplace: vi.fn().mockResolvedValue([
+        { id: 'acme.kept', version: '1.0.0', expiresAt: '2026-10-01T00:00:00Z', artifactDigest: 'a'.repeat(64), canKeep: true },
+        { id: 'acme.down', version: '2.0.0', expiresAt: '2026-10-02T00:00:00Z', canKeep: false },
+        { id: 'acme.pulled', version: '3.0.0', expiresAt: '2026-12-02T00:00:00Z', canKeep: false, withdrawn: true, keepRefusal: 'withdrawn' },
+        { id: 'acme.unsure', version: '4.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'unreachable' },
+        { id: 'acme.signedout', version: '5.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'signed-out' },
+        { id: 'acme.gone', version: '6.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'not-a-tester' },
+        { id: 'acme.old', version: '7.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'registry-outdated' },
+      ]),
+      keepExpiredTestplace,
+      prepareInstall,
+      adoptTestplaceRelease,
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const kept = wrapper.get('[data-expired-id="acme.kept"]')
+    expect(kept.text()).toContain('The test build acme.kept 1.0.0 expired on 2026-10-01 and was stopped; its settings and data are kept.')
+    expect(kept.find('.ext-testplace-marketplace').exists()).toBe(true)
+    expect(kept.find('.ext-testplace-remove').exists()).toBe(true)
+    // A takedown (or any failure besides the expiry) is never offered "keep using".
+    const down = wrapper.get('[data-expired-id="acme.down"]')
+    expect(down.find('.ext-testplace-keep').exists()).toBe(false)
+    expect(down.text()).toContain('cannot be kept')
+    // S8 T-MED-1: a withdrawn build says so; an unconfirmed one says why it cannot be kept now.
+    const pulled = wrapper.get('[data-expired-id="acme.pulled"]')
+    expect(pulled.text()).toContain('was withdrawn by its developer or by Navide')
+    expect(pulled.find('.ext-testplace-keep').exists()).toBe(false)
+    expect(pulled.find('.ext-testplace-remove').exists()).toBe(true)
+    const unsure = wrapper.get('[data-expired-id="acme.unsure"]')
+    expect(unsure.find('.ext-testplace-keep').exists()).toBe(false)
+    expect(unsure.text()).toContain('cannot be reached right now')
+    // S8 LOW-R3-2: the advice follows the reason.
+    expect(wrapper.get('[data-expired-id="acme.signedout"]').text()).toContain('Sign in with your Navide Cloud account')
+    expect(wrapper.get('[data-expired-id="acme.gone"]').text()).toContain('no longer a tester')
+    expect(wrapper.get('[data-expired-id="acme.old"]').text()).toContain('too old')
+    expect(api.remove).not.toHaveBeenCalled()
+
+    await kept.get('.ext-testplace-keep').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.message).toContain('acme.kept')
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(keepExpiredTestplace).toHaveBeenCalledWith('acme.kept')
+
+    // "Install the Navide Marketplace version": a promoted build of the same
+    // digest is adopted in place; otherwise the normal verified install runs.
+    adoptTestplaceRelease.mockResolvedValueOnce({ adopted: true })
+    await kept.get('.ext-testplace-marketplace').trigger('click')
+    await flushPromises()
+    expect(adoptTestplaceRelease).toHaveBeenCalledWith('acme.kept')
+    expect(prepareInstall).not.toHaveBeenCalled()
+    await kept.get('.ext-testplace-marketplace').trigger('click')
+    await flushPromises()
+    expect(prepareInstall).toHaveBeenCalledWith({ namespace: 'acme', name: 'kept' })
+  })
+
+  it('reminds from 7 days before expiry and marks a kept build as expired', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.soon', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2026-10-25T00:00:00Z', testplaceVia: 'invite' },
+        { id: 'acme.later', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2026-12-25T00:00:00Z' },
+        { id: 'acme.past', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2026-10-01T00:00:00Z' },
+      ]),
+      expiredTestplace: vi.fn().mockResolvedValue([]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.soon"] .ext-testplace-expiring').text()).toContain('expires in 5 days (2026-10-25)')
+    expect(wrapper.get('[data-id="acme.soon"] .nv-source-badge').text()).toBe('Test build: automated scan only, expires 2026-10-25')
+    expect(wrapper.find('[data-id="acme.later"] .ext-testplace-expiring').exists()).toBe(false)
+    expect(wrapper.get('[data-id="acme.past"] .ext-testplace-kept').text()).toContain('kept in use')
+    expect(wrapper.get('[data-id="acme.past"] .nv-source-badge').text()).toBe('Test build, expired 2026-10-01 (kept in use)')
   })
 })

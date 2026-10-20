@@ -2976,7 +2976,8 @@ class ChannelManager:
             self._awaiting_shown[pane_id] = _Shown(prompt)
             return
         self._retire_relay(pane_id, MSG_RELAY_SUPERSEDED)  # one live request per pane
-        request = self.relay.create(pane_id, kind, options, loc, prompt=prompt)
+        request = self.relay.create(pane_id, kind, options, loc, prompt=prompt,
+                                    agent_key=str(info.get("agent") or ""))
         text = who + relay.prompt_text(request, prompt)
         buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
         try:
@@ -3106,8 +3107,9 @@ class ChannelManager:
         for b in self.store.bindings():
             entry = bot(b.platform, b.account)
             # A chat bound under another token (or never seen again) still shows up.
+            # Untitled: a binding's title is the pane's name at bind time, not the chat's.
             chat = entry["chats"].setdefault(b.chat_id, {
-                "chat_id": b.chat_id, "title": "" if b.thread_id else b.title, "kind": "",
+                "chat_id": b.chat_id, "title": "", "kind": "",
                 "supports_topics": bool(b.thread_id), "bindings": []})
             pane = self._pane_info(b, directory)
             chat["bindings"].append({**b.public(), "pane_id": self._seams.resolve_pane(b.pane_id) or b.pane_id,

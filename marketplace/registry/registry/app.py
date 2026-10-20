@@ -3,23 +3,28 @@
 from __future__ import annotations
 
 import logging
+import time
 import urllib.parse
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO, Iterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Engine
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from sqlmodel import Session
 
-from . import cloud_auth
+from . import audit, cloud_auth, qualification
 from .auth import PublisherIdentity, get_publisher_identity
 from .config import VERIFIER_ACCEPTING, Settings, load_settings
 from . import review
-from .blocklist import db_blocklists
+from .qualification import publisher_problem
+from .testplace import expiry as testplace_expiry
+from .testplace_api import register_testplace_routes
+from .blocklist import db_blocklists, digest_blocked
 from .db import create_db_engine
 from .dns_verify import TxtResolver, doh_txt_resolver
 from .disclosure import registry_facts, sign_disclosure
@@ -45,7 +50,7 @@ from .packs import pack_conflict
 from .ratelimit import SlidingWindowLimiter
 from .ratings import RATING_LIMIT_PER_HOUR
 from .reports import REPORT_LIMIT_PER_HOUR
-from .repository import RegistryRepository, rating_average
+from .repository import RegistryRepository, VersionConflictError, rating_average
 from .registry_trust import RegistryTrustSigner
 from .schemas import (
     CategoryInfo,
@@ -98,6 +103,29 @@ class RegistryState:
     report_limiter: SlidingWindowLimiter = field(
         default_factory=lambda: SlidingWindowLimiter(REPORT_LIMIT_PER_HOUR, 3600)
     )
+    grandfather_swept_at: float | None = None
+    """Monotonic time of the last grandfather sweep (sweep_grandfather)."""
+
+
+GRANDFATHER_SWEEP_SECONDS = 600
+
+
+def sweep_grandfather(state: RegistryState) -> None:
+    """Reclaim grandfathered namespaces whose grace period ran out, at most
+    once every GRANDFATHER_SWEEP_SECONDS. Publishing does not wait for it:
+    publisher_problem refuses an expired namespace at once."""
+    now = time.monotonic()
+    if state.grandfather_swept_at is not None and now - state.grandfather_swept_at < GRANDFATHER_SWEEP_SECONDS:
+        return
+    state.grandfather_swept_at = now
+    try:
+        with Session(state.engine) as session:
+            reclaimed = qualification.reclaim_expired(session)
+    except Exception:  # noqa: BLE001 - the next sweep retries
+        _log.exception("grandfather sweep failed")
+        return
+    if reclaimed:
+        _log.info("reclaimed grandfathered namespaces: %s", ", ".join(reclaimed))
 
 
 def _make_verifier(settings: Settings) -> SignatureVerifier:
@@ -171,7 +199,18 @@ def create_app(
     if settings.root_path:
         app.add_middleware(_RootPathMiddleware, root_path=settings.root_path)
 
+    @app.middleware("http")
+    async def _grandfather_sweep(request: Request, call_next):
+        await run_in_threadpool(sweep_grandfather, request.app.state.registry)
+        return await call_next(request)
+
     _register_routes(app)
+    register_testplace_routes(
+        app,
+        version_info=_version_info,
+        file_chunks=_file_chunks,
+        require_admin_token=_require_admin_token,
+    )
 
     # Discovery website (p3-discovery): server-rendered pages + self-hosted
     # static assets, mounted alongside the /api/* JSON API on the same app.
@@ -185,6 +224,9 @@ def create_app(
     from .publisher_web import create_publisher_router
 
     app.include_router(create_publisher_router())
+    from .testplace_web import create_testplace_admin_router
+
+    app.include_router(create_testplace_admin_router())
     app.add_middleware(_HtmlSecurityHeadersMiddleware, csp=html_content_security_policy(settings))
     return app
 
@@ -285,9 +327,13 @@ def _package_key(namespace: str, name: str, version: str, target: str) -> str:
 
 
 def _publish_conflict(
-    identity: str, version: str, target: str, existing: list[ExtensionVersion]
+    identity: str, version: str, target: str, existing: list[ExtensionVersion], *, testplace: bool = False
 ) -> str | None:
     """Why `target` cannot join the artifacts already published for `version`.
+
+    A version number belongs to one channel until promotion (S8 R3-M2): a
+    testplace artifact never shares it with a stable or pre-release one, so a
+    revoke or yank of one can never reach the other.
 
     A version is either one `universal` artifact or a set of platform
     artifacts, never both: the client prefers an exact platform match over
@@ -296,6 +342,10 @@ def _publish_conflict(
     universal) has nothing platform-specific to split.
     """
     targets = [row.target for row in existing]
+    other = [row for row in existing if (row.channel == TESTPLACE_CHANNEL) != testplace]
+    if other:
+        held = "testplace" if not testplace else "the public channel"
+        return f"version {version} of {identity} already exists on {held}; a version belongs to one channel until promotion"
     if target in targets:
         return f"version {version} of {identity} already exists for target {target}"
     if any(row.yanked for row in existing):
@@ -306,6 +356,15 @@ def _publish_conflict(
             f"{', '.join(targets)}; a version is either universal or "
             "per-platform"
         )
+    return None
+
+
+def _other_channel_conflict(session, extension, version: str, *, testplace: bool) -> str | None:
+    """The one-channel rule again, inside the publish's own write (S8 R4-L3)."""
+    rows = RegistryRepository(session).list_version_artifacts(extension.id, version, public_only=False)
+    if any((row.channel == TESTPLACE_CHANNEL) != testplace for row in rows):
+        held = "testplace" if not testplace else "the public channel"
+        return f"version {version} of {extension.identity} already exists on {held}; a version belongs to one channel until promotion"
     return None
 
 
@@ -495,6 +554,14 @@ def _register_routes(app: FastAPI) -> None:
             token=body.token,
             display_name=body.display_name,
         )
+        audit.record(
+            repo.session,
+            actor=audit.ADMIN_TOKEN_ACTOR,
+            action="publisher.register",
+            target=f"publisher:{publisher.name}",
+            detail={"public_key_set": body.public_key is not None, "token_set": body.token is not None},
+        )
+        repo.session.commit()
         return PublisherRegisterResponse(
             name=publisher.name,
             display_name=publisher.display_name,
@@ -519,12 +586,14 @@ def _register_routes(app: FastAPI) -> None:
     ) -> PublishResponse:
         state: RegistryState = request.app.state.registry
         settings = state.settings
-        # Testplace opens in 0.2.27 (invites, Cloud-identity downloads). Until
-        # then no testplace row can exist, so no released App can be served one.
-        if channel == TESTPLACE_CHANNEL:
+        testplace_publish = channel == TESTPLACE_CHANNEL
+        # Testplace (0.2.27): only an authenticated, vetted publisher; the
+        # row is signed with `channel`/`expiresAt` (which released Apps
+        # reject) and reaches testers only through testplace_api.py.
+        if testplace_publish and not identity.authenticated:
             raise HTTPException(
-                status_code=409,
-                detail="TESTPLACE_NOT_OPEN: testplace publishing is not open yet",
+                status_code=401,
+                detail="testplace publishing needs a publisher token",
             )
         if channel is not None and channel not in VERSION_CHANNELS:
             raise HTTPException(status_code=400, detail=f"unknown channel '{channel}'")
@@ -534,10 +603,20 @@ def _register_routes(app: FastAPI) -> None:
         except PackageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+        if digest_blocked(repo.session, loaded.digest) is not None:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DIGEST_BLOCKED", "message": "this package's sha256 is on the registry blocklist"},
+            )
+
         manifest = loaded.manifest
         namespace = manifest.namespace
         name = manifest.extension_name
-        if channel is not None and channel != version_channel(manifest.version):
+        if (
+            channel is not None
+            and not testplace_publish
+            and channel != version_channel(manifest.version)
+        ):
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -568,6 +647,12 @@ def _register_routes(app: FastAPI) -> None:
         if block_reason is not None:
             raise HTTPException(status_code=403, detail=block_reason)
         publisher = repo.get_or_create_publisher(publisher_name)
+        if testplace_publish:
+            problem = publisher_problem(repo.session, publisher)
+            if problem is not None:
+                raise HTTPException(
+                    status_code=403, detail={"code": problem[0], "message": problem[1]}
+                )
 
         # Signature gate (p3-security): reject a bad signature; allow unsigned
         # only when the config explicitly permits it (dev).
@@ -613,7 +698,8 @@ def _register_routes(app: FastAPI) -> None:
             display_name=display_name,
             description=description,
             categories=categories,
-            update_existing=not publisher.review_required,
+            # A testplace build never changes the public listing.
+            update_existing=not publisher.review_required and not testplace_publish,
         )
 
         conflict = _publish_conflict(
@@ -623,6 +709,7 @@ def _register_routes(app: FastAPI) -> None:
             repo.list_version_artifacts(
                 extension.id, manifest.version, public_only=False
             ),
+            testplace=testplace_publish,
         )
         if conflict is not None:
             raise HTTPException(status_code=409, detail=conflict)
@@ -632,7 +719,54 @@ def _register_routes(app: FastAPI) -> None:
         # for the reviewer; approval scans again and signs that report.
         scan = run_scan(data, artifact_digest=loaded.digest, target=target,
                         manifest=manifest.model_dump(exclude_none=True))
-        if publisher.review_required:
+        expires_at = None
+        if testplace_publish:
+            # D2: an invite-list build gets the automatic checks only, so a
+            # blocking one refuses it instead of waiting for a reviewer.
+            review_report = review.submission_report(
+                repo.session,
+                namespace=namespace,
+                name=name,
+                data=data,
+                manifest=manifest.model_dump(exclude_none=True),
+                signature_present=signature is not None,
+                size_limit=MAX_ARCHIVE_SIZE,
+            )
+            if review.blocking_similarity(review_report):
+                raise HTTPException(
+                    status_code=422,
+                    detail="name similarity check blocks this testplace build",
+                )
+            if review.secret_findings(review_report):
+                raise HTTPException(
+                    status_code=422,
+                    detail="secret scan found likely credentials in this testplace build",
+                )
+            expires_at = testplace_expiry()
+            try:
+                registry_envelope, registry_signature = state.trust_signer.sign_envelope(
+                    artifact_digest=loaded.digest,
+                    package_id=f"{namespace}.{name}",
+                    version=manifest.version,
+                    target=target,
+                    publisher_id=publisher_name,
+                    channel=TESTPLACE_CHANNEL,
+                    expires_at=expires_at,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            try:
+                disclosure, disclosure_envelope, disclosure_signature = sign_disclosure(
+                    state.trust_signer,
+                    manifest.model_dump(exclude_none=True),
+                    registry_envelope,
+                    scan,
+                )
+            except CanonicalJsonError as exc:
+                raise HTTPException(status_code=400, detail=f"manifest cannot be disclosed: {exc}") from exc
+            trust_tier = compute_trust_tier(signed=True)
+            review_status = review.APPROVED
+        elif publisher.review_required:
             # Review before publish (D3): a self-claimed namespace's upload
             # waits unsigned and invisible until an admin approves it, which
             # is when the registry signs it (review.approve).
@@ -679,25 +813,43 @@ def _register_routes(app: FastAPI) -> None:
 
         key = _package_key(namespace, name, manifest.version, target)
         state.storage.put(key, data)
-        row = repo.add_version(
-            extension=extension,
-            version=manifest.version,
-            manifest=manifest.model_dump(exclude_none=True),
-            package_digest=loaded.digest,
-            package_key=key,
-            signature=signature,
-            target=target,
-            registry_envelope=registry_envelope,
-            registry_signature=registry_signature,
-            trust_tier=trust_tier,
-            assets=[(a.path, a.size, a.content_type) for a in loaded.assets],
-            review_status=review_status,
-            review_report=review_report,
-            disclosure=disclosure,
-            disclosure_envelope=disclosure_envelope,
-            disclosure_signature=disclosure_signature,
-            scan=scan,
-        )
+        try:
+            row = repo.add_version(
+                extension=extension,
+                version=manifest.version,
+                manifest=manifest.model_dump(exclude_none=True),
+                package_digest=loaded.digest,
+                package_key=key,
+                signature=signature,
+                target=target,
+                registry_envelope=registry_envelope,
+                registry_signature=registry_signature,
+                trust_tier=trust_tier,
+                assets=[(a.path, a.size, a.content_type) for a in loaded.assets],
+                review_status=review_status,
+                review_report=review_report,
+                disclosure=disclosure,
+                disclosure_envelope=disclosure_envelope,
+                disclosure_signature=disclosure_signature,
+                scan=scan,
+                channel=TESTPLACE_CHANNEL if testplace_publish else None,
+                expires_at=expires_at,
+                recheck=lambda session: _other_channel_conflict(
+                    session, extension, manifest.version, testplace=testplace_publish
+                ),
+            )
+        except VersionConflictError as exc:
+            # The blob stays: in a same-target race its key may be the winner's.
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if identity.authenticated:
+            audit.record(
+                repo.session,
+                actor=identity.actor or f"publisher:{publisher_name}",
+                action="version.submit",
+                target=f"package:{namespace}.{name}@{row.version}",
+                detail={"target": row.target, "digest": row.package_digest, "review_status": row.review_status},
+            )
+            repo.session.commit()
         return PublishResponse(
             namespace=namespace,
             name=name,
@@ -869,6 +1021,11 @@ def _register_routes(app: FastAPI) -> None:
                         f"(available: {available})"
                     ),
                 )
+        if digest_blocked(repo.session, row.package_digest) is not None:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DIGEST_BLOCKED", "message": "this package's sha256 is on the registry blocklist"},
+            )
         try:
             stream = state.storage.open_stream(row.package_key)
         except StorageError as exc:
@@ -893,29 +1050,58 @@ def _register_routes(app: FastAPI) -> None:
         namespace: str,
         name: str,
         version: str,
+        channel: str | None = None,
         identity: PublisherIdentity = Depends(get_publisher_identity),
         repo: RegistryRepository = Depends(_repo),
     ) -> YankResponse:
         # Only the owning publisher may yank (p3-publish); dev/anonymous is
-        # allowed when auth is not required.
+        # allowed when auth is not required. Errors carry a stable
+        # `detail.code`: NOT_OWNER or NOT_FOUND (token errors: auth.py).
         if identity.authenticated and identity.publisher != namespace:
             raise HTTPException(
                 status_code=403,
-                detail=(
-                    f"publisher '{identity.publisher}' cannot yank in "
-                    f"namespace '{namespace}'"
-                ),
+                detail={
+                    "code": "NOT_OWNER",
+                    "message": (
+                        f"publisher '{identity.publisher}' cannot yank in "
+                        f"namespace '{namespace}'"
+                    ),
+                },
             )
         extension = repo.get_extension(namespace, name, public_only=False)
         if extension is None:
-            raise HTTPException(status_code=404, detail="extension not found")
+            raise HTTPException(
+                status_code=404, detail={"code": "NOT_FOUND", "message": "extension not found"}
+            )
         # A version is yanked as a whole, across every target's artifact, so
         # "latest" resolves the same on every platform.
+        # One channel per yank (S8 R3-M2): `channel=testplace` for a test
+        # build, otherwise the public artifacts, or the test build when the
+        # version has no public one. A version an older Registry let hold
+        # both is never yanked on both at once.
         artifacts = repo.list_version_artifacts(
             extension.id, version, public_only=False
         )
+        test_builds = [a for a in artifacts if a.channel == TESTPLACE_CHANNEL]
+        public = [a for a in artifacts if a.channel != TESTPLACE_CHANNEL]
+        if channel == TESTPLACE_CHANNEL:
+            artifacts = test_builds
+        elif channel is not None:
+            artifacts = public
+        else:
+            artifacts = public or test_builds
         if not artifacts:
-            raise HTTPException(status_code=404, detail="version not found")
+            raise HTTPException(
+                status_code=404, detail={"code": "NOT_FOUND", "message": "version not found"}
+            )
+        if identity.authenticated and not all(a.yanked for a in artifacts):
+            audit.record(
+                repo.session,
+                actor=identity.actor or f"publisher:{namespace}",
+                action="version.yank",
+                target=f"package:{namespace}.{name}@{version}",
+                detail={"targets": [a.target for a in artifacts]},
+            )
         repo.yank_version(artifacts)
         return YankResponse(
             namespace=namespace,
@@ -924,6 +1110,16 @@ def _register_routes(app: FastAPI) -> None:
             yanked=True,
             targets=[a.target for a in artifacts],
         )
+
+    @app.get("/api/trust/local-install")
+    def local_install_trust(request: Request, repo: RegistryRepository = Depends(_repo)) -> dict:
+        """Root-signed approved publisher keys (revoked ones included) and
+        blocked package digests, for packages installed from a file or folder."""
+        keys, digests = qualification.local_install_entries(repo.session)
+        document, signature = request.app.state.registry.trust_signer.signed_local_install(
+            publisher_keys=keys, blocked_digests=digests
+        )
+        return {"local_trust_metadata": document, "local_trust_metadata_signature": signature}
 
     @app.post("/api/extensions/{namespace}/{name}/rating")
     def submit_rating(namespace: str, name: str) -> None:

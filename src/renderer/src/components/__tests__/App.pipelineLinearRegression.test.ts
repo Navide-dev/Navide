@@ -134,6 +134,10 @@ async function load(extraDeps: Record<string, unknown> = {}) {
     reclaimCompletedStagePanes: async (i: number) => { events.push(`reclaim ${i}`) },
     onStageSlotCompleted: (i: number, key: string) => events.push(`slotCompleted ${i} ${key}`),
     pipelineDag: dag,
+    // No pane in these traces was held by an earlier run (#448).
+    heldKickoffCopy: () => undefined,
+    heldKickoffPanes: new Set<string>(),
+    failRunOnKickoff: async () => {},
     ...extraDeps,
   }
   const factory = new Function(...Object.keys(deps), code)

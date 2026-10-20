@@ -333,6 +333,10 @@ describe.skipIf(!REGISTRY_AVAILABLE)('B2 against a real Registry: search → req
         await call('plugins:commitInstall', { id: `${namespace}.${name}`, publisherConfirmed: true, riskConfirmed: true })
         await call('plugins:restart', { id: `${namespace}.${name}` })
       },
+      // W1: an agent's local file request is not part of this Registry run.
+      installStaged: async () => {
+        throw new Error('no staged file in the Registry run')
+      },
       rollback: async (pluginId) => {
         await call('plugins:rollback', { id: pluginId })
       },

@@ -102,6 +102,107 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect((diff.props('diff') as { widened: boolean }).widened).toBe(true)
   })
 
+  it('W1: a file request shows the path, the digest and that Navide has not reviewed it; approving opens the same local consent', async () => {
+    const digest = 'ab'.repeat(32)
+    const file = request({
+      kind: 'plugin-install-file' as PluginAgentRequest['kind'],
+      target: {
+        id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.2.0', fromVersion: null,
+        path: '/Users/me/Downloads/indexer.vsix', digest, stagingId: 'cd'.repeat(16), packageKind: 'file',
+      },
+    })
+    plugins.prepareAgentFileInstall = vi.fn(async () => ({
+      id: 'acme.indexer', version: '1.2.0', source: 'local-unsigned', digest, sensitive: [], requiresRiskConfirmation: true,
+    }))
+    plugins.commitLocalInstall = vi.fn(async () => ({}))
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [file] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...file, status: 'applying' } })
+    wrapper = await open(mock)
+    expect(wrapper.find('[data-testid="plugin-request-file-path"]').text()).toBe('/Users/me/Downloads/indexer.vsix')
+    expect(wrapper.find('[data-testid="plugin-request-file-digest"]').text()).toBe(digest)
+    expect(wrapper.find('[data-testid="plugin-request-file-unreviewed"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="plugin-request-approve"]').trigger('click')
+    await flushPromises()
+    // The window names the staged copy, never the path; nothing is committed
+    // until the user confirms the consent dialog, which names who asked.
+    expect(plugins.prepareAgentFileInstall).toHaveBeenCalledWith('cd'.repeat(16))
+    expect(plugins.commitLocalInstall).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="ext-trust-agent-request"]').text()).toContain('dev')
+  })
+
+  it('MED-5: a file request whose time ran out reads as expired, never as failed', async () => {
+    const file = (over: Partial<PluginAgentRequest> = {}) => request({
+      kind: 'plugin-install-file' as PluginAgentRequest['kind'],
+      target: {
+        id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.2.0', fromVersion: null,
+        path: '/Users/me/Downloads/indexer.vsix', digest: 'ab'.repeat(32), stagingId: 'cd'.repeat(16), packageKind: 'file',
+      },
+      ...over,
+    })
+    // The card's own time ran out: expired, nothing to approve.
+    const late = createMockBackend('connected')
+    late.setResponse('plugins.agent_requests.list', { requests: [file({ expires_at: Date.now() / 1000 - 1 })] })
+    wrapper = await open(late)
+    expect(wrapper.text()).toContain(i18n.global.t('plugin-request.expired'))
+    expect(wrapper.find('[data-testid="plugin-request-approve"]').exists()).toBe(false)
+    wrapper.unmount()
+    // The Host's staged copy expired between the card and the approval.
+    plugins.prepareAgentFileInstall = vi.fn(async () => {
+      throw new Error("Error invoking remote method 'plugins:prepareAgentFileInstall': Error: AGENT_STAGING_EXPIRED: this request expired; ask the agent to send it again")
+    })
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [file()] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...file(), status: 'applying' } })
+    mock.setResponse('plugins.agent_request.finish', { approval: { ...file(), status: 'failed' } })
+    wrapper = await open(mock)
+    await wrapper.find('[data-testid="plugin-request-approve"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(i18n.global.t('plugin-request.expired'))
+    expect(wrapper.find('[data-testid="plugin-request-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="plugin-request-dismiss"]').exists()).toBe(true)
+  })
+
+  it('MED-5: rejecting a file request deletes its staged copy at once', async () => {
+    plugins.discardAgentStaged = vi.fn(async () => undefined)
+    const file = request({
+      kind: 'plugin-install-file' as PluginAgentRequest['kind'],
+      target: {
+        id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.2.0', fromVersion: null,
+        path: '/x.vsix', digest: 'ab'.repeat(32), stagingId: 'cd'.repeat(16), packageKind: 'file',
+      },
+    })
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [file] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...file, status: 'rejected' } })
+    wrapper = await open(mock)
+    await wrapper.find('[data-testid="plugin-request-reject"]').trigger('click')
+    await flushPromises()
+    expect(plugins.discardAgentStaged).toHaveBeenCalledWith('cd'.repeat(16))
+  })
+
+  it('LOW-3: a file request rejected in another window, or expired, drops its copy; one approved there does not', async () => {
+    plugins.discardAgentStaged = vi.fn(async () => undefined)
+    const file = (id: string, stagingId: string) => request({
+      approval_id: id,
+      kind: 'plugin-install-file' as PluginAgentRequest['kind'],
+      target: {
+        id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.2.0', fromVersion: null,
+        path: '/x.vsix', digest: 'ab'.repeat(32), stagingId, packageKind: 'file',
+      },
+    })
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', {
+      requests: [file('r1', '11'.repeat(16)), file('r2', '22'.repeat(16)), file('r3', '33'.repeat(16))],
+    })
+    wrapper = await open(mock)
+    mock.emit('plugins.agent_request_resolved', { approval_id: 'r1', status: 'rejected', error: null })
+    mock.emit('plugins.agent_request_resolved', { approval_id: 'r2', status: 'applying', error: null })
+    mock.emit('plugins.agent_request_resolved', { approval_id: 'r3', status: 'expired', error: null })
+    await flushPromises()
+    expect(plugins.discardAgentStaged.mock.calls).toEqual([['11'.repeat(16)], ['33'.repeat(16)]])
+  })
+
   it('approves with a window confirmation, installs, reports completed and closes', async () => {
     plugins.listInstalled.mockResolvedValue([{ id: 'acme.indexer', packageVersion: '1.2.0' }])
     const mock = createMockBackend('connected')
@@ -236,6 +337,36 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect(plugins.prepareInstall).not.toHaveBeenCalled()
     expect(mock.sent.some((s) => s.type === 'plugins.agent_request.finish')).toBe(false)
     expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
+  })
+
+  it("never shows an agent's form draft as an approval card (W3): its form opens in Settings", async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', {
+      requests: [request({ approval_id: 'f1', kind: 'plugin-publish' as never }), request({ approval_id: 'f2', kind: 'developer-application' as never })],
+    })
+    wrapper = await open(mock)
+    mock.emit('plugins.agent_request', request({ approval_id: 'f3', kind: 'plugin-yank' as never }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
+  })
+
+  it('says so when the asking pane has external influence (S8-M1), and still lets the user decide', async () => {
+    const mock = createMockBackend('connected')
+    const tainted = request()
+    tainted.requester = { ...tainted.requester, tainted: true } as never
+    mock.setResponse('plugins.agent_requests.list', { requests: [tainted] })
+    wrapper = await open(mock)
+    const line = wrapper.find('[data-testid="plugin-request-tainted"]')
+    expect(line.exists()).toBe(true)
+    expect(line.text()).toBe(i18n.global.t('plugin-request.tainted'))
+    expect(wrapper.find('[data-testid="plugin-request-approve"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('shows no external-influence line for a clean pane', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [request()] })
+    wrapper = await open(mock)
+    expect(wrapper.find('[data-testid="plugin-request-tainted"]').exists()).toBe(false)
   })
 
   it('drops a request decided in another window', async () => {

@@ -139,7 +139,7 @@ export function pinFreshSessionAtLaunch(
     const handwritten = command.match(pin.handwritten)
     return { command, explicitSessionId: handwritten ? handwritten[1] : '' }
   }
-  const id = requestedId?.trim() || generate()
+  const id = requestedId?.trim() || (pin.generateId ?? generate)()
   return { command: `${command} ${pin.flag} ${id}`, explicitSessionId: id }
 }
 

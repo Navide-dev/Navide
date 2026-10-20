@@ -9,6 +9,7 @@ container smoke test covers.
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import stat
@@ -872,6 +873,124 @@ class TestPortedModulesStayPosixFree:
         source = posix.read_text(encoding="utf-8")
         assert _POSIX_IMPORT_RE.search(source)
         assert _POSIX_CALL_RE.search(source)
+
+
+#: Spawns that redirect stdin or stdout without naming stderr. This list may
+#: shrink and must never grow; each entry says why it cannot name one.
+#:
+#: Why the rule: on Windows, CPython's `Popen` duplicates the backend's
+#: standard error handle (`GetStdHandle` + `DuplicateHandle`) for a child
+#: whose stderr is not given whenever stdin or stdout is. `mem_probe` swaps
+#: fd 2 on another thread every minute, and a spawn in that window fails with
+#: WinError 6 (#445). Naming stderr (a pipe, DEVNULL, STDOUT, a file) keeps
+#: the spawn off that handle.
+SPAWN_STDERR_ALLOWLIST: dict[str, str] = {}
+
+_SUBPROCESS_SPAWNS = {"Popen", "run", "call", "check_call", "check_output"}
+_ASYNCIO_SPAWNS = {"create_subprocess_exec", "create_subprocess_shell"}
+_LOOP_SPAWNS = {"subprocess_exec", "subprocess_shell"}
+
+
+def _spawn_names(tree: ast.AST) -> set[str]:
+    """Local names bound to a spawn function: `from subprocess import run`,
+    `from asyncio import create_subprocess_exec as spawn`, `run = subprocess.run`."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in ("subprocess", "asyncio", "asyncio.subprocess"):
+            spawns = _SUBPROCESS_SPAWNS if node.module == "subprocess" else _ASYNCIO_SPAWNS
+            names |= {alias.asname or alias.name for alias in node.names if alias.name in spawns}
+        elif isinstance(node, ast.Assign) and _is_spawn_attribute(node.value):
+            names |= {target.id for target in node.targets if isinstance(target, ast.Name)}
+    return names
+
+
+def _is_spawn_attribute(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Attribute):
+        return False
+    owner = ast.unparse(node.value)
+    return (
+        (owner == "subprocess" and node.attr in _SUBPROCESS_SPAWNS)
+        or (owner in ("asyncio", "asyncio.subprocess") and node.attr in _ASYNCIO_SPAWNS)
+        # loop.subprocess_exec / self._loop.subprocess_shell, whatever the loop is called
+        or node.attr in _LOOP_SPAWNS
+    )
+
+
+def _spawn_calls(source: str) -> list[tuple[int, str, bool]]:
+    """Every spawn call in `source` as (line, call text, names stderr when it
+    must). A call passing `**kwargs` may redirect anything, so it must name
+    stderr itself."""
+    tree = ast.parse(source)
+    names = _spawn_names(tree)
+    calls = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (_is_spawn_attribute(func) or (isinstance(func, ast.Name) and func.id in names)):
+            continue
+        given = {keyword.arg for keyword in node.keywords}
+        name = func.attr if isinstance(func, ast.Attribute) else func.id
+        redirects = bool(given & {"stdin", "stdout", "input", None}) or name == "check_output"
+        names_stderr = bool(given & {"stderr", "capture_output"})
+        calls.append((node.lineno, ast.unparse(func), names_stderr or not redirects))
+    return sorted(calls)
+
+
+class TestSpawnsNameTheirStderr:
+    def test_a_spawn_that_redirects_stdin_or_stdout_names_stderr(self):
+        root = Path(__file__).resolve().parents[1] / "agent_team_backend"
+        offenders = set()
+        for path in root.rglob("*.py"):
+            name = path.relative_to(root).as_posix()
+            for line, call, ok in _spawn_calls(path.read_text(encoding="utf-8")):
+                if not ok and f"{name}:{call}" not in SPAWN_STDERR_ALLOWLIST:
+                    offenders.add(f"{name}:{line} {call}")
+        assert not offenders, (
+            "these spawns redirect stdin or stdout but inherit stderr, which on "
+            "Windows duplicates the backend's stderr handle (WinError 6 while "
+            f"mem_probe swaps it, #445); name stderr: {sorted(offenders)}"
+        )
+
+    # The allowlist is a ratchet, so a cleaned-up spawn has to be removed from
+    # it — otherwise it silently licenses the next regression.
+    def test_the_allowlist_has_no_stale_entries(self):
+        root = Path(__file__).resolve().parents[1] / "agent_team_backend"
+        stale = set()
+        for entry in SPAWN_STDERR_ALLOWLIST:
+            name, _, call = entry.partition(":")
+            source = (root / name).read_text(encoding="utf-8")
+            if not any(c == call and not ok for _, c, ok in _spawn_calls(source)):
+                stale.add(entry)
+        assert not stale, f"already clean, drop from the allowlist: {sorted(stale)}"
+
+    def test_the_scan_sees_every_spelling_of_a_spawn(self):
+        # The ratchet would be vacuous if the scan simply stopped matching.
+        source = """
+import asyncio, subprocess
+from subprocess import Popen as P, check_output
+from asyncio import create_subprocess_exec as spawn
+run = subprocess.run
+subprocess.run(a, stdout=subprocess.PIPE)
+subprocess.run(a, capture_output=True)
+subprocess.run(a, input=b"x", stderr=subprocess.PIPE)
+subprocess.run(a)
+P(a, stdin=subprocess.PIPE)
+check_output(a)
+run(a, stdout=f)
+spawn(*a, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+asyncio.create_subprocess_exec(*a, stdin=asyncio.subprocess.PIPE)
+loop.subprocess_exec(factory, *a, **kwargs)
+"""
+        assert [(line, ok) for line, _, ok in _spawn_calls(source)] == [
+            (6, False), (7, True), (8, True), (9, True), (10, False), (11, False),
+            (12, False), (13, True), (14, False), (15, False),
+        ]
+        # And the real backend still has spawns for it to read.
+        worker = Path(__file__).resolve().parents[1] / "agent_team_backend" / "agent_tool_result_worker.py"
+        assert ("asyncio.create_subprocess_exec", True) in {
+            (call, ok) for _, call, ok in _spawn_calls(worker.read_text(encoding="utf-8"))
+        }
 
 
 class TestScripts:

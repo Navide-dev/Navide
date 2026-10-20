@@ -29,7 +29,7 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
     },
     "testplace": {
       "badge": "Test build, no human review, expires 2026-12-31",
-      "row": "Source and review Test build, no human review, expires 2026-12-31",
+      "row": "Source and review Test build, no human review, expires 2026-12-31While you are offline or not signed in to Navide Cloud, a withdrawal by its developer takes effect at the latest when it expires (up to 90 days).",
     },
   },
   "ja-JP": {
@@ -59,7 +59,7 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
     },
     "testplace": {
       "badge": "テスト版。人による審査なし。2026-12-31 に期限切れ",
-      "row": "提供元と審査 テスト版。人による審査なし。2026-12-31 に期限切れ",
+      "row": "提供元と審査 テスト版。人による審査なし。2026-12-31 に期限切れオフラインまたは Navide Cloud にサインインしていない間は、開発者による取り下げは最長で期限切れ（最大 90 日）まで反映されません。",
     },
   },
   "zh-TW": {
@@ -89,7 +89,7 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
     },
     "testplace": {
       "badge": "測試版，沒有人工審核，2026-12-31 到期",
-      "row": "來源與審核 測試版，沒有人工審核，2026-12-31 到期",
+      "row": "來源與審核 測試版，沒有人工審核，2026-12-31 到期離線或未登入 Navide Cloud 時，開發者撤回這個版本，最晚要到它到期（最多 90 天）才會生效。",
     },
   },
 }

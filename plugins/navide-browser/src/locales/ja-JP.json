@@ -1,0 +1,65 @@
+{
+  "browser": {
+    "app": { "title": "Navide ブラウザー" },
+    "overview": {
+      "title": "Navide ブラウザーの Space",
+      "new": "新しい Space",
+      "pending": "{count} 件が対応待ち",
+      "open-count": "{count} 件を開いています（それぞれメモリを使います）",
+      "empty": "Space はまだありません。＋ で作成できます。agent は初めてブラウズするときに自分の Space を開きます。agent は Navide ブラウザーでのあなたのログイン情報を使います（あなたの代わりにウェブページでリクエストを送信できます）。"
+    },
+    "state": {
+      "idle": "待機中",
+      "running": "実行中",
+      "need-action": "対応が必要",
+      "done": "完了"
+    },
+    "owner": { "agent": "Agent", "user": "あなた" },
+    "space": {
+      "all": "すべての Space",
+      "yours": "あなたの Space：許可しない限り agent は使えません",
+      "default-name": "マイ Space {n}"
+    },
+    "nav": {
+      "back": "戻る",
+      "forward": "進む",
+      "reload": "再読み込み",
+      "stop": "停止",
+      "address": "URL を入力"
+    },
+    "control": {
+      "agent": "agent が操作中",
+      "user": "あなたが操作中",
+      "yours": "あなたの Space"
+    },
+    "action": {
+      "take-over": "操作を引き継ぐ",
+      "hand-back": "agent に戻す",
+      "delegate": "この Space を agent に使わせる",
+      "reclaim": "この Space を取り戻す",
+      "close": "Space を閉じる",
+      "delegate-note": "どの pane、どのワークスペースの agent でも使えます"
+    },
+    "agent-script": {
+      "warning": "このページでは agent のスクリプトがまだ動いている可能性があります。パスワードや確認コードを入力する前に再読み込みしてください。",
+      "reload": "再読み込み",
+      "keep": "ページを保持"
+    },
+    "settings": {
+      "title": "設定",
+      "shared-sign-in": "すべての Space は同じログイン情報を共有し、このコンピューターに保存されます。agent は Navide ブラウザーでのあなたのログイン情報を使います（あなたの代わりにウェブページでリクエストを送信できます）。操作を引き継いだ後も、ページ内ですでに動いている agent のスクリプトは、再読み込みするまで止まりません。",
+      "clear-data": "すべてのログイン情報を消去",
+      "clear-data-confirm": "もう一度押すと、Navide ブラウザーのすべてのサイトからログアウトします",
+      "clear-data-done": "ログイン情報を消去しました。",
+      "cancel": "キャンセル"
+    },
+    "left": {
+      "open": "Navide ブラウザーを開く",
+      "empty": "Space はまだありません。"
+    },
+    "errors": {
+      "generic": "エラーが発生しました（{code}）。",
+      "invalid-address": "http または https のアドレスを入力してください。"
+    }
+  }
+}

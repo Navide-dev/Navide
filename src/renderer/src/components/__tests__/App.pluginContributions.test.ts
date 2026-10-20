@@ -149,3 +149,55 @@ describe('window plugin contributions filtering', () => {
     ])
   })
 })
+
+describe('plugin contribution grouping by location', () => {
+  // The catalog is the Host's list of every location a manifest may declare.
+  // A location without a bucket here made the grouping computed throw
+  // ("Cannot read properties of undefined (reading 'push')") the moment a
+  // package used it — the built-in navide.git ships a `detail` view.
+  const catalogSource = readFileSync(
+    resolve(process.cwd(), 'src/main/plugins/pluginContributionCatalog.ts'),
+    'utf8'
+  )
+  const unionMembers = (source: string, pattern: RegExp): string[] => {
+    const match = source.match(pattern)
+    expect(match, String(pattern)).not.toBeNull()
+    return [...match![1].matchAll(/'([a-z]+)'/g)].map((m) => m[1]).sort()
+  }
+  const catalogLocations = unionMembers(
+    catalogSource,
+    /export type PluginContributionLocation =([\s\S]*?)\n\n/
+  )
+
+  it('has a bucket for every location the catalog can return', () => {
+    const grouped = appSource.match(
+      /const grouped: Record<PluginRegionLocation, PluginRegionContribution\[\]> = \{([\s\S]*?)\}/
+    )
+    expect(grouped).not.toBeNull()
+    const buckets = [...grouped![1].matchAll(/(\w+): \[\]/g)].map((m) => m[1]).sort()
+    expect(catalogLocations).toContain('detail')
+    expect(buckets).toEqual(catalogLocations)
+  })
+
+  it('declares every catalog location in the renderer and preload types', () => {
+    const hostSource = readFileSync(
+      resolve(process.cwd(), 'src/renderer/src/components/PluginRegionHost.vue'),
+      'utf8'
+    )
+    const preloadSource = readFileSync(resolve(process.cwd(), 'src/preload/index.ts'), 'utf8')
+    expect(unionMembers(hostSource, /export interface PluginRegionContribution \{[\s\S]*?location: ([^\n]*)/)).toEqual(
+      catalogLocations
+    )
+    expect(unionMembers(preloadSource, /listContributions: \(\): Promise<Array<\{[\s\S]*?location: ([^\n]*)/)).toEqual(
+      catalogLocations
+    )
+  })
+
+  it('never renders a detail view as a main-window region', () => {
+    // A detail view is mounted only by the receiver that owns it.
+    expect(appSource).not.toContain("pluginContributionsAt('detail')")
+    expect(appSource).toMatch(
+      /function pluginContributionsAt\(location: Exclude<PluginRegionLocation, 'left' \| 'window' \| 'detail'>\)/
+    )
+  })
+})

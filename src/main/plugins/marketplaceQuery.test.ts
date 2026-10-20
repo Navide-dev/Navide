@@ -190,6 +190,56 @@ describe('answerMarketplaceQuery: installed', () => {
   })
 })
 
+// Plan W1: the installed source, and the local package kinds behind
+// plugins_validate_package and plugins_package.
+describe('answerMarketplaceQuery: W1 local packages', () => {
+  const report = {
+    path: '/work/todo.vsix', packageKind: 'file' as const, valid: true, errors: [], id: 'acme.todo', version: '1.0.0',
+    target: 'universal', digest: 'a'.repeat(64), signature: 'none' as const, disclosure: null, risk: null, scan: null,
+  }
+
+  it('names each installed package\'s source, and a revoked local signature', async () => {
+    const src = sources({
+      installed: vi.fn(() => [
+        { id: 'acme.signed', packageVersion: '1.0.0', source: 'local-signed' },
+        { id: 'acme.revoked', packageVersion: '1.0.0', source: 'local-unsigned', signatureRevoked: true },
+        { id: 'acme.legacy' },
+      ]),
+    })
+    const answer = await answerMarketplaceQuery({ kind: 'installed' }, src)
+    expect(answer.ok && answer.result.kind === 'installed' && answer.result.items).toEqual([
+      expect.objectContaining({ id: 'acme.signed', source: 'local-signed' }),
+      expect.objectContaining({ id: 'acme.revoked', source: 'local-unsigned', signatureRevoked: true }),
+      expect.not.objectContaining({ source: expect.anything() }),
+    ])
+  })
+
+  it('answers a check and a build with the Host\'s report', async () => {
+    const localValidate = vi.fn(async () => report)
+    const localPackage = vi.fn(async () => report)
+    const src = sources({ localValidate, localPackage })
+    expect(await answerMarketplaceQuery({ kind: 'localValidate', path: '/work/todo.vsix' }, src)).toEqual({
+      ok: true, result: { kind: 'localValidate', report },
+    })
+    expect(await answerMarketplaceQuery({ kind: 'localPackage', path: '/work/todo', target: 'universal', out: '/work/x.vsix' }, src))
+      .toEqual({ ok: true, result: { kind: 'localPackage', report } })
+    expect(localPackage).toHaveBeenCalledWith('/work/todo', { target: 'universal', out: '/work/x.vsix' })
+  })
+
+  it('refuses unknown fields and a missing path, and fences a path the Host cannot use', async () => {
+    const src = sources({ localValidate: vi.fn(async () => { throw new Error('ENOENT: /work/missing') }) })
+    for (const query of [{ kind: 'localValidate', path: '/x', out: '/y' }, { kind: 'localValidate' }, { kind: 'localPackage', path: '/x', target: 1 }]) {
+      expect(await answerMarketplaceQuery(query, src)).toEqual(expect.objectContaining({ ok: false, error_code: 'BAD_REQUEST' }))
+    }
+    expect(await answerMarketplaceQuery({ kind: 'localValidate', path: '/work/missing' }, src)).toEqual({
+      ok: false, error: 'ENOENT: /work/missing', error_code: 'NOT_FOUND',
+    })
+    expect(await answerMarketplaceQuery({ kind: 'localPackage', path: '/x' }, sources())).toEqual(
+      expect.objectContaining({ ok: false, error_code: 'HOST_UNAVAILABLE' }),
+    )
+  })
+})
+
 // Security review of B2-a: what reaches the agent is rebuilt from validated
 // fields only; unknown keys never pass and a malformed card is dropped whole.
 describe('answerMarketplaceQuery: only validated fields leave the Host', () => {
