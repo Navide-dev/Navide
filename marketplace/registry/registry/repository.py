@@ -19,6 +19,7 @@ from .models import (
     ExtensionVersion,
     Publisher,
 )
+from .qualification import record_key
 from .versions import TESTPLACE_CHANNEL, version_channel
 
 APPROVED = "approved"
@@ -75,6 +76,12 @@ class RegistryRepository:
             publisher.display_name = display_name
         if public_key is not None:
             publisher.public_key = public_key
+            self.session.add(publisher)
+            self.session.flush()
+            try:
+                record_key(self.session, publisher, public_key)
+            except Exception:  # noqa: BLE001 - an unparsable key keeps no history (as before)
+                pass
         if token is not None:
             publisher.token_hash = hash_token(token)
         self.session.add(publisher)

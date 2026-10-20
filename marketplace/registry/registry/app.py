@@ -15,11 +15,11 @@ from sqlalchemy import Engine
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from sqlmodel import Session
 
-from . import cloud_auth
+from . import audit, cloud_auth, qualification
 from .auth import PublisherIdentity, get_publisher_identity
 from .config import VERIFIER_ACCEPTING, Settings, load_settings
 from . import review
-from .blocklist import db_blocklists
+from .blocklist import db_blocklists, digest_blocked
 from .db import create_db_engine
 from .dns_verify import TxtResolver, doh_txt_resolver
 from .disclosure import registry_facts, sign_disclosure
@@ -495,6 +495,14 @@ def _register_routes(app: FastAPI) -> None:
             token=body.token,
             display_name=body.display_name,
         )
+        audit.record(
+            repo.session,
+            actor=audit.ADMIN_TOKEN_ACTOR,
+            action="publisher.register",
+            target=f"publisher:{publisher.name}",
+            detail={"public_key_set": body.public_key is not None, "token_set": body.token is not None},
+        )
+        repo.session.commit()
         return PublisherRegisterResponse(
             name=publisher.name,
             display_name=publisher.display_name,
@@ -533,6 +541,12 @@ def _register_routes(app: FastAPI) -> None:
             loaded = read_package(data, target=target)
         except PackageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if digest_blocked(repo.session, loaded.digest) is not None:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DIGEST_BLOCKED", "message": "this package's sha256 is on the registry blocklist"},
+            )
 
         manifest = loaded.manifest
         namespace = manifest.namespace
@@ -698,6 +712,15 @@ def _register_routes(app: FastAPI) -> None:
             disclosure_signature=disclosure_signature,
             scan=scan,
         )
+        if identity.authenticated:
+            audit.record(
+                repo.session,
+                actor=identity.actor or f"publisher:{publisher_name}",
+                action="version.submit",
+                target=f"package:{namespace}.{name}@{row.version}",
+                detail={"target": row.target, "digest": row.package_digest, "review_status": row.review_status},
+            )
+            repo.session.commit()
         return PublishResponse(
             namespace=namespace,
             name=name,
@@ -869,6 +892,11 @@ def _register_routes(app: FastAPI) -> None:
                         f"(available: {available})"
                     ),
                 )
+        if digest_blocked(repo.session, row.package_digest) is not None:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DIGEST_BLOCKED", "message": "this package's sha256 is on the registry blocklist"},
+            )
         try:
             stream = state.storage.open_stream(row.package_key)
         except StorageError as exc:
@@ -897,25 +925,41 @@ def _register_routes(app: FastAPI) -> None:
         repo: RegistryRepository = Depends(_repo),
     ) -> YankResponse:
         # Only the owning publisher may yank (p3-publish); dev/anonymous is
-        # allowed when auth is not required.
+        # allowed when auth is not required. Errors carry a stable
+        # `detail.code`: NOT_OWNER or NOT_FOUND (token errors: auth.py).
         if identity.authenticated and identity.publisher != namespace:
             raise HTTPException(
                 status_code=403,
-                detail=(
-                    f"publisher '{identity.publisher}' cannot yank in "
-                    f"namespace '{namespace}'"
-                ),
+                detail={
+                    "code": "NOT_OWNER",
+                    "message": (
+                        f"publisher '{identity.publisher}' cannot yank in "
+                        f"namespace '{namespace}'"
+                    ),
+                },
             )
         extension = repo.get_extension(namespace, name, public_only=False)
         if extension is None:
-            raise HTTPException(status_code=404, detail="extension not found")
+            raise HTTPException(
+                status_code=404, detail={"code": "NOT_FOUND", "message": "extension not found"}
+            )
         # A version is yanked as a whole, across every target's artifact, so
         # "latest" resolves the same on every platform.
         artifacts = repo.list_version_artifacts(
             extension.id, version, public_only=False
         )
         if not artifacts:
-            raise HTTPException(status_code=404, detail="version not found")
+            raise HTTPException(
+                status_code=404, detail={"code": "NOT_FOUND", "message": "version not found"}
+            )
+        if identity.authenticated and not all(a.yanked for a in artifacts):
+            audit.record(
+                repo.session,
+                actor=identity.actor or f"publisher:{namespace}",
+                action="version.yank",
+                target=f"package:{namespace}.{name}@{version}",
+                detail={"targets": [a.target for a in artifacts]},
+            )
         repo.yank_version(artifacts)
         return YankResponse(
             namespace=namespace,
@@ -924,6 +968,16 @@ def _register_routes(app: FastAPI) -> None:
             yanked=True,
             targets=[a.target for a in artifacts],
         )
+
+    @app.get("/api/trust/local-install")
+    def local_install_trust(request: Request, repo: RegistryRepository = Depends(_repo)) -> dict:
+        """Root-signed approved publisher keys (revoked ones included) and
+        blocked package digests, for packages installed from a file or folder."""
+        keys, digests = qualification.local_install_entries(repo.session)
+        document, signature = request.app.state.registry.trust_signer.signed_local_install(
+            publisher_keys=keys, blocked_digests=digests
+        )
+        return {"local_trust_metadata": document, "local_trust_metadata_signature": signature}
 
     @app.post("/api/extensions/{namespace}/{name}/rating")
     def submit_rating(namespace: str, name: str) -> None:
