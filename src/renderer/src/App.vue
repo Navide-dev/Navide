@@ -22,6 +22,7 @@ import { isPublishDeepLink, parseDeepLink, type DeepLinkExtensionTarget, type De
 import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceForm } from './composables/useMarketplaceForms'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
+import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
@@ -1533,13 +1534,24 @@ function refitAllTerminals(): void {
   }))
 }
 
+// The layout-mode cols cap and its lift on a window widen (lib/stageWidthCap.ts).
+// paneRefs holds null for a pane Vue has unmounted, hence the nullable type.
+const stageWidthCap = createStageWidthCap(
+  () => Object.values(paneRefs) as unknown as Array<CappablePane | null | undefined>,
+  () => window.innerWidth
+)
+
 // Window-level resize safety net. Per-pane ResizeObservers can miss the macOS
 // fullscreen / maximize transition (the renderer is occluded mid-animation, so
 // the observer callback is coalesced away), leaving panes at a stale width with
 // empty space on the right. A debounced window 'resize' listener guarantees a
 // refit on any OS-window size change regardless of the observers.
 let _winResizeTimer: number | null = null
+
 function onWindowResize(): void {
+  // Widening the window lifts the layout-mode cap. That includes moving the
+  // window to a larger monitor, but only when the window itself grows there.
+  stageWidthCap.onWindowResize()
   if (_winResizeTimer !== null) clearTimeout(_winResizeTimer)
   _winResizeTimer = window.setTimeout(() => { _winResizeTimer = null; refitAllTerminals() }, 150)
 }
@@ -20667,16 +20679,17 @@ const effectiveLayoutMode = computed<'grid' | 'spotlight' | 'sidebar' | 'fullscr
 // are a step change in width, and widening makes xterm reflow the scrollback.
 // A CLI that paints absolute-positioned full-width rows (claude) can never
 // repaint what reflow strands there — its redraw addresses the viewport only —
-// so the garbled history is permanent. Cap each pane at its grid-mode width on
-// the way in: the extra space is left blank instead of becoming columns, and
-// switching back is then a no-op resize. Set before the fit below, which is
-// what reads the cap. Panes stay uncapped in grid mode, where the container is
-// the width the user actually chose.
+// so the garbled history is permanent. Cap each pane at the cols it has now
+// (its grid-mode width, or the current width when switching between stage
+// modes) on the way in: the extra space is left blank instead of becoming
+// columns, and switching back to grid is then a no-op resize. Set before the
+// fit below, which is what reads the cap. Panes stay uncapped in grid mode,
+// where the container is the width the user actually chose. Widening the
+// window itself past the width it had on entry lifts the cap (see
+// onWindowResize) — and a pane that was lifted reflows when it goes back to
+// grid, the accepted cost of widening.
 watch(effectiveLayoutMode, (mode) => {
-  const capped = mode !== 'grid'
-  for (const ref of Object.values(paneRefs)) {
-    (ref as unknown as { lockCols?: (locked: boolean) => void })?.lockCols?.(capped)
-  }
+  stageWidthCap.enterMode(mode)
   void nextTick(() => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
