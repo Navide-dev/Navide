@@ -91,12 +91,14 @@ function nullableString(value: unknown): value is string | null {
 function parseRequester(value: unknown): PluginAgentRequester | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const record = value as Record<string, unknown>
-  const keys = Object.keys(record)
+  // S8-M1: `tainted` is optional and only ever true (a pane that read third-party content).
+  const keys = Object.keys(record).filter((key) => key !== 'tainted')
   if (keys.length !== REQUESTER_KEYS.length || !REQUESTER_KEYS.every((key) => keys.includes(key))) return null
-  const { paneId, paneName, workspace, callerKind } = record
+  const { paneId, paneName, workspace, callerKind, tainted } = record
   if (callerKind !== 'pane' && callerKind !== 'external' && callerKind !== 'host') return null
   if (!nullableString(paneId) || !nullableString(paneName) || !nullableString(workspace)) return null
-  return { paneId, paneName, workspace, callerKind }
+  if ('tainted' in record && tainted !== true) return null
+  return tainted === true ? { paneId, paneName, workspace, callerKind, tainted } : { paneId, paneName, workspace, callerKind }
 }
 
 /** `plugins.agent_action.request` (contract 4.3.1): exact keys, or null.
