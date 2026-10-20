@@ -528,6 +528,22 @@ describe('kickoffVerified', () => {
     expect(kickoffVerified('placeholder', 'growth', false)).toBe(false)
   })
 
+  // Issue #402 point 1: Grok Build shows a multi-line paste as a chip in its
+  // composer, not as text, and not as Claude's "[Pasted text …]" either, so
+  // the echo half can only ever be growth. A new turn starting after our Enter
+  // (submitTurnConfirm, read off the CLI's own log) is the CLI taking the
+  // text: nothing else types into a fresh pane past the prompt-ready gate.
+  it('accepts a growth-only echo when the CLI started a turn after the Enter', () => {
+    expect(kickoffVerified('growth', 'turn', true)).toBe(true)
+  })
+
+  it('still wants the gate open for a turn-confirmed growth echo', () => {
+    // A pane still painting its first screen (a session-marker turn, a resume
+    // replay) can start a turn of its own.
+    expect(kickoffVerified('growth', 'turn', false)).toBe(false)
+    expect(kickoffVerified(null, 'turn', true)).toBe(false)
+  })
+
   it('never vouches for a missing half, gate or not', () => {
     expect(kickoffVerified(null, 'growth', true)).toBe(false)
     expect(kickoffVerified('growth', null, true)).toBe(false)
