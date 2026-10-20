@@ -9328,7 +9328,9 @@
       "digest": "檔案 SHA-256",
       "unreviewed": "有 agent 要求安裝這個檔案。Navide 沒有審核過它。核准後會打開和「從檔案安裝」相同的安裝對話框，裝進去的是 agent 提出要求時 Navide 讀到的那一份，SHA-256 就是上面這一串。",
       "unreviewed-folder": "有 agent 要求載入這個開發者資料夾。Navide 沒有審核過它，內容也可能隨時改變。核准後會打開和你自己載入資料夾時相同的對話框。",
-      "digestChanged": "Navide 為這個請求保存的檔案和請求上顯示的不一樣，所以沒有安裝。請 agent 重新送出。"
+      "digestChanged": "Navide 為這個請求保存的檔案和請求上顯示的不一樣，所以沒有安裝。請 agent 重新送出。",
+      "card": "這個套件宣告的內容（來自本機檔案，不是 Navide Marketplace）",
+      "no-card": "這個本機套件沒有揭露資料。它來自本機檔案，不是 Navide Marketplace，Navide 也沒有審核過它。"
     },
     "kicker": "Navide 外掛請求",
     "title": {

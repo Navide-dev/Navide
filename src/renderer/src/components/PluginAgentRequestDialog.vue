@@ -379,15 +379,17 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
         </div>
 
         <div class="pr-section">
-          <div class="pr-label">{{ $t('plugin-request.card') }}</div>
+          <!-- A file request's card is the Host's reading of the package, not the Marketplace's. -->
+          <div class="pr-label">{{ $t(current.kind === 'plugin-install-file' ? 'plugin-request.file.card' : 'plugin-request.card') }}</div>
           <PluginDisclosureCard
             v-if="shownDisclosure"
             :disclosure="shownDisclosure"
             :scan="current.card?.manifest ? current.card.scan ?? null : null"
             :registry="current.card?.registry ?? null"
             :verified="false"
+            :local-source="current.kind === 'plugin-install-file'"
           />
-          <p v-else class="pr-note" data-testid="plugin-request-no-card">{{ $t('plugin-request.no-card') }}</p>
+          <p v-else class="pr-note" data-testid="plugin-request-no-card">{{ $t(current.kind === 'plugin-install-file' ? 'plugin-request.file.no-card' : 'plugin-request.no-card') }}</p>
         </div>
 
         <p v-if="!appliable" class="pr-note" data-testid="plugin-request-not-appliable">{{ $t('plugin-request.not-appliable') }}</p>
