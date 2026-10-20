@@ -84,4 +84,10 @@ describe('a late tool result does not count as activity', () => {
   it('is excluded from the clocks by the very guard that stamps them', () => {
     expect(idleGuardBlock()).toContain('!isToolResultHook(ev.detail)')
   })
+
+  it('does not re-arm the done notification either', () => {
+    expect(appSource).toContain(
+      'if (!isToolResultHook(ev.detail)) sysNotify.markActive(ev.pane_id)'
+    )
+  })
 })

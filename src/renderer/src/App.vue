@@ -14708,8 +14708,9 @@ backend.on('agent.activity', (raw) => {
         requestLlmPaneName(ev.pane_id, ev.text)
       }
     }
-    // A new turn re-arms 'done' notifications for this pane.
-    sysNotify.markActive(ev.pane_id)
+    // A new turn re-arms 'done' notifications for this pane. A late tool result
+    // is not one: it would clear the Dock badge the finished turn raised.
+    if (!isToolResultHook(ev.detail)) sysNotify.markActive(ev.pane_id)
     // Claude's Notification hook (user attention requested) arrives as
     // agent_active with detail 'hook:notification'. It is also the only signal
     // that separates "parked on the user" from "done": the prompt paints once
