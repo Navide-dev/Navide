@@ -514,8 +514,12 @@ watch(installed, () => {
     </p>
     <!-- D3: an expired test build is stopped, never silently dropped. -->
     <div v-for="item in expiredTestplace" :key="`expired:${item.id}`" class="ext-testplace-expired ext-risk-banner" role="alert" :data-expired-id="item.id">
-      <p>{{ $t('testplace.expired.banner', { id: reveal(item.id), version: reveal(item.version ?? ''), date: (item.expiresAt ?? '').slice(0, 10) }) }}</p>
-      <p v-if="!item.canKeep" class="ext-testplace-cannot-keep">{{ $t('testplace.expired.cannotKeep') }}</p>
+      <p v-if="item.withdrawn">{{ $t('testplace.expired.withdrawnBanner', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}</p>
+      <p v-else>{{ $t('testplace.expired.banner', { id: reveal(item.id), version: reveal(item.version ?? ''), date: (item.expiresAt ?? '').slice(0, 10) }) }}</p>
+      <!-- S8 T-MED-1: say why "keep using" is not offered. -->
+      <p v-if="!item.canKeep" class="ext-testplace-cannot-keep">
+        {{ $t(item.keepRefusal === 'withdrawn' ? 'testplace.expired.cannotKeepWithdrawn' : item.keepRefusal === 'unconfirmed' ? 'testplace.expired.cannotKeepUnconfirmed' : 'testplace.expired.cannotKeep') }}
+      </p>
       <div class="ext-actions">
         <button
           class="ext-testplace-marketplace nv-btn nv-btn--primary nv-btn--sm"

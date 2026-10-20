@@ -11558,6 +11558,9 @@
       "keep": "繼續使用（標示已過期）",
       "remove": "移除",
       "cannotKeep": "這個版本已被下架或無法驗證，不能繼續使用。",
+      "withdrawnBanner": "{id} {version} 的測試版已被開發者或 Navide 撤回，已經停用；設定和資料都保留著。請選擇接下來要怎麼做。",
+      "cannotKeepWithdrawn": "這個版本已被開發者或 Navide 撤回，不能繼續使用。",
+      "cannotKeepUnconfirmed": "無法向 Navide 市集確認這個版本沒有被撤回（請先登入 Navide Cloud 帳號，或稍後再試），所以目前不能繼續使用。",
       "keepTitle": "繼續使用已過期的測試版",
       "keepConfirm": "繼續使用已過期的測試版 {id}？它沒有經過 Navide 人工審核，也不會再收到更新；被下架時仍會停用。",
       "kept": "已過期的測試版，繼續使用中：不會再收到更新，被下架時仍會停用。"

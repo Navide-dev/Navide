@@ -1313,6 +1313,8 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
       expiredTestplace: vi.fn().mockResolvedValue([
         { id: 'acme.kept', version: '1.0.0', expiresAt: '2026-10-01T00:00:00Z', artifactDigest: 'a'.repeat(64), canKeep: true },
         { id: 'acme.down', version: '2.0.0', expiresAt: '2026-10-02T00:00:00Z', canKeep: false },
+        { id: 'acme.pulled', version: '3.0.0', expiresAt: '2026-12-02T00:00:00Z', canKeep: false, withdrawn: true, keepRefusal: 'withdrawn' },
+        { id: 'acme.unsure', version: '4.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'unconfirmed' },
       ]),
       keepExpiredTestplace,
       prepareInstall,
@@ -1328,6 +1330,14 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
     const down = wrapper.get('[data-expired-id="acme.down"]')
     expect(down.find('.ext-testplace-keep').exists()).toBe(false)
     expect(down.text()).toContain('cannot be kept')
+    // S8 T-MED-1: a withdrawn build says so; an unconfirmed one says why it cannot be kept now.
+    const pulled = wrapper.get('[data-expired-id="acme.pulled"]')
+    expect(pulled.text()).toContain('was withdrawn by its developer or by Navide')
+    expect(pulled.find('.ext-testplace-keep').exists()).toBe(false)
+    expect(pulled.find('.ext-testplace-remove').exists()).toBe(true)
+    const unsure = wrapper.get('[data-expired-id="acme.unsure"]')
+    expect(unsure.find('.ext-testplace-keep').exists()).toBe(false)
+    expect(unsure.text()).toContain('could not confirm this version was not withdrawn')
     expect(api.remove).not.toHaveBeenCalled()
 
     await kept.get('.ext-testplace-keep').trigger('click')
