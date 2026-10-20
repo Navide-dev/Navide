@@ -27,11 +27,11 @@ async function runKickoffSite(site: string, echo: EchoEvidence | null) {
   )
   const run = new Function(
     'runPipelineKickoff', 'injectPane', 'sleep', 'paneAlive', 'pipelineLog',
-    'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', code,
+    'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', code,
   )(
     runPipelineKickoff, injectPane, sleep, () => true, () => {},
     { id: 'pane', stageId: 'stage', kickoffPrompt: 'kickoff' }, { id: 'stage' },
-    'kickoff', 'test', MAX_KICKOFF_ATTEMPTS,
+    'kickoff', 'test', MAX_KICKOFF_ATTEMPTS, () => undefined,
   ) as () => ReturnType<typeof runPipelineKickoff>
   const result = await run()
   return { result, injectPane, sleep }

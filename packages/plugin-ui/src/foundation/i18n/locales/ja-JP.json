@@ -8610,6 +8610,8 @@
   },
   "error": {
     "pipeline-start-refused": "パイプラインは開始されませんでした：{reason}",
+    "pipeline-kickoff-failed": "パイプラインが失敗しました：ステージ {stage}、スロット {slot} — {reason}。ペインは開いたままです。",
+    "pipeline-kickoff-held": "パイプラインが失敗しました：ステージ {stage}、スロット {slot} — キックオフが入力欄に残っています。そのままにすれば resume が送信します。不要なら消去してください。ペインは開いたままです。",
     "workspace-create-exists": "「{name}」という名前の項目がすでにあります。別の名前を選んでください。",
     "workspace-create-denied": "{path} にフォルダーを作成する権限がありません。",
     "workspace-create-failed": "{path} にワークスペースフォルダーを作成できませんでした。",
