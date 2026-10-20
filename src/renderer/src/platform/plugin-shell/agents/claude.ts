@@ -87,13 +87,25 @@ export const SPEC = {
   // single spaces before testing, and the footer's own separators vary.
   // The two-option box (`Do you want to proceed?` / `1. Yes` / `2. No`) has
   // neither, so a third anchor is its `Esc to cancel · Tab to amend` footer.
-  // Every anchor must be the last text on screen: a live box is always the
-  // bottom of the frame, while the same words quoted in conversation (a pane
-  // discussing this very pattern) sit above the idle input box and status
-  // line — matching those parked an idle pane on AWAITING.
+  // A live box REPLACES Claude's input box, so after an anchor only a bounded
+  // tail may follow, and it must not draw the idle input prompt: a `❯` or `>`
+  // right after a frame character (`────` then `❯`, or the framed `│ >` older
+  // builds draw). A statusLine, a hint row and blank rows fit the tail, and so
+  // do border rows, which the 300-character bound does not count because one
+  // spans the pane width and the #416 guard reads the screen with them kept.
+  // The same words quoted in conversation sit above the idle input box, so the
+  // prompt row after them rules the match out — matching those parked an idle
+  // pane on AWAITING. The mirror case is a draft typed into the idle box that
+  // ends on an anchor phrase: the prompt row sits BEFORE the anchor, with no
+  // frame run between them, so the lookbehind rules it out. Only a run of 16 or
+  // more frame characters (a rule or border row, which spans the pane) ends the
+  // input box; a lone `│` side border or the corners of a pasted table do not.
+  // A numbered cursor row (`❯ 1. Yes`)
+  // is a live dialog's own option, not a prompt. Bash mode draws `!` for the
+  // prompt, so it counts as one in both directions.
   awaitingInput: {
     pattern:
-      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend) ?$/,
+      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend)(?<![─-╿] ?(?:[❯>](?! ?\d+[.)])|!(?= ))(?:[^─-╿]|[─-╿](?![─-╿]{15}))*)(?!.*[─-╿] ?(?:[❯>]|!(?= )))(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
     // Additive to the hook, never authoritative over it: an MCP elicitation
     // draws no option box, so a non-match here says nothing about a wait the
     // hook raised. See the field's own doc comment.

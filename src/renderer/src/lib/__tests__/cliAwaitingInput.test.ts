@@ -228,6 +228,140 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
     expect(matchAwaitingInput('claude', box)).toBe(true)
   })
 
+  // A live box replaces the input box, so whatever is drawn below it is not an
+  // idle prompt. These are the rows a real pane can paint under the footer.
+  describe('with rows drawn below the box', () => {
+    const STATUS_LINE = '  ~/git/navide · main · Opus 4.7 · 42% context'
+    const BORDER = '╰──────────────────────────────────────╯'
+    const FOOTER = 'Esc to cancel · Tab to amend'
+    const permissionBox = [
+      'Do you want to proceed?',
+      '❯ 1. Yes',
+      '  2. No',
+      '',
+      FOOTER,
+    ]
+
+    // A hint row walks the same branch as a statusLine, so it has no case.
+    const below = [
+      ['a custom statusLine', ['', STATUS_LINE]],
+      ['a statusLine that draws a prompt glyph', ['', '  ~/navide ❯ main']],
+      ['trailing border characters', [BORDER, '│']],
+      ['a statusLine whose git marker is not a bash prompt', ['', '────────', 'main !2 ?1']],
+    ] as const
+
+    it.each(below)('matches the permission box with %s below it', (_name, rows) => {
+      expect(matchAwaitingInput('claude', [...permissionBox, ...rows].join('\n'))).toBe(true)
+    })
+
+    it.each(below)('matches the AskUserQuestion footer with %s below it', (_name, rows) => {
+      expect(matchAwaitingInput('claude', [QUESTION_BOX, ...rows].join('\n'))).toBe(true)
+    })
+
+    it('does not match when the idle input prompt follows the anchor', () => {
+      // The same words as prose above a live input box: the `❯` row is the
+      // input box, so no dialog is up however much statusLine follows it.
+      const rule = '────────────────────────────────────────'
+      for (const anchor of [FOOTER, QUESTION_BOX.split('\n').pop()!]) {
+        const screen = [anchor, '', rule, '❯ ', rule, STATUS_LINE].join('\n')
+        expect(matchAwaitingInput('claude', screen)).toBe(false)
+      }
+    })
+
+    it('does not match when the framed prompt of an older build follows the anchor', () => {
+      const screen = [FOOTER, '╭──────────────────╮', '│ > Try "fix lint errors" │', '╰──────────────────╯', STATUS_LINE].join('\n')
+      expect(matchAwaitingInput('claude', screen)).toBe(false)
+    })
+
+    it('does not count a full-width border row against the tail bound', () => {
+      const wide = `╰${'─'.repeat(250)}╯`
+      expect(matchAwaitingInput('claude', [...permissionBox, wide, STATUS_LINE].join('\n'))).toBe(true)
+      expect(matchAwaitingInput('claude', [QUESTION_BOX, wide, STATUS_LINE].join('\n'))).toBe(true)
+    })
+
+    it('does not match when the tail outgrows its bound', () => {
+      const screen = [FOOTER, '', 'x'.repeat(400)].join('\n')
+      expect(matchAwaitingInput('claude', screen)).toBe(false)
+    })
+  })
+
+  // The input box is drawn on screen with whatever the user typed in it, and the
+  // pane stays idle: an anchor phrase INSIDE the box is a draft, not a dialog.
+  describe('with an unsent draft in the idle input box', () => {
+    const RULE = '────────────────────────────────────────'
+    const STATUS_LINE = '  ~/git/navide · main · Opus 4.7 · 42% context'
+    const anchors = [
+      'Esc to cancel · Tab to amend',
+      'Enter to select · ↑/↓ to navigate · Esc to cancel',
+      'No, and tell Claude what to do differently (esc)',
+    ]
+    const idleBox = (...rows: string[]): string => ['', RULE, ...rows, RULE, STATUS_LINE].join('\n')
+
+    it.each(anchors)('ignores a draft that is only %s', (anchor) => {
+      expect(matchAwaitingInput('claude', idleBox(`❯ ${anchor}`))).toBe(false)
+    })
+
+    it.each(anchors)('ignores a draft that ends with %s', (anchor) => {
+      expect(matchAwaitingInput('claude', idleBox(`❯ please do not show ${anchor}`))).toBe(false)
+    })
+
+    it('ignores a draft that wraps onto a second row', () => {
+      expect(matchAwaitingInput('claude', idleBox('❯ the footer reads', '  Esc to cancel · Tab to amend'))).toBe(false)
+    })
+
+    it('ignores a draft in the framed box an older build draws', () => {
+      const screen = [
+        '╭──────────────────────────────────────╮',
+        '│ > the footer reads                   │',
+        '│   Esc to cancel · Tab to amend       │',
+        '╰──────────────────────────────────────╯',
+        STATUS_LINE,
+      ].join('\n')
+      expect(matchAwaitingInput('claude', screen)).toBe(false)
+    })
+
+    it('ignores a draft that holds a pasted table before the anchor', () => {
+      const table = '┌───┬───┐ │ a │ b │ └───┴───┘'
+      expect(matchAwaitingInput('claude', idleBox(`❯ ${table} then Esc to cancel · Tab to amend`))).toBe(false)
+    })
+
+    it('ignores a draft in bash mode, whose prompt is `!`', () => {
+      expect(matchAwaitingInput('claude', idleBox('! echo Esc to cancel · Tab to amend'))).toBe(false)
+    })
+
+    it('still matches a live dialog drawn under a user message echoed after a frame', () => {
+      // The transcript echoes the user's message with the prompt glyph, and a
+      // tool box above it can end on a frame character. The live dialog's own
+      // rule separates the two, so the echo is not the input box.
+      const screen = [
+        '╰────────────────────╯',
+        '❯ run the tests',
+        '',
+        RULE,
+        ' Bash command',
+        '   npm test',
+        ' Do you want to proceed?',
+        ' ❯ 1. Yes',
+        '   2. No',
+        '',
+        ' Esc to cancel · Tab to amend',
+      ].join('\n')
+      expect(matchAwaitingInput('claude', screen)).toBe(true)
+    })
+
+    it('still matches a live dialog whose option rows are boxed', () => {
+      const screen = [
+        '╭──────────────────────────────────────╮',
+        '│ Do you want to proceed?              │',
+        '│ ❯ 1. Yes                             │',
+        '│   2. No                              │',
+        '│ Esc to cancel · Tab to amend         │',
+        '╰──────────────────────────────────────╯',
+      ].join('\n')
+      expect(matchAwaitingInput('claude', screen)).toBe(true)
+    })
+  })
+
   it('does not match the box quoted in conversation text above the idle prompt', () => {
     // A pane discussing the box shows its furniture as prose; the live box is
     // always the last thing on screen, the quoted one is followed by the input.
