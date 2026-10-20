@@ -754,8 +754,10 @@
           "conflict": "競合が検出されました。再読み込みしてからもう一度お試しください。",
           "internal-error": "バックエンドで内部エラーが発生しました。",
           "workspace-scope-violation": "ワークスペースの範囲外にあるファイルへのアクセスが試みられました。"
-        }
-      }
+        },
+        "rename-plan": "プラン名を変更"
+      },
+      "section-delete-confirm": "ドキュメントからセクション \"{anchor}\" を削除しますか？"
     },
     "terminal": {
       "readback-on-tooltip": "読み上げオン：このペインが完了または回答待ちになると読み上げます — クリックでオフ",

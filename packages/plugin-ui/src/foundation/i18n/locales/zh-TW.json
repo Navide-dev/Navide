@@ -754,8 +754,10 @@
           "conflict": "檔案發生衝突，請重新整理後再試。",
           "internal-error": "後端發生內部錯誤。",
           "workspace-scope-violation": "嘗試存取工作區以外的檔案。"
-        }
-      }
+        },
+        "rename-plan": "重新命名計畫"
+      },
+      "section-delete-confirm": "要從文件刪除「{anchor}」這個區段嗎？"
     },
     "terminal": {
       "readback-on-tooltip": "朗讀已開啟：完成或需要回答時會念出來——點一下關閉",

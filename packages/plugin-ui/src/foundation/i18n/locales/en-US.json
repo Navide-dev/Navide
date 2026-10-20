@@ -754,8 +754,10 @@
           "conflict": "Conflict detected. Please reload and try again.",
           "internal-error": "An internal backend error occurred.",
           "workspace-scope-violation": "Attempted to access files outside workspace scope."
-        }
-      }
+        },
+        "rename-plan": "Rename plan"
+      },
+      "section-delete-confirm": "Delete the section \"{anchor}\" from the document?"
     },
     "terminal": {
       "readback-on-tooltip": "Read aloud is on: spoken when this pane finishes or needs an answer — click to turn off",
