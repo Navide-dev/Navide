@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { generateKeyPairSync, sign as edSign } from 'node:crypto'
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { makeZip } from './zipFixture'
@@ -234,6 +234,68 @@ describe('plugins_install_file_fill: an agent prefills, the user approves', () =
     expect(call('plugins:listInstalled')).toEqual([])
     await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
     expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo', source: 'developer-unpacked' }])
+  })
+})
+
+describe('MED-5: staged copies live as long as their request', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('keeps every staged copy, the fifth and later included, so no earlier card fails', async () => {
+    register()
+    const ids: string[] = []
+    for (let n = 0; n < 7; n += 1) {
+      const path = join(base, `todo-${n}.vsix`)
+      writeFileSync(path, vsix(`acme.todo${n}`))
+      const staged = await stage(path)
+      ids.push(staged.result!.report.stagingId!)
+    }
+    for (const [n, stagingId] of ids.entries()) {
+      await expect(call('plugins:prepareAgentFileInstall', { stagingId })).resolves.toMatchObject({ id: `acme.todo${n}` })
+    }
+  })
+
+  it('says a copy expired once its request has, never just "gone"', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T10:00:00Z'))
+    register()
+    writeFileSync(picked, vsix())
+    const kept = (await stage(picked)).result!.report.stagingId!
+    const late = (await stage(picked)).result!.report.stagingId!
+    // Still there for the whole life of the request (15 minutes).
+    vi.setSystemTime(new Date('2026-10-20T10:14:59Z'))
+    await expect(call('plugins:prepareAgentFileInstall', { stagingId: kept })).resolves.toMatchObject({ id: 'acme.todo' })
+    vi.setSystemTime(new Date('2026-10-20T10:17:00Z'))
+    await expect(call('plugins:prepareAgentFileInstall', { stagingId: late })).rejects.toThrow(/^AGENT_STAGING_EXPIRED/)
+  })
+
+  const stagingDir = (): string => join(base, 'userData', 'plugin-staging', 'agent-file')
+  const stagedFiles = (): string[] => (existsSync(stagingDir()) ? readdirSync(stagingDir()) : [])
+
+  it('keeps the copy on disk, not in memory, and refuses it once its bytes changed there', async () => {
+    register()
+    writeFileSync(picked, vsix())
+    const stagingId = (await stage(picked)).result!.report.stagingId!
+    expect(stagedFiles()).toEqual([`${stagingId}.vsix`])
+    writeFileSync(join(stagingDir(), `${stagingId}.vsix`), vsix('acme.todo', '1.0.0', '<p>swapped</p>'))
+    await expect(call('plugins:prepareAgentFileInstall', { stagingId })).rejects.toThrow(/^STAGING_DIGEST_MISMATCH/)
+    expect(stagedFiles()).toEqual([])
+    expect(call('plugins:listInstalled')).toEqual([])
+  })
+
+  it('deletes the copy once the user decides, and once its request expires', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T10:00:00Z'))
+    register()
+    writeFileSync(picked, vsix())
+    const approved = (await stage(picked)).result!.report.stagingId!
+    const rejected = (await stage(picked)).result!.report.stagingId!
+    const expired = (await stage(picked)).result!.report.stagingId!
+    await call('plugins:prepareAgentFileInstall', { stagingId: approved })
+    await call('plugins:discardAgentStaged', { stagingId: rejected })
+    expect(stagedFiles()).toEqual([`${expired}.vsix`])
+    vi.setSystemTime(new Date('2026-10-20T10:17:00Z'))
+    await expect(call('plugins:prepareAgentFileInstall', { stagingId: expired })).rejects.toThrow(/^AGENT_STAGING_EXPIRED/)
+    expect(stagedFiles()).toEqual([])
   })
 })
 

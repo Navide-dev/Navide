@@ -11639,6 +11639,7 @@
       "cancel": "Cancel"
     },
     "publish": {
+      "stage-expired": "This package was staged more than an hour ago and has expired. Choose it again.",
       "open": "Publish a version",
       "sign-in-first": "Sign in as a publisher first: Navide signs the package with the key it keeps and uploads it.",
       "choose": "Choose a .vsix package…",

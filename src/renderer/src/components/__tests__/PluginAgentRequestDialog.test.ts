@@ -131,6 +131,56 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect(wrapper.find('[data-testid="ext-trust-agent-request"]').text()).toContain('dev')
   })
 
+  it('MED-5: a file request whose time ran out reads as expired, never as failed', async () => {
+    const file = (over: Partial<PluginAgentRequest> = {}) => request({
+      kind: 'plugin-install-file' as PluginAgentRequest['kind'],
+      target: {
+        id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.2.0', fromVersion: null,
+        path: '/Users/me/Downloads/indexer.vsix', digest: 'ab'.repeat(32), stagingId: 'cd'.repeat(16), packageKind: 'file',
+      },
+      ...over,
+    })
+    // The card's own time ran out: expired, nothing to approve.
+    const late = createMockBackend('connected')
+    late.setResponse('plugins.agent_requests.list', { requests: [file({ expires_at: Date.now() / 1000 - 1 })] })
+    wrapper = await open(late)
+    expect(wrapper.text()).toContain(i18n.global.t('plugin-request.expired'))
+    expect(wrapper.find('[data-testid="plugin-request-approve"]').exists()).toBe(false)
+    wrapper.unmount()
+    // The Host's staged copy expired between the card and the approval.
+    plugins.prepareAgentFileInstall = vi.fn(async () => {
+      throw new Error("Error invoking remote method 'plugins:prepareAgentFileInstall': Error: AGENT_STAGING_EXPIRED: this request expired; ask the agent to send it again")
+    })
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [file()] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...file(), status: 'applying' } })
+    mock.setResponse('plugins.agent_request.finish', { approval: { ...file(), status: 'failed' } })
+    wrapper = await open(mock)
+    await wrapper.find('[data-testid="plugin-request-approve"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(i18n.global.t('plugin-request.expired'))
+    expect(wrapper.find('[data-testid="plugin-request-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="plugin-request-dismiss"]').exists()).toBe(true)
+  })
+
+  it('MED-5: rejecting a file request deletes its staged copy at once', async () => {
+    plugins.discardAgentStaged = vi.fn(async () => undefined)
+    const file = request({
+      kind: 'plugin-install-file' as PluginAgentRequest['kind'],
+      target: {
+        id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.2.0', fromVersion: null,
+        path: '/x.vsix', digest: 'ab'.repeat(32), stagingId: 'cd'.repeat(16), packageKind: 'file',
+      },
+    })
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [file] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...file, status: 'rejected' } })
+    wrapper = await open(mock)
+    await wrapper.find('[data-testid="plugin-request-reject"]').trigger('click')
+    await flushPromises()
+    expect(plugins.discardAgentStaged).toHaveBeenCalledWith('cd'.repeat(16))
+  })
+
   it('approves with a window confirmation, installs, reports completed and closes', async () => {
     plugins.listInstalled.mockResolvedValue([{ id: 'acme.indexer', packageVersion: '1.2.0' }])
     const mock = createMockBackend('connected')

@@ -223,7 +223,14 @@ async function submitPublish(): Promise<void> {
   if (!pkg) return
   const result = await run('submit', () =>
     submitMarketplaceForm(props.backend, request.value, () => api().publish({ stageId: pkg.stageId, target: publishTarget.value })))
-  if (!result) return
+  if (!result) {
+    // MED-5: the staged copy outlived its time; say so and let the package be chosen again.
+    if (error.value.includes('PUBLISH_STAGE_EXPIRED')) {
+      error.value = t('marketplace-developer.publish.stage-expired')
+      staged.value = null
+    }
+    return
+  }
   if (!result.ok) {
     error.value = message(result)
     return

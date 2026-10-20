@@ -10,7 +10,10 @@
 // A package to publish is read once into a stage (like K3's installFromFile):
 // the form shows that copy's id, version, digest and disclosure, and Submit
 // signs and uploads exactly those bytes, whatever happens to the file later.
-import { randomUUID } from 'crypto'
+// Stages are files under Navide's data folder (PackageStagingStore, review
+// MED-5 / S8 Q3), re-read and digest-checked at Submit; there is no count
+// limit, and a stage goes once it is published or STAGE_TTL_MS after it was
+// made.
 import { readFileSync, statSync } from 'node:fs'
 import { basename, isAbsolute } from 'node:path'
 import type { IpcMainInvokeEvent } from 'electron'
@@ -19,6 +22,7 @@ import type { MarketplaceDeveloperQuery } from '../../shared/pluginAgentTools'
 import { redactDeveloperSecrets, registryError, type DeveloperAccount, type DeveloperSignInScope } from './developerAccount'
 import type { DeveloperCallResult, DeveloperPublicState, StagedPackage } from '../../shared/marketplaceDeveloper'
 import { isManifestV2 } from './pluginManifest'
+import { PackageStagingStore } from './pluginStagingStore'
 
 export type DeveloperQueryAnswer =
   | { ok: true; result: Record<string, unknown> & { kind: string } }
@@ -41,13 +45,16 @@ export interface DeveloperIpcDeps {
   /** A file dialog over the asking main window; null when cancelled. */
   pickPackageFile: (event: IpcMainInvokeEvent) => Promise<string | null>
   hostTarget: () => string
+  /** Folder for staged packages, under Navide's data folder. */
+  stagingRoot: string
 }
 
 const TARGET = /^[a-z0-9][a-z0-9-]{0,63}$/
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 const NAME_PART = /^[a-z0-9][a-z0-9-]*$/
-/** Stages kept at once; the oldest goes first. A stage is only a read copy. */
-const MAX_STAGES = 8
+/** How long a staged package waits for Submit; after that the form says it
+ * expired and the package is chosen again. */
+const STAGE_TTL_MS = 60 * 60 * 1000
 
 function callResult(res: { status: number; body: unknown }, ok: (status: number) => boolean): DeveloperCallResult {
   if (ok(res.status)) return { ok: true, status: res.status, body: res.body }
@@ -189,11 +196,11 @@ export function createDeveloperQueryHandler(
 }
 
 export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
-  stages: Map<string, StagedPackage & { bytes: Uint8Array }>
+  stages: PackageStagingStore<StagedPackage>
   publishFromPath: PublishFromPath
 } {
   const { account } = deps
-  const stages = new Map<string, StagedPackage & { bytes: Uint8Array }>()
+  const stages = new PackageStagingStore<StagedPackage>(deps.stagingRoot, STAGE_TTL_MS, 'PUBLISH_STAGE_EXPIRED')
   const guard = (event: IpcMainInvokeEvent): void => {
     if (!deps.authorize(event)) throw new Error('unauthorized developer request')
   }
@@ -230,7 +237,7 @@ export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
     const body = asRecord(res.body)
     return { ...res, body: { namespace: body.namespace ?? null, items: (Array.isArray(body.items) ? body.items : []).map(versionView) } }
   })
-  const stagePath = (path: string): StagedPackage & { bytes: Uint8Array } => {
+  const stagePath = (path: string): StagedPackage => {
     if (!isAbsolute(path) || !path.toLowerCase().endsWith('.vsix')) throw new Error('choose a .vsix package')
     // Only a regular file is read (never a FIFO or a device), once.
     if (!statSync(path).isFile()) throw new Error('the package path is not a regular file')
@@ -238,8 +245,8 @@ export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
     const inspected = deps.inspectPackage(bytes)
     const manifest = inspected.manifest as { backend?: unknown }
     const hasBackend = !!manifest?.backend
-    const staged: StagedPackage & { bytes: Uint8Array } = {
-      stageId: randomUUID(),
+    const staged: StagedPackage = {
+      stageId: '',
       path,
       fileName: basename(path),
       id: inspected.id,
@@ -250,13 +257,11 @@ export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
       defaultTarget: hasBackend ? deps.hostTarget() : 'universal',
       hasBackend,
       disclosure: isManifestV2(manifest as never) ? computeDisclosure(manifest as never) : null,
-      bytes,
     }
-    stages.set(staged.stageId, staged)
-    while (stages.size > MAX_STAGES) stages.delete(stages.keys().next().value as string)
+    staged.stageId = stages.stage(bytes, staged).id
     return staged
   }
-  const view = ({ bytes: _bytes, ...rest }: StagedPackage & { bytes: Uint8Array }): StagedPackage => rest
+  const view = (staged: StagedPackage): StagedPackage => ({ ...staged })
   /** Read a package once into a stage; `path` from a form (an agent's draft or a link), else a file dialog. */
   on('developer:stagePackage', async (event, rawPath): Promise<StagedPackage | null> => {
     let path = typeof rawPath === 'string' && rawPath ? rawPath : null
@@ -264,19 +269,22 @@ export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
     if (path === null) return null
     return view(stagePath(path))
   })
-  const publishStaged = async (staged: StagedPackage & { bytes: Uint8Array }, rawTarget: unknown): Promise<DeveloperCallResult & { digest?: string }> => {
+  const publishStaged = async (stageId: string, rawTarget: unknown): Promise<DeveloperCallResult & { digest?: string }> => {
+    // Re-read from disk and digest-checked; an expired stage throws PUBLISH_STAGE_EXPIRED.
+    const entry = stages.take(stageId)
+    if (!entry || !entry.bytes) throw new Error('the package is no longer staged; choose it again')
+    const staged = entry.meta
     const target = typeof rawTarget === 'string' && rawTarget ? rawTarget : staged.defaultTarget
     if (!TARGET.test(target)) throw new Error('target must be a platform target such as darwin-arm64')
-    const res = await account.publish(staged.bytes, staged.fileName, target)
+    const res = await account.publish(entry.bytes, staged.fileName, target)
     const result = callResult(res, (s) => s === 201)
-    if (result.ok) stages.delete(staged.stageId)
+    if (result.ok) stages.discard(stageId)
     return { ...result, digest: res.digest }
   }
   on('developer:publish', async (_event, raw): Promise<DeveloperCallResult & { digest?: string }> => {
     const input = asRecord(raw)
-    const staged = typeof input.stageId === 'string' ? stages.get(input.stageId) : undefined
-    if (!staged) throw new Error('the package is no longer staged; choose it again')
-    return publishStaged(staged, input.target)
+    if (typeof input.stageId !== 'string') throw new Error('the package is no longer staged; choose it again')
+    return publishStaged(input.stageId, input.target)
   })
   on('developer:yank', async (_event, raw): Promise<DeveloperCallResult> => {
     const input = asRecord(raw)
@@ -289,7 +297,7 @@ export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
   })
   const publishFromPath: PublishFromPath = async (path, target) => {
     const staged = stagePath(path)
-    return { staged: view(staged), result: await publishStaged(staged, target) }
+    return { staged: view(staged), result: await publishStaged(staged.stageId, target) }
   }
   return { stages, publishFromPath }
 }

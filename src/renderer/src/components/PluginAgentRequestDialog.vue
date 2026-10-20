@@ -71,7 +71,10 @@ const installedDisclosure = ref<ManifestDisclosure | null>(null)
 const now = ref(Date.now())
 const current = computed(() => queue.value[0] ?? null)
 // created_at / expires_at are Unix seconds; the backend expires lazily.
-const expired = computed(() => !!current.value && current.value.expires_at * 1000 <= now.value)
+// MED-5 on W1: a file request whose staged copy the Host let go (its request
+// expired meanwhile) reads as expired too, not as a failure.
+const stagingExpired = ref(false)
+const expired = computed(() => !!current.value && (stagingExpired.value || current.value.expires_at * 1000 <= now.value))
 const label = computed(() => (current.value ? `${current.value.target.namespace}.${current.value.target.name}` : ''))
 // A kind this Navide cannot carry out yet is shown but cannot be approved.
 const appliable = computed(() => !!current.value && isAppliableKind(current.value.kind))
@@ -154,6 +157,7 @@ const diff = computed<DisclosureDiff | null>(() => {
 
 watch(() => current.value?.approval_id, async (approvalId) => {
   error.value = ''
+  stagingExpired.value = false
   outcome.value = null
   finishedLate.value = false
   installedDisclosure.value = null
@@ -269,6 +273,9 @@ async function decide(approve: boolean): Promise<void> {
       return
     }
     if (!approve) {
+      // MED-5: a rejected file request's staged copy is deleted now, not at expiry.
+      const stagingId = request.kind === 'plugin-install-file' ? request.target.stagingId : undefined
+      if (stagingId) void window.agentTeam?.plugins?.discardAgentStaged?.(stagingId)?.catch(() => undefined)
       drop(request.approval_id)
       return
     }
@@ -280,6 +287,8 @@ async function decide(approve: boolean): Promise<void> {
         { type: finishedLate.value ? 'info' : 'success' },
       )
       drop(request.approval_id)
+    } else if (result.error.includes('AGENT_STAGING_EXPIRED')) {
+      stagingExpired.value = true
     } else {
       outcome.value = 'failed'
       error.value = t('plugin-request.failed', { error: result.error })

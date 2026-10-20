@@ -611,7 +611,14 @@ environment variable still cannot install from a file.
 | `plugins_install_file_fill` | `path`, `reason=""` | Navide reads the `.vsix` once, checks it and holds that copy (a folder needs Developer Mode on), then files a `plugin-install-file` request. The user sees who asked, the reason (as the agent's), the path, the SHA-256 and that Navide has not reviewed it; approving opens the "Install from file" consent dialog with the held copy. Returns `{ok, approval_id, status: "pending", expires_at, id, version, digest, packageKind, signature, reviewedByNavide: false, note}`, or `PACKAGE_INVALID` with `errors` when a local install would refuse it. Follow it with `marketplace_request_status` |
 
 A path inside Navide's own data folder is refused, and so is a file larger
-than any package. The package's own text (id, version, errors quoting its
+than any package. Navide keeps every staged copy, however many requests are
+open, for as long as its request lives: 15 minutes, the same as every Navide
+plugin request, plus one minute, so a request the user can still approve
+always installs its own copy. When the request expires the copy is dropped
+and the card reads "This request expired.", not a failure; an approval after
+that installs nothing, and `marketplace_request_status` reports the request
+`expired` (or `failed` with `AGENT_STAGING_EXPIRED` when the window caught
+it). Ask again with `plugins_install_file_fill`. The package's own text (id, version, errors quoting its
 manifest, the disclosure) is fenced as above and marks the reading pane.
 `plugins_list_installed` also returns each item's `source` (`marketplace`,
 `prerelease`, `testplace`, `local-signed`, `local-unsigned`,

@@ -1382,6 +1382,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
      *  by its stagingId; never a path. Installs nothing. */
     prepareAgentFileInstall: (stagingId: string): Promise<PreparedInstallSummary> =>
       ipcRenderer.invoke('plugins:prepareAgentFileInstall', { stagingId }),
+    /** The user rejected an agent's file request: drop its staged copy. */
+    discardAgentStaged: (stagingId: string): Promise<void> =>
+      ipcRenderer.invoke('plugins:discardAgentStaged', { stagingId }),
     /** Card K4: the Developer Mode switch and the developer folders. The main
      *  process owns the switch; it opens its own folder dialog. */
     developerMode: (): Promise<DeveloperModeState> => ipcRenderer.invoke('plugins:developerMode'),
