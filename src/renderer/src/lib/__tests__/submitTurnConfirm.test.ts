@@ -306,20 +306,20 @@ describe('blockingDialogShown', () => {
     expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: picker })).toBe(true)
   })
 
-  // The frame test is shared by every vendor: two box-only rows with no prompt
-  // glyph between them are no longer an input box, so codex's dialog above
-  // them is read and the extra Enter is not sent.
-  it('reads a codex dialog above two rules that frame no prompt row', () => {
-    const rule = '────────────────────────────────────────'
-    const screen = [
-      'Would you like to run the following command?',
-      '› 1. Yes, proceed (y)',
-      '  2. No, and tell Codex what to do differently (esc)',
-      rule,
-      '  Press enter to confirm or esc to cancel',
-      rule,
-    ].join('\n')
-    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'codex', screen })).toBe(true)
+  // The prompt-row test for the frame is Claude's: another vendor's framed
+  // composer may draw no glyph, a heavy bar, or hold a draft starting "1.",
+  // and is still read below its frame as on main.
+  it('keeps a non-claude framed composer without a prompt glyph framed', () => {
+    const rule = '─'.repeat(60)
+    const transcript = ['codex said: "Hooks need review" earlier', '']
+    for (const box of [
+      ['┏' + rule + '┓', '┃ my draft', '┗' + rule + '┛'],
+      ['╭' + rule + '╮', '│ my draft │', '╰' + rule + '╯'],
+      [rule, '› 1. first item', rule],
+    ]) {
+      const screen = [...transcript, ...box].join('\n')
+      expect(blockingDialogShown({ awaitingKind: null, agentKey: 'codex', screen }), screen).toBe(false)
+    }
   })
 
   // Frameless (codex): the composer is the prompt row and what wraps below

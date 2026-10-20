@@ -101,10 +101,12 @@ export function blockingDialogShown(input: {
   for (let i = close - 1; i >= 0; i--) {
     if (BOX_ONLY_LINE_RE.test(lines[i])) { open = i; break }
   }
-  // Two box-only rows are the input box only when a prompt row sits between
-  // them: border characters left below a live dialog's footer pair up the same
-  // way, and reading below THEM would skip the dialog.
-  const framed = open >= 0 && lines.slice(open + 1, close).some(line => FRAMED_PROMPT_ROW_RE.test(line))
+  // For Claude, two box-only rows are the input box only when a prompt row sits
+  // between them: border characters left below a live dialog's footer pair up
+  // the same way, and reading below THEM would skip the dialog. Other vendors
+  // keep main's frame test: their composers may draw no glyph inside the frame.
+  const framed = open >= 0 && (input.agentKey !== 'claude'
+    || lines.slice(open + 1, close).some(line => FRAMED_PROMPT_ROW_RE.test(line)))
   let region = input.screen
   if (framed) {
     region = lines.slice(close + 1).join('\n')
