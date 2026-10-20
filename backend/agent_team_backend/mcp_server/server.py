@@ -10315,8 +10315,10 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
 
     The same accounts Settings → Accounts shows, read from Navide's account
     store only: it says which accounts exist and which is active, not who is
-    signed in to them — no email and no signed-in flag, since both would mean
-    reading the credentials themselves. Read-only: nothing is switched or
+    signed in to them — no signed-in flag, since that would mean reading the
+    credentials themselves. An account's `name` is the name the user gave it,
+    and an account Navide added on its own is named after the email it was
+    signed in with, so a name can be an email. Read-only: nothing is switched or
     refreshed. Quota is in cli_usage, the failover state in
     cli_failover_state.
 
@@ -10519,14 +10521,16 @@ async def cli_account_switch(
     Returns {ok: true, status, agent, profile_id, from, to}: status
     "switched", or "switched-signed-out" when the account switched to has no
     usable sign-in (the window then starts one for the user); from and to are
-    the accounts' display names, never an email. Otherwise {ok: false, error,
+    the accounts' display names: the alias or name the user gave them, and an
+    account Navide added on its own is named after its email, so either can be
+    an email. Otherwise {ok: false, error,
     error_code}: "pane-only", "bad-request", "reason-required",
     "unknown-profile", "already-active", "unknown-caller", "declined" (the
     user said no), "confirm-timeout" (the user did not answer in time),
     "busy" (another agent's switch is waiting for the user),
     "restart-declined", "refused" (Navide refused the switch; `code` says
     why, e.g. SWITCH_RATE_LIMITED or UNRECONCILED_STATE) or
-    "window-unavailable". No credential, token or email ever comes back.
+    "window-unavailable". No credential or token ever comes back.
     """
     try:
         caller = _resolve_caller(ctx)
