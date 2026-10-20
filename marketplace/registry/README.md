@@ -501,7 +501,9 @@ approved by default.
   publishes. `/api/cli/token` answers `{token, scope, namespace, expires_at}`.
 - **Application**: `GET|POST /api/developer/me/application` (account or
   publisher token) or the website form `/developer/apply`. Real-name fields;
-  `field_sources` marks each field `user` or `agent-draft`.
+  `field_sources` marks each field `user` or `agent-draft`. The GET answer
+  also lists the account's frozen namespaces as `namespaces: [{namespace,
+  frozen_at, frozen_reason}]`.
 - **Admin queue**: `/admin/developers`, `GET /api/admin/developers`,
   `POST /api/admin/developers/{member_id}/approve|reject|revoke` (a reason is
   required to reject or revoke). Revoking, in one transaction, revokes every
