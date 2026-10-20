@@ -122,7 +122,7 @@ function assertNoSymlinkPath(root, path) {
       stat = lstatSync(candidate, { bigint: true })
     } catch (error) {
       if (error && typeof error === 'object' && error.code === 'ENOENT') {
-        fail(`package entry '${path}' does not exist`)
+        fail(`package entry '${path}' is listed in ${CANONICAL_FILE_LIST} but does not exist`)
       }
       throw error
     }
@@ -198,6 +198,9 @@ function parseFileList(directory) {
 
 function assertPublishableFile(path) {
   const segments = path.split('/')
+  if (segments.includes('.navide-dev')) {
+    fail(`package entry '${path}' is dev-backend data (.navide-dev); remove it from ${CANONICAL_FILE_LIST}`)
+  }
   if (segments.some((segment) => SOURCE_ONLY_SEGMENTS.has(segment))) {
     fail(`package entry '${path}' is source-only build input`)
   }
@@ -219,7 +222,7 @@ function collectFiles(directory, paths, root = realpathSync(directory)) {
       stat = lstatSync(fullPath, { bigint: true })
     } catch (error) {
       if (error && typeof error === 'object' && error.code === 'ENOENT') {
-        fail(`package entry '${path}' does not exist`)
+        fail(`package entry '${path}' is listed in ${CANONICAL_FILE_LIST} but does not exist`)
       }
       throw error
     }
