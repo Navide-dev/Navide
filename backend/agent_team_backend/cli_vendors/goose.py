@@ -43,11 +43,11 @@ import logging
 import os
 import re
 import sqlite3
-import sys
 from collections.abc import Iterable
 from pathlib import Path
 
 from .base import Dep, ExtensionsSpec, PlatformInstall, VendorSpec, command_text
+from ..osplat import platform_id as _platform_id
 from ..usage_common import _epoch_to_iso
 from ..log_readers.base import (
     ActivityEvent,
@@ -135,14 +135,15 @@ def _absolute(value: str | None) -> Path | None:
     return Path(value) if value and os.path.isabs(value) else None
 
 
-def _data_dir(env: dict | None = None, home: Path | None = None) -> Path:
-    """The CLI's data dir, by its own rule (see the module docstring)."""
+def _data_dir(env: dict | None = None, home: Path | None = None, platform: str | None = None) -> Path:
+    """The CLI's data dir, by its own rule (see the module docstring).
+    ``platform`` defaults to this process's (``osplat.platform_id``)."""
     env = os.environ if env is None else env
     home = Path.home() if home is None else home
     root = _absolute(env.get("GOOSE_PATH_ROOT"))
     if root is not None:
         return root / "data"
-    if sys.platform == "win32":
+    if (platform or _platform_id) == "win32":
         appdata = env.get("APPDATA")
         base = Path(appdata) if appdata else home / "AppData" / "Roaming"
         return base / "Block" / "goose" / "data"

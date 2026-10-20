@@ -74,16 +74,15 @@ def _tool(name):
 # ── data dir ──────────────────────────────────────────────────────────────
 
 
-def test_data_dir_follows_the_cli_rule(tmp_path, monkeypatch):
+def test_data_dir_follows_the_cli_rule(tmp_path):
     home = tmp_path / "h"
-    monkeypatch.setattr(goose.sys, "platform", "darwin")
-    assert _data_dir({}, home) == home / ".local" / "share" / "goose"
-    assert _data_dir({"XDG_DATA_HOME": str(tmp_path / "x")}, home) == tmp_path / "x" / "goose"
-    assert _data_dir({"GOOSE_PATH_ROOT": str(tmp_path / "r"), "XDG_DATA_HOME": str(tmp_path / "x")}, home) == tmp_path / "r" / "data"
+    posix = "darwin"
+    assert _data_dir({}, home, posix) == home / ".local" / "share" / "goose"
+    assert _data_dir({"XDG_DATA_HOME": str(tmp_path / "x")}, home, posix) == tmp_path / "x" / "goose"
+    assert _data_dir({"GOOSE_PATH_ROOT": str(tmp_path / "r"), "XDG_DATA_HOME": str(tmp_path / "x")}, home, posix) == tmp_path / "r" / "data"
     # The CLI ignores a relative root (paths.rs validated_path_root).
-    assert _data_dir({"GOOSE_PATH_ROOT": "relative/root"}, home) == home / ".local" / "share" / "goose"
-    monkeypatch.setattr(goose.sys, "platform", "win32")
-    assert _data_dir({"APPDATA": str(tmp_path / "ad")}, home) == tmp_path / "ad" / "Block" / "goose" / "data"
+    assert _data_dir({"GOOSE_PATH_ROOT": "relative/root"}, home, posix) == home / ".local" / "share" / "goose"
+    assert _data_dir({"APPDATA": str(tmp_path / "ad")}, home, "win32") == tmp_path / "ad" / "Block" / "goose" / "data"
 
 
 # ── resume ────────────────────────────────────────────────────────────────
