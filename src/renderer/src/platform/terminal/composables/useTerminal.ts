@@ -3315,9 +3315,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     return !!dims && Number.isFinite(dims.cols) && resizeCtrl.capCols(dims.cols) < dims.cols
   }
 
-  // The user's explicit opt-out of the cap: widen to the full container now.
-  // Widening reflows the scrollback, which is the cost the cap exists to avoid,
-  // so this only ever runs from a user action — never from a layout path.
+  // Lift the cap and widen to the full container now. Widening reflows the
+  // scrollback, which is the cost the cap exists to avoid, so this only runs
+  // when the user asks for width: the "Fit to pane width" item, or widening
+  // the window itself — never from a layout-mode switch.
   function unlockCols(): void {
     lockCols(false)
     fitTerminal({ redrawAfterSettle: true })

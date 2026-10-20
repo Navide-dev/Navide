@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest'
 
 // App.vue mounts backend/terminal/onboarding lifecycles, so it is not
 // practical to mount here (see App.idleReclaim.test.ts). The cap behavior is
-// unit-tested in useTerminal.fitWidth.test.ts; this file guards the wiring of
-// the pane menu's "Fit to pane width" and the layout-mode cap it opts out of.
+// unit-tested in useTerminal.fitWidth.test.ts and lib/stageWidthCap.test.ts;
+// this file guards the wiring of the pane menu's "Fit to pane width" and of
+// the layout-mode cap it opts out of.
 const appSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/App.vue'),
   'utf8'
@@ -39,18 +40,23 @@ describe('fit to pane width in the pane context menu', () => {
   })
 })
 
-// The cap exists so a layout-mode switch never widens (and reflows) the
-// scrollback on its own. Only the explicit menu action may lift it.
-describe('layout-mode cols cap', () => {
-  it('still caps every pane outside grid mode and refits after a frame', () => {
+// A layout-mode switch caps every pane at its current cols (stageWidthCap owns
+// the policy), then refits with a redraw after a frame. Widening the window is
+// the only thing that lifts the cap, and it is routed through the same module.
+describe('layout-mode switch wiring', () => {
+  it('hands the new mode to the cap policy, then refits every pane with a redraw after a frame', () => {
     const watcher = block('watch(effectiveLayoutMode, (mode) => {', '// Tab switches and minimize/restore')
-    expect(watcher).toContain("const capped = mode !== 'grid'")
-    expect(watcher).toContain('?.lockCols?.(capped)')
+    expect(watcher).toContain('stageWidthCap.enterMode(mode)')
     expect(watcher).toContain('?.fitTerminal?.({ redrawAfterSettle: true })')
-    expect(watcher).not.toContain('unlockCols')
+    expect(watcher.indexOf('stageWidthCap.enterMode(mode)')).toBeLessThan(watcher.indexOf('fitTerminal'))
   })
 
-  it('lifts the cap nowhere else in App.vue but the menu item', () => {
+  it('routes the window resize through the cap policy', () => {
+    const handler = block('function onWindowResize(): void {', '\nfunction onResizeEnd')
+    expect(handler).toContain('stageWidthCap.onWindowResize()')
+  })
+
+  it('calls unlockCols only from the menu item; the window-widen lift lives in stageWidthCap', () => {
     expect(appSource.match(/unlockCols/g)?.length).toBe(1)
   })
 })
