@@ -11327,6 +11327,7 @@
       "prerelease": "預覽版（已審核）",
       "testplace": "測試版，沒有人工審核，{date} 到期",
       "testplaceNoExpiry": "測試版，沒有人工審核，到期日不明",
+      "testplaceRevokeNote": "離線或未登入 Navide Cloud 時，開發者撤回這個版本，最晚要到它到期（最多 90 天）才會生效。",
       "testplaceInvite": "測試版：只經過自動掃描，{date} 到期",
       "testplaceCode": "測試版：公開測試碼已經過輕量人工審核，這一版沒有人工審核，{date} 到期",
       "testplaceExpired": "測試版，已於 {date} 到期（繼續使用中）",

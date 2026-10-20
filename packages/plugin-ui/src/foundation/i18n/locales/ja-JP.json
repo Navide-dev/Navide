@@ -11327,6 +11327,7 @@
       "prerelease": "プレリリース版（審査済み）",
       "testplace": "テスト版。人による審査なし。{date} に期限切れ",
       "testplaceNoExpiry": "テスト版。人による審査なし。期限不明",
+      "testplaceRevokeNote": "オフラインまたは Navide Cloud にサインインしていない間は、開発者による取り下げは最長で期限切れ（最大 90 日）まで反映されません。",
       "testplaceInvite": "テスト版：自動スキャンのみ。{date} に期限切れ",
       "testplaceCode": "テスト版：公開テストコードは簡易な人による審査済み、このバージョンは人による審査なし。{date} に期限切れ",
       "testplaceExpired": "テスト版。{date} に期限切れ（使用を継続中）",

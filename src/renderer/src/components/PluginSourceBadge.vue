@@ -58,6 +58,8 @@ const publisherText = computed(() => {
   <div v-if="row" class="nv-source-row" :data-source="shown" :data-signature="signature">
     <span class="nv-source-row-label">{{ $t('pluginDisclosure.source.heading') }}</span> <span class="nv-source-badge" :class="badgeClass">{{ label }}</span>
     <p v-if="local" class="nv-source-scan">{{ $t('pluginDisclosure.source.notScanned') }}</p>
+    <!-- S8: a withdrawal reaches an offline or signed-out tester only at the expiry. -->
+    <p v-if="source === 'testplace'" class="nv-source-revoke">{{ $t('pluginDisclosure.source.testplaceRevokeNote') }}</p>
     <p v-if="publisherText" class="nv-source-publisher">{{ $t('pluginDisclosure.source.publisher', { publisher: publisherText }) }}</p>
   </div>
   <span v-else class="nv-source-badge" :class="badgeClass" :data-source="shown" :data-signature="signature">{{ label }}</span>

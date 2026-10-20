@@ -11327,6 +11327,7 @@
       "prerelease": "Pre-release (reviewed)",
       "testplace": "Test build, no human review, expires {date}",
       "testplaceNoExpiry": "Test build, no human review, expiry unknown",
+      "testplaceRevokeNote": "While you are offline or not signed in to Navide Cloud, a withdrawal by its developer takes effect at the latest when it expires (up to 90 days).",
       "testplaceInvite": "Test build: automated scan only, expires {date}",
       "testplaceCode": "Test build: the public test code had a light human review; this version had none. Expires {date}",
       "testplaceExpired": "Test build, expired {date} (kept in use)",

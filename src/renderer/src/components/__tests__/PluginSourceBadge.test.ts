@@ -93,16 +93,21 @@ describe('PluginSourceBadge (K2)', () => {
     for (const locale of LOCALES) {
       i18n.global.locale.value = locale
       shown[locale] = {
-        invite: render({ source: 'testplace', expiresAt, via: 'invite', row: true }).text(),
-        code: render({ source: 'testplace', expiresAt, via: 'code', row: true }).text(),
-        unknown: render({ source: 'testplace', expiresAt, via: null, row: true }).text(),
+        invite: render({ source: 'testplace', expiresAt, via: 'invite', row: true }).get('.nv-source-badge').text(),
+        code: render({ source: 'testplace', expiresAt, via: 'code', row: true }).get('.nv-source-badge').text(),
+        unknown: render({ source: 'testplace', expiresAt, via: null, row: true }).get('.nv-source-badge').text(),
       }
     }
     expect(shown['zh-TW']).toEqual({
-      invite: '來源與審核 測試版：只經過自動掃描，2026-12-31 到期',
-      code: '來源與審核 測試版：公開測試碼已經過輕量人工審核，這一版沒有人工審核，2026-12-31 到期',
-      unknown: '來源與審核 測試版，沒有人工審核，2026-12-31 到期',
+      invite: '測試版：只經過自動掃描，2026-12-31 到期',
+      code: '測試版：公開測試碼已經過輕量人工審核，這一版沒有人工審核，2026-12-31 到期',
+      unknown: '測試版，沒有人工審核，2026-12-31 到期',
     })
+    // S8: the row tells a tester when a withdrawal reaches them offline.
+    i18n.global.locale.value = 'zh-TW'
+    expect(render({ source: 'testplace', expiresAt, row: true }).get('.nv-source-revoke').text())
+      .toBe('離線或未登入 Navide Cloud 時，開發者撤回這個版本，最晚要到它到期（最多 90 天）才會生效。')
+    expect(render({ source: 'marketplace', row: true }).find('.nv-source-revoke').exists()).toBe(false)
     // A public code's review is of the code, never of the version: no locale may call the version reviewed.
     expect(shown['en-US'].code).toContain('this version had none')
     expect(shown['ja-JP'].code).toContain('このバージョンは人による審査なし')
