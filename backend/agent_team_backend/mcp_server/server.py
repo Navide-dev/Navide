@@ -5600,25 +5600,57 @@ class _SelfScope:
     window_ids: frozenset[str]
 
 
+def _same_directory(a: str, b: str) -> bool:
+    """Whether two workspace paths name the same folder.
+
+    Compared by the folder's identity (device, inode) rather than by string:
+    on a case-insensitive volume (macOS, Windows) Path.resolve keeps the case
+    it was given, so "/Users/me/Proj" and "/users/me/proj" are one folder
+    with two spellings. Falls back to the normalised strings when either
+    path cannot be stat'ed (a folder that is gone).
+    """
+    if not a or not b:
+        return False
+    a = os.path.expanduser(a)
+    b = os.path.expanduser(b)
+    try:
+        sa, sb = os.stat(a), os.stat(b)
+    except OSError:
+        na, nb = _norm_workspace(a), _norm_workspace(b)
+        if sys.platform in ("darwin", "win32"):
+            # Their default volumes ignore case, so a folder that is gone
+            # still matches its other spellings.
+            return na.casefold() == nb.casefold()
+        return na == nb
+    return (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino)
+
+
 def _self_scope(caller: _Caller) -> _SelfScope | None:
     """The caller's own pane, workspace and windows; None for a caller with no
     pane (host / external), which has nothing of its own to protect."""
-    from agent_team_backend import agent_messaging
+    from agent_team_backend import agent_messaging, app
 
     if caller.kind != "pane":
         return None
     entry = agent_messaging.get(caller.pane_id)
     if entry is None:
         return None
-    workspace = _norm_workspace(entry.workspace_path) if entry.workspace_path else ""
+    workspace = entry.workspace_path or ""
     windows: set[str] = set()
     for pane in agent_messaging.list_panes():
-        if pane.pane_id != entry.pane_id and not (
-            workspace and pane.workspace_path and _norm_workspace(pane.workspace_path) == workspace
-        ):
+        if pane.pane_id != entry.pane_id and not _same_directory(pane.workspace_path, workspace):
             continue
         window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
         if window_id:
+            windows.add(window_id)
+    # A main window holding the caller's workspace with none of its panes in
+    # it — they all sit in detached group windows — is still the caller's
+    # own: closing it closes the caller's workspace. Windows report what they
+    # hold with ui.invoke.ready.
+    for session in app.main_window_sessions():
+        window_id = str(getattr(session, "window_id", "") or "")
+        held = getattr(session, "held_workspaces", ()) or ()
+        if window_id and any(_same_directory(path, workspace) for path in held):
             windows.add(window_id)
     return _SelfScope(entry.pane_id, workspace, frozenset(windows))
 
@@ -5634,7 +5666,40 @@ def _named_pane_id(value: Any) -> str:
     return entry.pane_id if entry is not None else named
 
 
-def _self_scope_refusal(caller: _Caller, action: str, args: dict[str, Any] | None) -> dict[str, Any] | None:
+def _lands_in_own_window(scope: _SelfScope, workspace_path: str) -> bool:
+    """Whether a window-level request (one that acts on whichever window
+    answers it, such as workbench.action.closeWindow) would be answered by one
+    of the caller's own windows.
+
+    An empty workspace_path, or the caller's own workspace, is addressed to
+    the caller's window outright. Another project lands in the window holding
+    it — the caller's own when that window also holds the caller's workspace,
+    as far as the registry shows (a window holding a project with no pane is
+    not visible here; the window repeats the check with what it knows).
+    """
+    from agent_team_backend import agent_messaging, app
+
+    if not workspace_path or _same_directory(workspace_path, scope.workspace):
+        return True
+    for pane in agent_messaging.list_panes():
+        if not _same_directory(pane.workspace_path, workspace_path):
+            continue
+        window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
+        if window_id in scope.window_ids:
+            return True
+    # A window holding that project with no pane of it, as it announced.
+    for session in app.main_window_sessions():
+        held = getattr(session, "held_workspaces", ()) or ()
+        if str(getattr(session, "window_id", "") or "") in scope.window_ids and any(
+            _same_directory(path, workspace_path) for path in held
+        ):
+            return True
+    return False
+
+
+def _self_scope_refusal(
+    caller: _Caller, action: str, args: dict[str, Any] | None, workspace_path: str = ""
+) -> dict[str, Any] | None:
     """Refuse closing the caller's own pane, workspace or window.
 
     The same rule as cli_close_agent's "self-close" and cli_reclaim_agent's
@@ -5646,6 +5711,10 @@ def _self_scope_refusal(caller: _Caller, action: str, args: dict[str, Any] | Non
     if scope is None:
         return None
     a = args or {}
+    # TODO(S4, review #534 MED-3): ui.workspace.close and ui.window.close are
+    # registered in S4, which must use exactly these arg names (`path`,
+    # `windowId`) and must either require `path` or treat an empty one as the
+    # caller's own workspace — an empty path is not refused here.
     if action == "ui.pane.close" and _named_pane_id(a.get("paneId")) == scope.pane_id:
         return {
             "ok": False,
@@ -5660,7 +5729,7 @@ def _self_scope_refusal(caller: _Caller, action: str, args: dict[str, Any] | Non
         path = str(a.get("path") or "")
         if path.startswith("~"):
             path = os.path.expanduser(path)
-        if path and scope.workspace and _norm_workspace(path) == scope.workspace:
+        if path and _same_directory(path, scope.workspace):
             return {
                 "ok": False,
                 "result": None,
@@ -5670,7 +5739,21 @@ def _self_scope_refusal(caller: _Caller, action: str, args: dict[str, Any] | Non
                 ),
                 "error_code": "self-workspace-close",
             }
-    if action == "ui.window.close" and str(a.get("windowId") or "") in scope.window_ids:
+    if action == "ui.pipeline.reset" and _lands_in_own_window(scope, workspace_path):
+        # Reset kills every pane in the window that answers it (onKillAll),
+        # pipeline or not, without asking — the caller's own included.
+        return {
+            "ok": False,
+            "result": None,
+            "error": (
+                "a pipeline reset ends every pane in the window that runs it, and that "
+                "window holds your own pane — it would end you with them. Ask the user to reset it."
+            ),
+            "error_code": "self-close",
+        }
+    if (action == "ui.window.close" and str(a.get("windowId") or "") in scope.window_ids) or (
+        action == "workbench.action.closeWindow" and _lands_in_own_window(scope, workspace_path)
+    ):
         return {
             "ok": False,
             "result": None,
@@ -5681,6 +5764,17 @@ def _self_scope_refusal(caller: _Caller, action: str, args: dict[str, Any] | Non
             "error_code": "self-window-close",
         }
     return None
+
+
+#: Close actions reachable only through their dedicated tools (S4), which
+#: record the action and show the user who did it. ui_invoke refuses them.
+_DEDICATED_CLOSE_ACTIONS = {
+    "ui.window.close": "window_close",
+    "ui.workspace.close": "workspace_close",
+    # The ⌘⇧W keybinding command closes whichever window answers; aimed at
+    # someone else's window it would close it with no record (review #534 R2).
+    "workbench.action.closeWindow": "window_close",
+}
 
 
 def _self_reclaim_entry(pane_id: str) -> dict[str, str]:
@@ -6243,7 +6337,17 @@ async def ui_invoke(
             "error": f"{action} is not a ui_invoke action; use cli_account_sign_in or cli_account_switch",
             "error_code": "ui_dedicated_tool",
         }
-    refused_self = _self_scope_refusal(caller, action, args)
+    if action in _DEDICATED_CLOSE_ACTIONS:
+        # Closing a window or a workspace leaves an action record and tells
+        # the user which pane did it; only the dedicated tools do that, so this
+        # route is closed rather than left as a silent way around them.
+        return {
+            "ok": False,
+            "result": None,
+            "error": f"{action} is not a ui_invoke action; use {_DEDICATED_CLOSE_ACTIONS[action]}",
+            "error_code": "ui_dedicated_tool",
+        }
+    refused_self = _self_scope_refusal(caller, action, args, workspace_path)
     if refused_self is not None:
         return refused_self
     if action == "ui.pane.reclaim":
@@ -6265,8 +6369,10 @@ async def ui_invoke(
                 args={**(args or {}), "paneId": rest},
             )
             result = reply.get("result")
-            if reply.get("ok") and isinstance(result, dict):
-                reply["result"] = {**result, "refused": [*(result.get("refused") or []), own]}
+            # Kept on an error reply too: the caller must still learn that its
+            # own id was taken out of the batch.
+            base = result if reply.get("ok") and isinstance(result, dict) else {"reclaimed": []}
+            reply["result"] = {**base, "refused": [*(base.get("refused") or []), own]}
             return reply
     return await _ui_request(
         workspace_path,
@@ -8860,6 +8966,9 @@ async def pipeline_reset(ctx: Context, workspace_path: str = "") -> dict[str, An
     """
     caller = _resolve_caller(ctx)
     workspace_path = await _run_workspace(caller, workspace_path)
+    refused_self = _self_scope_refusal(caller, "ui.pipeline.reset", {}, workspace_path)
+    if refused_self is not None:
+        return refused_self
     return await _ui_request(
         workspace_path, "invoke", caller=caller, action="ui.pipeline.reset", args={}
     )
