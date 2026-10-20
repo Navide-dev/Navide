@@ -19,7 +19,7 @@ function cacheFixture() {
     writeFileSync(destination, content)
   }
   file('package.json', '{}')
-  file('pnpm-lock.yaml')
+  file('bun.lock')
   for (const name of ['plugin-contracts', 'plugin-sdk', 'plugin-ui']) file(`packages/${name}/src/index.ts`)
   file('plugins/navide-mini-ide/src/App.vue')
   const build = vi.fn(() => {
@@ -40,7 +40,7 @@ it.each([
   'packages/plugin-contracts/src/index.ts', 'packages/plugin-sdk/tsconfig.build.json',
   'packages/plugin-ui/src/index.ts', 'plugins/navide-mini-ide/src/App.vue',
   'plugins/navide-mini-ide/vite.config.ts', 'plugins/navide-mini-ide/manifest.json',
-  'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'bun.lock', 'bunfig.toml', 'tsconfig.web.json', '.env.production',
+  'package.json', 'bun.lock', 'bunfig.toml', 'tsconfig.web.json', '.env.production',
   'tests/support/publicPackagesSetup.ts', 'node_modules/vite/package.json',
 ])('rebuilds after changing build input %s', (path) => {
   const { root, file, build } = cacheFixture()

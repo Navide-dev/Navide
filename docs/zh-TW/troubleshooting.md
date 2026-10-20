@@ -4,16 +4,18 @@
 
 ## 應用程式無法啟動
 
-1. 確認 Node.js 22.12+（22.x）、pnpm 10+、Python 3.12+ 與 uv 0.11+。
+1. 確認 Bun（版本固定於 `.bun-version`）、Python 3.12+ 與 uv 0.11+。
 2. 重新安裝 Lockfile 指定的相依套件：
 
    ```bash
-   pnpm install --frozen-lockfile
+   bun install --frozen-lockfile
    uv --project backend sync --locked
    ```
 
-3. 在 Terminal 中以 `pnpm dev` 啟動，檢查第一個 Backend 或 Electron Error。
-4. 執行 `pnpm typecheck`，區分環境問題與原始碼錯誤。
+3. 在 Terminal 中以 `bun run dev` 啟動，檢查第一個 Backend 或 Electron Error。
+4. 執行 `bun run typecheck`，區分環境問題與原始碼錯誤。
+5. 若 `node_modules` 曾用 pnpm 或 npm 安裝過，請刪除後重新執行 `bun install --frozen-lockfile`；不要在同一個 `node_modules` 混用 `bun install` 與 `pnpm install`。
+6. 若前端測試結果不對勁，請確認執行的是 `bun run test:run`：直接執行 `bun test` 會啟動 Bun 自己的測試執行器，而不是 Vitest。
 
 ## Backend Health 持續顯示不可用
 

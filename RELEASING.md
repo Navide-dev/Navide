@@ -33,7 +33,7 @@ around it, not the build itself.
   `NAVIDE_MIRROR_AWS_ACCESS_KEY_ID` and `NAVIDE_MIRROR_AWS_SECRET_ACCESS_KEY`
   (IAM user `navide-release-upload`, AWS account NT-網域; it can only write
   `releases/*` in the mirror bucket and invalidate its distribution).
-- `node`, `pnpm`, `uv`, `git` on PATH.
+- `node`, `bun`, `uv`, `git` on PATH.
 
 ## Pre-release checklist
 

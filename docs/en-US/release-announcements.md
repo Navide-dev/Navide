@@ -82,7 +82,7 @@ Its text is under `tour.v0_2_10.*` in all three locale files.
 
 ## What the tests enforce
 
-Run `pnpm exec vitest run src/renderer/src/lib/__tests__ src/renderer/src/components/__tests__/WhatsNewModal.test.ts packages/plugin-ui/src/foundation/i18n/__tests__/locales.test.ts`.
+Run `bun run vitest run src/renderer/src/lib/__tests__ src/renderer/src/components/__tests__/WhatsNewModal.test.ts packages/plugin-ui/src/foundation/i18n/__tests__/locales.test.ts`.
 They fail when any of these is broken:
 
 - Versions have no gaps and no duplicates (`whatsNew.test.ts`).

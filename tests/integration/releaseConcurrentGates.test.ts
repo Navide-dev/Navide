@@ -72,7 +72,7 @@ describe.skipIf(isWindows())('release.sh gates', () => {
     expect(result.stdout).not.toContain('after')
   })
 
-  // The background command spawns a grandchild, as `pnpm typecheck` runs its
+  // The background command spawns a grandchild, as `bun run typecheck` runs its
   // chain; stopping only the recorded pid would leave the grandchild running.
   it.each([['SIGINT', 130], ['SIGTERM', 143]] as const)('stops the whole background tree on %s', async (signal, code) => {
     const cwd = scratch()

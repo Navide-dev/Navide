@@ -24,25 +24,11 @@ type CommandResult = {
 
 const repositoryRoot = resolve(import.meta.dirname, '../../..')
 
-function packageManager(): { command: string; prefix: string[] } {
-  const inherited = process.env.npm_execpath ?? ''
-  const configured = process.env.NAVIDE_PNPM ?? (/pnpm/i.test(inherited) ? inherited : '')
-  if (!configured) return { command: 'pnpm', prefix: [] }
-  if (configured.endsWith('.js') || configured.endsWith('.cjs')) {
-    return { command: process.execPath, prefix: [configured] }
-  }
-  return { command: configured, prefix: [] }
-}
-
 function subprocessEnvironment(): NodeJS.ProcessEnv {
   const nodeDirectory = dirname(process.execPath)
   return {
     ...process.env,
     CI: '1',
-    PNPM_CONFIG_PM_ON_FAIL: 'ignore',
-    // A newer pnpm than the repo's pinned 10.x enables verify-deps-before-run
-    // by default and can wipe node_modules on a lockfile-config mismatch.
-    npm_config_verify_deps_before_run: 'false',
     PATH: `${nodeDirectory}:${process.env.PATH ?? ''}`,
   }
 }
@@ -87,19 +73,6 @@ function run(command: string, args: string[], cwd: string): Promise<CommandResul
   })
 }
 
-function runPnpm(args: string[], cwd: string): Promise<CommandResult> {
-  const invocation = packageManager()
-  return run(invocation.command, [...invocation.prefix, ...args], cwd)
-}
-
-async function runPnpmOrThrow(args: string[], cwd: string): Promise<CommandResult> {
-  const result = await runPnpm(args, cwd)
-  if (result.status !== 0) {
-    throw new Error(`pnpm ${args.join(' ')} failed in ${cwd}\n${result.stdout}\n${result.stderr}`)
-  }
-  return result
-}
-
 async function runNodeEntryOrThrow(entry: string, args: string[], cwd: string): Promise<CommandResult> {
   const result = await run(process.execPath, [entry, ...args], cwd)
   if (result.status !== 0) {
@@ -134,14 +107,7 @@ function resolveInstalledPackageDirectory(
   } catch {
     const directPackage = join(repository, 'node_modules', packageName)
     if (existsSync(join(directPackage, 'package.json'))) return realpathSync(directPackage)
-    const pnpmStore = join(repository, 'node_modules', '.pnpm')
-    const packageDirectory = readdirSync(pnpmStore).find((entry) =>
-      entry.startsWith(`${packageName.replace('/', '+')}@`),
-    )
-    if (!packageDirectory) throw new Error(`Could not locate installed package ${packageName}`)
-    return dirname(
-      realpathSync(join(pnpmStore, packageDirectory, 'node_modules', packageName, 'package.json')),
-    )
+    throw new Error(`Could not locate installed package ${packageName}`)
   }
 }
 

@@ -32,10 +32,6 @@ function subprocessEnvironment(): NodeJS.ProcessEnv {
   return {
     ...process.env,
     CI: '1',
-    PNPM_CONFIG_PM_ON_FAIL: 'ignore',
-    // A newer pnpm than the repo's pinned 10.x enables verify-deps-before-run
-    // by default and can wipe node_modules on a lockfile-config mismatch.
-    npm_config_verify_deps_before_run: 'false',
     PATH: `${nodeDirectory}${delimiter}${process.env.PATH ?? ''}`,
   }
 }
@@ -90,14 +86,7 @@ function resolveInstalledPackageDirectory(
   } catch {
     const directPackage = join(repository, 'node_modules', packageName)
     if (existsSync(join(directPackage, 'package.json'))) return realpathSync(directPackage)
-    const pnpmStore = join(repository, 'node_modules', '.pnpm')
-    const packageDirectory = readdirSync(pnpmStore).find((entry) =>
-      entry.startsWith(`${packageName.replace('/', '+')}@`),
-    )
-    if (!packageDirectory) throw new Error(`Could not locate installed package ${packageName}`)
-    return dirname(
-      realpathSync(join(pnpmStore, packageDirectory, 'node_modules', packageName, 'package.json')),
-    )
+    throw new Error(`Could not locate installed package ${packageName}`)
   }
 }
 

@@ -14,7 +14,7 @@ import { MINI_IDE_PLUGIN_REQUIRES } from './src/shared/pluginCapabilities'
 //
 // Output: dist-plugins/mini-ide/ — shipped inside the app package as the
 // bundled builtin copy (electron-builder `extraResources` → resources/plugins/
-// mini-ide; `pnpm build` chains this build so packaging always has it). The
+// mini-ide; `bun run build` chains this build so packaging always has it). The
 // same bundle is also distributed as a marketplace extension
 // (`scripts/package-mini-ide.sh` — the future update path); in dev the app
 // resolves the builtin straight from this local build.

@@ -24,46 +24,28 @@ const repositoryRoot = resolve(import.meta.dirname, '../..')
 const builtPackages = ['packages/plugin-contracts', 'packages/plugin-sdk', 'packages/plugin-ui']
 const packedPackages = [...builtPackages, 'plugins/navide-git']
 
-// Under Bun the build scripts run through Bun itself, so a Bun-only machine
-// needs no pnpm. On Windows process.execPath can be Bun's generated `node`
-// shim, which parses argv with Node semantics; resolve the real Bun CLI.
-function bunExecutable(): string | undefined {
-  if (!process.versions.bun) return undefined
+// The build scripts and `pm pack` run through Bun itself. On Windows
+// process.execPath can be Bun's generated `node` shim, which parses argv with
+// Node semantics; resolve the real Bun CLI.
+function bunExecutable(): string {
+  if (!process.versions.bun) throw new Error('Run Vitest through Bun (`bun run test:run`)')
   const bunGlobal = (globalThis as { Bun?: { which(command: string): string | null } }).Bun
   return bunGlobal?.which('bun') ?? process.execPath
 }
 
-function packageManager(): { command: string; prefix: string[] } {
-  const bun = bunExecutable()
-  if (bun) return { command: bun, prefix: [] }
-  // `pnpm` alone is a .cmd shim on Windows that execFile cannot start; under
-  // `pnpm test:run` npm_execpath is pnpm's own script.
-  const inherited = process.env.npm_execpath ?? ''
-  const configured = process.env.NAVIDE_PNPM ?? (/pnpm/i.test(inherited) ? inherited : '')
-  if (!configured) return { command: 'pnpm', prefix: [] }
-  if (configured.endsWith('.js') || configured.endsWith('.cjs')) {
-    return { command: process.execPath, prefix: [configured] }
-  }
-  return { command: configured, prefix: [] }
-}
-
-function pnpm(args: string[], cwd: string): string {
-  const invocation = packageManager()
+function bun(args: string[], cwd: string): string {
+  const executable = bunExecutable()
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     CI: '1',
-    PNPM_CONFIG_PM_ON_FAIL: 'ignore',
-    // A newer pnpm re-verifies the workspace before `run` and can replace
-    // node_modules on a config mismatch.
-    npm_config_verify_deps_before_run: 'false',
-    PATH: `${dirname(bunExecutable() ?? process.execPath)}${delimiter}${process.env.PATH ?? ''}`,
+    PATH: `${dirname(executable)}${delimiter}${process.env.PATH ?? ''}`,
   }
   // Vitest sets NODE_ENV=test in this process. Inherited, it makes Vite and
   // @vitejs/plugin-vue emit a development build of plugin-ui that differs from
-  // what `pnpm run build:public-packages` produces — and the Plans build ID
+  // what `bun run build:public-packages` produces — and the Plans build ID
   // hashes these dists, so an artifact built before the run no longer matched.
   delete env.NODE_ENV
-  return execFileSync(invocation.command, [...invocation.prefix, ...args], {
+  return execFileSync(executable, args, {
     cwd,
     encoding: 'utf8',
     stdio: 'pipe',
@@ -95,11 +77,11 @@ function artifactDigest(root: string, paths: string[], source = false): string {
   }
   for (const path of paths.sort()) visit(join(root, path))
   if (source) {
-    // NODE_ENV is deliberately removed by pnpm() above. Include the toolchain
+    // NODE_ENV is deliberately removed by bun() above. Include the toolchain
     // and build overrides that can otherwise change output without a source edit.
     const windows = process.platform === 'win32'
     const relevantEnvironmentKeys = new Set([
-      'NAVIDE_PLUGIN_ARTIFACT_VERSION', 'NAVIDE_MINI_IDE_DIST_DIR', 'NAVIDE_PNPM',
+      'NAVIDE_PLUGIN_ARTIFACT_VERSION', 'NAVIDE_MINI_IDE_DIST_DIR',
       'npm_execpath', 'npm_config_user_agent', 'NODE_OPTIONS', 'SOURCE_DATE_EPOCH',
       'LANG', 'LC_ALL', 'TZ',
     ].map((key) => windows ? key.toUpperCase() : key))
@@ -128,7 +110,7 @@ export function prepareArtifactInputs(root: string, build: () => void, prepared 
   const stamp = join(root, 'node_modules/.cache/navide-artifact-inputs.json')
   const inputs = artifactDigest(root, [
     ...builtPackages, 'plugins/navide-mini-ide', 'tests/support/publicPackagesSetup.ts',
-    'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'bun.lock', 'bunfig.toml', 'scripts/bun/vue-tsc.cjs',
+    'package.json', 'bun.lock', 'bunfig.toml', 'scripts/bun/vue-tsc.cjs',
     ...readdirSync(root).filter((file) => /^tsconfig.*\.json$/.test(file) || /^\.env(?:\.|$)/.test(file)),
     ...['typescript', 'vue-tsc', 'vite', '@vitejs/plugin-vue'].map((name) => `node_modules/${name}/package.json`),
   ], true)
@@ -153,8 +135,8 @@ export function prepareArtifactInputs(root: string, build: () => void, prepared 
 
 export default function setup(project: TestProject): () => void {
   prepareArtifactInputs(repositoryRoot, () => {
-    pnpm(['run', 'build:public-packages'], repositoryRoot)
-    pnpm(['run', 'build:mini-ide:v2'], repositoryRoot)
+    bun(['run', 'build:public-packages'], repositoryRoot)
+    bun(['run', 'build:mini-ide:v2'], repositoryRoot)
   }, process.env.NAVIDE_TEST_ARTIFACTS_PREBUILT === '1')
 
   // The runner's TEMP can be an 8.3 short path (C:\Users\RUNNER~1); tools
@@ -165,12 +147,12 @@ export default function setup(project: TestProject): () => void {
     const source = join(repositoryRoot, packageDirectory)
     const name = (JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name: string }).name
     // One directory per package, so the tarball is found by listing it rather
-    // than by parsing pack output, which differs between pnpm and npm.
+    // than by parsing pack output.
     const destination = join(artifacts, packageDirectory.replaceAll('/', '_'))
     mkdirSync(destination)
-    pnpm(process.versions.bun ? ['pm', 'pack', '--destination', destination] : ['pack', '--pack-destination', destination], source)
+    bun(['pm', 'pack', '--destination', destination], source)
     const packed = readdirSync(destination).filter((file) => file.endsWith('.tgz'))
-    if (packed.length !== 1) throw new Error(`pnpm pack wrote ${packed.length} tarballs for ${name}`)
+    if (packed.length !== 1) throw new Error(`bun pm pack wrote ${packed.length} tarballs for ${name}`)
     tarballs[name] = join(destination, packed[0])
   }
   project.provide('publicPackageTarballs', tarballs)

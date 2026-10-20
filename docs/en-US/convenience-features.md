@@ -144,7 +144,7 @@ keep seeding `config.toml` as before and carry nothing inline: never both.
 With the switch off, neither happens. A session that lives in `~/.codex`
 itself (no pane home) gets nothing, as before.
 
-A development backend (`pnpm dev`, whose port file is under a `-dev` data
+A development backend (`bun run dev`, whose port file is under a `-dev` data
 folder) never takes rows back and never carries the table: it shares
 `~/.codex-panes` with the installed Navide, and taking back every pane-home
 row would strip the rows of the installed build's live panes. It keeps

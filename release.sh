@@ -33,7 +33,7 @@ warn_missing_announcement() {
 # neither exit code is lost. The background output is held and printed when
 # both are done, so the two never interleave.
 # The background command gets its own process group (set -m) and an INT or
-# TERM stops that group by the recorded id: `pnpm typecheck` does not pass a
+# TERM stops that group by the recorded id: `bun run typecheck` does not pass a
 # signal on to the command chain it runs, so stopping its pid alone leaves
 # the chain running. Ctrl-C reaches the foreground command directly; bash
 # runs the trap once that command has ended, so a TERM sent to this script
@@ -103,7 +103,7 @@ if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; th
   fail "resolved version '$VERSION' is not a valid X.Y.Z"
 fi
 
-for command in git node pnpm uv; do
+for command in git node bun uv; do
   command -v "$command" >/dev/null || fail "required command not found: $command"
 done
 
@@ -121,7 +121,7 @@ if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; the
   fail "remote tag already exists: $TAG"
 fi
 
-pnpm release:check
+bun run release:check
 warn_missing_announcement "$VERSION"
 
 CURRENT="$(node -p "require('./package.json').version")"
@@ -153,17 +153,17 @@ node scripts/set-release-version.mjs "$VERSION"
 # included), so the download point always reflects the latest version.
 node scripts/update-readme-download-links.mjs "$VERSION"
 uv --project backend lock
-pnpm release:check "$TAG"
+bun run release:check "$TAG"
 
 echo ""
 echo "=== Release gates ==="
 uv --project backend run --locked ruff check backend
 # With NAVIDE_RELEASE_OVERLAP_GATES=1 the type check overlaps the backend
 # tests only: it rebuilds packages/*/dist, which the artifacts project of
-# `pnpm test:run` reads, and the backend tests touch neither. Backend tests
+# `bun run test:run` reads, and the backend tests touch neither. Backend tests
 # run with a throwaway HOME and no reach to the real keychain.
-run_gates pnpm typecheck -- scripts/release-backend-tests.sh
-pnpm test:run
+run_gates bun run typecheck -- scripts/release-backend-tests.sh
+bun run test:run
 
 echo ""
 echo "=== Building release artifacts ==="
@@ -171,7 +171,7 @@ echo "=== Building release artifacts ==="
   cd backend
   uv run --locked pyinstaller --noconfirm agent_team_backend.spec
 )
-CSC_IDENTITY_AUTO_DISCOVERY=false pnpm dist
+CSC_IDENTITY_AUTO_DISCOVERY=false bun run dist
 # The dev-only web mode (NAVIDE_DEV_WEB=1) must never reach a release build.
 node scripts/check-no-dev-web.mjs out
 

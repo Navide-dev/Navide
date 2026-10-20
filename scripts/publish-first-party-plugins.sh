@@ -175,20 +175,20 @@ fi
 require_publish_env
 
 if [ "$SKIP_BUILD" -eq 0 ]; then
-  pnpm run build:public-packages
+  bun run build:public-packages
 fi
 
 if [ "$ONLY" != "plans" ]; then
   if [ "$SKIP_BUILD" -eq 0 ]; then
-    pnpm run build:git:v2
+    bun run build:git:v2
   fi
   publish_dir "$ROOT/dist-plugins/navide-git" universal
 fi
 
 if [ "$ONLY" != "git" ]; then
   if [ "$SKIP_BUILD" -eq 0 ]; then
-    pnpm run build:plans:v2
-    pnpm run build:plans:backend
+    bun run build:plans:v2
+    bun run build:plans:backend
   fi
   backend="$ROOT/dist-plugins/navide-plans/backend/navide-plans"
   case "$HOST_TARGET" in win32-*) backend="$backend.exe" ;; esac
