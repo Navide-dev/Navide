@@ -2893,6 +2893,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         term.writeln(`\x1b[2m[startup probe] ${probe.binary_path}${version}${duration}\x1b[0m`)
       }
       if (probe?.warning) term.writeln(`\x1b[33m[startup probe] ${probe.warning}\x1b[0m`)
+      if (probe?.untested_version) term.writeln(`\x1b[2m[startup probe] ${probe.untested_version}\x1b[0m`)
       for (const warning of resp.payload.wiring_warnings ?? []) {
         term.writeln(`\x1b[33m[mcp] ${warning}\x1b[0m`)
       }
