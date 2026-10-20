@@ -3,7 +3,6 @@ import { resolve } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveReadySpawnGroupId } from '../../lib/runGroups'
-import { isQualifiedTarget } from '../../lib/agentMessaging'
 
 // cli_open_agent from a pane naming another project: the window holding that
 // project creates the child, parents it on the requester — which may live in
@@ -160,13 +159,12 @@ describe('ui.workspace.adopt', () => {
 
 describe('the stand-in report to a parent in another workspace', () => {
   function settleHarness() {
-    const child = { id: 'child', spawnedByName: 'alpha/lead', spawnReportPending: true }
+    const child: Record<string, unknown> = { id: 'child', spawnedByName: 'alpha/lead', spawnReportPending: true, spawnedCrossWorkspace: true }
     const sendMessage = vi.fn()
     const deps = {
       panes: { value: [child] },
       persistPaneReportDebt: vi.fn(),
       isBroadcastTarget: () => false,
-      isQualifiedTarget,
       renderFallbackReport: (text: string) => `fallback: ${text}`,
       messaging: { sendMessage },
     }
@@ -174,8 +172,17 @@ describe('the stand-in report to a parent in another workspace', () => {
       compilerOptions: { target: ts.ScriptTarget.ES2022 },
     }).outputText
     const settle = new Function(...Object.keys(deps), javascript)(...Object.values(deps))
-    return { settle, sendMessage }
+    return { settle, sendMessage, child }
   }
+
+  it('is not sent across projects for a parent whose name merely contains a slash', () => {
+    // Review #546 MED-3: only the cross-workspace spawn marks a parent as
+    // living in another project; the shape of a name proves nothing.
+    const h = settleHarness()
+    h.child.spawnedCrossWorkspace = undefined
+    h.settle('child', 'reviewer', 'done', [])
+    expect(h.sendMessage).not.toHaveBeenCalled()
+  })
 
   it('goes to the qualified address though no local pane answers to it', () => {
     const h = settleHarness()

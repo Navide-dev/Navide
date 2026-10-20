@@ -1299,6 +1299,14 @@ async def cli_open_agent(
         return {"ok": False, "error": "agent is required (e.g. \"claude\", \"codex\")"}
     if not pane_name:
         return {"ok": False, "error": "name is required — it doubles as the pane's address"}
+    if "/" in pane_name:
+        # "/" separates <folder>/<pane> in an address, so a name holding one
+        # would read as a pane of another project (review #546 MED-3).
+        return {
+            "ok": False,
+            "error": f'name "{pane_name}" contains "/", which separates a folder from a pane in an address; pick a name without it',
+            "error_code": "invalid-name",
+        }
     # A fresh pane with nothing to do is a mistake; a RESUMED one is not — the
     # conversation already has its own context and the caller may only want it
     # back on screen, talking to it later with cli_send. So an empty task is
@@ -1331,6 +1339,16 @@ async def cli_open_agent(
     # A pane caller naming another project: the child goes there, still
     # parented on the caller. Empty when omitted or naming its own workspace,
     # which keeps every step below exactly as it was.
+    if caller.kind == "pane" and (workspace_path or "").strip() and not os.path.isabs(
+        os.path.expanduser((workspace_path or "").strip())
+    ):
+        # Relative to what? The backend's and the window's working folders
+        # differ, and "one project, one window" compares absolute paths.
+        return {
+            "ok": False,
+            "error": f'workspace_path must be an absolute path (or start with "~"), not "{workspace_path}"; no pane was opened',
+            "error_code": "workspace-path-not-absolute",
+        }
     cross_workspace = _cross_workspace_path(caller, workspace_path)
     if cross_workspace and not os.path.isdir(cross_workspace):
         return {
@@ -1392,6 +1410,7 @@ async def cli_open_agent(
             caller, cross_workspace, choice or "current", named_window
         )
         if refusal is not None:
+            _record_cross_spawn(caller, cross_workspace, choice, refusal)
             return refusal
     # The spawn request is a broadcast only the window holding the workspace
     # answers, and it is not replayed: sent before that window is up (a
@@ -1412,6 +1431,7 @@ async def cli_open_agent(
             # What was already done for it stays done; say so, so the caller
             # does not prepare the same project a second time.
             not_ready["prepared"] = prepared
+            _record_cross_spawn(caller, cross_workspace, choice, not_ready)
         return not_ready
     request_id = f"{me or caller.kind}:spawn:{secrets.token_hex(8)}"
     loop = asyncio.get_running_loop()
@@ -1480,7 +1500,10 @@ async def cli_open_agent(
 
     if not verdict.get("ok"):
         _pending_kickoffs.pop(request_id, None)
-        return {"ok": False, "error": str(verdict.get("error") or "spawn refused")}
+        refused_spawn = {"ok": False, "error": str(verdict.get("error") or "spawn refused")}
+        if cross_workspace:
+            _record_cross_spawn(caller, cross_workspace, choice, {**refused_spawn, "prepared": prepared})
+        return refused_spawn
     _taint_spawned(caller, str(verdict.get("pane_id") or ""))
     # The pane exists; now the task. Waited for here rather than reported by
     # message: the caller acts on this answer, and "ok" alone was taken as
@@ -1537,6 +1560,7 @@ async def cli_open_agent(
         window_id = str(getattr(agent_messaging.owner(new_pane_id), "window_id", "") or "")
         if window_id:
             result["window_id"] = window_id
+        _record_cross_spawn(caller, cross_workspace, choice, result)
     advisories = list(verdict.get("advisories") or [])
     if agent_key == _TERMINAL_AGENT and not _TERMINAL_PROMPT_CHECK:
         result["prompt_check"] = "unavailable"
@@ -1579,6 +1603,31 @@ async def cli_open_agent(
 _SPAWN_WINDOW_CHOICES = frozenset({"", "current", "existing", "new"})
 
 
+def _record_cross_spawn(caller: _Caller, workspace_path: str, choice: str, outcome: dict[str, Any]) -> None:
+    """Disclose a cross-workspace spawn (DESIGN-C §5) in the window action
+    record: who asked, where the child went, what was prepared for it, and how
+    to undo it."""
+    from agent_team_backend import agent_window_actions
+
+    target: dict[str, Any] = {"workspace_path": workspace_path, "window": choice or "current"}
+    for key in ("pane_id", "address", "window_id", "prepared"):
+        if outcome.get(key):
+            target[key] = outcome[key]
+    undo: list[dict[str, Any]] = []
+    if outcome.get("ok") and outcome.get("address"):
+        undo.append({"tool": "cli_reclaim_agent", "args": {"target": outcome["address"]}})
+    if outcome.get("prepared") == "adopted":
+        undo.append({"tool": "workspace_close", "args": {"path": workspace_path}})
+    agent_window_actions.record(
+        "cli_open_agent",
+        _caller_view(caller),
+        target,
+        ok=bool(outcome.get("ok")),
+        error=str(outcome.get("error_code") or outcome.get("error") or "") if not outcome.get("ok") else "",
+        undo=undo or None,
+    )
+
+
 def _cross_workspace_path(caller: _Caller, workspace_path: str) -> str:
     """The project a pane caller asked its child to start in, when that is not
     its own; "" otherwise (omitted, own workspace however spelled, or a caller
@@ -1590,8 +1639,29 @@ def _cross_workspace_path(caller: _Caller, workspace_path: str) -> str:
     # is handed and never expands "~" itself.
     path = os.path.normpath(os.path.expanduser(path))
     own = _caller_workspace(caller)
-    if own and _norm_workspace(path) == _norm_workspace(own):
+    # By folder identity, not spelling: a case variant of your own project on
+    # macOS/Windows is still your own (review #546 MED-2).
+    if own and _same_directory(path, own):
         return ""
+    return _known_spelling(path)
+
+
+def _known_spelling(path: str) -> str:
+    """The spelling a window already holds *path* under, when one does.
+
+    Windows match projects by string; a case variant of a held project would
+    otherwise be adopted a second time, or never matched by the window that
+    holds it. Falls back to *path* itself.
+    """
+    from agent_team_backend import agent_messaging, app
+
+    for session in app.main_window_sessions():
+        for held in getattr(session, "held_workspaces", ()) or ():
+            if _same_directory(held, path):
+                return held
+    for pane in agent_messaging.list_panes():
+        if pane.workspace_path and _same_directory(pane.workspace_path, path):
+            return pane.workspace_path
     return path
 
 
@@ -1609,9 +1679,8 @@ def _holding_window_id(workspace_path: str) -> str:
     by the error text the window gave)."""
     from agent_team_backend import agent_messaging
 
-    target = _norm_workspace(workspace_path)
     for pane in agent_messaging.list_panes():
-        if pane.workspace_path and _norm_workspace(pane.workspace_path) == target:
+        if pane.workspace_path and _same_directory(pane.workspace_path, workspace_path):
             window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
             if window_id:
                 return window_id
@@ -1718,7 +1787,7 @@ async def _prepare_cross_workspace(
             return prepared, refusal
         choice = "new"
     if choice == "new":
-        if await _probe_window(workspace_path, _WINDOW_PROBE_TIMEOUT_S):
+        if _holding_window_id(workspace_path) or await _probe_window(workspace_path, _WINDOW_PROBE_TIMEOUT_S):
             return "", _in_other_window(workspace_path)
         reply = await _ui_request(
             "",
@@ -6038,6 +6107,9 @@ _DEDICATED_CLOSE_ACTIONS = {
     # it; half of it alone would be a silent close (DESIGN-C S4b).
     "ui.pane.moveToWindow": "window_move_pane",
     "ui.workspace.moveToWindow": "window_move_pane",
+    # Takes a project into a window's sidebar; only cli_open_agent's cross-
+    # workspace spawn asks for it, and that path records the action (review #546).
+    "ui.workspace.adopt": "cli_open_agent with workspace_path",
 }
 
 
