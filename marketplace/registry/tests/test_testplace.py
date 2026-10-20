@@ -529,3 +529,43 @@ def test_the_public_report_form_cannot_tell_a_testplace_version_exists(client: T
             except reports.ReportError as exc:
                 answers.append(str(exc))
         assert answers == ["that version does not exist", "that version does not exist"]
+
+
+def test_a_withdrawal_reaches_every_member_who_ever_held_a_seat(client: TestClient) -> None:
+    """The kill switch must not depend on a live seat or a qualified publisher:
+    a member whose seat was revoked, who left, or whose publisher was frozen
+    still learns a build was withdrawn; nobody else learns anything."""
+    assert _publish(client).status_code == 201
+    stayed, removed = _member(client, "member-stayed"), _member(client, "member-removed")
+    tokens = _invite(client, labels=("a@example.com", "b@example.com"))
+    assert _join(client, stayed, tokens[0]).status_code == 200
+    assert _join(client, removed, tokens[1]).status_code == 200
+    invites = client.get("/api/testplace/acme/files/invites", headers=_publisher()).json()["invites"]
+    seat = next(row for row in invites if row["label"] == "b@example.com")
+    client.post(f"/api/testplace/acme/files/invites/{seat['id']}/revoke", headers=_publisher())
+    assert client.get("/api/testplace/acme/files", headers=removed).status_code == 404
+
+    def withdrawn(member: dict):
+        return client.get("/api/testplace/acme/files/withdrawn", headers=member)
+
+    assert withdrawn(removed).json() == {"withdrawn": []}
+    revoked = client.post(
+        "/api/admin/testplace/acme/files/versions/1.0.0/revoke", json={"reason": "malware"}, headers=_admin()
+    )
+    assert revoked.status_code == 200, revoked.text
+    assert withdrawn(removed).json() == {"withdrawn": [{"version": "1.0.0", "target": "universal"}]}
+
+    # A frozen publisher: every one of its test builds reads as withdrawn.
+    assert _publish(client, "1.1.0").status_code == 201
+    with _session(client) as session:
+        publisher = session.exec(select(Publisher).where(Publisher.name == "acme")).one()
+        publisher.frozen_at = datetime.now(timezone.utc)
+        session.add(publisher)
+        session.commit()
+    assert {row["version"] for row in withdrawn(stayed).json()["withdrawn"]} == {"1.0.0", "1.1.0"}
+
+    # Outsiders, anonymous callers and a missing extension: the same answers.
+    outsider = withdrawn(_member(client, "member-out"))
+    missing = client.get("/api/testplace/acme/nothing/withdrawn", headers=stayed)
+    assert (outsider.status_code, outsider.json()) == (missing.status_code, missing.json()) == (404, outsider.json())
+    assert client.get("/api/testplace/acme/files/withdrawn").status_code == 401

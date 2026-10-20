@@ -121,6 +121,31 @@ def withdrawn_rows(session: Session, extension: Extension) -> list[ExtensionVers
     )
 
 
+def ever_seated(session: Session, extension: Extension, member_id: str) -> bool:
+    """True when `member_id` holds or ever held a seat, revoked or not: the
+    members who may still run one of its test builds."""
+    return (
+        session.exec(
+            select(TestplaceInvite).where(
+                TestplaceInvite.extension_id == extension.id,
+                TestplaceInvite.member_id == member_id,
+            )
+        ).first()
+        is not None
+    )
+
+
+def testplace_rows(session: Session, extension: Extension) -> list[ExtensionVersion]:
+    """Every testplace artifact of the extension, whatever its state."""
+    return list(
+        session.exec(
+            select(ExtensionVersion)
+            .where(ExtensionVersion.extension_id == extension.id, ExtensionVersion.channel == TESTPLACE_CHANNEL)
+            .order_by(ExtensionVersion.version, ExtensionVersion.target)
+        ).all()
+    )
+
+
 def version_rows(
     session: Session, extension: Extension, version: str
 ) -> list[ExtensionVersion]:

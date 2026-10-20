@@ -167,6 +167,29 @@ def register_testplace_routes(
             },
         )
 
+    @app.get("/api/testplace/{namespace}/{name}/withdrawn")
+    def tester_withdrawn(
+        namespace: str,
+        name: str,
+        member_id: str = Depends(require_member),
+        session: Session = Depends(session_dep),
+    ) -> dict:
+        """The kill switch for test builds already installed (S8 T-MED-1, R-MED-3).
+        Answered to every member who ever held a seat, revoked or not, and
+        whatever the publisher's state: a frozen or disqualified publisher's
+        test builds all read as withdrawn. Anyone else gets the 404 of a
+        missing extension, so it tells nobody a test build exists."""
+        extension = extension_or_404(session, namespace, name)
+        if not testplace.ever_seated(session, extension, member_id):
+            raise NOT_FOUND
+        publisher = session.get(Publisher, extension.publisher_id)
+        rows = (
+            testplace.testplace_rows(session, extension)
+            if publisher is None or publisher_problem(session, publisher) is not None
+            else testplace.withdrawn_rows(session, extension)
+        )
+        return {"withdrawn": [{"version": row.version, "target": row.target} for row in rows]}
+
     @app.post("/api/testplace/join")
     def tester_join(
         token: str = Body(..., embed=True, max_length=200),
