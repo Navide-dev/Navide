@@ -311,10 +311,10 @@ defineExpose({ openReplace, focusInput, setQuery })
           />
           <div class="sp-toggles">
             <button class="sp-tg" :class="{ on: caseSensitive }" :title="$t('hint.match-case')" @click="caseSensitive = !caseSensitive">Aa</button>
-            <button class="sp-tg" :class="{ on: wholeWord }" title="Match whole word" @click="wholeWord = !wholeWord">
+            <button class="sp-tg" :class="{ on: wholeWord }" :title="$t('editorWindow.search.whole-word')" @click="wholeWord = !wholeWord">
               <span style="text-decoration: underline">ab</span>
             </button>
-            <button class="sp-tg" :class="{ on: isRegex }" title="Use regular expression" @click="isRegex = !isRegex">.*</button>
+            <button class="sp-tg" :class="{ on: isRegex }" :title="$t('editorWindow.search.regex')" @click="isRegex = !isRegex">.*</button>
           </div>
         </div>
 
@@ -330,7 +330,7 @@ defineExpose({ openReplace, focusInput, setQuery })
           <button
             class="sp-replace-all"
             :disabled="!total || truncated"
-            :title="truncated ? $t('hint.replace-all-truncated') : 'Replace All'"
+            :title="truncated ? $t('hint.replace-all-truncated') : $t('editorWindow.search.replace-all')"
             @click="replaceAll"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 3h7v2l3-3-3-3v2H1v6h2V3Zm10 10H6v-2l-3 3 3 3v-2h8V9h-2v4Z"/></svg>
@@ -341,10 +341,10 @@ defineExpose({ openReplace, focusInput, setQuery })
 
     <!-- ── include / exclude ────────────────────────────────────────────── -->
     <div class="sp-globs">
-      <label class="sp-glob-label">files to include</label>
-      <input v-model="includes" class="sp-glob-input" placeholder="e.g. *.ts, src/**" spellcheck="false" />
-      <label class="sp-glob-label">files to exclude</label>
-      <input v-model="excludes" class="sp-glob-input" placeholder="e.g. *.test.ts, dist/**" spellcheck="false" />
+      <label class="sp-glob-label">{{ $t('editorWindow.search.files-include') }}</label>
+      <input v-model="includes" class="sp-glob-input" :placeholder="$t('editorWindow.search.include-placeholder')" spellcheck="false" />
+      <label class="sp-glob-label">{{ $t('editorWindow.search.files-exclude') }}</label>
+      <input v-model="excludes" class="sp-glob-input" :placeholder="$t('editorWindow.search.exclude-placeholder')" spellcheck="false" />
     </div>
 
     <!-- ── summary ──────────────────────────────────────────────────────── -->
@@ -352,7 +352,7 @@ defineExpose({ openReplace, focusInput, setQuery })
       <span v-if="searching" class="sp-muted">{{ $t('label.searching') }}</span>
       <span v-else-if="error" class="sp-error">{{ error }}</span>
       <span v-else-if="query && total === 0" class="sp-muted">{{ $t('label.no-results') }}</span>
-      <span v-else-if="total > 0">{{ total }} result(s) · {{ fileCount }} file(s)<span v-if="truncated" class="sp-trunc"> · Truncated</span></span>
+      <span v-else-if="total > 0">{{ $t('editorWindow.search.summary', { results: total, files: fileCount }) }}<span v-if="truncated" class="sp-trunc"> · {{ $t('editorWindow.search.truncated') }}</span></span>
     </div>
 
     <!-- ── results ──────────────────────────────────────────────────────── -->
