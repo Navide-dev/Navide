@@ -1314,7 +1314,10 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
         { id: 'acme.kept', version: '1.0.0', expiresAt: '2026-10-01T00:00:00Z', artifactDigest: 'a'.repeat(64), canKeep: true },
         { id: 'acme.down', version: '2.0.0', expiresAt: '2026-10-02T00:00:00Z', canKeep: false },
         { id: 'acme.pulled', version: '3.0.0', expiresAt: '2026-12-02T00:00:00Z', canKeep: false, withdrawn: true, keepRefusal: 'withdrawn' },
-        { id: 'acme.unsure', version: '4.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'unconfirmed' },
+        { id: 'acme.unsure', version: '4.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'unreachable' },
+        { id: 'acme.signedout', version: '5.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'signed-out' },
+        { id: 'acme.gone', version: '6.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'not-a-tester' },
+        { id: 'acme.old', version: '7.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'registry-outdated' },
       ]),
       keepExpiredTestplace,
       prepareInstall,
@@ -1337,7 +1340,11 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
     expect(pulled.find('.ext-testplace-remove').exists()).toBe(true)
     const unsure = wrapper.get('[data-expired-id="acme.unsure"]')
     expect(unsure.find('.ext-testplace-keep').exists()).toBe(false)
-    expect(unsure.text()).toContain('could not confirm this version was not withdrawn')
+    expect(unsure.text()).toContain('cannot be reached right now')
+    // S8 LOW-R3-2: the advice follows the reason.
+    expect(wrapper.get('[data-expired-id="acme.signedout"]').text()).toContain('Sign in with your Navide Cloud account')
+    expect(wrapper.get('[data-expired-id="acme.gone"]').text()).toContain('no longer a tester')
+    expect(wrapper.get('[data-expired-id="acme.old"]').text()).toContain('too old')
     expect(api.remove).not.toHaveBeenCalled()
 
     await kept.get('.ext-testplace-keep').trigger('click')

@@ -425,6 +425,14 @@ async function removeDeveloperFolder(id: string): Promise<void> {
 // Marketplace version (the normal verified install), keep using it marked
 // expired (only when it failed on its expiry alone), or remove it.
 const expiredTestplace = ref<ExpiredTestplaceBuild[]>([])
+// S8 LOW-R3-2: each reason "keep using" is refused has its own advice.
+const KEEP_REFUSAL_KEYS: Record<NonNullable<ExpiredTestplaceBuild['keepRefusal']>, string> = {
+  withdrawn: 'cannotKeepWithdrawn',
+  'signed-out': 'cannotKeepSignedOut',
+  'not-a-tester': 'cannotKeepNotTester',
+  'registry-outdated': 'cannotKeepRegistryOutdated',
+  unreachable: 'cannotKeepUnreachable',
+}
 async function refreshExpiredTestplace(): Promise<void> {
   try {
     expiredTestplace.value = (await pluginsApi()?.expiredTestplace?.()) ?? []
@@ -518,7 +526,7 @@ watch(installed, () => {
       <p v-else>{{ $t('testplace.expired.banner', { id: reveal(item.id), version: reveal(item.version ?? ''), date: (item.expiresAt ?? '').slice(0, 10) }) }}</p>
       <!-- S8 T-MED-1: say why "keep using" is not offered. -->
       <p v-if="!item.canKeep" class="ext-testplace-cannot-keep">
-        {{ $t(item.keepRefusal === 'withdrawn' ? 'testplace.expired.cannotKeepWithdrawn' : item.keepRefusal === 'unconfirmed' ? 'testplace.expired.cannotKeepUnconfirmed' : 'testplace.expired.cannotKeep') }}
+        {{ $t(item.keepRefusal ? `testplace.expired.${KEEP_REFUSAL_KEYS[item.keepRefusal]}` : 'testplace.expired.cannotKeep') }}
       </p>
       <div class="ext-actions">
         <button
