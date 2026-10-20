@@ -79,7 +79,7 @@ export interface PluginAgentActionDeps {
   /** O1: commit the held version through the window's own commit. */
   /** Stage the update and (user decision A, 2026-10-21) switch to it at
    *  once; `requester` is the agent the switch record names. */
-  commitUpdate?(pluginId: string, requester?: PluginAgentRequester): Promise<void>
+  commitUpdate?(pluginId: string, requester?: PluginAgentRequester): Promise<void | { switchError?: string }>
   /** O1: drop the held version. */
   discardUpdate?(pluginId: string): void
 }
@@ -149,11 +149,18 @@ async function answerAgentUpdate(
     deps.discardUpdate(pluginId)
     return approval(reason)
   }
+  let committed: void | { switchError?: string }
   try {
-    await deps.commitUpdate(pluginId, requester)
+    committed = await deps.commitUpdate(pluginId, requester)
   } catch (error) {
     deps.discardUpdate(pluginId)
     return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
+  }
+  // Review M2: staged, but the switch failed and `from` runs again. Said as it
+  // is; the main window shows only its "switch failed" row (with Apply now),
+  // never an "updated" one.
+  if (committed && committed.switchError !== undefined) {
+    return { ok: true, updated: true, switched: false, switchError: committed.switchError, pluginId, fromVersion: from, pluginVersion: version }
   }
   deps.notify({ action: 'update', pluginId, pluginVersion: version, fromVersion: from, requester })
   return { ok: true, updated: true, pluginId, fromVersion: from, pluginVersion: version }

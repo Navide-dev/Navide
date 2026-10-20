@@ -186,6 +186,18 @@ describe('O1: an agent update whose disclosure is unchanged', () => {
     })
   })
 
+  it('says a staged update whose switch failed as it is, and never announces it as updated (review M2)', async () => {
+    const { d, commitUpdate, discardUpdate } = updateDeps()
+    commitUpdate.mockResolvedValueOnce({ switchError: 'the view did not start' })
+    await expect(answerPluginAgentAction(update, d)).resolves.toEqual({
+      ok: true, updated: true, switched: false, switchError: 'the view did not start',
+      pluginId: 'nerdtechnic.devmap', fromVersion: '0.2.0', pluginVersion: '0.3.0',
+    })
+    // Kept staged for the main window's "switch failed" row; no "updated" notice.
+    expect(discardUpdate).not.toHaveBeenCalled()
+    expect(d.notify).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['a permission added', check({ disclosureDiff: diff({ added: [{ kind: 'network', key: 'shell', detail: null }], widened: true }) })],
     ['a permission removed', check({ disclosureDiff: diff({ removed: [{ kind: 'system', key: 'workspace.read', detail: null }] }) })],

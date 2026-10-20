@@ -4526,7 +4526,10 @@ export function registerPluginIpc(
               // The update stays staged; #505's launch notice lists it again.
             }
           }
+          // Review M2: the agent is told the switch failed, not that it is updated.
+          return { switchError: errorText(error) }
         }
+        return undefined
       },
       discardUpdate: (pluginId) => {
         prepared.delete(pluginId)
