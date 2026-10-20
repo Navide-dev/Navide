@@ -142,8 +142,14 @@ onMounted(() => {
 
 watch(
   // A new package version (Restart, an update taking effect, a rollback) means
-  // the Host drained the old guest; prepare a fresh one in place.
-  () => [props.workspacePath, props.contribution.contributionKey, props.contribution.packageVersion] as const,
+  // the Host drained the old guest; prepare a fresh one in place. Each value is
+  // compared on its own, so a refreshed contribution object with the same
+  // values keeps the guest.
+  [
+    () => props.workspacePath,
+    () => props.contribution.contributionKey,
+    () => props.contribution.packageVersion,
+  ],
   () => void prepare(),
   { immediate: true }
 )

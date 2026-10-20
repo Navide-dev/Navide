@@ -13404,7 +13404,11 @@ export class FrontendPluginManager {
       restoredInstances++
     }
     pending.restored = true
-    return Object.freeze({ restoredInstances, skippedDestroyedHostWindows, rendererRemounts: guests.length })
+    return Object.freeze({
+      restoredInstances,
+      skippedDestroyedHostWindows,
+      ...(guests.length > 0 ? { rendererRemounts: guests.length } : {}),
+    })
   }
 
   /** Complete only a successful (or explicitly host-destroyed) restore. */
