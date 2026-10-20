@@ -72,7 +72,7 @@ export const CORE_TOOL_NAMES = [
   'cli_usage', 'cli_wait_idle', 'cli_whoami', 'credentials_findings', 'credentials_list', 'evolve_report',
   'marketplace_detail',
   'marketplace_developer_application_fill', 'marketplace_developer_application_open',
-  'marketplace_developer_status', 'marketplace_publish_fill', 'marketplace_publish_open',
+  'marketplace_developer_status', 'marketplace_open', 'marketplace_publish_fill', 'marketplace_publish_open',
   'marketplace_publish_status', 'marketplace_publish_yank_fill', 'marketplace_publish_yank_open',
   'marketplace_request_install', 'marketplace_request_rollback',
   'marketplace_request_status', 'marketplace_request_update', 'marketplace_search',
@@ -80,8 +80,14 @@ export const CORE_TOOL_NAMES = [
   'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
   'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
   'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
-  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo', 'plugins_disable', 'plugins_enable',
-  'plugins_list_installed', 'plugins_request_remove',
+  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo',
+  'plugins_developer_mode_open',
+  'plugins_disable', 'plugins_enable',
+  'plugins_install_file_fill', 'plugins_install_file_open',
+  'plugins_list_installed',
+  'plugins_package',
+  'plugins_request_remove',
+  'plugins_validate_package',
   'preview_clear', 'preview_list',
   'preview_record', 'preview_show', 'prompt_list', 'role_define', 'scheduler_list', 'scheduler_remove',
   'scheduler_run_now', 'scheduler_runs', 'scheduler_set_enabled', 'scheduler_upsert', 'share_create',
@@ -622,6 +628,13 @@ export type MarketplaceQuery =
   | { kind: 'search'; text: string; category?: string; cursor?: string; limit?: number }
   | { kind: 'detail'; id: string; version?: string }
   | { kind: 'installed' }
+  /** plugins_validate_package (W1, S1): check a `.vsix` or a plugin folder. */
+  | { kind: 'localValidate'; path: string }
+  /** plugins_package (W1, S1b): build a `.vsix` from a plugin folder. */
+  | { kind: 'localPackage'; path: string; target?: string; out?: string }
+  /** plugins_install_file_fill (W1, S2): read once, check and hold a package
+   * for the user's approval; nothing is installed. */
+  | { kind: 'localStage'; path: string }
 
 export interface MarketplaceQueryRequest {
   request_id: string
@@ -644,6 +657,11 @@ export interface MarketplaceListingItem {
 export interface MarketplaceInstalledItem {
   id: string
   version: string
+  /** Where it came from and what review it passed (`PluginSource`); a local
+   * file a vetted publisher signed is `local-signed`. Absent when unknown. */
+  source?: string
+  /** A local file whose publisher key the Registry has since revoked. */
+  signatureRevoked?: boolean
   enabled: boolean
   quarantined: boolean
   hasBackend: boolean
@@ -654,6 +672,26 @@ export type MarketplaceQueryResult =
   | { kind: 'search'; items: MarketplaceListingItem[]; nextCursor: string | null }
   | { kind: 'detail'; item: MarketplaceListingItem; versions: string[]; card: DisclosureCard }
   | { kind: 'installed'; items: MarketplaceInstalledItem[] }
+  | { kind: 'localValidate' | 'localPackage' | 'localStage'; report: LocalPackageQueryReport }
+
+/** A local package check or build (W1). Package-chosen strings (id, version,
+ * errors quoting the manifest) are third-party text to the backend. */
+export interface LocalPackageQueryReport {
+  path: string
+  packageKind: 'file' | 'folder'
+  valid: boolean
+  errors: string[]
+  id: string | null
+  version: string | null
+  target: string | null
+  digest: string | null
+  signature: 'none' | 'verified' | 'revoked' | 'unverifiable'
+  disclosure: unknown
+  risk: DisclosureRiskLevel | null
+  scan: unknown
+  /** localStage only: the Host's handle on the held copy, for the approval. */
+  stagingId?: string
+}
 
 export type MarketplaceQueryResponse =
   | { request_id: string; ok: true; result: MarketplaceQueryResult }
@@ -674,9 +712,13 @@ export const PLUGIN_ACTIVITY_FORGET_MESSAGE = 'plugin.activity.forget'
 // ── approval registry (B2) ──────────────────────────────────────────────────
 
 export type FormApprovalKind = 'developer-application' | 'plugin-publish' | 'plugin-yank' | 'testplace-invite'
-export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable' | FormApprovalKind
+export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
+  /** W1 (S2): a local `.vsix` or developer folder an agent named, staged by the Host. */
+  | 'plugin-install-file'
+  | FormApprovalKind
 export const APPROVAL_KINDS: readonly ApprovalKind[] = [
   'skill', 'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable',
+  'plugin-install-file',
   'developer-application', 'plugin-publish', 'plugin-yank', 'testplace-invite',
 ]
 /** Requests that are a draft for a main-window form (P4 *_fill), not an approval
@@ -732,7 +774,19 @@ export interface PluginApprovalRequest {
   requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: AgentToolCaller['kind'] }
   /** Written by the agent; the card labels it as such. */
   reason: string
-  target: { id: string; namespace: string; name: string; version: string | null; fromVersion: string | null }
+  target: {
+    id: string
+    namespace: string
+    name: string
+    version: string | null
+    fromVersion: string | null
+    /** plugin-install-file (W1, S2): what the Host staged for the agent. */
+    path?: string
+    digest?: string | null
+    stagingId?: string
+    packageKind?: 'file' | 'folder'
+    signature?: 'none' | 'verified' | 'revoked' | 'unverifiable'
+  }
   card: DisclosureCard | null
   diff: DisclosureDiff | null
   /** Form kinds: the agent's draft for the form; null for every other kind. */

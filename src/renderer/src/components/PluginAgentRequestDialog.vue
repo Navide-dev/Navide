@@ -195,6 +195,13 @@ function applyDeps(): PluginRequestApplyDeps {
       await installSettled()
       if (flow.error.value) throw new Error(flow.error.value)
     },
+    // W1 (S2): the copy the Host staged when the agent asked, through the same
+    // consent dialog as the user's own "Install from file".
+    async installStaged(stagingId: string, digest: string | null): Promise<void> {
+      await flow.prepareAgentFile(stagingId, digest, requesterText.value)
+      await installSettled()
+      if (flow.error.value) throw new Error(flow.error.value)
+    },
     async rollback(pluginId: string): Promise<void> {
       // The same confirmation the Extensions pane asks before a rollback.
       const row = (await plugins().listInstalled()).find((p) => p.id === pluginId)
@@ -329,8 +336,20 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
             <dt>{{ $t('plugin-request.disabled-by') }}</dt><dd data-testid="plugin-request-disabled-by">{{ disabledByText }}</dd>
             <dt>{{ $t('plugin-request.disabled-at') }}</dt><dd data-testid="plugin-request-disabled-at">{{ disabledAtText }}</dd>
           </template>
+          <template v-if="current.kind === 'plugin-install-file'">
+            <dt>{{ $t(current.target.packageKind === 'folder' ? 'plugin-request.file.folder' : 'plugin-request.file.path') }}</dt>
+            <dd class="pr-mono" data-testid="plugin-request-file-path">{{ revealInvisibleText(current.target.path ?? '') }}</dd>
+            <template v-if="current.target.digest">
+              <dt>{{ $t('plugin-request.file.digest') }}</dt>
+              <dd class="pr-mono" data-testid="plugin-request-file-digest">{{ current.target.digest }}</dd>
+            </template>
+          </template>
           <dt>{{ $t('plugin-request.expires') }}</dt><dd>{{ expiresText }}</dd>
         </dl>
+        <!-- W1 (S2): a local file is no Marketplace version; nothing vouches for it. -->
+        <p v-if="current.kind === 'plugin-install-file'" class="pr-note pr-unreviewed" role="note" data-testid="plugin-request-file-unreviewed">
+          {{ $t(current.target.packageKind === 'folder' ? 'plugin-request.file.unreviewed-folder' : 'plugin-request.file.unreviewed') }}
+        </p>
 
         <div v-if="reasonText" class="pr-reason">
           <div class="pr-label">{{ $t('plugin-request.reason') }}</div>
@@ -391,6 +410,7 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
       v-if="flow.pendingConfirm.value"
       :pending="flow.pendingConfirm.value"
       :step="flow.pendingStep.value"
+      @confirm-replace="flow.confirmReplace"
       @confirm-publisher="flow.confirmPublisher"
       @confirm-risk="flow.confirmRisk"
       @cancel="flow.cancel"
@@ -439,6 +459,7 @@ h1 { margin: 6px 0 0; color: var(--text-bright); font-size: 20px; overflow-wrap:
 .pr-reason p { margin: 0; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pr-section { margin: 0 0 14px; }
 .pr-note { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.pr-unreviewed { margin: 0 0 14px; padding: 8px 12px; border-radius: 8px; background: var(--bg-subtle); color: var(--danger-fg); }
 .pr-error {
   margin: 8px 0 0; padding: 10px 12px; max-height: 120px; overflow: auto;
   border-radius: 8px; background: var(--bg-subtle); color: var(--danger-fg);

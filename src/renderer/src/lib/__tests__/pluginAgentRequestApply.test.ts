@@ -21,6 +21,7 @@ function deps(installed: InstalledPackage[]): PluginRequestApplyDeps & {
 } {
   return {
     install: vi.fn(async () => undefined),
+    installStaged: vi.fn(async () => undefined),
     rollback: vi.fn(async () => undefined),
     remove: vi.fn(async () => undefined),
     enable: vi.fn(async () => undefined),
@@ -142,5 +143,33 @@ describe('isAppliableKind', () => {
     expect(['plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable'].every(isAppliableKind)).toBe(true)
     // A kind added on the backend first must not be approvable before this side applies it.
     expect(isAppliableKind('skill')).toBe(false)
+  })
+})
+
+describe('W1 (S2): an approved agent file request', () => {
+  const fileRecord = (stagingId?: string): PluginRequestRecord => ({
+    approval_id: 'a-file',
+    kind: 'plugin-install-file',
+    status: 'applying',
+    target: {
+      id: 'acme.todo', namespace: 'acme', name: 'todo', version: '1.0.0', fromVersion: null,
+      ...(stagingId ? { stagingId, digest: 'ab'.repeat(32) } : {}),
+    },
+  })
+
+  it('installs the staged copy through the window\'s consent flow, bound to the card\'s digest', async () => {
+    const d = deps([{ id: 'acme.todo', packageVersion: '1.0.0' }])
+    expect(isAppliableKind('plugin-install-file')).toBe(true)
+    await expect(applyApprovedRequest(fileRecord('cd'.repeat(16)), d)).resolves.toEqual({ status: 'completed', error: null })
+    expect(d.installStaged).toHaveBeenCalledWith('cd'.repeat(16), 'ab'.repeat(32))
+    expect(d.install).not.toHaveBeenCalled()
+  })
+
+  it('fails a request with no staged copy, and one the user cancelled in the dialog', async () => {
+    const none = deps([])
+    expect(await applyApprovedRequest(fileRecord(), none)).toEqual({ status: 'failed', error: 'the request names no staged package' })
+    expect(none.installStaged).not.toHaveBeenCalled()
+    const cancelled = deps([])
+    expect(await applyApprovedRequest(fileRecord('cd'.repeat(16)), cancelled)).toEqual({ status: 'failed', error: 'not-applied' })
   })
 })

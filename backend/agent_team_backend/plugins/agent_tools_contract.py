@@ -55,7 +55,7 @@ CORE_TOOL_NAMES = (
     "cli_usage", "cli_wait_idle", "cli_whoami", "credentials_findings", "credentials_list", "evolve_report",
     "marketplace_detail",
     "marketplace_developer_application_fill", "marketplace_developer_application_open",
-    "marketplace_developer_status", "marketplace_publish_fill", "marketplace_publish_open",
+    "marketplace_developer_status", "marketplace_open", "marketplace_publish_fill", "marketplace_publish_open",
     "marketplace_publish_status", "marketplace_publish_yank_fill", "marketplace_publish_yank_open",
     "marketplace_request_install", "marketplace_request_rollback",
     "marketplace_request_status", "marketplace_request_update", "marketplace_search",
@@ -63,8 +63,14 @@ CORE_TOOL_NAMES = (
     "pipeline_abort", "pipeline_define", "pipeline_gate", "pipeline_graph",
     "pipeline_list", "pipeline_next", "pipeline_reset", "pipeline_restart", "pipeline_restart_from",
     "pipeline_resume", "pipeline_start", "pipeline_status", "plan_add_note", "plan_add_todo", "plan_create",
-    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo", "plugins_disable", "plugins_enable",
-    "plugins_list_installed", "plugins_request_remove",
+    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo",
+    "plugins_developer_mode_open",
+    "plugins_disable", "plugins_enable",
+    "plugins_install_file_fill", "plugins_install_file_open",
+    "plugins_list_installed",
+    "plugins_package",
+    "plugins_request_remove",
+    "plugins_validate_package",
     "preview_clear", "preview_list",
     "preview_record", "preview_show", "prompt_list", "role_define", "scheduler_list", "scheduler_remove",
     "scheduler_run_now", "scheduler_runs", "scheduler_set_enabled", "scheduler_upsert", "share_create",
@@ -573,7 +579,7 @@ def agent_tool_arguments_digest(arguments: Any) -> tuple[str, int]:
 
 MARKETPLACE_QUERY_REQUEST_EVENT = "marketplace.query.request"
 MARKETPLACE_QUERY_RESULT_MESSAGE = "marketplace.query.result"
-MARKETPLACE_QUERY_KINDS = ("search", "detail", "installed")
+MARKETPLACE_QUERY_KINDS = ("search", "detail", "installed", "localValidate", "localPackage", "localStage")
 MARKETPLACE_QUERY_ERROR_CODES = ("BAD_REQUEST", "NOT_FOUND", "REGISTRY_UNAVAILABLE", "HOST_UNAVAILABLE")
 
 # ── Host → backend: plugin activity (D-e, section 5) ────────────────────────
@@ -612,6 +618,8 @@ class MarketplaceQueryRequest(TypedDict):
 
 APPROVAL_KINDS = (
     "skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable",
+    # W1 (S2): a local .vsix or developer folder an agent named, staged by the Host.
+    "plugin-install-file",
     "developer-application", "plugin-publish", "plugin-yank", "testplace-invite",
 )
 #: Kinds whose request is a draft for a main-window form (P4 *_fill), not an
@@ -867,6 +875,8 @@ PLUGIN_AGENT_ACTIONS = (
     "request-enable", "decide-approve", "decide-reject", "finish-completed", "finish-failed",
     # The carrying window's own result, after another window had settled the request.
     "finish-late-completed", "finish-late-failed",
+    # W1 (S2): plugins_install_file_fill.
+    "request-install-file",
     # W3: an agent's draft for a main-window form, and O3's upload to a loopback Registry.
     "request-developer-application", "request-plugin-publish", "request-plugin-yank", "request-testplace-invite",
     "publish-loopback",

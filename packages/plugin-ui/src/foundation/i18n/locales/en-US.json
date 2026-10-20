@@ -1940,6 +1940,7 @@
         "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
       },
       "localInstall": {
+        "agentRequest": "Requested by {requester}. Navide has not reviewed this package; installing it is your decision.",
         "button": "Install from .vsix file…",
         "backToMarketplace": "Switch back to the Navide Marketplace version",
         "warning": "This Navide plugin comes from a file on this computer. Navide has not reviewed it and it is not signed: its author cannot be confirmed and the file may have been changed. Only install files from people you trust.",
@@ -9288,8 +9289,17 @@
     "dont-ask": "Stop asking about {label}"
   },
   "plugin-request": {
+    "file": {
+      "path": "File",
+      "folder": "Folder",
+      "digest": "File SHA-256",
+      "unreviewed": "An agent asked to install this file. Navide has not reviewed it. Approving opens the same install dialog as \"Install from file\", and what installs is the copy Navide read when the agent asked, with the SHA-256 above.",
+      "unreviewed-folder": "An agent asked to load this developer folder. Navide has not reviewed it and its contents can change at any time. Approving opens the same dialog as loading a folder yourself.",
+      "digestChanged": "The file Navide holds for this request is not the one shown on the request; nothing was installed. Ask the agent to send it again."
+    },
     "kicker": "Navide plugin request",
     "title": {
+      "install-file": "Install the Navide plugin {plugin} {version} from a file?",
       "install": "Install the Navide plugin {plugin} {version}?",
       "update": "Update the Navide plugin {plugin} from {from} to {version}?",
       "rollback": "Roll the Navide plugin {plugin} back from {from} to {version}?",

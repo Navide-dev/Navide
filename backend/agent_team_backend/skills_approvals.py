@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import re
 import threading
 import time
 import uuid
@@ -65,6 +66,22 @@ def _plugin_requester(requester: Any) -> dict[str, Any]:
             raise SkillApprovalError("BAD_REQUEST", f"requester {key} must be a string or null")
         cleaned[key] = None if value is None else _agent_text(value)
     return cleaned
+
+
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+_STAGING_ID = re.compile(r"[0-9a-f]{32}")
+
+
+def _file_target_ok(target: dict[str, Any]) -> bool:
+    """A plugin-install-file target: what the Host staged (W1, S2)."""
+    digest = target.get("digest")
+    return (
+        isinstance(target.get("path"), str) and bool(target["path"])
+        and target.get("packageKind") in ("file", "folder")
+        and isinstance(target.get("stagingId"), str) and _STAGING_ID.fullmatch(target["stagingId"]) is not None
+        # A folder has no single digest: it is loaded in place and may change.
+        and (digest is None if target["packageKind"] == "folder" else isinstance(digest, str) and _SHA256_HEX.fullmatch(digest) is not None)
+    )
 
 
 class SkillApprovalError(SkillsStoreError):
@@ -158,8 +175,15 @@ class ApprovalRegistry:
             raise SkillApprovalError("BAD_REQUEST", "the target id must be <namespace>.<name>")
         if not isinstance(reason, str):
             raise SkillApprovalError("BAD_REQUEST", "the reason must be a string")
+        if kind == "plugin-install-file" and not _file_target_ok(target):
+            raise SkillApprovalError(
+                "BAD_REQUEST", "a file request needs the staged path, digest, stagingId and package kind",
+            )
         requester = _plugin_requester(requester)
         owner = f"{kind}:{target['id']}@{version if kind != 'plugin-remove' else ''}"
+        if kind == "plugin-install-file":
+            # Two files of one id and version are two requests.
+            owner += f"#{target['digest'] or target['path']}"
         with self._lock:
             self._expire()
             for record in self._records.values():

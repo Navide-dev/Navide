@@ -1,7 +1,8 @@
 // Card K3: installing from a file is the user's own action in a main window.
 // These source checks pin the entry points that must never reach it: an
-// agent (MCP plugin requests and the window code that carries them out), the
-// plugin frame preload, and the environment.
+// agent (which may only prefill a request since W1: the Host stages the file
+// and the user installs it through the same consent), the plugin frame
+// preload, and the environment.
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -16,26 +17,38 @@ const read = (path: string): string => readFileSync(resolve(process.cwd(), path)
 const LOCAL_INSTALL = /installFromFile|commitLocalInstall/
 
 describe('install-from-file entry points', () => {
-  it('is never reached by an agent request: not from MCP, nor from the window code applying one', () => {
+  it('lets an agent only prefill: the Host stages the file, the user installs it in this window (W1, S2)', () => {
+    // Neither the MCP tools nor the window code carrying out an agent request
+    // reaches the install itself; the user's consent dialog does.
     for (const path of [
       'backend/agent_team_backend/mcp_server/server.py',
       'backend/agent_team_backend/mcp_server/marketplace_forms.py',
       'backend/agent_team_backend/mcp_server/testplace_tools.py',
+      'backend/agent_team_backend/mcp_server/plugin_local_tools.py',
       'src/renderer/src/lib/pluginAgentRequestApply.ts',
       'src/renderer/src/composables/usePluginAgentRequests.ts',
       'src/renderer/src/components/PluginAgentRequestDialog.vue',
     ]) {
       expect(read(path), path).not.toMatch(LOCAL_INSTALL)
     }
-    // The request kinds an agent can file are Marketplace ids, never a file;
-    // the form kinds only open a developer form for the user to submit.
+    // The request kinds an agent can file: Marketplace ids, and a file the Host
+    // staged; the form kinds only open a developer form for the user to submit.
     const kinds = read('src/shared/pluginAgentTools.ts')
     expect(kinds).toMatch(
       /export type FormApprovalKind = 'developer-application' \| 'plugin-publish' \| 'plugin-yank' \| 'testplace-invite'\n/,
     )
     expect(kinds).toMatch(
-      /export type ApprovalKind = 'skill' \| 'plugin-install' \| 'plugin-update' \| 'plugin-rollback' \| 'plugin-remove' \| 'plugin-enable' \| FormApprovalKind\n/,
+      /export type ApprovalKind = 'skill' \| 'plugin-install' \| 'plugin-update' \| 'plugin-rollback' \| 'plugin-remove' \| 'plugin-enable'\n  \/\*\*[^\n]*\*\/\n  \| 'plugin-install-file'\n  \| FormApprovalKind\n/,
     )
+    // The MCP tools file a request or read; they never decide, finish or commit it.
+    expect(read('backend/agent_team_backend/mcp_server/plugin_local_tools.py')).not.toMatch(/decide|finish_plugin|commit/i)
+    // The window names a staged copy, never a path, and preparing it installs nothing.
+    const ipc = read('src/main/plugins/pluginIpc.ts')
+    const start = ipc.indexOf("ipcMain.handle('plugins:prepareAgentFileInstall'")
+    expect(start).toBeGreaterThan(-1)
+    const handler = ipc.slice(start, ipc.indexOf('ipcMain.handle(', start + 1))
+    expect(handler).toContain('takeAgentStaged(stagingId)')
+    expect(handler).not.toMatch(/args\??\.path|process\.env|pickFile|stageCandidate|commitLocalInstall|createLocalTrustRecord/)
   })
 
   it('is not exposed to plugin frames', () => {

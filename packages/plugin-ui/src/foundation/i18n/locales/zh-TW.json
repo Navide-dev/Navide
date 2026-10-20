@@ -1940,6 +1940,7 @@
         "selfHostedQuarantine": "{id} {version} 來自自架 Registry，目前沒有載入。請開啟開發者模式，或改從 Navide 市集安裝。"
       },
       "localInstall": {
+        "agentRequest": "由 {requester} 提出。Navide 沒有審核過這個 Navide 外掛，要不要安裝由你決定。",
         "button": "從檔案安裝 .vsix…",
         "backToMarketplace": "換回 Navide 市集版本",
         "warning": "這個 Navide 外掛來自你選的本機檔案，沒有經過 Navide 審核，也沒有簽章：無法確認作者，檔案也可能被改過。只安裝你信任的人給你的檔案。",
@@ -9288,8 +9289,17 @@
     "dont-ask": "不要再詢問 {label}"
   },
   "plugin-request": {
+    "file": {
+      "path": "檔案",
+      "folder": "資料夾",
+      "digest": "檔案 SHA-256",
+      "unreviewed": "有 agent 要求安裝這個檔案。Navide 沒有審核過它。核准後會打開和「從檔案安裝」相同的安裝對話框，裝進去的是 agent 提出要求時 Navide 讀到的那一份，SHA-256 就是上面這一串。",
+      "unreviewed-folder": "有 agent 要求載入這個開發者資料夾。Navide 沒有審核過它，內容也可能隨時改變。核准後會打開和你自己載入資料夾時相同的對話框。",
+      "digestChanged": "Navide 為這個請求保存的檔案和請求上顯示的不一樣，所以沒有安裝。請 agent 重新送出。"
+    },
     "kicker": "Navide 外掛請求",
     "title": {
+      "install-file": "要從檔案安裝 Navide 外掛 {plugin} {version} 嗎？",
       "install": "要安裝 Navide 外掛 {plugin} {version} 嗎？",
       "update": "要把 Navide 外掛 {plugin} 從 {from} 更新到 {version} 嗎？",
       "rollback": "要把 Navide 外掛 {plugin} 從 {from} 回退到 {version} 嗎？",

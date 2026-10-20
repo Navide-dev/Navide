@@ -21,6 +21,12 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import {
+  isDigestBlocked,
+  localSignatureDecision,
+  type LocalInstallTrustMetadata,
+  type LocalSignatureDecision,
+} from './pluginLocalInstallTrust'
 import { dirname, extname, join } from 'node:path'
 import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import { isWindows } from '../../shared/osplat'
@@ -194,6 +200,9 @@ export interface PreparedInstall {
   /** False when no root-signed takedown list was available, so the package
    * could not be checked against it (MED-1 on #425). */
   takedownChecked?: boolean
+  /** Set only by prepareLocalInstall: what the `<file>.sig` beside the file
+   * shows against the vetted publisher keys (A3). */
+  localSignature?: LocalSignatureDecision
 }
 
 export class InstallError extends Error {
@@ -539,6 +548,11 @@ export interface LocalInstallTrust {
   trustSnapshot: RegistryTrustSnapshot | null
   /** Host-derived exact target a native backend must have been built for. */
   expectedTarget?: string
+  /** The root-verified local install trust (blocked digests, vetted
+   * publisher keys), or null when none was available. */
+  localInstallTrust?: LocalInstallTrustMetadata | null
+  /** The `<file>.sig` read beside the file, or null when there is none. */
+  signature?: string | null
 }
 
 /** The takedown list, when the pinned root signed it. An expired list still
@@ -567,8 +581,10 @@ function signedTakedownList(trust: LocalInstallTrust): RegistryTrustMetadata | n
  * dialog; every later step uses it, never the path. The archive goes through
  * the same zip checks, manifest schema and backend executable rules as a
  * Registry install. What it does not get is Registry evidence: there is no
- * signature and no review, so the package is `local-unsigned` and the user's
- * consent is always required.
+ * review, so the user's consent is always required. It is labelled
+ * `local-signed` only when a vetted publisher's active key signed exactly
+ * these bytes (A3, `localSignature`); a file on the root-signed
+ * blocked-digest list is refused.
  */
 export function prepareLocalInstall(bytes: Uint8Array, trust: LocalInstallTrust): PreparedInstall {
   const entries = readZipEntries(bytes)
@@ -604,6 +620,10 @@ export function prepareLocalInstall(bytes: Uint8Array, trust: LocalInstallTrust)
     throw new InstallError(`plugin '${manifest.id}' ${manifest.version} was taken down by Navide and cannot be installed`)
   }
   const digest = sha256Hex(bytes)
+  if (isDigestBlocked(trust.localInstallTrust ?? null, digest)) {
+    throw new InstallError(`DIGEST_BLOCKED: this file of '${manifest.id}' was taken down by Navide and cannot be installed`)
+  }
+  const localSignature = localSignatureDecision(trust.localInstallTrust ?? null, manifest.id, digest, trust.signature ?? null)
   const packageVerification = verifyPackage({
     bytes,
     expectedDigest: digest,
@@ -628,7 +648,11 @@ export function prepareLocalInstall(bytes: Uint8Array, trust: LocalInstallTrust)
     provenance: 'developer-local-unpacked',
     disclosure: computeDisclosure(manifest as unknown as DisclosureManifestInput),
     scan: null,
+    // The storage class stays `local-unsigned` (data hand-over, set-aside and
+    // replacement rules are those of any local file); `localSignature` is
+    // what decides the `local-signed` label.
     source: 'local-unsigned',
+    localSignature,
     // A native executable is built for one platform; without a backend the
     // package is the same everywhere.
     localTarget: backendEntry !== undefined ? trust.expectedTarget ?? currentPluginHostTarget() : UNIVERSAL_PLUGIN_TARGET,

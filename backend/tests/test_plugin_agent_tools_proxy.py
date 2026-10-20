@@ -50,8 +50,9 @@ pytestmark = pytest.mark.asyncio
 #: d435c7426 (after #345 added the read-only Marketplace tools), before this
 #: change; the same digest on a probe of main (review of #352). A core tool added or edited on
 #: purpose updates it: print _tools_list_text()'s digest and paste it here.
-#: Re-pinned for #448, which documents pipeline_status' new per-node `error`.
-MAIN_TOOLS_LIST_SHA256 = "2f720532c7ea3d7008e0f1c010cf54bb946247e5ffdcd5b4202f51120fc7ccd1"
+#: W1 then documented plugins_list_installed's `source` on purpose (its
+#: description only; every other tool still matches main).
+MAIN_TOOLS_LIST_SHA256 = "8d640231edfecfa4b12e1173277169547e941cb6c1352cc0ddf77492c2771cb9"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -72,6 +73,11 @@ FORM_CORE_TOOLS = frozenset({
 })
 #: Core tools added after that digest by plan mcp-navide-0-2-27 W5 (Testplace invitations, testplace_tools.py).
 TESTPLACE_CORE_TOOLS = frozenset({"marketplace_testplace_invite_open", "marketplace_testplace_invite_fill"})
+#: Core tools added after that digest by plan W1 (local Navide plugin packages).
+W1_CORE_TOOLS = frozenset({
+    "marketplace_open", "plugins_install_file_open", "plugins_install_file_fill", "plugins_developer_mode_open",
+    "plugins_validate_package", "plugins_package",
+})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server).
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"
@@ -243,8 +249,9 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     pristine = await _tools_list_text()
     builtin = await _builtin_package_tool_names()
     module_only = [t for t in json.loads(pristine) if t["name"] not in builtin]
-    assert B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS <= {t["name"] for t in module_only}
-    existing = [t for t in module_only if t["name"] not in B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS]
+    added = B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS
+    assert added <= {t["name"] for t in module_only}
+    existing = [t for t in module_only if t["name"] not in added]
     module_text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     assert hashlib.sha256(module_text.encode()).hexdigest() == MAIN_TOOLS_LIST_SHA256
 
