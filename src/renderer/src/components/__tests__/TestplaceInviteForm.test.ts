@@ -56,6 +56,24 @@ describe('TestplaceInviteForm (W5b)', () => {
     delete (window as unknown as { agentTeam?: unknown }).agentTeam
   })
 
+  it('says so when the asking pane has external influence (S8-M1), and still lets the user send', async () => {
+    const requester = { ...request.requester, tainted: true as const }
+    wrapper = mount(TestplaceInviteForm, {
+      props: { backend: fakeBackend() as never, form: form({ requester, request: { ...request, requester } }) },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    const line = wrapper.find('[data-testid="testplace-invite-tainted"]')
+    expect(line.exists()).toBe(true)
+    expect(line.text()).toBe(i18n.global.t('plugin-request.tainted'))
+  })
+
+  it('shows no external-influence line for a clean pane', async () => {
+    wrapper = mount(TestplaceInviteForm, { props: { backend: fakeBackend() as never, form: form() }, global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="testplace-invite-tainted"]').exists()).toBe(false)
+  })
+
   it("opens an agent's draft with each tester marked, and invites nobody before Send", async () => {
     const backend = fakeBackend()
     wrapper = mount(TestplaceInviteForm, { props: { backend: backend as never, form: form() }, global: { plugins: [i18n] } })
