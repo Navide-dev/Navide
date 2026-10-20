@@ -22,7 +22,7 @@ Two packages are published for x64:
 ## What you need to install from source
 
 - macOS 13+ on Apple silicon, Linux x64, or Windows on x64 or Arm
-- Bun (the version pinned in `.bun-version`); Node.js and pnpm are not needed for daily development
+- Bun (the version pinned in `.bun-version`); Node.js is not needed for daily development; pnpm 10.x is needed only for one test in the full `bun run test:run` (see “Development checks”)
 - Python 3.12+
 - uv 0.11+
 - At least one of the 14 supported coding CLIs (Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Droid, Grok CLI, Kilo Code, Kimi Code, Muse Code, OpenCode, Pi, Qwen Code) — the [User Guide](user-guide.md#manual-agent-panes) lists them
@@ -77,6 +77,6 @@ bun run test:run
 uv --project backend run pytest backend/tests
 ```
 
-Run the frontend tests with `bun run test:run`, never with bare `bun test`: that runs Bun's own test runner instead of Vitest and ignores the project's Vitest configuration. Do not use `bun run test` either; it starts Vitest in watch mode. Do not mix `bun install` and `pnpm install` in one `node_modules`.
+Run the frontend tests with `bun run test:run`, never with bare `bun test`: that runs Bun's own test runner instead of Vitest and ignores the project's Vitest configuration. Do not use `bun run test` either; it starts Vitest in watch mode. The full `bun run test:run` includes `src/main/plugins/pluginExternalWorkspace.test.ts`, which simulates an external plugin author who uses pnpm: it needs a real pnpm 10.x on `PATH` and fails with `Executable not found in $PATH: "pnpm"` without one (it is not skipped). Do not mix `bun install` and `pnpm install` in one `node_modules`.
 
 See [Troubleshooting](troubleshooting.md) if the app, backend, CLI, session binding, analyzer, or token tracking does not start as expected.

@@ -22,7 +22,7 @@ x64 提供兩種套件：
 ## 從原始碼安裝的前置需求
 
 - 配備 Apple 晶片的 macOS 13+、Linux x64，或 x64／Arm 版 Windows
-- Bun（版本固定於 `.bun-version`）；日常開發不需要 Node.js 與 pnpm
+- Bun（版本固定於 `.bun-version`）；日常開發不需要 Node.js，只有完整的 `bun run test:run` 中有一個測試需要 pnpm 10.x（見「開發檢查」）
 - Python 3.12+
 - uv 0.11+
 - 至少一個受支援的 Coding CLI（共 14 種：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code），清單見[使用手冊](user-guide.md)
@@ -77,6 +77,6 @@ bun run test:run
 uv --project backend run pytest backend/tests
 ```
 
-前端測試請用 `bun run test:run`，不要直接執行 `bun test`：它會啟動 Bun 自己的測試執行器而不是 Vitest，並忽略專案的 Vitest 設定。也不要用 `bun run test`，它會以 watch 模式啟動 Vitest。請勿在同一個 `node_modules` 混用 `bun install` 與 `pnpm install`。
+前端測試請用 `bun run test:run`，不要直接執行 `bun test`：它會啟動 Bun 自己的測試執行器而不是 Vitest，並忽略專案的 Vitest 設定。也不要用 `bun run test`，它會以 watch 模式啟動 Vitest。完整的 `bun run test:run` 包含 `src/main/plugins/pluginExternalWorkspace.test.ts`，它模擬使用 pnpm 的外部外掛開發者：`PATH` 上需要有真正的 pnpm 10.x，沒有時不會被略過，而是以 `Executable not found in $PATH: "pnpm"` 失敗。請勿在同一個 `node_modules` 混用 `bun install` 與 `pnpm install`。
 
 如果應用程式、Backend、CLI、Session Binding、Analyzer 或 Token Tracking 未正常啟動，請參考[疑難排解](troubleshooting.md)。
