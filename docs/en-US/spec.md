@@ -100,7 +100,7 @@ Legend: ✅ shipped & stable · 🟡 in working tree but not yet released · �
 ### M7 · Claude Code Hooks
 **Status**: ✅ Done · file: `claude_hooks.py`
 
-- Installer auto-merges into `~/.claude/settings.json` on backend startup (`PreToolUse` / `Stop` / `Notification`)
+- Installer auto-merges into `~/.claude/settings.json` on backend startup (`PreToolUse` / `Stop` / `Notification` / `SubagentStop` / `PermissionRequest` / `PostToolUse` / `PostToolUseFailure`)
 - Hook commands curl to `/hooks/claude` endpoint — most reliable "is agent working?" signal
 - Incoming hook payloads feed the ActivityEvent stream
 - The `Stop` hook is also a delivery channel: its response may answer `{"decision": "block", "reason": <envelope>}` to hand a queued inter-CLI message to the agent without typing it (`hook_drain.py`; see `inter-cli-messaging.md`)

@@ -142,6 +142,114 @@ export const USER_RECORD_DETAILS: ReadonlySet<string> = new Set(['user', 'prompt
 /** The reader's name for an assistant message that opened a question box. */
 export const QUESTION_DETAIL = 'assistant:question'
 
+/** True for Claude's two tool-result hooks. They are installed async, so the
+ *  last tool's result can land after Stop: they only release a permission hold
+ *  and must not stamp the activity clocks, or a finished pane reads as mid-turn
+ *  again for up to TURN_STALE_MS. */
+export function isToolResultHook(detail: string | undefined): boolean {
+  return detail === 'hook:post_tool_use' || detail === 'hook:post_tool_use_failure'
+}
+
+/** What one `agent.activity` event means for a held permission wait.
+ *
+ *  Claude's PermissionRequest hook runs only when its permission dialog is about
+ *  to open, so it raises a hold that output alone cannot end (the Notification
+ *  hook's wait settles on the box's own repaints). Only the tool the box was for
+ *  finishing releases it here: the backend stamps PermissionRequest and
+ *  PostToolUse(Failure) with `tool_key`, the tool name plus a fingerprint of its
+ *  input (the request carries no tool_use_id), and a result for any other tool —
+ *  a parallel one, a subagent's — leaves the hold alone. Two identical calls
+ *  share a key, so one finishing can release the other's box; the screen check
+ *  (holdOutlivedBox) and the answering key pick that up. PreToolUse never
+ *  releases, for the same parallel-tool reason.
+ *
+ *  Everything else that ends a hold is not an event: the answering key
+ *  (keysAnswerPermissionBox), the turn end, a respawn, the screen check.
+ *
+ *  `held.since` is 0 when nothing is held; nothing is released then, so a wait
+ *  some other signal raised (the Notification hook, a screen match) is never
+ *  ended from here. A hold without a key matches nothing. */
+export function permissionHoldActionFor(
+  ev: { detail?: string; tool_key?: string },
+  held: { since: number; key: string },
+): 'hold' | 'release' | null {
+  if (ev.detail === 'hook:permission_request') return 'hold'
+  if (held.since <= 0 || held.key === '') return null
+  if (isToolResultHook(ev.detail)) return ev.tool_key === held.key ? 'release' : null
+  return null
+}
+
+/** True when `data` — what a pane is sent, from the keyboard (xterm's onData
+ *  hands over one keystroke at a time) or from the chat relay (a short run such
+ *  as `y\r`) — contains a key that answers a permission box: Enter, a lone Esc,
+ *  Ctrl+C, or a digit 1-9 (the menu's numbered options).
+ *
+ *  Every way of answering the box is input to the pane, which ends the hold
+ *  with no hook or record: a subagent's "No" lives in a transcript nobody reads,
+ *  and a hook that approves and rewrites the input fires no matching result.
+ *  Navigation (arrows, Tab) and ordinary letters do not answer. Escape
+ *  SEQUENCES are skipped whole — an arrow is `ESC [ A`, not an Esc — and so are
+ *  the terminal's own reports and replies (focus, mouse, device attributes,
+ *  cursor position, colour and version strings): an X10 mouse report carries
+ *  three printable bytes and an OSC/DCS reply is mostly digits. A bracketed
+ *  paste is text. Choosing "No, and tell Claude what to do" and pressing Enter
+ *  releases while the text field is open: the user is at the keyboard. */
+export function keysAnswerPermissionBox(data: string): boolean {
+  if (data.startsWith('\x1b[200~')) return false
+  let i = 0
+  while (i < data.length) {
+    const c = data[i]
+    if (c === '\r' || c === '\x03' || (c >= '1' && c <= '9')) return true
+    if (c !== '\x1b') {
+      i += 1
+      continue
+    }
+    const next = data[i + 1]
+    if (next === undefined) return true // a lone Esc
+    if (next === '[') {
+      if (data[i + 2] === 'M') {
+        i += 6 // X10 mouse report: ESC [ M plus three bytes
+        continue
+      }
+      let j = i + 2
+      while (j < data.length && !(data.charCodeAt(j) >= 0x40 && data.charCodeAt(j) <= 0x7e)) j += 1
+      i = j + 1 // past the final byte of the CSI sequence
+    } else if (next === 'O') {
+      i += 3 // SS3 (application-mode arrows, F1-F4)
+    } else if (next === ']' || next === 'P' || next === 'X' || next === '^' || next === '_') {
+      // OSC / DCS / SOS / PM / APC: a string, ended by BEL or ST (ESC \). These
+      // are the terminal's replies to a CLI's queries (a colour, a version), and
+      // their payload is full of digits.
+      let j = i + 2
+      while (j < data.length && data[j] !== '\x07' && !(data[j] === '\x1b' && data[j + 1] === '\\')) j += 1
+      i = data[j] === '\x07' ? j + 1 : j + 2
+    } else {
+      i += 2 // Alt+key arrives as ESC plus the key
+    }
+  }
+  return false
+}
+
+/** How long a hold may sit with no box on screen before that counts as
+ *  evidence. The hook runs before the box paints. */
+export const HOLD_PAINT_GRACE_MS = 1500
+
+/** The one safety net under a held permission wait: true when the hold should
+ *  end because the box it was raised for is not on screen. It covers what no key,
+ *  hook or turn end reports — a hook that approved the call and rewrote its
+ *  input (no box, no matching result), a box-less PermissionRequest on a pane
+ *  that is not mid-turn. `boxOnScreen` is the vendor's awaitingInput pattern on
+ *  the rendered screen tail, so this relies on that pattern recognising the
+ *  current box, rows below it included. A pane that is mid-turn gets the paint
+ *  grace; one that is not has nothing left to paint. */
+export function holdOutlivedBox(state: {
+  heldMs: number
+  turnInFlight: boolean
+  boxOnScreen: boolean
+}): boolean {
+  return !state.boxOnScreen && (!state.turnInFlight || state.heldMs >= HOLD_PAINT_GRACE_MS)
+}
+
 /** What one `agent.activity` event means for the QUESTION badge.
  *
  *  Pure, so the decision can be executed in a test instead of only inspected in

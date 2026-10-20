@@ -341,9 +341,12 @@ import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, quotaExhau
 import {
   awaitingClearsOnMiss,
   hasAwaitingPattern,
+  holdOutlivedBox,
+  isToolResultHook,
   matchAwaitingInput,
   notificationEndsAwaiting,
   notificationMeansAwaiting,
+  permissionHoldActionFor,
   questionActionFor,
 } from './lib/cliAwaitingInput'
 import {
@@ -4113,7 +4116,21 @@ function pollAwaitingPanes(): void {
     // A badge must never take messaging down with it.
     try {
       const screen = ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string
-      if (matchAwaitingInput(pane.agentKey, screen)) ref.markNeedsInput?.()
+      const boxOnScreen = matchAwaitingInput(pane.agentKey, screen)
+      // The safety net under a held permission wait (see holdOutlivedBox): the
+      // box is no longer on screen, so nothing is left to hold for.
+      const held = ref.awaitingHeld?.() as { since: number } | undefined
+      if (held && held.since > 0 && holdOutlivedBox({
+        heldMs: Date.now() - held.since,
+        turnInFlight: isTurnInFlight(
+          paneLastActiveAt.get(pane.id) ?? 0,
+          paneTurnCompleteAt.get(pane.id) ?? 0,
+          Date.now(),
+          { inferEndFromSilence: VENDORS_WITHOUT_TURN_END.has(pane.agentKey) },
+        ),
+        boxOnScreen,
+      })) ref.releaseNeedsInputHold?.()
+      if (boxOnScreen) ref.markNeedsInput?.()
       else if (awaitingClearsOnMiss(pane.agentKey)) ref.clearNeedsInput?.()
     } catch {
       /* leave this pane's badge as-is and carry on with the rest */
@@ -10594,6 +10611,9 @@ registerCommand('ui.pane.sendKeys', async (args) => {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }
   }
   const resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data: resolved.keys })
+  // This write goes straight to the PTY, not through the terminal's onData, so
+  // tell the pane its held permission box was just answered.
+  if (resp.ok) ref.noteAnswerKeys?.(resolved.keys)
   return resp.ok ? { ok: true, sent: true } : { ok: false, sent: false, error: resp.error?.message ?? 'terminal.input failed' }
 })
 // Diagnostics recorded by uiDiagnostics (e.g. injectText resends) — lets an
@@ -14764,7 +14784,7 @@ const sessionGhostHealGate = createGhostHealGate(async (paneId, pinnedSessionId)
 // is working; turn_complete = its turn ended. We timestamp both per pane; the
 // completion logic reads these instead of guessing from the TUI buffer.
 backend.on('agent.activity', (raw) => {
-  const ev = raw as { event_type?: string; pane_id?: string; vendor?: string; session_id?: string; detail?: string; text?: string; timestamp?: string; notification_type?: string; superseded?: boolean; pending_subagents?: number }
+  const ev = raw as { event_type?: string; pane_id?: string; vendor?: string; session_id?: string; detail?: string; text?: string; timestamp?: string; notification_type?: string; tool_key?: string; superseded?: boolean; pending_subagents?: number }
   if (!ev?.pane_id) return
   // QUESTION badge: "the agent asked you something and is waiting". Decided in
   // one place for both event types because both carry a half of it — the turn
@@ -14902,8 +14922,10 @@ backend.on('agent.activity', (raw) => {
   } else if (ev.event_type === 'agent_active') {
     // idle_prompt fires about a minute after EVERY finished turn: the pane is
     // waiting, not working. Stamping the clocks with it made isTurnInFlight
-    // read a finished pane as mid-turn and hold its queued messages.
-    if (ev.notification_type !== 'idle_prompt') {
+    // read a finished pane as mid-turn and hold its queued messages. A tool
+    // result (async hook) can land after Stop for the same effect, and only
+    // releases a permission hold below.
+    if (ev.notification_type !== 'idle_prompt' && !isToolResultHook(ev.detail)) {
       // First activity after the last turn end = this turn's start. The quota
       // failover's settle needs it: a turn that began under the old account and
       // finished under the new one is the old account's work.
@@ -14946,8 +14968,9 @@ backend.on('agent.activity', (raw) => {
         requestLlmPaneName(ev.pane_id, ev.text)
       }
     }
-    // A new turn re-arms 'done' notifications for this pane.
-    sysNotify.markActive(ev.pane_id)
+    // A new turn re-arms 'done' notifications for this pane. A late tool result
+    // is not one: it would clear the Dock badge the finished turn raised.
+    if (!isToolResultHook(ev.detail)) sysNotify.markActive(ev.pane_id)
     // Claude's Notification hook (user attention requested) arrives as
     // agent_active with detail 'hook:notification'. It is also the only signal
     // that separates "parked on the user" from "done": the prompt paints once
@@ -14964,7 +14987,10 @@ backend.on('agent.activity', (raw) => {
       // once per turn on top of the existing done notification. Builds that
       // send no type at all keep the old always-notify behaviour rather than
       // silently losing a signal the user may already rely on.
-      if (awaiting || !ev.notification_type) notifyAttention(ev.pane_id)
+      // One permission box reports through this hook AND PermissionRequest, in
+      // either order: chime only for whichever lands first.
+      const alreadyWaiting = awaiting && paneRefs[ev.pane_id]?.permissionWaitLive?.() === true
+      if ((awaiting && !alreadyWaiting) || !ev.notification_type) notifyAttention(ev.pane_id)
       if (awaiting) {
         paneRefs[ev.pane_id]?.markNeedsInput?.()
       } else if (notificationEndsAwaiting(ev.notification_type)) {
@@ -14973,6 +14999,19 @@ backend.on('agent.activity', (raw) => {
         // stays excluded from messaging and dispatch — indefinitely.
         paneRefs[ev.pane_id]?.clearNeedsInput?.()
       }
+    }
+    // Claude's PermissionRequest hook opens a hold on AWAITING that the box's own
+    // repaints cannot settle away; see permissionHoldActionFor for what ends it.
+    const holdAction = permissionHoldActionFor(
+      ev,
+      paneRefs[ev.pane_id]?.awaitingHeld?.() ?? { since: 0, key: '' },
+    )
+    if (holdAction === 'hold') {
+      // The Notification hook may have reported this same box first.
+      if (paneRefs[ev.pane_id]?.permissionWaitLive?.() !== true) notifyAttention(ev.pane_id)
+      paneRefs[ev.pane_id]?.holdNeedsInput?.(ev.tool_key ?? '')
+    } else if (holdAction === 'release') {
+      paneRefs[ev.pane_id]?.releaseNeedsInputHold?.()
     }
     // Clear the restore-mode badge once the user interacts with the pane.
     const histEntry = spawnHistory.value.find((e) => e.paneId === ev.pane_id)

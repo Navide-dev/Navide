@@ -2,6 +2,8 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { isTurnInFlight } from '../../lib/agentMessaging'
+import { isToolResultHook } from '../../lib/cliAwaitingInput'
 
 // Claude fires Notification(idle_prompt) about a minute after EVERY finished
 // turn. It arrives as an agent_active, but it says the pane is WAITING. Letting
@@ -23,7 +25,7 @@ function agentActiveBranch(): string {
 
 function idleGuardBlock(): string {
   const body = agentActiveBranch()
-  const guard = "if (ev.notification_type !== 'idle_prompt') {"
+  const guard = "if (ev.notification_type !== 'idle_prompt' && !isToolResultHook(ev.detail)) {"
   const at = body.indexOf(guard)
   expect(at).toBeGreaterThan(-1)
   const close = body.indexOf('\n    }\n', at)
@@ -55,5 +57,37 @@ describe('idle_prompt does not count as activity', () => {
   it('stamps nowhere else in the branch', () => {
     const body = agentActiveBranch()
     expect(body.split('paneLastActiveAt.set(').length - 1).toBe(1)
+  })
+})
+
+// PostToolUse / PostToolUseFailure are installed async, so the last tool's
+// result can land after Stop. It arrives as an agent_active too, but it only
+// releases a permission hold; stamping with it reopened the finished turn.
+describe('a late tool result does not count as activity', () => {
+  // The same stamping rule the guard above applies to the shared clock.
+  function stamps(ev: { detail?: string; notification_type?: string }): boolean {
+    return ev.notification_type !== 'idle_prompt' && !isToolResultHook(ev.detail)
+  }
+
+  it('leaves isTurnInFlight false when a Post event arrives after turn_complete', () => {
+    const turnCompleteAt = 2_000
+    const now = 2_500
+    for (const detail of ['hook:post_tool_use', 'hook:post_tool_use_failure']) {
+      const lastActive = stamps({ detail }) ? now : 1_900
+      expect(isTurnInFlight(lastActive, turnCompleteAt, now), detail).toBe(false)
+    }
+    // A real tool start after the turn end still opens a turn.
+    const lastActive = stamps({ detail: 'hook:pre_tool_use' }) ? now : 1_900
+    expect(isTurnInFlight(lastActive, turnCompleteAt, now)).toBe(true)
+  })
+
+  it('is excluded from the clocks by the very guard that stamps them', () => {
+    expect(idleGuardBlock()).toContain('!isToolResultHook(ev.detail)')
+  })
+
+  it('does not re-arm the done notification either', () => {
+    expect(appSource).toContain(
+      'if (!isToolResultHook(ev.detail)) sysNotify.markActive(ev.pane_id)'
+    )
   })
 })

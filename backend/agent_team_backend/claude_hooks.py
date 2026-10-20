@@ -4,12 +4,18 @@ Claude Code (CLI) supports hooks: `~/.claude/settings.json` may declare shell
 commands to run at specific lifecycle events (PreToolUse / Stop / Notification
 / SubagentStop / etc.). Each hook receives a JSON payload on stdin.
 
-We install four hooks pointing at our local FastAPI endpoint so the
+We install seven hooks pointing at our local FastAPI endpoint so the
 orchestrator gets reliable signals (better than buffer-scanning):
-  - PreToolUse    → 100% signal: agent is actively working
-  - Stop          → 100% signal: turn ended
-  - Notification  → user attention requested (e.g. waiting for approval)
-  - SubagentStop  → a subagent (Task tool) finished
+  - PreToolUse         → 100% signal: agent is actively working
+  - Stop               → 100% signal: turn ended
+  - Notification       → user attention requested (e.g. waiting for approval)
+  - SubagentStop       → a subagent (Task tool) finished
+  - PermissionRequest  → the permission box is about to open (report-only)
+  - PostToolUse        → a tool finished; with PostToolUseFailure, tells the
+    PostToolUseFailure   frontend the box for that tool was answered (async)
+The last three are written only for a probed Claude Code >= 2.1.15 (see
+_PERMISSION_HOLD_SINCE): older builds ignore the whole settings file over an
+event name they do not know.
 
 PreToolUse also carries a second, synchronous hook: Navide Guard's decision
 (`_build_guard_command`), whose printed body can deny or ask for the call.
@@ -54,7 +60,35 @@ _HOOK_EVENTS: dict[str, str] = {
     "Stop": "stop",
     "Notification": "notification",
     "SubagentStop": "subagent_stop",
+    # The permission-box pair. PermissionRequest runs only when Claude Code is
+    # about to show its permission dialog; ours reports it and returns no
+    # decision, so the dialog appears exactly as it would without us. The
+    # answer then shows up as the tool finishing (PostToolUse /
+    # PostToolUseFailure) or, for a denial — which fires no hook at all — as
+    # the denial record in the transcript.
+    "PermissionRequest": "permission_request",
+    "PostToolUse": "post_tool_use",
+    "PostToolUseFailure": "post_tool_use_failure",
 }
+
+#: The three events written only for a Claude Code that knows all of them. A
+#: build before 2.1.101 ignores the WHOLE settings file over one unknown hook
+#: event name (PermissionRequest is unknown before 2.0.45, PostToolUseFailure
+#: before 2.0.56), and with it every other setting and the PreToolUse Guard
+#: hook. 2.1.15 is also the first build that reads `"async"`, so one floor
+#: covers the event names and the flag. An unknown version writes none of them.
+_PERMISSION_HOLD_EVENTS: frozenset[str] = frozenset(
+    {"PermissionRequest", "PostToolUse", "PostToolUseFailure"}
+)
+_PERMISSION_HOLD_SINCE = (2, 1, 15)
+
+#: Report-only events that fire once per tool call. Claude Code runs a command
+#: hook flagged `"async": true` in the background without waiting for it, so
+#: these two add no hook latency to every tool call. Safe because nothing reads
+#: their reply — the hook already discards the response body — and they are
+#: never needed before the tool proceeds. PermissionRequest stays synchronous:
+#: it fires once per box, and the box should not open before it has reported.
+_ASYNC_EVENTS: frozenset[str] = frozenset({"PostToolUse", "PostToolUseFailure"})
 
 #: Events that also arm the background rewake waiter — the hook that lets an
 #: inter-CLI message reach a claude pane that is sitting IDLE, which is the one
@@ -297,8 +331,9 @@ def _refresh_claude_version(port_file: str) -> None:
     """Probe in the background and reinstall when the answer changed.
 
     Off the startup path on purpose: `claude --version` is a Node cold start,
-    seconds on a loaded Windows machine. Until it answers, the hooks are
-    whatever the last probe allowed — PowerShell on a first run.
+    seconds on a loaded machine. Until it answers, the hooks are whatever the
+    last probe allowed — on a first run, without the permission-hold events and
+    (on Windows) with the PowerShell guard.
     """
     version = _probe_claude_version()
     if version == _known_claude_version():
@@ -498,6 +533,9 @@ def install_hooks(
         log.info("dev backend skipping hook install: production hook is active")
         return {"status": "skipped", "reason": "production hook active"}
 
+    version = _known_claude_version()
+    permission_hold = version is not None and version >= _PERMISSION_HOLD_SINCE
+
     added = 0
     for event_name in [*_HOOK_EVENTS, *(e for e in _REWAKE_EVENTS if e not in _HOOK_EVENTS)]:
         event_kind = _HOOK_EVENTS.get(event_name, "")
@@ -527,8 +565,14 @@ def install_hooks(
         # is backgrounded and only its exit code matters, and a single event
         # (Stop) wants both.
         ours: list[dict[str, Any]] = []
-        if event_kind and f"{event_name}:{event_kind}" not in skip:
-            ours.append(osplat.scripts.hook_entry(_build_curl_command(port_file, event_kind)))
+        # Gated off, the prior entries stripped above are simply not written
+        # back, which is also how a downgraded Claude Code loses them.
+        gated_off = event_name in _PERMISSION_HOLD_EVENTS and not permission_hold
+        if event_kind and not gated_off and f"{event_name}:{event_kind}" not in skip:
+            signal = osplat.scripts.hook_entry(_build_curl_command(port_file, event_kind))
+            if event_name in _ASYNC_EVENTS:
+                signal = {**signal, "async": True}
+            ours.append(signal)
         if event_name == GUARD_EVENT and f"{event_name}:guard" not in skip:
             ours.append(guard_hook_entry(port_file))
         if event_name in _REWAKE_EVENTS and rewake_wanted and f"{event_name}:rewake" not in skip:
@@ -566,7 +610,7 @@ def install_hooks(
 
 def _start_version_probe(port_file: str) -> None:
     global _version_refresh_started
-    if osplat.platform_id == "win32" and not _version_refresh_started:
+    if not _version_refresh_started:
         _version_refresh_started = True
         threading.Thread(
             target=_refresh_claude_version, args=(port_file,), name="claude-version-probe", daemon=True
@@ -613,7 +657,8 @@ def prepare_pane_settings(port_file: str, skip: frozenset[str]) -> Path:
     os.replace(staging, target)
     global _prepared_with
     _prepared_with = (port_file, skip)
-    # What the probe decides (the exec-form guard) is in this file now.
+    # What the probe decides (the exec-form guard, the permission-hold events)
+    # is in this file now.
     _start_version_probe(port_file)
     return target
 

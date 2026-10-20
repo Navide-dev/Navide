@@ -41,6 +41,13 @@ def _push_channel_off(monkeypatch):
     monkeypatch.setattr(claude_hooks, "_rewake_wanted", lambda: False)
 
 
+@pytest.fixture(autouse=True)
+def _claude_version(monkeypatch):
+    # The permission-hold events are written only for a Claude Code that knows
+    # them. Pinned to a current build here, never read from the test database.
+    monkeypatch.setattr(claude_hooks, "_known_claude_version", lambda: (2, 1, 303))
+
+
 def _ours(entries: list) -> list[dict]:
     return [
         h for e in entries for h in e.get("hooks", [])
@@ -71,10 +78,95 @@ def test_claude_other_events_are_unchanged(tmp_path) -> None:
     claude_hooks.install_hooks("/tmp/port-file", settings_file=settings)
 
     hooks = json.loads(settings.read_text())["hooks"]
-    for event, kind in (("Stop", "stop"), ("Notification", "notification"), ("SubagentStop", "subagent_stop")):
+    for event, kind in (
+        ("Stop", "stop"), ("Notification", "notification"), ("SubagentStop", "subagent_stop"),
+        ("PermissionRequest", "permission_request"),
+    ):
         assert _ours(hooks[event]) == [
             osplat.scripts.hook_entry(_build_curl_command("/tmp/port-file", kind))
         ], event
+
+
+def test_claude_per_tool_report_hooks_run_in_the_background(tmp_path) -> None:
+    # PostToolUse(Failure) fire once per tool call and only report, so they must
+    # not add a blocking hook process to each call; PermissionRequest stays sync.
+    settings = tmp_path / "settings.json"
+    claude_hooks.install_hooks("/tmp/port-file", settings_file=settings)
+
+    hooks = json.loads(settings.read_text())["hooks"]
+    for event, kind in (("PostToolUse", "post_tool_use"), ("PostToolUseFailure", "post_tool_use_failure")):
+        assert _ours(hooks[event]) == [
+            {**osplat.scripts.hook_entry(_build_curl_command("/tmp/port-file", kind)), "async": True}
+        ], event
+    assert all("async" not in h for h in _ours(hooks["PermissionRequest"]))
+
+
+_HOLD_EVENTS = ("PermissionRequest", "PostToolUse", "PostToolUseFailure")
+
+
+@pytest.mark.parametrize("version, written", [
+    (None, False),  # not probed yet: a Claude Code that rejects the file is the worse mistake
+    ((2, 0, 56), False),
+    ((2, 1, 14), False),
+    ((2, 1, 15), True),
+    ((2, 1, 303), True),
+])
+def test_claude_permission_hold_events_need_a_claude_that_knows_them(
+    tmp_path, monkeypatch, version, written
+) -> None:
+    monkeypatch.setattr(claude_hooks, "_known_claude_version", lambda: version)
+    settings = tmp_path / "settings.json"
+    claude_hooks.install_hooks("/tmp/port-file", settings_file=settings)
+
+    hooks = json.loads(settings.read_text())["hooks"]
+    for event in _HOLD_EVENTS:
+        assert (event in hooks) is written, event
+
+
+def test_claude_gated_off_leaves_the_guard_and_every_other_event_byte_identical(
+    tmp_path, monkeypatch
+) -> None:
+    full, gated = tmp_path / "full.json", tmp_path / "gated.json"
+    claude_hooks.install_hooks("/tmp/port-file", settings_file=full)
+    monkeypatch.setattr(claude_hooks, "_known_claude_version", lambda: None)
+    claude_hooks.install_hooks("/tmp/port-file", settings_file=gated)
+
+    written, kept = json.loads(full.read_text())["hooks"], json.loads(gated.read_text())["hooks"]
+    assert set(written) - set(kept) == set(_HOLD_EVENTS)
+    # PreToolUse carries the Guard hook: the whole event, not just its entries.
+    assert len(_ours(kept["PreToolUse"])) == 2
+    for event in kept:
+        assert kept[event] == written[event], event
+
+
+def test_claude_downgrade_strips_the_hold_events_and_keeps_the_user_s_own(
+    tmp_path, monkeypatch
+) -> None:
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"hooks": {"PostToolUse": [
+        {"matcher": "Edit", "hooks": [{"type": "command", "command": "mine.sh"}]},
+    ]}}))
+    claude_hooks.install_hooks("/tmp/port-file", settings_file=settings)
+    assert all(event in json.loads(settings.read_text())["hooks"] for event in _HOLD_EVENTS)
+
+    monkeypatch.setattr(claude_hooks, "_known_claude_version", lambda: (2, 1, 14))
+    claude_hooks.install_hooks("/tmp/port-file", settings_file=settings)
+
+    hooks = json.loads(settings.read_text())["hooks"]
+    assert [e for e in _HOLD_EVENTS if e in hooks] == ["PostToolUse"]
+    assert hooks["PostToolUse"] == [{"matcher": "Edit", "hooks": [{"type": "command", "command": "mine.sh"}]}]
+
+
+def test_claude_version_probe_runs_off_windows_too(monkeypatch) -> None:
+    # The permission-hold events depend on the probed version, so the probe is
+    # no longer a Windows-only thing.
+    probed = threading.Event()
+    monkeypatch.setattr(claude_hooks, "_version_refresh_started", False)
+    monkeypatch.setattr(claude_hooks, "_refresh_claude_version", lambda port_file: probed.set())
+
+    claude_hooks._start_version_probe("/tmp/port-file")
+
+    assert probed.wait(5)
 
 
 def test_claude_reinstall_and_uninstall_handle_the_guard_hook(tmp_path) -> None:
