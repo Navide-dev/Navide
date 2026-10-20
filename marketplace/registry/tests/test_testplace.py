@@ -596,6 +596,7 @@ def _mixed_legacy_version(client: TestClient, monkeypatch) -> None:
 
     assert _publish_native(client, "darwin-arm64", channel="testplace").status_code == 201
     monkeypatch.setattr(app_module, "_publish_conflict", lambda *args, **kwargs: None)
+    monkeypatch.setattr(app_module, "_other_channel_conflict", lambda *args, **kwargs: None)
     stable = _publish_native(client, "win32-x64", channel="stable")
     assert stable.status_code == 201, stable.text
     monkeypatch.undo()
@@ -759,3 +760,26 @@ def test_promotion_is_refused_while_the_version_is_blocked(client: TestClient) -
     with _session(client) as session:
         row = session.exec(select(ExtensionVersion)).one()
     assert row.promotion_status == "requested" and row.channel == "testplace"
+
+
+def test_two_publishes_racing_on_one_version_never_hold_both_channels(client: TestClient, monkeypatch) -> None:
+    """S8 R4-L3: the one-channel rule holds when two publishes race past the first check."""
+    from registry import app as app_module
+
+    real = app_module.run_scan
+    answers: list[int] = []
+
+    def scan_then_race(*args, **kwargs):
+        # The testplace publish has passed its conflict check; a stable one of
+        # the same version on another target runs to completion meanwhile.
+        monkeypatch.setattr(app_module, "run_scan", real)
+        answers.append(_publish_native(client, "win32-x64", channel="stable").status_code)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "run_scan", scan_then_race)
+    late = _publish_native(client, "darwin-arm64", channel="testplace")
+    assert answers == [201]
+    assert late.status_code == 409, late.text
+    rows = _rows(client)
+    assert set(rows) == {"win32-x64"}
+    assert all(row.channel != "testplace" for row in rows.values())
