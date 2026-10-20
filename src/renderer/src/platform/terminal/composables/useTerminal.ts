@@ -1235,6 +1235,18 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     backgroundTaskIds.value = next
   }
 
+  /** Whether a background task still holds this pane, on the same fuse as the
+   *  RUNNING badge but read now and regardless of AWAITING — the pipeline asks
+   *  "is work still running", not "what badge to show". */
+  function hasLiveBackgroundTasks(): boolean {
+    const lastSignOfLife = Math.max(lastCleanBurstAt.value, turnCompleteAt.value)
+    const now = Date.now()
+    for (const startedAt of backgroundTaskIds.value.values()) {
+      if (now - Math.max(startedAt, lastSignOfLife) <= BACKGROUND_TASK_FUSE_MS) return true
+    }
+    return false
+  }
+
   function markBufferPosition(): number {
     flushPendingClean()
     return cleanBuffer.value.length
@@ -3536,6 +3548,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     markDeliveredPending,
     clearDeliveredPending,
     noteBackgroundTasks,
+    hasLiveBackgroundTasks,
     markBufferPosition,
     recleanBuffer,
     flushPendingClean,
