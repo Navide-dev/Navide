@@ -145,7 +145,8 @@ A derived prefix in this list is refused (`AGENT_TOOL_PREFIX_RESERVED`):
 
 `cli_` `credentials_` `evolve_` `git_` `marketplace_` `mcp_` `memory_`
 `miniide_` `navide_` `pipeline_` `plan_` `plans_` `plugins_` `preview_`
-`prompt_` `role_` `scheduler_` `share_` `skills_` `stage_` `ui_` `workspace_`
+`prompt_` `role_` `scheduler_` `share_` `skills_` `stage_` `ui_` `window_`
+`workspace_`
 
 `git_`, `plans_` and `miniide_` are the prefixes the built-in packages
 (`navide.git`, `navide.plans`, `navide.mini-ide`) derive, so a third-party

@@ -356,8 +356,9 @@ import {
   screenShowsHookTrustPrompt
 } from './lib/sessionMarkerTurn'
 import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
-import { executeCommand, formatKeySpec, initKeybindingsPort, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
+import { executeCommand, formatKeySpec, initKeybindingsPort, invokeCommand, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
+import { WINDOW_INSTANCE_ID } from './lib/windowInstanceId'
 import {
   pluginAgentNoticeTitle,
   pluginAgentUndoApplies,
@@ -10923,6 +10924,42 @@ registerCommand('ui.workspace.switch', async (args) => {
     )
   }
   return { path: currentWorkspace.value }
+})
+// MCP window_list (DESIGN-C S3): this window describes itself, under the
+// page-load id the backend knows it by. Read-only.
+registerCommand('ui.window.describe', () => {
+  const held = [...workspaceOrder.value]
+  if (currentWorkspace.value && !held.some((w) => normWs(w) === normWs(currentWorkspace.value))) {
+    held.unshift(currentWorkspace.value)
+  }
+  return {
+    window_id: WINDOW_INSTANCE_ID,
+    kind: isDetachedWindow ? 'detached-group' : 'main',
+    on_screen: currentWorkspace.value,
+    workspaces: held,
+    ...(isDetachedWindow ? { detached_group: detachedGroupId } : {}),
+    focused: document.hasFocus(),
+    panes: panes.value.map((p) => ({ pane_id: p.id, name: p.messagingName ?? '', workspace_path: p.workspacePath })),
+  }
+})
+// MCP window_focus (DESIGN-C S3): optionally switch to a project this window
+// holds — through ui.workspace.switch, so its refusals (not held, pipeline
+// running, switch did not land) are the answer — then bring this window to the
+// front. Main focuses the window that sent the IPC and no other. The window
+// says which pane did it; caller_address is stamped by the backend from the
+// caller's credential.
+registerCommand('ui.window.focus', async (args) => {
+  const a = (args ?? {}) as { workspace_path?: string; caller_address?: string }
+  const previous = currentWorkspace.value
+  if (a.workspace_path && normWs(a.workspace_path) !== normWs(currentWorkspace.value)) {
+    const switched = await invokeCommand('ui.workspace.switch', { path: a.workspace_path })
+    if (!switched.ok) throw new Error(switched.error ?? `could not switch to ${a.workspace_path}`)
+  }
+  const focused = await window.agentTeam?.focusSelf?.()
+  const caller = a.caller_address || 'an agent'
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} brought this window to the front` })
+  notifyRestore.toast(i18n.global.t('msg.window-focused-by', { caller }), { type: 'info' })
+  return { on_screen: currentWorkspace.value, previous_on_screen: previous, focused: focused?.ok === true }
 })
 registerCommand('ui.layout.setMode', (args) => {
   const mode = (args as { mode?: LayoutMode } | undefined)?.mode
