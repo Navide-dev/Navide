@@ -54,7 +54,13 @@ const api = () => {
 const state = ref<DeveloperPublicState | null>(null)
 const busy = ref<string | null>(null)
 const error = ref('')
-const application = ref<{ status: DeveloperApplicationStatus; reason: string | null; fields: Record<string, unknown> } | null>(null)
+const application = ref<{
+  status: DeveloperApplicationStatus
+  reason: string | null
+  fields: Record<string, unknown>
+  /** Namespaces the Registry took back from this account (W2). */
+  namespaces?: Array<{ namespace: string; frozen_at: string | null; frozen_reason: string | null }>
+} | null>(null)
 const versions = ref<DeveloperVersionRow[]>([])
 
 const form = computed(() => openMarketplaceForm.value)
@@ -223,7 +229,14 @@ async function submitPublish(): Promise<void> {
   if (!pkg) return
   const result = await run('submit', () =>
     submitMarketplaceForm(props.backend, request.value, () => api().publish({ stageId: pkg.stageId, target: publishTarget.value })))
-  if (!result) return
+  if (!result) {
+    // MED-5: the staged copy outlived its time; say so and let the package be chosen again.
+    if (error.value.includes('PUBLISH_STAGE_EXPIRED')) {
+      error.value = t('marketplace-developer.publish.stage-expired')
+      staged.value = null
+    }
+    return
+  }
   if (!result.ok) {
     error.value = message(result)
     return
@@ -308,6 +321,16 @@ onMounted(() => {
         {{ $t(`marketplace-developer.application.status.${application?.status ?? 'none'}`) }}
         <template v-if="application?.reason"> — {{ application.reason }}</template>
       </p>
+      <div v-if="application?.namespaces?.length" class="dev-reclaimed" data-testid="developer-reclaimed-namespaces">
+        <div class="dev-muted">{{ $t('marketplace-developer.application.reclaimed.title') }}</div>
+        <ul>
+          <li v-for="item in application.namespaces" :key="item.namespace">
+            <code>{{ item.namespace }}</code>
+            <template v-if="item.frozen_at"> · {{ item.frozen_at }}</template>
+            — {{ item.frozen_reason ?? $t('marketplace-developer.application.reclaimed.no-reason') }}
+          </li>
+        </ul>
+      </div>
       <div class="dev-actions">
         <button class="nv-btn nv-btn--sm" @click="openForm('developer-application')">{{ $t('marketplace-developer.application.open') }}</button>
         <button class="nv-btn nv-btn--sm" @click="openForm('publish')">{{ $t('marketplace-developer.publish.open') }}</button>
@@ -324,6 +347,7 @@ onMounted(() => {
           {{ $t('marketplace-developer.form.agent-filled', { agent: requesterName }) }}
           <div v-if="reasonText" class="dev-reason">{{ $t('plugin-request.reason') }}: {{ reasonText }}</div>
         </template>
+        <div v-if="form.requester?.tainted === true" class="dev-tainted" data-testid="developer-form-tainted">{{ $t('plugin-request.tainted') }}</div>
       </div>
 
       <template v-if="form.form === 'developer-application'">
@@ -445,6 +469,8 @@ onMounted(() => {
 .dev-muted { margin: 0; color: var(--text-secondary); font-size: var(--font-xs); }
 .dev-notice { margin: 0; font-size: var(--font-xs); color: var(--text-primary); }
 .dev-callout { border-left: 3px solid var(--accent-fg); padding: var(--space-2) var(--space-3); background: var(--accent-subtle); font-size: var(--font-xs); }
+.dev-reclaimed ul { margin: var(--space-1, 4px) 0 0; padding-left: var(--space-4); font-size: var(--font-xs); }
+.dev-tainted { margin-top: var(--space-1, 4px); color: var(--risk-fg, var(--text-primary)); font-weight: 600; }
 .dev-reason { margin-top: var(--space-1, 4px); white-space: pre-wrap; color: var(--text-secondary); }
 .dev-facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1, 4px) var(--space-3); margin: 0; font-size: var(--font-xs); }
 .dev-facts dt { color: var(--text-secondary); }

@@ -12,7 +12,6 @@
 // main-side, keyed by id, until commit.
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { randomBytes } from 'node:crypto'
 import { backendCallAddress } from './pluginActivity'
 import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -135,6 +134,7 @@ import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
 import { createLocalTrustRecord, localTakedownDecision, readLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import { PackageStagingStore } from './pluginStagingStore'
 import {
   agentPackagePath,
   packageLocalFolder,
@@ -640,13 +640,14 @@ export type LocalPackageScanner = (input: {
   manifest: unknown
 }) => ScanReport | null | Promise<ScanReport | null>
 
-/** A package staged for an agent's file request (W1, S2). */
-type AgentStagedPackage =
-  | { kind: 'file'; bytes: Uint8Array; signature: string | null; at: number }
-  | { kind: 'folder'; path: string; at: number }
-/** As long as the request it belongs to lives. */
-const AGENT_STAGED_TTL_MS = 15 * 60 * 1000
-const MAX_AGENT_STAGED = 4
+/** What an agent's file request staged besides the bytes (W1, S2). */
+type AgentStagedMeta = { kind: 'file'; signature: string | null } | { kind: 'folder'; path: string }
+/** A staged copy outlives its request (15 minutes, PLUGIN_APPROVAL_TTL_S)
+ * by a minute, so a card the user can still approve always finds its copy.
+ * The copies are files (PackageStagingStore), so there is no count limit
+ * (review MED-5 on W1): a copy goes when the user decides or its request
+ * expires, never because other requests came after it. */
+const AGENT_STAGED_TTL_MS = 16 * 60 * 1000
 
 /** The largest `<file>.sig` read: a base64 Ed25519 signature is 88 bytes. */
 const MAX_SIGNATURE_BYTES = 4096
@@ -1567,14 +1568,16 @@ export function registerPluginIpc(
       localStage: (path) => stageAgentPackage(path),
     })
   )
-  // Staged packages of agent file requests, by a random id. Bounded: a few
-  // requests at a time, for as long as a request lives (15 minutes).
-  const agentStaged = new Map<string, AgentStagedPackage>()
-  const takeAgentStaged = (stagingId: string): AgentStagedPackage | undefined => {
-    const now = Date.now()
-    for (const [id, entry] of agentStaged) if (now - entry.at > AGENT_STAGED_TTL_MS) agentStaged.delete(id)
-    return agentStaged.get(stagingId)
-  }
+  // Staged copies of agent file requests, on disk under Navide's data folder
+  // (never the plugins root). Made when the Host starts, which removes what an
+  // earlier run left: its requests did not survive the restart.
+  const agentStagingStore = new PackageStagingStore<AgentStagedMeta>(
+    join(dirname(pluginsRoot), 'plugin-staging', 'agent-file'),
+    AGENT_STAGED_TTL_MS,
+    'AGENT_STAGING_EXPIRED',
+  )
+  const agentStaging = (): PackageStagingStore<AgentStagedMeta> => agentStagingStore
+  const takeAgentStaged = (stagingId: string) => agentStaging().take(stagingId)
   const stageAgentPackage = async (requested: string): Promise<LocalPackageQueryReport & { stagingId?: string }> => {
     await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
     const deps = localPackageToolDeps()
@@ -1588,12 +1591,10 @@ export function registerPluginIpc(
     // A folder is checked as Developer Mode loads it (K4), in place.
     const report = folder ? developerFolderReport(path) : await validateLocalBytes(path, bytes!, signature, deps)
     if (!report.valid) return report
-    const stagingId = randomBytes(16).toString('hex')
-    takeAgentStaged('')
-    while (agentStaged.size >= MAX_AGENT_STAGED) agentStaged.delete(agentStaged.keys().next().value as string)
-    agentStaged.set(stagingId, folder
-      ? { kind: 'folder', path, at: Date.now() }
-      : { kind: 'file', bytes: bytes!, signature, at: Date.now() })
+    const { id: stagingId } = agentStaging().stage(
+      folder ? null : bytes,
+      folder ? { kind: 'folder', path } : { kind: 'file', signature },
+    )
     return { ...report, stagingId }
   }
   const developerFolderReport = (path: string): LocalPackageQueryReport => {
@@ -3018,16 +3019,26 @@ export function registerPluginIpc(
     const stagingId = typeof args?.stagingId === 'string' ? args.stagingId : ''
     const staged = takeAgentStaged(stagingId)
     if (!staged) throw new Error('the staged package of this request is gone; ask the agent to send it again')
-    if (staged.kind === 'folder') {
+    // The user approved: the copy is used now (its bytes are held for the
+    // consent dialog like the user's own pick) and its file goes.
+    agentStaging().discard(stagingId)
+    const meta = staged.meta
+    if (meta.kind === 'folder') {
       if (!developerModeOn()) {
         throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
       }
-      const described = describeFolder(staged.path)
-      assertFolderIdFree(described.pluginId, staged.path)
-      preparedFolders.set(described.pluginId, { dir: staged.path, permissionsDigest: described.permissionsDigest })
+      const described = describeFolder(meta.path)
+      assertFolderIdFree(described.pluginId, meta.path)
+      preparedFolders.set(described.pluginId, { dir: meta.path, permissionsDigest: described.permissionsDigest })
       return described.summary
     }
-    return prepareLocalFile(staged.bytes, staged.signature)
+    return prepareLocalFile(staged.bytes!, meta.signature)
+  })
+
+  // The user rejected an agent's file request: its staged copy goes now.
+  ipcMain.handle('plugins:discardAgentStaged', (event, args: { stagingId?: unknown } | null) => {
+    assertAuthorized(event)
+    if (typeof args?.stagingId === 'string') agentStaging().discard(args.stagingId)
   })
 
   ipcMain.handle('plugins:reloadDeveloperPlugin', async (event, args: { id?: unknown } | null) => {

@@ -13,9 +13,13 @@ their publisher keys, and blocks the digest of every version they published
 
 A namespace self-claimed before qualification existed is grandfathered
 (migration 13, decision d4(a)): it keeps publishing for 30 days while its owner
-applies, a pending application pauses the period, and once it runs out with no
-approved or pending application the namespace is reclaimed the way a
-revocation tears one down (reclaim_expired).
+applies. The owner's first application, filed inside the period, pauses it
+until the decision, and a rejection resumes it with the time it had left.
+Nothing else pauses it: an application filed after the deadline, or a
+re-application after a rejection, leaves the clock running, so the period
+cannot be stretched indefinitely. Once it runs out with no approved owner and
+no paused application, the namespace is reclaimed the way a revocation tears
+one down (reclaim_expired).
 
 Admin-created (first-party) publishers have no owner and are always vetted.
 """
@@ -28,6 +32,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from . import audit, blocklist
@@ -138,12 +143,17 @@ def grandfather_deadline(publisher: Publisher, now: datetime) -> datetime | None
     return until
 
 
+def _paused(session: Session, publisher: Publisher) -> bool:
+    """A pending application holds the period only while it paused it."""
+    return publisher.grandfather_paused_at is not None and status_of(session, publisher.navide_member_id) == PENDING
+
+
 def grandfathered(session: Session, publisher: Publisher, now: datetime | None = None) -> bool:
-    """Whether the grace period still lets an unapproved owner publish: a
-    pending application always counts as having applied."""
+    """Whether the grace period still lets an unapproved owner publish: the
+    period is running, or the owner's first application paused it."""
     if publisher.grandfather_until is None or publisher.navide_member_id is None:
         return False
-    if status_of(session, publisher.navide_member_id) == PENDING:
+    if _paused(session, publisher):
         return True
     now = now or _now()
     return now < grandfather_deadline(publisher, now)
@@ -160,7 +170,7 @@ def grandfather_view(session: Session, publisher: Publisher, now: datetime | Non
         return None
     now = now or _now()
     deadline = grandfather_deadline(publisher, now)
-    paused = status == PENDING
+    paused = _paused(session, publisher)
     left = deadline - now
     return {
         "until": _iso(deadline),
@@ -172,13 +182,18 @@ def grandfather_view(session: Session, publisher: Publisher, now: datetime | Non
 
 
 def _pause_grandfather(session: Session, member_id: str, now: datetime) -> None:
+    """Pause every period of this owner that is still running at `now`; an
+    expired one stays expired."""
     for publisher in session.exec(
         select(Publisher).where(
             Publisher.navide_member_id == member_id,
             Publisher.grandfather_until.is_not(None),
             Publisher.grandfather_paused_at.is_(None),
+            Publisher.frozen_at.is_(None),
         )
     ).all():
+        if grandfather_deadline(publisher, now) <= now:
+            continue
         publisher.grandfather_paused_at = now
         session.add(publisher)
 
@@ -331,6 +346,9 @@ def submit_application(
         raise QualificationError("APPLICATION_EXISTS", f"an application is already {row.status}")
     if row is not None and row.status == REVOKED:
         raise QualificationError("QUALIFICATION_REVOKED", "this account's developer qualification was revoked")
+    # Only the first application pauses a grace period (S8 R-MED-2): a
+    # re-application after a rejection leaves the clock running.
+    first = row is None
     if row is None:
         row = DeveloperQualification(navide_member_id=member_id, status=PENDING)
     row.status = PENDING
@@ -338,7 +356,8 @@ def submit_application(
     row.field_sources = sources
     row.source = source
     row.submitted_at = _now()
-    _pause_grandfather(session, member_id, row.submitted_at)
+    if first:
+        _pause_grandfather(session, member_id, row.submitted_at)
     row.decided_at = None
     row.decided_by = None
     row.reason = None
@@ -353,7 +372,13 @@ def submit_application(
             "agent_drafted_fields": sorted(k for k, v in sources.items() if v == SOURCE_AGENT_DRAFT),
         },
     )
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        # Two first applications raced: the other one committed first, and
+        # this whole transaction (pause included) rolls back.
+        session.rollback()
+        raise QualificationError("APPLICATION_EXISTS", "an application is already pending") from exc
     session.refresh(row)
     return row
 
@@ -535,7 +560,7 @@ def revoke(session: Session, member_id: str, *, actor: str, reason: str) -> Revo
 
 def reclaim_expired(session: Session, now: datetime | None = None) -> list[str]:
     """Reclaim every grandfathered namespace whose grace period ran out with
-    no approved or pending application: tear it down as a revocation does
+    no approved owner and no paused application: tear it down as a revocation does
     (the account keeps its account token and may still apply). Commits.
     Returns the namespaces reclaimed."""
     now = now or _now()
@@ -547,7 +572,7 @@ def reclaim_expired(session: Session, now: datetime | None = None) -> list[str]:
             Publisher.navide_member_id.is_not(None),
         )
     ).all():
-        if status_of(session, publisher.navide_member_id) in (APPROVED, PENDING):
+        if is_approved(session, publisher.navide_member_id) or _paused(session, publisher):
             continue
         if grandfather_deadline(publisher, now) > now:
             continue

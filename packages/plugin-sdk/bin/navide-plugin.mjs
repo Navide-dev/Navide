@@ -677,6 +677,11 @@ async function main(argv) {
     for (const option of ['--registry', '--token', '--signature', '--insecure-http']) {
       if (options.has(option)) fail(`--via-navide cannot be combined with ${option}: Navide's publish form chooses the registry, signs you in and submits`)
     }
+    // Navide's publish form has no channel: a Testplace build handed over
+    // would go to ordinary Marketplace review and be public once approved.
+    if (options.has('--channel')) {
+      fail(`--via-navide cannot be combined with --channel: Navide's publish form sends every build to Marketplace review, where an approved build is public. Publish a Testplace build directly with \`navide-plugin publish ${argument} --channel testplace\` (it reads your publisher token).`)
+    }
     const link = navidePublishLink(argument, options.get('--target'))
     console.log(`Handing ${argument} to Navide: ${link}`)
     if (options.get('--no-browser') !== true) openBrowser(link)

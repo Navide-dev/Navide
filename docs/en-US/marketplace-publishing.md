@@ -224,10 +224,49 @@ choose **Restart Plugin**.
 
 ## 4. Publish to the Marketplace
 
+### Apply for developer qualification
+
+Only an approved developer can claim a namespace or get a publish token.
+Apply once per Navide account, at **Developer application**
+(`/developer/apply`) or from Navide. The application is real-name (legal
+name, contact email, country, the namespace you intend to claim, what you
+will publish); reviewers and you see those details, the Marketplace shows
+only your display name. Review checks who is publishing and that you can be
+reached, never which permissions your plugins ask for. A rejection comes with
+a reason and you can apply again.
+
+Revoking a qualification freezes every namespace of the account, revokes all
+of its tokens and signing keys, takes every version down and blocks their
+package digests as `qualification-revoked`. The reason is shown on each
+namespace's dashboard.
+
+#### Namespaces claimed before developer qualification existed
+
+A namespace you claimed before qualification existed keeps publishing for a
+30-day grace period while you apply. Your namespace's dashboard shows the
+deadline and warns in the last seven days.
+
+- Your **first** application, submitted **before** the deadline, pauses the
+  period until it is decided. If it is approved, the grace period no longer
+  applies. If it is rejected, the period resumes with the days it had left.
+- Nothing else pauses it. An application submitted after the deadline, or a
+  new application after a rejection, leaves the clock running. This includes
+  an account whose application was rejected before the grace period began:
+  its next application is a re-application and does not pause the period.
+- When the period runs out with no approved qualification and no paused
+  application, publishing is refused at once and the namespace is reclaimed
+  within minutes: it is frozen, its tokens and signing key are revoked, every
+  version is taken down and their digests are blocked as
+  `qualification-revoked`. The dashboard shows when and why.
+- A reclaimed namespace is **not** released and is **not** unfrozen by a later
+  approval. It stays in your account and still counts toward the three
+  namespaces an account can hold. After approval, claim a new namespace.
+
 ### Sign in and claim a namespace
 
 1. Open <https://server.navide.dev/registry/publish> and sign in with your
-   Navide account.
+   Navide account, and make sure your developer qualification is approved
+   (above).
 2. Open **Claim a namespace** (`/publisher/claim`), check a name and claim it.
    Namespaces are first come, first served; reserved words (`navide`,
    `official`, …) and look-alikes of an existing namespace are refused, and an
@@ -416,7 +455,7 @@ Testplace needs Navide 0.2.27 or later on the tester's side.
 
 | | Pre-release | Testplace | Local install |
 |---|---|---|---|
-| Who can install it | Everyone who turns on **Get pre-releases** for your Navide plugin, or picks **Install *version* (pre-release)** | Only the testers you invite (up to 100 per Navide plugin) | Anyone you send the `.vsix` file to |
+| Who can install it | Everyone who turns on **Get pre-releases** for your Navide plugin, or picks **Install *version* (pre-release)** | Only the testers you invite (no limit on how many) | Anyone you send the `.vsix` file to |
 | Review | Same review as a stable version | Automated scan only for invited testers; a public test code adds a light human review | None; Navide does not scan it |
 | Signed by the Navide Marketplace | Yes | Yes | No (your publisher signature at most) |
 | Label in Navide | **Pre-release (reviewed)** | **Test build, no human review, expires *date*** | **Local file**, with "not reviewed by Navide" |
@@ -464,11 +503,11 @@ navide-plugin testplace invite list acme.files
 - `invite add` creates one single-use join token per label and prints each
   once. A label is your own note (for example the address you send it to); it
   is never shown to the tester. Send the token yourself; the tester pastes it
-  in Navide while signed in to Navide Cloud. At most 100 invites per Navide
-  plugin; revoking one (`invite revoke`) frees its seat and removes that
-  tester's access.
-- `code create --max-testers <n>` opens a public test code for up to 1,000
-  testers. The first code of a Navide plugin waits for a light review by
+  in Navide while signed in to Navide Cloud. There is no limit on the number
+  of invites or testers; revoking one (`invite revoke`) removes that tester's
+  access.
+- `code create --max-testers <n>` opens a public test code for up to `n`
+  testers, any positive number you choose. The first code of a Navide plugin waits for a light review by
   Navide; later ones open at once. `code revoke` stops new joins; testers who
   already joined keep their access.
 - `revoke <id> <version>` withdraws a test build early. A yank does the same.
@@ -480,6 +519,10 @@ navide-plugin testplace invite list acme.files
 
   A build that is actually malicious is handled by Navide's existing takedown
   and blocklist, not by a revoke.
+- Two things still expire. A test build expires 90 days after it is published;
+  its testers lose it then unless you publish a newer one or promote it.
+  Testers sign in with a Navide Cloud account token that lasts 30 days, after
+  which they sign in again in Navide.
 - `promote <id> <version>` sends the same package to Marketplace review. When
   it is approved it becomes an ordinary stable or pre-release version (by its
   SemVer), and testers keep it without reinstalling.
@@ -580,7 +623,7 @@ navide-plugin logout [--registry <url>]
 navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]
 navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]
 navide-plugin testplace invite add <namespace.name> <label>... | invite list <namespace.name> | invite revoke <namespace.name> <invite-id>
-navide-plugin testplace code create <namespace.name> --max-testers <1-1000> | code list <namespace.name> | code revoke <namespace.name> <code-id>
+navide-plugin testplace code create <namespace.name> --max-testers <n> | code list <namespace.name> | code revoke <namespace.name> <code-id>
 navide-plugin testplace versions <namespace.name> | revoke <namespace.name> <version> [--reason <text>] | promote <namespace.name> <version>
 navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]
 ```

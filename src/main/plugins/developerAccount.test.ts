@@ -5,7 +5,7 @@ import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeveloperAccount, packageDigest, redactDeveloperSecrets } from './developerAccount'
 import { DeveloperVault, DeveloperVaultUnavailableError, type DeveloperVaultCrypto } from './developerVault'
-import { createDeveloperQueryHandler, isLoopbackRegistryUrl } from './developerIpc'
+import { applicationView, createDeveloperQueryHandler, isLoopbackRegistryUrl } from './developerIpc'
 
 // Built by concatenation so no scanner mistakes a fixture for a credential.
 const ACCOUNT_TOKEN = 'nva' + '_' + 'acc0unt' + 'Q'.repeat(24)
@@ -225,5 +225,28 @@ describe('O3: a Registry on this computer', () => {
       { kind: 'publish-direct', path: '/tmp/x.vsix', target: '' })
     expect(answer).toEqual({ ok: true, result: { kind: 'publish-direct', loopback: false } })
     expect(publishFromPath).not.toHaveBeenCalled()
+  })
+})
+
+describe('reclaimed namespaces in the application (W2)', () => {
+  const namespaces = [
+    { namespace: 'acme', frozen_at: '2026-10-20T01:00:00Z', frozen_reason: 'not claimed again within 30 days', extra: 'dropped' },
+    { namespace: 'old-tools', frozen_at: null, frozen_reason: null },
+  ]
+  const body = { status: 'rejected', fields: {}, field_sources: {}, reason: 'incomplete', namespaces }
+  const expected = [
+    { namespace: 'acme', frozen_at: '2026-10-20T01:00:00Z', frozen_reason: 'not claimed again within 30 days' },
+    { namespace: 'old-tools', frozen_at: null, frozen_reason: null },
+  ]
+
+  it('applicationView passes namespace, frozen_at and frozen_reason through as they are', () => {
+    expect(applicationView(body)?.namespaces).toEqual(expected)
+  })
+
+  it('the agent gets them in marketplace_developer_status', async () => {
+    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
+    const { account: dev } = account(() => ({ status: 200, body }))
+    const answer = await createDeveloperQueryHandler(dev)({ kind: 'developer-status' })
+    expect(answer).toMatchObject({ ok: true, result: { application: { namespaces: expected } } })
   })
 })

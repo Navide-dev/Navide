@@ -19,8 +19,10 @@ import pytest
 
 from agent_team_backend import agent_messaging, app, skills_approvals
 from agent_team_backend.db import Database
-from agent_team_backend.mcp_server import marketplace_forms as forms
+# server first: its tail imports marketplace_forms and then testplace_tools,
+# which needs marketplace_forms complete (importing marketplace_forms first is a cycle).
 from agent_team_backend.mcp_server import server as mcp
+from agent_team_backend.mcp_server import marketplace_forms as forms
 from agent_team_backend.plugins import agent_tools_contract as contract
 from agent_team_backend.plugins.audit_log import PluginAuditLog
 
@@ -84,9 +86,13 @@ def audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginAuditLog:
 def caller(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     agent_messaging._reset_for_test()
     skills_approvals.registry._reset_for_test()
+    from agent_team_backend.guard import taint
+
+    taint.clear_taint("p-7")
     agent_messaging.register("p-7", "publisher", str(tmp_path), agent_key="claude")
     monkeypatch.setattr(mcp, "_resolve_caller", lambda ctx: mcp._Caller(kind="pane", pane_id="p-7"))
     yield
+    taint.clear_taint("p-7")
     agent_messaging._reset_for_test()
     skills_approvals.registry._reset_for_test()
 
@@ -286,3 +292,43 @@ async def test_nothing_secret_or_personal_is_logged_or_audited(host, windows, au
     assert LEGAL_NAME not in caplog.text and FAKE_TOKEN not in caplog.text
     rows = audit.recent_agent_actions()
     assert rows and LEGAL_NAME not in repr(rows) and FAKE_TOKEN not in repr(rows)
+
+
+# ── S8-M1: a tainted pane's request says so (disclosure, never a restriction) ──
+
+
+async def test_a_tainted_panes_draft_carries_the_flag_and_is_still_filed(host, windows, audit, caller, monkeypatch) -> None:
+    from agent_team_backend.guard import taint
+
+    monkeypatch.setattr(taint, "is_tainted", lambda pane_id: pane_id == "p-7")
+    out = await forms.marketplace_developer_application_fill(None, {"legal_name": "A"}, "")
+    assert out["ok"] is True and out["status"] == "pending"
+    record = skills_approvals.registry.get(out["approval_id"])
+    assert record["requester"]["tainted"] is True
+    opened = await forms.marketplace_publish_open(None)
+    assert opened["ok"] is True
+    assert windows[-1]["payload"]["requester"]["tainted"] is True
+
+
+async def test_a_clean_panes_requester_keeps_its_shape(host, windows, audit, caller, monkeypatch) -> None:
+    from agent_team_backend.guard import taint
+
+    monkeypatch.setattr(taint, "is_tainted", lambda pane_id: False)
+    out = await forms.marketplace_developer_application_fill(None, {"legal_name": "A"}, "")
+    record = skills_approvals.registry.get(out["approval_id"])
+    assert set(record["requester"]) == {"paneId", "paneName", "workspace", "callerKind"}
+
+
+def test_a_plugin_request_keeps_the_tainted_flag_of_any_requester() -> None:
+    skills_approvals.registry._reset_for_test()
+    clean = {"paneId": "p-1", "paneName": "a", "workspace": None, "callerKind": "pane"}
+    target = {"id": "a.b", "namespace": "a", "name": "b", "version": "1.0.0", "fromVersion": None}
+    first = skills_approvals.registry.request_plugin(
+        kind="plugin-install", requester=clean, reason="", target=target, card=None, diff=None)
+    assert "tainted" not in first["requester"]
+    again = skills_approvals.registry.request_plugin(
+        kind="plugin-install", requester={**clean, "paneId": "p-2", "tainted": True}, reason="", target=target,
+        card=None, diff=None)
+    # The coalesced card names its first requester, and says a tainted pane asked too.
+    assert again["approval_id"] == first["approval_id"] and again["requester"]["tainted"] is True
+    skills_approvals.registry._reset_for_test()

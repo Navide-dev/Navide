@@ -10,7 +10,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from . import audit, cloud_auth, testplace
+from . import audit, cloud_auth, review, testplace
 from .models import Extension
 from .publisher_web import (
     _NO_STORE,
@@ -22,6 +22,7 @@ from .publisher_web import (
     _session,
 )
 from .repository import RegistryRepository
+from .static_scan import scan_stored_version
 from .web import _base_path_context, tile_hue
 
 
@@ -59,6 +60,9 @@ def create_testplace_admin_router() -> APIRouter:
                         "targets": [r.target for r in rows],
                         "requested_at": rows[0].promotion_requested_at,
                         "facts": testplace.promotion_facts(session, extension),
+                        # The same confirmations the stable review queue asks for.
+                        "secrets": any(review.secret_findings(r.review_report) for r in rows),
+                        "native": any((r.review_report or {}).get("native_backend") for r in rows),
                     }
                 )
         return templates.TemplateResponse(
@@ -115,6 +119,8 @@ def create_testplace_admin_router() -> APIRouter:
         decision: str = Form(""),
         reason: str = Form(""),
         artifact: list[str] = Form([]),
+        acknowledge: str = Form(""),
+        inspected_backend: str = Form(""),
         csrf: str = Form(""),
     ) -> Response:
         viewer = _require_admin(request)
@@ -139,6 +145,9 @@ def create_testplace_admin_router() -> APIRouter:
                         version=version,
                         reviewer=actor,
                         artifacts=artifact,
+                        acknowledge_secret_findings=acknowledge == "yes",
+                        inspected_native_backend=inspected_backend == "yes",
+                        rescan=lambda row: scan_stored_version(request.app.state.registry.storage, row),
                     )
                 else:
                     testplace.reject_promotion(

@@ -28,6 +28,7 @@ from .qualification import publisher_problem
 from .repository import RegistryRepository
 from .schemas import TestplaceExtension, TestplaceListResponse, TestplaceVersionInfo
 from .self_service import owned_publisher
+from .static_scan import scan_stored_version
 from .storage import StorageError
 from .versions import TESTPLACE_CHANNEL, version_key
 
@@ -312,16 +313,13 @@ def register_testplace_routes(
         session: Session = Depends(session_dep),
     ) -> dict:
         extension, _ = developer(session, authorization, namespace, name)
-        return {
-            "limit": testplace.MAX_INVITES,
-            "invites": [invite_view(r) for r in testplace.list_invites(session, extension)],
-        }
+        return {"invites": [invite_view(r) for r in testplace.list_invites(session, extension)]}
 
     @app.post("/api/testplace/{namespace}/{name}/invites", status_code=201)
     def developer_invite(
         namespace: str,
         name: str,
-        labels: list[str] = Body(..., embed=True, max_length=testplace.MAX_INVITES),
+        labels: list[str] = Body(..., embed=True),
         authorization: str | None = Header(default=None),
         session: Session = Depends(session_dep),
     ) -> dict:
@@ -534,6 +532,8 @@ def register_testplace_routes(
         approve: bool = Body(..., embed=True),
         artifacts: list[str] = Body(..., embed=True),
         reason: str = Body("", embed=True),
+        acknowledge_secret_findings: bool = Body(False, embed=True),
+        inspected_native_backend: bool = Body(False, embed=True),
         x_admin_token: str | None = Header(default=None),
         session: Session = Depends(session_dep),
     ) -> dict:
@@ -555,6 +555,9 @@ def register_testplace_routes(
                     version=version,
                     reviewer=audit.ADMIN_TOKEN_ACTOR,
                     artifacts=artifacts,
+                    acknowledge_secret_findings=acknowledge_secret_findings,
+                    inspected_native_backend=inspected_native_backend,
+                    rescan=lambda row: scan_stored_version(request.app.state.registry.storage, row),
                 )
             else:
                 rows = testplace.reject_promotion(

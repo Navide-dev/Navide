@@ -66,7 +66,7 @@ uv --project marketplace/registry run pytest marketplace/registry/tests
 | GET | `/api/testplace/{namespace}/{name}/withdrawn` | `{withdrawn: [{version, target}]}`: the test builds taken back (yanked or revoked; all of them when the publisher is frozen or disqualified). For any account that ever held a seat, revoked or not; anyone else gets the 404 of a missing extension. The App's kill switch for installed test builds. |
 | GET/POST | `/api/testplace/{namespace}/{name}/invites` | Developer (publisher token of the namespace, or the owning account's token): list invites, or create `{ "labels": [...] }` single-use join tokens, returned once. At most 100 live invites per extension (409 `INVITE_LIMIT`). |
 | POST | `/api/testplace/{namespace}/{name}/invites/{id}/revoke` | Developer: revoke an invite; a tester who joined through it loses access. |
-| GET/POST | `/api/testplace/{namespace}/{name}/codes` | Developer: list public test codes, or create `{ "max_testers": 1-1000 }`. The extension's first code waits for a light admin review (`in-review`); later ones open at once. The code is returned once. |
+| GET/POST | `/api/testplace/{namespace}/{name}/codes` | Developer: list public test codes, or create `{ "max_testers": n }` (any positive number; there is no upper limit). The extension's first code waits for a light admin review (`in-review`); later ones open at once. The code is returned once. |
 | POST | `/api/testplace/{namespace}/{name}/codes/{id}/revoke` | Developer: stop new joins through a code; testers already in keep their seat. |
 | GET | `/api/testplace/{namespace}/{name}/versions` | Developer: testplace versions with expiry and promotion state. |
 | POST | `/api/testplace/{namespace}/{name}/versions/{version}/revoke` | Developer: revoke a testplace version early: it is yanked and listed in the tester detail's `withdrawn`, so each tester's Navide stops it at its next trust refresh and never offers to keep it. Nothing goes into the public blocklist, which would tell anyone the version exists. |
@@ -485,12 +485,14 @@ approved by default.
 
 - **Grandfathered namespaces** (migration 13): a namespace self-claimed before
   qualification existed keeps publishing for 30 days from the migration
-  (`publisher.grandfather_until`) while its owner applies. A pending
-  application pauses the period; a rejection resumes it, extended by the
-  pending time. `GET /api/publisher/me` reports `grandfather: {until, paused,
+  (`publisher.grandfather_until`) while its owner applies. The owner's first
+  application, filed before the deadline, pauses the period; a rejection
+  resumes it, extended by the pending time. Nothing else pauses it — an
+  application filed after the deadline or a re-application after a rejection
+  leaves the clock running — so the period cannot be stretched indefinitely. `GET /api/publisher/me` reports `grandfather: {until, paused,
   days_left, remind, expired}` (null when none applies) and the dashboard shows
-  it, as a warning in the last 7 days. Past the deadline with no approved or
-  pending application, publishing is refused at once and a sweep (at most every
+  it, as a warning in the last 7 days. Past the deadline with no approved owner and
+  no paused application, publishing is refused at once and a sweep (at most every
   10 minutes, on request traffic) reclaims the namespace the way a revocation
   tears one down, audited as `namespace.reclaim` by
   `system:grandfather-expired`; the account keeps its account token and may
@@ -502,7 +504,9 @@ approved by default.
   publishes. `/api/cli/token` answers `{token, scope, namespace, expires_at}`.
 - **Application**: `GET|POST /api/developer/me/application` (account or
   publisher token) or the website form `/developer/apply`. Real-name fields;
-  `field_sources` marks each field `user` or `agent-draft`.
+  `field_sources` marks each field `user` or `agent-draft`. The GET answer
+  also lists the account's frozen namespaces as `namespaces: [{namespace,
+  frozen_at, frozen_reason}]`.
 - **Admin queue**: `/admin/developers`, `GET /api/admin/developers`,
   `POST /api/admin/developers/{member_id}/approve|reject|revoke` (a reason is
   required to reject or revoke). Revoking, in one transaction, revokes every

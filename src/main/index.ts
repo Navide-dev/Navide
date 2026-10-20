@@ -2108,6 +2108,7 @@ const developerAccount = new DeveloperAccount({
 setDeveloperAccount(developerAccount)
 const developerIpc = registerDeveloperIpc({
   handle: (channel, listener) => ipcMain.handle(channel, listener),
+  stagingRoot: join(app.getPath('userData'), 'plugin-staging', 'publish'),
   authorize: (event) => isTrustedPluginManagementSender(event, mainWindows),
   account: developerAccount,
   inspectPackage: (bytes) => {

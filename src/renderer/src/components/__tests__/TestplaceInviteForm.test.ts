@@ -56,6 +56,24 @@ describe('TestplaceInviteForm (W5b)', () => {
     delete (window as unknown as { agentTeam?: unknown }).agentTeam
   })
 
+  it('says so when the asking pane has external influence (S8-M1), and still lets the user send', async () => {
+    const requester = { ...request.requester, tainted: true as const }
+    wrapper = mount(TestplaceInviteForm, {
+      props: { backend: fakeBackend() as never, form: form({ requester, request: { ...request, requester } }) },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    const line = wrapper.find('[data-testid="testplace-invite-tainted"]')
+    expect(line.exists()).toBe(true)
+    expect(line.text()).toBe(i18n.global.t('plugin-request.tainted'))
+  })
+
+  it('shows no external-influence line for a clean pane', async () => {
+    wrapper = mount(TestplaceInviteForm, { props: { backend: fakeBackend() as never, form: form() }, global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="testplace-invite-tainted"]').exists()).toBe(false)
+  })
+
   it("opens an agent's draft with each tester marked, and invites nobody before Send", async () => {
     const backend = fakeBackend()
     wrapper = mount(TestplaceInviteForm, { props: { backend: backend as never, form: form() }, global: { plugins: [i18n] } })
@@ -105,10 +123,24 @@ describe('TestplaceInviteForm (W5b)', () => {
   })
 
   it('says why the Registry refused, without a raw code', async () => {
-    testplaceInvite.mockResolvedValue({ ok: false, status: 409, code: 'INVITE_LIMIT', message: 'limit' })
+    testplaceInvite.mockResolvedValue({ ok: false, status: 401, code: 'NOT_SIGNED_IN', message: 'sign in' })
     wrapper = mount(TestplaceInviteForm, { props: { backend: fakeBackend() as never, form: form() }, global: { plugins: [i18n] } })
     await wrapper.get('.nv-btn--primary').trigger('click')
     await flushPromises()
-    expect(wrapper.get('.dev-error').text()).toBe('This would exceed the tester limit of this Navide plugin.')
+    expect(wrapper.get('.dev-error').text()).toBe('Not signed in to Navide Cloud, or the sign-in expired.')
+  })
+
+  it('sends more than the former 100 testers and states the two expiries instead of a cap', async () => {
+    const invitees = Array.from({ length: 150 }, (_, i) => `t${i}@example.com`)
+    const many = { ...request, draft: { fields: { invitees }, field_sources: {} } }
+    wrapper = mount(TestplaceInviteForm, { props: { backend: fakeBackend() as never, form: form({ request: many }) }, global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(wrapper.get('.dev-notice').text()).toContain('no limit on the number of testers')
+    expect(wrapper.get('.dev-notice').text()).toContain('90 days')
+    expect(wrapper.get('.dev-notice').text()).toContain('30 days')
+    expect(wrapper.get('.nv-btn--primary').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.nv-btn--primary').trigger('click')
+    await flushPromises()
+    expect(testplaceInvite).toHaveBeenCalledWith('acme.demo', invitees)
   })
 })
