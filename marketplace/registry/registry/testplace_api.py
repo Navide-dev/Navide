@@ -37,6 +37,10 @@ NOT_FOUND = HTTPException(
 )
 
 
+# No extension has this id: the seat query a missing extension still runs.
+NO_EXTENSION_ID = -1
+
+
 def _http(exc: testplace.TestplaceError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)})
 
@@ -64,13 +68,14 @@ def register_testplace_routes(
 
     # -- testers -----------------------------------------------------------
     def tester_extension(session: Session, member_id: str, namespace: str, name: str) -> Extension:
-        extension = extension_or_404(session, namespace, name)
+        # A missing extension runs the same seat query as an uninvited member
+        # (S8 R4-L1), so neither answers faster than the other.
+        extension = RegistryRepository(session).get_extension(namespace, name, public_only=False)
+        seated = testplace.is_tester_id(session, extension.id if extension else NO_EXTENSION_ID, member_id)
+        if extension is None or not seated:
+            raise NOT_FOUND
         publisher = session.get(Publisher, extension.publisher_id)
-        if (
-            publisher is None
-            or publisher_problem(session, publisher) is not None
-            or not testplace.is_tester(session, extension, member_id)
-        ):
+        if publisher is None or publisher_problem(session, publisher) is not None:
             raise NOT_FOUND
         return extension
 
@@ -180,9 +185,10 @@ def register_testplace_routes(
         whatever the publisher's state: a frozen or disqualified publisher's
         test builds all read as withdrawn. Anyone else gets the 404 of a
         missing extension, so it tells nobody a test build exists."""
-        extension = extension_or_404(session, namespace, name)
-        ended = testplace.seat_ended(session, extension, member_id)
-        if ended is None:
+        # Same queries for a missing extension as for a never-seated member (S8 R4-L1).
+        extension = RegistryRepository(session).get_extension(namespace, name, public_only=False)
+        ended = testplace.seat_ended(session, extension.id if extension else NO_EXTENSION_ID, member_id)
+        if extension is None or ended is None:
             raise NOT_FOUND
         publisher = session.get(Publisher, extension.publisher_id)
         rows = (

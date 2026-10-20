@@ -783,3 +783,29 @@ def test_two_publishes_racing_on_one_version_never_hold_both_channels(client: Te
     rows = _rows(client)
     assert set(rows) == {"win32-x64"}
     assert all(row.channel != "testplace" for row in rows.values())
+
+
+def test_a_missing_extension_and_an_uninvited_member_run_the_same_queries(client: TestClient) -> None:
+    """S8 R4-L1: neither tester route answers a missing extension faster."""
+    from sqlalchemy import event
+
+    assert _publish(client).status_code == 201
+    outsider = _member(client, "member-out")
+    engine = client.app.state.registry.engine
+
+    def statements(path: str) -> list[str]:
+        seen: list[str] = []
+
+        def record(conn, cursor, statement, *args):  # noqa: ANN001
+            seen.append(statement.split(" WHERE")[0])
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            resp = client.get(path, headers=outsider)
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+        assert resp.status_code == 404
+        return seen
+
+    for suffix in ("", "/withdrawn"):
+        assert statements(f"/api/testplace/acme/files{suffix}") == statements(f"/api/testplace/acme/nothing{suffix}")

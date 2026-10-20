@@ -117,13 +117,13 @@ def withdrawn_rows(session: Session, extension: Extension) -> list[ExtensionVers
     )
 
 
-def seat_ended(session: Session, extension: Extension, member_id: str) -> datetime | None:
+def seat_ended(session: Session, extension_id: int, member_id: str) -> datetime | None:
     """When `member_id`'s access to the extension's test builds ended: now
     for a live seat, the latest revocation otherwise; None when the member
     never held a seat. Builds published after it are none of theirs."""
     seats = session.exec(
         select(TestplaceInvite).where(
-            TestplaceInvite.extension_id == extension.id,
+            TestplaceInvite.extension_id == extension_id,
             TestplaceInvite.member_id == member_id,
         )
     ).all()
@@ -171,9 +171,17 @@ def _live_seats(session: Session, extension: Extension):
 
 
 def is_tester(session: Session, extension: Extension, member_id: str) -> bool:
+    return is_tester_id(session, extension.id, member_id)
+
+
+def is_tester_id(session: Session, extension_id: int, member_id: str) -> bool:
     return (
         session.exec(
-            _live_seats(session, extension).where(TestplaceInvite.member_id == member_id)
+            select(TestplaceInvite).where(
+                TestplaceInvite.extension_id == extension_id,
+                TestplaceInvite.revoked_at.is_(None),
+                TestplaceInvite.member_id == member_id,
+            )
         ).first()
         is not None
     )
