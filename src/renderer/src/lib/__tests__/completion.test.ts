@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { activityMeansWorking, applyLoopWait, clearProvisionalStall, loopSettleMs, LOOP_INFERRED_TURN_END_SETTLE_MS, detailMeansToolUse, quotaTurnIsFresh, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, LOOP_WAIT_BACKOFF_MS, LOOP_WAIT_TOTAL_MAX_MS, slotFinished, allSlotsFinished, turnCompleteDone, loopContinueReady, turnEndsWithSentinel, parseEventMs, isReplayedTurnComplete, turnTextFingerprint, normalizeTurnText, turnMadeProgress, loopBackoffMs, applyTurnProgress, loopStallVerdict, loopWaitingOnSubagents, turnUsedNoTools, LOOP_STALL_BACKOFF_MS, LOOP_MIN_PROGRESS_CHARS, LOOP_STALL_LIMIT, LOOP_MAX_CONTINUES, LOOP_SUBAGENT_WAIT_MAX_MS, LOOP_RECENT_TURNS, type SlotSignal, type LoopStallState } from '../completion'
+import { activityMeansWorking, applyLoopWait, clearProvisionalStall, loopSettleMs, LOOP_INFERRED_TURN_END_SETTLE_MS, detailMeansToolUse, quotaTurnIsFresh, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, LOOP_WAIT_BACKOFF_MS, LOOP_WAIT_TOTAL_MAX_MS, slotFinished, allSlotsFinished, turnCompleteDone, loopContinueReady, turnEndsWithSentinel, parseEventMs, isReplayedTurnComplete, turnTextFingerprint, normalizeTurnText, turnMadeProgress, loopBackoffMs, applyTurnProgress, loopStallVerdict, loopWaitingOnSubagents, backgroundWorkPending, turnUsedNoTools, LOOP_STALL_BACKOFF_MS, LOOP_MIN_PROGRESS_CHARS, LOOP_STALL_LIMIT, LOOP_MAX_CONTINUES, LOOP_SUBAGENT_WAIT_MAX_MS, LOOP_RECENT_TURNS, type SlotSignal, type LoopStallState } from '../completion'
 import { VENDORS_WITHOUT_TURN_END } from '../agentMessaging'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 
@@ -103,6 +103,76 @@ describe('turnCompleteDone', () => {
     expect(turnCompleteDone({
       turnCompleteAt: 0, lastActiveAt: 0, armedAt: ARMED,
       now: 999_999, settleMs: SETTLE
+    })).toBe(false)
+  })
+})
+
+// ── Background work outliving the turn end (pipeline hand-off) ──────────────
+// claude (run_in_background Bash / async Agent) and qwen (background agents by
+// default, background shells) end the CURRENT turn while the work keeps
+// running, so that turn_complete is not the slot finishing. The field is
+// opt-in: a caller that leaves it out (the loop, the done notification, every
+// vendor that never reports background work) judges exactly as before.
+describe('background work holds the pipeline verdict', () => {
+  const SETTLE = 1500
+  const settled = { turnCompleteAt: 2000, lastActiveAt: 1500, armedAt: ARMED, now: 2000 + SETTLE, settleMs: SETTLE }
+
+  it('slotFinished refuses a post-arm turn_complete while background work runs', () => {
+    expect(slotFinished({ sentinelSeen: false, turnCompleteAt: 2000, armedAt: ARMED, backgroundRunning: true })).toBe(false)
+  })
+
+  it('slotFinished counts the same turn_complete once the background work has ended', () => {
+    expect(slotFinished({ sentinelSeen: false, turnCompleteAt: 2000, armedAt: ARMED, backgroundRunning: false })).toBe(true)
+  })
+
+  it('slotFinished still lets the sentinel outrank running background work', () => {
+    expect(slotFinished({ sentinelSeen: true, turnCompleteAt: 0, armedAt: ARMED, backgroundRunning: true })).toBe(true)
+  })
+
+  it('allSlotsFinished stays false while one slot is parked on background work', () => {
+    const done: SlotSignal = { sentinelSeen: false, turnCompleteAt: 2000, armedAt: ARMED }
+    const parked: SlotSignal = { sentinelSeen: false, turnCompleteAt: 2000, armedAt: ARMED, backgroundRunning: true }
+    expect(allSlotsFinished([done, parked])).toBe(false)
+  })
+
+  it('turnCompleteDone refuses a settled turn end while background work runs', () => {
+    expect(turnCompleteDone({ ...settled, backgroundRunning: true })).toBe(false)
+  })
+
+  it('turnCompleteDone is unchanged when the field is absent or false', () => {
+    expect(turnCompleteDone(settled)).toBe(true)
+    expect(turnCompleteDone({ ...settled, backgroundRunning: false })).toBe(true)
+  })
+
+  it('the turn the CLI runs on the completion notice is what releases the slot', () => {
+    // The background:end event is an agent_active, so it stamps lastActiveAt
+    // AFTER the parked turn end; only the follow-up turn's turn_complete counts.
+    expect(turnCompleteDone({ ...settled, lastActiveAt: 2600, now: 9000 })).toBe(false)
+    expect(turnCompleteDone({ ...settled, turnCompleteAt: 4000, lastActiveAt: 2600, now: 4000 + SETTLE })).toBe(true)
+  })
+})
+
+describe('backgroundWorkPending', () => {
+  const NOW = 1_000_000
+
+  it('is true while the pane tracks a live background task', () => {
+    expect(backgroundWorkPending({ liveTasks: true, now: NOW })).toBe(true)
+  })
+
+  it('is true while a hook reports pending background subagents', () => {
+    expect(backgroundWorkPending({ liveTasks: false, subagents: { pending: 1, observedAt: NOW - 1000 }, now: NOW })).toBe(true)
+  })
+
+  it('is false with no tasks and no pending subagents (every vendor without background work)', () => {
+    expect(backgroundWorkPending({ liveTasks: false, now: NOW })).toBe(false)
+    expect(backgroundWorkPending({ liveTasks: false, subagents: { pending: 0, observedAt: NOW }, now: NOW })).toBe(false)
+  })
+
+  it('lets a hook count lapse on the same cap the loop uses', () => {
+    expect(backgroundWorkPending({
+      liveTasks: false,
+      subagents: { pending: 2, observedAt: NOW - LOOP_SUBAGENT_WAIT_MAX_MS - 1 },
+      now: NOW,
     })).toBe(false)
   })
 })

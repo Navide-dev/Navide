@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .agent_tools_contract import validate_agent_tools
+from .agent_tools_contract import derive_agent_tool_prefix, validate_agent_tools
 from .path_policy import canonical_html_path, canonical_package_path
 from .versions import _V2_VERSION_RE
 
@@ -328,7 +328,16 @@ class ManifestV2(ManifestV2Model):
                 first = errors[0]
                 where = "" if first["index"] is None else f"[{first['index']}]"
                 field = f".{first['field']}" if first["index"] is not None and first["field"] else ""
-                raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}")
+                detail = ""
+                if first["code"] == "AGENT_TOOL_PREFIX_MISMATCH":
+                    # Name the prefix that would pass, as `navide-plugin validate` does.
+                    name = value["backend"]["agentTools"][first["index"]].get("name")
+                    prefix = derive_agent_tool_prefix(value.get("id"))
+                    detail = (
+                        f" ({name!r} must start with '{prefix}_', the prefix Navide derives "
+                        f"from id {value.get('id')!r}: its last segment without hyphens)"
+                    )
+                raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}{detail}")
             backend = value.get("backend")
             declared = backend.get("agentTools") if isinstance(backend, Mapping) else None
             for index, tool in enumerate(declared if isinstance(declared, list) else []):

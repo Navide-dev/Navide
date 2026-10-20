@@ -6,6 +6,7 @@ import hashlib
 
 from fastapi.testclient import TestClient
 
+from registry.native_backend import MIN_NAVIDE_FOR_THIRD_PARTY_BACKEND
 from tests.fixtures import build_package, build_v2_package, contract_manifest
 
 # Minimal native headers the registry can identify per target: a 64-bit Mach-O
@@ -20,8 +21,15 @@ PE_X64 = (
 )
 
 
+def _meets_local_backend_rules(manifest: dict) -> dict:
+    """A local Registry applies the native backend package rules to every publisher."""
+    manifest["backend"]["methods"] = ["skills.list"]
+    manifest["engines"] = {"navide": f">={MIN_NAVIDE_FOR_THIRD_PARTY_BACKEND}"}
+    return manifest
+
+
 def _backend_package(backend_data: bytes, version: str = "1.0.0") -> bytes:
-    manifest = contract_manifest("backend-only-skills.json")
+    manifest = _meets_local_backend_rules(contract_manifest("backend-only-skills.json"))
     manifest["version"] = version
     # A PE image ships as the `.exe` a Windows target reads the entry as.
     backend_name = (

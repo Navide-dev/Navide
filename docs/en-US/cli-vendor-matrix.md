@@ -3,7 +3,11 @@
 A snapshot of every CLI agent Navide ships with, what each one declares it can
 do, and where those facts live in the tree.
 
-**Snapshot: 2026-09-20, commit `9a630efe` (v0.2.8) + the mcode addition — 15 vendors.**
+**Snapshot: 2026-10-20, commit `5c8b00ddc` (v0.2.27) — 15 vendors.** The
+previous snapshot (2026-09-20, `9a630efe`, v0.2.8) was re-read field by field;
+the roster, the backend and frontend matrices and their totals are unchanged.
+New since then: the [support tiers](#support-tiers-l1l5) and the OpenCode 2.x
+reader note.
 
 This file is a reading aid, not a source of truth. The tree is. Every number
 below was read out of the files named beside it, and the
@@ -80,6 +84,87 @@ Two keys do not match their binary: `antigravity` runs `agy`, and `cursor` runs
 `agent` (`cursor-agent` is an older symlink the installer leaves behind, and is
 accepted as an alternate). Assuming key == command is the most common way to
 misdiagnose "the CLI is not installed".
+
+---
+
+## Support tiers (L1–L5)
+
+A tier says how much of Navide's pane machinery a vendor's spec declares.
+Tiers are cumulative: a vendor sits at the highest level whose test it passes
+**and** whose lower levels all pass. Each test is one field (or one list) in
+the tree, so a tier is re-derived, never judged:
+
+| Tier | Meaning | Test in the tree |
+|---|---|---|
+| **L1 Launch** | Detected, installable, opens a pane | backend `install_dep` + frontend `defaultCommand` |
+| **L2 Turn-aware** | Navide sees when a turn ends, so a delivered message's turn can be awaited | backend `make_log_reader` (every reader emits `turn_complete`) |
+| **L3 Session-bound** | A pane is matched to the CLI session it started | frontend `needsSessionMarker: true` or `pinsSessionIdAtLaunch`; codex instead binds through its SessionStart hook (`codex_session_hooks.py`) |
+| **L4 Resumable** | Restore, rebuild and account-switch restarts return to the same conversation | backend `supports_session_resume` not `False` + frontend `resumeArgs` + `supportsRebuild: true` |
+| **L5 Guarded** | A hook reports into Navide, and Navide Guard can block a tool call before it runs | vendor is in `guard_hooks.VENDORS` (`guard_hooks.py:66`) |
+
+| Key | Tier | L2 reader | L3 binding | L4 resume | L5 hook | Awaiting-input signal | Version on record |
+|---|---|---|---|---|---|---|---|
+| `claude` | **L5** | `claude.py:1567` | session id pinned at launch (`claude.ts:43`) | `claude.ts:17-18` | `install_hooks` (`claude.py:1490`) | screen (`claude.ts:106`) + Notification hook | 2.1.278 (`claude.py:1544`) |
+| `codex` | **L5** | `codex.py:1905` | SessionStart hook (`codex.ts:18` sets no marker) | `codex.ts:15,20` | per-launch `-c hooks.PreToolUse` (`codex_session_hooks.py`) | screen (`codex.ts:60`) | 0.155.1 (`codex.py:1884`) |
+| `copilot` | **L5** | `copilot.py:1539` | marker (`copilot.ts:28`) | `copilot.ts:27,31` | `install_hooks` (`copilot.py:1532`) | `notification` hook (`copilot_hooks.py`) | 1.0.81 (`copilot.py:1507`) |
+| `qwen` | **L5** | `qwen.py:979` *(silence)* | marker (`qwen.ts:14`) | `qwen.ts:13,16` | `install_hooks` (`qwen.py:946`) | Notification hook (`qwen_hooks.py`) | 0.22.2 (`qwen.py:966`) |
+| `antigravity` | L4 | `antigravity.py:895` | marker (`antigravity.ts:16`) | `antigravity.ts:15,19` | — | screen (`antigravity.ts:45`) | 1.2.7 (`antigravity.py:873`) |
+| `grok` | L4 | `grok.py:881` | session id pinned at launch (`grok.ts:59`) | `grok.ts:49,75` | — | trust prompt only (`grok.ts:70`) | 1.0.34 (`grok.py:858`) |
+| `kimi` | L4 | `kimi.py:667` *(silence)* | marker (`kimi.ts:23`) | `kimi.ts:14,25` | — | — | 0.39.0 (`kimi.py:652`) |
+| `opencode` | L4 | `opencode.py:1161` *(1.x and 2.x schemas)* | marker (`opencode.ts:32`) | `opencode.ts:31,34` | — | — | 1.15.12 (`opencode.py:1134`) |
+| `kilo` | L4 | `kilo.py:438` | marker (`kilo.ts:33`) | `kilo.ts:32,35` | — | — | 7.4.22 (`kilo.py:404`) |
+| `pi` | L4 | `pi.py:915` *(silence)* | marker (`pi.ts:20`) | `pi.ts:19,23` | — | — | 0.84.0 (`pi.py:895`) |
+| `cursor` | L4 | `cursor.py:895` | marker (`cursor.ts:21`) | `cursor.ts:20,26` | — | — | 2026.08.25-3e8eec8 (`cursor.py:866`) |
+| `muse` | L4 | `muse.py:820` | marker (`muse.ts:55`) | `muse.ts:49,56` | — | — | 1.3.0 (`muse.py:809`) |
+| `droid` | L4 | `droid.py:596` | marker (`droid.ts:47`) | `droid.ts:22-23` | — | — | 0.206.0 (`droid.py:575`) |
+| `aider` | L3 | `aider.py:694` | marker (`aider.ts:35`) | ❌ `supports_session_resume=False` (`aider.py:666`) | — | screen (`aider.ts:49`) | 0.86.2 (`aider.py:680`) |
+| `mcode` | L1 | ❌ no reader (`mcode.py:335-338`) | — | ❌ `supports_session_resume=False` (`mcode.py:339`) | — | — | 0.4.12 (`mcode.py:365`) |
+| **Total** | L5 ×4, L4 ×9, L3 ×1, L1 ×1 | 14 | 14 | 13 | 4 | 5 screen, 3 hook | 15 |
+
+Paths are relative to `backend/agent_team_backend/cli_vendors/` (`.py`),
+`backend/agent_team_backend/` (`*_hooks.py`) and
+`src/renderer/src/platform/plugin-shell/agents/` (`.ts`).
+
+How to read the columns:
+
+- **A tier is declared capability, not a compatibility promise.** It says what
+  the spec wires up. It does not say the vendor's current release still
+  behaves the way the spec was written against.
+- **"Version on record" is not a live test.** It is
+  `AccountSwitchSpec.verified_version`, and every one of the 15 adapters
+  records `evidence="source"`: the layout was read from the vendor's shipped
+  code or package, not exercised in a live A → B → A switch (see the
+  `evidence` field comment in `base.py`). No spec in the tree carries a
+  live-verified version. A local `--version` newer than this column is
+  untested by Navide.
+- ***(silence)*** marks the three readers that infer a turn's end from a quiet
+  window instead of reading an end-of-turn record (frontend
+  `turnEndInferredFromSilence: true` in `kimi.ts:22`, `pi.ts:21`,
+  `qwen.ts:15`). A long tool call can look like a finished turn there.
+- **Turn text is validated for two vendors only.** `verifiedTurnText: true`
+  is set in `claude.ts:19` and `codex.ts:21`; every other reader's turn text
+  is enough for inter-CLI messaging but keeps the loose buffer scan.
+- **Awaiting-input** is the signal that the CLI is parked on the user. "screen"
+  is a frontend `awaitingInput` pattern; "hook" is a Notification-type hook.
+  A dash means Navide cannot tell "waiting for you" from "idle" for that
+  vendor. Grok's pattern matches its folder-trust prompt only.
+- **OpenCode 2.x.** The reader detects the schema by its tables and reads
+  2.x's `session_v2` / `session_message` when they exist (`opencode.py:26-31`,
+  `_V2_TABLES` at `opencode.py:160`). The 2.x path was built from the
+  upstream source; it has not been run against a real 2.x binary.
+- **Account switching is declared for all 15.** Every spec carries an
+  `AccountSwitchSpec`, so switching does not separate the tiers.
+
+### ACP
+
+No vendor is driven over the Agent Client Protocol: Navide runs every CLI as
+an interactive TUI on a PTY, and none of the tier tests above involves ACP.
+Two readers meet ACP artifacts on disk:
+
+- `cursor.py:32` deliberately ignores `~/.cursor/acp-sessions/<id>/store.db`
+  (ACP mode).
+- `grok.py:7` reads Grok's `updates.jsonl`, which holds ACP `session/update`
+  notifications, as the transcript.
 
 ---
 
@@ -224,6 +309,17 @@ Frontend spec matrix:
 ```sh
 cd src/renderer/src/platform/plugin-shell/agents
 grep -H "label:\|defaultCommand:\|skipPermissionFlag:\|supportsRebuild:\|supportsRestorePin:" *.ts
+```
+
+Support tiers — the fields each tier test reads, and the version on record:
+
+```sh
+cd backend/agent_team_backend/cli_vendors
+grep -nE "^\s*(make_log_reader|supports_session_resume|install_hooks)\s*=" *.py
+grep -nE "verified_version\s*=|evidence\s*=" *.py
+grep -n "^VENDORS" ../guard_hooks.py
+cd ../../../src/renderer/src/platform/plugin-shell/agents
+grep -nE "^\s+(needsSessionMarker|pinsSessionIdAtLaunch|resumeArgs|supportsRebuild|awaitingInput|turnEndInferredFromSilence|verifiedTurnText)\??:" *.ts
 ```
 
 And the check that keeps both sides equal:
