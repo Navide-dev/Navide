@@ -20,6 +20,7 @@ describe('install-from-file entry points', () => {
     for (const path of [
       'backend/agent_team_backend/mcp_server/server.py',
       'backend/agent_team_backend/mcp_server/marketplace_forms.py',
+      'backend/agent_team_backend/mcp_server/testplace_tools.py',
       'src/renderer/src/lib/pluginAgentRequestApply.ts',
       'src/renderer/src/composables/usePluginAgentRequests.ts',
       'src/renderer/src/components/PluginAgentRequestDialog.vue',
