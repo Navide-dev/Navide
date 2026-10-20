@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   buildBubblewrapArgs as hostBubblewrapArgs,
@@ -189,9 +189,11 @@ describe.runIf(canRunLive)('dev-backend against a tiny fixture backend (live)', 
 
 describe('dev-backend output and data (DX-REPORT 7.1 #6, #9)', () => {
   it('keeps its data out of the package directory it runs', () => {
+    // resolve(): Windows adds the drive letter to a rooted path.
+    const packageDir = resolve('/work/acme/dist/package')
     const data = defaultDataDir('/work/acme/dist/package')
-    expect(data).toBe(join('/work/acme/dist', '.navide-dev', 'package', 'data'))
-    expect(data.startsWith('/work/acme/dist/package/')).toBe(false)
+    expect(data).toBe(join(dirname(packageDir), '.navide-dev', 'package', 'data'))
+    expect(data.startsWith(packageDir + sep)).toBe(false)
   })
 
   it('marks a clean exit neutrally and a failed one with a cross', () => {
