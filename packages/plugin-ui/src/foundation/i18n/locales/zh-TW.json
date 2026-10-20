@@ -9326,6 +9326,7 @@
     "desc": "有 agent 要求這項變更。你在這裡核准之前，什麼都不會改變；agent 無法代你核准。",
     "queue": "{count} 筆待處理",
     "requester": "請求者",
+    "tainted": "這個 pane 有「外部影響」標記：它讀過 Navide 以外的內容（例如網頁或 Navide 外掛的文字），這個請求可能受到那些內容影響。請仔細確認後再決定。",
     "workspace": "工作區",
     "expires": "到期時間",
     "caller-unknown": "不明的呼叫端",

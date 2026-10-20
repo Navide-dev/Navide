@@ -329,6 +329,8 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
       <main class="pr-main">
         <dl class="pr-facts">
           <dt>{{ $t('plugin-request.requester') }}</dt><dd>{{ requesterText }}</dd>
+          <!-- S8-M1: disclosure only; the decision is the user's exactly as for any request. -->
+          <dd v-if="current.requester.tainted === true" class="pr-tainted" data-testid="plugin-request-tainted">{{ $t('plugin-request.tainted') }}</dd>
           <template v-if="current.requester.workspace">
             <dt>{{ $t('plugin-request.workspace') }}</dt><dd class="pr-mono">{{ current.requester.workspace }}</dd>
           </template>
@@ -448,6 +450,7 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
 .pr-kicker { color: var(--accent-bright); font-size: var(--font-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 h1 { margin: 6px 0 0; color: var(--text-bright); font-size: 20px; overflow-wrap: anywhere; }
 .pr-desc { margin: 6px 0 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.pr-tainted { grid-column: 1 / -1; margin: 0; color: var(--risk-fg, var(--text-primary)); font-weight: 600; }
 .pr-badge { flex: none; font-size: var(--font-2xs); border-radius: 99px; padding: 2px 9px; background: var(--bg-subtle); color: var(--text-muted); }
 .pr-main { padding: 18px 28px; overflow: auto; }
 .pr-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 14px; font-size: 12.5px; }

@@ -9326,6 +9326,7 @@
     "desc": "An agent asked for this change. Nothing changes until you approve it here; the agent cannot approve it for you.",
     "queue": "{count} pending",
     "requester": "Requested by",
+    "tainted": "This pane is marked External influence: it has read content from outside Navide (such as a web page or a Navide plugin's text), which may have shaped this request. Check it carefully before you decide.",
     "workspace": "Workspace",
     "expires": "Expires at",
     "caller-unknown": "Unknown caller",

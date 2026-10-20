@@ -55,7 +55,7 @@ def _disabled_by(value: Any) -> dict[str, Any]:
 
 
 def _plugin_requester(requester: Any) -> dict[str, Any]:
-    if not isinstance(requester, dict) or set(requester) != _REQUESTER_KEYS:
+    if not isinstance(requester, dict) or set(requester) - {"tainted"} != _REQUESTER_KEYS:
         raise SkillApprovalError("BAD_REQUEST", "the requester must name paneId, paneName, workspace and callerKind")
     if requester["callerKind"] not in {"pane", "external", "host"}:
         raise SkillApprovalError("BAD_REQUEST", "unknown requester callerKind")
@@ -65,6 +65,9 @@ def _plugin_requester(requester: Any) -> dict[str, Any]:
         if value is not None and not isinstance(value, str):
             raise SkillApprovalError("BAD_REQUEST", f"requester {key} must be a string or null")
         cleaned[key] = None if value is None else _agent_text(value)
+    # S8-M1: present only for a tainted pane, so a clean request keeps its shape.
+    if requester.get("tainted") is True:
+        cleaned["tainted"] = True
     return cleaned
 
 
@@ -188,6 +191,9 @@ class ApprovalRegistry:
             self._expire()
             for record in self._records.values():
                 if record["status"] == "pending" and record["owner"] == owner:
+                    # A coalesced card names its first requester; a tainted later one is disclosed too.
+                    if requester.get("tainted") is True:
+                        record["requester"]["tainted"] = True
                     return copy.deepcopy(record)
             approval_id = uuid.uuid4().hex
             created_at = time.time()

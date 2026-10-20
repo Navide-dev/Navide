@@ -9790,12 +9790,28 @@ def _approval_requester(caller: _Caller) -> dict[str, Any]:
     if caller.kind != "pane":
         return {"paneId": None, "paneName": None, "workspace": None, "callerKind": caller.kind}
     pane = agent_messaging.get(caller.pane_id)
-    return {
+    requester: dict[str, Any] = {
         "paneId": caller.pane_id,
         "paneName": neutralize_external_text(pane.name) if pane else None,
         "workspace": neutralize_external_text(pane.workspace_path) if pane and pane.workspace_path else None,
         "callerKind": "pane",
     }
+    # S8-M1: a pane that read third-party content says so on the card and the
+    # form (disclosure only: the request is filed and decided exactly the same).
+    if _pane_tainted(caller.pane_id):
+        requester["tainted"] = True
+    return requester
+
+
+def _pane_tainted(pane_id: str | None) -> bool:
+    """Whether the pane is marked tainted; False when the taint store cannot answer."""
+    from agent_team_backend.guard import taint
+
+    try:
+        return bool(pane_id) and taint.is_tainted(pane_id)
+    except Exception as err:  # noqa: BLE001 - a disclosure line never fails the request
+        _log.warning("could not read the taint of pane %s: %s", pane_id, err)
+        return False
 
 
 def _audit_agent_action(

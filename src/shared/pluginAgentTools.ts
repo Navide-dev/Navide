@@ -771,7 +771,8 @@ export interface PluginApprovalRequest {
   kind: Exclude<ApprovalKind, 'skill'>
   /** Coalescing key: kind + plugin id + version; a duplicate returns the pending record. */
   owner: string
-  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: AgentToolCaller['kind'] }
+  /** `tainted`: present (true) only when the asking pane read third-party content (S8-M1, a disclosure). */
+  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: AgentToolCaller['kind']; tainted?: true }
   /** Written by the agent; the card labels it as such. */
   reason: string
   target: {
