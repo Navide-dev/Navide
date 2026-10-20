@@ -7,32 +7,47 @@ export interface PluginStagedCandidateNotice {
   reason: string
 }
 
+/** A package staged beside the active one, found at launch. */
+export interface PluginStagedUpdate {
+  pluginId: string
+  activeVersion: string
+  stagedVersion: string
+}
+
 /**
- * Tells the main window that a plugin installed without Restart could not be
- * activated when Navide started (`plugins:stagedCandidateNotActivated`), so
- * the user learns why it is missing and that Settings → Extensions still offers
- * Restart and Discard. With no main window open, or the one found still loading
- * (its listener not registered yet), the notice is held and `flush` hands it to
- * the next main window that finishes loading, so it is never dropped unseen.
+ * Tells the main window what the launch found among staged plugin packages:
+ * a first install it could not activate (`plugins:stagedCandidateNotActivated`)
+ * and the packages staged beside an active one (`plugins:stagedUpdates`), so
+ * the user learns why a plugin is missing or not on its newest version and
+ * can apply it. With no main window open, or the one found still loading (its
+ * listener not registered yet), each notice is held and `flush` hands it to the
+ * next main window that finishes loading, so it is never dropped unseen.
  */
 export function createPluginStagedCandidateRelay(deps: {
   window: () => NoticeWindow | null
-}): { notify(notice: PluginStagedCandidateNotice): void; flush(win: NoticeWindow): void } {
-  const held: PluginStagedCandidateNotice[] = []
+}): {
+  notify(notice: PluginStagedCandidateNotice): void
+  notifyStagedUpdates(updates: PluginStagedUpdate[]): void
+  flush(win: NoticeWindow): void
+} {
+  const held: Array<{ channel: string; payload: unknown }> = []
   const usable = (win: NoticeWindow | null): win is NoticeWindow =>
     !!win && !win.isDestroyed() && !win.webContents.isLoading()
-  const send = (win: NoticeWindow, notice: PluginStagedCandidateNotice): void => {
-    win.webContents.send('plugins:stagedCandidateNotActivated', notice)
+  const deliver = (channel: string, payload: unknown): void => {
+    const target = deps.window()
+    if (usable(target)) target.webContents.send(channel, payload)
+    else held.push({ channel, payload })
   }
   return {
     notify(notice) {
-      const target = deps.window()
-      if (usable(target)) send(target, notice)
-      else held.push(notice)
+      deliver('plugins:stagedCandidateNotActivated', notice)
+    },
+    notifyStagedUpdates(updates) {
+      deliver('plugins:stagedUpdates', updates)
     },
     flush(win) {
       if (!usable(win)) return
-      for (const notice of held.splice(0)) send(win, notice)
+      for (const { channel, payload } of held.splice(0)) win.webContents.send(channel, payload)
     },
   }
 }

@@ -11545,6 +11545,18 @@
       "downgrade": "{version} に戻す"
     }
   },
+  "plugin-staged": {
+    "notice": {
+      "title": "Navide プラグイン {plugin} のバージョン {staged} が適用待ちです。現在実行中のバージョンは {active} です。",
+      "detail": "このバージョンは再起動せずにインストールされたか、ロールバックで保持されたものです。「今すぐ適用」で切り替えます（再起動と同じ動作です）。",
+      "applied": "{plugin} はバージョン {version} で実行中です。",
+      "stale": "適用しませんでした：この Navide プラグインはその後変更されています。",
+      "failed": "適用できませんでした：{error}"
+    },
+    "button": {
+      "apply": "今すぐ適用"
+    }
+  },
   "testplace": {
     "view": "Testplace（招待制）",
     "title": "招待制テスト",

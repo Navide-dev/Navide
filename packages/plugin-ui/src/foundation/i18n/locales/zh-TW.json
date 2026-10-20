@@ -11545,6 +11545,18 @@
       "downgrade": "降回 {version}"
     }
   },
+  "plugin-staged": {
+    "notice": {
+      "title": "Navide 外掛 {plugin} 有版本 {staged} 等待套用，目前執行的是 {active}。",
+      "detail": "這個版本是安裝後沒有按「重新啟動」，或回退時保留下來的。按「立即套用」會切換過去，效果和重新啟動相同。",
+      "applied": "{plugin} 現在執行版本 {version}。",
+      "stale": "沒有套用：這個 Navide 外掛之後又被變更過。",
+      "failed": "無法套用：{error}"
+    },
+    "button": {
+      "apply": "立即套用"
+    }
+  },
   "testplace": {
     "view": "Testplace（受邀）",
     "title": "受邀測試",

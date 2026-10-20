@@ -11545,6 +11545,18 @@
       "downgrade": "Back to {version}"
     }
   },
+  "plugin-staged": {
+    "notice": {
+      "title": "The Navide plugin {plugin} has version {staged} waiting to be applied; version {active} is running.",
+      "detail": "It was installed without Restart, or set aside by a rollback. Apply it to switch now, as Restart does.",
+      "applied": "{plugin} now runs version {version}.",
+      "stale": "Nothing was applied: the Navide plugin was changed since.",
+      "failed": "Could not apply it: {error}"
+    },
+    "button": {
+      "apply": "Apply now"
+    }
+  },
   "testplace": {
     "view": "Testplace (invited)",
     "title": "Invited tests",

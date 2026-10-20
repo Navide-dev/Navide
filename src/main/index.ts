@@ -2176,6 +2176,8 @@ const pluginTrustRefresh = registerPluginIpc(
 void pluginTrustRefresh.loadDeveloperFolders()
 // A first install the user did not restart is activated now, as Restart would
 // have done it; one that cannot be stays staged and the main window says why.
+// A package staged beside an active one is not applied for the user: the main
+// window says which version waits and which runs, and offers to apply it.
 void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
   for (const failure of failures) {
     console.warn(`[main] plugin ${failure.pluginId} ${failure.version} installed without Restart was not activated: ${failure.reason}`)
@@ -2183,6 +2185,9 @@ void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
   }
 }, (error) => {
   console.warn(`[main] staged plugin activation failed: ${error instanceof Error ? error.message : String(error)}`)
+}).finally(() => {
+  const staged = pluginTrustRefresh.stagedUpdates()
+  if (staged.length > 0) pluginStagedCandidateRelay.notifyStagedUpdates(staged)
 })
 
 // Navide Marketplace developer (W3): sign-in, publish, yank and the developer

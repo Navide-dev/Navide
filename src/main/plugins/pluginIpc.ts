@@ -546,6 +546,9 @@ export interface PluginTrustRefreshController {
   /** At startup, promote each first install staged without Restart, exactly
    *  as Restart would; returns those that could not be (they stay staged). */
   activateStagedFirstInstalls(): Promise<Array<{ pluginId: string; version: string; reason: string }>>
+  /** Packages staged beside the active one (an update waiting for Restart, or
+   *  one a rollback displaced). Disclosure only. */
+  stagedUpdates(): Array<{ pluginId: string; activeVersion: string; stagedVersion: string }>
   /** Put back notices no window received, to be sent after the next check. */
   restoreRescanNotices(notices: PluginRescanNotice[]): void
   /** Decision d5: refresh the local-install trust and check every local
@@ -3781,6 +3784,22 @@ export function registerPluginIpc(
     return failures
   }
 
+  /** Every package staged beside the one that runs: an update waiting for
+   * Restart, or a package a rollback displaced (the selector does not tell
+   * them apart). Disclosure only; applying one is plugins:restart. */
+  function stagedUpdates(): Array<{ pluginId: string; activeVersion: string; stagedVersion: string }> {
+    const staged: Array<{ pluginId: string; activeVersion: string; stagedVersion: string }> = []
+    for (const record of lifecycleSelector.list()) {
+      if (!record.candidate || !record.active || record.activation) continue
+      staged.push({
+        pluginId: record.pluginId,
+        activeVersion: record.active.packageVersion,
+        stagedVersion: record.candidate.packageVersion,
+      })
+    }
+    return staged
+  }
+
   // Leaves the selected package running; the only exit from a candidate that
   // cannot be activated (for example over an unverifiable legacy install).
   ipcMain.handle('plugins:discardCandidate', async (event, args: { id?: unknown } | null) => {
@@ -4480,6 +4499,7 @@ export function registerPluginIpc(
     checkUpdates: checkInstalledUpdates,
     loadDeveloperFolders,
     activateStagedFirstInstalls,
+    stagedUpdates,
     /** Decision d5: one run at a time; a call during a run joins it. */
     revalidateLocalInstalls(): Promise<{ quarantined: string[] }> {
       revalidatingLocalInstalls ??= revalidateLocalInstalls().finally(() => {

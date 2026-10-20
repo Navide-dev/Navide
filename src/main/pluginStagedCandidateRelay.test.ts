@@ -31,3 +31,25 @@ describe('plugin staged candidate relay', () => {
     expect(ready.send).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('plugin staged update relay', () => {
+  const updates = [{ pluginId: 'acme.todo', activeVersion: '1.0.0', stagedVersion: '1.1.0' }]
+
+  it('sends the staged updates to a loaded main window at once', () => {
+    const win = fakeWindow()
+    createPluginStagedCandidateRelay({ window: () => win }).notifyStagedUpdates(updates)
+    expect(win.send).toHaveBeenCalledWith('plugins:stagedUpdates', updates)
+  })
+
+  it('holds them, in order with the other notice, until a window finishes loading', () => {
+    const relay = createPluginStagedCandidateRelay({ window: () => null })
+    relay.notify(notice)
+    relay.notifyStagedUpdates(updates)
+    const ready = fakeWindow()
+    relay.flush(ready)
+    expect(ready.send.mock.calls).toEqual([
+      ['plugins:stagedCandidateNotActivated', notice],
+      ['plugins:stagedUpdates', updates],
+    ])
+  })
+})

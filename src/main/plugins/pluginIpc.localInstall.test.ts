@@ -470,6 +470,8 @@ describe('a first install the user did not restart, on the next launch', () => {
     expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({
       active: { packageVersion: '1.0.0' },
     })
+    // Promoted, so nothing is left waiting beside it.
+    expect(controller.stagedUpdates()).toEqual([])
     expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.candidate).toBeUndefined()
     expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', source: 'local-unsigned' }])
     expect(call('plugins:listInstalled')).not.toMatchObject([{ pendingCandidateVersion: '1.0.0' }])
@@ -493,6 +495,8 @@ describe('a first install the user did not restart, on the next launch', () => {
       active: { packageVersion: '1.0.0' },
       candidate: { packageVersion: '1.1.0' },
     })
+    // Disclosed, for the main window to offer "Apply now".
+    expect(controller.stagedUpdates()).toEqual([{ pluginId: 'acme.todo', activeVersion: '1.0.0', stagedVersion: '1.1.0' }])
   })
 
   it('reports a candidate that can no longer be activated and keeps it staged', async () => {
