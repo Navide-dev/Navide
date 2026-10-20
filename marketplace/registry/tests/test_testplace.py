@@ -20,6 +20,7 @@ from registry.migrations import MIGRATIONS, applied_migrations, run_migrations
 from registry.models import DeveloperQualification, ExtensionVersion, Publisher, RegistryAudit
 
 from tests.fixtures import build_v2_package, contract_manifest
+from tests.test_multi_target import _meets_local_backend_rules
 
 ADMIN = "testplace-admin"  # noqa: S105 - test fixture token
 PUBLISHER_TOKEN = "tok-" + "acme-testplace"
@@ -578,7 +579,7 @@ PE_X64 = b"MZ" + b"\0" * 0x3A + (0x40).to_bytes(4, "little") + b"PE\0\0" + (0x86
 
 
 def _publish_native(client: TestClient, target: str, *, channel: str, version: str = "1.0.0"):
-    manifest = contract_manifest("backend-only-skills.json")
+    manifest = _meets_local_backend_rules(contract_manifest("backend-only-skills.json"))
     manifest.update(id="acme.tool", publisher="acme", version=version)
     data = MACHO_ARM64 if target.startswith("darwin") else PE_X64
     backend_name = manifest["backend"]["entry"] + ".exe" if data.startswith(b"MZ") else None

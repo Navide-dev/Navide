@@ -140,6 +140,8 @@ class PublishResponse(BaseModel):
     yanked: bool
     review_status: str = "approved"
     """'pending' when the namespace is review-required (not public yet)."""
+    notices: list[str] = []
+    """What this acceptance does not cover (a local Registry's skipped gates)."""
 
 
 class YankResponse(BaseModel):
