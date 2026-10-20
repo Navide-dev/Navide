@@ -517,6 +517,22 @@ approved by default.
   token of the account, freezes its namespaces, yanks all of their versions in
   every channel and revokes their publisher keys, and blocks the digest of
   every version they published with reason `qualification-revoked`.
+- **Unfreeze**: `/admin/namespaces` lists frozen namespaces;
+  `POST /admin/namespaces/{namespace}/unfreeze` (admin session + CSRF) and
+  `POST /api/admin/namespaces/{namespace}/unfreeze` (`X-Admin-Token`, closed
+  when `REGISTRY_ADMIN_TOKEN` is unset) take `{reason, restore_versions=false}`.
+  The namespace goes back to the account that owned it, never another one
+  (the body has no account field; an extra field is refused). Refused with
+  `NOT_FOUND` (404), `NOT_FROZEN`, `OWNER_NOT_APPROVED` (the owner must be an
+  approved developer now) or `OVER_ALLOWANCE` (the owner already has the
+  per-account number of unfrozen namespaces) (409), or `REASON_REQUIRED`
+  (400). Old publisher tokens and keys stay revoked: the owner issues a new
+  token and registers a new key. Versions stay yanked and digests blocked
+  unless `restore_versions`, which removes only the `qualification-revoked`
+  digest entries this freeze added (per its `namespace.freeze` audit row) and
+  un-yanks only the versions it yanked whose digest is then unblocked; a
+  version yanked or a digest blocked for another reason stays. Audited as
+  `namespace.unfreeze` with the reason and what was restored.
 - **Own data**: `GET /api/publisher/me`, `PUT /api/publisher/me/key`,
   `GET /api/publisher/me/versions` (`?extension=&version=`).
 - **Local-install trust**: `GET /api/trust/local-install` returns a separate

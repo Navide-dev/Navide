@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Frozen namespaces — Navide Marketplace{% endblock %}
+{% block content %}
+<nav class="crumbs"><a href="{{ base }}/admin/review">← Review queue</a> · <a href="{{ base }}/admin/developers">Developer applications</a> · <a href="{{ base }}/admin/blocklist">Blocklist</a></nav>
+<section class="panel">
+  <h1>Frozen namespaces</h1>
+  <p class="muted">A namespace is frozen when its owner's developer qualification is revoked
+    or a grandfathered namespace's grace period ends without an approved application. A
+    frozen name takes no slot and is never released. Unfreezing gives it back to the same
+    account only, once that account is an approved developer again; it never goes to
+    another account. The old publisher tokens and keys stay revoked: the owner issues a
+    new token and registers a new key. Versions stay yanked and their digests blocked
+    unless you tick "Restore versions", which undoes only what this freeze did.</p>
+  {% if error %}<p class="warn warn-block" role="alert">{{ error }}</p>{% endif %}
+  <table class="version-table">
+    <thead><tr><th>Namespace</th><th>Account</th><th>Qualification</th><th>Frozen</th><th>Why</th><th></th></tr></thead>
+    <tbody>
+    {% for i in items %}
+      <tr>
+        <td><code>{{ i.namespace }}</code></td>
+        <td><code>{{ i.member_id or '—' }}</code></td>
+        <td><span class="chip">{{ i.owner_status or 'none' }}</span></td>
+        <td>{{ i.frozen_at.strftime('%Y-%m-%d') if i.frozen_at else '—' }}</td>
+        <td>{{ i.frozen_reason or '—' }}</td>
+        <td>
+          {# A second, explicit step, with a reason that goes to the audit trail. #}
+          <details class="confirm-action">
+            <summary>Unfreeze…</summary>
+            <form class="inline-form" method="post" action="{{ base }}/admin/namespaces/{{ i.namespace }}/unfreeze">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input class="wide-input" name="reason" placeholder="Reason (audit trail)" required maxlength="500">
+              <label><input type="checkbox" name="restore_versions" value="yes"> Restore versions this freeze yanked</label>
+              <button type="submit" class="danger-button">Unfreeze for {{ i.member_id }}</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">No frozen namespaces.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

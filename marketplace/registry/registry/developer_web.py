@@ -14,7 +14,7 @@ from datetime import timezone
 
 from fastapi import APIRouter, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlmodel import Session, select
 
 from . import audit, qualification, review
@@ -26,6 +26,7 @@ from .signing import public_key_fingerprint
 from .versions import version_channel
 
 _NO_STORE = {"Cache-Control": "no-store"}
+_UNFREEZE_CONFLICTS = ("NOT_FROZEN", "OWNER_NOT_APPROVED", "OVER_ALLOWANCE")
 
 
 class ApplicationRequest(BaseModel):
@@ -36,6 +37,15 @@ class ApplicationRequest(BaseModel):
 
 class KeyRequest(BaseModel):
     public_key: str
+
+
+class UnfreezeRequest(BaseModel):
+    # No account field: a namespace only ever goes back to the account that
+    # owned it (user decision 2026-10-21), so any extra field is refused.
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = ""
+    restore_versions: bool = False
 
 
 class DecisionRequest(BaseModel):
@@ -401,3 +411,75 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
                 for r in rows
             ]
         return JSONResponse({"items": items}, headers=_NO_STORE)
+
+    # -- frozen namespaces: unfreeze for the original account ---------------
+    def unfreeze_namespace(request: Request, namespace: str, actor: str, reason: str, restore_versions: bool):
+        with session_of(request) as session:
+            try:
+                return qualification.unfreeze(
+                    session, namespace, actor=actor, reason=reason, restore_versions=restore_versions
+                )
+            except qualification.QualificationError as exc:
+                status = 404 if exc.code == "NOT_FOUND" else 409 if exc.code in _UNFREEZE_CONFLICTS else 400
+                raise _error(status, exc.code, exc.message) from exc
+
+    def frozen_page(request: Request, extra: dict | None = None, status: int = 200) -> Response:
+        with session_of(request) as session:
+            frozen = session.exec(
+                select(Publisher).where(Publisher.frozen_at.is_not(None)).order_by(Publisher.frozen_at.desc())
+            ).all()
+            items = [
+                {
+                    "namespace": p.name,
+                    "member_id": p.navide_member_id,
+                    "owner_status": qualification.status_of(session, p.navide_member_id) if p.navide_member_id else None,
+                    "frozen_at": p.frozen_at,
+                    "frozen_reason": p.frozen_reason,
+                }
+                for p in frozen
+            ]
+        return page(request, "admin_namespaces.html", {"items": items, **(extra or {})}, status=status)
+
+    @router.get("/admin/namespaces")
+    @guarded
+    def admin_namespaces(request: Request) -> Response:
+        require_admin(request)
+        return frozen_page(request)
+
+    @router.post("/admin/namespaces/{namespace}/unfreeze")
+    @guarded
+    def admin_unfreeze(
+        request: Request,
+        namespace: str,
+        csrf: str = Form(""),
+        reason: str = Form(""),
+        restore_versions: str = Form(""),
+    ) -> Response:
+        viewer = require_admin(request)
+        check_csrf(request, viewer, csrf)
+        try:
+            unfreeze_namespace(
+                request, namespace, audit.admin_actor(viewer.member_id), reason, restore_versions == "yes"
+            )
+        except HTTPException as exc:
+            if not isinstance(exc.detail, dict):
+                raise
+            return frozen_page(request, {"error": exc.detail["message"]}, status=exc.status_code)
+        return redirect(request, "/admin/namespaces")
+
+    @router.post("/api/admin/namespaces/{namespace}/unfreeze")
+    def api_unfreeze(
+        request: Request,
+        namespace: str,
+        body: UnfreezeRequest,
+        x_admin_token: str | None = Header(default=None),
+    ) -> JSONResponse:
+        require_admin_token(request, x_admin_token)
+        result = unfreeze_namespace(request, namespace, audit.ADMIN_TOKEN_ACTOR, body.reason, body.restore_versions)
+        return JSONResponse(
+            {
+                "namespace": result.namespace,
+                "restored_versions": result.restored_versions,
+                "digests_unblocked": result.digests_unblocked,
+            }
+        )
