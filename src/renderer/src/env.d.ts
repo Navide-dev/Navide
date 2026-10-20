@@ -900,7 +900,7 @@ declare global {
   interface DeveloperModeState {
     enabled: boolean
     /** A2-5 (G5): when Navide first saw settings another program wrote, while any is left. */
-    externalChange?: { detectedAt: string; modifiedAt: string | null }
+    externalChange?: { detectedAt: string; modifiedAt: string | null; reason?: 'signing-unavailable' }
     folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string; externallyChanged?: true }>
   }
 }

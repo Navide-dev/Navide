@@ -2977,6 +2977,10 @@ export function registerPluginIpc(
       } else {
         await loadDeveloperFolders()
       }
+    } else if (!enabled) {
+      // A2-5: off already, but another program's "on" may still be in the
+      // file; the user's "off" replaces it and its notice goes.
+      developerMode.setEnabled(false)
     }
     return developerModeState()
   })

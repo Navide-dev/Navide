@@ -168,6 +168,53 @@ describe('Developer Mode settings changed outside Navide (G5)', () => {
     expect(unavailable.externalChange()).toBeNull()
   })
 
+  it('never throws when secure storage refuses; the write is kept unsigned, asked about again and disclosed (MED-2)', () => {
+    const refusing = integrity({ encrypt: () => { throw new Error('keychain access denied') } })
+    const store = new PluginDeveloperModeStore(root, refusing)
+    expect(() => store.setEnabled(true)).not.toThrow()
+    expect(() => store.consent(folder('acme.one'))).not.toThrow()
+    expect(store.isEnabled()).toBe(false)
+    expect(store.folders()).toEqual([])
+    expect(store.untrustedFolders().map((f) => f.pluginId)).toEqual(['acme.one'])
+    expect(store.externalChange()).toMatchObject({ reason: 'signing-unavailable' })
+    expect(JSON.parse(readFileSync(join(root, STORE), 'utf8'))).toMatchObject({ enabled: true, folders: [{ pluginId: 'acme.one' }] })
+    expect(seen).toHaveLength(1)
+
+    // A legacy file and a key that cannot be unwrapped: same, no exception.
+    rmSync(join(root, SIGNATURE))
+    const legacy = new PluginDeveloperModeStore(root, refusing)
+    expect(() => legacy.isEnabled()).not.toThrow()
+    expect(legacy.isEnabled()).toBe(false)
+    const throwingDecrypt = new PluginDeveloperModeStore(root, integrity({ decrypt: () => { throw new Error('locked') } }))
+    expect(() => throwingDecrypt.folders()).not.toThrow()
+  })
+
+  it("the user's off replaces a switch another program turned on, and the notice goes (LOW-2)", () => {
+    const store = new PluginDeveloperModeStore(root, integrity())
+    store.setEnabled(true)
+    store.setEnabled(false)
+    writeOutside({ enabled: true, folders: [] })
+    const after = new PluginDeveloperModeStore(root, integrity())
+    expect(after.isEnabled()).toBe(false)
+    expect(after.externalChange()).not.toBeNull()
+    after.setEnabled(false)
+    expect(JSON.parse(readFileSync(join(root, STORE), 'utf8'))).toMatchObject({ enabled: false })
+    expect(after.externalChange()).toBeNull()
+  })
+
+  it('reports an outside change once across the two stores the app keeps (LOW-3)', () => {
+    const store = new PluginDeveloperModeStore(root, integrity())
+    store.setEnabled(true)
+    writeOutside({ enabled: true, folders: [folder('evil.two')] })
+    const fromIndex = new PluginDeveloperModeStore(root, integrity())
+    const fromIpc = new PluginDeveloperModeStore(root, integrity())
+    fromIndex.isEnabled()
+    fromIpc.folders()
+    fromIndex.untrustedFolders()
+    fromIpc.externalChange()
+    expect(seen).toHaveLength(1)
+  })
+
   it('behaves exactly as before without an integrity provider', () => {
     writeOutside({ enabled: true, folders: [folder('acme.one')] })
     const plain = new PluginDeveloperModeStore(root)

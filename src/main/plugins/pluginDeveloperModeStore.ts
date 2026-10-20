@@ -51,6 +51,9 @@ export interface DeveloperModeExternalChange {
   detectedAt: string
   /** The settings file's modification time then, when it could be read. */
   modifiedAt: string | null
+  /** Set when Navide could not sign its own write (secure storage refused):
+   * the entries are asked about again, as after an outside change. */
+  reason?: 'signing-unavailable'
 }
 
 interface PersistedSignature {
@@ -153,7 +156,11 @@ function readSignature(path: string): PersistedSignature | null {
       keyEnc: typeof parsed.keyEnc === 'string' ? parsed.keyEnc : '',
       macs: Array.isArray(parsed.macs) ? parsed.macs.filter((mac): mac is string => typeof mac === 'string') : [],
       externalChange: change && typeof change === 'object' && typeof change.detectedAt === 'string'
-        ? { detectedAt: change.detectedAt, modifiedAt: typeof change.modifiedAt === 'string' ? change.modifiedAt : null }
+        ? {
+            detectedAt: change.detectedAt,
+            modifiedAt: typeof change.modifiedAt === 'string' ? change.modifiedAt : null,
+            ...(change.reason === 'signing-unavailable' ? { reason: 'signing-unavailable' as const } : {}),
+          }
         : null,
     }
   } catch {
@@ -162,10 +169,20 @@ function readSignature(path: string): PersistedSignature | null {
   }
 }
 
+function readSignatureSafely(path: string): PersistedSignature | null {
+  try {
+    return readSignature(path)
+  } catch {
+    return null
+  }
+}
+
 export class PluginDeveloperModeStore {
   private readonly file: string
   private readonly signatureFile: string
   private unwrapped: { keyEnc: string; key: Buffer | null } | null = null
+  /** A notice that could not be saved in the signature file. */
+  private unsavedChange: DeveloperModeExternalChange | null = null
 
   constructor(private readonly root: string, private readonly integrity?: DeveloperModeIntegrity) {
     this.file = join(root, DEVELOPER_MODE_FILE)
@@ -181,7 +198,9 @@ export class PluginDeveloperModeStore {
 
   setEnabled(enabled: boolean): void {
     const evaluated = this.evaluate()
-    if ((evaluated.state.enabled && evaluated.enabledTrusted) === enabled) return
+    // Turning it off also writes over a switch another program turned on, so
+    // that entry and its notice go (review LOW-2 on #537).
+    if (evaluated.state.enabled === enabled && (!enabled || evaluated.enabledTrusted)) return
     this.write({ ...evaluated.state, enabled }, evaluated, { enabled: true })
   }
 
@@ -243,8 +262,50 @@ export class PluginDeveloperModeStore {
     return key
   }
 
+  /** Never throws (review MED-2 on #537): when the signature cannot be read,
+   * made or written, every entry is asked about again and that is disclosed. */
   private evaluate(): Evaluated {
     const state = this.read()
+    try {
+      return this.evaluateSigned(state)
+    } catch (error) {
+      console.warn('[plugins] Developer Mode settings could not be checked; every entry is asked about again:', error)
+      return {
+        state,
+        enabledTrusted: !state.enabled,
+        untrusted: new Set(state.folders.map((_, index) => index)),
+        externalChange: this.noteChange(null, 'signing-unavailable'),
+      }
+    }
+  }
+
+  /** Records (once, in the signature file when it can) and reports when
+   * Navide first saw entries it did not sign. */
+  private noteChange(signature: PersistedSignature | null, reason?: 'signing-unavailable'): DeveloperModeExternalChange {
+    const known = signature?.externalChange ?? readSignatureSafely(this.signatureFile)?.externalChange ?? this.unsavedChange
+    if (known) return known
+    const change: DeveloperModeExternalChange = {
+      detectedAt: new Date().toISOString(),
+      modifiedAt: this.modifiedAt(),
+      ...(reason ? { reason } : {}),
+    }
+    const base = signature ?? readSignatureSafely(this.signatureFile) ?? { schemaVersion: 1 as const, keyEnc: '', macs: [], externalChange: null }
+    try {
+      this.writeSignature({ ...base, externalChange: change })
+    } catch (error) {
+      // Kept for this run; said again on the next start.
+      this.unsavedChange = change
+      console.warn('[plugins] Developer Mode notice could not be saved:', error)
+    }
+    try {
+      this.integrity?.onExternalChange?.(change)
+    } catch (error) {
+      console.warn('[plugins] Developer Mode external change was not recorded:', error)
+    }
+    return change
+  }
+
+  private evaluateSigned(state: PersistedDeveloperModeState): Evaluated {
     const all: Evaluated = { state, enabledTrusted: true, untrusted: new Set(), externalChange: null }
     const integrity = this.integrity
     if (!integrity || !integrity.available) return all
@@ -252,6 +313,7 @@ export class PluginDeveloperModeStore {
     if (!state.enabled && state.folders.length === 0) {
       const signature = readSignature(this.signatureFile)
       if (signature?.externalChange) this.writeSignature({ ...signature, externalChange: null })
+      this.unsavedChange = null
       return all
     }
     const signature = readSignature(this.signatureFile)
@@ -273,19 +335,10 @@ export class PluginDeveloperModeStore {
     })
     if (enabledTrusted && untrusted.size === 0) {
       if (signature.externalChange) this.writeSignature({ ...signature, externalChange: null })
+      this.unsavedChange = null
       return all
     }
-    let change = signature.externalChange
-    if (!change) {
-      change = { detectedAt: new Date().toISOString(), modifiedAt: this.modifiedAt() }
-      this.writeSignature({ ...signature, externalChange: change })
-      try {
-        integrity.onExternalChange?.(change)
-      } catch (error) {
-        console.warn('[plugins] Developer Mode external change was not recorded:', error)
-      }
-    }
-    return { state, enabledTrusted, untrusted, externalChange: change }
+    return { state, enabledTrusted, untrusted, externalChange: this.noteChange(signature) }
   }
 
   private modifiedAt(): string | null {
@@ -337,7 +390,17 @@ export class PluginDeveloperModeStore {
     const untrusted = new Set(evaluated.state.folders.filter((_, index) => evaluated.untrusted.has(index)))
     const enabledTrusted = decision.enabled === true || evaluated.enabledTrusted
     const previous = readSignature(this.signatureFile)
-    const next = this.sign(state, untrusted, enabledTrusted, previous)
+    let next: PersistedSignature
+    try {
+      next = this.sign(state, untrusted, enabledTrusted, previous)
+    } catch (error) {
+      // Secure storage refused (review MED-2 on #537): the user's change is
+      // still written, unsigned, so it reads as "ask again" and is disclosed.
+      console.warn('[plugins] Developer Mode settings could not be signed:', error)
+      this.writeAtomic(this.file, state)
+      this.noteChange(previous, 'signing-unavailable')
+      return
+    }
     // Old and new entries are both signed while the two files change, so a
     // stop in between never reads as a change made outside Navide.
     const carried = previous && previous.keyEnc === next.keyEnc ? previous.macs : []

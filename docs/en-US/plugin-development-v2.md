@@ -2239,15 +2239,22 @@ runs only inside the OS sandbox described in
   the entry names). Navide says so in the launch reminder and on this page,
   and writes one Host event `developerMode.externalChange` to the activity
   log when it first sees the change. Nothing is blocked: the other program's
-  write is simply not taken as the user's consent. Known limits: the check
-  runs only after the app is ready and while secure storage is available
-  (not on Linux without a keyring, nor for the self-hosted Registry setting
-  read before the app is ready); a file from before 0.2.28, or one whose
-  signature file was deleted together with it, is signed once as it is; on
-  Windows and Linux the safeStorage key is readable by any process of the
-  same user, so a determined program can still forge an entry there; a
-  signature file that cannot be read or decrypted (another machine, a new
-  keychain) asks about every entry again. A native backend still needs its
+  write is simply not taken as the user's consent. When secure storage
+  refuses to sign Navide's own write (keychain access denied or locked), the
+  change is still written, unsigned, and reads as "ask again" with its own
+  notice; reading the settings never fails over it. Known limits: the check
+  runs only after the app is ready and only while secure storage is
+  available, so before the app is ready (the self-hosted Registry setting
+  can be read then) and on Linux without a keyring, or with the
+  `basic_text` password store, entries are taken as they are; a file from
+  before 0.2.28, or one whose signature file was deleted together with it,
+  is signed once as it is; the signature covers entries, not their age, so
+  restoring an older copy of both files together (for example one taken
+  while the switch was on, or before a folder was removed) makes that state
+  trusted again without a notice; on Windows and Linux the safeStorage key
+  is readable by any process of the same user, so a determined program can
+  still forge an entry there; a signature file that cannot be read or
+  decrypted (another machine, a new keychain) asks about every entry again. A native backend still needs its
   own consent, and a plugin frame and a plugin's own sandboxed backend cannot
   write either file. Navide Guard grades an agent's write to this file as
   critical where the CLI runs Navide's hooks (rule `plugin-store-write`, with
