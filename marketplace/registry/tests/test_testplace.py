@@ -479,3 +479,64 @@ def test_admin_page_reviews_a_code_and_a_promotion_and_revokes(tmp_path) -> None
         rows = session.exec(select(ExtensionVersion).where(ExtensionVersion.version == "1.1.0")).all()
     assert {"testplace.code.approve", "testplace.promotion.approve", "testplace.version.revoke"} <= set(actions)
     assert all(r.yanked for r in rows)
+
+
+# -- R-HIGH-1: promotion goes through the stable review ----------------------
+def test_promotion_of_a_native_backend_build_needs_the_stable_review_confirmation(client: TestClient) -> None:
+    from tests.test_native_backend import _backend_manifest, _backend_package
+
+    assert client.post(
+        "/api/publishers", json={"name": "acme-tools", "token": "tok-" + "acme-tools"}, headers=_admin()
+    ).status_code == 201
+    with _session(client) as session:
+        publisher = session.exec(select(Publisher).where(Publisher.name == "acme-tools")).one()
+        publisher.review_required = True
+        publisher.native_backend_allowed = True
+        publisher.verified_domain = "acme-tools.dev"
+        publisher.domain_verified_at = datetime.now(timezone.utc)
+        session.add(publisher)
+        session.commit()
+    tools = {"Authorization": "Bearer tok-" + "acme-tools"}
+    resp = client.post(
+        "/api/publish",
+        params={"channel": "testplace", "target": "darwin-arm64"},
+        headers=tools,
+        files={"package": ("pkg.vsix", _backend_package(_backend_manifest()), "application/zip")},
+    )
+    assert resp.status_code == 201, resp.text
+    digest = resp.json()["package_digest"]
+    version = resp.json()["version"]
+    path = f"/api/admin/testplace/promotions/acme-tools/indexer/{version}/decision"
+    assert client.post(f"/api/testplace/acme-tools/indexer/versions/{version}/promote", headers=tools).status_code == 200
+
+    # Same rule as a pending stable submission: a native backend is approved
+    # only once the reviewer confirms every target's executable was inspected.
+    refused = client.post(path, json={"approve": True, "artifacts": [digest]}, headers=_admin())
+    assert refused.status_code == 409, refused.text
+    assert "native backend" in refused.json()["detail"]["message"]
+    assert client.get("/api/extensions/acme-tools/indexer").status_code == 404
+
+    approved = client.post(
+        path, json={"approve": True, "artifacts": [digest], "inspected_native_backend": True}, headers=_admin()
+    )
+    assert approved.status_code == 200, approved.text
+    with _session(client) as session:
+        row = session.exec(select(ExtensionVersion).where(ExtensionVersion.package_digest == digest)).one()
+    assert row.reviewed_by == "admin-token" and row.reviewed_at is not None
+    # Rescanned at approval, like review.approve: the signed report is today's.
+    assert row.scan is not None and row.scan["artifactDigest"] == digest
+
+
+def test_promotion_rechecks_the_blocklist_and_records_the_review(client: TestClient) -> None:
+    assert _publish(client).status_code == 201
+    client.post("/api/testplace/acme/files/versions/1.0.0/promote", headers=_publisher())
+    digest = client.get("/api/admin/testplace/promotions", headers=_admin()).json()["promotions"][0]["artifacts"][0]
+    resp = client.post(
+        "/api/admin/testplace/promotions/acme/files/1.0.0/decision",
+        json={"approve": True, "artifacts": [digest]},
+        headers=_admin(),
+    )
+    assert resp.status_code == 200, resp.text
+    with _session(client) as session:
+        row = session.exec(select(ExtensionVersion)).one()
+    assert row.reviewed_by == "admin-token"
