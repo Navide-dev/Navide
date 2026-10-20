@@ -371,9 +371,11 @@ async def test_a_pipeline_reset_in_another_window_still_goes_through(
 def test_a_folder_that_is_gone_still_matches_its_case_variant_where_case_is_ignored(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(plan_mcp.sys, "platform", "darwin")
+    from agent_team_backend import osplat
+
+    monkeypatch.setattr(osplat, "paths_ignore_case", True)
     assert plan_mcp._same_directory("/no/such/Proj", "/no/such/proj/") is True
-    monkeypatch.setattr(plan_mcp.sys, "platform", "linux")
+    monkeypatch.setattr(osplat, "paths_ignore_case", False)
     assert plan_mcp._same_directory("/no/such/Proj", "/no/such/proj") is False
 
 
