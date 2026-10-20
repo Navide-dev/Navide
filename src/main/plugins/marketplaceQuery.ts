@@ -17,6 +17,7 @@
  * nothing here invents one.
  */
 import type {
+  LocalPackageQueryReport,
   MarketplaceInstalledItem,
   MarketplaceListingItem,
   MarketplaceQueryResponse,
@@ -58,6 +59,7 @@ export type MarketplaceQueryResult =
   | { kind: 'search'; items: MarketplaceQueryListingItem[]; nextCursor: string | null }
   | { kind: 'detail'; item: MarketplaceQueryListingItem; versions: string[]; card: DisclosureCard | null }
   | { kind: 'installed'; items: MarketplaceInstalledItem[] }
+  | { kind: 'localValidate' | 'localPackage' | 'localStage'; report: LocalPackageQueryReport }
 
 type ErrorCode = Extract<MarketplaceQueryResponse, { ok: false }>['error_code']
 
@@ -80,7 +82,18 @@ export interface MarketplaceQuerySources {
     options: { category?: string; offset?: number; limit: number },
   ): Promise<{ items?: Array<Record<string, unknown>>; total?: unknown }>
   detail(namespace: string, name: string): Promise<Record<string, unknown>>
-  installed(): Array<{ id: string; packageVersion?: string; disabled?: boolean; hasBackend?: boolean }>
+  installed(): Array<{
+    id: string
+    packageVersion?: string
+    disabled?: boolean
+    hasBackend?: boolean
+    source?: string
+    signatureRevoked?: boolean
+  }>
+  /** W1: absent, the local package kinds answer HOST_UNAVAILABLE. */
+  localValidate?(path: string): Promise<LocalPackageQueryReport>
+  localPackage?(path: string, options: { target?: string; out?: string }): Promise<LocalPackageQueryReport>
+  localStage?(path: string): Promise<LocalPackageQueryReport>
 }
 
 const DEFAULT_LIMIT = 20
@@ -127,7 +140,7 @@ function summaryClause(value: unknown): DisclosureSummaryClause | null {
   if (!isRecord(value)) return null
   const params = value.params
   switch (value.key) {
-    case 'nativeBackend': case 'aiCli': case 'ui': case 'network': case 'networkViaShell': case 'noPermissions':
+    case 'nativeBackend': case 'aiCli': case 'ui': case 'web': case 'network': case 'networkViaShell': case 'noPermissions':
       return isEmptyParams(params) ? { key: value.key, params: {} } : null
     case 'files':
       return isRecord(params) && (params.access === 'read' || params.access === 'readWrite')
@@ -171,7 +184,7 @@ function riskBlock(value: unknown): ManifestDisclosure['risk'] | null {
 function permissionsBlock(value: unknown): DisclosurePermissions | null {
   if (!isRecord(value)) return null
   const system = strings(value.system)
-  if (!system || !system.every((name) => name === 'aiCli' || name === 'fs' || name === 'ui')) return null
+  if (!system || !system.every((name) => name === 'aiCli' || name === 'fs' || name === 'ui' || name === 'web')) return null
   const shell = value.shell === null ? null : shellParams(value.shell)
   if (shell === undefined) return null
   let scopes: DisclosurePermissions['scopes'] = null
@@ -478,8 +491,35 @@ export async function answerMarketplaceQuery(
       hasBackend: summary.hasBackend === true,
       // No package can declare agent tools before B1 accepts the field.
       agentTools: [],
+      ...(summary.source ? { source: summary.source } : {}),
+      ...(summary.signatureRevoked ? { signatureRevoked: true } : {}),
     }))
     return { ok: true, result: { kind: 'installed', items } }
+  }
+  if (query.kind === 'localValidate' || query.kind === 'localPackage' || query.kind === 'localStage') {
+    const allowed = new Set(query.kind === 'localPackage' ? ['kind', 'path', 'target', 'out'] : ['kind', 'path'])
+    if (Object.keys(query).some((key) => !allowed.has(key))) return bad(`unknown ${query.kind} field`)
+    if (typeof query.path !== 'string' || !query.path) return bad('path must be an absolute path')
+    for (const key of ['target', 'out'] as const) {
+      if (query[key] !== undefined && typeof query[key] !== 'string') return bad(`${key} must be a string`)
+    }
+    const run = query.kind === 'localValidate'
+      ? sources.localValidate?.bind(sources, query.path)
+      : query.kind === 'localStage'
+      ? sources.localStage?.bind(sources, query.path)
+      : sources.localPackage?.bind(sources, query.path, {
+          ...(typeof query.target === 'string' ? { target: query.target } : {}),
+          ...(typeof query.out === 'string' ? { out: query.out } : {}),
+        })
+    if (!run) return { ok: false, error: 'Navide Host cannot check local packages now', error_code: 'HOST_UNAVAILABLE' }
+    try {
+      return { ok: true, result: { kind: query.kind, report: await run() } }
+    } catch (error) {
+      // A path the Host cannot use (missing, not absolute, a protected folder).
+      // Not BAD_REQUEST: that code is reserved for this file's own literals,
+      // and this text may quote a file name, so the backend fences it.
+      return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'NOT_FOUND' }
+    }
   }
   if (query.kind === 'search') {
     const allowed = new Set(['kind', 'text', 'category', 'cursor', 'limit'])

@@ -114,6 +114,13 @@
         "writes": "~/.codex/auth.json (a hard link to the pane's sign-in)",
         "cost": "A sign-in made inside a pane stays in that pane."
       },
+      "grok_folder-trust": {
+        "name": "Grok folder trust shared",
+        "benefit": "A folder you trusted in one Grok pane is trusted in every Grok pane, including ones you open or rebuild later.",
+        "purpose": "Grok panes do not ask you to trust the same folder again",
+        "writes": "~/.grok/trusted_folders.toml: when a Grok pane records that you trusted a folder, Navide appends that folder's entry to the end of this file. Only the workspace the pane was opened in, or a folder inside it, is shared to ~/.grok. Only folders the file does not already mention are added; your own entries, comments and layout are never changed. The file is backed up before every change, and turning this off removes exactly the text Navide appended, so the file is back to what it was (or removes the file if Navide created it)",
+        "cost": "A folder you trusted in one Grok pane is asked about again in every new or rebuilt Grok pane."
+      },
       "cursor_project-mcp": {
         "name": "Navide MCP tools for Cursor",
         "benefit": "Cursor panes get Navide's MCP tools, such as messaging, plans and scheduling.",
@@ -1776,6 +1783,13 @@
       "builtinSwitchBusy": "Applying… Navide first lets current work finish, which can take about half a minute for Plans.",
       "disabledBadge": "Disabled",
       "disabledNote": "Disabled: its views and backend do not run. Its files, permissions and stored data are kept.",
+      "digestBlock": {
+        "blocked": "Blocked by Navide",
+        "security": "Taken down by Navide (security)",
+        "qualificationRevoked": "Developer qualification revoked",
+        "developerWithdrawn": "Withdrawn by its developer",
+        "note": "Navide put the file this Navide plugin was installed from on its blocked list after you installed it."
+      },
       "rollback": {
         "toBundled": "Roll back to bundled",
         "toVersion": "Roll back to {version}",
@@ -1842,6 +1856,7 @@
         "uninstallConfirmBody": "{name} will be removed from this device. You can install it again from the Navide Marketplace.",
         "uninstallConfirmBodyWithData": "{name} will be removed from this device. Its native backend also stored {size} of private data on this device, at the location below. Navide deletes this data too unless you choose to keep it.",
         "uninstallKeepNativeData": "Keep this data so a reinstall can use it again",
+        "uninstallClearsWebData": "Removing {name} also deletes its site sign-ins, cookies and cache on this computer.",
         "updatesCount": "Updates available: {count}",
         "retry": "Retry",
         "featured": "Featured",
@@ -1933,6 +1948,7 @@
         "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
       },
       "localInstall": {
+        "agentRequest": "Requested by {requester}. Navide has not reviewed this package; installing it is your decision.",
         "button": "Install from .vsix file…",
         "backToMarketplace": "Switch back to the Navide Marketplace version",
         "warning": "This Navide plugin comes from a file on this computer. Navide has not reviewed it and it is not signed: its author cannot be confirmed and the file may have been changed. Only install files from people you trust.",
@@ -1948,6 +1964,16 @@
         "replaceDataSetAside": "The new version starts with an empty data folder. The existing data is kept aside, and the new version cannot read it.",
         "reattachData": "Take back the data kept aside from this source earlier (off by default)",
         "takedownUnknown": "Navide cannot tell right now whether this Navide plugin has been taken down: the Navide takedown list could not be fetched.",
+        "signatureState": {
+          "verified": "Signed by developer {publisher}, who passed Navide's developer vetting. This version itself was not reviewed by Navide.",
+          "revoked": "Signature no longer valid: Navide has revoked the signing key or the developer qualification of {publisher}.",
+          "unverifiable": "A signature Navide cannot check against a vetted developer ({publisher}): treat this file as unsigned.",
+          "warningVerified": "This Navide plugin comes from a file on this computer. It is signed by developer {publisher}, who passed Navide's developer vetting, but Navide has not reviewed this version. Only install files from people you trust.",
+          "warningRevoked": "This Navide plugin comes from a file on this computer, and its signature is no longer valid: Navide has revoked the signing key or the developer qualification of {publisher}. Navide has not reviewed it. Only install it if you trust where it came from."
+        },
+        "errors": {
+          "digestBlocked": "This file of {id} cannot be installed: Navide has taken this exact file down (its digest is on Navide's blocked list)."
+        },
         "confirmReplace": "Replace"
       },
       "trust": {
@@ -1966,6 +1992,7 @@
         "capability": {
           "fs": "Read and write files in your workspace.",
           "aiCli": "Run the AI CLI agents set up in Navide.",
+          "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; it can open many web pages at once, and each one uses memory.",
           "shell": "Run commands on your computer.",
           "terminal": "Open and control Navide terminals."
         }
@@ -5091,7 +5118,7 @@
         },
         "s1": {
           "title": "Direction 1: the tools Navide gives CLI agents",
-          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>63</strong> of them today (56 core, plus the 7 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
+          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>64</strong> of them today (57 core, plus the 7 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
           "h1": "Plan documents",
           "planTools": {
             "plan_list": "List every plan in this workspace, with its stage and todo progress",
@@ -5158,8 +5185,9 @@
             "cli_message_log": "The history of messages I sent and received; once delivered a message disappears from inbox_summary and pending_incoming, and this is the only place left to find it",
             "cli_usage": "How much quota each CLI has left; check before handing out work, or the message lands on a CLI that has already run out",
             "cli_failover_state": "What Navide's quota failover is doing about an exhausted CLI account: the policy, open incidents, how many automatic switches the budget still allows, and any half-finished switch that blocks a vendor until the user resolves it. Read-only; accounts are named by slot, never by email",
-            "cli_accounts_list": "The CLI accounts Navide keeps and which one each CLI runs on, from the account store only: names and ids, no email and no signed-in state, since those would mean reading the credentials. Read-only",
+            "cli_accounts_list": "The CLI accounts Navide keeps and which one each CLI runs on, from the account store only: names and ids (an account Navide added on its own is named after its email), no signed-in state, since that would mean reading the credentials. Read-only",
             "cli_account_sign_in": "Open the sign-in Navide already offers for one CLI account (a parked account in its own private home, or a claude account inside its own folder), so the user only finishes it in the browser; the user agrees first in a dialog that names the agent and its reason; nothing opens on a no or no answer. No token, code or URL comes back, nothing is switched, and the active account or a sign-in that would replace the live credential is left to the user",
+            "cli_account_switch": "Ask the user to switch one CLI to another of its accounts; the user agrees first in a dialog that names the agent, both accounts and its reason; nothing switches on a no or no answer. It goes through the window's own switch, never forced, and only the result and the accounts' display names (which can be an email) come back, never a credential",
             "cli_token_stats": "This workspace's current token usage",
             "cli_list_sessions": "The CLI conversations in this workspace a new pane could be opened onto — a conversation outlives the pane that ran it: close the pane, restart the app, rebuild the pane, and the transcript stays on disk. Each row says whether it is still resumable and whether the pane that owned it is still open: do not resume a live one, which forks or corrupts it — message that pane instead",
             "cli_place_pane": "Move a pane: change the tab group it sits in, or make it a child of another pane (the same thing as dragging it in the sidebar, through the same write path, so the position survives a restart). The two halves are independent and the reply says which landed. It does not touch that pane's CLI — nothing is sent, interrupted or restarted. Local panes only",
@@ -7854,6 +7882,19 @@
         "agent-login-confirm-reason-truncated": "The agent's reason was longer than 300 characters; only the first 300 are shown.",
         "agent-login-confirm-cancel": "Cancel",
         "agent-login-confirm-ok": "Open sign-in",
+        "agent-switch-confirm-title": "An agent asks to switch a CLI account",
+        "agent-switch-confirm-body": "Nothing switches unless you agree. The switch is the same one Settings → Accounts makes: the CLI moves to the other account, and if panes are running on it Navide asks you again before restarting them. If you do not answer, the request closes by itself.",
+        "agent-switch-confirm-late": "Once you agree, the switch finishes even if the agent has stopped waiting. If panes are restarted, that includes the asking agent's own pane when it runs on this CLI; it will not get the result and has to check its accounts again after the restart.",
+        "agent-switch-confirm-vendor": "CLI",
+        "agent-switch-confirm-from": "From account",
+        "agent-switch-confirm-to": "To account",
+        "agent-switch-confirm-caller": "Asked by pane",
+        "agent-switch-confirm-workspace": "Pane's workspace",
+        "agent-switch-confirm-reason": "Reason, written by the agent",
+        "agent-switch-confirm-reason-truncated": "The agent's reason was longer than 300 characters; only the first 300 are shown.",
+        "agent-switch-confirm-cancel": "Cancel",
+        "agent-switch-confirm-ok": "Switch account",
+        "agent-switch-done": "{agent} switched {vendor} from {from} to {to}. The agent's reason: {reason}",
         "login-complete": "Signed in as {email}. Account saved.",
         "login-complete-no-email": "Sign-in complete. Account saved.",
         "login-step2": "Step 1 done: {email} is saved. One more authorization signs this account in to its own folder. Finish it in the browser from the sign-in pane that just opened.",
@@ -7875,7 +7916,10 @@
         "refresh-quota-all": "Refresh all",
         "refreshing-quota": "Refreshing…",
         "refresh-quota-hint": "Re-read every CLI's remaining quota now, skipping the usual wait after a failed read. Claude is read by launching its CLI, so this can take a few seconds.",
-        "refresh-quota-card-hint": "Re-read this account's remaining quota now, skipping the usual wait after a failed read. Only the account the CLI is signed in as can be read.",
+        "refresh-quota-card-hint": "Re-read this account's remaining quota now, skipping the usual wait after a failed read. Only the account the CLI is signed in as, or one signed in to its own folder, can be read.",
+        "dir-sign-in": "Sign in to its own folder",
+        "dir-sign-in-hint": "Sign this account in once inside its own folder so its quota can be read live while it is parked. The browser asks you to authorize again; use the same email.",
+        "dir-email-mismatch": "Its own folder is signed in as {dirEmail}, not {expected}. The quota on this card is {dirEmail}'s.",
         "default-hint": "Your original login credentials",
         "is-default": "Default",
         "set-default": "Set as default",
@@ -8607,6 +8651,8 @@
   },
   "error": {
     "pipeline-start-refused": "The pipeline did not start: {reason}",
+    "pipeline-kickoff-failed": "Pipeline failed: stage {stage}, slot {slot} — {reason}. Its panes are still open.",
+    "pipeline-kickoff-held": "Pipeline failed: stage {stage}, slot {slot} — its kickoff is waiting in the input box. Leave it there and resume will submit it, or clear it. Its panes are still open.",
     "workspace-create-exists": "An item named “{name}” is already there. Pick another name.",
     "workspace-create-denied": "No permission to create a folder at {path}.",
     "workspace-create-failed": "Could not create the workspace folder at {path}.",
@@ -9276,8 +9322,17 @@
     "dont-ask": "Stop asking about {label}"
   },
   "plugin-request": {
+    "file": {
+      "path": "File",
+      "folder": "Folder",
+      "digest": "File SHA-256",
+      "unreviewed": "An agent asked to install this file. Navide has not reviewed it. Approving opens the same install dialog as \"Install from file\", and what installs is the copy Navide read when the agent asked, with the SHA-256 above.",
+      "unreviewed-folder": "An agent asked to load this developer folder. Navide has not reviewed it and its contents can change at any time. Approving opens the same dialog as loading a folder yourself.",
+      "digestChanged": "The file Navide holds for this request is not the one shown on the request; nothing was installed. Ask the agent to send it again."
+    },
     "kicker": "Navide plugin request",
     "title": {
+      "install-file": "Install the Navide plugin {plugin} {version} from a file?",
       "install": "Install the Navide plugin {plugin} {version}?",
       "update": "Update the Navide plugin {plugin} from {from} to {version}?",
       "rollback": "Roll the Navide plugin {plugin} back from {from} to {version}?",
@@ -9287,6 +9342,7 @@
     "desc": "An agent asked for this change. Nothing changes until you approve it here; the agent cannot approve it for you.",
     "queue": "{count} pending",
     "requester": "Requested by",
+    "tainted": "This pane is marked External influence: it has read content from outside Navide (such as a web page or a Navide plugin's text), which may have shaped this request. Check it carefully before you decide.",
     "workspace": "Workspace",
     "expires": "Expires at",
     "caller-unknown": "Unknown caller",
@@ -9439,9 +9495,9 @@
     "cached-account-tooltip": "Cached — this account could not be polled; numbers are from {time}",
     "cached-window-expired": "reset passed",
     "no-data": "No quota data yet",
-    "reading-now": "Reading this account's quota — up to about a minute",
+    "reading-now": "Reading this account's quota — can take up to 3 minutes",
     "reading-short": "reading",
-    "reading-tooltip": "This account just became active. Reading its quota starts a Claude Code, so the numbers below are the previous reading until that finishes — up to about a minute.",
+    "reading-tooltip": "This account just became active. Reading its quota starts a Claude Code, so the numbers below are the previous reading until that finishes — up to 3 minutes.",
     "refresh-status": "Refresh: {status}",
     "refresh-error": "Reason: {reason}",
     "refresh-status-ok": "up to date",
@@ -9459,6 +9515,13 @@
     "cli-missing-tooltip": "Claude Code is not on Navide's PATH, so its quota cannot be read. Install it, or re-detect it in Settings › CLI.",
     "remaining": "{pct} left",
     "resets-in": "resets in {time}",
+    "window-left": "{label} left",
+    "window-left-pct": "{label} {pct} left",
+    "window-left-used": "{label}: {pct} left ({used} used)",
+    "window-claude-session": "Session (5h)",
+    "window-claude-weekly": "Weekly (all models)",
+    "window-claude-weekly-model": "Weekly ({scope})",
+    "parked-not-measured-hint": "Parked: Claude Code only reports the account it runs as. Sign this account in to its own folder to read its quota live.",
     "updated": "updated {time}",
     "switch-title": "Switch account",
     "switch-default": "Default (built-in)",
@@ -10307,7 +10370,9 @@
     },
     "managed": {
       "create": "Create a new bot",
-      "disclose": "{manager} can read and replace the new bot's token at any time. Whoever holds {manager}'s token controls every bot it creates.",
+      "title": "Create a new bot through {manager}",
+      "disclose": "{manager} can read and replace the new bot's token at any time. Whoever holds {manager}'s token controls every bot it creates. If {manager}'s token leaks, every bot it created leaks with it.",
+      "confirm": "Continue in Telegram",
       "enable-hint": "Want a bot to create new bots in one tap? Turn on “Bot Management Mode” in BotFather. {n} of your bots don't have it on yet.",
       "open-botfather": "Open BotFather",
       "dismiss": "Don't show again",
@@ -10423,7 +10488,7 @@
     },
     "monitor": {
       "title": "Channel connections",
-      "tagline": "Every pane linked to a chat, and whether the link is up.",
+      "tagline": "Every pane linked to a chat. The status is the bot's: Connected means the bot is online, not that every chat can be reached.",
       "open": "Channel connections",
       "close": "Close",
       "empty": "No pane is linked to a channel yet.",
@@ -10630,7 +10695,10 @@
     },
     "pane": {
       "badge": "External influence",
-      "tooltip": "Received content from {sources} since {since}",
+      "badge-since": "External influence since {date}",
+      "tooltip": "Since {since}, this pane has received messages from {sources}.",
+      "source-who": "{source} ({who})",
+      "typing": "Typing on this computer never adds this mark.",
       "console": "Delivery log",
       "expand": "Show the full text",
       "text-missing": "text no longer in the message log",
@@ -11276,13 +11344,19 @@
       "prerelease": "Pre-release (reviewed)",
       "testplace": "Test build, no human review, expires {date}",
       "testplaceNoExpiry": "Test build, no human review, expiry unknown",
+      "testplaceRevokeNote": "While you are offline or not signed in to Navide Cloud, a withdrawal by its developer takes effect at the latest when it expires (up to 90 days).",
+      "testplaceInvite": "Test build: automated scan only, expires {date}",
+      "testplaceCode": "Test build: the public test code had a light human review; this version had none. Expires {date}",
+      "testplaceExpired": "Test build, expired {date} (kept in use)",
       "local-signed": "Local file signed by its publisher; this version was not reviewed by Navide",
       "local-unsigned": "Local file, not reviewed by Navide, unsigned",
       "developer-unpacked": "Developer folder; its contents can change at any time",
       "factory-bundled": "Built into Navide",
       "notScanned": "Not scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)",
       "publisher": "Publisher: {publisher}",
-      "selfDeclared": "Self-declared: {publisher}"
+      "selfDeclared": "Self-declared: {publisher}",
+      "localSignedBy": "Signed by developer {publisher} (vetted by Navide); this version was not reviewed by Navide",
+      "signatureRevoked": "Signature no longer valid"
     },
     "diff": {
       "heading": "What this update changes",
@@ -11363,6 +11437,7 @@
       },
       "networkViaShell": "Can reach remote hosts through those commands",
       "aiCli": "Controls AI CLI sessions",
+      "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; it can open many web pages at once, and each one uses memory.",
       "ui": "Shows its own views",
       "agentTools": "Offers tools agents can call ({read} read-only, {write} writing)",
       "network": "Can use the network",
@@ -11450,7 +11525,10 @@
       "enabled": "{caller} enabled the Navide plugin {plugin}",
       "version": "Version {version}. Its files, grants and data are kept.",
       "undo-failed": "Could not undo: {error}",
-      "undo-stale": "Nothing was undone: the Navide plugin was changed since."
+      "undo-stale": "Nothing was undone: the Navide plugin was changed since.",
+      "updated": "{caller} updated the Navide plugin {plugin} from {from} to {to}",
+      "updated-detail": "Applied without asking you: version {to} discloses exactly the same permissions, backend, agent tools and network access as {from}.",
+      "downgraded": "{plugin} is back to version {version}."
     },
     "caller": {
       "pane": "Agent pane “{pane}”",
@@ -11460,7 +11538,171 @@
     },
     "button": {
       "enable": "Enable again",
-      "disable": "Disable again"
+      "disable": "Disable again",
+      "downgrade": "Back to {version}"
+    }
+  },
+  "testplace": {
+    "view": "Testplace (invited)",
+    "title": "Invited tests",
+    "intro": "Test builds of Navide plugins are visible and installable only to the people invited. They have no Navide human review and stop when they expire.",
+    "signInNeeded": "To join a test, sign in with your Navide Cloud account first.",
+    "joinLabel": "Invite or public test code",
+    "joinPlaceholder": "Paste tpi_… or tpc_…, or the whole invitation message",
+    "join": "Join",
+    "joined": "Joined the test of {id}.",
+    "empty": "You have not joined any test.",
+    "refresh": "Refresh",
+    "viaInvite": "Joined by invite",
+    "viaCode": "Joined with a public test code",
+    "install": "Install test build {version}",
+    "installedVersion": "{version} installed",
+    "noVersion": "No test build to install right now.",
+    "notForThisComputer": "This test build does not support this computer.",
+    "leave": "Leave test",
+    "leaveTitle": "Leave test",
+    "leaveConfirm": "Leave the test of {id}? The installed build stays, but you will get no new test builds.",
+    "expiring": "This test build expires in {days} days ({date}). It then stops; its settings and data are kept.",
+    "error": {
+      "notSignedIn": "Not signed in to Navide Cloud, or the sign-in expired.",
+      "notFound": "This invite or test code was not found or no longer works.",
+      "codeFull": "This public test code is full.",
+      "badCode": "This is not a Testplace invite or public test code.",
+      "other": "Testplace request failed: {error}"
+    },
+    "expired": {
+      "banner": "The test build {id} {version} expired on {date} and was stopped; its settings and data are kept. Choose what to do next.",
+      "toMarketplace": "Install the Navide Marketplace version",
+      "keep": "Keep using (marked expired)",
+      "remove": "Remove",
+      "cannotKeep": "This version was taken down or no longer verifies, so it cannot be kept.",
+      "withdrawnBanner": "The test build {id} {version} was withdrawn by its developer or by Navide and was stopped; its settings and data are kept. Choose what to do next.",
+      "cannotKeepWithdrawn": "This version was withdrawn by its developer or by Navide, so it cannot be kept.",
+      "cannotKeepSignedOut": "Before it can be kept, Navide must confirm this version was not withdrawn. Sign in with your Navide Cloud account, then come back here.",
+      "cannotKeepNotTester": "You are no longer a tester of this test, so Navide cannot confirm this version was not withdrawn, and it cannot be kept. You can install the Navide Marketplace version or remove it.",
+      "cannotKeepRegistryOutdated": "The Navide Marketplace this Navide uses is too old to say whether this version was withdrawn, so it cannot be kept.",
+      "cannotKeepUnreachable": "The Navide Marketplace cannot be reached right now, so Navide cannot confirm this version was not withdrawn, and it cannot be kept for now. Try again later.",
+      "keepTitle": "Keep an expired test build",
+      "keepConfirm": "Keep using the expired test build {id}? It had no Navide human review and gets no more updates; a takedown still stops it.",
+      "kept": "Expired test build, kept in use: it gets no updates, and a takedown still stops it."
+    },
+    "invite": {
+      "title": "Invite testers",
+      "open": "Invite testers",
+      "plugin": "Navide plugin (namespace.name)",
+      "invitees": "Testers, one per line (an email address or a note, up to 120 characters)",
+      "validity": "There is no limit on the number of testers. A test build expires 90 days after it is published, and its testers lose it then. Testers sign in with a Navide Cloud account token, which lasts 30 days before they sign in again. Invite builds have the automated scan only.",
+      "submit": "Send invitations",
+      "sent": "{count} invitations created. Give each code to its tester; the codes are shown only this once.",
+      "copy": "Copy",
+      "done": "Done"
+    }
+  },
+  "marketplace-developer": {
+    "unavailable": "Navide Marketplace developer tools are not available in this window.",
+    "view": {
+      "label": "Navide Marketplace views",
+      "browse": "Browse",
+      "developer": "Developer"
+    },
+    "account": {
+      "title": "Developer account",
+      "desc": "Sign in with your Navide Cloud account to apply, publish Navide plugins and follow their review. Navide keeps the sign-in and the signing key in this computer's secure storage; agents never see them.",
+      "namespace": "Namespace",
+      "no-namespace": "None yet (granted when your application is approved)",
+      "key": "Signing key",
+      "no-key": "Created when you first sign in as a publisher",
+      "key-registered": "Registered",
+      "key-unregistered": "Not registered yet",
+      "expires": "Sign-in expires",
+      "sign-in": "Sign in with Navide Cloud",
+      "sign-in-publish": "Sign in as a publisher",
+      "sign-out": "Sign out",
+      "waiting": "Waiting for the browser…"
+    },
+    "application": {
+      "title": "Developer application",
+      "open": "Fill in the application",
+      "reclaimed": {
+        "title": "Namespaces taken back from this account",
+        "no-reason": "The Navide Marketplace gave no reason"
+      },
+      "notice": "When you press Submit, these details go to Navide Cloud's developer review. Navide staff read them to decide whether you may publish Navide plugins.",
+      "sent": "Application sent for review",
+      "individual": "Individual",
+      "organization": "Organization",
+      "status": {
+        "none": "You have not applied yet.",
+        "pending": "Your application is waiting for review.",
+        "approved": "Approved: you can publish Navide plugins.",
+        "rejected": "Your application was not approved.",
+        "revoked": "Your developer status was revoked."
+      },
+      "field": {
+        "applicant_type": "Applying as",
+        "legal_name": "Legal name",
+        "display_name": "Display name",
+        "contact_email": "Contact email",
+        "country": "Country (ISO code, e.g. TW)",
+        "intended_namespace": "Namespace you want",
+        "description": "What you plan to publish",
+        "agreed_terms": "I agree to the Navide Marketplace developer terms",
+        "organization_name": "Organization name",
+        "organization_id": "Organization registration number",
+        "website": "Website",
+        "source_url": "Work or source code link",
+        "needs_native_backend": "My Navide plugins need a native backend",
+        "domain": "Domain to verify"
+      }
+    },
+    "form": {
+      "developer-application": "Developer application",
+      "publish": "Publish a Navide plugin version",
+      "publish-yank": "Yank a published version",
+      "from-link": "Opened from a link outside Navide, for example from a terminal. Check the package before you submit.",
+      "agent-opened": "Opened for you by {agent}. Fill it in yourself; nothing is sent until you press Submit.",
+      "agent-filled": "Filled in by {agent}. Fields marked \"Written by an agent\" are its draft: check and edit them; nothing is sent until you press Submit.",
+      "by-agent": "Written by an agent",
+      "submit": "Submit",
+      "cancel": "Cancel"
+    },
+    "publish": {
+      "stage-expired": "This package was staged more than an hour ago and has expired. Choose it again.",
+      "open": "Publish a version",
+      "sign-in-first": "Sign in as a publisher first: Navide signs the package with the key it keeps and uploads it.",
+      "choose": "Choose a .vsix package…",
+      "package": "Navide plugin",
+      "file": "File",
+      "digest": "SHA-256",
+      "target": "Platform target",
+      "changelog-hint": "Release notes belong in the package's CHANGELOG.md; the Navide Marketplace shows it and it is signed with the package.",
+      "submit": "Sign and submit for review",
+      "sent": "{plugin} {version} was submitted for review"
+    },
+    "yank": {
+      "title": "Yank this version?",
+      "notice": "Yanking withdraws the version from new installs on every platform. People who already installed it keep it.",
+      "version": "Version",
+      "submit": "Yank",
+      "confirm": "Yank {plugin} {version} from the Navide Marketplace?",
+      "done": "{plugin} {version} was yanked"
+    },
+    "versions": {
+      "title": "Your published versions",
+      "refresh": "Refresh",
+      "empty": "No versions yet.",
+      "state": "Review",
+      "status": {
+        "pending": "Waiting for review",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "yanked": "Yanked"
+      }
+    },
+    "error": {
+      "not-signed-in": "Sign in under Developer account first.",
+      "qualification": "Your developer application must be approved first.",
+      "registry": "The Navide Marketplace refused it ({status} {code}): {message}"
     }
   }
 }

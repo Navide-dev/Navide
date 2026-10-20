@@ -72,8 +72,10 @@ def create_report(
     if len(detail) > MAX_DETAIL_LENGTH:
         raise ReportError(f"details are limited to {MAX_DETAIL_LENGTH} characters")
     version = version.strip()
+    # Public versions only: a testplace or unreviewed version answers like a
+    # missing one, so the form cannot tell anyone it exists (R-MED-4).
     if version and not RegistryRepository(session).list_version_artifacts(
-        extension.id, version, public_only=False
+        extension.id, version, public_only=True
     ):
         raise ReportError("that version does not exist")
     if has_open_report(session, extension, member_id):

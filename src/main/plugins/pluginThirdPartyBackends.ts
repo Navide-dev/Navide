@@ -12,9 +12,11 @@ import {
   PlansBridgeError,
   type BackendBridgeDispatcher,
   type PlansBridgeContext,
+  type PlansBridgePort,
   type PlansBridgeRequest,
   type PlansFilesystemPort,
 } from './plansBridge'
+import { firstPartyBridgePorts, isFirstPartyAgentToolActivation, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import {
   createHostSandboxProbe,
   resolveBackendSandbox,
@@ -60,7 +62,8 @@ import type { SupportedLocale } from '../hostLocale'
 
 /**
  * Admission control for third-party package backends (every package backend
- * other than the first-party Plans package).
+ * not on the first-party list, pluginFirstPartyBackends.ts: Plans and the
+ * browser start outside this gate).
  *
  * A third-party child starts only when ALL of these hold, checked again before
  * every (re)spawn: the global switch is on, the user has not disabled the
@@ -147,6 +150,74 @@ export function thirdPartyBackendLaunchSpec(
       ...(manifest.permissions.shell ? { shell: manifest.permissions.shell } : {}),
       ...(agentTools ?? {}),
     },
+  }
+}
+
+/** The DB3 record of a first-party agent tool stands in this field for the
+ *  native-backend consent time a third-party one is bound to. It is never a
+ *  timestamp, so no consent ever matches it. */
+const FIRST_PARTY_WRITE_GRANT = 'first-party'
+
+/** The system permission a first-party bridge port needs in the manifest. */
+const FIRST_PARTY_PORT_NAMESPACE: Partial<Record<PlansBridgePort, PluginSystemNamespace>> = {
+  filesystem: 'fs',
+  web: 'web',
+}
+
+/**
+ * Project a first-party package backend other than Plans (pluginFirstPartyBackends.ts)
+ * into a launch spec. It has no `thirdParty` part, so it never goes through
+ * the third-party admission gate: it starts like Plans, without the global
+ * switch, per-version consent or OS sandbox. Its methods and events come from
+ * its manifest; its bridge ports are the ones the first-party list gives it,
+ * each only when the manifest declares the matching system permission. Agents
+ * reach it only through agent tools: `agentMethods` stays empty. Only a
+ * package the Official Registry installed is projected; any other yields null.
+ */
+export function firstPartyBackendLaunchSpec(
+  activation: PluginActivationCatalogEntry,
+  manifest?: PluginManifestV2,
+): BackendPluginLaunchSpec | null {
+  if (!isFirstPartyAgentToolActivation(activation) || !activation.backend) return null
+  const parsed = manifest ?? readInstalledManifestV2(activation.packageDir)
+  if (!parsed.backend || parsed.id !== activation.pluginId || !parsed.backend.methods?.length) return null
+  const system = parsed.permissions.system ?? []
+  return {
+    pluginId: activation.pluginId,
+    packageVersion: activation.packageVersion,
+    packageDir: activation.packageDir,
+    entryFile: activation.backend.entryFile,
+    protocolVersion: activation.backend.protocolVersion,
+    activation: activation.backend.activation,
+    approvedMethods: [...parsed.backend.methods],
+    agentMethods: [],
+    approvedEvents: [...(parsed.backend.events ?? [])],
+    approvedBridgePorts: (firstPartyBridgePorts(activation.pluginId) ?? []).filter((port) => {
+      const namespace = FIRST_PARTY_PORT_NAMESPACE[port]
+      return namespace !== undefined && system.includes(namespace)
+    }),
+  }
+}
+
+/**
+ * The agent-tool catalog entry of a first-party backend (PluginAgentToolsHost):
+ * its launch spec plus the name, system permissions and declared agent tools
+ * the catalog and the per-call checks read. It describes the package only;
+ * the backend actually registered is {@link firstPartyBackendLaunchSpec}, and
+ * the Host never admits this object through the third-party gate.
+ */
+export function firstPartyAgentToolSpec(
+  activation: PluginActivationCatalogEntry,
+  manifest?: PluginManifestV2,
+): ThirdPartyLaunchSpec | null {
+  if (!isFirstPartyAgentToolActivation(activation) || !activation.backend) return null
+  const parsed = manifest ?? readInstalledManifestV2(activation.packageDir)
+  const launch = firstPartyBackendLaunchSpec(activation, parsed)
+  const agentTools = launch ? declaredAgentTools(parsed) : null
+  if (!launch || !agentTools) return null
+  return {
+    ...launch,
+    thirdParty: { name: parsed.name, system: [...(parsed.permissions.system ?? [])], ...agentTools },
   }
 }
 
@@ -800,8 +871,31 @@ export class ThirdPartyBackendController {
   ): Promise<boolean> {
     const consent = this.store.record(spec.pluginId).consent
     if (!consent) return false
-    if (this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)) return true
-    const identity = `agent-write\n${spec.pluginId}\n${spec.packageVersion}\n${consent.grantedAt}\n${workspacePath}`
+    return this.confirmWriteFor(spec, workspacePath, tool, consent.grantedAt, () =>
+      this.store.record(spec.pluginId).consent?.grantedAt)
+  }
+
+  /** DB3 for a first-party agent tool (navide.browser): the same question,
+   * asked once per (package, version, workspace). A first-party package has
+   * no native-backend consent, so the answer is bound to the version alone. */
+  async confirmFirstPartyAgentToolWrite(
+    spec: ThirdPartyLaunchSpec,
+    workspacePath: string,
+    tool: { name: string; title: string },
+  ): Promise<boolean> {
+    if (!isFirstPartyAgentToolPlugin(spec.pluginId)) return false
+    return this.confirmWriteFor(spec, workspacePath, tool, FIRST_PARTY_WRITE_GRANT, () => FIRST_PARTY_WRITE_GRANT)
+  }
+
+  private async confirmWriteFor(
+    spec: ThirdPartyLaunchSpec,
+    workspacePath: string,
+    tool: { name: string; title: string },
+    grantedAt: string,
+    currentGrantedAt: () => string | undefined,
+  ): Promise<boolean> {
+    if (this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, grantedAt, workspacePath)) return true
+    const identity = `agent-write\n${spec.pluginId}\n${spec.packageVersion}\n${grantedAt}\n${workspacePath}`
     if (this.declinedWrite.has(identity) || !this.options.promptAgentToolWrite) return false
     let pending = this.pendingPrompts.get(identity)
     if (!pending) {
@@ -819,10 +913,9 @@ export class ThirdPartyBackendController {
       this.declinedWrite.add(identity)
       return false
     }
-    const current = this.store.record(spec.pluginId).consent
     // The consent may have changed while the dialog was open.
-    if (current?.grantedAt !== consent.grantedAt) return false
-    this.store.setAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)
+    if (currentGrantedAt() !== grantedAt) return false
+    this.store.setAgentToolWrite(spec.pluginId, spec.packageVersion, grantedAt, workspacePath)
     return true
   }
 

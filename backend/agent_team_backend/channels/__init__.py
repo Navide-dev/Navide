@@ -136,6 +136,7 @@ def default_seams() -> Seams:
             "options": [str(o) for o in options] if isinstance(options, list) else [],
             # A window that does not report the vendor keeps the old behaviour.
             "answerable": not pane.agent_key or pane.agent_key in relay.ANSWERABLE_AGENTS,
+            "agent": pane.agent_key or "",
         }
 
     async def limit_info(pane_id: str) -> dict[str, Any]:

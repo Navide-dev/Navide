@@ -553,4 +553,35 @@ describe('agent plugin notices (B2-c)', () => {
     expect(pluginAgentUndoApplies(reDisable, [{ id: 'nerdtechnic.devmap', disabled: true }])).toBe(false)
     expect(pluginAgentUndoApplies(reEnable, [])).toBe(false)
   })
+
+  it('O1: says which agent updated the plugin from which version, and offers the way back', async () => {
+    const { useAnnouncements, i18n } = await load()
+    const a = useAnnouncements()
+    const requester = { paneId: 'p-41', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+    for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
+      i18n.global.locale.value = locale
+      a.notePluginAgentNotice({ pluginId: 'nerdtechnic.devmap', pluginVersion: '0.3.0', fromVersion: '0.2.0', action: 'update', requester }, 5)
+      const [row] = a.items.value.filter((item) => item.kind === 'plugin-agent' && item.id.startsWith('plugin-agent:update:'))
+      expect(row.title).toBe(i18n.global.t('plugin-agent.notice.updated', {
+        caller: i18n.global.t('plugin-agent.caller.pane', { pane: 'dev' }), plugin: 'nerdtechnic.devmap', from: '0.2.0', to: '0.3.0',
+      }))
+      expect(row.title).toContain('0.2.0')
+      expect(row.title).toContain('0.3.0')
+      expect(row.highlights).toEqual([i18n.global.t('plugin-agent.notice.updated-detail', { from: '0.2.0', to: '0.3.0' })])
+      expect(row.actions).toEqual([{ kind: 'plugin-agent-downgrade', pluginId: 'nerdtechnic.devmap', fromVersion: '0.2.0', toVersion: '0.3.0' }])
+    }
+    i18n.global.locale.value = 'en-US'
+  })
+
+  it('O1: the downgrade drops a staged update, rolls back one in use, and leaves a changed plugin alone', async () => {
+    const { pluginAgentDowngradeStep } = await load()
+    const action = { kind: 'plugin-agent-downgrade' as const, pluginId: 'nerdtechnic.devmap', fromVersion: '0.2.0', toVersion: '0.3.0' }
+    const id = 'nerdtechnic.devmap'
+    expect(pluginAgentDowngradeStep(action, [{ id, packageVersion: '0.2.0', pendingCandidateVersion: '0.3.0' }])).toBe('discard')
+    expect(pluginAgentDowngradeStep(action, [{ id, packageVersion: '0.3.0', rollbackToVersion: '0.2.0' }])).toBe('rollback')
+    expect(pluginAgentDowngradeStep(action, [{ id, packageVersion: '0.4.0', rollbackToVersion: '0.3.0' }])).toBeNull()
+    expect(pluginAgentDowngradeStep(action, [{ id, packageVersion: '0.3.0', rollbackToVersion: '0.1.0' }])).toBeNull()
+    expect(pluginAgentDowngradeStep(action, [{ id, packageVersion: '0.2.0', pendingCandidateVersion: '0.4.0' }])).toBeNull()
+    expect(pluginAgentDowngradeStep(action, [])).toBeNull()
+  })
 })

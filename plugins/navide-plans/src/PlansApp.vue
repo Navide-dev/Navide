@@ -1690,6 +1690,7 @@ onUnmounted(() => {
               <iframe
                 ref="planDocFrame"
                 class="plan-doc-frame"
+                name="navide-plan-doc"
                 sandbox="allow-scripts"
                 :key="currentDocumentToken ?? selected?.rel_path ?? ''"
                 :srcdoc="iframeSrcdoc"

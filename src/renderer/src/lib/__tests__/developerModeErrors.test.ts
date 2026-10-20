@@ -17,6 +17,7 @@ describe('localizeDeveloperModeError (review LOW-2 on #428)', () => {
     'DEVELOPER_FOLDER_RESERVED_ID [navide.x]: Developer Mode cannot claim reserved plugin id',
     'DEVELOPER_FOLDER_CHANGED [acme.todo]: the permissions or backend of acme.todo changed; choose the folder again',
     "DEVELOPER_FOLDER_TAKEN_DOWN [acme.todo]: taken down by Navide: publisher 'acme' is blocked",
+    "DIGEST_BLOCKED [acme.todo]: this file of 'acme.todo' was taken down by Navide and cannot be installed",
   ]
 
   it('words every coded refusal in every locale, never as the raw code', () => {
@@ -30,6 +31,7 @@ describe('localizeDeveloperModeError (review LOW-2 on #428)', () => {
     }
     i18n.global.locale.value = 'zh-TW'
     expect(localizeDeveloperModeError(coded[0], i18n.global.t)).toContain('acme.todo')
+    expect(localizeDeveloperModeError(coded.at(-1)!, i18n.global.t)).toContain('acme.todo')
   })
 
   it('leaves any other message as it is', () => {

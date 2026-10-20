@@ -20,7 +20,8 @@ const pluginId =
 const packageBackendEnabled = process.argv.includes(`${PACKAGE_BACKEND_PREFIX}1`)
 
 // ── Host-observed user gesture ────────────────────────────────────────────
-// Catalog addresses marked `requiresUserGesture` (today only `ui.openExternal`)
+// Catalog addresses marked `requiresUserGesture` (`ui.openExternal` and the
+// `web.*` ownership, control and data-clearing methods)
 // are refused by the Host unless the request carries a gesture the Host itself
 // observed. Plugin page script runs in an isolated world and cannot produce a
 // trusted event, so `isTrusted` recorded here is not forgeable from page

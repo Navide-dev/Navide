@@ -6,6 +6,7 @@ import type {
   AgentToolUnavailableReason,
 } from '../../shared/pluginAgentTools'
 import type { DisclosureAgentTool } from '../../shared/pluginDisclosure'
+import { isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import type { AgentToolSwitches } from './pluginNativeBackendStore'
 import { consentedAgentMethods, type ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 
@@ -20,6 +21,15 @@ import { consentedAgentMethods, type ThirdPartyLaunchSpec } from './pluginThirdP
  *
  * With the master switch (DB8) off since start-up nothing is sent and every
  * third-party `agentMethods` stays `[]`, exactly as on main.
+ *
+ * First-party packages (pluginFirstPartyBackends.ts, listed through
+ * `listFirstPartyPackages`) follow the master switch too, but their tools need
+ * no per-version consent and keep their names against a third-party package.
+ * Everything else still applies to them: the Disabled switch, quarantine and
+ * revocation, the caller-kind switch, and, on the backend side, the
+ * external-content wrapping and pane taint of every result. A package counts as first-party
+ * only when it is listed there and its id is on the first-party list; a
+ * third-party package never inherits the exemption, whatever its id.
  */
 
 export type AgentToolPackageMark = 'quarantined' | 'revoked'
@@ -27,8 +37,12 @@ export type AgentToolPackageMark = 'quarantined' | 'revoked'
 export interface PluginAgentToolsHostOptions {
   switches: () => AgentToolSwitches
   setSwitches: (change: Partial<AgentToolSwitches>) => void
-  /** Installed, registered third-party backends (Plans excluded). */
+  /** Installed, registered third-party backends (first-party ones excluded). */
   listPackages: () => ThirdPartyLaunchSpec[]
+  /** The agent-tool catalog entries of registered first-party backends
+   *  (firstPartyAgentToolSpec). An entry whose id is not on the first-party
+   *  list is ignored. */
+  listFirstPartyPackages?: () => ThirdPartyLaunchSpec[]
   /** The user's "Disabled" switch for the package or for its native backend. */
   isDisabled: (pluginId: string) => boolean
   /** Consent covers this exact package content, permission set and agent-tool
@@ -60,7 +74,7 @@ export type AgentToolAdmission =
   | { ok: false; reason: AgentToolUnavailableReason }
 
 const UNAVAILABLE_MESSAGES: Record<AgentToolUnavailableReason, string> = {
-  'master-switch-off': 'Agent tools from third-party Navide plugins are turned off.',
+  'master-switch-off': 'Agent tools from Navide plugins are turned off.',
   'external-callers-off': 'External MCP clients may not call third-party Navide plugin tools.',
   'plugin-not-installed': 'The Navide plugin is not installed.',
   'plugin-disabled': 'The Navide plugin is disabled.',
@@ -95,6 +109,9 @@ export class PluginAgentToolsHost {
   private collided = new Set<string>()
   private catalog: AgentToolSyncEntry[] = []
   private queue: Promise<void> = Promise.resolve()
+  /** Ids that were listed as first-party, so a disabled, quarantined or
+   *  revoked one keeps its first-party treatment. */
+  private readonly firstPartyIds = new Set<string>()
 
   constructor(options: PluginAgentToolsHostOptions) {
     this.options = options
@@ -119,7 +136,7 @@ export class PluginAgentToolsHost {
   mark(pluginId: string, mark: AgentToolPackageMark): void {
     const departed = this.departed.get(pluginId)
     if (departed && !this.known.has(pluginId)) this.known.set(pluginId, departed)
-    const spec = this.known.get(pluginId) ?? this.options.listPackages().find((candidate) => candidate.pluginId === pluginId)
+    const spec = this.known.get(pluginId) ?? this.listAll().find((candidate) => candidate.pluginId === pluginId)
     // A mark names one package version and directory; with none known there
     // is nothing it could apply to, and it must not attach to a later install.
     if (!spec) return
@@ -158,6 +175,21 @@ export class PluginAgentToolsHost {
     return this.refresh()
   }
 
+  /** The first-party catalog entries listed now (ids off the list dropped). */
+  private firstPartyPackages(): ThirdPartyLaunchSpec[] {
+    const listed = (this.options.listFirstPartyPackages?.() ?? [])
+      .filter((spec) => isFirstPartyAgentToolPlugin(spec.pluginId))
+    for (const spec of listed) this.firstPartyIds.add(spec.pluginId)
+    return listed
+  }
+
+  /** First-party entries, then the third-party packages with another id. */
+  private listAll(): ThirdPartyLaunchSpec[] {
+    const firstParty = this.firstPartyPackages()
+    const ids = new Set(firstParty.map((spec) => spec.pluginId))
+    return [...firstParty, ...this.options.listPackages().filter((spec) => !ids.has(spec.pluginId))]
+  }
+
   private updateKnown(present: ThirdPartyLaunchSpec[]): void {
     const presentIds = new Set(present.map((spec) => spec.pluginId))
     for (const pluginId of [...this.known.keys()]) {
@@ -186,12 +218,14 @@ export class PluginAgentToolsHost {
     if (mark === 'quarantined') return 'plugin-quarantined'
     if (mark === 'revoked') return 'plugin-revoked'
     if (!present || this.options.isDisabled(spec.pluginId)) return 'plugin-disabled'
+    // First-party tools need no per-version consent.
+    if (this.firstPartyIds.has(spec.pluginId)) return 'available'
     return (await this.options.hasConsent(spec)) ? 'available' : 'consent-required'
   }
 
   private async refreshNow(): Promise<void> {
-    const present = this.options.listPackages().filter((spec) => declaredTools(spec).length > 0)
-    const registered = this.options.listPackages()
+    const registered = this.listAll()
+    const present = registered.filter((spec) => declaredTools(spec).length > 0)
     this.updateKnown(present)
     const switches = this.options.switches()
     if (!switches.enabled) {
@@ -225,10 +259,14 @@ export class PluginAgentToolsHost {
       }
     }
     // DB1: of two available tools with one name, the package the user allowed
-    // first keeps it; the other is listed as a collision and not served.
+    // first keeps it; the other is listed as a collision and not served. A
+    // first-party package always keeps its names: a third-party package whose
+    // id derives the same prefix (acme.browser) cannot take them over.
     const winners = new Map<string, AgentToolSyncEntry>()
     const order = (entry: AgentToolSyncEntry): string =>
-      `${this.options.agentToolSince(entry.pluginId, entry.name) ?? '￿'}\u0000${entry.pluginId}`
+      `${this.firstPartyIds.has(entry.pluginId) ? '0' : '1'}\u0000${
+        this.options.agentToolSince(entry.pluginId, entry.name) ?? '￿'
+      }\u0000${entry.pluginId}`
     for (const entry of entries) {
       if (entry.state !== 'available') continue
       const winner = winners.get(entry.name)
@@ -303,10 +341,13 @@ export class PluginAgentToolsHost {
   ): { ok: true; spec: ThirdPartyLaunchSpec } | { ok: false; reason: AgentToolUnavailableReason } {
     const switches = this.options.switches()
     if (!switches.enabled) return { ok: false, reason: 'master-switch-off' }
-    if (caller.kind !== 'pane' && !switches.externalCallers) return { ok: false, reason: 'external-callers-off' }
+    const firstParty = this.firstPartyPackages().find((candidate) => candidate.pluginId === pluginId)
+    if (caller.kind !== 'pane' && !switches.externalCallers) {
+      return { ok: false, reason: 'external-callers-off' }
+    }
     const mark = this.marks.get(pluginId)?.kind
     if (mark) return { ok: false, reason: mark === 'quarantined' ? 'plugin-quarantined' : 'plugin-revoked' }
-    const spec = this.options.listPackages().find((candidate) => candidate.pluginId === pluginId)
+    const spec = firstParty ?? this.options.listPackages().find((candidate) => candidate.pluginId === pluginId)
     if (this.options.isDisabled(pluginId)) return { ok: false, reason: 'plugin-disabled' }
     if (!spec) return { ok: false, reason: 'plugin-not-installed' }
     if (isStopping(spec.pluginId, spec.packageVersion)) return { ok: false, reason: 'plugin-stopping' }
@@ -326,7 +367,9 @@ export class PluginAgentToolsHost {
   ): Promise<AgentToolAdmission> {
     const first = this.recheck(request.pluginId, request.caller, isStopping)
     if (!first.ok) return first
-    const consented = await this.options.hasConsent(first.spec)
+    // A listed first-party package needs no per-version consent.
+    const consented = this.firstPartyPackages().some((candidate) => candidate.pluginId === first.spec.pluginId) ||
+      await this.options.hasConsent(first.spec)
     // Hashing waits: a disable, quarantine, removal or switch change that
     // landed meanwhile wins.
     const again = this.recheck(request.pluginId, request.caller, isStopping, first.spec)
