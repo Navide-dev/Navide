@@ -22,6 +22,9 @@ export type { EditorNativeParams, EditorNativeResults, EditorNativeEvents, Edito
 export * from './gitCapabilities.js'
 export * from './issues.js'
 export * from './editorPreferences.js'
+export * from './staticScan.js'
+export { deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
+export type { AgentToolErrorCode, AgentToolValidationError } from './agentToolsValidation.js'
 export type { GitAccountParams, GitAccountResults, GitAccountSummary } from './gitAccounts.js'
 
 export type JsonPrimitive = string | number | boolean | null
@@ -488,8 +491,9 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
   let system: PluginSystemNamespace[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'system')) {
     const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, 3)
-    if (values.some((item) => !V2_SYSTEM_NAMESPACES.includes(item as PluginSystemNamespace))) {
-      fail('manifest permissions.system contains an unknown namespace')
+    const unknown = values.find((item) => !V2_SYSTEM_NAMESPACES.includes(item as PluginSystemNamespace))
+    if (unknown !== undefined) {
+      fail(`manifest permissions.system contains an unknown namespace ${JSON.stringify(unknown)}; allowed: ${V2_SYSTEM_NAMESPACES.join(', ')}`)
     }
     system = values as PluginSystemNamespace[]
   }
@@ -543,7 +547,7 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
     if (!VIEW_ID.test(id)) fail(`manifest contributes.views[${index}].id is invalid`)
     if (view.kind !== 'custom') fail(`manifest contributes.views[${index}].kind must be 'custom'`)
     if (!V2_VIEW_LOCATIONS.includes(view.location as (typeof V2_VIEW_LOCATIONS)[number])) {
-      fail(`manifest contributes.views[${index}].location is invalid`)
+      fail(`manifest contributes.views[${index}].location ${JSON.stringify(view.location)} is invalid; allowed: ${V2_VIEW_LOCATIONS.join(', ')}`)
     }
     const title = displayText(required(view, 'title', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].title`)
     const entry = htmlPath(required(view, 'entry', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].entry`)
