@@ -10,14 +10,17 @@ const dismissed = ref(false)
 // A2-5 (G5): Developer Mode settings another program wrote, said on every
 // launch until the user turns the switch on or consents to the folders again.
 const externalChange = ref<string | null>(null)
-const unsigned = ref(false)
+const reasonKey = ref('settings.extensions.developerMode.externalChange')
 
 onMounted(async () => {
   try {
     const state = await window.agentTeam?.plugins?.developerMode?.()
     enabled.value = state?.enabled === true
     externalChange.value = state?.externalChange?.detectedAt ?? null
-    unsigned.value = state?.externalChange?.reason === 'signing-unavailable'
+    const reason = state?.externalChange?.reason
+    reasonKey.value = reason === 'signing-unavailable'
+      ? 'settings.extensions.developerMode.externalChangeUnsigned'
+      : reason === 'signature-missing' ? 'settings.extensions.developerMode.externalChangeMissing' : 'settings.extensions.developerMode.externalChange'
   } catch {
     // No answer, no notice; the Settings banner still shows the state.
   }
@@ -29,7 +32,7 @@ onMounted(async () => {
     <div class="nv-devmode-reminder-text">
       <p v-if="enabled">{{ $t('settings.extensions.developerMode.reminder') }}</p>
       <p v-if="externalChange" class="nv-devmode-reminder-external">
-        {{ $t(unsigned ? 'settings.extensions.developerMode.externalChangeUnsigned' : 'settings.extensions.developerMode.externalChange', { time: new Date(externalChange).toLocaleString() }) }}
+        {{ $t(reasonKey, { time: new Date(externalChange).toLocaleString() }) }}
       </p>
     </div>
     <button type="button" class="nv-devmode-reminder-close nv-btn nv-btn--sm" @click="dismissed = true">

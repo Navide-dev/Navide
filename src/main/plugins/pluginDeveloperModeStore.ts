@@ -53,7 +53,7 @@ export interface DeveloperModeExternalChange {
   modifiedAt: string | null
   /** Set when Navide could not sign its own write (secure storage refused):
    * the entries are asked about again, as after an outside change. */
-  reason?: 'signing-unavailable'
+  reason?: 'signing-unavailable' | 'signature-missing'
 }
 
 interface PersistedSignature {
@@ -159,7 +159,7 @@ function readSignature(path: string): PersistedSignature | null {
         ? {
             detectedAt: change.detectedAt,
             modifiedAt: typeof change.modifiedAt === 'string' ? change.modifiedAt : null,
-            ...(change.reason === 'signing-unavailable' ? { reason: 'signing-unavailable' as const } : {}),
+            ...(change.reason === 'signing-unavailable' || change.reason === 'signature-missing' ? { reason: change.reason } : {}),
           }
         : null,
     }
@@ -281,7 +281,7 @@ export class PluginDeveloperModeStore {
 
   /** Records (once, in the signature file when it can) and reports when
    * Navide first saw entries it did not sign. */
-  private noteChange(signature: PersistedSignature | null, reason?: 'signing-unavailable'): DeveloperModeExternalChange {
+  private noteChange(signature: PersistedSignature | null, reason?: DeveloperModeExternalChange['reason']): DeveloperModeExternalChange {
     const known = signature?.externalChange ?? readSignatureSafely(this.signatureFile)?.externalChange ?? this.unsavedChange
     if (known) return known
     const change: DeveloperModeExternalChange = {
@@ -318,9 +318,16 @@ export class PluginDeveloperModeStore {
     }
     const signature = readSignature(this.signatureFile)
     if (!signature) {
-      // A file from before 0.2.28: signed once as it is (disclosed).
-      this.writeSignature(this.sign(state, new Set(), true, null))
-      return all
+      // Review HIGH-1 on #537: no signature file is not proof the entries are
+      // Navide's (deleting it would make any outside edit trusted). A file
+      // from before 0.2.28, or one whose signature file is gone, is asked
+      // about again once; consenting signs it.
+      return {
+        state,
+        enabledTrusted: !state.enabled,
+        untrusted: new Set(state.folders.map((_, index) => index)),
+        externalChange: this.noteChange(null, 'signature-missing'),
+      }
     }
     const key = signature.keyEnc ? this.key(signature) : null
     const signed = (entry: string): boolean => {

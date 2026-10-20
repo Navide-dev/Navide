@@ -518,7 +518,7 @@ watch(installed, () => {
     </p>
     <!-- A2-5 (G5): settings another program wrote are disclosed, never applied. -->
     <p v-if="developerMode.externalChange" class="ext-devmode-external ext-risk-banner" role="alert">
-      {{ $t(developerMode.externalChange.reason === 'signing-unavailable' ? 'settings.extensions.developerMode.externalChangeUnsigned' : 'settings.extensions.developerMode.externalChange', { time: new Date(developerMode.externalChange.detectedAt).toLocaleString() }) }}
+      {{ $t(developerMode.externalChange.reason === 'signing-unavailable' ? 'settings.extensions.developerMode.externalChangeUnsigned' : developerMode.externalChange.reason === 'signature-missing' ? 'settings.extensions.developerMode.externalChangeMissing' : 'settings.extensions.developerMode.externalChange', { time: new Date(developerMode.externalChange.detectedAt).toLocaleString() }) }}
     </p>
     <!-- D6: never let a self-hosted Registry package disappear silently. -->
     <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">

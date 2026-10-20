@@ -2247,8 +2247,9 @@ runs only inside the OS sandbox described in
   available, so before the app is ready (the self-hosted Registry setting
   can be read then) and on Linux without a keyring, or with the
   `basic_text` password store, entries are taken as they are; a file from
-  before 0.2.28, or one whose signature file was deleted together with it,
-  is signed once as it is; the signature covers entries, not their age, so
+  before 0.2.28, or one whose signature file is missing, is asked about
+  again once (the switch reads as off and each folder needs consent); the
+  signature covers entries, not their age, so
   restoring an older copy of both files together (for example one taken
   while the switch was on, or before a folder was removed) makes that state
   trusted again without a notice; on Windows and Linux the safeStorage key

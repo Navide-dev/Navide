@@ -127,14 +127,33 @@ describe('Developer Mode settings changed outside Navide (G5)', () => {
     expect(after.externalChange()).toBeNull()
   })
 
-  it('signs a pre-0.2.28 file once without a notice (legacy, disclosed)', () => {
+  it('asks again, once, about a pre-0.2.28 file with no signature yet (HIGH-1)', () => {
     writeOutside({ enabled: true, folders: [folder('acme.one')] })
     const store = new PluginDeveloperModeStore(root, integrity())
+    expect(store.isEnabled()).toBe(false)
+    expect(store.folders()).toEqual([])
+    expect(store.untrustedFolders().map((f) => f.pluginId)).toEqual(['acme.one'])
+    expect(store.externalChange()).toMatchObject({ reason: 'signature-missing' })
+    expect(seen).toHaveLength(1)
+    // The user turns it on and consents: signed, notice gone.
+    store.setEnabled(true)
+    store.consent(store.untrustedFolders()[0]!)
     expect(store.isEnabled()).toBe(true)
     expect(store.folders().map((f) => f.pluginId)).toEqual(['acme.one'])
     expect(store.externalChange()).toBeNull()
-    expect(existsSync(join(root, SIGNATURE))).toBe(true)
-    expect(seen).toEqual([])
+  })
+
+  it('does not trust entries once the signature file is deleted (HIGH-1)', () => {
+    const store = new PluginDeveloperModeStore(root, integrity())
+    store.setEnabled(true)
+    store.consent(folder('acme.one'))
+    writeOutside({ enabled: true, folders: [folder('acme.one'), folder('evil.two')] })
+    rmSync(join(root, SIGNATURE))
+    const after = new PluginDeveloperModeStore(root, integrity())
+    expect(after.isEnabled()).toBe(false)
+    expect(after.folders()).toEqual([])
+    expect(after.untrustedFolders().map((f) => f.pluginId)).toEqual(['acme.one', 'evil.two'])
+    expect(after.externalChange()).not.toBeNull()
   })
 
   it('asks again for everything when the key cannot be unwrapped (another machine or keychain)', () => {
