@@ -648,7 +648,7 @@ function loadWindow(win: BrowserWindow, params: Record<string, string>): void {
 
 async function createWindow(
   params: Record<string, string> = {},
-  opts?: { bounds?: WindowBounds }
+  opts?: { bounds?: WindowBounds; background?: boolean }
 ): Promise<BrowserWindow> {
   // Saved bounds may point at a display that is no longer attached.
   const bounds = opts?.bounds && onScreenBounds(
@@ -758,7 +758,10 @@ async function createWindow(
   const showOnce = (): void => {
     if (_shown || win.isDestroyed()) return
     _shown = true
-    win.show()
+    // A window an agent opened for a child pane appears without taking focus
+    // from whatever the user is doing (cli_open_agent window "new").
+    if (opts?.background) win.showInactive()
+    else win.show()
   }
   win.once('ready-to-show', showOnce)
   setTimeout(showOnce, 4000)
@@ -3711,7 +3714,7 @@ async function showGitViewUnavailable(target: BrowserWindow | null): Promise<voi
     : dialog.showMessageBox(options))
 }
 
-function openMainWindow(workspacePath = ''): void {
+function openMainWindow(workspacePath = '', background = false): void {
   const params: Record<string, string> = {}
   const ws = workspacePath?.trim() ?? ''
   if (ws) {
@@ -3728,11 +3731,11 @@ function openMainWindow(workspacePath = ''): void {
     // this — their previous sessions are dead and restore should run.
     params.duplicate = '1'
   }
-  void createWindow(params)
+  void createWindow(params, background ? { background: true } : undefined)
 }
 
-ipcMain.handle('window:openMain', (_event, args?: { workspace_path?: string }) => {
-  openMainWindow(args?.workspace_path)
+ipcMain.handle('window:openMain', (_event, args?: { workspace_path?: string; background?: boolean }) => {
+  openMainWindow(args?.workspace_path, args?.background === true)
   return { ok: true }
 })
 
@@ -3832,6 +3835,16 @@ ipcMain.handle('workspace:listOpen', () => {
     if (!win.isDestroyed()) open.push(...list)
   }
   return open
+})
+
+// Which OTHER window holds a workspace, by title, or '' when none does (or only
+// the asking window). cli_open_agent's "current" window choice refuses a
+// project another window already holds and names that window.
+ipcMain.handle('workspace:holder', (event, workspacePath: string) => {
+  const self = BrowserWindow.fromWebContents(event.sender)
+  const existing = findMainWindowForWorkspace(String(workspacePath ?? ''))
+  if (!existing || existing === self) return ''
+  return existing.getTitle() || 'another Navide window'
 })
 
 ipcMain.handle('workspace:focusExisting', (event, workspacePath: string) => {

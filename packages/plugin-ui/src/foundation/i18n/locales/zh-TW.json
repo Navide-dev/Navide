@@ -528,6 +528,7 @@
     "issue-create": "建立"
   },
   "pane": {
+    "opened-by": "由「{parent}」開啟",
     "git": {
       "title": "原始碼控制",
       "tab": "原始碼控制"

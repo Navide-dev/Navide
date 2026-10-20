@@ -651,6 +651,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
   listOpenWorkspaces: (): Promise<string[]> => ipcRenderer.invoke('workspace:listOpen'),
   focusWorkspaceWindow: (workspacePath: string): Promise<boolean> =>
     ipcRenderer.invoke('workspace:focusExisting', workspacePath),
+  workspaceHolder: (workspacePath: string): Promise<string> =>
+    ipcRenderer.invoke('workspace:holder', workspacePath),
   reportAdoptedWorkspaces: (paths: string[]): void =>
     ipcRenderer.send('window:reportAdoptedWorkspaces', paths),
   takeRestoredAdoptedWorkspaces: (): Promise<string[]> =>
@@ -670,7 +672,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('shell:openTerminal', command),
   openTempFile: (filename: string, content: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('shell:openTempFile', filename, content),
-  openMainWindow: (args?: { workspace_path?: string }): Promise<{ ok: boolean }> =>
+  openMainWindow: (args?: { workspace_path?: string; background?: boolean }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('window:openMain', args ?? {}),
   detachGroup: (args: { groupId: string; workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('window:detachGroup', args),

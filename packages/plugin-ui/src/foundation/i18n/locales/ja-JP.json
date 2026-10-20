@@ -528,6 +528,7 @@
     "issue-create": "作成"
   },
   "pane": {
+    "opened-by": "「{parent}」が開いた",
     "git": {
       "title": "ソース管理",
       "tab": "ソース管理"

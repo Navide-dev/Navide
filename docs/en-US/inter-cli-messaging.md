@@ -438,6 +438,21 @@ thresholds the call still succeeds and the requester is told what it costs. A
 malformed request (unknown agent key, missing or taken name, empty task) comes
 back as a [spawn feedback notice](#spawn-feedback-notices) naming the problem.
 
+### Into another project
+
+`cli_open_agent(workspace_path=...)` from a pane opens the child in that
+project — its working directory, CLAUDE.md, memory, Plans and git — while the
+caller stays its parent: the child reports to the caller's `<folder>/<pane>`
+address and the caller reclaims it by the `address` the tool returns.
+`window: "current"` (the default) has the caller's window take the project
+into its sidebar without switching to it; `window: "new"` opens it in a
+window of its own without taking focus. One project lives in one window, so a
+project another window already holds is refused with
+`workspace-in-other-window` and `holding_window_id`. The child's sidebar row
+says who opened it ("Opened by alpha/lead"), because the tree cannot draw a
+parent that lives in another project. Naming your own workspace is the same as
+omitting it.
+
 ### Stand-in reports
 
 The report back is the child's own output, not something Navide composes. What

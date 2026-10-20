@@ -528,6 +528,7 @@
     "issue-create": "Create"
   },
   "pane": {
+    "opened-by": "Opened by {parent}",
     "git": {
       "title": "SOURCE CONTROL",
       "tab": "Source Control"

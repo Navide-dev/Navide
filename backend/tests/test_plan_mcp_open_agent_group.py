@@ -88,7 +88,10 @@ async def test_group_reaches_the_window_including_empty(window: list, group: str
 
 @pytest.mark.asyncio
 async def test_pane_group_is_validated_in_its_own_workspace(window: list) -> None:
-    result = await _open(run_group_id="rg-alpha", workspace_path="/beta")
+    # A pane naming its OWN workspace keeps the old request exactly. (Naming
+    # another project now opens the child there — DESIGN-C §3.1/§7 — and is
+    # covered by test_mcp_cross_workspace_spawn.py.)
+    result = await _open(run_group_id="rg-alpha", workspace_path="/alpha")
     assert result["ok"] is True
     assert window[0]["payload"]["requester_pane_id"] == "parent"
     assert "target_workspace" not in window[0]["payload"]
@@ -97,7 +100,10 @@ async def test_pane_group_is_validated_in_its_own_workspace(window: list) -> Non
 @pytest.mark.asyncio
 @pytest.mark.parametrize("group", ["rg-missing", "rg-beta", " ", " rg-alpha "])
 async def test_invalid_or_foreign_group_never_dispatches(window: list, group: str) -> None:
-    result = await _open(run_group_id=group, workspace_path="/beta")
+    # Own workspace spelled out: a pane's workspace_path naming another project
+    # is no longer ignored (DESIGN-C §3.1/§7), so "/beta" would now be a
+    # cross-workspace request rather than a no-op.
+    result = await _open(run_group_id=group, workspace_path="/alpha")
     assert result["ok"] is False
     assert result["error_code"] == "unknown-run-group"
     assert window == []

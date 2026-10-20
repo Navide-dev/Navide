@@ -1090,6 +1090,7 @@ async def cli_open_agent(
     pane_id: str = "",
     session_id: str = "",
     run_group_id: str | None = None,
+    window: str = "",
 ) -> dict[str, Any]:
     """Open a new CLI pane and give it a task.
 
@@ -1127,8 +1128,20 @@ async def cli_open_agent(
     Without that line it finishes, writes the answer to its own screen, and
     nobody ever sees it.
 
-    Pane callers open the pane in their own workspace; `workspace_path` is
-    ignored for them. A caller with no pane identity (host / external
+    Pane callers open the pane in their own workspace unless `workspace_path`
+    names another project: then the child starts in THAT project (its cwd,
+    CLAUDE.md, memory, Plans and git) and you stay its parent — it reports
+    back to you and you can reclaim it by the returned `address`. `window`
+    says where it goes: "current" (the default) has your own window take the
+    project in the background, without switching what is on screen; "new"
+    opens it in a window of its own, without taking focus. One project lives
+    in one window at a time, so a project another window already holds is
+    refused with error_code "workspace-in-other-window" and
+    `holding_window_id`, never opened twice. A folder that does not exist is
+    "workspace-not-found". The answer then also carries `workspace_path`,
+    `prepared` ("already-open" | "adopted" | "new-window"), `parent` (your
+    address) and `window_id`. Naming your own workspace is the same as
+    omitting it. A caller with no pane identity (host / external
     credential) has no workspace of its own, so `workspace_path` is required —
     the pane opens there with no parent, so it has no child/depth counts of
     its own; the workspace's CLI-pane count is still tracked for the advisory
@@ -1275,9 +1288,27 @@ async def cli_open_agent(
     refusal = _refuse_unsupported_model(agent_key, (model or "").strip(), (effort or "").strip())
     if refusal:
         return {"ok": False, "error": refusal}
+    choice = (window or "").strip()
+    if choice not in _SPAWN_WINDOW_CHOICES:
+        return {
+            "ok": False,
+            "error": f'window must be "current" or "new", not "{window}"',
+            "error_code": "invalid-window",
+        }
     target_workspace = ""
+    # A pane caller naming another project: the child goes there, still
+    # parented on the caller. Empty when omitted or naming its own workspace,
+    # which keeps every step below exactly as it was.
+    cross_workspace = _cross_workspace_path(caller, workspace_path)
+    if cross_workspace and not os.path.isdir(cross_workspace):
+        return {
+            "ok": False,
+            "error": f"no folder at {cross_workspace}; no pane was opened",
+            "error_code": "workspace-not-found",
+        }
     if caller.kind == "pane":
         me = caller.pane_id
+        target_workspace = cross_workspace
     else:
         me = ""
         target_workspace = (workspace_path or "").strip()
@@ -1323,13 +1354,18 @@ async def cli_open_agent(
         )
         if refused:
             return refused
+    prepared = ""
+    if cross_workspace:
+        prepared, refusal = await _prepare_cross_workspace(caller, cross_workspace, choice or "current")
+        if refusal is not None:
+            return refusal
     # The spawn request is a broadcast only the window holding the workspace
     # answers, and it is not replayed: sent before that window is up (a
     # workspace_open a moment ago) or with no such window at all, nobody would
     # answer and the call would sit out the whole verdict deadline. Make sure
     # someone is listening first, and say so plainly when nobody is.
     if target_workspace and not await _wait_window_ready(target_workspace):
-        return {
+        not_ready: dict[str, Any] = {
             "ok": False,
             "error": (
                 f"no Navide window holds {target_workspace} (none answered within "
@@ -1338,6 +1374,11 @@ async def cli_open_agent(
             ),
             "error_code": "window_not_ready",
         }
+        if prepared:
+            # What was already done for it stays done; say so, so the caller
+            # does not prepare the same project a second time.
+            not_ready["prepared"] = prepared
+        return not_ready
     request_id = f"{me or caller.kind}:spawn:{secrets.token_hex(8)}"
     loop = asyncio.get_running_loop()
     future: asyncio.Future[dict[str, Any]] = loop.create_future()
@@ -1378,6 +1419,13 @@ async def cli_open_agent(
             # by workspace match instead (see App.vue's agent_spawn.request
             # handler).
             spawn_payload["target_workspace"] = target_workspace
+        if cross_workspace:
+            # A parent that lives in another workspace (possibly another
+            # window): the window holding target_workspace creates the pane,
+            # parents it on requester_pane_id, and has it report to this
+            # qualified address, the only form that reaches across workspaces.
+            spawn_payload["cross_workspace"] = True
+            spawn_payload["parent_address"] = _caller_address(caller)
         await app.broadcast(make_event("agent_spawn.request", spawn_payload))
         verdict = await asyncio.wait_for(future, timeout=_SPAWN_VERDICT_TIMEOUT_S)
     except asyncio.TimeoutError:
@@ -1448,6 +1496,13 @@ async def cli_open_agent(
         }
     if run_group_id is not None:
         result["run_group_id"] = run_group_id
+    if cross_workspace:
+        result["workspace_path"] = cross_workspace
+        result["prepared"] = prepared
+        result["parent"] = _caller_address(caller)
+        window_id = str(getattr(agent_messaging.owner(new_pane_id), "window_id", "") or "")
+        if window_id:
+            result["window_id"] = window_id
     advisories = list(verdict.get("advisories") or [])
     if agent_key == _TERMINAL_AGENT and not _TERMINAL_PROMPT_CHECK:
         result["prompt_check"] = "unavailable"
@@ -1484,6 +1539,125 @@ async def cli_open_agent(
     if advisories:
         result["advisories"] = advisories
     return result
+
+
+#: cli_open_agent's `window` values. "" means the default, "current".
+_SPAWN_WINDOW_CHOICES = frozenset({"", "current", "new"})
+
+
+def _cross_workspace_path(caller: _Caller, workspace_path: str) -> str:
+    """The project a pane caller asked its child to start in, when that is not
+    its own; "" otherwise (omitted, own workspace however spelled, or a caller
+    with no pane, whose workspace_path keeps its old meaning)."""
+    path = (workspace_path or "").strip()
+    if caller.kind != "pane" or not path:
+        return ""
+    # Expanded here, as workspace_open does: a window holds whatever string it
+    # is handed and never expands "~" itself.
+    path = os.path.normpath(os.path.expanduser(path))
+    own = _caller_workspace(caller)
+    if own and _norm_workspace(path) == _norm_workspace(own):
+        return ""
+    return path
+
+
+def _caller_address(caller: _Caller) -> str:
+    """The caller pane's `<folder>/<name>` address."""
+    from agent_team_backend import agent_messaging
+
+    entry = agent_messaging.get(caller.pane_id)
+    return entry.qualified_name if entry else caller.pane_id
+
+
+def _holding_window_id(workspace_path: str) -> str:
+    """A window known to hold *workspace_path*: the one mirroring a pane of it.
+    "" when no pane of that project is registered (the window is still named
+    by the error text the window gave)."""
+    from agent_team_backend import agent_messaging
+
+    target = _norm_workspace(workspace_path)
+    for pane in agent_messaging.list_panes():
+        if pane.workspace_path and _norm_workspace(pane.workspace_path) == target:
+            window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
+            if window_id:
+                return window_id
+    return ""
+
+
+def _in_other_window(workspace_path: str, detail: str = "") -> dict[str, Any]:
+    """Refusal for a project another window already holds (one project, one
+    window: two would run two sets of PTY and git against one checkout)."""
+    answer: dict[str, Any] = {
+        "ok": False,
+        "error": (
+            f"{workspace_path} is already open in another Navide window"
+            + (f" ({detail})" if detail else "")
+            + "; a project lives in one window at a time, so no pane was opened. "
+            "Ask the user to open the pane from that window, or close the project there first"
+        ),
+        "error_code": "workspace-in-other-window",
+    }
+    window_id = _holding_window_id(workspace_path)
+    if window_id:
+        answer["holding_window_id"] = window_id
+    return answer
+
+
+async def _prepare_cross_workspace(
+    caller: _Caller, workspace_path: str, choice: str
+) -> tuple[str, dict[str, Any] | None]:
+    """Make sure a window holds *workspace_path* for a cross-workspace spawn.
+
+    "current": the caller's own window takes the project into its sidebar
+    without switching to it. "new": a window of its own, opened without
+    taking focus. Returns (prepared, refusal).
+    """
+    if choice == "new":
+        if await _probe_window(workspace_path, _WINDOW_PROBE_TIMEOUT_S):
+            return "", _in_other_window(workspace_path)
+        reply = await _ui_request(
+            "",
+            "invoke",
+            caller=caller,
+            action="ui.workspace.open",
+            args={"path": workspace_path, "background": True},
+            is_global=True,
+        )
+        if not reply.get("ok"):
+            return "", {
+                "ok": False,
+                "error": str(reply.get("error") or "no Navide window could open a new window"),
+                "error_code": str(reply.get("error_code") or "ui_action_failed"),
+            }
+        # Same bookkeeping as workspace_open: a window opened this way stays
+        # out of Recent, and this is what lists it in workspace_list.
+        _mcp_opened_workspaces.pop(workspace_path, None)
+        _mcp_opened_workspaces[workspace_path] = (
+            datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        )
+        return "new-window", None
+    reply = await _ui_request(
+        _caller_workspace(caller),
+        "invoke",
+        caller=caller,
+        action="ui.workspace.adopt",
+        args={"path": workspace_path},
+    )
+    if not reply.get("ok"):
+        error = str(reply.get("error") or "")
+        code, _, detail = error.partition(":")
+        if code.strip() == "workspace-in-other-window":
+            return "", _in_other_window(workspace_path, detail.strip())
+        if code.strip() == "window-cannot-hold":
+            return "", {"ok": False, "error": detail.strip() or error, "error_code": "window-cannot-hold"}
+        return "", {
+            "ok": False,
+            "error": error or "your window did not answer",
+            "error_code": str(reply.get("error_code") or "ui_action_failed"),
+        }
+    result = reply.get("result")
+    prepared = str(result.get("prepared") or "") if isinstance(result, dict) else ""
+    return prepared or "adopted", None
 
 
 async def _reopen_pane(pane_id: str) -> dict[str, Any]:
