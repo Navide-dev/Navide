@@ -94,12 +94,19 @@ def audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginAuditLog:
 
 @pytest.fixture
 def caller(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from agent_team_backend.guard import taint
+
     agent_messaging._reset_for_test()
     skills_approvals.registry._reset_for_test()
+    # The taint store is the process-wide database: an earlier test that let a
+    # tool mark p-41 (a fenced Marketplace answer) would put tainted: true on
+    # this test's requester (S8-M1). Start and end with p-41 clean.
+    taint.clear_taint("p-41")
     agent_messaging.register("p-41", "dev", str(tmp_path), agent_key="claude")
     current = {"caller": mcp._Caller(kind="pane", pane_id="p-41")}
     monkeypatch.setattr(mcp, "_resolve_caller", lambda ctx: current["caller"])
     yield current
+    taint.clear_taint("p-41")
     agent_messaging._reset_for_test()
     skills_approvals.registry._reset_for_test()
 

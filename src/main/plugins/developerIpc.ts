@@ -85,6 +85,11 @@ export function applicationView(body: unknown): Record<string, unknown> | null {
     reason: typeof record.reason === 'string' ? record.reason : null,
     submitted_at: record.submitted_at ?? null,
     decided_at: record.decided_at ?? null,
+    // Namespaces the Registry took back from this account (W2): only these three fields, as given.
+    namespaces: (Array.isArray(record.namespaces) ? record.namespaces : []).map((item) => {
+      const row = asRecord(item)
+      return { namespace: row.namespace ?? null, frozen_at: row.frozen_at ?? null, frozen_reason: row.frozen_reason ?? null }
+    }),
   }
 }
 

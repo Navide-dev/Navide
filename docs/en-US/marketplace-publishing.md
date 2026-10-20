@@ -250,7 +250,9 @@ deadline and warns in the last seven days.
   period until it is decided. If it is approved, the grace period no longer
   applies. If it is rejected, the period resumes with the days it had left.
 - Nothing else pauses it. An application submitted after the deadline, or a
-  new application after a rejection, leaves the clock running.
+  new application after a rejection, leaves the clock running. This includes
+  an account whose application was rejected before the grace period began:
+  its next application is a re-application and does not pause the period.
 - When the period runs out with no approved qualification and no paused
   application, publishing is refused at once and the namespace is reclaimed
   within minutes: it is frozen, its tokens and signing key are revoked, every

@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from registry import blocklist
 from registry.account_auth import create_account_token
 from registry.app import create_app
 from registry.config import VERIFIER_ACCEPTING, Settings
@@ -538,3 +539,63 @@ def test_promotion_rechecks_the_blocklist_and_records_the_review(client: TestCli
     with _session(client) as session:
         row = session.exec(select(ExtensionVersion)).one()
     assert row.reviewed_by == "admin-token"
+
+
+# -- S8 round 3 -------------------------------------------------------------
+def test_approving_a_stable_version_lists_it_even_when_a_newer_testplace_build_exists(client: TestClient) -> None:
+    """R3-M1: a testplace build is not public, so it must not count as the
+    newer version that keeps a reviewed stable one from setting the listing."""
+    with _session(client) as session:
+        publisher = session.exec(select(Publisher).where(Publisher.name == "acme")).one()
+        publisher.review_required = True
+        session.add(publisher)
+        session.commit()
+
+    def package(version: str, name: str) -> bytes:
+        manifest = copy.deepcopy(contract_manifest())
+        manifest.update(id="acme.files", publisher="acme", version=version, name=name)
+        return build_v2_package(manifest)
+
+    secret = client.post(
+        "/api/publish",
+        params={"channel": "testplace"},
+        headers=_publisher(),
+        files={"package": ("pkg.vsix", package("2.0.0", "Secret Next Build"), "application/zip")},
+    )
+    assert secret.status_code == 201, secret.text
+    stable = client.post(
+        "/api/publish",
+        headers=_publisher(),
+        files={"package": ("pkg.vsix", package("1.0.0", "Files"), "application/zip")},
+    )
+    assert stable.status_code == 201 and stable.json()["review_status"] == "pending", stable.text
+    approved = client.post(
+        "/api/admin/review/acme/files/1.0.0/approve",
+        json={"artifacts": [stable.json()["package_digest"]]},
+        headers=_admin(),
+    )
+    assert approved.status_code == 200, approved.text
+
+    detail = client.get("/api/extensions/acme/files").json()
+    assert detail["display_name"] == "Files"
+    assert "Secret Next Build" not in client.get("/api/extensions").text
+
+
+def test_promotion_is_refused_while_the_version_is_blocked(client: TestClient) -> None:
+    """R3-L1: the shared review checks include the blocklist."""
+    assert _publish(client).status_code == 201
+    client.post("/api/testplace/acme/files/versions/1.0.0/promote", headers=_publisher())
+    digest = client.get("/api/admin/testplace/promotions", headers=_admin()).json()["promotions"][0]["artifacts"][0]
+    with _session(client) as session:
+        blocklist.add_entry(session, kind="package", value="acme.files@1.0.0", reason="malware", created_by="admin")
+    resp = client.post(
+        "/api/admin/testplace/promotions/acme/files/1.0.0/decision",
+        json={"approve": True, "artifacts": [digest]},
+        headers=_admin(),
+    )
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"]["code"] == "REVIEW_REFUSED"
+    assert client.get("/api/extensions/acme/files").status_code == 404
+    with _session(client) as session:
+        row = session.exec(select(ExtensionVersion)).one()
+    assert row.promotion_status == "requested" and row.channel == "testplace"

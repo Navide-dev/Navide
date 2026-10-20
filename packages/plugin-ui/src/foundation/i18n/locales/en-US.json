@@ -11599,6 +11599,10 @@
     "application": {
       "title": "Developer application",
       "open": "Fill in the application",
+      "reclaimed": {
+        "title": "Namespaces taken back from this account",
+        "no-reason": "The Navide Marketplace gave no reason"
+      },
       "notice": "When you press Submit, these details go to Navide Cloud's developer review. Navide staff read them to decide whether you may publish Navide plugins.",
       "sent": "Application sent for review",
       "individual": "Individual",

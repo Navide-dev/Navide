@@ -15,7 +15,7 @@ from registry import qualification
 from registry.db import create_db_engine
 from registry.migrations import MIGRATIONS, applied_migrations, run_migrations
 from registry.models import BlocklistEntry, DeveloperQualification, Publisher
-from tests.phase2_helpers import ADMIN_HEADERS, csrf_of, make_client, cloud_settings, package_for, publish
+from tests.phase2_helpers import ADMIN_HEADERS, csrf_of, make_client, cloud_settings, package_for, publish, sign_in
 from tests.test_developer_qualification import (
     MEMBER,
     account_token,
@@ -239,6 +239,15 @@ def test_an_expired_period_refuses_at_once_and_the_sweep_reclaims_the_namespace(
     assert "This namespace was frozen on" in page
     assert "30-day grace period" in page and "qualification-revoked" in page
     assert "claim a new namespace" in page
+    # ...and through its account token, which outlives the publisher token.
+    mine = client.get("/api/developer/me/application", headers=bearer(account)).json()
+    assert [n["namespace"] for n in mine["namespaces"]] == ["mei-tools"]
+    assert "30-day grace period" in mine["namespaces"][0]["frozen_reason"]
+    assert mine["namespaces"][0]["frozen_at"] is not None
+    # Another account sees none of it.
+    sign_in(client, "mem-other", approved=False)
+    other = client.get("/api/developer/me/application", headers=bearer(account_token(client))).json()
+    assert other["namespaces"] == []
     # The account may still apply; it keeps its account token.
     assert apply(client, account).status_code == 201
     # A second sweep finds nothing more to reclaim.

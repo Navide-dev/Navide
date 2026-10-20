@@ -27,7 +27,7 @@ from .repository import RegistryRepository
 from .secret_scan import scan_package
 from .similarity import check_extension_name
 from .trust import compute_trust_tier, sensitive_capabilities
-from .versions import latest_stable_version
+from .versions import TESTPLACE_CHANNEL, latest_stable_version
 
 PENDING = "pending"
 APPROVED = "approved"
@@ -268,6 +268,9 @@ def approve(
             select(ExtensionVersion).where(
                 ExtensionVersion.extension_id == extension.id,
                 ExtensionVersion.review_status == APPROVED,
+                # A testplace build is not public: it must not keep a newer
+                # reviewed version from setting the listing (S8 R3-M1).
+                ExtensionVersion.channel != TESTPLACE_CHANNEL,
                 ExtensionVersion.yanked == False,  # noqa: E712
             )
         ).all()

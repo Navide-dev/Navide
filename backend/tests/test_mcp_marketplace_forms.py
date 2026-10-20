@@ -86,9 +86,13 @@ def audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginAuditLog:
 def caller(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     agent_messaging._reset_for_test()
     skills_approvals.registry._reset_for_test()
+    from agent_team_backend.guard import taint
+
+    taint.clear_taint("p-7")
     agent_messaging.register("p-7", "publisher", str(tmp_path), agent_key="claude")
     monkeypatch.setattr(mcp, "_resolve_caller", lambda ctx: mcp._Caller(kind="pane", pane_id="p-7"))
     yield
+    taint.clear_taint("p-7")
     agent_messaging._reset_for_test()
     skills_approvals.registry._reset_for_test()
 
