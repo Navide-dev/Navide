@@ -8190,6 +8190,7 @@
     "plans-retry-failed": "再試行に失敗しました：{reason}",
     "plans-recovery-reason": "このセッションでは Plans v2 が無効化されました（{reason}）。",
     "plans-backend-stopped": "「{folder}」の Plans バックエンドは失敗が繰り返されたため停止しました。このワークスペースで Plans を開くと再起動できます。または Navide を再起動してください。",
+    "plugin-staged-not-activated": "Navide プラグイン {plugin} {version} はインストール済みですが、Navide の起動時に有効化できませんでした：{reason}。「設定 → Navide プラグイン」で再起動するか破棄してください。",
     "yolo-mode": "YOLO モード",
     "yolo-bypass": "— 許可の確認を自動でスキップ",
     "default": "デフォルト",
@@ -11545,6 +11546,18 @@
       "enable": "再度有効にする",
       "disable": "再度無効にする",
       "downgrade": "{version} に戻す"
+    }
+  },
+  "plugin-staged": {
+    "notice": {
+      "title": "Navide プラグイン {plugin} のバージョン {staged} が適用待ちです。現在実行中のバージョンは {active} です。",
+      "detail": "このバージョンは再起動せずにインストールされたか、ロールバックで保持されたものです。「今すぐ適用」で切り替えます（再起動と同じ動作です）。",
+      "applied": "{plugin} はバージョン {version} で実行中です。",
+      "stale": "適用しませんでした：この Navide プラグインはその後変更されています。",
+      "failed": "適用できませんでした：{error}"
+    },
+    "button": {
+      "apply": "今すぐ適用"
     }
   },
   "testplace": {
