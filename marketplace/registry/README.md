@@ -63,9 +63,9 @@ uv --project marketplace/registry run pytest marketplace/registry/tests
 | GET | `/api/testplace/{namespace}/{name}/{version}/download` | Stream a live testplace artifact to an invited account (`?target=` as for public downloads). |
 | POST | `/api/testplace/join` | `{ "token": "tpi_…" \| "tpc_…" }`: redeem a single-use invite token or an open public test code for the calling account. Every failure is the same 404; 409 `CODE_FULL` when a code has no seats left. |
 | POST | `/api/testplace/{namespace}/{name}/leave` | Give up the caller's seat. |
-| GET/POST | `/api/testplace/{namespace}/{name}/invites` | Developer (publisher token of the namespace, or the owning account's token): list invites, or create `{ "labels": [...] }` single-use join tokens, returned once. At most 100 live invites per extension (409 `INVITE_LIMIT`). |
+| GET/POST | `/api/testplace/{namespace}/{name}/invites` | Developer (publisher token of the namespace, or the owning account's token): list invites, or create `{ "labels": [...] }` single-use join tokens, returned once. There is no limit on the number of invites; the test build they lead to expires 90 days after it is published. |
 | POST | `/api/testplace/{namespace}/{name}/invites/{id}/revoke` | Developer: revoke an invite; a tester who joined through it loses access. |
-| GET/POST | `/api/testplace/{namespace}/{name}/codes` | Developer: list public test codes, or create `{ "max_testers": 1-1000 }`. The extension's first code waits for a light admin review (`in-review`); later ones open at once. The code is returned once. |
+| GET/POST | `/api/testplace/{namespace}/{name}/codes` | Developer: list public test codes, or create `{ "max_testers": n }` (any positive number; there is no upper limit). The extension's first code waits for a light admin review (`in-review`); later ones open at once. The code is returned once. |
 | POST | `/api/testplace/{namespace}/{name}/codes/{id}/revoke` | Developer: stop new joins through a code; testers already in keep their seat. |
 | GET | `/api/testplace/{namespace}/{name}/versions` | Developer: testplace versions with expiry and promotion state. |
 | POST | `/api/testplace/{namespace}/{name}/versions/{version}/revoke` | Developer: revoke a testplace version early: it is yanked and `namespace.name@version` joins the blocklist, so the signed trust metadata carries it to every App within its TTL. |
@@ -482,12 +482,14 @@ approved by default.
 
 - **Grandfathered namespaces** (migration 13): a namespace self-claimed before
   qualification existed keeps publishing for 30 days from the migration
-  (`publisher.grandfather_until`) while its owner applies. A pending
-  application pauses the period; a rejection resumes it, extended by the
-  pending time. `GET /api/publisher/me` reports `grandfather: {until, paused,
+  (`publisher.grandfather_until`) while its owner applies. The owner's first
+  application, filed before the deadline, pauses the period; a rejection
+  resumes it, extended by the pending time. Nothing else pauses it — an
+  application filed after the deadline or a re-application after a rejection
+  leaves the clock running — so the period cannot be stretched indefinitely. `GET /api/publisher/me` reports `grandfather: {until, paused,
   days_left, remind, expired}` (null when none applies) and the dashboard shows
-  it, as a warning in the last 7 days. Past the deadline with no approved or
-  pending application, publishing is refused at once and a sweep (at most every
+  it, as a warning in the last 7 days. Past the deadline with no approved owner and
+  no paused application, publishing is refused at once and a sweep (at most every
   10 minutes, on request traffic) reclaims the namespace the way a revocation
   tears one down, audited as `namespace.reclaim` by
   `system:grandfather-expired`; the account keeps its account token and may

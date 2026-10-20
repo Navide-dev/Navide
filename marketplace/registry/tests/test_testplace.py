@@ -17,7 +17,6 @@ from registry.config import VERIFIER_ACCEPTING, Settings
 from registry.db import create_db_engine
 from registry.migrations import MIGRATIONS, applied_migrations, run_migrations
 from registry.models import DeveloperQualification, ExtensionVersion, Publisher, RegistryAudit
-from registry.testplace import MAX_INVITES
 
 from tests.fixtures import build_v2_package, contract_manifest
 
@@ -161,19 +160,18 @@ def test_an_invited_member_lists_and_downloads_the_build(client: TestClient) -> 
     assert client.get("/api/testplace/acme/files", headers=other).status_code == 404
 
 
-def test_invites_are_capped_at_100_and_a_revoked_one_frees_a_seat(client: TestClient) -> None:
+def test_invites_and_code_caps_have_no_upper_limit(client: TestClient) -> None:
+    # The former caps (100 live invites per extension, 100 per request,
+    # 1-1000 testers per code) are gone; going past each still succeeds.
     assert _publish(client).status_code == 201
-    _invite(client, [f"t{i}" for i in range(MAX_INVITES)])
-    resp = client.post(
-        "/api/testplace/acme/files/invites", json={"labels": ["one-more"]}, headers=_publisher()
-    )
-    assert resp.status_code == 409
-    assert resp.json()["detail"]["code"] == "INVITE_LIMIT"
-    first = client.get("/api/testplace/acme/files/invites", headers=_publisher()).json()["invites"][0]
-    assert client.post(
-        f"/api/testplace/acme/files/invites/{first['id']}/revoke", headers=_publisher()
-    ).json()["state"] == "revoked"
-    _invite(client, ["one-more"])
+    assert len(_invite(client, [f"t{i}" for i in range(150)])) == 150
+    assert len(_invite(client, ["one-more"])) == 1
+    listed = client.get("/api/testplace/acme/files/invites", headers=_publisher()).json()
+    assert len(listed["invites"]) == 151 and "limit" not in listed
+    code = client.post("/api/testplace/acme/files/codes", json={"max_testers": 5000}, headers=_publisher())
+    assert code.status_code == 201 and code.json()["max_testers"] == 5000
+    zero = client.post("/api/testplace/acme/files/codes", json={"max_testers": 0}, headers=_publisher())
+    assert zero.status_code == 400
 
 
 def test_a_revoked_invite_removes_access(client: TestClient) -> None:
@@ -479,3 +477,64 @@ def test_admin_page_reviews_a_code_and_a_promotion_and_revokes(tmp_path) -> None
         rows = session.exec(select(ExtensionVersion).where(ExtensionVersion.version == "1.1.0")).all()
     assert {"testplace.code.approve", "testplace.promotion.approve", "testplace.version.revoke"} <= set(actions)
     assert all(r.yanked for r in rows)
+
+
+# -- R-HIGH-1: promotion goes through the stable review ----------------------
+def test_promotion_of_a_native_backend_build_needs_the_stable_review_confirmation(client: TestClient) -> None:
+    from tests.test_native_backend import _backend_manifest, _backend_package
+
+    assert client.post(
+        "/api/publishers", json={"name": "acme-tools", "token": "tok-" + "acme-tools"}, headers=_admin()
+    ).status_code == 201
+    with _session(client) as session:
+        publisher = session.exec(select(Publisher).where(Publisher.name == "acme-tools")).one()
+        publisher.review_required = True
+        publisher.native_backend_allowed = True
+        publisher.verified_domain = "acme-tools.dev"
+        publisher.domain_verified_at = datetime.now(timezone.utc)
+        session.add(publisher)
+        session.commit()
+    tools = {"Authorization": "Bearer tok-" + "acme-tools"}
+    resp = client.post(
+        "/api/publish",
+        params={"channel": "testplace", "target": "darwin-arm64"},
+        headers=tools,
+        files={"package": ("pkg.vsix", _backend_package(_backend_manifest()), "application/zip")},
+    )
+    assert resp.status_code == 201, resp.text
+    digest = resp.json()["package_digest"]
+    version = resp.json()["version"]
+    path = f"/api/admin/testplace/promotions/acme-tools/indexer/{version}/decision"
+    assert client.post(f"/api/testplace/acme-tools/indexer/versions/{version}/promote", headers=tools).status_code == 200
+
+    # Same rule as a pending stable submission: a native backend is approved
+    # only once the reviewer confirms every target's executable was inspected.
+    refused = client.post(path, json={"approve": True, "artifacts": [digest]}, headers=_admin())
+    assert refused.status_code == 409, refused.text
+    assert "native backend" in refused.json()["detail"]["message"]
+    assert client.get("/api/extensions/acme-tools/indexer").status_code == 404
+
+    approved = client.post(
+        path, json={"approve": True, "artifacts": [digest], "inspected_native_backend": True}, headers=_admin()
+    )
+    assert approved.status_code == 200, approved.text
+    with _session(client) as session:
+        row = session.exec(select(ExtensionVersion).where(ExtensionVersion.package_digest == digest)).one()
+    assert row.reviewed_by == "admin-token" and row.reviewed_at is not None
+    # Rescanned at approval, like review.approve: the signed report is today's.
+    assert row.scan is not None and row.scan["artifactDigest"] == digest
+
+
+def test_promotion_rechecks_the_blocklist_and_records_the_review(client: TestClient) -> None:
+    assert _publish(client).status_code == 201
+    client.post("/api/testplace/acme/files/versions/1.0.0/promote", headers=_publisher())
+    digest = client.get("/api/admin/testplace/promotions", headers=_admin()).json()["promotions"][0]["artifacts"][0]
+    resp = client.post(
+        "/api/admin/testplace/promotions/acme/files/1.0.0/decision",
+        json={"approve": True, "artifacts": [digest]},
+        headers=_admin(),
+    )
+    assert resp.status_code == 200, resp.text
+    with _session(client) as session:
+        row = session.exec(select(ExtensionVersion)).one()
+    assert row.reviewed_by == "admin-token"

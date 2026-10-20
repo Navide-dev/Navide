@@ -350,6 +350,25 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
   })
 
+  it('says so when the asking pane has external influence (S8-M1), and still lets the user decide', async () => {
+    const mock = createMockBackend('connected')
+    const tainted = request()
+    tainted.requester = { ...tainted.requester, tainted: true } as never
+    mock.setResponse('plugins.agent_requests.list', { requests: [tainted] })
+    wrapper = await open(mock)
+    const line = wrapper.find('[data-testid="plugin-request-tainted"]')
+    expect(line.exists()).toBe(true)
+    expect(line.text()).toBe(i18n.global.t('plugin-request.tainted'))
+    expect(wrapper.find('[data-testid="plugin-request-approve"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('shows no external-influence line for a clean pane', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [request()] })
+    wrapper = await open(mock)
+    expect(wrapper.find('[data-testid="plugin-request-tainted"]').exists()).toBe(false)
+  })
+
   it('drops a request decided in another window', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('plugins.agent_requests.list', { requests: [request()] })

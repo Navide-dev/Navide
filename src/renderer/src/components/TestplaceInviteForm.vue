@@ -26,8 +26,6 @@ import type { DeveloperCallResult } from '../../../shared/marketplaceDeveloper'
 const props = defineProps<{ backend: ReturnType<typeof useBackend>; form: OpenMarketplaceForm }>()
 const { t } = useI18n()
 
-/** The Registry's cap on live invitations per Navide plugin (D5). */
-const MAX_INVITEES = 100
 const MAX_LABEL = 120
 
 const pluginId = ref('')
@@ -61,13 +59,12 @@ const labels = computed(() => inviteesText.value.split('\n').map((line) => line.
 const lineRows = computed(() => labels.value.map((label) => ({ label, byAgent: agentLines.value.includes(label) })))
 const validId = computed(() => /^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/.test(pluginId.value))
 const canSend = computed(() =>
-  validId.value && labels.value.length >= 1 && labels.value.length <= MAX_INVITEES && labels.value.every((label) => label.length <= MAX_LABEL))
+  validId.value && labels.value.length >= 1 && labels.value.every((label) => label.length <= MAX_LABEL))
 
 function message(result: DeveloperCallResult): string {
   if (result.ok) return ''
   if (result.code === 'NOT_SIGNED_IN' || result.status === 401) return t('testplace.error.notSignedIn')
   if (result.code === 'QUALIFICATION_REQUIRED' || result.code === 'NAMESPACE_FROZEN') return t('marketplace-developer.error.qualification')
-  if (result.code === 'INVITE_LIMIT') return t('testplace.error.inviteLimit')
   return t('marketplace-developer.error.registry', { status: result.status, code: result.code ?? '', message: result.message })
 }
 
@@ -126,7 +123,7 @@ async function discard(): Promise<void> {
     </div>
 
     <template v-if="created.length === 0">
-      <p class="dev-notice">{{ $t('testplace.invite.limit', { limit: MAX_INVITEES }) }}</p>
+      <p class="dev-notice">{{ $t('testplace.invite.validity') }}</p>
       <div class="dev-field">
         <label for="tp-invite-id">{{ $t('testplace.invite.plugin') }}</label>
         <input id="tp-invite-id" v-model="pluginId" class="nv-input" type="text" placeholder="namespace.name" />

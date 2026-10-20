@@ -94,14 +94,37 @@ async def test_fill_files_a_pending_draft_marked_as_agent_written(window) -> Non
     assert [e["type"] for e in window] == [contract.PLUGIN_APPROVAL_REQUEST_EVENT]
 
 
-@pytest.mark.parametrize("invitees", [[], [""], ["x" * 121], ["ok"] * 101, "a@example.com"])
+@pytest.mark.parametrize("invitees", [[], [""], ["x" * 121], "a@example.com"])
 async def test_fill_refuses_a_bad_invitee_list(window, invitees) -> None:
     out = await testplace_tools.marketplace_testplace_invite_fill(None, "acme", "files", invitees)
     assert out["ok"] is False and out["error_code"] == "BAD_REQUEST"
     assert skills_approvals.registry.plugin_requests() == []
 
 
+async def test_fill_takes_more_than_the_former_100_invitees(window) -> None:
+    invitees = [f"t{i}@example.com" for i in range(150)]
+    out = await testplace_tools.marketplace_testplace_invite_fill(None, "acme", "files", invitees)
+    assert out["ok"] is True
+    assert skills_approvals.registry.get(out["approval_id"])["draft"]["fields"]["invitees"] == invitees
+
+
 async def test_fill_and_open_refuse_a_bad_id(window) -> None:
     assert (await testplace_tools.marketplace_testplace_invite_fill(None, "Acme", "files", ["a"]))["error_code"] == "BAD_REQUEST"
     assert (await testplace_tools.marketplace_testplace_invite_open(None, "acme", ""))["error_code"] == "BAD_REQUEST"
     assert window == []
+
+
+def test_marketplace_forms_imports_first_without_a_cycle() -> None:
+    """server.py imports marketplace_forms and testplace_tools at its end; a
+    test (or tool) that imports marketplace_forms first must still load."""
+    import subprocess
+    import sys
+
+    code = (
+        "import agent_team_backend.mcp_server.marketplace_forms\n"
+        "import agent_team_backend.mcp_server.server as mcp\n"
+        "names = {t.name for t in mcp.server._tool_manager.list_tools()}\n"
+        "assert {'marketplace_testplace_invite_open', 'marketplace_testplace_invite_fill'} <= names, names\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr

@@ -86,8 +86,8 @@ describe('navide-plugin testplace', () => {
   })
 
   it('reports the Registry error code', async () => {
-    replies['POST /api/testplace/acme/files/invites'] = [409, { detail: { code: 'INVITE_LIMIT', message: 'an extension has at most 100 invites (100 in use)' } }]
-    await expect(run(['invite', 'add', 'acme.files', 'x'])).rejects.toThrow('409 INVITE_LIMIT')
+    replies['POST /api/testplace/acme/files/invites'] = [409, { detail: { code: 'NO_TESTPLACE_VERSION', message: 'publish a testplace version first' } }]
+    await expect(run(['invite', 'add', 'acme.files', 'x'])).rejects.toThrow('409 NO_TESTPLACE_VERSION')
   })
 
   it('needs a token and sends nothing without one', async () => {

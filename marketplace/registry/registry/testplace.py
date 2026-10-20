@@ -7,8 +7,7 @@ only through the member-authenticated endpoints in testplace_api.py, and only
 while holding a live seat:
 
 - a personal invite: the developer creates a single-use join token and sends
-  it; the first Cloud member to redeem it owns the seat (at most
-  MAX_INVITES live invites per extension);
+  it; the first Cloud member to redeem it owns the seat;
 - a public test code: reusable up to its cap, usable only after the first code
   of the extension passed a light admin review (D2).
 
@@ -26,6 +25,7 @@ becomes the Marketplace version without a reinstall.
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -33,13 +33,12 @@ from sqlalchemy import func, insert, literal, update
 from sqlalchemy import select as sa_select
 from sqlmodel import Session, select
 
-from . import blocklist
+from . import blocklist, review
 from .disclosure import sign_disclosure
 from .models import (
     Extension,
     ExtensionReport,
     ExtensionVersion,
-    Publisher,
     TestplaceCode,
     TestplaceInvite,
 )
@@ -54,10 +53,6 @@ from .versions import (
     version_channel,
 )
 
-MAX_INVITES = 100
-"""Live personal invites per extension (D5)."""
-MAX_CODE_TESTERS = 1000
-"""Upper bound of one public code's cap (D5)."""
 MAX_LABEL_LENGTH = 120
 INVITE_PREFIX = "tpi_"
 CODE_PREFIX = "tpc_"
@@ -167,19 +162,6 @@ def create_invites(
     if not labels:
         raise TestplaceError("BAD_REQUEST", "name at least one invitee")
     clean = [_label(label) for label in labels]
-    live = session.exec(
-        select(func.count()).select_from(TestplaceInvite).where(
-            TestplaceInvite.extension_id == extension.id,
-            TestplaceInvite.revoked_at.is_(None),
-            TestplaceInvite.code_id.is_(None),
-        )
-    ).one()
-    if live + len(clean) > MAX_INVITES:
-        raise TestplaceError(
-            "INVITE_LIMIT",
-            f"an extension has at most {MAX_INVITES} invites ({live} in use)",
-            status=409,
-        )
     created = []
     for label in clean:
         plain = INVITE_PREFIX + secrets.token_urlsafe(24)
@@ -224,8 +206,8 @@ def revoke_invite(session: Session, extension: Extension, invite_id: int) -> Tes
 def create_code(
     session: Session, extension: Extension, max_testers: int
 ) -> tuple[str, TestplaceCode]:
-    if not 1 <= max_testers <= MAX_CODE_TESTERS:
-        raise TestplaceError("BAD_REQUEST", f"max_testers must be 1-{MAX_CODE_TESTERS}")
+    if max_testers < 1:
+        raise TestplaceError("BAD_REQUEST", "max_testers must be at least 1")
     if not live_rows(session, extension):
         raise TestplaceError(
             "NO_TESTPLACE_VERSION", "publish a testplace version before opening a code", status=409
@@ -523,17 +505,30 @@ def approve_promotion(
     version: str,
     reviewer: str,
     artifacts: list[str],
+    acknowledge_secret_findings: bool = False,
+    inspected_native_backend: bool = False,
+    rescan: Callable[[ExtensionVersion], dict | None] | None = None,
 ) -> list[ExtensionVersion]:
     """Re-sign the same artifacts (digest unchanged) on the channel their
-    SemVer implies, without an expiry, and make them public."""
+    SemVer implies, without an expiry, and make them public. The approval
+    passes exactly the checks a pending stable submission does
+    (`review.check_approvable`: blocklist, pack nesting, similarity, the
+    secret and native backend confirmations, a rescan), since a testplace
+    build itself only had the automatic checks."""
     rows = _requested_rows(session, extension, version, artifacts)
-    publisher = session.get(Publisher, extension.publisher_id)
-    publisher_id = publisher.name if publisher else extension.namespace
-    reason = signer.block_reason(
-        publisher_id=publisher_id, package_id=extension.identity, version=version
-    )
-    if reason is not None:
-        raise TestplaceError("BLOCKED", reason, status=409)
+    try:
+        publisher_id, scans = review.check_approvable(
+            session,
+            signer,
+            extension=extension,
+            version=version,
+            rows=rows,
+            acknowledge_secret_findings=acknowledge_secret_findings,
+            inspected_native_backend=inspected_native_backend,
+            rescan=rescan,
+        )
+    except review.ReviewError as exc:
+        raise TestplaceError("REVIEW_REFUSED", str(exc), status=409) from exc
     previously_public = [
         v.version
         for v in session.exec(
@@ -570,12 +565,16 @@ def approve_promotion(
         )
         row.registry_envelope = envelope
         row.registry_signature = signature
+        if rescan is not None:
+            row.scan = scans[row.id]
         row.disclosure, row.disclosure_envelope, row.disclosure_signature = sign_disclosure(
             signer, row.manifest or {}, envelope, row.scan
         )
         row.trust_tier = compute_trust_tier(signed=True)
         row.channel = channel
         row.expires_at = None
+        row.reviewed_at = now
+        row.reviewed_by = reviewer
         row.promotion_status = APPROVED
         row.promotion_reviewed_at = now
         row.promotion_reviewed_by = reviewer
