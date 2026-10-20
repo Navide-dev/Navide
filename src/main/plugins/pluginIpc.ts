@@ -2989,19 +2989,25 @@ export function registerPluginIpc(
     }
     // Review LOW-2 on #543: a file change has no proposer; whoever proposed
     // the folder stays named on the consent it now needs again.
-    const needsConsent = async (): Promise<void> => {
+    // Review R2 LOW-1 on #543: every failure on the way to consent is
+    // reported like any other (card + event), never only logged.
+    const needsConsent = async (permissionsDigest?: string): Promise<void> => {
       stopWatchingFolder(pluginId)
       await unloadDeveloperFolder(pluginId)
       preparedFolders.set(pluginId, {
         dir: consent.path,
-        permissionsDigest: describeFolder(consent.path).permissionsDigest,
+        permissionsDigest: permissionsDigest ?? describeFolder(consent.path).permissionsDigest,
         loadedBy: folderMeta.get(pluginId, consent.path).loadedBy,
       })
       reloadErrors.delete(pluginId)
       options.onDeveloperFolderEvent?.({ pluginId, kind: 'needs-consent' })
     }
     if (described.pluginId !== pluginId || described.permissionsDigest !== consent.permissionsDigest) {
-      await needsConsent()
+      try {
+        await needsConsent(described.pluginId === pluginId ? described.permissionsDigest : undefined)
+      } catch (error) {
+        failed(error)
+      }
       return
     }
     autoReloading.add(pluginId)

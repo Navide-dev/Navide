@@ -648,6 +648,18 @@ describe('G1: automatic reload on file change', () => {
     expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
   })
 
+  it('review R2 LOW-1 on #543: a failure while stopping for consent is reported, not only logged', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest('acme.devtodo', { system: ['fs'] })))
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementationOnce(() => { throw new Error('unload failed') })
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toMatchObject({ pluginId: 'acme.devtodo', kind: 'reload-failed', error: expect.stringMatching(/unload failed/) }))
+    expect((call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders[0])
+      .toMatchObject({ reloadError: expect.stringMatching(/unload failed/) })
+  })
+
   it('review LOW-2 on #543: a folder an agent proposed stays attributed to it after a change asks for consent again', async () => {
     register()
     await call('plugins:setDeveloperMode', { enabled: true })
