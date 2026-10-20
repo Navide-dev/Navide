@@ -2956,10 +2956,14 @@ export function registerPluginIpc(
       developerMode.setEnabled(enabled)
       manager.recordDeveloperModeChange(enabled, hostAppVersion())
       if (!developerModeOn()) {
-        for (const folder of developerMode.folders()) await unloadDeveloperFolder(folder.pluginId)
-        // G4: a folder chosen but not yet consented to does not outlive the
-        // switch; turning it on again means choosing the folder again.
-        preparedFolders.clear()
+        try {
+          for (const folder of developerMode.folders()) await unloadDeveloperFolder(folder.pluginId)
+        } finally {
+          // G4: a folder chosen but not yet consented to does not outlive the
+          // switch, even when an unload fails; turning it on again means
+          // choosing the folder again.
+          preparedFolders.clear()
+        }
       } else {
         await loadDeveloperFolders()
       }
