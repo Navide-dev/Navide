@@ -102,6 +102,25 @@ describe('layout-mode cols cap', () => {
     expect(pane.cap).toBeNull()
   })
 
+  // The 09-02 fix (bb2d93ab0): a grid → stage → grid round trip must never
+  // widen a normal-buffer pane, so the return to grid is not a narrowing reflow
+  // of its scrollback.
+  it('a grid → spotlight → grid round trip never changes the cols of a normal-buffer pane', () => {
+    const pane = fakePane({ cols: 90, container: 90 })
+    const { cap } = harness(1000, [pane])
+    const seen: number[] = []
+    cap.enterMode('spotlight')
+    pane.setContainer(180)
+    pane.fit()
+    seen.push(pane.cols)
+    cap.enterMode('grid')
+    pane.setContainer(90)
+    pane.fit()
+    seen.push(pane.cols)
+    expect(seen).toEqual([90, 90])
+    expect(pane.cap).toBeNull()
+  })
+
   it('going back to grid lifts the cap; widening afterwards does nothing more', () => {
     const pane = fakePane({ cols: 90, container: 90 })
     const { cap, resizeWindow } = harness(1000, [pane])
