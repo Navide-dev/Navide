@@ -11,7 +11,7 @@ import stat
 
 import pytest
 
-from agent_team_backend import app, sync_approvals, sync_scopes
+from agent_team_backend import app, sync_approvals, sync_engine, sync_scopes
 from agent_team_backend.mcp_settings import MCPSettingsStore
 from tests.test_sync_scope_adapters import Dev, StrictServer, _mcp, _skill_pair, account_key  # noqa: F401
 
@@ -160,7 +160,12 @@ def test_forget_approvals_drops_index_and_payloads(tmp_path, account_key, monkey
     sync_approvals.hold("mcp", "x", _mcp("x"), local=None, kind="new", summary={"name": "x"})
     path = sync_approvals._stash_path("mcp", "x")
     assert path.is_file() and sync_approvals.listing()
-    assert "npx" not in path.read_text()              # sealed, not plain
+    # Sealed, not plain. Base64 has no quotes or colons, so this fragment of the
+    # plaintext cannot turn up in the ciphertext by chance the way "npx" did.
+    plain = '"command":"npx"'
+    assert plain in sync_engine.canonical(_mcp("x"))
+    assert plain not in path.read_text()
+    assert sync_approvals.held_payload("mcp", "x") == _mcp("x")
     sync_approvals.forget_approvals()
     assert sync_approvals.listing() == [] and not path.exists()
 
