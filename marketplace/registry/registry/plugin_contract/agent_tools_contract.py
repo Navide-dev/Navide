@@ -53,7 +53,11 @@ CORE_TOOL_NAMES = (
     "cli_message_log", "cli_open_agent", "cli_pending_incoming", "cli_permission_settings", "cli_place_pane",
     "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_send", "cli_send_and_wait", "cli_token_stats",
     "cli_usage", "cli_wait_idle", "cli_whoami", "credentials_findings", "credentials_list", "evolve_report",
-    "marketplace_detail", "marketplace_request_install", "marketplace_request_rollback",
+    "marketplace_detail",
+    "marketplace_developer_application_fill", "marketplace_developer_application_open",
+    "marketplace_developer_status", "marketplace_publish_fill", "marketplace_publish_open",
+    "marketplace_publish_status", "marketplace_publish_yank_fill", "marketplace_publish_yank_open",
+    "marketplace_request_install", "marketplace_request_rollback",
     "marketplace_request_status", "marketplace_request_update", "marketplace_search", "mcp_list", "memory_list",
     "pipeline_abort", "pipeline_define", "pipeline_gate", "pipeline_graph",
     "pipeline_list", "pipeline_next", "pipeline_reset", "pipeline_restart", "pipeline_restart_from",
@@ -605,7 +609,33 @@ class MarketplaceQueryRequest(TypedDict):
 
 # ── approval registry (B2) ──────────────────────────────────────────────────
 
-APPROVAL_KINDS = ("skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable")
+APPROVAL_KINDS = (
+    "skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable",
+    "developer-application", "plugin-publish", "plugin-yank", "testplace-invite",
+)
+#: Kinds whose request is a draft for a main-window form (P4 *_fill), not an
+#: approval card: the user edits it and presses Submit; closing the form rejects it.
+FORM_APPROVAL_KINDS = ("developer-application", "plugin-publish", "plugin-yank", "testplace-invite")
+#: A form takes longer to read and edit than a card takes to decide.
+FORM_APPROVAL_TTL_S = 60 * 60
+#: Backend -> main windows: open a form for the user to fill in (P4 *_open);
+#: ``{form, prefill, requester}``. No request is filed.
+MARKETPLACE_FORM_OPEN_EVENT = "marketplace.form_open"
+MARKETPLACE_FORMS = ("developer-application", "publish", "publish-yank", "testplace-invite")
+#: The developer application's fields (Registry W2, real-name per DX 5.4).
+DEVELOPER_APPLICATION_FIELDS = (
+    "applicant_type", "legal_name", "display_name", "contact_email", "country", "intended_namespace",
+    "description", "agreed_terms", "organization_name", "organization_id", "website", "source_url",
+    "needs_native_backend", "domain",
+)
+#: Backend -> Host: ``{request_id, query}`` for the developer status tools; the
+#: Host calls the Registry with the credentials it keeps and answers with
+#: ``marketplace.developer.result`` ``{request_id, ok, result | error, error_code}``.
+#: ``query.kind`` is "developer-status" or "publish-status" (with ``id``).
+MARKETPLACE_DEVELOPER_REQUEST_EVENT = "marketplace.developer.request"
+MARKETPLACE_DEVELOPER_RESULT_MESSAGE = "marketplace.developer.result"
+#: Errors the developer tools add to MARKETPLACE_QUERY_ERROR_CODES.
+DEVELOPER_ERROR_CODES = ("NOT_SIGNED_IN", "QUALIFICATION_REQUIRED")
 PLUGIN_APPROVAL_STATUSES = ("pending", "applying", "completed", "rejected", "failed", "expired")
 PLUGIN_APPROVAL_DECIDE_ACTION = "plugins.agent_request.decide"
 PLUGIN_APPROVAL_TTL_S = 15 * 60
