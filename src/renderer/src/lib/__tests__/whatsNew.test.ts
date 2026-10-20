@@ -163,19 +163,30 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
   })
 })
 
-// Decision d6 (a): the downgrade to 0.2.26 is announced with 0.2.27.
-describe('0.2.27 — blocked local installs', () => {
+// Authored ahead of the 0.2.27 bump, like 0.2.26 above. One entry for the
+// release: Navide Browser (#459) and blocked local installs, with the
+// downgrade to 0.2.26 (decision d6 (a)); docs wrap-up adjusts the wording.
+describe('0.2.27 — Navide Browser and blocked local installs', () => {
   const entry = whatsNewFor('0.2.27')
 
-  it('is the newest entry, carries ja-JP for every line and names the downgrade', () => {
-    expect(WHATS_NEW[0].version).toBe('0.2.27')
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
     for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
-    expect(entry!.highlights.some((text) => text['en-US'].includes('0.2.26') && text['en-US'].includes('quarantined'))).toBe(true)
   })
 
-  it('is not shown to a build still running 0.2.26', () => {
-    expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
+  it('names Navide Browser and the downgrade to 0.2.26', () => {
+    expect(entry!.title['en-US']).toContain('Navide Browser')
+    expect(entry!.highlights.some((text) => text['en-US'].startsWith('Navide Browser'))).toBe(true)
+    expect(entry!.highlights.some((text) =>
+      text['en-US'].startsWith('Behaviour change:') && text['en-US'].includes('0.2.26') && text['en-US'].includes('quarantined'),
+    )).toBe(true)
+  })
+
+  it('shows once to someone updating from 0.2.26, as the newest entry, and not to a build still running 0.2.26', () => {
     expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
+    expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
+    expect(WHATS_NEW[0].version).toBe('0.2.27')
+    expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
   })
 })
 

@@ -1856,6 +1856,7 @@
         "uninstallConfirmBody": "{name} will be removed from this device. You can install it again from the Navide Marketplace.",
         "uninstallConfirmBodyWithData": "{name} will be removed from this device. Its native backend also stored {size} of private data on this device, at the location below. Navide deletes this data too unless you choose to keep it.",
         "uninstallKeepNativeData": "Keep this data so a reinstall can use it again",
+        "uninstallClearsWebData": "Removing {name} also deletes its site sign-ins, cookies and cache on this computer.",
         "updatesCount": "Updates available: {count}",
         "retry": "Retry",
         "featured": "Featured",
@@ -1991,6 +1992,7 @@
         "capability": {
           "fs": "Read and write files in your workspace.",
           "aiCli": "Run the AI CLI agents set up in Navide.",
+          "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; it can open many web pages at once, and each one uses memory.",
           "shell": "Run commands on your computer.",
           "terminal": "Open and control Navide terminals."
         }
@@ -11435,6 +11437,7 @@
       },
       "networkViaShell": "Can reach remote hosts through those commands",
       "aiCli": "Controls AI CLI sessions",
+      "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; it can open many web pages at once, and each one uses memory.",
       "ui": "Shows its own views",
       "agentTools": "Offers tools agents can call ({read} read-only, {write} writing)",
       "network": "Can use the network",

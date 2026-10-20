@@ -4042,8 +4042,13 @@ export function registerPluginIpc(
   const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown): Promise<{ ok: true }> => {
     const id = assertPluginRemovalTarget(pluginsRoot, rawId)
     // Plans, Git and Mini-IDE ship with Navide and can only be disabled; no
-    // `navide.` package is removable, so its storage and grant always stay.
-    if (isReservedPluginId(id)) throw new Error(`first-party plugin ${id} cannot be removed or restored`)
+    // other `navide.` package is removable, so its storage and grant always
+    // stay. A Marketplace first-party package (navide.browser) is the one
+    // exception: it installs from the Official Registry and is removed like
+    // any Marketplace package.
+    if (isReservedPluginId(id) && !manager.isMarketplaceFirstPartyPackage(id)) {
+      throw new Error(`first-party plugin ${id} cannot be removed or restored`)
+    }
     // No choice means keep, exactly as before this option existed.
     if (rawDataChoice !== undefined && rawDataChoice !== 'keep' && rawDataChoice !== 'delete') {
       throw new Error('invalid native backend data choice')
@@ -4074,6 +4079,8 @@ export function registerPluginIpc(
       // the package and restore its approved backend tuple for this session.
       try {
         await cleanupPluginStorage(id)
+        // Its browser partition (sign-ins, cookies, cache) goes with it.
+        await manager.clearPluginWebData(id)
         // Storage a source change set aside goes with the plugin's storage.
         if (options.pluginStorageRoot) removeNativeBackendData(options.pluginStorageRoot, pluginStorageDirName(id))
         // The backend child was stopped with the runtime above. Deleting its
@@ -4304,7 +4311,9 @@ export function registerPluginIpc(
           manager.registerInstalledPackage(
             { ...scanned.packageSummary, ...enabledSource.fields },
             scanned.descriptor,
-            {},
+            // A Marketplace first-party package claims its reserved id again
+            // on the Official Registry evidence just verified.
+            isReservedPluginId(id) ? enabledSource.registration : {},
             packageDir,
           )
         } catch (error) {

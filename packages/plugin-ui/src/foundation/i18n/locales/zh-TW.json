@@ -1856,6 +1856,7 @@
         "uninstallConfirmBody": "將從這台裝置移除 {name}。之後仍可從 Navide 市集重新安裝。",
         "uninstallConfirmBodyWithData": "將從這台裝置移除 {name}。{name} 的原生後端還在這台裝置上存了 {size} 的私有資料，位置如下。除非你選擇保留，Navide 會一併刪除這些資料。",
         "uninstallKeepNativeData": "保留這些資料，重新安裝時可以繼續使用",
+        "uninstallClearsWebData": "移除 {name} 也會刪除它在這台電腦上的網站登入、Cookie 與快取。",
         "updatesCount": "可用更新：{count} 個",
         "retry": "重試",
         "featured": "精選",
@@ -1991,6 +1992,7 @@
         "capability": {
           "fs": "讀寫工作區中的檔案。",
           "aiCli": "執行 Navide 中已設定的 AI CLI 代理。",
+          "web": "可開啟並瀏覽任何網站；網站登入資料會保存在本機；agent 會使用你在此 Navide 外掛中的登入身分（可代你在網頁上發送請求），並可讀取它開啟的所有網頁內容與登入狀態；你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止；可同時開啟多個網頁，每個網頁都會占用記憶體。",
           "shell": "在你的電腦上執行指令。",
           "terminal": "開啟並操作 Navide 終端機。"
         }
@@ -11435,6 +11437,7 @@
       },
       "networkViaShell": "可以透過這些指令連到遠端",
       "aiCli": "操作 AI CLI 工作階段",
+      "web": "可開啟並瀏覽任何網站；網站登入資料會保存在本機；agent 會使用你在此 Navide 外掛中的登入身分（可代你在網頁上發送請求），並可讀取它開啟的所有網頁內容與登入狀態；你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止；可同時開啟多個網頁，每個網頁都會占用記憶體。",
       "ui": "顯示自己的畫面",
       "agentTools": "提供 agent 可呼叫的工具（唯讀 {read} 個、寫入 {write} 個）",
       "network": "可以連網",

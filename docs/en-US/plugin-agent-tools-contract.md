@@ -351,6 +351,7 @@ in this order, each only when it applies:
 | `shell` | `shell` is not `null` | the `permissions.shell` object |
 | `networkViaShell` | `shell` is not `null` (`network` is `"via-shell"`) | `{}` |
 | `aiCli` | `system` contains `aiCli` | `{}` |
+| `web` | `system` contains `web` | `{}` |
 | `ui` | `system` contains `ui` | `{}` |
 | `agentTools` | at least one tool | `{read: <count>, write: <count>}` |
 | `network` | reserved for DB10; never produced in v1 | `{}` |
@@ -366,6 +367,7 @@ none apply. Reasons are listed in this fixed order:
 | `system.ui` | `system` contains `ui` | low |
 | `system.fs` | `system` contains `fs` (workspace read/write) | medium |
 | `system.aiCli` | `system` contains `aiCli` | high |
+| `system.web` | `system` contains `web` (plugin browser views and their saved sign-ins) | high |
 | `shell.allowlist` | `shell` is `allowlist` | high |
 | `nativeBackend` | the manifest has `backend` | high |
 | `agentTools.write` | at least one tool has `risk: "write"` | high |
@@ -522,7 +524,7 @@ package envelope as before.
 
 | `kind` | `key` | One per |
 |---|---|---|
-| `system` | `fs` / `ui` / `aiCli` | system namespace |
+| `system` | `fs` / `ui` / `aiCli` / `web` | system namespace |
 | `shell` | `allowlist` / `full` | shell mode |
 | `shellExecutable` | executable name | allowlisted executable |
 | `fsScopeRoot` | `workspace` / `repository` | declared scopes |
@@ -709,7 +711,7 @@ publish (DS3).
 | dynamic commands while `permissions.shell` is absent | `shellDynamic` / `dynamic` |
 | `shell.*` capability address while `permissions.shell` is absent | `shell` / `shell.run` |
 | an executable outside the allowlist while shell is `allowlist` | `shellExecutable` / the executable |
-| an `fs`, `ui` or `aiCli` capability address whose namespace is not in `system` | `system` / the namespace |
+| an `fs`, `ui`, `aiCli` or `web` capability address whose namespace is not in `system` | `system` / the namespace |
 | read or write paths while `system` lacks `fs` | `system` / `fs` |
 | a write path matching no `scopes.fs.write` pattern (scopes declared) | `fsScopeWrite` / the path |
 | a read path matching no `scopes.fs.read` or `write` pattern (scopes declared) | `fsScopeRead` / the path |

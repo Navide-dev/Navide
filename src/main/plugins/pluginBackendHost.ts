@@ -26,6 +26,7 @@ import {
   type BackendBridgeDispatcher,
 } from './plansBridge'
 import { noteBackendFailure, type ThirdPartyAdmission } from './pluginThirdPartyBackends'
+import { isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import {
   canonicalExistingDirectory,
   isWorkspaceContainedPath,
@@ -152,6 +153,12 @@ interface ThirdPartyIdleState {
 /** A third-party child with no call, subscription or bridge traffic for this
  * long is closed; the next call starts it again through the admission gate. */
 export const THIRD_PARTY_BACKEND_IDLE_MS = 10 * 60_000
+
+/** Whether agent-tool bindings may be made on this activation: a third-party
+ *  backend, or a first-party one that is not Plans (Plans keeps its own route). */
+function servesAgentTools(activation: BackendPluginLaunchSpec): boolean {
+  return activation.thirdParty !== undefined || isFirstPartyAgentToolPlugin(activation.pluginId)
+}
 
 function backendKey(pluginId: string, packageVersion: string): string {
   return `${pluginId}\u0000${packageVersion}`
@@ -434,16 +441,17 @@ export class PluginBackendHost {
 
   /**
    * Set the methods an agent may reach on one registered third-party package
-   * version through its agent-tool bindings ({@link bindAgentToolWorkspace}).
-   * The set must be a subset of the package's approved methods. Views and the
-   * registered activation are not changed, and first-party activations (Plans)
-   * are never touched. Returns false when no such third-party activation is
-   * registered.
+   * version, or first-party agent-tool package version (navide.browser,
+   * pluginFirstPartyBackends.ts), through its agent-tool bindings
+   * ({@link bindAgentToolWorkspace}). The set must be a subset of the
+   * package's approved methods. Views and the registered activation are not
+   * changed, and Plans is never touched. Returns false when no such
+   * activation is registered.
    */
   setAgentMethods(pluginId: string, packageVersion: string, methods: readonly string[]): boolean {
     const key = backendKey(pluginId, packageVersion)
     const backend = this.backends.get(key)
-    if (!backend || backend.activation.thirdParty === undefined) return false
+    if (!backend || !servesAgentTools(backend.activation)) return false
     if (!methods.every((method) => backend.activation.approvedMethods.includes(method))) {
       throw new BackendPluginError('INVALID_ACTIVATION', 'Agent methods must be approved backend methods.')
     }
@@ -458,7 +466,7 @@ export class PluginBackendHost {
     return this.agentToolMethods.get(backendKey(pluginId, packageVersion)) ?? []
   }
 
-  /** Bind a third-party package backend headlessly for agent-tool calls. Like
+  /** Bind a third-party (or first-party agent-tool) package backend headlessly for agent-tool calls. Like
    * {@link bindWorkspace}, but the binding is marked so that agent calls on it
    * are checked against {@link agentToolMethodsFor} instead of `agentMethods`. */
   async bindAgentToolWorkspace(
@@ -468,7 +476,7 @@ export class PluginBackendHost {
   ): Promise<string> {
     if (!nonEmptyString(workspacePath)) throw new BackendPluginError('INVALID_RUNTIME')
     const backend = this.backends.get(backendKey(runtime.pluginId, runtime.packageVersion))
-    if (!backend || backend.activation.thirdParty === undefined) throw new BackendPluginError('INVALID_RUNTIME')
+    if (!backend || !servesAgentTools(backend.activation)) throw new BackendPluginError('INVALID_RUNTIME')
     let instanceId = randomUUID()
     while (this.views.has(instanceId)) instanceId = randomUUID()
     const task = this.bindView({

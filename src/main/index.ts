@@ -65,6 +65,7 @@ import { BuiltinRemovedEarlierStore, migrateBuiltinRemovalsToDisabled, PluginDis
 import { createBuiltinSwitchReconciler } from './plugins/builtinSwitchReconciler'
 import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/frontendPluginManager'
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
+import { webAgentWritePrompt } from './browserAgentStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
 import { localTakedownDecision } from './plugins/pluginLocalTrust'
@@ -199,8 +200,12 @@ import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
 import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
 import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
+import { isFirstPartyAgentToolPlugin, isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
+import { isPluginWebGuest } from './plugins/pluginWebViews'
 import { guardPlanFrameNavigation } from './planFrameNavigation'
 import {
+  firstPartyAgentToolSpec,
+  firstPartyBackendLaunchSpec,
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
   packageContentDigest,
@@ -1122,7 +1127,7 @@ async function preflightCandidateBackend(
 ): Promise<void> {
   const backend = activation.backend
   if (!backend) return
-  if (activation.pluginId !== 'navide.plans') {
+  if (!isFirstPartyBackendPlugin(activation.pluginId)) {
     // A third-party candidate runs only with the admission a real launch
     // needs (switch, consent for this content, sandbox, breaker), never with
     // a prompt, and under the same watchdog and cleanup. Otherwise installing
@@ -1291,6 +1296,21 @@ frontendPluginManager.setThirdPartyBackendAdmitter((activation, workspacePath, i
     : Promise.reject(new BackendPluginError('BACKEND_UNAVAILABLE', 'not a third-party backend')),
 )
 
+/** A first-party backend other than Plans (pluginFirstPartyBackends.ts):
+ *  launched like Plans, outside the third-party admission gate. */
+function firstPartyBackendActivation(activation: PluginActivationCatalogEntry): BackendPluginLaunchSpec | null {
+  try {
+    return firstPartyBackendLaunchSpec(activation)
+  } catch (error) {
+    console.warn(
+      `[main] first-party backend for ${activation.pluginId} is unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+    return null
+  }
+}
+
 function thirdPartyBackendActivation(activation: PluginActivationCatalogEntry): BackendPluginLaunchSpec | null {
   try {
     return thirdPartyBackendLaunchSpec(activation)
@@ -1370,6 +1390,8 @@ async function promptNativeBackendWorkspaceWrite(prompt: NativeBackendWritePromp
 // DB3: an agent asked for a write-risk tool. Its own question, naming the
 // agent and the tool, separate from the view's "allow file changes".
 async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Promise<boolean> {
+  // Navide Browser's write tools drive web pages; asking about files would mislead.
+  if (prompt.pluginId === 'navide.browser') return promptWebAgentToolWrite(prompt)
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Agent wants to change files',
@@ -1398,11 +1420,37 @@ async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Prom
   return result.response === 1
 }
 
-// Installed third-party backends from the previous session. Plans registers
+async function promptWebAgentToolWrite(prompt: AgentToolWritePrompt): Promise<boolean> {
+  const tool = `"${revealUnsafeLineText(prompt.tool.title)}" (${revealUnsafeLineText(prompt.tool.name)})`
+  const text = webAgentWritePrompt(
+    currentUiLocale(),
+    tool,
+    revealUnsafeLineText(prompt.name),
+    revealUnsafeLineText(prompt.packageVersion),
+  )
+  const options: Electron.MessageBoxOptions = {
+    type: 'warning',
+    title: text.title,
+    message: text.message,
+    detail: [prompt.workspacePath, text.origin].join('\n\n'),
+    buttons: text.buttons,
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  }
+  const parent = nativeBackendDialogParent()
+  const result = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options)
+  return result.response === 1
+}
+
+// Installed package backends from the previous session: first-party ones
+// outside the third-party gate, every other one through it. Plans registers
 // through its own bundled/installed selection path.
 for (const activation of installedPluginLoad.activationCatalog) {
   if (!activation.backend || activation.pluginId === 'navide.plans') continue
-  const spec = thirdPartyBackendActivation(activation)
+  const spec = isFirstPartyBackendPlugin(activation.pluginId)
+    ? firstPartyBackendActivation(activation)
+    : thirdPartyBackendActivation(activation)
   if (!spec || frontendPluginManager.hasBackendActivation(activation.pluginId, activation.packageVersion)) continue
   try {
     frontendPluginManager.registerBackendActivation(spec)
@@ -1415,6 +1463,7 @@ for (const activation of installedPluginLoad.activationCatalog) {
   }
 }
 
+frontendPluginManager.setUiLocaleResolver(() => currentUiLocale())
 frontendPluginManager.setExecutionPolicyResolver((workspacePath?: string): ExecutionPolicySnapshot => {
   try {
     if (!workspacePath) return executionPolicySourceStore.getGlobalEffectivePolicy()
@@ -1725,12 +1774,16 @@ const applyPluginActivationChange = ({
   activation?: (typeof approvedInstalledPluginActivations)[number]
 }): void => {
   if (activation?.backend) {
-    // Every package backend other than Plans is third-party native code: its
-    // allowlists come from its manifest and it is launched only through the
-    // sandboxed third-party admission gate. Plans retains its explicit allowlist.
+    // Every package backend not on the first-party list is third-party native
+    // code: its allowlists come from its manifest and it is launched only
+    // through the sandboxed third-party admission gate. Plans retains its
+    // explicit allowlist; the other first-party backends (the browser) take
+    // theirs from the manifest and the first-party list, outside the gate.
     const backend: BackendPluginLaunchSpec | null = activation.pluginId === 'navide.plans'
       ? plansBackendActivation(activation)
-      : thirdPartyBackendActivation(activation)
+      : isFirstPartyBackendPlugin(activation.pluginId)
+        ? firstPartyBackendActivation(activation)
+        : thirdPartyBackendActivation(activation)
     if (backend && !frontendPluginManager.hasBackendActivation(pluginId, activation.packageVersion)) {
       frontendPluginManager.registerBackendActivation(backend)
     }
@@ -1811,19 +1864,45 @@ ipcMain.handle('git:retryV2', (event) => {
 
 const registeredThirdPartySpecs = (): ThirdPartyLaunchSpec[] =>
   approvedInstalledPluginActivations.flatMap((activation) => {
-    if (!activation.backend || activation.pluginId === 'navide.plans') return []
+    if (!activation.backend || isFirstPartyBackendPlugin(activation.pluginId)) return []
     const spec = frontendPluginManager.getBackendActivation(activation.pluginId, activation.packageVersion)
     return spec && isThirdPartyLaunchSpec(spec) ? [spec] : []
+  })
+// First-party backends with agent tools (navide.browser): the catalog entry
+// of each registered first-party activation. Their tools follow the master
+// switch but need no per-version consent (PluginAgentToolsHost).
+const registeredFirstPartyAgentToolSpecs = (): ThirdPartyLaunchSpec[] =>
+  approvedInstalledPluginActivations.flatMap((activation) => {
+    if (!activation.backend || !isFirstPartyAgentToolPlugin(activation.pluginId)) return []
+    const registered = frontendPluginManager.getBackendActivation(activation.pluginId, activation.packageVersion)
+    if (!registered || isThirdPartyLaunchSpec(registered)) return []
+    try {
+      const spec = firstPartyAgentToolSpec({ ...activation, packageDir: registered.packageDir })
+      return spec ? [spec] : []
+    } catch (error) {
+      console.warn(
+        `[main] agent tools of ${activation.pluginId} are unavailable: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return []
+    }
   })
 agentToolsHost = new PluginAgentToolsHost({
   switches: () => nativeBackendStore.agentToolSwitches(),
   setSwitches: (change) => nativeBackendStore.setAgentToolSwitches(change),
   listPackages: registeredThirdPartySpecs,
+  listFirstPartyPackages: registeredFirstPartyAgentToolSpecs,
   // Native backends turned off globally or for the package count as disabled.
+  // A first-party package is not a third-party native backend: only its own
+  // Disabled switch applies (the installed-package one: it is a Marketplace
+  // package).
   isDisabled: (pluginId) =>
-    !nativeBackendStore.isEnabled() ||
-    frontendPluginManager.isPluginDisabled(pluginId) ||
-    nativeBackendStore.record(pluginId).disabled === true,
+    isFirstPartyAgentToolPlugin(pluginId)
+      ? frontendPluginManager.isPluginDisabled(pluginId)
+      : !nativeBackendStore.isEnabled() ||
+        frontendPluginManager.isPluginDisabled(pluginId) ||
+        nativeBackendStore.record(pluginId).disabled === true,
   hasConsent: (spec) => thirdPartyBackends.hasAgentToolsConsent(spec),
   // DB1 collision order, per name (B1-a): when a consented version first
   // declared this name, else when the package first declared tools.
@@ -1834,7 +1913,9 @@ agentToolsHost = new PluginAgentToolsHost({
   setAgentMethods: (pluginId, packageVersion, methods) =>
     frontendPluginManager.setThirdPartyAgentMethods(pluginId, packageVersion, methods),
   confirmWrite: (spec, tool, workspaceRoot) =>
-    thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool),
+    isFirstPartyAgentToolPlugin(spec.pluginId)
+      ? thirdPartyBackends.confirmFirstPartyAgentToolWrite(spec, workspaceRoot, tool)
+      : thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool),
   send: (payload) => frontendPluginManager.sendAgentToolsSync(payload),
 })
 frontendPluginManager.setAgentToolsHost(agentToolsHost)
@@ -5703,6 +5784,8 @@ app.on('web-contents-created', (_e, contents) => {
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
   contents.on('will-navigate', (e, url) => {
+    // A plugin web view enforces its own http(s) allowlist (pluginWebViews.ts).
+    if (isPluginWebGuest(contents)) return
     if (!isAppNavigation(url)) e.preventDefault()
   })
   guardPlanFrameNavigation(contents)

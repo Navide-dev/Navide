@@ -1,0 +1,22 @@
+{
+  "name": "@navide/navide-browser",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@navide/plugin-sdk": "^1.0.0",
+    "@navide/plugin-ui": "^1.0.0",
+    "vue": "^3.5.13",
+    "vue-i18n": "^10.0.5 || ^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.4.3",
+    "vue-tsc": "^2.1.10"
+  }
+}
