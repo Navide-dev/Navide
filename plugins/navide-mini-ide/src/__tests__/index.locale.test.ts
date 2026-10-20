@@ -35,7 +35,7 @@ describe('mini-IDE entry locale', () => {
   })
 
   it('ignores a locale the UI has no messages for', async () => {
-    const booted = await bootWithLocale('fr-FR')
+    const booted = await bootWithLocale('it-IT')
 
     expect(booted.locale).toBe(booted.before)
     expect(booted.saved).toBeNull()

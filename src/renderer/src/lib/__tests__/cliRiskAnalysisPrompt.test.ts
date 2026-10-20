@@ -63,7 +63,7 @@ describe('buildCliRiskAnalysisPrompt', () => {
     expect(build([diskSignal()])).not.toContain('Finding 2')
   })
 
-  it.each([['zh-TW', 'Traditional Chinese'], ['ja-JP', 'Japanese'], ['en-US', 'English'], ['fr-FR', 'fr-FR']])('asks for replies in %s', (locale, language) => {
+  it.each([['zh-TW', 'Traditional Chinese'], ['ja-JP', 'Japanese'], ['en-US', 'English'], ['zh-CN', 'Simplified Chinese'], ['fr-FR', 'French'], ['it-IT', 'it-IT']])('asks for replies in %s', (locale, language) => {
     expect(build(undefined, locale)).toContain(`Respond in ${language} (UI locale: ${locale}).`)
   })
 })
