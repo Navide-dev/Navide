@@ -99,6 +99,7 @@ describe('ExtensionsPane', () => {
     expect(wrapper.get('[data-id="acme.mine"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUser'))
     const asked = wrapper.get('[data-id="acme.asked"] .ext-devmode-loaded-by').text()
     expect(asked).toContain(i18n.global.t('plugin-agent.caller.pane', { pane: 'builder' }))
+    expect(asked).toContain('builder')
     expect(wrapper.get('[data-id="acme.older"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUnknown'))
   })
 
