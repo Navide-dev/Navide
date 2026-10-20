@@ -10726,6 +10726,8 @@ class _Runner:
 _runner: _Runner | None = None
 # (pane or client, reason) pairs already logged as refused (see _PlanMcpASGI).
 _logged_refusals: set[tuple[str, str]] = set()
+# Bounds only how many distinct refusals get a log line; no request is ever
+# refused because of it.
 _MAX_LOGGED_REFUSALS = 1024
 # The exceptions the SDK logged while handling the current request: it answers
 # every failure before a tool runs with the same "-32603 Error handling POST
@@ -10750,7 +10752,7 @@ class _SdkFailureCapture(logging.Handler):
 logging.getLogger("mcp.server.streamable_http").addHandler(_SdkFailureCapture())
 
 
-def _caller_label(caller: _Caller | None) -> str:
+def _request_caller_label(caller: _Caller | None) -> str:
     if caller is None:
         return "unknown caller"
     return f"pane {caller.pane_id}" if caller.kind == "pane" else caller.kind
@@ -10837,7 +10839,7 @@ class _PlanMcpASGI:
                 start, held = held, None
                 match = _METHOD_RE.search(bytes(head))
                 method = match.group(1).decode("utf-8", "replace") if match else ""
-                who = _caller_label(caller)
+                who = _request_caller_label(caller)
                 _log.error(
                     "plan-mcp: %s request from %s failed before reaching a tool",
                     method or "a", who, exc_info=failures[-1],
