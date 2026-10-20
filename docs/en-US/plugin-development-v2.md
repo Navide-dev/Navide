@@ -2344,6 +2344,15 @@ runs only inside the OS sandbox described in
   enabled again; `admin`, `qualification-revoked` or no reason asks the user
   once to keep using, disable or remove it; `developer-withdrawn` is only
   labelled. Extensions keeps a label with the reason on each one.
+  `testplace-withdrawn` (0.2.28) names a Testplace build its developer or
+  Navide took back (revoked or yanked); it is the only reason also checked
+  against a Registry install, by the `artifactDigest` in its install receipt.
+  The tester sees the label and is asked once per digest to keep using,
+  disable or remove it; nothing is disabled for it. This reaches a tester who
+  is offline or signed out from the stored document; the signed-in check every
+  15 minutes stays the fast path. A release that does not know the reason
+  reads it as none (a warning for a file install; Registry installs are not
+  checked there).
   Limits: a file installed before 0.2.27 that was not signed has no recorded
   digest, so a later block cannot reach it (a signed one is checked through
   the digest in its signature evidence); a developer folder has no `.vsix` and

@@ -55,6 +55,8 @@ describe('decision d5: grading a blocked local install', () => {
     expect(digestBlockAction('qualification-revoked')).toBe('warn')
     expect(digestBlockAction(null)).toBe('warn')
     expect(digestBlockAction('developer-withdrawn')).toBe('label')
+    // 0.2.28: a withdrawn Testplace build warns once; it is never disabled for it.
+    expect(digestBlockAction('testplace-withdrawn')).toBe('warn')
   })
 
   it('checks the recorded .vsix digest, falling back to A3 signer evidence', () => {
@@ -105,6 +107,24 @@ describe('the dialog text', () => {
     }
     expect(digestBlockDialogText({ pluginId: ID, version: '1.0.0', reason: null, action: 'warn' }, 'en-US').message)
       .toMatch(/^The Navide plugin acme\.notes 1\.0\.0/)
+  })
+
+  it('names a withdrawn Testplace build as a test build, not a file, with the same three choices', () => {
+    for (const locale of ['zh-TW', 'en-US', 'ja-JP'] as const) {
+      const fromFile = digestBlockDialogText({ pluginId: ID, version: '1.0.0', reason: 'admin', action: 'warn' }, locale)
+      const text = digestBlockDialogText(
+        { pluginId: ID, version: '1.0.0', reason: 'testplace-withdrawn', action: 'warn', testBuild: true }, locale,
+      )
+      expect(text.choices).toEqual(['keep', 'disable', 'remove'])
+      expect(text.buttons).toEqual(fromFile.buttons)
+      expect(text.message).toContain('acme.notes 1.0.0')
+      expect(text.title).not.toBe(fromFile.title)
+      expect(text.message).not.toBe(fromFile.message)
+      expect(text.detail).toContain('Testplace')
+    }
+    expect(digestBlockDialogText(
+      { pluginId: ID, version: '1.0.0', reason: 'testplace-withdrawn', action: 'warn', testBuild: true }, 'en-US',
+    ).message).toBe('The test build of the Navide plugin acme.notes 1.0.0 you installed was withdrawn.')
   })
 
   it('offers only remove for a security block, which stays disabled', () => {

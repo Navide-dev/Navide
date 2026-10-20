@@ -1855,6 +1855,8 @@
         "security": "Taken down by Navide (security)",
         "qualificationRevoked": "Developer qualification revoked",
         "developerWithdrawn": "Withdrawn by its developer",
+        "testplaceWithdrawn": "Test build withdrawn",
+        "testplaceWithdrawnNote": "Its developer or Navide withdrew this Testplace build after you installed it. It still runs until you disable or remove it.",
         "note": "Navide put the file this Navide plugin was installed from on its blocked list after you installed it."
       },
       "rollback": {

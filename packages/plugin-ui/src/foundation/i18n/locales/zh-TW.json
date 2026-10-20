@@ -1855,6 +1855,8 @@
         "security": "已被 Navide 下架（安全問題）",
         "qualificationRevoked": "開發者資格已撤銷",
         "developerWithdrawn": "開發者已撤回",
+        "testplaceWithdrawn": "測試版已撤回",
+        "testplaceWithdrawnNote": "你安裝之後，開發者或 Navide 撤回了這個 Testplace 測試版。在你停用或移除之前，它仍會繼續執行。",
         "note": "你安裝這個 Navide 外掛之後，Navide 把它的安裝檔列入了封鎖清單。"
       },
       "rollback": {

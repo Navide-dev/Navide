@@ -51,6 +51,7 @@ import { parseManifestJson } from './pluginManifestJson'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import {
+  readRegistryReceiptArtifact,
   readRegistryReceiptChannel,
   readRegistryReceiptExpiresAt,
   readRegistryTrustSnapshot,
@@ -145,6 +146,7 @@ import {
 import {
   LOCAL_INSTALL_TRUST_PATH,
   LOCAL_SIGNATURE_SUFFIX,
+  digestBlock,
   readLocalInstallTrust,
   recordedSignatureState,
   writeLocalInstallTrust,
@@ -152,6 +154,7 @@ import {
 import { canonicalArchivePath } from './pluginPathPolicy'
 import {
   DigestBlockNoticeStore,
+  digestBlockAction,
   recordDigestBlock,
   type DigestBlockChoice,
   type DigestBlockPrompt,
@@ -881,6 +884,26 @@ export function registerPluginIpc(
       return null
     }
   }
+  // 0.2.28: a Registry install whose receipt digest the root-signed
+  // local-install document lists as `testplace-withdrawn` (a Testplace build
+  // taken back). Only that reason applies to Registry installs; the others
+  // keep applying to local installs alone.
+  const registryWithdrawnBlockFor = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): (LocalDigestBlock & { version: string }) | null => {
+    const dir = activeRegistryPackageDir(summary)
+    const artifact = dir === undefined ? undefined : readRegistryReceiptArtifact(dir)
+    if (!artifact) return null
+    try {
+      const pinned = resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey
+      const block = digestBlock(readLocalInstallTrust(pluginsRoot, pinned), artifact.artifactDigest)
+      if (block?.reason !== 'testplace-withdrawn') return null
+      return { digest: artifact.artifactDigest, reason: block.reason, action: digestBlockAction(block.reason), version: artifact.version }
+    } catch {
+      return null
+    }
+  }
   const sourceFields = (summary: {
     id: string
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
@@ -907,10 +930,12 @@ export function registerPluginIpc(
     const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined
     const expiresAt = dir === undefined ? undefined : readRegistryReceiptExpiresAt(dir)
     const via = source === 'testplace' ? testplaceStore.joinVia(summary.id) : null
+    const withdrawn = registryWithdrawnBlockFor(summary)
     return {
       source,
       ...(expiresAt !== undefined ? { expiresAt } : {}),
       ...(via ? { testplaceVia: via } : {}),
+      ...(withdrawn ? { digestBlock: { reason: withdrawn.reason } } : {}),
     }
   }
   // Plan B D2 (D-d): what an update changes, computed by the Host from the
@@ -4489,6 +4514,15 @@ export function registerPluginIpc(
       // Recorded before asking, so a second refresh during the dialog does not ask again.
       digestBlockNotices.record(summary.id, block)
       asks.push({ pluginId: summary.id, version: summary.packageVersion, reason: block.reason, action: block.action })
+    }
+    // 0.2.28: a withdrawn Testplace build is told once, by digest, and keeps
+    // running until the tester chooses; nothing is disabled for it.
+    for (const pkg of manager.listInstalledPackages()) {
+      if (pkg.provenance !== 'official-registry') continue
+      const block = registryWithdrawnBlockFor(pkg)
+      if (!block || !prompt || digestBlockNotices.shown(pkg.id, block)) continue
+      digestBlockNotices.record(pkg.id, block)
+      asks.push({ pluginId: pkg.id, version: block.version, reason: block.reason, action: 'warn', testBuild: true })
     }
     // The dialogs do not hold up the refresh (or the update check after it).
     if (prompt && asks.length > 0) void askAboutDigestBlocks(prompt, asks)

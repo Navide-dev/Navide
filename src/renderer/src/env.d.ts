@@ -600,7 +600,7 @@ declare global {
     localSignature?: 'verified' | 'revoked'
     /** Decision d5: Navide blocked the `.vsix` this local install came from;
      *  `reason` null when its list names none. */
-    digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
+    digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn' | null }
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'

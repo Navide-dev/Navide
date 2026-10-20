@@ -27,6 +27,10 @@ DIGEST_REASONS = (DIGEST_SECURITY, DIGEST_ADMIN, DIGEST_QUALIFICATION_REVOKED, D
 """Why a digest is blocked; the app grades an installed copy by it (decision
 d5): security disables it, admin and qualification-revoked warn once,
 developer-withdrawn only labels it."""
+DIGEST_TESTPLACE_WITHDRAWN = "testplace-withdrawn"
+"""Listed for withdrawn test builds only (qualification.testplace_withdrawn_digests),
+never stored as an entry: the app labels the installed copy and asks once
+whether to keep, disable or remove it."""
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 MAX_REASON_LENGTH = 500
 
