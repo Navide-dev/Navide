@@ -1155,6 +1155,105 @@ def _devmap_tool(monkeypatch) -> dict[str, Any]:
     return proxy._catalog.entries["devmap_read"]  # noqa: SLF001
 
 
+class _Measured:
+    """One ``devmap_read`` call measured step by step (``_measured_pieces_call``)."""
+
+    def __init__(self, result: Any, steps: list[float], excused: list[float], joins: int, join_alone: bool) -> None:
+        self.result = result
+        #: CPU time of every event-loop step, the excused join left out.
+        self.steps = steps
+        #: CPU time excused, one entry per step that was cut short.
+        self.excused = excused
+        #: How many times ``_text_frame`` returned (joined a text).
+        self.joins = joins
+        #: The excused step began after the last slice was decoded and handed
+        #: back: all it ran before ``_text_frame`` returned was the join.
+        self.join_alone = join_alone
+
+
+async def _measured_pieces_call(monkeypatch) -> _Measured:
+    """A ``devmap_read`` call measured step by step, with one copy excused:
+    the join of the result's text, which the product must make on the loop.
+
+    The agent gets a result as one string, so ``_text_frame`` ends with
+    ``"".join(parts)`` over the slices it decoded, one per step. That join is
+    a copy of the whole text in one step: no slicing can bound it, and it
+    cannot leave the loop either, since ``str.join`` (as ``bytes.decode``)
+    holds the GIL throughout: run with ``asyncio.to_thread`` the loop's
+    longest wall-clock gap stays the join's own time (10 MiB 1.2 ms, 100 MiB
+    5.5 ms on bare metal) while only the loop thread's CPU clock drops. Its
+    cost is memory: the bytes copied, and faults on pages written for the
+    first time, which on a VM the host serves while the thread's CPU clock
+    runs on: 1 to 2 ms for 10 MiB on bare metal, 18 to 29 ms on the macOS
+    runner. Serializing the MCP response copies the text once more, after
+    this call and outside what it measures.
+
+    So the step that ends in ``_text_frame`` returning is timed from that
+    moment on, and only what came before is excused, and only when it is the
+    join alone: the step must have begun after the last slice was decoded
+    and handed back. Every other step, and the rest of that one, is held to
+    LOOP_SLICE_BUDGET_S."""
+    import codecs
+    import time
+
+    from agent_team_backend import agent_tool_result_worker as worker
+    from tests.test_agent_tool_chunked_transport import _loop_step_times
+
+    text_frame = worker.ResultWorker._text_frame
+    steps: list[tuple[float, float]] = []
+    # (index of the step, its CPU clock then): steps are told apart by index,
+    # as the CPU clock ticks in 15.625 ms on Windows and many steps share a tick.
+    returned: list[tuple[int, float]] = []
+    last_decoded: list[int] = []
+
+    async def timed_text_frame(stream: Any) -> str:
+        text = await text_frame(stream)
+        # Still the step that joined the text: a return hands nothing back.
+        returned.append((len(steps), time.thread_time()))
+        return text
+
+    def decoder_factory(encoding: str) -> Any:
+        make = codecs.getincrementaldecoder(encoding)
+
+        def decoder(errors: str = "strict") -> Any:
+            inner = make(errors)
+
+            class Timed:
+                def decode(self, data: bytes, final: bool = False) -> str:
+                    text = inner.decode(data, final)
+                    if final:
+                        last_decoded.append(len(steps))
+                    return text
+
+            return Timed()
+
+        return decoder
+
+    monkeypatch.setattr(worker.ResultWorker, "_text_frame", staticmethod(timed_text_frame))
+    monkeypatch.setattr(worker, "codecs", types.SimpleNamespace(getincrementaldecoder=decoder_factory))
+    result, _ = await _loop_step_times(monkeypatch, proxy.call("devmap_read", {}, None), steps)
+    monkeypatch.setattr(worker.ResultWorker, "_text_frame", text_frame)
+    monkeypatch.setattr(worker, "codecs", codecs)
+    times: list[float] = []
+    excused: list[float] = []
+    join_alone = False
+    for index, (started, ended) in enumerate(steps):
+        for step, at in returned:
+            if step == index:
+                excused.append(at - started)
+                join_alone = len(last_decoded) == 1 and last_decoded[0] < index
+                started = at
+        times.append(ended - started)
+    return _Measured(result, times, excused, len(returned), join_alone)
+
+
+def _assert_only_the_join_is_excused(measured: _Measured) -> None:
+    """One step was cut short, once, and what was excused was the join alone."""
+    assert measured.joins == 1, f"the text was joined {measured.joins} times"
+    assert len(measured.excused) == 1, f"{len(measured.excused)} steps were excused"
+    assert measured.join_alone, "the excused step did more than join the text"
+
+
 @pytest.mark.parametrize(
     "shape",
     [
@@ -1163,8 +1262,6 @@ def _devmap_tool(monkeypatch) -> dict[str, Any]:
     ],
 )
 async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop(monkeypatch, shape) -> None:
-    from tests.test_agent_tool_chunked_transport import _least_longest_loop_slice
-
     import gc
 
     value = shape()
@@ -1179,22 +1276,27 @@ async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loo
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
     del value
     gc.collect()
-    result, longest = await _least_longest_loop_slice(
-        monkeypatch, lambda: proxy.call("devmap_read", {}, None), LOOP_SLICE_BUDGET_S
-    )
-    assert result.isError is False
+    measured = await _measured_pieces_call(monkeypatch)
+    assert measured.result.isError is False
     # Character for character what the in-process wrap gives (same function, in the helper).
-    assert result.content[0].text == expected
-    assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    assert measured.result.content[0].text == expected
+    # The one copy the product must make on the loop, and only it, is excused ...
+    _assert_only_the_join_is_excused(measured)
+    # ... and no other step held the loop.
+    longest = max(measured.steps)
+    assert longest < LOOP_SLICE_BUDGET_S, (
+        f"the loop ran {longest * 1000:.1f} ms of CPU without handing back, besides joining the"
+        f" text ({measured.excused[0] * 1000:.1f} ms, a copy of the whole result the loop must make:"
+        " 1-2 ms on bare metal, 18-29 ms on a VM writing fresh pages)"
+    )
 
 
 async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(monkeypatch) -> None:
     """The control for the check above: a result parsed and wrapped in one
     step on the loop, as before the helper, fails it on every attempt. A
-    tenth of the 10 MiB keeps the three attempts cheap: one still holds the
-    loop for hundreds of milliseconds (the 10 MiB one, seconds)."""
+    tenth of the 10 MiB keeps it cheap: one still holds the loop for
+    hundreds of milliseconds (the 10 MiB one, seconds)."""
     from agent_team_backend.agent_tool_result_worker import strict_loads
-    from tests.test_agent_tool_chunked_transport import _least_longest_loop_slice
 
     import gc
 
@@ -1206,11 +1308,59 @@ async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(mo
 
     monkeypatch.setattr(proxy._result_worker, "wrap", on_the_loop)  # noqa: SLF001
     gc.collect()
-    result, longest = await _least_longest_loop_slice(
-        monkeypatch, lambda: proxy.call("devmap_read", {}, None), LOOP_SLICE_BUDGET_S
+    measured = await _measured_pieces_call(monkeypatch)
+    assert measured.result.isError is False
+    assert measured.excused == []
+    assert max(measured.steps) >= LOOP_SLICE_BUDGET_S, (
+        f"a whole-result parse on the loop read as {max(measured.steps) * 1000:.1f} ms"
     )
-    assert result.isError is False
-    assert longest >= LOOP_SLICE_BUDGET_S, f"a whole-result parse on the loop read as {longest * 1000:.1f} ms"
+
+
+async def test_the_loop_check_still_catches_work_on_the_assembled_text(monkeypatch) -> None:
+    """The excused copy covers the join and nothing after it: a pass over the
+    whole text in the step that joined it (here wrapping it again, the work
+    the helper is for) still fails."""
+    _devmap_tool(monkeypatch)
+    _pieces_host(monkeypatch, agent_tool_payload_text({"rows": [{"k": i, "v": "abcdefgh中"} for i in range(34_500)]}))
+    wrap = proxy._result_worker.wrap  # noqa: SLF001
+
+    async def then_wrapped(entry: dict[str, Any], pieces: list[str]) -> str:
+        text = await wrap(entry, pieces)
+        proxy.wrap_result(entry, {"text": text})
+        return text
+
+    monkeypatch.setattr(proxy._result_worker, "wrap", then_wrapped)  # noqa: SLF001
+    measured = await _measured_pieces_call(monkeypatch)
+    assert measured.result.isError is False
+    _assert_only_the_join_is_excused(measured)
+    assert max(measured.steps) >= LOOP_SLICE_BUDGET_S, f"wrapping after the join read as {max(measured.steps) * 1000:.1f} ms"
+
+
+async def test_the_excused_step_must_be_the_join_alone(monkeypatch) -> None:
+    """The lock on the excusal: had the last slice been decoded in the step
+    that joins (no hand-back between them), that step did more than the join
+    and the check says so."""
+    import asyncio
+
+    _devmap_tool(monkeypatch)
+    _pieces_host(monkeypatch, agent_tool_payload_text({"warm": "x" * 200_000}))
+    real_sleep = asyncio.sleep
+
+    async def no_last_hand_back(delay: float, result: Any = None) -> Any:
+        # _text_frame's hand-back after each decoded slice is skipped: the
+        # last slice is decoded in the step that joins.
+        if delay == 0 and sys._getframe(1).f_code.co_name == "_text_frame":  # noqa: SLF001
+            return result
+        return await real_sleep(delay, result)
+
+    monkeypatch.setattr(asyncio, "sleep", no_last_hand_back)
+    measured = await _measured_pieces_call(monkeypatch)
+    monkeypatch.setattr(asyncio, "sleep", real_sleep)
+    assert measured.result.isError is False
+    assert measured.joins == 1 and len(measured.excused) == 1
+    assert not measured.join_alone
+    with pytest.raises(AssertionError, match="more than join"):
+        _assert_only_the_join_is_excused(measured)
 
 
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400"])
