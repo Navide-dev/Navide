@@ -171,7 +171,7 @@ import {
   CLI_PASTE_LINE_CAP
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
-import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
+import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -362,6 +362,7 @@ import {
   pluginAgentNoticeTitle,
   pluginAgentUndoApplies,
   pluginAgentDowngradeStep,
+  pluginStagedApplyApplies,
   releaseAnnouncementId,
   useAnnouncements,
   type SchedulerDisabledNotice,
@@ -431,6 +432,7 @@ import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } fr
 import { usePermissions } from './composables/usePermissions'
 import { useDisabledBuiltins } from './composables/useDisabledBuiltins'
 import { plansBackendStoppedNotice } from './composables/plansBackendStoppedNotice'
+import { pluginStagedCandidateNotice } from './composables/pluginStagedCandidateNotice'
 import navideMark from './assets/navide-mark.png'
 
 // Modals/wizard that only render behind a v-if (settings opened, run completed,
@@ -6318,6 +6320,8 @@ let stopGitRecoveryChanged: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
+let stopPluginStagedCandidate: (() => void) | null = null
+let stopPluginStagedUpdates: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
   stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
@@ -6339,6 +6343,22 @@ onMounted(() => {
     announcements.notePluginAgentNotice(notice)
     notifyRestore.toast(pluginAgentNoticeTitle(notice), { type: 'info' })
   }) ?? null
+  // A plugin installed without Restart could not be activated at launch.
+  stopPluginStagedCandidate = window.agentTeam?.onPluginStagedCandidateNotActivated?.((notice) => {
+    notifyRestore.toast(pluginStagedCandidateNotice(notice), { type: 'error' })
+  }) ?? null
+  // Packages staged beside an active one: a row with "Apply now" stays in the
+  // announcements centre until it is applied.
+  stopPluginStagedUpdates = window.agentTeam?.onPluginStagedUpdates?.((updates) => {
+    announcements.notePluginStagedUpdates(updates)
+    for (const update of updates) {
+      notifyRestore.toast(i18n.global.t('plugin-staged.notice.title', {
+        plugin: update.pluginId,
+        staged: update.stagedVersion,
+        active: update.activeVersion,
+      }), { type: 'info' })
+    }
+  }) ?? null
   void refreshPluginContributions()
   stopPluginContributionChanges = window.agentTeam?.plugins?.onContributionsChanged?.(() => {
     void refreshPluginContributions()
@@ -6355,6 +6375,10 @@ onUnmounted(() => {
   stopPlansBackendStopped = null
   stopPluginAgentAction?.()
   stopPluginAgentAction = null
+  stopPluginStagedCandidate?.()
+  stopPluginStagedCandidate = null
+  stopPluginStagedUpdates?.()
+  stopPluginStagedUpdates = null
   stopPluginContributionChanges?.()
   stopPluginContributionChanges = null
 })
@@ -14805,7 +14829,7 @@ backend.on('agent.activity', (raw) => {
   const questionAction = questionActionFor(ev)
   if (questionAction === 'raise') paneRefs[ev.pane_id]?.markQuestion?.()
   else if (questionAction === 'clear') paneRefs[ev.pane_id]?.clearQuestion?.()
-  // Background tasks the CLI keeps running past its turn end (claude's reader):
+  // Background tasks the CLI keeps running past its turn end (claude's and qwen's readers):
   // they hold the RUNNING badge until the transcript reports them finished.
   if (ev.detail === 'background:start' || ev.detail === 'background:end') {
     paneRefs[ev.pane_id]?.noteBackgroundTasks?.(
@@ -15369,6 +15393,7 @@ const convenience = useConvenience(backend, {
 /** The undo on an "an agent disabled / enabled a Navide plugin" row: the
  *  user's own Extensions switch, set back (B2-c). */
 async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise<void> {
+  if (action.kind === 'plugin-staged-apply') return applyStagedPluginPackage(action)
   try {
     // Only what the agent did: if the user changed it since, leave it be.
     const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
@@ -15395,6 +15420,35 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   } catch (error) {
     notifyRestore.toast(
       i18n.global.t('plugin-agent.notice.undo-failed', { error: error instanceof Error ? error.message : String(error) }),
+      { type: 'error' },
+    )
+  }
+}
+
+/** "Apply now" on a staged package row: what Restart does in Settings →
+ *  Navide Plugins, for exactly the version the row names. */
+async function applyStagedPluginPackage(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-staged-apply' }>,
+): Promise<void> {
+  try {
+    const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (!pluginStagedApplyApplies(action, installed)) {
+      announcements.dropPluginStagedUpdate(action.pluginId)
+      notifyRestore.toast(i18n.global.t('plugin-staged.notice.stale'), { type: 'info' })
+      return
+    }
+    const applied = await window.agentTeam?.plugins?.restart?.(action.pluginId)
+    announcements.dropPluginStagedUpdate(action.pluginId)
+    notifyRestore.toast(
+      i18n.global.t('plugin-staged.notice.applied', {
+        plugin: action.pluginId,
+        version: applied?.packageVersion ?? action.stagedVersion,
+      }),
+      { type: 'info' },
+    )
+  } catch (error) {
+    notifyRestore.toast(
+      i18n.global.t('plugin-staged.notice.failed', { error: error instanceof Error ? error.message : String(error) }),
       { type: 'error' },
     )
   }
@@ -15951,8 +16005,20 @@ function computeStageSlotSignals(stageIndex: number): SlotSignal[] {
       // that true after the block lifts, which quotaBlocked alone cannot.
       quotaBlocked: paneUsageLimited(p.id),
       quotaSeenAt: p.usageLimitSeenAt ?? 0,
-      turnSourceAt: paneTurnCompleteSourceAt.get(p.id) ?? 0
+      turnSourceAt: paneTurnCompleteSourceAt.get(p.id) ?? 0,
+      backgroundRunning: paneBackgroundRunning(p.id)
     }
+  })
+}
+
+// Background work this pane's CLI keeps running past its turn end (claude's
+// and qwen's readers, claude's hooks). Read by the pipeline's slot verdicts
+// only; a vendor that reports none is never held.
+function paneBackgroundRunning(paneId: string): boolean {
+  return backgroundWorkPending({
+    liveTasks: paneRefs[paneId]?.hasLiveBackgroundTasks?.() === true,
+    subagents: panePendingSubagents.get(paneId),
+    now: Date.now(),
   })
 }
 
@@ -17378,7 +17444,10 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
           // And once the block lifts, only the turn's own clock can tell the
           // failed turn from a real retry.
           quotaSeenAt: panes.value.find((p) => p.id === paneId)?.usageLimitSeenAt ?? 0,
-          turnSourceAt: paneTurnCompleteSourceAt.get(paneId) ?? 0
+          turnSourceAt: paneTurnCompleteSourceAt.get(paneId) ?? 0,
+          // A turn that ended while its background subagent / shell still
+          // runs is not this slot handing off — see paneBackgroundRunning.
+          backgroundRunning: paneBackgroundRunning(paneId)
         })
       ) {
         cancelWatcher(paneId)

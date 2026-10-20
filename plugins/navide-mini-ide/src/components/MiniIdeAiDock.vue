@@ -88,14 +88,14 @@ defineExpose({
       <select class="ai-cli-agent-select" :value="panel?.profileId" @change="panel?.selectProfile(($event.target as HTMLSelectElement).value)">
         <option v-for="profile in panel?.profiles ?? []" :key="profile.id" :value="profile.id">{{ profile.label }}</option>
       </select>
-      <button class="ai-cli-btn primary" :disabled="!workspacePath || !panel || panel.initializing || backend.status.value !== 'connected'" @click="panel?.start()">{{ panel?.initializing ? 'Reattaching…' : 'Start' }}</button>
+      <button class="ai-cli-btn primary" :disabled="!workspacePath || !panel || panel.initializing || backend.status.value !== 'connected'" @click="panel?.start()">{{ panel?.initializing ? t('editorWindow.aiDock.reattaching') : t('ai-cli.start') }}</button>
     </div>
     <div v-else class="ai-cli-controls">
       <span class="ai-cli-running-label" v-truncate>{{ profileLabel }}</span>
-      <button class="ai-cli-btn ghost" title="Send Ctrl+C to the CLI" @click="panel?.interrupt()">Interrupt</button>
-      <button class="ai-cli-btn danger" title="Kill the CLI process" @click="panel?.stop()">Stop</button>
+      <button class="ai-cli-btn ghost" :title="t('editorWindow.aiDock.interrupt-title')" @click="panel?.interrupt()">{{ t('ai-cli.interrupt') }}</button>
+      <button class="ai-cli-btn danger" :title="t('editorWindow.aiDock.stop-title')" @click="panel?.stop()">{{ t('ai-cli.stop') }}</button>
     </div>
-    <p v-if="!workspacePath" class="ai-cli-empty">No workspace available</p>
+    <p v-if="!workspacePath" class="ai-cli-empty">{{ t('editorWindow.aiDock.no-workspace') }}</p>
     <SafeAiCliPanel v-if="workspacePath" :key="paneId" ref="panel" v-model:open="open" embedded allow-cancel-start wait-for-startup-output :inject-quiet-ms="2000" :inject-timeout-ms="12000" :controller="controller" :terminal-view="terminalView" :terminal-resources="terminalResources" :workspace-path="workspacePath" :before-resume="beforeResume" :profile-preference="profilePreference" :width-key="widthKey" :default-width="defaultWidth" :build-context="buildContext" class="ai-cli-term" />
   </div>
 </template>
