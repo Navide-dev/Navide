@@ -19,15 +19,21 @@ describe('install-from-file entry points', () => {
   it('is never reached by an agent request: not from MCP, nor from the window code applying one', () => {
     for (const path of [
       'backend/agent_team_backend/mcp_server/server.py',
+      'backend/agent_team_backend/mcp_server/marketplace_forms.py',
       'src/renderer/src/lib/pluginAgentRequestApply.ts',
       'src/renderer/src/composables/usePluginAgentRequests.ts',
       'src/renderer/src/components/PluginAgentRequestDialog.vue',
     ]) {
       expect(read(path), path).not.toMatch(LOCAL_INSTALL)
     }
-    // The request kinds an agent can file are Marketplace ids, never a file.
-    expect(read('src/shared/pluginAgentTools.ts')).toMatch(
-      /export type ApprovalKind = 'skill' \| 'plugin-install' \| 'plugin-update' \| 'plugin-rollback' \| 'plugin-remove' \| 'plugin-enable'\n/,
+    // The request kinds an agent can file are Marketplace ids, never a file;
+    // the form kinds only open a developer form for the user to submit.
+    const kinds = read('src/shared/pluginAgentTools.ts')
+    expect(kinds).toMatch(
+      /export type FormApprovalKind = 'developer-application' \| 'plugin-publish' \| 'plugin-yank' \| 'testplace-invite'\n/,
+    )
+    expect(kinds).toMatch(
+      /export type ApprovalKind = 'skill' \| 'plugin-install' \| 'plugin-update' \| 'plugin-rollback' \| 'plugin-remove' \| 'plugin-enable' \| FormApprovalKind\n/,
     )
   })
 
