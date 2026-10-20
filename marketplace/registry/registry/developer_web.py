@@ -157,6 +157,14 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
         member_id = _member(_bearer(request, authorization))
         with session_of(request) as session:
             body = qualification.view(qualification.get(session, member_id))
+            # Disclose this account's frozen (revoked or reclaimed) namespaces
+            # and why: their publisher tokens no longer work, so this
+            # account-token read is where the owner can still learn it.
+            body["namespaces"] = [
+                {"namespace": p.name, "frozen_at": _iso(p.frozen_at), "frozen_reason": p.frozen_reason}
+                for p in owned_publishers(session, member_id)
+                if p.frozen_at is not None
+            ]
         return JSONResponse(body, headers=_NO_STORE)
 
     @router.post("/api/developer/me/application", status_code=201)
