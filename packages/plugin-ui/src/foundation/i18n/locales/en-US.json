@@ -2003,7 +2003,7 @@
         },
         "title": "Developer Mode",
         "switch": "Turn on Developer Mode",
-        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded.",
+        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded. Turning it off unloads every Navide plugin loaded from a folder and drops a folder you picked but did not consent to; the folders you consented to stay listed, load again when you turn it back on, and can be removed here.",
         "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
         "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
         "reminderClose": "Got it",
