@@ -18,13 +18,20 @@ vi.mock('vue', () => ({
   createApp: state.createApp,
 }))
 
-vi.mock('@navide/plugin-ui/foundation', () => ({
-  i18n: {
-    global: {
-      locale: state.localeRef,
+vi.mock('@navide/plugin-ui/foundation', async () => {
+  const locales = await vi.importActual<typeof import('../../../../../packages/plugin-ui/src/foundation/i18n/uiLocales')>(
+    '../../../../../packages/plugin-ui/src/foundation/i18n/uiLocales',
+  )
+  return {
+    i18n: {
+      global: {
+        locale: state.localeRef,
+      },
     },
-  },
-}))
+    resolveAvailableUiLocale: (value: unknown) =>
+      locales.isUiLocale(value) ? locales.resolveAvailableLocale(value, ['zh-TW', 'en-US', 'ja-JP']) : null,
+  }
+})
 
 vi.mock('@navide/plugin-ui/shared', () => ({
   seedSettings: state.seedSettings,

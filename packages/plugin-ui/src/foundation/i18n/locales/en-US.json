@@ -206,7 +206,74 @@
     "search-shortcuts": "Search keyboard shortcuts…",
     "select-language": "Select language mode…",
     "workspace-symbol": "Go to symbol in workspace…",
-    "symbol": "Go to symbol…"
+    "symbol": "Go to symbol…",
+    "pane": {
+      "ai-complete-title": "AI complete (⌘I)",
+      "ai-rewrite-title": "AI rewrite selection (⌘K)",
+      "complete": "Complete",
+      "replace-title": "Replace (↵)",
+      "replace-all-title": "Replace all (⌥↵)",
+      "generate-tests": "Generate Tests",
+      "go-to-line": "Go to line",
+      "go-to-line-n": "Go to line {line}",
+      "go": "Go",
+      "thinking": "Thinking…",
+      "ask": "Ask",
+      "rewrite": "Rewrite",
+      "proposal-title": "AI suggested rewrite",
+      "proposal-hint": "Tab to accept · Esc to reject",
+      "accept": "Accept",
+      "reject": "Reject",
+      "cursor-position": "Ln {line}, Col {col}",
+      "eol-title": "Line Ending: {eol} — click to toggle",
+      "indent-spaces-title": "Indentation: {size} Spaces — click to change",
+      "indent-tabs-title": "Indentation: Tabs — click to change",
+      "spaces-size": "Spaces: {size}",
+      "tab-size": "Tab Size: {size}",
+      "encoding-title": "File encoding: {encoding} — click to reopen with a different encoding",
+      "indentation": "Indentation",
+      "n-spaces": "{n} Spaces",
+      "n-tabs": "Tabs ({n})",
+      "reopen-encoding": "Reopen with Encoding"
+    },
+    "app": {
+      "empty-hint": "Open a file from the Explorer or Search pane on the left",
+      "line-n": "Line {line}",
+      "new-file-placeholder": "e.g. src/components/MyComponent.vue",
+      "breadcrumb-empty": "(empty)",
+      "switch-to-plan-view": "Switch to plan view",
+      "toggle-plan": "Plan"
+    },
+    "search": {
+      "whole-word": "Match whole word",
+      "regex": "Use regular expression",
+      "replace-all": "Replace All",
+      "files-include": "files to include",
+      "files-exclude": "files to exclude",
+      "include-placeholder": "e.g. *.ts, src/**",
+      "exclude-placeholder": "e.g. *.test.ts, dist/**",
+      "summary": "{results} result(s) · {files} file(s)",
+      "truncated": "Truncated"
+    },
+    "problems": {
+      "errors": "{count} error | {count} errors",
+      "warnings": "{count} warning | {count} warnings"
+    },
+    "notebook": {
+      "cell-output": "Cell output"
+    },
+    "aiDock": {
+      "interrupt-title": "Send Ctrl+C to the CLI",
+      "stop-title": "Kill the CLI process",
+      "no-workspace": "No workspace available",
+      "starting": "Starting…",
+      "reattaching": "Reattaching…",
+      "spawn-title": "Spawn the CLI in {path}"
+    },
+    "plan-body": {
+      "no-content": "No content yet.",
+      "no-body": "This plan has no document body."
+    }
   },
   "cli-risk": {
     "details": "CLI observations",
@@ -2257,6 +2324,16 @@
       "reset-colors-hint": "Reset all custom colors to the built-in theme",
       "language-en-US": "English",
       "language-ja-JP": "日本語",
+      "language-zh-CN": "简体中文",
+      "language-ko-KR": "한국어",
+      "language-es-ES": "Español (España)",
+      "language-fr-FR": "Français",
+      "language-de-DE": "Deutsch",
+      "language-pt-BR": "Português (Brasil)",
+      "language-ru-RU": "Русский",
+      "language-vi-VN": "Tiếng Việt",
+      "language-beta": "Beta",
+      "language-beta-hint": "Machine-translated. Native-speaker review pending.",
       "language-hint": "Language is a user-level preference applied across all workspaces.",
       "ui-scale": "Interface Scale",
       "ui-scale-hint": "Scale the whole interface — text, icons, and spacing — in every window. Separate from the terminal and editor font sizes, which keep their own ⌘= / ⌘- shortcuts.",

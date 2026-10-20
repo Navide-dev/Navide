@@ -1,5 +1,5 @@
 import { createApp, type Component } from 'vue'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, resolveAvailableUiLocale } from '@navide/plugin-ui/foundation'
 import { seedSettings } from '@navide/plugin-ui/shared'
 import { readHostBootstrapSettings } from './lib/settingsBootstrap'
 
@@ -14,13 +14,14 @@ seedSettings(bootstrapSettings)
 const bootstrapLocaleRaw = bootstrapSettings['agent-team:language']
 if (typeof bootstrapLocaleRaw === 'string') {
   const candidate = bootstrapLocaleRaw.trim()
-  if (candidate === 'zh-TW' || candidate === 'en-US' || candidate === 'ja-JP') {
-    i18n.global.locale.value = candidate
+  const resolved = resolveAvailableUiLocale(candidate)
+  if (resolved) {
+    i18n.global.locale.value = resolved
   } else {
     try {
-      const decoded = JSON.parse(candidate)
-      if (decoded === 'zh-TW' || decoded === 'en-US' || decoded === 'ja-JP') {
-        i18n.global.locale.value = decoded
+      const decodedLocale = resolveAvailableUiLocale(JSON.parse(candidate))
+      if (decodedLocale) {
+        i18n.global.locale.value = decodedLocale
       }
     } catch {
       // ignore
