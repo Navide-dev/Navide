@@ -53,7 +53,8 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned on integration/mcp-0227 for both documented changes: #448's
 #: pipeline_status `error` (main pinned it without W1's change) and W1's
 #: plugins_list_installed `source` (W1 pinned it without #448's).
-MAIN_TOOLS_LIST_SHA256 = "93ee01c3b9c70938a38f0dfcbfe3d26c2c264cdc03a52ca96e5bc9197b9f0d83"
+#: Re-pinned for #485, which documents cli_get_status' new `log_reader`.
+MAIN_TOOLS_LIST_SHA256 = "6410398fcb0160c15d04283286aea34a826b19ef6866c8e426b454a6981c58ae"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

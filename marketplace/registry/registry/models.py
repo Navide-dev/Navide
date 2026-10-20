@@ -29,7 +29,8 @@ class Publisher(SQLModel, table=True):
     """sha256 of the publisher's bearer token; None until a token is issued."""
     navide_member_id: str | None = Field(default=None, index=True)
     """Navide Cloud account that claimed this namespace (None: admin-created).
-    Not unique: one account may own up to MAX_NAMESPACES_PER_ACCOUNT."""
+    Not unique: one account may own up to MAX_NAMESPACES_PER_ACCOUNT, not
+    counting namespaces frozen by a qualification revocation."""
     review_required: bool = Field(default=False)
     """Submissions wait for admin review. True for self-claimed namespaces;
     admin-created (official) publishers stay auto-approved."""
