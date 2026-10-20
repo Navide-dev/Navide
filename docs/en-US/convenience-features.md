@@ -164,7 +164,7 @@ folders the panes trusted in their copies to your file:
 - Only the workspace a pane was opened in, or a folder inside it, is shared
   to `~/.grok`. Any other folder a pane's copy names — the root of a disk,
   your home folder or a folder above it, a folder elsewhere, one that does
-  not exist, or one reached through a link below the workspace —
+  not exist, or one written with `.`, `..` or through a link —
   stays in that pane's copy, and the backend log says so. Only a folder's
   `trusted` and `decided_at` are copied, and only from panes Navide started.
 - Only folders your file does not mention are added, as text at its end. A

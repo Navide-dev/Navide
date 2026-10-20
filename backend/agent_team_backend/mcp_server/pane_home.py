@@ -572,8 +572,8 @@ def _grok_trust_seeds_path() -> Path:
 
 
 def _record_grok_workspace(pane_id: str, workspace: str) -> None:
-    """Record the folder the pane is started in, as given and resolved now:
-    a link in it changed later must not move what the pane may share."""
+    """Record the folder the pane is started in, resolved now: a link in it
+    changed later must not move what the pane may share."""
     path = _grok_trust_record(GROK_TRUST_WORKSPACES)
     workspaces = _read_json_object(path)
     try:
@@ -581,7 +581,7 @@ def _record_grok_workspace(pane_id: str, workspace: str) -> None:
     except (OSError, ValueError):
         real = ""
     if real:
-        workspaces[pane_id] = {"path": os.path.normpath(workspace), "real": real}
+        workspaces[pane_id] = {"real": real}
     elif workspaces.pop(pane_id, None) is None:
         return
     _write_json(path, workspaces)
@@ -603,32 +603,32 @@ def _trust_in_workspace(folder: Any, workspace: Any) -> bool:
     """Whether a folder a pane trusted is its workspace or inside it.
 
     ``workspace`` is the record _record_grok_workspace made at spawn. The key
-    must be absolute (not ``~``, not a device-namespace path) and, with
-    ``..``, ``.`` and repeated or trailing separators collapsed, start with
-    the workspace as given or as resolved then, component by component
-    (``/ws-other`` is not inside ``/ws``). What follows must exist and hold
-    no link, so the key names the same folder now and later. A workspace that
-    is a drive root, the home folder or a folder above it shares nothing."""
+    must be absolute (not ``~``, not a device-namespace path), already in its
+    plain form (no ``.``, ``..`` or repeated separators; one trailing
+    separator is fine), and start with the workspace as resolved at spawn,
+    component by component (``/ws-other`` is not inside ``/ws``). The whole
+    key must exist and hold no link, so the row names the same folder now and
+    later. A workspace that is a drive root, the home folder or a folder above
+    it shares nothing."""
     if not isinstance(folder, str) or not isinstance(workspace, dict):
         return False
-    given, real = workspace.get("path"), workspace.get("real")
-    if not isinstance(given, str) or not isinstance(real, str) or not real:
+    real = workspace.get("real")
+    if not isinstance(real, str) or not real:
         return False
     if folder.startswith(("~", "\\\\?\\", "\\\\.\\", "//?/", "//./")) or not os.path.isabs(folder):
+        return False
+    plain = folder.rstrip("/\\") or folder
+    if os.path.normpath(plain) != plain:
         return False
     home = os.path.realpath(real_home())
     if Path(real).parent == Path(real) or _path_within(home, real):
         return False
-    parts = Path(os.path.normpath(folder)).parts
-    for base in {Path(given).parts, Path(real).parts}:
-        if parts[: len(base)] != base:
-            continue
-        target = str(Path(real).joinpath(*parts[len(base):]))
-        try:
-            return os.path.realpath(target, strict=True) == target
-        except (OSError, ValueError):
-            return False
-    return False
+    if Path(plain).parts[: len(Path(real).parts)] != Path(real).parts:
+        return False
+    try:
+        return os.path.realpath(plain, strict=True) == plain
+    except (OSError, ValueError):
+        return False
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:

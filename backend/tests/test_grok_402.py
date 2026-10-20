@@ -264,7 +264,10 @@ def test_a_shim_with_no_recorded_workspace_keeps_its_trust(gate, home: Path) -> 
 
 @pytest.mark.parametrize(
     "folder",
-    ["/", "WS/../", "HOME", "HOME/", "WS/../elsewhere", "WS-other", "WS/a/../../etc", "relative/path", "~/x", "/nowhere"],
+    [
+        "/", "WS/../", "HOME", "HOME/", "WS/../elsewhere", "WS-other", "WS/a/../../etc", "relative/path", "~/x",
+        "/nowhere", "WS/./a", "WS/a/../b", "WS//a",
+    ],
 )
 def test_only_a_folder_in_the_panes_own_workspace_reaches_the_users_file(
     gate, home: Path, folder: str
@@ -293,13 +296,11 @@ def test_a_link_into_the_workspace_is_judged_by_where_it_points(gate, home: Path
     for name in ("out", "top", "dangling", "sideways"):
         _grok_trusts(_shim_trust("p1"), str(workspace / name))
     _grok_trusts(_shim_trust("p1"), str(workspace / "inside") + "/")
-    _grok_trusts(_shim_trust("p1"), str(tmp_path / "ws-link" / "inside"))
+    _grok_trusts(_shim_trust("p1"), str(tmp_path / "ws-link" / "inside"))  # names whatever the link points at later
 
     _prepare("p2")
 
-    assert set(_folders(home / ".grok" / TRUST)) == {
-        str(workspace / "inside") + "/", str(tmp_path / "ws-link" / "inside")
-    }
+    assert set(_folders(home / ".grok" / TRUST)) == {str(workspace / "inside") + "/"}
 
 
 def test_a_workspace_link_moved_after_the_spawn_shares_nothing_new(gate, home: Path, tmp_path: Path) -> None:
@@ -331,12 +332,12 @@ def test_a_pane_opened_at_the_root_or_home_promotes_nothing(gate, home: Path, wo
 def test_the_workspace_itself_and_folders_below_it_are_shared(gate, home: Path) -> None:
     (Path(WS) / "a" / "deep").mkdir()
     _prepare("p1")
-    for folder in (WS, f"{WS}/", f"{WS}/a/deep", f"{WS}/./b//"):
+    for folder in (WS, f"{WS}/", f"{WS}/a/deep", f"{WS}/b/"):
         _grok_trusts(_shim_trust("p1"), folder)
 
     _prepare("p2")
 
-    assert set(_folders(home / ".grok" / TRUST)) == {WS, f"{WS}/", f"{WS}/a/deep", f"{WS}/./b//"}
+    assert set(_folders(home / ".grok" / TRUST)) == {WS, f"{WS}/", f"{WS}/a/deep", f"{WS}/b/"}
 
 
 @pytest.mark.skipif(sys.platform not in ("darwin", "win32"), reason="case-insensitive paths")
@@ -386,7 +387,7 @@ def test_navides_records_live_in_its_own_folder_and_old_ones_are_read_once(
     assert f"{WS}/a" in json.loads((own / ".folder-trust-merged.json").read_text(encoding="utf-8"))["rows"]
     assert "p1" in json.loads((own / ".folder-trust-seeds.json").read_text(encoding="utf-8"))
     assert json.loads((own / ".folder-trust-workspaces.json").read_text(encoding="utf-8")) == {
-        "p1": {"path": WS, "real": WS}
+        "p1": {"real": WS}
     }
     assert (old / ".folder-trust-merged.json").exists(), "the old file is left where it was"
     assert not (old / ".folder-trust-seeds.json").exists()
