@@ -77,6 +77,12 @@ class Host:
             response = {"ok": True, "result": self._result(event["payload"]["query"])}
             asyncio.get_running_loop().call_soon(
                 mcp.resolve_marketplace_query, event["payload"]["request_id"], response)
+        elif event["type"] == contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT and event["payload"]["action"] == "update":
+            # O1: the new version discloses something new, so the Host does not update.
+            response = {"ok": False, "error": "the disclosure changed", "error_code": "APPROVAL_REQUIRED",
+                        "pluginId": event["payload"]["plugin_id"], "pluginVersion": "0.2.0"}
+            asyncio.get_running_loop().call_soon(
+                mcp.resolve_plugin_agent_action, event["payload"]["request_id"], response)
         return True
 
     def kinds(self) -> list[str]:
@@ -205,15 +211,17 @@ async def _request(name: str) -> dict[str, Any]:
 async def test_a_request_only_files_a_pending_request_until_a_window_decides(host, windows, pane, name) -> None:
     out = await _request(name)
     assert out["ok"] is True and out["status"] == "pending"
-    # The Host is asked what is installed and what the Registry lists, never to act.
-    assert set(host.kinds()) == {contract.MARKETPLACE_QUERY_REQUEST_EVENT}
-    assert contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT not in host.kinds()
+    # The Host is asked what is installed and what the Registry lists, never to
+    # act; an update only asks whether the disclosure is unchanged (O1).
+    actions = [e["payload"]["action"] for e in host.events if e["type"] == contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT]
+    assert actions == (["update"] if name == "marketplace_request_update" else [])
+    asked = set(host.kinds())
     status = await mcp.marketplace_request_status(None, out["approval_id"], 1)
     assert status["status"] == "pending"
     # Only the window decision moves it.
     decided = await skills_approvals.decide_plugin(out["approval_id"], False)
     assert decided["status"] == "rejected"
-    assert set(host.kinds()) == {contract.MARKETPLACE_QUERY_REQUEST_EVENT}
+    assert set(host.kinds()) == asked
 
 
 @pytest.mark.parametrize("name", REQUEST_TOOLS)

@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 # ── manifest: backend.agentTools[] ──────────────────────────────────────────
 
@@ -54,13 +54,24 @@ CORE_TOOL_NAMES = (
     "cli_message_log", "cli_open_agent", "cli_pending_incoming", "cli_permission_settings", "cli_place_pane",
     "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_send", "cli_send_and_wait", "cli_token_stats",
     "cli_usage", "cli_wait_idle", "cli_whoami", "credentials_findings", "credentials_list", "evolve_report",
-    "marketplace_detail", "marketplace_request_install", "marketplace_request_rollback",
-    "marketplace_request_status", "marketplace_request_update", "marketplace_search", "mcp_list", "memory_list",
+    "marketplace_detail",
+    "marketplace_developer_application_fill", "marketplace_developer_application_open",
+    "marketplace_developer_status", "marketplace_open", "marketplace_publish_fill", "marketplace_publish_open",
+    "marketplace_publish_status", "marketplace_publish_yank_fill", "marketplace_publish_yank_open",
+    "marketplace_request_install", "marketplace_request_rollback",
+    "marketplace_request_status", "marketplace_request_update", "marketplace_search",
+    "marketplace_testplace_invite_fill", "marketplace_testplace_invite_open", "mcp_list", "memory_list",
     "pipeline_abort", "pipeline_define", "pipeline_gate", "pipeline_graph",
     "pipeline_list", "pipeline_next", "pipeline_reset", "pipeline_restart", "pipeline_restart_from",
     "pipeline_resume", "pipeline_start", "pipeline_status", "plan_add_note", "plan_add_todo", "plan_create",
-    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo", "plugins_disable", "plugins_enable",
-    "plugins_list_installed", "plugins_request_remove",
+    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo",
+    "plugins_developer_mode_open",
+    "plugins_disable", "plugins_enable",
+    "plugins_install_file_fill", "plugins_install_file_open",
+    "plugins_list_installed",
+    "plugins_package",
+    "plugins_request_remove",
+    "plugins_validate_package",
     "preview_clear", "preview_list",
     "preview_record", "preview_show", "prompt_list", "role_define", "scheduler_list", "scheduler_remove",
     "scheduler_run_now", "scheduler_runs", "scheduler_set_enabled", "scheduler_upsert", "share_create",
@@ -569,7 +580,7 @@ def agent_tool_arguments_digest(arguments: Any) -> tuple[str, int]:
 
 MARKETPLACE_QUERY_REQUEST_EVENT = "marketplace.query.request"
 MARKETPLACE_QUERY_RESULT_MESSAGE = "marketplace.query.result"
-MARKETPLACE_QUERY_KINDS = ("search", "detail", "installed")
+MARKETPLACE_QUERY_KINDS = ("search", "detail", "installed", "localValidate", "localPackage", "localStage")
 MARKETPLACE_QUERY_ERROR_CODES = ("BAD_REQUEST", "NOT_FOUND", "REGISTRY_UNAVAILABLE", "HOST_UNAVAILABLE")
 
 # ── Host → backend: plugin activity (D-e, section 5) ────────────────────────
@@ -606,7 +617,35 @@ class MarketplaceQueryRequest(TypedDict):
 
 # ── approval registry (B2) ──────────────────────────────────────────────────
 
-APPROVAL_KINDS = ("skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable")
+APPROVAL_KINDS = (
+    "skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable",
+    # W1 (S2): a local .vsix or developer folder an agent named, staged by the Host.
+    "plugin-install-file",
+    "developer-application", "plugin-publish", "plugin-yank", "testplace-invite",
+)
+#: Kinds whose request is a draft for a main-window form (P4 *_fill), not an
+#: approval card: the user edits it and presses Submit; closing the form rejects it.
+FORM_APPROVAL_KINDS = ("developer-application", "plugin-publish", "plugin-yank", "testplace-invite")
+#: A form takes longer to read and edit than a card takes to decide.
+FORM_APPROVAL_TTL_S = 60 * 60
+#: Backend -> main windows: open a form for the user to fill in (P4 *_open);
+#: ``{form, prefill, requester}``. No request is filed.
+MARKETPLACE_FORM_OPEN_EVENT = "marketplace.form_open"
+MARKETPLACE_FORMS = ("developer-application", "publish", "publish-yank", "testplace-invite")
+#: The developer application's fields (Registry W2, real-name per DX 5.4).
+DEVELOPER_APPLICATION_FIELDS = (
+    "applicant_type", "legal_name", "display_name", "contact_email", "country", "intended_namespace",
+    "description", "agreed_terms", "organization_name", "organization_id", "website", "source_url",
+    "needs_native_backend", "domain",
+)
+#: Backend -> Host: ``{request_id, query}`` for the developer status tools; the
+#: Host calls the Registry with the credentials it keeps and answers with
+#: ``marketplace.developer.result`` ``{request_id, ok, result | error, error_code}``.
+#: ``query.kind`` is "developer-status" or "publish-status" (with ``id``).
+MARKETPLACE_DEVELOPER_REQUEST_EVENT = "marketplace.developer.request"
+MARKETPLACE_DEVELOPER_RESULT_MESSAGE = "marketplace.developer.result"
+#: Errors the developer tools add to MARKETPLACE_QUERY_ERROR_CODES.
+DEVELOPER_ERROR_CODES = ("NOT_SIGNED_IN", "QUALIFICATION_REQUIRED")
 PLUGIN_APPROVAL_STATUSES = ("pending", "applying", "completed", "rejected", "failed", "expired")
 PLUGIN_APPROVAL_DECIDE_ACTION = "plugins.agent_request.decide"
 PLUGIN_APPROVAL_TTL_S = 15 * 60
@@ -682,7 +721,8 @@ class PluginApprovalDecision(TypedDict):
 
 PLUGIN_AGENT_ACTION_REQUEST_EVENT = "plugins.agent_action.request"
 PLUGIN_AGENT_ACTION_RESULT_MESSAGE = "plugins.agent_action.result"
-PLUGIN_AGENT_ACTION_KINDS = ("disable", "enable")
+#: ``update``: marketplace_request_update when the disclosure is unchanged (O1).
+PLUGIN_AGENT_ACTION_KINDS = ("disable", "enable", "update")
 #: ``APPROVAL_REQUIRED``: plugins_enable of a package the user disabled (B2-c option B).
 PLUGIN_AGENT_ACTION_ERROR_CODES = (
     "BAD_REQUEST", "NOT_INSTALLED", "BUILTIN_PLUGIN", "ACTION_FAILED", "HOST_UNAVAILABLE", "APPROVAL_REQUIRED",
@@ -691,8 +731,10 @@ PLUGIN_AGENT_ACTION_ERROR_CODES = (
 
 class PluginAgentActionRequest(TypedDict):
     request_id: str
-    action: Literal["disable", "enable"]
+    action: Literal["disable", "enable", "update"]
     plugin_id: str
+    #: ``update`` only: the version to update to.
+    version: NotRequired[str]
     requester: PluginApprovalRequester
 
 
@@ -833,10 +875,16 @@ PLUGIN_AUDIT_DDL = (
 # schema component: created if missing, nothing else touched.
 
 PLUGIN_AGENT_ACTIONS = (
-    "disable", "enable", "request-install", "request-update", "request-rollback", "request-remove",
+    # ``update``: an agent's update the Host carried out at once (O1, unchanged disclosure).
+    "disable", "enable", "update", "request-install", "request-update", "request-rollback", "request-remove",
     "request-enable", "decide-approve", "decide-reject", "finish-completed", "finish-failed",
     # The carrying window's own result, after another window had settled the request.
     "finish-late-completed", "finish-late-failed",
+    # W1 (S2): plugins_install_file_fill.
+    "request-install-file",
+    # W3: an agent's draft for a main-window form, and O3's upload to a loopback Registry.
+    "request-developer-application", "request-plugin-publish", "request-plugin-yank", "request-testplace-invite",
+    "publish-loopback",
 )
 #: ``user`` is a person in a Navide window (deciding or finishing a request).
 PLUGIN_AGENT_ACTION_CALLER_KINDS = ("pane", "external", "host", "user")

@@ -133,6 +133,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'All Spaces share one set of sign-ins kept on this computer; clear them from the Navide Browser settings.',
         'ja-JP': 'すべての Space は同じログイン情報を共有し、このコンピューターに保存されます。Navide ブラウザーの設定から消去できます。',
       },
+      {
+        'zh-TW': '從 .vsix 檔案安裝的 Navide 外掛，每次啟動和每次更新信任清單時都會再檢查一次。Navide 因安全問題下架的會被停用，只能移除；因其他原因被封鎖的會問你一次要繼續使用、停用或移除；開發者撤回的只會標示。「設定 → Navide 外掛」會一直標示它被封鎖的原因。',
+        'en-US': 'A Navide plugin installed from a .vsix file is checked again at every start and every trust refresh. One Navide took down for a security reason is disabled and can only be removed; one blocked for another reason asks you once whether to keep using, disable or remove it; one its developer withdrew is only labelled. Settings → Navide Plugins keeps showing why it is blocked.',
+        'ja-JP': '.vsix ファイルからインストールした Navide プラグインは、起動するたびと信頼リストを更新するたびに再確認されます。Navide がセキュリティ上の理由で取り下げたものは無効になり、削除だけができます。ほかの理由でブロックされたものは、使い続けるか、無効にするか、削除するかを一度だけ尋ねます。開発者が取り下げたものは表示だけです。「設定 → Navide プラグイン」には、ブロックされた理由が表示され続けます。',
+      },
+      {
+        'zh-TW': '行為改變：從檔案安裝的 Navide 外掛現在會記下安裝檔的 digest。降回 0.2.26 時，記有 digest 或開發者簽章的本機安裝會被隔離，不會載入；回到 0.2.27 或之後的版本就會恢復。',
+        'en-US': 'Behaviour change: a Navide plugin installed from a file now records the digest of its file. If you go back to 0.2.26, local installs that carry a digest or a developer signature are quarantined and not loaded; they come back on 0.2.27 or later.',
+        'ja-JP': '動作の変更：ファイルからインストールした Navide プラグインは、インストール元ファイルのダイジェストを記録するようになりました。0.2.26 に戻すと、ダイジェストや開発者の署名が記録されたローカルインストールは隔離され、読み込まれません。0.2.27 以降に戻すと元に戻ります。',
+      },
     ],
   },
   {

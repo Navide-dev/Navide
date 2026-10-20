@@ -7,6 +7,7 @@ type UpdateState = import('../../shared/updater').UpdateState
 type ExecutionPolicyApi = import('../../shared/executionPolicy').ExecutionPolicyApi
 type FnKeyApi = import('../../shared/fnKey').FnKeyApi
 type DeepLinkApi = import('../../shared/deepLink').DeepLinkApi
+type DeveloperApi = import('../../shared/marketplaceDeveloper').DeveloperApi
 type ManifestPermissionsSummary = import('../../shared/executionPolicy').ManifestPermissionsSummary
 type PackageVersionGrantSummary = import('../../shared/executionPolicy').PackageVersionGrantSummary
 type LegacyPlansPreferenceProjection = import('../../shared/plansPreferences').LegacyPlansPreferenceProjection
@@ -95,9 +96,11 @@ declare global {
       onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void) => () => void
       onPlansBackendStopped: (cb: (stopped: { workspacePath: string }) => void) => () => void
       onPluginAgentAction?: (cb: (notice: {
-        action: 'disable' | 'enable'
+        action: 'disable' | 'enable' | 'update'
         pluginId: string
         pluginVersion: string
+        /** `update` only: the version it was updated from. */
+        fromVersion?: string
         requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
       }) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
@@ -378,6 +381,7 @@ declare global {
       }
       fnKey?: FnKeyApi
       deepLink?: DeepLinkApi
+      developer?: DeveloperApi
       executionPolicy?: ExecutionPolicyApi
       plugins?: {
         listInstalled: () => Promise<InstalledPluginSummary[]>
@@ -433,6 +437,9 @@ declare global {
           manifestOrder: number
           /** Source and review state of the package that contributes this view. */
           source?: PluginSource
+          /** A test build: its signed expiry and how the user joined the test. */
+          expiresAt?: string
+          testplaceVia?: 'invite' | 'code'
         }>>
         hostThemeChanged: (theme: string) => void
         prepareContribution: (args: {
@@ -479,6 +486,7 @@ declare global {
           namespace: string
           name: string
           version?: string
+          testplace?: boolean
         }) => Promise<PreparedInstallSummary>
         commitInstall: (
           id: string,
@@ -487,18 +495,27 @@ declare global {
         installFromFile?: () => Promise<PreparedInstallSummary | null>
         commitLocalInstall?: (
           id: string,
-          approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
+          approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
         ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        prepareAgentFileInstall?: (stagingId: string) => Promise<PreparedInstallSummary>
+        discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
         setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
         loadFromFolder?: () => Promise<PreparedInstallSummary | null>
-        commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean }) => Promise<DeveloperModeState>
+        commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean; expectedFolder?: string }) => Promise<DeveloperModeState>
         reloadDeveloperPlugin?: (id: string) => Promise<
           | { reloaded: true; requiresConsent: false }
           | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
         >
         removeDeveloperFolder?: (id: string) => Promise<DeveloperModeState>
         selfHostedQuarantine?: () => Promise<Array<{ id: string; version: string | null }>>
+        testplaceList?: () => Promise<TestplaceListing[]>
+        testplaceJoin?: (code: string) => Promise<{ id: string }>
+        testplaceLeave?: (id: string) => Promise<{ ok: true }>
+        testplaceInvite?: (id: string, labels: string[]) => Promise<import('../../shared/marketplaceDeveloper').DeveloperCallResult>
+        expiredTestplace?: () => Promise<ExpiredTestplaceBuild[]>
+        keepExpiredTestplace?: (id: string) => Promise<{ ok: true }>
+        adoptTestplaceRelease?: (id: string) => Promise<{ adopted: boolean }>
         restart: (id: string) => Promise<{
           id: string
           packageVersion: string
@@ -511,6 +528,7 @@ declare global {
           restoredInstances: number
           skippedDestroyedHostWindows: number
         }>
+        discardCandidate?: (id: string) => Promise<{ ok: boolean }>
         remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<{ ok: boolean }>
         nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
         /** The installed version's disclosure (Manifest v2), or null. */
@@ -573,6 +591,14 @@ declare global {
     source?: PluginSource
     /** Test build expiry (ISO-8601), from the signed envelope; testplace only. */
     expiresAt?: string
+    /** How the user joined that test, when recorded; testplace only. */
+    testplaceVia?: 'invite' | 'code'
+    /** A3: a local file a vetted publisher signed, and whether that key is
+     *  still active (`verified`) or revoked since (`revoked`). */
+    localSignature?: 'verified' | 'revoked'
+    /** Decision d5: Navide blocked the `.vsix` this local install came from;
+     *  `reason` null when its list names none. */
+    digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'
@@ -819,6 +845,9 @@ declare global {
     registry?: PluginRegistryDisclosureFacts | null
     /** Card K3: the package's source; `local-unsigned` for a file install. */
     source?: PluginSource
+    /** A Testplace build: its signed expiry and how the user joined the test. */
+    expiresAt?: string
+    testplaceVia?: 'invite' | 'code'
     /** Card K3: sha256 of the picked file, shown in the consent dialog. */
     digest?: string
     /** Card K3 (D7): the installed package of the same id a file install replaces. */
@@ -831,8 +860,38 @@ declare global {
     reattachableBackendData?: true
     /** MED-1 on #425: false when the takedown list could not be checked. */
     takedownChecked?: boolean
+    /** A3: what the `<file>.sig` beside a local file shows against the
+     *  Navide-vetted publisher keys; `none` when there is no signature. */
+    localSignature?: { state: 'none' } | { state: 'verified' | 'revoked' | 'unverifiable'; publisherId: string; keyId?: string }
     /** Card K4: the developer folder this summary was read from. */
     folder?: string
+    /** W1: whether the shared static scan ran on a local file (`scan` holds it). */
+    localScan?: 'ran' | 'unavailable'
+  }
+
+  /** One test the user joined (Testplace, W5b). */
+  interface TestplaceListing {
+    id: string
+    namespace: string
+    name: string
+    displayName: string | null
+    description: string | null
+    publisher: string
+    via: 'invite' | 'code' | null
+    versions: Array<{ version: string; target: string; expiresAt: string | null; installable: boolean; compatible: boolean | null }>
+  }
+
+  /** D3: an installed Testplace build stopped because it expired; its data is kept. */
+  interface ExpiredTestplaceBuild {
+    id: string
+    version: string | null
+    expiresAt: string | null
+    artifactDigest?: string
+    /** False when it was taken down or fails for another reason: no "keep using". */
+    canKeep: boolean
+    /** Its developer or Navide took it back (S8 T-MED-1). */
+    withdrawn?: true
+    keepRefusal?: 'withdrawn' | 'signed-out' | 'not-a-tester' | 'registry-outdated' | 'unreachable'
   }
 
   /** Card K4: the Developer Mode switch and the developer folders consented to. */

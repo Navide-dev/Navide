@@ -21,7 +21,9 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from . import cloud_auth, ratings, reports, review
+from . import cloud_auth, qualification, ratings, reports, review
+from .account_auth import exchange_account_code, find_account_code, issue_account_code
+from .developer_web import register_developer_routes
 from .app import _require_admin_token as require_admin_token
 from .blocklist import BlocklistError, add_entry, db_entries, remove_entry, removed_list
 from .dns_verify import DomainError, record_host, record_value
@@ -31,6 +33,7 @@ from .repository import RegistryRepository
 from .self_service import (
     MAX_NAMESPACES_PER_ACCOUNT,
     MAX_TOKEN_DAYS,
+    QualificationRequired,
     SelfServiceError,
     check_claim,
     check_domain,
@@ -55,6 +58,11 @@ from .web import _base_path_context, tile_hue
 
 _TEMPLATES_DIR = Path(__file__).parent / "web_templates"
 _NO_STORE = {"Cache-Control": "no-store"}
+SCOPE_PUBLISH = "publish"
+SCOPE_ACCOUNT = "account"
+CLI_SCOPES = (SCOPE_PUBLISH, SCOPE_ACCOUNT)
+"""`/cli/authorize?scope=`: a namespace publish token (default) or an account
+token that names the Cloud account only (account_auth.py)."""
 _CLI_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]+")
 """ASCII only: str.isalnum() also accepts Unicode letters and digits."""
 
@@ -80,6 +88,7 @@ class BlockRequest(BaseModel):
     kind: str
     value: str
     reason: str
+    digest_reason: str | None = None
 
 
 class _Redirect(Exception):
@@ -347,7 +356,10 @@ def create_publisher_router() -> APIRouter:
                     "record_value": record_value(publisher.domain_token) if publisher.domain_token else None,
                     "key_fingerprint": fingerprint,
                     "review_required": publisher.review_required,
+                    "frozen_at": publisher.frozen_at,
+                    "frozen_reason": publisher.frozen_reason,
                 },
+                "grandfather": qualification.grandfather_view(session, publisher),
                 "rows": rows,
                 "reports": reports.publisher_reports(session, publisher),
                 "report_reasons": dict(reports.REASONS),
@@ -586,17 +598,34 @@ def create_publisher_router() -> APIRouter:
     @router.get("/cli/authorize", response_class=HTMLResponse)
     @guarded
     def cli_authorize_form(
-        request: Request, port: int = 0, state: str = "", code_challenge: str = "", label: str = "navide-plugin CLI"
+        request: Request,
+        port: int = 0,
+        state: str = "",
+        code_challenge: str = "",
+        label: str = "navide-plugin CLI",
+        scope: str = SCOPE_PUBLISH,
     ) -> Response:
-        if not _cli_params_ok(port, state, code_challenge):
+        if not _cli_params_ok(port, state, code_challenge) or scope not in CLI_SCOPES:
             raise HTTPException(status_code=400, detail="invalid CLI login request")
         viewer = _require_viewer(request)
         with _session(request) as session:
-            namespaces = [p.name for p in owned_publishers(session, viewer.member_id)]
+            # Only a namespace that may publish is offered (qualification.py).
+            namespaces = [
+                p.name for p in owned_publishers(session, viewer.member_id) if qualification.publisher_vetted(session, p)
+            ]
+            qualification_status = qualification.status_of(session, viewer.member_id)
         return page(
             request,
             "cli_authorize.html",
-            {"namespaces": namespaces, "port": port, "state": state, "code_challenge": code_challenge, "label": label[:64]},
+            {
+                "namespaces": namespaces,
+                "port": port,
+                "state": state,
+                "code_challenge": code_challenge,
+                "label": label[:64],
+                "scope": scope,
+                "qualification": qualification_status,
+            },
         )
 
     @router.post("/cli/authorize")
@@ -608,16 +637,24 @@ def create_publisher_router() -> APIRouter:
         state: str = Form(""),
         code_challenge: str = Form(""),
         label: str = Form("navide-plugin CLI"),
+        scope: str = Form(SCOPE_PUBLISH),
         csrf: str = Form(""),
     ) -> Response:
         viewer = _require_viewer(request)
         _check_csrf(request, viewer, csrf)
-        if not _cli_params_ok(port, state, code_challenge):
+        if not _cli_params_ok(port, state, code_challenge) or scope not in CLI_SCOPES:
             raise HTTPException(status_code=400, detail="invalid CLI login request")
         with _session(request) as session:
-            publisher = _owned_or_404(session, viewer, namespace)
             try:
-                code = issue_cli_code(session, publisher, code_challenge=code_challenge, label=label)
+                if scope == SCOPE_ACCOUNT:
+                    code = issue_account_code(
+                        session, viewer.member_id, code_challenge=code_challenge, label=label
+                    )
+                else:
+                    publisher = _owned_or_404(session, viewer, namespace)
+                    code = issue_cli_code(session, publisher, code_challenge=code_challenge, label=label)
+            except QualificationRequired as exc:
+                raise HTTPException(status_code=403, detail={"code": exc.code, "message": str(exc)}) from exc
             except SelfServiceError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
         query = urllib.parse.urlencode({"code": code, "state": state})
@@ -643,13 +680,34 @@ def create_publisher_router() -> APIRouter:
 
     @router.post("/api/cli/token")
     def cli_token(request: Request, body: CliTokenRequest) -> JSONResponse:
+        """Exchange a one-time code for a token: a publisher token for a
+        namespace (scope "publisher"), or an account token when the code came
+        from `/cli/authorize?scope=account` (scope "account", namespace null)."""
         with _session(request) as session:
             try:
+                if find_account_code(session, body.code) is not None:
+                    plain, account = exchange_account_code(session, code=body.code, code_verifier=body.code_verifier)
+                    return JSONResponse(
+                        {
+                            "token": plain,
+                            "scope": "account",
+                            "namespace": None,
+                            "expires_at": account.expires_at.isoformat(),
+                        },
+                        headers=_NO_STORE,
+                    )
                 plain, row, publisher = exchange_cli_code(session, code=body.code, code_verifier=body.code_verifier)
+            except QualificationRequired as exc:
+                raise HTTPException(status_code=403, detail={"code": exc.code, "message": str(exc)}) from exc
             except SelfServiceError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             return JSONResponse(
-                {"token": plain, "namespace": publisher.name, "expires_at": row.expires_at.isoformat()},
+                {
+                    "token": plain,
+                    "scope": "publisher",
+                    "namespace": publisher.name,
+                    "expires_at": row.expires_at.isoformat(),
+                },
                 headers=_NO_STORE,
             )
 
@@ -800,13 +858,25 @@ def create_publisher_router() -> APIRouter:
     @router.post("/admin/blocklist")
     @guarded
     def admin_block(
-        request: Request, kind: str = Form(""), value: str = Form(""), reason: str = Form(""), csrf: str = Form("")
+        request: Request,
+        kind: str = Form(""),
+        value: str = Form(""),
+        reason: str = Form(""),
+        digest_reason: str = Form(""),
+        csrf: str = Form(""),
     ) -> Response:
         viewer = _require_admin(request)
         _check_csrf(request, viewer, csrf)
         with _session(request) as session:
             try:
-                add_entry(session, kind=kind, value=value, reason=reason, created_by=f"member:{viewer.member_id}")
+                add_entry(
+                    session,
+                    kind=kind,
+                    value=value,
+                    reason=reason,
+                    created_by=f"member:{viewer.member_id}",
+                    digest_reason=(digest_reason or None) if kind == "digest" else None,
+                )
             except BlocklistError as exc:
                 items = removed_list(session, _settings(request))
                 return page(request, "admin_blocklist.html", {"items": items, "error": str(exc)}, status=400)
@@ -818,7 +888,7 @@ def create_publisher_router() -> APIRouter:
         viewer = _require_admin(request)
         _check_csrf(request, viewer, csrf)
         with _session(request) as session:
-            if not remove_entry(session, entry_id):
+            if not remove_entry(session, entry_id, actor=f"member:{viewer.member_id}"):
                 raise HTTPException(status_code=404, detail="entry not found")
         return _redirect(request, "/admin/blocklist")
 
@@ -926,17 +996,37 @@ def create_publisher_router() -> APIRouter:
         _require_admin_token(request, x_admin_token)
         with _session(request) as session:
             try:
-                entry = add_entry(session, kind=body.kind, value=body.value, reason=body.reason, created_by="admin-token")
+                entry = add_entry(
+                    session,
+                    kind=body.kind,
+                    value=body.value,
+                    reason=body.reason,
+                    created_by="admin-token",
+                    digest_reason=body.digest_reason,
+                )
             except BlocklistError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
-            return JSONResponse({"id": entry.id, "kind": entry.kind, "value": entry.value}, status_code=201)
+            return JSONResponse(
+                {"id": entry.id, "kind": entry.kind, "value": entry.value, "digest_reason": entry.digest_reason},
+                status_code=201,
+            )
 
     @router.delete("/api/admin/blocklist/{entry_id}")
     def api_unblock(request: Request, entry_id: int, x_admin_token: str | None = Header(default=None)) -> Response:
         _require_admin_token(request, x_admin_token)
         with _session(request) as session:
-            if not remove_entry(session, entry_id):
+            if not remove_entry(session, entry_id, actor="admin-token"):
                 raise HTTPException(status_code=404, detail="entry not found")
         return Response(status_code=204)
 
+    register_developer_routes(
+        router,
+        page=page,
+        guarded=guarded,
+        require_viewer=_require_viewer,
+        require_admin=_require_admin,
+        check_csrf=_check_csrf,
+        require_admin_token=_require_admin_token,
+        redirect=_redirect,
+    )
     return router

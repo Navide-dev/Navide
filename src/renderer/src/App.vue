@@ -18,7 +18,8 @@ import {
   useReadbackAnnouncer,
 } from './composables/useVoiceReadback'
 import { requestMarketplaceDetail } from './marketplaceDeepLink'
-import type { DeepLinkExtensionTarget } from '../../shared/deepLink'
+import { isPublishDeepLink, parseDeepLink, type DeepLinkExtensionTarget, type DeepLinkPublishTarget } from '../../shared/deepLink'
+import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceForm } from './composables/useMarketplaceForms'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
@@ -356,6 +357,7 @@ import { useUiActionBus } from './composables/useUiActionBus'
 import {
   pluginAgentNoticeTitle,
   pluginAgentUndoApplies,
+  pluginAgentDowngradeStep,
   releaseAnnouncementId,
   useAnnouncements,
   type SchedulerDisabledNotice,
@@ -958,6 +960,10 @@ watch(() => backend.status.value, (status) => {
   void pluginAgentRequests.recover().catch((error: unknown) => {
     console.warn('[plugins] could not settle interrupted agent plugin requests', error)
   })
+  // An agent's form draft filed before this window connected opens its form.
+  void restorePendingForms(backend).then((shown) => {
+    if (shown) openSettingsAt('marketplace')
+  }).catch(() => {})
 }, { immediate: true })
 // And when a main window went away while carrying out approved requests
 // (review-370 R1): the backend names them, and recover() settles whatever is
@@ -9463,7 +9469,7 @@ watch(currentWorkspace, (workspacePath) => {
 // alone is not enough: asking for the tab you are already on leaves the prop
 // unchanged, so the modal's watcher never fires and the request is dropped.
 const settingsTabRequest = ref(0)
-const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications'>('general')
+const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications' | 'extensions'>('general')
 // Needed to retarget an already-open modal: initialTab is only honoured on mount
 // and by its own watcher, so re-issuing the same tab is a no-op without this.
 const settingsModalRef = ref<{
@@ -9482,15 +9488,34 @@ function openMarketplaceDetail(target: DeepLinkExtensionTarget): void {
   requestMarketplaceDetail(target)
   openSettingsAt('marketplace')
 }
+// navide://publish (navide-plugin publish --via-navide): open the publish form
+// with that package. Only opens the form; the user reviews and presses Submit.
+function openPublishFromLink(target: DeepLinkPublishTarget): void {
+  showMarketplaceForm({
+    form: 'publish', origin: 'link', requester: null, request: null,
+    prefill: { path: target.path, ...(target.target ? { target: target.target } : {}) },
+  })
+  openSettingsAt('marketplace')
+}
 let stopDeepLinks: (() => void) | null = null
+let stopPublishLinks: (() => void) | null = null
 onMounted(() => {
   const api = window.agentTeam?.deepLink
   if (!api) return
   stopDeepLinks = api.onOpenExtension(openMarketplaceDetail)
+  stopPublishLinks = api.onOpenPublish?.(openPublishFromLink) ?? null
   // Links that arrived before this window could show them (cold start).
-  void api.ready().then((queued) => queued.forEach(openMarketplaceDetail))
+  void api.ready().then((queued) =>
+    queued.forEach((target) => (isPublishDeepLink(target) ? openPublishFromLink(target) : openMarketplaceDetail(target))))
 })
-onUnmounted(() => stopDeepLinks?.())
+onUnmounted(() => {
+  stopDeepLinks?.()
+  stopPublishLinks?.()
+})
+// An agent's *_open / *_fill for a Navide Marketplace developer form (W3) shows
+// it in Settings > Navide Marketplace > Developer; nothing is sent until Submit.
+const stopMarketplaceForms = installMarketplaceFormListeners(backend, () => openSettingsAt('marketplace'))
+onUnmounted(stopMarketplaceForms)
 // Workspaces the Resource Manager's storage scan walks: the open one first, then the recents that
 // still exist on disk.
 const knownWorkspacePaths = computed<string[]>(() => {
@@ -10157,6 +10182,35 @@ registerCommand('ui.settings.open', (args) => {
   }
 })
 registerCommand('ui.settings.close', () => { showSettings.value = false })
+// W1: the *_open agent tools (marketplace_open, plugins_install_file_open,
+// plugins_developer_mode_open). Each only shows a page; installing, choosing
+// a file and the Developer Mode switch stay the user's own presses.
+registerCommand('ui.plugins.openMarketplace', (args) => {
+  const id = (args as { id?: unknown } | undefined)?.id
+  if (id === undefined || id === null || id === '') {
+    openSettingsAt('marketplace')
+    return { opened: 'marketplace' }
+  }
+  const link = parseDeepLink(`navide://extension/${String(id)}`)
+  if (!link.ok) throw new Error(`not a Navide plugin id: ${link.reason}`)
+  openMarketplaceDetail(link.target)
+  return { opened: 'marketplace-detail' }
+})
+function openExtensionsSection(section: string): void {
+  settingsInitialTab.value = 'extensions'
+  showSettings.value = true
+  void nextTick(() => {
+    void settingsModalRef.value?.setSection('extensions', section)
+  })
+}
+registerCommand('ui.plugins.openInstallFromFile', () => {
+  openExtensionsSection('extensions-install-from-file')
+  return { opened: 'install-from-file' }
+})
+registerCommand('ui.plugins.openDeveloperMode', () => {
+  openExtensionsSection('extensions-developer-mode')
+  return { opened: 'developer-mode' }
+})
 // The permission-bypass toggle. NOT pipeline state and not workspace state:
 // skipFlagFor() reads it on every spawn / resume / restore path this window
 // has, whichever project they belong to — hence a ui.settings.* name and no
@@ -15267,6 +15321,21 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   try {
     // Only what the agent did: if the user changed it since, leave it be.
     const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (action.kind === 'plugin-agent-downgrade') {
+      // O1: back to the version an agent's update replaced.
+      const step = pluginAgentDowngradeStep(action, installed)
+      if (step === null) {
+        notifyRestore.toast(i18n.global.t('plugin-agent.notice.undo-stale'), { type: 'info' })
+        return
+      }
+      if (step === 'discard') await window.agentTeam?.plugins?.discardCandidate?.(action.pluginId)
+      else await window.agentTeam?.plugins?.rollback?.(action.pluginId)
+      notifyRestore.toast(
+        i18n.global.t('plugin-agent.notice.downgraded', { plugin: action.pluginId, version: action.fromVersion }),
+        { type: 'info' },
+      )
+      return
+    }
     if (!pluginAgentUndoApplies(action, installed)) {
       notifyRestore.toast(i18n.global.t('plugin-agent.notice.undo-stale'), { type: 'info' })
       return

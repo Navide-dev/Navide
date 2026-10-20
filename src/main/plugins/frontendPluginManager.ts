@@ -181,6 +181,8 @@ import { validatePluginDetailTarget } from './pluginDetailTargetSchema'
 import { canonicalTrustJson } from './pluginRegistryTrust'
 import { PLUGIN_RESOURCE_DECISION_MESSAGE, type PluginResourceDecisionRow } from '../../shared/pluginResourceDecision'
 import {
+  MARKETPLACE_DEVELOPER_REQUEST_EVENT,
+  MARKETPLACE_DEVELOPER_RESULT_MESSAGE,
   MARKETPLACE_QUERY_REQUEST_EVENT,
   MARKETPLACE_QUERY_RESULT_MESSAGE,
   PLUGIN_ACTIVITY_FORGET_MESSAGE,
@@ -191,6 +193,8 @@ import {
 } from '../../shared/pluginAgentTools'
 import { BACKEND_CALL_UNDECLARED_ADDRESS, type PluginActivityReportRequest } from '../../shared/pluginActivity'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
+import { redactDeveloperSecrets } from './developerAccount'
+import type { DeveloperQueryAnswer } from './developerIpc'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
   AGENT_CAPABILITY_PROGRESS_MESSAGE,
@@ -1562,6 +1566,8 @@ export class FrontendPluginManager {
   private wsClient: WsClient | null = null
   /** Answers `marketplace.query.request` (B2-a); set by registerPluginIpc. */
   private marketplaceQueryHandler: ((query: unknown) => Promise<MarketplaceQueryAnswer>) | null = null
+  /** Answers `marketplace.developer.request` (W3 status tools); set by registerDeveloperIpc. */
+  private developerQueryHandler: ((query: unknown) => Promise<DeveloperQueryAnswer>) | null = null
   /** Answers `plugins.agent_action.request` (B2-c); set by registerPluginIpc. */
   private pluginAgentActionHandler: ((request: unknown) => Promise<PluginAgentActionAnswer>) | null = null
   private readonly editorAiCapability = new EditorAiCapability({
@@ -8935,6 +8941,9 @@ export class FrontendPluginManager {
       client.on(MARKETPLACE_QUERY_REQUEST_EVENT, (payload) => {
         void this.handleMarketplaceQueryRequest(client, payload)
       })
+      client.on(MARKETPLACE_DEVELOPER_REQUEST_EVENT, (payload) => {
+        void this.handleDeveloperQueryRequest(client, payload)
+      })
       client.on(PLUGIN_AGENT_ACTION_REQUEST_EVENT, (payload) => {
         void this.handlePluginAgentActionRequest(client, payload)
       })
@@ -9279,6 +9288,13 @@ export class FrontendPluginManager {
     this.marketplaceQueryHandler = handler
   }
 
+  /** Install the function that answers the backend's developer status queries
+   *  (W3): it calls the Registry with the credentials the Host keeps and
+   *  answers with states only (developerIpc.ts). */
+  setDeveloperQueryHandler(handler: (query: unknown) => Promise<DeveloperQueryAnswer>): void {
+    this.developerQueryHandler = handler
+  }
+
   /** Plan B watchdog option C (contract 5.2): one resource decision row for
    *  the backend's audit, over this Host's authenticated session. Never throws
    *  and never waits: a row that cannot be sent is logged and dropped, so the
@@ -9344,6 +9360,31 @@ export class FrontendPluginManager {
       { request_id: requestId, ...answer },
       10_000,
     ).catch(() => {
+      // The backend's waiter has its own timeout and reports it there.
+    })
+  }
+
+  /** Answer one `marketplace.developer.request` (W3) on the registered Host session. */
+  private async handleDeveloperQueryRequest(client: WsClient, payload: unknown): Promise<void> {
+    const record: Record<string, unknown> =
+      typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+        ? payload as Record<string, unknown>
+        : {}
+    const requestId = nonEmptyString(record.request_id) ? record.request_id : null
+    if (requestId === null) return
+    let answer: DeveloperQueryAnswer
+    const handler = this.developerQueryHandler
+    if (this.wsClient !== client || !this.hostSessionRegistered || !handler) {
+      answer = { ok: false, error: 'Navide Host cannot answer developer queries now', error_code: 'HOST_UNAVAILABLE' }
+    } else {
+      try {
+        answer = await handler(record.query)
+      } catch (error) {
+        answer = { ok: false, error: redactDeveloperSecrets(error instanceof Error ? error.message : String(error)), error_code: 'HOST_UNAVAILABLE' }
+      }
+    }
+    if (this.wsClient !== client) return
+    await client.send(MARKETPLACE_DEVELOPER_RESULT_MESSAGE, { request_id: requestId, ...answer }, 10_000).catch(() => {
       // The backend's waiter has its own timeout and reports it there.
     })
   }

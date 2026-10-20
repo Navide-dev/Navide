@@ -31,7 +31,12 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        input: resolve(__dirname, 'src/main/index.ts'),
+        input: {
+          index: resolve(__dirname, 'src/main/index.ts'),
+          // The static scan of a local package runs in this worker thread
+          // (src/main/plugins/pluginLocalScan.ts loads it beside index.js).
+          pluginLocalScanWorker: resolve(__dirname, 'src/main/plugins/pluginLocalScanWorker.ts'),
+        },
         // `ws` (pulled in by the plugin WebSocket client) does an optional
         // `require('bufferutil')` / `require('utf-8-validate')` for native
         // speedups. They aren't installed and ws falls back to JS at runtime,

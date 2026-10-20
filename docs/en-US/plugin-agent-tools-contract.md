@@ -965,6 +965,26 @@ decision and answers the agent `{ok: false, error_code: "APPROVAL_REQUIRED",
 error, approval_id, status: "pending", expires_at}`. A second `enable` returns
 the same pending request.
 
+`update` (O1, user ruling 2026-10-20) is asked by `marketplace_request_update`
+after its own checks (installed, newer, not bundled) and before it files a
+request. It carries one more key, `version`. The Host verifies that Registry
+version exactly as the window's install does and updates at once only when
+nothing it discloses changes: the disclosure diff against the installed
+version adds and removes nothing and keeps the risk level, and the source,
+the views, an already trusted publisher and the absence of a local install or
+a version waiting for a restart are all unchanged. It then commits through the
+window's own commit, tells the user which caller updated the package from
+which version with a one-click downgrade (it drops the version waiting for a
+restart, or rolls back to the replaced version; it does nothing once the
+package changed again), and answers `{ok: true, updated: true, pluginId,
+fromVersion, pluginVersion}`; the backend audits `update` and answers the
+agent `{ok: true, status: "completed", applied: true, pluginId, fromVersion,
+pluginVersion, note}`. Anything else — a change, a diff that cannot be
+computed, a preparation failure, an install of the same id in progress, a
+failed commit (`ACTION_FAILED`, audited as `error`), no answer — files the
+`plugin-update` request exactly as before (fail closed). The Host's refusal is
+`{ok: false, error_code: "APPROVAL_REQUIRED", error, pluginId, pluginVersion}`.
+
 ### 4.4 Chunked transfer of results and arguments
 
 A result or an argument object of any size reaches the other end intact. A
@@ -1481,7 +1501,7 @@ starts as usual.
 | `id` | INTEGER PK | autoincrement |
 | `at` | INTEGER | when |
 | `plugin_id`, `plugin_version` | TEXT | `plugin_version` `''` when not known |
-| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` / `finish-late-completed` / `finish-late-failed` |
+| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` / `finish-late-completed` / `finish-late-failed` / `request-developer-application` / `request-plugin-publish` / `request-plugin-yank` / `request-testplace-invite` / `publish-loopback` |
 | `caller_kind` | TEXT | `pane` / `external` / `host`, or `user` (a person in a Navide window: decide, finish) |
 | `caller_pane_id`, `caller_pane_name`, `caller_workspace` | TEXT | `''` when not a pane |
 | `approval_id` | TEXT | the request's id, `''` when none |

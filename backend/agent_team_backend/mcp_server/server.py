@@ -9443,10 +9443,15 @@ _MQ_ENUMS = frozenset({
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
     "available", "consent-required", "plugin-disabled", "plugin-quarantined", "plugin-revoked", "name-collision",
+    # PluginSource (src/shared/pluginSource.ts), for plugins_list_installed (W1).
+    "marketplace", "prerelease", "testplace", "local-signed", "local-unsigned", "developer-unpacked",
+    "factory-bundled",
 })
 _MQ_ENUM_KEYS = frozenset({
     "kind", "risk", "level", "key", "mode", "access", "status", "secretScan", "network", "template",
     "state", "root", "projectWrites", "system", "executables",
+    # An installed package's source (W1); a scan's `source` stays fenced.
+    "source",
 })
 _MQ_KNOWN_KEYS = frozenset({
     "kind", "items", "nextCursor", "item", "versions", "card",
@@ -9457,7 +9462,7 @@ _MQ_KNOWN_KEYS = frozenset({
     "timeoutMs", "inputSchema", "dataLocations", "hostStorage", "backendDataDirectory", "projectWrites",
     "patterns", "domainVerifiedAt", "signature", "keyId", "review", "status", "reviewedAt",
     "nativeCodeInspected", "scan", "secretScan", "secretFindings", "similarityWarning", "similarTo",
-    "scannedAt", "enabled", "quarantined", "hasBackend", "state",
+    "scannedAt", "enabled", "quarantined", "hasBackend", "state", "signatureRevoked",
     # The card's scan report (contract 3.4, 3.8); its strings are fenced like any other.
     "scanner", "artifactDigest", "target", "coverage", "filesTotal", "filesScanned", "bytesScanned",
     "skipped", "reason", "count", "truncated", "timedOut", "calls", "executable", "subcommand", "category",
@@ -9707,8 +9712,15 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
 
     The same inventory Settings → Navide Plugins shows. Returns {ok, kind:
     "installed", items}; each item is {id, version, enabled, quarantined,
-    hasBackend, agentTools: [{name, state}]}. Enabling, disabling, updating
-    or removing a plugin is the user's decision and is not possible from here.
+    hasBackend, agentTools: [{name, state}], source, signatureRevoked?}.
+    `source` says where it came from and what review it passed:
+    marketplace / prerelease / testplace (Navide Marketplace), local-signed
+    (a local file a vetted publisher signed; this version not reviewed),
+    local-unsigned (a local file, unsigned and unreviewed), developer-unpacked
+    (a Developer Mode folder) or factory-bundled. `signatureRevoked: true`
+    marks a local file whose publisher key Navide has since revoked. Enabling,
+    disabling, updating or removing a plugin is the user's decision and is not
+    possible from here.
     """
     caller, out = await _marketplace_query(ctx, {"kind": "installed"})
     if out.get("ok") is not True or caller is None:
@@ -9781,12 +9793,28 @@ def _approval_requester(caller: _Caller) -> dict[str, Any]:
     if caller.kind != "pane":
         return {"paneId": None, "paneName": None, "workspace": None, "callerKind": caller.kind}
     pane = agent_messaging.get(caller.pane_id)
-    return {
+    requester: dict[str, Any] = {
         "paneId": caller.pane_id,
         "paneName": neutralize_external_text(pane.name) if pane else None,
         "workspace": neutralize_external_text(pane.workspace_path) if pane and pane.workspace_path else None,
         "callerKind": "pane",
     }
+    # S8-M1: a pane that read third-party content says so on the card and the
+    # form (disclosure only: the request is filed and decided exactly the same).
+    if _pane_tainted(caller.pane_id):
+        requester["tainted"] = True
+    return requester
+
+
+def _pane_tainted(pane_id: str | None) -> bool:
+    """Whether the pane is marked tainted; False when the taint store cannot answer."""
+    from agent_team_backend.guard import taint
+
+    try:
+        return bool(pane_id) and taint.is_tainted(pane_id)
+    except Exception as err:  # noqa: BLE001 - a disclosure line never fails the request
+        _log.warning("could not read the taint of pane %s: %s", pane_id, err)
+        return False
 
 
 def _audit_agent_action(
@@ -9915,6 +9943,10 @@ async def _file_plugin_request(
         return refuse("BAD_REQUEST", f"{version} is not newer than the installed {from_version}")
     if kind == "plugin-rollback" and _semver_key(version) >= _semver_key(from_version):
         return refuse("BAD_REQUEST", f"{version} is not older than the installed {from_version}")
+    if kind == "plugin-update":
+        applied = await _unchanged_update(caller, requester, plugin_id, version, from_version)
+        if applied is not None:
+            return applied
     card = None
     if kind != "plugin-remove":
         card, error = await _registry_card(caller, plugin_id, version)
@@ -9943,6 +9975,51 @@ async def _file_plugin_request(
     }
 
 
+async def _unchanged_update(
+    caller: _Caller, requester: dict[str, Any], plugin_id: str, version: str, from_version: str,
+) -> dict[str, Any] | None:
+    """O1 (user 2026-10-20 01:40): ask the Host to update at once when the new
+    version discloses exactly what the installed one does. The Host decides
+    and does it; None for anything but a confirmed update, and the caller then
+    files the request as before (fail closed)."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    request_id = f"pa:{secrets.token_hex(16)}"
+    future = _agent_action_pending.register(request_id)
+    try:
+        sent = await app.unicast_host(make_event(contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT, {
+            "request_id": request_id, "action": "update", "plugin_id": plugin_id, "version": version,
+            "requester": requester,
+        }))
+        result = await _agent_action_pending.wait(request_id, future, timeout=_AGENT_ACTION_TIMEOUT_S) if sent else TIMEOUT
+    finally:
+        _agent_action_pending.discard(request_id)
+    if result is TIMEOUT:
+        return None
+    if (result.get("ok") is True and result.get("updated") is True
+            and result.get("pluginVersion") == version and result.get("fromVersion") == from_version):
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
+                            outcome="allowed")
+        return {
+            "ok": True,
+            "status": "completed",
+            "applied": True,
+            "pluginId": plugin_id,
+            "fromVersion": from_version,
+            "pluginVersion": version,
+            "note": (
+                "Updated without asking: this version discloses exactly the same permissions, backend, agent tools "
+                "and network access as the installed one. The user was told, with a one-click downgrade."
+            ),
+        }
+    if result.get("error_code") == "ACTION_FAILED":
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
+                            outcome="error", error_code="ACTION_FAILED")
+    return None
+
+
 @server.tool()
 async def marketplace_request_install(
     ctx: Context, namespace: str, name: str, version: str, reason: str = "",
@@ -9966,13 +10043,18 @@ async def marketplace_request_install(
 async def marketplace_request_update(
     ctx: Context, namespace: str, name: str, version: str, reason: str = "",
 ) -> dict[str, Any]:
-    """Ask the user to update an installed Navide plugin to a newer version.
+    """Update an installed Navide plugin to a newer version, or ask the user to.
 
-    Like marketplace_request_install: files a request for the user's
-    decision in Navide and changes nothing by itself. `version` must be newer
-    than the installed one and listed in the Navide Marketplace.
-
-    Returns {ok, approval_id, status: "pending", expires_at, note}.
+    `version` must be newer than the installed one and listed in the Navide
+    Marketplace. When that version discloses exactly the same permissions,
+    backend, agent tools and network access as the installed one, Navide
+    updates it at once: the user is told which agent did it, with a one-click
+    downgrade, and the change is recorded. The answer is then {ok: true,
+    status: "completed", applied: true, pluginId, fromVersion, pluginVersion,
+    note}. Any change in what it discloses, or anything Navide cannot compare,
+    files a request for the user's decision in Navide instead, like
+    marketplace_request_install: {ok, approval_id, status: "pending",
+    expires_at, note}.
     """
     return await _file_plugin_request(ctx, "plugin-update", namespace, name, version, reason)
 
@@ -10691,3 +10773,10 @@ async def shutdown() -> None:
     global _session_manager
     _session_manager = None
     await _lifecycle.aclose()
+
+
+# The Navide Marketplace developer tools (W3) register on `server` from their own module.
+from agent_team_backend.mcp_server import marketplace_forms as _marketplace_forms  # noqa: E402,F401
+from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  # noqa: E402,F401
+# W1: local Navide plugin package tools (open, validate, package, fill).
+from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401

@@ -591,6 +591,49 @@ Errors are `{ok: false, error, error_code}` with `BAD_REQUEST`,
 result, disable and enable is recorded with the caller (pane name, external
 client or Navide Host) in the `plugin_agent_actions` table of navide.db.
 
+### Local Navide plugin packages: open, check, build, install from a file
+
+Each step has a tool, and opening and filling are separate (use either alone).
+When the user wants to do it themselves, an agent calls the `_open` tool and
+stops; when the user asks the agent to do it, it calls
+`plugins_install_file_fill` (no need to open first). Nothing here installs,
+submits or switches anything: an install happens only when the user approves
+the request and confirms the same consent dialog "Install from file" shows.
+Developer Mode stays the user's own switch, and a plugin frame or an
+environment variable still cannot install from a file.
+
+| Tool | Parameters | What it does |
+|---|---|---|
+| `marketplace_open` | `id=""` | Shows the Navide Marketplace, or one plugin's page in it, in the caller's Navide window |
+| `plugins_install_file_open` | — | Shows Settings → Navide plugins, where the user picks a `.vsix` with "Install from file" |
+| `plugins_developer_mode_open` | — | Shows the Developer Mode switch |
+| `plugins_validate_package` | `path` | Read-only check of a `.vsix` or a plugin folder (absolute path): a folder with the `navide-plugin package` rules, then like a file with the rules a local install applies (archive and manifest, the `navide.` namespace, Navide's takedown and blocked-file lists, the `<file>.sig` signature). Returns `{ok, path, packageKind, valid, errors, id, version, target, digest, signature, risk, disclosure, scan, reviewedByNavide: false}`; `signature` is `none`, `verified` (a vetted publisher's active key), `revoked` or `unverifiable` |
+| `plugins_package` | `dir`, `target=""`, `out=""` | Builds the same `.vsix` bytes `navide-plugin package` builds from the folder's `artifact-files.json` and writes them to `out` or `<id>-<version>-<target>.vsix` beside the folder. Never replaces an existing file, never writes into Navide's data folder, signs nothing. Returns the report of the written file |
+| `plugins_install_file_fill` | `path`, `reason=""` | Navide reads the `.vsix` once, checks it and holds that copy (a folder needs Developer Mode on), then files a `plugin-install-file` request. The user sees who asked, the reason (as the agent's), the path, the SHA-256 and that Navide has not reviewed it; approving opens the "Install from file" consent dialog with the held copy. Returns `{ok, approval_id, status: "pending", expires_at, id, version, digest, packageKind, signature, reviewedByNavide: false, note}`, or `PACKAGE_INVALID` with `errors` when a local install would refuse it. Follow it with `marketplace_request_status` |
+
+A path inside Navide's own data folder is refused, and so is a file larger
+than any package. Navide keeps every staged copy, however many requests are
+open, for as long as its request lives: 15 minutes, the same as every Navide
+plugin request, plus one minute, so a request the user can still approve
+always installs its own copy. When the request expires the copy is dropped
+and the card reads "This request expired.", not a failure; an approval after
+that installs nothing, and `marketplace_request_status` reports the request
+`expired` (or `failed` with `AGENT_STAGING_EXPIRED` when the window caught
+it). Ask again with `plugins_install_file_fill`. Staged copies are files in
+Navide's data folder, one per distinct file however often it is requested.
+There is no count or size quota, but Navide never fills the disk: a request
+whose copy would leave less than 5 GiB free (or that runs out of space while
+writing) is refused with `STAGING_DISK_LOW`, naming the free space and the
+file's size, and nothing is written; copies staged earlier and their cards
+are not touched. Expired copies are removed every minute, a rejected
+request's copy at once (in whichever window it was rejected), and whatever an
+earlier run left is removed when Navide starts. The package's own text (id, version, errors quoting its
+manifest, the disclosure) is fenced as above and marks the reading pane.
+`plugins_list_installed` also returns each item's `source` (`marketplace`,
+`prerelease`, `testplace`, `local-signed`, `local-unsigned`,
+`developer-unpacked`, `factory-bundled`) and `signatureRevoked: true` for a
+local file whose publisher key Navide has since revoked.
+
 ### Pipelines
 
 A pipeline is a saved multi-stage run: an ordered set of stages, each with

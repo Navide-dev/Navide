@@ -1783,6 +1783,13 @@
       "builtinSwitchBusy": "Applying… Navide first lets current work finish, which can take about half a minute for Plans.",
       "disabledBadge": "Disabled",
       "disabledNote": "Disabled: its views and backend do not run. Its files, permissions and stored data are kept.",
+      "digestBlock": {
+        "blocked": "Blocked by Navide",
+        "security": "Taken down by Navide (security)",
+        "qualificationRevoked": "Developer qualification revoked",
+        "developerWithdrawn": "Withdrawn by its developer",
+        "note": "Navide put the file this Navide plugin was installed from on its blocked list after you installed it."
+      },
       "rollback": {
         "toBundled": "Roll back to bundled",
         "toVersion": "Roll back to {version}",
@@ -1941,6 +1948,7 @@
         "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
       },
       "localInstall": {
+        "agentRequest": "Requested by {requester}. Navide has not reviewed this package; installing it is your decision.",
         "button": "Install from .vsix file…",
         "backToMarketplace": "Switch back to the Navide Marketplace version",
         "warning": "This Navide plugin comes from a file on this computer. Navide has not reviewed it and it is not signed: its author cannot be confirmed and the file may have been changed. Only install files from people you trust.",
@@ -1956,6 +1964,16 @@
         "replaceDataSetAside": "The new version starts with an empty data folder. The existing data is kept aside, and the new version cannot read it.",
         "reattachData": "Take back the data kept aside from this source earlier (off by default)",
         "takedownUnknown": "Navide cannot tell right now whether this Navide plugin has been taken down: the Navide takedown list could not be fetched.",
+        "signatureState": {
+          "verified": "Signed by developer {publisher}, who passed Navide's developer vetting. This version itself was not reviewed by Navide.",
+          "revoked": "Signature no longer valid: Navide has revoked the signing key or the developer qualification of {publisher}.",
+          "unverifiable": "A signature Navide cannot check against a vetted developer ({publisher}): treat this file as unsigned.",
+          "warningVerified": "This Navide plugin comes from a file on this computer. It is signed by developer {publisher}, who passed Navide's developer vetting, but Navide has not reviewed this version. Only install files from people you trust.",
+          "warningRevoked": "This Navide plugin comes from a file on this computer, and its signature is no longer valid: Navide has revoked the signing key or the developer qualification of {publisher}. Navide has not reviewed it. Only install it if you trust where it came from."
+        },
+        "errors": {
+          "digestBlocked": "This file of {id} cannot be installed: Navide has taken this exact file down (its digest is on Navide's blocked list)."
+        },
         "confirmReplace": "Replace"
       },
       "trust": {
@@ -9304,8 +9322,17 @@
     "dont-ask": "Stop asking about {label}"
   },
   "plugin-request": {
+    "file": {
+      "path": "File",
+      "folder": "Folder",
+      "digest": "File SHA-256",
+      "unreviewed": "An agent asked to install this file. Navide has not reviewed it. Approving opens the same install dialog as \"Install from file\", and what installs is the copy Navide read when the agent asked, with the SHA-256 above.",
+      "unreviewed-folder": "An agent asked to load this developer folder. Navide has not reviewed it and its contents can change at any time. Approving opens the same dialog as loading a folder yourself.",
+      "digestChanged": "The file Navide holds for this request is not the one shown on the request; nothing was installed. Ask the agent to send it again."
+    },
     "kicker": "Navide plugin request",
     "title": {
+      "install-file": "Install the Navide plugin {plugin} {version} from a file?",
       "install": "Install the Navide plugin {plugin} {version}?",
       "update": "Update the Navide plugin {plugin} from {from} to {version}?",
       "rollback": "Roll the Navide plugin {plugin} back from {from} to {version}?",
@@ -9315,6 +9342,7 @@
     "desc": "An agent asked for this change. Nothing changes until you approve it here; the agent cannot approve it for you.",
     "queue": "{count} pending",
     "requester": "Requested by",
+    "tainted": "This pane is marked External influence: it has read content from outside Navide (such as a web page or a Navide plugin's text), which may have shaped this request. Check it carefully before you decide.",
     "workspace": "Workspace",
     "expires": "Expires at",
     "caller-unknown": "Unknown caller",
@@ -11316,13 +11344,19 @@
       "prerelease": "Pre-release (reviewed)",
       "testplace": "Test build, no human review, expires {date}",
       "testplaceNoExpiry": "Test build, no human review, expiry unknown",
+      "testplaceRevokeNote": "While you are offline or not signed in to Navide Cloud, a withdrawal by its developer takes effect at the latest when it expires (up to 90 days).",
+      "testplaceInvite": "Test build: automated scan only, expires {date}",
+      "testplaceCode": "Test build: the public test code had a light human review; this version had none. Expires {date}",
+      "testplaceExpired": "Test build, expired {date} (kept in use)",
       "local-signed": "Local file signed by its publisher; this version was not reviewed by Navide",
       "local-unsigned": "Local file, not reviewed by Navide, unsigned",
       "developer-unpacked": "Developer folder; its contents can change at any time",
       "factory-bundled": "Built into Navide",
       "notScanned": "Not scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)",
       "publisher": "Publisher: {publisher}",
-      "selfDeclared": "Self-declared: {publisher}"
+      "selfDeclared": "Self-declared: {publisher}",
+      "localSignedBy": "Signed by developer {publisher} (vetted by Navide); this version was not reviewed by Navide",
+      "signatureRevoked": "Signature no longer valid"
     },
     "diff": {
       "heading": "What this update changes",
@@ -11491,7 +11525,10 @@
       "enabled": "{caller} enabled the Navide plugin {plugin}",
       "version": "Version {version}. Its files, grants and data are kept.",
       "undo-failed": "Could not undo: {error}",
-      "undo-stale": "Nothing was undone: the Navide plugin was changed since."
+      "undo-stale": "Nothing was undone: the Navide plugin was changed since.",
+      "updated": "{caller} updated the Navide plugin {plugin} from {from} to {to}",
+      "updated-detail": "Applied without asking you: version {to} discloses exactly the same permissions, backend, agent tools and network access as {from}.",
+      "downgraded": "{plugin} is back to version {version}."
     },
     "caller": {
       "pane": "Agent pane “{pane}”",
@@ -11501,7 +11538,171 @@
     },
     "button": {
       "enable": "Enable again",
-      "disable": "Disable again"
+      "disable": "Disable again",
+      "downgrade": "Back to {version}"
+    }
+  },
+  "testplace": {
+    "view": "Testplace (invited)",
+    "title": "Invited tests",
+    "intro": "Test builds of Navide plugins are visible and installable only to the people invited. They have no Navide human review and stop when they expire.",
+    "signInNeeded": "To join a test, sign in with your Navide Cloud account first.",
+    "joinLabel": "Invite or public test code",
+    "joinPlaceholder": "Paste tpi_… or tpc_…, or the whole invitation message",
+    "join": "Join",
+    "joined": "Joined the test of {id}.",
+    "empty": "You have not joined any test.",
+    "refresh": "Refresh",
+    "viaInvite": "Joined by invite",
+    "viaCode": "Joined with a public test code",
+    "install": "Install test build {version}",
+    "installedVersion": "{version} installed",
+    "noVersion": "No test build to install right now.",
+    "notForThisComputer": "This test build does not support this computer.",
+    "leave": "Leave test",
+    "leaveTitle": "Leave test",
+    "leaveConfirm": "Leave the test of {id}? The installed build stays, but you will get no new test builds.",
+    "expiring": "This test build expires in {days} days ({date}). It then stops; its settings and data are kept.",
+    "error": {
+      "notSignedIn": "Not signed in to Navide Cloud, or the sign-in expired.",
+      "notFound": "This invite or test code was not found or no longer works.",
+      "codeFull": "This public test code is full.",
+      "badCode": "This is not a Testplace invite or public test code.",
+      "other": "Testplace request failed: {error}"
+    },
+    "expired": {
+      "banner": "The test build {id} {version} expired on {date} and was stopped; its settings and data are kept. Choose what to do next.",
+      "toMarketplace": "Install the Navide Marketplace version",
+      "keep": "Keep using (marked expired)",
+      "remove": "Remove",
+      "cannotKeep": "This version was taken down or no longer verifies, so it cannot be kept.",
+      "withdrawnBanner": "The test build {id} {version} was withdrawn by its developer or by Navide and was stopped; its settings and data are kept. Choose what to do next.",
+      "cannotKeepWithdrawn": "This version was withdrawn by its developer or by Navide, so it cannot be kept.",
+      "cannotKeepSignedOut": "Before it can be kept, Navide must confirm this version was not withdrawn. Sign in with your Navide Cloud account, then come back here.",
+      "cannotKeepNotTester": "You are no longer a tester of this test, so Navide cannot confirm this version was not withdrawn, and it cannot be kept. You can install the Navide Marketplace version or remove it.",
+      "cannotKeepRegistryOutdated": "The Navide Marketplace this Navide uses is too old to say whether this version was withdrawn, so it cannot be kept.",
+      "cannotKeepUnreachable": "The Navide Marketplace cannot be reached right now, so Navide cannot confirm this version was not withdrawn, and it cannot be kept for now. Try again later.",
+      "keepTitle": "Keep an expired test build",
+      "keepConfirm": "Keep using the expired test build {id}? It had no Navide human review and gets no more updates; a takedown still stops it.",
+      "kept": "Expired test build, kept in use: it gets no updates, and a takedown still stops it."
+    },
+    "invite": {
+      "title": "Invite testers",
+      "open": "Invite testers",
+      "plugin": "Navide plugin (namespace.name)",
+      "invitees": "Testers, one per line (an email address or a note, up to 120 characters)",
+      "validity": "There is no limit on the number of testers. A test build expires 90 days after it is published, and its testers lose it then. Testers sign in with a Navide Cloud account token, which lasts 30 days before they sign in again. Invite builds have the automated scan only.",
+      "submit": "Send invitations",
+      "sent": "{count} invitations created. Give each code to its tester; the codes are shown only this once.",
+      "copy": "Copy",
+      "done": "Done"
+    }
+  },
+  "marketplace-developer": {
+    "unavailable": "Navide Marketplace developer tools are not available in this window.",
+    "view": {
+      "label": "Navide Marketplace views",
+      "browse": "Browse",
+      "developer": "Developer"
+    },
+    "account": {
+      "title": "Developer account",
+      "desc": "Sign in with your Navide Cloud account to apply, publish Navide plugins and follow their review. Navide keeps the sign-in and the signing key in this computer's secure storage; agents never see them.",
+      "namespace": "Namespace",
+      "no-namespace": "None yet (granted when your application is approved)",
+      "key": "Signing key",
+      "no-key": "Created when you first sign in as a publisher",
+      "key-registered": "Registered",
+      "key-unregistered": "Not registered yet",
+      "expires": "Sign-in expires",
+      "sign-in": "Sign in with Navide Cloud",
+      "sign-in-publish": "Sign in as a publisher",
+      "sign-out": "Sign out",
+      "waiting": "Waiting for the browser…"
+    },
+    "application": {
+      "title": "Developer application",
+      "open": "Fill in the application",
+      "reclaimed": {
+        "title": "Namespaces taken back from this account",
+        "no-reason": "The Navide Marketplace gave no reason"
+      },
+      "notice": "When you press Submit, these details go to Navide Cloud's developer review. Navide staff read them to decide whether you may publish Navide plugins.",
+      "sent": "Application sent for review",
+      "individual": "Individual",
+      "organization": "Organization",
+      "status": {
+        "none": "You have not applied yet.",
+        "pending": "Your application is waiting for review.",
+        "approved": "Approved: you can publish Navide plugins.",
+        "rejected": "Your application was not approved.",
+        "revoked": "Your developer status was revoked."
+      },
+      "field": {
+        "applicant_type": "Applying as",
+        "legal_name": "Legal name",
+        "display_name": "Display name",
+        "contact_email": "Contact email",
+        "country": "Country (ISO code, e.g. TW)",
+        "intended_namespace": "Namespace you want",
+        "description": "What you plan to publish",
+        "agreed_terms": "I agree to the Navide Marketplace developer terms",
+        "organization_name": "Organization name",
+        "organization_id": "Organization registration number",
+        "website": "Website",
+        "source_url": "Work or source code link",
+        "needs_native_backend": "My Navide plugins need a native backend",
+        "domain": "Domain to verify"
+      }
+    },
+    "form": {
+      "developer-application": "Developer application",
+      "publish": "Publish a Navide plugin version",
+      "publish-yank": "Yank a published version",
+      "from-link": "Opened from a link outside Navide, for example from a terminal. Check the package before you submit.",
+      "agent-opened": "Opened for you by {agent}. Fill it in yourself; nothing is sent until you press Submit.",
+      "agent-filled": "Filled in by {agent}. Fields marked \"Written by an agent\" are its draft: check and edit them; nothing is sent until you press Submit.",
+      "by-agent": "Written by an agent",
+      "submit": "Submit",
+      "cancel": "Cancel"
+    },
+    "publish": {
+      "stage-expired": "This package was staged more than an hour ago and has expired. Choose it again.",
+      "open": "Publish a version",
+      "sign-in-first": "Sign in as a publisher first: Navide signs the package with the key it keeps and uploads it.",
+      "choose": "Choose a .vsix package…",
+      "package": "Navide plugin",
+      "file": "File",
+      "digest": "SHA-256",
+      "target": "Platform target",
+      "changelog-hint": "Release notes belong in the package's CHANGELOG.md; the Navide Marketplace shows it and it is signed with the package.",
+      "submit": "Sign and submit for review",
+      "sent": "{plugin} {version} was submitted for review"
+    },
+    "yank": {
+      "title": "Yank this version?",
+      "notice": "Yanking withdraws the version from new installs on every platform. People who already installed it keep it.",
+      "version": "Version",
+      "submit": "Yank",
+      "confirm": "Yank {plugin} {version} from the Navide Marketplace?",
+      "done": "{plugin} {version} was yanked"
+    },
+    "versions": {
+      "title": "Your published versions",
+      "refresh": "Refresh",
+      "empty": "No versions yet.",
+      "state": "Review",
+      "status": {
+        "pending": "Waiting for review",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "yanked": "Yanked"
+      }
+    },
+    "error": {
+      "not-signed-in": "Sign in under Developer account first.",
+      "qualification": "Your developer application must be approved first.",
+      "registry": "The Navide Marketplace refused it ({status} {code}): {message}"
     }
   }
 }

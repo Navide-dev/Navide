@@ -1783,6 +1783,13 @@
       "builtinSwitchBusy": "適用中… 進行中の処理が終わるのを待っています。Plans では 30 秒ほどかかることがあります。",
       "disabledBadge": "無効",
       "disabledNote": "無効：ビューとバックエンドは実行されません。ファイル、権限、保存データは保持されます。",
+      "digestBlock": {
+        "blocked": "Navide がブロック",
+        "security": "Navide が取り下げ（セキュリティ）",
+        "qualificationRevoked": "開発者資格が取り消されました",
+        "developerWithdrawn": "開発者が取り下げ",
+        "note": "この Navide プラグインをインストールした後、Navide がそのインストール元のファイルをブロックリストに追加しました。"
+      },
       "rollback": {
         "toBundled": "同梱版に戻す",
         "toVersion": "{version} に戻す",
@@ -1941,6 +1948,7 @@
         "selfHostedQuarantine": "{id} {version} は自前の Registry から入れたもので、読み込まれていません。開発者モードをオンにするか、Navide マーケットプレイスからインストールしてください。"
       },
       "localInstall": {
+        "agentRequest": "{requester} からのリクエストです。Navide はこの Navide プラグインを審査していません。インストールするかどうかはあなたが決めます。",
         "button": ".vsix ファイルからインストール…",
         "backToMarketplace": "Navide マーケットプレイス版に戻す",
         "warning": "この Navide プラグインは、このコンピューター上のファイルから読み込まれます。Navide の審査を受けておらず署名もないため、作成者を確認できず、ファイルが改変されている可能性もあります。信頼できる相手から受け取ったファイルだけをインストールしてください。",
@@ -1956,6 +1964,16 @@
         "replaceDataSetAside": "新しい版は空のデータフォルダーから始まります。これまでのデータは別に保管され、新しい版からは読めません。",
         "reattachData": "以前この提供元から別に保管したデータを戻す（既定では戻さない）",
         "takedownUnknown": "この Navide プラグインが Navide によって取り下げられていないか、現在は確認できません：Navide の取り下げリストを取得できませんでした。",
+        "signatureState": {
+          "verified": "Navide の開発者資格審査を通過した開発者 {publisher} の署名があります。このバージョン自体は Navide の審査を受けていません。",
+          "revoked": "署名は無効になりました：Navide が {publisher} の署名鍵または開発者資格を取り消しました。",
+          "unverifiable": "署名はありますが、Navide は審査済みの開発者（{publisher}）と照合できません：このファイルは署名なしとして扱ってください。",
+          "warningVerified": "この Navide プラグインは、このコンピューター上のファイルから読み込まれます。Navide の開発者資格審査を通過した開発者 {publisher} の署名がありますが、このバージョンは Navide の審査を受けていません。信頼できる相手から受け取ったファイルだけをインストールしてください。",
+          "warningRevoked": "この Navide プラグインは、このコンピューター上のファイルから読み込まれ、その署名は無効になっています：Navide が {publisher} の署名鍵または開発者資格を取り消しました。Navide の審査も受けていません。入手元を信頼できる場合にだけインストールしてください。"
+        },
+        "errors": {
+          "digestBlocked": "{id} のこのファイルはインストールできません：Navide がこのファイルそのものを取り下げました（ダイジェストが Navide のブロックリストにあります）。"
+        },
         "confirmReplace": "置き換える"
       },
       "trust": {
@@ -9304,8 +9322,17 @@
     "dont-ask": "{label} について今後確認しない"
   },
   "plugin-request": {
+    "file": {
+      "path": "ファイル",
+      "folder": "フォルダー",
+      "digest": "ファイルの SHA-256",
+      "unreviewed": "agent がこのファイルのインストールを求めています。Navide はこのファイルを審査していません。承認すると「ファイルからインストール」と同じダイアログが開き、インストールされるのは agent が求めた時点で Navide が読み込んだもの（上の SHA-256）です。",
+      "unreviewed-folder": "agent がこの開発者フォルダーの読み込みを求めています。Navide は審査しておらず、内容はいつでも変わる可能性があります。承認すると、自分でフォルダーを読み込むときと同じダイアログが開きます。",
+      "digestChanged": "このリクエストのために Navide が保持しているファイルが、リクエストに表示されたものと一致しないため、インストールしませんでした。agent にもう一度送ってもらってください。"
+    },
     "kicker": "Navide プラグインのリクエスト",
     "title": {
+      "install-file": "ファイルから Navide プラグイン {plugin} {version} をインストールしますか？",
       "install": "Navide プラグイン {plugin} {version} をインストールしますか？",
       "update": "Navide プラグイン {plugin} を {from} から {version} に更新しますか？",
       "rollback": "Navide プラグイン {plugin} を {from} から {version} に戻しますか？",
@@ -9315,6 +9342,7 @@
     "desc": "agent がこの変更を求めています。ここで承認するまで何も変わりません。agent が代わりに承認することはできません。",
     "queue": "{count} 件待ち",
     "requester": "依頼元",
+    "tainted": "このペインには「外部の影響」の印があります。Navide の外の内容（ウェブページや Navide プラグインの文章など）を読んでおり、この依頼はその影響を受けている可能性があります。よく確認してから判断してください。",
     "workspace": "ワークスペース",
     "expires": "期限",
     "caller-unknown": "不明な呼び出し元",
@@ -11316,13 +11344,19 @@
       "prerelease": "プレリリース版（審査済み）",
       "testplace": "テスト版。人による審査なし。{date} に期限切れ",
       "testplaceNoExpiry": "テスト版。人による審査なし。期限不明",
+      "testplaceRevokeNote": "オフラインまたは Navide Cloud にサインインしていない間は、開発者による取り下げは最長で期限切れ（最大 90 日）まで反映されません。",
+      "testplaceInvite": "テスト版：自動スキャンのみ。{date} に期限切れ",
+      "testplaceCode": "テスト版：公開テストコードは簡易な人による審査済み、このバージョンは人による審査なし。{date} に期限切れ",
+      "testplaceExpired": "テスト版。{date} に期限切れ（使用を継続中）",
       "local-signed": "ローカルファイル。発行者の署名あり。このバージョンは Navide の審査を受けていません",
       "local-unsigned": "ローカルファイル。Navide の審査なし、署名なし",
       "developer-unpacked": "開発者フォルダー。内容はいつでも変わる可能性があります",
       "factory-bundled": "Navide に組み込み",
       "notScanned": "未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）",
       "publisher": "発行者：{publisher}",
-      "selfDeclared": "自称：{publisher}"
+      "selfDeclared": "自称：{publisher}",
+      "localSignedBy": "開発者 {publisher}（Navide の資格審査済み）の署名あり。このバージョンは Navide の審査を受けていません",
+      "signatureRevoked": "署名は無効になりました"
     },
     "diff": {
       "heading": "この更新での権限の変化",
@@ -11491,7 +11525,10 @@
       "enabled": "{caller}が Navide プラグイン {plugin} を有効にしました",
       "version": "バージョン {version}。ファイル、許可、データは保持されます。",
       "undo-failed": "元に戻せませんでした：{error}",
-      "undo-stale": "元に戻していません：その後 Navide プラグインが変更されています。"
+      "undo-stale": "元に戻していません：その後 Navide プラグインが変更されています。",
+      "updated": "{caller} が Navide プラグイン {plugin} を {from} から {to} に更新しました",
+      "updated-detail": "確認せずに適用しました：{to} が開示する権限、バックエンド、エージェントツール、ネットワークアクセスは {from} とまったく同じです。",
+      "downgraded": "{plugin} をバージョン {version} に戻しました。"
     },
     "caller": {
       "pane": "エージェント pane「{pane}」",
@@ -11501,7 +11538,171 @@
     },
     "button": {
       "enable": "再度有効にする",
-      "disable": "再度無効にする"
+      "disable": "再度無効にする",
+      "downgrade": "{version} に戻す"
+    }
+  },
+  "testplace": {
+    "view": "Testplace（招待制）",
+    "title": "招待制テスト",
+    "intro": "Navide プラグインのテスト版は、招待された人だけが表示・インストールできます。Navide による人の審査はなく、期限が切れると停止します。",
+    "signInNeeded": "テストに参加するには、まず Navide Cloud アカウントにサインインしてください。",
+    "joinLabel": "招待コードまたは公開テストコード",
+    "joinPlaceholder": "tpi_… または tpc_… を貼り付け（招待メッセージ全体でも可）",
+    "join": "参加",
+    "joined": "{id} のテストに参加しました。",
+    "empty": "まだテストに参加していません。",
+    "refresh": "更新",
+    "viaInvite": "招待で参加",
+    "viaCode": "公開テストコードで参加",
+    "install": "テスト版 {version} をインストール",
+    "installedVersion": "{version} をインストール済み",
+    "noVersion": "現在インストールできるテスト版はありません。",
+    "notForThisComputer": "このテスト版はこのコンピューターに対応していません。",
+    "leave": "テストから抜ける",
+    "leaveTitle": "テストから抜ける",
+    "leaveConfirm": "{id} のテストから抜けますか？インストール済みのバージョンは残りますが、新しいテスト版は届かなくなります。",
+    "expiring": "このテスト版は {days} 日後（{date}）に期限切れになります。その後は停止しますが、設定とデータは残ります。",
+    "error": {
+      "notSignedIn": "Navide Cloud にサインインしていないか、サインインの期限が切れています。",
+      "notFound": "この招待またはテストコードが見つからないか、無効になっています。",
+      "codeFull": "この公開テストコードは定員に達しています。",
+      "badCode": "これは Testplace の招待コードまたは公開テストコードではありません。",
+      "other": "Testplace のリクエストに失敗しました：{error}"
+    },
+    "expired": {
+      "banner": "テスト版 {id} {version} は {date} に期限切れになり、停止しました。設定とデータは残っています。次の操作を選んでください。",
+      "toMarketplace": "Navide マーケットプレイス版をインストール",
+      "keep": "使い続ける（期限切れと表示）",
+      "remove": "削除",
+      "cannotKeep": "このバージョンは取り下げられたか検証できないため、使い続けることはできません。",
+      "withdrawnBanner": "テスト版 {id} {version} は開発者または Navide によって取り下げられ、停止しました。設定とデータは残っています。次の操作を選んでください。",
+      "cannotKeepWithdrawn": "このバージョンは開発者または Navide によって取り下げられたため、使い続けることはできません。",
+      "cannotKeepSignedOut": "使い続けるには、このバージョンが取り下げられていないことを確認する必要があります。Navide Cloud アカウントにサインインしてから、ここに戻ってください。",
+      "cannotKeepNotTester": "あなたはこのテストのテスターではなくなったため、このバージョンが取り下げられていないことを確認できず、使い続けることはできません。Navide マーケットプレイス版をインストールするか、削除できます。",
+      "cannotKeepRegistryOutdated": "接続先の Navide マーケットプレイスが古いため、このバージョンが取り下げられたかどうかを確認できません。そのため使い続けることはできません。",
+      "cannotKeepUnreachable": "現在 Navide マーケットプレイスに接続できないため、このバージョンが取り下げられていないことを確認できず、今は使い続けることができません。後でもう一度お試しください。",
+      "keepTitle": "期限切れのテスト版を使い続ける",
+      "keepConfirm": "期限切れのテスト版 {id} を使い続けますか？Navide による人の審査はなく、更新も届きません。取り下げられた場合は停止します。",
+      "kept": "期限切れのテスト版を使用中：更新は届かず、取り下げられた場合は停止します。"
+    },
+    "invite": {
+      "title": "テスターを招待",
+      "open": "テスターを招待",
+      "plugin": "Navide プラグイン（namespace.name）",
+      "invitees": "テスター：1 行に 1 人（メールアドレスまたはメモ、120 文字まで）",
+      "validity": "テスターの人数に上限はありません。テスト版は公開から 90 日で期限切れになり、その時点でテスターは使えなくなります。テスターは Navide Cloud アカウントのトークンでサインインし、トークンは 30 日で再サインインが必要になります。招待制のテスト版は自動スキャンのみです。",
+      "submit": "招待を送信",
+      "sent": "{count} 件の招待を作成しました。各コードを該当するテスターに渡してください。コードは今回だけ表示されます。",
+      "copy": "コピー",
+      "done": "完了"
+    }
+  },
+  "marketplace-developer": {
+    "unavailable": "このウィンドウでは Navide マーケットプレイスの開発者機能を使えません。",
+    "view": {
+      "label": "Navide マーケットプレイスの表示",
+      "browse": "閲覧",
+      "developer": "開発者"
+    },
+    "account": {
+      "title": "開発者アカウント",
+      "desc": "Navide Cloud アカウントでサインインすると、開発者の申請、Navide プラグインの公開、審査状況の確認ができます。サインイン情報と署名鍵は Navide がこのコンピュータの安全な保存領域に保管し、エージェントには見えません。",
+      "namespace": "名前空間",
+      "no-namespace": "まだありません（申請が承認されると付与されます）",
+      "key": "署名鍵",
+      "no-key": "公開者として初めてサインインしたときに作成されます",
+      "key-registered": "登録済み",
+      "key-unregistered": "未登録",
+      "expires": "サインインの期限",
+      "sign-in": "Navide Cloud でサインイン",
+      "sign-in-publish": "公開者としてサインイン",
+      "sign-out": "サインアウト",
+      "waiting": "ブラウザーでの操作を待っています…"
+    },
+    "application": {
+      "title": "開発者の申請",
+      "open": "申請を記入",
+      "reclaimed": {
+        "title": "このアカウントから回収された名前空間",
+        "no-reason": "Navide マーケットプレイスは理由を示していません"
+      },
+      "notice": "送信すると、これらの情報は Navide Cloud の開発者審査に送られ、Navide のスタッフが Navide プラグインを公開できるかを判断します。",
+      "sent": "申請を審査に送りました",
+      "individual": "個人",
+      "organization": "組織",
+      "status": {
+        "none": "まだ申請していません。",
+        "pending": "申請は審査待ちです。",
+        "approved": "承認済み：Navide プラグインを公開できます。",
+        "rejected": "申請は承認されませんでした。",
+        "revoked": "開発者資格は取り消されました。"
+      },
+      "field": {
+        "applicant_type": "申請区分",
+        "legal_name": "法的氏名",
+        "display_name": "表示名",
+        "contact_email": "連絡先メール",
+        "country": "国（ISO コード、例: TW）",
+        "intended_namespace": "希望する名前空間",
+        "description": "公開する予定の内容",
+        "agreed_terms": "Navide マーケットプレイスの開発者規約に同意します",
+        "organization_name": "組織名",
+        "organization_id": "組織の登録番号",
+        "website": "ウェブサイト",
+        "source_url": "作品またはソースコードのリンク",
+        "needs_native_backend": "Navide プラグインにネイティブバックエンドが必要",
+        "domain": "確認するドメイン"
+      }
+    },
+    "form": {
+      "developer-application": "開発者の申請",
+      "publish": "Navide プラグインのバージョンを公開",
+      "publish-yank": "公開済みバージョンの取り下げ（yank）",
+      "from-link": "このフォームは Navide の外のリンク（ターミナルなど）から開かれました。送信前にパッケージを確認してください。",
+      "agent-opened": "{agent} が開きました。ご自身で記入してください。送信するまで何も送られません。",
+      "agent-filled": "{agent} が記入しました。「エージェントが記入」と表示された欄はその下書きです。確認して修正してください。送信するまで何も送られません。",
+      "by-agent": "エージェントが記入",
+      "submit": "送信",
+      "cancel": "キャンセル"
+    },
+    "publish": {
+      "stage-expired": "このパッケージは 1 時間以上前に保持されたため期限切れです。もう一度選んでください。",
+      "open": "バージョンを公開",
+      "sign-in-first": "先に公開者としてサインインしてください。Navide が保管している鍵でパッケージに署名してアップロードします。",
+      "choose": ".vsix パッケージを選択…",
+      "package": "Navide プラグイン",
+      "file": "ファイル",
+      "digest": "SHA-256",
+      "target": "プラットフォームのターゲット",
+      "changelog-hint": "リリースノートはパッケージの CHANGELOG.md に書いてください。Navide マーケットプレイスに表示され、パッケージと一緒に署名されます。",
+      "submit": "署名して審査に送る",
+      "sent": "{plugin} {version} を審査に送りました"
+    },
+    "yank": {
+      "title": "このバージョンを取り下げますか？",
+      "notice": "取り下げ（yank）ると、すべてのプラットフォームで新規インストールできなくなります。インストール済みの人には影響しません。",
+      "version": "バージョン",
+      "submit": "取り下げ",
+      "confirm": "{plugin} {version} を Navide マーケットプレイスから取り下げますか？",
+      "done": "{plugin} {version} を取り下げました"
+    },
+    "versions": {
+      "title": "公開したバージョン",
+      "refresh": "再読み込み",
+      "empty": "まだバージョンはありません。",
+      "state": "審査",
+      "status": {
+        "pending": "審査待ち",
+        "approved": "承認済み",
+        "rejected": "却下",
+        "yanked": "取り下げ済み"
+      }
+    },
+    "error": {
+      "not-signed-in": "先に「開発者アカウント」でサインインしてください。",
+      "qualification": "開発者の申請が承認されている必要があります。",
+      "registry": "Navide マーケットプレイスが拒否しました（{status} {code}）：{message}"
     }
   }
 }

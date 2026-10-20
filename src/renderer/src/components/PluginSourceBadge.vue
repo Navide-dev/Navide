@@ -19,30 +19,50 @@ const props = defineProps<{
   publisher?: string
   /** Test build expiry (ISO-8601); printed as YYYY-MM-DD, or "unknown" when absent. */
   expiresAt?: string | null
+  /** How the user joined a test build: decides which review the row names. */
+  via?: 'invite' | 'code' | null
   /** Render the disclosure card row instead of the badge. */
   row?: boolean
+  /** A3: a local file a Navide-vetted publisher signed (`verified`), or whose
+   *  key or publisher the Registry has revoked since (`revoked`). */
+  signature?: 'verified' | 'revoked'
 }>()
 const { t } = useI18n()
 
 const LOCAL: readonly PluginSource[] = ['local-signed', 'local-unsigned', 'developer-unpacked']
 const UNSIGNED: readonly PluginSource[] = ['local-unsigned', 'developer-unpacked']
 
-const label = computed(() => pluginSourceLabel(t, props.source, props.expiresAt))
+// A3: the Host stores a signed local file as `local-unsigned` and reports the
+// signature beside it; only an active vetted key makes it read as signed.
+const shown = computed<PluginSource>(() =>
+  props.source === 'local-unsigned' && props.signature === 'verified' ? 'local-signed' : props.source
+)
+const revoked = computed(() => props.source === 'local-unsigned' && props.signature === 'revoked')
+const label = computed(() => {
+  if (revoked.value) return t('pluginDisclosure.source.signatureRevoked')
+  if (shown.value === 'local-signed' && props.signature === 'verified' && props.publisher) {
+    return t('pluginDisclosure.source.localSignedBy', { publisher: reveal(props.publisher) })
+  }
+  return pluginSourceLabel(t, shown.value, props.expiresAt, props.via)
+})
 const local = computed(() => LOCAL.includes(props.source))
+const badgeClass = computed(() => (revoked.value ? 'nv-source-badge--signature-revoked' : `nv-source-badge--${shown.value}`))
 const publisherText = computed(() => {
   if (!local.value || !props.publisher) return ''
   const name = reveal(props.publisher)
-  return UNSIGNED.includes(props.source) ? t('pluginDisclosure.source.selfDeclared', { publisher: name }) : name
+  return UNSIGNED.includes(shown.value) ? t('pluginDisclosure.source.selfDeclared', { publisher: name }) : name
 })
 </script>
 
 <template>
-  <div v-if="row" class="nv-source-row" :data-source="source">
-    <span class="nv-source-row-label">{{ $t('pluginDisclosure.source.heading') }}</span> <span class="nv-source-badge" :class="`nv-source-badge--${source}`">{{ label }}</span>
+  <div v-if="row" class="nv-source-row" :data-source="shown" :data-signature="signature">
+    <span class="nv-source-row-label">{{ $t('pluginDisclosure.source.heading') }}</span> <span class="nv-source-badge" :class="badgeClass">{{ label }}</span>
     <p v-if="local" class="nv-source-scan">{{ $t('pluginDisclosure.source.notScanned') }}</p>
+    <!-- S8: a withdrawal reaches an offline or signed-out tester only at the expiry. -->
+    <p v-if="source === 'testplace'" class="nv-source-revoke">{{ $t('pluginDisclosure.source.testplaceRevokeNote') }}</p>
     <p v-if="publisherText" class="nv-source-publisher">{{ $t('pluginDisclosure.source.publisher', { publisher: publisherText }) }}</p>
   </div>
-  <span v-else class="nv-source-badge" :class="`nv-source-badge--${source}`" :data-source="source">{{ label }}</span>
+  <span v-else class="nv-source-badge" :class="badgeClass" :data-source="shown" :data-signature="signature">{{ label }}</span>
 </template>
 
 <style scoped>
@@ -78,6 +98,10 @@ const publisherText = computed(() => {
 .nv-source-badge--prerelease {
   color: var(--trust-signed-fg);
   background: var(--trust-signed-subtle);
+}
+.nv-source-badge--signature-revoked {
+  color: var(--danger-fg, var(--trust-unsigned-fg));
+  background: var(--danger-subtle, var(--trust-unsigned-subtle));
 }
 .nv-source-badge--factory-bundled {
   color: var(--text-secondary);

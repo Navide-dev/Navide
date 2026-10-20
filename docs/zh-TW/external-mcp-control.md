@@ -501,6 +501,21 @@ App 自己的固定錯誤文字（所有 `BAD_REQUEST`，以及 `HOST_UNAVAILABL
 
 錯誤是 `{ok: false, error, error_code}`，代碼為 `BAD_REQUEST`、`BUILTIN_PLUGIN`、`NOT_INSTALLED`、`NOT_FOUND`、`ACTION_FAILED`、`REGISTRY_UNAVAILABLE` 或 `HOST_UNAVAILABLE`。每一次請求、決定、結果、停用和啟用，都會連同呼叫端（pane 名稱、外部用戶端或 Navide Host）記在 navide.db 的 `plugin_agent_actions` 表。
 
+### 本機 Navide 外掛套件：開啟、檢查、打包、從檔案安裝
+
+每一步都有工具，「開啟」和「填寫」是兩個獨立動作，可以單獨使用。使用者想自己操作時，agent 呼叫 `_open` 工具後就停下來等；使用者要 agent 代勞時，agent 呼叫 `plugins_install_file_fill`（不必先開啟）。這些工具都不會安裝、送出或切換任何東西：只有使用者核准請求、並在和「從檔案安裝」相同的同意對話框確認後，才會安裝。開發者模式仍然只能由使用者自己切換；plugin frame 和環境變數仍然不能從檔案安裝。
+
+| 工具 | 參數 | 作用 |
+|---|---|---|
+| `marketplace_open` | `id=""` | 在呼叫者的 Navide 視窗打開 Navide 市集，或其中某個外掛的頁面 |
+| `plugins_install_file_open` | — | 打開「設定 → Navide 外掛」，使用者在那裡用「從檔案安裝」選 `.vsix` |
+| `plugins_developer_mode_open` | — | 打開開發者模式的開關 |
+| `plugins_validate_package` | `path` | 唯讀檢查 `.vsix` 或外掛資料夾（絕對路徑）：資料夾先套 `navide-plugin package` 的規則，再和檔案一樣套本機安裝的規則（壓縮檔與 manifest、`navide.` 命名空間、Navide 的下架與封鎖檔案清單、`<file>.sig` 簽章）。回傳 `{ok, path, packageKind, valid, errors, id, version, target, digest, signature, risk, disclosure, scan, reviewedByNavide: false}`；`signature` 是 `none`、`verified`（已審核開發者的有效金鑰）、`revoked` 或 `unverifiable` |
+| `plugins_package` | `dir`、`target=""`、`out=""` | 依資料夾的 `artifact-files.json` 產生和 `navide-plugin package` 完全相同的 `.vsix`，寫到 `out` 或資料夾旁的 `<id>-<version>-<target>.vsix`。不覆寫已存在的檔案，不寫進 Navide 的資料夾，不簽章。回傳寫出檔案的檢查報告 |
+| `plugins_install_file_fill` | `path`、`reason=""` | Navide 讀一次 `.vsix`、檢查並保存那一份（資料夾需要開發者模式已開啟），然後建立 `plugin-install-file` 請求。使用者會看到誰提出、理由（標示為 agent 寫的）、路徑、SHA-256，以及 Navide 未審核；核准後打開「從檔案安裝」的同意對話框，裝的是保存的那一份。回傳 `{ok, approval_id, status: "pending", expires_at, id, version, digest, packageKind, signature, reviewedByNavide: false, note}`；本機安裝會拒絕的套件回 `PACKAGE_INVALID` 和 `errors`。之後用 `marketplace_request_status` 查狀態 |
+
+Navide 資料夾內的路徑、比任何套件都大的檔案都會被拒絕。不論同時開著幾個請求，Navide 都會保留每一份暫存，直到它的請求過期為止：和所有 Navide 外掛請求一樣是 15 分鐘，再多 1 分鐘寬限，所以使用者還能核准的請求，裝的一定是它自己那一份。請求過期後暫存就會刪除，核准卡顯示「這個請求已經過期。」，不是失敗；之後才核准不會安裝任何東西，`marketplace_request_status` 回報 `expired`（若在視窗端才發現，則是 `failed` 並帶 `AGENT_STAGING_EXPIRED`），請重新呼叫 `plugins_install_file_fill`。暫存是 Navide 資料夾裡的檔案，同一個檔案不論被要求幾次都只存一份。沒有數量或總量上限，但 Navide 不會把磁碟寫滿：如果寫入這一份之後剩餘空間會低於 5 GiB（或寫到一半空間用完），這次請求會回 `STAGING_DISK_LOW`，訊息寫出目前剩餘空間和這個檔案的大小，什麼都不寫入；之前的暫存和它們的核准卡都不受影響。過期的暫存每分鐘清理一次；請求被拒絕時（不論在哪個視窗拒絕）立即刪除；上一次執行留下的暫存在 Navide 啟動時清掉。套件自己的文字（id、版本、引用 manifest 的錯誤、揭露內容）照上面的方式框起來，並標記讀取的 pane。`plugins_list_installed` 的每一項另外回傳 `source`（`marketplace`、`prerelease`、`testplace`、`local-signed`、`local-unsigned`、`developer-unpacked`、`factory-bundled`），以及開發者金鑰之後被 Navide 撤銷的本機檔案會帶 `signatureRevoked: true`。
+
 ### Pipeline
 
 Pipeline 是一份存起來的多階段執行：一組有序的 Stage，每個 Stage 有若干 Slot，
