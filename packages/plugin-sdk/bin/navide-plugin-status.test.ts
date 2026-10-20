@@ -236,6 +236,19 @@ describe('navide-plugin publish --via-navide', { timeout: 30_000 }, () => {
     expect(notVsix.stderr).toContain('--via-navide hands over a .vsix package')
     expect(run(['publish', 'f.vsix', '--no-browser'], directory, env).stderr).toContain('--no-browser applies to publish --via-navide only')
   })
+
+  it('refuses --channel instead of dropping it, so a Testplace build never becomes a public submission', () => {
+    const directory = root()
+    writePackage(directory, frontendManifest(), { 'frontend/main/index.html': '<!doctype html>' })
+    const env = environment(directory, undefined)
+    expect(run(['package', directory, '--out', 'f.vsix'], directory, env).status).toBe(0)
+    const refused = run(['publish', 'f.vsix', '--via-navide', '--channel', 'testplace', '--no-browser'], directory, env)
+    expect(refused.status).not.toBe(0)
+    expect(refused.stdout).not.toContain('navide://publish')
+    expect(refused.stderr).toContain('--via-navide cannot be combined with --channel')
+    expect(refused.stderr).toContain('navide-plugin publish f.vsix --channel testplace')
+    expect(existsSync(env.NAVIDE_PLUGIN_CONFIG_DIR as string)).toBe(false)
+  })
 })
 
 describe('navide-plugin scan', { timeout: 30_000 }, () => {
