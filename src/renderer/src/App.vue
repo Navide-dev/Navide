@@ -171,7 +171,7 @@ import {
   CLI_PASTE_LINE_CAP
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
-import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
+import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -14829,7 +14829,7 @@ backend.on('agent.activity', (raw) => {
   const questionAction = questionActionFor(ev)
   if (questionAction === 'raise') paneRefs[ev.pane_id]?.markQuestion?.()
   else if (questionAction === 'clear') paneRefs[ev.pane_id]?.clearQuestion?.()
-  // Background tasks the CLI keeps running past its turn end (claude's reader):
+  // Background tasks the CLI keeps running past its turn end (claude's and qwen's readers):
   // they hold the RUNNING badge until the transcript reports them finished.
   if (ev.detail === 'background:start' || ev.detail === 'background:end') {
     paneRefs[ev.pane_id]?.noteBackgroundTasks?.(
@@ -16005,8 +16005,20 @@ function computeStageSlotSignals(stageIndex: number): SlotSignal[] {
       // that true after the block lifts, which quotaBlocked alone cannot.
       quotaBlocked: paneUsageLimited(p.id),
       quotaSeenAt: p.usageLimitSeenAt ?? 0,
-      turnSourceAt: paneTurnCompleteSourceAt.get(p.id) ?? 0
+      turnSourceAt: paneTurnCompleteSourceAt.get(p.id) ?? 0,
+      backgroundRunning: paneBackgroundRunning(p.id)
     }
+  })
+}
+
+// Background work this pane's CLI keeps running past its turn end (claude's
+// and qwen's readers, claude's hooks). Read by the pipeline's slot verdicts
+// only; a vendor that reports none is never held.
+function paneBackgroundRunning(paneId: string): boolean {
+  return backgroundWorkPending({
+    liveTasks: paneRefs[paneId]?.hasLiveBackgroundTasks?.() === true,
+    subagents: panePendingSubagents.get(paneId),
+    now: Date.now(),
   })
 }
 
@@ -17432,7 +17444,10 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
           // And once the block lifts, only the turn's own clock can tell the
           // failed turn from a real retry.
           quotaSeenAt: panes.value.find((p) => p.id === paneId)?.usageLimitSeenAt ?? 0,
-          turnSourceAt: paneTurnCompleteSourceAt.get(paneId) ?? 0
+          turnSourceAt: paneTurnCompleteSourceAt.get(paneId) ?? 0,
+          // A turn that ended while its background subagent / shell still
+          // runs is not this slot handing off — see paneBackgroundRunning.
+          backgroundRunning: paneBackgroundRunning(paneId)
         })
       ) {
         cancelWatcher(paneId)
