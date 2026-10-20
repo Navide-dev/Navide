@@ -130,3 +130,34 @@ async def test_a_refused_pane_credential_is_logged_with_its_reason(
     refused = [r.getMessage() for r in caplog.records if "p-490-gone" in r.getMessage()]
     assert len(refused) == 1, refused  # once per pane and reason, not on every call
     assert "caller token rejected" in refused[0]
+
+
+def test_the_sdk_errors_behind_a_32603_reach_the_backend_log_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    from logging.handlers import RotatingFileHandler
+
+    from agent_team_backend import applog
+
+    path = tmp_path / "backend.log"
+    monkeypatch.setattr(applog, "backend_log_path", lambda: path)
+    applog.setup_file_logging("info")
+    loggers = [logging.getLogger("agent_team_backend"), logging.getLogger("mcp")]
+    try:
+        sdk = logging.getLogger("mcp.server.streamable_http")
+        sdk.info("Terminating session: None")
+        try:
+            raise RuntimeError("simulated " + "sdk failure")
+        except RuntimeError:
+            sdk.exception("Error handling POST request")
+        for logger in loggers:
+            for handler in logger.handlers:
+                handler.flush()
+        text = path.read_text(encoding="utf-8")
+    finally:
+        for logger in loggers:
+            for handler in list(logger.handlers):
+                if isinstance(handler, RotatingFileHandler) and handler.baseFilename == str(path):
+                    logger.removeHandler(handler)
+                    handler.close()
+    assert "Error handling POST request" in text
+    assert "RuntimeError: simulated sdk failure" in text  # the traceback, not just the line
+    assert "Terminating session" not in text  # the SDK's per-request info stays out
