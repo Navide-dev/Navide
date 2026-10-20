@@ -11599,6 +11599,10 @@
     "application": {
       "title": "開發者申請",
       "open": "填寫申請",
+      "reclaimed": {
+        "title": "已被收回的命名空間",
+        "no-reason": "Navide 市集沒有附上原因"
+      },
       "notice": "按下送出後，這些資料會送到 Navide Cloud 的開發者審核，由 Navide 人員判斷你是否可以上架 Navide 外掛。",
       "sent": "申請已送出審核",
       "individual": "個人",
