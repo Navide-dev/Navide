@@ -20,6 +20,8 @@ import {
   validatePortableArchiveEntries,
   type PluginManifestV2,
 } from '../../../packages/plugin-contracts/src/index'
+import { isWindows } from '../../shared/osplat'
+import { currentPluginHostTarget } from './pluginTarget'
 
 export const CANONICAL_FILE_LIST = 'artifact-files.json'
 const SOURCE_ONLY_SEGMENTS = new Set(['node_modules', '.venv', 'venv', '__pycache__', 'tests'])
@@ -75,7 +77,7 @@ export interface FolderPackage {
 /** The Host's own target, `<platform>-<arch>`, which a native backend is
  * built for (the SDK's rule: a backend package is packaged on its target). */
 export function hostBuildTarget(): string {
-  return `${process.platform}-${process.arch}`
+  return currentPluginHostTarget()
 }
 
 function artifactTarget(manifest: PluginManifestV2, target: string): string {
@@ -197,7 +199,7 @@ function validateFiles(manifest: PluginManifestV2, files: Array<{ path: string; 
     }
     const backend = files.find((file) => file.path === backendEntry)
     const backendStat = lstatSync(join(root, backendEntry))
-    if (!backendStat.isFile() || (process.platform !== 'win32' && (backendStat.mode & 0o111) === 0)) {
+    if (!backendStat.isFile() || (!isWindows() && (backendStat.mode & 0o111) === 0)) {
       fail(`backend entry '${backendEntry}' must be marked executable`)
     }
     if (!backend || backend.bytes.subarray(0, 2).equals(Buffer.from('#!')) || !backendMatchesTarget(backend.bytes, target)) {

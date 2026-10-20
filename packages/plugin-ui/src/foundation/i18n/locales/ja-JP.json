@@ -1933,7 +1933,7 @@
         "selfHostedQuarantine": "{id} {version} は自前の Registry から入れたもので、読み込まれていません。開発者モードをオンにするか、Navide マーケットプレイスからインストールしてください。"
       },
       "localInstall": {
-        "agentRequest": "{requester} からのリクエストです。Navide はこのプラグインを審査していません。インストールするかどうかはあなたが決めます。",
+        "agentRequest": "{requester} からのリクエストです。Navide はこの Navide プラグインを審査していません。インストールするかどうかはあなたが決めます。",
         "button": ".vsix ファイルからインストール…",
         "backToMarketplace": "Navide マーケットプレイス版に戻す",
         "warning": "この Navide プラグインは、このコンピューター上のファイルから読み込まれます。Navide の審査を受けておらず署名もないため、作成者を確認できず、ファイルが改変されている可能性もあります。信頼できる相手から受け取ったファイルだけをインストールしてください。",
