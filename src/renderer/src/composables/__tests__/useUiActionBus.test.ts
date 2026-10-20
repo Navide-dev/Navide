@@ -569,6 +569,99 @@ describe('useUiActionBus — pane-private actions (inbox)', () => {
   })
 })
 
+describe('useUiActionBus — an agent cannot close itself', () => {
+  // The backend refuses these first (_self_scope_refusal); the window repeats
+  // the rule with the identity the backend put on the request, so no route
+  // into this window closes the caller's own pane, workspace or window.
+  function setup(opts: { hostsPane?: (id: string) => boolean } = {}) {
+    const { backend, emit, sent } = createMockBackend()
+    const ran = vi.fn((args: unknown) => args)
+    const reclaim = vi.fn((args: unknown) => ({ reclaimed: (args as { paneId: string[] }).paneId, refused: [] }))
+    for (const action of ['ui.pane.close', 'ui.workspace.close', 'ui.window.close']) registerCommand(action, ran)
+    registerCommand('ui.pane.reclaim', reclaim)
+    useUiActionBus({
+      backend,
+      currentWorkspace: ref('/ws'),
+      buildSnapshot: () => ({}),
+      ownsWorkspace: (p) => p.replace(/\/+$/, '') === '/ws',
+      hostsPane: opts.hostsPane,
+    })
+    const replies = () => sent.filter((s) => s.type === 'ui.invoke.result').map((s) => s.payload as { ok: boolean; error: string | null; result: unknown })
+    return { emit, ran, reclaim, replies }
+  }
+  const asCaller = { caller_pane_id: 'pa', caller_workspace_path: '/ws', addressed: true }
+
+  it('refuses ui.pane.close naming the caller itself', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.close', args: { paneId: 'pa' }, ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0]).toMatchObject({ ok: false })
+    expect(replies()[0].error).toMatch(/^self-close/)
+  })
+
+  it('still closes another pane', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.close', args: { paneId: 'pb' }, ...asCaller }))
+    await flush()
+    expect(ran).toHaveBeenCalledTimes(1)
+    expect(replies()[0]).toMatchObject({ ok: true })
+  })
+
+  it('refuses ui.workspace.close on the caller\'s own workspace, trailing slash or not', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.workspace.close', args: { path: '/ws/' }, ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-workspace-close/)
+  })
+
+  it('refuses ui.window.close in a window holding the caller\'s workspace', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.window.close', args: {}, ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-window-close/)
+  })
+
+  it('refuses ui.window.close in a window hosting the caller pane, whatever its workspace', async () => {
+    const { emit, ran, replies } = setup({ hostsPane: (id) => id === 'pa' })
+    emit('ui.invoke.request', baseRequest({
+      action: 'ui.window.close', args: {}, caller_pane_id: 'pa', caller_workspace_path: '/elsewhere', addressed: true,
+    }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-window-close/)
+  })
+
+  it('takes the caller out of a reclaim batch and reports it refused', async () => {
+    const { emit, reclaim, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.reclaim', args: { paneId: ['pa', 'pb'] }, ...asCaller }))
+    await flush()
+    expect(reclaim).toHaveBeenCalledWith({ paneId: ['pb'] })
+    expect(replies()[0]).toMatchObject({
+      ok: true,
+      result: { reclaimed: ['pb'], refused: [{ paneId: 'pa', reason: 'self' }] },
+    })
+  })
+
+  it('answers a reclaim of only the caller without running it', async () => {
+    const { emit, reclaim, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.reclaim', args: { paneId: 'pa' }, ...asCaller }))
+    await flush()
+    expect(reclaim).not.toHaveBeenCalled()
+    expect(replies()[0]).toMatchObject({ ok: true, result: { reclaimed: [], refused: [{ paneId: 'pa', reason: 'self' }] } })
+  })
+
+  it('leaves a host caller (no pane) unaffected', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.close', args: { paneId: 'pa' } }))
+    await flush()
+    expect(ran).toHaveBeenCalledTimes(1)
+    expect(replies()[0]).toMatchObject({ ok: true })
+  })
+})
+
 describe('useUiActionBus — announcing the bus to the backend', () => {
   // The backend hands a global request (ui.workspace.open) only to a window
   // that announced it runs this bus; plugin and editor windows never answer.

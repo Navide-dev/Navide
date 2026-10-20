@@ -10968,6 +10968,7 @@ useUiActionBus({
   currentWorkspace,
   buildSnapshot: buildUiActionSnapshot,
   ownsWorkspace: isLocalWorkspace,
+  hostsPane: (id) => panes.value.some((p) => p.id === id),
   connectionStatus: backend.status,
   accountActions: { signIn: agentSignIn, switch: agentAccountSwitch },
 })
