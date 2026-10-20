@@ -1,20 +1,36 @@
 import enUS from './locales/en-US.json'
 import zhTW from './locales/zh-TW.json'
 import jaJP from './locales/ja-JP.json'
+import { isUiLocale } from '@navide/plugin-ui/foundation'
 
-export type SupportedPlansLocale = 'en-US' | 'zh-TW' | 'ja-JP'
-export const SUPPORTED_PLANS_LOCALES: readonly SupportedPlansLocale[] = ['en-US', 'zh-TW', 'ja-JP'] as const
+// This plugin's catalogs. Adding a language: import its JSON above and add
+// one entry here (the locale must be listed in UI_LOCALES).
+const PLANS_MESSAGES = {
+  'en-US': enUS,
+  'zh-TW': zhTW,
+  'ja-JP': jaJP,
+}
+
+export type SupportedPlansLocale = keyof typeof PLANS_MESSAGES
+export const SUPPORTED_PLANS_LOCALES: readonly SupportedPlansLocale[] = Object.keys(PLANS_MESSAGES) as SupportedPlansLocale[]
 
 type MergeLocaleMessage = (locale: string, messages: Record<string, unknown>) => void
 
 export function installPlansMessages(mergeLocaleMessage: MergeLocaleMessage): void {
-  mergeLocaleMessage('en-US', enUS)
-  mergeLocaleMessage('zh-TW', zhTW)
-  mergeLocaleMessage('ja-JP', jaJP)
+  for (const locale of SUPPORTED_PLANS_LOCALES) mergeLocaleMessage(locale, PLANS_MESSAGES[locale])
 }
 
+function isPlansLocale(value: unknown): value is SupportedPlansLocale {
+  return typeof value === 'string' && (SUPPORTED_PLANS_LOCALES as readonly string[]).includes(value)
+}
+
+/**
+ * A locale with a catalog here → itself; any other UI locale → en-US; a value
+ * that is not a UI locale at all keeps the historical zh-TW default.
+ */
 export function resolvePlansLocale(value: unknown): SupportedPlansLocale {
-  return value === 'zh-TW' || value === 'en-US' || value === 'ja-JP' ? value : 'zh-TW'
+  if (isPlansLocale(value)) return value
+  return isUiLocale(value) ? 'en-US' : 'zh-TW'
 }
 
 export function parsePlansLocaleFromQuery(queryOrSearch: string): SupportedPlansLocale {
@@ -30,10 +46,7 @@ export function extractLocaleFromSettingsEvent(payload: unknown): SupportedPlans
   const settings = record.settings
   if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) return null
   const language = (settings as Record<string, unknown>)['agent-team:language']
-  if (language === 'zh-TW' || language === 'en-US' || language === 'ja-JP') {
-    return language
-  }
-  return null
+  return isUiLocale(language) ? resolvePlansLocale(language) : null
 }
 
 export interface PlansI18nTarget {

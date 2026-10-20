@@ -54,8 +54,8 @@ function openItem(d: Diagnostic): void {
   <div class="problems-pane">
     <div class="problems-header">
       <span class="problems-title">{{ $t('pane.problems.title') }}</span>
-      <span v-if="errorCount" class="badge badge-err">{{ errorCount }} error{{ errorCount !== 1 ? 's' : '' }}</span>
-      <span v-if="warnCount" class="badge badge-warn">{{ warnCount }} warning{{ warnCount !== 1 ? 's' : '' }}</span>
+      <span v-if="errorCount" class="badge badge-err">{{ $t('editorWindow.problems.errors', { count: errorCount }, errorCount) }}</span>
+      <span v-if="warnCount" class="badge badge-warn">{{ $t('editorWindow.problems.warnings', { count: warnCount }, warnCount) }}</span>
     </div>
     <div v-if="!all.length" class="problems-empty">{{ $t('label.no-problems-detected') }}</div>
     <div v-else class="problems-list">

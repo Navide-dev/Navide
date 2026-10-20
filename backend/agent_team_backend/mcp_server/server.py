@@ -5860,8 +5860,8 @@ def _same_directory(a: str, b: str) -> bool:
         sa, sb = os.stat(a), os.stat(b)
     except OSError:
         na, nb = _norm_workspace(a), _norm_workspace(b)
-        if sys.platform in ("darwin", "win32"):
-            # Their default volumes ignore case, so a folder that is gone
+        if _osplat.paths_ignore_case:
+            # macOS and Windows volumes ignore case, so a folder that is gone
             # still matches its other spellings.
             return na.casefold() == nb.casefold()
         return na == nb
