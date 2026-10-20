@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { i18n, useTheme } from '@navide/plugin-ui/foundation'
+import { i18n, resolveAvailableUiLocale, useTheme } from '@navide/plugin-ui/foundation'
 import { initSettingsBackend, onSettingsChanged, settingsGet } from '@navide/plugin-ui/shared'
 import { createHostGitSettingsPort } from './composables/hostSurfacePorts'
 import { useBackend } from './composables/useBackend'
@@ -85,8 +85,13 @@ const { t, locale } = useI18n({ useScope: 'local', messages: {
 } })
 const backend = useBackend()
 initSettingsBackend(createHostGitSettingsPort(backend))
-const initialLocale = new URLSearchParams(window.location.search).get('locale')
-if (initialLocale === 'en-US' || initialLocale === 'zh-TW' || initialLocale === 'ja-JP') i18n.global.locale.value = initialLocale
+// The local table above covers en-US, zh-TW and ja-JP; any other locale reaches
+// en-US through the global fallback chain the local scope inherits.
+function applyLocale(value: unknown): void {
+  const resolved = resolveAvailableUiLocale(value)
+  if (resolved) i18n.global.locale.value = resolved
+}
+applyLocale(new URLSearchParams(window.location.search).get('locale'))
 const days = ref(30)
 const model = ref('')
 const page = ref(0)
@@ -134,14 +139,11 @@ let offSettings: (() => void) | undefined
 onMounted(() => {
   loadTheme()
   // This root mounts once per native window; the preload listener lives with it.
-  window.agentTeam?.onLanguageChanged?.(value => {
-    if (value === 'en-US' || value === 'zh-TW' || value === 'ja-JP') i18n.global.locale.value = value
-  })
+  window.agentTeam?.onLanguageChanged?.(applyLocale)
   offSettings = onSettingsChanged(keys => {
     if (keys.some(key => key.startsWith('agent-team:theme'))) loadTheme()
     if (keys.includes('agent-team:language')) {
-      const value = settingsGet<string>('agent-team:language', 'en-US')
-      if (value === 'en-US' || value === 'zh-TW' || value === 'ja-JP') i18n.global.locale.value = value
+      applyLocale(settingsGet<string>('agent-team:language', 'en-US'))
     }
   })
 })

@@ -15132,8 +15132,11 @@ describe('Git left legacy rollback composition', () => {
       const q3 = new URLSearchParams(plansQuery('/workspace', '', '', '', '  en-US  '))
       expect(q3.get('locale')).toBe('en-US')
 
-      const q4 = new URLSearchParams(plansQuery('/workspace', '', '', '', 'fr-FR'))
+      const q4 = new URLSearchParams(plansQuery('/workspace', '', '', '', 'it-IT'))
       expect(q4.get('locale')).toBe('zh-TW')
+
+      const q4b = new URLSearchParams(plansQuery('/workspace', '', '', '', 'fr-FR'))
+      expect(q4b.get('locale')).toBe('fr-FR')
 
       const q5 = new URLSearchParams(plansQuery('/workspace', '', '', ''))
       expect(q5.get('locale')).toBe('zh-TW')
