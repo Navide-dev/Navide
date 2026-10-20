@@ -1289,7 +1289,9 @@ describe('ExtensionsPane source badge (K2)', () => {
     // The Testplace row's expiry is read against the clock: pin it.
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
-    onTestFinished(() => vi.useRealTimers())
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
         { id: 'acme.registry', requires: [], sensitive: [], provenance: 'official-registry' },
