@@ -234,6 +234,11 @@ def test_an_expired_period_refuses_at_once_and_the_sweep_reclaims_the_namespace(
     assert reclaim["actor"] == "system:grandfather-expired"
     assert reclaim["target"] == f"member:{MEMBER}"
     assert ("namespace.freeze", "system:grandfather-expired") in {(r["action"], r["actor"]) for r in rows}
+    # The owner is told why, on the dashboard.
+    page = client.get("/publisher/mei-tools").text
+    assert "This namespace was frozen on" in page
+    assert "30-day grace period" in page and "qualification-revoked" in page
+    assert "claim a new namespace" in page
     # The account may still apply; it keeps its account token.
     assert apply(client, account).status_code == 201
     # A second sweep finds nothing more to reclaim.
