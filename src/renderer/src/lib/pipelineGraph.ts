@@ -140,6 +140,8 @@ export interface NodeRunState {
   pinned?: boolean
   /** Last assistant reply summary, for {{prev.summary}} and pinned reuse. */
   summary?: string
+  /** Why a `failed` node failed (e.g. its kickoff never reached the agent). */
+  error?: string
 }
 
 // ── Role properties (declarative node settings form) ─────────────────────────

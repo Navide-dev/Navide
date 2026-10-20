@@ -205,6 +205,7 @@ import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
+import { acceptStartupTrust } from './lib/startupTrust'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
 import {
@@ -6448,7 +6449,45 @@ async function waitForActivityThenSettle(
   return 'timeout'
 }
 
+// Panes whose vendor declares `startupTrust` (grok): one watcher per spawn
+// answers the prompt with the vendor's own key, and every other startup path
+// waits on it rather than pressing Enter on its own — two answerers could put
+// the second key into the composer, ahead of a kickoff typed next (#402).
+const startupTrustWatches = new Map<string, Promise<boolean>>()
+
+function paneAcceptsStartupTrust(paneId: string): boolean {
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  return !!agentSpecs.find((s) => s.agentKey === agentKey)?.startupTrust
+}
+
+function watchStartupTrust(paneId: string, agentKey: string, folder: string): void {
+  const watch = acceptStartupTrust(agentKey, {
+    readScreen: () => {
+      try {
+        return (paneRefs[paneId]?.readScreenTail?.(AWAITING_SCREEN_LINES) as unknown as string) ?? ''
+      } catch {
+        return ''
+      }
+    },
+    outputBytes: () => paneCleanBytes(paneId),
+    alive: () => paneAlive(paneId),
+    send: async (keys) => {
+      const sid = paneRefs[paneId]?.sessionId
+      if (!sid) return
+      await backend.send('terminal.input', { terminal_session_id: sid as string, data: keys })
+      pipelineLog(`✓ accepted startup trust prompt (pane ${paneId.slice(0, 8)})`)
+    },
+    sleep,
+    now: Date.now,
+    timeoutMs: DISMISS_TIMEOUT_MS,
+    quietMs: NO_DIALOG_QUIET_MS,
+    folder,
+  }).finally(() => startupTrustWatches.delete(paneId))
+  startupTrustWatches.set(paneId, watch)
+}
+
 async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_MS): Promise<boolean> {
+  if (paneAcceptsStartupTrust(paneId)) return (await startupTrustWatches.get(paneId)) ?? false
   const deadline = Date.now() + timeoutMs
   let lastSize = -1
   let stableSince = Date.now()
@@ -6741,7 +6780,7 @@ function scheduleInjection(pane: ActivePane): void {
       await sleep(MIN_INJECTION_LEAD_MS - lead)
       if (!paneAlive(pane.id)) return
     }
-    if (!dismissed) {
+    if (!dismissed && !paneAcceptsStartupTrust(pane.id)) {
       const lateBuf = ((paneRefs[pane.id]?.cleanBuffer as unknown as string) ?? '')
       if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf))) {
         pipelineLog(`${tag} late startup dialog detected — dismissing`)
@@ -6818,6 +6857,7 @@ function scheduleInjection(pane: ActivePane): void {
       // Use bracketed-paste so newlines in the context header (prior-stage
       // documents) are preserved — without it they become Enter keypresses
       // and fragment the prompt into multiple partial submissions.
+      let held = false
       const kickoffResult = await runPipelineKickoff({
         inject: async () => {
           const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
@@ -6826,7 +6866,10 @@ function scheduleInjection(pane: ActivePane): void {
         },
         sleep,
         paneAlive: () => paneAlive(pane.id),
-        onHeld: () => pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`),
+        onHeld: () => {
+          held = true
+          pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+        },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       })
       if (kickoffResult.cancelled) return
@@ -6834,8 +6877,24 @@ function scheduleInjection(pane: ActivePane): void {
       pane.kickoffStatus = ok2 ? 'sent' : 'failed'
       setPrepStatus(pane, ok2 ? 'ready' : 'failed')
       syncViews()
+      const stageIndexForPane = pane.origin === 'pipeline'
+        ? stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
+        : -1
       if (!ok2) {
-        pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts — arming watcher anyway`)
+        pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+        // A pipeline slot without its task cannot finish its stage (#448).
+        if (stageIndexForPane >= 0) {
+          if (held) heldKickoffPanes.add(pane.id)
+          await failRunOnKickoff(
+            stageIndexForPane,
+            pane.slotLabel ?? '',
+            held
+              ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
+              : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`,
+            held,
+          )
+          return
+        }
       } else {
         pipelineLog(`${tag} ✓ kickoff sent`)
       }
@@ -6843,15 +6902,12 @@ function scheduleInjection(pane: ActivePane): void {
       // 5. Arm watcher. For question-interactive stages (P01) capture scanFrom
       //    after kickoff confirmation; for other stages pass undefined so the
       //    watcher uses markBufferPosition() and agentGenerating handles pacing.
-      if (pane.origin === 'pipeline') {
-        const stageIndex = stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
-        if (stageIndex >= 0) {
-          const stageAllowsQ = stagesApi.stages.value[stageIndex]?.allowQuestions ?? false
-          const kickoffScanFrom2 = stageAllowsQ
-            ? (paneRefs[pane.id]?.markBufferPosition as () => number | undefined)?.()
-            : undefined
-          startStageWatcher(stageIndex, pane.id, kickoffScanFrom2)
-        }
+      if (stageIndexForPane >= 0) {
+        const stageAllowsQ = stagesApi.stages.value[stageIndexForPane]?.allowQuestions ?? false
+        const kickoffScanFrom2 = stageAllowsQ
+          ? (paneRefs[pane.id]?.markBufferPosition as () => number | undefined)?.()
+          : undefined
+        startStageWatcher(stageIndexForPane, pane.id, kickoffScanFrom2)
       }
     }
   })()
@@ -7087,8 +7143,8 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     : undefined
   // Codex keeps a marker fallback during rollout. Antigravity can't pin an id
   // at launch (`agy --conversation` only resumes existing ids), so the marker
-  // is its ONLY session-binding path. Grok likewise can't pin an id (`grok -s`
-  // only resumes existing ids) — marker-based binding via ~/.grok/grok.db.
+  // is its ONLY session-binding path. (Grok left this camp: `--session-id`
+  // names a NEW session, so it pins at launch like Claude — see agents/grok.ts.)
   // Kimi likewise can't pin an id (`kimi --session` only resumes existing ids);
   // its session id is captured from the wire.jsonl containing the marker.
   // OpenCode likewise can't pin an id (`opencode --session` only resumes
@@ -7339,6 +7395,9 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     startPaneHealthWatcher(id)
 
     if ((ref.status as unknown as string) === 'running') {
+      // Fresh or resumed, with a task or without: a resumed pane gets no other
+      // startup handling at all, and sat on the prompt with every message held.
+      if (spec.startupTrust) watchStartupTrust(id, spec.agentKey, opts.workspacePath ?? '')
       if (pane.origin !== 'pipeline' && !pane.roleKey && !pane.kickoffPrompt) {
         pane.injectionStatus = 'skipped'
         setPrepStatus(pane, 'ready')
@@ -13619,6 +13678,7 @@ async function activateStage(index: number): Promise<void> {
         index, slot.label) +
       sessionMarkerLine(pane.sessionMarker)
     pipelineLog(`${tag} ➜ injecting kickoff (${kickoff.length} chars)`)
+    let held = false
     const kickoffResult = await runPipelineKickoff({
       inject: async () => {
         const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
@@ -13627,14 +13687,32 @@ async function activateStage(index: number): Promise<void> {
       },
       sleep,
       paneAlive: () => paneAlive(pane.id),
-      onHeld: () => pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`),
+      onHeld: () => {
+        held = true
+        pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+      },
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+      // A resume after a held kickoff: submit the copy still in the box.
+      heldCopy: heldKickoffCopy(pane.id, kickoff),
     })
     if (kickoffResult.cancelled) {
       releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
       return
     }
     const ok = kickoffResult.sent
+    const failure = held
+      ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
+      : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`
+    // Another slot failed the run (or the user stopped it) while this kickoff
+    // was in flight: record nothing and arm nothing for a run that is over.
+    const runMovedOn = (): boolean => pipeline.state !== 'running' || pipeline.stageIndex !== index
+    if (runMovedOn()) {
+      if (!ok) {
+        if (held) heldKickoffPanes.add(pane.id)
+        void failRunOnKickoff(index, slot.label, failure, held)
+      }
+      return
+    }
     // Wire the Manager router HERE — the first statement after the kickoff
     // injection resolves, ahead of the render sync and the two backend round
     // trips below. The floor must be taken after the kickoff (its echo carries
@@ -13649,9 +13727,8 @@ async function activateStage(index: number): Promise<void> {
     // the floor. When ok is false the echo was never observed and may still be
     // in flight (this app has a known late paste-ack), and a floor taken now
     // would sit below it — putting the protocol's sentinels back above the
-    // floor, which is the failure the floor exists to prevent. That case takes
-    // the deferred arm after the round trips below, which is the position this
-    // used to have for every slot.
+    // floor, which is the failure the floor exists to prevent. That case ends
+    // the run below instead (#448), so no floor is taken for it.
     if (managerSlot) {
       const router = ensureStageRouter(index)
       if (slot === managerSlot) router.managerPaneId = pane.id
@@ -13667,11 +13744,8 @@ async function activateStage(index: number): Promise<void> {
       slot_label: slot.label,
       kickoff_status: ok ? 'sent' : 'failed',
     })
-    if (!ok) {
-      pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts — arming watcher anyway`)
-    } else {
-      pipelineLog(`${tag} ✓ kickoff sent`)
-    }
+    if (ok) pipelineLog(`${tag} ✓ kickoff sent`)
+    else pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
 
     // For question-interactive stages (P01): capture scanFrom AFTER kickoff is
     // confirmed so the watcher only scans content produced after the kickoff.
@@ -13683,6 +13757,16 @@ async function activateStage(index: number): Promise<void> {
 
     // Notify backend: mark this stage running (and previous completed).
     // Same role as pipeline.stage_spawn in the old spawnPipelineStage flow.
+    // A failed kickoff sends it too, before failing the run: it is the only
+    // call that marks the previous stage completed, and without it a resume
+    // re-ran that stage instead of this one (#448).
+    if (runMovedOn()) {
+      if (!ok) {
+        if (held) heldKickoffPanes.add(pane.id)
+        void failRunOnKickoff(index, slot.label, failure, held)
+      }
+      return
+    }
     const stageResp = await sendQuiet<ProjectPayload>('pipeline.stage_spawn', {
       workspace_path: pipeline.workspacePath,
       stage_index: index,
@@ -13692,16 +13776,20 @@ async function activateStage(index: number): Promise<void> {
     })
     applyProjectPaths(stageResp ?? undefined)
 
-    // Deferred floor for an unverified kickoff — see the note above the router
-    // wiring. The round trips just awaited are the settle time a late echo
-    // needs to land below it.
-    if (managerSlot && !ok) {
-      const router = ensureStageRouter(index)
-      armRouterCursors(router, pane.id)
+    if (!ok) {
+      // A slot without its task cannot finish the stage, and a watcher armed
+      // over it kept the run `running` with nothing to show for it (#448).
+      if (held) heldKickoffPanes.add(pane.id)
+      await failRunOnKickoff(index, slot.label, failure, held)
+      return
     }
-
+    if (runMovedOn()) return
     startStageWatcher(index, pane.id, kickoffScanFrom)
   }))
+
+  // A run failed by one of this stage's kickoffs is over: no router poll, and
+  // no CLIs spawned for a next stage it will never reach.
+  if (pipeline.state !== 'running' || pipeline.stageIndex !== index) return
 
   if (managerSlot) {
     startRouterPoll(index)
@@ -14084,6 +14172,72 @@ async function onPipelineAbort(): Promise<void> {
   applyProjectPaths(resp ?? undefined)
   // Refresh existingProject so the Resume banner appears immediately in the
   // same session without requiring the user to switch workspaces and back.
+  if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
+}
+
+/** Panes whose last pipeline kickoff was held in their input box, unsent
+ *  (#448). A resume must not paste the same kickoff on top of that copy. */
+const heldKickoffPanes = new Set<string>()
+
+/** For a pane in heldKickoffPanes (the flag is consumed): read whether the
+ *  box still holds this kickoff, and submit it with Enter — the same framed-box
+ *  check the spawn kickoff trusts. undefined for every other pane. */
+function heldKickoffCopy(paneId: string, text: string): { holds: () => boolean; submit: () => Promise<boolean> } | undefined {
+  if (!heldKickoffPanes.delete(paneId)) return undefined
+  const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
+  const screenTail = (): string => {
+    const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
+    return read ? read(SUBMIT_SCREEN_LINES) : ''
+  }
+  return {
+    holds: () => composerHoldsPayload(screenTail(), tail),
+    submit: () => submitHeldCopy({
+      held: () => framedComposerHolds(screenTail(), tail),
+      pressEnter: async () => {
+        const sid = paneRefs[paneId]?.sessionId
+        if (!sid || !paneAlive(paneId)) return false
+        try {
+          await backend.send('terminal.input', { terminal_session_id: sid, data: '\r' })
+          return true
+        } catch {
+          return false
+        }
+      },
+      sleep,
+      now: Date.now,
+      confirmMs: SUBMIT_CONFIRM_MS,
+    }),
+  }
+}
+
+/** A slot's kickoff never reached its agent: fail its node with the reason and
+ *  end the run as failed, instead of leaving it `running` around a pane that
+ *  never got its task (#448). Like an abort, the panes stay alive for a
+ *  resume. The first failing slot ends the run; later ones only fail their
+ *  own node. */
+async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false): Promise<void> {
+  // A kickoff that finishes late, after the user stopped this run and another
+  // one moved to a different stage, must not fail that one.
+  if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
+  pipelineDag.slotFailed(stageIndex, slotLabel, reason)
+  if (pipeline.state !== 'running') return
+  const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
+  pipelineLog(`Stage ${stageLabel}/${slotLabel} ✕ ${reason} — pipeline failed`)
+  tearDownPipelineOrchestration()
+  await pipelineDag.end('failed', `run stopped: slot "${slotLabel}" failed (${reason})`)
+  const resp = await sendQuiet<ProjectPayload>('pipeline.abort', {
+    workspace_path: pipeline.workspacePath,
+    reason: 'failed'
+  })
+  applyProjectPaths(resp ?? undefined)
+  // A held kickoff is left for resume to submit: one sent by hand would be
+  // pasted again by the resume.
+  notifyRestore.toast(
+    held
+      ? i18n.global.t('error.pipeline-kickoff-held', { stage: stageLabel, slot: slotLabel })
+      : i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
+    { type: 'error' },
+  )
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
 }
 

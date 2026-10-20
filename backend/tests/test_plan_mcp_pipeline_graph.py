@@ -123,6 +123,20 @@ def test_pipeline_status_carries_node_states_and_the_gate(monkeypatch: pytest.Mo
     assert status["gate"] == {"gateId": "gate", "label": "OK?"}
 
 
+def test_pipeline_status_says_why_a_node_failed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # #448: a kickoff that never reached its pane fails the node; the reason
+    # must reach pipeline_status, not only the window's log.
+    from agent_team_backend.projects import ProjectStore
+
+    ws = str(tmp_path)
+    store = ProjectStore()
+    store.start_pipeline(ws, task_description="t", total_stages=1, stage_blueprint=[{"stage_id": "01", "slots": []}])
+    store.record_node_states(ws, nodes={"n-01-0": {"status": "failed", "error": "kickoff never reached the agent"}})
+    monkeypatch.setattr(app, "project_store", store, raising=False)
+    status = plan_mcp._pipeline_status_of(ws)
+    assert status["nodes"] == {"n-01-0": {"status": "failed", "error": "kickoff never reached the agent"}}
+
+
 @pytest.fixture
 def ui_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     calls: list[dict[str, Any]] = []

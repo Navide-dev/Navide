@@ -687,6 +687,20 @@ def normalize_grok(billing: dict) -> tuple[list[dict], str | None]:
 
 
 
+class GrokRpcError(ConnectionError):
+    """A JSON-RPC error answer from ``grok agent stdio``, with its code."""
+
+    def __init__(self, code: Any, message: str) -> None:
+        super().__init__(f"{message} ({code})")
+        self.code = code
+
+
+#: JSON-RPC "Method not found". Grok Build 1.0.62 answers ``x.ai/billing``
+#: with it: its docs keep credit and billing on ``/usage`` inside the TUI
+#: (17-sessions.md), so there is nothing else to call (issue #402).
+_RPC_METHOD_NOT_FOUND = -32601
+
+
 async def grok_billing_rpc(binary: str, env: dict | None = None) -> dict:
     """Spawn ``grok agent stdio`` and ask ``x.ai/billing`` over newline-delimited
     JSON-RPC. The subprocess is short-lived — spawned, queried, terminated.
@@ -721,7 +735,10 @@ async def grok_billing_rpc(binary: str, env: dict | None = None) -> dict:
                 continue
             if isinstance(payload, dict) and payload.get("id") == req_id:
                 if "error" in payload:
-                    raise ConnectionError(str(payload["error"]))
+                    error = payload["error"]
+                    if isinstance(error, dict):
+                        raise GrokRpcError(error.get("code"), str(error.get("message") or ""))
+                    raise ConnectionError(str(error))
                 return payload.get("result") or {}
 
     try:
@@ -751,6 +768,14 @@ async def fetch_grok(home: Path, env: dict | None = None) -> dict:
         return _snapshot("grok", "unavailable", error="grok CLI not found")
     try:
         billing = await grok_billing_rpc(binary)
+    except GrokRpcError as err:
+        if err.code != _RPC_METHOD_NOT_FOUND:
+            return _snapshot("grok", "unavailable", error=str(err))
+        return _snapshot(
+            "grok", "unavailable",
+            error="this Grok Build version does not report its credits to other programs; "
+                  "type /usage in the Grok pane to see them",
+        )
     except (OSError, ConnectionError, asyncio.TimeoutError) as err:
         return _snapshot("grok", "unavailable", error=str(err) or "grok agent stdio failed")
     windows, plan = normalize_grok(billing)
@@ -864,6 +889,9 @@ SPEC = VendorSpec(
     # "grok <x.y.z> (<commit>)", the community one a bare "1.1.7".
     install_dep=Dep("grok", "Grok Build (SpaceXAI)", "xAI Grok coding agent", "agent_cli",
         ["grok", "--version"], r"(\d+\.\d+\.\d+)",
+        # Names the official CLI apart from the community one at the same path
+        # (the pane's startup probe warns on a mismatch, issue #402).
+        official_regex=r"^grok \d+\.\d+\.\d+ \(",
         install_cmd="curl -fsSL https://x.ai/cli/install.sh | bash",
         needs_terminal=True, requires_binaries=("curl",), optional=True,
         docs_url="https://docs.x.ai/build/overview",

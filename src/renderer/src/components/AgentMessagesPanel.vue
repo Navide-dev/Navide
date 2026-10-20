@@ -152,12 +152,12 @@ function vendorOf(agentKey: string | undefined, handle: string): string | null {
           <span v-if="msg.inReplyTo" class="msg-reply" :title="repliedTo(msg)?.content">
             {{ $t('msg.reply-badge') }}
           </span>
-          <span v-if="msg.route === 'hook'" class="msg-route" :title="$t('msg.hook-badge-title')">
+          <span v-if="msg.route === 'hook'" class="msg-via" :title="$t('msg.hook-badge-title')">
             {{ $t('msg.hook-badge') }}
           </span>
           <span
             v-else-if="pushKind(msg)"
-            class="msg-route"
+            class="msg-via"
             :title="$t(pushBadgeTitleKey(msg))"
           >
             {{ $t('msg.push-badge', { kind: pushKind(msg) }) }}
@@ -362,8 +362,8 @@ function vendorOf(agentKey: string | undefined, handle: string): string | null {
   border-radius: 99px;
   padding: 0 6px;
   white-space: nowrap;
-  background: rgba(110, 150, 230, 0.18);
-  color: #7ba3e8;
+  background: var(--toast-workspace-bg);
+  color: var(--toast-workspace-accent);
 }
 
 .msg-reply {
@@ -373,19 +373,24 @@ function vendorOf(agentKey: string | undefined, handle: string): string | null {
   border-radius: 99px;
   padding: 0 6px;
   white-space: nowrap;
-  background: rgba(140, 190, 140, 0.18);
-  color: #7cb37c;
+  background: var(--accent-subtle);
+  color: var(--accent-fg);
 }
 
-.msg-route {
+/* Notes on how the message went in (via hook / via push): outlined, so they
+   stay quieter than the solid state and source pills — the toast tiers' rule
+   of telling kinds apart by shape. A ring rather than a border keeps every pill
+   the same height. */
+.msg-via {
   flex: none;
   font-size: 9px;
   font-weight: 700;
   border-radius: 99px;
   padding: 0 6px;
   white-space: nowrap;
-  background: rgba(160, 140, 220, 0.18);
-  color: #a08cdc;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-default);
+  color: var(--text-secondary);
 }
 
 .msg-notice {
@@ -395,17 +400,18 @@ function vendorOf(agentKey: string | undefined, handle: string): string | null {
   border-radius: 99px;
   padding: 0 6px;
   white-space: nowrap;
-  background: rgba(200, 160, 90, 0.18);
-  color: #c8a05a;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-default);
+  color: var(--text-secondary);
 }
 
-.msg-st[data-st='queued'] { background: rgba(128, 128, 128, 0.18); color: var(--text-secondary); }
-.msg-st[data-st='delivering'] { background: rgba(230, 160, 60, 0.18); color: #e8a54b; }
-.msg-st[data-st='delivered'] { background: rgba(80, 190, 100, 0.18); color: #4fae5f; }
-.msg-st[data-st='failed'] { background: rgba(220, 80, 70, 0.18); color: #e0706a; }
+.msg-st[data-st='queued'] { background: var(--bg-muted); color: var(--text-secondary); }
+.msg-st[data-st='delivering'] { background: var(--attention-subtle); color: var(--attention-fg); }
+.msg-st[data-st='delivered'] { background: var(--success-subtle); color: var(--success-fg); }
+.msg-st[data-st='failed'] { background: var(--danger-subtle); color: var(--danger-fg); }
 /* Withdrawn on purpose, so it recedes rather than alarming like a failure. */
 .msg-st[data-st='cancelled'] {
-  background: rgba(128, 128, 128, 0.12);
+  background: var(--bg-muted);
   color: var(--text-secondary);
   text-decoration: line-through;
 }

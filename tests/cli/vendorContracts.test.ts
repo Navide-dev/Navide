@@ -113,13 +113,15 @@ describe('vendor specific frontend session and prompt contracts', () => {
     ['codex', 'Would you like to run the following command?', true],
     ['antigravity', 'Question 1/2: choose an option', true],
     ['aider', 'Run shell command? (Y)es/(N)o [Yes]:', true],
+    // Its folder-trust prompt, the one wait Grok Build shows as text (#402).
+    ['grok', 'Do you trust the contents of this directory?\n/work\n  Yes, proceed   y\n  No, quit       n', true],
   ] as const)('recognizes %s awaiting input without treating completed prose as a live prompt', (key, screen, clearsOnMiss) => {
     expect(matchAwaitingInput(key, screen)).toBe(true)
     expect(matchAwaitingInput(key, 'Task completed.')).toBe(false)
     expect(awaitingClearsOnMiss(key)).toBe(clearsOnMiss)
   })
 
-  it.each(['copilot', 'cursor', 'droid', 'grok', 'kimi', 'opencode', 'kilo', 'pi', 'qwen', 'muse', 'mcode'])('does not invent a screen permission signal for %s', (key) => {
+  it.each(['copilot', 'cursor', 'droid', 'kimi', 'opencode', 'kilo', 'pi', 'qwen', 'muse', 'mcode'])('does not invent a screen permission signal for %s', (key) => {
     expect(hasAwaitingPattern(key)).toBe(false)
     expect(matchAwaitingInput(key, 'Would you like to run the following command?')).toBe(false)
   })
