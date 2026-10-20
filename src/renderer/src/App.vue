@@ -4064,6 +4064,8 @@ onUnmounted(() => {
 // never reports — so a miss there is not evidence the wait ended and must not
 // clear what the hook raised.
 const AWAITING_SCREEN_LINES = 25
+// Between the steps of a free-text or multi-select answer (lib/paneAnswerKeys).
+const ANSWER_STEP_GAP_MS = 60
 
 /** Flag a pane whose turn is in flight but whose log and screen have both been
  *  quiet past the threshold, and record it once per episode. Reminder only:
@@ -10610,7 +10612,15 @@ registerCommand('ui.pane.sendKeys', async (args) => {
   if (!resolved.ok) {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }
   }
-  const resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data: resolved.keys })
+  // A free-text or multi-select answer goes in one step at a time, so the CLI
+  // reads arrows, typed text and Enter as separate keys rather than one paste.
+  const [first, ...rest] = resolved.steps ?? [resolved.keys]
+  let resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data: first })
+  for (const data of rest) {
+    if (!resp.ok) break
+    await new Promise((resolve) => setTimeout(resolve, ANSWER_STEP_GAP_MS))
+    resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data })
+  }
   // This write goes straight to the PTY, not through the terminal's onData, so
   // tell the pane its held permission box was just answered.
   if (resp.ok) ref.noteAnswerKeys?.(resolved.keys)

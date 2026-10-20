@@ -318,6 +318,23 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
     expect(matchAwaitingInput('claude', PERMISSION_BOX)).toBe(true)
   })
 
+  it("matches AskUserQuestion's review step, which has no footer", () => {
+    // From the 2.1.304 binary: a box of several questions ends here.
+    const review = [
+      '←  ☒ Checks  ☒ Size  ✔ Submit  →',
+      'Review your answers',
+      ' ● Which checks should run?',
+      '   → Lint, Unit tests',
+      ' ● Which size?',
+      '   → Large',
+      'Ready to submit your answers?',
+      '❯ 1. Submit answers',
+      '  2. Cancel',
+    ].join('\n')
+    expect(matchAwaitingInput('claude', review)).toBe(true)
+    expect(matchAwaitingInput('claude', `${review}\n${'─'.repeat(40)}\n❯ `)).toBe(false)
+  })
+
   it('matches the two-option permission box with the amend footer', () => {
     // The current box drops the "No, and tell Claude..." option; its only
     // furniture is the numbered No and the footer.

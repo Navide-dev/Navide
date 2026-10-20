@@ -146,29 +146,92 @@ async def test_an_unanswerable_vendor_gets_a_notice_without_buttons(env: Env) ->
     assert env.m.relay._by_id == {}
 
 
-# --- F4: multi-select and free-text rows are not offered --------------------------------
+# --- F4: multi-select and free-text questions are answered from the chat ---------------
+
+_CHECKS = ["[ ] Lint", "[ ] Unit tests", "[ ] Type something", "Chat about this"]
 
 
-async def test_a_multi_select_question_is_left_to_the_computer(env: Env) -> None:
+async def _multi(env: Env, options: list[str] = _CHECKS) -> str:
+    return await _question(env, options, prompt="Which checks should run?")
+
+
+async def test_a_multi_select_question_is_relayed_with_how_to_pick_several(env: Env) -> None:
     sent = _capture_buttons(env)
-    env.fake.kind = "permission"
-    env.fake.prompt = "Which checks should run?"
-    env.fake.options = ["[ ] Lint", "[ ] Unit tests", "Type something."]
-    await _awaiting(env)
-    await _until(lambda: any("這題需要在電腦上操作（多選／自由輸入）" in t for t, _ in sent))
-    text, buttons = next((t, b) for t, b in sent if "電腦上操作" in t)
-    assert buttons is None and "Lint" not in text.split("Which checks should run?")[-1]
-    assert env.m.relay._by_id == {}
+    rid = await _multi(env)
+    text, buttons = next((t, b) for t, b in sent if t.startswith("⏸"))
+    # No one-tap buttons: a tap could only toggle one box.
+    assert buttons is None
+    assert "1. [ ] Lint" in text and "3. [ ] Type something" in text
+    assert f"1,2 {rid}" in text and f"3 {rid} <你的文字>" in text
+    assert "電腦上操作" not in text
 
 
-async def test_a_free_text_row_is_not_offered(env: Env) -> None:
+async def test_several_options_are_picked_with_a_comma_list(env: Env) -> None:
+    rid = await _multi(env)
+    await env.inbound(f"2, 1 {rid}")
+    assert env.fake.answers == [("pane-1", {"kind": "multi", "options": [1, 2]})]
+    assert env.tg.texts()[-1] == "✅ 已送出：選項 1、2"
+
+
+async def test_a_multi_select_answer_can_carry_the_free_text(env: Env) -> None:
+    rid = await _multi(env)
+    await env.inbound(f"1,3 {rid} also run the docs build")
+    assert env.fake.answers == [
+        ("pane-1", {"kind": "multi", "options": [1, 3], "text": "also run the docs build"})]
+    assert env.tg.texts()[-1] == "✅ 已送出：選項 1、3（含自由輸入）"
+
+
+async def test_free_text_needs_its_own_option_in_a_multi_select(env: Env) -> None:
+    rid = await _multi(env)
+    await env.inbound(f"1 {rid} some text")  # text, but the free-text row is not picked
+    await env.inbound(f"1,3 {rid}")  # the free-text row, but no text
+    await env.inbound(f"1,4 {rid}")  # "Chat about this" is not a box
+    assert env.fake.answers == []
+    assert env.tg.texts()[-1].startswith("⚠️")
+    assert env.m.relay.get(rid) is not None  # still answerable
+
+
+async def test_a_bare_comma_list_answers_the_only_multi_select(env: Env) -> None:
+    await _multi(env)
+    await env.inbound("1,2")
+    assert env.fake.answers == [("pane-1", {"kind": "multi", "options": [1, 2]})]
+
+
+async def test_a_permanent_allow_box_is_never_picked_from_chat(env: Env) -> None:
+    rid = await _multi(env, ["[ ] Lint", "[ ] Always run all checks", "[ ] Type something"])
+    await env.inbound(f"1,2 {rid}")
+    assert env.fake.answers == []
+
+
+async def test_a_free_text_row_takes_the_text_after_the_id(env: Env) -> None:
     sent = _capture_buttons(env)
     rid = await _question(env, ["Keep", "Discard", "Type something."])
     text, buttons = next((t, b) for t, b in sent if t.startswith("⏸"))
     assert [label for label, _ in buttons] == ["1. Keep", "2. Discard"]
-    assert "Type something" not in text and "自由輸入的選項需要在電腦上操作" in text
+    assert "3. Type something." in text and f"3 {rid} <你的文字>" in text
     await env.inbound(f"3 {rid}")
-    assert env.fake.answers == [] and env.tg.texts()[-1] == "⚠️ 請回覆有效的選項編號"
+    assert env.fake.answers == [] and f"3 {rid} <你的文字>" in env.tg.texts()[-1]
+    await env.inbound(f"3 {rid} keep both, merge later")
+    assert env.fake.answers == [
+        ("pane-1", {"kind": "question", "option": 3, "text": "keep both, merge later"})]
+    assert env.tg.texts()[-1] == "✅ 已送出：選項 3（自由輸入）"
+
+
+async def test_a_bare_free_text_answer_needs_the_free_text_row(env: Env) -> None:
+    await _question(env, ["Keep", "Discard", "Type something."])
+    await env.inbound("2 and also something")  # option 2 takes no text: not an answer
+    assert env.fake.answers == []
+    await env.inbound("3 keep both")
+    assert env.fake.answers == [("pane-1", {"kind": "question", "option": 3, "text": "keep both"})]
+
+
+async def test_text_after_yes_is_not_a_relay_answer(env: Env) -> None:
+    env.fake.kind, env.fake.prompt, env.fake.options = "permission", "Run it?", ["Yes", "No"]
+    await _awaiting(env)
+    await _until_relay_prompt(env)
+    rid = _relay_id(env)
+    await env.inbound(f"yes {rid} and more")
+    assert env.fake.answers == []
 
 
 # --- F2: the next question, and a prompt whose id ran out, reach the chat ---------------

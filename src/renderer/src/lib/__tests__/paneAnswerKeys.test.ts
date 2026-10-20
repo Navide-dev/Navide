@@ -180,3 +180,87 @@ describe('resolveAnswerKeys with the prompt the caller checked', () => {
     expect(press(other, checked(SAFE))).toMatchObject({ ok: false, errorCode: 'prompt-changed' })
   })
 })
+
+// Claude Code 2.1.304's AskUserQuestion box, as its components render it: a
+// single-select menu ends in the "Other" text row ("Type something.") with
+// "Chat about this" under a divider; a multi-select menu boxes every row,
+// its "Other" row included, and puts a Submit (or Next) button after them.
+const DOWN = '\x1b[B'
+const UP = '\x1b[A'
+
+const CLAUDE_SINGLE_WITH_OTHER = [
+  'Which approach?',
+  '❯ 1. Merge them into one state',
+  '  2. Keep them separate',
+  '  3. Type something.',
+  '────────────────',
+  '  4. Chat about this',
+  'Enter to select · ↑/↓ to navigate · Esc to cancel',
+].join('\n')
+
+const claudeMulti = (focus: number, checked: number[] = []) =>
+  [
+    '←  ☐ Checks  ✔ Submit  →',
+    'Which checks should run?',
+    ...['Lint', 'Unit tests', 'Type something'].map(
+      (label, i) => `${i === focus ? '❯' : ' '} ${i + 1}. [${checked.includes(i + 1) ? '✔' : ' '}] ${label}`,
+    ),
+    '     Submit',
+    '────────────────',
+    '  4. Chat about this',
+    'Enter to select · Tab/Arrow keys to navigate · Esc to cancel',
+  ].join('\n')
+
+describe('resolveAnswerKeys for free text and multi-select (claude)', () => {
+  it('moves to the "Other" row, types the text and submits it, one step at a time', () => {
+    const r = resolve('claude', { kind: 'question', option: 3, text: 'keep both' }, CLAUDE_SINGLE_WITH_OTHER, 'permission')
+    expect(r).toEqual({ ok: true, keys: `${DOWN}${DOWN}keep both\r`, steps: [DOWN, DOWN, 'keep both', '\r'] })
+  })
+
+  it('types only printable text: control characters never reach the pane', () => {
+    const r = resolve('claude', { kind: 'question', option: 3, text: 'a\x1b[2J\r\nb\x03' }, CLAUDE_SINGLE_WITH_OTHER, 'permission')
+    expect(r.ok && r.steps).toEqual([DOWN, DOWN, 'a [2J b', '\r'])
+  })
+
+  it('refuses text for a row that takes none, and an empty text', () => {
+    expect(resolve('claude', { kind: 'question', option: 2, text: 'x' }, CLAUDE_SINGLE_WITH_OTHER, 'permission').ok).toBe(false)
+    expect(resolve('claude', { kind: 'question', option: 3, text: ' \x1b ' }, CLAUDE_SINGLE_WITH_OTHER, 'permission').ok).toBe(false)
+  })
+
+  it('toggles the picked boxes by number, then moves past the last row to Submit', () => {
+    const r = resolve('claude', { kind: 'multi', options: [1, 2] }, claudeMulti(0), 'permission')
+    expect(r.ok && r.steps).toEqual(['1', '2', DOWN, DOWN, DOWN, '\r'])
+  })
+
+  it('toggles only the boxes whose state differs from the answer', () => {
+    const r = resolve('claude', { kind: 'multi', options: [2] }, claudeMulti(1, [1, 2]), 'permission')
+    expect(r.ok && r.steps).toEqual(['1', DOWN, DOWN, '\r'])
+  })
+
+  it('types the free text into the "Other" row, which picks it, then submits', () => {
+    const r = resolve('claude', { kind: 'multi', options: [1, 3], text: 'docs' }, claudeMulti(0), 'permission')
+    expect(r.ok && r.steps).toEqual(['1', DOWN, DOWN, 'docs', DOWN, '\r'])
+  })
+
+  it('leaves the text row before pressing digits, which would be typed there', () => {
+    const r = resolve('claude', { kind: 'multi', options: [1] }, claudeMulti(2), 'permission')
+    expect(r.ok && r.steps).toEqual([UP, '1', DOWN, DOWN, '\r'])
+  })
+
+  it('refuses a row that is not a box, text without the "Other" row, and a permanent allow', () => {
+    expect(resolve('claude', { kind: 'multi', options: [1, 4] }, claudeMulti(0), 'permission').ok).toBe(false)
+    expect(resolve('claude', { kind: 'multi', options: [1], text: 'x' }, claudeMulti(0), 'permission').ok).toBe(false)
+    expect(resolve('claude', { kind: 'multi', options: [3] }, claudeMulti(0), 'permission').ok).toBe(false)
+    const always = claudeMulti(0).replace('Unit tests', 'Always run every check')
+    expect(resolve('claude', { kind: 'multi', options: [2] }, always, 'permission').ok).toBe(false)
+  })
+
+  it('refuses free text and multi-select for a vendor it has not been mapped for', () => {
+    expect(resolve('codex', { kind: 'multi', options: [1] }, claudeMulti(0), 'permission').ok).toBe(false)
+    expect(resolve('codex', { kind: 'question', option: 3, text: 'x' }, CLAUDE_SINGLE_WITH_OTHER, 'permission').ok).toBe(false)
+  })
+
+  it('refuses when no row on screen has the cursor', () => {
+    expect(resolve('claude', { kind: 'multi', options: [1] }, claudeMulti(-1), 'permission').ok).toBe(false)
+  })
+})
