@@ -649,6 +649,8 @@ export interface PluginStagedUpdate {
   pluginId: string
   activeVersion: string
   stagedVersion: string
+  /** Set when switching to it failed (an agent's automatic update, O1). */
+  reason?: string
 }
 
 /** One row per staged package, kept until it is applied or found changed.
@@ -660,14 +662,26 @@ function pluginStagedItems(): Announcement[] {
   return pluginStagedUpdates.value.map((update) => ({
     id: `plugin-staged:${update.pluginId}:${update.stagedVersion}`,
     kind: 'plugin-staged' as const,
-    title: t('plugin-staged.notice.title', {
-      plugin: update.pluginId,
-      staged: update.stagedVersion,
-      active: update.activeVersion,
-    }),
+    title: update.reason
+      ? t('plugin-staged.notice.failedTitle', {
+          plugin: update.pluginId,
+          staged: update.stagedVersion,
+          active: update.activeVersion,
+          reason: update.reason,
+        })
+      : t('plugin-staged.notice.title', {
+          plugin: update.pluginId,
+          staged: update.stagedVersion,
+          active: update.activeVersion,
+        }),
     highlights: [t('plugin-staged.notice.detail')],
     read: false,
-    actions: [{ kind: 'plugin-staged-apply' as const, ...update }],
+    actions: [{
+      kind: 'plugin-staged-apply' as const,
+      pluginId: update.pluginId,
+      activeVersion: update.activeVersion,
+      stagedVersion: update.stagedVersion,
+    }],
   }))
 }
 
@@ -681,9 +695,12 @@ export function pluginStagedApplyApplies(
   return current?.pendingCandidateVersion === action.stagedVersion && current.packageVersion === action.activeVersion
 }
 
-/** Replace the staged packages with what the Host found. */
+/** Add what the Host found (at launch, or a failed switch); a newer report
+ *  of the same plugin replaces its row. */
 function notePluginStagedUpdates(updates: PluginStagedUpdate[]): void {
-  pluginStagedUpdates.value = updates.filter((update) => update?.pluginId)
+  const fresh = updates.filter((update) => update?.pluginId)
+  const ids = new Set(fresh.map((update) => update.pluginId))
+  pluginStagedUpdates.value = [...fresh, ...pluginStagedUpdates.value.filter((update) => !ids.has(update.pluginId))]
 }
 
 /** Drop the row of a package that was applied or changed since. */
@@ -700,6 +717,8 @@ export interface PluginSwitchNotice {
   toVersion: string
   source: 'marketplace' | 'local-unsigned'
   at: number
+  /** Set when an agent's automatic update (O1) drove the switch. */
+  agent?: PluginAgentNotice['requester']
 }
 
 /** Switches this window heard, newest first. Not persisted: the plugin
@@ -711,7 +730,14 @@ function pluginSwitchItems(): Announcement[] {
   return pluginSwitchNotices.value.map((notice) => ({
     id: `plugin-switch:${notice.pluginId}:${notice.toVersion}:${notice.at}`,
     kind: 'plugin-switch' as const,
-    title: t('plugin-switch.notice.title', { plugin: notice.pluginId, from: notice.fromVersion, to: notice.toVersion }),
+    title: notice.agent
+      ? t('plugin-switch.notice.titleAgent', {
+          caller: pluginAgentCaller(notice.agent),
+          plugin: notice.pluginId,
+          from: notice.fromVersion,
+          to: notice.toVersion,
+        })
+      : t('plugin-switch.notice.title', { plugin: notice.pluginId, from: notice.fromVersion, to: notice.toVersion }),
     highlights: [
       t('plugin-switch.notice.detail', {
         time: new Date(notice.at).toLocaleTimeString(),

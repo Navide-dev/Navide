@@ -11551,6 +11551,7 @@
   "plugin-staged": {
     "notice": {
       "title": "Navide プラグイン {plugin} のバージョン {staged} が適用待ちです。現在実行中のバージョンは {active} です。",
+      "failedTitle": "{plugin} の {staged} への切り替えに失敗しました：{reason}。バージョン {active} に戻りました。",
       "detail": "このバージョンは再起動せずにインストールされたか、ロールバックで保持されたものです。「今すぐ適用」で切り替えます（再起動と同じ動作です）。",
       "applied": "{plugin} はバージョン {version} で実行中です。",
       "stale": "適用しませんでした：この Navide プラグインはその後変更されています。",
@@ -11563,6 +11564,7 @@
   "plugin-switch": {
     "notice": {
       "title": "{plugin} を {from} から {to} に切り替えました",
+      "titleAgent": "{caller}が開始した自動更新で、{plugin} を {from} から {to} に切り替えました",
       "detail": "{time} に切り替えました（{source}）。開いていた画面は再読み込みされました。",
       "reverted": "{plugin} はバージョン {version} に戻りました。",
       "stale": "変更しませんでした：この Navide プラグインはその後変更されたか、以前のバージョンが保持されていません。",

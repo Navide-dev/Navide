@@ -151,6 +151,8 @@ export interface PluginStagedUpdate {
   pluginId: string
   activeVersion: string
   stagedVersion: string
+  /** Set when switching to it failed. */
+  reason?: string
 }
 
 /** L3: an approved update switched versions. */
@@ -160,14 +162,21 @@ export interface PluginSwitchNotice {
   toVersion: string
   source: 'marketplace' | 'local-unsigned'
   at: number
+  /** Set when an agent's automatic update (O1) drove the switch. */
+  agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true }
 }
 
 function isPluginSwitchNotice(payload: unknown): payload is PluginSwitchNotice {
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
   const record = payload as Record<string, unknown>
+  const agent = record.agent as Record<string, unknown> | undefined
+  const nullableString = (value: unknown): boolean => value === null || typeof value === 'string'
   return typeof record.pluginId === 'string' && typeof record.fromVersion === 'string' &&
     typeof record.toVersion === 'string' && (record.source === 'marketplace' || record.source === 'local-unsigned') &&
-    typeof record.at === 'number'
+    typeof record.at === 'number' &&
+    (agent === undefined || (typeof agent === 'object' && agent !== null &&
+      ['pane', 'external', 'host'].includes(String(agent.callerKind)) &&
+      nullableString(agent.paneId) && nullableString(agent.paneName) && nullableString(agent.workspace)))
 }
 
 function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[] {
@@ -175,7 +184,7 @@ function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[
     if (typeof item !== 'object' || item === null || Array.isArray(item)) return false
     const record = item as Record<string, unknown>
     return typeof record.pluginId === 'string' && typeof record.activeVersion === 'string' &&
-      typeof record.stagedVersion === 'string'
+      typeof record.stagedVersion === 'string' && (record.reason === undefined || typeof record.reason === 'string')
   })
 }
 
