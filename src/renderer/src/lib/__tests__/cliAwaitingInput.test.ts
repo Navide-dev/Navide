@@ -320,6 +320,11 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
       expect(matchAwaitingInput('claude', screen)).toBe(false)
     })
 
+    it('ignores a draft that holds a pasted table before the anchor', () => {
+      const table = '┌───┬───┐ │ a │ b │ └───┴───┘'
+      expect(matchAwaitingInput('claude', idleBox(`❯ ${table} then Esc to cancel · Tab to amend`))).toBe(false)
+    })
+
     it('ignores a draft in bash mode, whose prompt is `!`', () => {
       expect(matchAwaitingInput('claude', idleBox('! echo Esc to cancel · Tab to amend'))).toBe(false)
     })
