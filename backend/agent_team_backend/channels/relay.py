@@ -47,7 +47,7 @@ PERMANENT_ALLOW_AGENTS = frozenset({"grok"})
 
 # Keep in sync with PERMANENT_ALLOW in src/renderer/src/lib/paneAnswerKeys.ts.
 _PERMANENT_ALLOW_RE = re.compile(
-    r"\bdon['’]?t ask again\b|\bdo not ask again\b|\balways\b|\b(?:this|the) session\b"
+    r"\bdon['’]?t ask (?:me )?again\b|\bdo not ask (?:me )?again\b|\balways\b|\b(?:this|the) session\b"
     r"|\bauto[- ]?accept|\bauto mode\b|\ballow all\b|\bpermanent"
     r"|不再詢問|不再询问|一律允許|一律允许|自動核准|自动批准|總是允許|总是允许|始終允許|始终允许"
     r"|本次工作階段|此工作階段|本次会话|此会话"

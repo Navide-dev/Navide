@@ -88,3 +88,13 @@ def test_publish_accepts_schema_data_strings_and_property_names() -> None:
     manifest = parse_manifest(raw)
     assert manifest.backend is not None
     assert manifest.backend.agentTools == raw["backend"]["agentTools"]
+
+
+def test_a_prefix_mismatch_names_the_prefix_the_id_derives() -> None:
+    # The SDK validator says the same (navide-plugin.mjs agentToolMessage).
+    raw = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    raw["backend"]["agentTools"][0].update(name="other_read")
+    with pytest.raises(ManifestError) as refused:
+        parse_manifest(raw)
+    assert "'other_read' must start with 'devmap_'" in str(refused.value)
+    assert "AGENT_TOOL_PREFIX_MISMATCH" in str(refused.value)

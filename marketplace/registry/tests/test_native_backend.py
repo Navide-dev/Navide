@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import sqlite3
 import stat
 import zipfile
 import pytest
+from fastapi.testclient import TestClient
 from sqlmodel import Session, select
+
+from registry.app import create_app
+from registry.config import VERIFIER_ACCEPTING, Settings
 
 from registry.db import create_db_engine
 from registry.dns_verify import record_host, record_value
 from registry.models import Publisher
 from registry.native_backend import (
     MIN_NAVIDE_FOR_BACKEND_SHELL,
+    LOCAL_NATIVE_BACKEND_NOTICE,
     MIN_NAVIDE_FOR_THIRD_PARTY_BACKEND,
+
 )
 from registry.secret_scan import MAX_SCANNED_BYTES_PER_FILE, scan_package
 from registry.similarity import check_extension_name
@@ -254,3 +261,82 @@ def test_migration_8_adds_the_allowlist_column_off_for_everyone(tmp_path):
     assert "native_backend_allowed" in columns
     assert 8 in applied
     assert allowed == [(0,)]
+
+
+# -- local (self-hosted-dev) Registry: same package rules as the Marketplace --
+
+
+@pytest.fixture()
+def local_client(tmp_path):
+    # The local setup marketplace-publishing.md section 3 documents: the
+    # default self-hosted-dev profile and a publisher created with the admin
+    # token, which on the Marketplace would be a self-claimed one.
+    client = TestClient(
+        create_app(
+            Settings(
+                data_dir=tmp_path,
+                verifier_kind=VERIFIER_ACCEPTING,
+                require_signature=False,
+                require_auth=False,
+                allow_open_admin=True,
+            )
+        )
+    )
+    assert client.post("/api/publishers", json={"name": "acme-tools"}).status_code == 201
+    return client
+
+
+def _local_publish(client, manifest: dict):
+    return publish(client, "", _backend_package(manifest), target="darwin-arm64")
+
+
+@pytest.mark.parametrize(
+    ("change", "detail"),
+    [
+        (lambda m: m["backend"].pop("methods"), "backend.methods"),
+        (
+            lambda m: m.update(
+                permissions={"system": ["fs"], "shell": "full"},
+                engines={"navide": f">={MIN_NAVIDE_FOR_BACKEND_SHELL}"},
+            ),
+            "full shell",
+        ),
+        (lambda m: m.update(engines={"navide": ">=0.1.0"}), MIN_NAVIDE_FOR_THIRD_PARTY_BACKEND),
+        (lambda m: m.update(permissions={"system": ["fs"], "shell": "allowlist"}), MIN_NAVIDE_FOR_BACKEND_SHELL),
+    ],
+)
+def test_local_registry_refuses_the_backend_packages_the_marketplace_refuses(local_client, change, detail):
+    manifest = _backend_manifest()
+    change(manifest)
+    refused = _local_publish(local_client, manifest)
+    assert refused.status_code == 403, refused.text
+    assert detail in refused.json()["detail"]
+
+
+def test_local_registry_discloses_the_publisher_gates_it_cannot_run(local_client):
+    accepted = _local_publish(local_client, _backend_manifest())
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["notices"] == [LOCAL_NATIVE_BACKEND_NOTICE]
+
+
+def test_local_registry_adds_no_notice_without_a_backend(local_client):
+    manifest = contract_manifest()
+    manifest.update(id="acme-tools.plain", publisher="acme-tools")
+    accepted = publish(local_client, "", build_v2_package(manifest))
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["notices"] == []
+
+
+def test_official_registry_keeps_the_admin_publisher_path(signed_env):
+    # Production (official profile): an admin-created publisher's first-party
+    # backend keeps its existing path, unchanged by the local rule above.
+    manifest = _backend_manifest(id="acme.indexer", publisher="acme", engines={"navide": ">=0.1.0"})
+    data = _backend_package(manifest)
+    accepted = signed_env.client.post(
+        "/api/publish",
+        params={"target": "darwin-arm64", "signature": signed_env.sign(hashlib.sha256(data).hexdigest())},
+        files={"package": ("p.vsix", data, "application/zip")},
+        headers={"Authorization": f"Bearer {signed_env.token}"},
+    )
+    assert accepted.status_code == 201, accepted.text
+    assert accepted.json()["notices"] == []
