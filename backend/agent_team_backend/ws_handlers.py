@@ -6322,7 +6322,7 @@ async def share_publish(session: "Session", msg_id: str, msg_type: str, payload:
     as a disconnect and nothing else. The error minted here names the file
     export as the way out instead.
     """
-    from . import share_codes
+    from . import settings_bundle, share_codes
 
     bundle = payload.get("bundle")
     if not isinstance(bundle, dict):
@@ -6330,6 +6330,7 @@ async def share_publish(session: "Session", msg_id: str, msg_type: str, payload:
             make_error(msg_id, msg_type, "INVALID_BUNDLE", "bundle must be an object")
         )
         return
+    bundle = settings_bundle.without_secrets(bundle)
     ttl = payload.get("ttlSeconds")
     if not isinstance(ttl, int) or isinstance(ttl, bool) or ttl <= 0:
         ttl = _SHARE_TTL_DEFAULT_S

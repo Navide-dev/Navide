@@ -96,7 +96,7 @@ Agent CLI の Credential は各 CLI の Configuration に残ります。Cloud AI
 
 **Portable Credential** はユーザーが自ら選ぶ例外です。各ベンダーが「別の Machine へ持ち運ぶ」ために公式に用意した値（例：`claude setup-token` が出力する Token）を、Settings → Accounts に貼り付けます。Navide はこの Device 上で暗号化して保存し、その CLI の新しい Pane を起動するときに環境変数としてのみ渡します。CLI 自身の Login File には書き込みません。ある Device から削除しても、その Device からだけ削除されます。
 
-Settings → Sync で **Credentials** を有効にすると（既定は無効）、貼り付けた各 Credential は Device 上で Account の Sync Key により暗号化されてから送信され、Navide Cloud はサービス側で開けない暗号文だけを保存します。同じ Account にサインインした別の Device がそれを復号し、ディスク上では同じく暗号文として保持し、Pane にのみ渡します。サービス側から見えるのは不透明な Item ID、Revision 番号、Timestamp、書き込んだ Device だけで、どの CLI やどの Account のものかは分かりません。ある Device で削除しても Cloud や他の Device からは削除されず、セクションを有効にするまで何も Upload されません。Device で Account を切り替えると、その Device が Import した Credential は破棄され、セクションは再び無効になります。
+貼り付けた Credential がアップロードされることはありません。Credential と Key はご自身の Machine にのみ保存され、Navide が Navide Cloud やその他の集中データベースに保存することはありません。Settings → Sync に Credentials セクションはなく、古いビルドでオンのまま残った Credentials スイッチはオフとして扱われ、Navide Cloud はどのバージョンから送られた Credential の Record も受け付けません。
 
 Local File Permission は、同じ Machine 上の他 User による偶発的 Access を減らしますが、Malware、Compromised User Account、Unrestricted Agent、Backup、同等権限の Process からは保護しません。
 
