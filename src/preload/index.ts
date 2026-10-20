@@ -133,6 +133,35 @@ function isPluginAgentActionNotice(payload: unknown): payload is PluginAgentActi
   )
 }
 
+/** A first install staged without Restart that the launch could not promote. */
+export interface PluginStagedCandidateNotice {
+  pluginId: string
+  version: string
+  reason: string
+}
+
+function isPluginStagedCandidateNotice(payload: unknown): payload is PluginStagedCandidateNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  return typeof record.pluginId === 'string' && typeof record.version === 'string' && typeof record.reason === 'string'
+}
+
+/** A package staged beside the active one, found at launch. */
+export interface PluginStagedUpdate {
+  pluginId: string
+  activeVersion: string
+  stagedVersion: string
+}
+
+function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[] {
+  return Array.isArray(payload) && payload.every((item) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return false
+    const record = item as Record<string, unknown>
+    return typeof record.pluginId === 'string' && typeof record.activeVersion === 'string' &&
+      typeof record.stagedVersion === 'string'
+  })
+}
+
 function isPlansRecoveryChanged(payload: unknown): payload is PlansRecoveryChanged {
   return (
     typeof payload === 'object' &&
@@ -632,6 +661,22 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }
     ipcRenderer.on('plugins:agentAction', listener)
     return () => ipcRenderer.removeListener('plugins:agentAction', listener)
+  },
+  // A plugin installed without Restart could not be activated at launch.
+  onPluginStagedCandidateNotActivated: (cb: (notice: PluginStagedCandidateNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginStagedCandidateNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:stagedCandidateNotActivated', listener)
+    return () => ipcRenderer.removeListener('plugins:stagedCandidateNotActivated', listener)
+  },
+  // Packages staged beside an active one, found at launch.
+  onPluginStagedUpdates: (cb: (updates: PluginStagedUpdate[]) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginStagedUpdates(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:stagedUpdates', listener)
+    return () => ipcRenderer.removeListener('plugins:stagedUpdates', listener)
   },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))
