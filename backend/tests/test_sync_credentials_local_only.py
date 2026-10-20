@@ -114,3 +114,25 @@ async def test_a_published_bundle_carries_no_mcp_secret_and_no_credentials_scope
     assert opened["scopes"]["mcp"]["items"]["gh"]["env"] == {"GH_PAT": ""}
     assert opened["scopes"]["mcp"]["items"]["gh"]["command"] == "gh-mcp"
     assert token.encode() not in base64.b64decode(sent["blob"])
+
+
+@pytest.mark.parametrize(
+    "scopes",
+    [
+        "not an object",
+        {"mcp": {"items": ["gh"]}},
+        {"mcp": {"items": {"gh": "env=GH_PAT"}}},
+        {"prompts": "review"},
+    ],
+)
+async def test_a_bundle_that_cannot_be_read_is_refused_not_sent(monkeypatch, scopes):
+    server = ShareServer()
+    server.install(monkeypatch)
+    session = FakeSession()
+    bundle = {"bundleVersion": 1, "name": "team", "scopes": scopes, "redactions": []}
+
+    await ws_handlers.share_publish(session, "1", "share.publish", {"bundle": bundle})
+
+    assert not session.reply["ok"]
+    assert session.reply["error"]["code"] == "INVALID_BUNDLE"
+    assert server.calls == []

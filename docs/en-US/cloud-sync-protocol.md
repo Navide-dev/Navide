@@ -39,8 +39,9 @@ and pushes that shape back, so a manifest added as a field would be silently
 erased by the first old client that saw it. Old clients never pull
 `skill-files`, so they keep syncing settings only and cannot damage anything.
 
-**Credentials and keys are only ever stored on the user's own machine** (policy
-of 2026-10-21; Navide never stores them in any central database). The
+**Account credentials and keys never leave the user's machine** (policy of
+2026-10-21). MCP records, when their sync is on, still travel as ciphertext
+sealed on the device; the server has no key to open them. The
 `credentials` scope name stays in the protocol only so rows an older desktop
 already pushed can be pulled and purged: no client engine registers an adapter
 for it or names it in a push (`sync_engine.LOCAL_ONLY_SCOPES`), a switch an

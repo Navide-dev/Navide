@@ -141,7 +141,7 @@ Agent CLI credentials remain in each CLI's own configuration. If you enter cloud
 
 **Portable CLI credentials** are the exception you opt into: a value a vendor documents for carrying between machines (for example the token `claude setup-token` prints) that you paste in Settings → Accounts. Navide stores it encrypted on this device and hands it to new panes of that CLI in their environment only; it never writes it into the CLI's own login files. Removing it from a device removes it from that device.
 
-Pasted credentials are never uploaded. Credentials and keys are only ever stored on your own machine, and Navide never stores them in Navide Cloud or any other central database: Settings → Sync has no Credentials section, a Credentials switch an older build left on is treated as off, and Navide Cloud refuses credential records from any version.
+Pasted credentials are never uploaded. Account credentials and keys never leave your machine: Settings → Sync has no Credentials section, a Credentials switch an older build left on is treated as off, and Navide Cloud refuses credential records from any version. MCP settings, if you turn their sync on, are encrypted on your machine before they are uploaded, and the server has no key to decrypt them.
 
 Local file permissions reduce accidental access by other users on the same machine but do not protect against malware, a compromised user account, unrestricted agents, backups, or processes with equivalent permissions.
 

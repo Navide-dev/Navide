@@ -170,6 +170,6 @@ Claude Code はリクエストごとに Credential を読み直すため、何�
 
 新しい Account のサインインは Claude Code、Codex、Grok、Kimi、Pi、Droid、MiniMax Code では隔離されています。サインイン用の Pane は専用の Home を使い、使用中の Account と実行中の Pane には触れません。他の CLI は Credential の保存場所が 1 つしかないため、サインインは一時的に現在の Credential を置き換えます。Navide は先に使用中の Account のスナップショットを取り、サインインが完了したら新しいサインインをそれ自身の Account カードへ退避し、使用中の Account を復元します——サインインが放棄された場合も同様です。このようなサインインが保留中の間、Navide はその CLI の他の Pane を開かず、その CLI の Pane が実行中のときはこのサインインを開始しません。すべての CLI の Account 切り替えの仕組みはベンダー自身のコードから読み取ったものです。Navide の中で 2 つの実 Account を往復した CLI はまだなく、MiniMax Code の対応は最も新しいものです。
 
-これらの Credential は**この Machine から出ることはありません**。Navide は Credential と Key をローカルにのみ保存し、どのサーバーにも保存しないため、**Sync** セクション（Settings → Sync）に Credentials の行はなく、古いビルドでオンのまま残った Credentials スイッチはオフとして扱われます。Sync セクションは Sync Key の ID を表示し（同期する資産を暗号化する Key で、CLI の Credential ではありません）、漏洩が疑われるときに Rotate を提供します。すべての Record が再暗号化され、ペアリング済みの Device は新しい Key を受け取ります。
+これらの Credential は**この Machine から出ることはありません**。アカウントの Credential と Key はローカルにのみ保存されるため、**Sync** セクション（Settings → Sync）に Credentials の行はなく、古いビルドでオンのまま残った Credentials スイッチはオフとして扱われます。Sync セクションは Sync Key の ID を表示し（同期する資産を暗号化する Key で、CLI の Credential ではありません）、漏洩が疑われるときに Rotate を提供します。すべての Record が再暗号化され、ペアリング済みの Device は新しい Key を受け取ります。
 
 `.agent-team/` は現在 Portability Mechanism ではありません。将来 Machine 間で移行する場合は Git Synchronization ではなく、Redaction と Retention Control を備えた明示的な Local Export/Import Flow を使用すべきです。
