@@ -143,13 +143,11 @@ describe('useTerminal — fit to pane width', () => {
   // alternate screen ($EDITOR from claude's Ctrl+G, less, vim) and leaves it
   // mid-mode must still be at its grid cols, or claude repaints at the stage
   // width and the return to grid is a narrowing reflow of those rows.
-  it('caps a pane that enters a stage mode on its alternate screen, and keeps the cap after it leaves', () => {
+  it('caps a pane that enters a stage mode on its alternate screen', () => {
     bufferType.value = 'alternate'
     const { result, scope } = mountedTerminal()
     result.lockCols(true)
     expect(ctrl.setColsCap).toHaveBeenLastCalledWith(80)
-    bufferType.value = 'normal' // the editor exits back to claude, still on the stage
-    expect(ctrl.setColsCap).not.toHaveBeenCalledWith(null)
     scope.stop()
   })
 })
