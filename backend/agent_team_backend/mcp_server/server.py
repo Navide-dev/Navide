@@ -10726,6 +10726,7 @@ class _Runner:
 _runner: _Runner | None = None
 # (pane or client, reason) pairs already logged as refused (see _PlanMcpASGI).
 _logged_refusals: set[tuple[str, str]] = set()
+_MAX_LOGGED_REFUSALS = 1024
 # The exceptions the SDK logged while handling the current request: it answers
 # every failure before a tool runs with the same "-32603 Error handling POST
 # request" and keeps the cause in its own log only (issue #490).
@@ -10793,12 +10794,14 @@ class _PlanMcpASGI:
                 caller = _credential(Request(scope))
             except CallerUnknown as err:
                 params = Request(scope).query_params
-                who = str(params.get("pane") or params.get("client") or "")
-                if (who, str(err)) not in _logged_refusals:
+                # Caller-supplied and unauthenticated: quoted and cut short so it
+                # cannot forge log lines, and the set is capped.
+                who = repr(str(params.get("pane") or params.get("client") or ""))[:64]
+                if (who, str(err)) not in _logged_refusals and len(_logged_refusals) < _MAX_LOGGED_REFUSALS:
                     # Once per caller and reason: a CLI that keeps calling would
                     # otherwise write the same line on every call.
                     _logged_refusals.add((who, str(err)))
-                    _log.warning("plan-mcp: refused %s — %s", who or "a caller with no id", err)
+                    _log.warning("plan-mcp: refused %s — %s", who, err)
                 await PlainTextResponse(str(err), status_code=401)(scope, receive, send)
                 return
         # Request bodies have no size limit (agent-tools contract 4.4, A1). Their
