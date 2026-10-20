@@ -1943,6 +1943,8 @@
         "reload": "Reload",
         "removeFolder": "Remove",
         "needsConsent": "Permissions or backend changed; consent again",
+        "externallyChanged": "Added or edited outside Navide; consent again",
+        "externalChange": "Developer Mode settings were changed by a program other than Navide ({time}). Navide did not apply those changes: turn Developer Mode on again, or consent again to the folders marked below, in Settings → Navide Plugins.",
         "folderWarning": "This Navide plugin is loaded straight from the folder you picked. Navide has not reviewed it and it is not signed. The folder can change at any time and Navide does not compare its content: you are asked again only when its permissions or backend change.",
         "folderLabel": "Folder",
         "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."

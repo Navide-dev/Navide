@@ -2224,20 +2224,34 @@ runs only inside the OS sandbox described in
   settings page can change it; every change made there is written to the
   plugin activity log as a Host event (`source: "host"`, `plugin_id: "host"`,
   `developerMode.on` / `.off`), which no plugin row can claim. The switch and
-  the folder consents live in an unsigned file,
-  `.navide-plugin-developer-mode.json` in the plugin install root, which is
-  checked only for its shape. Any unsandboxed process running as the same
-  user, an agent CLI included, can write that file to turn Developer Mode on
-  and add a consented folder (the permission digest is a plain SHA-256 of the
-  manifest's declarations); the next start then loads that folder without the
-  consent dialog, and a packaged build starts honouring a self-hosted Registry
-  URL. A direct write leaves no activity log entry; the launch reminder still
-  appears while the switch is on, and a native backend still needs its own
-  consent. A plugin frame and a plugin's own sandboxed backend cannot write
-  it. Navide Guard grades an agent's write to this file as critical where the
-  CLI runs Navide's hooks (rule `plugin-store-write`, with the limits listed
-  under the local trust record below); it does not stop other processes of
-  the same user. A main-process signed consent is planned for 0.2.27. A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
+  the folder consents live in `.navide-plugin-developer-mode.json` in the
+  plugin install root, which is checked for its shape. Any unsandboxed
+  process running as the same user, an agent CLI included, can write that
+  file. Since 0.2.28 Navide also keeps
+  `.navide-plugin-developer-mode.sig.json` beside it: an HMAC-SHA256 of each
+  entry Navide wrote itself (the switch when on, each folder consent), keyed
+  by a random key that Electron `safeStorage` encrypts. An entry Navide did
+  not write (the switch turned on, a folder added or edited by another
+  program) is not applied: the switch stays off until the user turns it on
+  on this page (with the usual confirmation), and the folder is listed as
+  "Added or edited outside Navide; consent again" and loads only after the
+  user consents to it again (Reload opens the consent dialog for the folder
+  the entry names). Navide says so in the launch reminder and on this page,
+  and writes one Host event `developerMode.externalChange` to the activity
+  log when it first sees the change. Nothing is blocked: the other program's
+  write is simply not taken as the user's consent. Known limits: the check
+  runs only after the app is ready and while secure storage is available
+  (not on Linux without a keyring, nor for the self-hosted Registry setting
+  read before the app is ready); a file from before 0.2.28, or one whose
+  signature file was deleted together with it, is signed once as it is; on
+  Windows and Linux the safeStorage key is readable by any process of the
+  same user, so a determined program can still forge an entry there; a
+  signature file that cannot be read or decrypted (another machine, a new
+  keychain) asks about every entry again. A native backend still needs its
+  own consent, and a plugin frame and a plugin's own sandboxed backend cannot
+  write either file. Navide Guard grades an agent's write to this file as
+  critical where the CLI runs Navide's hooks (rule `plugin-store-write`, with
+  the limits listed under the local trust record below). A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
   `AGENT_TEAM_PLUGIN_DEV_PATH` either way; with the switch on, **Load from
   folder…** opens the Host's own folder dialog. A folder loads a Manifest v2
   package (not `navide.`, not an id something else installed holds or

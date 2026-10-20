@@ -6867,6 +6867,11 @@ export class FrontendPluginManager {
     this.activityRecorder.recordHostEvent(enabled ? 'developerMode.on' : 'developerMode.off', appVersion)
   }
 
+  /** A2-5 (G5): Developer Mode settings another program wrote were seen. */
+  recordDeveloperModeExternalChange(appVersion: string): void {
+    this.activityRecorder.recordHostEvent('developerMode.externalChange', appVersion)
+  }
+
   /** D-e: a removed plugin's first-seen activity rows go (`plugin.activity.forget`),
    *  so a reinstall's first writes in a workspace are flagged again. Best effort:
    *  with no Host session it is skipped, and removal never waits for it. */

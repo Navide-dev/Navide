@@ -441,10 +441,11 @@ _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "
 _HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
 #: Calls into a plugin's own backend, counted by the Host per batch.
 _BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
-#: Card K4: the one Host event a row may report, the Developer Mode switch. It
-#: is filed under the Host's own event identity, which no plugin can hold.
+#: Card K4: the Host events a row may report, the Developer Mode switch and
+#: (A2-5) its settings changed outside Navide. They are filed under the Host's
+#: own event identity, which no plugin can hold.
 _HOST_EVENT_PLUGIN_ID = "host"
-_HOST_EVENT_ADDRESSES = frozenset(("developerMode.on", "developerMode.off"))
+_HOST_EVENT_ADDRESSES = frozenset(("developerMode.on", "developerMode.off", "developerMode.externalChange"))
 
 
 def _host_event_row(app: Any, row: dict) -> str | None:

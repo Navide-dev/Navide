@@ -1943,6 +1943,8 @@
         "reload": "重新載入",
         "removeFolder": "移除",
         "needsConsent": "權限或後端已變更，需要重新同意",
+        "externallyChanged": "被 Navide 以外的程式新增或改過，需要重新同意",
+        "externalChange": "開發者模式設定被 Navide 以外的程式改過（{time}）。Navide 沒有套用這些變更：請到「設定 → Navide 外掛」重新開啟開發者模式，或對下面標示的資料夾重新同意。",
         "folderWarning": "這個 Navide 外掛直接從你選的資料夾載入，沒有經過 Navide 審核，也沒有簽章。資料夾內容隨時可能變動，Navide 不做內容比對：只有權限或後端宣告改變時才會再問你。",
         "folderLabel": "資料夾",
         "selfHostedQuarantine": "{id} {version} 來自自架 Registry，目前沒有載入。請開啟開發者模式，或改從 Navide 市集安裝。"

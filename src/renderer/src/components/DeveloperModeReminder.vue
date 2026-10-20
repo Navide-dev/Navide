@@ -7,10 +7,15 @@ import { onMounted, ref } from 'vue'
 
 const enabled = ref(false)
 const dismissed = ref(false)
+// A2-5 (G5): Developer Mode settings another program wrote, said on every
+// launch until the user turns the switch on or consents to the folders again.
+const externalChange = ref<string | null>(null)
 
 onMounted(async () => {
   try {
-    enabled.value = (await window.agentTeam?.plugins?.developerMode?.())?.enabled === true
+    const state = await window.agentTeam?.plugins?.developerMode?.()
+    enabled.value = state?.enabled === true
+    externalChange.value = state?.externalChange?.detectedAt ?? null
   } catch {
     // No answer, no notice; the Settings banner still shows the state.
   }
@@ -18,8 +23,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="enabled && !dismissed" class="nv-devmode-reminder" role="status">
-    <p>{{ $t('settings.extensions.developerMode.reminder') }}</p>
+  <div v-if="(enabled || externalChange) && !dismissed" class="nv-devmode-reminder" role="status">
+    <div class="nv-devmode-reminder-text">
+      <p v-if="enabled">{{ $t('settings.extensions.developerMode.reminder') }}</p>
+      <p v-if="externalChange" class="nv-devmode-reminder-external">
+        {{ $t('settings.extensions.developerMode.externalChange', { time: new Date(externalChange).toLocaleString() }) }}
+      </p>
+    </div>
     <button type="button" class="nv-devmode-reminder-close nv-btn nv-btn--sm" @click="dismissed = true">
       {{ $t('settings.extensions.developerMode.reminderClose') }}
     </button>
