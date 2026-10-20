@@ -295,21 +295,67 @@ def test_a_host_caller_has_no_self_scope() -> None:
 
 
 @pytest.mark.asyncio
-async def test_the_close_window_keybinding_command_cannot_close_your_own_window(
-    monkeypatch: pytest.MonkeyPatch, workspace: str
+async def test_the_close_window_keybinding_command_is_only_reachable_through_window_close(
+    monkeypatch: pytest.MonkeyPatch, workspace: str, tmp_path: Any
 ) -> None:
-    """HIGH-1: workbench.action.closeWindow runs window.close() in whichever
-    window the request lands in; for a pane caller with no workspace_path, or
-    naming its own, that is the caller's own window."""
+    """Review #534 HIGH-1 / R2 MED-1: workbench.action.closeWindow runs
+    window.close() in whichever window answers — the caller's own, or someone
+    else's with no record of who did it. ui_invoke sends it to window_close."""
     _no_window_reached(monkeypatch)
+    other = tmp_path / "beta"
+    other.mkdir()
     agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
-    for target in ("", workspace, workspace + "/"):
+    agent_messaging.register("pb", "else", str(other), agent_key="claude", owner=_Window("w2"))
+    for target in ("", workspace, workspace + "/", str(other)):
         result = await plan_mcp.ui_invoke(target, "workbench.action.closeWindow", _pane_ctx("pa"), None)
-        assert result["error_code"] == "self-window-close", target
+        assert result["error_code"] == "ui_dedicated_tool", target
+        assert "window_close" in result["error"], target
+
+
+def test_the_self_check_still_knows_which_windows_the_close_window_command_would_hit(
+    workspace: str, tmp_path: Any
+) -> None:
+    """Kept for any route that runs it: one window holding two projects is the
+    caller's own whichever of them is named."""
+    other = tmp_path / "beta"
+    other.mkdir()
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
+    agent_messaging.register("pb", "else", str(other), agent_key="claude", owner=_Window("w1"))
+    for target in ("", workspace, str(other)):
+        assert _refusal("pa", "workbench.action.closeWindow", {}, target)["error_code"] == "self-window-close"
+
+
+# ── ui.pipeline.reset (review #534 R2 HIGH-1) ────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_the_close_window_command_aimed_at_another_project_still_goes_through(
+async def test_a_pipeline_reset_in_your_own_window_is_refused_on_both_routes(
+    monkeypatch: pytest.MonkeyPatch, workspace: str
+) -> None:
+    """Reset ends every pane in the window (onKillAll), manual ones included and
+    with no run needed — the caller's own with them."""
+    _no_window_reached(monkeypatch)
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
+    via_invoke = await plan_mcp.ui_invoke("", "ui.pipeline.reset", _pane_ctx("pa"), {})
+    assert via_invoke["error_code"] == "self-close"
+    via_tool = await plan_mcp.pipeline_reset(_pane_ctx("pa"))
+    assert via_tool["error_code"] == "self-close"
+
+
+def test_a_pipeline_reset_aimed_at_a_project_your_window_holds_without_panes_is_refused(
+    monkeypatch: pytest.MonkeyPatch, workspace: str, tmp_path: Any
+) -> None:
+    """The window holds the other project only as an announced workspace —
+    no pane of it is registered — and is still the caller's own."""
+    other = tmp_path / "beta"
+    other.mkdir()
+    monkeypatch.setattr(app, "main_window_sessions", lambda: [_MainWindow("w1", (workspace, str(other)))])
+    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
+    assert _refusal("pa", "ui.pipeline.reset", {}, str(other))["error_code"] == "self-close"
+
+
+@pytest.mark.asyncio
+async def test_a_pipeline_reset_in_another_window_still_goes_through(
     sent: list[dict[str, Any]], workspace: str, tmp_path: Any
 ) -> None:
     other = tmp_path / "beta"
@@ -317,24 +363,18 @@ async def test_the_close_window_command_aimed_at_another_project_still_goes_thro
     agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
     agent_messaging.register("pb", "else", str(other), agent_key="claude", owner=_Window("w2"))
     task = asyncio.create_task(_answer({}))
-    result = await plan_mcp.ui_invoke(str(other), "workbench.action.closeWindow", _pane_ctx("pa"), None)
+    result = await plan_mcp.ui_invoke(str(other), "ui.pipeline.reset", _pane_ctx("pa"), {})
     await task
     assert result["ok"] is True
 
 
-@pytest.mark.asyncio
-async def test_the_close_window_command_aimed_at_another_project_your_window_also_holds_is_refused(
-    monkeypatch: pytest.MonkeyPatch, workspace: str, tmp_path: Any
+def test_a_folder_that_is_gone_still_matches_its_case_variant_where_case_is_ignored(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """One window, two projects: naming the other project still lands in the
-    caller's own window."""
-    _no_window_reached(monkeypatch)
-    other = tmp_path / "beta"
-    other.mkdir()
-    agent_messaging.register("pa", "worker", workspace, agent_key="claude", owner=_Window("w1"))
-    agent_messaging.register("pb", "else", str(other), agent_key="claude", owner=_Window("w1"))
-    result = await plan_mcp.ui_invoke(str(other), "workbench.action.closeWindow", _pane_ctx("pa"), None)
-    assert result["error_code"] == "self-window-close"
+    monkeypatch.setattr(plan_mcp.sys, "platform", "darwin")
+    assert plan_mcp._same_directory("/no/such/Proj", "/no/such/proj/") is True
+    monkeypatch.setattr(plan_mcp.sys, "platform", "linux")
+    assert plan_mcp._same_directory("/no/such/Proj", "/no/such/proj") is False
 
 
 @pytest.mark.asyncio

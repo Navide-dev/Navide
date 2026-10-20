@@ -5597,7 +5597,12 @@ def _same_directory(a: str, b: str) -> bool:
     try:
         sa, sb = os.stat(a), os.stat(b)
     except OSError:
-        return _norm_workspace(a) == _norm_workspace(b)
+        na, nb = _norm_workspace(a), _norm_workspace(b)
+        if sys.platform in ("darwin", "win32"):
+            # Their default volumes ignore case, so a folder that is gone
+            # still matches its other spellings.
+            return na.casefold() == nb.casefold()
+        return na == nb
     return (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino)
 
 
@@ -5653,7 +5658,7 @@ def _lands_in_own_window(scope: _SelfScope, workspace_path: str) -> bool:
     as far as the registry shows (a window holding a project with no pane is
     not visible here; the window repeats the check with what it knows).
     """
-    from agent_team_backend import agent_messaging
+    from agent_team_backend import agent_messaging, app
 
     if not workspace_path or _same_directory(workspace_path, scope.workspace):
         return True
@@ -5662,6 +5667,13 @@ def _lands_in_own_window(scope: _SelfScope, workspace_path: str) -> bool:
             continue
         window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
         if window_id in scope.window_ids:
+            return True
+    # A window holding that project with no pane of it, as it announced.
+    for session in app.main_window_sessions():
+        held = getattr(session, "held_workspaces", ()) or ()
+        if str(getattr(session, "window_id", "") or "") in scope.window_ids and any(
+            _same_directory(path, workspace_path) for path in held
+        ):
             return True
     return False
 
@@ -5708,6 +5720,18 @@ def _self_scope_refusal(
                 ),
                 "error_code": "self-workspace-close",
             }
+    if action == "ui.pipeline.reset" and _lands_in_own_window(scope, workspace_path):
+        # Reset kills every pane in the window that answers it (onKillAll),
+        # pipeline or not, without asking — the caller's own included.
+        return {
+            "ok": False,
+            "result": None,
+            "error": (
+                "a pipeline reset ends every pane in the window that runs it, and that "
+                "window holds your own pane — it would end you with them. Ask the user to reset it."
+            ),
+            "error_code": "self-close",
+        }
     if (action == "ui.window.close" and str(a.get("windowId") or "") in scope.window_ids) or (
         action == "workbench.action.closeWindow" and _lands_in_own_window(scope, workspace_path)
     ):
@@ -5725,7 +5749,13 @@ def _self_scope_refusal(
 
 #: Close actions reachable only through their dedicated tools (S4), which
 #: record the action and show the user who did it. ui_invoke refuses them.
-_DEDICATED_CLOSE_ACTIONS = {"ui.window.close": "window_close", "ui.workspace.close": "workspace_close"}
+_DEDICATED_CLOSE_ACTIONS = {
+    "ui.window.close": "window_close",
+    "ui.workspace.close": "workspace_close",
+    # The ⌘⇧W keybinding command closes whichever window answers; aimed at
+    # someone else's window it would close it with no record (review #534 R2).
+    "workbench.action.closeWindow": "window_close",
+}
 
 
 def _self_reclaim_entry(pane_id: str) -> dict[str, str]:
@@ -8798,6 +8828,9 @@ async def pipeline_reset(ctx: Context, workspace_path: str = "") -> dict[str, An
     """
     caller = _resolve_caller(ctx)
     workspace_path = await _run_workspace(caller, workspace_path)
+    refused_self = _self_scope_refusal(caller, "ui.pipeline.reset", {}, workspace_path)
+    if refused_self is not None:
+        return refused_self
     return await _ui_request(
         workspace_path, "invoke", caller=caller, action="ui.pipeline.reset", args={}
     )

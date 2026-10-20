@@ -195,6 +195,11 @@ function selfCloseRefusal(req: Partial<UiInvokeRequest>, opts: UseUiActionBusOpt
   ) {
     return `self-close: ${req.action} acts on the focused pane, which is your own pane right now`
   }
+  // Reset ends EVERY pane in this window (onKillAll), manual ones included and
+  // with no run needed, so any caller this window hosts is refused.
+  if (req.action === 'ui.pipeline.reset' && opts.hostsPane?.(caller)) {
+    return 'self-close: ui.pipeline.reset ends every pane in this window, your own included'
+  }
   if (PIPELINE_TEARDOWN_ACTIONS.includes(req.action) && opts.isPipelineSlot?.(caller)) {
     return `self-close: ${req.action} would end the run your own pane is a slot of`
   }

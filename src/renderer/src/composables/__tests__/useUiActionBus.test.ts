@@ -739,6 +739,21 @@ describe('useUiActionBus — self protection, review #534', () => {
     expect(ran).toHaveBeenCalledTimes(1)
   })
 
+  it('refuses ui.pipeline.reset from any pane this window hosts, slot or not', async () => {
+    const { emit, ran, replies } = setup({ hostsPane: (id) => id === 'pa' })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pipeline.reset', ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-close/)
+  })
+
+  it('runs ui.pipeline.reset for a caller in another window', async () => {
+    const { emit, ran } = setup({ hostsPane: () => false })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pipeline.reset', caller_pane_id: 'pa', caller_workspace_path: '/other' }))
+    await flush()
+    expect(ran).toHaveBeenCalledTimes(1)
+  })
+
   it('refuses a case variant of the caller\'s own workspace', async () => {
     const { emit, ran, replies } = setup()
     emit('ui.invoke.request', baseRequest({ action: 'ui.workspace.close', args: { path: '/WS/' }, ...asCaller }))
