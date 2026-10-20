@@ -2775,6 +2775,43 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  it('on the next launch, leaves a package displaced by a rollback staged and discloses it', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', {}, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-rollback-relaunch-'))
+    const manager = new FrontendPluginManager()
+    const relaunched = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      await prepare(null, { namespace: 'acme', name: 'demo' })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+      installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
+      await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+      await handlers.get('plugins:rollback')!(null, { id: 'acme.demo' })
+      const afterRollback = new PluginActivationSelector(root).read('acme.demo')
+
+      handlers.clear()
+      const controller = registerPluginIpc(relaunched, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      expect(await controller.activateStagedFirstInstalls()).toEqual([])
+      // The user's rollback stands: nothing is promoted for them.
+      expect(new PluginActivationSelector(root).read('acme.demo')).toEqual(afterRollback)
+      expect(controller.stagedUpdates()).toEqual([
+        { pluginId: 'acme.demo', activeVersion: '1.0.0', stagedVersion: '1.0.1' },
+      ])
+    } finally {
+      await manager.closeBackendPlugins()
+      await relaunched.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('drains a backend-only active version before promoting an explicit rollback', async () => {
     const first = buildBackendPkg('1.0.0')
     const second = buildBackendPkg('1.0.1')
