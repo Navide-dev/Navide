@@ -11492,10 +11492,11 @@
       "system": "{key}"
     },
     "scanHeading": "上架時系統掃描的結果",
+    "scanHeadingLocal": "Navide 掃描這個檔案的結果",
     "declaredHeading": "這個 Navide 外掛宣告的權限",
     "registryHeading": "Navide Registry 的紀錄（未簽章）",
     "provenance": {
-      "local": "以下由 Navide 從套件自己的 manifest 讀出；沒有 Navide Registry 簽章，也沒有經過 Navide 掃描。",
+      "local": "以下由 Navide 從套件自己的 manifest 讀出；沒有 Navide Registry 簽章，Navide 也沒有審查過。",
       "unverified": "以下由 Navide Registry 提供，尚未驗證；安裝前 Navide 會驗證簽章，並和套件內容比對。",
       "verified": "已驗證：揭露內容和下載的套件一致，掃描報告的 Navide Registry 簽章正確。",
       "verifiedNoScan": "已驗證：揭露內容和下載的套件一致。這個版本沒有系統掃描。"
@@ -11503,7 +11504,9 @@
     "noDisclosure": "這個版本上架時尚未提供揭露資料。",
     "signedByRegistry": "掃描由 Navide Registry 執行並簽章。",
     "scannedByRegistry": "掃描由 Navide Registry 執行。",
+    "scannedLocally": "掃描結果只供這張卡片參考，不會決定是否安裝。",
     "limitsWithoutScan": "這個版本沒有系統掃描，以上只有這個 Navide 外掛自己的宣告。",
+    "limitsWithoutScanLocal": "Navide 沒有掃描這個檔案，以上只有這個 Navide 外掛自己的宣告。",
     "viewNetwork": "Navide 外掛的畫面（view）可以連網，也可以在 Navide 裡顯示外部網站；Navide 不會過濾或記錄這些流量。上面的網路項目只涵蓋它的指令與原生後端。",
     "viewNetworkIfViews": "如果這個 Navide 外掛有畫面（view），畫面可以連網，也可以在 Navide 裡顯示外部網站；Navide 不會過濾或記錄這些流量。上面的網路項目只涵蓋它的指令與原生後端。",
     "summary": {
@@ -11554,7 +11557,8 @@
       },
       "coverage": {
         "base": "上架時由 Navide Registry 掃描（掃描器 {scannerVersion}，{scannedAt}，掃了 {filesScanned}／{filesTotal} 個檔案）。靜態掃描看不到執行時才決定的行為，以上不代表完整清單。",
-        "incomplete": "掃描不完整：{reasons}。"
+        "incomplete": "掃描不完整：{reasons}。",
+        "local": "由 Navide 在這台電腦上掃描（掃描器 {scannerVersion}，{scannedAt}，掃了 {filesScanned}／{filesTotal} 個檔案）。靜態掃描看不到執行時才決定的行為，以上不代表完整清單。"
       },
       "notFound": {
         "shell": "靜態掃描未發現執行指令。",
@@ -11562,7 +11566,8 @@
         "files": "靜態掃描未發現檔案讀寫路徑。",
         "dynamicCode": "靜態掃描未發現執行時產生程式碼。"
       },
-      "noScan": "這個版本上架時尚未有系統掃描，以下只有這個 Navide 外掛自己的宣告。"
+      "noScan": "這個版本上架時尚未有系統掃描，以下只有這個 Navide 外掛自己的宣告。",
+      "noScanLocal": "Navide 沒有掃描這個檔案，以下只有這個 Navide 外掛自己的宣告。"
     },
     "incompleteReason": {
       "timedOut": "超過掃描時間",
