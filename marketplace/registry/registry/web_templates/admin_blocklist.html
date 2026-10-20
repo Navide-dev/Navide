@@ -23,6 +23,14 @@
     <select name="kind" aria-label="Kind"><option value="package">package</option><option value="publisher">publisher</option><option value="digest">digest (.vsix sha256)</option></select>
     <input class="wide-input" name="value" placeholder="namespace.name[@version], namespace or .vsix sha256" required>
     <input class="wide-input" name="reason" placeholder="Public reason" required maxlength="500">
+    {# Digest entries only: the app disables (security), warns about (admin,
+       qualification-revoked) or only labels (developer-withdrawn) an installed copy. #}
+    <select name="digest_reason" aria-label="Digest reason">
+      <option value="admin">digest reason: admin (app warns)</option>
+      <option value="security">digest reason: security (app disables)</option>
+      <option value="qualification-revoked">digest reason: qualification revoked (app warns)</option>
+      <option value="developer-withdrawn">digest reason: developer withdrawn (app labels)</option>
+    </select>
     <button type="submit">Block</button>
   </form>
   <table class="version-table">
@@ -30,7 +38,7 @@
     <tbody>
     {% for i in items %}
       <tr>
-        <td><span class="chip">{{ i.kind }}</span></td><td><span class="id-cell"><span class="mini-tile hue-{{ i.value.split('@')[0]|tile_hue }}" aria-hidden="true">{{ i.value.split('@')[0].split('.')[-1][:1]|upper }}</span><code>{{ i.value }}</code></span></td><td>{{ i.reason or '—' }}</td>
+        <td><span class="chip">{{ i.kind }}</span></td><td><span class="id-cell"><span class="mini-tile hue-{{ i.value.split('@')[0]|tile_hue }}" aria-hidden="true">{{ i.value.split('@')[0].split('.')[-1][:1]|upper }}</span><code>{{ i.value }}</code></span></td><td>{% if i.digest_reason %}<span class="chip">{{ i.digest_reason }}</span> {% endif %}{{ i.reason or '—' }}</td>
         <td>{{ i.removed_at.strftime('%Y-%m-%d') if i.removed_at else 'config' }}</td>
         <td>{% if i.id %}
           {# A second, explicit step before an entry leaves the signed blocklist. #}

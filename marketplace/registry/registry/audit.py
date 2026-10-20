@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 from .models import RegistryAudit
 
 SYSTEM_REVOCATION = "system:qualification-revoked"
+SYSTEM_GRANDFATHER_EXPIRED = "system:grandfather-expired"
 
 
 def member_actor(member_id: str) -> str:

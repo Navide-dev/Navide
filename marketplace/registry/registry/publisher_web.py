@@ -88,6 +88,7 @@ class BlockRequest(BaseModel):
     kind: str
     value: str
     reason: str
+    digest_reason: str | None = None
 
 
 class _Redirect(Exception):
@@ -356,6 +357,7 @@ def create_publisher_router() -> APIRouter:
                     "key_fingerprint": fingerprint,
                     "review_required": publisher.review_required,
                 },
+                "grandfather": qualification.grandfather_view(session, publisher),
                 "rows": rows,
                 "reports": reports.publisher_reports(session, publisher),
                 "report_reasons": dict(reports.REASONS),
@@ -854,13 +856,25 @@ def create_publisher_router() -> APIRouter:
     @router.post("/admin/blocklist")
     @guarded
     def admin_block(
-        request: Request, kind: str = Form(""), value: str = Form(""), reason: str = Form(""), csrf: str = Form("")
+        request: Request,
+        kind: str = Form(""),
+        value: str = Form(""),
+        reason: str = Form(""),
+        digest_reason: str = Form(""),
+        csrf: str = Form(""),
     ) -> Response:
         viewer = _require_admin(request)
         _check_csrf(request, viewer, csrf)
         with _session(request) as session:
             try:
-                add_entry(session, kind=kind, value=value, reason=reason, created_by=f"member:{viewer.member_id}")
+                add_entry(
+                    session,
+                    kind=kind,
+                    value=value,
+                    reason=reason,
+                    created_by=f"member:{viewer.member_id}",
+                    digest_reason=(digest_reason or None) if kind == "digest" else None,
+                )
             except BlocklistError as exc:
                 items = removed_list(session, _settings(request))
                 return page(request, "admin_blocklist.html", {"items": items, "error": str(exc)}, status=400)
@@ -980,10 +994,20 @@ def create_publisher_router() -> APIRouter:
         _require_admin_token(request, x_admin_token)
         with _session(request) as session:
             try:
-                entry = add_entry(session, kind=body.kind, value=body.value, reason=body.reason, created_by="admin-token")
+                entry = add_entry(
+                    session,
+                    kind=body.kind,
+                    value=body.value,
+                    reason=body.reason,
+                    created_by="admin-token",
+                    digest_reason=body.digest_reason,
+                )
             except BlocklistError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
-            return JSONResponse({"id": entry.id, "kind": entry.kind, "value": entry.value}, status_code=201)
+            return JSONResponse(
+                {"id": entry.id, "kind": entry.kind, "value": entry.value, "digest_reason": entry.digest_reason},
+                status_code=201,
+            )
 
     @router.delete("/api/admin/blocklist/{entry_id}")
     def api_unblock(request: Request, entry_id: int, x_admin_token: str | None = Header(default=None)) -> Response:

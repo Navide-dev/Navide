@@ -187,12 +187,14 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
                 if publisher.navide_member_id is not None
                 else qualification.APPROVED
             )
+            grandfather = qualification.grandfather_view(session, publisher)
         return JSONResponse(
             {
                 "namespace": publisher.name,
                 "display_name": publisher.display_name,
                 "qualification": status,
                 "frozen": publisher.frozen_at is not None,
+                "grandfather": grandfather,
                 "public_key_fingerprint": _fingerprint(publisher),
                 "token_expires_at": _iso(bearer.expires_at),
             },

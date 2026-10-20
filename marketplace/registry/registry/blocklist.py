@@ -19,6 +19,14 @@ from .config import PACKAGE_PATTERN, PUBLISHER_PATTERN, Settings
 from .models import BlocklistEntry
 
 KINDS = ("publisher", "package", "digest")
+DIGEST_SECURITY = "security"
+DIGEST_ADMIN = "admin"
+DIGEST_QUALIFICATION_REVOKED = "qualification-revoked"
+DIGEST_DEVELOPER_WITHDRAWN = "developer-withdrawn"
+DIGEST_REASONS = (DIGEST_SECURITY, DIGEST_ADMIN, DIGEST_QUALIFICATION_REVOKED, DIGEST_DEVELOPER_WITHDRAWN)
+"""Why a digest is blocked; the app grades an installed copy by it (decision
+d5): security disables it, admin and qualification-revoked warn once,
+developer-withdrawn only labels it."""
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}")
 MAX_REASON_LENGTH = 500
 
@@ -44,8 +52,29 @@ def validate(kind: str, value: str) -> str:
     return value
 
 
-def add_entry(session: Session, *, kind: str, value: str, reason: str, created_by: str) -> BlocklistEntry:
+def validate_digest_reason(kind: str, digest_reason: str | None) -> str | None:
+    """A digest entry defaults to 'admin'; the other kinds take none."""
+    if kind != "digest":
+        if digest_reason:
+            raise BlocklistError("only a digest entry takes a digest reason")
+        return None
+    digest_reason = (digest_reason or DIGEST_ADMIN).strip()
+    if digest_reason not in DIGEST_REASONS:
+        raise BlocklistError("digest reason must be one of " + ", ".join(DIGEST_REASONS))
+    return digest_reason
+
+
+def add_entry(
+    session: Session,
+    *,
+    kind: str,
+    value: str,
+    reason: str,
+    created_by: str,
+    digest_reason: str | None = None,
+) -> BlocklistEntry:
     value = validate(kind, value)
+    digest_reason = validate_digest_reason(kind, digest_reason)
     reason = reason.strip()
     if not reason or len(reason) > MAX_REASON_LENGTH:
         raise BlocklistError(f"a reason of 1-{MAX_REASON_LENGTH} characters is required")
@@ -54,9 +83,16 @@ def add_entry(session: Session, *, kind: str, value: str, reason: str, created_b
     ).first()
     if existing is not None:
         raise BlocklistError(f"{value} is already blocked")
-    entry = BlocklistEntry(kind=kind, value=value, reason=reason, created_by=created_by)
+    entry = BlocklistEntry(kind=kind, value=value, reason=reason, created_by=created_by, digest_reason=digest_reason)
     session.add(entry)
-    audit.record(session, actor=created_by, action="blocklist.add", target=f"{kind}:{value}", reason=reason)
+    audit.record(
+        session,
+        actor=created_by,
+        action="blocklist.add",
+        target=f"{kind}:{value}",
+        reason=reason,
+        detail={"digest_reason": digest_reason} if digest_reason else None,
+    )
     session.commit()
     session.refresh(entry)
     return entry
@@ -89,6 +125,22 @@ def digest_blocked(session: Session, digest: str) -> BlocklistEntry | None:
     ).first()
 
 
+def block_digests(session: Session, digests: list[str], *, reason: str, digest_reason: str, created_by: str) -> list[str]:
+    """Add digest entries without committing (the caller's transaction does);
+    a digest that is already blocked keeps its entry and reason. Returns the
+    digests added."""
+    digest_reason = validate_digest_reason("digest", digest_reason)
+    added: list[str] = []
+    for digest in sorted({validate("digest", d) for d in digests}):
+        if digest_blocked(session, digest) is not None:
+            continue
+        session.add(
+            BlocklistEntry(kind="digest", value=digest, reason=reason, created_by=created_by, digest_reason=digest_reason)
+        )
+        added.append(digest)
+    return added
+
+
 def db_entries(session: Session) -> list[BlocklistEntry]:
     return list(session.exec(select(BlocklistEntry).order_by(BlocklistEntry.created_at.desc())).all())
 
@@ -116,6 +168,7 @@ def removed_list(session: Session, settings: Settings) -> list[dict]:
             "kind": e.kind,
             "value": e.value,
             "reason": e.reason,
+            "digest_reason": e.digest_reason,
             "removed_at": e.created_at.replace(tzinfo=e.created_at.tzinfo or timezone.utc),
             "source": "admin",
         }
@@ -126,6 +179,13 @@ def removed_list(session: Session, settings: Settings) -> list[dict]:
         for value in values:
             if (kind, value) not in seen:
                 items.append(
-                    {"kind": kind, "value": value, "reason": None, "removed_at": None, "source": "config"}
+                    {
+                        "kind": kind,
+                        "value": value,
+                        "reason": None,
+                        "digest_reason": None,
+                        "removed_at": None,
+                        "source": "config",
+                    }
                 )
     return items

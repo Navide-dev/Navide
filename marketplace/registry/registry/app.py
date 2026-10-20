@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import time
 import urllib.parse
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO, Iterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Engine
@@ -98,6 +100,29 @@ class RegistryState:
     report_limiter: SlidingWindowLimiter = field(
         default_factory=lambda: SlidingWindowLimiter(REPORT_LIMIT_PER_HOUR, 3600)
     )
+    grandfather_swept_at: float | None = None
+    """Monotonic time of the last grandfather sweep (sweep_grandfather)."""
+
+
+GRANDFATHER_SWEEP_SECONDS = 600
+
+
+def sweep_grandfather(state: RegistryState) -> None:
+    """Reclaim grandfathered namespaces whose grace period ran out, at most
+    once every GRANDFATHER_SWEEP_SECONDS. Publishing does not wait for it:
+    publisher_problem refuses an expired namespace at once."""
+    now = time.monotonic()
+    if state.grandfather_swept_at is not None and now - state.grandfather_swept_at < GRANDFATHER_SWEEP_SECONDS:
+        return
+    state.grandfather_swept_at = now
+    try:
+        with Session(state.engine) as session:
+            reclaimed = qualification.reclaim_expired(session)
+    except Exception:  # noqa: BLE001 - the next sweep retries
+        _log.exception("grandfather sweep failed")
+        return
+    if reclaimed:
+        _log.info("reclaimed grandfathered namespaces: %s", ", ".join(reclaimed))
 
 
 def _make_verifier(settings: Settings) -> SignatureVerifier:
@@ -170,6 +195,11 @@ def create_app(
     app.state.registry = state
     if settings.root_path:
         app.add_middleware(_RootPathMiddleware, root_path=settings.root_path)
+
+    @app.middleware("http")
+    async def _grandfather_sweep(request: Request, call_next):
+        await run_in_threadpool(sweep_grandfather, request.app.state.registry)
+        return await call_next(request)
 
     _register_routes(app)
 

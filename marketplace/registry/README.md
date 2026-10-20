@@ -463,7 +463,20 @@ settings below are set; without them the registry behaves exactly as before
 Only an approved developer can claim a namespace or obtain a publish token
 (`qualification.py`). The record is keyed by `navide_member_id` and lives only
 here; Cloud's `members` table is untouched, and no existing account is
-grandfathered.
+approved by default.
+
+- **Grandfathered namespaces** (migration 13): a namespace self-claimed before
+  qualification existed keeps publishing for 30 days from the migration
+  (`publisher.grandfather_until`) while its owner applies. A pending
+  application pauses the period; a rejection resumes it, extended by the
+  pending time. `GET /api/publisher/me` reports `grandfather: {until, paused,
+  days_left, remind, expired}` (null when none applies) and the dashboard shows
+  it, as a warning in the last 7 days. Past the deadline with no approved or
+  pending application, publishing is refused at once and a sweep (at most every
+  10 minutes, on request traffic) reclaims the namespace the way a revocation
+  tears one down, audited as `namespace.reclaim` by
+  `system:grandfather-expired`; the account keeps its account token and may
+  still apply.
 
 - **Account token**: `/cli/authorize?scope=account` (same loopback + PKCE flow)
   issues an `nva_` token that names the Cloud account only. It can read and
@@ -476,13 +489,17 @@ grandfathered.
   `POST /api/admin/developers/{member_id}/approve|reject|revoke` (a reason is
   required to reject or revoke). Revoking, in one transaction, revokes every
   token of the account, freezes its namespaces, yanks all of their versions in
-  every channel and revokes their publisher keys.
+  every channel and revokes their publisher keys, and blocks the digest of
+  every version they published with reason `qualification-revoked`.
 - **Own data**: `GET /api/publisher/me`, `PUT /api/publisher/me/key`,
   `GET /api/publisher/me/versions` (`?extension=&version=`).
 - **Local-install trust**: `GET /api/trust/local-install` returns a separate
   root-signed document (`kind: local-install-trust`) with the keys of approved
   and first-party publishers (replaced or revoked ones as `revoked`) and the
-  blocked package digests (blocklist kind `digest`). The existing trust
+  blocked package digests (blocklist kind `digest`) as `[{digest, reason}]`.
+  `reason` is one of `security`, `admin` (the default for an admin entry),
+  `qualification-revoked` or `developer-withdrawn`; the app disables, warns
+  about or only labels an installed copy by it. The existing trust
   metadata is unchanged: released Apps reject any new field in it.
 - **Errors**: new and changed JSON errors carry `detail: {code, message}` —
   `TOKEN_MISSING|INVALID|REVOKED|EXPIRED` (401), `TOKEN_SCOPE`,
