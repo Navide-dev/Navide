@@ -525,7 +525,69 @@
     "clean-changed": "Untracked files changed since the preview. Nothing was deleted — review and try again.",
     "issue-back": "← Back",
     "issue-comment": "Comment",
-    "issue-create": "Create"
+    "issue-create": "Create",
+    "pane": {
+      "no-changes-to-display": "No changes to display",
+      "no-ignored-files": "No ignored files",
+      "drag-to-resize": "Drag to resize",
+      "commit-files": "Files ({count})",
+      "no-draft": "No draft",
+      "issues-open-count": "{count} open",
+      "issue-host-unsupported": "No supported issue host detected for this repo (needs a GitHub or GitLab origin remote).",
+      "issue-cli-missing": "{cli} is not installed.",
+      "issue-auth-before": "Not authenticated. Run",
+      "issue-auth-after": "in a terminal, then refresh.",
+      "issue-dispatch": "Dispatch to Agent",
+      "issue-dispatch-title": "Send this issue to a running agent",
+      "issue-no-running-agent": "No running agent",
+      "issue-handoff-handling": "Being handled by agent",
+      "issue-handoff-closed": "Agent pane closed",
+      "ignore-target": {
+        "project": ".gitignore (project root)",
+        "nested": ".gitignore (current folder)",
+        "local": ".git/info/exclude (local only)",
+        "global": "Global .gitignore"
+      }
+    },
+    "conflict": {
+      "progress": "{resolved} / {total} resolved",
+      "apply-title": "Write and stage this file",
+      "apply-blocked": "Resolve all conflicts first",
+      "apply": "Apply & Stage",
+      "ours-default": "HEAD (ours)",
+      "versus": "vs",
+      "theirs-default": "theirs",
+      "empty-side": "(empty)",
+      "accepted-ours": "Accepted Ours",
+      "accepted-theirs": "Accepted Theirs",
+      "accepted-both": "Accepted Both",
+      "manually-edited": "Manually edited",
+      "undo": "Undo"
+    },
+    "diff": {
+      "badge-staged": "STAGED",
+      "badge-working-tree": "WORKING TREE",
+      "open-in-editor": "Open file in editor",
+      "prev-change": "Previous change (↑)",
+      "next-change": "Next change (↓)",
+      "reload": "Reload diff",
+      "not-loaded": "Diff not loaded",
+      "stage-selected": "Stage Selected ({count})"
+    },
+    "branch-diff": {
+      "working-changes": "Working Changes",
+      "file-count": "{count} file | {count} files",
+      "expand-all": "Expand All",
+      "collapse-all": "Collapse All",
+      "no-changes-between": "No changes between {base} and {compare}",
+      "no-uncommitted": "No uncommitted changes",
+      "hidden-lines": "{count} hidden line | {count} hidden lines"
+    },
+    "file-detail": {
+      "no-history": "No file history.",
+      "no-changed-lines": "No changed lines.",
+      "no-blame": "No blame information."
+    }
   },
   "pane": {
     "git": {
@@ -3206,7 +3268,7 @@
               },
               "apply": {
                 "label": "Apply & Stage",
-                "text": "Only clickable once every block is settled; it writes the result back and stages the file in one go. This button is in English regardless of the selected interface language — that is what the product prints."
+                "text": "Only clickable once every block is settled; it writes the result back and stages the file in one go."
               }
             }
           },

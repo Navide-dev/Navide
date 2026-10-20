@@ -176,15 +176,15 @@ function cellClass(cell: SideRow['left']): string {
     <!-- Top bar -->
     <div class="bdp-bar">
       <span class="bdp-badge">±</span>
-      <span class="bdp-title">{{ compare ? `${base} → ${resolvedCompare || compare}` : 'Working Changes' }}</span>
+      <span class="bdp-title">{{ compare ? `${base} → ${resolvedCompare || compare}` : $t('git.branch-diff.working-changes') }}</span>
       <template v-if="!loading && fileDiffs.length">
-        <span class="bdp-meta">{{ fileDiffs.length }} file{{ fileDiffs.length !== 1 ? 's' : '' }}</span>
+        <span class="bdp-meta">{{ $t('git.branch-diff.file-count', { count: fileDiffs.length }, fileDiffs.length) }}</span>
         <span class="bdp-add">+{{ totalAdded }}</span>
         <span class="bdp-del">-{{ totalDeleted }}</span>
       </template>
       <div class="bdp-sp" />
       <template v-if="fileDiffs.length">
-        <button class="bdp-btn" :title="allCollapsed ? 'Expand All' : 'Collapse All'"
+        <button class="bdp-btn" :title="allCollapsed ? $t('git.branch-diff.expand-all') : $t('git.branch-diff.collapse-all')"
           @click="allCollapsed ? expandAll() : collapseAll()">
           <svg v-if="allCollapsed" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
             <path d="M1.75 2.5a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H1.75zm0 5a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H1.75zm0 5a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H1.75z"/>
@@ -194,7 +194,7 @@ function cellClass(cell: SideRow['left']): string {
           </svg>
         </button>
       </template>
-      <button class="bdp-btn" title="Refresh" :disabled="loading" @click="loadDiff">
+      <button class="bdp-btn" :title="$t('action.refresh')" :disabled="loading" @click="loadDiff">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
           <path d="M1.5 7.5A6 6 0 0 1 13 5.185V2.75a.75.75 0 0 1 1.5 0V7a.75.75 0 0 1-.75.75H9.25a.75.75 0 0 1 0-1.5h2.565A4.5 4.5 0 1 0 12 10a.75.75 0 1 1 1.261.815A6 6 0 1 1 1.5 7.5z"/>
         </svg>
@@ -230,7 +230,7 @@ function cellClass(cell: SideRow['left']): string {
     <div v-if="loading" class="bdp-msg">{{ $t('label.loading-diff') }}</div>
     <div v-else-if="loadError" class="bdp-msg bdp-err">{{ loadError }}</div>
     <div v-else-if="!fileDiffs.length" class="bdp-msg">
-      {{ compare ? `No changes between ${base} and ${resolvedCompare || compare}` : 'No uncommitted changes' }}
+      {{ compare ? $t('git.branch-diff.no-changes-between', { base, compare: resolvedCompare || compare }) : $t('git.branch-diff.no-uncommitted') }}
     </div>
 
     <!-- File list -->
@@ -249,7 +249,7 @@ function cellClass(cell: SideRow['left']): string {
           <span class="bdp-fname" v-truncate>{{ f.filename }}</span>
           <span v-if="f.addCount" class="bdp-add">+{{ f.addCount }}</span>
           <span v-if="f.delCount" class="bdp-del">-{{ f.delCount }}</span>
-          <button class="bdp-open-btn" title="Open file" @click.stop="openFile(f.filename)">
+          <button class="bdp-open-btn" :title="$t('action.open-file-plain')" @click.stop="openFile(f.filename)">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
               <path d="M3.75 2h3.5a.75.75 0 0 1 0 1.5h-3.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-3.5a.75.75 0 0 1 1.5 0v3.5A1.75 1.75 0 0 1 12.25 14h-8.5A1.75 1.75 0 0 1 2 12.25v-8.5C2 2.784 2.784 2 3.75 2zm6.854-1h4.146a.25.25 0 0 1 .25.25v4.146a.25.25 0 0 1-.427.177L13.03 4.03 9.28 7.78a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l3.75-3.75-1.543-1.543A.25.25 0 0 1 10.604 1z"/>
             </svg>
@@ -263,7 +263,7 @@ function cellClass(cell: SideRow['left']): string {
             <!-- Hidden lines separator -->
             <div v-if="hiddenAbove > 0" class="bdp-hidden">
               <div class="bdp-hidden-side" />
-              <div class="bdp-hidden-side">{{ hiddenAbove }} hidden line{{ hiddenAbove !== 1 ? 's' : '' }}</div>
+              <div class="bdp-hidden-side">{{ $t('git.branch-diff.hidden-lines', { count: hiddenAbove }, hiddenAbove) }}</div>
             </div>
 
             <!-- Hunk header -->

@@ -525,7 +525,69 @@
     "clean-changed": "預覽之後未追蹤檔案有變動，未刪除任何檔案，請重新檢視後再試。",
     "issue-back": "← 返回",
     "issue-comment": "留言",
-    "issue-create": "建立"
+    "issue-create": "建立",
+    "pane": {
+      "no-changes-to-display": "沒有可顯示的變更",
+      "no-ignored-files": "沒有已忽略的檔案",
+      "drag-to-resize": "拖曳以調整大小",
+      "commit-files": "檔案（{count}）",
+      "no-draft": "沒有草稿",
+      "issues-open-count": "{count} 個開啟中",
+      "issue-host-unsupported": "這個儲存庫沒有偵測到支援的議題主機（需要 GitHub 或 GitLab 的 origin 遠端）。",
+      "issue-cli-missing": "尚未安裝 {cli}。",
+      "issue-auth-before": "尚未登入驗證。請在終端機執行",
+      "issue-auth-after": "，然後重新整理。",
+      "issue-dispatch": "派工給 agent",
+      "issue-dispatch-title": "把這個議題交給執行中的 agent",
+      "issue-no-running-agent": "沒有執行中的 agent",
+      "issue-handoff-handling": "agent 處理中",
+      "issue-handoff-closed": "agent 面板已關閉",
+      "ignore-target": {
+        "project": ".gitignore（專案根目錄）",
+        "nested": ".gitignore（目前資料夾）",
+        "local": ".git/info/exclude（僅限本機）",
+        "global": "全域 .gitignore"
+      }
+    },
+    "conflict": {
+      "progress": "已解決 {resolved} / {total}",
+      "apply-title": "寫回並暫存這個檔案",
+      "apply-blocked": "請先解決所有衝突",
+      "apply": "套用並暫存",
+      "ours-default": "HEAD（我方）",
+      "versus": "對比",
+      "theirs-default": "對方",
+      "empty-side": "（空白）",
+      "accepted-ours": "已採用我們的版本",
+      "accepted-theirs": "已採用他們的版本",
+      "accepted-both": "已全部採用",
+      "manually-edited": "已手動編輯",
+      "undo": "復原"
+    },
+    "diff": {
+      "badge-staged": "已暫存",
+      "badge-working-tree": "工作區",
+      "open-in-editor": "在編輯器中開啟檔案",
+      "prev-change": "上一個變更（↑）",
+      "next-change": "下一個變更（↓）",
+      "reload": "重新載入差異",
+      "not-loaded": "尚未載入差異",
+      "stage-selected": "暫存所選（{count}）"
+    },
+    "branch-diff": {
+      "working-changes": "工作區變更",
+      "file-count": "{count} 個檔案",
+      "expand-all": "全部展開",
+      "collapse-all": "全部收合",
+      "no-changes-between": "{base} 與 {compare} 之間沒有變更",
+      "no-uncommitted": "沒有未提交的變更",
+      "hidden-lines": "已隱藏 {count} 行"
+    },
+    "file-detail": {
+      "no-history": "這個檔案沒有歷史記錄。",
+      "no-changed-lines": "沒有變更的行。",
+      "no-blame": "沒有 Blame 資訊。"
+    }
   },
   "pane": {
     "git": {
@@ -3205,8 +3267,8 @@
                 "text": "採用我們的／他們的／全部採用，或按編輯自己改。開了 Base 之後還會多一顆採用共同基準版本。"
               },
               "apply": {
-                "label": "Apply & Stage",
-                "text": "全部處理完才按得下去；它會把結果寫回檔案並直接暫存起來。這顆按鈕不論選擇哪種介面語言都顯示英文，產品本身就是這樣寫的。"
+                "label": "套用並暫存",
+                "text": "全部處理完才按得下去；它會把結果寫回檔案並直接暫存起來。"
               }
             }
           },
@@ -3242,7 +3304,7 @@
             "ours": "HEAD (ours)",
             "theirs": "theirs",
             "progress": "1 / 3 resolved",
-            "apply": "Apply & Stage",
+            "apply": "套用並暫存",
             "base": "Base"
           }
         },
@@ -3397,7 +3459,7 @@
             "badge": "標題掛 <strong>衝突</strong> 徽章，旁邊寫 <em>{'{'}n{'}'} / {'{'}m{'}'} resolved</em>。",
             "choices": "每一段衝突可選 <em>採用我們的版本</em>、<em>採用他們的版本</em>、<em>全部採用</em>、<em>採用共同基準版本</em>，或 <em>編輯</em> 手改（改完 <em>確認</em> / <em>取消</em>）。",
             "base": "<em>共同基準</em> 開關會把共同祖先那一版也叫出來對照。",
-            "apply": "全部處理完按 <strong>Apply &amp; Stage</strong> 寫回並暫存。",
+            "apply": "全部處理完按 <strong>套用並暫存</strong>，把結果寫回並暫存。",
             "binary": "二進位檔不能三方合併，會直接說 <em>Binary conflict</em>，只能整檔取捨。",
             "agent": "Git 視窗裡另外有一顆 <strong>交給 CLI agent 解衝突</strong>，把衝突整包丟給 CLI agent 去解。"
           },
