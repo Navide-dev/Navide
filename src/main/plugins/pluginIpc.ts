@@ -271,6 +271,9 @@ interface InstalledSummary {
   disabled?: boolean
 }
 
+/** S8 LOW-R3-1: a stuck Registry delays no trust refresh longer than this. */
+export const TESTPLACE_WITHDRAWAL_TIMEOUT_MS = 10_000
+
 /** One test the user joined (plugins:testplaceList). */
 export interface TestplaceListing {
   id: string
@@ -294,10 +297,14 @@ export interface ExpiredTestplaceBuild {
   canKeep: boolean
   /** Its developer or Navide took it back (S8 T-MED-1); never kept. */
   withdrawn?: true
-  /** Why "keep using" is not offered: taken back, or the Registry could not
-   *  confirm it was not (not signed in, offline, no longer a tester). */
-  keepRefusal?: 'withdrawn' | 'unconfirmed'
+  /** Why "keep using" is not offered: taken back, or why the Registry could
+   *  not confirm it was not (S8 LOW-R3-2). */
+  keepRefusal?: TestplaceKeepRefusal
 }
+
+/** Why an expired test build cannot be kept (each has its own advice). */
+export type TestplaceKeepRefusal = 'withdrawn' | 'signed-out' | 'not-a-tester' | 'registry-outdated' | 'unreachable'
+type TestplaceWithdrawalState = 'live' | TestplaceKeepRefusal
 
 export interface FactoryPackageSummary {
   id: string
@@ -552,6 +559,9 @@ export interface PluginRescanNotice {
 }
 
 export interface PluginIpcOptions {
+  /** How long a Testplace withdrawal check may take before it counts as
+   *  unreachable (S8 LOW-R3-1); tests shorten it. */
+  testplaceWithdrawalTimeoutMs?: number
   /** Convert a Host-verified icon file into renderer-safe image bytes. */
   resolveContributionIcon?: (iconFile: string) => ContributionIcon | null
   verifyCommittedInstall?: (
@@ -3147,19 +3157,35 @@ export function registerPluginIpc(
   // Registry's withdrawal list for this tester (never public metadata). The
   // answer is recorded, so every load and spawn refuses a withdrawn build.
   // `unconfirmed` (not signed in, offline, no longer a tester) records nothing.
-  const checkTestplaceWithdrawn = async (id: string, version: string): Promise<'withdrawn' | 'live' | 'unconfirmed'> => {
+  const checkTestplaceWithdrawn = async (id: string, version: string): Promise<TestplaceWithdrawalState> => {
     const dot = id.indexOf('.')
     let res: { status: number; body: { withdrawn?: unknown } | null }
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      res = await developerRegistryFetch<{ withdrawn?: unknown } | null>(
+      const call = developerRegistryFetch<{ withdrawn?: unknown } | null>(
         `/api/testplace/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}/withdrawn`,
         {},
         'account',
       )
-    } catch {
-      return 'unconfirmed'
+      const timeout = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), options.testplaceWithdrawalTimeoutMs ?? TESTPLACE_WITHDRAWAL_TIMEOUT_MS)
+      })
+      const answer = await Promise.race([call, timeout])
+      if (answer === 'timeout') return 'unreachable'
+      res = answer
+    } catch (error) {
+      // No developer account in this Host means nobody is signed in.
+      return /account is not available/.test(errorText(error)) ? 'signed-out' : 'unreachable'
+    } finally {
+      clearTimeout(timer)
     }
-    if (res.status !== 200 || !Array.isArray(res.body?.withdrawn)) return 'unconfirmed'
+    if (res.status === 401) return 'signed-out'
+    // The Registry's own 404 carries a code: this account is not (or no longer)
+    // a tester. A Registry without the route answers 404/405 without one.
+    if (res.status === 404 && registryError(res.body).code === 'NOT_FOUND') return 'not-a-tester'
+    if (res.status === 404 || res.status === 405) return 'registry-outdated'
+    if (res.status !== 200) return 'unreachable'
+    if (!Array.isArray(res.body?.withdrawn)) return 'registry-outdated'
     const versions = (res.body.withdrawn as Array<{ version?: unknown }>).flatMap((row) =>
       typeof row?.version === 'string' ? [row.version] : [])
     testplaceStore.setWithdrawn(id, versions)
@@ -3175,7 +3201,7 @@ export function registerPluginIpc(
       const { artifactDigest: _digest, ...rest } = build
       return state === 'withdrawn'
         ? { ...rest, canKeep: false, withdrawn: true as const, keepRefusal: 'withdrawn' as const }
-        : { ...rest, canKeep: false, keepRefusal: 'unconfirmed' as const }
+        : { ...rest, canKeep: false, keepRefusal: state }
     }))
 
   // DX report §9.5: a Testplace build the Registry promoted keeps its bytes,
@@ -3287,8 +3313,8 @@ export function registerPluginIpc(
     const build = (await checkedExpiredTestplaceBuilds()).find((item) => item.id === id)
     if (!build) throw new Error(`${id} is not an expired Testplace build`)
     if (build.keepRefusal === 'withdrawn') throw new Error(`${id} cannot be kept: its developer or Navide withdrew it`)
-    if (build.keepRefusal === 'unconfirmed') {
-      throw new Error(`${id} cannot be kept: the Navide Marketplace could not confirm it was not withdrawn`)
+    if (build.keepRefusal) {
+      throw new Error(`${id} cannot be kept: the Navide Marketplace could not confirm it was not withdrawn (${build.keepRefusal})`)
     }
     if (!build.canKeep || !build.artifactDigest) {
       throw new Error(`${id} cannot be kept: it was taken down or no longer verifies`)
@@ -4460,21 +4486,23 @@ export function registerPluginIpc(
         })
       }
       if (packageIds.length === 0) return { decisions, activationCatalog: [] }
-      // S8 T-MED-1: learn which installed test builds were taken back, so
-      // the trust check below stops them; then a promoted Testplace build
-      // takes its new receipt before that check, which loads it again if it
-      // had expired (W5b).
-      for (const packageId of packageIds) {
+      // S8 T-MED-1: learn which installed test builds were taken back, so the
+      // trust check below stops them. The checks run alongside the public
+      // trust fetch, each bounded by a timeout (LOW-R3-1); every trust
+      // decision below waits for them. A check that fails records nothing.
+      const withdrawalsChecked = Promise.all(packageIds.map(async (packageId) => {
         try {
           const active = lifecycleSelector.read(packageId)?.active
-          if (!active || active.layout === 'legacy-mutable') continue
+          if (!active || active.layout === 'legacy-mutable') return
           const dir = lifecycleSelector.packageDir(packageId, active)
-          if (readRegistryReceiptChannel(dir) !== 'testplace') continue
+          if (readRegistryReceiptChannel(dir) !== 'testplace') return
           await checkTestplaceWithdrawn(packageId, active.packageVersion)
         } catch (error) {
           console.warn(`[plugins] withdrawal of the Testplace build ${packageId} not checked: ${errorText(error)}`)
         }
-      }
+      }))
+      // A promoted Testplace build takes its new receipt before the trust
+      // check, which then loads it again if it had expired (W5b).
       for (const packageId of packageIds) {
         if (activeTransactions.has(packageId)) continue
         try {
@@ -4486,7 +4514,8 @@ export function registerPluginIpc(
 
       const marketplace = resolveConfiguredMarketplace(trust)
       const base = marketplace.registryUrl.replace(/\/+$/, '')
-      const fallbackToCachedTrust = () => {
+      const fallbackToCachedTrust = async () => {
+        await withdrawalsChecked
         const snapshot = readRegistryTrustSnapshot(pluginsRoot)
         const refreshed = manager.refreshInstalledPluginTrust(pluginsRoot, {
           pinnedRootKey: marketplace.trust.pinnedRegistryRootKey,
@@ -4541,7 +4570,7 @@ export function registerPluginIpc(
         }
       }
       if (!detail) {
-        fallbackToCachedTrust()
+        await fallbackToCachedTrust()
         throw lastRefreshError ?? new Error('trust metadata refresh failed')
       }
 
@@ -4568,6 +4597,7 @@ export function registerPluginIpc(
             .filter((pkg) => pkg.provenance === 'official-registry')
             .map((pkg) => pkg.id)
         )
+        await withdrawalsChecked
         const refreshedDecisions = manager.refreshInstalledPluginTrust(
           pluginsRoot,
           currentTrust,
@@ -4596,7 +4626,7 @@ export function registerPluginIpc(
             : { activationCatalog: [] }
         return { decisions, activationCatalog: reloaded.activationCatalog }
       } catch (error) {
-        fallbackToCachedTrust()
+        await fallbackToCachedTrust()
         throw error
       }
     },
