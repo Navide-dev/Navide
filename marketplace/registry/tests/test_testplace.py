@@ -571,3 +571,71 @@ def test_a_withdrawal_reaches_every_member_who_ever_held_a_seat(client: TestClie
     missing = client.get("/api/testplace/acme/nothing/withdrawn", headers=stayed)
     assert (outsider.status_code, outsider.json()) == (missing.status_code, missing.json()) == (404, outsider.json())
     assert client.get("/api/testplace/acme/files/withdrawn").status_code == 401
+
+
+# -- one channel per version (S8 R3-M2) -----------------------------------
+MACHO_ARM64 = (0xFEEDFACF).to_bytes(4, "little") + (0x0100000C).to_bytes(4, "little")
+PE_X64 = b"MZ" + b"\0" * 0x3A + (0x40).to_bytes(4, "little") + b"PE\0\0" + (0x8664).to_bytes(2, "little")
+
+
+def _publish_native(client: TestClient, target: str, *, channel: str, version: str = "1.0.0"):
+    manifest = contract_manifest("backend-only-skills.json")
+    manifest.update(id="acme.tool", publisher="acme", version=version)
+    data = MACHO_ARM64 if target.startswith("darwin") else PE_X64
+    backend_name = manifest["backend"]["entry"] + ".exe" if data.startswith(b"MZ") else None
+    return client.post(
+        "/api/publish",
+        params={"channel": channel, "target": target},
+        headers=_publisher(),
+        files={"package": ("pkg.vsix", build_v2_package(manifest, backend_data=data, backend_name=backend_name), "application/zip")},
+    )
+
+
+def _mixed_legacy_version(client: TestClient, monkeypatch) -> None:
+    """A 1.0.0 with a testplace and a stable artifact, as an older Registry allowed."""
+    from registry import app as app_module
+
+    assert _publish_native(client, "darwin-arm64", channel="testplace").status_code == 201
+    monkeypatch.setattr(app_module, "_publish_conflict", lambda *args, **kwargs: None)
+    stable = _publish_native(client, "win32-x64", channel="stable")
+    assert stable.status_code == 201, stable.text
+    monkeypatch.undo()
+
+
+def _rows(client: TestClient) -> dict[str, ExtensionVersion]:
+    with _session(client) as session:
+        return {row.target: row for row in session.exec(select(ExtensionVersion).where(ExtensionVersion.version == "1.0.0")).all()}
+
+
+def test_one_version_number_cannot_hold_a_testplace_and_a_stable_build(client: TestClient) -> None:
+    assert _publish_native(client, "darwin-arm64", channel="testplace").status_code == 201
+    stable = _publish_native(client, "win32-x64", channel="stable")
+    assert stable.status_code == 409 and "testplace" in stable.json()["detail"]
+    # And the other way round.
+    assert _publish_native(client, "win32-x64", channel="stable", version="2.0.0").status_code == 201
+    test_build = _publish_native(client, "darwin-arm64", channel="testplace", version="2.0.0")
+    assert test_build.status_code == 409
+
+
+def test_revoking_a_testplace_build_never_touches_a_public_version(client: TestClient, monkeypatch) -> None:
+    _mixed_legacy_version(client, monkeypatch)
+    resp = client.post("/api/testplace/acme/tool/versions/1.0.0/revoke", json={"reason": "crash"}, headers=_publisher())
+    assert resp.status_code == 200, resp.text
+    rows = _rows(client)
+    assert rows["darwin-arm64"].yanked is True
+    assert rows["win32-x64"].yanked is False
+    detail = client.get("/api/extensions/acme/tool").json()
+    assert [v["version"] for v in detail["versions"]] == ["1.0.0"]
+    assert all(blocked.get("packageId") != "acme.tool" for blocked in detail["trust_metadata"]["blockedPackages"])
+
+
+def test_a_yank_acts_on_one_channel_only(client: TestClient, monkeypatch) -> None:
+    _mixed_legacy_version(client, monkeypatch)
+    public = client.post("/api/extensions/acme/tool/1.0.0/yank", headers=_publisher())
+    assert public.status_code == 200, public.text
+    assert public.json()["targets"] == ["win32-x64"]
+    rows = _rows(client)
+    assert (rows["win32-x64"].yanked, rows["darwin-arm64"].yanked) == (True, False)
+    test_build = client.post("/api/extensions/acme/tool/1.0.0/yank", params={"channel": "testplace"}, headers=_publisher())
+    assert test_build.status_code == 200 and test_build.json()["targets"] == ["darwin-arm64"]
+    assert _rows(client)["darwin-arm64"].yanked is True

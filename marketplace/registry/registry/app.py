@@ -327,9 +327,13 @@ def _package_key(namespace: str, name: str, version: str, target: str) -> str:
 
 
 def _publish_conflict(
-    identity: str, version: str, target: str, existing: list[ExtensionVersion]
+    identity: str, version: str, target: str, existing: list[ExtensionVersion], *, testplace: bool = False
 ) -> str | None:
     """Why `target` cannot join the artifacts already published for `version`.
+
+    A version number belongs to one channel until promotion (S8 R3-M2): a
+    testplace artifact never shares it with a stable or pre-release one, so a
+    revoke or yank of one can never reach the other.
 
     A version is either one `universal` artifact or a set of platform
     artifacts, never both: the client prefers an exact platform match over
@@ -338,6 +342,10 @@ def _publish_conflict(
     universal) has nothing platform-specific to split.
     """
     targets = [row.target for row in existing]
+    other = [row for row in existing if (row.channel == TESTPLACE_CHANNEL) != testplace]
+    if other:
+        held = "testplace" if not testplace else "the public channel"
+        return f"version {version} of {identity} already exists on {held}; a version belongs to one channel until promotion"
     if target in targets:
         return f"version {version} of {identity} already exists for target {target}"
     if any(row.yanked for row in existing):
@@ -692,6 +700,7 @@ def _register_routes(app: FastAPI) -> None:
             repo.list_version_artifacts(
                 extension.id, manifest.version, public_only=False
             ),
+            testplace=testplace_publish,
         )
         if conflict is not None:
             raise HTTPException(status_code=409, detail=conflict)
@@ -1025,6 +1034,7 @@ def _register_routes(app: FastAPI) -> None:
         namespace: str,
         name: str,
         version: str,
+        channel: str | None = None,
         identity: PublisherIdentity = Depends(get_publisher_identity),
         repo: RegistryRepository = Depends(_repo),
     ) -> YankResponse:
@@ -1049,9 +1059,21 @@ def _register_routes(app: FastAPI) -> None:
             )
         # A version is yanked as a whole, across every target's artifact, so
         # "latest" resolves the same on every platform.
+        # One channel per yank (S8 R3-M2): `channel=testplace` for a test
+        # build, otherwise the public artifacts, or the test build when the
+        # version has no public one. A version an older Registry let hold
+        # both is never yanked on both at once.
         artifacts = repo.list_version_artifacts(
             extension.id, version, public_only=False
         )
+        test_builds = [a for a in artifacts if a.channel == TESTPLACE_CHANNEL]
+        public = [a for a in artifacts if a.channel != TESTPLACE_CHANNEL]
+        if channel == TESTPLACE_CHANNEL:
+            artifacts = test_builds
+        elif channel is not None:
+            artifacts = public
+        else:
+            artifacts = public or test_builds
         if not artifacts:
             raise HTTPException(
                 status_code=404, detail={"code": "NOT_FOUND", "message": "version not found"}
