@@ -8187,6 +8187,7 @@
     "plans-retry-failed": "Retry failed: {reason}",
     "plans-recovery-reason": "Plans v2 was withdrawn this session ({reason}).",
     "plans-backend-stopped": "The Plans backend for “{folder}” stopped after repeated failures. Open Plans for this workspace to restart it, or restart Navide.",
+    "plugin-staged-not-activated": "The Navide plugin {plugin} {version} was installed but could not be activated when Navide started: {reason}. Open Settings → Navide Plugins to restart or discard it.",
     "yolo-mode": "YOLO mode",
     "yolo-bypass": "— auto-bypass permission prompts",
     "default": "Default",

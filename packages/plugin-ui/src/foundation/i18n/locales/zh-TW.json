@@ -8187,6 +8187,7 @@
     "plans-retry-failed": "重試失敗：{reason}",
     "plans-recovery-reason": "本次啟動已停用 Plans v2（{reason}）。",
     "plans-backend-stopped": "「{folder}」的 Plans 後端多次失敗後已停止。開啟此工作區的 Plans 即可重新啟動其後端，或重新啟動 Navide。",
+    "plugin-staged-not-activated": "Navide 外掛 {plugin} {version} 已安裝，但 Navide 啟動時無法啟用：{reason}。請到「設定 → Navide 外掛」重新啟動或捨棄它。",
     "yolo-mode": "YOLO 模式",
     "yolo-bypass": "— 自動略過權限提示",
     "default": "預設",

@@ -8187,6 +8187,7 @@
     "plans-retry-failed": "再試行に失敗しました：{reason}",
     "plans-recovery-reason": "このセッションでは Plans v2 が無効化されました（{reason}）。",
     "plans-backend-stopped": "「{folder}」の Plans バックエンドは失敗が繰り返されたため停止しました。このワークスペースで Plans を開くと再起動できます。または Navide を再起動してください。",
+    "plugin-staged-not-activated": "Navide プラグイン {plugin} {version} はインストール済みですが、Navide の起動時に有効化できませんでした：{reason}。「設定 → Navide プラグイン」で再起動するか破棄してください。",
     "yolo-mode": "YOLO モード",
     "yolo-bypass": "— 許可の確認を自動でスキップ",
     "default": "デフォルト",

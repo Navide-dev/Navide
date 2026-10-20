@@ -431,6 +431,7 @@ import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } fr
 import { usePermissions } from './composables/usePermissions'
 import { useDisabledBuiltins } from './composables/useDisabledBuiltins'
 import { plansBackendStoppedNotice } from './composables/plansBackendStoppedNotice'
+import { pluginStagedCandidateNotice } from './composables/pluginStagedCandidateNotice'
 import navideMark from './assets/navide-mark.png'
 
 // Modals/wizard that only render behind a v-if (settings opened, run completed,
@@ -6318,6 +6319,7 @@ let stopGitRecoveryChanged: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
+let stopPluginStagedCandidate: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
   stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
@@ -6339,6 +6341,10 @@ onMounted(() => {
     announcements.notePluginAgentNotice(notice)
     notifyRestore.toast(pluginAgentNoticeTitle(notice), { type: 'info' })
   }) ?? null
+  // A plugin installed without Restart could not be activated at launch.
+  stopPluginStagedCandidate = window.agentTeam?.onPluginStagedCandidateNotActivated?.((notice) => {
+    notifyRestore.toast(pluginStagedCandidateNotice(notice), { type: 'error' })
+  }) ?? null
   void refreshPluginContributions()
   stopPluginContributionChanges = window.agentTeam?.plugins?.onContributionsChanged?.(() => {
     void refreshPluginContributions()
@@ -6355,6 +6361,8 @@ onUnmounted(() => {
   stopPlansBackendStopped = null
   stopPluginAgentAction?.()
   stopPluginAgentAction = null
+  stopPluginStagedCandidate?.()
+  stopPluginStagedCandidate = null
   stopPluginContributionChanges?.()
   stopPluginContributionChanges = null
 })
