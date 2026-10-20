@@ -230,6 +230,35 @@ describe('PluginDisclosureCard invisible characters', () => {
 // thing a marketplace source adds. The baseline file was written by main's card
 // before the row existed; `<!--v-if-->` placeholders are not rendered and are
 // left out of the comparison.
+// Follow-up to 0.2.27 §10: a file's card never says Navide did not scan it
+// next to a scan section, and never credits a local scan to the Registry.
+describe('PluginDisclosureCard local file scan wording', () => {
+  it.each([
+    ['scanned on this computer', scanOf('nothing-found')],
+    ['not scanned', null],
+  ] as const)('a local file card %s does not contradict itself', (_name, scan) => {
+    const text = render({ disclosure: disclosureOf('ui-only'), scan, verified: false, localSource: true }).text()
+    expect(text).toContain('Read by Navide from the package\'s own manifest. It has no Navide Registry signature and Navide has not reviewed it.')
+    expect(text).not.toContain('was not scanned by Navide')
+    expect(text).not.toMatch(/publish-time|at publish|published before system scans|by the Navide Registry\./)
+    if (scan) {
+      expect(text).toContain('What Navide\'s scan of this file found')
+      expect(text).toContain('Scanned by Navide on this computer')
+      expect(text).toContain('The scan informs this card; it never decides the install.')
+    } else {
+      expect(text).toContain('Navide did not scan this file')
+    }
+  })
+
+  it.each(['en-US', 'zh-TW', 'ja-JP'] as const)('has every local string (%s)', (locale) => {
+    i18n.global.locale.value = locale
+    for (const scan of [scanOf('nothing-found'), null]) {
+      const text = render({ disclosure: disclosureOf('ui-only'), scan, verified: false, localSource: true }).text()
+      expect(text).not.toMatch(/pluginDisclosure\./)
+    }
+  })
+})
+
 describe('PluginDisclosureCard source row (K2)', () => {
   const MAIN_BASELINE = './__snapshots__/PluginDisclosureCard.main-baseline.html'
   const strip = (html: string): string => html.replace(/<!--v-if-->/g, '').replace(/^[ \t]*\n/gm, '')

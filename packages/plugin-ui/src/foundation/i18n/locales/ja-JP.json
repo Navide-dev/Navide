@@ -11493,10 +11493,11 @@
       "system": "{key}"
     },
     "scanHeading": "公開時のシステムスキャンの結果",
+    "scanHeadingLocal": "Navide によるこのファイルのスキャン結果",
     "declaredHeading": "この Navide プラグインが宣言している権限",
     "registryHeading": "Navide Registry の記録（署名なし）",
     "provenance": {
-      "local": "パッケージ自身の manifest から Navide が読み取った内容です。Navide Registry の署名はなく、Navide のスキャンも受けていません。",
+      "local": "パッケージ自身の manifest から Navide が読み取った内容です。Navide Registry の署名はなく、Navide の審査も受けていません。",
       "unverified": "Navide Registry が提供した内容で、まだ検証されていません。インストール前に Navide が署名を検証し、パッケージと照合します。",
       "verified": "検証済み：開示内容はダウンロードしたパッケージと一致し、スキャン結果の Navide Registry の署名は有効です。",
       "verifiedNoScan": "検証済み：開示内容はダウンロードしたパッケージと一致しています。この版にはシステムスキャンがありません。"
@@ -11504,7 +11505,9 @@
     "noDisclosure": "このバージョンは開示データなしで公開されました。",
     "signedByRegistry": "スキャンは Navide Registry が実行し署名しました。",
     "scannedByRegistry": "スキャンは Navide Registry が実行しました。",
+    "scannedLocally": "スキャン結果はこのカードの参考情報で、インストールの可否は決めません。",
     "limitsWithoutScan": "このバージョンにはシステムスキャンがありません。上記はこの Navide プラグイン自身の宣言だけです。",
+    "limitsWithoutScanLocal": "Navide はこのファイルをスキャンしていません。上記はこの Navide プラグイン自身の宣言だけです。",
     "viewNetwork": "Navide プラグインのビューはネットワークに接続でき、Navide の中に外部サイトを表示できます。Navide はその通信をフィルターも記録もしません。上のネットワークの項目は、コマンドとネイティブバックエンドだけが対象です。",
     "viewNetworkIfViews": "この Navide プラグインにビューがある場合、ビューはネットワークに接続でき、Navide の中に外部サイトを表示できます。Navide はその通信をフィルターも記録もしません。上のネットワークの項目は、コマンドとネイティブバックエンドだけが対象です。",
     "summary": {
@@ -11555,7 +11558,8 @@
       },
       "coverage": {
         "base": "公開時に Navide Registry がスキャンしました（スキャナー {scannerVersion}、{scannedAt}、{filesTotal} ファイル中 {filesScanned}）。静的スキャンでは実行時に決まる動作は見えないため、これは完全な一覧ではありません。",
-        "incomplete": "スキャンが不完全です：{reasons}。"
+        "incomplete": "スキャンが不完全です：{reasons}。",
+        "local": "このコンピューターで Navide がスキャンしました（スキャナー {scannerVersion}、{scannedAt}、{filesTotal} ファイル中 {filesScanned}）。静的スキャンでは実行時に決まる動作は見えないため、これは完全な一覧ではありません。"
       },
       "notFound": {
         "shell": "静的スキャンではコマンドの実行は見つかりませんでした。",
@@ -11563,7 +11567,8 @@
         "files": "静的スキャンではファイルパスは見つかりませんでした。",
         "dynamicCode": "静的スキャンでは実行時に生成されるコードは見つかりませんでした。"
       },
-      "noScan": "このバージョンはシステムスキャン導入前に公開されました。以下はこの Navide プラグイン自身の宣言だけです。"
+      "noScan": "このバージョンはシステムスキャン導入前に公開されました。以下はこの Navide プラグイン自身の宣言だけです。",
+      "noScanLocal": "Navide はこのファイルをスキャンしていません。以下はこの Navide プラグイン自身の宣言だけです。"
     },
     "incompleteReason": {
       "timedOut": "スキャン時間を超えた",
