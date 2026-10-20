@@ -359,6 +359,7 @@ import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, his
 import { executeCommand, formatKeySpec, initKeybindingsPort, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
 import {
+  pluginAgentCaller,
   pluginAgentNoticeTitle,
   pluginAgentUndoApplies,
   pluginAgentDowngradeStep,
@@ -6354,11 +6355,10 @@ onMounted(() => {
   // L3: an approved update took effect at once; record it with its way back.
   stopPluginSwitched = window.agentTeam?.onPluginSwitched?.((notice) => {
     announcements.notePluginSwitch(notice)
-    notifyRestore.toast(i18n.global.t('plugin-switch.notice.title', {
-      plugin: notice.pluginId,
-      from: notice.fromVersion,
-      to: notice.toVersion,
-    }), { type: 'info' })
+    const switchedVersions = { plugin: notice.pluginId, from: notice.fromVersion, to: notice.toVersion }
+    notifyRestore.toast(notice.agent
+      ? i18n.global.t('plugin-switch.notice.titleAgent', { ...switchedVersions, caller: pluginAgentCaller(notice.agent) })
+      : i18n.global.t('plugin-switch.notice.title', switchedVersions), { type: 'info' })
   }) ?? null
   stopPluginStagedUpdates = window.agentTeam?.onPluginStagedUpdates?.((updates) => {
     announcements.notePluginStagedUpdates(updates)

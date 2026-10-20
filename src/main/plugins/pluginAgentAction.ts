@@ -77,7 +77,9 @@ export interface PluginAgentActionDeps {
    *  is written. Throws while the user is installing the same id. */
   prepareUpdate?(pluginId: string, version: string): Promise<PluginAgentUpdateCheck>
   /** O1: commit the held version through the window's own commit. */
-  commitUpdate?(pluginId: string): Promise<void>
+  /** Stage the update and (user decision A, 2026-10-21) switch to it at
+   *  once; `requester` is the agent the switch record names. */
+  commitUpdate?(pluginId: string, requester?: PluginAgentRequester): Promise<void>
   /** O1: drop the held version. */
   discardUpdate?(pluginId: string): void
 }
@@ -148,7 +150,7 @@ async function answerAgentUpdate(
     return approval(reason)
   }
   try {
-    await deps.commitUpdate(pluginId)
+    await deps.commitUpdate(pluginId, requester)
   } catch (error) {
     deps.discardUpdate(pluginId)
     return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }

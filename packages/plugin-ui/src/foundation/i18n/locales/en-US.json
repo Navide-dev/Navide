@@ -11550,6 +11550,7 @@
   "plugin-staged": {
     "notice": {
       "title": "The Navide plugin {plugin} has version {staged} waiting to be applied; version {active} is running.",
+      "failedTitle": "Switching {plugin} to {staged} failed: {reason}. Version {active} runs again.",
       "detail": "It was installed without Restart, or set aside by a rollback. Apply it to switch now, as Restart does.",
       "applied": "{plugin} now runs version {version}.",
       "stale": "Nothing was applied: the Navide plugin was changed since.",
@@ -11562,6 +11563,7 @@
   "plugin-switch": {
     "notice": {
       "title": "{plugin} switched from {from} to {to}",
+      "titleAgent": "An automatic update started by {caller} switched {plugin} from {from} to {to}",
       "detail": "Switched at {time} ({source}). Its open views reloaded.",
       "reverted": "{plugin} is back to version {version}.",
       "stale": "Nothing was changed: the Navide plugin was changed since, or no earlier version is kept.",

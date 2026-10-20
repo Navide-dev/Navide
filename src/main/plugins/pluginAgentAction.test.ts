@@ -178,7 +178,8 @@ describe('O1: an agent update whose disclosure is unchanged', () => {
       ok: true, updated: true, pluginId: 'nerdtechnic.devmap', fromVersion: '0.2.0', pluginVersion: '0.3.0',
     })
     expect(prepareUpdate).toHaveBeenCalledWith('nerdtechnic.devmap', '0.3.0')
-    expect(commitUpdate).toHaveBeenCalledWith('nerdtechnic.devmap')
+    // The switch record names the agent (user decision A, 2026-10-21).
+    expect(commitUpdate).toHaveBeenCalledWith('nerdtechnic.devmap', requester)
     expect(discardUpdate).not.toHaveBeenCalled()
     expect(d.notify).toHaveBeenCalledWith({
       action: 'update', pluginId: 'nerdtechnic.devmap', pluginVersion: '0.3.0', fromVersion: '0.2.0', requester,

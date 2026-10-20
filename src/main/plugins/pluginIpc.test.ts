@@ -2820,6 +2820,48 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  it('O1: an agent update with an identical disclosure switches at once, recorded with the agent, and Back works', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', {}, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-o1-switch-'))
+    const manager = new FrontendPluginManager()
+    const captureHandler = vi.spyOn(manager, 'setPluginAgentActionHandler')
+    const onPackageSwitched = vi.fn()
+    const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, { ...TEST_PREFLIGHT_OPTIONS, onPackageSwitched })
+      const agentAction = captureHandler.mock.calls[0]![0]
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+
+      installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
+      await expect(agentAction({ request_id: 'pa:1', action: 'update', plugin_id: 'acme.demo', version: '1.0.1', requester }))
+        .resolves.toMatchObject({ ok: true, updated: true, fromVersion: '1.0.0', pluginVersion: '1.0.1' })
+
+      // Switched at once: 1.0.1 runs, nothing is left staged.
+      const record = new PluginActivationSelector(root).read('acme.demo')
+      expect(record?.active?.packageVersion).toBe('1.0.1')
+      expect(record?.candidate).toBeUndefined()
+      // Recorded, naming the agent that started it.
+      expect(onPackageSwitched).toHaveBeenCalledWith(expect.objectContaining({
+        pluginId: 'acme.demo',
+        fromVersion: '1.0.0',
+        toVersion: '1.0.1',
+        source: 'marketplace',
+        agent: requester,
+      }))
+      // Back works: the row's rollback target is the version it replaced.
+      expect(handlers.get('plugins:listInstalled')!(null)).toMatchObject([
+        { id: 'acme.demo', packageVersion: '1.0.1', rollbackKind: 'previous', rollbackToVersion: '1.0.0' },
+      ])
+      await expect(handlers.get('plugins:rollback')!(null, { id: 'acme.demo' })).resolves.toMatchObject({ packageVersion: '1.0.0' })
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('drains a backend-only active version before promoting an explicit rollback', async () => {
     const first = buildBackendPkg('1.0.0')
     const second = buildBackendPkg('1.0.1')

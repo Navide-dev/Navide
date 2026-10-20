@@ -11550,6 +11550,7 @@
   "plugin-staged": {
     "notice": {
       "title": "Navide 外掛 {plugin} 有版本 {staged} 等待套用，目前執行的是 {active}。",
+      "failedTitle": "{plugin} 切換到 {staged} 失敗：{reason}。已回到版本 {active}。",
       "detail": "這個版本是安裝後沒有按「重新啟動」，或回退時保留下來的。按「立即套用」會切換過去，效果和重新啟動相同。",
       "applied": "{plugin} 現在執行版本 {version}。",
       "stale": "沒有套用：這個 Navide 外掛之後又被變更過。",
@@ -11562,6 +11563,7 @@
   "plugin-switch": {
     "notice": {
       "title": "{plugin} 已從 {from} 切換到 {to}",
+      "titleAgent": "由{caller}觸發的自動更新，已將 {plugin} 從 {from} 切換到 {to}",
       "detail": "於 {time} 切換（來源：{source}），開著的畫面已重新載入。",
       "reverted": "{plugin} 已退回版本 {version}。",
       "stale": "沒有變更：這個 Navide 外掛之後又被變更過，或沒有保留較早的版本。",

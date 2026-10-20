@@ -14,6 +14,8 @@ export interface PluginSwitchNotice {
   toVersion: string
   source: 'marketplace' | 'local-unsigned'
   at: number
+  /** Set when an agent's automatic update (O1) drove the switch. */
+  agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true }
 }
 
 /** A package staged beside the active one, found at launch. */
@@ -21,6 +23,8 @@ export interface PluginStagedUpdate {
   pluginId: string
   activeVersion: string
   stagedVersion: string
+  /** Set when switching to it failed (an agent's automatic update, O1). */
+  reason?: string
 }
 
 /**
