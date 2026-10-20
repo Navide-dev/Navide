@@ -165,3 +165,14 @@ async def test_handler_says_when_no_pane_took_the_write(tmp_path: Path) -> None:
     assert miss_reply["ok"] is True
     assert miss_reply["payload"] == {"ok": True, "applied": False}
     assert hit_reply["payload"] == {"ok": True, "applied": True}
+
+
+def test_a_cross_project_parent_flag_round_trips_and_defaults_off(store_ws: tuple[ProjectStore, str]) -> None:
+    """report_cross is written only when sent (by a cross-workspace child); an
+    ordinary record keeps the default."""
+    store, ws = store_ws
+    store.record_manual_pane_spawn(ws, pane_id="p1", agent="claude")
+    store.set_pane_resume_state(ws, pane_id="p1", report_to="lead", report_pending=True)
+    assert ProjectStore().peek(ws).panes[0].report_cross is False
+    store.set_pane_resume_state(ws, pane_id="p1", report_to="alpha/lead", report_cross=True)
+    assert ProjectStore().peek(ws).panes[0].report_cross is True

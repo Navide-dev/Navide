@@ -10250,6 +10250,7 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
     turn_state = payload.get("last_turn_state")
     report_to = payload.get("report_to")
     report_pending = payload.get("report_pending")
+    report_cross = payload.get("report_cross")
     live_launch = payload.get("last_live_launch")
     applied = False
     if ws_raw and pane_id:
@@ -10260,6 +10261,7 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
             report_to=report_to if isinstance(report_to, str) else None,
             report_pending=report_pending if isinstance(report_pending, bool) else None,
             last_live_launch=live_launch if isinstance(live_launch, str) else None,
+            report_cross=report_cross if isinstance(report_cross, bool) else None,
         )
         # Not an error, but say so: a write that matched no record is lost.
         applied = any(p.pane_id == pane_id for p in project.panes)

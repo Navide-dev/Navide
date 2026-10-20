@@ -132,6 +132,7 @@ import {
   CLI_BUFFER_REPLY_CHANNEL,
   type CliPaneBufferResult
 } from './cli-buffer-relay'
+import { workspaceIdentityKey } from './workspace-identity'
 import {
   PaneActionRelay,
   PANE_ACTION_REPLY_CHANNEL,
@@ -480,16 +481,18 @@ function normalizeWorkspacePath(p: string): string {
 }
 
 function findMainWindowForWorkspace(workspacePath: string): BrowserWindow | null {
-  const target = normalizeWorkspacePath(workspacePath)
+  // Compared by the folder's real identity, case included (review #546): the
+  // JS realpath behind normalizeWorkspacePath keeps the case it is given.
+  const target = workspaceIdentityKey(workspacePath)
   if (!target) return null
   // A window whose primary it is wins: that is where its tabs, git and
   // explorer already point.
   for (const [win, wp] of mainWindowWorkspaces) {
-    if (!win.isDestroyed() && normalizeWorkspacePath(wp) === target) return win
+    if (!win.isDestroyed() && workspaceIdentityKey(wp) === target) return win
   }
   for (const [win, list] of adoptedWorkspaces) {
     if (win.isDestroyed()) continue
-    if (list.some((wp) => normalizeWorkspacePath(wp) === target)) return win
+    if (list.some((wp) => workspaceIdentityKey(wp) === target)) return win
   }
   return null
 }

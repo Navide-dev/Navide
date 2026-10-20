@@ -80,7 +80,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isQualifiedTarget, isTurnInFlight, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { VENDORS_WITHOUT_TURN_END, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -1739,6 +1739,11 @@ interface ActivePane {
    *  a resume re-arms it, and the first turn that ends clears it for good. */
   spawnedByName?: string
   spawnReportPending?: boolean
+  /** spawnedByName is a parent in ANOTHER project: set only by the
+   *  cross-workspace spawn branch (cli_open_agent with workspace_path), never
+   *  inferred from the name. Drives the "Opened by" row and lets the stand-in
+   *  report leave this window. Persisted (PaneRecord.report_cross). */
+  spawnedCrossWorkspace?: boolean
   /** Placeholder only: the record says this pane was working (or still owed
    *  its parent a report) when the app closed. Shown on the placeholder, and
    *  read by the relaunch's automatic resume. */
@@ -2568,6 +2573,8 @@ function persistPaneReportDebt(pane: ActivePane): void {
       pane_id: pane.id,
       report_to: pane.spawnedByName ?? '',
       report_pending: !!pane.spawnReportPending,
+      // Only sent when set, so every ordinary pane's write stays as it was.
+      ...(pane.spawnedCrossWorkspace ? { report_cross: true } : {}),
     })
     .catch(() => { /* the report still settles in this session */ })
 }
@@ -2974,7 +2981,7 @@ function settleSpawnReport(
   // in another workspace (cli_open_agent with workspace_path) is not in this
   // window's list at all: its `<folder>/<pane>` address goes out through the
   // cross-workspace route, which answers for it.
-  if (!isQualifiedTarget(parentName) && !panes.value.some((p) => p.messagingName === parentName)) return
+  if (!pane.spawnedCrossWorkspace && !panes.value.some((p) => p.messagingName === parentName)) return
   const report = renderFallbackReport(text)
   if (!report) return
   messaging.sendMessage(senderName, parentName, report, { kind: 'fallback' })
@@ -3634,6 +3641,7 @@ async function kickoffRequestedPane(
     if (kicked && (opts.crossParent || panes.value.some((p) => p.messagingName === parentName))) {
       const live = panes.value.find((p) => p.id === paneId)
       if (live) {
+        if (opts.crossParent) live.spawnedCrossWorkspace = true
         live.spawnedByName = parentName
         live.spawnReportPending = true
         persistPaneReportDebt(live)
@@ -3832,6 +3840,17 @@ async function handleMcpSpawnRequest(ev: {
   // after this and reports a failure by message instead.
   const child = panes.value.find((p) => p.id === paneId)
   const childName = child?.messagingName ?? gate.name
+  if (cross) {
+    // Disclosed in this window as well as in the backend's action record: an
+    // agent of another project opened a pane here (DESIGN-C §5). The toast
+    // below names both.
+    recordDiagnostic({
+      level: 'info',
+      code: 'agent.window-action',
+      message: `${parentName} opened pane ${childName} in ${ev.target_workspace} from another project`,
+      paneId,
+    })
+  }
   if (!parent && !cross) {
     // Standalone spawn: createStandaloneRequestedPane already settled the CLI
     // and injected the task (or left the pane empty if there was none) before
@@ -4186,7 +4205,7 @@ function syncViews(): void {
       spawnedBy: p.spawnedBy,
       // Opened by a pane of another project: its `<folder>/<pane>` address,
       // shown on the row because the tree cannot draw that parent here.
-      openedBy: p.spawnedByName && isQualifiedTarget(p.spawnedByName) ? p.spawnedByName : undefined,
+      openedBy: p.spawnedCrossWorkspace ? p.spawnedByName : undefined,
       workspacePath: p.workspacePath,
       runGroupId: p.runGroupId,
       collapsed: collapsedPanes.value.has(p.id),
@@ -11526,6 +11545,7 @@ interface ProjectPane {
    *  fields existed. */
   last_turn_state?: string
   report_to?: string
+  report_cross?: boolean
   report_pending?: boolean
   /** The launch the pane's CLI last spawned in ('' after an idle reclaim).
    *  Absent on records written before the field existed. */
@@ -13065,6 +13085,7 @@ async function performRealizeRestoredPane(
       if (revived && saved.report_pending && saved.report_to) {
         revived.spawnedByName = saved.report_to
         revived.spawnReportPending = true
+        if (saved.report_cross) revived.spawnedCrossWorkspace = true
       }
     } else {
       // A fresh restore starts a NEW conversation in a marker-camp CLI, and
@@ -20646,7 +20667,9 @@ async function setPaneCustomName(paneId: string, rawName: string): Promise<void>
   // handle prompts for a unique name (cancel abandons the whole rename);
   // clearing the title reverts the handle to the auto-title or vendor label.
   if (nextCustomName) {
-    const resolved = await resolveManualHandle(paneId, nextCustomName)
+    // The title keeps what the user typed; the messaging handle may not hold
+    // "/", the separator of <folder>/<pane> addresses (review #546).
+    const resolved = await resolveManualHandle(paneId, nextCustomName.replaceAll('/', '-'))
     if (resolved === null) return // cancelled → abandon (title unchanged too)
     const applied = messaging.setDerivedName(pane.id, resolved, pane.agentKey)
     if (applied) {

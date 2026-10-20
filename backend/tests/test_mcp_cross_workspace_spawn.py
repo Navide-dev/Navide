@@ -14,6 +14,7 @@ spelled, must leave the spawn request exactly as it was.
 from __future__ import annotations
 
 import asyncio
+import os
 from types import SimpleNamespace
 from typing import Any
 
@@ -282,3 +283,131 @@ async def test_a_group_is_checked_against_the_target_project_before_anything_is_
     accepted = await _run_open(child_workspace=beta, workspace_path=beta, run_group_id="rg-beta")
     assert accepted["ok"] is True
     assert _spawn_payload(captured)["run_group_id"] == "rg-beta"
+
+
+# ── review #546 ──────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _action_record(tmp_path: Any) -> Any:
+    from agent_team_backend import agent_window_actions
+
+    agent_window_actions._reset_for_test(tmp_path / "actions.jsonl")
+    yield agent_window_actions
+    agent_window_actions._reset_for_test(None)
+
+
+class _MainWindow:
+    def __init__(self, window_id: str, held: tuple[str, ...]) -> None:
+        self.dead = False
+        self.window_id = window_id
+        self.held_workspaces = held
+
+
+@pytest.mark.asyncio
+async def test_a_relative_path_is_refused(
+    captured: list[dict[str, Any]], ui: dict[str, Any], projects: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MED-1: relative to what? The backend's and the window's folders differ."""
+    monkeypatch.chdir(projects["root"])
+    result = await _run_open(workspace_path="beta")
+    assert result["error_code"] == "workspace-path-not-absolute"
+    assert captured == [] and ui["requests"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_case_variant_of_your_own_workspace_is_your_own(
+    captured: list[dict[str, Any]], ui: dict[str, Any], projects: dict[str, str]
+) -> None:
+    """MED-2: compared by folder identity, so it takes the old path."""
+    variant = projects["alpha"][: -len("alpha")] + "ALPHA"
+    if not os.path.isdir(variant):
+        pytest.skip("case-sensitive volume")
+    await _run_open(workspace_path=variant)
+    payload = _spawn_payload(captured)
+    assert "cross_workspace" not in payload and "target_workspace" not in payload
+    assert ui["requests"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_case_variant_of_a_held_project_uses_the_spelling_the_window_holds(
+    captured: list[dict[str, Any]], ui: dict[str, Any], projects: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    variant = projects["beta"][: -len("beta")] + "BETA"
+    if not os.path.isdir(variant):
+        pytest.skip("case-sensitive volume")
+    monkeypatch.setattr(app, "main_window_sessions", lambda: [_MainWindow("w1", (projects["alpha"], projects["beta"]))])
+    ui["answers"]["ui.workspace.adopt"] = {"ok": True, "result": {"prepared": "already-open"}, "error": None}
+    await _run_open(child_workspace=projects["beta"], workspace_path=variant)
+    assert ui["requests"][0]["args"] == {"path": projects["beta"]}
+    assert _spawn_payload(captured)["target_workspace"] == projects["beta"]
+
+
+@pytest.mark.asyncio
+async def test_new_refuses_a_case_variant_of_a_project_another_window_holds(
+    captured: list[dict[str, Any]], ui: dict[str, Any], projects: dict[str, str]
+) -> None:
+    variant = projects["beta"][: -len("beta")] + "BETA"
+    if not os.path.isdir(variant):
+        pytest.skip("case-sensitive volume")
+    agent_messaging.register("pz", "other", projects["beta"], owner=_Window("w2"))
+    result = await _run_open(workspace_path=variant, window="new")
+    assert result["error_code"] == "workspace-in-other-window"
+    assert result["holding_window_id"] == "w2"
+    assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_a_name_holding_a_slash_is_refused(
+    captured: list[dict[str, Any]], ui: dict[str, Any], projects: dict[str, str]
+) -> None:
+    """MED-3: "/" separates <folder>/<pane>; a name with one would pass for a
+    pane of another project."""
+    result = await plan_mcp.cli_open_agent(ctx=_ctx(), agent="claude", name="beta/lead", task="go")
+    assert result["error_code"] == "invalid-name"
+    assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_ui_invoke_cannot_adopt_a_project_directly(
+    monkeypatch: pytest.MonkeyPatch, projects: dict[str, str]
+) -> None:
+    async def reached(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("ui.workspace.adopt reached a window through ui_invoke")
+
+    monkeypatch.setattr(plan_mcp, "_ui_request", reached)
+    result = await plan_mcp.ui_invoke("", "ui.workspace.adopt", _ctx(), {"path": projects["beta"]})
+    assert result["error_code"] == "ui_dedicated_tool"
+    assert "cli_open_agent" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_a_cross_workspace_spawn_is_recorded_with_who_where_and_how_to_undo(
+    captured: list[dict[str, Any]], ui: dict[str, Any], projects: dict[str, str], _action_record: Any
+) -> None:
+    ui["answers"]["ui.workspace.adopt"] = {"ok": True, "result": {"prepared": "adopted"}, "error": None}
+    await _run_open(child_workspace=projects["beta"], workspace_path=projects["beta"])
+    [entry] = _action_record.entries()
+    assert entry["tool"] == "cli_open_agent" and entry["ok"] is True
+    assert entry["caller"] == {"pane_id": "pa", "address": "alpha/lead"}
+    assert entry["target"]["workspace_path"] == projects["beta"]
+    assert entry["target"]["prepared"] == "adopted"
+    assert {u["tool"] for u in entry["undo"]} == {"cli_reclaim_agent", "workspace_close"}
+
+
+@pytest.mark.asyncio
+async def test_a_refused_cross_workspace_spawn_is_recorded_too(
+    captured: list[dict[str, Any]], ui: dict[str, Any], projects: dict[str, str], _action_record: Any
+) -> None:
+    ui["held"].add(plan_mcp._norm_workspace(projects["beta"]))
+    await _run_open(workspace_path=projects["beta"], window="new")
+    [entry] = _action_record.entries()
+    assert entry["ok"] is False and entry["error"] == "workspace-in-other-window"
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_spawn_writes_no_record(
+    captured: list[dict[str, Any]], ui: dict[str, Any], projects: dict[str, str], _action_record: Any
+) -> None:
+    await _run_open()
+    assert _action_record.entries() == []
