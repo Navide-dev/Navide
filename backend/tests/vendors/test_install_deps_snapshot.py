@@ -20,7 +20,8 @@ reason.
 
 `official_regex` was added 2026-10-20 (issue #402) for grok, whose path a
 community CLI of the same name also installs to: a mismatch is named in the
-pane's startup probe line. Empty for every other entry."""
+pane's startup probe line. kimi got one 2026-10-21 for the archived Python
+kimi-cli, which also installs `kimi`. Empty for every other entry."""
 
 import dataclasses
 
@@ -133,7 +134,7 @@ SNAPSHOT = [{'id': 'claude',
   'version_regex': '(\\d+\\.\\d+\\.\\d+)',
   'alt_commands': [],
   'identity_regex': '',
-  'official_regex': '',
+  'official_regex': '^\\d+\\.\\d+\\.\\d+',
   'min_version': '',
   'install_cmd': 'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash',
   'needs_terminal': True,

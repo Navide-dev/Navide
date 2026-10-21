@@ -165,6 +165,29 @@ describe('navide-plugin canonical artifacts', { timeout: 30_000 }, () => {
     expect(run(['validate', directory], directory).status).not.toBe(0)
   })
 
+  it('refuses dev-backend data in a package and says what it is', () => {
+    const directory = root()
+    packageDirectory(directory, frontendManifest(), {
+      'frontend/main/index.html': '<!doctype html>',
+      'frontend/.navide-dev/data/state.json': '{}',
+    })
+    const validated = run(['validate', directory], directory)
+    expect(validated.status).not.toBe(0)
+    expect(validated.stderr).toContain("package entry 'frontend/.navide-dev/data/state.json' is dev-backend data")
+  })
+
+  it('names artifact-files.json when a listed file is missing', () => {
+    const directory = root()
+    packageDirectory(directory, frontendManifest(), { 'frontend/main/index.html': '<!doctype html>' })
+    writeFileSync(
+      join(directory, 'artifact-files.json'),
+      `${JSON.stringify({ files: ['manifest.json', 'frontend/main/index.html', 'frontend/main/app.js'] })}\n`,
+    )
+    const validated = run(['validate', directory], directory)
+    expect(validated.status).not.toBe(0)
+    expect(validated.stderr).toContain("package entry 'frontend/main/app.js' is listed in artifact-files.json but does not exist")
+  })
+
   it('admits a manifest-declared detail target schema outside the frontend/assets/backend roots', () => {
     const manifest = frontendManifest() as {
       contributes: { views: Array<{ id: string; kind: string; location: string; title: string; entry: string; targetSchema?: string }> }

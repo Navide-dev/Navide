@@ -14938,6 +14938,7 @@ backend.on('agent.activity', (raw) => {
     // turn_complete (Claude Stop hook, thinking-only record, Codex cross-batch)
     // must never be judged against a previous turn's text.
     judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
     // the resume prompt again (runs before the poll's turn-complete continue).
@@ -16141,6 +16142,9 @@ interface StageRouter {
   /** True once the watchdog raised a stall for this stage, so the 4s poll does
    *  not re-raise it every tick. Reset by continueWaitingStall. */
   watchdogFired: boolean
+  /** DISPATCH blocks already routed (target + message, whitespace dropped).
+   *  The screen scan and the Manager's reply text can both carry one block. */
+  routedDispatches: Set<string>
 }
 const stageRouters = new Map<number, StageRouter>()
 
@@ -16162,6 +16166,7 @@ function ensureStageRouter(stageIndex: number): StageRouter {
       pollHandle: null,
       armedAt: 0,
       watchdogFired: false,
+      routedDispatches: new Set(),
     }
     stageRouters.set(stageIndex, r)
   }
@@ -16190,7 +16195,8 @@ function armRouterCursors(router: StageRouter, paneId: string): void {
  *  scan, so the pair stays consistent. Without this the 128KB cap shifts every
  *  absolute index by the dropped prefix and the router scans past the worker's
  *  ASK block / the Manager's DISPATCH or STAGE-DONE, which is unrecoverable —
- *  unlike the watcher, the router has no turn-text fallback of any kind. */
+ *  unlike the watcher, the router's only turn-text fallback is the Manager's
+ *  DISPATCH and READY (routeManagerTurnText). */
 function rebaseRouterCursors(router: StageRouter, paneId: string, bufLen: number): void {
   if (!routerObservationIsReal(paneId, bufLen, router.bufferAnchors)) return
   const obs: BufferObservation = { len: bufLen, bytesSeen: paneCleanBytes(paneId) }
@@ -16834,14 +16840,7 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     // kickoff echo that sits below the floor.
     const cursor = router.armedCursors.get(router.managerPaneId) ?? 0
     if (findSentinel(buf, MANAGER_READY_SENTINEL, cursor) >= 0) {
-      router.managerReady = true
-      pipelineLog(
-      `Stage ${stage.id} 🎯 Manager READY — ${i18n.global.t('label.pipeline-log-manager-ready', { count: router.preReadyQueue.length })}`,
-    )
-      const drain = router.preReadyQueue.splice(0)
-      for (const msg of drain) {
-        await injectManagerPane(router, msg)
-      }
+      await markManagerReady(router, stage.id, '')
     }
   }
 
@@ -16854,21 +16853,7 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     const { items: dispatches, newCursor } = parseDispatchBlocks(buf, cursor)
     router.cursors.set(router.managerPaneId, newCursor)
     for (const d of dispatches) {
-      const target = matchWorkerByLabel(router, d.to)
-      if (!target) {
-        pipelineLog(
-          `Stage ${stage.id} 🎯 dispatch ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`,
-        )
-        continue
-      }
-      const preview = d.message.slice(0, 50).replace(/\s+/g, ' ')
-      pipelineLog(`Stage ${stage.id} 🎯 → ${target.label}: ${preview}${d.message.length > 50 ? '…' : ''}`)
-      await injectPane(
-        target.paneId,
-        `[→ DISPATCH FROM Manager]\n${d.message}`,
-        `manager-dispatch:${target.label}`,
-        true
-      )
+      await routeManagerDispatch(router, stage.id, d)
     }
     // Scan from the armed floor, never from 0: the kickoff protocol prints
     // ---STAGE-DONE--- at line start, so a TUI that echoes the paste back
@@ -16904,6 +16889,67 @@ async function injectManagerPane(router: StageRouter, msg: PendingMessage): Prom
   if (!router.managerPaneId) return
   const text = `[→ ${msg.kind} FROM ${msg.fromLabel}]\n${msg.content}`
   await injectPane(router.managerPaneId, text, `${msg.kind.toLowerCase()}:${msg.fromLabel}`, true)
+}
+
+/** The Manager is coordinating: hand it the worker messages held until now.
+ *  `how` says what showed it, when that was not ---MANAGER-READY--- itself. */
+async function markManagerReady(router: StageRouter, stageId: string, how: string): Promise<void> {
+  if (router.managerReady) return
+  router.managerReady = true
+  pipelineLog(
+    `Stage ${stageId} 🎯 Manager READY${how} — ${i18n.global.t('label.pipeline-log-manager-ready', { count: router.preReadyQueue.length })}`,
+  )
+  const drain = router.preReadyQueue.splice(0)
+  for (const msg of drain) {
+    await injectManagerPane(router, msg)
+  }
+}
+
+/** Route one Manager DISPATCH to its worker, once: the screen scan and the
+ *  reply text can both carry the same block. A DISPATCH means the Manager is
+ *  coordinating, so one sent before ---MANAGER-READY--- implies it (#539).
+ *  Otherwise the workers' REPORTs stay held for a line the Manager may never
+ *  print, and every pane of the stage waits on another. */
+async function routeManagerDispatch(router: StageRouter, stageId: string, d: ParsedDispatch): Promise<void> {
+  const key = `${d.to.toLowerCase()}\u0000${d.message.replace(/\s+/g, '')}`
+  if (router.routedDispatches.has(key)) return
+  router.routedDispatches.add(key)
+  await markManagerReady(router, stageId, ' (implied by its DISPATCH)')
+  const target = matchWorkerByLabel(router, d.to)
+  if (!target) {
+    pipelineLog(
+      `Stage ${stageId} 🎯 dispatch ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`,
+    )
+    return
+  }
+  const preview = d.message.slice(0, 50).replace(/\s+/g, ' ')
+  pipelineLog(`Stage ${stageId} 🎯 → ${target.label}: ${preview}${d.message.length > 50 ? '…' : ''}`)
+  await injectPane(
+    target.paneId,
+    `[→ DISPATCH FROM Manager]\n${d.message}`,
+    `manager-dispatch:${target.label}`,
+    true
+  )
+}
+
+/** The Manager's reply, as its reader reported it at turn end, for the stage
+ *  router (#539). The router otherwise reads only the Manager's screen, where a
+ *  TUI's redraw can leave a DISPATCH block that does not parse; it was then
+ *  dropped without a trace. A replayed historical turn (backend restart) is
+ *  older than the router's arm and is ignored, as judgeTurnText does. */
+async function routeManagerTurnText(paneId: string, text: string, timestamp: string): Promise<void> {
+  if (!text || pipeline.state !== 'running') return
+  const router = stageRouters.get(pipeline.stageIndex)
+  const stage = stagesApi.stages.value[pipeline.stageIndex]
+  if (!router || !stage || router.finished || !router.armedAt || router.managerPaneId !== paneId) return
+  const eventMs = timestamp ? Date.parse(timestamp) : NaN
+  if (!Number.isNaN(eventMs) && eventMs < router.armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS) return
+  if (findSentinel(text, MANAGER_READY_SENTINEL, 0) >= 0) {
+    await markManagerReady(router, stage.id, ' (reply text)')
+  }
+  for (const d of parseDispatchBlocks(text, 0).items) {
+    await routeManagerDispatch(router, stage.id, d)
+  }
 }
 
 // ── Global Manager cross-stage router ────────────────────────────────────────
@@ -20752,6 +20798,9 @@ function setPaneAutoName(paneId: string, name: string, source: 'heuristic' | 'll
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || !name) return
   if (pane.customName || pane.nameLocked) return
+  // A pipeline slot pane keeps its slot label: the name is its messaging
+  // handle, and kickoffs address slots by label (#448).
+  if (pane.slotLabel) return
   if (pane.autoName && !(source === 'llm' && pane.autoNameSource !== 'llm')) return
   pane.autoName = name
   pane.autoNameSource = source
@@ -20804,6 +20853,8 @@ function requestLlmPaneName(paneId: string, rawMaterial: string): void {
   const material = stripCliSessionContext(rawMaterial)
   if (!pane || !pane.workspacePath || !material.trim()) return
   if (pane.customName || pane.nameLocked || pane.autoNameSource === 'llm') return
+  // The backend stores the model's title, so a slot pane must not ask (#448).
+  if (pane.slotLabel) return
   if (llmNameRequested.has(paneId)) return
   llmNameRequested.add(paneId)
   void (async () => {
