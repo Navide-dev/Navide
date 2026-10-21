@@ -34,6 +34,9 @@ class VendorData:
                      "FACTORY_HOME_OVERRIDE", "CODEX_HOME", "QWEN_HOME"):
             monkeypatch.delenv(name, raising=False)
         monkeypatch.setenv("XDG_DATA_HOME", str(self.home / ".local" / "share"))
+        # Goose's data dir follows %APPDATA% on Windows; its own root variable
+        # keeps that store inside the scratch home on every runner.
+        monkeypatch.setenv("GOOSE_PATH_ROOT", str(self.home / "goose-root"))
         self.values = {
             "HOME": str(self.home), "WORKSPACE": str(self.workspace),
             "PANE": PANE, "MARKER": MARKER,

@@ -1,5 +1,6 @@
 """Risk declarations use the pane's runtime, never the backend's home or secrets."""
 
+import sys
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
@@ -16,6 +17,7 @@ DEFAULT_ROOTS = {
     "copilot": ".copilot",
     "cursor": ".cursor/chats",
     "droid": ".factory",
+    "goose": "AppData/Roaming/Block/goose/data" if sys.platform == "win32" else ".local/share/goose",
     "grok": ".grok",
     "kilo": ".local/share/kilo",
     "kimi": ".kimi-code",
