@@ -730,6 +730,13 @@ async def test_memory_and_credentials_never_go_up_through_the_real_gate(
 
     server = V3Server(s3, caps=(server_kind != "v1"))
     assert server.retired == ()
+    if scope in sync_engine.LOCAL_ONLY_SCOPES:
+        # Stronger still: no engine takes an adapter for it at all.
+        with pytest.raises(sync_engine.SyncError):
+            V3Device(tmp_path, server, "A", adapter=DictScope(scope, {"x": {"secret": 1}}))
+        assert not [t for t in server.types() if t in ("sync.push", "sync.pull") or t.startswith("blobs.")]
+        assert s3.puts == [] and not server.rows
+        return
     d = V3Device(tmp_path, server, "A", adapter=DictScope(scope, {"x": {"secret": 1}}))
     d.engine._enabled = sync_scopes.scope_enabled
     result = await d.sync()

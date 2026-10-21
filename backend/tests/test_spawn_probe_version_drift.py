@@ -48,8 +48,16 @@ _VERIFIED = [
 ]
 
 
+# Vendors with no account-switch adapter have no verified_version to compare
+# against, so their probe never adds the note. Goose reads no credential at
+# all (cli_vendors/goose.py); its live-checked 1.55.0 is recorded in that
+# module's docstring and in docs/en-US/cli-vendor-matrix.md.
+_NO_ACCOUNT_SWITCH = {"goose"}
+
+
 def test_every_vendor_has_a_verified_version() -> None:
-    assert len(_VERIFIED) == len(VENDORS) == 15
+    assert {key for key, _ in _VERIFIED} == set(VENDORS) - _NO_ACCOUNT_SWITCH
+    assert len(_VERIFIED) == 15
 
 
 @pytest.mark.parametrize(("key", "verified"), _VERIFIED)

@@ -883,8 +883,10 @@
           "conflict": "Conflict detected. Please reload and try again.",
           "internal-error": "An internal backend error occurred.",
           "workspace-scope-violation": "Attempted to access files outside workspace scope."
-        }
-      }
+        },
+        "rename-plan": "Rename plan"
+      },
+      "section-delete-confirm": "Delete the section \"{anchor}\" from the document?"
     },
     "terminal": {
       "readback-on-tooltip": "Read aloud is on: spoken when this pane finishes or needs an answer — click to turn off",
@@ -1347,7 +1349,8 @@
       "unstage-folder": "Unstage folder",
       "discard-folder": "Discard folder",
       "file-history-blame": "File history + blame",
-      "open-diff-in-editor": "Open diff in editor"
+      "open-diff-in-editor": "Open diff in editor",
+    "resume-from-stage": "▶ Resume from Stage {n}"
   },
   "share": {
     "notice": {
@@ -3024,8 +3027,8 @@
           "h6": "Sync (keeping several machines the same)",
           "p11": "The first block on Settings ▸ Navide Cloud is called Sync. <strong>It is not a separate tab</strong> — it is the top section of this one page. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
           "sync": {
-            "scopes": "<strong>Six rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
-            "credentials": "<em>Memory</em>, <em>Credentials &amp; keys</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory or Credentials switch an older build left on can still be turned off.",
+            "scopes": "<strong>Five rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
+            "credentials": "<em>Memory</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory switch an older build left on can still be turned off. <em>Credentials &amp; keys</em> has no row at all: account credentials and keys never leave this machine. A Credentials switch an older build left on is treated as off. MCP settings, when their sync is on, are encrypted on this machine before they are uploaded, and the server has no key to decrypt them.",
             "states": "Two states are spelled out under the block: <em>not connected</em> (scopes you turned on catch up once the link is back) and <em>this device has no sync key yet</em> (nothing is uploaded until it has one). There is also a <em>Sync now</em> button, enabled only while connected.",
             "key": "<strong>The sync key is shown as the first 8 characters of its id</strong>, never as the key itself. <em>Rotate key</em> takes <strong>two clicks</strong>: the first turns it into <em>Rotate now</em> and adds a <em>Cancel</em> beside it. Rotating retires the current key, re-seals every synced record under a new one, and hands the new key to your other devices the next time they exchange keys — it is the move for a key you think has leaked.",
             "legacy": "<em>Adopt for this account</em> appears only when this device holds a sync key from before accounts were bound <em>and</em> this account has no key yet. It is a one-time choice: without adopting it you cannot read what was synced under that key, and minting a fresh key instead would leave those records permanently unreadable.",
@@ -4028,7 +4031,8 @@
             "usage": "Quota",
             "multi": "Multi-account",
             "signIn": "Sign-in command",
-            "signInInside": "Inside the CLI"
+            "signInInside": "Inside the CLI",
+            "flagNoteGoose": "None — Goose approves every tool by itself by default (GOOSE_MODE=auto); set GOOSE_MODE to approve or smart_approve to be asked. Navide's Guard does not cover Goose yet."
           },
           "note": "\"Quota\" = Navide can read the remaining usage (chapter 6). \"Multi-account\" = several sign-ins can be kept in Settings and switched (chapter 5). The four CLIs without a permission-bypass flag (Grok CLI, OpenCode, Pi, MiniMax Code) simply have no such flag — it is not something Navide left out. \"Sign-in command\" = what Navide actually runs when you press Sign in under Settings ▸ Accounts; the CLIs marked \"Inside the CLI\" declare no separate sign-in command, so the button launches them as usual and signing in happens on their own screen.",
           "callout": {
@@ -6779,7 +6783,8 @@
       "catalog-search": "Search MCP servers by name",
       "catalog-hint": "This catalog lists only <strong>\"Orchestrator context-reading\"</strong> MCPs — tools that read workspace / docs / external service data and inject it into kickoff prompts to ground agent knowledge. Execution actions (tests, browser automation, etc.) are handled by the CLI agents themselves.",
       "catalog-requires-env": "Requires env vars: {vars}",
-      "catalog-empty": "No matching MCP servers found"
+      "catalog-empty": "No matching MCP servers found",
+      "header-name-placeholder": "Header"
     },
     "credentials": {
       "title": "Credentials & keys",
@@ -7144,7 +7149,6 @@
       "scope-hint-skills": "Which skills are on and which CLIs each one goes to, plus the files of skills created in Navide (large ones travel as encrypted blobs). Skills you put in the folder yourself sync their settings only.",
       "scope-hint-memory": "Global instruction files such as ~/.claude/CLAUDE.md. Files inside a project stay with git.",
       "scope-credentials": "Credentials",
-      "scope-hint-credentials": "Portable CLI credentials you pasted in Accounts. Encrypted on this device before they leave; removing one here never removes it from the cloud or your other devices.",
       "sealed": "(credential — not shown)",
       "key-id": "Sync key {id}",
       "rotate": "Rotate key",
@@ -8755,7 +8759,47 @@
       "backend-stop": "Stop",
       "pipeline-pill-stage": "Stage {current} / {total}",
       "pipeline-pill-completed": "completed",
-      "pipeline-pill-aborted": "aborted"
+      "pipeline-pill-aborted": "aborted",
+    "legacy-recovery": "Legacy recovery",
+    "pipeline-runs-done": "{count} done",
+    "resume-existing-pipeline": "↻ Resume existing pipeline",
+    "resume-stages-done": "{done}/{total} stages done",
+    "focus-pane": "Focus pane",
+    "manager-badge": "🎯 Mgr",
+    "docked": "Docked",
+    "pane-origin-stage": "stage {id}",
+    "pane-origin-manual": "manual",
+    "session-id-tooltip": "CLI session id — used to resume this agent's memory on restart",
+    "role-system-prompt": "{role} system prompt",
+    "project-completed": "✓ Project completed",
+    "all-stages-done": "All {count} stages done · {time}",
+    "refresh-ollama-tooltip": "Refresh Ollama health + model list",
+    "retry-connection-tooltip": "Retry connection",
+    "minimized-sidebar": "sidebar",
+    "loop-badge": "∞ Loop",
+    "review-model-placeholder": "Model name (e.g. llama-3.3-70b)",
+    "review-working-changes": "Working Changes",
+    "current-branch-suffix": "{branch} (current)",
+    "review-dismissed": "Dismissed",
+    "review-general-finding": "(general)",
+    "review-ask-ai-fix": "Ask AI to fix",
+    "review-restore-finding": "Restore",
+    "review-no-findings": "No findings — looks good!",
+    "review-no-findings-filtered": "No findings to show.",
+    "question-is-asking": "is asking",
+    "question-dismiss-tooltip": "Dismiss without answering",
+    "question-auto-answering": "🤖 Auto-answering via LLM…",
+    "question-auto-answer": "🤖 Auto-answer: {text}",
+    "question-auto-mode": "🤖 Auto mode — submitting automatically",
+    "question-answer-all": "Answer all {count} question(s) to send.",
+    "question-send-hint": "{key} to send",
+    "question-send-all": "Send all {count} answers",
+    "question-send-one": "Send answer",
+    "console": "Console",
+    "drag-resize-log": "Drag to resize log panel",
+    "filter-by-type": "Filter by type",
+    "all-stages-finished": "All {count} stages finished successfully",
+    "region-unavailable": "{title} unavailable"
   },
   "layout": {
     "expand": "Expand panel",
@@ -9323,8 +9367,13 @@
     "info": {
       "runtime": "Runtime",
       "paths": "Paths",
-      "open": "Open"
-    }
+      "open": "Open",
+      "app": "App",
+      "backend": "Backend",
+      "started": "Started",
+      "shell": "Shell"
+    },
+    "backend-status": "backend {status}"
   },
   "orphans": {
     "title": "Leftover CLI processes",
@@ -9796,7 +9845,8 @@
     "run-by-hand": "You can also run this yourself in a terminal: {cmd}",
     "installed-not-detected": "The command finished, but {label} is still not detected. It may need a new shell session, or it landed outside PATH.",
     "installed-still-outdated": "The install finished, but the {label} found on PATH is still the old {version}. The new one may sit behind the system copy — move its directory ahead on PATH, then re-detect. A corrected PATH order takes effect on re-detect, no restart needed.",
-    "installed-still-outdated-python": "The install finished, but the {label} found on PATH is still the old {version}. Fix it either way, then re-detect: run brew link --overwrite python{'@'}3.x (with the version you installed), or add eval \"$(/opt/homebrew/bin/brew shellenv)\" to ~/.zprofile so Homebrew comes before the system copy."
+    "installed-still-outdated-python": "The install finished, but the {label} found on PATH is still the old {version}. Fix it either way, then re-detect: run brew link --overwrite python{'@'}3.x (with the version you installed), or add eval \"$(/opt/homebrew/bin/brew shellenv)\" to ~/.zprofile so Homebrew comes before the system copy.",
+    "custom-model-placeholder": "e.g. codellama:7b, gemma3:4b"
   },
   "executions": {
     "last-scan": "Last scan {time}",
@@ -10665,7 +10715,7 @@
       "title": "What Guard does",
       "hint": "Each action is graded, then handled by where the request came from.",
       "source": "Request source",
-      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl | sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
+      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl {'|'} sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
       "row": {
         "local": "You, on this computer",
         "relay": "Approved from a chat app",
@@ -11204,7 +11254,9 @@
       "ledger-open-failed": "Could not open the ledger plan",
       "pending-catch-up": "A missed run is waiting for this workspace to be opened.",
       "system-pane": "✦ system",
-      "system-pane-title": "Opened by self-evolution"
+      "system-pane-title": "Opened by self-evolution",
+      "run-tokens": "{tokens} token",
+      "run-pane": "pane “{name}”"
     },
     "field": {
       "time": "Time",
@@ -11239,7 +11291,8 @@
       "rules-hide": "Hide",
       "extra-placeholder": "Extra instructions (this workspace only)…",
       "ledger": "Ledger",
-      "ledger-placeholder": "Plan path, e.g. .agent-team/plans/xxx.html; empty = none"
+      "ledger-placeholder": "Plan path, e.g. .agent-team/plans/xxx.html; empty = none",
+      "effort-option": "effort: {effort}"
     },
     "error": {
       "at": "Use HH:MM",
@@ -11261,7 +11314,8 @@
       "date": "Date",
       "result": "Result",
       "fixes": "Fixes",
-      "proposals": "Proposals"
+      "proposals": "Proposals",
+      "tokens": "Tokens"
     },
     "reason": {
       "busy": "A run is already in progress for this workspace",

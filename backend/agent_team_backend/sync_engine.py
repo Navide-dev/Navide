@@ -166,6 +166,10 @@ _round_generation: contextvars.ContextVar[tuple[Any, int] | None] = contextvars.
 _V1_CAPS: dict[str, Any] = {"version": 1, "storage": "inline", "itemIds": "legacy"}
 #: Scopes that never go up on the v3 path, whatever the server lists.
 RETIRED_SCOPES: tuple[str, ...] = ("memory", "credentials")
+#: Scopes that hold credentials or keys. Those are only ever stored on the
+#: user's own machine (policy of 2026-10-21): no engine registers an adapter
+#: for one, and no push names one, whatever a switch or a caller says.
+LOCAL_ONLY_SCOPES: frozenset[str] = frozenset({"credentials"})
 #: Top-level refusals that mean the negotiated capabilities no longer hold.
 _RENEGOTIATE = frozenset({"OBJECTS_DISABLED", "SYNC_PROTOCOL_REQUIRED"})
 #: Objects per ``blobs.*`` request, the contract's ceiling.
@@ -1122,6 +1126,8 @@ class SyncEngine:
     def register(self, adapter: ScopeAdapter) -> None:
         if adapter.scope not in SCOPES + INTERNAL_SCOPES:
             raise SyncError(f"{adapter.scope!r} is not a protocol scope")
+        if adapter.scope in LOCAL_ONLY_SCOPES or _sensitive(adapter):
+            raise SyncError(f"{adapter.scope!r} holds credentials or keys, which never leave this machine")
         self._adapters[adapter.scope] = adapter
         if _sensitive(adapter):
             self._store.set_redactor(adapter.scope, lambda payload: _describe(adapter, payload))
@@ -1156,6 +1162,8 @@ class SyncEngine:
         # while the account changed must find out, not run for the next one.
         token = _round_generation.set((self._store, self._store.generation))
         try:
+            if scope in LOCAL_ONLY_SCOPES:
+                return {"skipped": "local-only"}
             adapter = self._adapters.get(scope)
             if adapter is None:
                 raise SyncError(f"no adapter registered for {scope!r}")
@@ -2192,6 +2200,8 @@ class SyncEngine:
             wire = [
                 {k: v for k, v in item.items() if k not in (_NAME_KEY, _PAIR_KEY, _OWED_KEY)} for item in wire
             ]
+        if scope in LOCAL_ONLY_SCOPES:
+            raise SyncError(f"{scope} never leaves this machine")
         caps = _caps_now()
         if _is_v3(caps) and caps.get("storage") == "s3":
             wire = await self._objectify(scope, wire, caps)

@@ -10,7 +10,7 @@ have since moved.
 
 Current built-in agent keys are `claude`, `codex`, `antigravity`, `grok`,
 `kimi`, `opencode`, `qwen`, `kilo`, `pi`, `copilot`, `cursor`, `aider`,
-`muse`, `droid`, and `mcode`. One key identifies a vendor on both sides — `agentKey`
+`muse`, `droid`, `mcode`, and `goose`. One key identifies a vendor on both sides — `agentKey`
 in the frontend, `agent_key` in the backend.
 
 The [vendor matrix roster](cli-vendor-matrix.md#roster) lists the current UI
@@ -65,8 +65,8 @@ version it was read from), and the environment variables that shadow the
 stored credential; `quota_exhausted_patterns` is the only CLI text the backend
 accepts as an exhaustion signal, and `login_home_env` decides whether a
 sign-in pane is isolated or runs against the live store. Step 9 of the vendor
-guide lists the contract. As of this writing all fifteen vendors carry
-`evidence="source"` — no real-account round-trip has been recorded; MiniMax
+guide lists the contract. As of this writing all fifteen vendors that declare
+one carry `evidence="source"` — no real-account round-trip has been recorded; MiniMax
 Code's adapter (region-scoped compound file plus a companion `auth-state`
 write, no session resume) is the newest.
 
@@ -80,6 +80,25 @@ exist as described, and the per-layer instructions are superseded by Part 1.
 What remains valid — and is recorded nowhere else — is the per-vendor
 research: install routes, resume syntax, session storage formats, token
 accounting, and the trap each CLI hides.
+
+### Goose (`goose`, AAIF) — added 2026-10-21
+
+Recorded live from goose 1.55.0 (`goose-aarch64-apple-darwin.tar.gz`, sha256
+`153425d6…7f2d8107`) in a scratch `HOME` / `GOOSE_PATH_ROOT`, keyring and
+telemetry off, against a loopback mock OpenAI endpoint — no account, no
+credential, no provider call, no global install. Goose ships no self-updater
+that runs on its own; `goose update` is manual.
+
+| Question | Finding (1.55.0) |
+|---|---|
+| Install | `curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh \| bash`; binary **`goose`**. pressly's database-migration tool is also called `goose` and prints `goose version: v3.x`; Navide's `identity_regex` accepts only the bare ` 1.55.0` shape. |
+| Launch | Bare `goose` opens a new session once a provider is configured, else runs `goose configure`. |
+| Permissions | No bypass flag. `GOOSE_MODE` (auto — the default — approve, smart_approve, chat) decides; the approve prompt is a cliclack select headed `◆  Goose would like to call the above tool, do you allow?`, which is the `awaitingInput` pattern. |
+| Resume | `goose session -r --session-id <id>`; an unknown id exits with "no such session exists". `--session-id` cannot name a NEW session, and `-n <name>` is not unique (a second `-n` with the same name makes a new session), so panes bind through the kickoff marker. |
+| Session storage | One SQLite db (WAL, schema v17): `$GOOSE_PATH_ROOT/data/sessions/sessions.db`, else `$XDG_DATA_HOME/goose/sessions/sessions.db` (default `~/.local/share/goose/…` **on macOS too** — not `~/Library/Application Support`), and `%APPDATA%\Block\goose\data\…` on Windows (source only). Session ids are `YYYYMMDD_N` in UTC. |
+| Turn end | No record. A model response is one `messages` row (text and toolRequest together, verified by streaming them as separate chunks), and the agent loop stops on a response without a tool request, so an agent-visible text-only assistant row ends the turn. A turn interrupted with Ctrl+C writes no row: the pane is seen to finish only when the next prompt starts. |
+| Tokens | `usage_ledger`, one row per model call; `input_tokens` already includes cache read/write (`token_usage.rs`). Sub-agent sessions (`parent_session_id`) are counted but never end the pane's turn or bind its marker. |
+| Not wired | MCP (`--with-streamable-http-extension` exists), skills, plugin hooks (`~/.agents/plugins`, PreToolUse could carry Guard), usage/quota, account switching, model flag. |
 
 ### MiniMax Code (`mcode`) — added 2026-09-20
 

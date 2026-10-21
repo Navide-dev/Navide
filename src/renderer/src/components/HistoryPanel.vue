@@ -204,7 +204,7 @@ function onLogDividerEnd(): void {
       </div>
       <div class="log-panel" :style="{ height: logHeight + 'px' }">
         <div class="log-hdr">
-          <span class="log-title">›_ Console</span>
+          <span class="log-title">›_ {{ $t('label.console') }}</span>
           <span v-if="pipeline.log.length" class="log-count">{{ pipeline.log.length }}</span>
         </div>
         <div ref="pipelineLogEl" class="pipeline-log">
@@ -217,21 +217,21 @@ function onLogDividerEnd(): void {
           </div>
         </div>
       </div>
-      <div class="log-resize" title="Drag to resize log panel" @mousedown="onLogDividerStart">
+      <div class="log-resize" :title="$t('label.drag-resize-log')" @mousedown="onLogDividerStart">
         <div class="log-resize-grip" />
       </div>
     </div>
 
     <div class="filters">
-      <select v-model="typeFilter" class="flt" title="Filter by type">
+      <select v-model="typeFilter" class="flt" :title="$t('label.filter-by-type')">
         <option v-for="t in typeOptions" :key="t" :value="t">{{ t }}</option>
       </select>
-      <select v-model="stageFilter" class="flt" title="Filter by stage">
+      <select v-model="stageFilter" class="flt" :title="$t('pane.plans.filter-stage')">
         <option v-for="s in stageOptions" :key="s" :value="s">
           {{ s === 'all' ? $t('label.all-stages') : $t('label.stage-n', { n: s }) }}
         </option>
       </select>
-      <input v-model="search" class="search" type="text" placeholder="🔍 search…" />
+      <input v-model="search" class="search" type="text" :placeholder="`🔍 ${$t('label.find-in-editor')}`" />
     </div>
 
     <div v-if="loading && events.length === 0" class="msg">{{ $t('label.loading') }}</div>
