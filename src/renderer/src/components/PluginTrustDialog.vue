@@ -118,6 +118,10 @@ function capabilityHint(cap: string): string {
         <p v-if="pending.agentRequest" class="ext-agent-request ext-risk-callout" role="note" data-testid="ext-trust-agent-request">
           {{ $t('settings.extensions.localInstall.agentRequest', { requester: pending.agentRequest.requester }) }}
         </p>
+        <!-- L4: consenting again to go back to a kept file version. -->
+        <p v-if="pending.rollbackFrom !== undefined" class="ext-rollback-consent ext-risk-callout" role="note" data-testid="ext-trust-rollback-consent">
+          {{ $t('settings.extensions.rollback.confirmLocalConsent', { id: reveal(pending.prepared.id), version: reveal(pending.prepared.version) }) }}
+        </p>
         <!-- L3: an approved update takes effect at once. -->
         <p v-if="switchesNow" class="ext-switch-now ext-risk-callout" role="note" data-testid="ext-trust-switch-now">
           {{ $t('settings.extensions.switchNow', { id: reveal(pending.prepared.id), version: reveal(pending.prepared.version) }) }}

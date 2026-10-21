@@ -507,6 +507,7 @@ declare global {
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
         ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
         prepareAgentFileInstall?: (stagingId: string) => Promise<PreparedInstallSummary>
+        prepareLocalRollback?: (id: string) => Promise<PreparedInstallSummary & { rollbackFrom: string }>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
         setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
@@ -531,7 +532,7 @@ declare global {
           restoredInstances: number
           skippedDestroyedHostWindows: number
         }>
-        rollback: (id: string) => Promise<{
+        rollback: (id: string, options?: { consentConfirmed?: boolean }) => Promise<{
           id: string
           packageVersion: string
           restoredInstances: number
@@ -614,6 +615,8 @@ declare global {
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'
     rollbackToVersion?: string
+    /** L4: the rollback target is a kept file version; going back asks again. */
+    rollbackNeedsConsent?: true
     /** Lowest Navide release the installed version needs (label only). */
     minNavideVersion?: string
     /** False when this Navide release is older; the Host still runs it. */

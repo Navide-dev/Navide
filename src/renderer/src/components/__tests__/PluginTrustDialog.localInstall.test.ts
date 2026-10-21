@@ -186,3 +186,28 @@ describe('PluginTrustDialog: the signature of a file install (A3)', () => {
     expect(dialog.get('.nv-source-row').attributes('data-source')).toBe('local-unsigned')
   })
 })
+
+describe('PluginTrustDialog for going back to a kept file version (L4, review M3)', () => {
+  it('shows the renewed-consent note with the kept version disclosure, source and digest', () => {
+    const dialog = mount(PluginTrustDialog, {
+      props: { pending: { ...pending(), rollbackFrom: '1.1.0' }, step: 'risk' } as never,
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    })
+    const note = dialog.get('[data-testid="ext-trust-rollback-consent"]')
+    expect(note.text()).toBe(i18n.global.t('settings.extensions.rollback.confirmLocalConsent', { id: 'acme.todo', version: '1.0.0' }))
+    // The same local disclosure as a file install: fixed warning, source row, digest.
+    expect(dialog.get('.ext-local-warning').text()).toBe(i18n.global.t('settings.extensions.localInstall.warning'))
+    expect(dialog.get('.nv-source-row').attributes('data-source')).toBe('local-unsigned')
+    expect(dialog.text()).toContain('a'.repeat(64))
+    // Consent still needs the explicit acknowledgement.
+    expect(dialog.get('.ext-confirm-risk').attributes('disabled')).toBeDefined()
+    dialog.unmount()
+  })
+
+  it('shows no rollback note for an ordinary file install', () => {
+    const dialog = render('risk')
+    expect(dialog.find('[data-testid="ext-trust-rollback-consent"]').exists()).toBe(false)
+    dialog.unmount()
+  })
+})

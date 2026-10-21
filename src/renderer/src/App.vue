@@ -15606,7 +15606,11 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
         return
       }
       if (step === 'discard') await window.agentTeam?.plugins?.discardCandidate?.(action.pluginId)
-      else await window.agentTeam?.plugins?.rollback?.(action.pluginId)
+      else {
+        const consent = await confirmLocalRollback(installed, action.pluginId, action.fromVersion)
+        if (consent === null) return
+        await window.agentTeam?.plugins?.rollback?.(action.pluginId, consent)
+      }
       notifyRestore.toast(
         i18n.global.t('plugin-agent.notice.downgraded', { plugin: action.pluginId, version: action.fromVersion }),
         { type: 'info' },
@@ -15626,6 +15630,23 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   }
 }
 
+/** L4: going back to a kept file version is consented to again, with its
+ *  disclosure, in Settings → Navide Plugins. Returns the rollback options for
+ *  any other target, or null after sending the user there. */
+async function confirmLocalRollback(
+  installed: ReadonlyArray<{ id: string; rollbackNeedsConsent?: true }>,
+  pluginId: string,
+  version: string,
+): Promise<{ consentConfirmed?: boolean } | null> {
+  if (installed.find((pkg) => pkg.id === pluginId)?.rollbackNeedsConsent !== true) return {}
+  // Review M3: that consent shows the kept version's disclosure, which lives
+  // in Settings → Navide Plugins; this row only takes the user there.
+  closePopover()
+  openSettingsAt('extensions')
+  notifyRestore.toast(i18n.global.t('settings.extensions.rollback.consentInSettings', { id: pluginId, version }), { type: 'info' })
+  return null
+}
+
 /** "Back to vA" on a switch row (L3): the rollback in Settings → Navide
  *  Plugins, only while the switch it names is still what is installed. */
 async function revertPluginSwitch(
@@ -15637,7 +15658,9 @@ async function revertPluginSwitch(
       notifyRestore.toast(i18n.global.t('plugin-switch.notice.stale'), { type: 'info' })
       return
     }
-    const reverted = await window.agentTeam?.plugins?.rollback?.(action.pluginId)
+    const consent = await confirmLocalRollback(installed, action.pluginId, action.fromVersion)
+    if (consent === null) return
+    const reverted = await window.agentTeam?.plugins?.rollback?.(action.pluginId, consent)
     notifyRestore.toast(
       i18n.global.t('plugin-switch.notice.reverted', {
         plugin: action.pluginId,

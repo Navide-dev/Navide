@@ -96,9 +96,21 @@ async function rollbackToApproved(
   if (version === null || retained !== version) {
     return `the version kept for rollback is ${retained ?? 'none'}, not the approved ${version ?? 'none'}`
   }
-  await deps.rollback(pluginId)
+  try {
+    await deps.rollback(pluginId)
+  } catch (error) {
+    // L4 (review r2): the Host's refusal names a consent the agent cannot
+    // give; the agent is told that plainly, never the Host's text.
+    if (errorText(error).includes('ROLLBACK_CONSENT_REQUIRED')) return ROLLBACK_CONSENT_REQUIRED_TEXT
+    throw error
+  }
   return null
 }
+
+/** What an agent's rollback request finishes with when going back to a kept
+ *  file version still waits for the user's renewed consent. */
+export const ROLLBACK_CONSENT_REQUIRED_TEXT =
+  'consent-required: going back to a kept file version needs the user\'s renewed consent, with that version\'s disclosure, in the Navide main window'
 
 /** Carry out one approved request in this window and report the result. */
 export async function applyApprovedRequest(record: PluginRequestRecord, deps: PluginRequestApplyDeps): Promise<FinishStatus> {

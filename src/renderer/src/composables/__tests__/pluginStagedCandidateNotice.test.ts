@@ -71,6 +71,6 @@ describe('an approved update takes effect at once (L3)', () => {
     expect(preload).toContain("ipcRenderer.on('plugins:switched', listener)")
     expect(app).toMatch(/onPluginSwitched\?\.\(\(notice\) => \{\s*announcements\.notePluginSwitch\(notice\)/)
     expect(app).toContain("if (action.kind === 'plugin-switch-back') return revertPluginSwitch(action)")
-    expect(app).toMatch(/revertPluginSwitch[\s\S]*?pluginSwitchBackApplies\(action, installed\)[\s\S]*?plugins\?\.rollback\?\.\(action\.pluginId\)/)
+    expect(app).toMatch(/revertPluginSwitch[\s\S]*?pluginSwitchBackApplies\(action, installed\)[\s\S]*?plugins\?\.rollback\?\.\(action\.pluginId/)
   })
 })
