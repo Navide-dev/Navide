@@ -1938,6 +1938,8 @@
         "confirm": "回复",
         "confirmFactory": "要将 {id} 回复为 Navide 内置的版本吗？你安装的套件会保留为待激活版本，之后可以重新启动切回。",
         "confirmPrevious": "要将 {id} 回复到 {version} 吗？目前的版本会保留为待激活版本，之后可以重新启动切回。",
+        "confirmLocalConsent": "{id} {version} 是未经 Navide 审核的本机文件版本。退回到这一版需要你在这里重新同意；如果它有原生后端，运行前也会再问一次。",
+        "consentInSettings": "退回到 {id} {version}（本机文件版本）需要看过它的揭露后重新同意。请到“设置 → Navide 插件”确认。",
         "previousVersion": "上一个版本",
         "errors": {
           "transactionInProgress": "{id} 正在安装、更新或回复中，请等它完成后再试。",
