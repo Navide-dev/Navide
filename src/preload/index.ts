@@ -234,7 +234,7 @@ export interface InstalledPluginSummary {
   localSignature?: 'verified' | 'revoked'
   /** Decision d5: Navide blocked the `.vsix` this local install came from;
    *  `reason` null when its list names none. */
-  digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
+  digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn' | null }
   /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
   localInstall?: LocalInstallDetails
   warning?: string
@@ -734,6 +734,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
   listOpenWorkspaces: (): Promise<string[]> => ipcRenderer.invoke('workspace:listOpen'),
   focusWorkspaceWindow: (workspacePath: string): Promise<boolean> =>
     ipcRenderer.invoke('workspace:focusExisting', workspacePath),
+  workspaceHolder: (workspacePath: string): Promise<string> =>
+    ipcRenderer.invoke('workspace:holder', workspacePath),
   reportAdoptedWorkspaces: (paths: string[]): void =>
     ipcRenderer.send('window:reportAdoptedWorkspaces', paths),
   takeRestoredAdoptedWorkspaces: (): Promise<string[]> =>
@@ -753,7 +755,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('shell:openTerminal', command),
   openTempFile: (filename: string, content: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('shell:openTempFile', filename, content),
-  openMainWindow: (args?: { workspace_path?: string }): Promise<{ ok: boolean }> =>
+  openMainWindow: (args?: { workspace_path?: string; background?: boolean }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('window:openMain', args ?? {}),
   detachGroup: (args: { groupId: string; workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('window:detachGroup', args),

@@ -109,8 +109,10 @@ export {
   UI_PLURAL_RULES,
   formatList,
   isBetaUiLocale,
+  isSingular,
   isUiLocale,
   normalizeSystemLocale,
+  pluralCategory,
   resolveAvailableLocale,
 } from './uiLocales'
 export type { UiLocale } from './uiLocales'

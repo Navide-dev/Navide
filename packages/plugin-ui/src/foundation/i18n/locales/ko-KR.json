@@ -664,6 +664,7 @@
     }
   },
   "pane": {
+    "opened-by": "「{parent}」이(가) 열었습니다",
     "git": {
       "title": "소스 제어",
       "tab": "소스 제어"
@@ -1938,6 +1939,8 @@
         "confirm": "롤백",
         "confirmFactory": "{id}을(를) Navide에 기본 포함된 버전으로 되돌릴까요? 설치한 패키지는 대기 상태로 남아 있어서 다시 시작하면 그 버전으로 돌아갈 수 있어요.",
         "confirmPrevious": "{id}을(를) {version}(으)로 롤백할까요? 현재 버전은 대기 상태로 남아 있어서 다시 시작하면 그 버전으로 돌아갈 수 있어요.",
+        "confirmLocalConsent": "{id} {version}은(는) Navide가 검토하지 않은 로컬 파일 버전이에요. 이 버전으로 되돌리면 여기서 다시 동의를 요청하고, 네이티브 백엔드가 있다면 실행하기 전에 다시 물어봐요.",
+        "consentInSettings": "로컬 파일 버전인 {id} {version}(으)로 되돌리려면 공개 내용과 함께 다시 동의해야 해요. 설정 → Navide 플러그인에서 확인하세요.",
         "previousVersion": "이전 버전",
         "errors": {
           "transactionInProgress": "{id}을(를) 이미 설치·업데이트·롤백하는 중이에요. 끝난 뒤 다시 시도하세요.",

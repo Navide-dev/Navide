@@ -57,7 +57,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned by DESIGN-C S3: the cli_list_targets and cli_whoami descriptions
 #: now document `window_id`. With their old descriptions the list still hashes
 #: to the previous pin (6410398f…), so no other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "e5270f54841aa8f8e0d73089f36711288f1fe0a0738831d65ca6f53ebdeb0652"
+#: Re-pinned for DESIGN-C S2: cli_open_agent's description and its new
+#: `window` parameter. With main's cli_open_agent entry the digest is the
+#: previous pin, e5270f54841aa8f8e0d73089f36711288f1fe0a0738831d65ca6f53ebdeb0652.
+MAIN_TOOLS_LIST_SHA256 = "e18c4e7dae03a9788f4c020623513c60602db17506e17858401f90954a7b697a"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

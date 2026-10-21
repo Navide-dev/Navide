@@ -343,6 +343,19 @@ export function readRegistryReceiptExpiresAt(pluginDir: string): string | undefi
   }
 }
 
+/** The artifact digest and version an installed package's Registry receipt
+ * names, read the same way as the channel: for the testplace-withdrawn lookup
+ * only, since load-time verification checks the receipt against the retained
+ * artifact. */
+export function readRegistryReceiptArtifact(pluginDir: string): { artifactDigest: string; version: string } | undefined {
+  try {
+    const receipt = parseReceipt(pluginDir)
+    return { artifactDigest: receipt.artifactDigest, version: receipt.version }
+  } catch {
+    return undefined
+  }
+}
+
 function hasCoherentRegistryEvidence(pluginDir: string, expectedPackageId: string): boolean {
   try {
     if (existsSync(join(pluginDir, PLUGIN_QUARANTINE_MARKER))) return false

@@ -51,6 +51,7 @@ import { parseManifestJson } from './pluginManifestJson'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import {
+  readRegistryReceiptArtifact,
   readRegistryReceiptChannel,
   readRegistryReceiptExpiresAt,
   readRegistryTrustSnapshot,
@@ -150,6 +151,7 @@ import {
 import {
   LOCAL_INSTALL_TRUST_PATH,
   LOCAL_SIGNATURE_SUFFIX,
+  digestBlock,
   readLocalInstallTrust,
   recordedSignatureState,
   writeLocalInstallTrust,
@@ -157,6 +159,7 @@ import {
 import { canonicalArchivePath } from './pluginPathPolicy'
 import {
   DigestBlockNoticeStore,
+  digestBlockAction,
   recordDigestBlock,
   type DigestBlockChoice,
   type DigestBlockPrompt,
@@ -931,6 +934,32 @@ export function registerPluginIpc(
       return null
     }
   }
+  // 0.2.28: a Registry install whose receipt digest the root-signed
+  // local-install document lists as `testplace-withdrawn` (a Testplace build
+  // taken back), or whose version the signed-in tester detail last listed as
+  // withdrawn (the 15-minute fast path). Either way it is the same block on
+  // the same digest, so the notice is shown once across both. Only that
+  // reason applies to Registry installs; the others keep applying to local
+  // installs alone.
+  const registryWithdrawnBlockFor = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): (LocalDigestBlock & { version: string }) | null => {
+    const dir = activeRegistryPackageDir(summary)
+    const artifact = dir === undefined ? undefined : readRegistryReceiptArtifact(dir)
+    if (!artifact || dir === undefined) return null
+    try {
+      const pinned = resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey
+      const block = digestBlock(readLocalInstallTrust(pluginsRoot, pinned), artifact.artifactDigest)
+      const listed = block?.reason === 'testplace-withdrawn'
+      const told = readRegistryReceiptChannel(dir) === 'testplace' && testplaceStore.isWithdrawn(summary.id, artifact.version)
+      if (!listed && !told) return null
+      const reason = 'testplace-withdrawn' as const
+      return { digest: artifact.artifactDigest, reason, action: digestBlockAction(reason), version: artifact.version }
+    } catch {
+      return null
+    }
+  }
   const sourceFields = (summary: {
     id: string
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
@@ -960,10 +989,12 @@ export function registerPluginIpc(
     const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined
     const expiresAt = dir === undefined ? undefined : readRegistryReceiptExpiresAt(dir)
     const via = source === 'testplace' ? testplaceStore.joinVia(summary.id) : null
+    const withdrawn = registryWithdrawnBlockFor(summary)
     return {
       source,
       ...(expiresAt !== undefined ? { expiresAt } : {}),
       ...(via ? { testplaceVia: via } : {}),
+      ...(withdrawn ? { digestBlock: { reason: withdrawn.reason } } : {}),
     }
   }
   // Plan B D2 (D-d): what an update changes, computed by the Host from the
@@ -3270,6 +3301,10 @@ export function registerPluginIpc(
         const receipt = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as Record<string, unknown>
         const version = typeof receipt.version === 'string' ? receipt.version : null
         if (decision.code === 'TESTPLACE_WITHDRAWN') {
+          // 0.2.28 (review #551 LOW): a withdrawn build the tester disabled is
+          // not loaded but has not expired; only expired ones are listed here.
+          const now = resolveConfiguredMarketplace(trust).trust.now ?? new Date()
+          if (expiresAt !== undefined && Date.parse(expiresAt) > now.getTime()) return []
           return [{ id, version, expiresAt: expiresAt ?? null, canKeep: false, withdrawn: true as const, keepRefusal: 'withdrawn' as const }]
         }
         const kept = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext(true))
@@ -4800,6 +4835,15 @@ export function registerPluginIpc(
       digestBlockNotices.record(summary.id, block)
       asks.push({ pluginId: summary.id, version: summary.packageVersion, reason: block.reason, action: block.action })
     }
+    // 0.2.28: a withdrawn Testplace build is told once, by digest, and keeps
+    // running until the tester chooses; nothing is disabled for it.
+    for (const pkg of manager.listInstalledPackages()) {
+      if (pkg.provenance !== 'official-registry') continue
+      const block = registryWithdrawnBlockFor(pkg)
+      if (!block || !prompt || digestBlockNotices.shown(pkg.id, block)) continue
+      digestBlockNotices.record(pkg.id, block)
+      asks.push({ pluginId: pkg.id, version: block.version, reason: block.reason, action: 'warn', testBuild: true })
+    }
     // The dialogs do not hold up the refresh (or the update check after it).
     if (prompt && asks.length > 0) void askAboutDigestBlocks(prompt, asks)
     return { quarantined }
@@ -4894,7 +4938,8 @@ export function registerPluginIpc(
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
           keepsExpiredTestplace,
-          withdrawnTestplace,
+          // 0.2.28 (user, 10-21): a withdrawal never stops a running build;
+          // registryWithdrawnBlockFor labels it and asks once instead.
         }, new Set([...packageIds, ...activeRegistryPackages]))
         for (const decision of refreshed) {
           if (decision.action === 'quarantine') {
@@ -4958,7 +5003,8 @@ export function registerPluginIpc(
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
           keepsExpiredTestplace,
-          withdrawnTestplace,
+          // 0.2.28 (user, 10-21): a withdrawal never stops a running build;
+          // registryWithdrawnBlockFor labels it and asks once instead.
         }
         const activeBeforeRefresh = new Set(
           manager

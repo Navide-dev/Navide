@@ -293,11 +293,13 @@ async function uninstallPack(members: string[]): Promise<void> {
 }
 
 // d5: the label for a local install whose file Navide blocked since; no
-// reason (or one this release does not know) reads as a plain block.
-function digestBlockKey(reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null): string {
+// reason (or one this release does not know) reads as a plain block. A
+// withdrawn Testplace build (0.2.28) is labelled the same way.
+function digestBlockKey(reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn' | null): string {
   if (reason === 'security') return 'security'
   if (reason === 'qualification-revoked') return 'qualificationRevoked'
   if (reason === 'developer-withdrawn') return 'developerWithdrawn'
+  if (reason === 'testplace-withdrawn') return 'testplaceWithdrawn'
   return 'blocked'
 }
 
@@ -742,12 +744,13 @@ watch(installed, () => {
                 :publisher="p.localSignature ? p.id.split('.')[0] : undefined"
                 :local-install="p.localInstall"
               />
-              <!-- d5: Navide blocked the file this local install came from; the label stays. -->
+              <!-- d5: Navide blocked the file this local install came from; the label stays.
+                   0.2.28: a withdrawn Testplace build keeps its label the same way. -->
               <span
                 v-if="p.digestBlock"
                 class="ext-badge ext-digest-blocked-badge"
                 :data-reason="p.digestBlock.reason ?? 'none'"
-                :title="$t('settings.extensions.digestBlock.note')"
+                :title="$t(p.digestBlock.reason === 'testplace-withdrawn' ? 'settings.extensions.digestBlock.testplaceWithdrawnNote' : 'settings.extensions.digestBlock.note')"
               >
                 {{ $t(`settings.extensions.digestBlock.${digestBlockKey(p.digestBlock.reason)}`) }}
               </span>

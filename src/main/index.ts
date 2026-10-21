@@ -132,6 +132,7 @@ import {
   CLI_BUFFER_REPLY_CHANNEL,
   type CliPaneBufferResult
 } from './cli-buffer-relay'
+import { workspaceIdentityKey } from './workspace-identity'
 import {
   PaneActionRelay,
   PANE_ACTION_REPLY_CHANNEL,
@@ -481,16 +482,18 @@ function normalizeWorkspacePath(p: string): string {
 }
 
 function findMainWindowForWorkspace(workspacePath: string): BrowserWindow | null {
-  const target = normalizeWorkspacePath(workspacePath)
+  // Compared by the folder's real identity, case included (review #546): the
+  // JS realpath behind normalizeWorkspacePath keeps the case it is given.
+  const target = workspaceIdentityKey(workspacePath)
   if (!target) return null
   // A window whose primary it is wins: that is where its tabs, git and
   // explorer already point.
   for (const [win, wp] of mainWindowWorkspaces) {
-    if (!win.isDestroyed() && normalizeWorkspacePath(wp) === target) return win
+    if (!win.isDestroyed() && workspaceIdentityKey(wp) === target) return win
   }
   for (const [win, list] of adoptedWorkspaces) {
     if (win.isDestroyed()) continue
-    if (list.some((wp) => normalizeWorkspacePath(wp) === target)) return win
+    if (list.some((wp) => workspaceIdentityKey(wp) === target)) return win
   }
   return null
 }
@@ -649,7 +652,7 @@ function loadWindow(win: BrowserWindow, params: Record<string, string>): void {
 
 async function createWindow(
   params: Record<string, string> = {},
-  opts?: { bounds?: WindowBounds }
+  opts?: { bounds?: WindowBounds; background?: boolean }
 ): Promise<BrowserWindow> {
   // Saved bounds may point at a display that is no longer attached.
   const bounds = opts?.bounds && onScreenBounds(
@@ -759,7 +762,10 @@ async function createWindow(
   const showOnce = (): void => {
     if (_shown || win.isDestroyed()) return
     _shown = true
-    win.show()
+    // A window an agent opened for a child pane appears without taking focus
+    // from whatever the user is doing (cli_open_agent window "new").
+    if (opts?.background) win.showInactive()
+    else win.show()
   }
   win.once('ready-to-show', showOnce)
   setTimeout(showOnce, 4000)
@@ -1024,8 +1030,6 @@ try {
 const pluginTestplaceStore = new PluginTestplaceStore(pluginsRoot())
 const keepsExpiredTestplace = (packageId: string, artifactDigest: string): boolean =>
   pluginTestplaceStore.keepsExpired(packageId, artifactDigest)
-const withdrawnTestplace = (packageId: string, version: string): boolean =>
-  pluginTestplaceStore.isWithdrawn(packageId, version)
 const installedPluginTrust = {
   pinnedRootKey: installedRegistryRootKey,
   snapshot: readRegistryTrustSnapshot(pluginsRoot()),
@@ -1033,7 +1037,8 @@ const installedPluginTrust = {
   officialRegistryUrl: installedOfficialRegistryUrl,
   expectedTarget: currentPluginHostTarget(),
   keepsExpiredTestplace,
-  withdrawnTestplace,
+  // 0.2.28 (user, 10-21): a Testplace withdrawal never stops a build at
+  // start; Extensions labels it and the tester is asked once.
 }
 
 function currentInstalledRegistryTrust() {
@@ -1046,7 +1051,6 @@ function currentInstalledRegistryTrust() {
     expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
     now: marketplace.trust.now,
     keepsExpiredTestplace,
-    withdrawnTestplace,
   }
 }
 
@@ -3751,7 +3755,7 @@ async function showGitViewUnavailable(target: BrowserWindow | null): Promise<voi
     : dialog.showMessageBox(options))
 }
 
-function openMainWindow(workspacePath = ''): void {
+function openMainWindow(workspacePath = '', background = false): void {
   const params: Record<string, string> = {}
   const ws = workspacePath?.trim() ?? ''
   if (ws) {
@@ -3768,11 +3772,11 @@ function openMainWindow(workspacePath = ''): void {
     // this — their previous sessions are dead and restore should run.
     params.duplicate = '1'
   }
-  void createWindow(params)
+  void createWindow(params, background ? { background: true } : undefined)
 }
 
-ipcMain.handle('window:openMain', (_event, args?: { workspace_path?: string }) => {
-  openMainWindow(args?.workspace_path)
+ipcMain.handle('window:openMain', (_event, args?: { workspace_path?: string; background?: boolean }) => {
+  openMainWindow(args?.workspace_path, args?.background === true)
   return { ok: true }
 })
 
@@ -3872,6 +3876,16 @@ ipcMain.handle('workspace:listOpen', () => {
     if (!win.isDestroyed()) open.push(...list)
   }
   return open
+})
+
+// Which OTHER window holds a workspace, by title, or '' when none does (or only
+// the asking window). cli_open_agent's "current" window choice refuses a
+// project another window already holds and names that window.
+ipcMain.handle('workspace:holder', (event, workspacePath: string) => {
+  const self = BrowserWindow.fromWebContents(event.sender)
+  const existing = findMainWindowForWorkspace(String(workspacePath ?? ''))
+  if (!existing || existing === self) return ''
+  return existing.getTitle() || 'another Navide window'
 })
 
 ipcMain.handle('workspace:focusExisting', (event, workspacePath: string) => {
