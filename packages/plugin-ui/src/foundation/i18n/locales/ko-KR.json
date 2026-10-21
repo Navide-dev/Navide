@@ -1349,7 +1349,8 @@
     "unstage-folder": "폴더 스테이징 취소",
     "discard-folder": "폴더 변경 취소",
     "file-history-blame": "파일 기록 + blame",
-    "open-diff-in-editor": "편집기에서 diff 열기"
+    "open-diff-in-editor": "편집기에서 diff 열기",
+    "resume-from-stage": "▶ Stage {n}부터 재개"
   },
   "share": {
     "notice": {
@@ -3023,8 +3024,8 @@
           "h6": "동기화(여러 기기를 같은 상태로 유지)",
           "p11": "설정 ▸ Navide Cloud의 첫 블록은 동기화예요. <strong>별도 탭이 아니라</strong> 이 페이지의 맨 위 섹션이에요. 동기화할 수 있는 범위마다 토글이 있는 행이 있으며, 하나를 켜면 그 범위는 <strong>같은 계정</strong>으로 로그인한 모든 기기에서 같은 상태로 유지돼요. 레코드는 <strong>이 기기에서 암호화</strong>되고, 서버는 키가 없는 암호문만 저장해요.",
           "sync": {
-            "scopes": "<strong>Agent 자산 페이지마다 한 행씩 사이드바 순서대로 여섯 행이 있고, 그중 세 개를 켤 수 있어요</strong>: <em>MCP</em>(Navide에서 추가한 서버이며, 비밀 값은 전송 전에 암호화돼요), <em>스킬</em>(켜진 스킬과 각 스킬이 전달되는 CLI, 그리고 Navide에서 만든 스킬의 파일. 폴더에 직접 넣은 스킬은 설정만 동기화돼요), <em>프롬프트</em>(프롬프트 스킬과 Loop 프롬프트).",
-            "credentials": "<em>메모리</em>, <em>자격 증명 &amp; 키</em>, <em>CLI 확장</em>은 <strong>목록에는 있지만 회색으로 비활성화</strong>되어 있고, \"아직 동기화할 수 없음\"이라고 표시돼요. \"기본값이 꺼짐이라 켜기를 기다리는 상태\"가 아니라 토글 자체가 움직이지 않아요. 이전 빌드에서 켜 둔 메모리나 자격 증명 스위치는 여전히 끌 수 있어요.",
+            "scopes": "<strong>Agent 자산 페이지마다 한 줄씩, 사이드바 순서대로 다섯 줄이 있고, 그중 세 개를 켤 수 있어요</strong>: <em>MCP</em>(Navide에서 추가한 서버. 비밀 값은 보내기 전에 암호화돼요), <em>Skills</em>(어떤 스킬이 켜져 있고 각각 어느 CLI로 가는지, 그리고 Navide에서 만든 스킬의 파일. 폴더에 직접 넣은 스킬은 설정만 동기화돼요), <em>Prompts</em>(프롬프트 스킬과 loop 프롬프트).",
+            "credentials": "<em>Memory</em>와 <em>CLI 확장</em>은 <strong>목록에는 있지만 회색으로 비활성화</strong>되어 있고, \"아직 동기화할 수 없음\"이라고 표시돼요. \"기본값이 꺼짐이라 켜기를 기다리는 상태\"가 아니라, 스위치 자체가 움직이지 않아요. 이전 버전에서 켜 둔 Memory 스위치는 여전히 끌 수 있어요. <em>Credentials &amp; keys</em>는 줄 자체가 없어요: 계정 자격 증명과 키는 이 컴퓨터를 절대 떠나지 않아요. 이전 버전에서 켜 둔 Credentials 스위치는 꺼진 것으로 처리돼요. MCP 설정은 동기화를 켰을 때 이 컴퓨터에서 암호화된 뒤 업로드되며, 서버에는 이를 복호화할 키가 없어요.",
             "states": "블록 아래에 두 가지 상태가 표시돼요: <em>연결되지 않음</em>(켜 둔 범위는 연결이 돌아오면 따라잡아요)과 <em>이 기기에 아직 동기화 키가 없음</em>(키가 생길 때까지 아무것도 업로드하지 않아요). 연결된 동안에만 활성화되는 <em>지금 동기화</em> 버튼도 있어요.",
             "key": "<strong>동기화 키는 ID의 앞 8자로만 표시되며</strong> 키 자체는 절대 표시되지 않아요. <em>키 교체</em>는 <strong>두 번 클릭</strong>해야 해요. 첫 클릭에서 <em>지금 교체</em>로 바뀌고 옆에 <em>취소</em>가 생겨요. 교체하면 현재 키가 폐기되고, 동기화된 모든 레코드를 새 키로 다시 봉인하며, 다른 기기가 다음에 키를 교환할 때 새 키를 전달해요. 키가 유출됐다고 생각될 때 쓰는 방법이에요.",
             "legacy": "<em>이 계정에 채택</em>은 이 기기가 계정 연결 이전의 동기화 키를 가지고 있고 <em>동시에</em> 이 계정에 아직 키가 없을 때만 나타나요. 한 번만 하는 선택이에요. 채택하지 않으면 그 키로 동기화된 내용을 읽을 수 없고, 대신 새 키를 만들면 그 레코드는 영구히 읽을 수 없게 돼요.",
@@ -4027,7 +4028,8 @@
             "usage": "할당량",
             "multi": "다중 계정",
             "signIn": "로그인 명령",
-            "signInInside": "CLI 안에서"
+            "signInInside": "CLI 안에서",
+            "flagNoteGoose": "없음 — Goose는 기본적으로 모든 도구를 스스로 승인해요(GOOSE_MODE=auto). 확인을 받으려면 GOOSE_MODE를 approve 또는 smart_approve로 설정하세요. Navide의 Guard는 아직 Goose를 지원하지 않아요."
           },
           "note": "\"할당량\" = Navide가 남은 사용량을 읽을 수 있어요(6장). \"다중 계정\" = 설정에 여러 로그인을 보관하고 전환할 수 있어요(5장). 권한 우회 플래그가 없는 네 CLI(Grok CLI, OpenCode, Pi, MiniMax Code)는 원래 그런 플래그가 없는 것이지 Navide가 빠뜨린 게 아니에요. \"로그인 명령\" = 설정 ▸ 계정에서 로그인을 눌렀을 때 Navide가 실제로 실행하는 명령이에요. \"CLI 안에서\"로 표시된 CLI는 별도 로그인 명령이 없어서, 버튼을 누르면 평소처럼 실행되고 로그인은 CLI 자체 화면에서 해요.",
           "callout": {
@@ -6778,7 +6780,8 @@
       "catalog-search": "이름으로 MCP 서버 검색",
       "catalog-hint": "이 카탈로그에는 <strong>\"오케스트레이터 컨텍스트 읽기\"</strong>용 MCP만 있어요. 작업 영역 / 문서 / 외부 서비스 데이터를 읽어 시작 프롬프트에 주입해 agent의 지식을 보강하는 도구예요. 실행 동작(테스트, 브라우저 자동화 등)은 CLI agent가 직접 처리해요.",
       "catalog-requires-env": "필요한 환경 변수: {vars}",
-      "catalog-empty": "일치하는 MCP 서버가 없어요"
+      "catalog-empty": "일치하는 MCP 서버가 없어요",
+      "header-name-placeholder": "헤더"
     },
     "credentials": {
       "title": "자격 증명 및 키",
@@ -7143,7 +7146,6 @@
       "scope-hint-skills": "어떤 스킬이 켜져 있고 각각 어느 CLI로 가는지, 그리고 Navide에서 만든 스킬의 파일이에요(큰 파일은 암호화된 blob으로 전달돼요). 폴더에 직접 넣은 스킬은 설정만 동기화돼요.",
       "scope-hint-memory": "~/.claude/CLAUDE.md 같은 전역 지침 파일이에요. 프로젝트 안의 파일은 git으로 관리돼요.",
       "scope-credentials": "자격 증명",
-      "scope-hint-credentials": "계정에 붙여 넣은 이동 가능한 CLI 자격 증명이에요. 전송 전에 이 기기에서 암호화되며, 여기서 제거해도 클라우드나 다른 기기에서는 제거되지 않아요.",
       "sealed": "(자격 증명 — 표시 안 함)",
       "key-id": "동기화 키 {id}",
       "rotate": "키 교체",
@@ -8754,7 +8756,47 @@
     "backend-stop": "중지",
     "pipeline-pill-stage": "{current} / {total}단계",
     "pipeline-pill-completed": "완료됨",
-    "pipeline-pill-aborted": "중단됨"
+    "pipeline-pill-aborted": "중단됨",
+    "legacy-recovery": "이전 방식 복구",
+    "pipeline-runs-done": "{count}개 완료",
+    "resume-existing-pipeline": "↻ 기존 pipeline 재개",
+    "resume-stages-done": "Stage {done}/{total}개 완료",
+    "focus-pane": "pane에 포커스",
+    "manager-badge": "🎯 관리자",
+    "docked": "도킹됨",
+    "pane-origin-stage": "stage {id}",
+    "pane-origin-manual": "수동",
+    "session-id-tooltip": "CLI session ID — 재시작할 때 이 agent의 기억을 이어 가는 데 쓰여요",
+    "role-system-prompt": "{role} 시스템 프롬프트",
+    "project-completed": "✓ 프로젝트 완료",
+    "all-stages-done": "Stage {count}개 모두 완료 · {time}",
+    "refresh-ollama-tooltip": "Ollama 상태와 모델 목록 새로고침",
+    "retry-connection-tooltip": "다시 연결",
+    "minimized-sidebar": "사이드바",
+    "loop-badge": "∞ Loop",
+    "review-model-placeholder": "모델 이름(예: llama-3.3-70b)",
+    "review-working-changes": "작업 중인 변경 사항",
+    "current-branch-suffix": "{branch}(현재)",
+    "review-dismissed": "무시됨",
+    "review-general-finding": "(일반)",
+    "review-ask-ai-fix": "AI에게 수정 요청",
+    "review-restore-finding": "복원",
+    "review-no-findings": "발견된 문제가 없어요. 좋아 보여요!",
+    "review-no-findings-filtered": "표시할 항목이 없어요.",
+    "question-is-asking": "님이 질문하고 있어요",
+    "question-dismiss-tooltip": "답하지 않고 닫기",
+    "question-auto-answering": "🤖 LLM으로 자동 답변 중…",
+    "question-auto-answer": "🤖 자동 답변: {text}",
+    "question-auto-mode": "🤖 자동 모드 — 자동으로 제출해요",
+    "question-answer-all": "보내려면 질문 {count}개에 모두 답하세요.",
+    "question-send-hint": "{key}(으)로 보내기",
+    "question-send-all": "답변 {count}개 모두 보내기",
+    "question-send-one": "답변 보내기",
+    "console": "콘솔",
+    "drag-resize-log": "드래그해서 로그 패널 크기 조절",
+    "filter-by-type": "유형별 필터",
+    "all-stages-finished": "Stage {count}개가 모두 성공적으로 끝났어요",
+    "region-unavailable": "{title}을(를) 사용할 수 없어요"
   },
   "layout": {
     "expand": "패널 펼치기",
@@ -9322,8 +9364,13 @@
     "info": {
       "runtime": "런타임",
       "paths": "경로",
-      "open": "열기"
-    }
+      "open": "열기",
+      "app": "App",
+      "backend": "백엔드",
+      "started": "시작 시각",
+      "shell": "셸"
+    },
+    "backend-status": "백엔드 {status}"
   },
   "orphans": {
     "title": "남은 CLI 프로세스",
@@ -9795,7 +9842,8 @@
     "run-by-hand": "터미널에서 직접 실행할 수도 있어요: {cmd}",
     "installed-not-detected": "명령은 완료됐지만 {label}이(가) 아직 감지되지 않아요. 새 셸 session이 필요하거나 PATH 밖에 설치되었을 수 있어요.",
     "installed-still-outdated": "설치는 완료됐지만 PATH에서 찾은 {label}은(는) 여전히 이전 버전 {version}이에요. 새 버전이 시스템 사본 뒤에 있을 수 있으니 해당 디렉터리를 PATH 앞쪽으로 옮긴 뒤 다시 감지하세요. 수정한 PATH 순서는 다시 감지할 때 적용되며 다시 시작할 필요는 없어요.",
-    "installed-still-outdated-python": "설치는 완료됐지만 PATH에서 찾은 {label}은(는) 여전히 이전 버전 {version}이에요. 다음 중 하나로 해결한 뒤 다시 감지하세요: brew link --overwrite python{'@'}3.x(설치한 버전으로)를 실행하거나, ~/.zprofile에 eval \"$(/opt/homebrew/bin/brew shellenv)\"를 추가해 Homebrew가 시스템 사본보다 먼저 오게 하세요."
+    "installed-still-outdated-python": "설치는 완료됐지만 PATH에서 찾은 {label}은(는) 여전히 이전 버전 {version}이에요. 다음 중 하나로 해결한 뒤 다시 감지하세요: brew link --overwrite python{'@'}3.x(설치한 버전으로)를 실행하거나, ~/.zprofile에 eval \"$(/opt/homebrew/bin/brew shellenv)\"를 추가해 Homebrew가 시스템 사본보다 먼저 오게 하세요.",
+    "custom-model-placeholder": "예: codellama:7b, gemma3:4b"
   },
   "executions": {
     "last-scan": "마지막 검색 {time}",
@@ -11203,7 +11251,9 @@
       "ledger-open-failed": "원장 계획을 열지 못했어요",
       "pending-catch-up": "놓친 실행이 이 작업 영역이 열리기를 기다리고 있어요.",
       "system-pane": "✦ 시스템",
-      "system-pane-title": "자기 진화가 열었어요"
+      "system-pane-title": "자기 진화가 열었어요",
+      "run-tokens": "{tokens} token",
+      "run-pane": "pane “{name}”"
     },
     "field": {
       "time": "시간",
@@ -11238,7 +11288,8 @@
       "rules-hide": "숨기기",
       "extra-placeholder": "추가 지시(이 작업 영역 전용)…",
       "ledger": "원장",
-      "ledger-placeholder": "계획 경로(예: .agent-team/plans/xxx.html), 비우면 없음"
+      "ledger-placeholder": "계획 경로(예: .agent-team/plans/xxx.html), 비우면 없음",
+      "effort-option": "effort: {effort}"
     },
     "error": {
       "at": "HH:MM 형식을 사용하세요",
@@ -11260,7 +11311,8 @@
       "date": "날짜",
       "result": "결과",
       "fixes": "수정",
-      "proposals": "제안"
+      "proposals": "제안",
+      "tokens": "Token"
     },
     "reason": {
       "busy": "이 작업 영역에서 이미 실행이 진행 중이에요",
