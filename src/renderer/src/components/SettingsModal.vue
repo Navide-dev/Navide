@@ -3204,7 +3204,7 @@ watch(activeTab, (tab) => {
                 <strong>{{ props.analyzerApi.benchmarkResults.value.filter(r => r.passed).length }}</strong>
                 /
                 {{ props.analyzerApi.benchmarkResults.value.length }}
-                {{ $t('settings.analyzer.models') }}
+                {{ $t('settings.analyzer.models', props.analyzerApi.benchmarkResults.value.length) }}
               </div>
               <table class="az-table">
                 <thead>
