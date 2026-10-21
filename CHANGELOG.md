@@ -46,6 +46,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Navide plugins: an in-window plugin panel no longer reloads whenever any plugin's contributions refresh (an install, a switch, a rollback). It reloads only when its own workspace, contribution or package version changes, so open panels keep what is not saved in them. A plugin switch with one of its panels open in the main window no longer fails and rolls back; the panel comes back on the new version in place. (#512)
 - Pipelines: a slot's pane keeps its slot label as its name and messaging address. It was auto-titled from its first reply or role prompt, so panes sharing a role collided into `…-2` names, and a kickoff that says "message 畫師" pointed at a name that no longer existed (#448).
 - Pipelines (Manager mode): a Manager's `DISPATCH` reaches its worker even when the block does not parse from the Manager's screen. The router now also reads the Manager's reply text, and routes each block once. A `DISPATCH` sent before `---MANAGER-READY---` counts as READY, so the workers' held REPORTs go to the Manager instead of the whole stage waiting while it shows `running` (#539).
 - Pipelines (Manager mode): with a single commander, its workers' REPORTs no longer reach it before `---MANAGER-READY---`, and each `DISPATCH` reaches its worker once instead of twice. That commander is also the global Manager, and the global router routed its stage alongside the stage's own router (#539).
