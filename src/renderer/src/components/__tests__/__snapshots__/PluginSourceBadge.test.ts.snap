@@ -4,8 +4,8 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
 {
   "en-US": {
     "developer-unpacked": {
-      "badge": "Developer folder; its contents can change at any time",
-      "row": "Source and review Developer folder; its contents can change at any timeNot scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)Publisher: Self-declared: acme",
+      "badge": "Local folder",
+      "row": "Source and review Local folderNot scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)Loaded straight from a folder on this computer; its contents can change at any time.Publisher: Self-declared: acme",
     },
     "factory-bundled": {
       "badge": "Built into Navide",
@@ -34,8 +34,8 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
   },
   "ja-JP": {
     "developer-unpacked": {
-      "badge": "開発者フォルダー。内容はいつでも変わる可能性があります",
-      "row": "提供元と審査 開発者フォルダー。内容はいつでも変わる可能性があります未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）発行者：自称：acme",
+      "badge": "ローカルフォルダー",
+      "row": "提供元と審査 ローカルフォルダー未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）このコンピューター上のフォルダーから直接読み込まれています。内容はいつでも変わる可能性があります。発行者：自称：acme",
     },
     "factory-bundled": {
       "badge": "Navide に組み込み",
@@ -64,8 +64,8 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
   },
   "zh-TW": {
     "developer-unpacked": {
-      "badge": "開發者資料夾，內容隨時可能變動",
-      "row": "來源與審核 開發者資料夾，內容隨時可能變動未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）發佈者：自稱：acme",
+      "badge": "本機資料夾",
+      "row": "來源與審核 本機資料夾未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）直接從這台電腦上的資料夾載入，內容隨時可能變動。發佈者：自稱：acme",
     },
     "factory-bundled": {
       "badge": "Navide 內建",

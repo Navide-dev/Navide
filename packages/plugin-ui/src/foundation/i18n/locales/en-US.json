@@ -2111,6 +2111,28 @@
         "externalChangeMissing": "Developer Mode settings have no signature from Navide ({time}): they were written before Navide 0.2.28, or the signature file was removed. Navide did not apply them: turn Developer Mode on again, or consent again to the folders marked below, in Settings → Navide Plugins.",
         "folderWarning": "This Navide plugin is loaded straight from the folder you picked. Navide has not reviewed it and it is not signed. The folder can change at any time and Navide does not compare its content: you are asked again only when its permissions or backend change.",
         "folderLabel": "Folder",
+        "infoCard": {
+          "close": "Close",
+          "path": "Folder",
+          "reveal": "Reveal in folder",
+          "loadedAt": "Last loaded",
+          "notRecorded": "Not recorded (loaded before Navide 0.2.28)",
+          "trigger": {
+            "user-load": "loaded by you",
+            "manual-reload": "Reload",
+            "auto-reload": "reloaded automatically after a file change",
+            "startup": "when Navide started",
+            "developer-mode-on": "when Developer Mode was turned on"
+          },
+          "fingerprint": "Content fingerprint",
+          "copy": "Copy in full",
+          "copied": "Copied",
+          "fileCount": "{count} file(s)",
+          "computing": "Computing…",
+          "loadedBy": "Loaded by",
+          "notReviewed": "Not reviewed by Navide, not signed, not scanned.",
+          "mayChange": "Its contents can change at any time. The fingerprint only records what the folder held when it was loaded; Navide does not use it to refuse a load."
+        },
         "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
       },
       "localInstall": {
@@ -11580,7 +11602,8 @@
       "testplaceExpired": "Test build, expired {date} (kept in use)",
       "local-signed": "Local file signed by its publisher; this version was not reviewed by Navide",
       "local-unsigned": "Local file, not reviewed by Navide, unsigned",
-      "developer-unpacked": "Developer folder; its contents can change at any time",
+      "developer-unpacked": "Local folder",
+      "folderMayChange": "Loaded straight from a folder on this computer; its contents can change at any time.",
       "factory-bundled": "Built into Navide",
       "notScanned": "Not scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)",
       "publisher": "Publisher: {publisher}",

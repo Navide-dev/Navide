@@ -69,6 +69,7 @@ import {
 import { swapRegistryReceipt } from './pluginReceiptPromotion'
 import { pluginDeveloperModeEnabled } from './pluginDeveloperMode'
 import { developerPermissionsDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './pluginDeveloperModeStore'
+import { folderFingerprint } from './pluginFolderFingerprint'
 import {
   PluginDeveloperFolderMetaStore,
   type DeveloperFolderLoadedBy,
@@ -3188,8 +3189,18 @@ export function registerPluginIpc(
         activation: { ...scanned.activation, provenance: 'developer-local-unpacked' },
       })
     }
-    folderMeta.recordLoad(pluginId, consent.path, { at: new Date().toISOString(), trigger })
+    const lastLoad = { at: new Date().toISOString(), trigger }
+    folderMeta.recordLoad(pluginId, consent.path, lastLoad)
     syncFolderWatch(pluginId)
+    // A2-3 (G2): the content fingerprint of this load, taken off the load's
+    // path and added only while it is still the last load. Disclosed in the
+    // "Local folder" info card; never compared, never blocks a load.
+    void folderFingerprint(consent.path).then((taken) => {
+      if (!existsSync(pluginsRoot) || folderMeta.get(pluginId, consent.path).lastLoad?.at !== lastLoad.at) return
+      folderMeta.recordLoad(pluginId, consent.path, { ...lastLoad, ...taken })
+    }).catch((error: unknown) => {
+      console.warn(`[plugins] fingerprint of developer folder ${pluginId} was not taken: ${errorText(error)}`)
+    })
     return true
   }
 

@@ -951,3 +951,29 @@ describe('Developer Mode settings another program wrote (A2-5, G5)', () => {
     expect(call('plugins:listInstalled')).toEqual([])
   })
 })
+
+describe('the content fingerprint of a developer folder (A2-3, G2)', () => {
+  const lastLoad = () => (call('plugins:developerMode') as { folders: Array<{ lastLoad?: { at: string; fingerprint?: string; fileCount?: number } }> })
+    .folders[0]?.lastLoad
+
+  it('is taken after each load, shown with the file count, and never blocks a reload', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    await vi.waitFor(() => expect(lastLoad()?.fingerprint).toMatch(/^[0-9a-f]{64}$/))
+    const first = lastLoad()!
+    expect(first.fileCount).toBe(3)
+
+    writeFileSync(join(folder, 'frontend', 'left', 'index.html'), '<p>edited</p>')
+    expect(await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).toEqual({ reloaded: true, requiresConsent: false })
+    await vi.waitFor(() => expect(lastLoad()?.fingerprint).toMatch(/^[0-9a-f]{64}$/))
+    expect(lastLoad()!.fingerprint).not.toBe(first.fingerprint)
+    expect(lastLoad()!.fileCount).toBe(3)
+  })
+
+  it('is not taken while Developer Mode is off', async () => {
+    register()
+    expect(call('plugins:developerMode')).toEqual({ enabled: false, folders: [] })
+    expect(existsSync(join(pluginsRoot, '.navide-plugin-developer-folders-meta.json'))).toBe(false)
+  })
+})
