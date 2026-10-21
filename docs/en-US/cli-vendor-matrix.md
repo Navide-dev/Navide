@@ -7,7 +7,8 @@ do, and where those facts live in the tree.
 previous snapshot (2026-09-20, `9a630efe`, v0.2.8) was re-read field by field;
 the roster, the backend and frontend matrices and their totals are unchanged.
 New since then: the [support tiers](#support-tiers-l1l5) and the OpenCode 2.x
-reader note.
+reader note. Goose (`goose`) was added on 2026-10-21, making 16 vendors; its
+rows below were read from the tree that adds it.
 
 This file is a reading aid, not a source of truth. The tree is. Every number
 below was read out of the files named beside it, and the
@@ -24,9 +25,9 @@ that reproduce each table, so a stale entry is always cheap to catch.
 
 | Side | Count | Source of truth |
 |---|---|---|
-| Backend vendor modules | 15 | `backend/agent_team_backend/cli_vendors/<key>.py` |
-| Backend registry | 15 | `cli_vendors/registry.py` — the `_ALL` tuple, then `VENDORS` |
-| Frontend specs | 15 + `terminal` | `src/renderer/src/platform/plugin-shell/agents/index.ts` — the `ORDERED` array |
+| Backend vendor modules | 16 | `backend/agent_team_backend/cli_vendors/<key>.py` |
+| Backend registry | 16 | `cli_vendors/registry.py` — the `_ALL` tuple, then `VENDORS` |
+| Frontend specs | 16 + `terminal` | `src/renderer/src/platform/plugin-shell/agents/index.ts` — the `ORDERED` array |
 
 Runtime registries derive from `VENDORS` or `ORDERED`: install detection
 (`onboarding_deps.py`), quota polling
@@ -79,6 +80,7 @@ label does not upgrade a CLI or establish compatibility with a newer release.
 | `muse` | Muse Code (Meta) | `muse` | install script (dev.meta.ai) |
 | `droid` | Droid CLI (Factory) | `droid` | `brew install --cask droid` |
 | `mcode` | MiniMax Code | `mcode` | `npm i -g @minimax-ai/code` |
+| `goose` | Goose (AAIF) | `goose` | install script (github.com/aaif-goose) |
 
 Two keys do not match their binary: `antigravity` runs `agy`, and `cursor` runs
 `agent` (`cursor-agent` is an older symlink the installer leaves behind, and is
@@ -110,7 +112,7 @@ the tree, so a tier is re-derived, never judged:
 | `qwen` | **L5** | `qwen.py:979` *(silence)* | marker (`qwen.ts:14`) | `qwen.ts:13,16` | `install_hooks` (`qwen.py:946`) | Notification hook (`qwen_hooks.py`) | 0.22.2 (`qwen.py:966`) |
 | `antigravity` | L4 | `antigravity.py:895` | marker (`antigravity.ts:16`) | `antigravity.ts:15,19` | — | screen (`antigravity.ts:45`) | 1.2.7 (`antigravity.py:873`) |
 | `grok` | L4 | `grok.py:881` | session id pinned at launch (`grok.ts:59`) | `grok.ts:49,75` | — | trust prompt only (`grok.ts:70`) | 1.0.34 (`grok.py:858`) |
-| `kimi` | L4 | `kimi.py:667` *(silence)* | marker (`kimi.ts:23`) | `kimi.ts:14,25` | — | — | 0.39.0 (`kimi.py:652`) |
+| `kimi` | L4 | `kimi.py:684` *(`turn.ended`, silence fallback)* | marker (`kimi.ts:23`) | `kimi.ts:14,25` | — | — | 0.39.0 (`kimi.py:669`) |
 | `opencode` | L4 | `opencode.py:1161` *(1.x and 2.x schemas)* | marker (`opencode.ts:32`) | `opencode.ts:31,34` | — | — | 1.15.12 (`opencode.py:1134`) |
 | `kilo` | L4 | `kilo.py:438` | marker (`kilo.ts:33`) | `kilo.ts:32,35` | — | — | 7.4.22 (`kilo.py:404`) |
 | `pi` | L4 | `pi.py:915` *(silence)* | marker (`pi.ts:20`) | `pi.ts:19,23` | — | — | 0.84.0 (`pi.py:895`) |
@@ -118,8 +120,9 @@ the tree, so a tier is re-derived, never judged:
 | `muse` | L4 | `muse.py:820` | marker (`muse.ts:55`) | `muse.ts:49,56` | — | — | 1.3.0 (`muse.py:809`) |
 | `droid` | L4 | `droid.py:596` | marker (`droid.ts:47`) | `droid.ts:22-23` | — | — | 0.206.0 (`droid.py:575`) |
 | `aider` | L3 | `aider.py:694` | marker (`aider.ts:35`) | ❌ `supports_session_resume=False` (`aider.py:666`) | — | screen (`aider.ts:49`) | 0.86.2 (`aider.py:680`) |
+| `goose` | L4 | `goose.py:407` | marker (`goose.ts:19`) | `goose.ts:17,20` | — | screen (`goose.ts:27`) | 1.55.0 *(live, scratch home; no account switch)* |
 | `mcode` | L1 | ❌ no reader (`mcode.py:335-338`) | — | ❌ `supports_session_resume=False` (`mcode.py:339`) | — | — | 0.4.12 (`mcode.py:365`) |
-| **Total** | L5 ×4, L4 ×9, L3 ×1, L1 ×1 | 14 | 14 | 13 | 4 | 5 screen, 3 hook | 15 |
+| **Total** | L5 ×4, L4 ×10, L3 ×1, L1 ×1 | 15 | 15 | 14 | 4 | 6 screen, 3 hook | 16 |
 
 Paths are relative to `backend/agent_team_backend/cli_vendors/` (`.py`),
 `backend/agent_team_backend/` (`*_hooks.py`) and
@@ -136,11 +139,23 @@ How to read the columns:
   code or package, not exercised in a live A → B → A switch (see the
   `evidence` field comment in `base.py`). No spec in the tree carries a
   live-verified version. A local `--version` newer than this column is
-  untested by Navide.
-- ***(silence)*** marks the three readers that infer a turn's end from a quiet
+  untested by Navide. Goose has no account-switch adapter; its 1.55.0 is the
+  binary its reader, resume and awaiting pattern were recorded from in a
+  scratch home (`goose.py` module docstring), with no account involved. The
+  startup probe's untested-version note reads this column, so it never
+  appears for goose (planned for 0.2.29).
+- ***(silence)*** marks the readers that infer a turn's end from a quiet
   window instead of reading an end-of-turn record (frontend
   `turnEndInferredFromSilence: true` in `kimi.ts:22`, `pi.ts:21`,
-  `qwen.ts:15`). A long tool call can look like a finished turn there.
+  `qwen.ts:15`). A long tool call can look like a finished turn there. Kimi
+  Code writes a `turn.ended` record (0.39.0 and 2.2.0, recorded live), which
+  the reader acts on at once; the quiet window remains its fallback for older
+  wire files, which is why the flag stays set.
+- **Kimi Code vs the archived kimi-cli.** Both install a `kimi` binary. The
+  Python MoonshotAI/kimi-cli (1.x, archived) prints `kimi, version 1.52.0`;
+  Kimi Code prints a bare version. Kimi's `official_regex` names the mismatch
+  in the pane's startup probe line and points at the Kimi Code installer; the
+  launch is not refused.
 - **Turn text is validated for two vendors only.** `verifiedTurnText: true`
   is set in `claude.ts:19` and `codex.ts:21`; every other reader's turn text
   is enough for inter-CLI messaging but keeps the loose buffer scan.
@@ -152,8 +167,9 @@ How to read the columns:
   2.x's `session_v2` / `session_message` when they exist (`opencode.py:26-31`,
   `_V2_TABLES` at `opencode.py:160`). The 2.x path was built from the
   upstream source; it has not been run against a real 2.x binary.
-- **Account switching is declared for all 15.** Every spec carries an
-  `AccountSwitchSpec`, so switching does not separate the tiers.
+- **Account switching is declared for 15 of 16.** Every spec but `goose`
+  carries an `AccountSwitchSpec`; goose reads no credential at all. Switching
+  does not separate the tiers.
 
 ### ACP
 
@@ -192,7 +208,8 @@ statement, not a gap to fill in from a guess.
 | `muse` | — | ✅ | — | ✅ | ✅ | ✅ | — | — |
 | `droid` | — | — | — | ✅ | — | — | — | — |
 | `mcode` | — | — | — | ❌ *(explicit `False`)* | — | — | — | — |
-| **Total** | **10** | **11** | **10** | **13** | **12** | **5** | **4** | **3** |
+| `goose` | — | — | — | ✅ | — | — | — | — |
+| **Total** | **10** | **11** | **10** | **14** | **12** | **5** | **4** | **3** |
 
 Notes on the cells that are easy to misread:
 
@@ -247,12 +264,14 @@ Read from each `agents/<key>.ts`. These fields shape the argv Navide builds.
 | `muse` | `--disable-approval` | `resume <id>` | ✅ | — |
 | `droid` | `--auto high` | `--resume <id>` | ✅ | — |
 | `mcode` | — *(setting, not a flag)* | — *(needs a reader)* | — | — |
+| `goose` | — *(`GOOSE_MODE` setting)* | `session -r --session-id <id>` | ✅ | — |
 
-The four vendors with no bypass flag each carry a comment explaining why, so
+The five vendors with no bypass flag each carry a comment explaining why, so
 the blank is not mistaken for an oversight: `grok` has `--always-approve` but
 Navide deliberately does not pass it, `opencode`'s TUI has no such flag,
-`pi` has no permission system to bypass, and `mcode` controls permission mode
-through its settings instead of an interactive launch flag.
+`pi` has no permission system to bypass, and `mcode` and `goose` control
+permission mode through a setting (`GOOSE_MODE` for goose) instead of an
+interactive launch flag.
 
 ---
 
@@ -289,8 +308,8 @@ Backend capability matrix — presence of a field, per vendor:
 
 ```sh
 cd backend/agent_team_backend/cli_vendors
-for f in aider antigravity claude codex copilot cursor droid grok kilo kimi \
-         mcode muse opencode pi qwen; do
+for f in aider antigravity claude codex copilot cursor droid goose grok kilo \
+         kimi mcode muse opencode pi qwen; do
   printf "%-12s" "$f"
   for cap in mcp_wiring skills_supported fetch_usage supports_model \
              supports_effort push_channel supports_session_resume install_dep; do

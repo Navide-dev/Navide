@@ -985,6 +985,13 @@ computed, a preparation failure, an install of the same id in progress, a
 failed commit (`ACTION_FAILED`, audited as `error`), no answer — files the
 `plugin-update` request exactly as before (fail closed). The Host's refusal is
 `{ok: false, error_code: "APPROVAL_REQUIRED", error, pluginId, pluginVersion}`.
+Since live activation the update also switches at once; when the switch fails
+the old version runs again, the update stays staged with a "switch failed" row
+in the main window, the Host answers `{ok: true, updated: true, switched:
+false, switchError, pluginId, fromVersion, pluginVersion}`, and the backend
+answers the agent `{ok: false, status: "staged", applied: false, error_code:
+"SWITCH_FAILED", error, pluginId, fromVersion, pluginVersion}` (audited as
+`error` with `ACTION_FAILED`), without the Host's text and without filing a request.
 
 ### 4.4 Chunked transfer of results and arguments
 

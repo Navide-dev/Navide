@@ -207,7 +207,7 @@ describe('ControlPane manifest-driven plugin placement', () => {
     await tab.trigger('click')
     await wrapper.vm.$nextTick()
     expect(wrapper.findComponent({ name: 'GitPluginHostSlot' }).exists()).toBe(true)
-    expect(wrapper.get('[data-legacy-recovery-label]').text()).toBe('Legacy recovery')
+    expect(wrapper.get('[data-legacy-recovery-label]').text()).toBe('label.legacy-recovery')
     wrapper.unmount()
   })
 

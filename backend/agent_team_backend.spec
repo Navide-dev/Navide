@@ -97,6 +97,7 @@ a = Analysis(
         'agent_team_backend.cli_vendors.copilot',
         'agent_team_backend.cli_vendors.cursor',
         'agent_team_backend.cli_vendors.droid',
+        'agent_team_backend.cli_vendors.goose',
         'agent_team_backend.cli_vendors.grok',
         'agent_team_backend.cli_vendors.kilo',
         'agent_team_backend.cli_vendors.kimi',

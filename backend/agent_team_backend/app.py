@@ -484,20 +484,20 @@ def has_main_window() -> bool:
     return any(not s.dead and is_main_window(s) for s in list(_SESSIONS))
 
 
-def live_main_window_ids() -> set[str]:
-    """The page-load ids (``ui.invoke.ready`` window_id) of the main windows connected now."""
-    return {
-        s.window_id for s in list(_SESSIONS)
-        if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
-    }
-
-
 def main_window_sessions() -> list["Session"]:
     """The main windows connected now that announced a page-load id."""
     return [
         s for s in list(_SESSIONS)
         if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
     ]
+
+
+def live_main_window_ids() -> set[str]:
+    """The page-load ids (``ui.invoke.ready`` window_id) of the main windows connected now."""
+    return {
+        s.window_id for s in list(_SESSIONS)
+        if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
+    }
 
 
 async def unicast_host(event: dict[str, Any]) -> bool:
@@ -666,6 +666,12 @@ class Session:
         # A main window's page-load id (`ui.invoke.ready` window_id): stays the
         # same across reconnects, changes when the window reloads (B2-c).
         self.window_id = ""
+        # The workspaces a main window holds (`ui.invoke.ready` workspaces):
+        # the one it opened with plus the ones its sidebar adopted, re-announced
+        # whenever that list changes. Read by the MCP self-close checks, which
+        # count a window holding the caller's workspace as the caller's own
+        # even when none of that workspace's panes sit in it.
+        self.held_workspaces: tuple[str, ...] = ()
         # Set by `window.prove` answering this connection's challenge (see
         # navide_window_proof_matches): a Navide window, as opposed to any
         # other client holding the token. ui_bus_ready is self-declared.

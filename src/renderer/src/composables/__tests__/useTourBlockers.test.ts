@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { defineComponent, h, nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
+import { i18n } from '@navide/plugin-ui/foundation'
 import { blockTourWhile, tourBlocked } from '../useTourBlockers'
 import QuestionAlert from '../../components/QuestionAlert.vue'
 
@@ -49,7 +50,11 @@ describe('tour blockers', () => {
 
   it('is blocked by a CLI question while it is on screen', async () => {
     const question = { prompt: 'Which?', type: 'choice' as const, options: ['A'] }
-    const w = mount(QuestionAlert, { props: { visible: true, questions: [question] }, attachTo: document.body })
+    const w = mount(QuestionAlert, {
+      props: { visible: true, questions: [question] },
+      attachTo: document.body,
+      global: { plugins: [i18n] },
+    })
     expect(tourBlocked.value).toBe(true)
     await w.setProps({ visible: false })
     expect(tourBlocked.value).toBe(false)
