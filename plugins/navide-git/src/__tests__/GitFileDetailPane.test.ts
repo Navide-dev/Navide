@@ -57,7 +57,7 @@ describe('GitFileDetailPane close preparation', () => {
     expect(wrapper.vm.getCloseState()).toBe('busy')
     expect(wrapper.findComponent({ name: 'DiffPane' }).exists()).toBe(true)
 
-    await wrapper.findAll('button.detail-open').find((button) => button.text() === 'History')!.trigger('click')
+    await wrapper.findAll('button.detail-open').find((button) => button.text() === 'label.history')!.trigger('click')
     expect(wrapper.findComponent({ name: 'DiffPane' }).exists()).toBe(true)
     expect(wrapper.find('.detail-scroll').exists()).toBe(false)
 
@@ -94,7 +94,7 @@ describe('GitFileDetailPane close preparation', () => {
     expect(wrapper.vm.getCloseState()).toBe('busy')
     expect(wrapper.get('input.dp-check').attributes('disabled')).toBeDefined()
     expect(wrapper.get('button.hk-btn').attributes('disabled')).toBeDefined()
-    expect(wrapper.findAll('button.detail-open').find((button) => button.text() === 'History')!.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('button.detail-open').find((button) => button.text() === 'label.history')!.attributes('disabled')).toBeDefined()
 
     wrapper.vm.setClosePrepared(false)
     await nextTick()

@@ -855,6 +855,9 @@ export type PluginAgentActionAnswer =
   | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string; disabled: PluginDisabledBy }
   /** update (O1): carried out at once; the disclosure did not change. */
   | { ok: true; updated: true; pluginId: string; fromVersion: string; pluginVersion: string }
+  /** update (O1): staged, but switching to it failed; `fromVersion` still runs
+   *  and the main window offers to apply it. */
+  | { ok: true; updated: true; switched: false; switchError: string; pluginId: string; fromVersion: string; pluginVersion: string }
   /** update (O1): something changed or could not be compared; the backend files a plugin-update request. */
   | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string }
 export const PLUGIN_APPROVAL_TTL_MS = 15 * 60_000

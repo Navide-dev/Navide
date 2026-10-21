@@ -29,7 +29,7 @@ One **item** is one logical row in one **scope**. Scopes are exactly:
 | `mcp` | Navide-owned MCP server records (never the native reflection) |
 | `skills` | skill enable/route state (content is Phase 4, not v1) |
 | `memory` | user-scope instruction-file records (never project scope) |
-| `credentials` | portable CLI credentials the user pasted in Settings → Accounts (see below) |
+| `credentials` | retired: credentials and keys never leave the user's machine (see below) |
 | `skill-files` | file manifests of skills too large for one `skills` record (see Blobs) |
 
 `skill-files` is not a switch of its own: it rides with `skills`. It is a
@@ -38,6 +38,17 @@ client that predates blobs stores a `skills` record as `{enabled, targets}`
 and pushes that shape back, so a manifest added as a field would be silently
 erased by the first old client that saw it. Old clients never pull
 `skill-files`, so they keep syncing settings only and cannot damage anything.
+
+**Account credentials and keys never leave the user's machine** (policy of
+2026-10-21). MCP records, when their sync is on, still travel as ciphertext
+sealed on the device; the server has no key to open them. The
+`credentials` scope name stays in the protocol only so rows an older desktop
+already pushed can be pulled and purged: no client engine registers an adapter
+for it or names it in a push (`sync_engine.LOCAL_ONLY_SCOPES`), a switch an
+older build left on reads as off, `share.publish` drops it and empties MCP
+env/header values from any bundle it is handed, and the server refuses every
+`sync.push` to it with `SCOPE_RETIRED` whatever its deploy settings. The notes
+below describe what clients before 0.2.28 did and are kept for that purge.
 
 The `credentials` scope is, to the server, indistinguishable from the other
 four: same tables, same handlers, same ciphertext-only `body`. What differs is

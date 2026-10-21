@@ -599,7 +599,69 @@
     "clean-changed": "Untracked files changed since the preview. Nothing was deleted — review and try again.",
     "issue-back": "← Back",
     "issue-comment": "Comment",
-    "issue-create": "Create"
+    "issue-create": "Create",
+    "pane": {
+      "no-changes-to-display": "No changes to display",
+      "no-ignored-files": "No ignored files",
+      "drag-to-resize": "Drag to resize",
+      "commit-files": "Files ({count})",
+      "no-draft": "No draft",
+      "issues-open-count": "{count} open",
+      "issue-host-unsupported": "No supported issue host detected for this repo (needs a GitHub or GitLab origin remote).",
+      "issue-cli-missing": "{cli} is not installed.",
+      "issue-auth-before": "Not authenticated. Run",
+      "issue-auth-after": "in a terminal, then refresh.",
+      "issue-dispatch": "Dispatch to Agent",
+      "issue-dispatch-title": "Send this issue to a running agent",
+      "issue-no-running-agent": "No running agent",
+      "issue-handoff-handling": "Being handled by agent",
+      "issue-handoff-closed": "Agent pane closed",
+      "ignore-target": {
+        "project": ".gitignore (project root)",
+        "nested": ".gitignore (current folder)",
+        "local": ".git/info/exclude (local only)",
+        "global": "Global .gitignore"
+      }
+    },
+    "conflict": {
+      "progress": "{resolved} / {total} resolved",
+      "apply-title": "Write and stage this file",
+      "apply-blocked": "Resolve all conflicts first",
+      "apply": "Apply & Stage",
+      "ours-default": "HEAD (ours)",
+      "versus": "vs",
+      "theirs-default": "theirs",
+      "empty-side": "(empty)",
+      "accepted-ours": "Accepted Ours",
+      "accepted-theirs": "Accepted Theirs",
+      "accepted-both": "Accepted Both",
+      "manually-edited": "Manually edited",
+      "undo": "Undo"
+    },
+    "diff": {
+      "badge-staged": "STAGED",
+      "badge-working-tree": "WORKING TREE",
+      "open-in-editor": "Open file in editor",
+      "prev-change": "Previous change (↑)",
+      "next-change": "Next change (↓)",
+      "reload": "Reload diff",
+      "not-loaded": "Diff not loaded",
+      "stage-selected": "Stage Selected ({count})"
+    },
+    "branch-diff": {
+      "working-changes": "Working Changes",
+      "file-count": "{count} file | {count} files",
+      "expand-all": "Expand All",
+      "collapse-all": "Collapse All",
+      "no-changes-between": "No changes between {base} and {compare}",
+      "no-uncommitted": "No uncommitted changes",
+      "hidden-lines": "{count} hidden line | {count} hidden lines"
+    },
+    "file-detail": {
+      "no-history": "No file history.",
+      "no-changed-lines": "No changed lines.",
+      "no-blame": "No blame information."
+    }
   },
   "pane": {
     "git": {
@@ -828,8 +890,10 @@
           "conflict": "Conflict detected. Please reload and try again.",
           "internal-error": "An internal backend error occurred.",
           "workspace-scope-violation": "Attempted to access files outside workspace scope."
-        }
-      }
+        },
+        "rename-plan": "Rename plan"
+      },
+      "section-delete-confirm": "Delete the section \"{anchor}\" from the document?"
     },
     "terminal": {
       "readback-on-tooltip": "Read aloud is on: spoken when this pane finishes or needs an answer — click to turn off",
@@ -1292,7 +1356,8 @@
       "unstage-folder": "Unstage folder",
       "discard-folder": "Discard folder",
       "file-history-blame": "File history + blame",
-      "open-diff-in-editor": "Open diff in editor"
+      "open-diff-in-editor": "Open diff in editor",
+    "resume-from-stage": "▶ Resume from Stage {n}"
   },
   "share": {
     "notice": {
@@ -1845,6 +1910,8 @@
       },
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
+      "activationFailed": "{plugin} was installed but could not be activated: {reason}. Restart or discard it in the list below.",
+      "switchNow": "Approving switches {id} to {version} right away. Its open views reload, and anything not saved in them is lost. The switch is recorded in the announcements, where you can go back in one click.",
       "restartPlugin": "Restart Navide plugin",
       "disable": "Disable",
       "enable": "Enable",
@@ -2006,7 +2073,7 @@
         },
         "title": "Developer Mode",
         "switch": "Turn on Developer Mode",
-        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded.",
+        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded. Turning it off unloads every Navide plugin loaded from a folder and drops a folder you picked but did not consent to; the folders you consented to stay listed, load again when you turn it back on, and can be removed here.",
         "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
         "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
         "reminderClose": "Got it",
@@ -2965,8 +3032,8 @@
           "h6": "Sync (keeping several machines the same)",
           "p11": "The first block on Settings ▸ Navide Cloud is called Sync. <strong>It is not a separate tab</strong> — it is the top section of this one page. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
           "sync": {
-            "scopes": "<strong>Six rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
-            "credentials": "<em>Memory</em>, <em>Credentials &amp; keys</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory or Credentials switch an older build left on can still be turned off.",
+            "scopes": "<strong>Five rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
+            "credentials": "<em>Memory</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory switch an older build left on can still be turned off. <em>Credentials &amp; keys</em> has no row at all: account credentials and keys never leave this machine. A Credentials switch an older build left on is treated as off. MCP settings, when their sync is on, are encrypted on this machine before they are uploaded, and the server has no key to decrypt them.",
             "states": "Two states are spelled out under the block: <em>not connected</em> (scopes you turned on catch up once the link is back) and <em>this device has no sync key yet</em> (nothing is uploaded until it has one). There is also a <em>Sync now</em> button, enabled only while connected.",
             "key": "<strong>The sync key is shown as the first 8 characters of its id</strong>, never as the key itself. <em>Rotate key</em> takes <strong>two clicks</strong>: the first turns it into <em>Rotate now</em> and adds a <em>Cancel</em> beside it. Rotating retires the current key, re-seals every synced record under a new one, and hands the new key to your other devices the next time they exchange keys — it is the move for a key you think has leaked.",
             "legacy": "<em>Adopt for this account</em> appears only when this device holds a sync key from before accounts were bound <em>and</em> this account has no key yet. It is a one-time choice: without adopting it you cannot read what was synced under that key, and minting a fresh key instead would leave those records permanently unreadable.",
@@ -3290,7 +3357,7 @@
               },
               "apply": {
                 "label": "Apply & Stage",
-                "text": "Only clickable once every block is settled; it writes the result back and stages the file in one go. This button is in English regardless of the selected interface language — that is what the product prints."
+                "text": "Only clickable once every block is settled; it writes the result back and stages the file in one go."
               }
             }
           },
@@ -3969,7 +4036,8 @@
             "usage": "Quota",
             "multi": "Multi-account",
             "signIn": "Sign-in command",
-            "signInInside": "Inside the CLI"
+            "signInInside": "Inside the CLI",
+            "flagNoteGoose": "None — Goose approves every tool by itself by default (GOOSE_MODE=auto); set GOOSE_MODE to approve or smart_approve to be asked. Navide's Guard does not cover Goose yet."
           },
           "note": "\"Quota\" = Navide can read the remaining usage (chapter 6). \"Multi-account\" = several sign-ins can be kept in Settings and switched (chapter 5). The four CLIs without a permission-bypass flag (Grok CLI, OpenCode, Pi, MiniMax Code) simply have no such flag — it is not something Navide left out. \"Sign-in command\" = what Navide actually runs when you press Sign in under Settings ▸ Accounts; the CLIs marked \"Inside the CLI\" declare no separate sign-in command, so the button launches them as usual and signing in happens on their own screen.",
           "callout": {
@@ -6720,7 +6788,8 @@
       "catalog-search": "Search MCP servers by name",
       "catalog-hint": "This catalog lists only <strong>\"Orchestrator context-reading\"</strong> MCPs — tools that read workspace / docs / external service data and inject it into kickoff prompts to ground agent knowledge. Execution actions (tests, browser automation, etc.) are handled by the CLI agents themselves.",
       "catalog-requires-env": "Requires env vars: {vars}",
-      "catalog-empty": "No matching MCP servers found"
+      "catalog-empty": "No matching MCP servers found",
+      "header-name-placeholder": "Header"
     },
     "credentials": {
       "title": "Credentials & keys",
@@ -7085,7 +7154,6 @@
       "scope-hint-skills": "Which skills are on and which CLIs each one goes to, plus the files of skills created in Navide (large ones travel as encrypted blobs). Skills you put in the folder yourself sync their settings only.",
       "scope-hint-memory": "Global instruction files such as ~/.claude/CLAUDE.md. Files inside a project stay with git.",
       "scope-credentials": "Credentials",
-      "scope-hint-credentials": "Portable CLI credentials you pasted in Accounts. Encrypted on this device before they leave; removing one here never removes it from the cloud or your other devices.",
       "sealed": "(credential — not shown)",
       "key-id": "Sync key {id}",
       "rotate": "Rotate key",
@@ -8696,7 +8764,47 @@
       "backend-stop": "Stop",
       "pipeline-pill-stage": "Stage {current} / {total}",
       "pipeline-pill-completed": "completed",
-      "pipeline-pill-aborted": "aborted"
+      "pipeline-pill-aborted": "aborted",
+    "legacy-recovery": "Legacy recovery",
+    "pipeline-runs-done": "{count} done",
+    "resume-existing-pipeline": "↻ Resume existing pipeline",
+    "resume-stages-done": "{done}/{total} stages done",
+    "focus-pane": "Focus pane",
+    "manager-badge": "🎯 Mgr",
+    "docked": "Docked",
+    "pane-origin-stage": "stage {id}",
+    "pane-origin-manual": "manual",
+    "session-id-tooltip": "CLI session id — used to resume this agent's memory on restart",
+    "role-system-prompt": "{role} system prompt",
+    "project-completed": "✓ Project completed",
+    "all-stages-done": "All {count} stages done · {time}",
+    "refresh-ollama-tooltip": "Refresh Ollama health + model list",
+    "retry-connection-tooltip": "Retry connection",
+    "minimized-sidebar": "sidebar",
+    "loop-badge": "∞ Loop",
+    "review-model-placeholder": "Model name (e.g. llama-3.3-70b)",
+    "review-working-changes": "Working Changes",
+    "current-branch-suffix": "{branch} (current)",
+    "review-dismissed": "Dismissed",
+    "review-general-finding": "(general)",
+    "review-ask-ai-fix": "Ask AI to fix",
+    "review-restore-finding": "Restore",
+    "review-no-findings": "No findings — looks good!",
+    "review-no-findings-filtered": "No findings to show.",
+    "question-is-asking": "is asking",
+    "question-dismiss-tooltip": "Dismiss without answering",
+    "question-auto-answering": "🤖 Auto-answering via LLM…",
+    "question-auto-answer": "🤖 Auto-answer: {text}",
+    "question-auto-mode": "🤖 Auto mode — submitting automatically",
+    "question-answer-all": "Answer all {count} question(s) to send.",
+    "question-send-hint": "{key} to send",
+    "question-send-all": "Send all {count} answers",
+    "question-send-one": "Send answer",
+    "console": "Console",
+    "drag-resize-log": "Drag to resize log panel",
+    "filter-by-type": "Filter by type",
+    "all-stages-finished": "All {count} stages finished successfully",
+    "region-unavailable": "{title} unavailable"
   },
   "layout": {
     "expand": "Expand panel",
@@ -9264,8 +9372,13 @@
     "info": {
       "runtime": "Runtime",
       "paths": "Paths",
-      "open": "Open"
-    }
+      "open": "Open",
+      "app": "App",
+      "backend": "Backend",
+      "started": "Started",
+      "shell": "Shell"
+    },
+    "backend-status": "backend {status}"
   },
   "orphans": {
     "title": "Leftover CLI processes",
@@ -9737,7 +9850,8 @@
     "run-by-hand": "You can also run this yourself in a terminal: {cmd}",
     "installed-not-detected": "The command finished, but {label} is still not detected. It may need a new shell session, or it landed outside PATH.",
     "installed-still-outdated": "The install finished, but the {label} found on PATH is still the old {version}. The new one may sit behind the system copy — move its directory ahead on PATH, then re-detect. A corrected PATH order takes effect on re-detect, no restart needed.",
-    "installed-still-outdated-python": "The install finished, but the {label} found on PATH is still the old {version}. Fix it either way, then re-detect: run brew link --overwrite python{'@'}3.x (with the version you installed), or add eval \"$(/opt/homebrew/bin/brew shellenv)\" to ~/.zprofile so Homebrew comes before the system copy."
+    "installed-still-outdated-python": "The install finished, but the {label} found on PATH is still the old {version}. Fix it either way, then re-detect: run brew link --overwrite python{'@'}3.x (with the version you installed), or add eval \"$(/opt/homebrew/bin/brew shellenv)\" to ~/.zprofile so Homebrew comes before the system copy.",
+    "custom-model-placeholder": "e.g. codellama:7b, gemma3:4b"
   },
   "executions": {
     "last-scan": "Last scan {time}",
@@ -10606,7 +10720,7 @@
       "title": "What Guard does",
       "hint": "Each action is graded, then handled by where the request came from.",
       "source": "Request source",
-      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl | sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
+      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl {'|'} sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
       "row": {
         "local": "You, on this computer",
         "relay": "Approved from a chat app",
@@ -11145,7 +11259,9 @@
       "ledger-open-failed": "Could not open the ledger plan",
       "pending-catch-up": "A missed run is waiting for this workspace to be opened.",
       "system-pane": "✦ system",
-      "system-pane-title": "Opened by self-evolution"
+      "system-pane-title": "Opened by self-evolution",
+      "run-tokens": "{tokens} token",
+      "run-pane": "pane “{name}”"
     },
     "field": {
       "time": "Time",
@@ -11180,7 +11296,8 @@
       "rules-hide": "Hide",
       "extra-placeholder": "Extra instructions (this workspace only)…",
       "ledger": "Ledger",
-      "ledger-placeholder": "Plan path, e.g. .agent-team/plans/xxx.html; empty = none"
+      "ledger-placeholder": "Plan path, e.g. .agent-team/plans/xxx.html; empty = none",
+      "effort-option": "effort: {effort}"
     },
     "error": {
       "at": "Use HH:MM",
@@ -11202,7 +11319,8 @@
       "date": "Date",
       "result": "Result",
       "fixes": "Fixes",
-      "proposals": "Proposals"
+      "proposals": "Proposals",
+      "tokens": "Tokens"
     },
     "reason": {
       "busy": "A run is already in progress for this workspace",
@@ -11443,7 +11561,12 @@
       "publisher": "Publisher: {publisher}",
       "selfDeclared": "Self-declared: {publisher}",
       "localSignedBy": "Signed by developer {publisher} (vetted by Navide); this version was not reviewed by Navide",
-      "signatureRevoked": "Signature no longer valid"
+      "signatureRevoked": "Signature no longer valid",
+      "unsignedNote": "The author cannot be confirmed; the file may have been changed.",
+      "showDetails": "Show the source, SHA-256 and install time",
+      "fileDigest": "SHA-256 of the installed file: {digest}",
+      "contentDigest": "SHA-256 of the installed contents: {digest}",
+      "installedAt": "Installed: {time}"
     },
     "diff": {
       "heading": "What this update changes",
@@ -11498,10 +11621,11 @@
       "system": "{key}"
     },
     "scanHeading": "What the publish-time scan found",
+    "scanHeadingLocal": "What Navide's scan of this file found",
     "declaredHeading": "What this Navide plugin declares",
     "registryHeading": "Navide Registry records (unsigned)",
     "provenance": {
-      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and was not scanned by Navide.",
+      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and Navide has not reviewed it.",
       "unverified": "Provided by the Navide Registry, not yet verified; before installing, Navide verifies the signature and compares it with the package.",
       "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid.",
       "verifiedNoScan": "Verified: the disclosure matches the downloaded package. This version has no system scan."
@@ -11509,7 +11633,9 @@
     "noDisclosure": "This version was published without disclosure data.",
     "signedByRegistry": "The scan was run and signed by the Navide Registry.",
     "scannedByRegistry": "The scan was run by the Navide Registry.",
+    "scannedLocally": "The scan informs this card; it never decides the install.",
     "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
+    "limitsWithoutScanLocal": "Navide did not scan this file; the above is only this Navide plugin's own declaration.",
     "viewNetwork": "A Navide plugin's views can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "viewNetworkIfViews": "If this Navide plugin has views, they can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "summary": {
@@ -11560,7 +11686,8 @@
       },
       "coverage": {
         "base": "Scanned by the Navide Registry at publish (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list.",
-        "incomplete": "Scan incomplete: {reasons}."
+        "incomplete": "Scan incomplete: {reasons}.",
+        "local": "Scanned by Navide on this computer (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list."
       },
       "notFound": {
         "shell": "The static scan found no commands.",
@@ -11568,7 +11695,8 @@
         "files": "The static scan found no file paths.",
         "dynamicCode": "The static scan found no code built at run time."
       },
-      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration."
+      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration.",
+      "noScanLocal": "Navide did not scan this file; below is only this Navide plugin's own declaration."
     },
     "incompleteReason": {
       "timedOut": "the scan ran out of time",
@@ -11632,6 +11760,7 @@
   "plugin-staged": {
     "notice": {
       "title": "The Navide plugin {plugin} has version {staged} waiting to be applied; version {active} is running.",
+      "failedTitle": "Switching {plugin} to {staged} failed: {reason}. Version {active} runs again.",
       "detail": "It was installed without Restart, or set aside by a rollback. Apply it to switch now, as Restart does.",
       "applied": "{plugin} now runs version {version}.",
       "stale": "Nothing was applied: the Navide plugin was changed since.",
@@ -11639,6 +11768,23 @@
     },
     "button": {
       "apply": "Apply now"
+    }
+  },
+  "plugin-switch": {
+    "notice": {
+      "title": "{plugin} switched from {from} to {to}",
+      "titleAgent": "An automatic update started by {caller} switched {plugin} from {from} to {to}",
+      "detail": "Switched at {time} ({source}). Its open views reloaded.",
+      "reverted": "{plugin} is back to version {version}.",
+      "stale": "Nothing was changed: the Navide plugin was changed since, or no earlier version is kept.",
+      "failed": "Could not go back: {error}"
+    },
+    "button": {
+      "back": "Back to {version}"
+    },
+    "source": {
+      "marketplace": "Navide Marketplace",
+      "local": "local file"
     }
   },
   "testplace": {

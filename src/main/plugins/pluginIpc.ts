@@ -98,7 +98,7 @@ import type {
   PluginPackageRestartTransaction,
 } from './frontendPluginManager'
 import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManager'
-import { answerPluginAgentAction, type PluginAgentActionNotice } from './pluginAgentAction'
+import { answerPluginAgentAction, type PluginAgentActionNotice, type PluginAgentRequester } from './pluginAgentAction'
 import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
@@ -129,7 +129,7 @@ import {
 } from '../../shared/pluginDisclosure'
 import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
 import type { LocalPackageQueryReport } from '../../shared/pluginAgentTools'
-import { pluginSourceFromLegacyProvenance, type PluginSource } from '../../shared/pluginSource'
+import { pluginSourceFromLegacyProvenance, type LocalInstallDetails, type PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
@@ -256,6 +256,8 @@ interface InstalledSummary {
   /** Decision d5, a local file only: Navide blocked the `.vsix` it was
    * installed from since; `reason` null when the list names none. */
   digestBlock?: { reason: LocalBlockReason | null }
+  /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+  localInstall?: LocalInstallDetails
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -585,6 +587,26 @@ export interface PluginIpcOptions {
    *  their private data in `<root>/<pluginId>/`. Removal deletes that directory
    *  only when the caller passes `nativeBackendData: 'delete'`. */
   nativeBackendDataRoot?: string
+  /** L3: a restart switched an installed plugin from one version to another
+   *  (an approved update taking effect, or Restart). The main window records
+   *  every switch with a one-click way back. */
+  onPackageSwitched?: (notice: {
+    pluginId: string
+    fromVersion: string
+    toVersion: string
+    source: 'marketplace' | 'local-unsigned'
+    at: number
+    /** Set when an agent's automatic update (O1) drove the switch. */
+    agent?: PluginAgentRequester
+  }) => void
+  /** O1: an agent's automatic update was staged but its switch failed; the
+   *  old version runs again and the main window keeps a row to apply it. */
+  onPackageSwitchFailed?: (notice: {
+    pluginId: string
+    activeVersion: string
+    stagedVersion: string
+    reason: string
+  }) => void
   factoryPackageIds?: readonly string[]
   /** Why rolling this id back to its factory package is refused right now, or
    *  undefined when it is allowed. Checked before a rollback is offered or its
@@ -881,6 +903,22 @@ export function registerPluginIpc(
       return null
     }
   }
+  // DX 9.4 A1: what the user consented to for a local file, and when.
+  const localInstallFor = (summary: { id: string; packageVersion?: string }): LocalInstallDetails | null => {
+    if (!summary.packageVersion) return null
+    const path = localTrustRecordFor(pluginsRoot, summary.id, summary.packageVersion)
+    if (!path) return null
+    try {
+      const record = readLocalTrustRecord(path)
+      return {
+        ...(record.artifactDigest ? { fileDigest: record.artifactDigest } : {}),
+        contentDigest: record.contentDigest,
+        installedAt: record.consentedAt,
+      }
+    } catch {
+      return null
+    }
+  }
   const sourceFields = (summary: {
     id: string
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
@@ -892,16 +930,19 @@ export function registerPluginIpc(
     testplaceVia?: TestplaceJoinVia
     localSignature?: 'verified' | 'revoked'
     digestBlock?: { reason: LocalBlockReason | null }
+    localInstall?: LocalInstallDetails
   } => {
     const source = installedSource(summary, activeRegistryChannel(summary))
     if (!source) return {}
     if (source === 'local-unsigned') {
       const signature = recordedLocalSignature(summary)
       const block = localDigestBlockFor(summary)
+      const install = localInstallFor(summary)
       return {
         source,
         ...(signature ? { localSignature: signature } : {}),
         ...(block ? { digestBlock: { reason: block.reason } } : {}),
+        ...(install ? { localInstall: install } : {}),
       }
     }
     const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined
@@ -2528,7 +2569,7 @@ export function registerPluginIpc(
   }
   ipcMain.handle('plugins:commitInstall', async (event, args: CommitInstallArgs) => {
     assertAuthorized(event)
-    return commitRegistryInstall(args)
+    return activateIfFirstInstall(await commitRegistryInstall(args))
   })
 
   // DX report A1 (card K3): install a `.vsix` the user picked in this window.
@@ -2721,6 +2762,7 @@ export function registerPluginIpc(
       activeTransactions.add(id)
       preparedLocal.delete(id)
       const candidateRecord = localTrustRecordPath(pluginsRoot, id, 'candidate')
+      let committed: { id: string; requires: string[]; restartRequired: true }
       try {
         const staged = stageInstallCandidate(pkg, pluginsRoot)
         const scanned = loadPluginDir(staged.candidateDir)
@@ -2794,7 +2836,7 @@ export function registerPluginIpc(
         lifecycleSelector.stageCandidate(id, candidate, {
           candidateGrant: { selection: candidate, grant: candidateGrant },
         })
-        return { id, requires: scanned.packageSummary.requires, restartRequired: true }
+        committed = { id, requires: scanned.packageSummary.requires, restartRequired: true }
       } catch (error) {
         try {
           forgetLocalTrustRecords(pluginsRoot, id, ['candidate'])
@@ -2805,6 +2847,7 @@ export function registerPluginIpc(
       } finally {
         activeTransactions.delete(id)
       }
+      return activateIfFirstInstall(committed)
     }
   )
 
@@ -2956,7 +2999,14 @@ export function registerPluginIpc(
       developerMode.setEnabled(enabled)
       manager.recordDeveloperModeChange(enabled, hostAppVersion())
       if (!developerModeOn()) {
-        for (const folder of developerMode.folders()) await unloadDeveloperFolder(folder.pluginId)
+        try {
+          for (const folder of developerMode.folders()) await unloadDeveloperFolder(folder.pluginId)
+        } finally {
+          // G4: a folder chosen but not yet consented to does not outlive the
+          // switch, even when an unload fails; turning it on again means
+          // choosing the folder again.
+          preparedFolders.clear()
+        }
       } else {
         await loadDeveloperFolders()
       }
@@ -3350,12 +3400,71 @@ export function registerPluginIpc(
 
   ipcMain.handle('plugins:restart', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
-    return restartStagedCandidate(assertPluginRemovalTarget(pluginsRoot, args?.id))
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    // L1: a first install is active once approved, so a Restart that still
+    // follows the commit (an older flow, a second click) has nothing to do.
+    const selected = lifecycleSelector.read(id)
+    if (selected?.active && !selected.candidate && !selected.activation && !activeTransactions.has(id)) {
+      return { id, packageVersion: selected.active.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
+    }
+    return restartStagedCandidate(id)
   })
+
+  /** A first install staged and not yet promoted: a candidate with no active
+   * package, no activation in progress and nothing loaded under its id (a
+   * factory rollback also leaves only a candidate; the bundled package runs). */
+  function isStagedFirstInstall(
+    record: ReturnType<PluginActivationSelector['read']>,
+  ): record is NonNullable<ReturnType<PluginActivationSelector['read']>> & { candidate: PluginPackageSelection } {
+    if (!record?.candidate || record.active || record.activation) return false
+    return !manager.getDescriptor(record.pluginId) &&
+      !manager.listInstalledPackages().some((pkg) => pkg.id === record.pluginId)
+  }
+
+  /** L1: a first install takes effect when the user approves it, through the
+   * same cutover Restart runs; nothing runs under the id yet, so nothing is
+   * drained. A native backend still asks for its own consent before it
+   * starts. One that cannot be activated stays staged (Restart and Discard
+   * remain) and the answer says why. An update is left for Restart. */
+  async function activateIfFirstInstall<T extends { id: string }>(
+    committed: T,
+  ): Promise<T | (T & { restartRequired: false; activatedVersion: string }) | (T & { activationError: string })> {
+    if (!isStagedFirstInstall(lifecycleSelector.read(committed.id))) return committed
+    try {
+      const activated = await restartStagedCandidate(committed.id)
+      return { ...committed, restartRequired: false, activatedVersion: activated.packageVersion }
+    } catch (error) {
+      return { ...committed, activationError: errorText(error) }
+    }
+  }
+
+  /** L3: record a version switch for the main window. A first install is not
+   * a switch, and a failure to report never undoes the switch. */
+  function reportSwitch(
+    id: string,
+    fromVersion: string | undefined,
+    toVersion: string,
+    local: boolean,
+    agent?: PluginAgentRequester,
+  ): void {
+    if (!fromVersion || fromVersion === toVersion) return
+    try {
+      options.onPackageSwitched?.({
+        pluginId: id,
+        fromVersion,
+        toVersion,
+        source: local ? 'local-unsigned' : 'marketplace',
+        at: Date.now(),
+        ...(agent ? { agent } : {}),
+      })
+    } catch (error) {
+      console.warn(`[plugins] version switch of ${id} was not reported: ${errorText(error)}`)
+    }
+  }
 
   /** Promote the staged candidate of `id`: what the Restart button does, and
    * what a launch does for a first install the user never restarted. */
-  async function restartStagedCandidate(id: string) {
+  async function restartStagedCandidate(id: string, trigger: { agent?: PluginAgentRequester } = {}) {
     assertNoDeveloperFolder(id)
     if (activeTransactions.has(id)) {
       throw new Error(`plugin transaction already in progress for ${id}`)
@@ -3605,6 +3714,7 @@ export function registerPluginIpc(
         if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
         if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
+        reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate, trigger.agent)
         return {
           id,
           packageVersion: selected.active!.packageVersion,
@@ -3617,6 +3727,7 @@ export function registerPluginIpc(
       if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
       if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
+      reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate, trigger.agent)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
       // A failed data move back is reported with the restart's own error,
@@ -3771,10 +3882,7 @@ export function registerPluginIpc(
   async function activateStagedFirstInstalls(): Promise<Array<{ pluginId: string; version: string; reason: string }>> {
     const failures: Array<{ pluginId: string; version: string; reason: string }> = []
     for (const record of lifecycleSelector.list()) {
-      if (!record.candidate || record.active || record.activation) continue
-      // A factory rollback also leaves only a candidate; the bundled package runs.
-      if (manager.getDescriptor(record.pluginId) ||
-          manager.listInstalledPackages().some((pkg) => pkg.id === record.pluginId)) continue
+      if (!isStagedFirstInstall(record)) continue
       try {
         await restartStagedCandidate(record.pluginId)
       } catch (error) {
@@ -4424,8 +4532,32 @@ export function registerPluginIpc(
           prepared: summary,
         }
       },
-      commitUpdate: async (pluginId) => {
+      commitUpdate: async (pluginId, requester) => {
         await commitRegistryInstall({ id: pluginId, riskConfirmed: true })
+        // User decision A (2026-10-21): an agent's update that discloses
+        // exactly what the running version does switches at once, recorded
+        // with the agent and a way back. A failed switch restores the old
+        // version, keeps the update staged and says so in the main window.
+        try {
+          await restartStagedCandidate(pluginId, requester ? { agent: requester } : {})
+        } catch (error) {
+          const record = lifecycleSelector.read(pluginId)
+          if (record?.active && record.candidate) {
+            try {
+              options.onPackageSwitchFailed?.({
+                pluginId,
+                activeVersion: record.active.packageVersion,
+                stagedVersion: record.candidate.packageVersion,
+                reason: errorText(error),
+              })
+            } catch {
+              // The update stays staged; #505's launch notice lists it again.
+            }
+          }
+          // Review M2: the agent is told the switch failed, not that it is updated.
+          return { switchError: errorText(error) }
+        }
+        return { switched: true as const }
       },
       discardUpdate: (pluginId) => {
         prepared.delete(pluginId)

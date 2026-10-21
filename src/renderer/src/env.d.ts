@@ -12,6 +12,7 @@ type ManifestPermissionsSummary = import('../../shared/executionPolicy').Manifes
 type PackageVersionGrantSummary = import('../../shared/executionPolicy').PackageVersionGrantSummary
 type LegacyPlansPreferenceProjection = import('../../shared/plansPreferences').LegacyPlansPreferenceProjection
 type PluginSource = import('../../shared/pluginSource').PluginSource
+type LocalInstallDetails = import('../../shared/pluginSource').LocalInstallDetails
 type PluginManifestDisclosure = import('../../shared/pluginDisclosure').ManifestDisclosure
 type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
@@ -104,7 +105,8 @@ declare global {
         requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
       }) => void) => () => void
       onPluginStagedCandidateNotActivated?: (cb: (notice: { pluginId: string; version: string; reason: string }) => void) => () => void
-      onPluginStagedUpdates?: (cb: (updates: { pluginId: string; activeVersion: string; stagedVersion: string }[]) => void) => () => void
+      onPluginStagedUpdates?: (cb: (updates: { pluginId: string; activeVersion: string; stagedVersion: string; reason?: string }[]) => void) => () => void
+      onPluginSwitched?: (cb: (notice: { pluginId: string; fromVersion: string; toVersion: string; source: 'marketplace' | 'local-unsigned'; at: number; agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true } }) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
       onSystemResumed: (cb: () => void) => () => void
       setRecentWorkspaces: (list: { path: string; name: string; exists: boolean }[]) => void
@@ -445,6 +447,8 @@ declare global {
           /** A test build: its signed expiry and how the user joined the test. */
           expiresAt?: string
           testplaceVia?: 'invite' | 'code'
+          /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+          localInstall?: LocalInstallDetails
         }>>
         hostThemeChanged: (theme: string) => void
         prepareContribution: (args: {
@@ -496,12 +500,12 @@ declare global {
         commitInstall: (
           id: string,
           approval?: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
-        ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
         installFromFile?: () => Promise<PreparedInstallSummary | null>
         commitLocalInstall?: (
           id: string,
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
-        ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
         prepareAgentFileInstall?: (stagingId: string) => Promise<PreparedInstallSummary>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
@@ -604,6 +608,8 @@ declare global {
     /** Decision d5: Navide blocked the `.vsix` this local install came from;
      *  `reason` null when its list names none. */
     digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
+    /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+    localInstall?: LocalInstallDetails
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'

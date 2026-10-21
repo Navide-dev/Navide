@@ -239,6 +239,34 @@ def _skill_facts() -> dict[str, dict[str, Any]]:
     }
 
 
+def without_secrets(bundle: dict[str, Any]) -> dict[str, Any]:
+    """A bundle as it may leave this machine: only the shareable scopes, and
+    every MCP env/header value emptied. For bundles that did not come from
+    ``export_bundle`` (``share.publish`` takes one from its caller) —
+    credentials and keys are only ever stored on this machine. A bundle not
+    in ``export_bundle``'s shape is refused rather than sent as it came: what
+    cannot be read cannot be stripped."""
+    out = copy.deepcopy(bundle)
+    scopes = out.get("scopes")
+    if not isinstance(scopes, dict):
+        raise BundleError("INVALID_BUNDLE", "bundle.scopes must be an object")
+    for scope in [s for s in scopes if s not in SCOPES]:
+        del scopes[scope]
+    for scope, section in scopes.items():
+        items = section.get("items") if isinstance(section, dict) else None
+        if not isinstance(items, dict):
+            raise BundleError("INVALID_BUNDLE", f"bundle.scopes.{scope}.items must be an object", {"scope": scope})
+        if scope != "mcp":
+            continue
+        for item_id, server in items.items():
+            if not isinstance(server, dict):
+                raise BundleError(
+                    "INVALID_BUNDLE", f"bundle.scopes.mcp.items.{item_id} must be an object", {"scope": scope}
+                )
+            items[item_id] = strip_secrets(server)[0]
+    return out
+
+
 def strip_secrets(server: dict[str, Any]) -> tuple[dict[str, Any], tuple[str, ...]]:
     """A server record with every env/header value emptied, and what was taken.
 
