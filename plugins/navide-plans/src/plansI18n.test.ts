@@ -12,6 +12,7 @@ import { backendErrorMessage, KNOWN_BACKEND_ERROR_KEYS } from './backend'
 import enUS from './locales/en-US.json'
 import zhTW from './locales/zh-TW.json'
 import jaJP from './locales/ja-JP.json'
+import zhCN from './locales/zh-CN.json'
 
 function collectLeafKeys(obj: Record<string, unknown>, prefix = ''): string[] {
   const keys: string[] = []
@@ -234,6 +235,7 @@ describe('Plans i18n bootstrap', () => {
 
     expect(enKeys).toEqual(zhKeys)
     expect(collectLeafKeys(jaJP).sort()).toEqual(enKeys)
+    expect(collectLeafKeys(zhCN).sort()).toEqual(enKeys)
     expect(enKeys.length).toBeGreaterThan(0)
   })
 
