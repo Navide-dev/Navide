@@ -137,8 +137,10 @@ describe('useSettings — language bootstrap and persistence', () => {
   })
 
   it.each([
-    ['ko-KR', 'en-US'],
-    ['zh-CN', 'en-US'],
+    ['ko-KR', 'ko-KR'],
+    ['zh-CN', 'zh-CN'],
+    ['zh-Hans', 'zh-CN'],
+    ['fr-FR', 'en-US'],
     ['it-IT', 'en-US'],
     ['zh-HK', 'zh-TW'],
   ])('maps system language %s to an available locale (%s)', (system, expected) => {
@@ -151,7 +153,7 @@ describe('useSettings — language bootstrap and persistence', () => {
   })
 
   it('ignores a saved locale that has no catalog yet', () => {
-    seedSettings({ 'agent-team:language': 'ko-KR' })
+    seedSettings({ 'agent-team:language': 'fr-FR' })
     const language = vi.spyOn(navigator, 'language', 'get').mockReturnValue('ja-JP')
     try {
       useSettings().loadLanguage()
