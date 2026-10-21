@@ -17,7 +17,7 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
     },
     "local-unsigned": {
       "badge": "Local file, not reviewed by Navide, unsigned",
-      "row": "Source and review Local file, not reviewed by Navide, unsignedNot scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)Publisher: Self-declared: acme",
+      "row": "Source and review Local file, not reviewed by Navide, unsignedThe author cannot be confirmed; the file may have been changed.Not scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)Publisher: Self-declared: acme",
     },
     "marketplace": {
       "badge": "Reviewed",
@@ -47,7 +47,7 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
     },
     "local-unsigned": {
       "badge": "ローカルファイル。Navide の審査なし、署名なし",
-      "row": "提供元と審査 ローカルファイル。Navide の審査なし、署名なし未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）発行者：自称：acme",
+      "row": "提供元と審査 ローカルファイル。Navide の審査なし、署名なし作成者を確認できません。ファイルが改変されている可能性があります。未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）発行者：自称：acme",
     },
     "marketplace": {
       "badge": "審査済み",
@@ -77,7 +77,7 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
     },
     "local-unsigned": {
       "badge": "本機檔案，未經 Navide 審核，未簽章",
-      "row": "來源與審核 本機檔案，未經 Navide 審核，未簽章未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）發佈者：自稱：acme",
+      "row": "來源與審核 本機檔案，未經 Navide 審核，未簽章無法確認作者，檔案可能被改過。未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）發佈者：自稱：acme",
     },
     "marketplace": {
       "badge": "已審核",

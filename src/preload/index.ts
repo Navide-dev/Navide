@@ -24,7 +24,7 @@ import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
-import type { PluginSource } from '../shared/pluginSource'
+import type { LocalInstallDetails, PluginSource } from '../shared/pluginSource'
 import type { DeveloperApi, DeveloperCallResult } from '../shared/marketplaceDeveloper'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
@@ -151,6 +151,32 @@ export interface PluginStagedUpdate {
   pluginId: string
   activeVersion: string
   stagedVersion: string
+  /** Set when switching to it failed. */
+  reason?: string
+}
+
+/** L3: an approved update switched versions. */
+export interface PluginSwitchNotice {
+  pluginId: string
+  fromVersion: string
+  toVersion: string
+  source: 'marketplace' | 'local-unsigned'
+  at: number
+  /** Set when an agent's automatic update (O1) drove the switch. */
+  agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true }
+}
+
+function isPluginSwitchNotice(payload: unknown): payload is PluginSwitchNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  const agent = record.agent as Record<string, unknown> | undefined
+  const nullableString = (value: unknown): boolean => value === null || typeof value === 'string'
+  return typeof record.pluginId === 'string' && typeof record.fromVersion === 'string' &&
+    typeof record.toVersion === 'string' && (record.source === 'marketplace' || record.source === 'local-unsigned') &&
+    typeof record.at === 'number' &&
+    (agent === undefined || (typeof agent === 'object' && agent !== null &&
+      ['pane', 'external', 'host'].includes(String(agent.callerKind)) &&
+      nullableString(agent.paneId) && nullableString(agent.paneName) && nullableString(agent.workspace)))
 }
 
 function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[] {
@@ -158,7 +184,7 @@ function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[
     if (typeof item !== 'object' || item === null || Array.isArray(item)) return false
     const record = item as Record<string, unknown>
     return typeof record.pluginId === 'string' && typeof record.activeVersion === 'string' &&
-      typeof record.stagedVersion === 'string'
+      typeof record.stagedVersion === 'string' && (record.reason === undefined || typeof record.reason === 'string')
   })
 }
 
@@ -208,7 +234,9 @@ export interface InstalledPluginSummary {
   localSignature?: 'verified' | 'revoked'
   /** Decision d5: Navide blocked the `.vsix` this local install came from;
    *  `reason` null when its list names none. */
-  digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
+  digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn' | null }
+  /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+  localInstall?: LocalInstallDetails
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -511,7 +539,9 @@ export interface ExpiredTestplaceBuild {
 
 export interface DeveloperModeState {
   enabled: boolean
-  folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
+  /** A2-5 (G5): when Navide first saw settings another program wrote, while any is left. */
+  externalChange?: { detectedAt: string; modifiedAt: string | null; reason?: 'signing-unavailable' | 'signature-missing' }
+  folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string; externallyChanged?: true }>
 }
 
 export interface PreparedInstallSummary {
@@ -676,6 +706,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.on('plugins:stagedUpdates', listener)
     return () => ipcRenderer.removeListener('plugins:stagedUpdates', listener)
   },
+  // L3: an approved update switched versions.
+  onPluginSwitched: (cb: (notice: PluginSwitchNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginSwitchNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:switched', listener)
+    return () => ipcRenderer.removeListener('plugins:switched', listener)
+  },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))
   },
@@ -722,6 +760,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
   detachWorkspace: (args: { workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('window:detachWorkspace', args),
   getDetachedGroups: (): Promise<string[]> => ipcRenderer.invoke('window:getDetachedGroups'),
+  /** Bring the calling window itself to the front (MCP window_focus). Main
+   *  resolves the window from the sender; no other window can be named. */
+  focusSelf: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:focusSelf'),
+  /** Close the calling window itself (MCP window_close). Main resolves the
+   *  window from the sender; no other window can be named. */
+  closeSelf: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('window:closeSelf'),
+  /** Whether closeSelf would close this window ('last-window' off macOS). */
+  canCloseSelf: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('window:canCloseSelf'),
   /** Merge a detached group back. Omit groupId from the detached window itself
    *  — main resolves it from the sender. */
   reattachGroup: (args?: { groupId?: string }): Promise<{ ok: boolean }> =>
@@ -1416,14 +1462,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     commitInstall: (
       id: string,
       approval: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean } = {}
-    ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
+    ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
       ipcRenderer.invoke('plugins:commitInstall', { id, ...approval }),
     /** Card K3: the main process opens its own file dialog; nothing names a path. */
     installFromFile: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:installFromFile'),
     commitLocalInstall: (
       id: string,
       approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
-    ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
+    ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
     /** W1 (S2): the copy the Host staged for an agent's file request, named
      *  by its stagingId; never a path. Installs nothing. */
@@ -1432,6 +1478,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
       requester?: { callerKind: string; paneName?: string },
     ): Promise<PreparedInstallSummary> =>
       ipcRenderer.invoke('plugins:prepareAgentFileInstall', requester ? { stagingId, requester } : { stagingId }),
+    /** L4: the disclosure of a kept file version, for consenting to go back to it. */
+    prepareLocalRollback: (id: string): Promise<PreparedInstallSummary & { rollbackFrom: string }> =>
+      ipcRenderer.invoke('plugins:prepareLocalRollback', { id }),
     /** The user rejected an agent's file request: drop its staged copy. */
     discardAgentStaged: (stagingId: string): Promise<void> =>
       ipcRenderer.invoke('plugins:discardAgentStaged', { stagingId }),
@@ -1468,12 +1517,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
       restoredInstances: number
       skippedDestroyedHostWindows: number
     }> => ipcRenderer.invoke('plugins:restart', { id }),
-    rollback: (id: string): Promise<{
+    // L4: going back to a kept file version carries the user's renewed consent.
+    rollback: (id: string, options: { consentConfirmed?: boolean } = {}): Promise<{
       id: string
       packageVersion: string
       restoredInstances: number
       skippedDestroyedHostWindows: number
-    }> => ipcRenderer.invoke('plugins:rollback', { id }),
+    }> => ipcRenderer.invoke('plugins:rollback', { id, ...(options.consentConfirmed === true ? { consentConfirmed: true } : {}) }),
     /** Drop the version staged for the next restart (the downgrade of an agent's O1 update). */
     discardCandidate: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:discardCandidate', { id }),
     remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>

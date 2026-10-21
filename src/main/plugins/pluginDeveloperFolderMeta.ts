@@ -18,7 +18,10 @@ import { fsyncFileSync, syncDirectorySync } from './fsSync'
 // that store accepts exactly four fields per folder, so a release that does
 // not know this file keeps reading the store as before (downgrade-safe).
 // Disclosure only: nothing here decides whether a folder loads, so a missing
-// or damaged file shows "unknown" and never blocks a load.
+// or damaged file shows "unknown", and a write that fails never blocks a load.
+// The file is not signed: any program running as the user can rewrite it
+// (disclosed in plugin-development-v2.md), the same as the Developer Mode
+// store before its signature (G5).
 const DEVELOPER_FOLDER_META_FILE = '.navide-plugin-developer-folders-meta.json'
 
 /** Who had a developer folder loaded: the user's own pick in the main window,
@@ -147,16 +150,21 @@ export class PluginDeveloperFolderMetaStore {
     this.write({ schemaVersion: 1, folders })
   }
 
+  /** Best effort (review MED-2 on #536): the record only discloses, so a
+   *  write that fails (disk full, permissions, a directory where the file
+   *  belongs) is logged and never fails the load or consent around it. */
   private write(state: PersistedFolderMeta): void {
-    mkdirSync(this.root, { recursive: true, mode: 0o700 })
     const temporary = `${this.file}.${randomUUID()}.tmp`
     try {
+      mkdirSync(this.root, { recursive: true, mode: 0o700 })
       writeFileSync(temporary, `${JSON.stringify(state)}\n`, { encoding: 'utf8', mode: 0o600 })
       chmodSync(temporary, 0o600)
       fsyncFileSync(temporary)
       renameSync(temporary, this.file)
       chmodSync(this.file, 0o600)
       syncDirectorySync(this.root)
+    } catch (error) {
+      console.warn(`[plugins] developer folder record not saved at ${this.file}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       rmSync(temporary, { force: true })
     }

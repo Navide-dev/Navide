@@ -14,7 +14,7 @@
 // inside an already-hidden subtree — which is what lets a hidden Git tab keep
 // its changes badge current.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { PluginSource } from '../../../shared/pluginSource'
+import type { LocalInstallDetails, PluginSource } from '../../../shared/pluginSource'
 import { chromeSourceMark } from '../lib/pluginSourceMark'
 import PluginSourceBadge from './PluginSourceBadge.vue'
 import DeveloperFolderInfoCard, { type DeveloperFolderInfo } from './DeveloperFolderInfoCard.vue'
@@ -36,6 +36,8 @@ export interface PluginRegionContribution {
   /** A test build: its signed expiry and how the user joined the test. */
   expiresAt?: string
   testplaceVia?: 'invite' | 'code'
+  /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+  localInstall?: LocalInstallDetails
 }
 
 const props = defineProps<{
@@ -158,7 +160,15 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.workspacePath, props.contribution.contributionKey] as const,
+  // A new package version (Restart, an update taking effect, a rollback) means
+  // the Host drained the old guest; prepare a fresh one in place. Each value is
+  // compared on its own, so a refreshed contribution object with the same
+  // values keeps the guest.
+  [
+    () => props.workspacePath,
+    () => props.contribution.contributionKey,
+    () => props.contribution.packageVersion,
+  ],
   () => void prepare(),
   { immediate: true }
 )
@@ -202,9 +212,9 @@ onBeforeUnmount(() => {
         :aria-expanded="folderInfo !== null"
         @click="toggleFolderInfo"
       >
-        <PluginSourceBadge :source="sourceMark" />
+        <PluginSourceBadge :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" :local-install="contribution.localInstall" />
       </button>
-      <PluginSourceBadge v-else :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" />
+      <PluginSourceBadge v-else :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" :local-install="contribution.localInstall" />
     </div>
     <DeveloperFolderInfoCard
       v-if="sourceMark && folderInfo"
@@ -213,7 +223,7 @@ onBeforeUnmount(() => {
       @close="folderInfo = null"
     />
     <div v-if="error" class="plugin-region-host__error" role="status">
-      {{ contribution.title }} unavailable
+      {{ $t('label.region-unavailable', { title: contribution.title }) }}
     </div>
     <webview
       v-else-if="src"

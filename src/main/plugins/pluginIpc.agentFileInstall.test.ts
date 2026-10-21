@@ -253,6 +253,20 @@ describe('plugins_install_file_fill: an agent prefills, the user approves', () =
     expect(state.folders[0]!.loadedBy).toMatchObject({ kind: 'agent', callerKind: 'pane', paneName: 'builder' })
     expect(Date.parse(String(state.folders[0]!.loadedBy.approvedAt))).not.toBeNaN()
   })
+
+  it('review LOW-1 on #536: a requester with the wrong types is recorded as an unknown agent caller', async () => {
+    register()
+    const dir = join(base, 'dev-todo')
+    mkdirSync(join(dir, 'frontend', 'left'), { recursive: true })
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifestFor('acme.devtodo', '0.1.0', false)))
+    writeFileSync(join(dir, 'frontend', 'left', 'index.html'), '<!doctype html>')
+    await call('plugins:setDeveloperMode', { enabled: true })
+    const staged = await stage(dir)
+    await call('plugins:prepareAgentFileInstall', { stagingId: staged.result!.report.stagingId, requester: { callerKind: 7, paneName: ['x'] } })
+    await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
+    const state = call('plugins:developerMode') as { folders: Array<{ loadedBy: Record<string, unknown> }> }
+    expect(state.folders[0]!.loadedBy).toEqual({ kind: 'agent', callerKind: 'unknown', approvedAt: expect.any(String) })
+  })
 })
 
 describe('MED-5: staged copies live as long as their request', () => {
@@ -394,6 +408,19 @@ describe('A3: a local file signed by a vetted publisher', () => {
     expect(prepared.localSignature).toEqual({ state: 'none' })
     const [row] = call('plugins:listInstalled') as Array<Record<string, unknown>>
     expect(row.localSignature).toBeUndefined()
+  })
+
+  it('a local file row carries the SHA-256 it was installed from and when (DX 9.4 A1)', async () => {
+    register()
+    const bytes = vsix()
+    await install(bytes, null)
+    const [row] = call('plugins:listInstalled') as Array<Record<string, unknown>>
+    const record = readLocalTrustRecord(localTrustRecordPath(pluginsRoot, 'acme.todo'))
+    expect(row.localInstall).toEqual({
+      fileDigest: sha256Hex(bytes),
+      contentDigest: record.contentDigest,
+      installedAt: record.consentedAt,
+    })
   })
 
   it('signature no longer valid: a revoked key at install, or a key the Registry revokes later', async () => {

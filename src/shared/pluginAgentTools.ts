@@ -57,7 +57,7 @@ const AGENT_TOOL_FIELDS: ReadonlySet<string> = new Set([...AGENT_TOOL_REQUIRED_F
 export const RESERVED_TOOL_PREFIXES = [
   'cli_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
   'plan_', 'plans_', 'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'skills_', 'stage_', 'ui_',
-  'workspace_',
+  'window_', 'workspace_',
 ] as const
 
 /** tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned. */
@@ -94,7 +94,8 @@ export const CORE_TOOL_NAMES = [
   'scheduler_run_now', 'scheduler_runs', 'scheduler_set_enabled', 'scheduler_upsert', 'share_create',
   'share_list', 'share_revoke', 'skills_inspect', 'skills_install', 'skills_install_status', 'skills_list',
   'skills_prepare_install', 'skills_set_delivery', 'stage_define', 'ui_diagnostics', 'ui_invoke',
-  'ui_list_actions', 'ui_snapshot', 'workspace_list', 'workspace_open', 'workspace_switch',
+  'ui_list_actions', 'ui_snapshot', 'window_close', 'window_focus', 'window_list', 'workspace_close',
+  'workspace_list', 'workspace_open', 'workspace_switch',
 ] as const
 
 export type AgentToolNameError =
@@ -854,6 +855,9 @@ export type PluginAgentActionAnswer =
   | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string; disabled: PluginDisabledBy }
   /** update (O1): carried out at once; the disclosure did not change. */
   | { ok: true; updated: true; pluginId: string; fromVersion: string; pluginVersion: string }
+  /** update (O1): staged, but switching to it failed; `fromVersion` still runs
+   *  and the main window offers to apply it. */
+  | { ok: true; updated: true; switched: false; switchError: string; pluginId: string; fromVersion: string; pluginVersion: string }
   /** update (O1): something changed or could not be compared; the backend files a plugin-update request. */
   | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string }
 export const PLUGIN_APPROVAL_TTL_MS = 15 * 60_000

@@ -1,7 +1,7 @@
 // DESIGN-A2 §2.0: the developer folder record beside the Developer Mode store.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PluginDeveloperFolderMetaStore } from './pluginDeveloperFolderMeta'
@@ -55,6 +55,15 @@ describe('PluginDeveloperFolderMetaStore', () => {
     }))
     expect(store.get('acme.bad', '/dev/bad').loadedBy).toEqual({ kind: 'unknown' })
     expect(store.get('acme.good', '/dev/good')).toMatchObject({ loadedBy: { kind: 'user' }, autoReload: false })
+  })
+
+  it('review MED-2 on #536: a write that fails never throws (a directory where the file belongs)', () => {
+    mkdirSync(join(root, FILE))
+    const store = new PluginDeveloperFolderMetaStore(root)
+    expect(() => store.setLoadedBy('acme.todo', '/dev/todo', { kind: 'user' })).not.toThrow()
+    expect(() => store.recordLoad('acme.todo', '/dev/todo', { at: '2026-10-21T01:00:00.000Z', trigger: 'startup' })).not.toThrow()
+    expect(() => store.setAutoReload('acme.todo', '/dev/todo', false)).not.toThrow()
+    expect(store.get('acme.todo', '/dev/todo').loadedBy).toEqual({ kind: 'unknown' })
   })
 
   it('forgets one folder and keeps the others', () => {

@@ -265,7 +265,7 @@ describe('PipelineManagerModal — roles tab', () => {
     await tab(w).findAll('.toolbar .ghost')[1].trigger('click')
     await flushPromises()
 
-    expect(tab(w).find('.summary-ok').text()).toContain('Imported 0 role(s)')
+    expect(tab(w).find('.summary-ok').text()).toContain('Imported 0 roles')
     expect(tab(w).find('.summary-ok').text()).toContain('2 failed')
     expect(tab(w).find('.err-msg').text()).toContain('dev: roles.json is read-only')
     expect(tab(w).findAll('.toolbar .ghost')[1].attributes('disabled')).toBeUndefined()

@@ -1,0 +1,281 @@
+{
+  "vendor": "goose",
+  "provenance": {
+    "kind": "recorded",
+    "source": "backend/tests/vendors/test_goose.py",
+    "revision": "49721cd8e",
+    "notes": "Schema and row shapes recorded from goose 1.55.0 (goose-aarch64-apple-darwin.tar.gz sha256 153425d6dc3a49afce85e70009eff87f6020e3ed029bb56fae1b523f7f2d8107) in a scratch HOME/GOOSE_PATH_ROOT against a loopback mock OpenAI endpoint; no account, credential or provider call. Text, ids and token counts are replaced by fixture values."
+  },
+  "sessionId": "20261020_1",
+  "path": "${HOME}/goose-root/data/sessions/sessions.db",
+  "expected": {
+    "tokens": [
+      12,
+      3
+    ],
+    "reply": "Regression reply: café 完成\n---MSG-END---"
+  },
+  "binary": "goose",
+  "resumeCommand": "goose session -r --session-id 20261020_1",
+  "guardedEnvironment": [],
+  "phases": {
+    "initial": [
+      {
+        "kind": "sqlite",
+        "schema": "CREATE TABLE schema_version ( version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ); CREATE TABLE sessions ( id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', user_set_name BOOLEAN DEFAULT FALSE, session_type TEXT NOT NULL DEFAULT 'user', working_dir TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, extension_data TEXT DEFAULT '{}', total_tokens INTEGER, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, accumulated_total_tokens INTEGER, accumulated_input_tokens INTEGER, accumulated_output_tokens INTEGER, accumulated_cache_read_tokens INTEGER, accumulated_cache_write_tokens INTEGER, accumulated_cost REAL, schedule_id TEXT, recipe_json TEXT, user_recipe_values_json TEXT, provider_name TEXT, model_config_json TEXT, goose_mode TEXT NOT NULL DEFAULT 'auto', archived_at TIMESTAMP, project_id TEXT, parent_session_id TEXT, system_prompt_override TEXT, system_prompt_extras_json TEXT, container_id TEXT ); CREATE TABLE messages ( id INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT, session_id TEXT NOT NULL REFERENCES sessions(id), role TEXT NOT NULL, content_json TEXT NOT NULL, created_timestamp INTEGER NOT NULL, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, tokens INTEGER, metadata_json TEXT ); CREATE TABLE usage_ledger ( id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, created_timestamp INTEGER NOT NULL, model TEXT, input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, cost REAL, cost_source TEXT, is_compaction INTEGER DEFAULT 0 ); CREATE INDEX idx_messages_session ON messages(session_id); CREATE INDEX idx_messages_timestamp ON messages(timestamp); CREATE INDEX idx_messages_message_id ON messages(message_id); CREATE INDEX idx_messages_session_created ON messages(session_id, created_timestamp, id); CREATE INDEX idx_sessions_updated ON sessions(updated_at DESC); CREATE INDEX idx_sessions_type ON sessions(session_type); CREATE INDEX idx_sessions_parent ON sessions(parent_session_id); CREATE INDEX idx_usage_ledger_session ON usage_ledger(session_id);",
+        "statements": [
+          {
+            "sql": "INSERT INTO schema_version (version) VALUES (17)",
+            "params": []
+          },
+          {
+            "sql": "INSERT INTO sessions (id, name, user_set_name, session_type, working_dir, provider_name, goose_mode) VALUES (?, '', 0, 'user', ?, 'openai', 'approve')",
+            "params": [
+              "20261020_1",
+              "${WORKSPACE}"
+            ]
+          },
+          {
+            "sql": "INSERT INTO messages (message_id, session_id, role, content_json, created_timestamp, metadata_json) VALUES (?, ?, ?, ?, ?, ?)",
+            "params": [
+              "msg_fixture_user",
+              "20261020_1",
+              "user",
+              [
+                {
+                  "type": "text",
+                  "text": "${MARKER} work"
+                }
+              ],
+              1792513596,
+              {
+                "userVisible": true,
+                "agentVisible": true
+              }
+            ]
+          },
+          {
+            "sql": "INSERT INTO messages (message_id, session_id, role, content_json, created_timestamp, metadata_json) VALUES (?, ?, ?, ?, ?, ?)",
+            "params": [
+              "msg_fixture_context",
+              "20261020_1",
+              "user",
+              [
+                {
+                  "type": "text",
+                  "text": "<turn-context>\n<working-directory>${WORKSPACE}</working-directory>\n</turn-context>"
+                }
+              ],
+              1792513596,
+              {
+                "userVisible": false,
+                "agentVisible": true,
+                "turnContext": true
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "response": [
+      {
+        "kind": "sqlite",
+        "statements": [
+          {
+            "sql": "INSERT INTO messages (message_id, session_id, role, content_json, created_timestamp, metadata_json) VALUES (?, ?, ?, ?, ?, ?)",
+            "params": [
+              "c1",
+              "20261020_1",
+              "assistant",
+              [
+                {
+                  "type": "text",
+                  "text": "Checking first."
+                },
+                {
+                  "type": "toolRequest",
+                  "id": "call_1",
+                  "toolCall": {
+                    "status": "success",
+                    "value": {
+                      "name": "shell",
+                      "arguments": {
+                        "command": "echo fixture"
+                      }
+                    }
+                  },
+                  "_meta": {
+                    "goose.toolCall.providerIndex": 0,
+                    "goose_extension": "developer",
+                    "goose.executable": true
+                  }
+                }
+              ],
+              1792513603,
+              {
+                "userVisible": true,
+                "agentVisible": true,
+                "inference": {
+                  "provider": "openai",
+                  "requestedModel": "fixture-model"
+                },
+                "usage": {
+                  "inputTokens": 5,
+                  "outputTokens": 1,
+                  "totalTokens": 6
+                }
+              }
+            ]
+          },
+          {
+            "sql": "INSERT INTO usage_ledger (session_id, created_timestamp, model, input_tokens, output_tokens, total_tokens, cache_read_tokens, cache_write_tokens, is_compaction) VALUES (?, ?, 'fixture-model', ?, ?, ?, ?, NULL, 0)",
+            "params": [
+              "20261020_1",
+              1792513603,
+              5,
+              1,
+              6,
+              null
+            ]
+          },
+          {
+            "sql": "INSERT INTO messages (message_id, session_id, role, content_json, created_timestamp, metadata_json) VALUES (?, ?, ?, ?, ?, ?)",
+            "params": [
+              "msg_fixture_confirm",
+              "20261020_1",
+              "assistant",
+              [
+                {
+                  "type": "actionRequired",
+                  "data": {
+                    "actionType": "toolConfirmation",
+                    "id": "call_1",
+                    "toolName": "shell",
+                    "arguments": {
+                      "command": "echo fixture"
+                    },
+                    "prompt": null
+                  }
+                }
+              ],
+              1792513603,
+              {
+                "userVisible": true,
+                "agentVisible": false
+              }
+            ]
+          },
+          {
+            "sql": "INSERT INTO messages (message_id, session_id, role, content_json, created_timestamp, metadata_json) VALUES (?, ?, ?, ?, ?, ?)",
+            "params": [
+              "msg_fixture_allow",
+              "20261020_1",
+              "user",
+              [
+                {
+                  "type": "actionRequired",
+                  "data": {
+                    "actionType": "toolConfirmationResponse",
+                    "id": "call_1",
+                    "permission": "allow_once"
+                  }
+                }
+              ],
+              1792513612,
+              {
+                "userVisible": false,
+                "agentVisible": false
+              }
+            ]
+          },
+          {
+            "sql": "INSERT INTO messages (message_id, session_id, role, content_json, created_timestamp, metadata_json) VALUES (?, ?, ?, ?, ?, ?)",
+            "params": [
+              "msg_fixture_result",
+              "20261020_1",
+              "user",
+              [
+                {
+                  "type": "toolResponse",
+                  "id": "call_1",
+                  "toolResult": {
+                    "status": "success",
+                    "value": {
+                      "resultType": "complete",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "fixture",
+                          "annotations": {
+                            "priority": 0.0
+                          }
+                        }
+                      ],
+                      "structuredContent": {
+                        "stdout": "fixture",
+                        "stderr": "",
+                        "exit_code": 0
+                      },
+                      "isError": false
+                    }
+                  }
+                }
+              ],
+              1792513612,
+              {
+                "userVisible": true,
+                "agentVisible": true
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "complete": [
+      {
+        "kind": "sqlite",
+        "statements": [
+          {
+            "sql": "INSERT INTO messages (message_id, session_id, role, content_json, created_timestamp, metadata_json) VALUES (?, ?, ?, ?, ?, ?)",
+            "params": [
+              "c2",
+              "20261020_1",
+              "assistant",
+              [
+                {
+                  "type": "text",
+                  "text": "Regression reply: café 完成\n---MSG-END---"
+                }
+              ],
+              1792513612,
+              {
+                "userVisible": true,
+                "agentVisible": true,
+                "inference": {
+                  "provider": "openai",
+                  "requestedModel": "fixture-model"
+                },
+                "usage": {
+                  "inputTokens": 7,
+                  "outputTokens": 2,
+                  "totalTokens": 9
+                }
+              }
+            ]
+          },
+          {
+            "sql": "INSERT INTO usage_ledger (session_id, created_timestamp, model, input_tokens, output_tokens, total_tokens, cache_read_tokens, cache_write_tokens, is_compaction) VALUES (?, ?, 'fixture-model', ?, ?, ?, ?, NULL, 0)",
+            "params": [
+              "20261020_1",
+              1792513612,
+              7,
+              2,
+              9,
+              2
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

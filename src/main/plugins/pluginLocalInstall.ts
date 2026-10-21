@@ -26,15 +26,15 @@ import type { SupportedLocale } from '../hostLocale'
  * itself change the content the record covers. */
 export const PLUGIN_LOCAL_TRUST_DIR = 'plugin-local-trust'
 
-export type LocalRecordRole = 'active' | 'candidate'
+export type LocalRecordRole = 'active' | 'candidate' | 'previous'
 
 export function localTrustRecordPath(pluginsRoot: string, pluginId: string, role: LocalRecordRole = 'active'): string {
-  return join(dirname(pluginsRoot), PLUGIN_LOCAL_TRUST_DIR, role === 'active' ? `${pluginId}.json` : `${pluginId}.candidate.json`)
+  return join(dirname(pluginsRoot), PLUGIN_LOCAL_TRUST_DIR, role === 'active' ? `${pluginId}.json` : `${pluginId}.${role}.json`)
 }
 
 /** The consent record covering `pluginId`@`version`, active first. */
 export function localTrustRecordFor(pluginsRoot: string, pluginId: string, version: string): string | null {
-  for (const role of ['active', 'candidate'] as const) {
+  for (const role of ['active', 'candidate', 'previous'] as const) {
     const path = localTrustRecordPath(pluginsRoot, pluginId, role)
     try {
       const record = readLocalTrustRecord(path)
@@ -94,9 +94,28 @@ export function promoteLocalCandidateRecord(pluginsRoot: string, pluginId: strin
   if (existsSync(candidate)) renameSync(candidate, localTrustRecordPath(pluginsRoot, pluginId, 'active'))
 }
 
+/** L4: a file update over a file install keeps the replaced version as the
+ * rollback target, so its consent record moves to the `previous` role before
+ * the candidate's becomes the active one. Going back to it asks again. */
+export function retainActiveLocalRecordAsPrevious(pluginsRoot: string, pluginId: string): void {
+  const active = localTrustRecordPath(pluginsRoot, pluginId, 'active')
+  if (existsSync(active)) renameSync(active, localTrustRecordPath(pluginsRoot, pluginId, 'previous'))
+}
+
+/** L4: a rollback to the kept file version: its record becomes the active one
+ * again and the displaced version's record becomes the candidate's, matching
+ * the selector (the displaced package is retained as the next candidate). */
+export function swapLocalRecordsForRollback(pluginsRoot: string, pluginId: string): void {
+  const previous = localTrustRecordPath(pluginsRoot, pluginId, 'previous')
+  if (!existsSync(previous)) return
+  const active = localTrustRecordPath(pluginsRoot, pluginId, 'active')
+  if (existsSync(active)) renameSync(active, localTrustRecordPath(pluginsRoot, pluginId, 'candidate'))
+  renameSync(previous, active)
+}
+
 /** Drop the consent records of one plugin (removal, or a Registry install
  * replacing a local one). */
-export function forgetLocalTrustRecords(pluginsRoot: string, pluginId: string, roles: readonly LocalRecordRole[] = ['active', 'candidate']): void {
+export function forgetLocalTrustRecords(pluginsRoot: string, pluginId: string, roles: readonly LocalRecordRole[] = ['active', 'candidate', 'previous']): void {
   for (const role of roles) rmSync(localTrustRecordPath(pluginsRoot, pluginId, role), { force: true })
 }
 
