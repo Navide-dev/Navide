@@ -1904,6 +1904,7 @@
       "restore": "복원",
       "candidateReady": "업데이트 {version} 준비됨",
       "activationFailed": "{plugin}은(는) 설치되었지만 활성화하지 못했어요: {reason}. 아래 목록에서 다시 시작하거나 삭제하세요.",
+      "switchNow": "승인하면 {id}이(가) 바로 {version}(으)로 전환돼요. 열려 있는 보기는 다시 로드되고, 저장하지 않은 내용은 사라져요. 전환 내역은 공지에 기록되며, 거기서 한 번에 되돌릴 수 있어요.",
       "restartPlugin": "Navide 플러그인 다시 시작",
       "disable": "사용 안 함",
       "enable": "사용",
@@ -11752,6 +11753,7 @@
   "plugin-staged": {
     "notice": {
       "title": "Navide 플러그인 {plugin}의 버전 {staged}이(가) 적용을 기다리고 있어요. 현재 버전 {active}이(가) 실행 중이에요.",
+      "failedTitle": "{plugin}을(를) {staged}(으)로 전환하지 못했어요: {reason}. 버전 {active}이(가) 다시 실행돼요.",
       "detail": "다시 시작 없이 설치되었거나 롤백으로 보류된 버전이에요. 적용하면 다시 시작할 때처럼 지금 전환돼요.",
       "applied": "{plugin}이(가) 이제 버전 {version}(으)로 실행돼요.",
       "stale": "적용하지 않았어요: 그 사이 Navide 플러그인이 변경되었어요.",
@@ -11759,6 +11761,23 @@
     },
     "button": {
       "apply": "지금 적용"
+    }
+  },
+  "plugin-switch": {
+    "notice": {
+      "title": "{plugin}이(가) {from}에서 {to}(으)로 전환됐어요",
+      "titleAgent": "{caller}이(가) 시작한 자동 업데이트로 {plugin}이(가) {from}에서 {to}(으)로 전환됐어요",
+      "detail": "{time}에 전환됨({source}). 열려 있던 보기를 다시 로드했어요.",
+      "reverted": "{plugin}이(가) 버전 {version}(으)로 돌아갔어요.",
+      "stale": "변경된 것이 없어요: 그 사이 Navide 플러그인이 바뀌었거나, 이전 버전이 보관되어 있지 않아요.",
+      "failed": "되돌리지 못했어요: {error}"
+    },
+    "button": {
+      "back": "{version}(으)로 되돌리기"
+    },
+    "source": {
+      "marketplace": "Navide 마켓플레이스",
+      "local": "로컬 파일"
     }
   },
   "testplace": {
