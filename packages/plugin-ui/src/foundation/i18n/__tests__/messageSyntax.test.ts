@@ -12,7 +12,7 @@ const localeDirs = [
   'plugins/navide-plans/src/locales',
   'plugins/navide-browser/src/locales'
 ]
-const LOCALES = ['en-US', 'zh-TW', 'ja-JP'] as const
+const LOCALES = ['en-US', 'zh-TW', 'ja-JP', 'zh-CN'] as const
 
 // Keys that are meant to be plurals (called with a count).
 const PLURAL_KEYS = [
