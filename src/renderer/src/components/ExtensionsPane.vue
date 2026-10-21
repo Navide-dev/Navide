@@ -709,6 +709,7 @@ watch(installed, () => {
                 :via="p.testplaceVia"
                 :signature="p.localSignature"
                 :publisher="p.localSignature ? p.id.split('.')[0] : undefined"
+                :local-install="p.localInstall"
               />
               <!-- d5: Navide blocked the file this local install came from; the label stays. -->
               <span

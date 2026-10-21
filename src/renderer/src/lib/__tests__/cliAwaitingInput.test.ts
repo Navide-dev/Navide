@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import {
   awaitingClearsOnMiss,
@@ -316,6 +318,23 @@ describe('matchAwaitingInput — claude (hook plus screen)', () => {
 
   it('matches the permission box', () => {
     expect(matchAwaitingInput('claude', PERMISSION_BOX)).toBe(true)
+  })
+
+  it("matches AskUserQuestion's review step, which has no footer", () => {
+    // From the 2.1.304 binary: a box of several questions ends here.
+    const review = [
+      '←  ☒ Checks  ☒ Size  ✔ Submit  →',
+      'Review your answers',
+      ' ● Which checks should run?',
+      '   → Lint, Unit tests',
+      ' ● Which size?',
+      '   → Large',
+      'Ready to submit your answers?',
+      '❯ 1. Submit answers',
+      '  2. Cancel',
+    ].join('\n')
+    expect(matchAwaitingInput('claude', review)).toBe(true)
+    expect(matchAwaitingInput('claude', `${review}\n${'─'.repeat(40)}\n❯ `)).toBe(false)
   })
 
   it('matches the two-option permission box with the amend footer', () => {
@@ -644,6 +663,33 @@ describe('textEndsOnQuestion', () => {
     // Stop-hook / thinking-only turn_complete events carry no text at all.
     expect(textEndsOnQuestion('')).toBe(false)
     expect(textEndsOnQuestion('   \n\n')).toBe(false)
+  })
+
+  // 10-21: a Claude report ended on a numbered list of open items whose last
+  // item closed on "？". The pane read as QUESTION with no menu on screen, so
+  // cli_reclaim_agent refused it as not idle until the user closed it.
+  it('is false when the turn ends inside a numbered list', () => {
+    const transcript = [
+      '**待指揮決定（這次都沒改）：**',
+      '1. Qwen 的 `goal_runtime`／`realtime_message` 兩種紀錄，上游也不算回合邊界。',
+      '2. Codex 子 agent 的 token 會算到父 session 上，用子 agent 的 id 也查不到它的回合。這是既有行為，要不要另開一個 todo？',
+    ].join('\n')
+    expect(textEndsOnQuestion(transcript)).toBe(false)
+    expect(textEndsOnQuestion('Open items:\n1) Keep it?\n2) Drop it?')).toBe(false)
+  })
+
+  it('is false for the evidence screen, whose last item wraps onto an indented line', () => {
+    const log = readFileSync(resolve(__dirname, 'fixtures/claude-turn-ends-on-numbered-list.txt'), 'utf8')
+    const reply = log.slice(0, log.indexOf('✢Seasoning'))
+    expect(reply.trimEnd().endsWith('要不要另開一個 todo？')).toBe(true)
+    expect(textEndsOnQuestion(reply)).toBe(false)
+    expect(questionActionFor({ event_type: 'turn_complete', text: reply })).toBe('clear')
+  })
+
+  it('still sees a question asked after a numbered list', () => {
+    expect(textEndsOnQuestion('Done:\n1. Fixed A\n2. Fixed B\n\nShall I commit?')).toBe(true)
+    expect(textEndsOnQuestion('Version 2.0 is out?')).toBe(true)
+    expect(textEndsOnQuestion('2.0 shipped. Release notes too?')).toBe(true)
   })
 })
 
