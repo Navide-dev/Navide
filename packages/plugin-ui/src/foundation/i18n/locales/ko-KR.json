@@ -2084,6 +2084,10 @@
         "reload": "다시 불러오기",
         "removeFolder": "제거",
         "needsConsent": "권한이나 백엔드가 바뀌었어요. 다시 동의하세요",
+        "externallyChanged": "Navide가 아닌 프로그램이 추가하거나 바꿨어요. 다시 동의하세요",
+        "externalChange": "Developer Mode 설정이 Navide가 아닌 프로그램에 의해 바뀌었어요({time}). Navide는 그 변경을 적용하지 않았어요. 설정 → Navide 플러그인에서 Developer Mode를 다시 켜거나, 아래 표시된 폴더에 다시 동의하세요.",
+        "externalChangeUnsigned": "Navide가 보안 저장소로 Developer Mode 설정에 서명하지 못했어요({time}). 그래서 이 설정을 사용자의 동의로 보지 않아요. 설정 → Navide 플러그인에서 Developer Mode를 다시 켜거나, 아래 표시된 폴더에 다시 동의하세요. 보안 저장소가 계속 거부하면 시작할 때마다 다시 물어봐요.",
+        "externalChangeMissing": "Developer Mode 설정에 Navide의 서명이 없어요({time}). Navide 0.2.28 이전에 작성되었거나 서명 파일이 삭제되었어요. Navide는 이 설정을 적용하지 않았어요. 설정 → Navide 플러그인에서 Developer Mode를 다시 켜거나, 아래 표시된 폴더에 다시 동의하세요.",
         "folderWarning": "이 Navide 플러그인은 선택한 폴더에서 바로 불러와요. Navide가 검토하지 않았고 서명되지도 않았어요. 폴더 내용은 언제든 바뀔 수 있으며 Navide는 내용을 비교하지 않아요. 권한이나 백엔드가 바뀔 때만 다시 물어봐요.",
         "folderLabel": "폴더",
         "selfHostedQuarantine": "{id} {version}은(는) 자체 호스팅 레지스트리에서 받은 것이라 불러오지 않았어요. Developer Mode를 켜거나 Navide 마켓플레이스에서 설치하세요."

@@ -2084,6 +2084,10 @@
         "reload": "重新加载",
         "removeFolder": "移除",
         "needsConsent": "权限或后端已变更，需要重新同意",
+        "externallyChanged": "被 Navide 以外的程序新增或改过，需要重新同意",
+        "externalChange": "开发者模式设置被 Navide 以外的程序改过（{time}）。Navide 没有应用这些更改：请到“设置 → Navide 插件”重新打开开发者模式，或对下面标示的文件夹重新同意。",
+        "externalChangeUnsigned": "Navide 无法用系统安全存储签署开发者模式设置（{time}），所以不把它们当成你的同意：请到“设置 → Navide 插件”重新打开开发者模式，或对下面标示的文件夹重新同意。安全存储一直拒绝的话，每次启动都会再问一次。",
+        "externalChangeMissing": "开发者模式设置没有 Navide 的签章（{time}）：可能是 Navide 0.2.28 以前写的，或签章文件被删除了。Navide 没有应用这些设置：请到“设置 → Navide 插件”重新打开开发者模式，或对下面标示的文件夹重新同意。",
         "folderWarning": "这个 Navide 插件直接从你选的文件夹加载，没有经过 Navide 审核，也没有签章。文件夹内容随时可能变动，Navide 不做内容比对：只有权限或后端声明改变时才会再问你。",
         "folderLabel": "文件夹",
         "selfHostedQuarantine": "{id} {version} 来自自架 Registry，目前没有加载。请打开开发者模式，或改从 Navide 市场安装。"

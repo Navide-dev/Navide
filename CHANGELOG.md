@@ -28,6 +28,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Security
 
+- Extensions: Developer Mode settings changed by a program other than Navide are no longer taken as your consent. Navide signs every entry it writes (the key is kept with the operating system's secure storage); an entry it did not write leaves the switch off and the folder unloaded until you turn Developer Mode on again or consent to that folder again, and the launch reminder, the Navide Plugins page and the activity log say so. **Upgrading from 0.2.27 with Developer Mode in use:** the switch reads as off once and every local folder asks for your consent again, because the settings carry no signature yet. (#537)
 - Plans: only HTML whitespace may now come before a plan document's doctype when Navide places its Content Security Policy, in the Plans window and in the plan preview. A character JavaScript counts as whitespace but HTML does not (U+00A0, U+000B, U+2028, U+2029, U+1680, U+3000) used to push the policy out of `<head>`, where Chromium ignores it, so the plan's inline event handlers ran. A `<meta http-equiv="refresh">` is now stripped and a plan frame can no longer navigate away from its own document, so clicking an external link inside a plan no longer replaces the plan in its frame. A `<script>` is kept as JSON data only when it has a real `type="application/json"` attribute. (#462)
 
 ### Known issue in 0.2.26

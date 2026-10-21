@@ -911,7 +911,9 @@ declare global {
   /** Card K4: the Developer Mode switch and the developer folders consented to. */
   interface DeveloperModeState {
     enabled: boolean
-    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
+    /** A2-5 (G5): when Navide first saw settings another program wrote, while any is left. */
+    externalChange?: { detectedAt: string; modifiedAt: string | null; reason?: 'signing-unavailable' | 'signature-missing' }
+    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string; externallyChanged?: true }>
   }
 }
 

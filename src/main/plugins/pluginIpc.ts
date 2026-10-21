@@ -67,7 +67,7 @@ import {
 } from './pluginInstalledTrust'
 import { swapRegistryReceipt } from './pluginReceiptPromotion'
 import { pluginDeveloperModeEnabled } from './pluginDeveloperMode'
-import { developerPermissionsDigest, PluginDeveloperModeStore } from './pluginDeveloperModeStore'
+import { developerPermissionsDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './pluginDeveloperModeStore'
 import {
   currentPluginHostTarget,
   isPluginTargetCompatible,
@@ -658,6 +658,9 @@ export interface PluginIpcOptions {
   /** Card K4: the Host's own folder dialog, parented to the window that
    * asked. Absent, loading from a folder is unavailable. */
   pickDeveloperFolder?: (event: IpcMainInvokeEvent) => Promise<string | null>
+  /** A2-5 (G5): wraps the HMAC key of the Developer Mode settings (Electron
+   * safeStorage in the app). Absent, the settings are not checked, as on 0.2.27. */
+  developerModeIntegrity?: DeveloperModeIntegrity
   /** The static scan run on a package installed from a file (the scanner the
    * Registry and `navide-plugin scan` share). Absent, the consent dialog says
    * the scan is not available. Never decides the install. */
@@ -1123,7 +1126,7 @@ export function registerPluginIpc(
   const assertNoDeveloperFolder = (id: string): void => {
     // A consented folder counts while Developer Mode is off and it is unloaded:
     // its backend data is the developer's and goes to no other install.
-    if (developerMode.folder(id) ||
+    if (developerMode.anyFolder(id) ||
         manager.listInstalledPackages().some((pkg) => pkg.id === id && pkg.provenance === 'developer-local-unpacked')) {
       throw new Error(`DEVELOPER_FOLDER_HOLDS_ID [${id}]: ${id} is loaded from a developer folder; remove that folder in Developer Mode first`)
     }
@@ -2869,7 +2872,7 @@ export function registerPluginIpc(
   // it on, the user may load a folder they pick in the Host dialog: it is not
   // reviewed, its content may change at any time, and its consent is bound to
   // the folder and its declared permissions and backend.
-  const developerMode = new PluginDeveloperModeStore(pluginsRoot)
+  const developerMode = new PluginDeveloperModeStore(pluginsRoot, options.developerModeIntegrity)
   const developerModeOn = (): boolean =>
     pluginDeveloperModeEnabled(process.env, app.isPackaged, developerMode.isEnabled())
   const preparedFolders = new Map<string, { dir: string; permissionsDigest: string }>()
@@ -2929,7 +2932,9 @@ export function registerPluginIpc(
   /** A developer folder may not take an id something else installed holds:
    * the grant and the package registration are per id. */
   const assertFolderIdFree = (pluginId: string, dir?: string): void => {
-    const prior = developerMode.folder(pluginId)
+    // A2-5: an entry another program wrote holds its id too, until the user
+    // consents to it again or removes it.
+    const prior = developerMode.anyFolder(pluginId)
     if (dir !== undefined && prior && resolve(prior.path) !== resolve(dir)) {
       throw new Error(`ANOTHER_DEVELOPER_FOLDER [${pluginId}]: ${pluginId} is loaded from another developer folder (${prior.path}); remove that folder first`)
     }
@@ -2980,13 +2985,23 @@ export function registerPluginIpc(
 
   const developerModeState = () => ({
     enabled: developerMode.isEnabled(),
-    folders: developerMode.folders().map((folder) => ({
+    // A2-5 (G5): entries another program wrote, listed until the user consents
+    // to them again or removes them; never loaded.
+    ...(() => {
+      const change = developerMode.externalChange()
+      return change ? { externalChange: change } : {}
+    })(),
+    folders: [
+      ...developerMode.folders().map((folder) => ({ ...folder, externallyChanged: false })),
+      ...developerMode.untrustedFolders().map((folder) => ({ ...folder, externallyChanged: true })),
+    ].map((folder) => ({
       pluginId: folder.pluginId,
       path: folder.path,
       consentedAt: folder.consentedAt,
       loaded: manager.listInstalledPackages().some(
         (pkg) => pkg.id === folder.pluginId && pkg.provenance === 'developer-local-unpacked',
       ),
+      ...(folder.externallyChanged ? { externallyChanged: true } : {}),
       ...(() => {
         try {
           describeFolder(folder.path)
@@ -3012,7 +3027,9 @@ export function registerPluginIpc(
       manager.recordDeveloperModeChange(enabled, hostAppVersion())
       if (!developerModeOn()) {
         try {
-          for (const folder of developerMode.folders()) await unloadDeveloperFolder(folder.pluginId)
+          for (const folder of [...developerMode.folders(), ...developerMode.untrustedFolders()]) {
+            await unloadDeveloperFolder(folder.pluginId)
+          }
         } finally {
           // G4: a folder chosen but not yet consented to does not outlive the
           // switch, even when an unload fails; turning it on again means
@@ -3022,6 +3039,10 @@ export function registerPluginIpc(
       } else {
         await loadDeveloperFolders()
       }
+    } else if (!enabled) {
+      // A2-5: off already, but another program's "on" may still be in the
+      // file; the user's "off" replaces it and its notice goes.
+      developerMode.setEnabled(false)
     }
     return developerModeState()
   })
@@ -3123,6 +3144,16 @@ export function registerPluginIpc(
     assertAuthorized(event)
     if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to reload a developer folder')
     const id = typeof args?.id === 'string' ? args.id : ''
+    // A2-5 (G5): an entry another program wrote is consented to again, from
+    // the folder it names, in the same dialog as a changed permission set.
+    const untrusted = developerMode.folder(id) ? undefined : developerMode.untrustedFolders().find((folder) => folder.pluginId === id)
+    if (untrusted) {
+      const described = describeFolder(untrusted.path)
+      if (described.pluginId !== id) throw new Error(`DEVELOPER_FOLDER_CHANGED [${id}]: the permissions or backend of ${id} changed; choose the folder again`)
+      await unloadDeveloperFolder(id)
+      preparedFolders.set(id, { dir: untrusted.path, permissionsDigest: described.permissionsDigest })
+      return { reloaded: false, requiresConsent: true, prepared: described.summary }
+    }
     const consent = developerMode.folder(id)
     if (!consent) throw new Error(`${id} is not a developer folder`)
     const described = describeFolder(consent.path)
