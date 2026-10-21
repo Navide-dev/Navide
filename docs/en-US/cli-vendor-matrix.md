@@ -110,7 +110,7 @@ the tree, so a tier is re-derived, never judged:
 | `qwen` | **L5** | `qwen.py:979` *(silence)* | marker (`qwen.ts:14`) | `qwen.ts:13,16` | `install_hooks` (`qwen.py:946`) | Notification hook (`qwen_hooks.py`) | 0.22.2 (`qwen.py:966`) |
 | `antigravity` | L4 | `antigravity.py:895` | marker (`antigravity.ts:16`) | `antigravity.ts:15,19` | — | screen (`antigravity.ts:45`) | 1.2.7 (`antigravity.py:873`) |
 | `grok` | L4 | `grok.py:881` | session id pinned at launch (`grok.ts:59`) | `grok.ts:49,75` | — | trust prompt only (`grok.ts:70`) | 1.0.34 (`grok.py:858`) |
-| `kimi` | L4 | `kimi.py:667` *(silence)* | marker (`kimi.ts:23`) | `kimi.ts:14,25` | — | — | 0.39.0 (`kimi.py:652`) |
+| `kimi` | L4 | `kimi.py:684` *(`turn.ended`, silence fallback)* | marker (`kimi.ts:23`) | `kimi.ts:14,25` | — | — | 0.39.0 (`kimi.py:669`) |
 | `opencode` | L4 | `opencode.py:1161` *(1.x and 2.x schemas)* | marker (`opencode.ts:32`) | `opencode.ts:31,34` | — | — | 1.15.12 (`opencode.py:1134`) |
 | `kilo` | L4 | `kilo.py:438` | marker (`kilo.ts:33`) | `kilo.ts:32,35` | — | — | 7.4.22 (`kilo.py:404`) |
 | `pi` | L4 | `pi.py:915` *(silence)* | marker (`pi.ts:20`) | `pi.ts:19,23` | — | — | 0.84.0 (`pi.py:895`) |
@@ -137,10 +137,18 @@ How to read the columns:
   `evidence` field comment in `base.py`). No spec in the tree carries a
   live-verified version. A local `--version` newer than this column is
   untested by Navide.
-- ***(silence)*** marks the three readers that infer a turn's end from a quiet
+- ***(silence)*** marks the readers that infer a turn's end from a quiet
   window instead of reading an end-of-turn record (frontend
   `turnEndInferredFromSilence: true` in `kimi.ts:22`, `pi.ts:21`,
-  `qwen.ts:15`). A long tool call can look like a finished turn there.
+  `qwen.ts:15`). A long tool call can look like a finished turn there. Kimi
+  Code writes a `turn.ended` record (0.39.0 and 2.2.0, recorded live), which
+  the reader acts on at once; the quiet window remains its fallback for older
+  wire files, which is why the flag stays set.
+- **Kimi Code vs the archived kimi-cli.** Both install a `kimi` binary. The
+  Python MoonshotAI/kimi-cli (1.x, archived) prints `kimi, version 1.52.0`;
+  Kimi Code prints a bare version. Kimi's `official_regex` names the mismatch
+  in the pane's startup probe line and points at the Kimi Code installer; the
+  launch is not refused.
 - **Turn text is validated for two vendors only.** `verifiedTurnText: true`
   is set in `claude.ts:19` and `codex.ts:21`; every other reader's turn text
   is enough for inter-CLI messaging but keeps the loose buffer scan.
