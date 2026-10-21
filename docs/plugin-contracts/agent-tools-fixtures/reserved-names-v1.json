@@ -22,6 +22,7 @@
     "skills_",
     "stage_",
     "ui_",
+    "window_",
     "workspace_"
   ],
   "coreToolNames": [
@@ -129,6 +130,8 @@
     "ui_invoke",
     "ui_list_actions",
     "ui_snapshot",
+    "window_focus",
+    "window_list",
     "workspace_list",
     "workspace_open",
     "workspace_switch"

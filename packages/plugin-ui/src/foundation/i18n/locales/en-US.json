@@ -495,6 +495,7 @@
     "rename-collision-cancel": "Cancel",
     "paused-banner": "Delivery paused — messages queue but are not sent",
     "spawn-toast": "“{parent}” spawned “{child}”",
+    "window-focused-by": "“{caller}” brought this window to the front",
     "cross-workspace-toast": "Instruction from another workspace: “{from}” → “{target}”",
     "cross-workspace-badge": "cross-workspace",
     "reply-badge": "reply",
