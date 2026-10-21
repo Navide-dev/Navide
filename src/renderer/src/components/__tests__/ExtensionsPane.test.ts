@@ -197,7 +197,7 @@ describe('ExtensionsPane', () => {
     const boxes = dialog.findAll('.pack-uninstall-member input')
     expect(dialog.findAll('.pack-uninstall-member').map((m) => m.attributes('data-member'))).toEqual(['acme.lint', 'acme.notes'])
     expect(boxes.every((b) => !(b.element as HTMLInputElement).checked)).toBe(true)
-    expect(dialog.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack only')
+    expect(dialog.get('.pack-uninstall-confirm').text()).toBe('Uninstall Pack Only')
     await dialog.get('.pack-uninstall-confirm').trigger('click')
     await flushPromises()
     expect(api.remove).not.toHaveBeenCalled()
@@ -689,7 +689,7 @@ describe('ExtensionsPane', () => {
     await flushPromises()
 
     const button = wrapper.get('[data-id="acme.demo"] .ext-rollback')
-    expect(button.text()).toContain('bundled')
+    expect(button.text()).toContain('Bundled')
     await button.trigger('click')
     await flushPromises()
     useNotify().resolveDialog(false)
@@ -1452,7 +1452,7 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
     await flushPromises()
     expect(keepExpiredTestplace).toHaveBeenCalledWith('acme.kept')
 
-    // "Install the Navide Marketplace version": a promoted build of the same
+    // "Install the Navide Marketplace Version": a promoted build of the same
     // digest is adopted in place; otherwise the normal verified install runs.
     adoptTestplaceRelease.mockResolvedValueOnce({ adopted: true })
     await kept.get('.ext-testplace-marketplace').trigger('click')

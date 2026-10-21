@@ -227,7 +227,7 @@ describe('McpPane', () => {
     expect(drawer.findAll('input')).toHaveLength(0)
     expect(drawer.text()).toContain('/Users/x/.codex/config.toml')
 
-    await drawer.findAll('button').find((b) => b.text() === 'Open config file')!.trigger('click')
+    await drawer.findAll('button').find((b) => b.text() === 'Open Config File')!.trigger('click')
     await flushPromises()
     expect(openPath).toHaveBeenCalledWith('/Users/x/.codex/config.toml')
   })

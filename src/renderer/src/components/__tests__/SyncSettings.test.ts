@@ -203,7 +203,7 @@ describe('SyncSettings', () => {
     wrapper = mount(SyncSettings, { props: { backend }, global: { plugins: [i18n] } })
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('Credentials & keys')
+    expect(wrapper.text()).not.toContain('Credentials & Keys')
     const switches = wrapper.findAll('button[role="switch"]')
     expect(switches).toHaveLength(5)
     for (const s of switches) {
@@ -304,9 +304,9 @@ describe('SyncSettings', () => {
     expect(wrapper.text()).toContain('npx')
   })
 
-  // X-5: "Sync now" used to look only at resp.ok, so a scope that failed,
+  // X-5: "Sync Now" used to look only at resp.ok, so a scope that failed,
   // was skipped or left items behind looked exactly like one that synced.
-  it('shows what each scope did after "Sync now", not only that the call returned', async () => {
+  it('shows what each scope did after "Sync Now", not only that the call returned', async () => {
     const { backend } = mockBackend({
       'sync.now': {
         ok: true,
@@ -491,7 +491,7 @@ describe('SyncSettings', () => {
 
     const buttons = wrapper.findAll('.sync-conflict-side button')
     expect(buttons).toHaveLength(1)
-    expect(buttons[0].text()).toBe('Keep this one')
+    expect(buttons[0].text()).toBe('Keep This One')
   })
 
   // C-3 follow-up: secrets also ride in an MCP record's url (userinfo, query)
@@ -714,10 +714,10 @@ describe('SyncSettings', () => {
     expect(row.text()).toContain('abcdef01')
     expect(row.text()).not.toContain('abcdef0123456789') // the id is shortened, and it is only an id
     const rotate = row.findAll('button')[0]
-    expect(rotate.text()).toBe('Rotate key')
+    expect(rotate.text()).toBe('Rotate Key')
     await rotate.trigger('click')
     expect(send).not.toHaveBeenCalledWith('sync.rotate_key', {}, 60_000)
-    expect(row.findAll('button')[0].text()).toBe('Rotate now')
+    expect(row.findAll('button')[0].text()).toBe('Rotate Now')
     await row.findAll('button')[0].trigger('click')
     await flushPromises()
     expect(send).toHaveBeenCalledWith('sync.rotate_key', {}, 60_000)

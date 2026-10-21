@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Account sign-in, across the two places it now lives.
 //
-// The form lives in AccountModal.vue, opened from the titlebar "Sign in"
+// The form lives in AccountModal.vue, opened from the titlebar "Sign In"
 // button: signing in is the *first* thing a new user does, and burying it in
 // Settings meant it could only be found by someone who already knew it was
 // there. It is an in-app modal (like Settings), not a separate OS window.

@@ -100,7 +100,7 @@ describe('CliHealthGuide', () => {
 
     await next().trigger('click')
     await next().trigger('click')
-    const close = wrapper.findAll('button').find((button) => button.text() === "Close and don't remind me")
+    const close = wrapper.findAll('button').find((button) => button.text() === "Close and Don't Remind Me")
     await close!.trigger('click')
 
     expect(mock.sent).toContainEqual({

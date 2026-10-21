@@ -73,10 +73,10 @@ describe('FilePreviewPane – image', () => {
     await flushPromises()
     expect(wrapper.find('img.fpv-img--fit').exists()).toBe(true)
     const zoom = wrapper.find('.fpv-zoom-btn')
-    expect(zoom.text()).toContain('Actual size')
+    expect(zoom.text()).toContain('Actual Size')
     await zoom.trigger('click')
     expect(wrapper.find('img.fpv-img--full').exists()).toBe(true)
-    expect(wrapper.find('.fpv-zoom-btn').text()).toContain('Fit to window')
+    expect(wrapper.find('.fpv-zoom-btn').text()).toContain('Fit to Window')
   })
 
   it('shows the file size from the range response headers', async () => {

@@ -63,7 +63,7 @@ describe('SettingsSystemHelp', () => {
     expect(text).toContain('Settings overview')
     expect(text).toContain('Resources and upkeep')
     expect(text).toContain('Token Monitor')
-    expect(text).toContain('Status badges')
+    expect(text).toContain('Status Badges')
     expect(text).toContain('Confirm before closing a pane')
     expect(text).toContain('Pipeline Manager')
     expect(wrapper.findAll('.syh-h2')).toHaveLength(9)

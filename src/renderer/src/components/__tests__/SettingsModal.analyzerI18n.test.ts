@@ -42,10 +42,10 @@ describe('Settings — remaining hard-coded strings', () => {
     ['settings.analyzer.gguf-not-detected', "?.gguf_warning ?? $t('settings.analyzer.gguf-not-detected')", 'Not yet detected', '尚未偵測到'],
     ['settings.analyzer.gguf-hint', "<div class=\"az-gguf-hint\" v-html=\"$t('settings.analyzer.gguf-hint')\"></div>", 'Download a <code>.gguf</code> file from', '下載 <code>.gguf</code> 檔案，並在這裡填入完整路徑'],
     // B. Settings bundle export / import
-    ['settings.management.export-dialog-title', "title: t('settings.management.export-dialog-title')", 'Export settings bundle', '匯出設定全集'],
+    ['settings.management.export-dialog-title', "title: t('settings.management.export-dialog-title')", 'Export Settings Bundle', '匯出設定全集'],
     ['settings.management.exported', "settingsBundleSummary.value = t('settings.management.exported')", 'Settings bundle exported', '設定全集已匯出'],
     ['settings.management.export-failed', "err.message : t('settings.management.export-failed')", 'Export failed', '匯出失敗'],
-    ['settings.management.import-dialog-title', "openJson({ title: t('settings.management.import-dialog-title') })", 'Import settings bundle JSON', '匯入設定全集 JSON'],
+    ['settings.management.import-dialog-title', "openJson({ title: t('settings.management.import-dialog-title') })", 'Import Settings Bundle JSON', '匯入設定全集 JSON'],
     ['settings.management.import-failed', "err.message : t('settings.management.import-failed')", 'Import failed', '匯入失敗'],
     ['settings.analyzer.filter-executable', "{ name: t('settings.analyzer.filter-executable'), extensions: ['*'] }", 'Executable', '執行檔'],
     ['settings.analyzer.filter-gguf', "{ name: t('settings.analyzer.filter-gguf'), extensions: ['gguf'] }", 'GGUF Model', 'GGUF 模型'],

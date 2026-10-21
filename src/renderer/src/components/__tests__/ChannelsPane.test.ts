@@ -417,7 +417,7 @@ describe('ChannelsPane', () => {
       const w = await render()
       const tg = w.get('[data-platform="telegram"]')
       expect(tg.get('[data-testid="channel-next-step"]').text()).toBe('Next: link your chat account')
-      expect(tg.findAll('[data-testid="channel-link-action"]').map((a) => a.text())).toEqual(['Open in Telegram (DM)', 'Add to a group'])
+      expect(tg.findAll('[data-testid="channel-link-action"]').map((a) => a.text())).toEqual(['Open in Telegram (DM)', 'Add to a Group'])
       // Platforms that are not connected get no guide.
       expect(w.get('[data-platform="slack"]').find('[data-testid="channel-link-block"]').exists()).toBe(false)
     })
@@ -509,7 +509,7 @@ describe('ChannelsPane', () => {
       expect(clip.reads).toBe(1)
       expect((tg.get('input[name="token"]').element as HTMLInputElement).value).toBe(TG_TOKEN)
       expect(tg.find('[data-testid="channel-save"]').exists()).toBe(false)
-      expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick add')
+      expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick Add')
 
       const release = holdQuickAdd()
       mock.setResponse('channels.quick_add', {
@@ -681,7 +681,7 @@ describe('ChannelsPane', () => {
       await flushPromises()
       expect(tg.get('form [role="alert"]').text()).toBe('Telegram rejected the credential: Unauthorized')
       expect(tg.find('[data-testid="channel-quick-steps"]').exists()).toBe(false)
-      expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick add')
+      expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick Add')
       expect(openExternal).not.toHaveBeenCalled()
 
       mock.setResponse('channels.quick_add', { ok: false, reason: 'timeout', error: 'no answer' })
@@ -802,7 +802,7 @@ describe('ChannelsPane', () => {
     it('offers the button only on a connected bot that can manage bots', async () => {
       seedManager(true)
       const w = await render()
-      expect(managerRow(w).get('[data-testid="channel-managed-create"]').text()).toBe('Create a new bot')
+      expect(managerRow(w).get('[data-testid="channel-managed-create"]').text()).toBe('Create a New Bot')
       expect(managerRow(w).find('[data-testid="channel-managed-enable"]').exists()).toBe(false)
     })
 

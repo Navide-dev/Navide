@@ -13,7 +13,7 @@ import { aiTerminalPaneId } from '@navide/plugin-shell'
 import { i18n } from '@navide/plugin-ui/foundation'
 
 // Control surface for the stubbed CLI terminal: tests seed the PTY state the
-// dock sees at mount and read back what "Resolve with agent" pasted into it.
+// dock sees at mount and read back what "Resolve with Agent" pasted into it.
 const term = vi.hoisted(() => ({
   /** Seeds the stub's status ref at mount ('running' = a live CLI). */
   status: 'idle',
@@ -369,12 +369,12 @@ describe('GitWindowApp — Editorial Calm wiring', () => {
 
   it('stages all and unstages all from the list header links', async () => {
     wrapper = await mountApp()
-    const stageAll = wrapper.findAll('.hdr-actions .linkbtn').find((b) => b.text() === 'Stage all')
+    const stageAll = wrapper.findAll('.hdr-actions .linkbtn').find((b) => b.text() === 'Stage All')
     await stageAll!.trigger('click')
     await flushPromises()
     expect(callsOf('git.stage_all').length).toBe(1)
 
-    const unstageAll = wrapper.findAll('.hdr-actions .linkbtn').find((b) => b.text() === 'Unstage all')
+    const unstageAll = wrapper.findAll('.hdr-actions .linkbtn').find((b) => b.text() === 'Unstage All')
     await unstageAll!.trigger('click')
     await flushPromises()
     expect(callsOf('git.unstage')[0]!.payload).toMatchObject({ files: ['src/staged.ts'] })
@@ -538,7 +538,7 @@ describe('GitWindowApp — Editorial Calm wiring', () => {
     wrapper = await mountApp()
     const feature = wrapper.findAll('.branch-row').find((r) => r.text().includes('feature-x'))
     await feature!.trigger('contextmenu')
-    const del = wrapper.findAll('.menu-item').find((m) => m.text().startsWith('Delete branch'))
+    const del = wrapper.findAll('.menu-item').find((m) => m.text().startsWith('Delete Branch'))
     expect(del).toBeTruthy()
   })
 
@@ -548,7 +548,7 @@ describe('GitWindowApp — Editorial Calm wiring', () => {
     await hdr!.trigger('click')
     await flushPromises()
     const row = wrapper.findAll('.generic-row').find((r) => r.text().includes('wip sidebar'))
-    await row!.find('button[title="Pop (apply & remove)"]').trigger('click')
+    await row!.find('button[title="Pop (Apply & Remove)"]').trigger('click')
     await flushPromises()
     expect(callsOf('git.stash_pop').length).toBe(1)
   })
@@ -583,7 +583,7 @@ describe('GitWindowApp — Editorial Calm wiring', () => {
     const hdr = wrapper.findAll('.card-hdr').find((h) => h.text().includes('Remotes'))
     await hdr!.trigger('click')
     await flushPromises()
-    await wrapper.find('button[title="Open remote URL"]').trigger('click')
+    await wrapper.find('button[title="Open Remote URL"]').trigger('click')
     await flushPromises()
     expect(callsOf('ui.open_external')[0]!.payload).toMatchObject({ url: 'https://example.com/r.git' })
   })
@@ -619,7 +619,7 @@ describe('GitWindowApp — Editorial Calm wiring', () => {
 
   it('opens the branch-diff view with a sensible base/compare preselection', async () => {
     wrapper = await mountApp()
-    const btn = wrapper.findAll('.navi button').find((b) => b.text() === 'Branch diff')
+    const btn = wrapper.findAll('.navi button').find((b) => b.text() === 'Branch Diff')
     await btn!.trigger('click')
     await flushPromises()
     const selects = wrapper.findAll('select.ed-select')
@@ -662,12 +662,12 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
   it('runs pull --rebase and push --set-upstream from the toolbar ⋯ menu', async () => {
     wrapper = await mountApp()
     await openToolbarMenu(wrapper)
-    await menuItem(wrapper, 'Pull (rebase)').trigger('click')
+    await menuItem(wrapper, 'Pull (Rebase)').trigger('click')
     await flushPromises()
     expect(callsOf('git.pull_rebase')[0]!.payload).toMatchObject({ workspace_path: '/tmp/ws' })
 
     await openToolbarMenu(wrapper)
-    await menuItem(wrapper, 'Push (set upstream)').trigger('click')
+    await menuItem(wrapper, 'Push (Set Upstream)').trigger('click')
     await flushPromises()
     expect(callsOf('git.push_upstream')[0]!.payload).toMatchObject({
       branch: 'main',
@@ -675,26 +675,26 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
     })
   })
 
-  it('hides "Push (set upstream)" when the repo has no current branch', async () => {
+  it('hides "Push (Set Upstream)" when the repo has no current branch', async () => {
     statusOverride.value = { ...baseStatus(), branch: '' }
     wrapper = await mountApp()
     await openToolbarMenu(wrapper)
     const labels = wrapper.findAll('.menu-item').map((m) => m.text())
-    expect(labels).toContain('Pull (rebase)')
-    expect(labels).not.toContain('Push (set upstream)')
+    expect(labels).toContain('Pull (Rebase)')
+    expect(labels).not.toContain('Push (Set Upstream)')
   })
 
   it('force-pushes only after the destructive confirmation is accepted', async () => {
     wrapper = await mountApp()
     await openToolbarMenu(wrapper)
-    await menuItem(wrapper, 'Force push…').trigger('click')
+    await menuItem(wrapper, 'Force Push…').trigger('click')
     await flushPromises()
     expect(dialogMessage()).toContain('cannot be undone')
     await answerDialog(false)
     expect(callsOf('git.push_force').length).toBe(0)
 
     await openToolbarMenu(wrapper)
-    await menuItem(wrapper, 'Force push…').trigger('click')
+    await menuItem(wrapper, 'Force Push…').trigger('click')
     await flushPromises()
     await answerDialog(true)
     expect(callsOf('git.push_force').length).toBe(1)
@@ -703,7 +703,7 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
   it('undoes the last commit behind a confirmation', async () => {
     wrapper = await mountApp()
     await openToolbarMenu(wrapper)
-    await menuItem(wrapper, 'Undo last commit…').trigger('click')
+    await menuItem(wrapper, 'Undo Last Commit…').trigger('click')
     await flushPromises()
     expect(dialogMessage()).toContain('stay in your working tree')
     await answerDialog(true)
@@ -714,7 +714,7 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
     cleanFiles.value = Array.from({ length: 12 }, (_, i) => `junk/f${i}.log`)
     wrapper = await mountApp()
     await openToolbarMenu(wrapper)
-    await menuItem(wrapper, 'Clean untracked files…').trigger('click')
+    await menuItem(wrapper, 'Clean Untracked Files…').trigger('click')
     await flushPromises()
 
     // Stage 1 is the dry run; nothing is deleted yet.
@@ -741,7 +741,7 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
     cleanFiles.value = ['junk/a.log']
     wrapper = await mountApp()
     await openToolbarMenu(wrapper)
-    await menuItem(wrapper, 'Clean untracked files…').trigger('click')
+    await menuItem(wrapper, 'Clean Untracked Files…').trigger('click')
     await flushPromises()
     await answerDialog(false)
     expect(callsOf('git.clean').length).toBe(1)
@@ -751,7 +751,7 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
     cleanFiles.value = []
     wrapper = await mountApp()
     await openToolbarMenu(wrapper)
-    await menuItem(wrapper, 'Clean untracked files…').trigger('click')
+    await menuItem(wrapper, 'Clean Untracked Files…').trigger('click')
     await flushPromises()
     expect(callsOf('git.clean').length).toBe(1)
     expect(notify.dialog.value).toBeNull()
@@ -907,10 +907,10 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
     wrapper = await mountApp()
     await openFileMenu(wrapper, 'a.ts')
     expect(wrapper.findAll('.menu-item').map((m) => m.text())).toEqual([
-      'Open in editor',
-      'View history',
+      'Open in Editor',
+      'View History',
       'Blame',
-      'Restore from branch…'
+      'Restore from Branch…'
     ])
 
     await openFileMenu(wrapper, 'new.ts')
@@ -931,7 +931,7 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
     expect(callsOf('git.blame')[0]!.payload).toMatchObject({ filepath: 'src/staged.ts' })
 
     await openFileMenu(wrapper, 'staged.ts')
-    await menuItem(wrapper, 'View history').trigger('click')
+    await menuItem(wrapper, 'View History').trigger('click')
     await flushPromises()
     expect(callsOf('git.file_log')[0]!.payload).toMatchObject({ filepath: 'src/staged.ts' })
   })
@@ -939,7 +939,7 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
   it('restores a file from another branch through the two-level menu', async () => {
     wrapper = await mountApp()
     await openFileMenu(wrapper, 'a.ts')
-    await menuItem(wrapper, 'Restore from branch…').trigger('click')
+    await menuItem(wrapper, 'Restore from Branch…').trigger('click')
     await flushPromises()
     // Second level lists the other local branches only (never the current one).
     const branches = wrapper.findAll('.menu-item').map((m) => m.text())
@@ -972,7 +972,7 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
     wrapper = await mountApp()
     const feature = wrapper.findAll('.branch-row').find((r) => r.text().includes('feature-x'))
     await feature!.trigger('contextmenu')
-    await menuItem(wrapper, 'Merge current into feature-x').trigger('click')
+    await menuItem(wrapper, 'Merge Current into feature-x').trigger('click')
     await flushPromises()
     expect(dialogMessage()).toContain('Merge main into feature-x')
     await answerDialog(true)
@@ -997,7 +997,7 @@ describe('GitWindowApp — toolbar ⋯, detail modes, file menu, bootstrap', () 
   it('clones from the empty state and opens the clone as a new workspace', async () => {
     statusOverride.value = { ...baseStatus(), is_git_repo: false }
     wrapper = await mountApp()
-    await wrapper.findAll('.init-card button').find((b) => b.text().includes('Clone repository'))!.trigger('click')
+    await wrapper.findAll('.init-card button').find((b) => b.text().includes('Clone Repository'))!.trigger('click')
 
     const cloneBtn = (): DOMWrapper<Element> =>
       wrapper!.findAll('.init-clone button').find((b) => b.text() === 'Clone')!
@@ -1104,14 +1104,14 @@ describe('GitWindowApp — Resolve with agent', () => {
     }
   })
 
-  it('adds "Resolve with agent" to the context menu of conflicted files only', async () => {
+  it('adds "Resolve with Agent" to the context menu of conflicted files only', async () => {
     wrapper = await mountApp()
     await wrapper.find('.frow.conflict').trigger('contextmenu', { clientX: 10, clientY: 10 })
-    expect(wrapper.findAll('.menu-item').map((m) => m.text())[0]).toBe('Resolve with agent')
+    expect(wrapper.findAll('.menu-item').map((m) => m.text())[0]).toBe('Resolve with Agent')
 
     await wrapper.find('.menu-backdrop').trigger('click')
     await rowFor(wrapper, 'a.ts').trigger('contextmenu', { clientX: 10, clientY: 10 })
-    expect(wrapper.findAll('.menu-item').map((m) => m.text())).not.toContain('Resolve with agent')
+    expect(wrapper.findAll('.menu-item').map((m) => m.text())).not.toContain('Resolve with Agent')
   })
 
   it('quotes a small file in full and submits it as one bracketed paste', async () => {

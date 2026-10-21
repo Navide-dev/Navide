@@ -33,22 +33,22 @@
       "yours": "Your Space"
     },
     "action": {
-      "take-over": "Take over",
-      "hand-back": "Hand back to agent",
-      "delegate": "Let the agent use this Space",
-      "reclaim": "Take this Space back",
+      "take-over": "Take Over",
+      "hand-back": "Hand Back to Agent",
+      "delegate": "Let the Agent Use This Space",
+      "reclaim": "Take This Space Back",
       "close": "Close Space",
       "delegate-note": "Agents in any pane and any workspace can use it"
     },
     "agent-script": {
       "warning": "Agent scripts may still be running in this page. Reload it before you type a password or a verification code.",
       "reload": "Reload",
-      "keep": "Keep page"
+      "keep": "Keep Page"
     },
     "settings": {
       "title": "Settings",
       "shared-sign-in": "All Spaces share the same sign-ins, kept on this computer. Agents use your sign-ins in Navide Browser (they can send requests on websites for you). After you take over, agent scripts already running in a page stop only when you reload it.",
-      "clear-data": "Clear all sign-in data",
+      "clear-data": "Clear All Sign-In Data",
       "clear-data-confirm": "Click again to sign out of every site in Navide Browser",
       "clear-data-done": "Sign-in data cleared.",
       "cancel": "Cancel"

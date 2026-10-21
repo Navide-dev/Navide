@@ -19,7 +19,7 @@ function mountPlaceholder(realizing = false, autoNamed = false) {
         $t: (key: string) => ({
           'pane.terminal.click-to-resume': 'Click to resume',
           'pane.terminal.resuming': 'Resuming…',
-          'pane.terminal.minimize-tooltip': 'Minimize to sidebar',
+          'pane.terminal.minimize-tooltip': 'Minimize to Sidebar',
         })[key] ?? key,
       },
     },

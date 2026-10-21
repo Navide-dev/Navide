@@ -47,7 +47,7 @@ describe('auto resume scope wiring', () => {
   it('runs no workspace close and no kill while the app is ending', () => {
     const calls = appSource.split('\n').filter((line) =>
       /\bcloseWorkspace\b/.test(line) && !/^\s*(\/\/|\*|\/\*)/.test(line))
-    // The definition, the sidebar's own "Close workspace" event, and MCP
+    // The definition, the sidebar's own "Close Workspace" event, and MCP
     // workspace_close(keep_panes=false) — the ui.workspace.close command, which
     // runs only on an agent's request after the user agreed in its dialog
     // (DESIGN-C S4a), never on the way out of the app. Nothing else.

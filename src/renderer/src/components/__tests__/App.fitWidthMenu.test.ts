@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 // App.vue mounts backend/terminal/onboarding lifecycles, so it is not
 // practical to mount here (see App.idleReclaim.test.ts). The cap behavior is
 // unit-tested in useTerminal.fitWidth.test.ts and lib/stageWidthCap.test.ts;
-// this file guards the wiring of the pane menu's "Fit to pane width" and of
+// this file guards the wiring of the pane menu's "Fit to Pane Width" and of
 // the layout-mode cap it opts out of.
 const appSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/App.vue'),
