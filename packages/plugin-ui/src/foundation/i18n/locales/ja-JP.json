@@ -664,6 +664,7 @@
     }
   },
   "pane": {
+    "opened-by": "「{parent}」が開いた",
     "git": {
       "title": "ソース管理",
       "tab": "ソース管理"

@@ -664,6 +664,7 @@
     }
   },
   "pane": {
+    "opened-by": "由「{parent}」打开",
     "git": {
       "title": "源代码控制",
       "tab": "源代码控制"

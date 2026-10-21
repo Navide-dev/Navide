@@ -110,13 +110,15 @@ declare global {
       onMenuAction: (cb: (action: string) => void) => void
       onSystemResumed: (cb: () => void) => () => void
       setRecentWorkspaces: (list: { path: string; name: string; exists: boolean }[]) => void
-      openMainWindow: (args?: { workspace_path?: string }) => Promise<{ ok: boolean }>
+      openMainWindow: (args?: { workspace_path?: string; background?: boolean }) => Promise<{ ok: boolean }>
       pickWorkspace: (defaultPath?: string) => Promise<string | null>
       newWorkspace: () => Promise<NewWorkspaceResult>
       getHomeDir: () => Promise<string>
       dockSurfaceProvided?: (surface: string) => Promise<boolean>
       listOpenWorkspaces: () => Promise<string[]>
       focusWorkspaceWindow: (workspacePath: string) => Promise<boolean>
+      /** Title of ANOTHER window holding the workspace, or '' (none, or only this one). */
+      workspaceHolder?: (workspacePath: string) => Promise<string>
       reportAdoptedWorkspaces: (paths: string[]) => void
       takeRestoredAdoptedWorkspaces: () => Promise<string[]>
       onOpenWorkspacesChanged: (cb: () => void) => () => void

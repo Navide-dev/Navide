@@ -1743,6 +1743,11 @@ interface ActivePane {
    *  a resume re-arms it, and the first turn that ends clears it for good. */
   spawnedByName?: string
   spawnReportPending?: boolean
+  /** spawnedByName is a parent in ANOTHER project: set only by the
+   *  cross-workspace spawn branch (cli_open_agent with workspace_path), never
+   *  inferred from the name. Drives the "Opened by" row and lets the stand-in
+   *  report leave this window. Persisted (PaneRecord.report_cross). */
+  spawnedCrossWorkspace?: boolean
   /** Placeholder only: the record says this pane was working (or still owed
    *  its parent a report) when the app closed. Shown on the placeholder, and
    *  read by the relaunch's automatic resume. */
@@ -2572,6 +2577,8 @@ function persistPaneReportDebt(pane: ActivePane): void {
       pane_id: pane.id,
       report_to: pane.spawnedByName ?? '',
       report_pending: !!pane.spawnReportPending,
+      // Only sent when set, so every ordinary pane's write stays as it was.
+      ...(pane.spawnedCrossWorkspace ? { report_cross: true } : {}),
     })
     .catch(() => { /* the report still settles in this session */ })
 }
@@ -2974,8 +2981,11 @@ function settleSpawnReport(
   // is one of the panes a broadcast reaches.
   if (parsed.some((m) => isBroadcastTarget(m.target) || m.target === parentName)) return
   // The parent may have closed while the child worked; there is nowhere to send
-  // and no failure worth reporting to a pane that did not ask for this.
-  if (!panes.value.some((p) => p.messagingName === parentName)) return
+  // and no failure worth reporting to a pane that did not ask for this. A parent
+  // in another workspace (cli_open_agent with workspace_path) is not in this
+  // window's list at all: its `<folder>/<pane>` address goes out through the
+  // cross-workspace route, which answers for it.
+  if (!pane.spawnedCrossWorkspace && !panes.value.some((p) => p.messagingName === parentName)) return
   const report = renderFallbackReport(text)
   if (!report) return
   messaging.sendMessage(senderName, parentName, report, { kind: 'fallback' })
@@ -3167,7 +3177,9 @@ function assertRequestedSpawnGroup(workspacePath: string, groupId: string | unde
 }
 
 async function createRequestedPane(
-  parent: ActivePane,
+  // Only these three are read, which is what lets a cross-workspace spawn hand
+  // in a parent that lives in another workspace, with the child's workspace.
+  parent: Pick<ActivePane, 'id' | 'workspacePath' | 'runGroupId'>,
   req: { agentKey: string; name: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(parent.workspacePath, req.runGroupId)
@@ -3436,7 +3448,7 @@ async function kickoffRequestedPane(
   parentName: string,
   task: string,
   requestId?: string,
-  opts: { resume?: boolean } = {},
+  opts: { resume?: boolean; crossParent?: boolean } = {},
 ): Promise<boolean> {
   // Built before the pane lookup: that lookup has its own early return, and a
   // caller blocked on the verdict would otherwise wait out the whole deadline
@@ -3628,9 +3640,12 @@ async function kickoffRequestedPane(
     // only a messaging handle when a live pane answers to it — the MCP path
     // falls back to a pane id, and a standalone caller passes a workspace path,
     // neither of which anything can be delivered to.
-    if (kicked && panes.value.some((p) => p.messagingName === parentName)) {
+    // A cross-workspace parent (crossParent) is not in this window's list; the
+    // backend checked it exists and handed its qualified address.
+    if (kicked && (opts.crossParent || panes.value.some((p) => p.messagingName === parentName))) {
       const live = panes.value.find((p) => p.id === paneId)
       if (live) {
+        if (opts.crossParent) live.spawnedCrossWorkspace = true
         live.spawnedByName = parentName
         live.spawnReportPending = true
         persistPaneReportDebt(live)
@@ -3729,11 +3744,24 @@ async function handleMcpSpawnRequest(ev: {
   resume_spawned_by?: string
   resume_run_group_id?: string
   run_group_id?: string
+  /** cli_open_agent from a pane naming another project: the child goes into
+   *  target_workspace, parented on requester_pane_id, which may live in
+   *  another workspace or window. */
+  cross_workspace?: boolean
+  /** The requester's `<folder>/<pane>` address, for its report. */
+  parent_address?: string
 }): Promise<void> {
   const standalone = !!ev.target_workspace
+  const cross = !!ev.cross_workspace
   let parent: ActivePane | undefined
   let parentName: string
-  if (standalone) {
+  if (cross) {
+    // The window holding the target project creates the pane, whoever holds
+    // the parent. Same single-owner rule as the standalone branch below.
+    if (!isLocalWorkspace(ev.target_workspace ?? '')) return
+    parent = panes.value.find((p) => p.id === ev.requester_pane_id)
+    parentName = ev.parent_address || ev.requester_pane_id
+  } else if (standalone) {
     // Any workspace this window holds. Exactly one window holds a given
     // workspace — findMainWindowForWorkspace covers adopted ones now, so a
     // second window is sent to this one rather than opening it too — which is
@@ -3793,9 +3821,14 @@ async function handleMcpSpawnRequest(ev: {
     // The gate decides identity (name collisions, model/effort); the session to
     // resume is not its business, so it rides alongside rather than through it.
     const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id }
-    paneId = parent
-      ? await createRequestedPane(parent, spawnReq)
-      : await createStandaloneRequestedPane(ev.target_workspace as string, spawnReq)
+    paneId = cross
+      ? await createRequestedPane(
+          { id: ev.requester_pane_id, workspacePath: ev.target_workspace as string, runGroupId: undefined },
+          spawnReq,
+        )
+      : parent
+        ? await createRequestedPane(parent, spawnReq)
+        : await createStandaloneRequestedPane(ev.target_workspace as string, spawnReq)
   } catch (err) {
     report({ ok: false, error: err instanceof Error ? err.message : String(err) })
     return
@@ -3811,7 +3844,18 @@ async function handleMcpSpawnRequest(ev: {
   // after this and reports a failure by message instead.
   const child = panes.value.find((p) => p.id === paneId)
   const childName = child?.messagingName ?? gate.name
-  if (!parent) {
+  if (cross) {
+    // Disclosed in this window as well as in the backend's action record: an
+    // agent of another project opened a pane here (DESIGN-C §5). The toast
+    // below names both.
+    recordDiagnostic({
+      level: 'info',
+      code: 'agent.window-action',
+      message: `${parentName} opened pane ${childName} in ${ev.target_workspace} from another project`,
+      paneId,
+    })
+  }
+  if (!parent && !cross) {
     // Standalone spawn: createStandaloneRequestedPane already settled the CLI
     // and injected the task (or left the pane empty if there was none) before
     // returning paneId above. There is no parent pane to report back to, so
@@ -3846,6 +3890,7 @@ async function handleMcpSpawnRequest(ev: {
 
   void kickoffRequestedPane(paneId, parentName, gate.task, ev.request_id, {
     resume: !!(ev.session_id ?? '').trim(),
+    crossParent: cross,
   })
     .then((ok) => {
       if (!ok) {
@@ -4164,6 +4209,9 @@ function syncViews(): void {
       kickoffStatus: p.kickoffStatus,
       origin: p.origin,
       spawnedBy: p.spawnedBy,
+      // Opened by a pane of another project: its `<folder>/<pane>` address,
+      // shown on the row because the tree cannot draw that parent here.
+      openedBy: p.spawnedCrossWorkspace ? p.spawnedByName : undefined,
       workspacePath: p.workspacePath,
       runGroupId: p.runGroupId,
       collapsed: collapsedPanes.value.has(p.id),
@@ -10935,9 +10983,31 @@ registerCommand('ui.pipeline.restart_from', async (args) => {
   return { workspacePath: pipeline.workspacePath, state: restarted, stageIndex: pipeline.stageIndex }
 })
 registerCommand('ui.workspace.open', async (args) => {
+  const a = (args as { path?: string; background?: boolean } | undefined) ?? {}
+  if (!a.path) throw new Error('ui.workspace.open requires path')
+  // background: a window opened for an agent's child pane, shown without
+  // taking focus. Absent for every other caller, which keeps the old call.
+  await window.agentTeam?.openMainWindow?.(
+    a.background ? { workspace_path: a.path, background: true } : { workspace_path: a.path },
+  )
+})
+// cli_open_agent's "current" window for a child in another project: take the
+// project into this window's sidebar without switching to it. A project
+// another window holds is refused with that window named — one project lives
+// in one window — and a detached group window holds one workspace only. The
+// error text starts with the code the backend maps to error_code.
+registerCommand('ui.workspace.adopt', async (args) => {
   const path = (args as { path?: string } | undefined)?.path
-  if (!path) throw new Error('ui.workspace.open requires path')
-  await window.agentTeam?.openMainWindow?.({ workspace_path: path })
+  if (!path) throw new Error('ui.workspace.adopt requires path')
+  if (isLocalWorkspace(path)) return { prepared: 'already-open' }
+  if (isDetachedWindow) {
+    throw new Error('window-cannot-hold: this is a detached group window, which shows one workspace only')
+  }
+  const elsewhere = (await window.agentTeam?.workspaceHolder?.(path)) ?? ''
+  if (elsewhere) throw new Error(`workspace-in-other-window: ${elsewhere}`)
+  adoptWorkspace(path)
+  if (!isLocalWorkspace(path)) throw new Error(`this window did not take ${path}`)
+  return { prepared: 'adopted' }
 })
 // Switch THIS window to another workspace it already holds (one window, many
 // projects). A path this window does not hold is refused rather than opened on
@@ -11634,6 +11704,7 @@ interface ProjectPane {
    *  fields existed. */
   last_turn_state?: string
   report_to?: string
+  report_cross?: boolean
   report_pending?: boolean
   /** The launch the pane's CLI last spawned in ('' after an idle reclaim).
    *  Absent on records written before the field existed. */
@@ -13173,6 +13244,7 @@ async function performRealizeRestoredPane(
       if (revived && saved.report_pending && saved.report_to) {
         revived.spawnedByName = saved.report_to
         revived.spawnReportPending = true
+        if (saved.report_cross) revived.spawnedCrossWorkspace = true
       }
     } else {
       // A fresh restore starts a NEW conversation in a marker-camp CLI, and
@@ -15475,6 +15547,8 @@ backend.on('agent_spawn.request', (raw) => {
     resume_spawned_by?: string
     resume_run_group_id?: string
     run_group_id?: string
+    cross_workspace?: boolean
+    parent_address?: string
   }
   // An external caller (no requesting pane) addresses this by target_workspace
   // instead — accept the event as long as one of the two identifies an owner.
@@ -15498,6 +15572,8 @@ backend.on('agent_spawn.request', (raw) => {
     resume_spawned_by: ev.resume_spawned_by ?? '',
     resume_run_group_id: ev.resume_run_group_id ?? '',
     run_group_id: ev.run_group_id ?? undefined,
+    cross_workspace: ev.cross_workspace === true,
+    parent_address: ev.parent_address ?? '',
   })
 })
 
@@ -20931,7 +21007,9 @@ async function setPaneCustomName(paneId: string, rawName: string): Promise<void>
   // handle prompts for a unique name (cancel abandons the whole rename);
   // clearing the title reverts the handle to the auto-title or vendor label.
   if (nextCustomName) {
-    const resolved = await resolveManualHandle(paneId, nextCustomName)
+    // The title keeps what the user typed; the messaging handle may not hold
+    // "/", the separator of <folder>/<pane> addresses (review #546).
+    const resolved = await resolveManualHandle(paneId, nextCustomName.replaceAll('/', '-'))
     if (resolved === null) return // cancelled → abandon (title unchanged too)
     const applied = messaging.setDerivedName(pane.id, resolved, pane.agentKey)
     if (applied) {
