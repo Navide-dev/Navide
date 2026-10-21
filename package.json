@@ -280,7 +280,7 @@
     "electron": "^44.7.0",
     "electron-builder": "^26.17.0",
     "electron-vite": "^3.1.0",
-    "happy-dom": "^20.14.6",
+    "happy-dom": "^21.0.3",
     "typescript": "^5.7.2",
     "vite": "^6.4.4",
     "vite-plugin-monaco-editor": "^1.1.0",
