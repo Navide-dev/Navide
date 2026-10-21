@@ -87,7 +87,7 @@ const datalistId = useId()
       <div v-if="currentRole" class="prompt-block">
         <div class="prompt-head">
           <button class="link" @click="emit('update:previewOpen', !previewOpen)">
-            {{ previewOpen ? '▾' : '▸' }} {{ currentRole.label }} system prompt
+            {{ previewOpen ? '▾' : '▸' }} {{ $t('label.role-system-prompt', { role: currentRole.label }) }}
           </button>
           <button class="link tiny" @click="emit('open-settings')" :title="`${$t('action.settings')} (${formatKeySpec(settingsKeySpec())})`">
             ⚙ {{ $t('action.settings') }}

@@ -16938,6 +16938,14 @@ async function globalManagerRouterScan(): Promise<void> {
   const managerPaneId = globalManagerPaneId()
   if (!managerPaneId) return
   const gm = pipeline.globalManager!
+  // A single commander is the global Manager too, and its stage router already
+  // routes that stage: REPORTs held until READY, DISPATCH to its workers.
+  // Routing them here as well sent a REPORT past the READY queue and every
+  // DISPATCH twice (#539). Panes of other stages still cross over here.
+  const stageRouter = stageRouters.get(pipeline.stageIndex)
+  const ownedByStage = new Set<string>(
+    stageRouter?.managerPaneId === managerPaneId ? stageRouter.workerPaneIds.values() : [],
+  )
 
   // Scan all active Worker panes (any stage, not the Manager itself) for ASK/REPORT
   const workerPanes = panes.value.filter(
@@ -16945,6 +16953,7 @@ async function globalManagerRouterScan(): Promise<void> {
            !(p.stageId === gm.stageId && p.slotLabel === gm.slotLabel)
   )
   for (const wp of workerPanes) {
+    if (ownedByStage.has(wp.id)) continue
     const ref = paneRefs[wp.id]
     const buf: string = (ref?.cleanBuffer as unknown as string) ?? ''
     if (!buf) continue
@@ -16977,6 +16986,7 @@ async function globalManagerRouterScan(): Promise<void> {
       (p) => p.realized && p.origin === 'pipeline' && p.id !== managerPaneId &&
              p.slotLabel.toLowerCase() === d.to.toLowerCase()
     )
+    if (target && ownedByStage.has(target.id)) continue
     if (!target) {
       pipelineLog(`🎯 Global DISPATCH ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`)
       continue
@@ -21826,7 +21836,7 @@ function paneIsCommander(p: ActivePane): boolean {
           <button class="boot-retry" @click="retryBackend">{{ $t('action.retry') }}</button>
         </template>
         <template v-else>
-          <div class="boot-spinner" aria-label="loading" />
+          <div class="boot-spinner" :aria-label="$t('label.loading')" />
           <div class="boot-status">
             <span>{{ $t(bootStatusKey) }}</span>
             <span class="boot-elapsed">{{ $t('label.boot-countdown', { seconds: bootCountdown }) }}</span>
@@ -22774,7 +22784,7 @@ function paneIsCommander(p: ActivePane): boolean {
       >
         <div class="float-pip-header" @mousedown.prevent="onPipDragStart">
           <span class="float-pip-title">
-            Agents ({{ auxiliaryListPanes.length }})
+            {{ $t('label.agents') }} ({{ auxiliaryListPanes.length }})
           </span>
           <button class="float-pip-toggle" @mousedown.stop @click="floatPipExpanded = !floatPipExpanded; clampPipPos()">
             {{ floatPipExpanded ? '▾' : '▸' }}

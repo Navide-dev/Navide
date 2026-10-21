@@ -31,6 +31,7 @@ const contracts = [
   { key: 'aider', binary: 'aider', permission: '--yes-always', resume: 'aider --restore-chat-history', model: false, effort: null, paste: false, fullScreen: false, silence: false },
   { key: 'muse', binary: 'muse', permission: '--disable-approval', resume: 'muse resume session-123', model: true, effort: '--reasoning-effort high', paste: false, fullScreen: false, silence: false },
   { key: 'mcode', binary: 'mcode', permission: '', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
+  { key: 'goose', binary: 'goose', permission: '', resume: 'goose session -r --session-id session-123', model: false, effort: null, paste: true, fullScreen: false, silence: false },
 ] as const
 
 describe('frontend CLI contract inventory', () => {
@@ -115,6 +116,8 @@ describe('vendor specific frontend session and prompt contracts', () => {
     ['aider', 'Run shell command? (Y)es/(N)o [Yes]:', true],
     // Its folder-trust prompt, the one wait Grok Build shows as text (#402).
     ['grok', 'Do you trust the contents of this directory?\n/work\n  Yes, proceed   y\n  No, quit       n', true],
+    // Its tool-approval select under GOOSE_MODE=approve, from a 1.55.0 PTY capture.
+    ['goose', '◆  Goose would like to call the above tool, do you allow?\n│  ● Allow (Allow the tool call once)\n│  ○ Always Allow\n│  ○ Deny', true],
   ] as const)('recognizes %s awaiting input without treating completed prose as a live prompt', (key, screen, clearsOnMiss) => {
     expect(matchAwaitingInput(key, screen)).toBe(true)
     expect(matchAwaitingInput(key, 'Task completed.')).toBe(false)

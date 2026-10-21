@@ -32,7 +32,7 @@ CLI_AGENTS_HELP = (
 
 EXPECTED_KEYS = {
     "aider", "antigravity", "claude", "codex", "copilot", "cursor",
-    "droid", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi",
+    "droid", "goose", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi",
     "qwen",
 }
 
