@@ -11,7 +11,7 @@ script synchronizes these four files when a version changes:
 - `backend/agent_team_backend/__init__.py`
 - `backend/uv.lock`
 
-Run `pnpm release:check` at any time to verify that they still match. The
+Run `bun run release:check` at any time to verify that they still match. The
 release workflow also checks that the pushed tag exactly matches the version.
 
 ## Update architecture
@@ -112,7 +112,7 @@ local development and must never be committed.
    [Release announcements](release-announcements.md). `release.sh` warns when
    the version has none.
 2. Commit every intended source change and confirm the repository is clean.
-3. Run `./release.sh X.Y.Z` (or `pnpm release:prepare -- X.Y.Z`). The script
+3. Run `./release.sh X.Y.Z` (or `bun run release:prepare -- X.Y.Z`). The script
    validates that the requested version is newer, synchronizes all version
    files, runs the release gates, builds the unsigned local artifacts, and
    creates the release commit and annotated `vX.Y.Z` tag.
@@ -157,12 +157,12 @@ credentials are configured.
 
 ## Local packaging
 
-Run `./build.sh` (or `pnpm package:local`) for a fast local unsigned `.app`
+Run `./build.sh` (or `bun run package:local`) for a fast local unsigned `.app`
 without changing the version, creating a commit, or creating a tag. Add
 `--install` to replace the local copy under `/Applications` after quitting the
 running app. Local output is written to `dist-local/`.
 
-`pnpm dist` creates the full unsigned DMG, ZIP, blockmaps, and updater metadata.
+`bun run dist` creates the full unsigned DMG, ZIP, blockmaps, and updater metadata.
 Those formats are part of the production contract. Unsigned preview releases
 must remain prereleases, and their assets must never be represented as signed
 or notarized. Formal stable versions

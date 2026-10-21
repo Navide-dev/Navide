@@ -19,7 +19,7 @@ STAGE_DIR="$ROOT/dist-plugins/package/navide.mini-ide"
 OUT_VSIX="$ROOT/dist-plugins/navide.mini-ide-$VERSION.vsix"
 
 echo "==> Building mini-IDE bundle (v$VERSION)"
-pnpm run build:mini-ide
+bun run build:mini-ide
 
 echo "==> Staging package at $STAGE_DIR"
 rm -rf "$STAGE_DIR"

@@ -10,7 +10,7 @@
     "url": "https://github.com/Navide-dev/Navide.git"
   },
   "main": "out/main/index.js",
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "bun@1.4.3",
   "workspaces": [
     "packages/plugin-contracts",
     "packages/plugin-sdk",
@@ -46,41 +46,42 @@
     "node": ">=22.12 <23"
   },
   "scripts": {
-    "dev": "pnpm run build:public-packages && vite build --config vite.plans.config.ts && pnpm run build:mini-ide:v2 && pnpm run build:plans:v2 && node scripts/build-plans-v2-backend.mjs --if-needed && pnpm run build:git:v2 && node scripts/stage-official-plugin-artifacts.mjs && node scripts/build-fn-key-helper.mjs --if-needed && electron-vite dev",
-    "build": "pnpm run build:official-plugins && pnpm run build:git:legacy && pnpm run build:pane-helper && pnpm run build:fn-key && electron-vite build",
+    "postinstall": "bun node_modules/electron/install.js",
+    "dev": "bun run build:public-packages && vite build --config vite.plans.config.ts && bun run build:mini-ide:v2 && bun run build:plans:v2 && node scripts/build-plans-v2-backend.mjs --if-needed && bun run build:git:v2 && node scripts/stage-official-plugin-artifacts.mjs && node scripts/build-fn-key-helper.mjs --if-needed && electron-vite dev",
+    "build": "bun run build:official-plugins && bun run build:git:legacy && bun run build:pane-helper && bun run build:fn-key && electron-vite build",
     "build:pane-helper": "node scripts/build-pane-helper.mjs",
     "build:fn-key": "node scripts/build-fn-key-helper.mjs",
     "build:stt": "node scripts/build-stt.mjs",
-    "build:official-plugins": "pnpm run build:public-packages && pnpm run build:mini-ide && pnpm run build:mini-ide:v2 && pnpm run build:plans && pnpm run build:git:v2 && node scripts/stage-official-plugin-artifacts.mjs",
+    "build:official-plugins": "bun run build:public-packages && bun run build:mini-ide && bun run build:mini-ide:v2 && bun run build:plans && bun run build:git:v2 && node scripts/stage-official-plugin-artifacts.mjs",
     "build:mini-ide": "vite build --config vite.mini-ide.config.ts",
     "build:mini-ide:v2": "vite build --config plugins/navide-mini-ide/vite.config.ts",
     "build:plans:legacy": "vite build --config vite.plans.config.ts",
     "build:plans:v2": "vite build --config plugins/navide-plans/vite.config.ts",
     "build:plans:backend": "node scripts/build-plans-v2-backend.mjs",
-    "build:plans": "pnpm run build:plans:legacy && pnpm run build:plans:v2 && pnpm run build:plans:backend",
+    "build:plans": "bun run build:plans:legacy && bun run build:plans:v2 && bun run build:plans:backend",
     "build:plans:fixture": "node scripts/build-plans-backend.mjs",
     "build:browser:v2": "vite build --config plugins/navide-browser/vite.config.ts",
     "build:browser:backend": "node scripts/build-browser-v2-backend.mjs",
-    "build:browser": "pnpm run build:browser:v2 && pnpm run build:browser:backend",
+    "build:browser": "bun run build:browser:v2 && bun run build:browser:backend",
     "test:packaged-plans": "node scripts/run-artifact-tests.mjs --packaged-plans",
     "build:git:legacy": "vite build --config vite.git.config.ts",
     "build:git:v2": "vite build --config plugins/navide-git/vite.config.ts",
-    "build:git": "pnpm run build:git:legacy && pnpm run build:git:v2",
+    "build:git": "bun run build:git:legacy && bun run build:git:v2",
     "start": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:integration": "tsc --noEmit -p tsconfig.integration.json",
     "typecheck:web": "node scripts/bun/vue-tsc.cjs --noEmit -p tsconfig.web.json",
     "typecheck:public": "tsc --noEmit -p packages/plugin-contracts/tsconfig.json && tsc --noEmit -p packages/plugin-sdk/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p packages/plugin-ui/tsconfig.json",
-    "typecheck:plugin-git": "pnpm run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-git/tsconfig.json",
-    "typecheck:plugin-plans": "pnpm run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-plans/tsconfig.json",
-    "typecheck": "pnpm run typecheck:node && pnpm run typecheck:integration && pnpm run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-git/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-plans/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-mini-ide/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-browser/tsconfig.json && pnpm run typecheck:web && pnpm run typecheck:public",
+    "typecheck:plugin-git": "bun run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-git/tsconfig.json",
+    "typecheck:plugin-plans": "bun run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-plans/tsconfig.json",
+    "typecheck": "bun run typecheck:node && bun run typecheck:integration && bun run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-git/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-plans/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-mini-ide/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-browser/tsconfig.json && bun run typecheck:web && bun run typecheck:public",
     "build:public-packages": "tsc -p packages/plugin-contracts/tsconfig.json && tsc -p packages/plugin-sdk/tsconfig.build.json && vite build --config packages/plugin-ui/vite.config.ts && node scripts/bun/vue-tsc.cjs -p packages/plugin-ui/tsconfig.build.json",
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e": "playwright test",
     "backend:dev": "uv --project backend run python -m agent_team_backend",
     "package:local": "bash ./build.sh",
-    "dist": "pnpm build && electron-builder",
+    "dist": "bun run build && electron-builder",
     "release:check": "node scripts/verify-release-version.mjs",
     "release:prepare": "bash ./release.sh",
     "test:frontend": "vitest run --project unit --project cli",
@@ -89,7 +90,7 @@
     "test:infrastructure": "vitest run --project unit tests/infrastructure",
     "test:cli": "node scripts/run-cli-tests.mjs",
     "test:cli:frontend": "node scripts/run-cli-tests.mjs --frontend-only",
-    "typecheck:plugin-mini-ide": "pnpm run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-mini-ide/tsconfig.json"
+    "typecheck:plugin-mini-ide": "bun run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-mini-ide/tsconfig.json"
   },
   "build": {
     "appId": "com.nerdtechnic.agent-team",
@@ -287,36 +288,6 @@
     "vitest": "^3.2.7",
     "vue": "^3.5.43",
     "vue-tsc": "^2.1.10"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "esbuild"
-    ],
-    "auditConfig": {
-      "ignoreGhsas": [
-        "GHSA-ch52-4w7c-c8xp"
-      ]
-    },
-    "overrides": {
-      "tar": "^7.5.19",
-      "brace-expansion@1": "^1.1.21",
-      "brace-expansion@2": "^2.1.7",
-      "brace-expansion@>=3": "^5.0.12",
-      "fast-uri": "^3.1.8",
-      "js-yaml@4": "^4.3.1",
-      "nanoid@3": "^3.3.18",
-      "browserslist": "^4.28.7",
-      "ip-address": "^10.3.1",
-      "postcss": "^8.5.23",
-      "vite": "^6.4.4",
-      "form-data@4": "^4.0.6",
-      "dompurify": "^3.4.16",
-      "source-map-js": "^1.2.2",
-      "katex": "^0.18.2",
-      "tinypool": "^2.1.2",
-      "@xmldom/xmldom": "^0.8.15"
-    }
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",

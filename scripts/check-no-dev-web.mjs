@@ -2,7 +2,7 @@
 // Fails when a production build contains any part of the dev-only web mode
 // (scripts/dev-web/, src/renderer/src/devWeb/). The web mode is wired in only
 // by the dev server when NAVIDE_DEV_WEB=1, so none of these strings may ever
-// reach out/. release.sh runs this on out/ right after `pnpm dist`.
+// reach out/. release.sh runs this on out/ right after `bun run dist`.
 //
 // Usage: node scripts/check-no-dev-web.mjs [buildDir=out]
 // Exit codes: 0 clean, 1 marker found, 2 build dir missing.

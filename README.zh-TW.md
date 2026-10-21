@@ -133,7 +133,7 @@ Linux 與 Windows 通過與 macOS 相同的 CI 關卡。Arm 版 Windows 的原�
 
 ### 原始碼安裝前置需求
 
-- Node.js 22.12+（22.x）與 pnpm 10+
+- Bun（版本固定於 `.bun-version`）
 - Python 3.12+ 與 uv 0.11+
 - 至少一個受支援的 Coding CLI
 - 選用：Ollama 或本機 GGUF 分析模型
@@ -143,9 +143,9 @@ Linux 與 Windows 通過與 macOS 相同的 CI 關卡。Arm 版 Windows 的原�
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-pnpm install
+bun install
 uv --project backend sync
-pnpm dev
+bun run dev
 ```
 
 Onboarding Wizard 會檢查 Runtime、偵測 Agent CLI，並說明相關 macOS 權限。接著可閱讀[開始使用](docs/zh-TW/getting-started.md)與[使用指南](docs/zh-TW/user-guide.md)。

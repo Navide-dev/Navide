@@ -44,7 +44,7 @@ describe('CI path filter rules', () => {
     'src/renderer/src/lib/promptSkillSeed.ts',
     'plugins/navide-plans/backend/plans_backend.py',
     'package.json',
-    'pnpm-lock.yaml',
+    'bun.lock',
     '.github/workflows/ci.yml',
     'scripts/ci-changed-scopes.mjs',
     'docs/en-US/architecture.md',
@@ -135,7 +135,7 @@ describe('path filter allowlists match what the suites read', () => {
       'tests/infrastructure/ciTriage.test.ts',
       'tests/infrastructure/ciPathFilter.test.ts',
       'scripts/ci-changed-scopes.mjs',
-      // `pnpm test:cli` runs pytest itself; CI's frontend job does not use it.
+      // `bun run test:cli` runs pytest itself; CI's frontend job does not use it.
       'scripts/run-cli-tests.mjs',
       // A local test picker; it and its test run in the static job, which the
       // filter never skips.
@@ -174,7 +174,6 @@ describe('CI workflow wiring of the path filter', () => {
     ['backend', 'backend'],
     ['frontend', 'frontend'],
     ['build-artifacts', 'frontend'],
-    ['pnpm-lockfile', 'frontend'],
   ])('gates %s on the %s verdict and runs it when the verdict is missing', (name, output) => {
     const job = workflow.jobs[name]
     expect(job.needs).toBe('changes')
@@ -183,7 +182,7 @@ describe('CI workflow wiring of the path filter', () => {
 
   it('leaves every other job unfiltered', () => {
     for (const [name, job] of Object.entries(workflow.jobs)) {
-      if (['backend', 'frontend', 'build-artifacts', 'pnpm-lockfile', 'lint-and-test'].includes(name)) continue
+      if (['backend', 'frontend', 'build-artifacts', 'lint-and-test'].includes(name)) continue
       expect(job.if, name).toBeUndefined()
     }
   })

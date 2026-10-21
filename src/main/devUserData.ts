@@ -9,7 +9,7 @@ import { isAbsolute } from 'node:path'
  * NAVIDE_DEV_USER_DATA_DIR, an absolute path, replaces it outright: pointed at
  * an empty directory (with AGENT_TEAM_DATA_DIR on another), it is how a dev
  * run looks like a first install. Electron's own --user-data-dir switch does
- * not get through `pnpm dev`, which is why this exists. A relative value is
+ * not get through `bun run dev`, which is why this exists. A relative value is
  * ignored and reported back as `ignored`.
  */
 export function devUserDataPath(

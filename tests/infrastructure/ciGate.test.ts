@@ -82,7 +82,7 @@ describe('required CI gate', () => {
     })
 
     const groups = [
-      { filter: 'RUN_FRONTEND', jobs: ['FRONTEND_RESULT', 'BUILD_ARTIFACTS_RESULT', 'PNPM_LOCKFILE_RESULT'] },
+      { filter: 'RUN_FRONTEND', jobs: ['FRONTEND_RESULT', 'BUILD_ARTIFACTS_RESULT'] },
       { filter: 'RUN_BACKEND', jobs: ['BACKEND_RESULT'] },
     ]
 

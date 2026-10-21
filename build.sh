@@ -19,14 +19,14 @@ esac
   exit 1
 }
 
-for command in node pnpm uv; do
+for command in node bun uv; do
   command -v "$command" >/dev/null || {
     echo "ERROR: required command not found: $command" >&2
     exit 1
   }
 done
 
-pnpm release:check
+bun run release:check
 VERSION="$(node -p "require('./package.json').version")"
 OUTPUT_DIR="$ROOT/dist-local"
 APP_NAME="Navide.app"
@@ -41,12 +41,12 @@ echo "=== [1/3] Building Python backend for v$VERSION ==="
 
 echo ""
 echo "=== [2/3] Building Electron application ==="
-pnpm build
+bun run build
 
 echo ""
 echo "=== [3/3] Packaging local macOS arm64 app ==="
 CSC_IDENTITY_AUTO_DISCOVERY=false \
-  pnpm exec electron-builder --mac --arm64 --dir --publish never \
+  bun run electron-builder --mac --arm64 --dir --publish never \
   -c.directories.output="$OUTPUT_DIR"
 
 [[ -d "$APP_PATH" ]] || {

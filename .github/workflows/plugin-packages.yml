@@ -71,16 +71,20 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Bun
+        # Runs install and the build scripts; the version is pinned in
+        # .bun-version and the action pin is the one ci.yml uses.
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          version: 10.0.0
+          bun-version-file: .bun-version
 
       - name: Set up Node.js
+        # Only for the plain `node -p` and `node scripts/...` steps below.
+        # Everything started through `bun run` runs on Bun itself (bunfig.toml
+        # [run] bun).
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -95,7 +99,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Check the runner is the target
@@ -107,9 +111,9 @@ jobs:
       - name: Build navide.plans
         # The same build commands scripts/publish-first-party-plugins.sh runs.
         run: |
-          pnpm run build:public-packages
-          pnpm run build:plans:v2
-          pnpm run build:plans:backend
+          bun run build:public-packages
+          bun run build:plans:v2
+          bun run build:plans:backend
 
       - name: Verify the backend architecture
         run: |
