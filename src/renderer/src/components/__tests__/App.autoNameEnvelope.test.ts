@@ -31,7 +31,8 @@ describe('auto-naming skips inter-CLI envelopes', () => {
     const body = activityHandler()
     // The user-prompt path and the turn_complete fallback.
     expect(countOf(body, 'setPaneAutoName(')).toBe(2)
-    expect(countOf(body, 'isInjectedMessageText(')).toBe(2)
+    // Plus the reply recorder for {{prev.summary}}, which skips envelopes too.
+    expect(countOf(body, 'isInjectedMessageText(')).toBe(3)
   })
 
   it('the turn_complete fallback guards its own text', () => {

@@ -29,6 +29,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Security
 
+- Extensions: Developer Mode settings changed by a program other than Navide are no longer taken as your consent. Navide signs every entry it writes (the key is kept with the operating system's secure storage); an entry it did not write leaves the switch off and the folder unloaded until you turn Developer Mode on again or consent to that folder again, and the launch reminder, the Navide Plugins page and the activity log say so. **Upgrading from 0.2.27 with Developer Mode in use:** the switch reads as off once and every local folder asks for your consent again, because the settings carry no signature yet. (#537)
 - Plans: only HTML whitespace may now come before a plan document's doctype when Navide places its Content Security Policy, in the Plans window and in the plan preview. A character JavaScript counts as whitespace but HTML does not (U+00A0, U+000B, U+2028, U+2029, U+1680, U+3000) used to push the policy out of `<head>`, where Chromium ignores it, so the plan's inline event handlers ran. A `<meta http-equiv="refresh">` is now stripped and a plan frame can no longer navigate away from its own document, so clicking an external link inside a plan no longer replaces the plan in its frame. A `<script>` is kept as JSON data only when it has a real `type="application/json"` attribute. (#462)
 
 ### Known issue in 0.2.26
@@ -51,6 +52,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Pipelines: `{{prev.summary}}` is the upstream slot's own last reply instead of a scrape of its terminal, which carried spinners, status and "Tip:" lines, and blocks repeated by redraws. A CLI that reports no reply text still hands over the end of its screen (#448).
 - Navide plugins: an in-window plugin panel no longer reloads whenever any plugin's contributions refresh (an install, a switch, a rollback). It reloads only when its own workspace, contribution or package version changes, so open panels keep what is not saved in them. A plugin switch with one of its panels open in the main window no longer fails and rolls back; the panel comes back on the new version in place. (#512)
 - Pipelines: a slot's pane keeps its slot label as its name and messaging address. It was auto-titled from its first reply or role prompt, so panes sharing a role collided into `…-2` names, and a kickoff that says "message 畫師" pointed at a name that no longer existed (#448).
 - Pipelines (Manager mode): a Manager's `DISPATCH` reaches its worker even when the block does not parse from the Manager's screen. The router now also reads the Manager's reply text, and routes each block once. A `DISPATCH` sent before `---MANAGER-READY---` counts as READY, so the workers' held REPORTs go to the Manager instead of the whole stage waiting while it shows `running` (#539).
