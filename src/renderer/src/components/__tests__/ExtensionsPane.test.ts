@@ -175,7 +175,7 @@ describe('ExtensionsPane', () => {
     await wrapper.get('.ext-pack-remove').trigger('click')
     await flushPromises()
     await wrapper.get('.pack-uninstall-member input').setValue(true)
-    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 Navide plugin(s)')
+    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 Navide plugin')
     await wrapper.get('.pack-uninstall-confirm').trigger('click')
     await flushPromises()
     // The Host removes the chosen members itself, so it can refuse a member

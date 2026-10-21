@@ -98,7 +98,7 @@ import type {
   PluginPackageRestartTransaction,
 } from './frontendPluginManager'
 import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManager'
-import { answerPluginAgentAction, type PluginAgentActionNotice } from './pluginAgentAction'
+import { answerPluginAgentAction, type PluginAgentActionNotice, type PluginAgentRequester } from './pluginAgentAction'
 import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
@@ -164,6 +164,8 @@ import {
   localTrustRecordFor,
   localTrustRecordPath,
   promoteLocalCandidateRecord,
+  retainActiveLocalRecordAsPrevious,
+  swapLocalRecordsForRollback,
   verifyLocalInstalledPackage,
 } from './pluginLocalInstall'
 
@@ -262,6 +264,8 @@ interface InstalledSummary {
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
   rollbackToVersion?: string
+  /** L4: the rollback target is a kept file version; going back asks again. */
+  rollbackNeedsConsent?: true
   /** Lowest Navide release the installed version needs (label only). */
   minNavideVersion?: string
   /** False when this Navide release is older than that; the Host still runs
@@ -587,6 +591,26 @@ export interface PluginIpcOptions {
    *  their private data in `<root>/<pluginId>/`. Removal deletes that directory
    *  only when the caller passes `nativeBackendData: 'delete'`. */
   nativeBackendDataRoot?: string
+  /** L3: a restart switched an installed plugin from one version to another
+   *  (an approved update taking effect, or Restart). The main window records
+   *  every switch with a one-click way back. */
+  onPackageSwitched?: (notice: {
+    pluginId: string
+    fromVersion: string
+    toVersion: string
+    source: 'marketplace' | 'local-unsigned'
+    at: number
+    /** Set when an agent's automatic update (O1) drove the switch. */
+    agent?: PluginAgentRequester
+  }) => void
+  /** O1: an agent's automatic update was staged but its switch failed; the
+   *  old version runs again and the main window keeps a row to apply it. */
+  onPackageSwitchFailed?: (notice: {
+    pluginId: string
+    activeVersion: string
+    stagedVersion: string
+    reason: string
+  }) => void
   factoryPackageIds?: readonly string[]
   /** Why rolling this id back to its factory package is refused right now, or
    *  undefined when it is allowed. Checked before a rollback is offered or its
@@ -1068,7 +1092,7 @@ export function registerPluginIpc(
   // id to the App bundle, which keeps no selector record of its own.
   function rollbackTargetFor(
     id: string,
-  ): { kind: 'factory' } | { kind: 'previous'; version: string } | null {
+  ): { kind: 'factory' } | { kind: 'previous'; version: string; local: boolean } | null {
     const selected = lifecycleSelector.read(id)
     if (!selected?.active || selected.candidate || selected.activation) return null
     if (!selected.previous) {
@@ -1082,7 +1106,11 @@ export function registerPluginIpc(
     // can change after the row is drawn, so a refusal is still reachable and its
     // message is shown to the user rather than swallowed.
     if (!selected.previousGrant) return null
-    return { kind: 'previous', version: selected.previous.packageVersion }
+    return {
+      kind: 'previous',
+      version: selected.previous.packageVersion,
+      local: isLocalInstalledPackage(pluginsRoot, lifecycleSelector.packageDir(id, selected.previous), id),
+    }
   }
 
   // The installed package when it came from a local file (card K3).
@@ -1214,7 +1242,11 @@ export function registerPluginIpc(
         if (!rollback) return {}
         return rollback.kind === 'factory'
           ? { rollbackKind: 'factory' as const }
-          : { rollbackKind: 'previous' as const, rollbackToVersion: rollback.version }
+          : {
+              rollbackKind: 'previous' as const,
+              rollbackToVersion: rollback.version,
+              ...(rollback.local ? { rollbackNeedsConsent: true as const } : {}),
+            }
       })(),
     }
     })
@@ -3418,9 +3450,33 @@ export function registerPluginIpc(
     }
   }
 
+  /** L3: record a version switch for the main window. A first install is not
+   * a switch, and a failure to report never undoes the switch. */
+  function reportSwitch(
+    id: string,
+    fromVersion: string | undefined,
+    toVersion: string,
+    local: boolean,
+    agent?: PluginAgentRequester,
+  ): void {
+    if (!fromVersion || fromVersion === toVersion) return
+    try {
+      options.onPackageSwitched?.({
+        pluginId: id,
+        fromVersion,
+        toVersion,
+        source: local ? 'local-unsigned' : 'marketplace',
+        at: Date.now(),
+        ...(agent ? { agent } : {}),
+      })
+    } catch (error) {
+      console.warn(`[plugins] version switch of ${id} was not reported: ${errorText(error)}`)
+    }
+  }
+
   /** Promote the staged candidate of `id`: what the Restart button does, and
    * what a launch does for a first install the user never restarted. */
-  async function restartStagedCandidate(id: string) {
+  async function restartStagedCandidate(id: string, trigger: { agent?: PluginAgentRequester } = {}) {
     assertNoDeveloperFolder(id)
     if (activeTransactions.has(id)) {
       throw new Error(`plugin transaction already in progress for ${id}`)
@@ -3459,6 +3515,9 @@ export function registerPluginIpc(
     // D7: a change to or from a local source keeps nothing of the replaced
     // package's consent: grant, rollback grant, backend and agent tool answers.
     const sourceReplaced = localCandidate || installedSummary?.source === 'local-unsigned'
+    // L4 (D7 decided 2026-10-20): a file update over a file install keeps the
+    // replaced version as the rollback target; going back to it asks again.
+    const localToLocal = localCandidate && installedSummary?.source === 'local-unsigned'
     // D7: the native backend data moves aside only when the source changes
     // (Marketplace ↔ local file); an update within one source keeps it as on main.
     const replacedSource = dataSourceOf(installedSummary)
@@ -3497,7 +3556,7 @@ export function registerPluginIpc(
     }
     const finishSourceReplacement = (): void => {
       if (!sourceReplaced) return
-      lifecycleSelector.forgetPrevious(id)
+      if (!localToLocal) lifecycleSelector.forgetPrevious(id)
       options.forgetBackendConsent?.(id)
       if (!localCandidate) forgetLocalTrustRecords(pluginsRoot, id)
     }
@@ -3632,6 +3691,7 @@ export function registerPluginIpc(
       }
       const selected = lifecycleSelector.activateCandidate(id)
       promoted = true
+      if (localToLocal) retainActiveLocalRecordAsPrevious(pluginsRoot, id)
       if (localCandidate) promoteLocalCandidateRecord(pluginsRoot, id)
       const summary = { ...scanned.packageSummary, ...candidateSource }
       const registration = localCandidate ? {} : { official: true }
@@ -3670,6 +3730,7 @@ export function registerPluginIpc(
         if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
         if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
+        reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate, trigger.agent)
         return {
           id,
           packageVersion: selected.active!.packageVersion,
@@ -3682,6 +3743,7 @@ export function registerPluginIpc(
       if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
       if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
+      reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate, trigger.agent)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
       // A failed data move back is reported with the restart's own error,
@@ -3697,6 +3759,19 @@ export function registerPluginIpc(
           options.forgetBackendConsent?.(id)
         } catch (forgetError) {
           moveErrors.push(forgetError)
+        }
+      }
+      // L4 (review M1): a file-over-file switch renamed the consent records at
+      // promotion; put them back (the kept version's active again, the
+      // candidate's candidate again), so a retry neither overwrites the kept
+      // version's record nor loses the one-click way back.
+      if (promoted && localToLocal) {
+        try {
+          swapLocalRecordsForRollback(pluginsRoot, id)
+        } catch (recordError) {
+          // Fail-closed: a version without its record verifies as a Registry
+          // package, which it is not, so it cannot load or be rolled back to.
+          console.warn(`[plugins] consent records of ${id} were not restored: ${errorText(recordError)}`)
         }
       }
       if (promoted) {
@@ -4008,7 +4083,73 @@ export function registerPluginIpc(
     }
   }
 
-  ipcMain.handle('plugins:rollback', async (event, args: { id?: unknown } | null) => {
+  /** The grant a consent to a file package writes for exactly this version:
+   * its declared policy plus Host storage (the dialog asked the risk
+   * acknowledgement, which covers a declared full shell). */
+  function localConsentGrant(scanned: ReturnType<typeof loadPluginDir>, packageVersion: string): HostCapabilityGrant {
+    const policy = scanned.descriptor?.capabilityPolicy
+    if (scanned.descriptor && policy?.kind === 'manifest-v2') {
+      return {
+        packageVersion,
+        system: [...policy.system],
+        ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
+        storage: true,
+      }
+    }
+    return { packageVersion, system: [], storage: true }
+  }
+
+  /** L4 (review M3, D7): going back to a kept file version is consented to
+   * again with that version's own disclosure, in the dialog a file install
+   * shows: permissions, backend, agent tools, source and digest. Read only. */
+  ipcMain.handle('plugins:prepareLocalRollback', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    const selected = lifecycleSelector.read(id)
+    const previous = selected?.previous
+    if (!selected?.active || !previous || selected.candidate || selected.activation) {
+      throw new Error(`plugin ${id} has no completed activation to roll back`)
+    }
+    const previousDir = lifecycleSelector.packageDir(id, previous)
+    const recordPath = localTrustRecordFor(pluginsRoot, id, previous.packageVersion)
+    if (!recordPath || !isLocalInstalledPackage(pluginsRoot, previousDir, id)) {
+      throw new Error(`${id} ${previous.packageVersion} is not a kept file version`)
+    }
+    const scanned = loadPluginDir(previousDir)
+    if (scanned.error || !scanned.packageSummary) {
+      throw new Error(`previous package is unavailable for rollback${scanned.error ? `: ${scanned.error}` : ''}`)
+    }
+    const manifest = parseInstalledManifest(parseManifestJson(readFileSync(join(previousDir, 'manifest.json'), 'utf8')))
+    const disclosure = isManifestV2(manifest) ? computeDisclosure(manifest as unknown as DisclosureManifestInput) : null
+    const record = readLocalTrustRecord(recordPath)
+    const signature = recordedLocalSignature({ id, packageVersion: previous.packageVersion })
+    return {
+      id,
+      version: previous.packageVersion,
+      trustTier: 'unsigned' as const,
+      sensitive: sensitiveCapabilities(scanned.packageSummary.requires),
+      containsBackendExecutable: Boolean(scanned.activation?.backend),
+      hasViews: manifestHasViews(manifest),
+      ...(disclosure && disclosure.agentTools.length > 0 ? { agentTools: disclosure.agentTools } : {}),
+      requiresConfirmation: true,
+      publisherId: record.signer?.publisherId ?? id.split('.')[0],
+      requiresPublisherTrust: false,
+      requiresRiskConfirmation: true,
+      disclosure,
+      scan: null,
+      localScan: 'unavailable' as const,
+      registry: null,
+      source: 'local-unsigned' as const,
+      localSignature: signature && record.signer
+        ? { state: signature, publisherId: record.signer.publisherId, keyId: record.signer.keyId }
+        : { state: 'none' as const },
+      ...(record.artifactDigest ? { digest: record.artifactDigest } : {}),
+      rollbackFrom: selected.active.packageVersion,
+    }
+  })
+
+  ipcMain.handle('plugins:rollback', async (event, args: { id?: unknown; consentConfirmed?: unknown } | null) => {
     assertAuthorized(event)
     const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
     if (activeTransactions.has(id)) {
@@ -4056,6 +4197,14 @@ export function registerPluginIpc(
         `previous package is unavailable for rollback${previousScanned.error ? `: ${previousScanned.error}` : ''}`,
       )
     }
+    // L4: the kept file version is unreviewed code the user replaced; going
+    // back to it is consented to again, and its native backend asks again.
+    const previousIsLocal = isLocalInstalledPackage(pluginsRoot, previousDir, id)
+    if (previousIsLocal && args?.consentConfirmed !== true) {
+      throw new Error(
+        `ROLLBACK_CONSENT_REQUIRED [${id}]: going back to the file version ${previous.packageVersion} of ${id} needs your consent again`,
+      )
+    }
     const currentDescriptor = manager.getDescriptor(id)
     // A backend-only activation has no descriptor, but its exact active
     // selector identity still owns a live runtime that must drain first.
@@ -4075,7 +4224,16 @@ export function registerPluginIpc(
       const currentPreviousTrust = verifyPrevious()
       const selected = lifecycleSelector.activatePrevious(id)
       promoted = true
-      capabilityGrants.set(id, selectedBeforeRollback.previousGrant!)
+      if (previousIsLocal) {
+        swapLocalRecordsForRollback(pluginsRoot, id)
+        options.forgetBackendConsent?.(id)
+      }
+      // L4 (review M3): the renewed consent writes the grant of what the kept
+      // version declares, as a file install's consent does; the grant it had
+      // before is not carried back.
+      capabilityGrants.set(id, previousIsLocal
+        ? localConsentGrant(previousScanned, previous.packageVersion)
+        : selectedBeforeRollback.previousGrant!)
       const previousSource = evidenceSource(previousDir, id)
       manager.registerInstalledPackage(
         { ...previousScanned.packageSummary, ...previousSource.fields },
@@ -4486,8 +4644,32 @@ export function registerPluginIpc(
           prepared: summary,
         }
       },
-      commitUpdate: async (pluginId) => {
+      commitUpdate: async (pluginId, requester) => {
         await commitRegistryInstall({ id: pluginId, riskConfirmed: true })
+        // User decision A (2026-10-21): an agent's update that discloses
+        // exactly what the running version does switches at once, recorded
+        // with the agent and a way back. A failed switch restores the old
+        // version, keeps the update staged and says so in the main window.
+        try {
+          await restartStagedCandidate(pluginId, requester ? { agent: requester } : {})
+        } catch (error) {
+          const record = lifecycleSelector.read(pluginId)
+          if (record?.active && record.candidate) {
+            try {
+              options.onPackageSwitchFailed?.({
+                pluginId,
+                activeVersion: record.active.packageVersion,
+                stagedVersion: record.candidate.packageVersion,
+                reason: errorText(error),
+              })
+            } catch {
+              // The update stays staged; #505's launch notice lists it again.
+            }
+          }
+          // Review M2: the agent is told the switch failed, not that it is updated.
+          return { switchError: errorText(error) }
+        }
+        return { switched: true as const }
       },
       discardUpdate: (pluginId) => {
         prepared.delete(pluginId)

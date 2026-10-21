@@ -48,6 +48,7 @@ from .models import (
     Publisher,
     PublisherKey,
     PublisherToken,
+    RegistryAudit,
 )
 from .signing import public_key_fingerprint
 
@@ -600,6 +601,126 @@ def reclaim_expired(session: Session, now: datetime | None = None) -> list[str]:
         reclaimed += [p.name for p in publishers]
     session.commit()
     return reclaimed
+
+
+def _held_by_other_frozen(session: Session, digest: str, publisher_id: int) -> bool:
+    """Whether a version with this digest belongs to another namespace that is
+    still frozen, whose block must then stay."""
+    return (
+        session.exec(
+            select(ExtensionVersion.id)
+            .join(Extension, Extension.id == ExtensionVersion.extension_id)
+            .join(Publisher, Publisher.id == Extension.publisher_id)
+            .where(
+                ExtensionVersion.package_digest == digest,
+                Publisher.id != publisher_id,
+                Publisher.frozen_at.is_not(None),
+            )
+        ).first()
+        is not None
+    )
+
+
+@dataclass(frozen=True)
+class UnfreezeResult:
+    namespace: str
+    restored_versions: list[str]
+    digests_unblocked: list[str]
+
+
+def unfreeze(session: Session, namespace: str, *, actor: str, reason: str, restore_versions: bool = False) -> UnfreezeResult:
+    """Give a frozen namespace back to the account that owned it, once that
+    account is approved again (user decision 2026-10-21: only the original
+    account, never another developer). Commits.
+
+    The freeze's dropped tokens and revoked keys stay dead: the owner issues a
+    new token and registers a new key. Versions stay yanked and their digests
+    blocked unless `restore_versions`, which undoes only what this freeze did:
+    the `qualification-revoked` digest entries its `namespace.freeze` audit
+    row added (still as that freeze wrote them), and the versions it yanked
+    whose digest is then no longer blocked. A version yanked or a digest
+    blocked for any other reason is left as it is, and so is a digest that a
+    version of another namespace still frozen also has (review-550 LOW-3).
+
+    Only the latest freeze is undone: digests a freeze before an unfreeze
+    without restore left blocked stay blocked (fail-closed; review-550
+    LOW-2). The checks and writes rely on SQLite serialising writers; on a
+    database that does not, lock the publisher and qualification rows
+    (SELECT ... FOR UPDATE) first (review-550 LOW-1)."""
+    from .self_service import MAX_NAMESPACES_PER_ACCOUNT, counted_namespaces  # self_service imports this module
+
+    publisher = session.exec(select(Publisher).where(Publisher.name == namespace.strip().lower())).first()
+    if publisher is None:
+        raise QualificationError("NOT_FOUND", "no such namespace")
+    if publisher.frozen_at is None:
+        raise QualificationError("NOT_FROZEN", "this namespace is not frozen")
+    reason = _reason(reason, required=True)
+    member_id = publisher.navide_member_id
+    if member_id is None or not is_approved(session, member_id):
+        raise QualificationError(
+            "OWNER_NOT_APPROVED", "the account that owns this namespace is not an approved developer now"
+        )
+    if session.exec(select(counted_namespaces(member_id))).one() >= MAX_NAMESPACES_PER_ACCOUNT:
+        raise QualificationError(
+            "OVER_ALLOWANCE", f"the owner already has {MAX_NAMESPACES_PER_ACCOUNT} namespaces that are not frozen"
+        )
+
+    restored: list[str] = []
+    unblocked: list[str] = []
+    if restore_versions:
+        freeze = session.exec(
+            select(RegistryAudit)
+            .where(RegistryAudit.target == f"publisher:{publisher.name}", RegistryAudit.action == "namespace.freeze")
+            .order_by(RegistryAudit.id.desc())
+        ).first()
+        detail = freeze.detail if freeze is not None else {}
+        for digest in sorted(set(detail.get("digests_blocked") or [])):
+            entry = blocklist.digest_blocked(session, digest)
+            if (
+                entry is not None
+                and entry.digest_reason == blocklist.DIGEST_QUALIFICATION_REVOKED
+                and entry.created_by == freeze.actor
+                and not _held_by_other_frozen(session, digest, publisher.id)
+            ):
+                session.delete(entry)
+                unblocked.append(digest)
+        session.flush()
+        yanked_by_freeze = set(detail.get("yanked") or [])
+        extensions = {
+            e.id: e.identity for e in session.exec(select(Extension).where(Extension.publisher_id == publisher.id)).all()
+        }
+        if extensions:
+            for version in session.exec(
+                select(ExtensionVersion).where(ExtensionVersion.extension_id.in_(list(extensions)))
+            ).all():
+                label = f"{extensions[version.extension_id]}@{version.version}#{version.target}"
+                if not version.yanked or label not in yanked_by_freeze:
+                    continue
+                if blocklist.digest_blocked(session, version.package_digest) is not None:
+                    continue
+                version.yanked = False
+                session.add(version)
+                restored.append(label)
+        restored.sort()
+
+    publisher.frozen_at = None
+    publisher.frozen_reason = None
+    session.add(publisher)
+    audit.record(
+        session,
+        actor=actor,
+        action="namespace.unfreeze",
+        target=f"publisher:{publisher.name}",
+        reason=reason,
+        detail={
+            "member_id": member_id,
+            "restore_versions": restore_versions,
+            "restored_versions": restored,
+            "digests_unblocked": unblocked,
+        },
+    )
+    session.commit()
+    return UnfreezeResult(namespace=publisher.name, restored_versions=restored, digests_unblocked=unblocked)
 
 
 # -- publisher keys -------------------------------------------------------

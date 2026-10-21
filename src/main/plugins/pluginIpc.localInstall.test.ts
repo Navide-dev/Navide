@@ -334,7 +334,7 @@ describe('plugins:installFromFile', () => {
     await expect(call('plugins:installFromFile')).resolves.toMatchObject({ id: 'acme.todo' })
   })
 
-  it('does not replace an installed package unasked; replacing clears its grant, rollback and backend consent', async () => {
+  it('does not replace an installed package unasked; replacing clears its grant and backend consent, and keeps the file version to go back to (L4)', async () => {
     register()
     await installLocal(vsix('acme.todo', '1.0.0'))
     writeFileSync(picked, vsix('acme.todo', '2.0.0'))
@@ -347,12 +347,18 @@ describe('plugins:installFromFile', () => {
     await call('plugins:restart', { id: 'acme.todo' })
     const record = new PluginActivationSelector(pluginsRoot).read('acme.todo')!
     expect(record.active?.packageVersion).toBe('2.0.0')
-    expect(record.previous).toBeUndefined()
-    expect(record.previousGrant).toBeUndefined()
+    // L4 (D7 decided 2026-10-20): the replaced file version is kept as the
+    // rollback target, and going back to it asks for consent again.
+    expect(record.previous?.packageVersion).toBe('1.0.0')
     expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.todo', '1.0.0')).toBeNull()
     expect(forgetBackendConsent).toHaveBeenCalledWith('acme.todo')
-    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', packageVersion: '2.0.0' }])
-    expect((call('plugins:listInstalled') as Array<Record<string, unknown>>)[0]).not.toHaveProperty('rollbackKind')
+    expect(call('plugins:listInstalled')).toMatchObject([{
+      id: 'acme.todo',
+      packageVersion: '2.0.0',
+      rollbackKind: 'previous',
+      rollbackToVersion: '1.0.0',
+      rollbackNeedsConsent: true,
+    }])
   })
 
   it('replaces a Marketplace install only when asked, and keeps none of its consent', async () => {
@@ -586,5 +592,160 @@ describe('L1: a first install takes effect when the user approves it', () => {
       active: { packageVersion: '1.0.0' },
       candidate: { packageVersion: '1.1.0' },
     })
+  })
+})
+
+describe('L3: every version switch is reported for the record', () => {
+  it('reports an update switched by Restart, naming both versions and the source, but not a first install', async () => {
+    const onPackageSwitched = vi.fn()
+    register(() => true, { onPackageSwitched })
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    expect(onPackageSwitched).not.toHaveBeenCalled()
+
+    writeFileSync(picked, vsix('acme.todo', '1.1.0'))
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+
+    expect(onPackageSwitched).toHaveBeenCalledTimes(1)
+    expect(onPackageSwitched).toHaveBeenCalledWith({
+      pluginId: 'acme.todo',
+      fromVersion: '1.0.0',
+      toVersion: '1.1.0',
+      source: 'local-unsigned',
+      at: expect.any(Number),
+    })
+  })
+
+  it('keeps the switch when reporting it throws', async () => {
+    register(() => true, { onPackageSwitched: () => { throw new Error('no window') } })
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    writeFileSync(picked, vsix('acme.todo', '1.1.0'))
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.active?.packageVersion).toBe('1.1.0')
+  })
+})
+
+describe('L4: a file update keeps the replaced file version to go back to', () => {
+  async function updateFromFile(): Promise<void> {
+    register()
+    await installLocal(vsix('acme.todo', '1.0.0', { withBackend: true }))
+    writeFileSync(picked, vsix('acme.todo', '1.1.0', { withBackend: true }))
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+  }
+
+  it('refuses to go back without renewed consent, and changes nothing', async () => {
+    await updateFromFile()
+    await expect(call('plugins:rollback', { id: 'acme.todo' })).rejects.toThrow(/ROLLBACK_CONSENT_REQUIRED \[acme\.todo\]/)
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({
+      active: { packageVersion: '1.1.0' },
+      previous: { packageVersion: '1.0.0' },
+    })
+  })
+
+  it('goes back with renewed consent: the kept version runs, its backend asks again, the newer one stays staged', async () => {
+    await updateFromFile()
+    forgetBackendConsent.mockClear()
+    await expect(call('plugins:rollback', { id: 'acme.todo', consentConfirmed: true })).resolves.toMatchObject({
+      id: 'acme.todo',
+      packageVersion: '1.0.0',
+    })
+    const record = new PluginActivationSelector(pluginsRoot).read('acme.todo')!
+    expect(record.active?.packageVersion).toBe('1.0.0')
+    expect(record.candidate?.packageVersion).toBe('1.1.0')
+    expect(forgetBackendConsent).toHaveBeenCalledWith('acme.todo')
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', packageVersion: '1.0.0', source: 'local-unsigned' }])
+    // The consent records follow the selector: the running version's is active.
+    expect(JSON.parse(readFileSync(localTrustRecordPath(pluginsRoot, 'acme.todo'), 'utf8')).version).toBe('1.0.0')
+    expect(JSON.parse(readFileSync(localTrustRecordPath(pluginsRoot, 'acme.todo', 'candidate'), 'utf8')).version).toBe('1.1.0')
+  })
+
+  it('keeps the way back when a file switch fails and is applied again (review M1)', async () => {
+    const version = (role: 'active' | 'candidate' | 'previous') => {
+      const path = localTrustRecordPath(pluginsRoot, 'acme.todo', role)
+      return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).version : null
+    }
+    let failOnce = true
+    register(() => true, {
+      onActivationChange: (change: { pluginId: string; activation?: PluginActivationCatalogEntry }) => {
+        if (failOnce && change.activation?.packageVersion === '1.1.0') {
+          failOnce = false
+          throw new Error('the switch failed for the test')
+        }
+        activations.push(change)
+      },
+    })
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    writeFileSync(picked, vsix('acme.todo', '1.1.0'))
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await expect(call('plugins:restart', { id: 'acme.todo' })).rejects.toThrow(/the switch failed for the test/)
+
+    // Failed: 1.0.0 runs again and the records are as before the switch.
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({
+      active: { packageVersion: '1.0.0' },
+      candidate: { packageVersion: '1.1.0' },
+    })
+    expect({ a: version('active'), c: version('candidate'), p: version('previous') }).toEqual({ a: '1.0.0', c: '1.1.0', p: null })
+
+    // Applied again: 1.1.0 runs and 1.0.0 is still the kept version.
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect({ a: version('active'), c: version('candidate'), p: version('previous') }).toEqual({ a: '1.1.0', c: null, p: '1.0.0' })
+    expect(call('plugins:listInstalled')).toMatchObject([{ rollbackToVersion: '1.0.0', rollbackNeedsConsent: true }])
+    await expect(call('plugins:rollback', { id: 'acme.todo', consentConfirmed: true })).resolves.toMatchObject({ packageVersion: '1.0.0' })
+  })
+
+  it('discloses the kept version for the renewed consent, and writes its grant afresh on going back (review M3)', async () => {
+    await updateFromFile()
+    const prepared = await call('plugins:prepareLocalRollback', { id: 'acme.todo' }) as Record<string, unknown>
+    expect(prepared).toMatchObject({
+      id: 'acme.todo',
+      version: '1.0.0',
+      rollbackFrom: '1.1.0',
+      source: 'local-unsigned',
+      trustTier: 'unsigned',
+      containsBackendExecutable: true,
+      requiresRiskConfirmation: true,
+    })
+    expect(prepared.digest).toMatch(/^[0-9a-f]{64}$/)
+    // Preparing changes nothing.
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.active?.packageVersion).toBe('1.1.0')
+
+    await call('plugins:rollback', { id: 'acme.todo', consentConfirmed: true })
+    expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.todo', '1.0.0')).toEqual({
+      packageVersion: '1.0.0',
+      system: [],
+      storage: true,
+    })
+  })
+
+  it('has nothing to disclose for a rollback that is not to a kept file version', async () => {
+    register()
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    await expect(call('plugins:prepareLocalRollback', { id: 'acme.todo' })).rejects.toThrow(/no completed activation to roll back/)
+  })
+
+  it('removes every kept consent record with the plugin', async () => {
+    await updateFromFile()
+    await call('plugins:remove', { id: 'acme.todo' })
+    for (const role of ['active', 'candidate', 'previous'] as const) {
+      expect(existsSync(localTrustRecordPath(pluginsRoot, 'acme.todo', role))).toBe(false)
+    }
+  })
+
+  it('still keeps nothing to go back to when a file replaces a Marketplace install (D7)', async () => {
+    register()
+    installRegistryFetch('acme.todo', '1.0.0')
+    await call('plugins:prepareInstall', { namespace: 'acme', name: 'todo' })
+    await call('plugins:commitInstall', { id: 'acme.todo', publisherConfirmed: true, riskConfirmed: true })
+    writeFileSync(picked, vsix('acme.todo', '1.1.0-local'))
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.previous).toBeUndefined()
   })
 })

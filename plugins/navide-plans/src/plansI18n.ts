@@ -1,6 +1,8 @@
 import enUS from './locales/en-US.json'
 import zhTW from './locales/zh-TW.json'
 import jaJP from './locales/ja-JP.json'
+import koKR from './locales/ko-KR.json'
+import zhCN from './locales/zh-CN.json'
 import { isUiLocale } from '@navide/plugin-ui/foundation'
 
 // This plugin's catalogs. Adding a language: import its JSON above and add
@@ -9,6 +11,8 @@ const PLANS_MESSAGES = {
   'en-US': enUS,
   'zh-TW': zhTW,
   'ja-JP': jaJP,
+  'ko-KR': koKR,
+  'zh-CN': zhCN,
 }
 
 export type SupportedPlansLocale = keyof typeof PLANS_MESSAGES

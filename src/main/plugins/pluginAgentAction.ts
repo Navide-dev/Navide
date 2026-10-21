@@ -77,7 +77,9 @@ export interface PluginAgentActionDeps {
    *  is written. Throws while the user is installing the same id. */
   prepareUpdate?(pluginId: string, version: string): Promise<PluginAgentUpdateCheck>
   /** O1: commit the held version through the window's own commit. */
-  commitUpdate?(pluginId: string): Promise<void>
+  /** Stage the update and (user decision A, 2026-10-21) switch to it at
+   *  once; `requester` is the agent the switch record names. */
+  commitUpdate?(pluginId: string, requester?: PluginAgentRequester): Promise<void | { switched?: true; switchError?: string }>
   /** O1: drop the held version. */
   discardUpdate?(pluginId: string): void
 }
@@ -147,13 +149,24 @@ async function answerAgentUpdate(
     deps.discardUpdate(pluginId)
     return approval(reason)
   }
+  let committed: void | { switched?: true; switchError?: string }
   try {
-    await deps.commitUpdate(pluginId)
+    committed = await deps.commitUpdate(pluginId, requester)
   } catch (error) {
     deps.discardUpdate(pluginId)
     return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
   }
-  deps.notify({ action: 'update', pluginId, pluginVersion: version, fromVersion: from, requester })
+  // Review M2: staged, but the switch failed and `from` runs again. Said as it
+  // is; the main window shows only its "switch failed" row (with Apply now),
+  // never an "updated" one.
+  if (committed && committed.switchError !== undefined) {
+    return { ok: true, updated: true, switched: false, switchError: committed.switchError, pluginId, fromVersion: from, pluginVersion: version }
+  }
+  // Review r2: a switched update is recorded by the switch row itself (it names
+  // the agent and offers Back), so the window shows one row, not two.
+  if (!committed || committed.switched !== true) {
+    deps.notify({ action: 'update', pluginId, pluginVersion: version, fromVersion: from, requester })
+  }
   return { ok: true, updated: true, pluginId, fromVersion: from, pluginVersion: version }
 }
 

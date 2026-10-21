@@ -1956,6 +1956,11 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
+    onPackageSwitchFailed: (failure) => {
+      console.warn(`[main] switching ${failure.pluginId} to ${failure.stagedVersion} failed: ${failure.reason}`)
+      pluginStagedCandidateRelay.notifyStagedUpdates([failure])
+    },
     promptDigestBlock,
     preflightCandidateFrontend,
     preflightCandidateBackend,
@@ -4037,6 +4042,40 @@ ipcMain.handle('window:reattachGroup', (event, arg: { groupId?: string } | undef
   const child = detachedGroups.get(groupId)
   if (!child || child.isDestroyed()) return { ok: false }
   child.close()
+  return { ok: true }
+})
+
+// MCP window_focus (DESIGN-C S3): a window brings ITSELF to the front. The
+// window is the sender's, never an argument, so a renderer cannot focus (or
+// name) any other window through this.
+ipcMain.handle('window:focusSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return { ok: false }
+  revealMainWindow(win)
+  return { ok: true }
+})
+
+// MCP window_close (DESIGN-C S4a): a window closes ITSELF, the same close its
+// own title-bar button makes (so the last-window guard still applies). The
+// window is the sender's, never an argument.
+// Off macOS the last main window cannot be closed this way: that would quit
+// Navide and end every CLI. Asked before the window lets go of anything
+// (window:canCloseSelf), and again at the close itself.
+function agentCloseRefusal(win: BrowserWindow | null): string | null {
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return 'not-a-main-window'
+  const others = [...mainWindows].filter((w) => w !== win && !w.isDestroyed() && !detachedWindowIds.has(w.id))
+  if (!isMac() && !detachedWindowIds.has(win.id) && others.length === 0) return 'last-window'
+  return null
+}
+ipcMain.handle('window:canCloseSelf', (event) => {
+  const refusal = agentCloseRefusal(BrowserWindow.fromWebContents(event.sender))
+  return refusal ? { ok: false, error: refusal } : { ok: true }
+})
+ipcMain.handle('window:closeSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const refusal = agentCloseRefusal(win)
+  if (refusal || !win) return { ok: false, error: refusal ?? 'not-a-main-window' }
+  win.close()
   return { ok: true }
 })
 
