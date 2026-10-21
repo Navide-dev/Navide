@@ -14894,6 +14894,10 @@ const stageCompletions = new Map<number, StageSlotTracker>()
 // Map — NOT on the watcher — so it survives cancelWatcher(), letting the stall
 // path (whose watcher is already cancelled) still judge slotFinished correctly.
 const paneArmedAt = new Map<string, number>()
+/** Each pane's last reply as its reader reported it (turn_complete text), with
+ *  the CLI's own time for it. A finished slot's {{prev.summary}} is taken from
+ *  here — see slotSummarySource. */
+const paneLastReply = new Map<string, { text: string; at: number }>()
 
 // ── Background system notifications (CLI done / needs input) ─────────────────
 // Native OS notification when a pane's turn completes or it needs the user's
@@ -15088,6 +15092,10 @@ backend.on('agent.activity', (raw) => {
     // turn_complete (Claude Stop hook, thinking-only record, Codex cross-batch)
     // must never be judged against a previous turn's text.
     judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    if (ev.text && !markerReply && !isInjectedMessageText(ev.text)) {
+      const at = ev.timestamp ? Date.parse(ev.timestamp) : NaN
+      paneLastReply.set(ev.pane_id, { text: ev.text, at: Number.isNaN(at) ? Date.now() : at })
+    }
     if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
@@ -15285,6 +15293,20 @@ backend.on('agent.activity', (raw) => {
 // buffer question pre-check owns that (it advances scanFrom and dedups); we only
 // DEFER completion when the turn also asked a real question, preserving
 // "question wins over sentinel" without a second enqueue path.
+/** What a finished slot hands downstream as {{prev.summary}} (#448): its own
+ *  last reply. The screen tail it used to be carries spinners, status lines and
+ *  repeated blocks. A reply from before the slot was armed belongs to an
+ *  earlier task (its role prompt, a previous stage), and a vendor whose reader
+ *  reports no turn text has nothing else, so both keep the screen tail. */
+function slotSummarySource(paneId: string, stageIndex: number): string {
+  const reply = paneLastReply.get(paneId)
+  // The later arm wins: a pane kept from an earlier stage still holds that
+  // stage's watcher arm when a Manager-mode stage arms it through its router.
+  const armedAt = Math.max(paneArmedAt.get(paneId) ?? 0, stageRouters.get(stageIndex)?.armedAt ?? 0)
+  if (reply && armedAt > 0 && reply.at >= armedAt) return reply.text
+  return (paneRefs[paneId]?.cleanBuffer as unknown as string) ?? ''
+}
+
 function judgeTurnText(paneId: string, text: string, timestamp: string): void {
   const watcher = watchers.get(paneId)
   if (!watcher || watcher.cancelled) return
@@ -17276,7 +17298,7 @@ function onStageSlotCompleted(
     pipelineDag.slotFinished(
       stageIndex,
       completedPane.slotLabel,
-      (paneRefs[paneId]?.cleanBuffer as unknown as string) ?? '',
+      slotSummarySource(paneId, stageIndex),
     )
   }
   // Audit trail (→ history.jsonl): every slot finish records its reason so a
