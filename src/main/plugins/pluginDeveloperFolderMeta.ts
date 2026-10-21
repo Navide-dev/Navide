@@ -11,6 +11,7 @@ import {
 import { randomUUID } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { fsyncFileSync, syncDirectorySync } from './fsSync'
+import { canonicalContractJson } from '../../shared/pluginDisclosure'
 
 // What Navide discloses about each developer folder beyond its consent
 // (DESIGN-A2 §2.0): who had it loaded, whether it reloads on file changes,
@@ -19,9 +20,16 @@ import { fsyncFileSync, syncDirectorySync } from './fsSync'
 // not know this file keeps reading the store as before (downgrade-safe).
 // Disclosure only: nothing here decides whether a folder loads, so a missing
 // or damaged file shows "unknown", and a write that fails never blocks a load.
-// The file is not signed: any program running as the user can rewrite it
-// (disclosed in plugin-development-v2.md), the same as the Developer Mode
-// store before its signature (G5).
+// Review MED-1 on #536: who loaded a folder is signed with the Developer
+// Mode store's key (G5). A loader another program wrote, or one without a
+// signature, reads as "unknown, the record may have been changed"; one
+// signed under an earlier key says the key changed. With secure storage but
+// no usable key (the signature file gone) nothing verifies (review MED-1 on
+// #552). Without secure storage there is no key: the record reads as
+// written and says it is not signed, as the Developer Mode store does then.
+// A record restored from earlier for the same id and folder still verifies
+// (no counter; the same as the store's own entries). The load is never
+// affected.
 const DEVELOPER_FOLDER_META_FILE = '.navide-plugin-developer-folders-meta.json'
 
 /** Who had a developer folder loaded: the user's own pick in the main window,
@@ -47,9 +55,25 @@ export interface DeveloperFolderLastLoad {
   fileCount?: number
 }
 
+/** Signs the loader record; the Developer Mode store with its key. */
+export interface DeveloperFolderRecordSigner {
+  recordSigning():
+    | { state: 'no-secure-storage' }
+    | { state: 'no-key' }
+    | { state: 'ready'; keyId: string; mac(entry: string): string }
+}
+
 export interface DeveloperFolderMeta {
   path: string
   loadedBy: DeveloperFolderLoadedBy
+  /** HMAC of the loader record (pluginId, folder, loadedBy), and the
+   *  fingerprint of the key it was made with. */
+  loadedByMac?: string
+  loadedByKeyId?: string
+  /** Set on read, never stored: why the loader did not verify. */
+  loadedByUnverified?: 'changed' | 'key-changed' | 'no-key'
+  /** Set on read, never stored: no secure storage, so nothing is signed. */
+  loadedByUnsigned?: true
   /** Reload when a file in the folder changes (A2-4); on unless turned off. */
   autoReload: boolean
   lastLoad?: DeveloperFolderLastLoad
@@ -88,6 +112,8 @@ function validMeta(value: unknown): value is DeveloperFolderMeta {
   return isRecord(value) &&
     typeof value.path === 'string' && value.path.length > 0 &&
     validLoadedBy(value.loadedBy) &&
+    (value.loadedByMac === undefined || typeof value.loadedByMac === 'string') &&
+    (value.loadedByKeyId === undefined || typeof value.loadedByKeyId === 'string') &&
     typeof value.autoReload === 'boolean' &&
     (value.lastLoad === undefined || validLastLoad(value.lastLoad))
 }
@@ -110,23 +136,51 @@ function readFolders(path: string): Record<string, DeveloperFolderMeta> {
   }
 }
 
+const loaderEntry = (pluginId: string, path: string, loadedBy: DeveloperFolderLoadedBy): string =>
+  canonicalContractJson({ pluginId, path: resolve(path), loadedBy })
+
 export class PluginDeveloperFolderMetaStore {
   private readonly file: string
 
-  constructor(private readonly root: string) {
+  constructor(private readonly root: string, private readonly signer?: DeveloperFolderRecordSigner) {
     this.file = join(root, DEVELOPER_FOLDER_META_FILE)
   }
 
   /** The record of `pluginId` loaded from `path`; a record of another folder
-   *  is stale and reads as the default. */
+   *  is stale and reads as the default. A loader that does not verify reads
+   *  as unknown and says so. */
   get(pluginId: string, path: string): DeveloperFolderMeta {
+    const { loadedByMac, loadedByKeyId, ...meta } = this.stored(pluginId, path)
+    if (!this.signer || meta.loadedBy.kind === 'unknown') return meta
+    const signing = this.signing()
+    if (signing.state === 'no-secure-storage') return { ...meta, loadedByUnsigned: true }
+    const unverified = (reason: 'changed' | 'key-changed' | 'no-key'): DeveloperFolderMeta =>
+      ({ ...meta, loadedBy: { kind: 'unknown' }, loadedByUnverified: reason })
+    if (signing.state === 'no-key') return unverified('no-key')
+    if (loadedByKeyId !== undefined && loadedByMac !== undefined && loadedByKeyId !== signing.keyId) return unverified('key-changed')
+    return loadedByMac === signing.mac(loaderEntry(pluginId, path, meta.loadedBy)) ? meta : unverified('changed')
+  }
+
+  setLoadedBy(pluginId: string, path: string, loadedBy: DeveloperFolderLoadedBy): void {
+    const signing = this.signer ? this.signing() : null
+    const signed = signing?.state === 'ready'
+      ? { loadedByMac: signing.mac(loaderEntry(pluginId, path, loadedBy)), loadedByKeyId: signing.keyId }
+      : {}
+    this.update(pluginId, path, ({ loadedByMac: _mac, loadedByKeyId: _keyId, ...meta }) => ({ ...meta, loadedBy, ...signed }))
+  }
+
+  private stored(pluginId: string, path: string): DeveloperFolderMeta {
     const meta = readFolders(this.file)[pluginId]
     if (meta && resolve(meta.path) === resolve(path)) return structuredClone(meta)
     return { path, loadedBy: { kind: 'unknown' }, autoReload: true }
   }
 
-  setLoadedBy(pluginId: string, path: string, loadedBy: DeveloperFolderLoadedBy): void {
-    this.update(pluginId, path, (meta) => ({ ...meta, loadedBy }))
+  private signing(): ReturnType<DeveloperFolderRecordSigner['recordSigning']> {
+    try {
+      return this.signer!.recordSigning()
+    } catch {
+      return { state: 'no-key' }
+    }
   }
 
   setAutoReload(pluginId: string, path: string, autoReload: boolean): void {
@@ -146,7 +200,7 @@ export class PluginDeveloperFolderMetaStore {
 
   private update(pluginId: string, path: string, change: (meta: DeveloperFolderMeta) => DeveloperFolderMeta): void {
     const folders = readFolders(this.file)
-    folders[pluginId] = change(this.get(pluginId, path))
+    folders[pluginId] = change(this.stored(pluginId, path))
     this.write({ schemaVersion: 1, folders })
   }
 

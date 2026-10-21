@@ -411,16 +411,23 @@ async function setFolderAutoReload(pluginId: string, enabled: boolean): Promise<
 }
 /** DESIGN-A2 G3: who had a loaded developer folder loaded, in the wording of agent request cards. */
 function folderLoadedByText(pluginId: string): string {
-  const loadedBy = developerMode.value.folders.find((folder) => folder.pluginId === pluginId)?.loadedBy
+  const folder = developerMode.value.folders.find((entry) => entry.pluginId === pluginId)
+  const loadedBy = folder?.loadedBy
   if (!loadedBy) return ''
-  if (loadedBy.kind === 'user') return t('settings.extensions.developerMode.loadedByUser')
+  if (folder.loadedByUnverified === 'key-changed') return t('settings.extensions.developerMode.loadedByKeyChanged')
+  if (folder.loadedByUnverified) return t('settings.extensions.developerMode.loadedByUnverified')
+  if (loadedBy.kind === 'user') {
+    const text = t('settings.extensions.developerMode.loadedByUser')
+    return folder.loadedByUnsigned ? `${text} ${t('settings.extensions.developerMode.loadedByUnsigned')}` : text
+  }
   if (loadedBy.kind === 'unknown') return t('settings.extensions.developerMode.loadedByUnknown')
   const requester = loadedBy.callerKind === 'pane'
     ? (loadedBy.paneName ? t('plugin-agent.caller.pane', { pane: reveal(loadedBy.paneName) }) : t('plugin-agent.caller.pane-unknown'))
     : loadedBy.callerKind === 'external' ? t('plugin-agent.caller.external')
       : loadedBy.callerKind === 'host' ? t('plugin-agent.caller.host')
         : t('plugin-request.caller-unknown')
-  return t('settings.extensions.developerMode.loadedByAgent', { requester, at: new Date(loadedBy.approvedAt).toLocaleString() })
+  const text = t('settings.extensions.developerMode.loadedByAgent', { requester, at: new Date(loadedBy.approvedAt).toLocaleString() })
+  return folder.loadedByUnsigned ? `${text} ${t('settings.extensions.developerMode.loadedByUnsigned')}` : text
 }
 
 async function refreshDeveloperMode(): Promise<void> {

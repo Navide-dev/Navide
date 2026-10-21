@@ -226,6 +226,42 @@ export class PluginDeveloperModeStore {
     return this.folder(pluginId) ?? this.untrustedFolders().find((folder) => folder.pluginId === pluginId)
   }
 
+  /** An HMAC of `entry` under this store's key, for the developer folder
+   * record beside it (review MED-1 on #536). The key never leaves the store;
+   * a domain prefix keeps these MACs apart from the store's own entries.
+   * Null without secure storage, before Navide signed anything, or when the
+   * key cannot be unwrapped. Never throws. */
+  entryMac(entry: string): string | null {
+    const signing = this.recordSigning()
+    return signing.state === 'ready' ? signing.mac(entry) : null
+  }
+
+  /** How the developer folder record can be signed now (review MED-1 on
+   * #552): `no-secure-storage` (nothing is checked, as for this store),
+   * `no-key` (secure storage works but there is no usable key: the
+   * signature file is gone or its key cannot be unwrapped; nothing verifies,
+   * as this store treats a missing signature), or `ready` with the key's
+   * fingerprint, so a record signed under an earlier key can say so. Never
+   * throws; never exposes the key. */
+  recordSigning():
+    | { state: 'no-secure-storage' }
+    | { state: 'no-key' }
+    | { state: 'ready'; keyId: string; mac(entry: string): string } {
+    if (!this.integrity?.available) return { state: 'no-secure-storage' }
+    try {
+      const signature = readSignature(this.signatureFile)
+      const key = signature?.keyEnc ? this.key(signature) : null
+      if (!key) return { state: 'no-key' }
+      return {
+        state: 'ready',
+        keyId: createHmac('sha256', key).update('developer-folder-record-key-id').digest('hex').slice(0, 16),
+        mac: (entry) => createHmac('sha256', key).update(`developer-folder-record\u0000${entry}`).digest('hex'),
+      }
+    } catch {
+      return { state: 'no-key' }
+    }
+  }
+
   /** G5: when Navide first saw entries it did not write, while any is left. */
   externalChange(): DeveloperModeExternalChange | null {
     return this.evaluate().externalChange

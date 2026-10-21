@@ -9,7 +9,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import { revealPath } from '../composables/hostShell'
-import { developerFolderLoadedByText, type DeveloperFolderLoadedBy } from '../lib/developerFolderLoadedBy'
+import { developerFolderLoadedByText, type DeveloperFolderLoadedBy, type DeveloperFolderLoaderCheck } from '../lib/developerFolderLoadedBy'
 
 export interface DeveloperFolderInfo {
   pluginId: string
@@ -21,6 +21,8 @@ export interface DeveloperFolderInfo {
     fileCount?: number
   } | null
   loadedBy?: DeveloperFolderLoadedBy
+  loadedByUnverified?: DeveloperFolderLoaderCheck['loadedByUnverified']
+  loadedByUnsigned?: true
 }
 
 const props = defineProps<{ folder: DeveloperFolderInfo }>()
@@ -36,7 +38,7 @@ const trigger = computed(() => {
   return value && TRIGGERS.includes(value) ? value : null
 })
 const fingerprint = computed(() => props.folder.lastLoad?.fingerprint ?? '')
-const loadedByText = computed(() => developerFolderLoadedByText(props.folder.loadedBy, t))
+const loadedByText = computed(() => developerFolderLoadedByText(props.folder.loadedBy, t, props.folder))
 
 async function copyFingerprint(): Promise<void> {
   try {

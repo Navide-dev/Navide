@@ -2931,7 +2931,7 @@ export function registerPluginIpc(
   // DESIGN-A2 G3: who asked for each prepared folder travels with it to the
   // consent, and the record beside the store keeps it after the load.
   const preparedFolders = new Map<string, { dir: string; permissionsDigest: string; loadedBy: DeveloperFolderLoadedBy }>()
-  const folderMeta = new PluginDeveloperFolderMetaStore(pluginsRoot)
+  const folderMeta = new PluginDeveloperFolderMetaStore(pluginsRoot, developerMode)
 
   /** What the consent dialog shows for a developer folder, from its manifest. */
   const describeFolder = (dir: string): {
@@ -3219,7 +3219,13 @@ export function registerPluginIpc(
       pluginId: folder.pluginId,
       path: folder.path,
       consentedAt: folder.consentedAt,
-      ...(({ loadedBy, autoReload, lastLoad }) => ({ loadedBy, autoReload, ...(lastLoad ? { lastLoad } : {}) }))(
+      ...(({ loadedBy, loadedByUnverified, loadedByUnsigned, autoReload, lastLoad }) => ({
+        loadedBy,
+        ...(loadedByUnverified ? { loadedByUnverified } : {}),
+        ...(loadedByUnsigned ? { loadedByUnsigned } : {}),
+        autoReload,
+        ...(lastLoad ? { lastLoad } : {}),
+      }))(
         folderMeta.get(folder.pluginId, folder.path),
       ),
       ...(reloadErrors.has(folder.pluginId) ? { reloadError: reloadErrors.get(folder.pluginId) } : {}),
@@ -3447,8 +3453,9 @@ export function registerPluginIpc(
     const id = typeof args?.id === 'string' ? args.id : ''
     await unloadDeveloperFolder(id)
     // Its backend data stays, recorded as local, so no later install of the
-    // id takes it over.
-    if (developerMode.folder(id) && options.nativeBackendDataRoot) {
+    // id takes it over. Review LOW-3 on #552: also for an entry another
+    // program wrote.
+    if (developerMode.anyFolder(id) && options.nativeBackendDataRoot) {
       recordKeptNativeBackendDataSource(options.nativeBackendDataRoot, id, 'local-unsigned')
     }
     developerMode.forget(id)

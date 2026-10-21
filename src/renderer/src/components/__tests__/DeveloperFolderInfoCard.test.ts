@@ -67,4 +67,15 @@ describe('DeveloperFolderInfoCard', () => {
     expect(older.get('.nv-folder-card-loaded').text()).toBe(i18n.global.t('settings.extensions.developerMode.infoCard.notRecorded'))
     expect(older.get('.nv-folder-card-fingerprint').text()).toBe(i18n.global.t('settings.extensions.developerMode.infoCard.notRecorded'))
   })
+
+  it('review MED-1 on #536 / #552: a loader record that does not verify says so, and an unsigned one says it is not signed', () => {
+    const changed = card({ loadedBy: { kind: 'unknown' }, loadedByUnverified: 'changed' })
+    expect(changed.get('.nv-folder-card-loader').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUnverified'))
+    const rekeyed = card({ loadedBy: { kind: 'unknown' }, loadedByUnverified: 'key-changed' })
+    expect(rekeyed.get('.nv-folder-card-loader').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByKeyChanged'))
+    const unsigned = card({ loadedBy: { kind: 'user' }, loadedByUnsigned: true })
+    expect(unsigned.get('.nv-folder-card-loader').text()).toBe(
+      `${i18n.global.t('settings.extensions.developerMode.loadedByUser')} ${i18n.global.t('settings.extensions.developerMode.loadedByUnsigned')}`,
+    )
+  })
 })

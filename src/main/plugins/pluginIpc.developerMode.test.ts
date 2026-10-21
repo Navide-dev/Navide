@@ -952,6 +952,55 @@ describe('Developer Mode settings another program wrote (A2-5, G5)', () => {
   })
 })
 
+describe('review MED-1 on #536: the loader record is signed', () => {
+  beforeEach(() => {
+    integrity = {
+      available: true,
+      encrypt: (plain) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`,
+      decrypt: (enc) => Buffer.from(enc.slice(4), 'base64').toString('utf8'),
+    }
+  })
+
+  it('a loader another program rewrites on disk reads as unknown, may have been changed; the folder still loads', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loadedBy: { kind: 'user' } }] })
+    const file = join(pluginsRoot, '.navide-plugin-developer-folders-meta.json')
+    const saved = JSON.parse(readFileSync(file, 'utf8')) as { folders: Record<string, Record<string, unknown>> }
+    saved.folders['acme.devtodo']!.loadedBy = { kind: 'agent', callerKind: 'pane', paneName: 'someone', approvedAt: '2026-10-21T01:00:00.000Z' }
+    writeFileSync(file, JSON.stringify(saved))
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loaded: true, loadedBy: { kind: 'unknown' }, loadedByUnverified: 'changed' }] })
+    expect(await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).toEqual({ reloaded: true, requiresConsent: false })
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+  })
+
+  it('review MED-1 on #552: rewriting the loader and deleting the signature file reads as unknown, not as written', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const file = join(pluginsRoot, '.navide-plugin-developer-folders-meta.json')
+    const saved = JSON.parse(readFileSync(file, 'utf8')) as { folders: Record<string, Record<string, unknown>> }
+    saved.folders['acme.devtodo']!.loadedBy = { kind: 'agent', callerKind: 'pane', paneName: 'someone', approvedAt: '2026-10-21T01:00:00.000Z' }
+    writeFileSync(file, JSON.stringify(saved))
+    rmSync(join(pluginsRoot, '.navide-plugin-developer-mode.sig.json'))
+    const folders = (call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders
+    expect(folders.find((folder) => folder.pluginId === 'acme.devtodo')).toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: 'no-key' })
+  })
+
+  it('review LOW-3 on #552: removing a folder another program wrote keeps its backend data recorded as local', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    mkdirSync(join(dataRoot, 'acme.devtodo'), { recursive: true })
+    rmSync(join(pluginsRoot, '.navide-plugin-developer-mode.sig.json'))
+    expect((call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders)
+      .toMatchObject([{ pluginId: 'acme.devtodo', externallyChanged: true }])
+    await call('plugins:removeDeveloperFolder', { id: 'acme.devtodo' })
+    expect(JSON.parse(readFileSync(join(dataRoot, 'acme.devtodo@kept-source.json'), 'utf8'))).toEqual({ schemaVersion: 1, source: 'local-unsigned' })
+  })
+})
+
 describe('the content fingerprint of a developer folder (A2-3, G2)', () => {
   const lastLoad = () => (call('plugins:developerMode') as { folders: Array<{ lastLoad?: { at: string; fingerprint?: string; fileCount?: number } }> })
     .folders[0]?.lastLoad
