@@ -6193,7 +6193,7 @@ async def _describe_windows(caller: _Caller) -> list[tuple[Any, dict[str, Any] |
     asked in parallel."""
     from agent_team_backend import app
 
-    sessions = app.main_window_sessions()
+    sessions = [s for s in app.main_window_sessions() if getattr(s, "window_id", "")]
     answers = await asyncio.gather(*(
         _window_request(s, "ui.window.describe", None, caller, timeout=_WINDOW_DESCRIBE_TIMEOUT_S)
         for s in sessions
@@ -6314,7 +6314,7 @@ async def ui_invoke(
         if refused is not None:
             return {**refused, "result": None}
     if action == "ui.window.focus":
-        # The focused window says who did it; that name comes from the
+        # The affected window says who did it; that name comes from the
         # credential, never from what the caller wrote (window_focus does
         # the same).
         who = _caller_view(caller)

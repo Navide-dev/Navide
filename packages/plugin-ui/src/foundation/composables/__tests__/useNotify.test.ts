@@ -38,6 +38,17 @@ describe('useNotify', () => {
     }
   })
 
+  it('carries an opt-in action button and leaves it off a plain toast', () => {
+    const run = vi.fn()
+    n.toast('closed', { action: { label: 'Undo', run } })
+    const t = n.toasts.value[0]
+    expect(t.action?.label).toBe('Undo')
+    t.action?.run()
+    expect(run).toHaveBeenCalledTimes(1)
+    n.toast('plain')
+    expect('action' in n.toasts.value[1]).toBe(false)
+  })
+
   it('toast honors an explicit type', () => {
     n.toast('done', { type: 'success' })
     expect(n.toasts.value[0].type).toBe('success')

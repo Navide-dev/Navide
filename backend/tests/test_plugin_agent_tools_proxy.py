@@ -84,7 +84,7 @@ W1_CORE_TOOLS = frozenset({
     "plugins_validate_package", "plugins_package",
 })
 #: Core tools added after that digest by DESIGN-C S3 (mcp_server/window_tools.py).
-DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus"})
+DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", "workspace_close"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server).
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"
