@@ -592,7 +592,69 @@
     "clean-changed": "プレビュー後に未追跡ファイルが変わりました。何も削除していません。確認してもう一度お試しください。",
     "issue-back": "← 戻る",
     "issue-comment": "コメント",
-    "issue-create": "作成"
+    "issue-create": "作成",
+    "pane": {
+      "no-changes-to-display": "表示する変更はありません",
+      "no-ignored-files": "無視対象のファイルはありません",
+      "drag-to-resize": "ドラッグしてサイズを変更",
+      "commit-files": "ファイル（{count}）",
+      "no-draft": "下書きはありません",
+      "issues-open-count": "{count} 件オープン",
+      "issue-host-unsupported": "このリポジトリでは対応する Issue ホストが見つかりません（GitHub または GitLab の origin リモートが必要です）。",
+      "issue-cli-missing": "{cli} がインストールされていません。",
+      "issue-auth-before": "認証されていません。ターミナルで",
+      "issue-auth-after": "を実行してから、更新してください。",
+      "issue-dispatch": "エージェントに送信",
+      "issue-dispatch-title": "この Issue を実行中のエージェントに送信",
+      "issue-no-running-agent": "実行中のエージェントはありません",
+      "issue-handoff-handling": "エージェントが対応中",
+      "issue-handoff-closed": "エージェントのペインは閉じられました",
+      "ignore-target": {
+        "project": ".gitignore（プロジェクトのルート）",
+        "nested": ".gitignore（現在のフォルダー）",
+        "local": ".git/info/exclude（ローカルのみ）",
+        "global": "グローバル .gitignore"
+      }
+    },
+    "conflict": {
+      "progress": "{resolved} / {total} 解決済み",
+      "apply-title": "このファイルを書き込んでステージ",
+      "apply-blocked": "先にすべての競合を解決してください",
+      "apply": "適用してステージ",
+      "ours-default": "HEAD（自分側）",
+      "versus": "対",
+      "theirs-default": "相手側",
+      "empty-side": "（空）",
+      "accepted-ours": "自分側を採用済み",
+      "accepted-theirs": "相手側を採用済み",
+      "accepted-both": "両方を採用済み",
+      "manually-edited": "手動で編集済み",
+      "undo": "元に戻す"
+    },
+    "diff": {
+      "badge-staged": "ステージ済み",
+      "badge-working-tree": "作業ツリー",
+      "open-in-editor": "ファイルをエディターで開く",
+      "prev-change": "前の変更（↑）",
+      "next-change": "次の変更（↓）",
+      "reload": "差分を再読み込み",
+      "not-loaded": "差分は読み込まれていません",
+      "stage-selected": "選択行をステージ（{count}）"
+    },
+    "branch-diff": {
+      "working-changes": "作業中の変更",
+      "file-count": "{count} ファイル",
+      "expand-all": "すべて展開",
+      "collapse-all": "すべて折りたたむ",
+      "no-changes-between": "{base} と {compare} の間に変更はありません",
+      "no-uncommitted": "未コミットの変更はありません",
+      "hidden-lines": "{count} 行を非表示"
+    },
+    "file-detail": {
+      "no-history": "このファイルの履歴はありません。",
+      "no-changed-lines": "変更された行はありません。",
+      "no-blame": "Blame 情報はありません。"
+    }
   },
   "pane": {
     "git": {
@@ -1838,6 +1900,7 @@
       },
       "restore": "復元",
       "candidateReady": "アップデート {version} の準備ができました",
+      "activationFailed": "{plugin} はインストールされましたが、有効化できませんでした：{reason}。下の一覧で再起動するか破棄してください。",
       "restartPlugin": "Navide プラグインを再起動",
       "disable": "無効化",
       "enable": "有効化",
@@ -2001,7 +2064,7 @@
         },
         "title": "開発者モード",
         "switch": "開発者モードをオンにする",
-        "hint": "オンにすると、選んだフォルダーから Navide プラグインを読み込んで開発・テストでき、自前の Registry の設定（AGENT_TEAM_MARKETPLACE_URL）も適用されます。この設定画面でのみ切り替えられ、変更はすべて記録されます。",
+        "hint": "オンにすると、選んだフォルダーから Navide プラグインを読み込んで開発・テストでき、自前の Registry の設定（AGENT_TEAM_MARKETPLACE_URL）も適用されます。この設定画面でのみ切り替えられ、変更はすべて記録されます。オフにすると、フォルダーから読み込んだ Navide プラグインはすべて取り外され、選んだだけで同意していないフォルダーも消えます。同意済みのフォルダーの一覧は残り、再びオンにすると自動で読み込まれます。ここから削除することもできます。",
         "banner": "開発者モードがオンです。フォルダーから読み込んだ Navide プラグインは審査されていません。",
         "reminder": "開発者モードがオンです：フォルダーから読み込んだ Navide プラグインは審査されていません。不要になったら「設定 → Navide プラグイン」でオフにしてください。",
         "reminderClose": "了解",
@@ -3284,8 +3347,8 @@
                 "text": "自分側を採用、相手側を採用、両方を採用、または自分で編集できます。「共通の祖先」をオンにすると、共通の祖先を採用するボタンも表示されます。"
               },
               "apply": {
-                "label": "Apply & Stage",
-                "text": "すべてのブロックを解決するとクリックでき、結果の書き戻しとファイルのステージをまとめて行います。このボタンは、選択した表示言語にかかわらず英語で表示されます。実際の製品の表記です。"
+                "label": "適用してステージ",
+                "text": "すべてのブロックを解決するとクリックでき、結果の書き戻しとファイルのステージをまとめて行います。"
               }
             }
           },
@@ -3321,7 +3384,7 @@
             "ours": "HEAD（自分側）",
             "theirs": "相手側",
             "progress": "1 / 3 解決済み",
-            "apply": "Apply & Stage",
+            "apply": "適用してステージ",
             "base": "共通の祖先"
           }
         },
@@ -3476,7 +3539,7 @@
             "badge": "タイトルには<strong>競合</strong>バッジと、<em>{'{'}n{'}'} / {'{'}m{'}'} 解決済み</em>が表示されます。",
             "choices": "各競合ハンクで、<em>自分側を採用</em>、<em>相手側を採用</em>、<em>両方を採用</em>、<em>共通の祖先を採用</em>、または<em>編集</em>を選べます。手動編集後は<em>確定</em> / <em>キャンセル</em>で操作します。",
             "base": "<em>共通の祖先</em>を切り替えると、比較用に分岐元の版を表示します。",
-            "apply": "すべて処理したら、<strong>Apply &amp; Stage</strong> で書き戻してステージします。",
+            "apply": "すべて処理したら、<strong>適用してステージ</strong> を押して書き戻し、ステージします。",
             "binary": "バイナリファイルは 3 方向のマージができません。<em>バイナリの競合</em>と表示され、ファイル全体での選択のみが可能です。",
             "agent": "Git ウィンドウにはさらに<strong>エージェントで解決</strong>ボタンがあり、競合全体を CLI エージェントに渡せます。"
           },
@@ -11438,7 +11501,12 @@
       "publisher": "発行者：{publisher}",
       "selfDeclared": "自称：{publisher}",
       "localSignedBy": "開発者 {publisher}（Navide の資格審査済み）の署名あり。このバージョンは Navide の審査を受けていません",
-      "signatureRevoked": "署名は無効になりました"
+      "signatureRevoked": "署名は無効になりました",
+      "unsignedNote": "作成者を確認できません。ファイルが改変されている可能性があります。",
+      "showDetails": "提供元、SHA-256、インストール日時を表示",
+      "fileDigest": "インストールしたファイルの SHA-256：{digest}",
+      "contentDigest": "インストールした内容の SHA-256：{digest}",
+      "installedAt": "インストール日時：{time}"
     },
     "diff": {
       "heading": "この更新での権限の変化",
@@ -11493,10 +11561,11 @@
       "system": "{key}"
     },
     "scanHeading": "公開時のシステムスキャンの結果",
+    "scanHeadingLocal": "Navide によるこのファイルのスキャン結果",
     "declaredHeading": "この Navide プラグインが宣言している権限",
     "registryHeading": "Navide Registry の記録（署名なし）",
     "provenance": {
-      "local": "パッケージ自身の manifest から Navide が読み取った内容です。Navide Registry の署名はなく、Navide のスキャンも受けていません。",
+      "local": "パッケージ自身の manifest から Navide が読み取った内容です。Navide Registry の署名はなく、Navide の審査も受けていません。",
       "unverified": "Navide Registry が提供した内容で、まだ検証されていません。インストール前に Navide が署名を検証し、パッケージと照合します。",
       "verified": "検証済み：開示内容はダウンロードしたパッケージと一致し、スキャン結果の Navide Registry の署名は有効です。",
       "verifiedNoScan": "検証済み：開示内容はダウンロードしたパッケージと一致しています。この版にはシステムスキャンがありません。"
@@ -11504,7 +11573,9 @@
     "noDisclosure": "このバージョンは開示データなしで公開されました。",
     "signedByRegistry": "スキャンは Navide Registry が実行し署名しました。",
     "scannedByRegistry": "スキャンは Navide Registry が実行しました。",
+    "scannedLocally": "スキャン結果はこのカードの参考情報で、インストールの可否は決めません。",
     "limitsWithoutScan": "このバージョンにはシステムスキャンがありません。上記はこの Navide プラグイン自身の宣言だけです。",
+    "limitsWithoutScanLocal": "Navide はこのファイルをスキャンしていません。上記はこの Navide プラグイン自身の宣言だけです。",
     "viewNetwork": "Navide プラグインのビューはネットワークに接続でき、Navide の中に外部サイトを表示できます。Navide はその通信をフィルターも記録もしません。上のネットワークの項目は、コマンドとネイティブバックエンドだけが対象です。",
     "viewNetworkIfViews": "この Navide プラグインにビューがある場合、ビューはネットワークに接続でき、Navide の中に外部サイトを表示できます。Navide はその通信をフィルターも記録もしません。上のネットワークの項目は、コマンドとネイティブバックエンドだけが対象です。",
     "summary": {
@@ -11555,7 +11626,8 @@
       },
       "coverage": {
         "base": "公開時に Navide Registry がスキャンしました（スキャナー {scannerVersion}、{scannedAt}、{filesTotal} ファイル中 {filesScanned}）。静的スキャンでは実行時に決まる動作は見えないため、これは完全な一覧ではありません。",
-        "incomplete": "スキャンが不完全です：{reasons}。"
+        "incomplete": "スキャンが不完全です：{reasons}。",
+        "local": "このコンピューターで Navide がスキャンしました（スキャナー {scannerVersion}、{scannedAt}、{filesTotal} ファイル中 {filesScanned}）。静的スキャンでは実行時に決まる動作は見えないため、これは完全な一覧ではありません。"
       },
       "notFound": {
         "shell": "静的スキャンではコマンドの実行は見つかりませんでした。",
@@ -11563,7 +11635,8 @@
         "files": "静的スキャンではファイルパスは見つかりませんでした。",
         "dynamicCode": "静的スキャンでは実行時に生成されるコードは見つかりませんでした。"
       },
-      "noScan": "このバージョンはシステムスキャン導入前に公開されました。以下はこの Navide プラグイン自身の宣言だけです。"
+      "noScan": "このバージョンはシステムスキャン導入前に公開されました。以下はこの Navide プラグイン自身の宣言だけです。",
+      "noScanLocal": "Navide はこのファイルをスキャンしていません。以下はこの Navide プラグイン自身の宣言だけです。"
     },
     "incompleteReason": {
       "timedOut": "スキャン時間を超えた",

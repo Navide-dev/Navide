@@ -2134,6 +2134,33 @@ message, and optional structured details:
 The v1 broker's `CAP_DENIED`, `UNKNOWN`, `BAD_REQUEST`, and `BACKEND_ERROR`
 strings are internal legacy values and are mapped by the compatibility adapter.
 
+### Where to look when something fails
+
+- **A view's console.** Each view runs in its own web contents (a `<webview>`
+  guest, or a native `WebContentsView` for `location: "window"`), so
+  **View → Toggle Developer Tools** opens the DevTools of Navide's own window,
+  not your view's. To read your view's console, turn on **Chrome DevTools
+  Protocol** in Settings → MCP → External access, restart Navide, open
+  `chrome://inspect` in Chrome, add `127.0.0.1:9223` (or the port you chose)
+  under **Configure…**, and inspect the target whose URL is your view's
+  `entry`. While it is on, anything on this machine can run code in Navide
+  (see [CDP debug](external-mcp-control.md#cdp-debug-escape-hatch)); turn it off
+  when you are done.
+- **A Host refusal in a view.** The call rejects with a `PluginError` whose
+  `code` is in the table above (`CAPABILITY_DENIED` for a capability the
+  manifest does not declare or the user did not grant). Navide also records
+  every refused call: Settings → Navide Plugins → **Disclosure overview** →
+  your Navide plugin → **Activity** lists it as denied, and says when the
+  manifest did not declare it.
+- **A backend.** Its stderr, start failures and restarts are written to
+  Navide's main log, `<userData>/logs/main.log` (on macOS
+  `~/Library/Application Support/Agent-Team/logs/main.log`), on lines that start
+  with `[plugin-backend]`. A call the backend makes through the Host bridge and
+  the Host refuses is answered to the backend with that error code and counted
+  in the same **Activity** list. Before installing, `navide-plugin
+  dev-backend` prints each bridge call as `← bridge (denied in dev-backend)` and
+  the backend's stderr as `[backend]` lines.
+
 ## Views and lifecycle
 
 A package may contribute multiple views, and each view may have multiple live
