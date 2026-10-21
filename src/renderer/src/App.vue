@@ -11083,6 +11083,113 @@ registerCommand('ui.window.focus', async (args) => {
   notifyRestore.toast(i18n.global.t('msg.window-focused-by', { caller }), { type: 'info' })
   return { on_screen: currentWorkspace.value, previous_on_screen: previous, focused: focused?.ok === true }
 })
+// MCP window_close (DESIGN-C S4a). Only the window the id names acts — an
+// id that is not this page's is refused, so a broadcast cannot close a
+// bystander. The caller's own window never gets here: the bus refuses it
+// first (selfCloseRefusal), as the backend did. No CLI is ended: a main
+// window lets go of every project the way the sidebar's plain "Close
+// workspace" does (the PTYs keep running and re-attach on reopen) and then
+// closes; a detached group window just closes, which hands its group back to
+// the main window. A running pipeline is refused — stopping it is the user's.
+registerCommand('ui.window.close', async (args) => {
+  const a = (args ?? {}) as { windowId?: string; caller_address?: string }
+  if (!a.windowId || a.windowId !== WINDOW_INSTANCE_ID) {
+    throw new Error(`unknown-window: this window is ${WINDOW_INSTANCE_ID}, not "${a.windowId ?? ''}"`)
+  }
+  if (pipeline.state === 'running') {
+    throw new Error('pipeline-running: a pipeline is running in this window; only the user can stop it')
+  }
+  // Asked before anything is let go of: main refuses the last window off macOS.
+  const can = await window.agentTeam?.canCloseSelf?.()
+  if (can && !can.ok) {
+    throw new Error(`${can.error ?? 'window-close-failed'}: this window cannot be closed (closing the last window would quit Navide)`)
+  }
+  const caller = a.caller_address || 'an agent'
+  const left = panes.value.map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath }))
+  const held = [...workspaceOrder.value]
+  if (currentWorkspace.value && !held.some((w) => normWs(w) === normWs(currentWorkspace.value))) {
+    held.unshift(currentWorkspace.value)
+  }
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} closed this window; its CLIs keep running` })
+  if (!isDetachedWindow) for (const path of held) dropWorkspacePanes(path)
+  // After the answer is on its way: the window that is closing sends it.
+  setTimeout(() => { void window.agentTeam?.closeSelf?.() }, 300)
+  return isDetachedWindow
+    ? { workspaces: [], panes: left, reattached_to_main: true }
+    : { workspaces: held, panes: left }
+})
+// MCP workspace_close (DESIGN-C S4a). `path` is required and must be one this
+// window holds, spelled as it holds it (the backend hands over the window's own
+// spelling) — an empty or near-miss path is refused, never read as "the one on
+// screen". The caller's own workspace was refused before this (backend and
+// bus). keepPanes false ends the CLIs, so it always asks, naming the agent,
+// whatever "don't ask again" says; no answer within 55s is a no, answered
+// before the backend's own minute runs out.
+registerCommand('ui.workspace.close', async (args) => {
+  const a = (args ?? {}) as { path?: string; keepPanes?: boolean; caller_address?: string }
+  const path = typeof a.path === 'string' ? a.path : ''
+  if (!path) throw new Error('path-required: ui.workspace.close requires path')
+  const held = workspaceOrder.value.find((w) => normWs(w) === normWs(path))
+  if (!held) throw new Error(`workspace-not-open: this window does not hold ${path}`)
+  if (workspaceOrder.value.length < 2) {
+    throw new Error(`last-workspace: ${held} is this window's only project; close the window instead`)
+  }
+  if (pipeline.state === 'running' && normWs(pipelineRunWorkspace || pipeline.workspacePath) === normWs(held)) {
+    throw new Error(`pipeline-running: a pipeline is running in ${held}; only the user can stop it`)
+  }
+  const caller = a.caller_address || 'an agent'
+  const name = wsDisplayName(held)
+  const mine = panes.value
+    .filter((p) => normWs(p.workspacePath) === normWs(held))
+    .map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath }))
+  if (a.keepPanes === false) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // The deadline answers THIS dialog only: if another one has replaced it
+    // since, that one is left alone (and this one was already answered no).
+    let ownDialog: unknown = null
+    const noAnswer = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => {
+        if (ownDialog && notifyRestore.dialog.value === ownDialog) notifyRestore.resolveDialog(false)
+        resolve(false)
+      }, 55_000)
+    })
+    const asked = notifyRestore.confirm(
+      i18n.global.t('msg.agent-close-workspace-body', { caller, name, count: mine.length }),
+      {
+        title: i18n.global.t('msg.agent-close-workspace-title', { caller, name }),
+        confirmText: i18n.global.t('confirm-close.sidebar-ws-confirm'),
+        cancelText: i18n.global.t('action.cancel'),
+        danger: true,
+      },
+    )
+    // confirm() puts its dialog up synchronously.
+    ownDialog = notifyRestore.dialog.value
+    const agreed = await Promise.race([asked, noAnswer])
+    clearTimeout(timer)
+    if (!agreed) throw new Error(`user-declined: the user did not agree to end the CLIs in ${held}`)
+    await closeWorkspace(held, { confirmed: true })
+  } else {
+    await closeWorkspaceKeepPanes(held)
+  }
+  if (workspaceOrder.value.some((w) => normWs(w) === normWs(held))) {
+    throw new Error(`workspace-close-failed: ${held} is still open in this window`)
+  }
+  recordDiagnostic({
+    level: 'info',
+    code: 'agent.window-action',
+    message: `${caller} closed ${held}${a.keepPanes === false ? ' and ended its CLIs' : '; its CLIs keep running'}`,
+  })
+  if (a.keepPanes === false) {
+    notifyRestore.toast(i18n.global.t('msg.agent-closed-workspace-ended', { caller, name }), { type: 'info', duration: 8000 })
+  } else {
+    notifyRestore.toast(i18n.global.t('msg.agent-closed-workspace-kept', { caller, name }), {
+      type: 'info',
+      duration: 12000,
+      action: { label: i18n.global.t('msg.undo'), run: () => adoptWorkspace(held) },
+    })
+  }
+  return { path: held, panes: mine }
+})
 registerCommand('ui.layout.setMode', (args) => {
   const mode = (args as { mode?: LayoutMode } | undefined)?.mode
   if (!mode) throw new Error('ui.layout.setMode requires mode')
@@ -15375,6 +15482,27 @@ const SEEN_SPAWN_REQUEST_IDS_CAP = 200
 
 // cli_open_agent wants a pane opened. Every window sees this; only the one
 // owning the requesting pane answers (handleMcpSpawnRequest bails otherwise).
+// The caller's own window hears what its agent did to another window
+// (window_close), with an undo that reopens each project it held.
+backend.on('agent.window_action', (raw) => {
+  const ev = (raw ?? {}) as { tool?: string; caller?: string; workspaces?: string[]; panes_left_running?: string[] }
+  if (ev.tool !== 'window_close') return
+  const paths = Array.isArray(ev.workspaces) ? ev.workspaces.filter((p) => typeof p === 'string' && p) : []
+  notifyRestore.toast(
+    i18n.global.t('msg.agent-closed-window', {
+      caller: ev.caller || 'an agent',
+      names: paths.map((p) => wsDisplayName(p)).join(', '),
+      count: Array.isArray(ev.panes_left_running) ? ev.panes_left_running.length : 0,
+    }),
+    {
+      type: 'info',
+      duration: 12000,
+      ...(paths.length
+        ? { action: { label: i18n.global.t('msg.undo'), run: () => { for (const p of paths) void window.agentTeam?.openMainWindow?.({ workspace_path: p }) } } }
+        : {}),
+    },
+  )
+})
 backend.on('agent_spawn.request', (raw) => {
   const ev = raw as {
     request_id?: string
@@ -15554,7 +15682,11 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
         return
       }
       if (step === 'discard') await window.agentTeam?.plugins?.discardCandidate?.(action.pluginId)
-      else await window.agentTeam?.plugins?.rollback?.(action.pluginId)
+      else {
+        const consent = await confirmLocalRollback(installed, action.pluginId, action.fromVersion)
+        if (consent === null) return
+        await window.agentTeam?.plugins?.rollback?.(action.pluginId, consent)
+      }
       notifyRestore.toast(
         i18n.global.t('plugin-agent.notice.downgraded', { plugin: action.pluginId, version: action.fromVersion }),
         { type: 'info' },
@@ -15574,6 +15706,23 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   }
 }
 
+/** L4: going back to a kept file version is consented to again, with its
+ *  disclosure, in Settings → Navide Plugins. Returns the rollback options for
+ *  any other target, or null after sending the user there. */
+async function confirmLocalRollback(
+  installed: ReadonlyArray<{ id: string; rollbackNeedsConsent?: true }>,
+  pluginId: string,
+  version: string,
+): Promise<{ consentConfirmed?: boolean } | null> {
+  if (installed.find((pkg) => pkg.id === pluginId)?.rollbackNeedsConsent !== true) return {}
+  // Review M3: that consent shows the kept version's disclosure, which lives
+  // in Settings → Navide Plugins; this row only takes the user there.
+  closePopover()
+  openSettingsAt('extensions')
+  notifyRestore.toast(i18n.global.t('settings.extensions.rollback.consentInSettings', { id: pluginId, version }), { type: 'info' })
+  return null
+}
+
 /** "Back to vA" on a switch row (L3): the rollback in Settings → Navide
  *  Plugins, only while the switch it names is still what is installed. */
 async function revertPluginSwitch(
@@ -15585,7 +15734,9 @@ async function revertPluginSwitch(
       notifyRestore.toast(i18n.global.t('plugin-switch.notice.stale'), { type: 'info' })
       return
     }
-    const reverted = await window.agentTeam?.plugins?.rollback?.(action.pluginId)
+    const consent = await confirmLocalRollback(installed, action.pluginId, action.fromVersion)
+    if (consent === null) return
+    const reverted = await window.agentTeam?.plugins?.rollback?.(action.pluginId, consent)
     notifyRestore.toast(
       i18n.global.t('plugin-switch.notice.reverted', {
         plugin: action.pluginId,
@@ -19856,14 +20007,15 @@ async function onRenameWorkspace(path: string, name: string): Promise<void> {
  *  unable to close the project you are looking at only leaves you switching
  *  away first to do the same thing. The one thing it needs is somewhere to
  *  land — see below. */
-async function closeWorkspace(path: string): Promise<void> {
+async function closeWorkspace(path: string, opts: { confirmed?: boolean } = {}): Promise<void> {
   if (!path) return
   if (!workspaceOrder.value.some((w) => normWs(w) === normWs(path))) return
   // Ask BEFORE anything is torn down. Closing ends every CLI running in the
   // workspace: the pane records survive it, so a reopen brings the panes back,
   // but the turn each agent was in the middle of does not come with them — and
-  // the menu row alone does not say so.
-  if (confirmBeforeCloseWorkspace.value) {
+  // the menu row alone does not say so. `confirmed`: the caller already asked
+  // (ui.workspace.close asks every time, naming the agent that wants it).
+  if (confirmBeforeCloseWorkspace.value && !opts.confirmed) {
     const inWorkspace = panes.value.filter((p) => normWs(p.workspacePath) === normWs(path))
     const count = inWorkspace.length
     // Pipeline panes are unspawned below, so the plain wording — which now

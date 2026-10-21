@@ -130,8 +130,10 @@
     "ui_invoke",
     "ui_list_actions",
     "ui_snapshot",
+    "window_close",
     "window_focus",
     "window_list",
+    "workspace_close",
     "workspace_list",
     "workspace_open",
     "workspace_switch"

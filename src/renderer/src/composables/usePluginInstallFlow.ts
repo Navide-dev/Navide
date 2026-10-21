@@ -19,6 +19,9 @@ export interface PendingInstall {
   /** W1 (S2): an agent's file request this consent carries out; the dialog
    *  names who asked. Absent for the user's own pick. */
   agentRequest?: { requester: string }
+  /** L4: this consent is for going back to the kept file version `prepared`
+   *  describes, from the version named here; approving rolls back. */
+  rollbackFrom?: string
 }
 
 /** Card K3: the extra step a package of the same id asks for before it is
@@ -271,8 +274,44 @@ export function usePluginInstallFlow() {
     }
   }
 
+  /** L4 (review M3): going back to a kept file version shows that version's
+   *  disclosure in the consent dialog first; approving it rolls back. */
+  async function rollbackWithConsent(id: string): Promise<void> {
+    const plugins = api()
+    if (!plugins?.prepareLocalRollback) return
+    busy.value = true
+    error.value = ''
+    try {
+      const prepared = await plugins.prepareLocalRollback(id)
+      pendingConfirm.value = { label: prepared.id, prepared, rollbackFrom: prepared.rollbackFrom }
+      pendingStep.value = 'risk'
+      publisherConfirmed.value = false
+      replaceConfirmed.value = false
+      reattachBackendData.value = false
+    } catch (err) {
+      fail(err)
+    } finally {
+      busy.value = false
+    }
+  }
+
   async function confirmRisk(): Promise<void> {
     if (!pendingConfirm.value) return
+    if (pendingConfirm.value.rollbackFrom !== undefined) {
+      const id = pendingConfirm.value.prepared.id
+      busy.value = true
+      try {
+        await api()?.rollback(id, { consentConfirmed: true })
+        pendingConfirm.value = null
+        pendingStep.value = null
+        await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
+      } catch (err) {
+        fail(err)
+      } finally {
+        busy.value = false
+      }
+      return
+    }
     busy.value = true
     try {
       await commit(pendingConfirm.value.prepared.id, {
@@ -325,6 +364,7 @@ export function usePluginInstallFlow() {
     confirmReplace,
     confirmPublisher,
     confirmRisk,
+    rollbackWithConsent,
     cancel,
   }
 }

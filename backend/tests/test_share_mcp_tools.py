@@ -55,7 +55,7 @@ LOCAL_PACKAGE_TOOLS = [
 ]
 #: Core tools registered after those: DESIGN-C S3's window tools
 #: (mcp_server/window_tools.py, imported after plugin_local_tools).
-WINDOW_TOOLS = ["window_list", "window_focus"]
+WINDOW_TOOLS = ["window_list", "window_focus", "window_close", "workspace_close"]
 #: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills).
 PLUGIN_PREFIXES = ("plan_", "skills_")
 BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"

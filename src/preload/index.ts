@@ -763,6 +763,11 @@ contextBridge.exposeInMainWorld('agentTeam', {
   /** Bring the calling window itself to the front (MCP window_focus). Main
    *  resolves the window from the sender; no other window can be named. */
   focusSelf: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:focusSelf'),
+  /** Close the calling window itself (MCP window_close). Main resolves the
+   *  window from the sender; no other window can be named. */
+  closeSelf: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('window:closeSelf'),
+  /** Whether closeSelf would close this window ('last-window' off macOS). */
+  canCloseSelf: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('window:canCloseSelf'),
   /** Merge a detached group back. Omit groupId from the detached window itself
    *  — main resolves it from the sender. */
   reattachGroup: (args?: { groupId?: string }): Promise<{ ok: boolean }> =>
@@ -1470,6 +1475,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
      *  by its stagingId; never a path. Installs nothing. */
     prepareAgentFileInstall: (stagingId: string): Promise<PreparedInstallSummary> =>
       ipcRenderer.invoke('plugins:prepareAgentFileInstall', { stagingId }),
+    /** L4: the disclosure of a kept file version, for consenting to go back to it. */
+    prepareLocalRollback: (id: string): Promise<PreparedInstallSummary & { rollbackFrom: string }> =>
+      ipcRenderer.invoke('plugins:prepareLocalRollback', { id }),
     /** The user rejected an agent's file request: drop its staged copy. */
     discardAgentStaged: (stagingId: string): Promise<void> =>
       ipcRenderer.invoke('plugins:discardAgentStaged', { stagingId }),
@@ -1506,12 +1514,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
       restoredInstances: number
       skippedDestroyedHostWindows: number
     }> => ipcRenderer.invoke('plugins:restart', { id }),
-    rollback: (id: string): Promise<{
+    // L4: going back to a kept file version carries the user's renewed consent.
+    rollback: (id: string, options: { consentConfirmed?: boolean } = {}): Promise<{
       id: string
       packageVersion: string
       restoredInstances: number
       skippedDestroyedHostWindows: number
-    }> => ipcRenderer.invoke('plugins:rollback', { id }),
+    }> => ipcRenderer.invoke('plugins:rollback', { id, ...(options.consentConfirmed === true ? { consentConfirmed: true } : {}) }),
     /** Drop the version staged for the next restart (the downgrade of an agent's O1 update). */
     discardCandidate: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:discardCandidate', { id }),
     remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>

@@ -474,7 +474,7 @@ describe('PipelineExecutions', () => {
     expect(runs.map((r) => r.find('.px-run-task').text())).toEqual(['second', 'first'])
     expect(w.find('.px-head').text()).toContain('second')
     expect(w.find('.canvas-stub').text()).toContain('"plan"')
-    expect(w.text()).toContain('1 older run(s)')
+    expect(w.text()).toContain('1 older run')
     scope.stop()
   })
 })
