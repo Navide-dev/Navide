@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { importsOf, moduleOf, selectTests } from '../../scripts/changed-backend-tests.mjs'
+import { importsOf, moduleOf, parseArgs, selectTests } from '../../scripts/changed-backend-tests.mjs'
 
 const fixture: Record<string, string> = {
   'backend/agent_team_backend/__init__.py': '',
@@ -72,6 +72,23 @@ describe('changed backend test selection', () => {
   })
 })
 
+describe('changed backend tests arguments', () => {
+  it('reads the base, --list and the pytest arguments', () => {
+    expect(parseArgs([])).toEqual({ base: 'origin/main', list: false, pytestArgs: [] })
+    expect(parseArgs(['main~3', '--list', '--', '-x', '--help'])).toEqual({ base: 'main~3', list: true, pytestArgs: ['-x', '--help'] })
+  })
+
+  it('answers --help with the usage and runs nothing', () => {
+    for (const flag of ['--help', '-h']) expect(parseArgs([flag])).toEqual({ help: true })
+  })
+
+  it('refuses an unknown flag or a second base with the usage', () => {
+    for (const argv of [['--bogus'], ['-x'], ['--list', '--lsit'], ['main', 'other']]) {
+      expect(parseArgs(argv)).toEqual({ error: expect.stringContaining(argv[argv.length - 1]) })
+    }
+  })
+})
+
 describe('changed backend test selection on this repository', () => {
   const files = execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean)
   const real = { files, read: (path: string) => readFileSync(path, 'utf8') }
@@ -79,6 +96,13 @@ describe('changed backend test selection on this repository', () => {
   it('finds the known readers of a module and of a renderer file', () => {
     expect(selectTests(['backend/agent_team_backend/prompt_skills.py'], real)).toContain('backend/tests/test_prompt_skills.py')
     expect(selectTests(['src/renderer/src/lib/promptSkillSeed.ts'], real)).toContain('backend/tests/test_prompt_skills.py')
+  })
+
+  // 0.2.27 time-shift follow-up: a changed product module selects its tests,
+  // not only changed test files (the approval TTLs and confirm_by).
+  it('selects the tests of changed product code the 0.2.27 time-shift run missed', () => {
+    expect(selectTests(['backend/agent_team_backend/skills_approvals.py'], real)).toContain('backend/tests/test_plugin_agent_approvals.py')
+    expect(selectTests(['backend/agent_team_backend/mcp_server/server.py'], real)).toContain('backend/tests/test_plan_mcp_ui_invoke.py')
   })
 })
 

@@ -14,7 +14,7 @@
 // inside an already-hidden subtree — which is what lets a hidden Git tab keep
 // its changes badge current.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { PluginSource } from '../../../shared/pluginSource'
+import type { LocalInstallDetails, PluginSource } from '../../../shared/pluginSource'
 import { chromeSourceMark } from '../lib/pluginSourceMark'
 import PluginSourceBadge from './PluginSourceBadge.vue'
 
@@ -35,6 +35,8 @@ export interface PluginRegionContribution {
   /** A test build: its signed expiry and how the user joined the test. */
   expiresAt?: string
   testplaceVia?: 'invite' | 'code'
+  /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+  localInstall?: LocalInstallDetails
 }
 
 const props = defineProps<{
@@ -186,7 +188,7 @@ onBeforeUnmount(() => {
     <!-- K2: a persistent source strip in Navide's own chrome, above the guest. -->
     <div v-if="sourceMark" class="plugin-region-host__source">
       <span class="plugin-region-host__title" v-text="contribution.title" />
-      <PluginSourceBadge :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" />
+      <PluginSourceBadge :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" :local-install="contribution.localInstall" />
     </div>
     <div v-if="error" class="plugin-region-host__error" role="status">
       {{ contribution.title }} unavailable

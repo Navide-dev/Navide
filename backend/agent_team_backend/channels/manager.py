@@ -1855,11 +1855,15 @@ class ChannelManager:
 
     def _bare_answer(self, msg: InboundMessage) -> relay.RelayAnswer | None:
         """``2`` / ``yes`` with no id answers the chat's prompt when exactly one is live."""
-        choice = relay.parse_bare(msg.text)
+        choice, text = relay.parse_bare(msg.text)
         if not choice:
             return None
         live = self.relay.for_location(msg.location_key())
-        return relay.RelayAnswer(live[0].id, choice) if len(live) == 1 else None
+        if len(live) != 1:
+            return None
+        if (text or "," in choice) and relay.answer_payload(live[0], choice, text) is None:
+            return None  # "2 more tests please" is a message, not an answer
+        return relay.RelayAnswer(live[0].id, choice, text)
 
     async def _held_by_prompt(self, msg: InboundMessage, pane_id: str) -> bool:
         """A pane waiting on a permission-type prompt would queue the text until the
@@ -1942,10 +1946,10 @@ class ChannelManager:
         if relay.refuses_permanent(request, answer.choice):
             await self._reply(msg, MSG_RELAY_PERMANENT)
             return
-        payload = relay.answer_payload(request, answer.choice)
+        payload = relay.answer_payload(request, answer.choice, answer.text)
         if payload is None:
             await self._reply(msg, f"⚠️ {relay.answer_hint(request)}" if request.kind == "permission"
-                              else "⚠️ 請回覆有效的選項編號")
+                              else relay.invalid_reply(request))
             return
         if not relay.is_deny(request, payload) and self._guard_vetoes(request):
             await self._reply(msg, MSG_RELAY_NEEDS_LOCAL)
@@ -2965,19 +2969,14 @@ class ChannelManager:
             # No keys Navide could press for this vendor: buttons would only fail.
             await self._send_awaiting(pane_id, loc, prompt, who + MSG_AWAITING_LOCAL)
             return
-        if any(relay.is_multi_select(o) for o in options):
-            # Toggling a box is one key, submitting is more: nothing to relay safely.
-            lines = [f"{who}⏸ pane 需要確認（question）", *([prompt.strip()] if prompt.strip() else []),
-                     relay.COMPUTER_ONLY]
-            await self._send_awaiting(pane_id, loc, prompt, "\n".join(lines))
-            return
         if not self._relay_enabled(loc.platform, loc.account):
             await self._notice(adapter, loc, f"{who}⏸ pane 等待確認（{kind}）")
             self._awaiting_shown[pane_id] = _Shown(prompt)
             return
         self._retire_relay(pane_id, MSG_RELAY_SUPERSEDED)  # one live request per pane
         request = self.relay.create(pane_id, kind, options, loc, prompt=prompt,
-                                    agent_key=str(info.get("agent") or ""))
+                                    agent_key=str(info.get("agent") or ""),
+                                    multi=any(relay.is_multi_select(o) for o in options))
         text = who + relay.prompt_text(request, prompt)
         buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
         try:

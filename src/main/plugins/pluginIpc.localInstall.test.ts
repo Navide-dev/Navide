@@ -206,8 +206,9 @@ const call = (channel: string, args?: unknown) => {
 async function installLocal(bytes: Uint8Array, approval: Record<string, unknown> = {}): Promise<{ id: string }> {
   writeFileSync(picked, bytes)
   const prepared = await call('plugins:installFromFile') as { id: string }
-  await call('plugins:commitLocalInstall', { id: prepared.id, riskConfirmed: true, ...approval })
-  await call('plugins:restart', { id: prepared.id })
+  const committed = await call('plugins:commitLocalInstall', { id: prepared.id, riskConfirmed: true, ...approval }) as { restartRequired: boolean }
+  // L1: a first install is already active; an update still waits for Restart.
+  if (committed.restartRequired) await call('plugins:restart', { id: prepared.id })
   return prepared
 }
 
@@ -246,7 +247,8 @@ describe('plugins:installFromFile', () => {
     expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toBeNull()
     await expect(call('plugins:commitLocalInstall', { id: 'acme.todo' })).rejects.toThrow(/consent is required/)
     expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toBeNull()
-    await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })).resolves.toMatchObject({ restartRequired: true })
+    // L1: active as soon as it is approved.
+    await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })).resolves.toMatchObject({ restartRequired: false, activatedVersion: '1.0.0' })
     // A committed prepare is spent: committing again needs the file again.
     await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })).rejects.toThrow(/no prepared local install/)
     await call('plugins:restart', { id: 'acme.todo' })
@@ -305,8 +307,9 @@ describe('plugins:installFromFile', () => {
     writeFileSync(picked, vsix('acme.todo', '1.0.0', { html: '<script>swapped()</script>' }))
     await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })
     const selector = new PluginActivationSelector(pluginsRoot)
-    const staged = selector.packageDir('acme.todo', selector.read('acme.todo')!.candidate!)
-    expect(readFileSync(join(staged, 'frontend', 'left', 'index.html'), 'utf8')).toBe('<p>the reviewed copy</p>')
+    // L1: the approved copy is the active one.
+    const installed = selector.packageDir('acme.todo', selector.read('acme.todo')!.active!)
+    expect(readFileSync(join(installed, 'frontend', 'left', 'index.html'), 'utf8')).toBe('<p>the reviewed copy</p>')
     expect(pick).toHaveBeenCalledTimes(1)
   })
 
@@ -449,8 +452,19 @@ describe('a first install the user did not restart, on the next launch', () => {
     return { manager, controller }
   }
 
+  /** A first install left staged: since L1 that happens only when the
+   * activation on approval failed (or the App went away before it ran). */
   async function stageLocal(bytes: Uint8Array): Promise<void> {
-    register()
+    let failOnce = true
+    register(() => true, {
+      onActivationChange: (change: { pluginId: string; activation?: PluginActivationCatalogEntry }) => {
+        if (failOnce && change.activation) {
+          failOnce = false
+          throw new Error('the App went away before the activation finished')
+        }
+        activations.push(change)
+      },
+    })
     writeFileSync(picked, bytes)
     await call('plugins:installFromFile')
     await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })
@@ -511,5 +525,66 @@ describe('a first install the user did not restart, on the next launch', () => {
     expect(failures[0]!.reason).toMatch(/quarantined/)
     expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({ candidate: { packageVersion: '1.0.0' } })
     expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.active).toBeUndefined()
+  })
+})
+
+describe('L1: a first install takes effect when the user approves it', () => {
+  it('is active right after the commit, with no Restart and no relaunch', async () => {
+    register()
+    writeFileSync(picked, vsix('acme.todo', '1.0.0', { withBackend: true }))
+    await call('plugins:installFromFile')
+    const committed = await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true }) as Record<string, unknown>
+
+    expect(committed).toMatchObject({ id: 'acme.todo', restartRequired: false, activatedVersion: '1.0.0' })
+    expect(committed).not.toHaveProperty('activationError')
+    const record = new PluginActivationSelector(pluginsRoot).read('acme.todo')
+    expect(record?.active?.packageVersion).toBe('1.0.0')
+    expect(record?.candidate).toBeUndefined()
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', source: 'local-unsigned' }])
+    expect(call('plugins:listInstalled')).not.toMatchObject([{ pendingCandidateVersion: '1.0.0' }])
+    expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.todo', '1.0.0')).toMatchObject({ packageVersion: '1.0.0', storage: true })
+    // The backend is registered for the Host's own admission gate, which still
+    // asks for the native backend consent before it ever starts.
+    expect(activations.at(-1)?.activation).toMatchObject({ pluginId: 'acme.todo', source: 'local-unsigned' })
+    expect(activations.at(-1)?.activation?.backend).toBeDefined()
+  })
+
+  it('stays staged with Restart and Discard, and says why, when the activation fails', async () => {
+    let failOnce = true
+    register(() => true, {
+      onActivationChange: (change: { pluginId: string; activation?: PluginActivationCatalogEntry }) => {
+        if (failOnce && change.activation) {
+          failOnce = false
+          throw new Error('activation refused for the test')
+        }
+        activations.push(change)
+      },
+    })
+    writeFileSync(picked, vsix())
+    await call('plugins:installFromFile')
+    const committed = await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true }) as Record<string, unknown>
+
+    expect(committed).toMatchObject({ id: 'acme.todo', restartRequired: true })
+    expect(String(committed.activationError)).toMatch(/activation refused for the test/)
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({ candidate: { packageVersion: '1.0.0' } })
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.active).toBeUndefined()
+    // Restart still works once the cause is gone.
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.active?.packageVersion).toBe('1.0.0')
+  })
+
+  it('leaves an update from a file for Restart', async () => {
+    register()
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    writeFileSync(picked, vsix('acme.todo', '1.1.0'))
+    await call('plugins:installFromFile')
+    const committed = await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true }) as Record<string, unknown>
+
+    expect(committed).toMatchObject({ restartRequired: true })
+    expect(committed).not.toHaveProperty('activatedVersion')
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toMatchObject({
+      active: { packageVersion: '1.0.0' },
+      candidate: { packageVersion: '1.1.0' },
+    })
   })
 })
