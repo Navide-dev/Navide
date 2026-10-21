@@ -117,8 +117,12 @@ describe('PlanWindowApp locale propagation', () => {
     languageCallback!('it-IT')
     expect(i18n.global.locale.value).toBe('ja-JP')
 
-    // A UI locale without a catalog renders in en-US
+    // A Beta locale with a catalog renders in itself
     languageCallback!('ko-KR')
+    expect(i18n.global.locale.value).toBe('ko-KR')
+
+    // A UI locale without a catalog renders in en-US
+    languageCallback!('fr-FR')
     expect(i18n.global.locale.value).toBe('en-US')
 
     wrapper.unmount()

@@ -201,7 +201,10 @@ describe('OnboardingWizard', () => {
     try {
       wrapper = await open(mock)
       const select = wrapper.get('select.ob-lang-btn')
-      expect(select.findAll('option').map(option => option.text())).toEqual(['繁體中文', 'English', '日本語'])
+      const beta = i18n.global.t('settings.appearance.language-beta')
+      expect(select.findAll('option').map(option => option.text())).toEqual(
+        ['繁體中文', 'English', '日本語', `한국어 (${beta})`, `简体中文 (${beta})`]
+      )
       await select.setValue('ja-JP')
       expect(i18n.global.locale.value).toBe('ja-JP')
       expect(wrapper.text()).toContain(i18n.global.t('onboard.step.environment'))
