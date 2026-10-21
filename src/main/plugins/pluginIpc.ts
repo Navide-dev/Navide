@@ -3204,6 +3204,10 @@ export function registerPluginIpc(
         const receipt = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as Record<string, unknown>
         const version = typeof receipt.version === 'string' ? receipt.version : null
         if (decision.code === 'TESTPLACE_WITHDRAWN') {
+          // 0.2.28 (review #551 LOW): a withdrawn build the tester disabled is
+          // not loaded but has not expired; only expired ones are listed here.
+          const now = resolveConfiguredMarketplace(trust).trust.now ?? new Date()
+          if (expiresAt !== undefined && Date.parse(expiresAt) > now.getTime()) return []
           return [{ id, version, expiresAt: expiresAt ?? null, canKeep: false, withdrawn: true as const, keepRefusal: 'withdrawn' as const }]
         }
         const kept = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext(true))

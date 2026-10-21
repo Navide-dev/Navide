@@ -273,4 +273,21 @@ describe('a withdrawn Testplace build (0.2.28)', () => {
     expect(prompt).not.toHaveBeenCalled()
     expect(row()).not.toHaveProperty('digestBlock')
   })
+
+  // Review #551 round 3 LOW: a build the tester disabled is not loaded, but
+  // it has not expired, so it is not listed with the expired builds.
+  it('a withdrawn build the tester disabled is not listed as expired', async () => {
+    const { controller } = register()
+    await installTestBuild()
+    prompt.mockResolvedValue('disable')
+    withdrawnAnswer = { status: 200, body: { withdrawn: [{ version: '0.3.0', target: 'universal' }] } }
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    await controller.revalidateLocalInstalls()
+    await vi.waitFor(() => expect(row()).toMatchObject({ disabled: true, digestBlock: { reason: 'testplace-withdrawn' } }))
+    // Next start: a disabled build is not loaded.
+    const restarted = register()
+    expect(restarted.manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(false)
+    expect(await call('plugins:expiredTestplace')).toEqual([])
+  })
 })
+
