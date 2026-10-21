@@ -115,10 +115,10 @@ async function selectCommit(commit: string): Promise<void> {
   <section class="git-file-detail">
     <header class="detail-header">
       <span class="detail-path" v-truncate>{{ target.resource.filepath }}</span>
-      <button v-if="target.resource.kind === 'file-diff'" class="detail-open" :disabled="closePrepared || diffBusy" @click="setLocalMode('diff')">Diff</button>
-      <button v-if="target.resource.kind === 'file-diff'" class="detail-open" :disabled="closePrepared || diffBusy" @click="setLocalMode('history')">History</button>
-      <button v-if="target.resource.kind === 'file-diff'" class="detail-open" :disabled="closePrepared || diffBusy" @click="setLocalMode('blame')">Blame</button>
-      <button class="detail-open" @click="emit('open-file', target.resource.filepath)">Open in editor</button>
+      <button v-if="target.resource.kind === 'file-diff'" class="detail-open" :disabled="closePrepared || diffBusy" @click="setLocalMode('diff')">{{ $t('label.diff') }}</button>
+      <button v-if="target.resource.kind === 'file-diff'" class="detail-open" :disabled="closePrepared || diffBusy" @click="setLocalMode('history')">{{ $t('label.history') }}</button>
+      <button v-if="target.resource.kind === 'file-diff'" class="detail-open" :disabled="closePrepared || diffBusy" @click="setLocalMode('blame')">{{ $t('label.blame') }}</button>
+      <button class="detail-open" @click="emit('open-file', target.resource.filepath)">{{ $t('action.open-in-editor') }}</button>
     </header>
 
     <DiffPane
@@ -136,9 +136,9 @@ async function selectCommit(commit: string): Promise<void> {
     />
 
     <div v-else class="detail-scroll">
-      <p v-if="loading" class="detail-message">Loading…</p>
+      <p v-if="loading" class="detail-message">{{ $t('label.loading') }}</p>
       <template v-else-if="localMode === 'history'">
-        <p v-if="!history.length" class="detail-message">No file history.</p>
+        <p v-if="!history.length" class="detail-message">{{ $t('git.file-detail.no-history') }}</p>
         <button
           v-for="commit in history"
           :key="commit.hash"
@@ -155,14 +155,14 @@ async function selectCommit(commit: string): Promise<void> {
         </template>
       </template>
       <template v-else-if="blameChangedOnly">
-        <p v-if="!blameHunks.length" class="detail-message">No changed lines.</p>
+        <p v-if="!blameHunks.length" class="detail-message">{{ $t('git.file-detail.no-changed-lines') }}</p>
         <template v-for="(hunk, index) in blameHunks" :key="index">
           <pre class="hunk-header">{{ hunk.header }}</pre>
           <pre v-for="(line, lineIndex) in hunk.lines" :key="lineIndex" class="diff-line">{{ line.author }} {{ line.text }}</pre>
         </template>
       </template>
       <template v-else>
-        <p v-if="!blame.length" class="detail-message">No blame information.</p>
+        <p v-if="!blame.length" class="detail-message">{{ $t('git.file-detail.no-blame') }}</p>
         <pre v-for="(line, index) in blame" :key="index" class="diff-line">{{ line.short_hash }} {{ line.author }} {{ line.content }}</pre>
       </template>
     </div>
