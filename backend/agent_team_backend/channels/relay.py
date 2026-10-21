@@ -9,7 +9,9 @@ Answers: ``yes <id>`` / ``no <id>`` (also ``y`` / ``n``) for a permission,
 multi-select question, ``<n> <id> <text>`` for a free-text row ("Type
 something", alone or among the boxes), or a button whose callback data is
 ``nv1:<id>:<choice>`` (choice ``y`` / ``n`` / ``1``..``9``, well under
-Telegram's 64-byte limit). The text is typed into the pane's own text box and
+Telegram's 64-byte limit). A multi-select question's buttons tick and untick its
+boxes (``t1``..``t9``) on a platform that can redraw them, and ``s`` sends the
+boxes ticked; the ticks live on the request, so they go with it. The text is typed into the pane's own text box and
 nowhere else; the keys that do it are fixed (src/renderer/src/lib/paneAnswerKeys.ts).
 
 A permanent-allow option ("don't ask again", "always allow", "for this session" …)
@@ -36,7 +38,7 @@ CALLBACK_PREFIX = "nv1:"
 _CHOICE = r"yes|y|no|n|[1-9](?:\s*[,，、]\s*[1-9])*"
 _TEXT_ANSWER_RE = re.compile(
     rf"^\s*({_CHOICE})\s+([{ID_ALPHABET}]{{{ID_LENGTH}}})(?:\s+(.+?))?\s*$", re.IGNORECASE | re.DOTALL)
-_CALLBACK_RE = re.compile(rf"^nv1:([{ID_ALPHABET}]{{{ID_LENGTH}}}):(y|n|[1-9])$")
+_CALLBACK_RE = re.compile(rf"^nv1:([{ID_ALPHABET}]{{{ID_LENGTH}}}):(y|n|[1-9]|t[1-9]|s)$")
 _BARE_ANSWER_RE = re.compile(rf"^\s*({_CHOICE})(?:\s+(.+?))?\s*$", re.IGNORECASE | re.DOTALL)
 
 # Vendors whose prompts Navide can answer with keys. Keep in sync with MENU_VENDORS,
@@ -65,6 +67,7 @@ _PERMANENT_ALLOW_RE = re.compile(
 # row that opens a free-text answer (after its box, in a multi-select menu).
 # Keep in sync with CHECKBOX and FREE_TEXT in src/renderer/src/lib/paneAnswerKeys.ts.
 _MULTI_SELECT_RE = re.compile(r"^\s*(?:\[[^\]]?\]|[☐☑☒□■◻◼✓✔✗])")
+_CHECKED_RE = re.compile(r"^\s*(?:\[[^\s\]]\]|[☑☒■◼✓✔✗])")
 _FREE_TEXT_RE = re.compile(
     r"^\s*(?:type something|type here|something else|other\b|自行輸入|自由輸入|其他)", re.IGNORECASE)
 # What cli_answer_prompt says of a menu it cannot answer (the chat relay can).
@@ -95,6 +98,8 @@ class RelayRequest:
     agent_key: str = ""
     # A multi-select menu: several boxes are picked in one answer.
     multi: bool = False
+    # The boxes ticked with the buttons so far (multi-select); starts as the screen shows them.
+    ticked: set[int] = field(default_factory=set)
 
 
 @dataclass(frozen=True)
@@ -338,10 +343,31 @@ def buttons_for(request: RelayRequest) -> list[tuple[str, str]]:
         deny = ("拒絕", f"{CALLBACK_PREFIX}{request.id}:n")
         return [("允許", f"{CALLBACK_PREFIX}{request.id}:y"), deny] if _allow_offered(request) else [deny]
     if request.multi:
-        return []  # a tap picks one box; several are picked with a typed list
+        return []  # without toggle_buttons, several boxes are picked with a typed list
     # A free-text row needs its text, which a button cannot carry.
     return [(f"{i}. {opt}"[:40], f"{CALLBACK_PREFIX}{request.id}:{i}") for i, opt in _offered(request)
             if not is_free_text(opt)]
+
+
+def toggle_buttons(request: RelayRequest) -> list[tuple[str, str]]:
+    """A multi-select question's buttons: one per box, ticked or not, then 送出.
+    The free-text row needs its text, which a button cannot carry."""
+    boxes = [(f"{'✓' if i in request.ticked else '☐'} {i}. {_MULTI_SELECT_RE.sub('', opt, count=1).strip()}"[:40],
+              f"{CALLBACK_PREFIX}{request.id}:t{i}") for i, opt in _offered(request) if not is_free_text(opt)]
+    return [*boxes, ("送出", f"{CALLBACK_PREFIX}{request.id}:s")]
+
+
+def toggle(request: RelayRequest, n: int) -> bool:
+    """Tick or untick box ``n``; False when it is not a box a button may tick."""
+    if not request.multi or n not in {i for i, opt in _offered(request) if not is_free_text(opt)}:
+        return False
+    request.ticked ^= {n}
+    return True
+
+
+def ticked_choice(request: RelayRequest) -> str:
+    """The ticked boxes as a choice ("1,3"), "" when none is."""
+    return ",".join(str(n) for n in sorted(request.ticked))
 
 
 class RelayTable:
@@ -362,6 +388,8 @@ class RelayTable:
             rid = new_request_id()
         req = RelayRequest(rid, pane_id, kind, list(options), loc, self._clock(), prompt,
                            agent_key=agent_key, multi=multi)
+        if multi:
+            req.ticked = {i for i, opt in _offered(req) if not is_free_text(opt) and _CHECKED_RE.match(opt)}
         self._by_id[rid] = req
         return req
 
