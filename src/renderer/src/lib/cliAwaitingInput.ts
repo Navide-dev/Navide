@@ -120,6 +120,13 @@ export function notificationEndsAwaiting(notificationType: string | undefined): 
  *  list/quote punctuation are stripped first because a question routinely ends
  *  "**...?**" or "- ...?" once markdown is in play.
  *
+ *  A turn that ends inside a numbered list is a report, not a question: the
+ *  list is open items for whoever reads it, even when its last item closes on
+ *  "?". No menu is on screen then, yet QUESTION is not idle, so
+ *  cli_reclaim_agent refused such a pane until the user closed it (10-21). The
+ *  item may wrap onto indented lines, so those are walked back to the line
+ *  that starts the item. A bulleted line still counts as a question.
+ *
  *  This is deliberately advisory. QUESTION passes the messaging gate exactly
  *  like idle does (see messagingHoldKey), so a false positive costs a wrong
  *  badge and nothing else — it can never park a pane out of inter-CLI dispatch. */
@@ -128,7 +135,10 @@ export function textEndsOnQuestion(text: string): boolean {
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim()
     if (!line) continue
-    return /[?？]["'’”）)\]*_`]*$/.test(line)
+    if (!/[?？]["'’”）)\]*_`]*$/.test(line)) return false
+    let start = i
+    while (start > 0 && /^\s/.test(lines[start]) && lines[start - 1].trim()) start--
+    return !/^\s*\d{1,3}[.)](?!\d)/.test(lines[start])
   }
   return false
 }

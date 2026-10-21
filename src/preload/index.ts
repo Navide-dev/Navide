@@ -24,7 +24,7 @@ import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
-import type { PluginSource } from '../shared/pluginSource'
+import type { LocalInstallDetails, PluginSource } from '../shared/pluginSource'
 import type { DeveloperApi, DeveloperCallResult } from '../shared/marketplaceDeveloper'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
@@ -209,6 +209,8 @@ export interface InstalledPluginSummary {
   /** Decision d5: Navide blocked the `.vsix` this local install came from;
    *  `reason` null when its list names none. */
   digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
+  /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+  localInstall?: LocalInstallDetails
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -1418,14 +1420,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     commitInstall: (
       id: string,
       approval: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean } = {}
-    ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
+    ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
       ipcRenderer.invoke('plugins:commitInstall', { id, ...approval }),
     /** Card K3: the main process opens its own file dialog; nothing names a path. */
     installFromFile: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:installFromFile'),
     commitLocalInstall: (
       id: string,
       approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
-    ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
+    ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
     /** W1 (S2): the copy the Host staged for an agent's file request, named
      *  by its stagingId; never a path. Installs nothing. */

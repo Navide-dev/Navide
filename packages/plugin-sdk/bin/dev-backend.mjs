@@ -9,7 +9,7 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import { accessSync, constants, lstatSync, mkdirSync, readdirSync, realpathSync } from 'node:fs'
-import { basename, join, posix } from 'node:path'
+import { basename, dirname, join, posix, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const PROTOCOL_REVISION = '2026-07-28'
@@ -341,19 +341,33 @@ export async function startDevBackend({ directory, manifest, dataDir, onOutput, 
   return session
 }
 
-function print(kind, detail) {
+/** One line of dev-backend output; a clean exit (code 0) gets no failure cross. */
+export function formatOutput(kind, detail) {
   const text = typeof detail === 'string' ? detail : JSON.stringify(detail)
+  const cleanExit = kind === 'exit' && detail?.code === 0 && !detail?.signal
   const prefix = {
     result: '← result',
     event: '← event',
     bridge: '← bridge (denied in dev-backend)',
     stderr: '[backend]',
-    exit: '× backend exited',
+    exit: cleanExit ? '• backend exited' : '× backend exited',
     error: '× error',
     'protocol-error': '× protocol',
     notification: '← notification',
   }[kind] ?? kind
-  ;(kind === 'stderr' || kind === 'error' || kind === 'protocol-error' ? console.error : console.log)(`${prefix} ${text}`)
+  return `${prefix} ${text}`
+}
+
+function print(kind, detail) {
+  ;(kind === 'stderr' || kind === 'error' || kind === 'protocol-error' ? console.error : console.log)(formatOutput(kind, detail))
+}
+
+/** Where dev-backend keeps a package's data by default: beside the package
+ *  directory, never inside it, so a build that lists the directory recursively
+ *  cannot package it. */
+export function defaultDataDir(directory) {
+  const packageDir = resolve(directory)
+  return join(dirname(packageDir), '.navide-dev', basename(packageDir), 'data')
 }
 
 function parseJsonArgument(text, label) {
@@ -366,7 +380,7 @@ function parseJsonArgument(text, label) {
 
 /** CLI entry: one-shot (`--call`) or interactive (lines `<method> [json]`). */
 export async function runDevBackend(directory, manifest, options) {
-  const dataDir = options.dataDir ?? join(directory, '.navide-dev', 'data')
+  const dataDir = options.dataDir ?? defaultDataDir(directory)
   const session = await startDevBackend({ directory, manifest, dataDir, onOutput: print })
   console.log(`Backend ${manifest.id}@${manifest.version} is running in the ${session.sandbox} sandbox (data: ${dataDir}).`)
   for (const event of options.subscribe ?? []) {

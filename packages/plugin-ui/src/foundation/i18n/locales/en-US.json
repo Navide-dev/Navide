@@ -206,7 +206,74 @@
     "search-shortcuts": "Search keyboard shortcuts…",
     "select-language": "Select language mode…",
     "workspace-symbol": "Go to symbol in workspace…",
-    "symbol": "Go to symbol…"
+    "symbol": "Go to symbol…",
+    "pane": {
+      "ai-complete-title": "AI complete (⌘I)",
+      "ai-rewrite-title": "AI rewrite selection (⌘K)",
+      "complete": "Complete",
+      "replace-title": "Replace (↵)",
+      "replace-all-title": "Replace all (⌥↵)",
+      "generate-tests": "Generate Tests",
+      "go-to-line": "Go to line",
+      "go-to-line-n": "Go to line {line}",
+      "go": "Go",
+      "thinking": "Thinking…",
+      "ask": "Ask",
+      "rewrite": "Rewrite",
+      "proposal-title": "AI suggested rewrite",
+      "proposal-hint": "Tab to accept · Esc to reject",
+      "accept": "Accept",
+      "reject": "Reject",
+      "cursor-position": "Ln {line}, Col {col}",
+      "eol-title": "Line Ending: {eol} — click to toggle",
+      "indent-spaces-title": "Indentation: {size} Spaces — click to change",
+      "indent-tabs-title": "Indentation: Tabs — click to change",
+      "spaces-size": "Spaces: {size}",
+      "tab-size": "Tab Size: {size}",
+      "encoding-title": "File encoding: {encoding} — click to reopen with a different encoding",
+      "indentation": "Indentation",
+      "n-spaces": "{n} Spaces",
+      "n-tabs": "Tabs ({n})",
+      "reopen-encoding": "Reopen with Encoding"
+    },
+    "app": {
+      "empty-hint": "Open a file from the Explorer or Search pane on the left",
+      "line-n": "Line {line}",
+      "new-file-placeholder": "e.g. src/components/MyComponent.vue",
+      "breadcrumb-empty": "(empty)",
+      "switch-to-plan-view": "Switch to plan view",
+      "toggle-plan": "Plan"
+    },
+    "search": {
+      "whole-word": "Match whole word",
+      "regex": "Use regular expression",
+      "replace-all": "Replace All",
+      "files-include": "files to include",
+      "files-exclude": "files to exclude",
+      "include-placeholder": "e.g. *.ts, src/**",
+      "exclude-placeholder": "e.g. *.test.ts, dist/**",
+      "summary": "{results} result(s) · {files} file(s)",
+      "truncated": "Truncated"
+    },
+    "problems": {
+      "errors": "{count} error | {count} errors",
+      "warnings": "{count} warning | {count} warnings"
+    },
+    "notebook": {
+      "cell-output": "Cell output"
+    },
+    "aiDock": {
+      "interrupt-title": "Send Ctrl+C to the CLI",
+      "stop-title": "Kill the CLI process",
+      "no-workspace": "No workspace available",
+      "starting": "Starting…",
+      "reattaching": "Reattaching…",
+      "spawn-title": "Spawn the CLI in {path}"
+    },
+    "plan-body": {
+      "no-content": "No content yet.",
+      "no-body": "This plan has no document body."
+    }
   },
   "cli-risk": {
     "details": "CLI observations",
@@ -525,7 +592,69 @@
     "clean-changed": "Untracked files changed since the preview. Nothing was deleted — review and try again.",
     "issue-back": "← Back",
     "issue-comment": "Comment",
-    "issue-create": "Create"
+    "issue-create": "Create",
+    "pane": {
+      "no-changes-to-display": "No changes to display",
+      "no-ignored-files": "No ignored files",
+      "drag-to-resize": "Drag to resize",
+      "commit-files": "Files ({count})",
+      "no-draft": "No draft",
+      "issues-open-count": "{count} open",
+      "issue-host-unsupported": "No supported issue host detected for this repo (needs a GitHub or GitLab origin remote).",
+      "issue-cli-missing": "{cli} is not installed.",
+      "issue-auth-before": "Not authenticated. Run",
+      "issue-auth-after": "in a terminal, then refresh.",
+      "issue-dispatch": "Dispatch to Agent",
+      "issue-dispatch-title": "Send this issue to a running agent",
+      "issue-no-running-agent": "No running agent",
+      "issue-handoff-handling": "Being handled by agent",
+      "issue-handoff-closed": "Agent pane closed",
+      "ignore-target": {
+        "project": ".gitignore (project root)",
+        "nested": ".gitignore (current folder)",
+        "local": ".git/info/exclude (local only)",
+        "global": "Global .gitignore"
+      }
+    },
+    "conflict": {
+      "progress": "{resolved} / {total} resolved",
+      "apply-title": "Write and stage this file",
+      "apply-blocked": "Resolve all conflicts first",
+      "apply": "Apply & Stage",
+      "ours-default": "HEAD (ours)",
+      "versus": "vs",
+      "theirs-default": "theirs",
+      "empty-side": "(empty)",
+      "accepted-ours": "Accepted Ours",
+      "accepted-theirs": "Accepted Theirs",
+      "accepted-both": "Accepted Both",
+      "manually-edited": "Manually edited",
+      "undo": "Undo"
+    },
+    "diff": {
+      "badge-staged": "STAGED",
+      "badge-working-tree": "WORKING TREE",
+      "open-in-editor": "Open file in editor",
+      "prev-change": "Previous change (↑)",
+      "next-change": "Next change (↓)",
+      "reload": "Reload diff",
+      "not-loaded": "Diff not loaded",
+      "stage-selected": "Stage Selected ({count})"
+    },
+    "branch-diff": {
+      "working-changes": "Working Changes",
+      "file-count": "{count} file | {count} files",
+      "expand-all": "Expand All",
+      "collapse-all": "Collapse All",
+      "no-changes-between": "No changes between {base} and {compare}",
+      "no-uncommitted": "No uncommitted changes",
+      "hidden-lines": "{count} hidden line | {count} hidden lines"
+    },
+    "file-detail": {
+      "no-history": "No file history.",
+      "no-changed-lines": "No changed lines.",
+      "no-blame": "No blame information."
+    }
   },
   "pane": {
     "git": {
@@ -1771,6 +1900,7 @@
       },
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
+      "activationFailed": "{plugin} was installed but could not be activated: {reason}. Restart or discard it in the list below.",
       "restartPlugin": "Restart Navide plugin",
       "disable": "Disable",
       "enable": "Enable",
@@ -1932,7 +2062,7 @@
         },
         "title": "Developer Mode",
         "switch": "Turn on Developer Mode",
-        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded.",
+        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded. Turning it off unloads every Navide plugin loaded from a folder and drops a folder you picked but did not consent to; the folders you consented to stay listed, load again when you turn it back on, and can be removed here.",
         "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
         "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
         "reminderClose": "Got it",
@@ -2261,6 +2391,16 @@
       "reset-colors-hint": "Reset all custom colors to the built-in theme",
       "language-en-US": "English",
       "language-ja-JP": "日本語",
+      "language-zh-CN": "简体中文",
+      "language-ko-KR": "한국어",
+      "language-es-ES": "Español (España)",
+      "language-fr-FR": "Français",
+      "language-de-DE": "Deutsch",
+      "language-pt-BR": "Português (Brasil)",
+      "language-ru-RU": "Русский",
+      "language-vi-VN": "Tiếng Việt",
+      "language-beta": "Beta",
+      "language-beta-hint": "Machine-translated. Native-speaker review pending.",
       "language-hint": "Language is a user-level preference applied across all workspaces.",
       "ui-scale": "Interface Scale",
       "ui-scale-hint": "Scale the whole interface — text, icons, and spacing — in every window. Separate from the terminal and editor font sizes, which keep their own ⌘= / ⌘- shortcuts.",
@@ -3210,7 +3350,7 @@
               },
               "apply": {
                 "label": "Apply & Stage",
-                "text": "Only clickable once every block is settled; it writes the result back and stages the file in one go. This button is in English regardless of the selected interface language — that is what the product prints."
+                "text": "Only clickable once every block is settled; it writes the result back and stages the file in one go."
               }
             }
           },
@@ -11363,7 +11503,12 @@
       "publisher": "Publisher: {publisher}",
       "selfDeclared": "Self-declared: {publisher}",
       "localSignedBy": "Signed by developer {publisher} (vetted by Navide); this version was not reviewed by Navide",
-      "signatureRevoked": "Signature no longer valid"
+      "signatureRevoked": "Signature no longer valid",
+      "unsignedNote": "The author cannot be confirmed; the file may have been changed.",
+      "showDetails": "Show the source, SHA-256 and install time",
+      "fileDigest": "SHA-256 of the installed file: {digest}",
+      "contentDigest": "SHA-256 of the installed contents: {digest}",
+      "installedAt": "Installed: {time}"
     },
     "diff": {
       "heading": "What this update changes",
@@ -11418,10 +11563,11 @@
       "system": "{key}"
     },
     "scanHeading": "What the publish-time scan found",
+    "scanHeadingLocal": "What Navide's scan of this file found",
     "declaredHeading": "What this Navide plugin declares",
     "registryHeading": "Navide Registry records (unsigned)",
     "provenance": {
-      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and was not scanned by Navide.",
+      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and Navide has not reviewed it.",
       "unverified": "Provided by the Navide Registry, not yet verified; before installing, Navide verifies the signature and compares it with the package.",
       "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid.",
       "verifiedNoScan": "Verified: the disclosure matches the downloaded package. This version has no system scan."
@@ -11429,7 +11575,9 @@
     "noDisclosure": "This version was published without disclosure data.",
     "signedByRegistry": "The scan was run and signed by the Navide Registry.",
     "scannedByRegistry": "The scan was run by the Navide Registry.",
+    "scannedLocally": "The scan informs this card; it never decides the install.",
     "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
+    "limitsWithoutScanLocal": "Navide did not scan this file; the above is only this Navide plugin's own declaration.",
     "viewNetwork": "A Navide plugin's views can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "viewNetworkIfViews": "If this Navide plugin has views, they can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "summary": {
@@ -11480,7 +11628,8 @@
       },
       "coverage": {
         "base": "Scanned by the Navide Registry at publish (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list.",
-        "incomplete": "Scan incomplete: {reasons}."
+        "incomplete": "Scan incomplete: {reasons}.",
+        "local": "Scanned by Navide on this computer (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list."
       },
       "notFound": {
         "shell": "The static scan found no commands.",
@@ -11488,7 +11637,8 @@
         "files": "The static scan found no file paths.",
         "dynamicCode": "The static scan found no code built at run time."
       },
-      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration."
+      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration.",
+      "noScanLocal": "Navide did not scan this file; below is only this Navide plugin's own declaration."
     },
     "incompleteReason": {
       "timedOut": "the scan ran out of time",
