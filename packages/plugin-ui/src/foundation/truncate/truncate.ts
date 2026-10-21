@@ -72,6 +72,7 @@ padding:6px 9px;border-radius:6px;border:1px solid var(--border-default,#30363d)
 background:var(--bg-overlay,#161b22);color:var(--text-bright,#e6edf3);
 font:12px/1.45 -apple-system,BlinkMacSystemFont,"PingFang TC","Segoe UI",sans-serif;
 white-space:pre-wrap;overflow-wrap:anywhere;box-shadow:0 8px 24px rgba(1,4,9,.45);pointer-events:auto}
+:root:lang(zh-CN) .${TIP_CLASS}{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Noto Sans SC","Segoe UI",sans-serif}
 .${TIP_CLASS}[hidden]{display:none}`
 
 interface DocState {

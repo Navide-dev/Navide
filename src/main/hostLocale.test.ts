@@ -12,8 +12,10 @@ describe('Host locale resolution', () => {
     expect(validateSupportedLocale('en-US')).toBe('en-US')
     expect(validateSupportedLocale('zh-TW')).toBe('zh-TW')
     expect(validateSupportedLocale('ja-JP')).toBe('ja-JP')
-    expect(validateSupportedLocale('zh-CN')).toBeNull()
-    expect(validateSupportedLocale('fr-FR')).toBeNull()
+    expect(validateSupportedLocale('zh-CN')).toBe('zh-CN')
+    expect(validateSupportedLocale('fr-FR')).toBe('fr-FR')
+    expect(validateSupportedLocale('it-IT')).toBeNull()
+    expect(validateSupportedLocale('zh')).toBeNull()
     expect(validateSupportedLocale('')).toBeNull()
     expect(validateSupportedLocale(null)).toBeNull()
     expect(validateSupportedLocale(123)).toBeNull()
@@ -23,8 +25,10 @@ describe('Host locale resolution', () => {
     expect(normalizeSystemLocale('zh-TW')).toBe('zh-TW')
     expect(normalizeSystemLocale('zh-HK')).toBe('zh-TW')
     expect(normalizeSystemLocale('zh-Hant-TW')).toBe('zh-TW')
-    expect(normalizeSystemLocale('zh-CN')).toBe('zh-TW')
-    expect(normalizeSystemLocale('zh')).toBe('zh-TW')
+    expect(normalizeSystemLocale('zh-CN')).toBe('zh-CN')
+    expect(normalizeSystemLocale('zh-Hans')).toBe('zh-CN')
+    expect(normalizeSystemLocale('zh-SG')).toBe('zh-CN')
+    expect(normalizeSystemLocale('zh')).toBe('zh-CN')
 
     expect(normalizeSystemLocale('en-US')).toBe('en-US')
     expect(normalizeSystemLocale('en-GB')).toBe('en-US')
@@ -34,11 +38,15 @@ describe('Host locale resolution', () => {
     expect(normalizeSystemLocale('ja')).toBe('ja-JP')
     expect(normalizeSystemLocale(' JA-jp ')).toBe('ja-JP')
 
-    // Unsupported system locales fall back to zh-TW
-    expect(normalizeSystemLocale('fr-FR')).toBe('zh-TW')
-    expect(normalizeSystemLocale('')).toBe('zh-TW')
-    expect(normalizeSystemLocale(null)).toBe('zh-TW')
-    expect(normalizeSystemLocale(undefined)).toBe('zh-TW')
+    expect(normalizeSystemLocale('fr-CA')).toBe('fr-FR')
+    expect(normalizeSystemLocale('pt-PT')).toBe('pt-BR')
+    expect(normalizeSystemLocale('es-419')).toBe('es-ES')
+
+    // Unrecognized system locales fall back to en-US
+    expect(normalizeSystemLocale('it-IT')).toBe('en-US')
+    expect(normalizeSystemLocale('')).toBe('en-US')
+    expect(normalizeSystemLocale(null)).toBe('en-US')
+    expect(normalizeSystemLocale(undefined)).toBe('en-US')
   })
 
   it.each(['ja-JP', '"ja-JP"'])('retains persisted Japanese %s across restart and runtime updates', (raw) => {
@@ -47,7 +55,7 @@ describe('Host locale resolution', () => {
     expect(manager.getLocale()).toBe('ja-JP')
     expect(manager.setRuntimeLocale('en-US')).toBe('en-US')
     expect(manager.setRuntimeLocale('ja-JP')).toBe('ja-JP')
-    expect(manager.setRuntimeLocale('fr-FR')).toBeNull()
+    expect(manager.setRuntimeLocale('it-IT')).toBeNull()
     expect(manager.getLocale()).toBe('ja-JP')
   })
 
@@ -75,8 +83,8 @@ describe('Host locale resolution', () => {
 
     expect(resolveInitialHostLocale({
       persistedSetting: null,
-      systemLocale: 'fr-FR',
-    })).toBe('zh-TW')
+      systemLocale: 'it-IT',
+    })).toBe('en-US')
   })
 
   it('HostLocaleManager caches validated runtime locale upon language IPC and ignores invalid', () => {
@@ -101,7 +109,7 @@ describe('Host locale resolution', () => {
     expect(manager.getLocale()).toBe('zh-TW')
 
     // Invalid runtime update is rejected and preserves previous valid runtime locale
-    const rejected = manager.setRuntimeLocale('fr-FR')
+    const rejected = manager.setRuntimeLocale('it-IT')
     expect(rejected).toBeNull()
     expect(manager.getLocale()).toBe('zh-TW')
 
@@ -124,8 +132,8 @@ describe('Host locale resolution', () => {
     expect(readPersistedLocaleFromSettings({ 'agent-team:language': '  "en-US"  ' })).toBe('en-US')
 
     // Invalid, malformed, or missing settings
-    expect(readPersistedLocaleFromSettings({ 'agent-team:language': 'fr-FR' })).toBeNull()
-    expect(readPersistedLocaleFromSettings({ 'agent-team:language': '"fr-FR"' })).toBeNull()
+    expect(readPersistedLocaleFromSettings({ 'agent-team:language': 'it-IT' })).toBeNull()
+    expect(readPersistedLocaleFromSettings({ 'agent-team:language': '"it-IT"' })).toBeNull()
     expect(readPersistedLocaleFromSettings({ 'agent-team:language': '' })).toBeNull()
     expect(readPersistedLocaleFromSettings({ 'agent-team:language': 123 })).toBeNull()
     expect(readPersistedLocaleFromSettings({})).toBeNull()

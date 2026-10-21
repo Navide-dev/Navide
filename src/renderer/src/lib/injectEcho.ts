@@ -153,13 +153,21 @@ export function injectionVerified(
  *  repaint the new pane's own layout reflow triggers. Accepting it would
  *  report `kickoff: "sent"` for a paste the CLI never took — the exact
  *  silence this verdict exists to end. Without the gate, growth stays what it
- *  was: a booting TUI repainting. */
+ *  was: a booting TUI repainting.
+ *
+ *  One case lets a growth echo through: the submit half saw the CLI start a
+ *  new turn after our Enter (`turn`, read off its own log). Past the gate
+ *  nothing else types into the pane, so that turn is our text being taken,
+ *  however the CLI drew it — Grok Build shows a multi-line paste as a chip
+ *  that is neither our tail nor "[Pasted text …]" (issue #402 point 1), and
+ *  reading that as unverified retyped a kickoff that was already running. */
 export function kickoffVerified(
   echo: EchoEvidence | null,
   submit: SubmitEvidence | null,
   promptReady: boolean,
 ): boolean {
   if (injectionVerified(echo, submit)) return true
+  if (promptReady && echo === 'growth' && submit === 'turn') return true
   return promptReady && echo !== null && echo !== 'growth' && submit !== null && submit !== 'unconfirmed'
 }
 

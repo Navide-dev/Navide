@@ -40,7 +40,7 @@ import { formatCpuPercent, machineCpuShare, machineMemoryShare } from './lib/res
 import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composables/useResourceUsage'
 import { channelsKey, useChannels } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
-import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, type PaneAnswer } from './lib/paneAnswerKeys'
+import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
 import TurnStatsModal from './components/TurnStatsModal.vue'
@@ -4066,6 +4066,8 @@ onUnmounted(() => {
 // never reports — so a miss there is not evidence the wait ended and must not
 // clear what the hook raised.
 const AWAITING_SCREEN_LINES = 25
+// Between the steps of a free-text or multi-select answer (lib/paneAnswerKeys).
+const ANSWER_STEP_GAP_MS = 60
 
 /** Flag a pane whose turn is in flight but whose log and screen have both been
  *  quiet past the threshold, and record it once per episode. Reminder only:
@@ -10634,7 +10636,20 @@ registerCommand('ui.pane.sendKeys', async (args) => {
   if (!resolved.ok) {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }
   }
-  const resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data: resolved.keys })
+  // A free-text or multi-select answer goes in one step at a time, so the CLI
+  // reads arrows, typed text and Enter as separate keys rather than one paste.
+  // Each later step goes in only while the same menu is still up (writeAnswerSteps).
+  const screenTail = () => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
+  const resp = await writeAnswerSteps({
+    steps: resolved.steps ?? [resolved.keys],
+    menu: screenTail(),
+    read: () => ({ displayStatus: ref.displayStatus as string | undefined, screen: screenTail() }),
+    write: (data) => backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data }),
+    gapMs: ANSWER_STEP_GAP_MS,
+  })
+  if (resp === 'prompt-changed') {
+    return { ok: false, sent: false, error: 'the prompt changed while the answer was going in', error_code: 'prompt-changed' }
+  }
   // This write goes straight to the PTY, not through the terminal's onData, so
   // tell the pane its held permission box was just answered.
   if (resp.ok) ref.noteAnswerKeys?.(resolved.keys)
@@ -14918,6 +14933,7 @@ backend.on('agent.activity', (raw) => {
       const at = ev.timestamp ? Date.parse(ev.timestamp) : NaN
       paneLastReply.set(ev.pane_id, { text: ev.text, at: Number.isNaN(at) ? Date.now() : at })
     }
+    if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
     // the resume prompt again (runs before the poll's turn-complete continue).
@@ -16084,6 +16100,9 @@ interface StageRouter {
   /** True once the watchdog raised a stall for this stage, so the 4s poll does
    *  not re-raise it every tick. Reset by continueWaitingStall. */
   watchdogFired: boolean
+  /** DISPATCH blocks already routed (target + message, whitespace dropped).
+   *  The screen scan and the Manager's reply text can both carry one block. */
+  routedDispatches: Set<string>
 }
 const stageRouters = new Map<number, StageRouter>()
 
@@ -16105,6 +16124,7 @@ function ensureStageRouter(stageIndex: number): StageRouter {
       pollHandle: null,
       armedAt: 0,
       watchdogFired: false,
+      routedDispatches: new Set(),
     }
     stageRouters.set(stageIndex, r)
   }
@@ -16133,7 +16153,8 @@ function armRouterCursors(router: StageRouter, paneId: string): void {
  *  scan, so the pair stays consistent. Without this the 128KB cap shifts every
  *  absolute index by the dropped prefix and the router scans past the worker's
  *  ASK block / the Manager's DISPATCH or STAGE-DONE, which is unrecoverable —
- *  unlike the watcher, the router has no turn-text fallback of any kind. */
+ *  unlike the watcher, the router's only turn-text fallback is the Manager's
+ *  DISPATCH and READY (routeManagerTurnText). */
 function rebaseRouterCursors(router: StageRouter, paneId: string, bufLen: number): void {
   if (!routerObservationIsReal(paneId, bufLen, router.bufferAnchors)) return
   const obs: BufferObservation = { len: bufLen, bytesSeen: paneCleanBytes(paneId) }
@@ -16777,14 +16798,7 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     // kickoff echo that sits below the floor.
     const cursor = router.armedCursors.get(router.managerPaneId) ?? 0
     if (findSentinel(buf, MANAGER_READY_SENTINEL, cursor) >= 0) {
-      router.managerReady = true
-      pipelineLog(
-      `Stage ${stage.id} 🎯 Manager READY — ${i18n.global.t('label.pipeline-log-manager-ready', { count: router.preReadyQueue.length })}`,
-    )
-      const drain = router.preReadyQueue.splice(0)
-      for (const msg of drain) {
-        await injectManagerPane(router, msg)
-      }
+      await markManagerReady(router, stage.id, '')
     }
   }
 
@@ -16797,21 +16811,7 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     const { items: dispatches, newCursor } = parseDispatchBlocks(buf, cursor)
     router.cursors.set(router.managerPaneId, newCursor)
     for (const d of dispatches) {
-      const target = matchWorkerByLabel(router, d.to)
-      if (!target) {
-        pipelineLog(
-          `Stage ${stage.id} 🎯 dispatch ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`,
-        )
-        continue
-      }
-      const preview = d.message.slice(0, 50).replace(/\s+/g, ' ')
-      pipelineLog(`Stage ${stage.id} 🎯 → ${target.label}: ${preview}${d.message.length > 50 ? '…' : ''}`)
-      await injectPane(
-        target.paneId,
-        `[→ DISPATCH FROM Manager]\n${d.message}`,
-        `manager-dispatch:${target.label}`,
-        true
-      )
+      await routeManagerDispatch(router, stage.id, d)
     }
     // Scan from the armed floor, never from 0: the kickoff protocol prints
     // ---STAGE-DONE--- at line start, so a TUI that echoes the paste back
@@ -16847,6 +16847,67 @@ async function injectManagerPane(router: StageRouter, msg: PendingMessage): Prom
   if (!router.managerPaneId) return
   const text = `[→ ${msg.kind} FROM ${msg.fromLabel}]\n${msg.content}`
   await injectPane(router.managerPaneId, text, `${msg.kind.toLowerCase()}:${msg.fromLabel}`, true)
+}
+
+/** The Manager is coordinating: hand it the worker messages held until now.
+ *  `how` says what showed it, when that was not ---MANAGER-READY--- itself. */
+async function markManagerReady(router: StageRouter, stageId: string, how: string): Promise<void> {
+  if (router.managerReady) return
+  router.managerReady = true
+  pipelineLog(
+    `Stage ${stageId} 🎯 Manager READY${how} — ${i18n.global.t('label.pipeline-log-manager-ready', { count: router.preReadyQueue.length })}`,
+  )
+  const drain = router.preReadyQueue.splice(0)
+  for (const msg of drain) {
+    await injectManagerPane(router, msg)
+  }
+}
+
+/** Route one Manager DISPATCH to its worker, once: the screen scan and the
+ *  reply text can both carry the same block. A DISPATCH means the Manager is
+ *  coordinating, so one sent before ---MANAGER-READY--- implies it (#539).
+ *  Otherwise the workers' REPORTs stay held for a line the Manager may never
+ *  print, and every pane of the stage waits on another. */
+async function routeManagerDispatch(router: StageRouter, stageId: string, d: ParsedDispatch): Promise<void> {
+  const key = `${d.to.toLowerCase()}\u0000${d.message.replace(/\s+/g, '')}`
+  if (router.routedDispatches.has(key)) return
+  router.routedDispatches.add(key)
+  await markManagerReady(router, stageId, ' (implied by its DISPATCH)')
+  const target = matchWorkerByLabel(router, d.to)
+  if (!target) {
+    pipelineLog(
+      `Stage ${stageId} 🎯 dispatch ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`,
+    )
+    return
+  }
+  const preview = d.message.slice(0, 50).replace(/\s+/g, ' ')
+  pipelineLog(`Stage ${stageId} 🎯 → ${target.label}: ${preview}${d.message.length > 50 ? '…' : ''}`)
+  await injectPane(
+    target.paneId,
+    `[→ DISPATCH FROM Manager]\n${d.message}`,
+    `manager-dispatch:${target.label}`,
+    true
+  )
+}
+
+/** The Manager's reply, as its reader reported it at turn end, for the stage
+ *  router (#539). The router otherwise reads only the Manager's screen, where a
+ *  TUI's redraw can leave a DISPATCH block that does not parse; it was then
+ *  dropped without a trace. A replayed historical turn (backend restart) is
+ *  older than the router's arm and is ignored, as judgeTurnText does. */
+async function routeManagerTurnText(paneId: string, text: string, timestamp: string): Promise<void> {
+  if (!text || pipeline.state !== 'running') return
+  const router = stageRouters.get(pipeline.stageIndex)
+  const stage = stagesApi.stages.value[pipeline.stageIndex]
+  if (!router || !stage || router.finished || !router.armedAt || router.managerPaneId !== paneId) return
+  const eventMs = timestamp ? Date.parse(timestamp) : NaN
+  if (!Number.isNaN(eventMs) && eventMs < router.armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS) return
+  if (findSentinel(text, MANAGER_READY_SENTINEL, 0) >= 0) {
+    await markManagerReady(router, stage.id, ' (reply text)')
+  }
+  for (const d of parseDispatchBlocks(text, 0).items) {
+    await routeManagerDispatch(router, stage.id, d)
+  }
 }
 
 // ── Global Manager cross-stage router ────────────────────────────────────────
@@ -16899,6 +16960,14 @@ async function globalManagerRouterScan(): Promise<void> {
   const managerPaneId = globalManagerPaneId()
   if (!managerPaneId) return
   const gm = pipeline.globalManager!
+  // A single commander is the global Manager too, and its stage router already
+  // routes that stage: REPORTs held until READY, DISPATCH to its workers.
+  // Routing them here as well sent a REPORT past the READY queue and every
+  // DISPATCH twice (#539). Panes of other stages still cross over here.
+  const stageRouter = stageRouters.get(pipeline.stageIndex)
+  const ownedByStage = new Set<string>(
+    stageRouter?.managerPaneId === managerPaneId ? stageRouter.workerPaneIds.values() : [],
+  )
 
   // Scan all active Worker panes (any stage, not the Manager itself) for ASK/REPORT
   const workerPanes = panes.value.filter(
@@ -16906,6 +16975,7 @@ async function globalManagerRouterScan(): Promise<void> {
            !(p.stageId === gm.stageId && p.slotLabel === gm.slotLabel)
   )
   for (const wp of workerPanes) {
+    if (ownedByStage.has(wp.id)) continue
     const ref = paneRefs[wp.id]
     const buf: string = (ref?.cleanBuffer as unknown as string) ?? ''
     if (!buf) continue
@@ -16938,6 +17008,7 @@ async function globalManagerRouterScan(): Promise<void> {
       (p) => p.realized && p.origin === 'pipeline' && p.id !== managerPaneId &&
              p.slotLabel.toLowerCase() === d.to.toLowerCase()
     )
+    if (target && ownedByStage.has(target.id)) continue
     if (!target) {
       pipelineLog(`🎯 Global DISPATCH ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`)
       continue
@@ -20695,6 +20766,9 @@ function setPaneAutoName(paneId: string, name: string, source: 'heuristic' | 'll
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || !name) return
   if (pane.customName || pane.nameLocked) return
+  // A pipeline slot pane keeps its slot label: the name is its messaging
+  // handle, and kickoffs address slots by label (#448).
+  if (pane.slotLabel) return
   if (pane.autoName && !(source === 'llm' && pane.autoNameSource !== 'llm')) return
   pane.autoName = name
   pane.autoNameSource = source
@@ -20747,6 +20821,8 @@ function requestLlmPaneName(paneId: string, rawMaterial: string): void {
   const material = stripCliSessionContext(rawMaterial)
   if (!pane || !pane.workspacePath || !material.trim()) return
   if (pane.customName || pane.nameLocked || pane.autoNameSource === 'llm') return
+  // The backend stores the model's title, so a slot pane must not ask (#448).
+  if (pane.slotLabel) return
   if (llmNameRequested.has(paneId)) return
   llmNameRequested.add(paneId)
   void (async () => {
@@ -21782,7 +21858,7 @@ function paneIsCommander(p: ActivePane): boolean {
           <button class="boot-retry" @click="retryBackend">{{ $t('action.retry') }}</button>
         </template>
         <template v-else>
-          <div class="boot-spinner" aria-label="loading" />
+          <div class="boot-spinner" :aria-label="$t('label.loading')" />
           <div class="boot-status">
             <span>{{ $t(bootStatusKey) }}</span>
             <span class="boot-elapsed">{{ $t('label.boot-countdown', { seconds: bootCountdown }) }}</span>
@@ -22730,7 +22806,7 @@ function paneIsCommander(p: ActivePane): boolean {
       >
         <div class="float-pip-header" @mousedown.prevent="onPipDragStart">
           <span class="float-pip-title">
-            Agents ({{ auxiliaryListPanes.length }})
+            {{ $t('label.agents') }} ({{ auxiliaryListPanes.length }})
           </span>
           <button class="float-pip-toggle" @mousedown.stop @click="floatPipExpanded = !floatPipExpanded; clampPipPos()">
             {{ floatPipExpanded ? '▾' : '▸' }}

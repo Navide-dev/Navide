@@ -592,7 +592,69 @@
     "clean-changed": "預覽之後未追蹤檔案有變動，未刪除任何檔案，請重新檢視後再試。",
     "issue-back": "← 返回",
     "issue-comment": "留言",
-    "issue-create": "建立"
+    "issue-create": "建立",
+    "pane": {
+      "no-changes-to-display": "沒有可顯示的變更",
+      "no-ignored-files": "沒有已忽略的檔案",
+      "drag-to-resize": "拖曳以調整大小",
+      "commit-files": "檔案（{count}）",
+      "no-draft": "沒有草稿",
+      "issues-open-count": "{count} 個開啟中",
+      "issue-host-unsupported": "這個儲存庫沒有偵測到支援的議題主機（需要 GitHub 或 GitLab 的 origin 遠端）。",
+      "issue-cli-missing": "尚未安裝 {cli}。",
+      "issue-auth-before": "尚未登入驗證。請在終端機執行",
+      "issue-auth-after": "，然後重新整理。",
+      "issue-dispatch": "派工給 agent",
+      "issue-dispatch-title": "把這個議題交給執行中的 agent",
+      "issue-no-running-agent": "沒有執行中的 agent",
+      "issue-handoff-handling": "agent 處理中",
+      "issue-handoff-closed": "agent 面板已關閉",
+      "ignore-target": {
+        "project": ".gitignore（專案根目錄）",
+        "nested": ".gitignore（目前資料夾）",
+        "local": ".git/info/exclude（僅限本機）",
+        "global": "全域 .gitignore"
+      }
+    },
+    "conflict": {
+      "progress": "已解決 {resolved} / {total}",
+      "apply-title": "寫回並暫存這個檔案",
+      "apply-blocked": "請先解決所有衝突",
+      "apply": "套用並暫存",
+      "ours-default": "HEAD（我方）",
+      "versus": "對比",
+      "theirs-default": "對方",
+      "empty-side": "（空白）",
+      "accepted-ours": "已採用我們的版本",
+      "accepted-theirs": "已採用他們的版本",
+      "accepted-both": "已全部採用",
+      "manually-edited": "已手動編輯",
+      "undo": "復原"
+    },
+    "diff": {
+      "badge-staged": "已暫存",
+      "badge-working-tree": "工作區",
+      "open-in-editor": "在編輯器中開啟檔案",
+      "prev-change": "上一個變更（↑）",
+      "next-change": "下一個變更（↓）",
+      "reload": "重新載入差異",
+      "not-loaded": "尚未載入差異",
+      "stage-selected": "暫存所選（{count}）"
+    },
+    "branch-diff": {
+      "working-changes": "工作區變更",
+      "file-count": "{count} 個檔案",
+      "expand-all": "全部展開",
+      "collapse-all": "全部收合",
+      "no-changes-between": "{base} 與 {compare} 之間沒有變更",
+      "no-uncommitted": "沒有未提交的變更",
+      "hidden-lines": "已隱藏 {count} 行"
+    },
+    "file-detail": {
+      "no-history": "這個檔案沒有歷史記錄。",
+      "no-changed-lines": "沒有變更的行。",
+      "no-blame": "沒有 Blame 資訊。"
+    }
   },
   "pane": {
     "git": {
@@ -821,8 +883,10 @@
           "conflict": "檔案發生衝突，請重新整理後再試。",
           "internal-error": "後端發生內部錯誤。",
           "workspace-scope-violation": "嘗試存取工作區以外的檔案。"
-        }
-      }
+        },
+        "rename-plan": "重新命名計畫"
+      },
+      "section-delete-confirm": "要從文件刪除「{anchor}」這個區段嗎？"
     },
     "terminal": {
       "readback-on-tooltip": "朗讀已開啟：完成或需要回答時會念出來——點一下關閉",
@@ -882,7 +946,7 @@
       "auto-named-tooltip": "此名稱由系統依這個 session 的第一句指令自動產生 — 只要你改過名，就不會再被自動命名",
       "loop-tag-tooltip": "此 pane 正在執行 Loop",
       "subtree-tooltip": "底下有 {count} 個派生 pane 處於 {status}",
-      "subtree-summary": "sub {status} {count}",
+      "subtree-summary": "子 pane {status} {count}",
       "location-minimized": "已縮到側欄",
       "location-tab": "分頁：{name}",
       "location-workspace": "工作區：{name}",
@@ -1285,7 +1349,8 @@
       "unstage-folder": "取消暫存整個資料夾",
       "discard-folder": "捨棄整個資料夾的變更",
       "file-history-blame": "檔案歷史與逐行歸屬",
-      "open-diff-in-editor": "在編輯器開啟這個差異"
+      "open-diff-in-editor": "在編輯器開啟這個差異",
+    "resume-from-stage": "▶ 從第 {n} 階段接續"
   },
   "share": {
     "notice": {
@@ -1407,7 +1472,7 @@
         "intercept-tools": "攔截工具呼叫",
         "rewrite-prompt": "改寫 prompt",
         "ui": "畫介面",
-        "telemetry": "Telemetry"
+        "telemetry": "遙測"
       },
       "consent": {
         "none": "CLI 執行前不會先詢問",
@@ -1838,6 +1903,7 @@
       },
       "restore": "還原",
       "candidateReady": "更新 {version} 已就緒",
+      "activationFailed": "{plugin} 已安裝，但無法啟用：{reason}。請在下方清單重新啟動或捨棄它。",
       "restartPlugin": "重新啟動 Navide 外掛",
       "disable": "停用",
       "enable": "啟用",
@@ -1999,7 +2065,7 @@
         },
         "title": "開發者模式",
         "switch": "開啟開發者模式",
-        "hint": "開啟後可以從你選的資料夾載入 Navide 外掛來開發與測試，也會套用自架 Registry 的設定（AGENT_TEAM_MARKETPLACE_URL）。只有在這個設定頁可以切換，每次變更都會記錄。",
+        "hint": "開啟後可以從你選的資料夾載入 Navide 外掛來開發與測試，也會套用自架 Registry 的設定（AGENT_TEAM_MARKETPLACE_URL）。只有在這個設定頁可以切換，每次變更都會記錄。關閉時會卸下所有從資料夾載入的 Navide 外掛，選了但還沒同意的資料夾也會清掉；你同意過的資料夾清單會保留，再開啟時自動接回，也可以在這裡移除。",
         "banner": "開發者模式已開啟，從資料夾載入的 Navide 外掛沒有經過審核。",
         "reminder": "開發者模式已開啟：從資料夾載入的 Navide 外掛沒有經過審核。不用時請到「設定 → Navide 外掛」關閉。",
         "reminderClose": "知道了",
@@ -2324,6 +2390,16 @@
       "reset-colors-hint": "將所有自訂顏色還原為內建主題",
       "language-en-US": "English",
       "language-ja-JP": "日本語",
+      "language-zh-CN": "简体中文",
+      "language-ko-KR": "한국어",
+      "language-es-ES": "Español (España)",
+      "language-fr-FR": "Français",
+      "language-de-DE": "Deutsch",
+      "language-pt-BR": "Português (Brasil)",
+      "language-ru-RU": "Русский",
+      "language-vi-VN": "Tiếng Việt",
+      "language-beta": "Beta",
+      "language-beta-hint": "機器翻譯，尚待母語者審閱。",
       "language-hint": "語言是使用者層級的偏好設定，對所有工作區生效。",
       "ui-scale": "介面縮放",
       "ui-scale-hint": "整體放大或縮小介面——文字、圖示與間距——並套用到所有視窗。與終端機、編輯器的字級無關，那兩者仍各自使用 ⌘= / ⌘- 快捷鍵。",
@@ -2464,9 +2540,9 @@
             }
           },
           "sample": {
-            "query": "reclaim",
-            "hit1": "Idle reclaim",
-            "hit2": "Reclaim threshold",
+            "query": "回收",
+            "hit1": "回收閒置的 CLI",
+            "hit2": "閒置多久後回收",
             "paneA": "reviewer",
             "paneB": "builder",
             "paneC": "docs",
@@ -2633,7 +2709,7 @@
             },
             "resumeOnOpen": {
               "desc": "開啟工作區時舊面板怎麼辦：總是恢復／一律開新對話／每次詢問。",
-              "fallback": "Always"
+              "fallback": "總是恢復"
             },
             "resumeScope": {
               "desc": "接續範圍：單一 CLI／目前 Grid 頁面／目前分頁／全部 CLI／自動（只接續上次關閉 Navide 時仍在執行的 CLI）。",
@@ -2975,7 +3051,7 @@
             },
             "standard": {
               "value": "標準 macOS 視窗操作。Zoom 是把視窗框放到最大，跟面板內容的字級縮放無關。",
-              "label": "Minimize / Zoom / Bring All to Front"
+              "label": "縮到最小 / 縮放 / 將全部移到最前面"
             },
             "turnStats": {
               "value": "開「每輪消耗」對話框（本頁第 8 章）。"
@@ -3272,8 +3348,8 @@
                 "text": "採用我們的／他們的／全部採用，或按編輯自己改。開了 Base 之後還會多一顆採用共同基準版本。"
               },
               "apply": {
-                "label": "Apply & Stage",
-                "text": "全部處理完才按得下去；它會把結果寫回檔案並直接暫存起來。這顆按鈕不論選擇哪種介面語言都顯示英文，產品本身就是這樣寫的。"
+                "label": "套用並暫存",
+                "text": "全部處理完才按得下去；它會把結果寫回檔案並直接暫存起來。"
               }
             }
           },
@@ -3306,11 +3382,11 @@
             "message": "fix(git): keep the hunk selection after a stage",
             "hunk": "{'@'}{'@'} -12,7 +12,9 {'@'}{'@'}",
             "conflictNo": "#1",
-            "ours": "HEAD (ours)",
-            "theirs": "theirs",
-            "progress": "1 / 3 resolved",
-            "apply": "Apply & Stage",
-            "base": "Base"
+            "ours": "HEAD（我方）",
+            "theirs": "對方",
+            "progress": "已解決 1 / 3",
+            "apply": "套用並暫存",
+            "base": "共同基準"
           }
         },
         "intro": "Git 面板、計畫文件、內建編輯器與預覽——把 agent 做出來的變更看清楚、審過、提交出去。這裡沿用「工作區／面板」這組名詞。",
@@ -3464,7 +3540,7 @@
             "badge": "標題掛 <strong>衝突</strong> 徽章，旁邊寫 <em>{'{'}n{'}'} / {'{'}m{'}'} resolved</em>。",
             "choices": "每一段衝突可選 <em>採用我們的版本</em>、<em>採用他們的版本</em>、<em>全部採用</em>、<em>採用共同基準版本</em>，或 <em>編輯</em> 手改（改完 <em>確認</em> / <em>取消</em>）。",
             "base": "<em>共同基準</em> 開關會把共同祖先那一版也叫出來對照。",
-            "apply": "全部處理完按 <strong>Apply &amp; Stage</strong> 寫回並暫存。",
+            "apply": "全部處理完按 <strong>套用並暫存</strong>，把結果寫回並暫存。",
             "binary": "二進位檔不能三方合併，會直接說 <em>Binary conflict</em>，只能整檔取捨。",
             "agent": "Git 視窗裡另外有一顆 <strong>交給 CLI agent 解衝突</strong>，把衝突整包丟給 CLI agent 去解。"
           },
@@ -3824,8 +3900,8 @@
           "title": "Plans 是一個 Navide 外掛（以及它失敗時的樣子）",
           "p1": "側欄的 Plans 分頁與 Plan 視窗都由隨附的 Navide 外掛 <code>navide.plans</code> 繪製，在<strong>設定 ▸ Navide 外掛</strong>的 <em>內建</em> 區列得到它：id、版本、啟用中／已移除／無法使用 徽章、manifest 權限與套件版本。介面上任何地方都不會寫 “v2” 這兩個字——唯一的例外是下面這塊復原面板。",
           "p2": "切換 App 主題時 Plans 的畫面會即時跟著換，不必重開視窗。",
-          "h1": "Plans 起不來時：Legacy recovery",
-          "p3": "Navide 外掛這次啟動失敗時，Plans 分頁會換成灰底的 <strong>Legacy recovery</strong> 標籤，底下掛回舊版計畫面板，中間一行寫著原因：<em>本次啟動已停用 Plans v2（{'{'}原因{'}'}）。</em>常見的原因字串有 <code>forced</code>（環境變數 <code>NAVIDE_PLANS_RECOVERY=legacy</code> 指定的）、<code>storage-migration-failure</code>（存放紀錄讀不到或轉不過去），以及後端啟動失敗的訊息。",
+          "h1": "Plans 起不來時：舊版復原",
+          "p3": "Navide 外掛這次啟動失敗時，Plans 分頁會換成灰底的 <strong>舊版復原</strong> 標籤，底下掛回舊版計畫面板，中間一行寫著原因：<em>本次啟動已停用 Plans v2（{'{'}原因{'}'}）。</em>常見的原因字串有 <code>forced</code>（環境變數 <code>NAVIDE_PLANS_RECOVERY=legacy</code> 指定的）、<code>storage-migration-failure</code>（存放紀錄讀不到或轉不過去），以及後端啟動失敗的訊息。",
           "list": {
             "retry": "<strong>重試 Plans v2</strong>——把 Navide 外掛重新武裝，下一次開 Plans 時再生一次後端。<strong>整個 session 只有 2 次額度，而且是先扣再試</strong>：按下去就算一次，成敗都不退。額度用完後這個 session 就固定留在舊版面板，要再試只能重開 app。",
             "repair": "<strong>修復儲存紀錄</strong>——只有原因是 <code>storage-migration-failure</code> 時才出現。修好之後畫面<strong>仍然留在復原狀態</strong>，訊息會寫 <em>儲存紀錄已修復，重啟 Navide 即可離開舊版復原模式。</em>；本來就沒壞的話會回 <em>儲存紀錄可正常讀取，無需修復。</em>"
@@ -3926,14 +4002,14 @@
             "chain1": "Homebrew",
             "chain2": "Node.js",
             "plan": "Pro",
-            "window1": "5-hour window",
-            "window2": "Weekly",
+            "window1": "5 小時窗口",
+            "window2": "每週",
             "pct1": "62%",
             "pct2": "18%",
             "reset1": "2h 40m",
             "reset2": "3d",
-            "acct1": "work",
-            "acct2": "personal",
+            "acct1": "工作",
+            "acct2": "個人",
             "acctPct1": "62%",
             "acctPct2": "9%",
             "model": "opus-5",
@@ -3952,7 +4028,8 @@
             "usage": "額度",
             "multi": "多帳號",
             "signIn": "登入指令",
-            "signInInside": "在 CLI 內登入"
+            "signInInside": "在 CLI 內登入",
+            "flagNoteGoose": "無——Goose 預設會自己核准所有工具（GOOSE_MODE=auto）；要先詢問，請把 GOOSE_MODE 設成 approve 或 smart_approve。Navide 的 Guard 目前還不涵蓋 Goose。"
           },
           "note": "「額度」＝ Navide 讀得到剩餘用量（第 6 章）。「多帳號」＝ 可以在設定裡掛多組登入並切換（第 5 章）。四家沒有略過權限旗標的 CLI（Grok CLI、OpenCode、Pi、MiniMax Code）是因為它們本身就沒有這個旗標，不是 Navide 沒接。「登入指令」＝ 在設定 ▸ 帳號按「登入」時，Navide 實際會執行的指令；標示「在 CLI 內登入」的那幾家沒有獨立的登入指令，按下去就是照常啟動該 CLI，登入在它自己的畫面裡完成。",
           "callout": {
@@ -4794,8 +4871,8 @@
           },
           "sample": {
             "workspace": "my-project",
-            "group": "Main",
-            "group2": "Review",
+            "group": "主要",
+            "group2": "審查",
             "pane1": "reviewer",
             "pane2": "builder",
             "pane3": "tester",
@@ -4892,7 +4969,7 @@
           "h2": "右鍵選單",
           "p3": "在面板上或側欄那一列按右鍵：<em>聚焦</em>、<em>重新命名</em>、<em>傳送訊息</em>、<em>中斷</em>、<em>重新套用角色</em>、<em>移除</em>。其中 <em>傳送訊息</em> 會把那個面板的位址插進你目前焦點面板的輸入框——這是跨面板傳訊最快的入口。底下有子面板（<code>▸</code>）的面板還會多一項 <em>移除旗下 N 個子面板</em>：只關掉它派生出來的子面板，它自己和其他面板都不動。",
           "h3": "收合與佔位卡",
-          "p4": "面板右上角的 <code>⊟</code> 是最小化。收起來之後側欄那一列會標上 <strong>Docked</strong>，展開後有 <em>↑ 還原</em> 與 <em>移除</em>。",
+          "p4": "面板右上角的 <code>⊟</code> 是最小化。收起來之後側欄那一列會標上 <strong>已收合</strong>，展開後有 <em>↑ 還原</em> 與 <em>移除</em>。",
           "p5": "另外有一種狀態叫<strong>佔位卡</strong>：位子還在，但顯示一張「↩ 點擊以續接」的卡片，標題、副標、群組標籤全部保留。重開 app、或被閒置回收之後，面板就是這個樣子。點卡片任一處，CLI 會接著原本的對話繼續。",
           "h4": "閒置自動回收",
           "p6": "每個跑著的 CLI 都佔著記憶體與 GPU。Navide 預設會把太久沒動靜的面板降級回佔位卡：",
@@ -4992,7 +5069,7 @@
           "rows": {
             "workspace": "<strong>工作區列</strong>：由左到右是摺疊箭頭、資料夾圖示、專案名、面板數（<code>開著的 / 全部</code>，被回收或等待還原的佔位面板不算開著）、路徑、摺疊鈕、<code>＋</code>、<code>⋯</code>（{more}）。右鍵依序有 <em>{rename}</em>、<em>{finder}</em>、<em>{copyPath}</em>、<em>{moveToGroup}</em>（移到某個工作區群組，有工作區群組時才出現）、<em>{reclaim}</em>、<em>{close}</em>（只移除這一列，CLI 繼續跑，之後重開會接回）、<em>{closePanes}</em>（結束全部 CLI）。<strong><code>↻</code>「{rebuildAll}」與「{history}」不在列上，在 <code>⋯</code> 選單裡</strong>：側欄縮到最窄時，列上多一顆按鈕就會擠掉專案名的寬度，所以收了進去。<code>⋯</code> 依序是 {rebuildAll}、{history}、{finder}、{copyPath}、{rename}、{detach}（可以拆出去時才有）、{reclaim}，以及可以關閉時的兩種關閉；它<strong>靠近視窗底部時會自動往上翻</strong>，選單本身太長時<strong>在裡面捲動不會把它關掉</strong>，只有捲動選單以外的地方才會關。",
             "group": "<strong>群組列</strong>：黏在頂端捲動，顯示狀態色點、群組名、成員數，一顆滑鼠移上去才浮現的摺疊鈕，以及一顆「在這個群組裡開 agent」的 <code>＋</code>。成員列的左緣有一條中性色細軌，表示它們同屬一群。",
-            "pane": "<strong>面板列</strong>：名稱、狀態、Docked 標籤等。"
+            "pane": "<strong>面板列</strong>：名稱、狀態、已收合標籤等。"
           },
           "callout": {
             "title": "群組的改名與刪除不在側欄",
@@ -5521,11 +5598,11 @@
               "what": "純記號：這個名字是自動取的。改過名字就不再出現。"
             },
             "stageManager": {
-              "where": "面板名稱旁，顯示為 <code>🎯 Mgr</code>",
+              "where": "面板名稱旁，顯示為 <code>🎯 管理</code>",
               "what": "純記號：這個面板是 pipeline 的階段總管。"
             },
             "docked": {
-              "where": "面板列上，顯示為圖示＋<code>Docked</code>",
+              "where": "面板列上，顯示為圖示＋<code>已收合</code>",
               "what": "純標籤：這個面板已經收起來了，只剩側欄這一列。"
             },
             "expandRow": {
@@ -5575,7 +5652,7 @@
               "name": "<code>此名稱由系統依這個 session 的第一句指令自動產生 — 只要你改過名，就不會再被自動命名</code>"
             },
             "globalManager": {
-              "where": "標題文字旁，顯示 <code>🎯 Mgr</code>",
+              "where": "標題文字旁，顯示 <code>🎯 管理</code>",
               "what": "純記號：這是 pipeline 的總管面板。"
             },
             "loop": {
@@ -6270,7 +6347,7 @@
               "name": "<code>此名稱由系統依這個 session 的第一句指令自動產生 — 只要你改過名，就不會再被自動命名</code>"
             },
             "manager": {
-              "name": "<code>Global Manager</code> / <code>Stage manager</code>，顯示為 <code>🎯 Mgr</code>",
+              "name": "<code>Global Manager</code> / <code>Stage manager</code>，顯示為 <code>🎯 管理</code>",
               "where": "面板標題與側欄面板列",
               "meaning": "這個面板是 pipeline 的階段總管，負責判斷每個階段何時結束。"
             },
@@ -6677,7 +6754,7 @@
       "view-browse": "瀏覽",
       "view-compare": "對照",
       "source-navide": "Navide",
-      "matrix-server": "Server",
+      "matrix-server": "伺服器",
       "matrix-legend-here": "已在此設定",
       "matrix-legend-disabled": "已設定但已關閉",
       "matrix-legend-off": "不在使用者層級設定裡",
@@ -6703,7 +6780,8 @@
       "catalog-search": "依名稱搜尋 MCP server",
       "catalog-hint": "這份目錄只收錄<strong>「Orchestrator 情境讀取」</strong>類的 MCP — 也就是讀取 workspace／文件／外部服務資料，再注入 kickoff prompt 以校正 agent 認知的工具。執行類動作（測試、瀏覽器自動化等）由 CLI agent 自己處理。",
       "catalog-requires-env": "需要環境變數：{vars}",
-      "catalog-empty": "找不到符合的 MCP server"
+      "catalog-empty": "找不到符合的 MCP server",
+      "header-name-placeholder": "標頭名稱"
     },
     "credentials": {
       "title": "憑證與金鑰",
@@ -6902,7 +6980,7 @@
       "error-save": "無法儲存 skill；草稿仍保留在編輯器中。",
       "error-toggle": "無法更新啟用狀態，請再試一次。",
       "error-delete": "無法將 skill 移至垃圾桶；未刪除任何內容。",
-      "matrix-skill": "Skill",
+      "matrix-skill": "技能",
       "matrix-legend-on": "已送達",
       "matrix-legend-off": "未送達",
       "matrix-legend-planned": "支援但尚未接線",
@@ -7578,7 +7656,7 @@
         "signed-out": "未登入",
         "custom-binary": "自訂執行檔",
         "model": "模型 {model}",
-        "effort": "effort {effort}",
+        "effort": "推理強度 {effort}",
         "custom-command": "自訂啟動指令",
         "custom-env": "自訂 env {count}"
       }
@@ -8679,7 +8757,47 @@
       "backend-stop": "停止",
       "pipeline-pill-stage": "階段 {current} / {total}",
       "pipeline-pill-completed": "已完成",
-      "pipeline-pill-aborted": "已中止"
+      "pipeline-pill-aborted": "已中止",
+    "legacy-recovery": "舊版復原",
+    "pipeline-runs-done": "已完成 {count} 次",
+    "resume-existing-pipeline": "↻ 接續既有流程",
+    "resume-stages-done": "已完成 {done}/{total} 個階段",
+    "focus-pane": "聚焦此 pane",
+    "manager-badge": "🎯 管理",
+    "docked": "已收合",
+    "pane-origin-stage": "階段 {id}",
+    "pane-origin-manual": "手動",
+    "session-id-tooltip": "CLI Session ID — 重新啟動時用來接回這個 Agent 的記憶",
+    "role-system-prompt": "{role} 系統提示詞",
+    "project-completed": "✓ 專案已完成",
+    "all-stages-done": "{count} 個階段全部完成 · {time}",
+    "refresh-ollama-tooltip": "重新檢查 Ollama 狀態與模型清單",
+    "retry-connection-tooltip": "重新嘗試連線",
+    "minimized-sidebar": "側欄",
+    "loop-badge": "∞ Loop 執行中",
+    "review-model-placeholder": "模型名稱（例如 llama-3.3-70b）",
+    "review-working-changes": "工作區變更",
+    "current-branch-suffix": "{branch}（目前）",
+    "review-dismissed": "已忽略",
+    "review-general-finding": "（整體）",
+    "review-ask-ai-fix": "請 AI 修正",
+    "review-restore-finding": "還原",
+    "review-no-findings": "沒有發現問題 — 看起來不錯！",
+    "review-no-findings-filtered": "沒有可顯示的項目。",
+    "question-is-asking": "正在詢問",
+    "question-dismiss-tooltip": "不回答直接關閉",
+    "question-auto-answering": "🤖 正在由 LLM 自動回答…",
+    "question-auto-answer": "🤖 自動回答：{text}",
+    "question-auto-mode": "🤖 自動模式 — 將自動送出",
+    "question-answer-all": "回答全部 {count} 個問題後才能送出。",
+    "question-send-hint": "{key} 送出",
+    "question-send-all": "送出全部 {count} 個回答",
+    "question-send-one": "送出回答",
+    "console": "主控台",
+    "drag-resize-log": "拖曳以調整記錄面板高度",
+    "filter-by-type": "依類型篩選",
+    "all-stages-finished": "{count} 個階段全部順利完成",
+    "region-unavailable": "{title} 無法使用"
   },
   "layout": {
     "expand": "展開面板",
@@ -9247,8 +9365,13 @@
     "info": {
       "runtime": "執行環境",
       "paths": "路徑",
-      "open": "開啟"
-    }
+      "open": "開啟",
+      "app": "應用程式",
+      "backend": "後端",
+      "started": "啟動時間",
+      "shell": "殼層"
+    },
+    "backend-status": "後端 {status}"
   },
   "orphans": {
     "title": "殘留 CLI 程序",
@@ -9720,7 +9843,8 @@
     "run-by-hand": "你也可以自己在終端機執行：{cmd}",
     "installed-not-detected": "指令已執行完成，但仍偵測不到 {label}。可能需要新的終端機工作階段，或它安裝在 PATH 之外。",
     "installed-still-outdated": "安裝完成了，但 PATH 上找到的仍是舊版 {label} {version}。新版可能排在系統內建版本後面 — 把它的目錄移到 PATH 前面再重新偵測。調整好 PATH 順序後，重新偵測就會生效，不必重啟。",
-    "installed-still-outdated-python": "安裝完成了，但 PATH 上找到的仍是舊版 {label} {version}。任選一種修法後重新偵測：執行 brew link --overwrite python{'@'}3.x（換成你安裝的版本），或在 ~/.zprofile 加入 eval \"$(/opt/homebrew/bin/brew shellenv)\"，讓 Homebrew 排在系統內建版本前面。"
+    "installed-still-outdated-python": "安裝完成了，但 PATH 上找到的仍是舊版 {label} {version}。任選一種修法後重新偵測：執行 brew link --overwrite python{'@'}3.x（換成你安裝的版本），或在 ~/.zprofile 加入 eval \"$(/opt/homebrew/bin/brew shellenv)\"，讓 Homebrew 排在系統內建版本前面。",
+    "custom-model-placeholder": "例如 codellama:7b、gemma3:4b"
   },
   "executions": {
     "last-scan": "上次掃描 {time}",
@@ -9760,19 +9884,19 @@
       "title": "系統 crontab"
     },
     "launchagents": {
-      "title": "macOS Agents"
+      "title": "macOS 代理程式"
     },
     "daemons": {
-      "title": "macOS Daemons"
+      "title": "macOS 常駐服務"
     },
     "scope": {
       "user": "使用者",
       "system-agent": "系統",
-      "system-daemon": "Daemon"
+      "system-daemon": "常駐服務"
     },
     "tag": {
       "pid": "PID {pid}",
-      "exit": "exit {code}"
+      "exit": "結束碼 {code}"
     },
     "state": {
       "loaded-not-running": "已載入但未執行",
@@ -9791,7 +9915,7 @@
       "schedule": "排程",
       "command": "指令",
       "raw": "原始內容",
-      "label": "Label",
+      "label": "標籤",
       "scope": "層級",
       "plist": "plist 路徑",
       "exit-code": "上次結束碼",
@@ -9893,7 +10017,7 @@
       "freq-weekly": "每週",
       "freq-once": "一次",
       "minutes": "分鐘",
-      "workspace": "Workspace",
+      "workspace": "工作區",
       "pick-workspace": "選擇 workspace",
       "target": "目標 pane",
       "pick-pane": "選擇 pane",
@@ -9946,7 +10070,7 @@
     "pane": "Pane",
     "pane-placeholder": "尚未啟動",
     "no-token-usage": "不提供 token 用量",
-    "session": "Session",
+    "session": "工作階段",
     "summary": "{turns} 輪 · {calls} 次呼叫 · 總計 {total}",
     "rescan": "重新掃描",
     "export": "匯出 CSV",
@@ -9956,10 +10080,10 @@
     "method-unsupported": "此 CLI 不提供 token 用量。",
     "col-time": "時間",
     "col-prompt": "提示摘要",
-    "col-input": "In",
-    "col-cache-read": "Cache R",
-    "col-cache-write": "Cache W",
-    "col-output": "Out",
+    "col-input": "輸入",
+    "col-cache-read": "快取讀取",
+    "col-cache-write": "快取寫入",
+    "col-output": "輸出",
     "col-total": "總計",
     "col-calls": "呼叫",
     "row-total": "合計",
@@ -10009,9 +10133,9 @@
   },
   "account-dim": {
     "unknown": "未知",
-    "default": "Default",
+    "default": "預設",
     "removed": "帳號已移除",
-    "active": "active",
+    "active": "作用中",
     "inactive": "非 active"
   },
   "quota-cycles": {
@@ -10457,14 +10581,14 @@
     "needs": "需要：{fields}",
     "imessage-note": "不需要 token，僅限 macOS。",
     "field": {
-      "token": "Bot token",
-      "app_token": "App-level token",
-      "bot_token": "Bot token",
+      "token": "Bot 權杖",
+      "app_token": "App 層級權杖",
+      "bot_token": "Bot 權杖",
       "app_id": "App ID",
       "app_secret": "App Secret",
       "client_id": "Client ID",
       "client_secret": "Client Secret",
-      "access_token": "Access token",
+      "access_token": "存取權杖",
       "server_url": "伺服器 URL",
       "homeserver": "Homeserver URL",
       "domain": "區域",
@@ -10589,7 +10713,7 @@
       "title": "Guard 怎麼處理",
       "hint": "每個動作先分級，再依要求來自哪裡決定處置。",
       "source": "要求來源",
-      "levels": "嚴重：刪除 workspace 或家目錄以外的檔案、磁碟與系統指令、sudo、curl | sh、讀寫憑證、強制推送到 main、雲端資源刪除。高：workspace 內 rm -rf、git push／reset --hard、發布套件、修改 CI 或 git hooks。",
+      "levels": "嚴重：刪除 workspace 或家目錄以外的檔案、磁碟與系統指令、sudo、curl {'|'} sh、讀寫憑證、強制推送到 main、雲端資源刪除。高：workspace 內 rm -rf、git push／reset --hard、發布套件、修改 CI 或 git hooks。",
       "row": {
         "local": "你本人，在這台電腦上",
         "relay": "從聊天室核准",
@@ -11128,7 +11252,9 @@
       "ledger-open-failed": "無法開啟帳本計畫",
       "pending-catch-up": "有一次錯過的執行，等這個 workspace 開啟後補跑。",
       "system-pane": "✦ 系統開啟",
-      "system-pane-title": "這個 pane 由自我優化開啟"
+      "system-pane-title": "這個 pane 由自我優化開啟",
+      "run-tokens": "{tokens} 個 Token",
+      "run-pane": "面板「{name}」"
     },
     "field": {
       "time": "執行時間",
@@ -11163,7 +11289,8 @@
       "rules-hide": "收起",
       "extra-placeholder": "補充指示（只套用這個 workspace）…",
       "ledger": "帳本",
-      "ledger-placeholder": "plan 相對路徑，例：.agent-team/plans/xxx.html；空白＝不綁"
+      "ledger-placeholder": "plan 相對路徑，例：.agent-team/plans/xxx.html；空白＝不綁",
+      "effort-option": "推理強度：{effort}"
     },
     "error": {
       "at": "時間格式要是 HH:MM",
@@ -11185,7 +11312,8 @@
       "date": "日期",
       "result": "結果",
       "fixes": "修正",
-      "proposals": "提案"
+      "proposals": "提案",
+      "tokens": "Token 數"
     },
     "reason": {
       "busy": "這個 workspace 已有一次在執行",
@@ -11426,7 +11554,12 @@
       "publisher": "發佈者：{publisher}",
       "selfDeclared": "自稱：{publisher}",
       "localSignedBy": "開發者 {publisher}（已通過 Navide 資格審核）簽章，這一版未經 Navide 審核",
-      "signatureRevoked": "簽章已失效"
+      "signatureRevoked": "簽章已失效",
+      "unsignedNote": "無法確認作者，檔案可能被改過。",
+      "showDetails": "顯示來源、SHA-256 與安裝時間",
+      "fileDigest": "安裝檔案的 SHA-256：{digest}",
+      "contentDigest": "安裝內容的 SHA-256：{digest}",
+      "installedAt": "安裝時間：{time}"
     },
     "diff": {
       "heading": "這次更新的權限變化",
@@ -11481,10 +11614,11 @@
       "system": "{key}"
     },
     "scanHeading": "上架時系統掃描的結果",
+    "scanHeadingLocal": "Navide 掃描這個檔案的結果",
     "declaredHeading": "這個 Navide 外掛宣告的權限",
     "registryHeading": "Navide Registry 的紀錄（未簽章）",
     "provenance": {
-      "local": "以下由 Navide 從套件自己的 manifest 讀出；沒有 Navide Registry 簽章，也沒有經過 Navide 掃描。",
+      "local": "以下由 Navide 從套件自己的 manifest 讀出；沒有 Navide Registry 簽章，Navide 也沒有審查過。",
       "unverified": "以下由 Navide Registry 提供，尚未驗證；安裝前 Navide 會驗證簽章，並和套件內容比對。",
       "verified": "已驗證：揭露內容和下載的套件一致，掃描報告的 Navide Registry 簽章正確。",
       "verifiedNoScan": "已驗證：揭露內容和下載的套件一致。這個版本沒有系統掃描。"
@@ -11492,7 +11626,9 @@
     "noDisclosure": "這個版本上架時尚未提供揭露資料。",
     "signedByRegistry": "掃描由 Navide Registry 執行並簽章。",
     "scannedByRegistry": "掃描由 Navide Registry 執行。",
+    "scannedLocally": "掃描結果只供這張卡片參考，不會決定是否安裝。",
     "limitsWithoutScan": "這個版本沒有系統掃描，以上只有這個 Navide 外掛自己的宣告。",
+    "limitsWithoutScanLocal": "Navide 沒有掃描這個檔案，以上只有這個 Navide 外掛自己的宣告。",
     "viewNetwork": "Navide 外掛的畫面（view）可以連網，也可以在 Navide 裡顯示外部網站；Navide 不會過濾或記錄這些流量。上面的網路項目只涵蓋它的指令與原生後端。",
     "viewNetworkIfViews": "如果這個 Navide 外掛有畫面（view），畫面可以連網，也可以在 Navide 裡顯示外部網站；Navide 不會過濾或記錄這些流量。上面的網路項目只涵蓋它的指令與原生後端。",
     "summary": {
@@ -11543,7 +11679,8 @@
       },
       "coverage": {
         "base": "上架時由 Navide Registry 掃描（掃描器 {scannerVersion}，{scannedAt}，掃了 {filesScanned}／{filesTotal} 個檔案）。靜態掃描看不到執行時才決定的行為，以上不代表完整清單。",
-        "incomplete": "掃描不完整：{reasons}。"
+        "incomplete": "掃描不完整：{reasons}。",
+        "local": "由 Navide 在這台電腦上掃描（掃描器 {scannerVersion}，{scannedAt}，掃了 {filesScanned}／{filesTotal} 個檔案）。靜態掃描看不到執行時才決定的行為，以上不代表完整清單。"
       },
       "notFound": {
         "shell": "靜態掃描未發現執行指令。",
@@ -11551,7 +11688,8 @@
         "files": "靜態掃描未發現檔案讀寫路徑。",
         "dynamicCode": "靜態掃描未發現執行時產生程式碼。"
       },
-      "noScan": "這個版本上架時尚未有系統掃描，以下只有這個 Navide 外掛自己的宣告。"
+      "noScan": "這個版本上架時尚未有系統掃描，以下只有這個 Navide 外掛自己的宣告。",
+      "noScanLocal": "Navide 沒有掃描這個檔案，以下只有這個 Navide 外掛自己的宣告。"
     },
     "incompleteReason": {
       "timedOut": "超過掃描時間",

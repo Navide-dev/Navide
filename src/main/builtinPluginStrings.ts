@@ -1,4 +1,4 @@
-import type { SupportedLocale } from './hostLocale'
+import { hostStrings, type HostStringTable, type SupportedLocale } from './hostLocale'
 
 /**
  * The main-process dialog shown when the user (or a plugin button) asks for a
@@ -6,7 +6,7 @@ import type { SupportedLocale } from './hostLocale'
  * menuStrings.ts); the wording follows the renderer's
  * settings.extensions.builtinDisabledTooltip and the glossary.
  */
-const STRINGS: Record<SupportedLocale, { title: string; message: (name: string) => string }> = {
+const STRINGS: HostStringTable<{ title: string; message: (name: string) => string }> = {
   'en-US': {
     title: 'Navide plugin disabled',
     message: (name) => `Navide plugin ${name} is disabled. Enable it in Settings → Extensions.`,
@@ -25,6 +25,6 @@ export function builtinPluginDisabledDialog(
   locale: SupportedLocale,
   name: string,
 ): { title: string; message: string } {
-  const strings = STRINGS[locale] ?? STRINGS['en-US']
+  const strings = hostStrings(STRINGS, locale)
   return { title: strings.title, message: strings.message(name) }
 }
