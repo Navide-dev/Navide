@@ -399,12 +399,30 @@ describe('PluginRegionHost source strip (K2)', () => {
     return wrapper
   }
 
+  it('A2-3: a developer folder badge opens the Local folder card in the Host chrome, not in the guest', async () => {
+    i18n.global.locale.value = 'en-US'
+    const wrapper = await render('developer-unpacked')
+    const developerMode = vi.fn(async () => ({
+      enabled: true,
+      folders: [{ pluginId: 'acme.files', path: '/Users/me/files', consentedAt: '', loaded: true, lastLoad: { at: '2026-10-21T01:00:00.000Z', trigger: 'startup' } }],
+    }))
+    ;(window.agentTeam!.plugins as unknown as Record<string, unknown>).developerMode = developerMode
+    await wrapper.get('.plugin-region-host__folder-toggle').trigger('click')
+    await flushPromises()
+    const folderCard = wrapper.get('.plugin-region-host__folder-card')
+    expect(folderCard.get('.nv-folder-card-path').text()).toBe('/Users/me/files')
+    expect(wrapper.get('webview').find('.nv-folder-card').exists()).toBe(false)
+    await wrapper.get('.plugin-region-host__folder-toggle').trigger('click')
+    expect(wrapper.find('.plugin-region-host__folder-card').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('shows a local source above the webview, outside it', async () => {
     i18n.global.locale.value = 'en-US'
     const wrapper = await render('developer-unpacked')
     const strip = wrapper.get('.plugin-region-host__source')
     expect(strip.get('.plugin-region-host__title').text()).toBe('Files')
-    expect(strip.get('.nv-source-badge').text()).toBe('Developer folder; its contents can change at any time')
+    expect(strip.get('.nv-source-badge').text()).toBe('Local folder')
     expect(strip.element.nextElementSibling?.tagName).toBe('WEBVIEW')
     expect(wrapper.get('webview').find('.plugin-region-host__source').exists()).toBe(false)
     wrapper.unmount()

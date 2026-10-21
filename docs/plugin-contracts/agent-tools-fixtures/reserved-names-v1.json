@@ -133,6 +133,7 @@
     "window_close",
     "window_focus",
     "window_list",
+    "window_move_pane",
     "workspace_close",
     "workspace_list",
     "workspace_open",

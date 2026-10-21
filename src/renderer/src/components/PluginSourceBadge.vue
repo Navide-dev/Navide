@@ -70,6 +70,8 @@ const publisherText = computed(() => {
     <span class="nv-source-row-label">{{ $t('pluginDisclosure.source.heading') }}</span> <span class="nv-source-badge" :class="badgeClass">{{ label }}</span>
     <p v-if="unsignedNote" class="nv-source-unsigned">{{ $t('pluginDisclosure.source.unsignedNote') }}</p>
     <p v-if="local" class="nv-source-scan">{{ $t('pluginDisclosure.source.notScanned') }}</p>
+    <!-- A2-3: the short "Local folder" label keeps this line on the card. -->
+    <p v-if="shown === 'developer-unpacked'" class="nv-source-folder-note">{{ $t('pluginDisclosure.source.folderMayChange') }}</p>
     <!-- S8: a withdrawal reaches an offline or signed-out tester only at the expiry. -->
     <p v-if="source === 'testplace'" class="nv-source-revoke">{{ $t('pluginDisclosure.source.testplaceRevokeNote') }}</p>
     <p v-if="publisherText" class="nv-source-publisher">{{ $t('pluginDisclosure.source.publisher', { publisher: publisherText }) }}</p>

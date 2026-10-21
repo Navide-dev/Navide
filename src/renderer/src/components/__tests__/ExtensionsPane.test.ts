@@ -109,6 +109,44 @@ describe('ExtensionsPane', () => {
     expect(wrapper.get('[data-id="acme.rekeyed"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByKeyChanged'))
   })
 
+  it('G1: a loaded developer folder reloads on file change by default, can turn it off, and shows the last load', async () => {
+    let emit: ((event: { pluginId: string; kind: string }) => void) | undefined
+    const state = (autoReload: boolean, extra: Record<string, unknown> = {}) => ({
+      enabled: true,
+      folders: [{
+        pluginId: 'acme.dev', path: '/dev/acme', consentedAt: '2026-10-21T01:00:00.000Z', loaded: true,
+        loadedBy: { kind: 'user' }, autoReload, lastLoad: { at: '2026-10-21T01:05:00.000Z', trigger: 'auto-reload' }, ...extra,
+      }],
+    })
+    const developerMode = vi.fn().mockResolvedValueOnce(state(true)).mockResolvedValue(state(true, { reloadError: 'manifest.json: Unexpected end of JSON input' }))
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.dev', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+      ]),
+      developerMode,
+      selfHostedQuarantine: vi.fn().mockResolvedValue([]),
+      setDeveloperFolderAutoReload: vi.fn().mockResolvedValue(state(false)),
+      onDeveloperFolderEvent: vi.fn((handler: typeof emit) => { emit = handler; return () => { emit = undefined } }),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const row = wrapper.get('[data-id="acme.dev"]')
+    const toggle = row.get('.ext-devmode-auto-reload input')
+    expect((toggle.element as HTMLInputElement).checked).toBe(true)
+    expect(row.get('.ext-devmode-last-load').text()).toContain(i18n.global.t('settings.extensions.developerMode.loadTrigger.auto-reload'))
+
+    emit!({ pluginId: 'acme.dev', kind: 'reload-failed' })
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.dev"] .ext-devmode-reload-error').text()).toContain('Unexpected end of JSON input')
+
+    await wrapper.get('[data-id="acme.dev"] .ext-devmode-auto-reload input').setValue(false)
+    await flushPromises()
+    expect((api as unknown as Record<string, ReturnType<typeof vi.fn>>).setDeveloperFolderAutoReload).toHaveBeenCalledWith('acme.dev', false)
+    wrapper.unmount()
+    wrapper = undefined
+    expect(emit).toBeUndefined()
+  })
+
   it('labels an installed version this Navide release is too old for, without disabling it', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
@@ -1477,6 +1515,41 @@ describe('ExtensionsPane: Developer Mode settings changed outside Navide (A2-5, 
     const wrapper = mountExtensions()
     await flushPromises()
     expect(wrapper.find('.ext-devmode-external').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('ExtensionsPane: the Local folder card (A2-3)', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('opens from a developer folder badge with its path and last load; other sources have no card', async () => {
+    const developerMode = vi.fn().mockResolvedValue({
+      enabled: true,
+      folders: [{
+        pluginId: 'acme.devtodo', path: '/Users/me/dev-todo', consentedAt: '', loaded: true, loadedBy: { kind: 'user' }, autoReload: true,
+        lastLoad: { at: '2026-10-21T01:00:00.000Z', trigger: 'user-load', fingerprint: 'f'.repeat(64), fileCount: 3 },
+      }],
+    })
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.devtodo', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.file', requires: [], sensitive: [], source: 'local-unsigned' },
+      ]),
+      developerMode,
+    })
+    const wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.devtodo"] .nv-source-badge').text()).toBe('Local folder')
+    expect(wrapper.find('[data-id="acme.file"] .ext-folder-info-toggle').exists()).toBe(false)
+    await wrapper.get('[data-id="acme.devtodo"] .ext-folder-info-toggle').trigger('click')
+    await flushPromises()
+    const folderCard = wrapper.get('[data-id="acme.devtodo"] .nv-folder-card')
+    expect(folderCard.get('.nv-folder-card-path').text()).toBe('/Users/me/dev-todo')
+    expect(folderCard.get('.nv-folder-card-fingerprint code').text()).toBe('ffffffffffff')
+    await folderCard.get('.nv-folder-card-close').trigger('click')
+    expect(wrapper.find('.nv-folder-card').exists()).toBe(false)
     wrapper.unmount()
   })
 })

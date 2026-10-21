@@ -7,7 +7,7 @@
 // All privileged work is brokered through the main process via
 // `window.agentTeam.plugins`; this component holds no secrets and never touches
 // package bytes.
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
 import type {
@@ -25,6 +25,7 @@ import NativeBackendPanel from './NativeBackendPanel.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 import PluginSourceBadge from './PluginSourceBadge.vue'
+import DeveloperFolderInfoCard from './DeveloperFolderInfoCard.vue'
 import { isTestplaceExpired, testplaceDaysLeft } from '../lib/pluginSourceMark'
 
 const { t } = useI18n()
@@ -373,8 +374,41 @@ async function restoreFactoryPackage(id: string): Promise<void> {
 // Card K4: the Developer Mode switch (owned by the main process) and its
 // developer folders; D6: packages from a self-hosted Registry it quarantines.
 const developerMode = ref<DeveloperModeState>({ enabled: false, folders: [] })
+// A2-3: the "Local folder" info card opened from a developer folder's badge.
+const folderCardFor = ref<string | null>(null)
+const developerFolderOf = (pluginId: string) => developerMode.value.folders.find((folder) => folder.pluginId === pluginId)
+async function toggleFolderCard(pluginId: string): Promise<void> {
+  if (folderCardFor.value === pluginId) {
+    folderCardFor.value = null
+    return
+  }
+  folderCardFor.value = pluginId
+  // The fingerprint of the last load is taken after it; read it fresh.
+  await refreshDeveloperMode()
+}
 const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>([])
 const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
+/** DESIGN-A2 G1: the developer folder record of a loaded package. */
+function developerFolder(pluginId: string): DeveloperModeState['folders'][number] | undefined {
+  return developerMode.value.folders.find((folder) => folder.pluginId === pluginId)
+}
+function lastLoadText(pluginId: string): string {
+  const lastLoad = developerFolder(pluginId)?.lastLoad
+  if (!lastLoad) return ''
+  return t('settings.extensions.developerMode.lastLoad', {
+    at: new Date(lastLoad.at).toLocaleString(),
+    trigger: t(`settings.extensions.developerMode.loadTrigger.${lastLoad.trigger}`),
+  })
+}
+async function setFolderAutoReload(pluginId: string, enabled: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setDeveloperFolderAutoReload) return
+  try {
+    developerMode.value = await api.setDeveloperFolderAutoReload(pluginId, enabled)
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  }
+}
 /** DESIGN-A2 G3: who had a loaded developer folder loaded, in the wording of agent request cards. */
 function folderLoadedByText(pluginId: string): string {
   const folder = developerMode.value.folders.find((entry) => entry.pluginId === pluginId)
@@ -521,7 +555,17 @@ watch(() => updateFlow.pendingConfirm.value, (pending) => {
   if (!pending) void refreshDeveloperMode()
 })
 
+// G1: an automatic reload refreshes the list; changed permissions stop it and say so.
+let stopDeveloperFolderEvents: (() => void) | undefined
+onBeforeUnmount(() => stopDeveloperFolderEvents?.())
+
 onMounted(() => {
+  stopDeveloperFolderEvents = pluginsApi()?.onDeveloperFolderEvent?.((folderEvent) => {
+    void refreshDeveloperMode()
+    if (folderEvent.kind === 'needs-consent') {
+      notify.toast(t('settings.extensions.developerMode.autoReloadNeedsConsent', { id: reveal(folderEvent.pluginId) }), { type: 'info' })
+    }
+  })
   void reloadInventory()
   void refreshDisabledStoreStatus()
   void pluginUpdates.refresh()
@@ -735,8 +779,18 @@ watch(installed, () => {
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
               <!-- K2: the Host's source only; none (an unknown channel) shows no badge.
                    A3: a signed local file names the publisher its id names, the one whose key signed it. -->
+              <!-- A2-3: a developer folder's badge opens its "Local folder" info card. -->
+              <button
+                v-if="p.source === 'developer-unpacked' && developerFolderOf(p.id)"
+                type="button"
+                class="ext-folder-info-toggle"
+                :aria-expanded="folderCardFor === p.id"
+                @click="toggleFolderCard(p.id)"
+              >
+                <PluginSourceBadge :source="p.source" />
+              </button>
               <PluginSourceBadge
-                v-if="p.source"
+                v-else-if="p.source"
                 :source="p.source"
                 :expires-at="p.expiresAt"
                 :via="p.testplaceVia"
@@ -794,6 +848,28 @@ watch(installed, () => {
             <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
               {{ folderLoadedByText(p.id) }}
             </p>
+            <!-- G1: reload on file change (on by default), the last load, and a change that could not be read. -->
+            <div v-if="p.provenance === 'developer-local-unpacked' && developerFolder(p.id)" class="ext-card-sub ext-devmode-auto">
+              <label class="ext-devmode-auto-reload">
+                <input
+                  type="checkbox"
+                  :checked="developerFolder(p.id)?.autoReload !== false"
+                  :disabled="busy"
+                  @change="setFolderAutoReload(p.id, ($event.target as HTMLInputElement).checked)"
+                />
+                {{ $t('settings.extensions.developerMode.autoReload') }}
+              </label>
+              <span class="ext-requires ext-devmode-mixed-hint">{{ $t('settings.extensions.developerMode.autoReloadMixedHint') }}</span>
+              <span v-if="lastLoadText(p.id)" class="ext-requires ext-devmode-last-load">{{ lastLoadText(p.id) }}</span>
+              <span v-if="developerFolder(p.id)?.reloadError" class="ext-badge ext-dev-warning ext-devmode-reload-error">
+                {{ $t('settings.extensions.developerMode.reloadFailed', { error: reveal(developerFolder(p.id)?.reloadError ?? '') }) }}
+              </span>
+            </div>
+            <DeveloperFolderInfoCard
+              v-if="folderCardFor === p.id && developerFolderOf(p.id)"
+              :folder="developerFolderOf(p.id)!"
+              @close="folderCardFor = null"
+            />
             <!-- D3: remind from 7 days before a test build expires; once kept past it, say so. -->
             <p v-if="p.source === 'testplace' && testplaceDaysLeft(p.expiresAt) !== null" class="ext-disabled-note ext-testplace-expiring" role="status">
               {{ $t('testplace.expiring', { days: testplaceDaysLeft(p.expiresAt), date: (p.expiresAt ?? '').slice(0, 10) }) }}
@@ -962,6 +1038,10 @@ watch(installed, () => {
           <code class="ext-devmode-path">{{ reveal(folder.path) }}</code>
           <span v-if="folder.unavailable" class="ext-badge ext-dev-warning ext-devmode-unavailable">{{ localizeDeveloperModeError(folder.unavailable, t) }}</span>
           <span v-else-if="folder.externallyChanged" class="ext-badge ext-dev-warning ext-devmode-external-folder">{{ $t('settings.extensions.developerMode.externallyChanged') }}</span>
+          <!-- Review MED-3 on #543: a reload that unloaded the old version and could not load the new one. -->
+          <span v-else-if="folder.reloadError" class="ext-badge ext-dev-warning ext-devmode-reload-error">
+            {{ $t('settings.extensions.developerMode.reloadFailedNothingRunning', { error: reveal(folder.reloadError) }) }}
+          </span>
           <span v-else class="ext-badge ext-dev-warning">{{ $t('settings.extensions.developerMode.needsConsent') }}</span>
           <button class="ext-devmode-reload nv-btn nv-btn--sm" :disabled="busy || updateFlow.busy.value" @click="updateFlow.reloadDeveloperPlugin(folder.pluginId)">
             {{ $t('settings.extensions.developerMode.reload') }}
@@ -995,6 +1075,12 @@ watch(installed, () => {
 </template>
 
 <style scoped>
+.ext-folder-info-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
 .extensions-pane {
   /* Native controls (checkboxes, scrollbars) follow the theme. */
   color-scheme: var(--nv-color-scheme);

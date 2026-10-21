@@ -11190,6 +11190,133 @@ registerCommand('ui.workspace.close', async (args) => {
   }
   return { path: held, panes: mine }
 })
+// MCP window_move_pane, mode "pane" (DESIGN-C S4b). A pane lives only in a
+// window holding its project, so it moves alone only into a detached window of
+// its own ("new": its tab group, split off when it shares one) or, from one,
+// back into the main window (the whole detached group merges back — the only
+// way a detached window gives panes back). The backend already checked that a
+// window id names the main window holding the project; ui_invoke cannot reach
+// this (window_move_pane only). Nothing is killed.
+registerCommand('ui.pane.moveToWindow', async (args) => {
+  const a = (args ?? {}) as { paneId?: string; to?: string; caller_address?: string }
+  const pane = panes.value.find((p) => p.id === a.paneId)
+  if (!pane) throw new Error(`unknown-pane: this window has no pane ${a.paneId ?? ''}`)
+  if (pane.origin === 'pipeline' && pipeline.state === 'running') {
+    throw new Error('pipeline-running: that pane is a slot of a running pipeline; only the user can move it')
+  }
+  const caller = a.caller_address || 'an agent'
+  const label = pane.messagingName || pane.customName || pane.autoName || pane.agentLabel
+  if (a.to === 'new') {
+    if (isDetachedWindow) throw new Error('already-there: that pane is already in a detached window')
+    if (normWs(pane.workspacePath) !== normWs(currentWorkspace.value)) {
+      throw new Error(
+        `pane-not-on-screen: switch this window to ${pane.workspacePath} first (window_focus with workspace_path)`,
+      )
+    }
+    let groupId = pane.runGroupId ?? ''
+    const sharing = panes.value.filter((p) => (p.runGroupId ?? '') === groupId && normWs(p.workspacePath) === normWs(pane.workspacePath))
+    if (!groupId || sharing.length > 1) {
+      // Split it off into a group of its own, so only this pane goes.
+      const group = createRunGroup(label)
+      const previous = pane.runGroupId
+      pane.runGroupId = group.id
+      if (!(await persistPaneRunGroup(pane, group.id))) {
+        pane.runGroupId = previous
+        throw new Error('move-failed: the pane could not be given a tab group of its own')
+      }
+      groupId = group.id
+    }
+    recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} moved ${label} to a window of its own`, paneId: pane.id })
+    notifyRestore.toast(i18n.global.t('msg.agent-moved-pane', { caller, name: label }), { type: 'info', duration: 8000 })
+    await window.agentTeam?.detachGroup?.({
+      groupId,
+      workspacePath: pane.workspacePath,
+      bounds: { x: 120, y: 120, width: 900, height: 700 },
+    })
+    return { group_id: groupId, panes: [{ pane_id: pane.id, workspace_path: pane.workspacePath }] }
+  }
+  if (!isDetachedWindow) {
+    throw new Error('pane-needs-workspace-move: a single pane moves back only from a detached window')
+  }
+  const moved = panes.value.map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath }))
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} merged this window back into the main window` })
+  // After the answer is on its way: merging back closes this window.
+  setTimeout(() => { reattachThisWindow() }, 300)
+  return { group_id: detachedGroupId, panes: moved }
+})
+// MCP window_move_pane, mode "workspace" (DESIGN-C S4b): this window lets go
+// of a project it holds, with every pane of it and every CLI still running —
+// "new" through the sidebar's drag-out (detachWorkspace, a window of its own),
+// a window id through the plain "Close workspace" (the backend then has that
+// window adopt it, or gives it back here). The window keeps at least one
+// project. ui_invoke cannot reach this (window_move_pane only).
+registerCommand('ui.workspace.moveToWindow', async (args) => {
+  const a = (args ?? {}) as { path?: string; to?: string; caller_address?: string }
+  const path = typeof a.path === 'string' ? a.path : ''
+  if (!path) throw new Error('path-required: ui.workspace.moveToWindow requires path')
+  if (isDetachedWindow) throw new Error('window-cannot-hold: a detached group window does not hold its project')
+  const held = workspaceOrder.value.find((w) => normWs(w) === normWs(path))
+  if (!held) throw new Error(`workspace-not-open: this window does not hold ${path}`)
+  if (workspaceOrder.value.length < 2) {
+    throw new Error(`last-workspace: ${held} is this window's only project; it would leave the window empty`)
+  }
+  if (pipeline.state === 'running' && normWs(pipelineRunWorkspace || pipeline.workspacePath) === normWs(held)) {
+    throw new Error(`pipeline-running: a pipeline is running in ${held}; only the user can move it`)
+  }
+  const caller = a.caller_address || 'an agent'
+  // `realized`: the destination attaches exactly these again at once.
+  const moved = panes.value
+    .filter((p) => normWs(p.workspacePath) === normWs(held))
+    .map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath, realized: p.realized }))
+  if (a.to === 'new') await detachWorkspace(held, 120, 120)
+  else await closeWorkspaceKeepPanes(held)
+  if (workspaceOrder.value.some((w) => normWs(w) === normWs(held))) {
+    throw new Error(`move-failed: ${held} is still in this window`)
+  }
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} moved ${held} to another window; its CLIs keep running` })
+  notifyRestore.toast(i18n.global.t('msg.agent-moved-workspace', { caller, name: wsDisplayName(held) }), { type: 'info', duration: 8000 })
+  return { path: held, panes: moved }
+})
+// MCP window_move_pane, mode "workspace" into an EXISTING window (DESIGN-C
+// S4b, §3.4): this window takes the project the source just let go of and
+// attaches its panes again at once, as a detachWorkspace hand-off does — the
+// panes that were attached in the source are opened the way a click on their
+// card opens them (ui.pane.open: a live PTY is re-attached, nothing is
+// respawned), so none of them goes unread. Also the way back when the
+// destination refused. ui_invoke cannot reach this (window_move_pane only).
+registerCommand('ui.workspace.receive', async (args) => {
+  const a = (args ?? {}) as { path?: string; paneIds?: unknown; caller_address?: string }
+  const path = typeof a.path === 'string' ? a.path : ''
+  if (!path) throw new Error('path-required: ui.workspace.receive requires path')
+  if (isDetachedWindow) throw new Error('window-cannot-hold: this is a detached group window, which shows one workspace only')
+  if (!isLocalWorkspace(path)) {
+    // The source let go of it a moment ago; main may not have heard yet. Wait
+    // for that rather than refuse a move that is about to be legal.
+    let elsewhere = (await window.agentTeam?.workspaceHolder?.(path)) ?? ''
+    for (let i = 0; elsewhere && i < 15; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      elsewhere = (await window.agentTeam?.workspaceHolder?.(path)) ?? ''
+    }
+    if (elsewhere) throw new Error(`workspace-in-other-window: ${elsewhere}`)
+    adoptWorkspace(path)
+    if (!isLocalWorkspace(path)) throw new Error(`move-failed: this window did not take ${path}`)
+  }
+  const resp = await sendQuiet<ProjectPayload>('project.peek', { workspace_path: path })
+  if (resp) await restoreWorkspacePanes(resp, path)
+  const ids = Array.isArray(a.paneIds) ? a.paneIds.filter((id): id is string => typeof id === 'string' && !!id) : []
+  const opened: string[] = []
+  const notOpened: { paneId: string; error: string }[] = []
+  for (const id of ids) {
+    const outcome = await invokeCommand('ui.pane.open', { paneId: id })
+    const answer = outcome.result as { paneId?: string; realized?: boolean } | undefined
+    if (outcome.ok && answer?.realized) opened.push(answer.paneId ?? id)
+    else notOpened.push({ paneId: id, error: outcome.error ?? 'not opened' })
+  }
+  const caller = a.caller_address || 'an agent'
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} moved ${path} into this window` })
+  notifyRestore.toast(i18n.global.t('msg.agent-moved-workspace-in', { caller, name: wsDisplayName(path) }), { type: 'info', duration: 8000 })
+  return { path, prepared: 'adopted', opened, not_opened: notOpened }
+})
 registerCommand('ui.layout.setMode', (args) => {
   const mode = (args as { mode?: LayoutMode } | undefined)?.mode
   if (!mode) throw new Error('ui.layout.setMode requires mode')

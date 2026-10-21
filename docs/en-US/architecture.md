@@ -145,6 +145,17 @@ window's ownership on disconnect, so the CLI keeps running and re-attaches when
 the project is opened again. Until then its output is not read (a bare-line
 report written meanwhile reaches nobody) and it is out of the messaging roster.
 
+`window_move_pane` keeps the rule that a pane lives only in a window holding
+its project. A single pane moves only into a detached window of its own (its
+tab group, split off first when it shares one) or, from one, back into the main
+window holding its project (the detached group merges back); any other target
+is `pane-needs-workspace-move`. Mode `workspace` moves the project with every
+pane of it: the source window lets go of it the way the plain "Close
+workspace" does, then the destination adopts it (`ui.workspace.adopt`), or it
+goes back to the source. The two window commands behind it
+(`ui.pane.moveToWindow`, `ui.workspace.moveToWindow`) are refused on
+`ui_invoke`, since half of a move alone is a close.
+
 ## Runtime workflow
 
 ### Evolution session

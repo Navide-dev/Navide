@@ -227,6 +227,20 @@ describe('A3: a signed local file', () => {
     }
   })
 
+  it('names a developer folder "Local folder" in every locale; the row adds that it can change (A2-3)', () => {
+    const expected = { 'zh-TW': '本機資料夾', 'en-US': 'Local folder', 'ja-JP': 'ローカルフォルダー' } as const
+    for (const [locale, text] of Object.entries(expected)) {
+      i18n.global.locale.value = locale as keyof typeof expected
+      expect(render({ source: 'developer-unpacked' }).text()).toBe(text)
+      const row = render({ source: 'developer-unpacked', row: true })
+      expect(row.get('.nv-source-folder-note').text()).toBe(i18n.global.t('pluginDisclosure.source.folderMayChange'))
+      expect(row.get('.nv-source-folder-note').text()).not.toBe('')
+    }
+    // The six other sources keep their words and have no such line.
+    i18n.global.locale.value = 'en-US'
+    expect(render({ source: 'local-unsigned', row: true }).find('.nv-source-folder-note').exists()).toBe(false)
+  })
+
   it('never lets a signature relabel a source that is not a local file', () => {
     i18n.global.locale.value = 'en-US'
     const folder = render({ source: 'developer-unpacked', signature: 'verified', publisher: 'acme' })
