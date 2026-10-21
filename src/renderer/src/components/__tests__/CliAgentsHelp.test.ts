@@ -47,7 +47,7 @@ describe('CliAgentsHelp', () => {
     expect(text).toContain('Supported CLIs')
     expect(text).toContain('Troubleshooting')
     expect(wrapper.findAll('.cah-h2')).toHaveLength(9)
-    expect(wrapper.findAll('.cah-table').at(0)!.findAll('tbody tr')).toHaveLength(15)
+    expect(wrapper.findAll('.cah-table').at(0)!.findAll('tbody tr')).toHaveLength(16)
 
     // `{CLI}` is placeholder prose, not an interpolation — the escape must survive.
     expect(text).toContain('{CLI}')
@@ -63,7 +63,7 @@ describe('CliAgentsHelp', () => {
     expect(text).toContain('疑難排解')
     expect(text).toContain('取得 Session ID 中')
     expect(wrapper.findAll('.cah-h2')).toHaveLength(9)
-    expect(wrapper.findAll('.cah-table').at(0)!.findAll('tbody tr')).toHaveLength(15)
+    expect(wrapper.findAll('.cah-table').at(0)!.findAll('tbody tr')).toHaveLength(16)
 
     expect(text).toContain('{CLI}')
     expect(unexpectedWarnings(warn)).toEqual([])
@@ -111,6 +111,23 @@ describe('CliAgentsHelp', () => {
     expect(unexpectedWarnings(warn)).toEqual([])
   })
 
+  // review-524 MEDIUM-1: Goose has no bypass flag because it approves tools by
+  // itself by default; its row must not read like the CLIs that ask first.
+  it.each([
+    ['en-US', 'GOOSE_MODE=auto', "Navide's Guard does not cover Goose"],
+    ['zh-TW', 'GOOSE_MODE=auto', 'Navide 的 Guard'],
+    ['ja-JP', 'GOOSE_MODE=auto', 'Navide の Guard'],
+  ] as const)('says Goose approves tools by itself unless GOOSE_MODE asks (%s)', (locale, mode, guard) => {
+    i18n.global.locale.value = locale
+    const row = mountHelp().findAll('tbody tr').find((tr) => tr.text().includes('Goose (AAIF)'))!
+    const flagCell = row.findAll('td')[2].text()
+    expect(flagCell).toContain(mode)
+    expect(flagCell).toContain('approve')
+    expect(flagCell).toContain('smart_approve')
+    expect(flagCell).toContain(guard)
+    expect(unexpectedWarnings(warn)).toEqual([])
+  })
+
   it('names the sign-in command each vendor actually runs', () => {
     i18n.global.locale.value = 'en-US'
     const wrapper = mountHelp()
@@ -140,11 +157,12 @@ describe('CliAgentsHelp', () => {
       'muse login',
       'Inside the CLI',
       'mcode login',
+      'Inside the CLI',
     ])
     // A real command is typeset as one; the fallback is prose, not a command.
     expect(cells.map((c) => c.find('code').exists())).toEqual([
       true, true, false, true, true, true, false, true, false, true, false, false, true, false,
-      true,
+      true, false,
     ])
 
     expect(unexpectedWarnings(warn)).toEqual([])

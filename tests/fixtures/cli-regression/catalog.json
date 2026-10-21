@@ -169,6 +169,25 @@
         }
       }
     },
+    "goose": {
+      "capabilities": [
+        "launch",
+        "reader",
+        "resume"
+      ],
+      "fixture": "goose.json",
+      "cases": {
+        "launch": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[goose]"
+        },
+        "reader": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_reader[goose]"
+        },
+        "resume": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_resume[goose]"
+        }
+      }
+    },
     "grok": {
       "capabilities": [
         "launch",

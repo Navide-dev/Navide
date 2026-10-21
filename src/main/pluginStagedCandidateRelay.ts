@@ -7,11 +7,24 @@ export interface PluginStagedCandidateNotice {
   reason: string
 }
 
+/** L3: an approved update switched versions. */
+export interface PluginSwitchNotice {
+  pluginId: string
+  fromVersion: string
+  toVersion: string
+  source: 'marketplace' | 'local-unsigned'
+  at: number
+  /** Set when an agent's automatic update (O1) drove the switch. */
+  agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true }
+}
+
 /** A package staged beside the active one, found at launch. */
 export interface PluginStagedUpdate {
   pluginId: string
   activeVersion: string
   stagedVersion: string
+  /** Set when switching to it failed (an agent's automatic update, O1). */
+  reason?: string
 }
 
 /**
@@ -28,6 +41,7 @@ export function createPluginStagedCandidateRelay(deps: {
 }): {
   notify(notice: PluginStagedCandidateNotice): void
   notifyStagedUpdates(updates: PluginStagedUpdate[]): void
+  notifySwitched(notice: PluginSwitchNotice): void
   flush(win: NoticeWindow): void
 } {
   const held: Array<{ channel: string; payload: unknown }> = []
@@ -44,6 +58,9 @@ export function createPluginStagedCandidateRelay(deps: {
     },
     notifyStagedUpdates(updates) {
       deliver('plugins:stagedUpdates', updates)
+    },
+    notifySwitched(notice) {
+      deliver('plugins:switched', notice)
     },
     flush(win) {
       if (!usable(win)) return

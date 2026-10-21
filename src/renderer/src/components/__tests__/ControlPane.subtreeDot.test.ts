@@ -75,7 +75,7 @@ describe('ControlPane – subtree status on the parent row dot', () => {
     ])
     expect(dotOf(0).attributes('data-state')).toBe('running')
     // Own status first, then the family — real i18n on the script side.
-    expect(dotOf(0).attributes('title')).toBe('idle · 2 spawned pane(s) running under this one')
+    expect(dotOf(0).attributes('title')).toBe('idle · 2 spawned panes running under this one')
     // No extra chip on the row: the dot is the whole signal.
     expect(wrapper.find('.subtree-tag').exists()).toBe(false)
   })
@@ -95,7 +95,7 @@ describe('ControlPane – subtree status on the parent row dot', () => {
       { ...basePane, id: 'c1', spawnedBy: 'parent', status: 'running' }
     ])
     expect(dotOf(0).attributes('data-state')).toBe('awaiting')
-    expect(dotOf(0).attributes('title')).toBe('awaiting · 1 spawned pane(s) running under this one')
+    expect(dotOf(0).attributes('title')).toBe('awaiting · 1 spawned pane running under this one')
   })
 
   it('leaves the dot alone when every descendant is idle, or when a pane has none', () => {

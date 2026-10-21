@@ -636,3 +636,86 @@ describe('staged plugin packages found at launch', () => {
     expect(pluginStagedApplyApplies(action, [])).toBe(false)
   })
 })
+
+describe('plugin version switches (L3)', () => {
+  beforeEach(() => {
+    store.clear()
+    ;(window as unknown as { agentTeam?: unknown }).agentTeam = { version: '0.1.77' }
+  })
+
+  afterEach(() => {
+    delete (window as unknown as { agentTeam?: unknown }).agentTeam
+  })
+
+  const switched = { pluginId: 'acme.todo', fromVersion: '1.0.0', toVersion: '1.1.0', source: 'local-unsigned' as const, at: 1_000 }
+
+  it('records each switch with both versions and offers the way back', async () => {
+    const { useAnnouncements, i18n } = await load()
+    i18n.global.locale.value = 'en-US'
+    const a = useAnnouncements()
+    a.notePluginSwitch(switched)
+    const rows = a.items.value.filter((item) => item.kind === 'plugin-switch')
+    expect(rows.map((row) => row.title)).toEqual(['acme.todo switched from 1.0.0 to 1.1.0'])
+    expect(rows[0].highlights[0]).toContain('local file')
+    expect(rows[0].actions).toEqual([{ kind: 'plugin-switch-back', pluginId: 'acme.todo', fromVersion: '1.0.0', toVersion: '1.1.0' }])
+    i18n.global.locale.value = 'zh-TW'
+    expect(a.items.value.find((item) => item.kind === 'plugin-switch')?.title).toBe('acme.todo 已從 1.0.0 切換到 1.1.0')
+    i18n.global.locale.value = 'en-US'
+  })
+
+  it('goes back only while the switch it names is still installed with its previous version kept', async () => {
+    const { pluginSwitchBackApplies } = await load()
+    const action = { kind: 'plugin-switch-back' as const, pluginId: 'acme.todo', fromVersion: '1.0.0', toVersion: '1.1.0' }
+    expect(pluginSwitchBackApplies(action, [{ id: 'acme.todo', packageVersion: '1.1.0', rollbackToVersion: '1.0.0' }])).toBe(true)
+    // No earlier version kept (a file update before L4), switched again, or another update waiting.
+    expect(pluginSwitchBackApplies(action, [{ id: 'acme.todo', packageVersion: '1.1.0' }])).toBe(false)
+    expect(pluginSwitchBackApplies(action, [{ id: 'acme.todo', packageVersion: '1.2.0', rollbackToVersion: '1.1.0' }])).toBe(false)
+    expect(pluginSwitchBackApplies(action, [{ id: 'acme.todo', packageVersion: '1.1.0', rollbackToVersion: '1.0.0', pendingCandidateVersion: '1.2.0' }])).toBe(false)
+  })
+})
+
+describe('switches an agent started, and a failed switch (O1, decision A)', () => {
+  beforeEach(() => {
+    store.clear()
+    ;(window as unknown as { agentTeam?: unknown }).agentTeam = { version: '0.1.77' }
+  })
+
+  afterEach(() => {
+    delete (window as unknown as { agentTeam?: unknown }).agentTeam
+  })
+
+  it('names the agent on the switch row, in each language', async () => {
+    const { useAnnouncements, i18n } = await load()
+    const a = useAnnouncements()
+    a.notePluginSwitch({
+      pluginId: 'acme.todo', fromVersion: '1.0.0', toVersion: '1.0.1', source: 'marketplace', at: 2_000,
+      agent: { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' },
+    })
+    const title = () => a.items.value.find((item) => item.kind === 'plugin-switch')?.title
+    i18n.global.locale.value = 'en-US'
+    expect(title()).toBe('An automatic update started by Agent pane “dev” switched acme.todo from 1.0.0 to 1.0.1')
+    i18n.global.locale.value = 'zh-TW'
+    expect(title()).toContain('自動更新')
+    expect(title()).toContain('「dev」')
+    i18n.global.locale.value = 'ja-JP'
+    expect(title()).toContain('自動更新')
+    i18n.global.locale.value = 'en-US'
+    expect(a.items.value.find((item) => item.kind === 'plugin-switch')?.actions).toEqual([
+      { kind: 'plugin-switch-back', pluginId: 'acme.todo', fromVersion: '1.0.0', toVersion: '1.0.1' },
+    ])
+  })
+
+  it('keeps a "switch failed" row with Apply now, beside the rows found at launch', async () => {
+    const { useAnnouncements, i18n } = await load()
+    i18n.global.locale.value = 'en-US'
+    const a = useAnnouncements()
+    a.notePluginStagedUpdates([{ pluginId: 'acme.other', activeVersion: '2.0.0', stagedVersion: '2.1.0' }])
+    a.notePluginStagedUpdates([{ pluginId: 'acme.todo', activeVersion: '1.0.0', stagedVersion: '1.0.1', reason: 'view did not start' }])
+    const rows = a.items.value.filter((item) => item.kind === 'plugin-staged')
+    expect(rows.map((row) => row.title)).toEqual([
+      'Switching acme.todo to 1.0.1 failed: view did not start. Version 1.0.0 runs again.',
+      'The Navide plugin acme.other has version 2.1.0 waiting to be applied; version 2.0.0 is running.',
+    ])
+    expect(rows[0].actions).toEqual([{ kind: 'plugin-staged-apply', pluginId: 'acme.todo', activeVersion: '1.0.0', stagedVersion: '1.0.1' }])
+  })
+})

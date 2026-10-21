@@ -356,13 +356,16 @@ import {
   screenShowsHookTrustPrompt
 } from './lib/sessionMarkerTurn'
 import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
-import { executeCommand, formatKeySpec, initKeybindingsPort, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
+import { executeCommand, formatKeySpec, initKeybindingsPort, invokeCommand, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
+import { WINDOW_INSTANCE_ID } from './lib/windowInstanceId'
 import {
+  pluginAgentCaller,
   pluginAgentNoticeTitle,
   pluginAgentUndoApplies,
   pluginAgentDowngradeStep,
   pluginStagedApplyApplies,
+  pluginSwitchBackApplies,
   releaseAnnouncementId,
   useAnnouncements,
   type SchedulerDisabledNotice,
@@ -6324,6 +6327,7 @@ let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
 let stopPluginStagedCandidate: (() => void) | null = null
 let stopPluginStagedUpdates: (() => void) | null = null
+let stopPluginSwitched: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
   stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
@@ -6351,6 +6355,14 @@ onMounted(() => {
   }) ?? null
   // Packages staged beside an active one: a row with "Apply now" stays in the
   // announcements centre until it is applied.
+  // L3: an approved update took effect at once; record it with its way back.
+  stopPluginSwitched = window.agentTeam?.onPluginSwitched?.((notice) => {
+    announcements.notePluginSwitch(notice)
+    const switchedVersions = { plugin: notice.pluginId, from: notice.fromVersion, to: notice.toVersion }
+    notifyRestore.toast(notice.agent
+      ? i18n.global.t('plugin-switch.notice.titleAgent', { ...switchedVersions, caller: pluginAgentCaller(notice.agent) })
+      : i18n.global.t('plugin-switch.notice.title', switchedVersions), { type: 'info' })
+  }) ?? null
   stopPluginStagedUpdates = window.agentTeam?.onPluginStagedUpdates?.((updates) => {
     announcements.notePluginStagedUpdates(updates)
     for (const update of updates) {
@@ -6381,6 +6393,8 @@ onUnmounted(() => {
   stopPluginStagedCandidate = null
   stopPluginStagedUpdates?.()
   stopPluginStagedUpdates = null
+  stopPluginSwitched?.()
+  stopPluginSwitched = null
   stopPluginContributionChanges?.()
   stopPluginContributionChanges = null
 })
@@ -10963,6 +10977,42 @@ registerCommand('ui.workspace.switch', async (args) => {
   }
   return { path: currentWorkspace.value }
 })
+// MCP window_list (DESIGN-C S3): this window describes itself, under the
+// page-load id the backend knows it by. Read-only.
+registerCommand('ui.window.describe', () => {
+  const held = [...workspaceOrder.value]
+  if (currentWorkspace.value && !held.some((w) => normWs(w) === normWs(currentWorkspace.value))) {
+    held.unshift(currentWorkspace.value)
+  }
+  return {
+    window_id: WINDOW_INSTANCE_ID,
+    kind: isDetachedWindow ? 'detached-group' : 'main',
+    on_screen: currentWorkspace.value,
+    workspaces: held,
+    ...(isDetachedWindow ? { detached_group: detachedGroupId } : {}),
+    focused: document.hasFocus(),
+    panes: panes.value.map((p) => ({ pane_id: p.id, name: p.messagingName ?? '', workspace_path: p.workspacePath })),
+  }
+})
+// MCP window_focus (DESIGN-C S3): optionally switch to a project this window
+// holds — through ui.workspace.switch, so its refusals (not held, pipeline
+// running, switch did not land) are the answer — then bring this window to the
+// front. Main focuses the window that sent the IPC and no other. The window
+// says which pane did it; caller_address is stamped by the backend from the
+// caller's credential.
+registerCommand('ui.window.focus', async (args) => {
+  const a = (args ?? {}) as { workspace_path?: string; caller_address?: string }
+  const previous = currentWorkspace.value
+  if (a.workspace_path && normWs(a.workspace_path) !== normWs(currentWorkspace.value)) {
+    const switched = await invokeCommand('ui.workspace.switch', { path: a.workspace_path })
+    if (!switched.ok) throw new Error(switched.error ?? `could not switch to ${a.workspace_path}`)
+  }
+  const focused = await window.agentTeam?.focusSelf?.()
+  const caller = a.caller_address || 'an agent'
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} brought this window to the front` })
+  notifyRestore.toast(i18n.global.t('msg.window-focused-by', { caller }), { type: 'info' })
+  return { on_screen: currentWorkspace.value, previous_on_screen: previous, focused: focused?.ok === true }
+})
 registerCommand('ui.layout.setMode', (args) => {
   const mode = (args as { mode?: LayoutMode } | undefined)?.mode
   if (!mode) throw new Error('ui.layout.setMode requires mode')
@@ -11007,6 +11057,12 @@ useUiActionBus({
   currentWorkspace,
   buildSnapshot: buildUiActionSnapshot,
   ownsWorkspace: isLocalWorkspace,
+  hostsPane: (id) => panes.value.some((p) => p.id === id),
+  // What closeActivePane / rebuildFocusedPane would act on, so neither can be
+  // aimed at the calling pane by way of the user's focus.
+  focusedPaneIds: () => [focusPaneId.value, effectiveFocusPaneId.value].filter((id): id is string => !!id),
+  isPipelineSlot: (id) => panes.value.some((p) => p.id === id && p.origin === 'pipeline'),
+  heldWorkspaces: () => (isDetachedWindow ? [] : workspaceOrder.value),
   connectionStatus: backend.status,
   accountActions: { signIn: agentSignIn, switch: agentAccountSwitch },
 })
@@ -15410,6 +15466,7 @@ const convenience = useConvenience(backend, {
  *  user's own Extensions switch, set back (B2-c). */
 async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise<void> {
   if (action.kind === 'plugin-staged-apply') return applyStagedPluginPackage(action)
+  if (action.kind === 'plugin-switch-back') return revertPluginSwitch(action)
   try {
     // Only what the agent did: if the user changed it since, leave it be.
     const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
@@ -15421,7 +15478,11 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
         return
       }
       if (step === 'discard') await window.agentTeam?.plugins?.discardCandidate?.(action.pluginId)
-      else await window.agentTeam?.plugins?.rollback?.(action.pluginId)
+      else {
+        const consent = await confirmLocalRollback(installed, action.pluginId, action.fromVersion)
+        if (consent === null) return
+        await window.agentTeam?.plugins?.rollback?.(action.pluginId, consent)
+      }
       notifyRestore.toast(
         i18n.global.t('plugin-agent.notice.downgraded', { plugin: action.pluginId, version: action.fromVersion }),
         { type: 'info' },
@@ -15436,6 +15497,52 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   } catch (error) {
     notifyRestore.toast(
       i18n.global.t('plugin-agent.notice.undo-failed', { error: error instanceof Error ? error.message : String(error) }),
+      { type: 'error' },
+    )
+  }
+}
+
+/** L4: going back to a kept file version is consented to again, with its
+ *  disclosure, in Settings → Navide Plugins. Returns the rollback options for
+ *  any other target, or null after sending the user there. */
+async function confirmLocalRollback(
+  installed: ReadonlyArray<{ id: string; rollbackNeedsConsent?: true }>,
+  pluginId: string,
+  version: string,
+): Promise<{ consentConfirmed?: boolean } | null> {
+  if (installed.find((pkg) => pkg.id === pluginId)?.rollbackNeedsConsent !== true) return {}
+  // Review M3: that consent shows the kept version's disclosure, which lives
+  // in Settings → Navide Plugins; this row only takes the user there.
+  closePopover()
+  openSettingsAt('extensions')
+  notifyRestore.toast(i18n.global.t('settings.extensions.rollback.consentInSettings', { id: pluginId, version }), { type: 'info' })
+  return null
+}
+
+/** "Back to vA" on a switch row (L3): the rollback in Settings → Navide
+ *  Plugins, only while the switch it names is still what is installed. */
+async function revertPluginSwitch(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-switch-back' }>,
+): Promise<void> {
+  try {
+    const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (!pluginSwitchBackApplies(action, installed)) {
+      notifyRestore.toast(i18n.global.t('plugin-switch.notice.stale'), { type: 'info' })
+      return
+    }
+    const consent = await confirmLocalRollback(installed, action.pluginId, action.fromVersion)
+    if (consent === null) return
+    const reverted = await window.agentTeam?.plugins?.rollback?.(action.pluginId, consent)
+    notifyRestore.toast(
+      i18n.global.t('plugin-switch.notice.reverted', {
+        plugin: action.pluginId,
+        version: reverted?.packageVersion ?? action.fromVersion,
+      }),
+      { type: 'info' },
+    )
+  } catch (error) {
+    notifyRestore.toast(
+      i18n.global.t('plugin-switch.notice.failed', { error: error instanceof Error ? error.message : String(error) }),
       { type: 'error' },
     )
   }
@@ -16938,6 +17045,14 @@ async function globalManagerRouterScan(): Promise<void> {
   const managerPaneId = globalManagerPaneId()
   if (!managerPaneId) return
   const gm = pipeline.globalManager!
+  // A single commander is the global Manager too, and its stage router already
+  // routes that stage: REPORTs held until READY, DISPATCH to its workers.
+  // Routing them here as well sent a REPORT past the READY queue and every
+  // DISPATCH twice (#539). Panes of other stages still cross over here.
+  const stageRouter = stageRouters.get(pipeline.stageIndex)
+  const ownedByStage = new Set<string>(
+    stageRouter?.managerPaneId === managerPaneId ? stageRouter.workerPaneIds.values() : [],
+  )
 
   // Scan all active Worker panes (any stage, not the Manager itself) for ASK/REPORT
   const workerPanes = panes.value.filter(
@@ -16945,6 +17060,7 @@ async function globalManagerRouterScan(): Promise<void> {
            !(p.stageId === gm.stageId && p.slotLabel === gm.slotLabel)
   )
   for (const wp of workerPanes) {
+    if (ownedByStage.has(wp.id)) continue
     const ref = paneRefs[wp.id]
     const buf: string = (ref?.cleanBuffer as unknown as string) ?? ''
     if (!buf) continue
@@ -16977,6 +17093,7 @@ async function globalManagerRouterScan(): Promise<void> {
       (p) => p.realized && p.origin === 'pipeline' && p.id !== managerPaneId &&
              p.slotLabel.toLowerCase() === d.to.toLowerCase()
     )
+    if (target && ownedByStage.has(target.id)) continue
     if (!target) {
       pipelineLog(`🎯 Global DISPATCH ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`)
       continue
@@ -21826,7 +21943,7 @@ function paneIsCommander(p: ActivePane): boolean {
           <button class="boot-retry" @click="retryBackend">{{ $t('action.retry') }}</button>
         </template>
         <template v-else>
-          <div class="boot-spinner" aria-label="loading" />
+          <div class="boot-spinner" :aria-label="$t('label.loading')" />
           <div class="boot-status">
             <span>{{ $t(bootStatusKey) }}</span>
             <span class="boot-elapsed">{{ $t('label.boot-countdown', { seconds: bootCountdown }) }}</span>
@@ -22774,7 +22891,7 @@ function paneIsCommander(p: ActivePane): boolean {
       >
         <div class="float-pip-header" @mousedown.prevent="onPipDragStart">
           <span class="float-pip-title">
-            Agents ({{ auxiliaryListPanes.length }})
+            {{ $t('label.agents') }} ({{ auxiliaryListPanes.length }})
           </span>
           <button class="float-pip-toggle" @mousedown.stop @click="floatPipExpanded = !floatPipExpanded; clampPipPos()">
             {{ floatPipExpanded ? '▾' : '▸' }}
