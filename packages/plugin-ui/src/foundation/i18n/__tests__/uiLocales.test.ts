@@ -69,8 +69,10 @@ describe('uiLocales', () => {
   })
 
   it('registers the translated catalogs only', () => {
-    expect([...AVAILABLE_UI_LOCALES].sort()).toEqual(['en-US', 'ja-JP', 'zh-CN', 'zh-TW'])
-    expect(detectUiLocale('ko-KR')).toBe('en-US')
+    expect([...AVAILABLE_UI_LOCALES].sort()).toEqual(['en-US', 'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW'])
+    expect(detectUiLocale('ko-KR')).toBe('ko-KR')
+    expect(detectUiLocale('ko')).toBe('ko-KR')
+    expect(detectUiLocale('de-DE')).toBe('en-US')
     expect(detectUiLocale('zh-Hans')).toBe('zh-CN')
     expect(detectUiLocale('zh-SG')).toBe('zh-CN')
     expect(detectUiLocale('zh-HK')).toBe('zh-TW')

@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n'
 import zhTW from './locales/zh-TW.json'
 import enUS from './locales/en-US.json'
 import jaJP from './locales/ja-JP.json'
+import koKR from './locales/ko-KR.json'
 import zhCN from './locales/zh-CN.json'
 import { settingsGet } from '../../shared'
 import {
@@ -24,6 +25,7 @@ const messages = {
   'zh-TW': zhTW,
   'en-US': enUS,
   'ja-JP': jaJP,
+  'ko-KR': koKR,
   'zh-CN': zhCN,
 }
 
