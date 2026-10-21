@@ -151,6 +151,7 @@ MSG_RELAY_TURN_ENDED = "✔ 回合已結束，不需要再確認"
 MSG_RELAY_PANE_GONE = "⚠️ pane 已離線，這個確認已失效"
 MSG_RELAY_ANSWERED_IN_CHAT = "✅ 已在聊天室回答："  # + the answer
 MSG_RELAY_PERMANENT = "⚠️ 這個選項會永久放行，請在電腦前操作"
+MSG_RELAY_NONE_TICKED = "⚠️ 請先勾選至少一個選項，再按「送出」"
 MSG_RELAY_NEEDS_LOCAL = "⚠️ 這個動作需要在電腦前確認"
 MSG_AWAITING_LOCAL = "pane 在等確認，請在電腦上回答"
 MSG_PENDING_NONE = "目前沒有等待確認的 pane"
@@ -280,6 +281,16 @@ async def _no_resume() -> dict[str, Any]:
 
 
 AdapterFactory = Callable[[dict[str, Any], dict[str, Any], ChannelStore], ChannelAdapter]
+
+
+def _relay_buttons(adapter: ChannelAdapter, request: relay.RelayRequest) -> list[tuple[str, str]] | None:
+    """The request's buttons on this adapter: a multi-select question gets tick buttons
+    only where they can be redrawn in place (``edit_buttons``)."""
+    if not adapter.capabilities.buttons:
+        return None
+    if request.multi and request.kind == "question" and hasattr(adapter, "edit_buttons"):
+        return relay.toggle_buttons(request)
+    return relay.buttons_for(request)
 
 
 def _bot_key(adapter: ChannelAdapter) -> str:
@@ -1901,7 +1912,7 @@ class ChannelManager:
             minutes = int(max(self._clock() - request.created, 0) // 60)
             head = f"📋 {names.get(request.pane_id) or request.pane_id}・{minutes} 分鐘前"
             text = f"{head}\n{relay.prompt_text(request, request.prompt)}"
-            buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
+            buttons = _relay_buttons(adapter, request)
             try:
                 ids = await self.mirror.send(request.loc, text, owner=request.pane_id, buttons=buttons or None)
             except Exception as exc:  # noqa: BLE001
@@ -1926,7 +1937,7 @@ class ChannelManager:
             await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=relay.answer_hint(request)))
             return
         text = MSG_HELD_BY_PROMPT.format(how="\n" + relay.held_text(request))
-        buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
+        buttons = _relay_buttons(adapter, request)
         try:
             ids = await self.mirror.send(loc, text, buttons=buttons or None, reply_to=request.message_id)
         except Exception as exc:  # noqa: BLE001
@@ -1943,6 +1954,14 @@ class ChannelManager:
         if request is None or request.loc.key() != msg.location_key():
             await self._reply(msg, MSG_RELAY_EXPIRED)
             return
+        if answer.choice.startswith("t"):
+            await self._relay_toggle(msg, request, int(answer.choice[1:]))
+            return
+        if answer.choice == "s":
+            answer = dataclasses.replace(answer, choice=relay.ticked_choice(request))
+            if not answer.choice:
+                await self._reply(msg, MSG_RELAY_NONE_TICKED)
+                return
         if relay.refuses_permanent(request, answer.choice):
             await self._reply(msg, MSG_RELAY_PERMANENT)
             return
@@ -1983,6 +2002,22 @@ class ChannelManager:
             await self._reply(msg, f"✅ 已送出：{relay.describe_answer(payload)}")
         else:
             await self._reply(msg, f"⚠️ 送出失敗：{result.get('error') or 'not sent'}")
+
+    async def _relay_toggle(self, msg: InboundMessage, request: relay.RelayRequest, n: int) -> None:
+        """A box button: tick or untick it and redraw the request's buttons. Nothing
+        reaches the pane until 送出."""
+        adapter = self._adapters.get((request.loc.platform, request.loc.account))
+        if not hasattr(adapter, "edit_buttons") or not relay.toggle(request, n):
+            await self._reply(msg, relay.invalid_reply(request))
+            return
+        buttons = relay.toggle_buttons(request)
+        for message_id in [request.message_id, *(mid for mid, _ in request.held)]:
+            if not message_id:
+                continue
+            try:
+                await adapter.edit_buttons(request.loc, message_id, buttons)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("channels: redrawing relay buttons in %s failed: %s", request.loc.key(), exc)
 
     async def _relay_prompt_changed(self, msg: InboundMessage, request: relay.RelayRequest) -> None:
         """The screen moved on: this id is stale, and the pane's prompt as it is now is
@@ -2978,7 +3013,7 @@ class ChannelManager:
                                     agent_key=str(info.get("agent") or ""),
                                     multi=any(relay.is_multi_select(o) for o in options))
         text = who + relay.prompt_text(request, prompt)
-        buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
+        buttons = _relay_buttons(adapter, request)
         try:
             ids = await self.mirror.send(loc, text, owner=pane_id, buttons=buttons or None)
         except Exception as exc:  # noqa: BLE001

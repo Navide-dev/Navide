@@ -159,11 +159,70 @@ async def test_a_multi_select_question_is_relayed_with_how_to_pick_several(env: 
     sent = _capture_buttons(env)
     rid = await _multi(env)
     text, buttons = next((t, b) for t, b in sent if t.startswith("⏸"))
-    # No one-tap buttons: a tap could only toggle one box.
-    assert buttons is None
+    # Tick buttons for the boxes (not the free-text row, which needs its text), then 送出.
+    assert buttons == [("☐ 1. Lint", f"nv1:{rid}:t1"), ("☐ 2. Unit tests", f"nv1:{rid}:t2"),
+                       ("送出", f"nv1:{rid}:s")]
     assert "1. [ ] Lint" in text and "3. [ ] Type something" in text
     assert f"1,2 {rid}" in text and f"3 {rid} <你的文字>" in text
     assert "電腦上操作" not in text
+
+
+async def _press(env: Env, data: str, *, sender: str = "7", chat: str = "-100") -> None:
+    await env.inbound("", callback=data, sender=sender, chat=chat)
+
+
+async def test_box_buttons_tick_untick_and_send_the_ticked_boxes(env: Env) -> None:
+    rid = await _multi(env)
+    await _press(env, f"nv1:{rid}:t1")
+    await _press(env, f"nv1:{rid}:t2")
+    await _press(env, f"nv1:{rid}:t1")  # untick
+    assert env.fake.answers == []  # nothing reaches the pane before 送出
+    labels = [label for label, _ in env.tg.button_edits[-1][1]]
+    assert labels == ["☐ 1. Lint", "✓ 2. Unit tests", "送出"]
+    await _press(env, f"nv1:{rid}:s")
+    assert env.fake.answers == [("pane-1", {"kind": "multi", "options": [2]})]
+    assert env.tg.texts()[-1] == "✅ 已送出：選項 2"
+    assert env.m.relay.get(rid) is None  # used up
+
+
+async def test_send_with_nothing_ticked_sends_nothing(env: Env) -> None:
+    rid = await _multi(env)
+    await _press(env, f"nv1:{rid}:s")
+    assert env.fake.answers == [] and env.tg.texts()[-1] == "⚠️ 請先勾選至少一個選項，再按「送出」"
+    assert env.m.relay.get(rid) is not None
+
+
+async def test_boxes_ticked_on_screen_start_ticked(env: Env) -> None:
+    rid = await _multi(env, ["[✔] Lint", "[ ] Unit tests", "[ ] Type something"])
+    await _press(env, f"nv1:{rid}:t2")
+    await _press(env, f"nv1:{rid}:s")
+    assert env.fake.answers == [("pane-1", {"kind": "multi", "options": [1, 2]})]
+
+
+async def test_a_permanent_or_free_text_box_cannot_be_ticked(env: Env) -> None:
+    rid = await _multi(env, ["[ ] Lint", "[ ] Always run all checks", "[ ] Type something"])
+    for n in (2, 3, 9):
+        await _press(env, f"nv1:{rid}:t{n}")
+        assert env.tg.texts()[-1].startswith("⚠️ 請回覆有效的選項編號")
+    assert env.tg.button_edits == [] and env.m.relay.get(rid).ticked == set()
+
+
+async def test_box_buttons_only_work_for_the_bound_user_in_the_prompt_chat(env: Env) -> None:
+    rid = await _multi(env)
+    await _press(env, f"nv1:{rid}:t1", sender="99")  # a stranger in the group
+    await _press(env, f"nv1:{rid}:t1", chat="-200")  # the id, pressed from another chat
+    assert env.m.relay.get(rid).ticked == set() and env.tg.button_edits == []
+    await _press(env, "nv1:zzzzz:s")  # a forged id answers nothing
+    assert env.fake.answers == []
+
+
+async def test_ticks_die_with_the_request(env: Env) -> None:
+    rid = await _multi(env)
+    await _press(env, f"nv1:{rid}:t1")
+    _set_status(env, "running")  # the prompt left the screen
+    await _until(lambda: env.m.relay.get(rid) is None)
+    await _press(env, f"nv1:{rid}:s")
+    assert env.fake.answers == []
 
 
 async def test_several_options_are_picked_with_a_comma_list(env: Env) -> None:
