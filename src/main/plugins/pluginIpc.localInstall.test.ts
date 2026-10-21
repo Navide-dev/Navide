@@ -588,3 +588,36 @@ describe('L1: a first install takes effect when the user approves it', () => {
     })
   })
 })
+
+describe('L3: every version switch is reported for the record', () => {
+  it('reports an update switched by Restart, naming both versions and the source, but not a first install', async () => {
+    const onPackageSwitched = vi.fn()
+    register(() => true, { onPackageSwitched })
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    expect(onPackageSwitched).not.toHaveBeenCalled()
+
+    writeFileSync(picked, vsix('acme.todo', '1.1.0'))
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+
+    expect(onPackageSwitched).toHaveBeenCalledTimes(1)
+    expect(onPackageSwitched).toHaveBeenCalledWith({
+      pluginId: 'acme.todo',
+      fromVersion: '1.0.0',
+      toVersion: '1.1.0',
+      source: 'local-unsigned',
+      at: expect.any(Number),
+    })
+  })
+
+  it('keeps the switch when reporting it throws', async () => {
+    register(() => true, { onPackageSwitched: () => { throw new Error('no window') } })
+    await installLocal(vsix('acme.todo', '1.0.0'))
+    writeFileSync(picked, vsix('acme.todo', '1.1.0'))
+    await call('plugins:installFromFile')
+    await call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true })
+    await call('plugins:restart', { id: 'acme.todo' })
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')?.active?.packageVersion).toBe('1.1.0')
+  })
+})

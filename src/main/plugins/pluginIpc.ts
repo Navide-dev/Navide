@@ -98,7 +98,7 @@ import type {
   PluginPackageRestartTransaction,
 } from './frontendPluginManager'
 import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManager'
-import { answerPluginAgentAction, type PluginAgentActionNotice } from './pluginAgentAction'
+import { answerPluginAgentAction, type PluginAgentActionNotice, type PluginAgentRequester } from './pluginAgentAction'
 import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
@@ -587,6 +587,26 @@ export interface PluginIpcOptions {
    *  their private data in `<root>/<pluginId>/`. Removal deletes that directory
    *  only when the caller passes `nativeBackendData: 'delete'`. */
   nativeBackendDataRoot?: string
+  /** L3: a restart switched an installed plugin from one version to another
+   *  (an approved update taking effect, or Restart). The main window records
+   *  every switch with a one-click way back. */
+  onPackageSwitched?: (notice: {
+    pluginId: string
+    fromVersion: string
+    toVersion: string
+    source: 'marketplace' | 'local-unsigned'
+    at: number
+    /** Set when an agent's automatic update (O1) drove the switch. */
+    agent?: PluginAgentRequester
+  }) => void
+  /** O1: an agent's automatic update was staged but its switch failed; the
+   *  old version runs again and the main window keeps a row to apply it. */
+  onPackageSwitchFailed?: (notice: {
+    pluginId: string
+    activeVersion: string
+    stagedVersion: string
+    reason: string
+  }) => void
   factoryPackageIds?: readonly string[]
   /** Why rolling this id back to its factory package is refused right now, or
    *  undefined when it is allowed. Checked before a rollback is offered or its
@@ -3418,9 +3438,33 @@ export function registerPluginIpc(
     }
   }
 
+  /** L3: record a version switch for the main window. A first install is not
+   * a switch, and a failure to report never undoes the switch. */
+  function reportSwitch(
+    id: string,
+    fromVersion: string | undefined,
+    toVersion: string,
+    local: boolean,
+    agent?: PluginAgentRequester,
+  ): void {
+    if (!fromVersion || fromVersion === toVersion) return
+    try {
+      options.onPackageSwitched?.({
+        pluginId: id,
+        fromVersion,
+        toVersion,
+        source: local ? 'local-unsigned' : 'marketplace',
+        at: Date.now(),
+        ...(agent ? { agent } : {}),
+      })
+    } catch (error) {
+      console.warn(`[plugins] version switch of ${id} was not reported: ${errorText(error)}`)
+    }
+  }
+
   /** Promote the staged candidate of `id`: what the Restart button does, and
    * what a launch does for a first install the user never restarted. */
-  async function restartStagedCandidate(id: string) {
+  async function restartStagedCandidate(id: string, trigger: { agent?: PluginAgentRequester } = {}) {
     assertNoDeveloperFolder(id)
     if (activeTransactions.has(id)) {
       throw new Error(`plugin transaction already in progress for ${id}`)
@@ -3670,6 +3714,7 @@ export function registerPluginIpc(
         if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
         if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
+        reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate, trigger.agent)
         return {
           id,
           packageVersion: selected.active!.packageVersion,
@@ -3682,6 +3727,7 @@ export function registerPluginIpc(
       if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
       if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
+      reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate, trigger.agent)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
       // A failed data move back is reported with the restart's own error,
@@ -4486,8 +4532,32 @@ export function registerPluginIpc(
           prepared: summary,
         }
       },
-      commitUpdate: async (pluginId) => {
+      commitUpdate: async (pluginId, requester) => {
         await commitRegistryInstall({ id: pluginId, riskConfirmed: true })
+        // User decision A (2026-10-21): an agent's update that discloses
+        // exactly what the running version does switches at once, recorded
+        // with the agent and a way back. A failed switch restores the old
+        // version, keeps the update staged and says so in the main window.
+        try {
+          await restartStagedCandidate(pluginId, requester ? { agent: requester } : {})
+        } catch (error) {
+          const record = lifecycleSelector.read(pluginId)
+          if (record?.active && record.candidate) {
+            try {
+              options.onPackageSwitchFailed?.({
+                pluginId,
+                activeVersion: record.active.packageVersion,
+                stagedVersion: record.candidate.packageVersion,
+                reason: errorText(error),
+              })
+            } catch {
+              // The update stays staged; #505's launch notice lists it again.
+            }
+          }
+          // Review M2: the agent is told the switch failed, not that it is updated.
+          return { switchError: errorText(error) }
+        }
+        return { switched: true as const }
       },
       discardUpdate: (pluginId) => {
         prepared.delete(pluginId)

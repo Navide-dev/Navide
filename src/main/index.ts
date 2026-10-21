@@ -1956,6 +1956,11 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
+    onPackageSwitchFailed: (failure) => {
+      console.warn(`[main] switching ${failure.pluginId} to ${failure.stagedVersion} failed: ${failure.reason}`)
+      pluginStagedCandidateRelay.notifyStagedUpdates([failure])
+    },
     promptDigestBlock,
     preflightCandidateFrontend,
     preflightCandidateBackend,

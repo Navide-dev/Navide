@@ -1904,6 +1904,7 @@
       "restore": "還原",
       "candidateReady": "更新 {version} 已就緒",
       "activationFailed": "{plugin} 已安裝，但無法啟用：{reason}。請在下方清單重新啟動或捨棄它。",
+      "switchNow": "核准後，{id} 會立即切換到 {version}。開著的畫面會重新載入，畫面裡沒存的內容會遺失。這次切換會記錄在公告中心，可以一鍵退回。",
       "restartPlugin": "重新啟動 Navide 外掛",
       "disable": "停用",
       "enable": "啟用",
@@ -11752,6 +11753,7 @@
   "plugin-staged": {
     "notice": {
       "title": "Navide 外掛 {plugin} 有版本 {staged} 等待套用，目前執行的是 {active}。",
+      "failedTitle": "{plugin} 切換到 {staged} 失敗：{reason}。已回到版本 {active}。",
       "detail": "這個版本是安裝後沒有按「重新啟動」，或回退時保留下來的。按「立即套用」會切換過去，效果和重新啟動相同。",
       "applied": "{plugin} 現在執行版本 {version}。",
       "stale": "沒有套用：這個 Navide 外掛之後又被變更過。",
@@ -11759,6 +11761,23 @@
     },
     "button": {
       "apply": "立即套用"
+    }
+  },
+  "plugin-switch": {
+    "notice": {
+      "title": "{plugin} 已從 {from} 切換到 {to}",
+      "titleAgent": "由{caller}觸發的自動更新，已將 {plugin} 從 {from} 切換到 {to}",
+      "detail": "於 {time} 切換（來源：{source}），開著的畫面已重新載入。",
+      "reverted": "{plugin} 已退回版本 {version}。",
+      "stale": "沒有變更：這個 Navide 外掛之後又被變更過，或沒有保留較早的版本。",
+      "failed": "無法退回：{error}"
+    },
+    "button": {
+      "back": "退回 {version}"
+    },
+    "source": {
+      "marketplace": "Navide Marketplace",
+      "local": "本機檔案"
     }
   },
   "testplace": {
