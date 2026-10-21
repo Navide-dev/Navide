@@ -1305,9 +1305,8 @@ class ServerLink:
             )
             engine.register(skill_files)
             engine.register(sync_scopes.MemoryScope())
-            # One instance, shared with the spawn and sign-out paths; see
-            # sync_scopes.credentials_scope.
-            engine.register(sync_scopes.credentials_scope())
+            # No credentials adapter: credentials and keys never leave this
+            # machine (sync_engine.LOCAL_ONLY_SCOPES).
             self._sync_engine = engine
         return self._sync_engine
 

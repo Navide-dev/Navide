@@ -143,7 +143,15 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.workspacePath, props.contribution.contributionKey] as const,
+  // A new package version (Restart, an update taking effect, a rollback) means
+  // the Host drained the old guest; prepare a fresh one in place. Each value is
+  // compared on its own, so a refreshed contribution object with the same
+  // values keeps the guest.
+  [
+    () => props.workspacePath,
+    () => props.contribution.contributionKey,
+    () => props.contribution.packageVersion,
+  ],
   () => void prepare(),
   { immediate: true }
 )
@@ -183,7 +191,7 @@ onBeforeUnmount(() => {
       <PluginSourceBadge :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" :local-install="contribution.localInstall" />
     </div>
     <div v-if="error" class="plugin-region-host__error" role="status">
-      {{ contribution.title }} unavailable
+      {{ $t('label.region-unavailable', { title: contribution.title }) }}
     </div>
     <webview
       v-else-if="src"

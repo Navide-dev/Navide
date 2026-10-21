@@ -813,7 +813,7 @@ describe('PlanReviewToolbar – history panel', () => {
     expect(diff.exists()).toBe(true)
     expect(diff.text()).toContain('Stage: draft → in-review')
     expect(diff.text()).toContain('Todo phase-a: pending → done')
-    expect(diff.text()).toContain('1 todo(s) added')
+    expect(diff.text()).toContain('1 todo added')
     expect(diff.text()).toContain('Review notes: +1')
     expect(diff.text()).toMatch(/\+\d+ \/ −\d+ lines/)
   })

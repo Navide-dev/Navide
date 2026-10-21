@@ -127,7 +127,7 @@ export interface HostEventActivityRow {
   count: 1
 }
 
-export type HostEventAddress = 'developerMode.on' | 'developerMode.off'
+export type HostEventAddress = 'developerMode.on' | 'developerMode.off' | 'developerMode.externalChange'
 
 /** Broker refusals: the call never ran. Anything else that is not ok failed. */
 const DENIED_CODES: ReadonlySet<string> = new Set([

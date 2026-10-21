@@ -38,6 +38,7 @@ export const TURN_START_SIGNAL: Readonly<Record<string, boolean>> = {
   kimi: true,
   pi: true,
   qwen: true,
+  goose: true,
   // No log reader: mcode keeps its history in SQLite Navide cannot read yet.
   mcode: false,
   // A plain shell takes its own submit path and never reaches the watch.

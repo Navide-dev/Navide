@@ -471,7 +471,7 @@ onUnmounted(() => stopTail())
           </nav>
           <div class="dbg-meta">
             <span class="dbg-dot" :class="backend.status.value"></span>
-            <span>backend {{ backend.status.value }}</span>
+            <span>{{ t('debug.backend-status', { status: backend.status.value }) }}</span>
           </div>
           <button class="dbg-close" :title="t('debug.close')" @click="emit('close')">✕</button>
         </header>
@@ -609,11 +609,11 @@ onUnmounted(() => stopTail())
           <div class="dbg-info">
             <h3>{{ t('debug.info.runtime') }}</h3>
             <dl>
-              <dt>App</dt>
+              <dt>{{ t('debug.info.app') }}</dt>
               <dd>{{ appVersion }}</dd>
-              <dt>Backend</dt>
+              <dt>{{ t('debug.info.backend') }}</dt>
               <dd>{{ health?.version ?? '—' }}</dd>
-              <dt>Started</dt>
+              <dt>{{ t('debug.info.started') }}</dt>
               <dd>{{ health?.started_at ?? '—' }}</dd>
               <dt>WebSocket</dt>
               <dd>{{ maskWsUrlToken(backend.wsUrl.value) || '—' }}</dd>
@@ -621,7 +621,7 @@ onUnmounted(() => stopTail())
               <dd>{{ backend.httpUrl.value || '—' }}</dd>
               <dt>PID</dt>
               <dd>{{ backend.pid.value ?? '—' }}</dd>
-              <dt>Shell</dt>
+              <dt>{{ t('debug.info.shell') }}</dt>
               <dd>{{ backend.shell.value || '—' }}</dd>
             </dl>
             <h3>{{ t('debug.info.paths') }}</h3>

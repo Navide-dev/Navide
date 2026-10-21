@@ -182,16 +182,23 @@ async function remove(id: string): Promise<void> {
 // the App-bundled factory package for the ids that ship with Navide. The Host
 // decides which of the two applies; the row only offers the button when the Host
 // says a rollback is available.
-async function rollback(id: string, kind: 'factory' | 'previous', version?: string): Promise<void> {
+async function rollback(id: string, kind: 'factory' | 'previous', version?: string, needsConsent = false): Promise<void> {
   const api = pluginsApi()
   if (!api) return
+  // L4 (review M3): a kept file version is consented to again with its own
+  // disclosure, in the install consent dialog.
+  if (needsConsent) {
+    await updateFlow.rollbackWithConsent(id)
+    return
+  }
+  const previousText = t('settings.extensions.rollback.confirmPrevious', {
+    id,
+    version: version ?? t('settings.extensions.rollback.previousVersion'),
+  })
   const confirmed = await notify.confirm(
     kind === 'factory'
       ? t('settings.extensions.rollback.confirmFactory', { id })
-      : t('settings.extensions.rollback.confirmPrevious', {
-          id,
-          version: version ?? t('settings.extensions.rollback.previousVersion'),
-        }),
+      : previousText,
     {
       title: t('settings.extensions.rollback.title'),
       confirmText: t('settings.extensions.rollback.confirm'),
@@ -560,6 +567,10 @@ watch(installed, () => {
     <p v-if="developerMode.enabled" class="ext-devmode-banner ext-risk-banner" role="status">
       {{ $t('settings.extensions.developerMode.banner') }}
     </p>
+    <!-- A2-5 (G5): settings another program wrote are disclosed, never applied. -->
+    <p v-if="developerMode.externalChange" class="ext-devmode-external ext-risk-banner" role="alert">
+      {{ $t(developerMode.externalChange.reason === 'signing-unavailable' ? 'settings.extensions.developerMode.externalChangeUnsigned' : developerMode.externalChange.reason === 'signature-missing' ? 'settings.extensions.developerMode.externalChangeMissing' : 'settings.extensions.developerMode.externalChange', { time: new Date(developerMode.externalChange.detectedAt).toLocaleString() }) }}
+    </p>
     <!-- D6: never let a self-hosted Registry package disappear silently. -->
     <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
       {{ $t('settings.extensions.developerMode.selfHostedQuarantine', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
@@ -920,7 +931,7 @@ watch(installed, () => {
               v-if="p.rollbackKind"
               class="ext-rollback nv-btn nv-btn--sm"
               :disabled="busy || updateFlow.busy.value"
-              @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion)"
+              @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion, p.rollbackNeedsConsent === true)"
             >
               {{
                 p.rollbackKind === 'factory'
@@ -988,6 +999,7 @@ watch(installed, () => {
           <span class="ext-id" v-truncate>{{ reveal(folder.pluginId) }}</span>
           <code class="ext-devmode-path">{{ reveal(folder.path) }}</code>
           <span v-if="folder.unavailable" class="ext-badge ext-dev-warning ext-devmode-unavailable">{{ localizeDeveloperModeError(folder.unavailable, t) }}</span>
+          <span v-else-if="folder.externallyChanged" class="ext-badge ext-dev-warning ext-devmode-external-folder">{{ $t('settings.extensions.developerMode.externallyChanged') }}</span>
           <!-- Review MED-3 on #543: a reload that unloaded the old version and could not load the new one. -->
           <span v-else-if="folder.reloadError" class="ext-badge ext-dev-warning ext-devmode-reload-error">
             {{ $t('settings.extensions.developerMode.reloadFailedNothingRunning', { error: reveal(folder.reloadError) }) }}

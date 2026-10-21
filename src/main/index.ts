@@ -39,7 +39,7 @@ import {
   setMarketplaceOverridesAllowed,
 } from './plugins/pluginIpc'
 import { scanLocalPackageInWorker } from './plugins/pluginLocalScan'
-import { developerFolderBackendDigest, PluginDeveloperModeStore } from './plugins/pluginDeveloperModeStore'
+import { developerFolderBackendDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './plugins/pluginDeveloperModeStore'
 import { disableOfficialKeyOverride } from './plugins/pluginVerify'
 import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
@@ -991,7 +991,20 @@ const pluginsRoot = (): string => join(app.getPath('userData'), 'plugins')
 // Card K4 (D6): a packaged build honors the self-hosted Registry overrides only
 // while the user's Developer Mode switch is on, and never takes the official
 // publisher key from the environment. Set before anything resolves either.
-const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot())
+// A2-5 (G5): entries of that file another program wrote are disclosed and
+// asked about again. Its HMAC key is wrapped by safeStorage, touched only once
+// the app is ready and only while Developer Mode is in use; before that, or
+// without secure storage, nothing is checked (disclosed).
+const pluginDeveloperModeIntegrity: DeveloperModeIntegrity = {
+  get available(): boolean {
+    return app.isReady() && !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
+      (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+  },
+  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
+  decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
+  onExternalChange: () => frontendPluginManager.recordDeveloperModeExternalChange(app.getVersion()),
+}
+const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot(), pluginDeveloperModeIntegrity)
 setMarketplaceOverridesAllowed(() => !app.isPackaged || pluginDeveloperModeStore.isEnabled())
 if (app.isPackaged) disableOfficialKeyOverride()
 let installedRegistryRootKey: string | null = null
@@ -1956,6 +1969,11 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
+    onPackageSwitchFailed: (failure) => {
+      console.warn(`[main] switching ${failure.pluginId} to ${failure.stagedVersion} failed: ${failure.reason}`)
+      pluginStagedCandidateRelay.notifyStagedUpdates([failure])
+    },
     promptDigestBlock,
     preflightCandidateFrontend,
     preflightCandidateBackend,
@@ -1978,6 +1996,7 @@ const pluginTrustRefresh = registerPluginIpc(
         hostWindow.webContents.send('plugins:developerFolderEvent', folderEvent)
       }
     },
+    developerModeIntegrity: pluginDeveloperModeIntegrity,
     pickDeveloperFolder: async (event) => {
       const parent = BrowserWindow.fromWebContents(event.sender)
       if (!parent || parent.isDestroyed() || !mainWindows.has(parent) || detachedWindowIds.has(parent.id)) return null
@@ -2181,7 +2200,8 @@ const pluginTrustRefresh = registerPluginIpc(
   }
 )
 // Card K4: the developer folders the user consented to, when Developer Mode is on.
-void pluginTrustRefresh.loadDeveloperFolders()
+// A2-5: once the app is ready, so the consent signatures can be checked.
+void app.whenReady().then(() => pluginTrustRefresh.loadDeveloperFolders())
 // A first install the user did not restart is activated now, as Restart would
 // have done it; one that cannot be stays staged and the main window says why.
 // A package staged beside an active one is not applied for the user: the main
@@ -4045,6 +4065,40 @@ ipcMain.handle('window:reattachGroup', (event, arg: { groupId?: string } | undef
   const child = detachedGroups.get(groupId)
   if (!child || child.isDestroyed()) return { ok: false }
   child.close()
+  return { ok: true }
+})
+
+// MCP window_focus (DESIGN-C S3): a window brings ITSELF to the front. The
+// window is the sender's, never an argument, so a renderer cannot focus (or
+// name) any other window through this.
+ipcMain.handle('window:focusSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return { ok: false }
+  revealMainWindow(win)
+  return { ok: true }
+})
+
+// MCP window_close (DESIGN-C S4a): a window closes ITSELF, the same close its
+// own title-bar button makes (so the last-window guard still applies). The
+// window is the sender's, never an argument.
+// Off macOS the last main window cannot be closed this way: that would quit
+// Navide and end every CLI. Asked before the window lets go of anything
+// (window:canCloseSelf), and again at the close itself.
+function agentCloseRefusal(win: BrowserWindow | null): string | null {
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return 'not-a-main-window'
+  const others = [...mainWindows].filter((w) => w !== win && !w.isDestroyed() && !detachedWindowIds.has(w.id))
+  if (!isMac() && !detachedWindowIds.has(win.id) && others.length === 0) return 'last-window'
+  return null
+}
+ipcMain.handle('window:canCloseSelf', (event) => {
+  const refusal = agentCloseRefusal(BrowserWindow.fromWebContents(event.sender))
+  return refusal ? { ok: false, error: refusal } : { ok: true }
+})
+ipcMain.handle('window:closeSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const refusal = agentCloseRefusal(win)
+  if (refusal || !win) return { ok: false, error: refusal ?? 'not-a-main-window' }
+  win.close()
   return { ok: true }
 })
 

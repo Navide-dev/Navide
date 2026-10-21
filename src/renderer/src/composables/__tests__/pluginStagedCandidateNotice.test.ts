@@ -54,3 +54,23 @@ describe('staged packages found at launch', () => {
     expect(app).toMatch(/applyStagedPluginPackage[\s\S]*?pluginStagedApplyApplies\(action, installed\)[\s\S]*?plugins\?\.restart\?\.\(action\.pluginId\)/)
   })
 })
+
+describe('an approved update takes effect at once (L3)', () => {
+  it('is disclosed before approval, switched right after it, and recorded with a way back', () => {
+    const app = readFileSync(join(root, 'src/renderer/src/App.vue'), 'utf8')
+    const preload = readFileSync(join(root, 'src/preload/index.ts'), 'utf8')
+    const main = readFileSync(join(root, 'src/main/index.ts'), 'utf8')
+    const dialog = readFileSync(join(root, 'src/renderer/src/components/PluginTrustDialog.vue'), 'utf8')
+    const flow = readFileSync(join(root, 'src/renderer/src/composables/usePluginInstallFlow.ts'), 'utf8')
+    // Before: the consent dialog says the views reload and the switch can be undone.
+    expect(dialog).toContain("$t('settings.extensions.switchNow'")
+    // Right after: the approved update goes through Restart.
+    expect(flow).toMatch(/committed\?\.restartRequired === true && !committed\.activationError && plugins\.restart\)[\s\S]*?await plugins\.restart\(id\)/)
+    // Recorded: main reports every switch, the window keeps a row with the way back.
+    expect(main).toContain('onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice)')
+    expect(preload).toContain("ipcRenderer.on('plugins:switched', listener)")
+    expect(app).toMatch(/onPluginSwitched\?\.\(\(notice\) => \{\s*announcements\.notePluginSwitch\(notice\)/)
+    expect(app).toContain("if (action.kind === 'plugin-switch-back') return revertPluginSwitch(action)")
+    expect(app).toMatch(/revertPluginSwitch[\s\S]*?pluginSwitchBackApplies\(action, installed\)[\s\S]*?plugins\?\.rollback\?\.\(action\.pluginId/)
+  })
+})

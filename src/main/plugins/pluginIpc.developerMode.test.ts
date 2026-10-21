@@ -14,7 +14,7 @@ import { canonicalTrustJson, type RegistryPackageEnvelope, type RegistryTrustMet
 import type { InstallerTrustConfig } from './pluginInstaller'
 import { backendEntryOnDisk, type PluginActivationCatalogEntry } from './installedPlugins'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
-import { developerFolderBackendDigest, PluginDeveloperModeStore } from './pluginDeveloperModeStore'
+import { developerFolderBackendDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './pluginDeveloperModeStore'
 import { PluginDeveloperFolderMetaStore } from './pluginDeveloperFolderMeta'
 
 const { handlers, packaged } = vi.hoisted(() => ({
@@ -91,6 +91,7 @@ let watches: Array<{ dir: string; onChange: () => void; onError?: (error: Error)
 let folderEvents: Array<Record<string, unknown>>
 const openWatches = () => watches.filter((entry) => !entry.closed)
 const fireChange = () => { for (const entry of openWatches()) entry.onChange() }
+let integrity: DeveloperModeIntegrity | undefined
 
 function register(authorize: () => boolean = () => true, manager = new FrontendPluginManager()) {
   const controller = registerPluginIpc(manager, pluginsRoot, authorize, TRUST_CONFIG, undefined, {
@@ -106,6 +107,7 @@ function register(authorize: () => boolean = () => true, manager = new FrontendP
       return { close: () => { entry.closed = true } }
     },
     onDeveloperFolderEvent: (event: Record<string, unknown>) => folderEvents.push(event),
+    developerModeIntegrity: integrity,
   })
   return { manager, controller }
 }
@@ -167,6 +169,7 @@ beforeEach(() => {
   activations = []
   watches = []
   folderEvents = []
+  integrity = undefined
   delete process.env['AGENT_TEAM_PLUGIN_DEV']
 })
 
@@ -858,5 +861,93 @@ describe('D6: self-hosted Registry overrides in a packaged build', () => {
     expect(call('plugins:selfHostedQuarantine')).toEqual([{ id: 'acme.hosted', version: '0.1.0' }])
     setMarketplaceOverridesAllowed(() => true)
     expect(call('plugins:selfHostedQuarantine')).toEqual([])
+  })
+})
+
+describe('Developer Mode settings another program wrote (A2-5, G5)', () => {
+  const STORE = '.navide-plugin-developer-mode.json'
+  let externalChanges: number
+
+  beforeEach(() => {
+    externalChanges = 0
+    // A reversible stand-in for safeStorage: no keychain is touched.
+    integrity = {
+      available: true,
+      encrypt: (plain) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`,
+      decrypt: (enc) => Buffer.from(enc.slice(4), 'base64').toString('utf8'),
+      onExternalChange: () => { externalChanges += 1 },
+    }
+  })
+
+  const readStore = () => JSON.parse(readFileSync(join(pluginsRoot, STORE), 'utf8')) as {
+    schemaVersion: 1; enabled: boolean; folders: Array<Record<string, unknown>>
+  }
+  const writeStore = (value: unknown) => writeFileSync(join(pluginsRoot, STORE), JSON.stringify(value))
+
+  it('does not load a folder another program added; it is disclosed and consented to again in the main window', async () => {
+    packaged.value = true
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const other = join(base, 'other')
+    writeFolder(other, manifest('evil.two', { system: ['fs'] }))
+    const store = readStore()
+    writeStore({ ...store, folders: [...store.folders, { ...store.folders[0], pluginId: 'evil.two', path: other }] })
+
+    handlers.clear()
+    const restarted = register()
+    await restarted.controller.loadDeveloperFolders()
+    expect(restarted.manager.listInstalledPackages().map((pkg) => pkg.id)).toEqual(['acme.devtodo'])
+    const state = call('plugins:developerMode') as Record<string, unknown>
+    expect(state).toMatchObject({
+      enabled: true,
+      externalChange: { detectedAt: expect.any(String) },
+      folders: [
+        { pluginId: 'acme.devtodo', loaded: true },
+        { pluginId: 'evil.two', path: other, loaded: false, externallyChanged: true },
+      ],
+    })
+    expect(externalChanges).toBe(1)
+    // Its id is held until the user decides; it cannot be committed unseen.
+    await expect(call('plugins:commitFolderLoad', { id: 'evil.two', riskConfirmed: true })).rejects.toThrow(/no prepared developer folder/)
+
+    const reload = await call('plugins:reloadDeveloperPlugin', { id: 'evil.two' }) as Record<string, unknown>
+    expect(reload).toMatchObject({ reloaded: false, requiresConsent: true, prepared: { id: 'evil.two', folder: other } })
+    await call('plugins:commitFolderLoad', { id: 'evil.two', riskConfirmed: true })
+    const after = call('plugins:developerMode') as Record<string, unknown>
+    expect(after.externalChange).toBeUndefined()
+    expect(after).toMatchObject({ folders: [{ pluginId: 'acme.devtodo', loaded: true }, { pluginId: 'evil.two', loaded: true }] })
+  })
+
+  it('does not take the switch another program turned on; the user turns it on with the usual confirmation', async () => {
+    packaged.value = true
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    await call('plugins:setDeveloperMode', { enabled: false })
+    writeStore({ ...readStore(), enabled: true })
+
+    handlers.clear()
+    const restarted = register()
+    const audit = vi.spyOn(restarted.manager, 'recordDeveloperModeChange')
+    await restarted.controller.loadDeveloperFolders()
+    expect(restarted.manager.listInstalledPackages()).toEqual([])
+    expect(call('plugins:developerMode')).toMatchObject({ enabled: false, externalChange: { detectedAt: expect.any(String) } })
+    await expect(call('plugins:loadFromFolder')).rejects.toThrow(/turn on Developer Mode/)
+
+    await call('plugins:setDeveloperMode', { enabled: true })
+    expect(audit.mock.calls).toEqual([[true, '0.2.26']])
+    expect(restarted.manager.listInstalledPackages().map((pkg) => pkg.id)).toEqual(['acme.devtodo'])
+    expect((call('plugins:developerMode') as Record<string, unknown>).externalChange).toBeUndefined()
+  })
+
+  it('turning Developer Mode off also unloads a loaded folder whose entry was edited outside Navide', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const store = readStore()
+    writeStore({ ...store, folders: [{ ...store.folders[0], consentedAt: '2000-01-01T00:00:00.000Z' }] })
+    await call('plugins:setDeveloperMode', { enabled: false })
+    expect(call('plugins:listInstalled')).toEqual([])
   })
 })
