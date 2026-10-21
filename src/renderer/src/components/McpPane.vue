@@ -649,7 +649,7 @@ function entries(map: Record<string, string>): [string, string][] {
                   :value="value"
                   :type="isSecretSettingKey(key) && !secretVisible('env', key) ? 'password' : 'text'"
                   spellcheck="false"
-                  placeholder="value"
+                  :placeholder="t('settings.cliLaunch.env-value-placeholder')"
                   @input="setRecordValue(draftEnv(), key, ($event.target as HTMLInputElement).value)"
                 />
                 <button
@@ -687,7 +687,7 @@ function entries(map: Record<string, string>): [string, string][] {
                   :value="key"
                   type="text"
                   spellcheck="false"
-                  placeholder="Header"
+                  :placeholder="t('settings.mcp.header-name-placeholder')"
                   class="mcp-kv-key"
                   @change="setRecordKey(draftHeaders(), key, ($event.target as HTMLInputElement).value)"
                 />
@@ -695,7 +695,7 @@ function entries(map: Record<string, string>): [string, string][] {
                   :value="value"
                   :type="isSecretSettingKey(key) && !secretVisible('header', key) ? 'password' : 'text'"
                   spellcheck="false"
-                  placeholder="value"
+                  :placeholder="t('settings.cliLaunch.env-value-placeholder')"
                   @input="setRecordValue(draftHeaders(), key, ($event.target as HTMLInputElement).value)"
                 />
                 <button

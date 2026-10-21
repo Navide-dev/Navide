@@ -49,6 +49,12 @@ watch(dialog, async (d) => {
             </span>
             <span class="toast-msg">{{ t.message }}</span>
           </template>
+          <button
+            v-if="t.action"
+            type="button"
+            class="toast-action"
+            @click.stop="t.action.run(); dismissToast(t.id)"
+          >{{ t.action.label }}</button>
         </div>
       </transition-group>
     </div>
@@ -167,6 +173,18 @@ watch(dialog, async (d) => {
 .toast.info .toast-icon {
   color: var(--accent-fg);
 }
+.toast-action {
+  flex: none;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
 .toast-msg {
   flex: 1;
   word-break: break-word;

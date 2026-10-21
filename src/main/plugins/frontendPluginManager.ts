@@ -537,6 +537,9 @@ export interface PluginInstanceRestartSnapshot {
 export interface PluginPackageRestartRestoreReport {
   readonly restoredInstances: number
   readonly skippedDestroyedHostWindows: number
+  /** In-window guest placements left to their renderer, which prepares a
+   *  fresh guest URL once the contribution's package version changes. */
+  readonly rendererRemounts?: number
 }
 
 declare const pluginPackageRestartTransactionBrand: unique symbol
@@ -6865,6 +6868,11 @@ export class FrontendPluginManager {
    *  activity row: sent with the next batch over the Host session. */
   recordDeveloperModeChange(enabled: boolean, appVersion: string): void {
     this.activityRecorder.recordHostEvent(enabled ? 'developerMode.on' : 'developerMode.off', appVersion)
+  }
+
+  /** A2-5 (G5): Developer Mode settings another program wrote were seen. */
+  recordDeveloperModeExternalChange(appVersion: string): void {
+    this.activityRecorder.recordHostEvent('developerMode.externalChange', appVersion)
   }
 
   /** D-e: a removed plugin's first-seen activity rows go (`plugin.activity.forget`),
@@ -13333,8 +13341,10 @@ export class FrontendPluginManager {
   }
 
   /** Restore native placements through the current descriptor only. Guest
-   * placements are deliberately reported as incomplete rather than mounted as
-   * a different carrier; their renderer must request a fresh guest URL. */
+   * placements are never mounted as a different carrier: the in-window guest
+   * belongs to its renderer, which requests a fresh guest URL when the
+   * contribution's package version changes (PluginRegionHost). They are
+   * counted in the report, not treated as a failed restore. */
   async restorePackageRestart(
     transaction: PluginPackageRestartTransaction,
     expectedSelectedVersion: string,
@@ -13346,20 +13356,20 @@ export class FrontendPluginManager {
       throw new Error('package restart selected descriptor is not current')
     }
     const guests = pending.snapshots.filter((snapshot) => snapshot.carrier === 'guest')
-    if (guests.length > 0) {
-      throw new Error('package restart requires renderer guest re-prepare before completion')
-    }
+    const natives = pending.snapshots.filter((snapshot) => snapshot.carrier !== 'guest')
     for (const snapshot of pending.snapshots) {
       if (snapshot.pluginId !== pending.pluginId || snapshot.packageVersion !== pending.packageVersion) {
         throw new Error('package restart transaction snapshot is invalid')
       }
+    }
+    for (const snapshot of natives) {
       if (!descriptor.views?.some((view) => view.contributionKey === snapshot.contributionKey)) {
         throw new Error(`package restart contribution '${snapshot.contributionKey}' is not registered`) 
       }
     }
     let restoredInstances = 0
     let skippedDestroyedHostWindows = 0
-    for (const snapshot of pending.snapshots) {
+    for (const snapshot of natives) {
       if (snapshot.hostWindow.isDestroyed()) {
         skippedDestroyedHostWindows++
         continue
@@ -13399,7 +13409,11 @@ export class FrontendPluginManager {
       restoredInstances++
     }
     pending.restored = true
-    return Object.freeze({ restoredInstances, skippedDestroyedHostWindows })
+    return Object.freeze({
+      restoredInstances,
+      skippedDestroyedHostWindows,
+      ...(guests.length > 0 ? { rendererRemounts: guests.length } : {}),
+    })
   }
 
   /** Complete only a successful (or explicitly host-destroyed) restore. */

@@ -202,7 +202,7 @@ describe('ExtensionsPane', () => {
     await wrapper.get('.ext-pack-remove').trigger('click')
     await flushPromises()
     await wrapper.get('.pack-uninstall-member input').setValue(true)
-    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 Navide plugin(s)')
+    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 Navide plugin')
     await wrapper.get('.pack-uninstall-confirm').trigger('click')
     await flushPromises()
     // The Host removes the chosen members itself, so it can refuse a member
@@ -1432,5 +1432,41 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
     expect(wrapper.find('[data-id="acme.later"] .ext-testplace-expiring').exists()).toBe(false)
     expect(wrapper.get('[data-id="acme.past"] .ext-testplace-kept').text()).toContain('kept in use')
     expect(wrapper.get('[data-id="acme.past"] .nv-source-badge').text()).toBe('Test build, expired 2026-10-01 (kept in use)')
+  })
+})
+
+describe('ExtensionsPane: Developer Mode settings changed outside Navide (A2-5, G5)', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('shows the notice and marks the folder another program added, with Reload to consent again', async () => {
+    const reloadDeveloperPlugin = vi.fn().mockResolvedValue({ reloaded: false, requiresConsent: false })
+    mockPlugins({
+      developerMode: vi.fn().mockResolvedValue({
+        enabled: true,
+        externalChange: { detectedAt: '2026-10-21T01:00:00.000Z', modifiedAt: null },
+        folders: [{ pluginId: 'evil.two', path: '/tmp/other', consentedAt: '', loaded: false, externallyChanged: true }],
+      }),
+      reloadDeveloperPlugin,
+    })
+    const wrapper = mountExtensions()
+    await flushPromises()
+    const notice = wrapper.get('.ext-devmode-external')
+    expect(notice.attributes('role')).toBe('alert')
+    expect(notice.text().startsWith(i18n.global.t('settings.extensions.developerMode.externalChange', { time: 'T' }).split('T')[0]!)).toBe(true)
+    expect(wrapper.get('.ext-devmode-external-folder').text()).toBe(i18n.global.t('settings.extensions.developerMode.externallyChanged'))
+    await wrapper.get('.ext-devmode-folder .ext-devmode-reload').trigger('click')
+    await flushPromises()
+    expect(reloadDeveloperPlugin).toHaveBeenCalledWith('evil.two')
+    wrapper.unmount()
+  })
+
+  it('says nothing more when nothing was changed outside Navide', async () => {
+    mockPlugins({ developerMode: vi.fn().mockResolvedValue({ enabled: true, folders: [] }) })
+    const wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.find('.ext-devmode-external').exists()).toBe(false)
+    wrapper.unmount()
   })
 })
