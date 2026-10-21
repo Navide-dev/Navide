@@ -51,6 +51,7 @@ from .models import (
     RegistryAudit,
 )
 from .signing import public_key_fingerprint
+from .versions import TESTPLACE_CHANNEL
 
 PENDING = "pending"
 APPROVED = "approved"
@@ -789,4 +790,24 @@ def local_install_entries(session: Session) -> tuple[list[dict], list[dict]]:
             ).all()
         )
     ]
+    listed = {entry["digest"] for entry in digests}
+    digests += [
+        {"digest": digest, "reason": blocklist.DIGEST_TESTPLACE_WITHDRAWN}
+        for digest in testplace_withdrawn_digests(session)
+        if digest not in listed
+    ]
     return keys, digests
+
+
+def testplace_withdrawn_digests(session: Session) -> list[str]:
+    """Digests of test builds taken back (yanked, revoked, or withdrawn with
+    the publisher's qualification), so a tester who is offline or signed out
+    learns of it from the root-signed document. Only the digest is listed,
+    never `ns.name@version` (R-MED-3), and no blocklist row is written: the
+    list follows the versions, so a build served again leaves it, and publish
+    is not refused. A digest some unyanked version still holds is left out."""
+    rows = session.exec(select(ExtensionVersion.package_digest, ExtensionVersion.channel, ExtensionVersion.yanked)).all()
+    served = {digest for digest, _, yanked in rows if not yanked}
+    return sorted(
+        {digest for digest, channel, yanked in rows if yanked and channel == TESTPLACE_CHANNEL} - served
+    )

@@ -40,9 +40,12 @@ export interface LocalPublisherKey {
   revokedAt: string | null
 }
 
-/** Why Navide blocked a digest (decision d5). */
-export type LocalBlockReason = 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn'
-const BLOCK_REASONS: readonly LocalBlockReason[] = ['security', 'admin', 'qualification-revoked', 'developer-withdrawn']
+/** Why Navide blocked a digest (decision d5). `testplace-withdrawn` (0.2.28)
+ * names a Testplace build its developer or Navide took back. */
+export type LocalBlockReason = 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn'
+const BLOCK_REASONS: readonly LocalBlockReason[] = [
+  'security', 'admin', 'qualification-revoked', 'developer-withdrawn', 'testplace-withdrawn',
+]
 
 /** One `blockedDigests` entry as signed: a bare digest (no reason) or
  * `{digest, reason}`. Kept as received, since the root signed these bytes. */

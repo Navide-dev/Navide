@@ -180,6 +180,10 @@ export interface ActivePaneView {
    *  verbatim — the tree itself is built in App's paneLineage, which is the
    *  structure layer this view model must not duplicate. */
   spawnedBy?: string
+  /** `<folder>/<pane>` of the pane that opened this one from ANOTHER project
+   *  (cli_open_agent with workspace_path). The tree cannot draw a parent that
+   *  lives elsewhere, so the row says who opened it. Absent otherwise. */
+  openedBy?: string
   /** The workspace the pane runs in. Read by the nest-drop pre-check: a pane
    *  can only be parented within its own workspace, and the row must not light
    *  up for a drop the write would refuse. */
@@ -1040,6 +1044,10 @@ function panesOf(
  *  unique: an alias is display-only and is deliberately allowed to repeat (see
  *  lib/workspaceAlias), and two checkouts of the same project share a folder
  *  name. The full path stays in the row's title for the rest. */
+function openedByLabel(parent: string): string {
+  return i18n.global.t('pane.opened-by', { parent })
+}
+
 function workspaceTag(pane: ActivePaneView): string {
   if (!freeMode.value) return ''
   const path = pane.workspacePath
@@ -4029,6 +4037,13 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             :class="{ 'pane-ws-line--rail': hasChildren || depth || g.rail }"
             :title="p.workspacePath"
           >{{ workspaceTag(p) }}</div>
+          <div
+            v-if="p.openedBy"
+            class="pane-ws-line"
+            v-truncate
+            :class="{ 'pane-ws-line--rail': hasChildren || depth || g.rail }"
+            :title="p.openedBy"
+          >{{ openedByLabel(p.openedBy) }}</div>
           <template v-if="isRowExpanded(p.id)">
             <div class="agent-role-line">
               <span class="agent-role-main" v-truncate>{{ agentTypeLabel(p.agentKey) }}<span v-if="p.roleLabel"> · {{ p.roleLabel }}</span></span>
