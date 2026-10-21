@@ -684,7 +684,7 @@ onMounted(() => {
           class="auto-name-mark"
           :title="$t('pane.terminal.auto-named-tooltip')"
         >◦</span>
-        <span v-if="isCommander" class="commander-inline" :title="$t('pane.terminal.commander-tooltip')">🎯 Mgr</span>
+        <span v-if="isCommander" class="commander-inline" :title="$t('pane.terminal.commander-tooltip')">{{ $t('label.manager-badge') }}</span>
         <span
           v-if="loopActive"
           class="loop-inline"

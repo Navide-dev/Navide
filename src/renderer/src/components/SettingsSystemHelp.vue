@@ -776,7 +776,7 @@ const resourceRows = computed(() => [
       <p class="syh-note" v-html="$t('settings.help.settingsSystem.s6.note1')"></p>
 
       <div class="syh-card">
-        <div class="syh-card-title">Pipeline Manager</div>
+        <div class="syh-card-title">{{ $t('label.pipeline-manager') }}</div>
         <p class="syh-p" v-html="$t('settings.help.settingsSystem.s6.pipeline.p1')"></p>
         <p class="syh-p" v-html="$t('settings.help.settingsSystem.s6.pipeline.p2')"></p>
       </div>
