@@ -114,9 +114,15 @@ export const SPEC = {
   // on one read as idle and a delivered message's Enter picked an option
   // (/compact or /clear) for the user. Anchored on the option rows, taken from
   // the strings in the 2.1.304 binary; not yet seen on a live pane.
+  //
+  // The last anchor is AskUserQuestion's review step: a box of several
+  // questions ends on "Review your answers … Ready to submit your answers?"
+  // with a Submit answers / Cancel menu and none of the footers, so without it
+  // a pane answered from the chat question by question would read as idle on
+  // the last step. From the 2.1.304 binary as well; not yet seen on a live pane.
   awaitingInput: {
     pattern:
-      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend|Resume this conversation\?.{0,600}?Start a new conversation|Resume full session as-is.{0,40}?Don't ask me again)(?<![─-╿] ?(?:[❯>](?! ?\d+[.)])|!(?= ))(?:[^─-╿]|[─-╿](?![─-╿]{15}))*)(?!.*[─-╿] ?(?:[❯>]|!(?= )))(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
+      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend|Resume this conversation\?.{0,600}?Start a new conversation|Resume full session as-is.{0,40}?Don't ask me again|Ready to submit your answers\?.{0,80}?Submit answers.{0,40}?Cancel)(?<![─-╿] ?(?:[❯>](?! ?\d+[.)])|!(?= ))(?:[^─-╿]|[─-╿](?![─-╿]{15}))*)(?!.*[─-╿] ?(?:[❯>]|!(?= )))(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
     // Additive to the hook, never authoritative over it: an MCP elicitation
     // draws no option box, so a non-match here says nothing about a wait the
     // hook raised. See the field's own doc comment.

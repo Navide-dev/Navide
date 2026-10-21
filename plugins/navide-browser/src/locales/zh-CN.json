@@ -1,0 +1,70 @@
+{
+  "browser": {
+    "app": {
+      "title": "Navide 浏览器"
+    },
+    "overview": {
+      "title": "Navide 浏览器 Spaces",
+      "new": "添加 Space",
+      "pending": "{count} 个等你处理",
+      "open-count": "{count} 个开着，每个都会占用内存",
+      "empty": "还没有 Space。按 ＋ 添加一个；agent 第一次浏览网页时也会自动开一个自己的 Space。agent 会使用你在 Navide 浏览器中的登录身分（可代你在网页上发送请求）。"
+    },
+    "state": {
+      "idle": "闲置",
+      "running": "运行中",
+      "need-action": "需要你处理",
+      "done": "完成"
+    },
+    "owner": {
+      "agent": "Agent",
+      "user": "你"
+    },
+    "space": {
+      "all": "所有 Space",
+      "yours": "你的 Space：除非你同意，agent 不能使用",
+      "default-name": "我的 Space {n}"
+    },
+    "nav": {
+      "back": "上一页",
+      "forward": "下一页",
+      "reload": "刷新",
+      "stop": "停止",
+      "address": "输入网址"
+    },
+    "control": {
+      "agent": "agent 控制中",
+      "user": "你在控制",
+      "yours": "你的 Space"
+    },
+    "action": {
+      "take-over": "接手",
+      "hand-back": "交还给 agent",
+      "delegate": "让 agent 使用这个 Space",
+      "reclaim": "收回这个 Space",
+      "close": "关闭 Space",
+      "delegate-note": "任何 pane、任何工作区的 agent 都能使用"
+    },
+    "agent-script": {
+      "warning": "agent 的脚本可能仍在这个页面运行，输入密码或验证码前请先重新加载。",
+      "reload": "重新加载",
+      "keep": "保留页面"
+    },
+    "settings": {
+      "title": "设置",
+      "shared-sign-in": "所有 Space 共用同一份登录数据，保存在这台电脑上。agent 会使用你在 Navide 浏览器中的登录身分（可代你在网页上发送请求）。你接手后，页面内已经在跑的 agent 脚本要重新加载才会停止。",
+      "clear-data": "清除所有登录数据",
+      "clear-data-confirm": "再按一次，退出登录 Navide 浏览器里的所有网站",
+      "clear-data-done": "已清除登录数据。",
+      "cancel": "取消"
+    },
+    "left": {
+      "open": "打开 Navide 浏览器",
+      "empty": "还没有 Space。"
+    },
+    "errors": {
+      "generic": "发生错误（{code}）。",
+      "invalid-address": "请输入 http 或 https 网址。"
+    }
+  }
+}

@@ -24,6 +24,12 @@ const local = computed(() =>
   props.pending.prepared.source === 'local-unsigned' || props.pending.prepared.source === 'developer-unpacked'
 )
 const folder = computed(() => props.pending.prepared.source === 'developer-unpacked')
+// L3: approving an update (or a replacement) switches versions at once, so
+// what that does to open views is said before the user approves it.
+const switchesNow = computed(() =>
+  !folder.value &&
+  Boolean(props.pending.prepared.disclosureDiff || props.pending.prepared.replaces || props.pending.prepared.replacesLocal)
+)
 // A3: what the signature beside a local file shows. Only `verified` (the
 // active key of a Navide-vetted publisher signed exactly these bytes) changes
 // the warning; any other signature reads as one that cannot be trusted.
@@ -111,6 +117,10 @@ function capabilityHint(cap: string): string {
         <!-- W1 (S2): an agent asked for this install; the user still decides here. -->
         <p v-if="pending.agentRequest" class="ext-agent-request ext-risk-callout" role="note" data-testid="ext-trust-agent-request">
           {{ $t('settings.extensions.localInstall.agentRequest', { requester: pending.agentRequest.requester }) }}
+        </p>
+        <!-- L3: an approved update takes effect at once. -->
+        <p v-if="switchesNow" class="ext-switch-now ext-risk-callout" role="note" data-testid="ext-trust-switch-now">
+          {{ $t('settings.extensions.switchNow', { id: reveal(pending.prepared.id), version: reveal(pending.prepared.version) }) }}
         </p>
         <!-- D7: replacing an installed package of the same id is asked first. -->
         <template v-if="step === 'replace'">

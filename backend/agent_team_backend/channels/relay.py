@@ -5,9 +5,12 @@ letters a-z without ``l`` (Claude Code channels format) and is single-use: it
 expires when answered, when the pane leaves awaiting, or after 30 minutes.
 
 Answers: ``yes <id>`` / ``no <id>`` (also ``y`` / ``n``) for a permission,
-``<n> <id>`` for a question option, or a button whose callback data is
+``<n> <id>`` for a question option, ``<n>,<m> <id>`` for the boxes of a
+multi-select question, ``<n> <id> <text>`` for a free-text row ("Type
+something", alone or among the boxes), or a button whose callback data is
 ``nv1:<id>:<choice>`` (choice ``y`` / ``n`` / ``1``..``9``, well under
-Telegram's 64-byte limit).
+Telegram's 64-byte limit). The text is typed into the pane's own text box and
+nowhere else; the keys that do it are fixed (src/renderer/src/lib/paneAnswerKeys.ts).
 
 A permanent-allow option ("don't ask again", "always allow", "for this session" …)
 is never offered or accepted from chat: that choice is made at the computer.
@@ -30,9 +33,11 @@ REQUEST_TTL_S = 1800.0
 MAX_BUTTON_OPTIONS = 9
 CALLBACK_PREFIX = "nv1:"
 
-_TEXT_ANSWER_RE = re.compile(rf"^\s*(yes|y|no|n|[1-9])\s+([{ID_ALPHABET}]{{{ID_LENGTH}}})\s*$", re.IGNORECASE)
+_CHOICE = r"yes|y|no|n|[1-9](?:\s*[,，、]\s*[1-9])*"
+_TEXT_ANSWER_RE = re.compile(
+    rf"^\s*({_CHOICE})\s+([{ID_ALPHABET}]{{{ID_LENGTH}}})(?:\s+(.+?))?\s*$", re.IGNORECASE | re.DOTALL)
 _CALLBACK_RE = re.compile(rf"^nv1:([{ID_ALPHABET}]{{{ID_LENGTH}}}):(y|n|[1-9])$")
-_BARE_ANSWER_RE = re.compile(r"^\s*(yes|y|no|n|[1-9])\s*$", re.IGNORECASE)
+_BARE_ANSWER_RE = re.compile(rf"^\s*({_CHOICE})(?:\s+(.+?))?\s*$", re.IGNORECASE | re.DOTALL)
 
 # Vendors whose prompts Navide can answer with keys. Keep in sync with MENU_VENDORS,
 # LINE_PROMPT_VENDORS and HOTKEY_VENDORS in src/renderer/src/lib/paneAnswerKeys.ts.
@@ -57,10 +62,12 @@ _PERMANENT_ALLOW_RE = re.compile(
 
 
 # A checkbox row of a multi-select menu ("[ ] Lint", "[✔] Tests", "☐ Docs"), and a
-# row that opens a free-text answer: neither can be answered with one key from chat.
+# row that opens a free-text answer (after its box, in a multi-select menu).
+# Keep in sync with CHECKBOX and FREE_TEXT in src/renderer/src/lib/paneAnswerKeys.ts.
 _MULTI_SELECT_RE = re.compile(r"^\s*(?:\[[^\]]?\]|[☐☑☒□■◻◼✓✔✗])")
 _FREE_TEXT_RE = re.compile(
     r"^\s*(?:type something|type here|something else|other\b|自行輸入|自由輸入|其他)", re.IGNORECASE)
+# What cli_answer_prompt says of a menu it cannot answer (the chat relay can).
 COMPUTER_ONLY = "這題需要在電腦上操作（多選／自由輸入）"
 
 
@@ -86,12 +93,15 @@ class RelayRequest:
     held: list[tuple[str, str]] = field(default_factory=list)
     # The pane's CLI, where the window reported it.
     agent_key: str = ""
+    # A multi-select menu: several boxes are picked in one answer.
+    multi: bool = False
 
 
 @dataclass(frozen=True)
 class RelayAnswer:
     request_id: str
-    choice: str  # "y" | "n" | "1".."9"
+    choice: str  # "y" | "n" | "1".."9" | "1,3" (multi-select)
+    text: str = ""  # for a free-text row
 
 
 def parse_answer(text: str, callback_data: str) -> RelayAnswer | None:
@@ -100,20 +110,48 @@ def parse_answer(text: str, callback_data: str) -> RelayAnswer | None:
         m = _CALLBACK_RE.match(callback_data)
         return RelayAnswer(m.group(1), m.group(2)) if m else None
     m = _TEXT_ANSWER_RE.match(text or "")
-    if not m:
+    choice = _choice(m, 3)
+    if not choice:
         return None
-    word = m.group(1).lower()
-    choice = "y" if word in ("yes", "y") else "n" if word in ("no", "n") else word
-    return RelayAnswer(m.group(2).lower(), choice)
+    return RelayAnswer(m.group(2).lower(), choice, answer_text(m.group(3) or ""))
 
 
-def parse_bare(text: str) -> str:
-    """The choice in a bare ``yes`` / ``n`` / ``2`` with no request id, else ""."""
+def parse_bare(text: str) -> tuple[str, str]:
+    """The choice and free text in a bare ``yes`` / ``n`` / ``2`` / ``1,3`` / ``3 <text>``
+    with no request id, else ("", "")."""
     m = _BARE_ANSWER_RE.match(text or "")
+    choice = _choice(m, 2)
+    return (choice, answer_text(m.group(2) or "")) if choice else ("", "")
+
+
+def _choice(m: re.Match[str] | None, text_group: int) -> str:
+    """The normalized choice; "" when there is none, or when text follows yes / no."""
     if not m:
         return ""
     word = m.group(1).lower()
-    return "y" if word in ("yes", "y") else "n" if word in ("no", "n") else word
+    if word in ("yes", "y", "no", "n"):
+        return "" if m.group(text_group) else word[0]
+    return ",".join(re.split(r"\s*[,，、]\s*", word))
+
+
+# Bidi controls and zero-width characters: invisible in the chat, they could make
+# the typed text read differently from what lands in the pane.
+# Keep in sync with INVISIBLE in src/renderer/src/lib/paneAnswerKeys.ts.
+_INVISIBLE_RE = re.compile("[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+
+
+def answer_text(text: str) -> str:
+    """Free text as it may be typed into a pane: one line (U+2028 / U+2029 too), no
+    control or invisible characters. Never shortened: the pane gets all of it."""
+    visible = _INVISIBLE_RE.sub("", text)
+    return " ".join(re.sub(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]", " ", visible).split())
+
+
+def choice_numbers(choice: str) -> list[int]:
+    """The option numbers in ``choice`` (ascending, once each), or [] for yes / no."""
+    if not choice or not all(part.isdigit() for part in choice.split(",")):
+        return []
+    return sorted({int(part) for part in choice.split(",")})
 
 
 def is_permanent_allow(option: str) -> bool:
@@ -126,7 +164,7 @@ def is_multi_select(option: str) -> bool:
 
 
 def is_free_text(option: str) -> bool:
-    return bool(_FREE_TEXT_RE.match(option or ""))
+    return bool(_FREE_TEXT_RE.match(_MULTI_SELECT_RE.sub("", option or "", count=1)))
 
 
 def refuses_permanent(request: RelayRequest, choice: str) -> bool:
@@ -136,9 +174,8 @@ def refuses_permanent(request: RelayRequest, choice: str) -> bool:
             request.agent_key in PERMANENT_ALLOW_AGENTS
             or (bool(request.options) and is_permanent_allow(request.options[0]))
         )
-    if choice.isdigit() and 1 <= int(choice) <= len(request.options):
-        return is_permanent_allow(request.options[int(choice) - 1])
-    return False
+    return any(is_permanent_allow(request.options[n - 1])
+               for n in choice_numbers(choice) if 1 <= n <= len(request.options))
 
 
 _DENY_OPTION_RE = re.compile(r"^\s*(no|deny|reject|decline|cancel|abort|拒絕|取消|否)\b", re.IGNORECASE)
@@ -180,31 +217,57 @@ def same_options(a: list[str], b: list[str]) -> bool:
 
 def _offered(request: RelayRequest) -> list[tuple[int, str]]:
     return [(i, opt) for i, opt in enumerate(request.options[:MAX_BUTTON_OPTIONS], 1)
-            if not is_permanent_allow(opt) and not is_free_text(opt)]
+            if not is_permanent_allow(opt) and (not request.multi or is_multi_select(opt))]
+
+
+def _free_text_option(request: RelayRequest) -> int:
+    """The number of the offered free-text row, or 0."""
+    return next((i for i, opt in _offered(request) if is_free_text(opt)), 0)
 
 
 def _allow_offered(request: RelayRequest) -> bool:
     return not refuses_permanent(request, "y")
 
 
-def answer_payload(request: RelayRequest, choice: str) -> dict[str, Any] | None:
-    """The ``ui.pane.sendKeys`` answer for ``choice``, or None if it does not fit the request."""
-    if request.kind == "permission" and choice in ("y", "n"):
-        return {"kind": "permission", "choice": "allow" if choice == "y" else "deny"}
-    if request.kind == "question" and choice.isdigit():
-        n = int(choice)
-        if request.options and n > len(request.options):
+def answer_payload(request: RelayRequest, choice: str, text: str = "") -> dict[str, Any] | None:
+    """The ``ui.pane.sendKeys`` answer for ``choice`` (and the free ``text`` its
+    free-text row takes), or None if it does not fit the request."""
+    if request.kind == "permission":
+        if choice in ("y", "n") and not text:
+            return {"kind": "permission", "choice": "allow" if choice == "y" else "deny"}
+        return None
+    numbers = choice_numbers(choice)
+    if request.kind != "question" or not numbers:
+        return None
+    if request.options and numbers[-1] > len(request.options):
+        return None
+    free = _free_text_option(request)
+    if free in numbers and not text or text and free not in numbers:
+        return None  # a free-text row takes text, and only it does
+    if request.multi:
+        offered = {i for i, _ in _offered(request)}
+        if not set(numbers) <= offered:
             return None
-        if request.options and is_free_text(request.options[n - 1]):
-            return None  # it opens a text box the relay never types into
-        return {"kind": "question", "option": n}
-    return None
+        return {"kind": "multi", "options": numbers, **({"text": text} if text else {})}
+    if len(numbers) != 1:
+        return None
+    return {"kind": "question", "option": numbers[0], **({"text": text} if text else {})}
 
 
 def describe_answer(answer: dict[str, Any]) -> str:
     if answer["kind"] == "permission":
         return "允許" if answer["choice"] == "allow" else "拒絕"
-    return f"選項 {answer['option']}"
+    if answer["kind"] == "multi":
+        picked = "、".join(str(n) for n in answer["options"])
+        return f"選項 {picked}" + ("（含自由輸入）" if answer.get("text") else "")
+    return f"選項 {answer['option']}" + ("（自由輸入）" if answer.get("text") else "")
+
+
+def invalid_reply(request: RelayRequest) -> str:
+    """What a question answer that did not fit is told."""
+    if request.multi or _free_text_option(request):
+        return f"⚠️ 請回覆有效的選項編號：{answer_hint(request)}"
+    return "⚠️ 請回覆有效的選項編號"
 
 
 def prompt_text(request: RelayRequest, prompt: str) -> str:
@@ -214,9 +277,7 @@ def prompt_text(request: RelayRequest, prompt: str) -> str:
     if request.kind == "question":
         for i, opt in _offered(request):
             lines.append(f"{i}. {opt}")
-        if any(is_free_text(opt) for opt in request.options):
-            lines.append("自由輸入的選項需要在電腦上操作")
-        lines.append(f"回覆 <選項編號> {request.id}")
+        lines.append(answer_hint(request))
     elif _allow_offered(request):
         lines.append(f"回覆 yes {request.id} / no {request.id}")
     else:
@@ -227,7 +288,18 @@ def prompt_text(request: RelayRequest, prompt: str) -> str:
 def answer_hint(request: RelayRequest) -> str:
     """How to answer ``request`` from chat, in one line."""
     if request.kind == "question":
-        return f"回覆 <選項編號> {request.id}"
+        free = _free_text_option(request)
+        if request.multi:
+            boxes = [i for i, _ in _offered(request) if i != free]
+            example = ",".join(str(i) for i in boxes[:2]) or "1"
+            hint = f"可複選，回覆 <編號,編號> {request.id}（例如 {example} {request.id}）"
+            if free:
+                hint += f"；自由輸入：回覆 {free} {request.id} <你的文字>（可與其他編號並列，如 1,{free}）"
+            return hint
+        hint = f"回覆 <選項編號> {request.id}"
+        if free:
+            hint += f"；自由輸入：回覆 {free} {request.id} <你的文字>"
+        return hint
     if _allow_offered(request):
         return f"回覆 yes {request.id} / no {request.id}"
     return f"回覆 no {request.id}（允許請在電腦前操作）"
@@ -265,7 +337,11 @@ def buttons_for(request: RelayRequest) -> list[tuple[str, str]]:
     if request.kind == "permission":
         deny = ("拒絕", f"{CALLBACK_PREFIX}{request.id}:n")
         return [("允許", f"{CALLBACK_PREFIX}{request.id}:y"), deny] if _allow_offered(request) else [deny]
-    return [(f"{i}. {opt}"[:40], f"{CALLBACK_PREFIX}{request.id}:{i}") for i, opt in _offered(request)]
+    if request.multi:
+        return []  # a tap picks one box; several are picked with a typed list
+    # A free-text row needs its text, which a button cannot carry.
+    return [(f"{i}. {opt}"[:40], f"{CALLBACK_PREFIX}{request.id}:{i}") for i, opt in _offered(request)
+            if not is_free_text(opt)]
 
 
 class RelayTable:
@@ -278,14 +354,14 @@ class RelayTable:
 
     def create(
         self, pane_id: str, kind: str, options: list[str], loc: Location, prompt: str = "",
-        agent_key: str = "",
+        agent_key: str = "", multi: bool = False,
     ) -> RelayRequest:
         self.prune()
         rid = new_request_id()
         while rid in self._by_id:
             rid = new_request_id()
         req = RelayRequest(rid, pane_id, kind, list(options), loc, self._clock(), prompt,
-                           agent_key=agent_key)
+                           agent_key=agent_key, multi=multi)
         self._by_id[rid] = req
         return req
 
