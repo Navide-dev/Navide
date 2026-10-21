@@ -261,7 +261,7 @@ describe('CliAccountsPane', () => {
     const claude = section(w, 0)
     expect(claude.text()).toContain('Claude Code')
     expect(claude.findAll('.cli-card')).toHaveLength(3) // Default + 2 profiles
-    expect(buttonByText(claude, '+ New account')).toBeDefined()
+    expect(buttonByText(claude, '+ New Account')).toBeDefined()
     expect(claude.find('.cli-unsupported').exists()).toBe(false)
   })
 
@@ -275,7 +275,7 @@ describe('CliAccountsPane', () => {
     expect(group.find('[data-agent="antigravity"]').exists()).toBe(true)
     expect(group.find('[data-agent="claude"]').exists()).toBe(false)
     expect(group.findAll('.cli-card')).toHaveLength(0)
-    expect(buttonByText(group, '+ New account')).toBeUndefined()
+    expect(buttonByText(group, '+ New Account')).toBeUndefined()
   })
 
   // ── rowName ────────────────────────────────────────────────────────────────
@@ -477,7 +477,7 @@ describe('CliAccountsPane', () => {
     const api = makeApi({ profiles: [profile('p1', 'claude', 'Account 2')] })
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), '+ New account')!.trigger('click')
+    await buttonByText(section(w, 0), '+ New Account')!.trigger('click')
     await flushPromises()
 
     // 1 existing claude profile -> "Account 3". No scope: claude's store is
@@ -493,7 +493,7 @@ describe('CliAccountsPane', () => {
     const kimi = section(w, 4)
 
     notify.confirm.mockResolvedValueOnce(false)
-    await buttonByText(kimi, '+ New account')!.trigger('click')
+    await buttonByText(kimi, '+ New Account')!.trigger('click')
     await flushPromises()
     expect(notify.confirm).toHaveBeenCalledTimes(1)
     const [body, opts] = notify.confirm.mock.calls[0] as [string, { title?: string }]
@@ -507,7 +507,7 @@ describe('CliAccountsPane', () => {
     expect(w.emitted('login')).toBeUndefined()
 
     notify.confirm.mockResolvedValueOnce(true)
-    await buttonByText(kimi, '+ New account')!.trigger('click')
+    await buttonByText(kimi, '+ New Account')!.trigger('click')
     await flushPromises()
     expect(api.create).toHaveBeenCalledWith('kimi', 'Account 2', null)
     expect(w.emitted('login')).toEqual([['kimi', 'created-id']])
@@ -516,7 +516,7 @@ describe('CliAccountsPane', () => {
   it('an isolated-login vendor asks nothing (unchanged flow)', async () => {
     const api = makeApi({ globalLogin: ['kimi'] })
     const w = mountPane(api)
-    await buttonByText(section(w, 0), '+ New account')!.trigger('click')
+    await buttonByText(section(w, 0), '+ New Account')!.trigger('click')
     await flushPromises()
     expect(notify.confirm).not.toHaveBeenCalled()
     expect(api.create).toHaveBeenCalledWith('claude', 'Account 2', null)
@@ -532,12 +532,12 @@ describe('CliAccountsPane', () => {
     expect(select.findAll('option').map((o) => o.attributes('value'))).toEqual(['anthropic', 'openai'])
 
     // Default pick is the first declared scope.
-    await buttonByText(sec, '+ New account')!.trigger('click')
+    await buttonByText(sec, '+ New Account')!.trigger('click')
     await flushPromises()
     expect(api.create).toHaveBeenLastCalledWith('opencode', 'Account 2', 'anthropic')
 
     await select.setValue('openai')
-    await buttonByText(sec, '+ New account')!.trigger('click')
+    await buttonByText(sec, '+ New Account')!.trigger('click')
     await flushPromises()
     expect(api.create).toHaveBeenLastCalledWith('opencode', 'Account 3', 'openai')
   })
@@ -549,7 +549,7 @@ describe('CliAccountsPane', () => {
     const api = makeApi({ profiles: [profile('p3', 'kimi', 'Account 3')] })
     const w = mountPane(api)
 
-    await buttonByText(section(w, 4), '+ New account')!.trigger('click')
+    await buttonByText(section(w, 4), '+ New Account')!.trigger('click')
     await flushPromises()
 
     expect(api.create).toHaveBeenCalledWith('kimi', 'Account 4', null)
@@ -559,7 +559,7 @@ describe('CliAccountsPane', () => {
     const api = makeApi({ profiles: [profile('px', 'kimi', 'Work login')] })
     const w = mountPane(api)
 
-    await buttonByText(section(w, 4), '+ New account')!.trigger('click')
+    await buttonByText(section(w, 4), '+ New Account')!.trigger('click')
     await flushPromises()
 
     expect(api.create).toHaveBeenCalledWith('kimi', 'Account 2', null)
@@ -571,7 +571,7 @@ describe('CliAccountsPane', () => {
     const api = makeApi()
     const w = mountPane(api, { workspaceOpen: false })
 
-    await buttonByText(section(w, 0), '+ New account')!.trigger('click')
+    await buttonByText(section(w, 0), '+ New Account')!.trigger('click')
     await flushPromises()
 
     // No orphan "Not signed in" row: create was never called, nothing emitted.
@@ -586,7 +586,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api, { workspaceOpen: false })
 
     const row = section(w, 0).findAll('.cli-card')[1]
-    await row.findAll('button').find((b) => b.text() === 'Sign in')!.trigger('click')
+    await row.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
     await flushPromises()
 
     expect(api.setDefault).not.toHaveBeenCalled()
@@ -602,7 +602,7 @@ describe('CliAccountsPane', () => {
 
     // Row 0 is the built-in Default; row 1 is p1 (not signed in, not active).
     const row = section(w, 0).findAll('.cli-card')[1]
-    await row.findAll('button').find((b) => b.text() === 'Sign in')!.trigger('click')
+    await row.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
     await flushPromises()
 
     expect(api.setDefault).not.toHaveBeenCalled()
@@ -617,7 +617,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
 
     const row = section(w, 0).findAll('.cli-card')[1]
-    await row.findAll('button').find((b) => b.text() === 'Sign in')!.trigger('click')
+    await row.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
     await flushPromises()
 
     expect(api.setDefault).not.toHaveBeenCalled()
@@ -632,7 +632,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
 
     const defaultRow = section(w, 0).findAll('.cli-card')[0]
-    await defaultRow.findAll('button').find((b) => b.text() === 'Sign in')!.trigger('click')
+    await defaultRow.findAll('button').find((b) => b.text() === 'Sign In')!.trigger('click')
     await flushPromises()
 
     expect(api.setDefault).toHaveBeenCalledWith('claude', null)
@@ -644,8 +644,8 @@ describe('CliAccountsPane', () => {
     const setDefault = api.setDefault as ReturnType<typeof vi.fn>
     const w = mountPane(api)
 
-    // Default is null, so the profile row shows "Set as default".
-    await buttonByText(section(w, 0), 'Set as default')!.trigger('click')
+    // Default is null, so the profile row shows "Set as Default".
+    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -661,13 +661,13 @@ describe('CliAccountsPane', () => {
     )
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), 'Set as default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
     await flushPromises()
 
     const busy = buttonByText(section(w, 0), 'Switching…')
     expect(busy).toBeDefined()
     expect(busy!.attributes('disabled')).toBeDefined()
-    expect(buttonByText(section(w, 0), 'Set as default')).toBeUndefined()
+    expect(buttonByText(section(w, 0), 'Set as Default')).toBeUndefined()
 
     release({ ok: true })
     await flushPromises()
@@ -682,7 +682,7 @@ describe('CliAccountsPane', () => {
     const handler = vi.fn(async () => ({ ok: true as const }))
     const w = mountPane(api, { switchHandler: handler })
 
-    await buttonByText(section(w, 0), 'Set as default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
     await flushPromises()
 
     expect(handler).toHaveBeenCalledWith('claude', 'p1')
@@ -704,7 +704,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api, { switchHandler: handler })
 
-    await buttonByText(section(w, 0), 'Set as default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
     await flushPromises()
 
     expect(notify.confirm).toHaveBeenCalledTimes(1)
@@ -726,7 +726,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api, { switchHandler: handler })
 
-    await buttonByText(section(w, 0), 'Set as default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -740,7 +740,7 @@ describe('CliAccountsPane', () => {
     setDefault.mockResolvedValue({ ok: false, code: 'PANES_RUNNING', count: 1, message: 'panes running' })
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), 'Set as default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -764,7 +764,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api)
 
-    await buttonByText(section(w, 0), 'Set as default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
     await flushPromises()
 
     expect(setDefault).toHaveBeenCalledTimes(1)
@@ -1108,7 +1108,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
     expect(usage.refreshUsage).toHaveBeenCalledTimes(1)
 
-    await buttonByText(section(w, 0), 'Set as default')!.trigger('click')
+    await buttonByText(section(w, 0), 'Set as Default')!.trigger('click')
     await flushPromises()
     expect(usage.refreshUsage).toHaveBeenCalledTimes(2)
   })
@@ -1134,7 +1134,7 @@ describe('CliAccountsPane', () => {
     // The poller broadcast that ends the cycle clears the busy state.
     usageVersion.value++
     await flushPromises()
-    expect(button.text()).toBe('Refresh all')
+    expect(button.text()).toBe('Refresh All')
     expect(button.attributes('disabled')).toBeUndefined()
   })
 
@@ -1159,7 +1159,7 @@ describe('CliAccountsPane', () => {
     usage.usageFor.mockReturnValue(undefined)
     usageVersion.value++
     await flushPromises()
-    expect(button.text()).toBe('Refresh all')
+    expect(button.text()).toBe('Refresh All')
   })
 
   it('stays idle when there is no backend to ask', async () => {
@@ -1169,7 +1169,7 @@ describe('CliAccountsPane', () => {
 
     const button = w.get('.cli-refresh')
     await button.trigger('click')
-    expect(button.text()).toBe('Refresh all')
+    expect(button.text()).toBe('Refresh All')
     expect(button.attributes('disabled')).toBeUndefined()
   })
 
@@ -1196,7 +1196,7 @@ describe('CliAccountsPane', () => {
 
     usageVersion.value++
     await flushPromises()
-    expect(button.text()).toBe('Refresh quota')
+    expect(button.text()).toBe('Refresh Quota')
   })
 
   it('holds each card busy only while its own CLI is still reading', async () => {
@@ -1223,7 +1223,7 @@ describe('CliAccountsPane', () => {
     usageVersion.value++
     await flushPromises()
     expect(claudeBtn.text()).toBe('Refreshing…')
-    expect(codexBtn.text()).toBe('Refresh quota')
+    expect(codexBtn.text()).toBe('Refresh Quota')
   })
 
   it('hides a card refresh where the CLI reports no quota at all', () => {
@@ -1249,7 +1249,7 @@ describe('CliAccountsPane', () => {
       expect(button.text()).toBe('Refreshing…')
       vi.advanceTimersByTime(20_000)
       await flushPromises()
-      expect(button.text()).toBe('Refresh all')
+      expect(button.text()).toBe('Refresh All')
       expect(button.attributes('disabled')).toBeUndefined()
     } finally {
       vi.useRealTimers()
@@ -1429,8 +1429,8 @@ describe('CliAccountsPane', () => {
     // Section 0 is claude, section 1 is codex (CLI_AGENT_SPECS order).
     // An empty slot has no block, just the button in its action row.
     expect(section(w, 0).find('.cli-card-portable').exists()).toBe(false)
-    expect(buttonByText(section(w, 0).find('.cli-card-actions'), 'Paste credential')).toBeDefined()
-    expect(buttonByText(section(w, 1), 'Paste credential')).toBeUndefined()
+    expect(buttonByText(section(w, 0).find('.cli-card-actions'), 'Paste Credential')).toBeDefined()
+    expect(buttonByText(section(w, 1), 'Paste Credential')).toBeUndefined()
   })
 
   it('offers the paste button and saves while credential sync is off', async () => {
@@ -1438,7 +1438,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
     expect(card.find('.cli-card-portable').exists()).toBe(false)
-    await buttonByText(card.find('.cli-card-actions'), 'Paste credential')!.trigger('click')
+    await buttonByText(card.find('.cli-card-actions'), 'Paste Credential')!.trigger('click')
     await flushPromises()
     await card.get('input.cli-portable-input').setValue('sk-ant-oat01-SYNTHETIC')
     await card.get('form').trigger('submit')
@@ -1458,21 +1458,21 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
     expect(card.find('.cli-card-portable').exists()).toBe(true)
-    expect(buttonByText(card, 'Remove from this device')).toBeDefined()
+    expect(buttonByText(card, 'Remove from This Device')).toBeDefined()
   })
 
   it('opens the form from the compact button and collapses again on cancel', async () => {
     const api = makeApi({ portableSupported: ['claude'], cloudStatus: 'ok' })
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Paste credential')!.trigger('click')
+    await buttonByText(card, 'Paste Credential')!.trigger('click')
     await flushPromises()
     expect(card.find('input.cli-portable-input').exists()).toBe(true)
-    expect(buttonByText(card.find('.cli-card-actions'), 'Paste credential')).toBeUndefined()
+    expect(buttonByText(card.find('.cli-card-actions'), 'Paste Credential')).toBeUndefined()
     await buttonByText(card.find('.cli-card-portable'), 'Cancel')!.trigger('click')
     await flushPromises()
     expect(card.find('.cli-card-portable').exists()).toBe(false)
-    expect(buttonByText(card.find('.cli-card-actions'), 'Paste credential')).toBeDefined()
+    expect(buttonByText(card.find('.cli-card-actions'), 'Paste Credential')).toBeDefined()
   })
 
   it('sends the pasted value once and clears the input after saving', async () => {
@@ -1484,7 +1484,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
 
-    await buttonByText(card, 'Paste credential')!.trigger('click')
+    await buttonByText(card, 'Paste Credential')!.trigger('click')
     await flushPromises()
     const input = card.get('input.cli-portable-input')
     expect(input.attributes('type')).toBe('password')
@@ -1503,14 +1503,14 @@ describe('CliAccountsPane', () => {
     expect(card.get('.cli-portable-flag').text()).toBe('Set')
     expect(card.text()).toContain('CLAUDE_CODE_OAUTH_TOKEN')
     expect(buttonByText(card, 'Replace')).toBeDefined()
-    expect(buttonByText(card, 'Remove from this device')).toBeDefined()
+    expect(buttonByText(card, 'Remove from This Device')).toBeDefined()
   })
 
   it('does not save an empty paste', async () => {
     const api = makeApi({ portableSupported: ['claude'], cloudStatus: 'ok' })
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Paste credential')!.trigger('click')
+    await buttonByText(card, 'Paste Credential')!.trigger('click')
     await flushPromises()
     expect(card.get('button[type="submit"]').attributes('disabled')).toBeDefined()
     await card.get('form').trigger('submit')
@@ -1535,7 +1535,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Remove from this device')!.trigger('click')
+    await buttonByText(card, 'Remove from This Device')!.trigger('click')
     await flushPromises()
     expect(api.portableClear).toHaveBeenCalledWith('claude', null)
   })
@@ -1544,7 +1544,7 @@ describe('CliAccountsPane', () => {
     const api = makeApi({ portableSupported: ['claude'], cloudStatus: 'ok' })
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Paste credential')!.trigger('click')
+    await buttonByText(card, 'Paste Credential')!.trigger('click')
     await flushPromises()
     expect(api.portableDescribe).toHaveBeenCalledWith('claude', null)
     expect(card.get('input.cli-portable-input').attributes('placeholder')).toContain('claude setup-token')
@@ -1563,7 +1563,7 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Paste credential')!.trigger('click')
+    await buttonByText(card, 'Paste Credential')!.trigger('click')
     await flushPromises()
     await card.get('input.cli-portable-input').setValue('sk-ant-oat01-SYNTHETIC')
     await card.get('form').trigger('submit')
@@ -1583,11 +1583,11 @@ describe('CliAccountsPane', () => {
     })
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
-    await buttonByText(card, 'Use for new panes')!.trigger('click')
+    await buttonByText(card, 'Use for New Panes')!.trigger('click')
     await flushPromises()
     expect(api.portableEnable).toHaveBeenCalledWith('claude', '__default__', true)
     expect(card.text()).toContain('In use')
-    await buttonByText(card, 'Stop using')!.trigger('click')
+    await buttonByText(card, 'Stop Using')!.trigger('click')
     await flushPromises()
     expect(api.portableEnable).toHaveBeenLastCalledWith('claude', '__default__', false)
   })
@@ -1617,9 +1617,9 @@ describe('CliAccountsPane', () => {
     expect(imported.get('.cli-portable-flag').text()).toBe('From cloud')
     // It can be selected and removed here, but not replaced (that is the pasting device's job).
     expect(buttonByText(imported, 'Replace')).toBeUndefined()
-    expect(buttonByText(imported, 'Paste credential')).toBeUndefined()
-    expect(buttonByText(imported, 'Remove from this device')).toBeDefined()
-    await buttonByText(imported, 'Use for new panes')!.trigger('click')
+    expect(buttonByText(imported, 'Paste Credential')).toBeUndefined()
+    expect(buttonByText(imported, 'Remove from This Device')).toBeDefined()
+    await buttonByText(imported, 'Use for New Panes')!.trigger('click')
     await flushPromises()
     expect(api.portableEnable).toHaveBeenCalledWith('claude', 'p-on-other-device', true)
     // Its slot id — another install's profile id — is not shown.
@@ -1636,7 +1636,7 @@ describe('CliAccountsPane', () => {
       deviceId: 'Studio',
       readable: true,
     }
-    // After "Remove from this device" the backend no longer lists the import;
+    // After "Remove from This Device" the backend no longer lists the import;
     // only the cloud inventory still knows the slot.
     const api = makeApi({
       portableSupported: ['claude'],
@@ -1652,9 +1652,9 @@ describe('CliAccountsPane', () => {
     expect(card.get('.cli-portable-flag').text()).toBe('Not set')
     expect(card.get('.cli-cloud-badge').text()).toBe('In cloud, not used here')
     // Nothing local to paste into or remove; the one action is to take it back.
-    expect(buttonByText(card, 'Paste credential')).toBeUndefined()
-    expect(buttonByText(card, 'Remove from this device')).toBeUndefined()
-    await buttonByText(card, 'Use on this device')!.trigger('click')
+    expect(buttonByText(card, 'Paste Credential')).toBeUndefined()
+    expect(buttonByText(card, 'Remove from This Device')).toBeUndefined()
+    await buttonByText(card, 'Use on This Device')!.trigger('click')
     await flushPromises()
     expect(api.useFromCloud).toHaveBeenCalledWith('c-99999999999999999999999999999999')
   })
@@ -1669,7 +1669,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
     const card = section(w, 0).findAll('.cli-card')[0]
     expect(card.get('.cli-portable-warn').text()).toContain('cannot be opened on this device')
-    expect(buttonByText(card, 'Use for new panes')!.attributes('disabled')).toBeDefined()
+    expect(buttonByText(card, 'Use for New Panes')!.attributes('disabled')).toBeDefined()
   })
 
   // ── cloud column ───────────────────────────────────────────────────────────
@@ -1718,7 +1718,7 @@ describe('CliAccountsPane', () => {
     expect(cloud.text()).toContain('MacBook')
     // Opaque ids are for the engine, not the person.
     expect(cloud.text()).not.toContain('c-0123456789abcdef')
-    expect(buttonByText(cloud, 'Use on this device')).toBeUndefined()
+    expect(buttonByText(cloud, 'Use on This Device')).toBeUndefined()
   })
 
   it('lets a cloud-only credential be taken into use here by its item id', async () => {
@@ -1744,7 +1744,7 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
     const cloud = section(w, 0).findAll('.cli-card')[0].find('.cli-portable-cloud')
     expect(cloud.get('.cli-cloud-badge').text()).toBe('In cloud, not used here')
-    await buttonByText(cloud, 'Use on this device')!.trigger('click')
+    await buttonByText(cloud, 'Use on This Device')!.trigger('click')
     await flushPromises()
     expect(api.useFromCloud).toHaveBeenCalledWith('c-feedfacefeedfacefeedfacefeedface')
   })
@@ -1772,6 +1772,6 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
     const cloud = section(w, 0).findAll('.cli-card')[0].find('.cli-portable-cloud')
     expect(cloud.text()).toContain('Sealed under a key this device does not hold')
-    expect(buttonByText(cloud, 'Use on this device')).toBeUndefined()
+    expect(buttonByText(cloud, 'Use on This Device')).toBeUndefined()
   })
 })

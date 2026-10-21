@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createMockBackend, withScope } from './mockBackend'
 
-// "Fit to pane width" is glue between useTerminal and the resize controller's
+// "Fit to Pane Width" is glue between useTerminal and the resize controller's
 // cols cap, so the controller (and xterm, which won't boot in happy-dom) are
 // mocked and only the delegation is asserted. The cap arithmetic itself lives
 // in createResizeController.

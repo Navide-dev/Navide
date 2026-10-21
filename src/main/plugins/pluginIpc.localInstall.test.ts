@@ -515,7 +515,7 @@ describe('a first install the user did not restart, on the next launch', () => {
       active: { packageVersion: '1.0.0' },
       candidate: { packageVersion: '1.1.0' },
     })
-    // Disclosed, for the main window to offer "Apply now".
+    // Disclosed, for the main window to offer "Apply Now".
     expect(controller.stagedUpdates()).toEqual([{ pluginId: 'acme.todo', activeVersion: '1.0.0', stagedVersion: '1.1.0' }])
   })
 

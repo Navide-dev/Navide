@@ -598,7 +598,7 @@ describe('staged plugin packages found at launch', () => {
 
   const update = { pluginId: 'acme.todo', activeVersion: '1.0.0', stagedVersion: '1.1.0' }
 
-  it('keeps one row per staged package, naming both versions, with "Apply now"', async () => {
+  it('keeps one row per staged package, naming both versions, with "Apply Now"', async () => {
     const { useAnnouncements, i18n } = await load()
     i18n.global.locale.value = 'en-US'
     const a = useAnnouncements()

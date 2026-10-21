@@ -14,13 +14,13 @@ function view(overrides: Partial<WebViewInfo>): WebViewInfo {
 describe('parseViews', () => {
   it('keeps well-formed views and drops the rest', () => {
     const parsed = parseViews([
-      view({ viewId: 'a', note: 'Sign in' }),
+      view({ viewId: 'a', note: 'Sign In' }),
       { viewId: 'b', owner: 'admin', control: 'agent', state: 'idle' },
       { viewId: '', owner: 'agent', control: 'agent', state: 'idle' },
       'nope',
     ])
     expect(parsed.map((item) => item.viewId)).toEqual(['a'])
-    expect(parsed[0].note).toBe('Sign in')
+    expect(parsed[0].note).toBe('Sign In')
   })
 
   it('answers an empty list for anything that is not an array', () => {

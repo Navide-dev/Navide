@@ -564,7 +564,7 @@ describe('OnboardingWizard', () => {
       return s
     }
 
-    it('leaves every card collapsed and drops "Install missing"', async () => {
+    it('leaves every card collapsed and drops "Install Missing"', async () => {
       const mock = createMockBackend('connected')
       mock.setResponse('onboarding.status', allFoundationOk())
       wrapper = await open(mock)

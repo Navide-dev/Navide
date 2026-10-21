@@ -157,7 +157,7 @@ describe('web view capability requests', () => {
 describe('web.changed event payload', () => {
   it('accepts a list of WebViewInfo', () => {
     expect(validateWebChangedEvent({ views: [] })).toBe(true)
-    expect(validateWebChangedEvent({ views: [view, { ...view, note: 'Sign in', state: 'need-action', control: 'user' }] })).toBe(true)
+    expect(validateWebChangedEvent({ views: [view, { ...view, note: 'Sign In', state: 'need-action', control: 'user' }] })).toBe(true)
   })
 
   it.each([

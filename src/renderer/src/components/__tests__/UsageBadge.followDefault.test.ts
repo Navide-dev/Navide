@@ -187,7 +187,7 @@ describe('UsageBadge – scheme B: the list chooses the default account', () => 
     expect(w.find('.usage-acct-follow-hint').text()).toBe(i18n.global.t('usage.follow-hint-none'))
   })
 
-  it('has no "Continue" and no separate "Sign in" button on any row', async () => {
+  it('has no "Continue" and no separate "Sign In" button on any row', async () => {
     const { w } = mountB()
     await open(w)
     expect(w.find('.usage-acct-continue').exists()).toBe(false)

@@ -27,7 +27,7 @@ describe('ControlPane – running pipeline card', () => {
       global: { plugins: [i18n] },
     })
     const link = wrapper.find('.prn-open')
-    expect(link.text()).toBe('Open in the pipeline canvas')
+    expect(link.text()).toBe('Open in the Pipeline Canvas')
     await link.trigger('click')
     expect(wrapper.emitted('open-pipeline-manager')?.[0]).toEqual(['p1'])
   })

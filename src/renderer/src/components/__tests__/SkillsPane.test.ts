@@ -115,7 +115,7 @@ describe('SkillsPane', () => {
     expect((wrapper.get('.skill-body').element as HTMLTextAreaElement).value).toBe('Check the diff.')
     expect(wrapper.get('.skill-attachments').text()).toContain('references/checklist.md')
 
-    const open = wrapper.findAll('.skills-drawer button').find((b) => b.text() === 'Open folder')
+    const open = wrapper.findAll('.skills-drawer button').find((b) => b.text() === 'Open Folder')
     await open!.trigger('click')
     expect(openPath).toHaveBeenCalledWith('/tmp/skills/review-code')
   })
@@ -913,7 +913,7 @@ describe('SkillsPane write consent', () => {
     })
     wrapper = mount(SkillsPane, { props: { backend: mocked.backend }, global: { plugins: [i18n] } })
     await flushPromises()
-    const newButton = wrapper.findAll('.skills-toolbar-actions button').find((b) => b.text() === 'New skill')!
+    const newButton = wrapper.findAll('.skills-toolbar-actions button').find((b) => b.text() === 'New Skill')!
     await newButton.trigger('click')
     await wrapper.find('.skills-create input').setValue('fresh')
     return mocked
@@ -975,7 +975,7 @@ describe('SkillsPane write consent', () => {
     })
     wrapper = mount(SkillsPane, { props: { backend: mocked.backend }, global: { plugins: [i18n] } })
     await flushPromises()
-    const newButton = wrapper.findAll('.skills-toolbar-actions button').find((b) => b.text() === 'New skill')!
+    const newButton = wrapper.findAll('.skills-toolbar-actions button').find((b) => b.text() === 'New Skill')!
     await newButton.trigger('click')
     await wrapper.find('.skills-create input').setValue('fresh')
 
@@ -1018,7 +1018,7 @@ describe('SkillsPane migrate and restore', () => {
   /** Migrate lives in the drawer: open the native card, then click it. */
   async function clickMigrate(): Promise<void> {
     await openCard(wrapper!, 'bug-buster')
-    const btn = wrapper!.findAll('.skills-drawer button').find((b) => b.text() === 'Move into shared library')
+    const btn = wrapper!.findAll('.skills-drawer button').find((b) => b.text() === 'Move into Shared Library')
     await btn!.trigger('click')
     await flushPromises()
   }
@@ -1053,7 +1053,7 @@ describe('SkillsPane migrate and restore', () => {
     await openList({ native: [{ ...nativeSkill, valid: false, error: 'SKILL.md missing' }] })
     await openCard(wrapper!, 'bug-buster')
 
-    const btn = wrapper!.findAll('.skills-drawer button').find((b) => b.text() === 'Move into shared library')
+    const btn = wrapper!.findAll('.skills-drawer button').find((b) => b.text() === 'Move into Shared Library')
     expect((btn!.element as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -1206,7 +1206,7 @@ describe('SkillsPane merged browse/route layout', () => {
   })
 })
 
-// "Move into shared library" moves a CLI's own skill and leaves a link, so the
+// "Move into Shared Library" moves a CLI's own skill and leaves a link, so the
 // page intro must not promise that nothing here ever moves those skills.
 describe('SkillsPane intro', () => {
   it.each(['zh-TW', 'en-US', 'ja-JP'] as const)('names the one action that moves a CLI skill (%s)', (locale) => {

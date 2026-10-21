@@ -3,7 +3,7 @@
 // `var(--bg-default)` is not in the design system — semantic.css defines
 // --bg-base / --bg-inset / --bg-subtle / --bg-muted / --bg-elevated — so a
 // declaration reading it falls back to `transparent`, silently, and only on
-// the one surface that used it. That is how the "Paste credential" field in
+// the one surface that used it. That is how the "Paste Credential" field in
 // PortableCredentialBlock.vue and the pane-title rename box in
 // TerminalPane.vue both ended up with no background.
 //

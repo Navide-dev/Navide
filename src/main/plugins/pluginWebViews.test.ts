@@ -372,7 +372,7 @@ describe('user in control', () => {
       (_viewId, contents) => contents.emit('before-input-event', {}, { type: 'keyDown' }),
       (viewId) => registry.takeControl('navide.browser', viewId),
       (viewId) => registry.navigate('navide.browser', { viewId, action: 'reload' }),
-      (viewId) => registry.setState('navide.browser', viewId, 'need-action', 'Sign in'),
+      (viewId) => registry.setState('navide.browser', viewId, 'need-action', 'Sign In'),
       (_viewId, contents) => sessions.get('persist:navide-web:navide.browser')!.permissionHandler?.(contents, 'geolocation', () => {}),
       (viewId) => registry.setOwner('navide.browser', viewId, 'user'),
     ]
@@ -449,7 +449,7 @@ describe('agent script since load', () => {
     const { registry, views } = setup()
     const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
     await registry.cdp('navide.browser', viewId, 'Runtime.evaluate', { expression: '1' })
-    registry.setState('navide.browser', viewId, 'need-action', 'Sign in')
+    registry.setState('navide.browser', viewId, 'need-action', 'Sign In')
     expect(views[0].webContents.reloads).toBe(1)
     expect(registry.list('navide.browser')[0]).toMatchObject({ control: 'user', state: 'need-action' })
   })
@@ -458,7 +458,7 @@ describe('agent script since load', () => {
     const { registry, views } = setup()
     const { viewId } = registry.create('navide.browser', { space: 'agent' }, 'agent')
     await registry.cdp('navide.browser', viewId, 'Input.insertText', { text: 'a' })
-    registry.setState('navide.browser', viewId, 'need-action', 'Sign in')
+    registry.setState('navide.browser', viewId, 'need-action', 'Sign In')
     expect(views[0].webContents.reloads).toBe(0)
     expect(registry.list('navide.browser')[0]).toMatchObject({ control: 'user', state: 'need-action', agentScriptSinceLoad: false })
   })

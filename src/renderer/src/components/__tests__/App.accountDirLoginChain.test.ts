@@ -102,7 +102,7 @@ describe('two-step Claude sign-in copy', () => {
   }
 
   it("the badge button says where it signs in, in #409's words", () => {
-    expect((locale('en-US').usage as Record<string, string>)['dir-sign-in']).toBe('Sign in to its own folder')
+    expect((locale('en-US').usage as Record<string, string>)['dir-sign-in']).toBe('Sign In to Its Own Folder')
     expect((locale('zh-TW').usage as Record<string, string>)['dir-sign-in']).toBe('登入到帳號資料夾')
     expect((locale('ja-JP').usage as Record<string, string>)['dir-sign-in']).toBe('専用フォルダーでサインイン')
   })

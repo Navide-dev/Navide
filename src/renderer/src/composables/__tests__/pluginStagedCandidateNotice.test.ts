@@ -41,7 +41,7 @@ describe('pluginStagedCandidateNotice', () => {
 })
 
 describe('staged packages found at launch', () => {
-  it('reach the announcements centre and "Apply now" runs Restart for that package', () => {
+  it('reach the announcements centre and "Apply Now" runs Restart for that package', () => {
     const app = readFileSync(join(root, 'src/renderer/src/App.vue'), 'utf8')
     const preload = readFileSync(join(root, 'src/preload/index.ts'), 'utf8')
     const main = readFileSync(join(root, 'src/main/index.ts'), 'utf8')

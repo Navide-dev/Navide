@@ -777,8 +777,8 @@ describe('PlansApp', () => {
       messages: {
         'en-US': {
           action: {
-            'open-in-editor': 'Open in editor',
-            'copy-path': 'Copy path',
+            'open-in-editor': 'Open in Editor',
+            'copy-path': 'Copy Path',
             create: 'Create',
             rename: 'Rename',
             delete: 'Delete',
@@ -826,8 +826,8 @@ describe('PlansApp', () => {
       messages: {
         'en-US': {
           action: {
-            'open-in-editor': 'Open in editor',
-            'copy-path': 'Copy path',
+            'open-in-editor': 'Open in Editor',
+            'copy-path': 'Copy Path',
             create: 'Create',
             rename: 'Rename',
             delete: 'Delete',
