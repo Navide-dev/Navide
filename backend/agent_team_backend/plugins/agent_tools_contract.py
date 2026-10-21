@@ -77,8 +77,8 @@ CORE_TOOL_NAMES = (
     "scheduler_run_now", "scheduler_runs", "scheduler_set_enabled", "scheduler_upsert", "share_create",
     "share_list", "share_revoke", "skills_inspect", "skills_install", "skills_install_status", "skills_list",
     "skills_prepare_install", "skills_set_delivery", "stage_define", "ui_diagnostics", "ui_invoke",
-    "ui_list_actions", "ui_snapshot", "window_focus", "window_list", "workspace_list", "workspace_open",
-    "workspace_switch",
+    "ui_list_actions", "ui_snapshot", "window_close", "window_focus", "window_list", "workspace_close", "workspace_list",
+    "workspace_open", "workspace_switch",
 )
 
 
