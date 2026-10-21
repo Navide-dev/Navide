@@ -4028,7 +4028,8 @@
             "usage": "額度",
             "multi": "多帳號",
             "signIn": "登入指令",
-            "signInInside": "在 CLI 內登入"
+            "signInInside": "在 CLI 內登入",
+            "flagNoteGoose": "無——Goose 預設會自己核准所有工具（GOOSE_MODE=auto）；要先詢問，請把 GOOSE_MODE 設成 approve 或 smart_approve。Navide 的 Guard 目前還不涵蓋 Goose。"
           },
           "note": "「額度」＝ Navide 讀得到剩餘用量（第 6 章）。「多帳號」＝ 可以在設定裡掛多組登入並切換（第 5 章）。四家沒有略過權限旗標的 CLI（Grok CLI、OpenCode、Pi、MiniMax Code）是因為它們本身就沒有這個旗標，不是 Navide 沒接。「登入指令」＝ 在設定 ▸ 帳號按「登入」時，Navide 實際會執行的指令；標示「在 CLI 內登入」的那幾家沒有獨立的登入指令，按下去就是照常啟動該 CLI，登入在它自己的畫面裡完成。",
           "callout": {

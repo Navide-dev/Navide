@@ -68,10 +68,10 @@ describe('skipPermissionFlagFor', () => {
     }
   })
 
-  it('keeps the four flagless vendors flagless', () => {
+  it('keeps the five flagless vendors flagless', () => {
     const flagless = CLI_AGENT_SPECS.filter((spec) => !spec.skipPermissionFlag)
       .map((spec) => spec.agentKey)
       .sort()
-    expect(flagless).toEqual(['grok', 'mcode', 'opencode', 'pi'])
+    expect(flagless).toEqual(['goose', 'grok', 'mcode', 'opencode', 'pi'])
   })
 })

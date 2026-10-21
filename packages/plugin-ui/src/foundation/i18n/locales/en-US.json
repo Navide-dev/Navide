@@ -4028,7 +4028,8 @@
             "usage": "Quota",
             "multi": "Multi-account",
             "signIn": "Sign-in command",
-            "signInInside": "Inside the CLI"
+            "signInInside": "Inside the CLI",
+            "flagNoteGoose": "None — Goose approves every tool by itself by default (GOOSE_MODE=auto); set GOOSE_MODE to approve or smart_approve to be asked. Navide's Guard does not cover Goose yet."
           },
           "note": "\"Quota\" = Navide can read the remaining usage (chapter 6). \"Multi-account\" = several sign-ins can be kept in Settings and switched (chapter 5). The four CLIs without a permission-bypass flag (Grok CLI, OpenCode, Pi, MiniMax Code) simply have no such flag — it is not something Navide left out. \"Sign-in command\" = what Navide actually runs when you press Sign in under Settings ▸ Accounts; the CLIs marked \"Inside the CLI\" declare no separate sign-in command, so the button launches them as usual and signing in happens on their own screen.",
           "callout": {

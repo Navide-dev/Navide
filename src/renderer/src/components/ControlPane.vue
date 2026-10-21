@@ -2626,12 +2626,12 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 // would clip a menu positioned inside it.
 const addMenuAnchor = ref<{ top: number; bottom: number; right: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
- *  360px) plus the fixed furniture around it — role picker, two dividers,
+ *  384px) plus the fixed furniture around it — role picker, two dividers,
  *  the Terminal and Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 450
+const ADD_MENU_MAX_H = 474
 
 const addMenuStyle = computed(() => {
   const a = addMenuAnchor.value
@@ -6385,9 +6385,9 @@ button.icon-btn.muted:hover {
  * window still gets a menu that fits. 200px was set when ten vendors was the
  * whole list; at fourteen it cut the last four off with nothing on screen
  * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 360px carries fifteen. */
+ * 3px padding either side), so 384px carries sixteen. */
 .ws-add-scroll {
-  max-height: min(360px, 45vh);
+  max-height: min(384px, 45vh);
   overflow-y: auto;
   /* Scroll affordance. The two fades are painted in the scroller's own
    * coordinate space (`local`), so each one is visible only while content is
