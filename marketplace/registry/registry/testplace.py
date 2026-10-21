@@ -13,8 +13,9 @@ while holding a live seat:
 
 Revoking a code stops new joins; seats already taken stay, like a TestFlight
 public link. Revoking or yanking a version takes it back; its testers see
-it in the tester detail's `withdrawn` list, and their App stops it and never
-offers to keep it. Nothing goes into the public signed blocklist, where
+it in the tester detail's `withdrawn` list, and their App labels it and asks
+once (0.2.28; never stopped automatically) and never offers to keep it once
+expired. Nothing goes into the public signed blocklist, where
 `ns.name@version` would tell anyone the test build exists (R-MED-3); the
 root-signed local-install document lists only its digest, as
 `testplace-withdrawn` (qualification.testplace_withdrawn_digests), so a tester

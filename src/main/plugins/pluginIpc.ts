@@ -904,20 +904,26 @@ export function registerPluginIpc(
   }
   // 0.2.28: a Registry install whose receipt digest the root-signed
   // local-install document lists as `testplace-withdrawn` (a Testplace build
-  // taken back). Only that reason applies to Registry installs; the others
-  // keep applying to local installs alone.
+  // taken back), or whose version the signed-in tester detail last listed as
+  // withdrawn (the 15-minute fast path). Either way it is the same block on
+  // the same digest, so the notice is shown once across both. Only that
+  // reason applies to Registry installs; the others keep applying to local
+  // installs alone.
   const registryWithdrawnBlockFor = (summary: {
     id: string
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
   }): (LocalDigestBlock & { version: string }) | null => {
     const dir = activeRegistryPackageDir(summary)
     const artifact = dir === undefined ? undefined : readRegistryReceiptArtifact(dir)
-    if (!artifact) return null
+    if (!artifact || dir === undefined) return null
     try {
       const pinned = resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey
       const block = digestBlock(readLocalInstallTrust(pluginsRoot, pinned), artifact.artifactDigest)
-      if (block?.reason !== 'testplace-withdrawn') return null
-      return { digest: artifact.artifactDigest, reason: block.reason, action: digestBlockAction(block.reason), version: artifact.version }
+      const listed = block?.reason === 'testplace-withdrawn'
+      const told = readRegistryReceiptChannel(dir) === 'testplace' && testplaceStore.isWithdrawn(summary.id, artifact.version)
+      if (!listed && !told) return null
+      const reason = 'testplace-withdrawn' as const
+      return { digest: artifact.artifactDigest, reason, action: digestBlockAction(reason), version: artifact.version }
     } catch {
       return null
     }
@@ -4680,7 +4686,8 @@ export function registerPluginIpc(
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
           keepsExpiredTestplace,
-          withdrawnTestplace,
+          // 0.2.28 (user, 10-21): a withdrawal never stops a running build;
+          // registryWithdrawnBlockFor labels it and asks once instead.
         }, new Set([...packageIds, ...activeRegistryPackages]))
         for (const decision of refreshed) {
           if (decision.action === 'quarantine') {
@@ -4744,7 +4751,8 @@ export function registerPluginIpc(
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
           keepsExpiredTestplace,
-          withdrawnTestplace,
+          // 0.2.28 (user, 10-21): a withdrawal never stops a running build;
+          // registryWithdrawnBlockFor labels it and asks once instead.
         }
         const activeBeforeRefresh = new Set(
           manager

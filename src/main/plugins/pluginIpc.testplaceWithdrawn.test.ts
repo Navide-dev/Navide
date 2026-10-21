@@ -104,6 +104,8 @@ const testplaceDetail = {
 
 let base = ''
 let pluginsRoot = ''
+/** What the signed-in tester detail's withdrawal list answers (the 15-minute fast path). */
+let withdrawnAnswer: { status: number; body: unknown }
 const prompt = vi.fn<(ask: DigestBlockPrompt) => Promise<DigestBlockChoice>>()
 
 function register() {
@@ -154,10 +156,11 @@ beforeEach(() => {
   mkdirSync(pluginsRoot)
   prompt.mockReset()
   prompt.mockResolvedValue('keep')
+  withdrawnAnswer = { status: 200, body: { withdrawn: [] } }
   registry.fetch = vi.fn(async (path: string) => {
     if (path === '/api/testplace') return { status: 200, body: { items: [testplaceDetail] } }
     if (path === '/api/testplace/acme/beta') return { status: 200, body: testplaceDetail }
-    if (path === '/api/testplace/acme/beta/withdrawn') return { status: 200, body: { withdrawn: [] } }
+    if (path === '/api/testplace/acme/beta/withdrawn') return withdrawnAnswer
     return { status: 404, body: { detail: { code: 'NOT_FOUND', message: path } } }
   })
   registry.download = vi.fn(async () => ({ status: 200, body: Buffer.from(bytes), digest }))
@@ -225,5 +228,49 @@ describe('a withdrawn Testplace build (0.2.28)', () => {
       expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(true)
     }
     expect(prompt).not.toHaveBeenCalled()
+  })
+
+  // User, 10-21 (06:53): the signed-in fast path is kept only for learning of
+  // it sooner; it never stops the build either.
+  it('signed in: the fast path labels it and asks once, and never disables it', async () => {
+    const { manager, controller } = register()
+    await installTestBuild()
+    withdrawnAnswer = { status: 200, body: { withdrawn: [{ version: '0.3.0', target: 'universal' }] } }
+    // The public trust metadata is unreachable; the refresh falls back to the cached copy.
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    expect(await controller.revalidateLocalInstalls()).toEqual({ quarantined: [] })
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalledTimes(1))
+    expect(prompt).toHaveBeenCalledWith({
+      pluginId: ID, version: '0.3.0', reason: 'testplace-withdrawn', action: 'warn', testBuild: true,
+    })
+    expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(true)
+    expect(row()).toMatchObject({ digestBlock: { reason: 'testplace-withdrawn' }, disabled: false })
+    expect(await call('plugins:expiredTestplace')).toEqual([])
+  })
+
+  it('told through both paths, the tester is still asked only once for that digest', async () => {
+    const { controller } = register()
+    await installTestBuild()
+    withdrawnAnswer = { status: 200, body: { withdrawn: [{ version: '0.3.0', target: 'universal' }] } }
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    await controller.revalidateLocalInstalls()
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalledTimes(1))
+    // The signed document now lists the same digest too.
+    serve(localTrust([{ digest, reason: 'testplace-withdrawn' }]))
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    await controller.revalidateLocalInstalls()
+    expect(row()).toMatchObject({ digestBlock: { reason: 'testplace-withdrawn' }, disabled: false })
+    const restarted = register()
+    await restarted.controller.revalidateLocalInstalls()
+    expect(prompt).toHaveBeenCalledTimes(1)
+  })
+
+  it('the fast path finding nothing withdrawn leaves the build unlabelled', async () => {
+    const { controller } = register()
+    await installTestBuild()
+    await expect(controller.refreshRegistryTrust()).rejects.toThrow()
+    await controller.revalidateLocalInstalls()
+    expect(prompt).not.toHaveBeenCalled()
+    expect(row()).not.toHaveProperty('digestBlock')
   })
 })

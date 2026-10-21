@@ -2377,7 +2377,8 @@ runs only inside the OS sandbox described in
   The tester sees the label and is asked once per digest to keep using,
   disable or remove it; nothing is disabled for it. This reaches a tester who
   is offline or signed out from the stored document; the signed-in check every
-  15 minutes stays the fast path. A release that does not know the reason
+  15 minutes stays the fast path and, since 0.2.28, no longer stops the build
+  either: it records the same block, and one notice covers both paths. A release that does not know the reason
   reads it as none (a warning for a file install; Registry installs are not
   checked there).
   Limits: a file installed before 0.2.27 that was not signed has no recorded
