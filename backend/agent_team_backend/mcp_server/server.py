@@ -1110,6 +1110,7 @@ async def cli_open_agent(
     session_id: str = "",
     run_group_id: str | None = None,
     window: str = "",
+    window_id: str = "",
 ) -> dict[str, Any]:
     """Open a new CLI pane and give it a task.
 
@@ -1153,9 +1154,14 @@ async def cli_open_agent(
     back to you and you can reclaim it by the returned `address`. `window`
     says where it goes: "current" (the default) has your own window take the
     project in the background, without switching what is on screen; "new"
-    opens it in a window of its own, without taking focus. One project lives
-    in one window at a time, so a project another window already holds is
-    refused with error_code "workspace-in-other-window" and
+    opens it in a window of its own, without taking focus; "existing" opens it
+    in the window that already holds the project (any window, not only
+    yours), or — with `window_id` from window_list — in that window, which
+    takes the project in the background when no window holds it yet (a
+    detached group window cannot: "window-cannot-hold"). With "existing" and
+    no window_id, a project no window holds opens as with "new". One project
+    lives in one window at a time, so a project another window already holds
+    is refused with error_code "workspace-in-other-window" and
     `holding_window_id`, never opened twice. A folder that does not exist is
     "workspace-not-found". The answer then also carries `workspace_path`,
     `prepared` ("already-open" | "adopted" | "new-window"), `parent` (your
@@ -1319,7 +1325,14 @@ async def cli_open_agent(
     if choice not in _SPAWN_WINDOW_CHOICES:
         return {
             "ok": False,
-            "error": f'window must be "current" or "new", not "{window}"',
+            "error": f'window must be "current", "existing" or "new", not "{window}"',
+            "error_code": "invalid-window",
+        }
+    named_window = (window_id or "").strip()
+    if named_window and choice != "existing":
+        return {
+            "ok": False,
+            "error": 'window_id goes with window "existing"',
             "error_code": "invalid-window",
         }
     target_workspace = ""
@@ -1393,7 +1406,9 @@ async def cli_open_agent(
             return refused
     prepared = ""
     if cross_workspace:
-        prepared, refusal = await _prepare_cross_workspace(caller, cross_workspace, choice or "current")
+        prepared, refusal = await _prepare_cross_workspace(
+            caller, cross_workspace, choice or "current", named_window
+        )
         if refusal is not None:
             _record_cross_spawn(caller, cross_workspace, choice, refusal)
             return refusal
@@ -1585,7 +1600,7 @@ async def cli_open_agent(
 
 
 #: cli_open_agent's `window` values. "" means the default, "current".
-_SPAWN_WINDOW_CHOICES = frozenset({"", "current", "new"})
+_SPAWN_WINDOW_CHOICES = frozenset({"", "current", "existing", "new"})
 
 
 def _record_cross_spawn(caller: _Caller, workspace_path: str, choice: str, outcome: dict[str, Any]) -> None:
@@ -1691,15 +1706,86 @@ def _in_other_window(workspace_path: str, detail: str = "") -> dict[str, Any]:
     return answer
 
 
+async def _prepare_in_existing_window(
+    caller: _Caller, workspace_path: str, window_id: str
+) -> tuple[str, dict[str, Any] | None]:
+    """cli_open_agent window "existing" (DESIGN-C §3.1): the window that holds
+    the project, or the named one. Returns (prepared, refusal); prepared ""
+    with no refusal means "nobody holds it and no window was named"."""
+    if "/" in window_id:
+        return "", {
+            "ok": False,
+            "error": "window ids name windows on this machine only; a pane cannot be opened in another device's window",
+            "error_code": "spawn-local-only",
+        }
+    named = _window_session(window_id) if window_id else None
+    if window_id and named is None:
+        return "", {
+            "ok": False,
+            "error": f"no Navide window has id {window_id!r} — it may have closed or reloaded; call window_list for the current ids",
+            "error_code": "unknown-window",
+        }
+    holder = None
+    named_kind = ""
+    for session, answer in await _describe_windows(caller):
+        described = answer.get("result") if answer and answer.get("ok") else None
+        if not isinstance(described, dict):
+            continue
+        if session is named:
+            named_kind = str(described.get("kind") or "")
+        if described.get("kind") == "detached-group":
+            continue
+        if any(_same_directory(str(p), workspace_path) for p in described.get("workspaces") or []):
+            holder = session
+    if holder is not None:
+        if named is not None and holder is not named:
+            refusal = _in_other_window(workspace_path)
+            refusal["holding_window_id"] = holder.window_id
+            return "", refusal
+        return "already-open", None
+    if named is None:
+        return "", None
+    if named_kind == "detached-group":
+        return "", {
+            "ok": False,
+            "error": f"window {window_id} is a detached group window, which shows one workspace only",
+            "error_code": "window-cannot-hold",
+        }
+    reply = await _window_request(named, "ui.workspace.adopt", {"path": workspace_path}, caller)
+    if reply is None:
+        return "", {
+            "ok": False,
+            "error": f"window {window_id} did not answer within {_UI_INVOKE_TIMEOUT_S:.0f}s",
+            "error_code": "ui_action_timeout",
+        }
+    if not reply.get("ok"):
+        error = str(reply.get("error") or "")
+        code, _, detail = error.partition(":")
+        if code.strip() == "workspace-in-other-window":
+            return "", _in_other_window(workspace_path, detail.strip())
+        if code.strip() == "window-cannot-hold":
+            return "", {"ok": False, "error": detail.strip() or error, "error_code": "window-cannot-hold"}
+        return "", {"ok": False, "error": error or "the window did not take the project", "error_code": "ui_action_failed"}
+    result = reply.get("result")
+    prepared = str(result.get("prepared") or "") if isinstance(result, dict) else ""
+    return prepared or "adopted", None
+
+
 async def _prepare_cross_workspace(
-    caller: _Caller, workspace_path: str, choice: str
+    caller: _Caller, workspace_path: str, choice: str, window_id: str = ""
 ) -> tuple[str, dict[str, Any] | None]:
     """Make sure a window holds *workspace_path* for a cross-workspace spawn.
 
     "current": the caller's own window takes the project into its sidebar
     without switching to it. "new": a window of its own, opened without
-    taking focus. Returns (prepared, refusal).
+    taking focus. "existing": the window already holding it, or the named
+    window (see _prepare_in_existing_window). Returns (prepared, refusal).
     """
+    if choice == "existing":
+        prepared, refusal = await _prepare_in_existing_window(caller, workspace_path, window_id)
+        if refusal is not None or prepared:
+            return prepared, refusal
+        choice = "new"
     if choice == "new":
         if _holding_window_id(workspace_path) or await _probe_window(workspace_path, _WINDOW_PROBE_TIMEOUT_S):
             return "", _in_other_window(workspace_path)
@@ -6017,6 +6103,11 @@ _DEDICATED_CLOSE_ACTIONS = {
     # The ⌘⇧W keybinding command closes whichever window answers; aimed at
     # someone else's window it would close it with no record (review #534 R2).
     "workbench.action.closeWindow": "window_close",
+    # A move lets go of a pane or project in one window and has another take
+    # it; half of it alone would be a silent close (DESIGN-C S4b).
+    "ui.pane.moveToWindow": "window_move_pane",
+    "ui.workspace.moveToWindow": "window_move_pane",
+    "ui.workspace.receive": "window_move_pane",
     # Takes a project into a window's sidebar; only cli_open_agent's cross-
     # workspace spawn asks for it, and that path records the action (review #546).
     "ui.workspace.adopt": "cli_open_agent with workspace_path",
