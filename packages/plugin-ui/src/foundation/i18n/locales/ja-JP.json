@@ -883,8 +883,10 @@
           "conflict": "競合が検出されました。再読み込みしてからもう一度お試しください。",
           "internal-error": "バックエンドで内部エラーが発生しました。",
           "workspace-scope-violation": "ワークスペースの範囲外にあるファイルへのアクセスが試みられました。"
-        }
-      }
+        },
+        "rename-plan": "プラン名を変更"
+      },
+      "section-delete-confirm": "ドキュメントからセクション \"{anchor}\" を削除しますか？"
     },
     "terminal": {
       "readback-on-tooltip": "読み上げオン：このペインが完了または回答待ちになると読み上げます — クリックでオフ",
@@ -944,7 +946,7 @@
       "auto-named-tooltip": "このセッションの最初の指示から自動で名前を付けました。名前を変更すると、その名前が保持されます",
       "loop-tag-tooltip": "このペインでループが実行中です",
       "subtree-tooltip": "このペインから起動した {count} 個のペインが {status}",
-      "subtree-summary": "sub {status} {count}",
+      "subtree-summary": "サブペイン {status} {count}",
       "location-minimized": "サイドバーに最小化",
       "location-tab": "タブ：{name}",
       "location-workspace": "プロジェクト：{name}",
@@ -1347,7 +1349,8 @@
     "unstage-folder": "フォルダーのステージングを解除",
     "discard-folder": "フォルダー内の変更を破棄",
     "file-history-blame": "ファイル履歴 + blame",
-    "open-diff-in-editor": "差分をエディターで開く"
+    "open-diff-in-editor": "差分をエディターで開く",
+    "resume-from-stage": "▶ ステージ {n} から再開"
   },
   "share": {
     "notice": {
@@ -3022,8 +3025,8 @@
           "h6": "同期（複数のマシンで同じ設定を使う）",
           "p11": "設定 ▸ Navide Cloud の最初の欄は「同期」です。<strong>独立したタブではなく</strong>、このページの最上部にあります。同期可能な範囲ごとに切り替えがあり、オンにすると、<strong>同じアカウント</strong>にサインインしたすべてのデバイスで内容がそろいます。記録は<strong>このマシン上で暗号化</strong>され、サーバーは復号鍵を持たず、暗号文だけを保存します。",
           "sync": {
-            "scopes": "<strong>サイドバーの「エージェント資産」と同じ順に 1 ページ 1 行、計 6 行。有効にできるのは 3 つです</strong>。<em>MCP</em>（Navide で追加したサーバー。秘密情報は送信前に暗号化）、<em>スキル</em>（有効なスキルと配信先の CLI、そして Navide で作成したスキルのファイル。自分でフォルダーに置いたスキルは設定のみ）、<em>プロンプト</em>（プロンプトスキルとループ用プロンプト）です。",
-            "credentials": "<em>メモリ</em>、<em>認証情報とキー</em>、<em>CLI 拡張</em>の行は<strong>表示されますがグレーで無効</strong>で、「まだ同期できません」と表示されます。既定でオフになっていて有効にできる、という意味ではありません。切り替えは操作できません。古いビルドでオンのまま残ったメモリや認証情報のスイッチは、オフにはできます。",
+            "scopes": "<strong>サイドバーの「エージェント資産」と同じ順に 1 ページ 1 行、計 5 行。有効にできるのは 3 つです</strong>。<em>MCP</em>（Navide で追加したサーバー。秘密情報は送信前に暗号化）、<em>スキル</em>（有効なスキルと配信先の CLI、そして Navide で作成したスキルのファイル。自分でフォルダーに置いたスキルは設定のみ）、<em>プロンプト</em>（プロンプトスキルとループ用プロンプト）です。",
+            "credentials": "<em>メモリ</em>と<em>CLI 拡張</em>の行は<strong>表示されますがグレーで無効</strong>で、「まだ同期できません」と表示されます。既定でオフになっていて有効にできる、という意味ではありません。切り替えは操作できません。古いビルドでオンのまま残ったメモリのスイッチは、オフにはできます。<em>認証情報とキー</em>の行はありません。アカウントの認証情報とキーはこのマシンから出ることはありません。古いビルドでオンのまま残った認証情報のスイッチは、オフとして扱われます。MCP 設定は、同期を有効にした場合、このマシンで暗号化してからアップロードされ、サーバーは復号キーを持ちません。",
             "states": "欄の下には 2 つの状態を明示します。<em>未接続</em>（接続が戻ると有効な範囲を同期）と、<em>このデバイスにはまだ同期鍵がありません</em>（鍵を持つまで何もアップロードしない）です。接続中にのみ使える<em>今すぐ同期</em>ボタンもあります。",
             "key": "<strong>同期鍵は ID の先頭 8 文字だけを表示</strong>し、鍵自体は表示しません。<em>鍵を更新</em>には<strong>2 回のクリック</strong>が必要です。最初のクリックで<em>今すぐ更新</em>に変わり、横に<em>キャンセル</em>が現れます。更新すると現在の鍵を廃止し、同期済みの全記録を新しい鍵で暗号化し直し、次の鍵交換時に他のデバイスに渡します。鍵の漏洩が疑われる場合に使います。",
             "legacy": "<em>このアカウントに引き継ぐ</em>は、アカウントに紐付けられる前の同期鍵がこのデバイスにあり、<em>かつ</em>このアカウントにまだ鍵がない場合にのみ表示されます。一度限りの選択です。引き継がなければその鍵で同期した記録を読めず、代わりに新しい鍵を作ると、それらの記録は永久に読めなくなります。",
@@ -4026,7 +4029,8 @@
             "usage": "利用枠",
             "multi": "複数アカウント",
             "signIn": "ログインコマンド",
-            "signInInside": "CLI 内で操作"
+            "signInInside": "CLI 内で操作",
+            "flagNoteGoose": "なし — Goose は既定ですべてのツールを自動で承認します（GOOSE_MODE=auto）。確認を求めさせるには GOOSE_MODE を approve か smart_approve に設定してください。Navide の Guard はまだ Goose を対象にしていません。"
           },
           "note": "「利用枠」は Navide が残りの利用枠を読み取れることを示します（第 6 章）。「複数アカウント」は、複数のログイン情報を設定に保存して切り替えられることを示します（第 5 章）。権限確認をスキップするフラグがない 4 つの CLI（Grok CLI、OpenCode、Pi、MiniMax Code）は、元々そのフラグを持っていません。Navide 側の対応漏れではありません。「ログインコマンド」は「設定 ▸ アカウント」で「ログイン」を押したときに実際に実行するコマンドです。「CLI 内で操作」とある CLI は独立したログインコマンドを定義していないため、通常どおり起動し、その画面内でログインします。",
           "callout": {
@@ -4540,23 +4544,23 @@
           },
           "addressing": {
             "pane": {
-              "form": "<pane name>",
+              "form": "<ペイン名>",
               "meaning": "自分のワークスペース内だけを検索します"
             },
             "folder": {
-              "form": "<folder name>/<pane name>",
+              "form": "<フォルダー名>/<ペイン名>",
               "meaning": "別のワークスペースウィンドウのペイン"
             },
             "suffix": {
-              "form": "<path suffix>/<pane name>",
+              "form": "<パスの末尾>/<ペイン名>",
               "meaning": "同名のフォルダーをパス末尾で区別します"
             },
             "absolute": {
-              "form": "<absolute path>/<pane name>",
+              "form": "<絶対パス>/<ペイン名>",
               "meaning": "最も正確な形式です"
             },
             "device": {
-              "form": "<device>/<workspace>/<pane name>",
+              "form": "<デバイス>/<ワークスペース>/<ペイン名>",
               "meaning": "別のマシンのペイン（両方とも Navide Cloud へのサインインが必要）"
             }
           },
@@ -6428,7 +6432,7 @@
           },
           "sample": {
             "workspace": "Agent-Team",
-            "group": "Build",
+            "group": "ビルド",
             "pane1": "architect",
             "pane2": "reviewer",
             "sub1": "claude · design",
@@ -6777,7 +6781,8 @@
       "catalog-search": "MCP サーバーを名前で検索",
       "catalog-hint": "このカタログには、<strong>「オーケストレーターのコンテキスト読み取り用」</strong> MCP のみを掲載しています。ワークスペース、ドキュメント、外部サービスのデータを読み取り、開始時のプロンプトに組み込むことで、エージェントの知識に根拠を与えるツールです。テストやブラウザー自動操作などの実行処理は、CLI エージェント自身が担当します。",
       "catalog-requires-env": "必要な環境変数：{vars}",
-      "catalog-empty": "一致する MCP サーバーが見つかりません"
+      "catalog-empty": "一致する MCP サーバーが見つかりません",
+      "header-name-placeholder": "ヘッダー名"
     },
     "credentials": {
       "title": "認証情報とキー",
@@ -7142,7 +7147,6 @@
       "scope-hint-skills": "スキルの有効・無効と各スキルの配布先 CLI、そして Navide で作成したスキルのファイル（大きいものは暗号化された blob として送信）。自分でフォルダーに置いたスキルは設定のみ同期されます。",
       "scope-hint-memory": "~/.claude/CLAUDE.md などのグローバル指示ファイル。プロジェクト内のファイルは引き続き git で管理します。",
       "scope-credentials": "認証情報",
-      "scope-hint-credentials": "アカウント画面で貼り付けた、持ち運び可能な CLI 認証情報。送信前にこのデバイスで暗号化されます。ここで削除しても、クラウドや他のデバイスからは削除されません。",
       "sealed": "（認証情報 — 非表示）",
       "key-id": "同期キー {id}",
       "rotate": "キーをローテーション",
@@ -8342,7 +8346,7 @@
     "pipeline": "パイプライン",
     "explorer": "エクスプローラー",
     "git": "Git",
-    "plans": "Plans",
+    "plans": "プラン",
     "cli-stage": "CLI ステージ",
     "history": "履歴",
     "tokens": "トークン",
@@ -8553,8 +8557,8 @@
     "detached": "分離状態",
     "locked": "ロック中",
     "stale": "無効な参照",
-    "detached-head": "detached HEAD",
-    "worktree-path-placeholder": "/path/to/worktree",
+    "detached-head": "切り離された HEAD",
+    "worktree-path-placeholder": "/ワークツリー/パス",
     "new-worktree-branch-placeholder": "新しいブランチ",
     "branch-placeholder": "ブランチ…",
     "create-new-branch": "新しいブランチを作成",
@@ -8593,7 +8597,7 @@
     "url": "URL",
     "no-tags": "タグはありません",
     "message": "メッセージ",
-    "absolute-path-placeholder": "/absolute/path",
+    "absolute-path-placeholder": "/絶対/パス",
     "worktree-create-new-branch": "新しいブランチを作成",
     "n-open": "{count} 件未解決",
     "no-issue-host": "このリポジトリでは対応する Issue ホストが検出されませんでした（GitHub または GitLab の origin リモートが必要です）。",
@@ -8753,7 +8757,47 @@
     "backend-stop": "停止",
     "pipeline-pill-stage": "ステージ {current} / {total}",
     "pipeline-pill-completed": "完了",
-    "pipeline-pill-aborted": "中止"
+    "pipeline-pill-aborted": "中止",
+    "legacy-recovery": "旧版で復旧",
+    "pipeline-runs-done": "{count} 回完了",
+    "resume-existing-pipeline": "↻ 既存のパイプラインを再開",
+    "resume-stages-done": "{done}/{total} ステージ完了",
+    "focus-pane": "このペインにフォーカス",
+    "manager-badge": "🎯 マネージャー",
+    "docked": "収納済み",
+    "pane-origin-stage": "ステージ {id}",
+    "pane-origin-manual": "手動",
+    "session-id-tooltip": "CLI セッション ID — 再起動時にこのエージェントの記憶を引き継ぐために使います",
+    "role-system-prompt": "{role} のシステムプロンプト",
+    "project-completed": "✓ プロジェクト完了",
+    "all-stages-done": "全 {count} ステージ完了 · {time}",
+    "refresh-ollama-tooltip": "Ollama の状態とモデル一覧を再取得",
+    "retry-connection-tooltip": "接続を再試行",
+    "minimized-sidebar": "サイドバー",
+    "loop-badge": "∞ ループ",
+    "review-model-placeholder": "モデル名（例：llama-3.3-70b）",
+    "review-working-changes": "作業中の変更",
+    "current-branch-suffix": "{branch}（現在）",
+    "review-dismissed": "無視済み",
+    "review-general-finding": "（全般）",
+    "review-ask-ai-fix": "AI に修正を依頼",
+    "review-restore-finding": "元に戻す",
+    "review-no-findings": "指摘はありません。問題なさそうです！",
+    "review-no-findings-filtered": "表示する指摘はありません。",
+    "question-is-asking": "が質問しています",
+    "question-dismiss-tooltip": "回答せずに閉じる",
+    "question-auto-answering": "🤖 LLM で自動回答中…",
+    "question-auto-answer": "🤖 自動回答：{text}",
+    "question-auto-mode": "🤖 自動モード — 自動的に送信します",
+    "question-answer-all": "送信するには {count} 件の質問すべてに回答してください。",
+    "question-send-hint": "{key} で送信",
+    "question-send-all": "{count} 件の回答をすべて送信",
+    "question-send-one": "回答を送信",
+    "console": "コンソール",
+    "drag-resize-log": "ドラッグしてログパネルのサイズを変更",
+    "filter-by-type": "種類で絞り込み",
+    "all-stages-finished": "全 {count} ステージが正常に完了しました",
+    "region-unavailable": "{title} は利用できません"
   },
   "layout": {
     "expand": "パネルを展開",
@@ -9321,8 +9365,13 @@
     "info": {
       "runtime": "ランタイム",
       "paths": "パス",
-      "open": "開く"
-    }
+      "open": "開く",
+      "app": "アプリ",
+      "backend": "バックエンド",
+      "started": "起動時刻",
+      "shell": "シェル"
+    },
+    "backend-status": "バックエンド {status}"
   },
   "orphans": {
     "title": "残存する CLI プロセス",
@@ -9794,7 +9843,8 @@
     "run-by-hand": "ターミナルで自分で実行することもできます：{cmd}",
     "installed-not-detected": "コマンドは完了しましたが、{label} はまだ検出されていません。新しいシェルセッションが必要か、PATH 外にインストールされた可能性があります。",
     "installed-still-outdated": "インストールは完了しましたが、PATH 上の {label} は古い {version} のままです。システム側のコピーが優先されている可能性があります。そのディレクトリを PATH の前方に移してから、再検出してください。PATH の順序を直せば、再起動しなくても再検出で反映されます。",
-    "installed-still-outdated-python": "インストールは完了しましたが、PATH 上の {label} は古い {version} のままです。次のどちらかで直してから再検出してください：brew link --overwrite python{'@'}3.x を実行する（インストールしたバージョンに置き換えてください）、または ~/.zprofile に eval \"$(/opt/homebrew/bin/brew shellenv)\" を追加して Homebrew をシステム側より前にする。"
+    "installed-still-outdated-python": "インストールは完了しましたが、PATH 上の {label} は古い {version} のままです。次のどちらかで直してから再検出してください：brew link --overwrite python{'@'}3.x を実行する（インストールしたバージョンに置き換えてください）、または ~/.zprofile に eval \"$(/opt/homebrew/bin/brew shellenv)\" を追加して Homebrew をシステム側より前にする。",
+    "custom-model-placeholder": "例：codellama:7b、gemma3:4b"
   },
   "executions": {
     "last-scan": "最終スキャン {time}",
@@ -9967,7 +10017,7 @@
       "freq-weekly": "毎週",
       "freq-once": "1 回",
       "minutes": "分",
-      "workspace": "Workspace",
+      "workspace": "ワークスペース",
       "pick-workspace": "workspace を選択",
       "target": "対象 pane",
       "pick-pane": "pane を選択",
@@ -10663,7 +10713,7 @@
       "title": "Guard の動作",
       "hint": "各操作を分類し、依頼元に応じて処理します。",
       "source": "依頼元",
-      "levels": "重大：workspace やホーム外の削除、ディスク・システム操作、sudo、curl | sh、認証情報の読み書き、main への強制プッシュ、クラウドリソースの削除。高：workspace 内の rm -rf、git push／reset --hard、パッケージ公開、CI や git hooks の変更。",
+      "levels": "重大：workspace やホーム外の削除、ディスク・システム操作、sudo、curl {'|'} sh、認証情報の読み書き、main への強制プッシュ、クラウドリソースの削除。高：workspace 内の rm -rf、git push／reset --hard、パッケージ公開、CI や git hooks の変更。",
       "row": {
         "local": "このコンピューターのあなた",
         "relay": "チャットアプリで承認",
@@ -11202,7 +11252,9 @@
       "ledger-open-failed": "台帳の計画を開けませんでした",
       "pending-catch-up": "逃した実行が 1 回、この workspace が開かれるのを待っています。",
       "system-pane": "✦ システム起動",
-      "system-pane-title": "自己改善が開いた pane です"
+      "system-pane-title": "自己改善が開いた pane です",
+      "run-tokens": "{tokens} トークン",
+      "run-pane": "ペイン「{name}」"
     },
     "field": {
       "time": "実行時刻",
@@ -11237,7 +11289,8 @@
       "rules-hide": "閉じる",
       "extra-placeholder": "追加の指示（この workspace のみ）…",
       "ledger": "台帳",
-      "ledger-placeholder": "plan の相対パス（例：.agent-team/plans/xxx.html）。空欄＝なし"
+      "ledger-placeholder": "plan の相対パス（例：.agent-team/plans/xxx.html）。空欄＝なし",
+      "effort-option": "推論の強度：{effort}"
     },
     "error": {
       "at": "HH:MM 形式で入力してください",
@@ -11259,7 +11312,8 @@
       "date": "日付",
       "result": "結果",
       "fixes": "修正",
-      "proposals": "提案"
+      "proposals": "提案",
+      "tokens": "トークン"
     },
     "reason": {
       "busy": "この workspace ではすでに実行中です",
