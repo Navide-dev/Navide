@@ -21,6 +21,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Navide plugins: the source badge of a Navide plugin installed from a .vsix file opens its SHA-256 and install time, and an unsigned file's note is on a line of its own (#527).
 - CLI panes: Goose (AAIF) is the 16th supported CLI, at support tier L4: install detection, launch, session binding, turn end, reply text and tokens, and resume (#524).
 - Channels: a pane's multi-select and free-text questions can be answered from the bound chat (`1,3` picks boxes, `<n> <text>` fills the free-text row); a question box's final review step is relayed too. Single-select questions keep their buttons (#540).
+- Channels: on Telegram a multi-select question carries one button per box; a tap ticks (✓) or unticks it in place, and 送出 sends the ticked boxes through the same checks as a typed `1,3` (which still works). Permanent-allow and free-text rows get no button, a press counts only from the bound chat user in the prompt's own chat, and the ticks end with the request.
 - UI languages: Korean (ko-KR) and Simplified Chinese (zh-CN) are available as Beta UI languages. The language pickers show them with a Beta label, and a string not yet translated falls back to English (#553, #554, #558, #559).
 
 ### Changed

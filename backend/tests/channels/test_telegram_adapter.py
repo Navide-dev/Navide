@@ -316,6 +316,20 @@ async def test_edit_buttons_and_callback(api: FakeBotApi) -> None:
     assert api.calls_of("answerCallbackQuery")
 
 
+async def test_edit_buttons_replaces_only_the_keyboard(api: FakeBotApi) -> None:
+    api.handlers["editMessageReplyMarkup"] = lambda params: True
+    ad = _adapter(api)
+    await ad.edit_buttons(Location("telegram", "default", "42"), "9",
+                          [("✓ 1. Lint", "nv1:abcde:t1"), ("送出", "nv1:abcde:s")])
+    call = api.calls_of("editMessageReplyMarkup")[0]
+    assert call["message_id"] == 9 and "text" not in call
+    flat = [b for row in call["reply_markup"]["inline_keyboard"] for b in row]
+    assert flat == [{"text": "✓ 1. Lint", "callback_data": "nv1:abcde:t1"},
+                    {"text": "送出", "callback_data": "nv1:abcde:s"}]
+    api.fail("editMessageReplyMarkup", 400, "Bad Request: message is not modified")
+    await ad.edit_buttons(Location("telegram", "default", "42"), "9", [("送出", "nv1:abcde:s")])
+
+
 async def test_edit_not_modified_is_ignored(api: FakeBotApi) -> None:
     api.fail("editMessageText", 400, "Bad Request: message is not modified")
     ad = _adapter(api)
