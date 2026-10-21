@@ -48,7 +48,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Navide plugins: the disclosure card of a Navide plugin installed from a file no longer says it was not scanned next to Navide's own scan of it (#528).
 - Plans: a plan whose file starts with a UTF-8 BOM no longer drops Plans v2 to legacy recovery (#525).
 - Plans: the plan-frame guard no longer applies to websites shown in a Navide plugin web view (#529).
-- Plans: in-page `#` links in a plan open in the Plan view, so a plan's click-to-enlarge image (a CSS `:target` lightbox) opens and closes there too (#562).
+- Plans: in-page `#` links in a plan open in the Plan view, so a plan's click-to-enlarge image (a CSS `:target` lightbox) opens and closes there too; the same goes for the plan preview in the editor (#562, #563).
 - Navide Browser: page text holding U+FEFF no longer breaks the plugin backend's frame (#533).
 - Kimi Code panes: Kimi Code 0.39+ and 2.x sessions get their workspace again, so tokens and turn ends are attributed to it; a turn ends as soon as Kimi Code says so; the archived kimi-cli is named as archived (#531).
 - OpenCode panes: a problem from a read that runs only on some passes no longer stays reported on a healthy database, and a half-migrated v2 database is disclosed (#526).
