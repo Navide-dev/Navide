@@ -4,7 +4,7 @@
 // host-side postMessage validation — non-whitelisted events are ignored and
 // malformed payloads never reach the write hooks.
 // @vitest-environment happy-dom
-import { afterEach, describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, onTestFinished, vi } from 'vitest'
 import { Window as HappyWindow } from 'happy-dom'
 import {
   MAX_ANCHOR_LENGTH,
@@ -94,6 +94,27 @@ describe('buildPlanRuntimeScript', () => {
     // The embedded reference regex survives template-literal escaping intact.
     expect(script).toContain('CODE_REF_RE')
     expect(script).toContain('\\d{1,7}')
+  })
+
+  // In the about:srcdoc frame "#id" resolves against the host URL, so the
+  // default click never reaches :target (a CSS lightbox stays shut).
+  it('keeps "#id" link clicks inside the frame so :target lightboxes open and close', () => {
+    const window = new HappyWindow({ url: 'about:srcdoc' })
+    onTestFinished(() => window.happyDOM.abort())
+    window.document.body.innerHTML =
+      '<div class="zoom" id="z1"><a id="open" href="#z1"><img alt=""></a><a id="close" href="#_">x</a></div>' +
+      '<a id="external" href="https://example.com/">out</a>'
+    window.eval(buildPlanRuntimeScript(initOf()))
+    const click = (selector: string) => {
+      const event = new window.MouseEvent('click', { bubbles: true, cancelable: true })
+      window.document.querySelector(selector)!.dispatchEvent(event)
+      return event
+    }
+    expect(click('#open img').defaultPrevented).toBe(true)
+    expect(window.location.hash).toBe('#z1')
+    expect(click('#close').defaultPrevented).toBe(true)
+    expect(window.location.hash).toBe('#_')
+    expect(click('#external').defaultPrevented).toBe(false)
   })
 
   it('injects layout overrides so wide tables wrap and the document uses the frame width', () => {
