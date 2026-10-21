@@ -21826,7 +21826,7 @@ function paneIsCommander(p: ActivePane): boolean {
           <button class="boot-retry" @click="retryBackend">{{ $t('action.retry') }}</button>
         </template>
         <template v-else>
-          <div class="boot-spinner" aria-label="loading" />
+          <div class="boot-spinner" :aria-label="$t('label.loading')" />
           <div class="boot-status">
             <span>{{ $t(bootStatusKey) }}</span>
             <span class="boot-elapsed">{{ $t('label.boot-countdown', { seconds: bootCountdown }) }}</span>
@@ -22774,7 +22774,7 @@ function paneIsCommander(p: ActivePane): boolean {
       >
         <div class="float-pip-header" @mousedown.prevent="onPipDragStart">
           <span class="float-pip-title">
-            Agents ({{ auxiliaryListPanes.length }})
+            {{ $t('label.agents') }} ({{ auxiliaryListPanes.length }})
           </span>
           <button class="float-pip-toggle" @mousedown.stop @click="floatPipExpanded = !floatPipExpanded; clampPipPos()">
             {{ floatPipExpanded ? '▾' : '▸' }}
