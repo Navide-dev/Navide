@@ -11150,7 +11150,7 @@
       "move-right": "Move Layer Right",
       "parallel": "{n} in parallel",
       "settings": "Layer Settings",
-      "more": "{n} More Layer | {n} More Layers"
+      "more": "{n} more layer | {n} more layers"
     },
     "node": {
       "commander": "Pipeline manager",
