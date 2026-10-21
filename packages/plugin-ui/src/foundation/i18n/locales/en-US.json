@@ -883,8 +883,10 @@
           "conflict": "Conflict detected. Please reload and try again.",
           "internal-error": "An internal backend error occurred.",
           "workspace-scope-violation": "Attempted to access files outside workspace scope."
-        }
-      }
+        },
+        "rename-plan": "Rename plan"
+      },
+      "section-delete-confirm": "Delete the section \"{anchor}\" from the document?"
     },
     "terminal": {
       "readback-on-tooltip": "Read aloud is on: spoken when this pane finishes or needs an answer — click to turn off",
@@ -10662,7 +10664,7 @@
       "title": "What Guard does",
       "hint": "Each action is graded, then handled by where the request came from.",
       "source": "Request source",
-      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl | sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
+      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl {'|'} sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
       "row": {
         "local": "You, on this computer",
         "relay": "Approved from a chat app",

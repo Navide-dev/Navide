@@ -883,8 +883,10 @@
           "conflict": "競合が検出されました。再読み込みしてからもう一度お試しください。",
           "internal-error": "バックエンドで内部エラーが発生しました。",
           "workspace-scope-violation": "ワークスペースの範囲外にあるファイルへのアクセスが試みられました。"
-        }
-      }
+        },
+        "rename-plan": "プラン名を変更"
+      },
+      "section-delete-confirm": "ドキュメントからセクション \"{anchor}\" を削除しますか？"
     },
     "terminal": {
       "readback-on-tooltip": "読み上げオン：このペインが完了または回答待ちになると読み上げます — クリックでオフ",
@@ -944,7 +946,7 @@
       "auto-named-tooltip": "このセッションの最初の指示から自動で名前を付けました。名前を変更すると、その名前が保持されます",
       "loop-tag-tooltip": "このペインでループが実行中です",
       "subtree-tooltip": "このペインから起動した {count} 個のペインが {status}",
-      "subtree-summary": "sub {status} {count}",
+      "subtree-summary": "サブペイン {status} {count}",
       "location-minimized": "サイドバーに最小化",
       "location-tab": "タブ：{name}",
       "location-workspace": "プロジェクト：{name}",
@@ -4539,23 +4541,23 @@
           },
           "addressing": {
             "pane": {
-              "form": "<pane name>",
+              "form": "<ペイン名>",
               "meaning": "自分のワークスペース内だけを検索します"
             },
             "folder": {
-              "form": "<folder name>/<pane name>",
+              "form": "<フォルダー名>/<ペイン名>",
               "meaning": "別のワークスペースウィンドウのペイン"
             },
             "suffix": {
-              "form": "<path suffix>/<pane name>",
+              "form": "<パスの末尾>/<ペイン名>",
               "meaning": "同名のフォルダーをパス末尾で区別します"
             },
             "absolute": {
-              "form": "<absolute path>/<pane name>",
+              "form": "<絶対パス>/<ペイン名>",
               "meaning": "最も正確な形式です"
             },
             "device": {
-              "form": "<device>/<workspace>/<pane name>",
+              "form": "<デバイス>/<ワークスペース>/<ペイン名>",
               "meaning": "別のマシンのペイン（両方とも Navide Cloud へのサインインが必要）"
             }
           },
@@ -6427,7 +6429,7 @@
           },
           "sample": {
             "workspace": "Agent-Team",
-            "group": "Build",
+            "group": "ビルド",
             "pane1": "architect",
             "pane2": "reviewer",
             "sub1": "claude · design",
@@ -8341,7 +8343,7 @@
     "pipeline": "パイプライン",
     "explorer": "エクスプローラー",
     "git": "Git",
-    "plans": "Plans",
+    "plans": "プラン",
     "cli-stage": "CLI ステージ",
     "history": "履歴",
     "tokens": "トークン",
@@ -8552,8 +8554,8 @@
     "detached": "分離状態",
     "locked": "ロック中",
     "stale": "無効な参照",
-    "detached-head": "detached HEAD",
-    "worktree-path-placeholder": "/path/to/worktree",
+    "detached-head": "切り離された HEAD",
+    "worktree-path-placeholder": "/ワークツリー/パス",
     "new-worktree-branch-placeholder": "新しいブランチ",
     "branch-placeholder": "ブランチ…",
     "create-new-branch": "新しいブランチを作成",
@@ -8592,7 +8594,7 @@
     "url": "URL",
     "no-tags": "タグはありません",
     "message": "メッセージ",
-    "absolute-path-placeholder": "/absolute/path",
+    "absolute-path-placeholder": "/絶対/パス",
     "worktree-create-new-branch": "新しいブランチを作成",
     "n-open": "{count} 件未解決",
     "no-issue-host": "このリポジトリでは対応する Issue ホストが検出されませんでした（GitHub または GitLab の origin リモートが必要です）。",
@@ -9966,7 +9968,7 @@
       "freq-weekly": "毎週",
       "freq-once": "1 回",
       "minutes": "分",
-      "workspace": "Workspace",
+      "workspace": "ワークスペース",
       "pick-workspace": "workspace を選択",
       "target": "対象 pane",
       "pick-pane": "pane を選択",
@@ -10662,7 +10664,7 @@
       "title": "Guard の動作",
       "hint": "各操作を分類し、依頼元に応じて処理します。",
       "source": "依頼元",
-      "levels": "重大：workspace やホーム外の削除、ディスク・システム操作、sudo、curl | sh、認証情報の読み書き、main への強制プッシュ、クラウドリソースの削除。高：workspace 内の rm -rf、git push／reset --hard、パッケージ公開、CI や git hooks の変更。",
+      "levels": "重大：workspace やホーム外の削除、ディスク・システム操作、sudo、curl {'|'} sh、認証情報の読み書き、main への強制プッシュ、クラウドリソースの削除。高：workspace 内の rm -rf、git push／reset --hard、パッケージ公開、CI や git hooks の変更。",
       "row": {
         "local": "このコンピューターのあなた",
         "relay": "チャットアプリで承認",

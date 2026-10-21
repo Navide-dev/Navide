@@ -98,7 +98,7 @@ describe('the subtree summary text', () => {
 
   it('is translated, not hard-coded', () => {
     i18n.global.locale.value = 'zh-TW'
-    expect(paneListSubtreeText('lead')).toBe(`sub ${paneStatusLabelText('awaiting')} 1`)
+    expect(paneListSubtreeText('lead')).toBe(`子 pane ${paneStatusLabelText('awaiting')} 1`)
   })
 })
 
