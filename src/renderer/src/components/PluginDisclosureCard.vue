@@ -73,9 +73,12 @@ function list(values: unknown): string {
 }
 
 /** `coverage` is both a sentence and the prefix of `coverage.incomplete`, so
- * the plain one reads `scan.coverage.base` (nested i18n keys cannot be both). */
+ * the plain one reads `scan.coverage.base` (nested i18n keys cannot be both).
+ * A file's card (localSource) reads `coverage.local`: Navide scanned it on this
+ * computer, not the Registry at publish. Marketplace cards are as before. */
 function scanKey(key: string): string {
-  return key === 'coverage' ? 'pluginDisclosure.scan.coverage.base' : `pluginDisclosure.scan.${key}`
+  if (key === 'coverage') return props.localSource ? 'pluginDisclosure.scan.coverage.local' : 'pluginDisclosure.scan.coverage.base'
+  return `pluginDisclosure.scan.${key}`
 }
 
 /** Third-party text with every invisible character spelled out, so a scanned
@@ -180,7 +183,7 @@ const facts = computed(() => {
         </ul>
       </div>
 
-      <h5 class="nv-disclosure-heading">{{ $t('pluginDisclosure.scanHeading') }}</h5>
+      <h5 class="nv-disclosure-heading">{{ $t(localSource ? 'pluginDisclosure.scanHeadingLocal' : 'pluginDisclosure.scanHeading') }}</h5>
       <ul v-if="scan" class="nv-disclosure-sentences">
         <li
           v-for="sentence in bodySentences"
@@ -190,7 +193,7 @@ const facts = computed(() => {
           {{ scanText(sentence) }}
         </li>
       </ul>
-      <p v-else class="nv-disclosure-noscan">{{ $t('pluginDisclosure.scan.noScan') }}</p>
+      <p v-else class="nv-disclosure-noscan">{{ $t(localSource ? 'pluginDisclosure.scan.noScanLocal' : 'pluginDisclosure.scan.noScan') }}</p>
 
       <details class="nv-disclosure-declared">
         <summary>{{ $t('pluginDisclosure.declaredHeading') }}</summary>
@@ -209,9 +212,9 @@ const facts = computed(() => {
       <p class="nv-disclosure-limits">
         <template v-if="coverageSentence">
           {{ scanText(coverageSentence) }}
-          {{ verified ? $t('pluginDisclosure.signedByRegistry') : $t('pluginDisclosure.scannedByRegistry') }}
+          {{ localSource ? $t('pluginDisclosure.scannedLocally') : verified ? $t('pluginDisclosure.signedByRegistry') : $t('pluginDisclosure.scannedByRegistry') }}
         </template>
-        <template v-else>{{ $t('pluginDisclosure.limitsWithoutScan') }}</template>
+        <template v-else>{{ $t(localSource ? 'pluginDisclosure.limitsWithoutScanLocal' : 'pluginDisclosure.limitsWithoutScan') }}</template>
       </p>
       <p v-if="hasViews !== false" class="nv-disclosure-view-network">
         {{ hasViews ? $t('pluginDisclosure.viewNetwork') : $t('pluginDisclosure.viewNetworkIfViews') }}

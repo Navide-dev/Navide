@@ -410,6 +410,19 @@ describe('A3: a local file signed by a vetted publisher', () => {
     expect(row.localSignature).toBeUndefined()
   })
 
+  it('a local file row carries the SHA-256 it was installed from and when (DX 9.4 A1)', async () => {
+    register()
+    const bytes = vsix()
+    await install(bytes, null)
+    const [row] = call('plugins:listInstalled') as Array<Record<string, unknown>>
+    const record = readLocalTrustRecord(localTrustRecordPath(pluginsRoot, 'acme.todo'))
+    expect(row.localInstall).toEqual({
+      fileDigest: sha256Hex(bytes),
+      contentDigest: record.contentDigest,
+      installedAt: record.consentedAt,
+    })
+  })
+
   it('signature no longer valid: a revoked key at install, or a key the Registry revokes later', async () => {
     register()
     const bytes = vsix()

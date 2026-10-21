@@ -191,24 +191,24 @@ function cellClass(cell: { kind: ' ' | '+' | '-' } | null): string {
   <div class="diff-pane">
     <div class="dp-toolbar">
       <span v-if="commit" class="dp-badge commit">{{ commit.slice(0, 7) }}</span>
-      <span v-else class="dp-badge" :class="staged ? 'staged' : 'unstaged'">{{ staged ? 'STAGED' : 'WORKING TREE' }}</span>
+      <span v-else class="dp-badge" :class="staged ? 'staged' : 'unstaged'">{{ staged ? $t('git.diff.badge-staged') : $t('git.diff.badge-working-tree') }}</span>
       <span class="dp-filepath" v-truncate>{{ filepath }}</span>
       <div class="dp-toolbar-actions">
         <!-- Open file in editor -->
-        <button class="dp-tbtn" title="Open file in editor" @click="emit('open-file', { filepath, name })">
+        <button class="dp-tbtn" :title="$t('git.diff.open-in-editor')" @click="emit('open-file', { filepath, name })">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
             <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25V1.75zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5H3.75zm6.75.56v2.19c0 .138.112.25.25.25h2.19L10.5 2.06z"/>
           </svg>
         </button>
         <!-- Prev hunk -->
-        <button class="dp-tbtn" title="Previous change (↑)" :disabled="closePrepared || applying || !hunkCount || atFirst" @click="prevHunk">
+        <button class="dp-tbtn" :title="$t('git.diff.prev-change')" :disabled="closePrepared || applying || !hunkCount || atFirst" @click="prevHunk">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06z" transform="rotate(90 8 8)"/></svg>
         </button>
         <!-- Next hunk -->
-        <button class="dp-tbtn" title="Next change (↓)" :disabled="closePrepared || applying || !hunkCount || atLast" @click="nextHunk">
+        <button class="dp-tbtn" :title="$t('git.diff.next-change')" :disabled="closePrepared || applying || !hunkCount || atLast" @click="nextHunk">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8.22 3.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L11.19 9H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.53a.75.75 0 0 1 0-1.06z" transform="rotate(90 8 8)"/></svg>
         </button>
-        <button class="dp-tbtn" title="Reload diff" :disabled="closePrepared || applying" @click="reloadDiff">
+        <button class="dp-tbtn" :title="$t('git.diff.reload')" :disabled="closePrepared || applying" @click="reloadDiff">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z"/></svg>
         </button>
       </div>
@@ -223,7 +223,7 @@ function cellClass(cell: { kind: ' ' | '+' | '-' } | null): string {
       <div v-else-if="isBinary" class="dp-msg">{{ $t('label.binary-file') }}</div>
       <div v-else-if="isEmpty" class="dp-msg">{{ $t('label.no-changes') }}</div>
       <div v-else-if="rawDiff === null" class="dp-msg">
-        Diff not loaded
+        {{ $t('git.diff.not-loaded') }}
         <button class="dp-refresh" style="margin-left: 8px" :disabled="closePrepared || applying" @click="reloadDiff">{{ $t('action.reload') }}</button>
       </div>
       <div v-else class="dp-hunks">
@@ -236,7 +236,7 @@ function cellClass(cell: { kind: ' ' | '+' | '-' } | null): string {
               </template>
               <template v-else>
                 <button v-if="hunkHasChanges(hunk)" class="hk-btn" :disabled="closePrepared || applying" @click="stageHunk(hunk)">{{ $t('action.stage-hunk') }}</button>
-                <button v-if="selectedCount(hi) > 0" class="hk-btn primary" :disabled="closePrepared || applying" @click="stageSelected(hunk, hi)">Stage Selected ({{ selectedCount(hi) }})</button>
+                <button v-if="selectedCount(hi) > 0" class="hk-btn primary" :disabled="closePrepared || applying" @click="stageSelected(hunk, hi)">{{ $t('git.diff.stage-selected', { count: selectedCount(hi) }) }}</button>
                 <button v-if="hunkHasChanges(hunk)" class="hk-btn danger" :disabled="closePrepared || applying" @click="discardHunk(hunk)">{{ $t('action.discard-hunk') }}</button>
               </template>
             </span>
