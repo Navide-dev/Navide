@@ -1,20 +1,40 @@
 import enUS from './locales/en-US.json'
 import zhTW from './locales/zh-TW.json'
 import jaJP from './locales/ja-JP.json'
+import koKR from './locales/ko-KR.json'
+import zhCN from './locales/zh-CN.json'
+import { isUiLocale } from '@navide/plugin-ui/foundation'
 
-export type SupportedBrowserLocale = 'en-US' | 'zh-TW' | 'ja-JP'
-export const SUPPORTED_BROWSER_LOCALES: readonly SupportedBrowserLocale[] = ['en-US', 'zh-TW', 'ja-JP'] as const
+// This plugin's catalogs. Adding a language: import its JSON above and add
+// one entry here (the locale must be listed in UI_LOCALES).
+const BROWSER_MESSAGES = {
+  'en-US': enUS,
+  'zh-TW': zhTW,
+  'ja-JP': jaJP,
+  'ko-KR': koKR,
+  'zh-CN': zhCN,
+}
+
+export type SupportedBrowserLocale = keyof typeof BROWSER_MESSAGES
+export const SUPPORTED_BROWSER_LOCALES: readonly SupportedBrowserLocale[] = Object.keys(BROWSER_MESSAGES) as SupportedBrowserLocale[]
 
 type MergeLocaleMessage = (locale: string, messages: Record<string, unknown>) => void
 
 export function installBrowserMessages(mergeLocaleMessage: MergeLocaleMessage): void {
-  mergeLocaleMessage('en-US', enUS)
-  mergeLocaleMessage('zh-TW', zhTW)
-  mergeLocaleMessage('ja-JP', jaJP)
+  for (const locale of SUPPORTED_BROWSER_LOCALES) mergeLocaleMessage(locale, BROWSER_MESSAGES[locale])
 }
 
+function isBrowserLocale(value: unknown): value is SupportedBrowserLocale {
+  return typeof value === 'string' && (SUPPORTED_BROWSER_LOCALES as readonly string[]).includes(value)
+}
+
+/**
+ * A locale with a catalog here → itself; any other UI locale → en-US; a value
+ * that is not a UI locale at all keeps the historical zh-TW default.
+ */
 export function resolveBrowserLocale(value: unknown): SupportedBrowserLocale {
-  return value === 'zh-TW' || value === 'en-US' || value === 'ja-JP' ? value : 'zh-TW'
+  if (isBrowserLocale(value)) return value
+  return isUiLocale(value) ? 'en-US' : 'zh-TW'
 }
 
 export function parseBrowserLocaleFromQuery(queryOrSearch: string): SupportedBrowserLocale {
@@ -30,10 +50,7 @@ export function extractLocaleFromSettingsEvent(payload: unknown): SupportedBrows
   const settings = record.settings
   if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) return null
   const language = (settings as Record<string, unknown>)['agent-team:language']
-  if (language === 'zh-TW' || language === 'en-US' || language === 'ja-JP') {
-    return language
-  }
-  return null
+  return isUiLocale(language) ? resolveBrowserLocale(language) : null
 }
 
 export interface BrowserI18nTarget {

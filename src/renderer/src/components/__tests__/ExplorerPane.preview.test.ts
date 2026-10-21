@@ -45,7 +45,7 @@ async function mountPane(props: Record<string, unknown> = {}, entries = [FILE_EN
 function previewItems(w: ReturnType<typeof mount>) {
   return w.findAll('.exp-ctx-item').filter((b) => {
     const t = b.text()
-    return t.includes('Show in preview') || t.includes('Show diff in preview')
+    return t.includes('Show in Preview') || t.includes('Show Diff in Preview')
   })
 }
 

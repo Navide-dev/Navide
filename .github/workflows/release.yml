@@ -92,8 +92,11 @@ jobs:
 
       - name: Run release gates
         env:
-          # vue-tsc on tsconfig.web.json outgrew Node's default ~2 GB heap and
-          # aborted here (OOM, exit 134); CI's test jobs already run with 4 GB.
+          # Added when vue-tsc on tsconfig.web.json outgrew Node's default ~2 GB
+          # heap here (OOM, exit 134). These `bun run` commands now run on Bun
+          # (bunfig.toml `[run] bun = true`), where this V8 heap flag most
+          # likely has no effect; it stays for anything that still starts a
+          # real Node.js, matching CI's test jobs.
           NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
           uv --project backend run --locked ruff check backend

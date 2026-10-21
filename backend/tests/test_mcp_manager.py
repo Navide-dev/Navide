@@ -717,3 +717,75 @@ async def test_cancelled_stop_still_kills_the_server_group(tmp_path, monkeypatch
                 os.kill(pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+
+
+# A stdio MCP server that answers the handshake and exits on stdin EOF, with a
+# grandchild that left its process group: the shape of `npx` on Windows, where
+# node.exe under cmd.exe is outside the library's Job object and so outlives a
+# teardown that ends only cmd.exe.
+_ESCAPED_GRANDCHILD_SERVER = r"""
+import json, os, subprocess, sys
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"],
+    start_new_session=True)
+with open(sys.argv[1], "w") as f:
+    f.write(f"{os.getpid()} {child.pid}")
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg.get("method") == "initialize":
+        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {
+            "protocolVersion": msg["params"]["protocolVersion"],
+            "capabilities": {}, "serverInfo": {"name": "escaped", "version": "0"}}}),
+            flush=True)
+"""
+
+
+def _probe_descendants(monkeypatch) -> None:
+    """As _probe_start_times, for the descendant walk and identity probe that
+    stop() reads from `ps`."""
+    from agent_team_backend import osplat
+
+    if osplat.process_tree.descendants(os.getppid()):
+        return
+    import psutil
+
+    def descendants(pid):
+        try:
+            return [p.pid for p in psutil.Process(pid).children(recursive=True)]
+        except psutil.Error:
+            return []
+
+    monkeypatch.setattr(osplat.process_tree, "descendants", descendants)
+    monkeypatch.setattr(
+        osplat.process_tree, "identity", lambda pid: f"{pid}:alive" if _alive(pid) else ""
+    )
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX sessions stand in for a Job escape")
+@pytest.mark.asyncio
+async def test_stop_ends_a_server_descendant_outside_its_group(tmp_path, monkeypatch):
+    # 0.2.27 packaged Windows check: after a normal quit the context7 server's
+    # cmd.exe was gone but its node.exe lived on — the library's teardown ends
+    # the Job (or group) it made, and a descendant outside it was left behind.
+    _probe_start_times(monkeypatch)
+    _probe_descendants(monkeypatch)
+    script = tmp_path / "server.py"
+    script.write_text(_ESCAPED_GRANDCHILD_SERVER)
+    pidfile = tmp_path / "pids"
+    client = MCPClient(MCPServerConfig(
+        name="escaped", command=sys.executable, args=[str(script), str(pidfile)]
+    ))
+    await client.start()
+    assert client.ready
+    pids = [int(p) for p in pidfile.read_text().split()]
+    try:
+        await asyncio.wait_for(client.stop(), timeout=8.0)
+        deadline = time.monotonic() + 3.0
+        while any(_alive(p) for p in pids) and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        assert not [p for p in pids if _alive(p)], "server and escaped grandchild must be gone"
+    finally:
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass

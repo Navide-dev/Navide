@@ -375,7 +375,7 @@ describe('UsageBadge – popover account list', () => {
     expect(wrapper.find('.usage-pop').exists()).toBe(true)
     expect(wrapper.find('.usage-pop-switch-title').exists()).toBe(false)
     expect(wrapper.find('.usage-acct-list').exists()).toBe(false)
-    // The "Add / manage accounts…" entry is always available.
+    // The "Add / Manage Accounts…" entry is always available.
     expect(wrapper.find('.usage-acct-manage').exists()).toBe(true)
   })
 

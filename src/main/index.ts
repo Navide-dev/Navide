@@ -39,7 +39,7 @@ import {
   setMarketplaceOverridesAllowed,
 } from './plugins/pluginIpc'
 import { scanLocalPackageInWorker } from './plugins/pluginLocalScan'
-import { developerFolderBackendDigest, PluginDeveloperModeStore } from './plugins/pluginDeveloperModeStore'
+import { developerFolderBackendDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './plugins/pluginDeveloperModeStore'
 import { disableOfficialKeyOverride } from './plugins/pluginVerify'
 import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
@@ -88,7 +88,7 @@ import {
   getContributionWindowConfig,
   getContributionWindowKey,
 } from './plansWindowRouting'
-import { MENU_STRINGS } from './menuStrings'
+import { menuStringsFor } from './menuStrings'
 import { HostLocaleManager, readPersistedLocaleFromSettings, type SupportedLocale } from './hostLocale'
 import {
   activateFactoryGitWithLegacyFallback,
@@ -132,6 +132,7 @@ import {
   CLI_BUFFER_REPLY_CHANNEL,
   type CliPaneBufferResult
 } from './cli-buffer-relay'
+import { workspaceIdentityKey } from './workspace-identity'
 import {
   PaneActionRelay,
   PANE_ACTION_REPLY_CHANNEL,
@@ -177,6 +178,7 @@ import { watchRendererCrashes } from './renderer-crash-reload'
 import { recordMainFault, setMainLedgerDataDir } from './error-ledger'
 import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
+import { createPluginStagedCandidateRelay } from './pluginStagedCandidateRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
@@ -480,16 +482,18 @@ function normalizeWorkspacePath(p: string): string {
 }
 
 function findMainWindowForWorkspace(workspacePath: string): BrowserWindow | null {
-  const target = normalizeWorkspacePath(workspacePath)
+  // Compared by the folder's real identity, case included (review #546): the
+  // JS realpath behind normalizeWorkspacePath keeps the case it is given.
+  const target = workspaceIdentityKey(workspacePath)
   if (!target) return null
   // A window whose primary it is wins: that is where its tabs, git and
   // explorer already point.
   for (const [win, wp] of mainWindowWorkspaces) {
-    if (!win.isDestroyed() && normalizeWorkspacePath(wp) === target) return win
+    if (!win.isDestroyed() && workspaceIdentityKey(wp) === target) return win
   }
   for (const [win, list] of adoptedWorkspaces) {
     if (win.isDestroyed()) continue
-    if (list.some((wp) => normalizeWorkspacePath(wp) === target)) return win
+    if (list.some((wp) => workspaceIdentityKey(wp) === target)) return win
   }
   return null
 }
@@ -648,7 +652,7 @@ function loadWindow(win: BrowserWindow, params: Record<string, string>): void {
 
 async function createWindow(
   params: Record<string, string> = {},
-  opts?: { bounds?: WindowBounds }
+  opts?: { bounds?: WindowBounds; background?: boolean }
 ): Promise<BrowserWindow> {
   // Saved bounds may point at a display that is no longer attached.
   const bounds = opts?.bounds && onScreenBounds(
@@ -758,13 +762,17 @@ async function createWindow(
   const showOnce = (): void => {
     if (_shown || win.isDestroyed()) return
     _shown = true
-    win.show()
+    // A window an agent opened for a child pane appears without taking focus
+    // from whatever the user is doing (cli_open_agent window "new").
+    if (opts?.background) win.showInactive()
+    else win.show()
   }
   win.once('ready-to-show', showOnce)
   setTimeout(showOnce, 4000)
   // A Plans notice that found no loaded main window is handed to this one.
   win.webContents.on('did-finish-load', () => plansBackendStoppedRelay.flush(win))
   win.webContents.on('did-finish-load', () => pluginAgentActionRelay.flush(win))
+  win.webContents.on('did-finish-load', () => pluginStagedCandidateRelay.flush(win))
   win.on('focus', () => { mainWindow = win })
   win.on('closed', () => {
     mainWindows.delete(win)
@@ -989,7 +997,20 @@ const pluginsRoot = (): string => join(app.getPath('userData'), 'plugins')
 // Card K4 (D6): a packaged build honors the self-hosted Registry overrides only
 // while the user's Developer Mode switch is on, and never takes the official
 // publisher key from the environment. Set before anything resolves either.
-const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot())
+// A2-5 (G5): entries of that file another program wrote are disclosed and
+// asked about again. Its HMAC key is wrapped by safeStorage, touched only once
+// the app is ready and only while Developer Mode is in use; before that, or
+// without secure storage, nothing is checked (disclosed).
+const pluginDeveloperModeIntegrity: DeveloperModeIntegrity = {
+  get available(): boolean {
+    return app.isReady() && !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
+      (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+  },
+  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
+  decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
+  onExternalChange: () => frontendPluginManager.recordDeveloperModeExternalChange(app.getVersion()),
+}
+const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot(), pluginDeveloperModeIntegrity)
 setMarketplaceOverridesAllowed(() => !app.isPackaged || pluginDeveloperModeStore.isEnabled())
 if (app.isPackaged) disableOfficialKeyOverride()
 let installedRegistryRootKey: string | null = null
@@ -1009,8 +1030,6 @@ try {
 const pluginTestplaceStore = new PluginTestplaceStore(pluginsRoot())
 const keepsExpiredTestplace = (packageId: string, artifactDigest: string): boolean =>
   pluginTestplaceStore.keepsExpired(packageId, artifactDigest)
-const withdrawnTestplace = (packageId: string, version: string): boolean =>
-  pluginTestplaceStore.isWithdrawn(packageId, version)
 const installedPluginTrust = {
   pinnedRootKey: installedRegistryRootKey,
   snapshot: readRegistryTrustSnapshot(pluginsRoot()),
@@ -1018,7 +1037,8 @@ const installedPluginTrust = {
   officialRegistryUrl: installedOfficialRegistryUrl,
   expectedTarget: currentPluginHostTarget(),
   keepsExpiredTestplace,
-  withdrawnTestplace,
+  // 0.2.28 (user, 10-21): a Testplace withdrawal never stops a build at
+  // start; Extensions labels it and the tester is asked once.
 }
 
 function currentInstalledRegistryTrust() {
@@ -1031,7 +1051,6 @@ function currentInstalledRegistryTrust() {
     expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
     now: marketplace.trust.now,
     keepsExpiredTestplace,
-    withdrawnTestplace,
   }
 }
 
@@ -1651,6 +1670,9 @@ const plansBackendStoppedRelay = createPlansBackendStoppedRelay({
 // An agent disabled or enabled a Navide plugin (B2-c): the main window names
 // the caller and offers the undo; held until one has loaded.
 const pluginAgentActionRelay = createPluginAgentActionRelay({ window: () => mainWindow })
+// A plugin installed without Restart that the launch could not activate: the
+// main window says why and where Restart and Discard are; held until one has loaded.
+const pluginStagedCandidateRelay = createPluginStagedCandidateRelay({ window: () => mainWindow })
 frontendPluginManager.setPlansBackendStoppedHandler(({ workspacePath }) => {
   // A headless (agent) Plans child failed too often to be restarted. Nothing
   // on screen shows it, so the workspace's window tells the user how to bring
@@ -1951,6 +1973,11 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
+    onPackageSwitchFailed: (failure) => {
+      console.warn(`[main] switching ${failure.pluginId} to ${failure.stagedVersion} failed: ${failure.reason}`)
+      pluginStagedCandidateRelay.notifyStagedUpdates([failure])
+    },
     promptDigestBlock,
     preflightCandidateFrontend,
     preflightCandidateBackend,
@@ -1965,6 +1992,15 @@ const pluginTrustRefresh = registerPluginIpc(
       })
       return picked.canceled ? null : picked.filePaths[0] ?? null
     },
+    // DESIGN-A2 G1: an automatic reload of a developer folder; the main
+    // windows refresh the Developer Mode list and say when consent is needed.
+    onDeveloperFolderEvent: (folderEvent) => {
+      for (const hostWindow of mainWindows) {
+        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+        hostWindow.webContents.send('plugins:developerFolderEvent', folderEvent)
+      }
+    },
+    developerModeIntegrity: pluginDeveloperModeIntegrity,
     pickDeveloperFolder: async (event) => {
       const parent = BrowserWindow.fromWebContents(event.sender)
       if (!parent || parent.isDestroyed() || !mainWindows.has(parent) || detachedWindowIds.has(parent.id)) return null
@@ -2168,7 +2204,23 @@ const pluginTrustRefresh = registerPluginIpc(
   }
 )
 // Card K4: the developer folders the user consented to, when Developer Mode is on.
-void pluginTrustRefresh.loadDeveloperFolders()
+// A2-5: once the app is ready, so the consent signatures can be checked.
+void app.whenReady().then(() => pluginTrustRefresh.loadDeveloperFolders())
+// A first install the user did not restart is activated now, as Restart would
+// have done it; one that cannot be stays staged and the main window says why.
+// A package staged beside an active one is not applied for the user: the main
+// window says which version waits and which runs, and offers to apply it.
+void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
+  for (const failure of failures) {
+    console.warn(`[main] plugin ${failure.pluginId} ${failure.version} installed without Restart was not activated: ${failure.reason}`)
+    pluginStagedCandidateRelay.notify(failure)
+  }
+}, (error) => {
+  console.warn(`[main] staged plugin activation failed: ${error instanceof Error ? error.message : String(error)}`)
+}).finally(() => {
+  const staged = pluginTrustRefresh.stagedUpdates()
+  if (staged.length > 0) pluginStagedCandidateRelay.notifyStagedUpdates(staged)
+})
 
 // Navide Marketplace developer (W3): sign-in, publish, yank and the developer
 // application. Tokens and the signing key are safeStorage ciphertext in their
@@ -2784,9 +2836,9 @@ ipcMain.handle('backend:stop', async () => {
 
 async function pickWorkspacePath(defaultPath?: string): Promise<string | null> {
   const opts: Electron.OpenDialogOptions = {
-    title: MENU_STRINGS[currentUiLocale()].pickWorkspace,
+    title: menuStringsFor(currentUiLocale()).pickWorkspace,
     properties: ['openDirectory', 'createDirectory'],
-    buttonLabel: MENU_STRINGS[currentUiLocale()].useFolder
+    buttonLabel: menuStringsFor(currentUiLocale()).useFolder
   }
   if (defaultPath && typeof defaultPath === 'string') opts.defaultPath = defaultPath
 
@@ -2806,10 +2858,10 @@ ipcMain.handle('workspace:new', async (): Promise<NewWorkspaceResult> => {
   // workspace in the same step that places it. `defaultPath` seeds both — the
   // home directory and an editable placeholder name.
   const opts: Electron.SaveDialogOptions = {
-    title: MENU_STRINGS[currentUiLocale()].createWorkspace,
+    title: menuStringsFor(currentUiLocale()).createWorkspace,
     defaultPath: join(app.getPath('home'), 'navide-workspace'),
-    nameFieldLabel: MENU_STRINGS[currentUiLocale()].workspaceName,
-    buttonLabel: MENU_STRINGS[currentUiLocale()].create,
+    nameFieldLabel: menuStringsFor(currentUiLocale()).workspaceName,
+    buttonLabel: menuStringsFor(currentUiLocale()).create,
     // `showOverwriteConfirmation` is Linux-only and deliberately left off:
     // nothing here overwrites, so asking "replace it?" would promise something
     // the mkdir below refuses to do. macOS and Windows ask anyway and cannot
@@ -3711,7 +3763,7 @@ async function showGitViewUnavailable(target: BrowserWindow | null): Promise<voi
     : dialog.showMessageBox(options))
 }
 
-function openMainWindow(workspacePath = ''): void {
+function openMainWindow(workspacePath = '', background = false): void {
   const params: Record<string, string> = {}
   const ws = workspacePath?.trim() ?? ''
   if (ws) {
@@ -3728,11 +3780,11 @@ function openMainWindow(workspacePath = ''): void {
     // this — their previous sessions are dead and restore should run.
     params.duplicate = '1'
   }
-  void createWindow(params)
+  void createWindow(params, background ? { background: true } : undefined)
 }
 
-ipcMain.handle('window:openMain', (_event, args?: { workspace_path?: string }) => {
-  openMainWindow(args?.workspace_path)
+ipcMain.handle('window:openMain', (_event, args?: { workspace_path?: string; background?: boolean }) => {
+  openMainWindow(args?.workspace_path, args?.background === true)
   return { ok: true }
 })
 
@@ -3832,6 +3884,16 @@ ipcMain.handle('workspace:listOpen', () => {
     if (!win.isDestroyed()) open.push(...list)
   }
   return open
+})
+
+// Which OTHER window holds a workspace, by title, or '' when none does (or only
+// the asking window). cli_open_agent's "current" window choice refuses a
+// project another window already holds and names that window.
+ipcMain.handle('workspace:holder', (event, workspacePath: string) => {
+  const self = BrowserWindow.fromWebContents(event.sender)
+  const existing = findMainWindowForWorkspace(String(workspacePath ?? ''))
+  if (!existing || existing === self) return ''
+  return existing.getTitle() || 'another Navide window'
 })
 
 ipcMain.handle('workspace:focusExisting', (event, workspacePath: string) => {
@@ -4017,6 +4079,40 @@ ipcMain.handle('window:reattachGroup', (event, arg: { groupId?: string } | undef
   const child = detachedGroups.get(groupId)
   if (!child || child.isDestroyed()) return { ok: false }
   child.close()
+  return { ok: true }
+})
+
+// MCP window_focus (DESIGN-C S3): a window brings ITSELF to the front. The
+// window is the sender's, never an argument, so a renderer cannot focus (or
+// name) any other window through this.
+ipcMain.handle('window:focusSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return { ok: false }
+  revealMainWindow(win)
+  return { ok: true }
+})
+
+// MCP window_close (DESIGN-C S4a): a window closes ITSELF, the same close its
+// own title-bar button makes (so the last-window guard still applies). The
+// window is the sender's, never an argument.
+// Off macOS the last main window cannot be closed this way: that would quit
+// Navide and end every CLI. Asked before the window lets go of anything
+// (window:canCloseSelf), and again at the close itself.
+function agentCloseRefusal(win: BrowserWindow | null): string | null {
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return 'not-a-main-window'
+  const others = [...mainWindows].filter((w) => w !== win && !w.isDestroyed() && !detachedWindowIds.has(w.id))
+  if (!isMac() && !detachedWindowIds.has(win.id) && others.length === 0) return 'last-window'
+  return null
+}
+ipcMain.handle('window:canCloseSelf', (event) => {
+  const refusal = agentCloseRefusal(BrowserWindow.fromWebContents(event.sender))
+  return refusal ? { ok: false, error: refusal } : { ok: true }
+})
+ipcMain.handle('window:closeSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const refusal = agentCloseRefusal(win)
+  if (refusal || !win) return { ok: false, error: refusal ?? 'not-a-main-window' }
+  win.close()
   return { ok: true }
 })
 
@@ -5788,7 +5884,7 @@ app.on('web-contents-created', (_e, contents) => {
     if (isPluginWebGuest(contents)) return
     if (!isAppNavigation(url)) e.preventDefault()
   })
-  guardPlanFrameNavigation(contents)
+  guardPlanFrameNavigation(contents, () => isPluginWebGuest(contents))
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }

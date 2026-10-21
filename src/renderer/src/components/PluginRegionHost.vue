@@ -14,9 +14,10 @@
 // inside an already-hidden subtree — which is what lets a hidden Git tab keep
 // its changes badge current.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { PluginSource } from '../../../shared/pluginSource'
+import type { LocalInstallDetails, PluginSource } from '../../../shared/pluginSource'
 import { chromeSourceMark } from '../lib/pluginSourceMark'
 import PluginSourceBadge from './PluginSourceBadge.vue'
+import DeveloperFolderInfoCard, { type DeveloperFolderInfo } from './DeveloperFolderInfoCard.vue'
 
 export interface PluginRegionContribution {
   pluginId: string
@@ -35,6 +36,8 @@ export interface PluginRegionContribution {
   /** A test build: its signed expiry and how the user joined the test. */
   expiresAt?: string
   testplaceVia?: 'invite' | 'code'
+  /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+  localInstall?: LocalInstallDetails
 }
 
 const props = defineProps<{
@@ -48,6 +51,22 @@ const props = defineProps<{
 const src = ref<string | null>(null)
 const error = ref<string | null>(null)
 const sourceMark = computed(() => chromeSourceMark(props.contribution.source))
+
+// A2-3: a developer folder's badge opens its "Local folder" info card, read
+// from the main process when opened (Host chrome, outside the guest).
+const folderInfo = ref<DeveloperFolderInfo | null>(null)
+async function toggleFolderInfo(): Promise<void> {
+  if (folderInfo.value) {
+    folderInfo.value = null
+    return
+  }
+  try {
+    const state = await window.agentTeam?.plugins?.developerMode?.()
+    folderInfo.value = state?.folders.find((folder) => folder.pluginId === props.contribution.pluginId) ?? null
+  } catch {
+    folderInfo.value = null
+  }
+}
 let generation = 0
 let themeObserver: MutationObserver | null = null
 /** True once a Host-side instance may exist for this contribution key. */
@@ -141,7 +160,15 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.workspacePath, props.contribution.contributionKey] as const,
+  // A new package version (Restart, an update taking effect, a rollback) means
+  // the Host drained the old guest; prepare a fresh one in place. Each value is
+  // compared on its own, so a refreshed contribution object with the same
+  // values keeps the guest.
+  [
+    () => props.workspacePath,
+    () => props.contribution.contributionKey,
+    () => props.contribution.packageVersion,
+  ],
   () => void prepare(),
   { immediate: true }
 )
@@ -178,10 +205,25 @@ onBeforeUnmount(() => {
     <!-- K2: a persistent source strip in Navide's own chrome, above the guest. -->
     <div v-if="sourceMark" class="plugin-region-host__source">
       <span class="plugin-region-host__title" v-text="contribution.title" />
-      <PluginSourceBadge :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" />
+      <button
+        v-if="sourceMark === 'developer-unpacked'"
+        type="button"
+        class="plugin-region-host__folder-toggle"
+        :aria-expanded="folderInfo !== null"
+        @click="toggleFolderInfo"
+      >
+        <PluginSourceBadge :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" :local-install="contribution.localInstall" />
+      </button>
+      <PluginSourceBadge v-else :source="sourceMark" :expires-at="contribution.expiresAt" :via="contribution.testplaceVia" :local-install="contribution.localInstall" />
     </div>
+    <DeveloperFolderInfoCard
+      v-if="sourceMark && folderInfo"
+      class="plugin-region-host__folder-card"
+      :folder="folderInfo"
+      @close="folderInfo = null"
+    />
     <div v-if="error" class="plugin-region-host__error" role="status">
-      {{ contribution.title }} unavailable
+      {{ $t('label.region-unavailable', { title: contribution.title }) }}
     </div>
     <webview
       v-else-if="src"
@@ -227,6 +269,19 @@ onBeforeUnmount(() => {
   padding: 3px 8px;
   border-bottom: 1px solid var(--border-muted);
   font-size: var(--font-2xs);
+}
+
+.plugin-region-host__folder-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* A2-3: in the flow between the strip and the guest, never over the guest. */
+.plugin-region-host__folder-card {
+  flex: none;
+  margin: 6px 8px;
 }
 
 .plugin-region-host__title {

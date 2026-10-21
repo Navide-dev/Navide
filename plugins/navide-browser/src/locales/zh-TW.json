@@ -47,7 +47,7 @@
     },
     "settings": {
       "title": "設定",
-      "shared-sign-in": "所有 Space 共用同一份登入資料，保存在這台電腦上。agent 會使用你在 Navide 瀏覽器中的登入身分（可代你在網頁上發送請求）。你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止。",
+      "shared-sign-in": "所有 Space 共用同一份登入資料，儲存在這台電腦上。agent 會使用你在 Navide 瀏覽器中的登入身分（可代你在網頁上發送請求）。你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止。",
       "clear-data": "清除所有登入資料",
       "clear-data-confirm": "再按一次，登出 Navide 瀏覽器裡的所有網站",
       "clear-data-done": "已清除登入資料。",

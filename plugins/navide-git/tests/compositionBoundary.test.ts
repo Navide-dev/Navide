@@ -314,7 +314,7 @@ describe('navide.git public composition', () => {
           'vue-i18n': installedVersion(repositoryRoot, 'vue-i18n'),
           'vue-tsc': installedVersionOrUndefined(repositoryRoot, 'vue-tsc'),
         }
-        expect(versions.vite).toBe('6.4.3')
+        expect(versions.vite).toBe('6.4.4')
         writeConsumerProject(externalProject, packageTarballs, versions)
 
         for (const packageName of Object.keys(packageTarballs)) {

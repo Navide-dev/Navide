@@ -20,6 +20,7 @@ from registry.migrations import MIGRATIONS, applied_migrations, run_migrations
 from registry.models import DeveloperQualification, ExtensionVersion, Publisher, RegistryAudit
 
 from tests.fixtures import build_v2_package, contract_manifest
+from tests.test_multi_target import _meets_local_backend_rules
 
 ADMIN = "testplace-admin"  # noqa: S105 - test fixture token
 PUBLISHER_TOKEN = "tok-" + "acme-testplace"
@@ -578,7 +579,7 @@ PE_X64 = b"MZ" + b"\0" * 0x3A + (0x40).to_bytes(4, "little") + b"PE\0\0" + (0x86
 
 
 def _publish_native(client: TestClient, target: str, *, channel: str, version: str = "1.0.0"):
-    manifest = contract_manifest("backend-only-skills.json")
+    manifest = _meets_local_backend_rules(contract_manifest("backend-only-skills.json"))
     manifest.update(id="acme.tool", publisher="acme", version=version)
     data = MACHO_ARM64 if target.startswith("darwin") else PE_X64
     backend_name = manifest["backend"]["entry"] + ".exe" if data.startswith(b"MZ") else None
@@ -846,3 +847,67 @@ def test_a_globally_blocked_test_build_is_not_served_to_testers_but_reads_as_wit
     assert client.get("/api/testplace/acme/files/1.0.0/download", headers=tester).status_code == 404
     withdrawn = client.get("/api/testplace/acme/files/withdrawn", headers=tester).json()["withdrawn"]
     assert {row["version"] for row in withdrawn} == {"1.0.0", "1.1.0"}
+
+
+# -- testplace-withdrawn in the local-install trust document (0.2.28) ---------
+def _local_install_document(client: TestClient) -> dict:
+    from registry.signing import public_key_from_private
+    from tests.test_registry_signing import _verify
+
+    body = client.get("/api/trust/local-install").json()
+    document = body["local_trust_metadata"]
+    root = public_key_from_private(client.app.state.registry.trust_signer.root_private_key)
+    _verify(root, document, body["local_trust_metadata_signature"])
+    return document
+
+
+def _digest_of(client: TestClient, version: str) -> str:
+    with _session(client) as session:
+        return session.exec(select(ExtensionVersion).where(ExtensionVersion.version == version)).one().package_digest
+
+
+def test_a_withdrawn_test_build_lists_only_its_digest_as_testplace_withdrawn(client: TestClient) -> None:
+    """A tester who is offline or signed out learns of the withdrawal from the
+    root-signed document; it names the digest only, never the package."""
+    assert _publish(client).status_code == 201
+    assert _publish(client, "1.1.0").status_code == 201
+    withdrawn, live = _digest_of(client, "1.0.0"), _digest_of(client, "1.1.0")
+    assert _local_install_document(client)["blockedDigests"] == []
+
+    resp = client.post(
+        "/api/testplace/acme/files/versions/1.0.0/revoke", json={"reason": "crash"}, headers=_publisher()
+    )
+    assert resp.status_code == 200, resp.text
+    document = _local_install_document(client)
+    assert document["blockedDigests"] == [{"digest": withdrawn, "reason": "testplace-withdrawn"}]
+    assert live not in str(document)
+    assert "acme" not in str(document["blockedDigests"]) and "1.0.0" not in str(document["blockedDigests"])
+    # Computed, not a blocklist row: no admin entry, nothing on the public removed list, no publish refusal.
+    with _session(client) as session:
+        assert blocklist.digest_blocked(session, withdrawn) is None
+        assert blocklist.removed_list(session, client.app.state.registry.settings) == []
+
+
+def test_a_developer_yank_of_a_test_build_also_lists_its_digest(client: TestClient) -> None:
+    assert _publish(client).status_code == 201
+    assert client.post("/api/extensions/acme/files/1.0.0/yank", headers=_publisher()).status_code == 200
+    assert _local_install_document(client)["blockedDigests"] == [
+        {"digest": _digest_of(client, "1.0.0"), "reason": "testplace-withdrawn"}
+    ]
+
+
+def test_an_existing_digest_block_keeps_its_own_reason(client: TestClient) -> None:
+    """RULE ZERO: security, admin and the rest are listed exactly as before."""
+    assert _publish(client).status_code == 201
+    digest = _digest_of(client, "1.0.0")
+    with _session(client) as session:
+        blocklist.block_digests(session, [digest], reason="malware", digest_reason="security", created_by="admin")
+        session.commit()
+    client.post("/api/testplace/acme/files/versions/1.0.0/revoke", json={"reason": "x"}, headers=_publisher())
+    assert _local_install_document(client)["blockedDigests"] == [{"digest": digest, "reason": "security"}]
+
+
+def test_a_yanked_public_version_is_not_listed_as_testplace_withdrawn(client: TestClient) -> None:
+    assert _publish(client, "2.0.0", channel="stable").status_code == 201
+    assert client.post("/api/extensions/acme/files/2.0.0/yank", headers=_publisher()).status_code == 200
+    assert _local_install_document(client)["blockedDigests"] == []

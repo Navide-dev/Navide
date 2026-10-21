@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// The sidebar's plain "Close workspace" lets go of the workspace and leaves its
-// CLIs running; "Close workspace and its panes" (closeWorkspace) is the one
+// The sidebar's plain "Close Workspace" lets go of the workspace and leaves its
+// CLIs running; "Close Workspace and Its Panes" (closeWorkspace) is the one
 // that ends them. What makes the plain one easy to get wrong is the half detach
 // skips: panesInView only holds back workspaces the window still HOLDS, so a
 // let-go workspace's panes would surface on the stage of whatever project is

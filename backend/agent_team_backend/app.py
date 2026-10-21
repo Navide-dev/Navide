@@ -484,6 +484,14 @@ def has_main_window() -> bool:
     return any(not s.dead and is_main_window(s) for s in list(_SESSIONS))
 
 
+def main_window_sessions() -> list["Session"]:
+    """The main windows connected now that announced a page-load id."""
+    return [
+        s for s in list(_SESSIONS)
+        if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
+    ]
+
+
 def live_main_window_ids() -> set[str]:
     """The page-load ids (``ui.invoke.ready`` window_id) of the main windows connected now."""
     return {
@@ -658,6 +666,12 @@ class Session:
         # A main window's page-load id (`ui.invoke.ready` window_id): stays the
         # same across reconnects, changes when the window reloads (B2-c).
         self.window_id = ""
+        # The workspaces a main window holds (`ui.invoke.ready` workspaces):
+        # the one it opened with plus the ones its sidebar adopted, re-announced
+        # whenever that list changes. Read by the MCP self-close checks, which
+        # count a window holding the caller's workspace as the caller's own
+        # even when none of that workspace's panes sit in it.
+        self.held_workspaces: tuple[str, ...] = ()
         # Set by `window.prove` answering this connection's challenge (see
         # navide_window_proof_matches): a Navide window, as opposed to any
         # other client holding the token. ui_bus_ready is self-declared.
@@ -3949,7 +3963,32 @@ def _probe_agent_cli_for_spawn(agent_key: str, requested_command: Any = None) ->
             f"(--version printed {output.splitlines()[0][:60] if output else 'nothing'!r}); "
             f"to use {dep.label}, install it with: {install}"
         )
+    else:
+        untested = _untested_version_note(agent_key, dep.label, version)
+        if untested:
+            details["untested_version"] = untested
     return details
+
+
+def _leading_version(text: str) -> tuple[int, ...]:
+    # "2026.08.25-3e8eec8" -> (2026, 8, 25): a build suffix is not a version.
+    m = re.match(r"\d+(?:\.\d+)*", text.strip())
+    return tuple(int(p) for p in m.group(0).split(".")) if m else ()
+
+
+def _untested_version_note(agent_key: str, label: str, version: str | None) -> str:
+    """A line for the pane when the CLI is newer than the version Navide was
+    last verified against. Disclosure only: the spawn goes ahead either way."""
+    spec = cli_vendor(agent_key)
+    switch = spec.account_switch if spec is not None else None
+    verified = switch.verified_version if switch is not None else ""
+    found, known = _leading_version(version or ""), _leading_version(verified)
+    if not found or not known or found <= known:
+        return ""
+    return (
+        f"{label} {version} is newer than the last version Navide verified "
+        f"({verified}); it should work, but this version has not been tested"
+    )
 
 
 _HOME_PREFIX = str(Path.home())

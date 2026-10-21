@@ -5718,7 +5718,7 @@ describe('immutable package restart frontend seam', () => {
     }
   })
 
-  it('does not silently complete a renderer-owned guest placement', async () => {
+  it('completes a restart with an in-window guest open, leaving its remount to the renderer', async () => {
     const mgr = new FrontendPluginManager()
     const pluginId = 'acme.pending-guest'
     const oldVersion = '1.0.0'
@@ -5743,9 +5743,17 @@ describe('immutable package restart frontend seam', () => {
       mgr.registerDescriptor(descriptor(newVersion))
       mgr.setPluginStorageSnapshotSelection(pluginId, { activeVersion: newVersion, previousVersion: oldVersion })
 
-      await expect(mgr.restorePackageRestart(transaction, newVersion)).rejects.toThrow(/guest re-prepare/)
-      expect(() => mgr.completePackageRestart(transaction)).toThrow(/required placements/)
-      mgr.cancelPackageRestart(transaction)
+      // L2: the in-window guest is its renderer's to remount: the restart
+      // completes, counts it, and the renderer prepares the new version.
+      await expect(mgr.restorePackageRestart(transaction, newVersion)).resolves.toEqual({
+        restoredInstances: 0,
+        skippedDestroyedHostWindows: 0,
+        rendererRemounts: 1,
+      })
+      expect(() => mgr.completePackageRestart(transaction)).not.toThrow()
+      await expect(mgr.prepareGuestContribution(asHost(host), view.contributionKey, {
+        workspacePath: '/workspace', query: '?workspace_path=%2Fworkspace',
+      })).resolves.toMatchObject({ ok: true })
     } finally {
       revoke.mockRestore()
       await mgr.closeBackendPlugins()
@@ -15124,8 +15132,11 @@ describe('Git left legacy rollback composition', () => {
       const q3 = new URLSearchParams(plansQuery('/workspace', '', '', '', '  en-US  '))
       expect(q3.get('locale')).toBe('en-US')
 
-      const q4 = new URLSearchParams(plansQuery('/workspace', '', '', '', 'fr-FR'))
+      const q4 = new URLSearchParams(plansQuery('/workspace', '', '', '', 'it-IT'))
       expect(q4.get('locale')).toBe('zh-TW')
+
+      const q4b = new URLSearchParams(plansQuery('/workspace', '', '', '', 'fr-FR'))
+      expect(q4b.get('locale')).toBe('fr-FR')
 
       const q5 = new URLSearchParams(plansQuery('/workspace', '', '', ''))
       expect(q5.get('locale')).toBe('zh-TW')

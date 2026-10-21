@@ -19,6 +19,9 @@ export interface PendingInstall {
   /** W1 (S2): an agent's file request this consent carries out; the dialog
    *  names who asked. Absent for the user's own pick. */
   agentRequest?: { requester: string }
+  /** L4: this consent is for going back to the kept file version `prepared`
+   *  describes, from the version named here; approving rolls back. */
+  rollbackFrom?: string
 }
 
 /** Card K3: the extra step a package of the same id asks for before it is
@@ -66,6 +69,7 @@ export function usePluginInstallFlow() {
     // prepare of the same id meanwhile (an agent's request, a second pick)
     // is refused instead of installed.
     const shown = pendingConfirm.value?.prepared.id === id ? pendingConfirm.value.prepared : undefined
+    let committed: { restartRequired?: boolean; activationError?: string } | undefined
     if (pendingSource === 'developer-unpacked') {
       if (!plugins.commitFolderLoad) throw new Error('loading from a folder is unavailable')
       await plugins.commitFolderLoad(id, {
@@ -74,17 +78,33 @@ export function usePluginInstallFlow() {
       })
     } else if (local) {
       if (!plugins.commitLocalInstall) throw new Error('installing from a file is unavailable')
-      await plugins.commitLocalInstall(id, {
+      committed = await plugins.commitLocalInstall(id, {
         riskConfirmed: approval.riskConfirmed === true,
         ...replace,
         ...(shown?.digest ? { expectedDigest: shown.digest } : {}),
       })
     } else {
-      await plugins.commitInstall(id, { ...approval, ...replace })
+      committed = await plugins.commitInstall(id, { ...approval, ...replace })
     }
     pendingConfirm.value = null
     pendingStep.value = null
     await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
+    // L3: an approved update takes effect now, through the same Restart the
+    // list offers (the dialog said so before approval, and the switch is
+    // recorded with a way back). The main window refreshes once it is done.
+    if (committed?.restartRequired === true && !committed.activationError && plugins.restart) {
+      try {
+        await plugins.restart(id)
+      } catch (err) {
+        committed = { ...committed, activationError: ipcErrorMessage(err) }
+      }
+      await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
+    }
+    // L1: a first install is activated on approval; one that could not be
+    // stays staged with Restart and Discard, and the reason is shown.
+    if (committed?.activationError) {
+      error.value = t('settings.extensions.activationFailed', { plugin: id, reason: committed.activationError })
+    }
   }
 
   // `version` pins the artifact (an update names the newest version this Host
@@ -149,13 +169,19 @@ export function usePluginInstallFlow() {
    *  folder) when the agent asked; this holds that copy for the same consent
    *  dialog as the user's own pick, naming who asked. A file whose digest is
    *  not the one the request card showed is refused. */
-  async function prepareAgentFile(stagingId: string, expectedDigest: string | null, requester: string): Promise<void> {
+  async function prepareAgentFile(
+    stagingId: string,
+    expectedDigest: string | null,
+    requester: string,
+    requesterIdentity?: { callerKind: string; paneName?: string },
+  ): Promise<void> {
     const plugins = api()
     if (!plugins?.prepareAgentFileInstall) throw new Error('installing from a file is unavailable')
     busy.value = true
     error.value = ''
     try {
-      const prepared = await plugins.prepareAgentFileInstall(stagingId)
+      // G3: the Host keeps who asked with a developer folder after it loads.
+      const prepared = await plugins.prepareAgentFileInstall(stagingId, requesterIdentity)
       if (expectedDigest !== null && prepared.digest !== expectedDigest) {
         throw new Error(t('plugin-request.file.digestChanged'))
       }
@@ -254,8 +280,44 @@ export function usePluginInstallFlow() {
     }
   }
 
+  /** L4 (review M3): going back to a kept file version shows that version's
+   *  disclosure in the consent dialog first; approving it rolls back. */
+  async function rollbackWithConsent(id: string): Promise<void> {
+    const plugins = api()
+    if (!plugins?.prepareLocalRollback) return
+    busy.value = true
+    error.value = ''
+    try {
+      const prepared = await plugins.prepareLocalRollback(id)
+      pendingConfirm.value = { label: prepared.id, prepared, rollbackFrom: prepared.rollbackFrom }
+      pendingStep.value = 'risk'
+      publisherConfirmed.value = false
+      replaceConfirmed.value = false
+      reattachBackendData.value = false
+    } catch (err) {
+      fail(err)
+    } finally {
+      busy.value = false
+    }
+  }
+
   async function confirmRisk(): Promise<void> {
     if (!pendingConfirm.value) return
+    if (pendingConfirm.value.rollbackFrom !== undefined) {
+      const id = pendingConfirm.value.prepared.id
+      busy.value = true
+      try {
+        await api()?.rollback(id, { consentConfirmed: true })
+        pendingConfirm.value = null
+        pendingStep.value = null
+        await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
+      } catch (err) {
+        fail(err)
+      } finally {
+        busy.value = false
+      }
+      return
+    }
     busy.value = true
     try {
       await commit(pendingConfirm.value.prepared.id, {
@@ -308,6 +370,7 @@ export function usePluginInstallFlow() {
     confirmReplace,
     confirmPublisher,
     confirmRisk,
+    rollbackWithConsent,
     cancel,
   }
 }

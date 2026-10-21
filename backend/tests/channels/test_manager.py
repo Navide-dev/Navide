@@ -51,6 +51,7 @@ class FakeAdapter:
         self.emit = None
         self.menus: list[tuple[Location, str, list]] = []
         self.menu_edits: list[tuple[str, str, list]] = []
+        self.button_edits: list[tuple[str, list]] = []
 
     async def start(self, emit) -> None:
         self.emit = emit
@@ -83,6 +84,9 @@ class FakeAdapter:
         if self.fail_edits:
             raise RuntimeError("edit failed")
         self.menu_edits.append((message_id, text, rows))
+
+    async def edit_buttons(self, loc: Location, message_id: str, buttons: list) -> None:
+        self.button_edits.append((message_id, buttons))
 
     async def send_typing(self, loc: Location) -> None:
         self.typing += 1

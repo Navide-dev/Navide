@@ -63,7 +63,7 @@ describe('SettingsSystemHelp', () => {
     expect(text).toContain('Settings overview')
     expect(text).toContain('Resources and upkeep')
     expect(text).toContain('Token Monitor')
-    expect(text).toContain('Status badges')
+    expect(text).toContain('Status Badges')
     expect(text).toContain('Confirm before closing a pane')
     expect(text).toContain('Pipeline Manager')
     expect(wrapper.findAll('.syh-h2')).toHaveLength(9)
@@ -169,7 +169,7 @@ describe('SettingsSystemHelp', () => {
 
     const mockText = wrapper.findAll('.mk-fig').map((f) => f.text()).join(' ')
     expect(mockText.length).toBeGreaterThan(200)
-    expect(mockText).toContain('reclaim')
+    expect(mockText).toContain('回收')
     expect(mockText).toContain('市集')
     expect(mockText).toContain('資源控管')
     // Pane names and figures are the same in both locales.

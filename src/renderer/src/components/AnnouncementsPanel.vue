@@ -50,7 +50,10 @@ function onAction(action: AnnouncementActionSpec): void {
   else if (action.kind === 'tour') emit('tour', action.version)
   else if (action.kind.startsWith('evolve-')) emit('evolve-action', action as EvolveAnnouncementAction)
   else if (action.kind.startsWith('convenience-')) emit('convenience-action', action as ConvenienceAnnouncementAction)
-  else if (action.kind === 'plugin-agent-undo' || action.kind === 'plugin-agent-downgrade') emit('plugin-agent-action', action)
+  else if (action.kind === 'plugin-agent-undo' || action.kind === 'plugin-agent-downgrade' || action.kind === 'plugin-staged-apply' ||
+    action.kind === 'plugin-switch-back') {
+    emit('plugin-agent-action', action)
+  }
   else emit('quota-action', action as QuotaAnnouncementAction)
 }
 
@@ -99,6 +102,10 @@ function actionLabel(action: AnnouncementActionSpec): string {
       return i18n.global.t(`plugin-agent.button.${action.disable ? 'disable' : 'enable'}`)
     case 'plugin-agent-downgrade':
       return i18n.global.t('plugin-agent.button.downgrade', { version: action.fromVersion })
+    case 'plugin-staged-apply':
+      return i18n.global.t('plugin-staged.button.apply')
+    case 'plugin-switch-back':
+      return i18n.global.t('plugin-switch.button.back', { version: action.fromVersion })
   }
 }
 
@@ -114,6 +121,8 @@ function iconOf(item: Announcement): string {
   if (item.kind === 'evolve') return '✦'
   if (item.kind === 'convenience') return '⚙'
   if (item.kind === 'plugin-agent') return '⏻'
+  if (item.kind === 'plugin-staged') return '⟳'
+  if (item.kind === 'plugin-switch') return '⇄'
   return '⬆'
 }
 

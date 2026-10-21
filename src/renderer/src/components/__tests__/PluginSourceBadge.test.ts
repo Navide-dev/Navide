@@ -227,10 +227,62 @@ describe('A3: a signed local file', () => {
     }
   })
 
+  it('names a developer folder "Local folder" in every locale; the row adds that it can change (A2-3)', () => {
+    const expected = { 'zh-TW': '本機資料夾', 'en-US': 'Local folder', 'ja-JP': 'ローカルフォルダー' } as const
+    for (const [locale, text] of Object.entries(expected)) {
+      i18n.global.locale.value = locale as keyof typeof expected
+      expect(render({ source: 'developer-unpacked' }).text()).toBe(text)
+      const row = render({ source: 'developer-unpacked', row: true })
+      expect(row.get('.nv-source-folder-note').text()).toBe(i18n.global.t('pluginDisclosure.source.folderMayChange'))
+      expect(row.get('.nv-source-folder-note').text()).not.toBe('')
+    }
+    // The six other sources keep their words and have no such line.
+    i18n.global.locale.value = 'en-US'
+    expect(render({ source: 'local-unsigned', row: true }).find('.nv-source-folder-note').exists()).toBe(false)
+  })
+
   it('never lets a signature relabel a source that is not a local file', () => {
     i18n.global.locale.value = 'en-US'
     const folder = render({ source: 'developer-unpacked', signature: 'verified', publisher: 'acme' })
     expect(folder.attributes('data-source')).toBe('developer-unpacked')
     expect(folder.text()).toBe(i18n.global.t('pluginDisclosure.source.developer-unpacked'))
+  })
+
+  it('gives an unsigned local file its own "author cannot be confirmed" line (DX 9.4 A1)', () => {
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      const row = render({ source: 'local-unsigned', row: true })
+      const note = row.find('.nv-source-unsigned')
+      expect(note.exists(), locale).toBe(true)
+      expect(row.find('.nv-source-badge').text()).not.toContain(note.text())
+    }
+    i18n.global.locale.value = 'en-US'
+    expect(render({ source: 'local-unsigned', row: true }).find('.nv-source-unsigned').text())
+      .toBe('The author cannot be confirmed; the file may have been changed.')
+    expect(render({ source: 'local-unsigned', signature: 'verified', publisher: 'acme', row: true }).find('.nv-source-unsigned').exists()).toBe(false)
+    expect(render({ source: 'marketplace', row: true }).find('.nv-source-unsigned').exists()).toBe(false)
+  })
+
+  it('opens the SHA-256 and install time from a local file badge (DX 9.4 A1)', async () => {
+    i18n.global.locale.value = 'en-US'
+    const digest = 'a'.repeat(64)
+    const badge = render({
+      source: 'local-unsigned',
+      localInstall: { fileDigest: digest, contentDigest: 'b'.repeat(64), installedAt: '2026-10-19T08:30:00Z' },
+    })
+    const button = badge.find('button.nv-source-badge')
+    expect(button.exists()).toBe(true)
+    expect(badge.find('.nv-source-details').exists()).toBe(false)
+    await button.trigger('click')
+    const details = badge.find('.nv-source-details')
+    expect(details.text()).toContain('Local file, not reviewed by Navide, unsigned')
+    expect(details.text()).toContain(`SHA-256 of the installed file: ${digest}`)
+    expect(details.text()).toContain('2026')
+    expect(details.find('.nv-source-unsigned').exists()).toBe(true)
+    await button.trigger('click')
+    expect(badge.find('.nv-source-details').exists()).toBe(false)
+
+    // Without install details (any other source) the badge stays a plain label.
+    expect(render({ source: 'marketplace' }).find('button').exists()).toBe(false)
   })
 })

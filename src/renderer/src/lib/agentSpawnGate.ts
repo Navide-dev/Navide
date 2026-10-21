@@ -177,6 +177,11 @@ export function evaluateSpawnRequest(
   }
   const name = req.name ? normalizeMessagingName(req.name) : null
   if (!name) return { ok: false, reason: 'name 欄位缺少或不合法' }
+  // "/" separates <folder>/<pane> in an address: a name holding one would read
+  // as a pane of another project (review #546).
+  if (name.includes('/')) {
+    return { ok: false, reason: `名稱「${name}」含有「/」，它是位址中資料夾與 pane 的分隔符，請換一個名稱` }
+  }
   if (ctx.isNameTaken(name)) {
     return { ok: false, reason: `名稱「${name}」已被其他 pane 使用，請換一個名稱` }
   }

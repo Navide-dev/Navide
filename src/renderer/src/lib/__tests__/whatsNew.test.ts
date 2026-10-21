@@ -90,6 +90,13 @@ describe('pickText', () => {
 
   it('falls back to zh-TW for an unknown locale', () => {
     expect(pickText(text, 'ja-JP')).toBe('你好')
+    expect(pickText(text, 'it-IT')).toBe('你好')
+  })
+
+  it('falls back to en-US for a later UI language', () => {
+    expect(pickText(text, 'ko-KR')).toBe('hi')
+    expect(pickText(text, 'zh-CN')).toBe('hi')
+    expect(pickText({ ...text, 'ko-KR': '안녕' }, 'ko-KR')).toBe('안녕')
   })
 })
 
@@ -158,8 +165,8 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[1].version).toBe('0.2.26')
-    expect(WHATS_NEW[2].version).toBe('0.2.25')
+    expect(WHATS_NEW[2].version).toBe('0.2.26')
+    expect(WHATS_NEW[3].version).toBe('0.2.25')
   })
 })
 
@@ -182,11 +189,36 @@ describe('0.2.27 — Navide Browser and blocked local installs', () => {
     )).toBe(true)
   })
 
-  it('shows once to someone updating from 0.2.26, as the newest entry, and not to a build still running 0.2.26', () => {
+  it('shows once to someone updating from 0.2.26, and not to a build still running 0.2.26', () => {
     expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
-    expect(WHATS_NEW[0].version).toBe('0.2.27')
+    expect(WHATS_NEW[1].version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
+  })
+})
+
+// Authored ahead of the 0.2.28 bump, like 0.2.27 above. The default UI
+// language line is the wording #519 settled; Korean (Beta) is added by its own PR.
+describe('0.2.28 — take effect at once, window tools and the English fallback', () => {
+  const entry = whatsNewFor('0.2.28')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('says the default UI language is now English and the Developer Mode re-consent', () => {
+    expect(entry!.highlights.some((text) => text['en-US'].startsWith('The default UI language has changed:'))).toBe(true)
+    expect(entry!.highlights.some((text) =>
+      text['en-US'].startsWith('Behaviour change:') && text['en-US'].includes('Developer Mode') && text['en-US'].includes('0.2.27'),
+    )).toBe(true)
+  })
+
+  it('shows once to someone updating from 0.2.27, as the newest entry, and not to a build still running 0.2.27', () => {
+    expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
+    expect(pickWhatsNew('0.2.28', '0.2.28')).toBeNull()
+    expect(WHATS_NEW[0].version).toBe('0.2.28')
+    expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
   })
 })
 

@@ -359,7 +359,10 @@ describe('a withdrawn Testplace build (S8 T-MED-1)', () => {
     expect(((await call('plugins:expiredTestplace')) as Array<{ keepRefusal?: string }>)[0].keepRefusal).toBe('signed-out')
   })
 
-  it('stops a running build at the next trust refresh and lists it, without the public blocklist', async () => {
+  // 0.2.28 (user, 10-21): a withdrawal never stops a running build. The
+  // signed-in check still learns of it first; the build keeps running and
+  // is labelled, and the tester chooses (pluginIpc.testplaceWithdrawn.test.ts).
+  it('keeps a running build running at the next trust refresh and labels it, without the public blocklist', async () => {
     register()
     await installTestBuild()
     const manager = register()
@@ -371,11 +374,11 @@ describe('a withdrawn Testplace build (S8 T-MED-1)', () => {
     withdrawnAnswer = { status: 200, body: { withdrawn: [{ version: '0.3.0', target: 'universal' }] } }
     // The public Registry is unreachable here; the refresh falls back to the cached metadata.
     await expect(controller.refreshRegistryTrust()).rejects.toThrow()
-    expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(false)
-    expect(activations.some((change) => change.pluginId === ID && !change.activation)).toBe(true)
-    expect(await call('plugins:expiredTestplace')).toEqual([
-      { id: ID, version: '0.3.0', expiresAt: EXPIRES_AT, canKeep: false, withdrawn: true, keepRefusal: 'withdrawn' },
-    ])
+    expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(true)
+    expect(activations.some((change) => change.pluginId === ID && !change.activation)).toBe(false)
+    expect((call('plugins:listInstalled') as Array<Record<string, unknown>>).find((row) => row.id === ID))
+      .toMatchObject({ source: 'testplace', digestBlock: { reason: 'testplace-withdrawn' } })
+    expect(await call('plugins:expiredTestplace')).toEqual([])
   })
 })
 
@@ -400,19 +403,24 @@ describe('the withdrawal check fails safe (S8 round 7)', () => {
     expect(manager.listInstalledPackages().some((pkg) => pkg.id === ID)).toBe(true)
   })
 
-  it('keeps a withdrawn build stopped when the next read fails and Navide restarts', async () => {
+  // 0.2.28: the recorded withdrawal survives a failed read and a restart as
+  // the label; the start-up load (src/main/index.ts) no longer refuses it.
+  it('keeps a withdrawn build labelled, and running, when the next read fails and Navide restarts', async () => {
     register()
     await installTestBuild()
     withdrawnAnswer = { status: 200, body: { withdrawn: [{ version: '0.3.0', target: 'universal' }] } }
     await expect(controller.refreshRegistryTrust()).rejects.toThrow()
     withdrawnAnswer = { status: 503, body: { detail: 'unavailable' } }
     await expect(controller.refreshRegistryTrust()).rejects.toThrow()
-    // Restart: the start-up load reads the recorded withdrawal.
     const restarted = register()
-    expect(load(restarted, INSTALL_AT).activationCatalog).toEqual([])
-    expect(await call('plugins:expiredTestplace')).toEqual([
-      expect.objectContaining({ id: ID, withdrawn: true, keepRefusal: 'withdrawn' }),
-    ])
+    const loaded = restarted.loadInstalledPlugins(pluginsRoot, {
+      provenance: 'official-registry',
+      trust: { pinnedRootKey: root.pubPem, snapshot: JSON.parse(readFileSync(join(pluginsRoot, '.navide-registry-trust.json'), 'utf8')), now: INSTALL_AT },
+    }, new Set([ID]))
+    expect(loaded.activationCatalog.map((entry) => entry.pluginId)).toContain(ID)
+    expect((call('plugins:listInstalled') as Array<Record<string, unknown>>).find((row) => row.id === ID))
+      .toMatchObject({ digestBlock: { reason: 'testplace-withdrawn' } })
+    expect(await call('plugins:expiredTestplace')).toEqual([])
   })
 
   it('does not let a stuck Registry hold up the trust refresh, and refuses to keep then', async () => {

@@ -156,11 +156,55 @@ describe('PluginRegionHost', () => {
     wrapper.unmount()
   })
 
+  it('prepares a fresh guest in place when the package version changes (L2)', async () => {
+    const prepare = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, url: URL_A })
+      .mockResolvedValueOnce({ ok: true, url: URL_B })
+    const { closeContribution } = stubPlugins(prepare)
+    const wrapper = mount(PluginRegionHost, {
+      props: { contribution, workspacePath: '/ws', visible: true },
+    })
+    await flushPromises()
+
+    // Restart, an update taking effect or a rollback: the Host drained the old guest.
+    await wrapper.setProps({ contribution: { ...contribution, packageVersion: '1.1.0' } })
+    await flushPromises()
+
+    expect(prepare).toHaveBeenCalledTimes(2)
+    expect(prepare).toHaveBeenLastCalledWith({
+      contributionKey: 'acme.files.left',
+      workspace_path: '/ws',
+      theme: 'dark-github',
+    })
+    // The old instance is released before the new guest replaces it.
+    expect(closeContribution).toHaveBeenCalledWith({ contributionKey: 'acme.files.left' })
+    expect(wrapper.find('webview').attributes('src')).toBe(URL_B)
+    wrapper.unmount()
+  })
+
+  it('keeps the guest when the contribution list refreshes without a version change', async () => {
+    const prepare = vi.fn(async () => ({ ok: true, url: URL_A }))
+    stubPlugins(prepare)
+    const wrapper = mount(PluginRegionHost, {
+      props: { contribution, workspacePath: '/ws', visible: true },
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ contribution: { ...contribution, title: 'Files (renamed)' } })
+    await flushPromises()
+
+    expect(prepare).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('shows the unavailable state when the Host refuses to prepare', async () => {
+    i18n.global.locale.value = 'en-US'
     const prepare = vi.fn(async () => ({ ok: false, error: 'grant is missing' }))
     stubPlugins(prepare)
     const wrapper = mount(PluginRegionHost, {
       props: { contribution, workspacePath: '/ws', visible: true },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 
@@ -273,6 +317,7 @@ describe('PluginRegionHost', () => {
     stubPlugins(prepare)
     const wrapper = mount(PluginRegionHost, {
       props: { contribution, workspacePath: '/ws', visible: false },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
     expect(wrapper.find('webview').exists()).toBe(false)
@@ -354,12 +399,30 @@ describe('PluginRegionHost source strip (K2)', () => {
     return wrapper
   }
 
+  it('A2-3: a developer folder badge opens the Local folder card in the Host chrome, not in the guest', async () => {
+    i18n.global.locale.value = 'en-US'
+    const wrapper = await render('developer-unpacked')
+    const developerMode = vi.fn(async () => ({
+      enabled: true,
+      folders: [{ pluginId: 'acme.files', path: '/Users/me/files', consentedAt: '', loaded: true, lastLoad: { at: '2026-10-21T01:00:00.000Z', trigger: 'startup' } }],
+    }))
+    ;(window.agentTeam!.plugins as unknown as Record<string, unknown>).developerMode = developerMode
+    await wrapper.get('.plugin-region-host__folder-toggle').trigger('click')
+    await flushPromises()
+    const folderCard = wrapper.get('.plugin-region-host__folder-card')
+    expect(folderCard.get('.nv-folder-card-path').text()).toBe('/Users/me/files')
+    expect(wrapper.get('webview').find('.nv-folder-card').exists()).toBe(false)
+    await wrapper.get('.plugin-region-host__folder-toggle').trigger('click')
+    expect(wrapper.find('.plugin-region-host__folder-card').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('shows a local source above the webview, outside it', async () => {
     i18n.global.locale.value = 'en-US'
     const wrapper = await render('developer-unpacked')
     const strip = wrapper.get('.plugin-region-host__source')
     expect(strip.get('.plugin-region-host__title').text()).toBe('Files')
-    expect(strip.get('.nv-source-badge').text()).toBe('Developer folder; its contents can change at any time')
+    expect(strip.get('.nv-source-badge').text()).toBe('Local folder')
     expect(strip.element.nextElementSibling?.tagName).toBe('WEBVIEW')
     expect(wrapper.get('webview').find('.plugin-region-host__source').exists()).toBe(false)
     wrapper.unmount()

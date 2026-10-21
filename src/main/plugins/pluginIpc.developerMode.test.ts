@@ -14,7 +14,8 @@ import { canonicalTrustJson, type RegistryPackageEnvelope, type RegistryTrustMet
 import type { InstallerTrustConfig } from './pluginInstaller'
 import { backendEntryOnDisk, type PluginActivationCatalogEntry } from './installedPlugins'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
-import { developerFolderBackendDigest, PluginDeveloperModeStore } from './pluginDeveloperModeStore'
+import { developerFolderBackendDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './pluginDeveloperModeStore'
+import { PluginDeveloperFolderMetaStore } from './pluginDeveloperFolderMeta'
 
 const { handlers, packaged } = vi.hoisted(() => ({
   handlers: new Map<string, (...a: unknown[]) => unknown>(),
@@ -85,6 +86,12 @@ let folder = ''
 let activations: Array<{ pluginId: string; activation?: PluginActivationCatalogEntry }>
 let pickFolder: ReturnType<typeof vi.fn>
 let dataRoot = ''
+/** G1: folder watches the Host opened, fired by hand instead of the file system. */
+let watches: Array<{ dir: string; onChange: () => void; onError?: (error: Error) => void; closed: boolean }>
+let folderEvents: Array<Record<string, unknown>>
+const openWatches = () => watches.filter((entry) => !entry.closed)
+const fireChange = () => { for (const entry of openWatches()) entry.onChange() }
+let integrity: DeveloperModeIntegrity | undefined
 
 function register(authorize: () => boolean = () => true, manager = new FrontendPluginManager()) {
   const controller = registerPluginIpc(manager, pluginsRoot, authorize, TRUST_CONFIG, undefined, {
@@ -94,6 +101,13 @@ function register(authorize: () => boolean = () => true, manager = new FrontendP
     onActivationChange: (change) => activations.push(change),
     pickDeveloperFolder: pickFolder,
     nativeBackendDataRoot: dataRoot,
+    watchDeveloperFolder: (dir: string, onChange: () => void, onError?: (error: Error) => void) => {
+      const entry = { dir, onChange, onError, closed: false }
+      watches.push(entry)
+      return { close: () => { entry.closed = true } }
+    },
+    onDeveloperFolderEvent: (event: Record<string, unknown>) => folderEvents.push(event),
+    developerModeIntegrity: integrity,
   })
   return { manager, controller }
 }
@@ -153,6 +167,9 @@ beforeEach(() => {
   dataRoot = join(base, 'native-data')
   mkdirSync(dataRoot)
   activations = []
+  watches = []
+  folderEvents = []
+  integrity = undefined
   delete process.env['AGENT_TEAM_PLUGIN_DEV']
 })
 
@@ -271,6 +288,82 @@ describe('loading a developer folder', () => {
     expect(call('plugins:listInstalled')).toEqual([])
     expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.devtodo', '0.1.0')).toBeNull()
     expect(activations.at(-1)).toEqual({ pluginId: 'acme.devtodo' })
+  })
+
+  it('G3: records who loaded the folder and every load beside the store, whose format stays as on main', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    expect(call('plugins:developerMode')).toMatchObject({
+      folders: [{ pluginId: 'acme.devtodo', loadedBy: { kind: 'user' }, autoReload: true, lastLoad: { trigger: 'user-load' } }],
+    })
+    await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })
+    expect(call('plugins:developerMode')).toMatchObject({
+      folders: [{ loadedBy: { kind: 'user' }, lastLoad: { trigger: 'manual-reload' } }],
+    })
+    await call('plugins:setDeveloperMode', { enabled: false })
+    await call('plugins:setDeveloperMode', { enabled: true })
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ lastLoad: { trigger: 'developer-mode-on' } }] })
+    handlers.clear()
+    const restarted = register()
+    await restarted.controller.loadDeveloperFolders()
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loadedBy: { kind: 'user' }, lastLoad: { trigger: 'startup' } }] })
+
+    const store = JSON.parse(readFileSync(join(pluginsRoot, '.navide-plugin-developer-mode.json'), 'utf8')) as { folders: Array<Record<string, unknown>> }
+    expect(Object.keys(store.folders[0]!).sort()).toEqual(['consentedAt', 'path', 'permissionsDigest', 'pluginId'])
+
+    await call('plugins:removeDeveloperFolder', { id: 'acme.devtodo' })
+    const meta = JSON.parse(readFileSync(join(pluginsRoot, '.navide-plugin-developer-folders-meta.json'), 'utf8')) as { folders: Record<string, unknown> }
+    expect(meta.folders).toEqual({})
+  })
+
+  it('G3: a folder consented to before the record existed reads as loaded by an unknown party and still loads', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    rmSync(join(pluginsRoot, '.navide-plugin-developer-folders-meta.json'))
+    handlers.clear()
+    const restarted = register()
+    await restarted.controller.loadDeveloperFolders()
+    expect(restarted.manager.listInstalledPackages()).toMatchObject([{ id: 'acme.devtodo' }])
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loadedBy: { kind: 'unknown' }, lastLoad: { trigger: 'startup' } }] })
+  })
+
+  it('review MED-2 on #536: a record that cannot be written never blocks loading a folder', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    mkdirSync(join(pluginsRoot, '.navide-plugin-developer-folders-meta.json'))
+    await loadFolder()
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+    expect(await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).toEqual({ reloaded: true, requiresConsent: false })
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loaded: true, loadedBy: { kind: 'unknown' } }] })
+  })
+
+  it('turning Developer Mode off also drops a folder chosen but not yet consented to (G4)', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await call('plugins:loadFromFolder')
+    await call('plugins:setDeveloperMode', { enabled: false })
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await expect(call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true }))
+      .rejects.toThrow(/no prepared developer folder/)
+    expect(call('plugins:listInstalled')).toEqual([])
+    expect(new PluginDeveloperModeStore(pluginsRoot).folders()).toEqual([])
+  })
+
+  it('G4: the chosen folder is dropped even when unloading a consented folder throws', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const second = join(base, 'dev-other')
+    writeFolder(second, manifest('acme.other'))
+    pickFolder.mockResolvedValueOnce(second)
+    await call('plugins:loadFromFolder')
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementationOnce(() => { throw new Error('unload failed') })
+    await expect(call('plugins:setDeveloperMode', { enabled: false })).rejects.toThrow(/unload failed/)
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await expect(call('plugins:commitFolderLoad', { id: 'acme.other', riskConfirmed: true }))
+      .rejects.toThrow(/no prepared developer folder/)
   })
 
   it('refuses the navide. namespace and a folder that changed while the dialog was open', async () => {
@@ -427,6 +520,235 @@ describe('loading a developer folder', () => {
   })
 })
 
+describe('G1: automatic reload on file change', () => {
+  type FolderState = { folders: Array<Record<string, unknown> & { lastLoad?: { trigger: string } }> }
+  const folderState = () => (call('plugins:developerMode') as FolderState).folders[0]!
+
+  it('watches a loaded folder and reloads it after a file edit, with no consent asked', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    expect(openWatches().map((entry) => entry.dir)).toEqual([folder])
+    writeFileSync(join(folder, 'frontend', 'left', 'index.html'), '<p>edited</p>')
+    const load = vi.spyOn(manager, 'loadExplicitDeveloperPlugin')
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents).toContainEqual({ pluginId: 'acme.devtodo', kind: 'reloaded' }))
+    expect(load).toHaveBeenCalledTimes(1)
+    expect(folderState()).toMatchObject({ loaded: true, lastLoad: { trigger: 'auto-reload' } })
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+  })
+
+  it('never applies changed permissions: it unloads and stops at "needs consent", however often files change', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest('acme.devtodo', { system: ['fs'] })))
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents).toContainEqual({ pluginId: 'acme.devtodo', kind: 'needs-consent' }))
+    expect(call('plugins:listInstalled')).toEqual([])
+    expect(folderState()).toMatchObject({ loaded: false })
+    fireChange()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(call('plugins:listInstalled')).toEqual([])
+    // Only the user's consent in the main window loads it again.
+    await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+  })
+
+  it('keeps the running version when the folder cannot be read mid-edit, and loads once it can', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    writeFileSync(join(folder, 'manifest.json'), '{"schemaVersion": 2, "id": ')
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toMatchObject({ pluginId: 'acme.devtodo', kind: 'reload-failed' }))
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+    expect(folderState().reloadError).toEqual(expect.any(String))
+    writeFolder(folder)
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toEqual({ pluginId: 'acme.devtodo', kind: 'reloaded' }))
+    expect(folderState().reloadError).toBeUndefined()
+  })
+
+  it('runs one reload at a time and one more for changes made during it', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const load = vi.spyOn(manager, 'loadExplicitDeveloperPlugin')
+    const entry = openWatches()[0]!
+    entry.onChange()
+    entry.onChange()
+    entry.onChange()
+    await vi.waitFor(() => expect(folderEvents.filter((event) => event.kind === 'reloaded')).toHaveLength(2))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('is on by default, can be turned off per folder, and stops with the folder or Developer Mode', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    expect(folderState()).toMatchObject({ autoReload: true })
+    expect(await call('plugins:setDeveloperFolderAutoReload', { id: 'acme.devtodo', enabled: false })).toMatchObject({
+      folders: [{ autoReload: false }],
+    })
+    expect(openWatches()).toEqual([])
+    await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })
+    expect(openWatches()).toEqual([])
+
+    await call('plugins:setDeveloperFolderAutoReload', { id: 'acme.devtodo', enabled: true })
+    expect(openWatches()).toHaveLength(1)
+    await call('plugins:setDeveloperMode', { enabled: false })
+    expect(openWatches()).toEqual([])
+    await call('plugins:setDeveloperMode', { enabled: true })
+    expect(openWatches()).toHaveLength(1)
+    await call('plugins:removeDeveloperFolder', { id: 'acme.devtodo' })
+    expect(openWatches()).toEqual([])
+  })
+
+  it('review MED-1 on #543: Developer Mode turned off during an automatic reload leaves the folder unloaded', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    fireChange()
+    // The switch goes off while the reload is unloading the old version.
+    await call('plugins:setDeveloperMode', { enabled: false })
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toMatchObject({ pluginId: 'acme.devtodo', kind: 'reload-failed', running: false }))
+    expect(call('plugins:listInstalled')).toEqual([])
+    expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.devtodo', '0.1.0')).toBeNull()
+    expect(openWatches()).toEqual([])
+    expect(activations.at(-1)).toEqual({ pluginId: 'acme.devtodo' })
+  })
+
+  it('review MED-2 on #543: a manual Reload waits for an automatic one; unload and load never interleave', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const order: string[] = []
+    const remove = manager.removeInstalledPlugin.bind(manager)
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementation((id: string) => { order.push('unload'); return remove(id) })
+    const load = manager.loadExplicitDeveloperPlugin.bind(manager)
+    vi.spyOn(manager, 'loadExplicitDeveloperPlugin').mockImplementation((...args) => { order.push('load'); return load(...args) })
+    fireChange()
+    expect(await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).toEqual({ reloaded: true, requiresConsent: false })
+    await vi.waitFor(() => expect(folderEvents).toContainEqual({ pluginId: 'acme.devtodo', kind: 'reloaded' }))
+    expect(order).toEqual(['unload', 'load', 'unload', 'load'])
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+  })
+
+  it('review MED-3 on #543: a folder that fails the full check keeps the old version running, nothing is unloaded', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const remove = vi.spyOn(manager, 'removeInstalledPlugin')
+    rmSync(join(folder, BACKEND_ENTRY))
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toMatchObject({ pluginId: 'acme.devtodo', kind: 'reload-failed', running: true }))
+    expect(remove).not.toHaveBeenCalled()
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+  })
+
+  it('review MED-3 on #543: a load that fails after the old version went says nothing is running', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    vi.spyOn(manager, 'loadExplicitDeveloperPlugin').mockReturnValueOnce({ loaded: false, error: 'registration failed' })
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toMatchObject({ pluginId: 'acme.devtodo', kind: 'reload-failed', running: false }))
+    expect(folderEvents).not.toContainEqual({ pluginId: 'acme.devtodo', kind: 'reloaded' })
+    expect(call('plugins:listInstalled')).toEqual([])
+    expect((call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders[0])
+      .toMatchObject({ loaded: false, reloadError: expect.stringMatching(/registration failed/) })
+  })
+
+  it('review MED-3 on #543: permissions changed between the check and the load stop at "needs consent", never "reloaded"', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const remove = manager.removeInstalledPlugin.bind(manager)
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementationOnce((id: string) => {
+      writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest('acme.devtodo', { system: ['fs'] })))
+      return remove(id)
+    })
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toEqual({ pluginId: 'acme.devtodo', kind: 'needs-consent' }))
+    expect(folderEvents).not.toContainEqual({ pluginId: 'acme.devtodo', kind: 'reloaded' })
+    expect(call('plugins:listInstalled')).toEqual([])
+    await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+  })
+
+  it('review R2 LOW-1 on #543: a failure while stopping for consent is reported, not only logged', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest('acme.devtodo', { system: ['fs'] })))
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementationOnce(() => { throw new Error('unload failed') })
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toMatchObject({ pluginId: 'acme.devtodo', kind: 'reload-failed', error: expect.stringMatching(/unload failed/) }))
+    expect((call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders[0])
+      .toMatchObject({ reloadError: expect.stringMatching(/unload failed/) })
+  })
+
+  it('review LOW-2 on #543: a folder an agent proposed stays attributed to it after a change asks for consent again', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const agent = { kind: 'agent', callerKind: 'pane', paneName: 'builder', approvedAt: '2026-10-21T01:00:00.000Z' } as const
+    new PluginDeveloperFolderMetaStore(pluginsRoot).setLoadedBy('acme.devtodo', folder, agent)
+    writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest('acme.devtodo', { system: ['fs'] })))
+    fireChange()
+    await vi.waitFor(() => expect(folderEvents.at(-1)).toEqual({ pluginId: 'acme.devtodo', kind: 'needs-consent' }))
+    await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
+    expect((call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders[0]).toMatchObject({ loadedBy: agent })
+  })
+
+  it('review LOW-3 on #543: a watch that fails is dropped, said on the card, and starts again with the next load', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    openWatches()[0]!.onError!(new Error('EMFILE: too many open files'))
+    expect(openWatches()).toEqual([])
+    expect((call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders[0])
+      .toMatchObject({ reloadError: expect.stringMatching(/EMFILE/) })
+    await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })
+    expect(openWatches()).toHaveLength(1)
+  })
+
+  it('review R2 LOW-2 on #543: turning Developer Mode off unloads, stops every watch and drops chosen folders, even when an unload throws', async () => {
+    const { manager } = register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const second = join(base, 'dev-other')
+    writeFolder(second, manifest('acme.other'))
+    pickFolder.mockResolvedValueOnce(second)
+    await call('plugins:commitFolderLoad', { id: (await call('plugins:loadFromFolder') as { id: string }).id, riskConfirmed: true })
+    const third = join(base, 'dev-third')
+    writeFolder(third, manifest('acme.third'))
+    pickFolder.mockResolvedValueOnce(third)
+    await call('plugins:loadFromFolder')
+    openWatches()[0]!.onError!(new Error('EMFILE'))
+    expect(openWatches()).toHaveLength(1)
+    const remove = manager.removeInstalledPlugin.bind(manager)
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementation((id: string) => {
+      if (id === 'acme.devtodo') throw new Error('unload failed')
+      return remove(id)
+    })
+    await expect(call('plugins:setDeveloperMode', { enabled: false })).rejects.toThrow(/unload failed/)
+    expect(openWatches()).toEqual([])
+    expect((call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders.every((folder) => folder.reloadError === undefined)).toBe(true)
+    vi.mocked(manager.removeInstalledPlugin).mockImplementation(remove)
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await expect(call('plugins:commitFolderLoad', { id: 'acme.third', riskConfirmed: true }))
+      .rejects.toThrow(/no prepared developer folder/)
+  })
+
+  it('only the main window turns it on or off', async () => {
+    register(() => false)
+    await expect(call('plugins:setDeveloperFolderAutoReload', { id: 'acme.devtodo', enabled: false })).rejects.toThrow(/unauthorized/)
+  })
+})
+
 describe('review of #428', () => {
   function writeTakedown(blockedPublishers: string[]): void {
     const metadata: RegistryTrustMetadata = {
@@ -539,5 +861,168 @@ describe('D6: self-hosted Registry overrides in a packaged build', () => {
     expect(call('plugins:selfHostedQuarantine')).toEqual([{ id: 'acme.hosted', version: '0.1.0' }])
     setMarketplaceOverridesAllowed(() => true)
     expect(call('plugins:selfHostedQuarantine')).toEqual([])
+  })
+})
+
+describe('Developer Mode settings another program wrote (A2-5, G5)', () => {
+  const STORE = '.navide-plugin-developer-mode.json'
+  let externalChanges: number
+
+  beforeEach(() => {
+    externalChanges = 0
+    // A reversible stand-in for safeStorage: no keychain is touched.
+    integrity = {
+      available: true,
+      encrypt: (plain) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`,
+      decrypt: (enc) => Buffer.from(enc.slice(4), 'base64').toString('utf8'),
+      onExternalChange: () => { externalChanges += 1 },
+    }
+  })
+
+  const readStore = () => JSON.parse(readFileSync(join(pluginsRoot, STORE), 'utf8')) as {
+    schemaVersion: 1; enabled: boolean; folders: Array<Record<string, unknown>>
+  }
+  const writeStore = (value: unknown) => writeFileSync(join(pluginsRoot, STORE), JSON.stringify(value))
+
+  it('does not load a folder another program added; it is disclosed and consented to again in the main window', async () => {
+    packaged.value = true
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const other = join(base, 'other')
+    writeFolder(other, manifest('evil.two', { system: ['fs'] }))
+    const store = readStore()
+    writeStore({ ...store, folders: [...store.folders, { ...store.folders[0], pluginId: 'evil.two', path: other }] })
+
+    handlers.clear()
+    const restarted = register()
+    await restarted.controller.loadDeveloperFolders()
+    expect(restarted.manager.listInstalledPackages().map((pkg) => pkg.id)).toEqual(['acme.devtodo'])
+    const state = call('plugins:developerMode') as Record<string, unknown>
+    expect(state).toMatchObject({
+      enabled: true,
+      externalChange: { detectedAt: expect.any(String) },
+      folders: [
+        { pluginId: 'acme.devtodo', loaded: true },
+        { pluginId: 'evil.two', path: other, loaded: false, externallyChanged: true },
+      ],
+    })
+    expect(externalChanges).toBe(1)
+    // Its id is held until the user decides; it cannot be committed unseen.
+    await expect(call('plugins:commitFolderLoad', { id: 'evil.two', riskConfirmed: true })).rejects.toThrow(/no prepared developer folder/)
+
+    const reload = await call('plugins:reloadDeveloperPlugin', { id: 'evil.two' }) as Record<string, unknown>
+    expect(reload).toMatchObject({ reloaded: false, requiresConsent: true, prepared: { id: 'evil.two', folder: other } })
+    await call('plugins:commitFolderLoad', { id: 'evil.two', riskConfirmed: true })
+    const after = call('plugins:developerMode') as Record<string, unknown>
+    expect(after.externalChange).toBeUndefined()
+    expect(after).toMatchObject({ folders: [{ pluginId: 'acme.devtodo', loaded: true }, { pluginId: 'evil.two', loaded: true }] })
+  })
+
+  it('does not take the switch another program turned on; the user turns it on with the usual confirmation', async () => {
+    packaged.value = true
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    await call('plugins:setDeveloperMode', { enabled: false })
+    writeStore({ ...readStore(), enabled: true })
+
+    handlers.clear()
+    const restarted = register()
+    const audit = vi.spyOn(restarted.manager, 'recordDeveloperModeChange')
+    await restarted.controller.loadDeveloperFolders()
+    expect(restarted.manager.listInstalledPackages()).toEqual([])
+    expect(call('plugins:developerMode')).toMatchObject({ enabled: false, externalChange: { detectedAt: expect.any(String) } })
+    await expect(call('plugins:loadFromFolder')).rejects.toThrow(/turn on Developer Mode/)
+
+    await call('plugins:setDeveloperMode', { enabled: true })
+    expect(audit.mock.calls).toEqual([[true, '0.2.26']])
+    expect(restarted.manager.listInstalledPackages().map((pkg) => pkg.id)).toEqual(['acme.devtodo'])
+    expect((call('plugins:developerMode') as Record<string, unknown>).externalChange).toBeUndefined()
+  })
+
+  it('turning Developer Mode off also unloads a loaded folder whose entry was edited outside Navide', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const store = readStore()
+    writeStore({ ...store, folders: [{ ...store.folders[0], consentedAt: '2000-01-01T00:00:00.000Z' }] })
+    await call('plugins:setDeveloperMode', { enabled: false })
+    expect(call('plugins:listInstalled')).toEqual([])
+  })
+})
+
+describe('review MED-1 on #536: the loader record is signed', () => {
+  beforeEach(() => {
+    integrity = {
+      available: true,
+      encrypt: (plain) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`,
+      decrypt: (enc) => Buffer.from(enc.slice(4), 'base64').toString('utf8'),
+    }
+  })
+
+  it('a loader another program rewrites on disk reads as unknown, may have been changed; the folder still loads', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loadedBy: { kind: 'user' } }] })
+    const file = join(pluginsRoot, '.navide-plugin-developer-folders-meta.json')
+    const saved = JSON.parse(readFileSync(file, 'utf8')) as { folders: Record<string, Record<string, unknown>> }
+    saved.folders['acme.devtodo']!.loadedBy = { kind: 'agent', callerKind: 'pane', paneName: 'someone', approvedAt: '2026-10-21T01:00:00.000Z' }
+    writeFileSync(file, JSON.stringify(saved))
+    expect(call('plugins:developerMode')).toMatchObject({ folders: [{ loaded: true, loadedBy: { kind: 'unknown' }, loadedByUnverified: 'changed' }] })
+    expect(await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).toEqual({ reloaded: true, requiresConsent: false })
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo' }])
+  })
+
+  it('review MED-1 on #552: rewriting the loader and deleting the signature file reads as unknown, not as written', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    const file = join(pluginsRoot, '.navide-plugin-developer-folders-meta.json')
+    const saved = JSON.parse(readFileSync(file, 'utf8')) as { folders: Record<string, Record<string, unknown>> }
+    saved.folders['acme.devtodo']!.loadedBy = { kind: 'agent', callerKind: 'pane', paneName: 'someone', approvedAt: '2026-10-21T01:00:00.000Z' }
+    writeFileSync(file, JSON.stringify(saved))
+    rmSync(join(pluginsRoot, '.navide-plugin-developer-mode.sig.json'))
+    const folders = (call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders
+    expect(folders.find((folder) => folder.pluginId === 'acme.devtodo')).toMatchObject({ loadedBy: { kind: 'unknown' }, loadedByUnverified: 'no-key' })
+  })
+
+  it('review LOW-3 on #552: removing a folder another program wrote keeps its backend data recorded as local', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    mkdirSync(join(dataRoot, 'acme.devtodo'), { recursive: true })
+    rmSync(join(pluginsRoot, '.navide-plugin-developer-mode.sig.json'))
+    expect((call('plugins:developerMode') as { folders: Array<Record<string, unknown>> }).folders)
+      .toMatchObject([{ pluginId: 'acme.devtodo', externallyChanged: true }])
+    await call('plugins:removeDeveloperFolder', { id: 'acme.devtodo' })
+    expect(JSON.parse(readFileSync(join(dataRoot, 'acme.devtodo@kept-source.json'), 'utf8'))).toEqual({ schemaVersion: 1, source: 'local-unsigned' })
+  })
+})
+
+describe('the content fingerprint of a developer folder (A2-3, G2)', () => {
+  const lastLoad = () => (call('plugins:developerMode') as { folders: Array<{ lastLoad?: { at: string; fingerprint?: string; fileCount?: number } }> })
+    .folders[0]?.lastLoad
+
+  it('is taken after each load, shown with the file count, and never blocks a reload', async () => {
+    register()
+    await call('plugins:setDeveloperMode', { enabled: true })
+    await loadFolder()
+    await vi.waitFor(() => expect(lastLoad()?.fingerprint).toMatch(/^[0-9a-f]{64}$/))
+    const first = lastLoad()!
+    expect(first.fileCount).toBe(3)
+
+    writeFileSync(join(folder, 'frontend', 'left', 'index.html'), '<p>edited</p>')
+    expect(await call('plugins:reloadDeveloperPlugin', { id: 'acme.devtodo' })).toEqual({ reloaded: true, requiresConsent: false })
+    await vi.waitFor(() => expect(lastLoad()?.fingerprint).toMatch(/^[0-9a-f]{64}$/))
+    expect(lastLoad()!.fingerprint).not.toBe(first.fingerprint)
+    expect(lastLoad()!.fileCount).toBe(3)
+  })
+
+  it('is not taken while Developer Mode is off', async () => {
+    register()
+    expect(call('plugins:developerMode')).toEqual({ enabled: false, folders: [] })
+    expect(existsSync(join(pluginsRoot, '.navide-plugin-developer-folders-meta.json'))).toBe(false)
   })
 })

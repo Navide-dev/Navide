@@ -498,6 +498,17 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
     });
   });
 
+  // Same-document "#id" links (in-page jumps, CSS :target lightboxes). In an
+  // about:srcdoc frame "#id" resolves against the host's URL, so the default
+  // click is a cross-document navigation the sandbox blocks and nothing
+  // happens; set the hash on the frame's own URL instead.
+  document.addEventListener('click', function (ev) {
+    var link = ev.target && ev.target.closest ? ev.target.closest('a[href^="#"]') : null;
+    if (!link || ev.defaultPrevented) return;
+    ev.preventDefault();
+    location.hash = link.getAttribute('href').slice(1);
+  });
+
   // file:line references in <code> elements become clickable and ask the
   // host to open the editor at that line. Workspace-relative paths only.
   // Extracted so a cancelled section edit can rebind links in the restored
@@ -702,6 +713,10 @@ function buildPlanCspMeta(nonce: string): string {
  * document scripts, inject a nonce'd CSP meta (only the runtime may execute;
  * inline styles and data: images stay allowed for self-contained docs), and
  * append the runtime script before `</body>`.
+ *
+ * @deprecated Unused copy that predates the Plans CSP fix (#462). Plans
+ * renders through `preparePlanDocHtml` in `../planSecurity`; import that one,
+ * never this.
  */
 export function preparePlanDocHtml(
   content: string,

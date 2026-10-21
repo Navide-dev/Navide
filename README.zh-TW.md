@@ -81,7 +81,7 @@ Navide 已經是創辦人持續開發這個專案時使用的主要工程環境�
 
 ## 目前已具備
 
-- **多 Agent Workspace：**在獨立 pane 中執行 15 種支援的 coding CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、Pi、Qwen Code）或一般 Terminal。
+- **多 Agent Workspace：**在獨立 pane 中執行 16 種支援的 coding CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Goose、Grok CLI、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、Pi、Qwen Code）或一般 Terminal。
 - **CLI 管理：**偵測已安裝的 Coding CLI、版本與安裝方式，並執行各 CLI 官方自己的更新與診斷指令。
 - **Session 生命週期：**偵測、保存、重建並恢復受支援的 CLI Session。
 - **可設定 Pipeline：**定義 Stage、平行 slot、Agent、角色、kickoff prompt、提問規則、文件查詢與完成 sentinel。

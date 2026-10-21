@@ -202,13 +202,26 @@ function applyDeps(): PluginRequestApplyDeps {
     // W1 (S2): the copy the Host staged when the agent asked, through the same
     // consent dialog as the user's own "Install from file".
     async installStaged(stagingId: string, digest: string | null): Promise<void> {
-      await flow.prepareAgentFile(stagingId, digest, requesterText.value)
+      const requester = current.value?.requester
+      await flow.prepareAgentFile(stagingId, digest, requesterText.value, requester ? {
+        callerKind: requester.callerKind ?? 'unknown',
+        ...(requester.paneName ? { paneName: requester.paneName } : {}),
+      } : undefined)
       await installSettled()
       if (flow.error.value) throw new Error(flow.error.value)
     },
     async rollback(pluginId: string): Promise<void> {
-      // The same confirmation the Extensions pane asks before a rollback.
       const row = (await plugins().listInstalled()).find((p) => p.id === pluginId)
+      // L4 (review r2): going back to a kept file version is the renewed
+      // consent with its disclosure, the dialog the Extensions pane shows.
+      if (row?.rollbackNeedsConsent === true) {
+        await flow.rollbackWithConsent(pluginId)
+        await installSettled()
+        if (flow.error.value) throw new Error(flow.error.value)
+        await inventory.refresh()
+        return
+      }
+      // The same confirmation the Extensions pane asks before a rollback.
       const confirmed = await notify.confirm(
         row?.rollbackKind === 'factory'
           ? t('settings.extensions.rollback.confirmFactory', { id: pluginId })

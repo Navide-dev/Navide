@@ -165,8 +165,22 @@ class MCPClient:
         A cancellation (shutdown cancelling a startup that is cleaning up a
         failed server) still exits both contexts, then propagates: swallowing it
         let the startup carry on while shutdown waited on the lifecycle lock.
+
+        The stdio server's descendants are read before the teardown and any
+        still alive after it are ended: the library ends only the Job object
+        (group on POSIX) it made, and on Windows `npx`'s node.exe under
+        cmd.exe can be outside that Job — once cmd.exe is gone nothing walks
+        down to it, since Windows never reparents.
         """
         cancelled: asyncio.CancelledError | None = None
+        leftovers: list[tuple[int, str]] = []
+        if self._transport_cm is not None:
+            try:
+                leftovers = await asyncio.to_thread(self._server_descendants)
+            except asyncio.CancelledError as err:
+                cancelled = err
+            except Exception:  # noqa: BLE001
+                pass
         for label, cm in (("session", self._session_cm), ("transport", self._transport_cm)):
             if cm is not None:
                 try:
@@ -175,6 +189,13 @@ class MCPClient:
                     cancelled = err
                 except Exception:  # noqa: BLE001
                     pass
+        if leftovers:
+            try:
+                await asyncio.to_thread(self._end_leftovers, leftovers)
+            except asyncio.CancelledError as err:
+                cancelled = err
+            except Exception:  # noqa: BLE001
+                pass
         self._session = None
         self._session_cm = None
         self._transport_cm = None
@@ -246,6 +267,35 @@ class MCPClient:
             return
         osplat.process_tree.end_contained(pid)
         log.warning("MCP '%s' server tree %d ended", self.name, pid)
+
+    def _server_descendants(self) -> list[tuple[int, str]]:
+        """`(pid, identity)` of every process below the live stdio server, or
+        [] when the pid is no longer the server this client started."""
+        pid = self._server_pid
+        start = self._server_start
+        if pid is None or not start or osplat.process_tree.start_time(pid) != start:
+            return []
+        found = []
+        for child in osplat.process_tree.descendants(pid):
+            identity = osplat.process_tree.identity(child)
+            if identity:
+                found.append((child, identity))
+        return found
+
+    def _end_leftovers(self, leftovers: list[tuple[int, str]]) -> None:
+        """End the descendants the teardown left alive, each only while its
+        pid is still the process that was read (Windows reuses pids fast)."""
+        ended = []
+        for pid, identity in leftovers:
+            if osplat.process_tree.identity(pid) != identity:
+                continue
+            try:
+                osplat.process_tree.kill(pid, force=True)
+            except OSError:
+                continue
+            ended.append(pid)
+        if ended:
+            log.warning("MCP '%s' left %s running after stop; ended them", self.name, ended)
 
     async def list_tools(self) -> list[dict[str, str]]:
         """Return the tools exposed by this server (best-effort, empty on failure)."""

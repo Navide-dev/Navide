@@ -221,7 +221,7 @@ describe('UsageBadge – scheme A: a row swaps the live credential', () => {
     expect(w.find('.usage-pop-switch-title').text()).toBe(i18n.global.t('usage.switch-title'))
   })
 
-  it('shows no "Continue", no separate "Sign in" and no "needs sign-in" chip', async () => {
+  it('shows no "Continue", no separate "Sign In" and no "needs sign-in" chip', async () => {
     const { w } = mountA()
     await open(w)
     expect(w.find('.usage-acct-continue').exists()).toBe(false)

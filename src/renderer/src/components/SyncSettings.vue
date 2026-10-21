@@ -125,15 +125,7 @@ const waiting = computed(() => approvals.value.filter((a) => a.status !== 'rejec
 const results = ref<Record<string, ScopeResult>>({})
 
 /** Scopes whose adapter is not shipped yet still list, but cannot be turned on.
- *  Skill *content* is a later phase; what ships here is the decision layer.
- *
- *  'credentials' is held out of this set for v0.2.4: its adapter is complete
- *  and tested, but its review is not, and it is the one scope that puts a CLI
- *  credential on the wire. Leaving it off the list is the whole gate — the
- *  Accounts pane reads the cloud side only when `scopes.credentials` is on
- *  (useCliProfiles.refreshCloud), so with no way to switch it on, nothing
- *  downstream can reach a credential either. Put it back once the review
- *  lands. */
+ *  Skill *content* is a later phase; what ships here is the decision layer. */
 const READY: ReadonlySet<string> = new Set(['prompts', 'mcp', 'skills'])
 
 /** Scopes sync no longer offers (2026-10-09: memory — sync covers assets and
@@ -142,8 +134,14 @@ const READY: ReadonlySet<string> = new Set(['prompts', 'mcp', 'skills'])
 const RETIRED: ReadonlySet<string> = new Set(['memory'])
 
 /** The rows to list: one per Agent Assets page, in the sidebar's order and
- *  under the sidebar's names. Rows outside READY show greyed out. */
-const listed = ['mcp', 'skills', 'prompts', 'memory', 'credentials', 'cliExtensions'] as const
+ *  under the sidebar's names. Rows outside READY show greyed out.
+ *
+ *  No 'credentials' row: credentials and keys are only ever stored on this
+ *  machine (2026-10-21), so there is nothing to sync and nothing to offer.
+ *  A switch an older build left on is treated as off by the backend
+ *  (sync_scopes.NEVER_SYNCED), and no engine takes the scope at all
+ *  (sync_engine.LOCAL_ONLY_SCOPES). */
+const listed = ['mcp', 'skills', 'prompts', 'memory', 'cliExtensions'] as const
 
 const connected = computed(() => linkState.value === 'connected')
 

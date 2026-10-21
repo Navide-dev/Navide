@@ -81,6 +81,7 @@ vi.mock('../editor/ConflictPane.vue', () => ({
 function mountDetail(ui: { openInEditor: ReturnType<typeof vi.fn> } = { openInEditor: vi.fn() }): VueWrapper {
   return mount(GitDetailApp, {
     global: {
+      mocks: { $t: (key: string) => key },
       provide: {
         [GIT_TRANSPORT_KEY as symbol]: { status: ref('connected'), send: vi.fn(), on: vi.fn(() => () => undefined) },
         [GIT_BRANCH_DIFF_KEY as symbol]: { load: vi.fn(async () => ({ ok: true, diff: '' })) },

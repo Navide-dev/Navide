@@ -69,6 +69,12 @@ describe('evaluateSpawnRequest', () => {
     }
   })
 
+  it('rejects a name holding "/", the separator of <folder>/<pane> addresses', () => {
+    const res = evaluateSpawnRequest({ ...goodReq, name: 'other-project/lead' }, ctx())
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.reason).toContain('/')
+  })
+
   it('rejects an empty task on a fresh spawn', () => {
     const res = evaluateSpawnRequest({ ...goodReq, task: '' }, ctx())
     expect(res.ok).toBe(false)
