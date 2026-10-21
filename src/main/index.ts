@@ -1992,6 +1992,14 @@ const pluginTrustRefresh = registerPluginIpc(
       })
       return picked.canceled ? null : picked.filePaths[0] ?? null
     },
+    // DESIGN-A2 G1: an automatic reload of a developer folder; the main
+    // windows refresh the Developer Mode list and say when consent is needed.
+    onDeveloperFolderEvent: (folderEvent) => {
+      for (const hostWindow of mainWindows) {
+        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+        hostWindow.webContents.send('plugins:developerFolderEvent', folderEvent)
+      }
+    },
     developerModeIntegrity: pluginDeveloperModeIntegrity,
     pickDeveloperFolder: async (event) => {
       const parent = BrowserWindow.fromWebContents(event.sender)
