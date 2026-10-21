@@ -2098,6 +2098,28 @@
         "externalChangeMissing": "開発者モードの設定に Navide の署名がありません（{time}）。Navide 0.2.28 より前に書かれたか、署名ファイルが削除されています。Navide はこの設定を適用していません。「設定 → Navide プラグイン」で開発者モードをもう一度オンにするか、下に表示されたフォルダーにもう一度同意してください。",
         "folderWarning": "この Navide プラグインは選んだフォルダーから直接読み込まれます。Navide の審査を受けておらず、署名もありません。フォルダーの内容はいつでも変わる可能性があり、Navide は内容を照合しません：権限またはバックエンドの宣言が変わったときだけ改めて確認します。",
         "folderLabel": "フォルダー",
+        "infoCard": {
+          "close": "閉じる",
+          "path": "フォルダー",
+          "reveal": "フォルダー内に表示",
+          "loadedAt": "前回の読み込み",
+          "notRecorded": "記録なし（Navide 0.2.28 より前に読み込み）",
+          "trigger": {
+            "user-load": "あなたが読み込み",
+            "manual-reload": "再読み込み",
+            "auto-reload": "ファイル変更後に自動で再読み込み",
+            "startup": "Navide の起動時",
+            "developer-mode-on": "開発者モードをオンにしたとき"
+          },
+          "fingerprint": "内容のフィンガープリント",
+          "copy": "全体をコピー",
+          "copied": "コピーしました",
+          "fileCount": "{count} 個のファイル",
+          "computing": "計算中…",
+          "loadedBy": "読み込んだ人",
+          "notReviewed": "Navide の審査なし、署名なし、スキャンなし。",
+          "mayChange": "内容はいつでも変わる可能性があります。フィンガープリントは読み込み時点の内容を記録するだけで、Navide はこれを理由に読み込みを止めません。"
+        },
         "selfHostedQuarantine": "{id} {version} は自前の Registry から入れたもので、読み込まれていません。開発者モードをオンにするか、Navide マーケットプレイスからインストールしてください。"
       },
       "localInstall": {
@@ -11567,7 +11589,8 @@
       "testplaceExpired": "テスト版。{date} に期限切れ（使用を継続中）",
       "local-signed": "ローカルファイル。発行者の署名あり。このバージョンは Navide の審査を受けていません",
       "local-unsigned": "ローカルファイル。Navide の審査なし、署名なし",
-      "developer-unpacked": "開発者フォルダー。内容はいつでも変わる可能性があります",
+      "developer-unpacked": "ローカルフォルダー",
+      "folderMayChange": "このコンピューター上のフォルダーから直接読み込まれています。内容はいつでも変わる可能性があります。",
       "factory-bundled": "Navide に組み込み",
       "notScanned": "未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）",
       "publisher": "発行者：{publisher}",

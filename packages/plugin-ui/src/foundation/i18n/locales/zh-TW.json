@@ -2098,6 +2098,28 @@
         "externalChangeMissing": "開發者模式設定沒有 Navide 的簽章（{time}）：可能是 Navide 0.2.28 以前寫的，或簽章檔被刪掉了。Navide 沒有套用這些設定：請到「設定 → Navide 外掛」重新開啟開發者模式，或對下面標示的資料夾重新同意。",
         "folderWarning": "這個 Navide 外掛直接從你選的資料夾載入，沒有經過 Navide 審核，也沒有簽章。資料夾內容隨時可能變動，Navide 不做內容比對：只有權限或後端宣告改變時才會再問你。",
         "folderLabel": "資料夾",
+        "infoCard": {
+          "close": "關閉",
+          "path": "資料夾",
+          "reveal": "在資料夾中顯示",
+          "loadedAt": "上次載入",
+          "notRecorded": "沒有紀錄（Navide 0.2.28 以前載入）",
+          "trigger": {
+            "user-load": "你自己載入",
+            "manual-reload": "重新載入",
+            "auto-reload": "檔案變更後自動重新載入",
+            "startup": "Navide 啟動時",
+            "developer-mode-on": "開啟開發者模式時"
+          },
+          "fingerprint": "內容指紋",
+          "copy": "完整複製",
+          "copied": "已複製",
+          "fileCount": "{count} 個檔案",
+          "computing": "計算中…",
+          "loadedBy": "載入者",
+          "notReviewed": "沒有經過 Navide 審核、沒有簽章、未掃描。",
+          "mayChange": "內容隨時可能變動；指紋只記錄載入當下的內容，Navide 不拿它擋載入。"
+        },
         "selfHostedQuarantine": "{id} {version} 來自自架 Registry，目前沒有載入。請開啟開發者模式，或改從 Navide 市集安裝。"
       },
       "localInstall": {
@@ -11567,7 +11589,8 @@
       "testplaceExpired": "測試版，已於 {date} 到期（繼續使用中）",
       "local-signed": "本機檔案，發佈者已簽章，這個版本未經 Navide 審核",
       "local-unsigned": "本機檔案，未經 Navide 審核，未簽章",
-      "developer-unpacked": "開發者資料夾，內容隨時可能變動",
+      "developer-unpacked": "本機資料夾",
+      "folderMayChange": "直接從這台電腦上的資料夾載入，內容隨時可能變動。",
       "factory-bundled": "Navide 內建",
       "notScanned": "未掃描（只有從 Navide 市集安裝的 Navide 外掛會經過 Navide 掃描）",
       "publisher": "發佈者：{publisher}",

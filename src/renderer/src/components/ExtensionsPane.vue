@@ -25,6 +25,7 @@ import NativeBackendPanel from './NativeBackendPanel.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 import PluginSourceBadge from './PluginSourceBadge.vue'
+import DeveloperFolderInfoCard from './DeveloperFolderInfoCard.vue'
 import { isTestplaceExpired, testplaceDaysLeft } from '../lib/pluginSourceMark'
 
 const { t } = useI18n()
@@ -373,6 +374,18 @@ async function restoreFactoryPackage(id: string): Promise<void> {
 // Card K4: the Developer Mode switch (owned by the main process) and its
 // developer folders; D6: packages from a self-hosted Registry it quarantines.
 const developerMode = ref<DeveloperModeState>({ enabled: false, folders: [] })
+// A2-3: the "Local folder" info card opened from a developer folder's badge.
+const folderCardFor = ref<string | null>(null)
+const developerFolderOf = (pluginId: string) => developerMode.value.folders.find((folder) => folder.pluginId === pluginId)
+async function toggleFolderCard(pluginId: string): Promise<void> {
+  if (folderCardFor.value === pluginId) {
+    folderCardFor.value = null
+    return
+  }
+  folderCardFor.value = pluginId
+  // The fingerprint of the last load is taken after it; read it fresh.
+  await refreshDeveloperMode()
+}
 const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>([])
 const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
 /** DESIGN-A2 G3: who had a loaded developer folder loaded, in the wording of agent request cards. */
@@ -728,8 +741,18 @@ watch(installed, () => {
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
               <!-- K2: the Host's source only; none (an unknown channel) shows no badge.
                    A3: a signed local file names the publisher its id names, the one whose key signed it. -->
+              <!-- A2-3: a developer folder's badge opens its "Local folder" info card. -->
+              <button
+                v-if="p.source === 'developer-unpacked' && developerFolderOf(p.id)"
+                type="button"
+                class="ext-folder-info-toggle"
+                :aria-expanded="folderCardFor === p.id"
+                @click="toggleFolderCard(p.id)"
+              >
+                <PluginSourceBadge :source="p.source" />
+              </button>
               <PluginSourceBadge
-                v-if="p.source"
+                v-else-if="p.source"
                 :source="p.source"
                 :expires-at="p.expiresAt"
                 :via="p.testplaceVia"
@@ -787,6 +810,11 @@ watch(installed, () => {
             <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
               {{ folderLoadedByText(p.id) }}
             </p>
+            <DeveloperFolderInfoCard
+              v-if="folderCardFor === p.id && developerFolderOf(p.id)"
+              :folder="developerFolderOf(p.id)!"
+              @close="folderCardFor = null"
+            />
             <!-- D3: remind from 7 days before a test build expires; once kept past it, say so. -->
             <p v-if="p.source === 'testplace' && testplaceDaysLeft(p.expiresAt) !== null" class="ext-disabled-note ext-testplace-expiring" role="status">
               {{ $t('testplace.expiring', { days: testplaceDaysLeft(p.expiresAt), date: (p.expiresAt ?? '').slice(0, 10) }) }}
@@ -988,6 +1016,12 @@ watch(installed, () => {
 </template>
 
 <style scoped>
+.ext-folder-info-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
 .extensions-pane {
   /* Native controls (checkboxes, scrollbars) follow the theme. */
   color-scheme: var(--nv-color-scheme);

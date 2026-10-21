@@ -86,7 +86,7 @@ describe('install-from-file entry points', () => {
     const folder = installedPackageSource({ provenance: 'developer-local-unpacked' })
     expect(folder).toBe('developer-unpacked')
     expect(agentApprovalSourceNote(folder)).toBe(
-      'Source: a developer folder, not reviewed by Navide; its contents can change at any time.',
+      'Source: a local folder, not reviewed by Navide; its contents can change at any time.',
     )
     const consent = nativeBackendConsentDialog(
       { pluginId: 'acme.folder', name: 'Folder', packageVersion: '0.1.0', system: [], methods: [], agentTools: [], update: false },
@@ -94,7 +94,7 @@ describe('install-from-file entry points', () => {
       folder,
     )
     expect(consent.message.split('\n')[0]).toBe(
-      'Source and review: Developer folder; its contents can change at any time, not reviewed by Navide',
+      'Source and review: Local folder; its contents can change at any time, not reviewed by Navide',
     )
     expect(consent.detail.split('\n')[0]).toBe(consent.message.split('\n')[0])
     for (const locale of ['zh-TW', 'ja-JP']) expect(localSourceConsentLine(folder, locale)).not.toBe('')
