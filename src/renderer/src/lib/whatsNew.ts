@@ -121,6 +121,51 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.28',
+    title: {
+      'zh-TW': '核准就生效：Navide 外掛不用重新啟動，agent 也能幫你整理視窗',
+      'en-US': 'Approve and It Is Live: No Restart for Navide Plugins, and Agents Can Arrange Your Windows',
+      'ja-JP': '承認すればすぐ有効：Navide プラグインは再起動不要、agent はウィンドウも整理できます',
+    },
+    highlights: [
+      {
+        'zh-TW': '核准的 Navide 外掛安裝和更新會立即生效，不用按「重新啟動」或重開 Navide。核准前對話框會說明這個外掛開著的畫面會重新載入；每次切換都記在公告中心，附「退回」上一版的按鈕。從檔案更新時會保留被取代的版本，退回它需要重新同意。',
+        'en-US': 'Navide plugin installs and updates you approve take effect at once, without Restart or relaunching Navide. The dialog says beforehand that the plugin\'s open views reload; every switch is recorded in the announcements with Back to the previous version. A file update keeps the version it replaced, and going back to it asks for your consent again.',
+        'ja-JP': '承認した Navide プラグインのインストールと更新はすぐに有効になり、再起動も Navide の再起動も不要です。承認の前に、そのプラグインの開いている画面が再読み込みされることをダイアログが説明します。切り替えはすべてお知らせに記録され、前のバージョンに戻すボタンが付きます。ファイルから更新した場合は置き換えたバージョンを保持し、そこへ戻すには改めて同意が必要です。',
+      },
+      {
+        'zh-TW': 'agent 可以管理 Navide 視窗：列出所有視窗並切到前景、把某個 pane 或整個專案移到另一個視窗，以及關掉別的視窗或專案（不會關自己的，也不會結束 CLI）。每個動作都會顯示是哪個 pane 做的，並留下紀錄。',
+        'en-US': 'Agents can arrange Navide windows: list them and bring one to the front, move a pane or a whole project to another window, and close another window or project (never their own, and no CLI ends). Every action shows which pane did it and is recorded.',
+        'ja-JP': 'agent が Navide のウィンドウを整理できます：ウィンドウの一覧と前面への切り替え、pane やプロジェクト全体の別ウィンドウへの移動、ほかのウィンドウやプロジェクトのクローズ（自分自身は閉じず、CLI も終了しません）。どの操作も、どの pane が行ったかが表示され、記録されます。',
+      },
+      {
+        'zh-TW': 'agent 用 cli_open_agent 開子 pane 時可以開在另一個專案裡，子 pane 仍然向開它的 pane 回報。',
+        'en-US': 'An agent can open a child pane in another project with cli_open_agent; the child still reports back to the pane that opened it.',
+        'ja-JP': 'agent は cli_open_agent で別のプロジェクトに子 pane を開けます。子 pane は開いた pane に引き続き報告します。',
+      },
+      {
+        'zh-TW': '從本機資料夾載入的 Navide 外掛標示為「本機資料夾」，點開可以看到資料夾路徑、上次載入的時間和方式、是誰載入的，以及當時內容的指紋。',
+        'en-US': 'A Navide plugin loaded from a folder is labelled Local folder; open it to see the folder path, when and how it last loaded, who loaded it and a fingerprint of its content at that load.',
+        'ja-JP': 'フォルダーから読み込んだ Navide プラグインには「ローカルフォルダー」と表示されます。開くと、フォルダーのパス、前回の読み込み日時と方法、誰が読み込んだか、そのときの内容のフィンガープリントを確認できます。',
+      },
+      {
+        'zh-TW': '行為改變：開發者模式設定被 Navide 以外的程式改過時不再算數，開關維持關閉、資料夾不會載入，直到你重新開啟或重新同意。0.2.27 有在用開發者模式的人，升級後要重新開啟一次，每個本機資料夾也要再同意一次。',
+        'en-US': 'Behaviour change: Developer Mode settings changed by a program other than Navide no longer count; the switch stays off and the folder is not loaded until you turn it on or consent again. If you used Developer Mode in 0.2.27, turn it on once more after upgrading and consent to each local folder again.',
+        'ja-JP': '動作の変更：Navide 以外のプログラムが変更した開発者モードの設定は無効になり、もう一度オンにするか同意し直すまで、スイッチはオフのまま、フォルダーも読み込まれません。0.2.27 で開発者モードを使っていた場合は、アップグレード後にもう一度オンにし、ローカルフォルダーごとに同意し直してください。',
+      },
+      {
+        'zh-TW': '行為改變：被開發者或 Navide 撤回的 Testplace 測試版不再自動停用，而是標示「測試版已撤回」並問你一次要怎麼處理；離線或沒登入 Navide Cloud 的測試者也會收到通知。',
+        'en-US': 'Behaviour change: a Testplace build withdrawn by its developer or by Navide is no longer disabled automatically; it is labelled Test build withdrawn and you are asked once what to do. Testers who are offline or signed out of Navide Cloud are told too.',
+        'ja-JP': '動作の変更：開発者または Navide が取り下げた Testplace のテストビルドは自動で無効にならなくなり、「テストビルドは取り下げ済み」と表示して、どうするかを一度だけ尋ねます。オフラインの、または Navide Cloud にログインしていないテスターにも通知されます。',
+      },
+      {
+        'zh-TW': '介面語言的預設值改了：系統語言不在 Navide 支援的清單裡時，介面改用英文（以前是繁體中文）。你在設定裡自己選過的語言不受影響。',
+        'en-US': 'The default UI language has changed: when your system language is not one Navide supports, the interface now uses English (it used to be Traditional Chinese). A language you picked in Settings is not affected.',
+        'ja-JP': '既定の表示言語が変わりました：システムの言語が Navide の対応言語にない場合、表示は英語になります（以前は繁体字中国語でした）。設定で選んだ言語はそのままです。',
+      },
+    ],
+  },
+  {
     version: '0.2.27',
     title: {
       'zh-TW': 'Navide 瀏覽器：agent 在自己的 Space 上網，你的分頁不會被搶走',
