@@ -5,7 +5,7 @@ import {
   recoveryResult,
   type InstalledPackage,
   type PluginRequestApplyDeps,
-  type PluginRequestRecord, isAppliableKind } from '../pluginAgentRequestApply'
+  type PluginRequestRecord, isAppliableKind, ROLLBACK_CONSENT_REQUIRED_TEXT } from '../pluginAgentRequestApply'
 
 function record(kind: PluginRequestRecord['kind'], version: string | null, status = 'applying'): PluginRequestRecord {
   return {
@@ -100,6 +100,16 @@ describe('a rollback only to the version the user approved', () => {
     expect(d.finish).toHaveBeenCalledWith('a-plugin-rollback', {
       status: 'failed', error: 'the version kept for rollback is 0.2.0, not the approved 0.1.0',
     })
+  })
+
+  it('tells the agent plainly when going back still needs the user\'s renewed consent (L4)', async () => {
+    const d = deps([{ id: 'nerdtechnic.devmap', packageVersion: '0.3.0', rollbackToVersion: '0.2.0' }])
+    d.rollback = vi.fn(async () => { throw new Error('ROLLBACK_CONSENT_REQUIRED [nerdtechnic.devmap]: going back to the file version 0.2.0 needs your consent again') })
+    await expect(applyApprovedRequest(record('plugin-rollback', '0.2.0'), d)).resolves.toEqual({
+      status: 'failed', error: ROLLBACK_CONSENT_REQUIRED_TEXT,
+    })
+    expect(ROLLBACK_CONSENT_REQUIRED_TEXT.startsWith('consent-required:')).toBe(true)
+    expect(ROLLBACK_CONSENT_REQUIRED_TEXT).not.toContain('ROLLBACK_CONSENT_REQUIRED [')
   })
 
   it('does not roll back when no version is kept', async () => {

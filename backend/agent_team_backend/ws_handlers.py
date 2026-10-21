@@ -12157,6 +12157,9 @@ async def ui_invoke_ready(session: "Session", msg_id: str, msg_type: str, payloa
     window_id = payload.get("window_id")
     if isinstance(window_id, str) and _WINDOW_ID.fullmatch(window_id):
         session.window_id = window_id
+    held = payload.get("workspaces")
+    if isinstance(held, list):
+        session.held_workspaces = tuple(p for p in held if isinstance(p, str) and p)
     if payload.get("focused"):
         session.ui_focused_at = next(_UI_FOCUS_SEQ)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))

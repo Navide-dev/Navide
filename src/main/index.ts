@@ -1969,6 +1969,11 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
+    onPackageSwitchFailed: (failure) => {
+      console.warn(`[main] switching ${failure.pluginId} to ${failure.stagedVersion} failed: ${failure.reason}`)
+      pluginStagedCandidateRelay.notifyStagedUpdates([failure])
+    },
     promptDigestBlock,
     preflightCandidateFrontend,
     preflightCandidateBackend,
@@ -4052,6 +4057,16 @@ ipcMain.handle('window:reattachGroup', (event, arg: { groupId?: string } | undef
   const child = detachedGroups.get(groupId)
   if (!child || child.isDestroyed()) return { ok: false }
   child.close()
+  return { ok: true }
+})
+
+// MCP window_focus (DESIGN-C S3): a window brings ITSELF to the front. The
+// window is the sender's, never an argument, so a renderer cannot focus (or
+// name) any other window through this.
+ipcMain.handle('window:focusSelf', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win || win.isDestroyed() || !mainWindows.has(win)) return { ok: false }
+  revealMainWindow(win)
   return { ok: true }
 })
 

@@ -182,16 +182,23 @@ async function remove(id: string): Promise<void> {
 // the App-bundled factory package for the ids that ship with Navide. The Host
 // decides which of the two applies; the row only offers the button when the Host
 // says a rollback is available.
-async function rollback(id: string, kind: 'factory' | 'previous', version?: string): Promise<void> {
+async function rollback(id: string, kind: 'factory' | 'previous', version?: string, needsConsent = false): Promise<void> {
   const api = pluginsApi()
   if (!api) return
+  // L4 (review M3): a kept file version is consented to again with its own
+  // disclosure, in the install consent dialog.
+  if (needsConsent) {
+    await updateFlow.rollbackWithConsent(id)
+    return
+  }
+  const previousText = t('settings.extensions.rollback.confirmPrevious', {
+    id,
+    version: version ?? t('settings.extensions.rollback.previousVersion'),
+  })
   const confirmed = await notify.confirm(
     kind === 'factory'
       ? t('settings.extensions.rollback.confirmFactory', { id })
-      : t('settings.extensions.rollback.confirmPrevious', {
-          id,
-          version: version ?? t('settings.extensions.rollback.previousVersion'),
-        }),
+      : previousText,
     {
       title: t('settings.extensions.rollback.title'),
       confirmText: t('settings.extensions.rollback.confirm'),
@@ -860,7 +867,7 @@ watch(installed, () => {
               v-if="p.rollbackKind"
               class="ext-rollback nv-btn nv-btn--sm"
               :disabled="busy || updateFlow.busy.value"
-              @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion)"
+              @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion, p.rollbackNeedsConsent === true)"
             >
               {{
                 p.rollbackKind === 'factory'

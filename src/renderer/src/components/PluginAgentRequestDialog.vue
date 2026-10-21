@@ -207,8 +207,17 @@ function applyDeps(): PluginRequestApplyDeps {
       if (flow.error.value) throw new Error(flow.error.value)
     },
     async rollback(pluginId: string): Promise<void> {
-      // The same confirmation the Extensions pane asks before a rollback.
       const row = (await plugins().listInstalled()).find((p) => p.id === pluginId)
+      // L4 (review r2): going back to a kept file version is the renewed
+      // consent with its disclosure, the dialog the Extensions pane shows.
+      if (row?.rollbackNeedsConsent === true) {
+        await flow.rollbackWithConsent(pluginId)
+        await installSettled()
+        if (flow.error.value) throw new Error(flow.error.value)
+        await inventory.refresh()
+        return
+      }
+      // The same confirmation the Extensions pane asks before a rollback.
       const confirmed = await notify.confirm(
         row?.rollbackKind === 'factory'
           ? t('settings.extensions.rollback.confirmFactory', { id: pluginId })
