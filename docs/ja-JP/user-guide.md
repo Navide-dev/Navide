@@ -156,7 +156,7 @@ Skills 画面は backend の変更成功と再接続で更新されます。未�
 
 **設定 → 言語** は、サイドバーの「外観」の次にある独立したページです。繁體中文、English、日本語から選択できます。このユーザー設定はすべてのワークスペースに適用されます。初回起動時に言語設定が保存されていなければ、日本語のシステムでは日本語が選択されます。言語の変更は初期設定画面、Navide のネイティブメニュー項目、独立した Plans とトークンモニターのウィンドウにも反映されます。OS が提供するメニュー項目や外部のコンテンツは、それぞれの言語で表示される場合があります。
 
-Settings は Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider、Appearance、Keyboard Shortcut を扱います。CLI Agents では Install 済みの Coding CLI も管理します。バージョン、Install 方法、重複 Install、その CLI 自身の最後の更新結果を表示し、その CLI 公式の更新コマンドと診断コマンドを Terminal で実行できます。Navide はベンダーのコマンドを提示して実行するだけで、CLI 自体を更新することはありません。Export された Settings は API Key と Token を Redact します。Third-party Server を有効化する前に、MCP Command と Environment Variable を確認してください。
+Settings は Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider、Appearance、Keyboard Shortcut を扱います。Navide が MCP Server を停止するとき（Navide の終了、再読み込み、Server の起動失敗）は、その Server が起動してまだ動いているすべてのプロセスも終了します。Server があなたのために開いたプログラム（起動したブラウザーなど）も含みます。CLI Agents では Install 済みの Coding CLI も管理します。バージョン、Install 方法、重複 Install、その CLI 自身の最後の更新結果を表示し、その CLI 公式の更新コマンドと診断コマンドを Terminal で実行できます。Navide はベンダーのコマンドを提示して実行するだけで、CLI 自体を更新することはありません。Export された Settings は API Key と Token を Redact します。Third-party Server を有効化する前に、MCP Command と Environment Variable を確認してください。
 
 **Accounts** では CLI Account ごとに 1 枚のカードを扱います。CLI 自身のサインインに加えて、カードには **Portable Credential** を保持できます。これは各ベンダーが「どの Machine でも使う」ために公式に用意した値（例：Claude Code の `claude setup-token`）です。一度貼り付けると、その CLI の新しい Pane が環境変数として受け取り、CLI 自身の Login File には触れません。CLI ごとに*使用中*の Credential は 1 つで、カードがどれかを示し、ローカルの Login File が優先されてしまう場合には警告します。削除はこの Device にのみ影響します。
 

@@ -55,7 +55,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Qwen Code panes: Qwen Code 0.25's multi-agent records in a session are no longer read as your prompts or as turn boundaries (#504).
 - Pipelines: a slot's hand-off waits while its background subagent or shell is still running (#506).
 - UI text: English that was hard-coded in the editor and Mini-IDE, the Git surfaces and the remaining components is now translated in zh-TW and ja-JP, and two Plans strings that showed their raw key are added (#509, #513, #514, #515).
-- MCP servers (Windows): quitting Navide no longer leaves an MCP server's node.exe running after its cmd.exe wrapper has exited, as seen with context7 (`npx`). Stopping a stdio MCP server now also ends any of its processes still alive after the library's own teardown.
+- MCP servers (Windows): quitting Navide no longer leaves an MCP server's node.exe running after its cmd.exe wrapper has exited, as seen with context7 (`npx`). Stopping a stdio MCP server now also ends any of its processes still alive after the library's own teardown. This includes a program the server opened for you, such as a browser it launched.
 
 ### Security
 
