@@ -1932,6 +1932,8 @@
         "confirm": "Roll back",
         "confirmFactory": "Return {id} to the version bundled with Navide? The package you installed stays staged, so you can restart back into it.",
         "confirmPrevious": "Roll {id} back to {version}? The current version stays staged, so you can restart back into it.",
+        "confirmLocalConsent": "{id} {version} is a local file version that Navide did not review. Going back to it asks for your consent again here, and its native backend, if it has one, asks again before it runs.",
+        "consentInSettings": "Going back to {id} {version}, a local file version, asks for your consent again with its disclosure. Confirm it under Settings → Navide Plugins.",
         "previousVersion": "the previous version",
         "errors": {
           "transactionInProgress": "{id} is already being installed, updated or rolled back. Try again when that finishes.",
