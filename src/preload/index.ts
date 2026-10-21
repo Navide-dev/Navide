@@ -1473,8 +1473,11 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
     /** W1 (S2): the copy the Host staged for an agent's file request, named
      *  by its stagingId; never a path. Installs nothing. */
-    prepareAgentFileInstall: (stagingId: string): Promise<PreparedInstallSummary> =>
-      ipcRenderer.invoke('plugins:prepareAgentFileInstall', { stagingId }),
+    prepareAgentFileInstall: (
+      stagingId: string,
+      requester?: { callerKind: string; paneName?: string },
+    ): Promise<PreparedInstallSummary> =>
+      ipcRenderer.invoke('plugins:prepareAgentFileInstall', requester ? { stagingId, requester } : { stagingId }),
     /** L4: the disclosure of a kept file version, for consenting to go back to it. */
     prepareLocalRollback: (id: string): Promise<PreparedInstallSummary & { rollbackFrom: string }> =>
       ipcRenderer.invoke('plugins:prepareLocalRollback', { id }),

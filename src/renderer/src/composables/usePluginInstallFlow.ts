@@ -169,13 +169,19 @@ export function usePluginInstallFlow() {
    *  folder) when the agent asked; this holds that copy for the same consent
    *  dialog as the user's own pick, naming who asked. A file whose digest is
    *  not the one the request card showed is refused. */
-  async function prepareAgentFile(stagingId: string, expectedDigest: string | null, requester: string): Promise<void> {
+  async function prepareAgentFile(
+    stagingId: string,
+    expectedDigest: string | null,
+    requester: string,
+    requesterIdentity?: { callerKind: string; paneName?: string },
+  ): Promise<void> {
     const plugins = api()
     if (!plugins?.prepareAgentFileInstall) throw new Error('installing from a file is unavailable')
     busy.value = true
     error.value = ''
     try {
-      const prepared = await plugins.prepareAgentFileInstall(stagingId)
+      // G3: the Host keeps who asked with a developer folder after it loads.
+      const prepared = await plugins.prepareAgentFileInstall(stagingId, requesterIdentity)
       if (expectedDigest !== null && prepared.digest !== expectedDigest) {
         throw new Error(t('plugin-request.file.digestChanged'))
       }

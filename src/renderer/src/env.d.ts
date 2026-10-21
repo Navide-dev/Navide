@@ -506,7 +506,10 @@ declare global {
           id: string,
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
         ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
-        prepareAgentFileInstall?: (stagingId: string) => Promise<PreparedInstallSummary>
+        prepareAgentFileInstall?: (
+          stagingId: string,
+          requester?: { callerKind: string; paneName?: string },
+        ) => Promise<PreparedInstallSummary>
         prepareLocalRollback?: (id: string) => Promise<PreparedInstallSummary & { rollbackFrom: string }>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
@@ -913,7 +916,26 @@ declare global {
     enabled: boolean
     /** A2-5 (G5): when Navide first saw settings another program wrote, while any is left. */
     externalChange?: { detectedAt: string; modifiedAt: string | null; reason?: 'signing-unavailable' | 'signature-missing' }
-    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string; externallyChanged?: true }>
+    folders: Array<{
+      pluginId: string
+      path: string
+      consentedAt: string
+      loaded: boolean
+      unavailable?: string
+      externallyChanged?: true
+      /** DESIGN-A2 G3: who had the folder loaded. */
+      loadedBy?:
+        | { kind: 'user' }
+        | { kind: 'agent'; callerKind: string; paneName?: string; approvedAt: string }
+        | { kind: 'unknown' }
+      autoReload?: boolean
+      lastLoad?: {
+        at: string
+        trigger: 'user-load' | 'manual-reload' | 'auto-reload' | 'startup' | 'developer-mode-on'
+        fingerprint?: string
+        fileCount?: number
+      }
+    }>
   }
 }
 

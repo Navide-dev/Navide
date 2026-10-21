@@ -126,7 +126,7 @@ describe('PluginAgentRequestDialog (B2)', () => {
     await flushPromises()
     // The window names the staged copy, never the path; nothing is committed
     // until the user confirms the consent dialog, which names who asked.
-    expect(plugins.prepareAgentFileInstall).toHaveBeenCalledWith('cd'.repeat(16))
+    expect(plugins.prepareAgentFileInstall).toHaveBeenCalledWith('cd'.repeat(16), { callerKind: 'pane', paneName: 'dev' })
     expect(plugins.commitLocalInstall).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="ext-trust-agent-request"]').text()).toContain('dev')
   })
