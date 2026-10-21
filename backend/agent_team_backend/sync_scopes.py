@@ -47,7 +47,12 @@ def _settings():
 def enabled_scopes() -> dict[str, bool]:
     raw = _settings().get().get(SCOPES_SETTING)
     stored = raw if isinstance(raw, dict) else {}
-    return {scope: bool(stored.get(scope, False)) for scope in sync_engine.SCOPES}
+    # A credentials switch an older build left on reads as off, and is written
+    # back as off by the next set_scope_enabled.
+    return {
+        scope: bool(stored.get(scope, False)) and scope not in sync_engine.LOCAL_ONLY_SCOPES
+        for scope in sync_engine.SCOPES
+    }
 
 
 #: Internal scopes and the switch each one rides with.
@@ -2547,27 +2552,9 @@ def forget_credential(agent_key: str, slot_id: str) -> int:
 
 
 def credential_saved(agent_key: str, slot_id: str) -> None:
-    """For the save path: a paste is an edit worth carrying up now, not on
-    the next round that happens by. Nothing happens unless the scope is on
-    and the link is up; ``sync_now`` says so itself.
-
-    Must be called on the event loop (the WS handler, after its blocking
-    store returns) — a worker thread has no loop to schedule on, and that is
-    said out loud rather than dropped. Rounds on one scope are serialised by
-    the engine, so a save landing mid-round simply runs after it.
-    """
-    from . import server_link
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        log.warning(
-            "credential_saved for %s/%s was called off the event loop; no sync scheduled",
-            agent_key, slot_id,
-        )
-        return
-    log.info("portable credential for %s/%s changed; scheduling a sync", agent_key, slot_id)
-    loop.create_task(server_link.sync_now(scope="credentials"))
+    """For the save path. Schedules nothing: credentials and keys are only
+    ever stored on this machine (``sync_engine.LOCAL_ONLY_SCOPES``), so a
+    paste has nowhere to go."""
 
 
 def on_account_changed() -> None:

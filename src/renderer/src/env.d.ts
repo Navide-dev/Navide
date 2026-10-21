@@ -12,6 +12,7 @@ type ManifestPermissionsSummary = import('../../shared/executionPolicy').Manifes
 type PackageVersionGrantSummary = import('../../shared/executionPolicy').PackageVersionGrantSummary
 type LegacyPlansPreferenceProjection = import('../../shared/plansPreferences').LegacyPlansPreferenceProjection
 type PluginSource = import('../../shared/pluginSource').PluginSource
+type LocalInstallDetails = import('../../shared/pluginSource').LocalInstallDetails
 type PluginManifestDisclosure = import('../../shared/pluginDisclosure').ManifestDisclosure
 type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
@@ -104,7 +105,8 @@ declare global {
         requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
       }) => void) => () => void
       onPluginStagedCandidateNotActivated?: (cb: (notice: { pluginId: string; version: string; reason: string }) => void) => () => void
-      onPluginStagedUpdates?: (cb: (updates: { pluginId: string; activeVersion: string; stagedVersion: string }[]) => void) => () => void
+      onPluginStagedUpdates?: (cb: (updates: { pluginId: string; activeVersion: string; stagedVersion: string; reason?: string }[]) => void) => () => void
+      onPluginSwitched?: (cb: (notice: { pluginId: string; fromVersion: string; toVersion: string; source: 'marketplace' | 'local-unsigned'; at: number; agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true } }) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
       onSystemResumed: (cb: () => void) => () => void
       setRecentWorkspaces: (list: { path: string; name: string; exists: boolean }[]) => void
@@ -447,6 +449,8 @@ declare global {
           /** A test build: its signed expiry and how the user joined the test. */
           expiresAt?: string
           testplaceVia?: 'invite' | 'code'
+          /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+          localInstall?: LocalInstallDetails
         }>>
         hostThemeChanged: (theme: string) => void
         prepareContribution: (args: {
@@ -498,13 +502,17 @@ declare global {
         commitInstall: (
           id: string,
           approval?: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
-        ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
+        ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
         installFromFile?: () => Promise<PreparedInstallSummary | null>
         commitLocalInstall?: (
           id: string,
           approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
-        ) => Promise<{ id: string; requires: string[]; restartRequired: true }>
-        prepareAgentFileInstall?: (stagingId: string) => Promise<PreparedInstallSummary>
+        ) => Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }>
+        prepareAgentFileInstall?: (
+          stagingId: string,
+          requester?: { callerKind: string; paneName?: string },
+        ) => Promise<PreparedInstallSummary>
+        prepareLocalRollback?: (id: string) => Promise<PreparedInstallSummary & { rollbackFrom: string }>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
         setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
@@ -529,7 +537,7 @@ declare global {
           restoredInstances: number
           skippedDestroyedHostWindows: number
         }>
-        rollback: (id: string) => Promise<{
+        rollback: (id: string, options?: { consentConfirmed?: boolean }) => Promise<{
           id: string
           packageVersion: string
           restoredInstances: number
@@ -605,11 +613,15 @@ declare global {
     localSignature?: 'verified' | 'revoked'
     /** Decision d5: Navide blocked the `.vsix` this local install came from;
      *  `reason` null when its list names none. */
-    digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
+    digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn' | null }
+    /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+    localInstall?: LocalInstallDetails
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'
     rollbackToVersion?: string
+    /** L4: the rollback target is a kept file version; going back asks again. */
+    rollbackNeedsConsent?: true
     /** Lowest Navide release the installed version needs (label only). */
     minNavideVersion?: string
     /** False when this Navide release is older; the Host still runs it. */
@@ -904,7 +916,28 @@ declare global {
   /** Card K4: the Developer Mode switch and the developer folders consented to. */
   interface DeveloperModeState {
     enabled: boolean
-    folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string }>
+    /** A2-5 (G5): when Navide first saw settings another program wrote, while any is left. */
+    externalChange?: { detectedAt: string; modifiedAt: string | null; reason?: 'signing-unavailable' | 'signature-missing' }
+    folders: Array<{
+      pluginId: string
+      path: string
+      consentedAt: string
+      loaded: boolean
+      unavailable?: string
+      externallyChanged?: true
+      /** DESIGN-A2 G3: who had the folder loaded. */
+      loadedBy?:
+        | { kind: 'user' }
+        | { kind: 'agent'; callerKind: string; paneName?: string; approvedAt: string }
+        | { kind: 'unknown' }
+      autoReload?: boolean
+      lastLoad?: {
+        at: string
+        trigger: 'user-load' | 'manual-reload' | 'auto-reload' | 'startup' | 'developer-mode-on'
+        fingerprint?: string
+        fileCount?: number
+      }
+    }>
   }
 }
 

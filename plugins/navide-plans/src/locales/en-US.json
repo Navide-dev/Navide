@@ -48,8 +48,8 @@
       "archived": "Archived",
       "archive-all-done": "Archive all done",
       "archive-confirm": "Archive plan \"{name}\"?",
-      "archive-all-confirm": "Archive {count} done plan(s)?",
-      "archived-count": "Archived {count} plan(s)",
+      "archive-all-confirm": "Archive {count} done plan? | Archive {count} done plans?",
+      "archived-count": "Archived {count} plan | Archived {count} plans",
       "menu-open": "Open",
       "menu-rename": "Rename",
       "menu-delete": "Delete",
@@ -74,8 +74,8 @@
       "history-no-differences": "No differences",
       "history-diff-stage": "Stage: {from} → {to}",
       "history-diff-todo": "Todo {id}: {from} → {to}",
-      "history-diff-todos-added": "{count} todo(s) added",
-      "history-diff-todos-removed": "{count} todo(s) removed",
+      "history-diff-todos-added": "{count} todo added | {count} todos added",
+      "history-diff-todos-removed": "{count} todo removed | {count} todos removed",
       "history-diff-notes": "Review notes: {delta}",
       "history-diff-lines": "+{added} / −{removed} lines",
       "snapshot-readonly": "Read-only snapshot",
@@ -127,9 +127,9 @@
       "copy-path-success": "Path copied",
       "delete-all": "Delete all",
       "delete-completed-title": "Delete Completed Plans",
-      "delete-completed-confirm": "Delete {count} completed plan(s)?",
+      "delete-completed-confirm": "Delete {count} completed plan? | Delete {count} completed plans?",
       "delete-item-failed": "Failed to delete {name}",
-      "deleted-count": "Deleted {count} completed plan(s)",
+      "deleted-count": "Deleted {count} completed plan | Deleted {count} completed plans",
       "list-failed": "Failed to list plans",
       "load-failed": "Failed to load plans",
       "archive-item-failed": "Failed to archive {name}",
@@ -206,8 +206,10 @@
           "conflict": "Conflict detected. Please reload and try again.",
           "internal-error": "An internal backend error occurred.",
           "workspace-scope-violation": "Attempted to access files outside workspace scope."
-        }
-      }
+        },
+        "rename-plan": "Rename plan"
+      },
+      "section-delete-confirm": "Delete the section \"{anchor}\" from the document?"
     }
   }
 }

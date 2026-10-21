@@ -182,16 +182,23 @@ async function remove(id: string): Promise<void> {
 // the App-bundled factory package for the ids that ship with Navide. The Host
 // decides which of the two applies; the row only offers the button when the Host
 // says a rollback is available.
-async function rollback(id: string, kind: 'factory' | 'previous', version?: string): Promise<void> {
+async function rollback(id: string, kind: 'factory' | 'previous', version?: string, needsConsent = false): Promise<void> {
   const api = pluginsApi()
   if (!api) return
+  // L4 (review M3): a kept file version is consented to again with its own
+  // disclosure, in the install consent dialog.
+  if (needsConsent) {
+    await updateFlow.rollbackWithConsent(id)
+    return
+  }
+  const previousText = t('settings.extensions.rollback.confirmPrevious', {
+    id,
+    version: version ?? t('settings.extensions.rollback.previousVersion'),
+  })
   const confirmed = await notify.confirm(
     kind === 'factory'
       ? t('settings.extensions.rollback.confirmFactory', { id })
-      : t('settings.extensions.rollback.confirmPrevious', {
-          id,
-          version: version ?? t('settings.extensions.rollback.previousVersion'),
-        }),
+      : previousText,
     {
       title: t('settings.extensions.rollback.title'),
       confirmText: t('settings.extensions.rollback.confirm'),
@@ -286,11 +293,13 @@ async function uninstallPack(members: string[]): Promise<void> {
 }
 
 // d5: the label for a local install whose file Navide blocked since; no
-// reason (or one this release does not know) reads as a plain block.
-function digestBlockKey(reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null): string {
+// reason (or one this release does not know) reads as a plain block. A
+// withdrawn Testplace build (0.2.28) is labelled the same way.
+function digestBlockKey(reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn' | null): string {
   if (reason === 'security') return 'security'
   if (reason === 'qualification-revoked') return 'qualificationRevoked'
   if (reason === 'developer-withdrawn') return 'developerWithdrawn'
+  if (reason === 'testplace-withdrawn') return 'testplaceWithdrawn'
   return 'blocked'
 }
 
@@ -366,6 +375,19 @@ async function restoreFactoryPackage(id: string): Promise<void> {
 const developerMode = ref<DeveloperModeState>({ enabled: false, folders: [] })
 const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>([])
 const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
+/** DESIGN-A2 G3: who had a loaded developer folder loaded, in the wording of agent request cards. */
+function folderLoadedByText(pluginId: string): string {
+  const loadedBy = developerMode.value.folders.find((folder) => folder.pluginId === pluginId)?.loadedBy
+  if (!loadedBy) return ''
+  if (loadedBy.kind === 'user') return t('settings.extensions.developerMode.loadedByUser')
+  if (loadedBy.kind === 'unknown') return t('settings.extensions.developerMode.loadedByUnknown')
+  const requester = loadedBy.callerKind === 'pane'
+    ? (loadedBy.paneName ? t('plugin-agent.caller.pane', { pane: reveal(loadedBy.paneName) }) : t('plugin-agent.caller.pane-unknown'))
+    : loadedBy.callerKind === 'external' ? t('plugin-agent.caller.external')
+      : loadedBy.callerKind === 'host' ? t('plugin-agent.caller.host')
+        : t('plugin-request.caller-unknown')
+  return t('settings.extensions.developerMode.loadedByAgent', { requester, at: new Date(loadedBy.approvedAt).toLocaleString() })
+}
 
 async function refreshDeveloperMode(): Promise<void> {
   const api = pluginsApi()
@@ -515,6 +537,10 @@ watch(installed, () => {
     <!-- Card K4: shown above the lists for as long as Developer Mode is on. -->
     <p v-if="developerMode.enabled" class="ext-devmode-banner ext-risk-banner" role="status">
       {{ $t('settings.extensions.developerMode.banner') }}
+    </p>
+    <!-- A2-5 (G5): settings another program wrote are disclosed, never applied. -->
+    <p v-if="developerMode.externalChange" class="ext-devmode-external ext-risk-banner" role="alert">
+      {{ $t(developerMode.externalChange.reason === 'signing-unavailable' ? 'settings.extensions.developerMode.externalChangeUnsigned' : developerMode.externalChange.reason === 'signature-missing' ? 'settings.extensions.developerMode.externalChangeMissing' : 'settings.extensions.developerMode.externalChange', { time: new Date(developerMode.externalChange.detectedAt).toLocaleString() }) }}
     </p>
     <!-- D6: never let a self-hosted Registry package disappear silently. -->
     <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
@@ -709,13 +735,15 @@ watch(installed, () => {
                 :via="p.testplaceVia"
                 :signature="p.localSignature"
                 :publisher="p.localSignature ? p.id.split('.')[0] : undefined"
+                :local-install="p.localInstall"
               />
-              <!-- d5: Navide blocked the file this local install came from; the label stays. -->
+              <!-- d5: Navide blocked the file this local install came from; the label stays.
+                   0.2.28: a withdrawn Testplace build keeps its label the same way. -->
               <span
                 v-if="p.digestBlock"
                 class="ext-badge ext-digest-blocked-badge"
                 :data-reason="p.digestBlock.reason ?? 'none'"
-                :title="$t('settings.extensions.digestBlock.note')"
+                :title="$t(p.digestBlock.reason === 'testplace-withdrawn' ? 'settings.extensions.digestBlock.testplaceWithdrawnNote' : 'settings.extensions.digestBlock.note')"
               >
                 {{ $t(`settings.extensions.digestBlock.${digestBlockKey(p.digestBlock.reason)}`) }}
               </span>
@@ -756,6 +784,9 @@ watch(installed, () => {
               </span>
             </div>
             <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
+            <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
+              {{ folderLoadedByText(p.id) }}
+            </p>
             <!-- D3: remind from 7 days before a test build expires; once kept past it, say so. -->
             <p v-if="p.source === 'testplace' && testplaceDaysLeft(p.expiresAt) !== null" class="ext-disabled-note ext-testplace-expiring" role="status">
               {{ $t('testplace.expiring', { days: testplaceDaysLeft(p.expiresAt), date: (p.expiresAt ?? '').slice(0, 10) }) }}
@@ -855,7 +886,7 @@ watch(installed, () => {
               v-if="p.rollbackKind"
               class="ext-rollback nv-btn nv-btn--sm"
               :disabled="busy || updateFlow.busy.value"
-              @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion)"
+              @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion, p.rollbackNeedsConsent === true)"
             >
               {{
                 p.rollbackKind === 'factory'
@@ -923,6 +954,7 @@ watch(installed, () => {
           <span class="ext-id" v-truncate>{{ reveal(folder.pluginId) }}</span>
           <code class="ext-devmode-path">{{ reveal(folder.path) }}</code>
           <span v-if="folder.unavailable" class="ext-badge ext-dev-warning ext-devmode-unavailable">{{ localizeDeveloperModeError(folder.unavailable, t) }}</span>
+          <span v-else-if="folder.externallyChanged" class="ext-badge ext-dev-warning ext-devmode-external-folder">{{ $t('settings.extensions.developerMode.externallyChanged') }}</span>
           <span v-else class="ext-badge ext-dev-warning">{{ $t('settings.extensions.developerMode.needsConsent') }}</span>
           <button class="ext-devmode-reload nv-btn nv-btn--sm" :disabled="busy || updateFlow.busy.value" @click="updateFlow.reloadDeveloperPlugin(folder.pluginId)">
             {{ $t('settings.extensions.developerMode.reload') }}

@@ -159,7 +159,7 @@ describe('O1: an agent update whose disclosure is unchanged', () => {
     ...extra,
   })
   function updateDeps(result: unknown = check()) {
-    const commitUpdate = vi.fn(async () => {})
+    const commitUpdate = vi.fn(async (): Promise<void | { switched?: true; switchError?: string }> => {})
     const discardUpdate = vi.fn()
     const prepareUpdate = vi.fn(async () => result)
     return { d: deps({ prepareUpdate, commitUpdate, discardUpdate } as never), prepareUpdate, commitUpdate, discardUpdate }
@@ -178,11 +178,33 @@ describe('O1: an agent update whose disclosure is unchanged', () => {
       ok: true, updated: true, pluginId: 'nerdtechnic.devmap', fromVersion: '0.2.0', pluginVersion: '0.3.0',
     })
     expect(prepareUpdate).toHaveBeenCalledWith('nerdtechnic.devmap', '0.3.0')
-    expect(commitUpdate).toHaveBeenCalledWith('nerdtechnic.devmap')
+    // The switch record names the agent (user decision A, 2026-10-21).
+    expect(commitUpdate).toHaveBeenCalledWith('nerdtechnic.devmap', requester)
     expect(discardUpdate).not.toHaveBeenCalled()
     expect(d.notify).toHaveBeenCalledWith({
       action: 'update', pluginId: 'nerdtechnic.devmap', pluginVersion: '0.3.0', fromVersion: '0.2.0', requester,
     })
+  })
+
+  it('leaves a switched update to the switch row: no second "updated" notice (review r2)', async () => {
+    const { d, commitUpdate } = updateDeps()
+    commitUpdate.mockResolvedValueOnce({ switched: true })
+    await expect(answerPluginAgentAction(update, d)).resolves.toEqual({
+      ok: true, updated: true, pluginId: 'nerdtechnic.devmap', fromVersion: '0.2.0', pluginVersion: '0.3.0',
+    })
+    expect(d.notify).not.toHaveBeenCalled()
+  })
+
+  it('says a staged update whose switch failed as it is, and never announces it as updated (review M2)', async () => {
+    const { d, commitUpdate, discardUpdate } = updateDeps()
+    commitUpdate.mockResolvedValueOnce({ switchError: 'the view did not start' })
+    await expect(answerPluginAgentAction(update, d)).resolves.toEqual({
+      ok: true, updated: true, switched: false, switchError: 'the view did not start',
+      pluginId: 'nerdtechnic.devmap', fromVersion: '0.2.0', pluginVersion: '0.3.0',
+    })
+    // Kept staged for the main window's "switch failed" row; no "updated" notice.
+    expect(discardUpdate).not.toHaveBeenCalled()
+    expect(d.notify).not.toHaveBeenCalled()
   })
 
   it.each([

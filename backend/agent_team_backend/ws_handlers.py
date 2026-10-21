@@ -441,10 +441,11 @@ _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "
 _HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
 #: Calls into a plugin's own backend, counted by the Host per batch.
 _BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
-#: Card K4: the one Host event a row may report, the Developer Mode switch. It
-#: is filed under the Host's own event identity, which no plugin can hold.
+#: Card K4: the Host events a row may report, the Developer Mode switch and
+#: (A2-5) its settings changed outside Navide. They are filed under the Host's
+#: own event identity, which no plugin can hold.
 _HOST_EVENT_PLUGIN_ID = "host"
-_HOST_EVENT_ADDRESSES = frozenset(("developerMode.on", "developerMode.off"))
+_HOST_EVENT_ADDRESSES = frozenset(("developerMode.on", "developerMode.off", "developerMode.externalChange"))
 
 
 def _host_event_row(app: Any, row: dict) -> str | None:
@@ -6322,13 +6323,18 @@ async def share_publish(session: "Session", msg_id: str, msg_type: str, payload:
     as a disconnect and nothing else. The error minted here names the file
     export as the way out instead.
     """
-    from . import share_codes
+    from . import settings_bundle, share_codes
 
     bundle = payload.get("bundle")
     if not isinstance(bundle, dict):
         await session.send_json(
             make_error(msg_id, msg_type, "INVALID_BUNDLE", "bundle must be an object")
         )
+        return
+    try:
+        bundle = settings_bundle.without_secrets(bundle)
+    except settings_bundle.BundleError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, err.message, err.details))
         return
     ttl = payload.get("ttlSeconds")
     if not isinstance(ttl, int) or isinstance(ttl, bool) or ttl <= 0:

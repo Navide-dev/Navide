@@ -50,6 +50,24 @@ describe('DeveloperModeReminder (K4)', () => {
   })
 })
 
+describe('DeveloperModeReminder: settings changed outside Navide (A2-5, G5)', () => {
+  it('says so on launch in every locale, also while the switch it turned on is not applied', async () => {
+    ;(window as unknown as { agentTeam: unknown }).agentTeam = {
+      plugins: { developerMode: async () => ({ enabled: false, externalChange: { detectedAt: '2026-10-21T01:00:00.000Z', modifiedAt: null }, folders: [] }) },
+    }
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      const reminder = mount(DeveloperModeReminder, { global: { plugins: [i18n] } })
+      await flushPromises()
+      const text = reminder.get('.nv-devmode-reminder-external').text()
+      const expected = i18n.global.t('settings.extensions.developerMode.externalChange', { time: 'TIME' })
+      expect(text.startsWith(expected.split('TIME')[0]!)).toBe(true)
+      expect(text).not.toContain(i18n.global.t('settings.extensions.developerMode.reminder'))
+      reminder.unmount()
+    }
+  })
+})
+
 describe('PluginTrustDialog for a developer folder (K4)', () => {
   const pending = {
     label: 'acme.devtodo',

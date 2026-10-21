@@ -169,7 +169,7 @@ describe('SettingsSystemHelp', () => {
 
     const mockText = wrapper.findAll('.mk-fig').map((f) => f.text()).join(' ')
     expect(mockText.length).toBeGreaterThan(200)
-    expect(mockText).toContain('reclaim')
+    expect(mockText).toContain('回收')
     expect(mockText).toContain('市集')
     expect(mockText).toContain('資源控管')
     // Pane names and figures are the same in both locales.

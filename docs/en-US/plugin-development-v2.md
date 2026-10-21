@@ -6,8 +6,8 @@
 > `navide.plans` and `navide.mini-ide` packages run on this contract, and so do
 > third-party packages installed from a Registry.
 >
-> Installing a v2 package from a Registry and choosing **Restart Plugin**
-> writes an exact package-version grant for the declared `permissions` plus
+> Installing a v2 package from a Registry writes, as soon as the user
+> approves it, an exact package-version grant for the declared `permissions` plus
 > Host-managed storage, so a third-party view can call the public catalog and
 > `storage.*` (see [Host-managed storage partitions](#host-managed-storage-partitions)).
 > Third-party native backends run only under the OS sandbox and consent rules
@@ -286,7 +286,7 @@ protocol.
 | Stage | Python backend | Host-visible contract |
 |---|---|---|
 | Source development | Authors may use `.py` files, a virtual environment, and any Python build/test layout. | None. Source layout is not an installed interface. |
-| Local testing | Turn on Developer Mode (Settings → Navide Plugins) and **Load from folder…**: the view opens with its declared grant and the backend runs in the same sandbox, after the same native backend consent, as an installed one. `navide-plugin dev-backend <directory>` still runs the executable alone, with every Host bridge request answered `CAPABILITY_DENIED`. | A developer folder's consent is bound to the folder and its manifest `permissions` and `backend`; editing files never asks again, changing either declaration does. |
+| Local testing | Turn on Developer Mode (Settings → Navide Plugins) and **Load from folder…**: the view opens with its declared grant and the backend runs in the same sandbox, after the same native backend consent, as an installed one. `navide-plugin dev-backend <directory>` still runs the executable alone, with every Host bridge request answered `CAPABILITY_DENIED`. | A developer folder's consent is bound to the folder and its manifest `permissions` and `backend`; editing files never asks again, changing either declaration does. Settings → Navide Plugins also says who had each folder loaded (you, or an agent's request you approved in the main window) and when it last loaded; that record (`.navide-plugin-developer-folders-meta.json`) only discloses, is not signed, and can be rewritten by any program running as you. |
 | `navide-plugin package` | Python, its required modules, and the plugin code are bundled into a target-specific executable by an author-selected tool such as PyInstaller or Nuitka. | `backend.entry` names the resulting executable inside the archive. |
 | Install and runtime target | No Python installation, `pip`, virtual environment, source checkout, or author build tool may be required on the user's machine. | The Electron main process supervises the executable over Backend Wire v1 without a shell. The first-party Plans backend runs directly; a third-party backend runs only under the conditions in [Third-party backends](#third-party-backends-sandbox-consent-and-publishing). |
 
@@ -2134,6 +2134,33 @@ message, and optional structured details:
 The v1 broker's `CAP_DENIED`, `UNKNOWN`, `BAD_REQUEST`, and `BACKEND_ERROR`
 strings are internal legacy values and are mapped by the compatibility adapter.
 
+### Where to look when something fails
+
+- **A view's console.** Each view runs in its own web contents (a `<webview>`
+  guest, or a native `WebContentsView` for `location: "window"`), so
+  **View → Toggle Developer Tools** opens the DevTools of Navide's own window,
+  not your view's. To read your view's console, turn on **Chrome DevTools
+  Protocol** in Settings → MCP → External access, restart Navide, open
+  `chrome://inspect` in Chrome, add `127.0.0.1:9223` (or the port you chose)
+  under **Configure…**, and inspect the target whose URL is your view's
+  `entry`. While it is on, anything on this machine can run code in Navide
+  (see [CDP debug](external-mcp-control.md#cdp-debug-escape-hatch)); turn it off
+  when you are done.
+- **A Host refusal in a view.** The call rejects with a `PluginError` whose
+  `code` is in the table above (`CAPABILITY_DENIED` for a capability the
+  manifest does not declare or the user did not grant). Navide also records
+  every refused call: Settings → Navide Plugins → **Disclosure overview** →
+  your Navide plugin → **Activity** lists it as denied, and says when the
+  manifest did not declare it.
+- **A backend.** Its stderr, start failures and restarts are written to
+  Navide's main log, `<userData>/logs/main.log` (on macOS
+  `~/Library/Application Support/Agent-Team/logs/main.log`), on lines that start
+  with `[plugin-backend]`. A call the backend makes through the Host bridge and
+  the Host refuses is answered to the backend with that error code and counted
+  in the same **Activity** list. Before installing, `navide-plugin
+  dev-backend` prints each bridge call as `← bridge (denied in dev-backend)` and
+  the backend's stderr as `[backend]` lines.
+
 ## Views and lifecycle
 
 A package may contribute multiple views, and each view may have multiple live
@@ -2147,14 +2174,29 @@ have a package-relative HTML `entry`. The initial v2 contract does not accept
 additive contract only after authors can implement and test the complete
 provider Interface.
 
-An update is downloaded and verified in the background but is not a live code
-swap. The update is staged at an immutable target-specific package directory,
-receives current trust verification plus restricted frontend and backend
-preflight, and is then offered through **Restart Plugin**. Navide drains only that plugin,
+What the user approves takes effect at once; it is never a live code swap
+inside a running view. An install or update is staged at an immutable
+target-specific package directory and receives current trust verification
+plus restricted frontend and backend preflight. A first install is then
+activated as soon as it is approved. An approved update, and an agent's
+automatic update whose disclosure is identical to the running version's
+(O1), switches right away through the same per-plugin switch as
+**Restart Plugin**: the consent dialog says beforehand that the plugin's open
+views reload and lose what is not saved in them. Navide drains only that plugin,
 atomically selects one complete frontend/backend package version and its
 matching storage selection, then restores native view placements from fresh
 Host-owned descriptor and Grant data. Navide itself and unrelated plugins do
-not restart. An older mutable Registry installation is adopted as the previous
+not restart. In-window views come back on the new version in place. Every
+switch is recorded in the main window's announcements with a one-click way
+back to the version it replaced; a failed switch keeps the previous version
+running and leaves the update staged. For an update the user approved, the
+Extensions page shows the reason at once, its row keeps Restart and Discard,
+and the main window lists it with **Apply now** on the next launch; for an
+agent's automatic update the main window shows the reason with **Apply now**
+at once. A first install or update that is still staged when Navide starts
+(the App closed before it switched) is activated, or disclosed with
+**Apply now**, on that launch.
+An older mutable Registry installation is adopted as the previous
 version only after its retained archive, receipt, grant, and current Registry
 trust verify; a failed check cannot turn it into an active selection.
 Interrupted activation recovery, rollback to a retained previous
@@ -2224,20 +2266,42 @@ runs only inside the OS sandbox described in
   settings page can change it; every change made there is written to the
   plugin activity log as a Host event (`source: "host"`, `plugin_id: "host"`,
   `developerMode.on` / `.off`), which no plugin row can claim. The switch and
-  the folder consents live in an unsigned file,
-  `.navide-plugin-developer-mode.json` in the plugin install root, which is
-  checked only for its shape. Any unsandboxed process running as the same
-  user, an agent CLI included, can write that file to turn Developer Mode on
-  and add a consented folder (the permission digest is a plain SHA-256 of the
-  manifest's declarations); the next start then loads that folder without the
-  consent dialog, and a packaged build starts honouring a self-hosted Registry
-  URL. A direct write leaves no activity log entry; the launch reminder still
-  appears while the switch is on, and a native backend still needs its own
-  consent. A plugin frame and a plugin's own sandboxed backend cannot write
-  it. Navide Guard grades an agent's write to this file as critical where the
-  CLI runs Navide's hooks (rule `plugin-store-write`, with the limits listed
-  under the local trust record below); it does not stop other processes of
-  the same user. A main-process signed consent is planned for 0.2.27. A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
+  the folder consents live in `.navide-plugin-developer-mode.json` in the
+  plugin install root, which is checked for its shape. Any unsandboxed
+  process running as the same user, an agent CLI included, can write that
+  file. Since 0.2.28 Navide also keeps
+  `.navide-plugin-developer-mode.sig.json` beside it: an HMAC-SHA256 of each
+  entry Navide wrote itself (the switch when on, each folder consent), keyed
+  by a random key that Electron `safeStorage` encrypts. An entry Navide did
+  not write (the switch turned on, a folder added or edited by another
+  program) is not applied: the switch stays off until the user turns it on
+  on this page (with the usual confirmation), and the folder is listed as
+  "Added or edited outside Navide; consent again" and loads only after the
+  user consents to it again (Reload opens the consent dialog for the folder
+  the entry names). Navide says so in the launch reminder and on this page,
+  and writes one Host event `developerMode.externalChange` to the activity
+  log when it first sees the change. Nothing is blocked: the other program's
+  write is simply not taken as the user's consent. When secure storage
+  refuses to sign Navide's own write (keychain access denied or locked), the
+  change is still written, unsigned, and reads as "ask again" with its own
+  notice; reading the settings never fails over it. Known limits: the check
+  runs only after the app is ready and only while secure storage is
+  available, so before the app is ready (the self-hosted Registry setting
+  can be read then) and on Linux without a keyring, or with the
+  `basic_text` password store, entries are taken as they are; a file from
+  before 0.2.28, or one whose signature file is missing, is asked about
+  again once (the switch reads as off and each folder needs consent); the
+  signature covers entries, not their age, so
+  restoring an older copy of both files together (for example one taken
+  while the switch was on, or before a folder was removed) makes that state
+  trusted again without a notice; on Windows and Linux the safeStorage key
+  is readable by any process of the same user, so a determined program can
+  still forge an entry there; a signature file that cannot be read or
+  decrypted (another machine, a new keychain) asks about every entry again. A native backend still needs its
+  own consent, and a plugin frame and a plugin's own sandboxed backend cannot
+  write either file. Navide Guard grades an agent's write to this file as
+  critical where the CLI runs Navide's hooks (rule `plugin-store-write`, with
+  the limits listed under the local trust record below). A packaged build ignores `AGENT_TEAM_PLUGIN_DEV` and
   `AGENT_TEAM_PLUGIN_DEV_PATH` either way; with the switch on, **Load from
   folder…** opens the Host's own folder dialog. A folder loads a Manifest v2
   package (not `navide.`, not an id something else installed holds or
@@ -2277,9 +2341,13 @@ runs only inside the OS sandbox described in
   the user always consents in a dialog that shows a fixed warning, the
   self-declared publisher and "not scanned", starts on Cancel and enables its
   consent button only after an explicit acknowledgement. The package is staged
-  like a Registry candidate and its grant takes effect on **Restart Plugin**;
+  like a Registry candidate and takes effect, with its grant, as soon as the
+  user approves it (the same per-plugin switch as **Restart Plugin**);
   a native backend still asks for its own consent and runs in the same
-  sandbox. A file install never updates automatically. Installing a file over
+  sandbox. A file install never updates automatically. A file installed over
+  a file install keeps the replaced file version as the rollback target;
+  going back to it asks for the user's consent again, and its native backend
+  asks again before it runs. Installing a file over
   an installed package of the same id (or a Marketplace version over a file
   install) asks first, and the replacement keeps none of the replaced
   package's permissions: its capability grant and rollback grant, its native
@@ -2344,6 +2412,16 @@ runs only inside the OS sandbox described in
   enabled again; `admin`, `qualification-revoked` or no reason asks the user
   once to keep using, disable or remove it; `developer-withdrawn` is only
   labelled. Extensions keeps a label with the reason on each one.
+  `testplace-withdrawn` (0.2.28) names a Testplace build its developer or
+  Navide took back (revoked or yanked); it is the only reason also checked
+  against a Registry install, by the `artifactDigest` in its install receipt.
+  The tester sees the label and is asked once per digest to keep using,
+  disable or remove it; nothing is disabled for it. This reaches a tester who
+  is offline or signed out from the stored document; the signed-in check every
+  15 minutes stays the fast path and, since 0.2.28, no longer stops the build
+  either: it records the same block, and one notice covers both paths. A release that does not know the reason
+  reads it as none (a warning for a file install; Registry installs are not
+  checked there).
   Limits: a file installed before 0.2.27 that was not signed has no recorded
   digest, so a later block cannot reach it (a signed one is checked through
   the digest in its signature evidence); a developer folder has no `.vsix` and

@@ -166,7 +166,7 @@ describe('which vendors get the turn watch', () => {
 
   it('watches the vendors whose log reader reports a turn start', () => {
     for (const key of ['claude', 'codex', 'copilot', 'cursor', 'droid', 'antigravity', 'aider',
-      'muse', 'opencode', 'kilo', 'grok', 'kimi', 'pi', 'qwen']) {
+      'muse', 'opencode', 'kilo', 'grok', 'kimi', 'pi', 'qwen', 'goose']) {
       expect(shouldWatchTurn({ agentKey: key, midTurn: false }), key).toBe(true)
     }
   })

@@ -97,16 +97,50 @@ export function selectTests(changed, repo) {
   return [...selected].sort()
 }
 
+const USAGE = `usage: node scripts/changed-backend-tests.mjs [base] [--list] [-- pytest args]
+
+Runs the backend test files that the changes since base (default origin/main)
+can affect, through scripts/isolated-pytest.sh.
+
+  --list      print the selection and run nothing
+  -h, --help  print this and run nothing
+  --          everything after it goes to pytest
+`
+
+/**
+ * Own arguments; anything after `--` goes to pytest untouched.
+ * @returns { help: true } | { error } | { base, list, pytestArgs }
+ */
+export function parseArgs(argv) {
+  const split = argv.indexOf('--')
+  const own = split >= 0 ? argv.slice(0, split) : argv
+  const pytestArgs = split >= 0 ? argv.slice(split + 1) : []
+  if (own.includes('--help') || own.includes('-h')) return { help: true }
+  let base = null
+  for (const arg of own) {
+    if (arg === '--list') continue
+    if (arg.startsWith('-')) return { error: `unknown option: ${arg}` }
+    if (base !== null) return { error: `more than one base: ${arg}` }
+    base = arg
+  }
+  return { base: base ?? 'origin/main', list: own.includes('--list'), pytestArgs }
+}
+
 function git(args) {
   return execFileSync('git', args, { encoding: 'utf8' }).split('\n').filter(Boolean)
 }
 
 function main(argv) {
-  const split = argv.indexOf('--')
-  const own = split >= 0 ? argv.slice(0, split) : argv
-  const pytestArgs = split >= 0 ? argv.slice(split + 1) : []
-  const list = own.includes('--list')
-  const base = own.find((arg) => !arg.startsWith('--')) ?? 'origin/main'
+  const args = parseArgs(argv)
+  if (args.help) {
+    process.stdout.write(USAGE)
+    return 0
+  }
+  if (args.error) {
+    process.stderr.write(`${args.error}\n${USAGE}`)
+    return 2
+  }
+  const { base, list, pytestArgs } = args
   const root = join(dirname(fileURLToPath(import.meta.url)), '..')
   process.chdir(root)
   let selected

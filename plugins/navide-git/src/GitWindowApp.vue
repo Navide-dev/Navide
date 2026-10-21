@@ -38,7 +38,7 @@ import {
   type GitFileEntry
 } from './composables/useGit'
 import { useIssues } from './composables/useIssues'
-import { useNotify, useTheme, vTruncate } from '@navide/plugin-ui/foundation'
+import { isSingular, useNotify, useTheme, vTruncate } from '@navide/plugin-ui/foundation'
 import { settingsGet, onSettingsChanged } from '@navide/plugin-ui/shared'
 import {
   GIT_BRANCH_DIFF_KEY,
@@ -78,7 +78,7 @@ const props = defineProps<{
   aiCliController: AiCliSessionController
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const gitTransport = inject(GIT_TRANSPORT_KEY)!
 const fileAccess = inject(GIT_FILE_ACCESS_KEY)!
 const uiPort = inject(GIT_UI_KEY)!
@@ -566,7 +566,7 @@ function openRestoreBranchMenu(x: number, y: number, path: string): void {
   if (hidden > 0) {
     items.push({
       label:
-        hidden === 1
+        isSingular(hidden, locale.value)
           ? t('label.more-branches-one', { count: hidden })
           : t('label.more-branches-many', { count: hidden }),
       disabled: true,
@@ -851,7 +851,7 @@ async function doMergeCurrentInto(name: string): Promise<void> {
   const conflicts = r.conflict_files?.length ?? 0
   if (conflicts) {
     notify.toast(
-      conflicts === 1
+      isSingular(conflicts, locale.value)
         ? t('label.merged-with-conflicts-one', { branch: name, count: conflicts })
         : t('label.merged-with-conflicts-many', { branch: name, count: conflicts }),
       { type: 'error' }
@@ -1216,7 +1216,7 @@ async function onCleanUntracked(): Promise<void> {
   ].join('\n')
   const count = preview.files.length
   const ok = await notify.confirm(
-    count === 1
+    isSingular(count, locale.value)
       ? t('label.clean-untracked-confirm-one', { count, files: listed })
       : t('label.clean-untracked-confirm-many', { count, files: listed }),
     { title: t('label.clean-untracked-title'), confirmText: t('action.delete-files') }
@@ -1235,7 +1235,7 @@ async function onCleanUntracked(): Promise<void> {
     const r = await cleanUntracked(false)
     const removed = r.files.length || preview.files.length
     const doneMsg =
-      removed === 1
+      isSingular(removed, locale.value)
         ? t('label.deleted-files-one', { count: removed })
         : t('label.deleted-files-many', { count: removed })
     if (toastResult(r, doneMsg)) await refreshAll()
@@ -1875,13 +1875,13 @@ registerCommand('git.focusAgent', () => {
         <div v-else class="status-wrap">
           <div class="pane changes">
             <div v-if="opInProgress" class="op-banner">
-              <span>{{ $t('label.op-in-progress', { op: opInProgress }) }}<template v-if="conflictFiles.length"> — {{ conflictFiles.length > 1 ? $t('label.conflicted-files-many', { count: conflictFiles.length }) : $t('label.conflicted-files-one', { count: conflictFiles.length }) }}</template></span>
+              <span>{{ $t('label.op-in-progress', { op: opInProgress }) }}<template v-if="conflictFiles.length"> — {{ isSingular(conflictFiles.length, locale) ? $t('label.conflicted-files-one', { count: conflictFiles.length }) : $t('label.conflicted-files-many', { count: conflictFiles.length }) }}</template></span>
               <button class="linkbtn danger" @click="onAbortOperation">{{ $t('action.abort-op', { op: opInProgress }) }}</button>
             </div>
 
             <div class="list-hdr">
               <div>
-                <div class="gtitle">{{ changeCount === 1 ? $t('label.files-changed-one', { count: changeCount }) : $t('label.files-changed-many', { count: changeCount }) }}</div>
+                <div class="gtitle">{{ isSingular(changeCount, locale) ? $t('label.files-changed-one', { count: changeCount }) : $t('label.files-changed-many', { count: changeCount }) }}</div>
                 <div class="gsub">{{ $t('hint.file-card') }}</div>
               </div>
               <div class="hdr-actions">
@@ -1977,7 +1977,7 @@ registerCommand('git.focusAgent', () => {
                   {{
                     isCommitting
                       ? $t('label.committing')
-                      : gitStatus.staged.length === 1
+                      : isSingular(gitStatus.staged.length, locale)
                         ? $t('action.commit-files-one', { count: gitStatus.staged.length })
                         : $t('action.commit-files-many', { count: gitStatus.staged.length })
                   }}

@@ -7,8 +7,10 @@ import {
   UI_PLURAL_RULES,
   formatList,
   isBetaUiLocale,
+  isSingular,
   isUiLocale,
   normalizeSystemLocale,
+  pluralCategory,
   resolveAvailableLocale,
 } from '../uiLocales'
 import { AVAILABLE_UI_LOCALES, detectUiLocale, resolveAvailableUiLocale } from '..'
@@ -68,10 +70,13 @@ describe('uiLocales', () => {
     expect(resolveAvailableLocale('ja-JP', ['en-US', 'zh-TW', 'ja-JP'])).toBe('ja-JP')
   })
 
-  it('only the three translated catalogs are registered today', () => {
-    expect([...AVAILABLE_UI_LOCALES].sort()).toEqual(['en-US', 'ja-JP', 'zh-TW'])
-    expect(detectUiLocale('ko-KR')).toBe('en-US')
-    expect(detectUiLocale('zh-Hans')).toBe('en-US')
+  it('registers the translated catalogs only', () => {
+    expect([...AVAILABLE_UI_LOCALES].sort()).toEqual(['en-US', 'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW'])
+    expect(detectUiLocale('ko-KR')).toBe('ko-KR')
+    expect(detectUiLocale('ko')).toBe('ko-KR')
+    expect(detectUiLocale('de-DE')).toBe('en-US')
+    expect(detectUiLocale('zh-Hans')).toBe('zh-CN')
+    expect(detectUiLocale('zh-SG')).toBe('zh-CN')
     expect(detectUiLocale('zh-HK')).toBe('zh-TW')
     expect(resolveAvailableUiLocale('ru-RU')).toBe('en-US')
     expect(resolveAvailableUiLocale('ja-JP')).toBe('ja-JP')
@@ -163,5 +168,43 @@ describe('uiLocales', () => {
     expect(formatList(['a', 'b', 'c'], 'zh-TW')).toBe('a、b和c')
     expect(formatList(['a', 'b', 'c'], 'ja-JP')).toBe('a、b、c')
     expect(formatList(['a', 'b'], 'en-US', 'disjunction')).toBe('a or b')
+  })
+
+  describe('singular key selection', () => {
+    it.each([
+      ['en-US', 0, false],
+      ['en-US', 1, true],
+      ['en-US', 2, false],
+      ['fr-FR', 0, true],
+      ['fr-FR', 1, true],
+      ['fr-FR', 2, false],
+      ['pt-BR', 0, true],
+      ['pt-BR', 1, true],
+      ['ru-RU', 1, true],
+      ['ru-RU', 2, false],
+      ['ru-RU', 5, false],
+      ['ru-RU', 21, true],
+      // No CLDR "one" category: count === 1 keeps today's singular key.
+      ['ja-JP', 1, true],
+      ['ja-JP', 2, false],
+      ['zh-TW', 1, true],
+      ['zh-TW', 0, false],
+    ] as const)('%s %d → singular %s', (locale, count, singular) => {
+      expect(isSingular(count, locale)).toBe(singular)
+    })
+
+    it('matches count === 1 for en-US, zh-TW and ja-JP', () => {
+      for (const locale of ['en-US', 'zh-TW', 'ja-JP']) {
+        for (let count = 0; count <= 120; count++) expect(isSingular(count, locale)).toBe(count === 1)
+      }
+    })
+
+    it('reports CLDR categories', () => {
+      expect(pluralCategory(1, 'en-US')).toBe('one')
+      expect(pluralCategory(0, 'fr-FR')).toBe('one')
+      expect(pluralCategory(2, 'ru-RU')).toBe('few')
+      expect(pluralCategory(5, 'ru-RU')).toBe('many')
+      expect(pluralCategory(1, 'ja-JP')).toBe('other')
+    })
   })
 })

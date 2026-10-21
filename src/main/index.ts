@@ -39,7 +39,7 @@ import {
   setMarketplaceOverridesAllowed,
 } from './plugins/pluginIpc'
 import { scanLocalPackageInWorker } from './plugins/pluginLocalScan'
-import { developerFolderBackendDigest, PluginDeveloperModeStore } from './plugins/pluginDeveloperModeStore'
+import { developerFolderBackendDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './plugins/pluginDeveloperModeStore'
 import { disableOfficialKeyOverride } from './plugins/pluginVerify'
 import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
@@ -997,7 +997,20 @@ const pluginsRoot = (): string => join(app.getPath('userData'), 'plugins')
 // Card K4 (D6): a packaged build honors the self-hosted Registry overrides only
 // while the user's Developer Mode switch is on, and never takes the official
 // publisher key from the environment. Set before anything resolves either.
-const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot())
+// A2-5 (G5): entries of that file another program wrote are disclosed and
+// asked about again. Its HMAC key is wrapped by safeStorage, touched only once
+// the app is ready and only while Developer Mode is in use; before that, or
+// without secure storage, nothing is checked (disclosed).
+const pluginDeveloperModeIntegrity: DeveloperModeIntegrity = {
+  get available(): boolean {
+    return app.isReady() && !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
+      (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+  },
+  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
+  decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
+  onExternalChange: () => frontendPluginManager.recordDeveloperModeExternalChange(app.getVersion()),
+}
+const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot(), pluginDeveloperModeIntegrity)
 setMarketplaceOverridesAllowed(() => !app.isPackaged || pluginDeveloperModeStore.isEnabled())
 if (app.isPackaged) disableOfficialKeyOverride()
 let installedRegistryRootKey: string | null = null
@@ -1017,8 +1030,6 @@ try {
 const pluginTestplaceStore = new PluginTestplaceStore(pluginsRoot())
 const keepsExpiredTestplace = (packageId: string, artifactDigest: string): boolean =>
   pluginTestplaceStore.keepsExpired(packageId, artifactDigest)
-const withdrawnTestplace = (packageId: string, version: string): boolean =>
-  pluginTestplaceStore.isWithdrawn(packageId, version)
 const installedPluginTrust = {
   pinnedRootKey: installedRegistryRootKey,
   snapshot: readRegistryTrustSnapshot(pluginsRoot()),
@@ -1026,7 +1037,8 @@ const installedPluginTrust = {
   officialRegistryUrl: installedOfficialRegistryUrl,
   expectedTarget: currentPluginHostTarget(),
   keepsExpiredTestplace,
-  withdrawnTestplace,
+  // 0.2.28 (user, 10-21): a Testplace withdrawal never stops a build at
+  // start; Extensions labels it and the tester is asked once.
 }
 
 function currentInstalledRegistryTrust() {
@@ -1039,7 +1051,6 @@ function currentInstalledRegistryTrust() {
     expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
     now: marketplace.trust.now,
     keepsExpiredTestplace,
-    withdrawnTestplace,
   }
 }
 
@@ -1962,6 +1973,11 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
+    onPackageSwitchFailed: (failure) => {
+      console.warn(`[main] switching ${failure.pluginId} to ${failure.stagedVersion} failed: ${failure.reason}`)
+      pluginStagedCandidateRelay.notifyStagedUpdates([failure])
+    },
     promptDigestBlock,
     preflightCandidateFrontend,
     preflightCandidateBackend,
@@ -1976,6 +1992,7 @@ const pluginTrustRefresh = registerPluginIpc(
       })
       return picked.canceled ? null : picked.filePaths[0] ?? null
     },
+    developerModeIntegrity: pluginDeveloperModeIntegrity,
     pickDeveloperFolder: async (event) => {
       const parent = BrowserWindow.fromWebContents(event.sender)
       if (!parent || parent.isDestroyed() || !mainWindows.has(parent) || detachedWindowIds.has(parent.id)) return null
@@ -2179,7 +2196,8 @@ const pluginTrustRefresh = registerPluginIpc(
   }
 )
 // Card K4: the developer folders the user consented to, when Developer Mode is on.
-void pluginTrustRefresh.loadDeveloperFolders()
+// A2-5: once the app is ready, so the consent signatures can be checked.
+void app.whenReady().then(() => pluginTrustRefresh.loadDeveloperFolders())
 // A first install the user did not restart is activated now, as Restart would
 // have done it; one that cannot be stays staged and the main window says why.
 // A package staged beside an active one is not applied for the user: the main
@@ -5858,7 +5876,7 @@ app.on('web-contents-created', (_e, contents) => {
     if (isPluginWebGuest(contents)) return
     if (!isAppNavigation(url)) e.preventDefault()
   })
-  guardPlanFrameNavigation(contents)
+  guardPlanFrameNavigation(contents, () => isPluginWebGuest(contents))
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }

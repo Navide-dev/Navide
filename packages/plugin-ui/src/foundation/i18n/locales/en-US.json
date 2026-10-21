@@ -172,10 +172,10 @@
     "restore": "Restore"
   },
   "editorWindow": {
-    "paths-copied": "Copied {count} path(s)",
+    "paths-copied": "Copied {count} path | Copied {count} paths",
     "path-copied": "Path copied",
     "copy-failed": "Copy failed",
-    "replaced-occurrences": "Replaced {count} occurrence(s)",
+    "replaced-occurrences": "Replaced {count} occurrence | Replaced {count} occurrences",
     "search-stale": "Content has changed, please search again",
     "ai-terminal-starting": "AI terminal is starting — retry in a moment",
     "ai-terminal-not-started": "Start the AI terminal first, then retry",
@@ -193,15 +193,15 @@
     "no-completion": "No completion available",
     "reopen-encoding-failed": "Failed to re-open with encoding",
     "close-editor": "Close Editor",
-    "close-editor-dirty": "{count} file(s) have unsaved changes. Close the editor anyway?",
+    "close-editor-dirty": "{count} file has unsaved changes. Close the editor anyway? | {count} files have unsaved changes. Close the editor anyway?",
     "close-file": "Close File",
     "close-file-dirty": "\"{name}\" has unsaved changes. Close anyway?",
-    "close-others-dirty": "{count} file(s) have unsaved changes. Close other tabs anyway?",
-    "close-right-dirty": "{count} file(s) have unsaved changes. Close tabs to the right anyway?",
-    "close-left-dirty": "{count} file(s) have unsaved changes. Close tabs to the left anyway?",
-    "close-all-dirty": "{count} file(s) have unsaved changes. Close all anyway?",
-    "reload-dirty": "{count} file(s) have unsaved changes. Reload and discard them?",
-    "quit-dirty": "{count} file(s) have unsaved changes. Quit and discard them?",
+    "close-others-dirty": "{count} file has unsaved changes. Close other tabs anyway? | {count} files have unsaved changes. Close other tabs anyway?",
+    "close-right-dirty": "{count} file has unsaved changes. Close tabs to the right anyway? | {count} files have unsaved changes. Close tabs to the right anyway?",
+    "close-left-dirty": "{count} file has unsaved changes. Close tabs to the left anyway? | {count} files have unsaved changes. Close tabs to the left anyway?",
+    "close-all-dirty": "{count} file has unsaved changes. Close all anyway? | {count} files have unsaved changes. Close all anyway?",
+    "reload-dirty": "{count} file has unsaved changes. Reload and discard it? | {count} files have unsaved changes. Reload and discard them?",
+    "quit-dirty": "{count} file has unsaved changes. Quit and discard it? | {count} files have unsaved changes. Quit and discard them?",
     "select-theme": "Select color theme…",
     "search-shortcuts": "Search keyboard shortcuts…",
     "select-language": "Select language mode…",
@@ -252,7 +252,7 @@
       "files-exclude": "files to exclude",
       "include-placeholder": "e.g. *.ts, src/**",
       "exclude-placeholder": "e.g. *.test.ts, dist/**",
-      "summary": "{results} result(s) · {files} file(s)",
+      "summary": "Results: {results} · Files: {files}",
       "truncated": "Truncated"
     },
     "problems": {
@@ -451,7 +451,7 @@
     "cancel-title": "Take this message back before it reaches the target pane",
     "hold-busy": "Target is not ready to receive",
     "hold-paused": "Delivery is paused",
-    "hold-behind": "Waiting behind {n} message(s)",
+    "hold-behind": "Waiting in line — messages ahead: {n}",
     "hold-gone": "Target pane no longer exists",
     "hold-not-ready": "Target pane is not running",
     "hold-starting": "Target pane is still starting up",
@@ -530,9 +530,9 @@
     "ws-running-extra": "This aborts the running pipeline (its record is kept on disk and can be resumed later).",
     "ws-pm-panel-extra": "The Pipeline Manager's AI panel for this workspace ends too.",
     "sidebar-ws-title": "Close \u201c{name}\u201d?",
-    "sidebar-ws-body": "This ends the {count} CLI pane(s) in this workspace. Their records are kept, so reopening it brings each one back as a card you click to resume.",
-    "sidebar-ws-body-pipeline-only": "This ends the {count} CLI pane(s) in this workspace. They all belong to a pipeline run, so reopening it will not bring them back.",
-    "sidebar-ws-body-pipeline": "This ends the {count} CLI pane(s) in this workspace. The ones you opened come back as a card you click to resume; {pipelineCount} of them belong to a pipeline run and will not.",
+    "sidebar-ws-body": "This ends the {count} CLI pane in this workspace. Its record is kept, so reopening the workspace brings it back as a card you click to resume. | This ends the {count} CLI panes in this workspace. Their records are kept, so reopening it brings each one back as a card you click to resume.",
+    "sidebar-ws-body-pipeline-only": "This ends the {count} CLI pane in this workspace. It belongs to a pipeline run, so reopening the workspace will not bring it back. | This ends the {count} CLI panes in this workspace. They all belong to a pipeline run, so reopening it will not bring them back.",
+    "sidebar-ws-body-pipeline": "This ends the {count} CLI panes in this workspace. The ones you opened come back as a card you click to resume; {pipelineCount} of them belong to a pipeline run and will not.",
     "sidebar-ws-body-empty": "Remove \u201c{name}\u201d from the sidebar?",
     "sidebar-ws-confirm": "Close workspace and its panes",
     "confirm": "Close",
@@ -592,7 +592,7 @@
     "commit-failed": "Commit failed.",
     "undo-failed": "Undo failed.",
     "generation-failed": "Message generation failed.",
-    "auto-commit-lint-aborted": "Auto Commit aborted: {count} lint error(s) detected",
+    "auto-commit-lint-aborted": "Auto Commit aborted: {count} lint error detected | Auto Commit aborted: {count} lint errors detected",
     "auto-commit-generate-failed": "Auto Commit stopped: could not generate a message. Changes remain staged.",
     "auto-commit-commit-failed": "Auto Commit failed: {error} Changes remain staged.",
     "auto-commit-done": "Auto-committed: {message}",
@@ -602,7 +602,69 @@
     "clean-changed": "Untracked files changed since the preview. Nothing was deleted — review and try again.",
     "issue-back": "← Back",
     "issue-comment": "Comment",
-    "issue-create": "Create"
+    "issue-create": "Create",
+    "pane": {
+      "no-changes-to-display": "No changes to display",
+      "no-ignored-files": "No ignored files",
+      "drag-to-resize": "Drag to resize",
+      "commit-files": "Files ({count})",
+      "no-draft": "No draft",
+      "issues-open-count": "{count} open",
+      "issue-host-unsupported": "No supported issue host detected for this repo (needs a GitHub or GitLab origin remote).",
+      "issue-cli-missing": "{cli} is not installed.",
+      "issue-auth-before": "Not authenticated. Run",
+      "issue-auth-after": "in a terminal, then refresh.",
+      "issue-dispatch": "Dispatch to Agent",
+      "issue-dispatch-title": "Send this issue to a running agent",
+      "issue-no-running-agent": "No running agent",
+      "issue-handoff-handling": "Being handled by agent",
+      "issue-handoff-closed": "Agent pane closed",
+      "ignore-target": {
+        "project": ".gitignore (project root)",
+        "nested": ".gitignore (current folder)",
+        "local": ".git/info/exclude (local only)",
+        "global": "Global .gitignore"
+      }
+    },
+    "conflict": {
+      "progress": "{resolved} / {total} resolved",
+      "apply-title": "Write and stage this file",
+      "apply-blocked": "Resolve all conflicts first",
+      "apply": "Apply & Stage",
+      "ours-default": "HEAD (ours)",
+      "versus": "vs",
+      "theirs-default": "theirs",
+      "empty-side": "(empty)",
+      "accepted-ours": "Accepted Ours",
+      "accepted-theirs": "Accepted Theirs",
+      "accepted-both": "Accepted Both",
+      "manually-edited": "Manually edited",
+      "undo": "Undo"
+    },
+    "diff": {
+      "badge-staged": "STAGED",
+      "badge-working-tree": "WORKING TREE",
+      "open-in-editor": "Open file in editor",
+      "prev-change": "Previous change (↑)",
+      "next-change": "Next change (↓)",
+      "reload": "Reload diff",
+      "not-loaded": "Diff not loaded",
+      "stage-selected": "Stage Selected ({count})"
+    },
+    "branch-diff": {
+      "working-changes": "Working Changes",
+      "file-count": "{count} file | {count} files",
+      "expand-all": "Expand All",
+      "collapse-all": "Collapse All",
+      "no-changes-between": "No changes between {base} and {compare}",
+      "no-uncommitted": "No uncommitted changes",
+      "hidden-lines": "{count} hidden line | {count} hidden lines"
+    },
+    "file-detail": {
+      "no-history": "No file history.",
+      "no-changed-lines": "No changed lines.",
+      "no-blame": "No blame information."
+    }
   },
   "pane": {
     "opened-by": "Opened by {parent}",
@@ -674,8 +736,8 @@
       "archived": "Archived",
       "archive-all-done": "Archive all done",
       "archive-confirm": "Archive plan \"{name}\"?",
-      "archive-all-confirm": "Archive {count} done plan(s)?",
-      "archived-count": "Archived {count} plan(s)",
+      "archive-all-confirm": "Archive {count} done plan? | Archive {count} done plans?",
+      "archived-count": "Archived {count} plan | Archived {count} plans",
       "menu-open": "Open",
       "menu-rename": "Rename",
       "menu-delete": "Delete",
@@ -700,8 +762,8 @@
       "history-no-differences": "No differences",
       "history-diff-stage": "Stage: {from} → {to}",
       "history-diff-todo": "Todo {id}: {from} → {to}",
-      "history-diff-todos-added": "{count} todo(s) added",
-      "history-diff-todos-removed": "{count} todo(s) removed",
+      "history-diff-todos-added": "{count} todo added | {count} todos added",
+      "history-diff-todos-removed": "{count} todo removed | {count} todos removed",
       "history-diff-notes": "Review notes: {delta}",
       "history-diff-lines": "+{added} / −{removed} lines",
       "snapshot-readonly": "Read-only snapshot",
@@ -753,9 +815,9 @@
       "copy-path-success": "Path copied",
       "delete-all": "Delete all",
       "delete-completed-title": "Delete Completed Plans",
-      "delete-completed-confirm": "Delete {count} completed plan(s)?",
+      "delete-completed-confirm": "Delete {count} completed plan? | Delete {count} completed plans?",
       "delete-item-failed": "Failed to delete {name}",
-      "deleted-count": "Deleted {count} completed plan(s)",
+      "deleted-count": "Deleted {count} completed plan | Deleted {count} completed plans",
       "list-failed": "Failed to list plans",
       "load-failed": "Failed to load plans",
       "archive-item-failed": "Failed to archive {name}",
@@ -832,8 +894,10 @@
           "conflict": "Conflict detected. Please reload and try again.",
           "internal-error": "An internal backend error occurred.",
           "workspace-scope-violation": "Attempted to access files outside workspace scope."
-        }
-      }
+        },
+        "rename-plan": "Rename plan"
+      },
+      "section-delete-confirm": "Delete the section \"{anchor}\" from the document?"
     },
     "terminal": {
       "readback-on-tooltip": "Read aloud is on: spoken when this pane finishes or needs an answer — click to turn off",
@@ -842,8 +906,8 @@
       "backend-reconnecting": "Backend disconnected — reconnecting. Typing is paused.",
       "backend-restarting": "Backend crashed — restarting ({attempt}/{max}). Typing is paused.",
       "backend-unavailable": "Backend unavailable — typing is paused until it is restarted.",
-      "session-resumed": "Resumed {count} session(s) after the backend restarted",
-      "session-resume-failed": "Could not resume {count} session(s) after the backend restarted — use Rebuild to retry",
+      "session-resumed": "Resumed {count} session after the backend restarted | Resumed {count} sessions after the backend restarted",
+      "session-resume-failed": "Could not resume {count} session after the backend restarted — use Rebuild to retry | Could not resume {count} sessions after the backend restarted — use Rebuild to retry",
       "option-select-hint": "This CLI captures the mouse — hold {key} while dragging to select text",
       "continue": "↻ Continue",
       "continue-tooltip": "This session was restored and is waiting at the prompt — send \"continue\" to pick the work back up",
@@ -857,7 +921,7 @@
       "clipboard-send-failed": "Only part of the paste reached {pane} — the rest was lost on the way",
       "clipboard-send-failed-all": "The paste never reached {pane} — {chars} characters were lost on the way",
       "open-file-failed": "Could not open {file} — the editor did not respond",
-      "idle-reclaimed": "Reclaimed {count} idle CLI pane(s) to free memory — click the “Click to resume” card in a pane to bring it back",
+      "idle-reclaimed": "Reclaimed {count} idle CLI pane to free memory — click the “Click to resume” card in the pane to bring it back | Reclaimed {count} idle CLI panes to free memory — click the “Click to resume” card in a pane to bring it back",
       "click-to-resume": "Click to resume",
       "interrupted-at-launch": "Working at restart",
       "interrupted-at-launch-tooltip": "This pane was working when Navide restarted, and its turn was cut off. It was not resumed automatically (over the automatic-resume limit, or the resume failed). Click to resume it.",
@@ -865,18 +929,18 @@
       "rebuild-tooltip": "Rebuild (resume the conversation) ⌘R — close and reopen via --resume at the current size to clear ghosting/overlap that can't be repainted. Interrupts the in-progress turn and reprints the conversation.",
       "rebuild-tooltip-disabled": "Rebuild needs an existing session to resume. Send a message first — the conversation transcript is created after the first turn.",
       "rebuild-busy-skipped": "CLI is busy — kept the running work, skipped rebuild",
-      "rebuild-busy-skipped-batch": "{count} CLI(s) busy — kept running work, skipped rebuild",
+      "rebuild-busy-skipped-batch": "{count} CLI busy — kept running work, skipped rebuild | {count} CLIs busy — kept running work, skipped rebuild",
       "rebuild-no-session": "No resumable session for this pane",
       "rebuild-in-progress": "Rebuild already in progress",
       "rebuild-not-resumable": "Session not found on disk — cannot rebuild via resume",
       "rebuild-probe-failed": "Could not verify the session — the service isn't responding, try again",
       "rebuild-running-confirm-title": "CLI is running",
       "rebuild-running-confirm-body": "Rebuilding will interrupt the in-progress turn and reprint the conversation. Rebuild anyway?",
-      "rebuild-running-confirm-body-batch": "{count} CLI(s) are running — rebuilding will interrupt their in-progress turns and reprint the conversations. Rebuild anyway?",
+      "rebuild-running-confirm-body-batch": "{count} CLI is running — rebuilding will interrupt its in-progress turn and reprint the conversation. Rebuild anyway? | {count} CLIs are running — rebuilding will interrupt their in-progress turns and reprint the conversations. Rebuild anyway?",
       "rebuild-running-confirm-confirm": "Rebuild",
       "rebuild-running-confirm-cancel": "Cancel",
       "rebuild-batch-confirm-title": "Rebuild CLI panes",
-      "rebuild-batch-confirm-body": "Rebuild {count} CLI pane(s)? Each conversation is resumed and reprinted.",
+      "rebuild-batch-confirm-body": "Rebuild {count} CLI pane? Its conversation is resumed and reprinted. | Rebuild {count} CLI panes? Each conversation is resumed and reprinted.",
       "close-running-confirm-title": "CLI is running",
       "close-running-confirm-body": "Closing this pane will end the in-progress turn and discard the conversation. Close anyway?",
       "close-running-confirm-confirm": "Close pane",
@@ -892,7 +956,7 @@
       "rename-title-tooltip": "Double-click to rename this pane",
       "auto-named-tooltip": "Named automatically from this session's first instruction — rename it and it stays yours",
       "loop-tag-tooltip": "Loop is running on this pane",
-      "subtree-tooltip": "{count} spawned pane(s) {status} under this one",
+      "subtree-tooltip": "{count} spawned pane {status} under this one | {count} spawned panes {status} under this one",
       "subtree-summary": "sub {status} {count}",
       "location-minimized": "Minimized to sidebar",
       "location-tab": "Tab: {name}",
@@ -994,7 +1058,7 @@
     "cancel": "Cancel",
     "ok": "OK",
     "submit": "Submit",
-    "open-files": "Open {count} file(s)",
+    "open-files": "Open {count} file | Open {count} files",
     "delete-items": "Delete {size} items",
     "copy-paths": "Copy paths",
     "open-diff": "Open Diff",
@@ -1206,9 +1270,9 @@
     "merge-into-current": "Merge into current",
     "switch": "Switch",
     "checkout-locally": "Checkout locally",
-    "stage-files": "Stage {count} file(s)",
-    "unstage-files": "Unstage {count} file(s)",
-    "discard-files": "Discard {count} file(s)",
+    "stage-files": "Stage {count} file | Stage {count} files",
+    "unstage-files": "Unstage {count} file | Unstage {count} files",
+    "discard-files": "Discard {count} file | Discard {count} files",
     "open-changes": "Open Changes",
     "open-file-plain": "Open File",
     "open-file-head": "Open File (HEAD)",
@@ -1296,7 +1360,8 @@
       "unstage-folder": "Unstage folder",
       "discard-folder": "Discard folder",
       "file-history-blame": "File history + blame",
-      "open-diff-in-editor": "Open diff in editor"
+      "open-diff-in-editor": "Open diff in editor",
+    "resume-from-stage": "▶ Resume from Stage {n}"
   },
   "share": {
     "notice": {
@@ -1849,6 +1914,8 @@
       },
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
+      "activationFailed": "{plugin} was installed but could not be activated: {reason}. Restart or discard it in the list below.",
+      "switchNow": "Approving switches {id} to {version} right away. Its open views reload, and anything not saved in them is lost. The switch is recorded in the announcements, where you can go back in one click.",
       "restartPlugin": "Restart Navide plugin",
       "disable": "Disable",
       "enable": "Enable",
@@ -1866,6 +1933,8 @@
         "security": "Taken down by Navide (security)",
         "qualificationRevoked": "Developer qualification revoked",
         "developerWithdrawn": "Withdrawn by its developer",
+        "testplaceWithdrawn": "Test build withdrawn",
+        "testplaceWithdrawnNote": "Its developer or Navide withdrew this Testplace build after you installed it. It still runs until you disable or remove it.",
         "note": "Navide put the file this Navide plugin was installed from on its blocked list after you installed it."
       },
       "rollback": {
@@ -1875,6 +1944,8 @@
         "confirm": "Roll back",
         "confirmFactory": "Return {id} to the version bundled with Navide? The package you installed stays staged, so you can restart back into it.",
         "confirmPrevious": "Roll {id} back to {version}? The current version stays staged, so you can restart back into it.",
+        "confirmLocalConsent": "{id} {version} is a local file version that Navide did not review. Going back to it asks for your consent again here, and its native backend, if it has one, asks again before it runs.",
+        "consentInSettings": "Going back to {id} {version}, a local file version, asks for your consent again with its disclosure. Confirm it under Settings → Navide Plugins.",
         "previousVersion": "the previous version",
         "errors": {
           "transactionInProgress": "{id} is already being installed, updated or rolled back. Try again when that finishes.",
@@ -2010,7 +2081,7 @@
         },
         "title": "Developer Mode",
         "switch": "Turn on Developer Mode",
-        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded.",
+        "hint": "Lets you load a Navide plugin from a folder you pick, to develop and test it, and applies a self-hosted Registry setting (AGENT_TEAM_MARKETPLACE_URL). It can only be changed on this page, and every change is recorded. Turning it off unloads every Navide plugin loaded from a folder and drops a folder you picked but did not consent to; the folders you consented to stay listed, load again when you turn it back on, and can be removed here.",
         "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
         "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
         "reminderClose": "Got it",
@@ -2019,8 +2090,15 @@
         "confirmOn": "Turn on",
         "loadFolder": "Load from folder…",
         "reload": "Reload",
+        "loadedByUser": "Loaded by you",
+        "loadedByAgent": "Requested by {requester}; you approved it in the main window ({at})",
+        "loadedByUnknown": "Loaded by an unknown party (before Navide recorded it)",
         "removeFolder": "Remove",
         "needsConsent": "Permissions or backend changed; consent again",
+        "externallyChanged": "Added or edited outside Navide; consent again",
+        "externalChange": "Developer Mode settings were changed by a program other than Navide ({time}). Navide did not apply those changes: turn Developer Mode on again, or consent again to the folders marked below, in Settings → Navide Plugins.",
+        "externalChangeUnsigned": "Navide could not sign its Developer Mode settings with secure storage ({time}), so it does not take them as yours: turn Developer Mode on again, or consent again to the folders marked below, in Settings → Navide Plugins. If secure storage keeps refusing, they are asked about on every start.",
+        "externalChangeMissing": "Developer Mode settings have no signature from Navide ({time}): they were written before Navide 0.2.28, or the signature file was removed. Navide did not apply them: turn Developer Mode on again, or consent again to the folders marked below, in Settings → Navide Plugins.",
         "folderWarning": "This Navide plugin is loaded straight from the folder you picked. Navide has not reviewed it and it is not signed. The folder can change at any time and Navide does not compare its content: you are asked again only when its permissions or backend change.",
         "folderLabel": "Folder",
         "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
@@ -2121,7 +2199,7 @@
         "uninstallBody": "This removes the pack. Its Navide plugins stay installed unless you tick them below.",
         "uninstallMembersHint": "Installed only because of this pack:",
         "uninstallOnly": "Uninstall pack only",
-        "uninstallWithMembers": "Uninstall pack and {count} Navide plugin(s)",
+        "uninstallWithMembers": "Uninstall pack and {count} Navide plugin | Uninstall pack and {count} Navide plugins",
         "noPermissionsOfItsOwn": "This pack grants no permissions itself; each Navide plugin in it asks for its own when you install it."
       }
     },
@@ -2314,7 +2392,7 @@
       "idle-reclaim-8h": "8 hours",
       "idle-reclaim-never": "Never",
       "idle-reclaim-now": "Reclaim now",
-      "idle-reclaim-now-hint": "End those CLIs now instead of waiting for the threshold. {count} pane(s) qualify, holding roughly {size}. Each one becomes a click-to-resume placeholder.",
+      "idle-reclaim-now-hint": "End it now instead of waiting for the threshold. {count} pane qualifies, holding roughly {size}. It becomes a click-to-resume placeholder. | End those CLIs now instead of waiting for the threshold. {count} panes qualify, holding roughly {size}. Each one becomes a click-to-resume placeholder.",
       "idle-reclaim-now-empty": "No pane qualifies right now — the focused pane, one awaiting your answer, one with unsent text and one that cannot be resumed are never reclaimed.",
       "idle-reclaim-now-action": "Reclaim {count} now",
       "idle-reclaim-now-action-empty": "Nothing to reclaim",
@@ -2969,8 +3047,8 @@
           "h6": "Sync (keeping several machines the same)",
           "p11": "The first block on Settings ▸ Navide Cloud is called Sync. <strong>It is not a separate tab</strong> — it is the top section of this one page. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
           "sync": {
-            "scopes": "<strong>Six rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
-            "credentials": "<em>Memory</em>, <em>Credentials &amp; keys</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory or Credentials switch an older build left on can still be turned off.",
+            "scopes": "<strong>Five rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
+            "credentials": "<em>Memory</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory switch an older build left on can still be turned off. <em>Credentials &amp; keys</em> has no row at all: account credentials and keys never leave this machine. A Credentials switch an older build left on is treated as off. MCP settings, when their sync is on, are encrypted on this machine before they are uploaded, and the server has no key to decrypt them.",
             "states": "Two states are spelled out under the block: <em>not connected</em> (scopes you turned on catch up once the link is back) and <em>this device has no sync key yet</em> (nothing is uploaded until it has one). There is also a <em>Sync now</em> button, enabled only while connected.",
             "key": "<strong>The sync key is shown as the first 8 characters of its id</strong>, never as the key itself. <em>Rotate key</em> takes <strong>two clicks</strong>: the first turns it into <em>Rotate now</em> and adds a <em>Cancel</em> beside it. Rotating retires the current key, re-seals every synced record under a new one, and hands the new key to your other devices the next time they exchange keys — it is the move for a key you think has leaked.",
             "legacy": "<em>Adopt for this account</em> appears only when this device holds a sync key from before accounts were bound <em>and</em> this account has no key yet. It is a one-time choice: without adopting it you cannot read what was synced under that key, and minting a fresh key instead would leave those records permanently unreadable.",
@@ -3294,7 +3372,7 @@
               },
               "apply": {
                 "label": "Apply & Stage",
-                "text": "Only clickable once every block is settled; it writes the result back and stages the file in one go. This button is in English regardless of the selected interface language — that is what the product prints."
+                "text": "Only clickable once every block is settled; it writes the result back and stages the file in one go."
               }
             }
           },
@@ -3422,7 +3500,7 @@
           "h3": "The <code>···</code> view menu",
           "p6": "The <code>···</code> in the header (<em>More options</em>) holds three groups: <em>View as List</em> / <em>View as Tree</em>; <strong>Sort by</strong> with <em>Name</em> / <em>Path</em> / <em>Status</em>; and <em>Show Ignored Files</em>. Whichever option is in effect is marked with a <code>✓</code>. List and tree are also exposed as their own buttons in the header.",
           "h4": "Folders that are not a Git repository yet",
-          "p7": "You get a <strong>Not a Git repository</strong> card offering <em>Initialize Repository</em>, <em>Initialize (without .gitignore)</em> and <em>Initialize in a specific folder…</em>, with a URL field below it for <em>Connect to Remote</em>. If subfolders contain other repos, it lists <em>Found {'{'}n{'}'} Git repo(s) in subfolders</em>; when one workspace holds several repos, a row of repo tabs appears at the top of the panel (the workspace root is marked <code>⌂</code>, and each tab carries its branch name and change count)."
+          "p7": "You get a <strong>Not a Git repository</strong> card offering <em>Initialize Repository</em>, <em>Initialize (without .gitignore)</em> and <em>Initialize in a specific folder…</em>, with a URL field below it for <em>Connect to Remote</em>. If subfolders contain other repos, it lists <em>Found {'{'}n{'}'} Git repos in subfolders</em>; when one workspace holds several repos, a row of repo tabs appears at the top of the panel (the workspace root is marked <code>⌂</code>, and each tab carries its branch name and change count)."
         },
         "s3": {
           "title": "Git: branches and remotes",
@@ -3479,7 +3557,7 @@
         "s4": {
           "title": "Git: conflicts, drafts and history",
           "h1": "Conflicts",
-          "p1": "While a merge, rebase or cherry-pick is in progress a banner appears at the top of the panel reading <code>⚠ {'{'}op{'}'} in progress</code> plus the number of conflicted files, with an <em>Abort {'{'}op{'}'}</em> on the right. There is also a dialog titled <strong>Merge conflict ({'{'}count{'}'} file(s))</strong> offering the two routes <em>Abort merge</em> and <em>Resolve conflicts</em>. Once everything is resolved the banner becomes <em>✓ All conflicts resolved — ready to commit merge</em> with a <em>Go to commit</em> button.",
+          "p1": "While a merge, rebase or cherry-pick is in progress a banner appears at the top of the panel reading <code>⚠ {'{'}op{'}'} in progress</code> plus the number of conflicted files, with an <em>Abort {'{'}op{'}'}</em> on the right. There is also a dialog titled <strong>Merge conflict ({'{'}count{'}'} files)</strong> offering the two routes <em>Abort merge</em> and <em>Resolve conflicts</em>. Once everything is resolved the banner becomes <em>✓ All conflicts resolved — ready to commit merge</em> with a <em>Go to commit</em> button.",
           "p2": "For a plain whole-file decision the <code>↰</code> / <code>↱</code> on the file row is enough. To work hunk by hunk, open <strong>ConflictPane</strong>:",
           "conflictList": {
             "badge": "The title carries a <strong>CONFLICT</strong> badge with <em>{'{'}n{'}'} / {'{'}m{'}'} resolved</em> next to it.",
@@ -3973,7 +4051,8 @@
             "usage": "Quota",
             "multi": "Multi-account",
             "signIn": "Sign-in command",
-            "signInInside": "Inside the CLI"
+            "signInInside": "Inside the CLI",
+            "flagNoteGoose": "None — Goose approves every tool by itself by default (GOOSE_MODE=auto); set GOOSE_MODE to approve or smart_approve to be asked. Navide's Guard does not cover Goose yet."
           },
           "note": "\"Quota\" = Navide can read the remaining usage (chapter 6). \"Multi-account\" = several sign-ins can be kept in Settings and switched (chapter 5). The four CLIs without a permission-bypass flag (Grok CLI, OpenCode, Pi, MiniMax Code) simply have no such flag — it is not something Navide left out. \"Sign-in command\" = what Navide actually runs when you press Sign in under Settings ▸ Accounts; the CLIs marked \"Inside the CLI\" declare no separate sign-in command, so the button launches them as usual and signing in happens on their own screen.",
           "callout": {
@@ -4233,7 +4312,7 @@
           },
           "note1": "Every account <strong>can be renamed</strong>, the built-in Default included: hover a card and click the pencil (the same pencil sits on each row of the quota badge's account list). The name you give it leads everywhere — the pane header, the account list and the cards — with the signed-in identity kept below it. Clear the field to go back to the generated name (Account 1, Account 2…).",
           "p4": "Two cases refuse deletion and say why: the account is <strong>currently active</strong> (switch to another one first), or its <strong>sign-in is still running</strong> (finish or close its login pane first).",
-          "p5": "<strong>What happens to running CLIs when you switch?</strong> Navide does not kill them. The default is to <strong>refuse the switch</strong> and tell you \"N running CLI pane(s) are using this account — close them before switching.\" If you insist, a confirmation appears: <em>Switching accounts will restart N running {'{'}CLI{'}'} pane(s). Continue?</em> After \"Switch & restart\", those panes are <strong>rebuilt with resume</strong> (reconnecting the original conversation), not killed. If any pane fails to rebuild, a summary notification appears.",
+          "p5": "<strong>What happens to running CLIs when you switch?</strong> Navide does not kill them. The default is to <strong>refuse the switch</strong> and tell you \"N running CLI panes are using this account — close them before switching.\" If you insist, a confirmation appears: <em>Switching accounts will restart N running {'{'}CLI{'}'} panes. Continue?</em> After \"Switch & restart\", those panes are <strong>rebuilt with resume</strong> (reconnecting the original conversation), not killed. If any pane fails to rebuild, a summary notification appears.",
           "p6": "Claude Code is the exception: it re-reads its credentials before every request, so the switch is a hot swap — no confirmation and no pane restart.",
           "p7": "Switching too often is blocked (at most 3 times per 60 seconds per CLI); confirming a forced switch does not bypass this.",
           "callout1": {
@@ -4358,7 +4437,7 @@
               "fix": "Check the \"Refresh: …\" line in the badge details first — it states the reason. To re-read immediately, press \"Refresh quota\" at the top of Settings ▸ Accounts (it skips the wait after a failed read). Note that only the account the CLI is signed in as can be read; parked accounts only show the cache."
             },
             "panesRunning": {
-              "symptom": "\"N running CLI pane(s) are using this account — close them before switching.\"",
+              "symptom": "\"N running CLI panes are using this account — close them before switching.\"",
               "cause": "Non-Claude CLIs do not allow the credentials to be swapped in place while a pane is running.",
               "fix": "Close those panes and switch again; or choose \"Switch & restart\" in the confirmation so Navide rebuilds them with resume. Switching too often is blocked by the 3-per-60-seconds limit — wait a moment and retry."
             },
@@ -5069,9 +5148,9 @@
           "h2": "Right half: what is in progress",
           "right": {
             "pipeline": "Pipeline progress, for example <code>Stage 2 / 5</code>.",
-            "tidying": "<code>↻ tidying token history… N file(s)</code> — background tidying in progress.",
+            "tidying": "<code>↻ tidying token history… N files</code> — background tidying in progress.",
             "leftover": "<code>⚠ N leftover</code> — leftover orphan terminal processes; click to clean them up.",
-            "disconnected": "<code>⚡ N conversation(s) may have been disconnected — click to recover</code> — click to open the reconnect picker, or press <code>✕</code> to ignore it.",
+            "disconnected": "<code>⚡ N conversations may have been disconnected — click to recover</code> — click to open the reconnect picker, or press <code>✕</code> to ignore it.",
             "announcements": "<strong>📢 Announcement badge</strong> plus the version number and the unread count.",
             "clock": "The clock.",
             "closeAll": "<code>✕</code> closes every session."
@@ -5775,7 +5854,7 @@
           },
           "right": {
             "tidying": {
-              "name": "<code>Backfilling historical token usage in the background</code>, shown as <code>↻ tidying token history… N file(s)</code>",
+              "name": "<code>Backfilling historical token usage in the background</code>, shown as <code>↻ tidying token history… N files</code>",
               "where": "Right half of the status bar",
               "what": "Display only: historical usage is being backfilled in the background. Nothing to do."
             },
@@ -5787,7 +5866,7 @@
             "disconnected": {
               "where": "Right half of the status bar",
               "what": "Panes have disconnected. Click the text to open the reconnect picker.",
-              "name": "<code>N conversation(s) may have been disconnected — click to recover</code>"
+              "name": "<code>N conversations may have been disconnected — click to recover</code>"
             },
             "dismiss": {
               "where": "Immediately after the <code>⚡</code> entry",
@@ -6724,7 +6803,8 @@
       "catalog-search": "Search MCP servers by name",
       "catalog-hint": "This catalog lists only <strong>\"Orchestrator context-reading\"</strong> MCPs — tools that read workspace / docs / external service data and inject it into kickoff prompts to ground agent knowledge. Execution actions (tests, browser automation, etc.) are handled by the CLI agents themselves.",
       "catalog-requires-env": "Requires env vars: {vars}",
-      "catalog-empty": "No matching MCP servers found"
+      "catalog-empty": "No matching MCP servers found",
+      "header-name-placeholder": "Header"
     },
     "credentials": {
       "title": "Credentials & keys",
@@ -7089,7 +7169,6 @@
       "scope-hint-skills": "Which skills are on and which CLIs each one goes to, plus the files of skills created in Navide (large ones travel as encrypted blobs). Skills you put in the folder yourself sync their settings only.",
       "scope-hint-memory": "Global instruction files such as ~/.claude/CLAUDE.md. Files inside a project stay with git.",
       "scope-credentials": "Credentials",
-      "scope-hint-credentials": "Portable CLI credentials you pasted in Accounts. Encrypted on this device before they leave; removing one here never removes it from the cloud or your other devices.",
       "sealed": "(credential — not shown)",
       "key-id": "Sync key {id}",
       "rotate": "Rotate key",
@@ -7166,7 +7245,7 @@
         "error-preview": "That bundle could not be read.",
         "error-apply": "The import could not be applied.",
         "preview-title": "Review before anything is written",
-        "preview-intro": "Nothing has been changed yet. This bundle carries {count} item(s) — tick the ones to apply.",
+        "preview-intro": "Nothing has been changed yet. This bundle carries {count} item — tick it to apply. | Nothing has been changed yet. This bundle carries {count} items — tick the ones to apply.",
         "action-create": "New",
         "action-overwrite": "Overwrites what is here",
         "action-skip": "Cannot be imported",
@@ -7321,7 +7400,7 @@
         "auto-updates": "This updates on its own.",
         "cancel-request": "Cancel request",
         "code-label": "Pairing code",
-        "commands-summary": "{count} remote command(s)",
+        "commands-summary": "{count} remote command | {count} remote commands",
         "compare": "Check that {device} is showing these same six digits.",
         "done-refused": "Refused. Nothing was paired.",
         "err-generic": "That answer did not go through.",
@@ -7507,7 +7586,7 @@
         "pending-later-title": "Off the list without deciding. Returns on the next attempt.",
         "pending-online": "Online now",
         "pending-offline": "Offline",
-        "pending-panes": "{count} pane(s) open in {workspaces}",
+        "pending-panes": "{count} pane open in {workspaces} | {count} panes open in {workspaces}",
         "pending-panes-none": "no panes open",
         "key-changed": "{device} is using a different key",
         "key-changed-refusing": "Its messages are being refused",
@@ -7650,15 +7729,15 @@
       },
       "export": "Export",
       "import": "Import",
-      "import-confirm": "Import replaces your current shortcuts. {current} customised binding(s) will be discarded and {incoming} imported. Continue?",
-      "export-done": "Exported {count} customization(s)",
+      "import-confirm": "Import replaces your current shortcuts. Customised bindings to discard: {current}; to import: {incoming}. Continue?",
+      "export-done": "Exported {count} customization | Exported {count} customizations",
       "export-failed": "Export failed",
       "import-failed": "Import failed",
-      "import-done": "Imported {count} rule(s), {rejected} rejected",
+      "import-done": "Imported {count} rule, {rejected} rejected | Imported {count} rules, {rejected} rejected",
       "import-rejected": "{count} entr(ies) were rejected and not imported:",
       "reset-all": "Reset all",
       "reset-row": "Reset to default",
-      "customized-count": "{count} shortcut(s) customized",
+      "customized-count": "{count} shortcut customized | {count} shortcuts customized",
       "save-failed": "Could not save keybindings.json",
       "cmd": {
         "controlPane_selectCliType1": "Select CLI Type 1",
@@ -8023,7 +8102,7 @@
         "unsupported": "Navide can't keep more than one account for these CLIs:",
         "active-error": "This account is currently active and cannot be deleted. Switch to another account first.",
         "login-in-progress-error": "A sign-in for this account is still running. Finish or close its login pane first.",
-        "account-dir-in-use-error": "{count} running pane(s) use this account's own folder. Close them before deleting the account.",
+        "account-dir-in-use-error": "{count} running pane uses this account's own folder. Close it before deleting the account. | {count} running panes use this account's own folder. Close them before deleting the account.",
         "portable-label": "Portable credential",
         "portable-present": "Set",
         "portable-absent": "Not set",
@@ -8108,7 +8187,7 @@
       "task-t4": "CLI intent parsing — parses agent output and extracts questions and options",
       "pass-threshold": "Pass threshold: at least 3 of 4 tasks (≥75%). Models that fail will be hidden from the Model dropdown.",
       "passed": "Passed",
-      "models": "model(s)",
+      "models": "model | models",
       "col-model": "Model",
       "col-score": "Score",
       "col-verdict": "Verdict",
@@ -8140,12 +8219,12 @@
   },
   "label": {
     "resume-other-pipeline": "An unfinished run belongs to \"{name}\". Switch to that pipeline to continue it.",
-    "role-rename-repointed": "Updated the role reference in {count} pipeline(s).",
+    "role-rename-repointed": "Updated the role reference in {count} pipeline. | Updated the role reference in {count} pipelines.",
     "pipeline-manager": "Pipeline Manager",
     "backend-status": "backend {status}",
     "pipeline-name-placeholder": "Pipeline name…",
-    "stage-count": "{count} stage(s)",
-    "pipeline-count": "{count} pipeline(s)",
+    "stage-count": "{count} stage | {count} stages",
+    "pipeline-count": "{count} pipeline | {count} pipelines",
     "builtin": "Built-in",
     "pipeline-definition-file": "Definition file",
     "loading-pipelines": "Loading pipelines…",
@@ -8170,13 +8249,13 @@
     "reset-to-factory-defaults": "Reset to factory defaults",
     "export-stages-title": "Export stages",
     "import-stages-title": "Import stages JSON",
-    "exported-stages": "Exported {count} stage(s)",
-    "imported-stages": "Imported {count} stage(s)",
+    "exported-stages": "Exported {count} stage | Exported {count} stages",
+    "imported-stages": "Imported {count} stage | Imported {count} stages",
     "import-failed-count": " · {count} failed",
     "export-roles-title": "Export roles",
     "import-roles-title": "Import roles JSON",
-    "exported-roles": "Exported {count} role(s)",
-    "imported-roles": "Imported {count} role(s)",
+    "exported-roles": "Exported {count} role | Exported {count} roles",
+    "imported-roles": "Imported {count} role | Imported {count} roles",
     "role-label-placeholder": "e.g. Tech Lead",
     "role-one-line-placeholder": "short hint shown in dropdown",
     "doc-query-placeholder": "e.g. security best practices, authentication",
@@ -8345,7 +8424,7 @@
     "init-in-folder": "Initialize in a specific folder…",
     "connect-remote-title": "Or connect to an existing remote repository",
     "connect-remote-hint": "Merge the current directory with a remote repo (no separate folder selection needed)",
-    "nested-repos-title": "Found {n} Git repo(s) in subfolders",
+    "nested-repos-title": "Found {n} Git repo in subfolders | Found {n} Git repos in subfolders",
     "nested-repos-hint": "Open one to manage it in the Git panel",
     "discovery-skipped-title": "Repository scan skipped",
     "discovery-skipped-hint": "This workspace lives in a cloud-synced folder, so scanning subfolders for Git repos was skipped to keep the app responsive. Scanning it may take a while.",
@@ -8392,7 +8471,7 @@
     "kill-all-confirm-suffix": " — all work in progress will be lost.",
     "copied": "Copied",
     "history-delete-confirm": "Delete history entry \"{name}\"?",
-    "history-delete-logs": "The CLI transcript logs are deleted from disk too — {files} file(s), freeing {size}.",
+    "history-delete-logs": "The CLI transcript logs are deleted from disk too — files: {files}, freeing {size}.",
     "history-cleanup-removed": "Clear all removed",
     "history-cleanup-older": "Clear entries older than 7 days",
     "history-cleanup-confirm-count": "This will delete {count} history entries.",
@@ -8473,7 +8552,7 @@
     "path": "Path",
     "status": "Status",
     "op-in-progress": "{op} in progress",
-    "conflict-files": "{count} conflict file(s)",
+    "conflict-files": "{count} conflict file | {count} conflict files",
     "conflicts-resolved": "All conflicts resolved — ready to commit merge",
     "amend-message-placeholder": "Amend message…",
     "commit-message-placeholder": "Message (⌘↩ to commit)",
@@ -8481,7 +8560,7 @@
     "off": "OFF",
     "auto-commit-scheduled": "Scheduled — auto-commit in 60 seconds",
     "auto-commit-waiting": "Auto Commit waiting — triggers in {count}s",
-    "merge-conflict-files": "Merge conflict ({count} file(s))",
+    "merge-conflict-files": "Merge conflict ({count} file) | Merge conflict ({count} files)",
     "name-draft-placeholder": "Name this draft… (optional)",
     "create-branch-placeholder": "New branch name…",
     "remote-branches": "Remote branches",
@@ -8667,7 +8746,7 @@
     "pipeline-starting": "Starting the pipeline…",
     "pipeline-log-session-bound": "session bound",
     "pipeline-log-answer-manually": "answer it manually",
-    "pipeline-log-manager-ready": "taking over (draining {count} message(s))",
+    "pipeline-log-manager-ready": "taking over (draining {count} message) | taking over (draining {count} messages)",
     "pipeline-log-slot-not-found": "no slot \"{slot}\"",
     "pipeline-log-manager-done": "Manager printed {sentinel} — wrapping up",
     "pipeline-log-queued-pre-ready": "queued (Manager is not READY yet, {count} held)",
@@ -8700,7 +8779,47 @@
       "backend-stop": "Stop",
       "pipeline-pill-stage": "Stage {current} / {total}",
       "pipeline-pill-completed": "completed",
-      "pipeline-pill-aborted": "aborted"
+      "pipeline-pill-aborted": "aborted",
+    "legacy-recovery": "Legacy recovery",
+    "pipeline-runs-done": "{count} done",
+    "resume-existing-pipeline": "↻ Resume existing pipeline",
+    "resume-stages-done": "{done}/{total} stages done",
+    "focus-pane": "Focus pane",
+    "manager-badge": "🎯 Mgr",
+    "docked": "Docked",
+    "pane-origin-stage": "stage {id}",
+    "pane-origin-manual": "manual",
+    "session-id-tooltip": "CLI session id — used to resume this agent's memory on restart",
+    "role-system-prompt": "{role} system prompt",
+    "project-completed": "✓ Project completed",
+    "all-stages-done": "All {count} stages done · {time}",
+    "refresh-ollama-tooltip": "Refresh Ollama health + model list",
+    "retry-connection-tooltip": "Retry connection",
+    "minimized-sidebar": "sidebar",
+    "loop-badge": "∞ Loop",
+    "review-model-placeholder": "Model name (e.g. llama-3.3-70b)",
+    "review-working-changes": "Working Changes",
+    "current-branch-suffix": "{branch} (current)",
+    "review-dismissed": "Dismissed",
+    "review-general-finding": "(general)",
+    "review-ask-ai-fix": "Ask AI to fix",
+    "review-restore-finding": "Restore",
+    "review-no-findings": "No findings — looks good!",
+    "review-no-findings-filtered": "No findings to show.",
+    "question-is-asking": "is asking",
+    "question-dismiss-tooltip": "Dismiss without answering",
+    "question-auto-answering": "🤖 Auto-answering via LLM…",
+    "question-auto-answer": "🤖 Auto-answer: {text}",
+    "question-auto-mode": "🤖 Auto mode — submitting automatically",
+    "question-answer-all": "Answer the question to send. | Answer all {count} questions to send.",
+    "question-send-hint": "{key} to send",
+    "question-send-all": "Send all {count} answers",
+    "question-send-one": "Send answer",
+    "console": "Console",
+    "drag-resize-log": "Drag to resize log panel",
+    "filter-by-type": "Filter by type",
+    "all-stages-finished": "All {count} stages finished successfully",
+    "region-unavailable": "{title} unavailable"
   },
   "layout": {
     "expand": "Expand panel",
@@ -8777,12 +8896,12 @@
     "close-group": "Close group",
     "close-group-title": "Remove this group; its panes move to another group",
     "close-group-and-panes": "Close group and its panes",
-    "close-running-confirm-body": "{count} CLI(s) in this group are running — closing will stop their in-progress turns. Close anyway?",
+    "close-running-confirm-body": "{count} CLI in this group is running — closing will stop its in-progress turn. Close anyway? | {count} CLIs in this group are running — closing will stop their in-progress turns. Close anyway?",
     "close-running-confirm-confirm": "Close",
     "remove-panes": "Remove this group's CLIs ({count})",
     "move-to-group": "Move to another group",
     "close-all-panes": "Close all panes",
-    "free-mode-untouched": "Only the current workspace was affected: {count} pane(s) from other workspaces were left as they are."
+    "free-mode-untouched": "Only the current workspace was affected: {count} pane from another workspace was left as it is. | Only the current workspace was affected: {count} panes from other workspaces were left as they are."
   },
   "status": {
     "not-git-repo": "Not a Git repository",
@@ -8894,7 +9013,7 @@
     "download-retry-count-hint": "How many times to retry a failed download.",
     "install-timeout": "Install timeout (seconds)",
     "install-timeout-hint": "How long the installer gets to restart the app before the update is handed back as ready to install.",
-    "check-failure": "Update checks have failed {count} time(s) in a row: {message}",
+    "check-failure": "Update checks have failed {count} time in a row: {message} | Update checks have failed {count} times in a row: {message}",
     "last-successful-check": "Last successful check: {at}.",
     "last-successful-check-never": "No check has ever succeeded.",
     "channel": "Update channel",
@@ -9019,14 +9138,14 @@
         "tried": "already tried this round",
         "wrong-scope": "different authentication scope"
       },
-      "scope": "Affects {workspaces} workspace(s), {panes} pane(s) · {scope}",
+      "scope": "Affected workspaces: {workspaces}, panes: {panes} · {scope}",
       "candidate": "{label} — {tier}",
       "candidate-detail": "{label} — {tier} · {detail}",
       "excluded-line": "{label} — {reason}",
       "reset-expected": "{source} is expected back around {time} (not verified). No automatic switch back.",
       "actions-withdrawn": "These options are no longer current.",
       "untrusted": "Not verified: no switch was started.",
-      "not-switched": "{count} pane(s) not switched: their credential comes from the environment.",
+      "not-switched": "{count} pane not switched: its credential comes from the environment. | {count} panes not switched: their credential comes from the environment.",
       "blocked": "Account switching for this CLI is paused until the earlier switch is reconciled.",
       "reconcile": "Complete reconciliation",
       "reconcile-as": "The live account is {label}",
@@ -9219,14 +9338,14 @@
   },
   "restore": {
     "dialog-title": "Restore previous session?",
-    "dialog-message": "The app didn't close properly last time. Reopen {count} workspace(s)?",
-    "skipped-title": "{count} workspace(s) were not reopened",
+    "dialog-message": "The app didn't close properly last time. Reopen {count} workspace? | The app didn't close properly last time. Reopen {count} workspaces?",
+    "skipped-title": "{count} workspace was not reopened | {count} workspaces were not reopened",
     "skipped-message": "These workspaces failed to open 3 times in a row, so they were left closed to keep the app usable. You can open them again yourself at any time.",
     "skipped-ack": "Got it",
     "apply": "Restore",
     "dismiss": "Dismiss",
     "scope-title": "Resume previous conversations",
-    "scope-message": "This workspace has {count} previous session(s). Choose what to resume.",
+    "scope-message": "This workspace has {count} previous session. Choose what to resume. | This workspace has {count} previous sessions. Choose what to resume.",
     "scope-single": "Resume one CLI",
     "scope-page": "Resume current Grid page",
     "scope-tab": "Resume active tab",
@@ -9238,7 +9357,7 @@
   },
   "backfill": {
     "title": "Backfilling historical token usage in the background",
-    "tidying": "tidying token history… {count} file(s)"
+    "tidying": "tidying token history… {count} file | tidying token history… {count} files"
   },
   "debug": {
     "title": "Debug",
@@ -9268,8 +9387,13 @@
     "info": {
       "runtime": "Runtime",
       "paths": "Paths",
-      "open": "Open"
-    }
+      "open": "Open",
+      "app": "App",
+      "backend": "Backend",
+      "started": "Started",
+      "shell": "Shell"
+    },
+    "backend-status": "backend {status}"
   },
   "orphans": {
     "title": "Leftover CLI processes",
@@ -9280,9 +9404,9 @@
     "failed": "Cleanup failed"
   },
   "reconnect": {
-    "banner": "{count} conversation(s) may have been disconnected — click to recover",
+    "banner": "{count} conversation may have been disconnected — click to recover | {count} conversations may have been disconnected — click to recover",
     "banner-title": "Open the manual picker to reconnect a conversation",
-    "auto-toast": "Auto-reconnected {count} conversation(s)",
+    "auto-toast": "Auto-reconnected {count} conversation | Auto-reconnected {count} conversations",
     "menu-item": "Reconnect conversation…",
     "modal-title": "Reconnect conversation",
     "modal-hint": "Pick a previous conversation to reconnect to this pane:",
@@ -9298,14 +9422,14 @@
     "default": "Default",
     "switch-title": "Switch account",
     "swap-failed": "Account switch failed — the previous account is still active.",
-    "panes-running": "{count} running CLI pane(s) are using this account — close them before switching.",
+    "panes-running": "{count} running CLI pane is using this account — close it before switching. | {count} running CLI panes are using this account — close them before switching.",
     "live-changed": "The signed-in {agent} account changed after this notice, so nothing was switched. Check Settings → Accounts.",
     "switch-rate-limited": "Too many account switches — try again in {seconds}s.",
     "switch-restart-confirm-title": "Restart running panes",
-    "switch-restart-confirm-body": "Switching accounts will restart {count} running {agent} pane(s). Continue?",
+    "switch-restart-confirm-body": "Switching accounts will restart {count} running {agent} pane. Continue? | Switching accounts will restart {count} running {agent} panes. Continue?",
     "switch-restart-confirm-confirm": "Switch & restart",
     "switch-restart-confirm-cancel": "Cancel",
-    "switch-restart-partial": "{failed} of {total} pane(s) could not be restarted after the account switch — see the log for details.",
+    "switch-restart-partial": "Panes not restarted after the account switch: {failed} of {total} — see the log for details.",
     "needs-login": "This account is signed out — starting a sign-in.",
     "needs-login-expired": "This account's token expired while it was parked — starting a sign-in to renew it.",
     "preflight-unknown-scope": "This slot's provider is not one {agent} declares — pick a provider from the list.",
@@ -9317,7 +9441,7 @@
     "preflight-unreconciled": "An earlier {agent} switch is not reconciled — complete it from the announcement first.",
     "preflight-credential-source-unknown": "Where {agent}'s credential comes from could not be determined (environment variable or provider scope), so nothing was switched.",
     "login-in-progress": "A {agent} sign-in is {state} — switch after it completes.",
-    "login-blocked-by-live-panes": "{count} running {agent} pane(s) block signing in — close or finish them first.",
+    "login-blocked-by-live-panes": "{count} running {agent} pane blocks signing in — close or finish it first. | {count} running {agent} panes block signing in — close or finish them first.",
     "live-drift": "The live {agent} credential is not the current account and the target slot is not empty — reconcile from the announcement first.",
     "adopted-live-login": "The live sign-in already was the selected account; it was adopted into its slot without a swap.",
     "plaintext-token-store": "This Copilot installation stores its token in plain text (storeTokenPlaintext); Navide cannot switch its accounts safely, so nothing was changed.",
@@ -9344,9 +9468,9 @@
     "label": "close all",
     "title": "Close all sessions and tabs (history kept)",
     "confirmTitle": "Close all sessions",
-    "confirm": "Close all {count} session(s) and their tabs? Agent history is kept — this only frees the resources used by this project.",
+    "confirm": "Close {count} session and its tabs? Agent history is kept — this only frees the resources used by this project. | Close all {count} sessions and their tabs? Agent history is kept — this only frees the resources used by this project.",
     "confirmBtn": "Close all",
-    "done": "Closed {count} session(s)"
+    "done": "Closed {count} session | Closed {count} sessions"
   },
   "cli-env": {
     "denied": "{label}: Navide manages {keys} itself, so the value you set never reached the CLI.",
@@ -9623,9 +9747,9 @@
     "switch-manage": "Add / manage accounts…",
     "pane-default-title": "New panes use",
     "follow-default-title": "Default account",
-    "follow-hint": "New panes and {count} following pane(s) use it",
+    "follow-hint": "New panes and {count} following pane use it | New panes and {count} following panes use it",
     "follow-hint-none": "New panes use it. Mark a pane to follow with the pin beside its account badge.",
-    "pinned-hint": "{count} pane(s) are fixed to an account's own folder and stay put when you switch.",
+    "pinned-hint": "{count} pane is fixed to an account's own folder and stays put when you switch. | {count} panes are fixed to an account's own folder and stay put when you switch.",
     "unpin-all": "Make all follow",
     "unpin-all-tooltip": "Reopen these panes on the current login so they move with every account switch. Each reopens once and picks up its conversation; one that is working is asked about first.",
     "continue-with": "Continue ›",
@@ -9741,7 +9865,8 @@
     "run-by-hand": "You can also run this yourself in a terminal: {cmd}",
     "installed-not-detected": "The command finished, but {label} is still not detected. It may need a new shell session, or it landed outside PATH.",
     "installed-still-outdated": "The install finished, but the {label} found on PATH is still the old {version}. The new one may sit behind the system copy — move its directory ahead on PATH, then re-detect. A corrected PATH order takes effect on re-detect, no restart needed.",
-    "installed-still-outdated-python": "The install finished, but the {label} found on PATH is still the old {version}. Fix it either way, then re-detect: run brew link --overwrite python{'@'}3.x (with the version you installed), or add eval \"$(/opt/homebrew/bin/brew shellenv)\" to ~/.zprofile so Homebrew comes before the system copy."
+    "installed-still-outdated-python": "The install finished, but the {label} found on PATH is still the old {version}. Fix it either way, then re-detect: run brew link --overwrite python{'@'}3.x (with the version you installed), or add eval \"$(/opt/homebrew/bin/brew shellenv)\" to ~/.zprofile so Homebrew comes before the system copy.",
+    "custom-model-placeholder": "e.g. codellama:7b, gemma3:4b"
   },
   "executions": {
     "last-scan": "Last scan {time}",
@@ -10409,9 +10534,9 @@
       "new": "New bot",
       "name": "Bot name",
       "rename": "Rename",
-      "remove-ask": "Remove this bot? {n} pane(s) connected through it will be disconnected."
+      "remove-ask": "Remove this bot? {n} pane connected through it will be disconnected. | Remove this bot? {n} panes connected through it will be disconnected."
     },
-    "platform-summary": "{bots} bot(s) · {chats} chat(s) · {panes} pane(s) bound",
+    "platform-summary": "Bots: {bots} · Chats: {chats} · Bound panes: {panes}",
     "menu": {
       "label": "More actions for {bot}",
       "connection": "Connection settings (token, permissions)",
@@ -10429,13 +10554,13 @@
       "focus": "Jump to pane ↗",
       "unbind": "Unbind",
       "unbind-confirm": "Unbind?",
-      "children": "{n} sub-agent topic(s)",
+      "children": "{n} sub-agent topic | {n} sub-agent topics",
       "auto": "Auto",
       "follows-parent": "Released with its parent",
-      "selected": "{n} binding(s) selected",
+      "selected": "{n} binding selected | {n} bindings selected",
       "unbind-n": "Unbind {n}",
-      "batch-ask": "Unbind {n} binding(s)?",
-      "batch-note": "Each of the {n} chat(s) will be told it was disconnected.",
+      "batch-ask": "Unbind {n} binding? | Unbind {n} bindings?",
+      "batch-note": "The {n} chat will be told it was disconnected. | Each of the {n} chats will be told it was disconnected.",
       "partial": "{n} could not be unbound:",
       "bound-at": "bound {at}",
       "focus-no-window": "“{name}” is not open in any window.",
@@ -10610,7 +10735,7 @@
       "title": "What Guard does",
       "hint": "Each action is graded, then handled by where the request came from.",
       "source": "Request source",
-      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl | sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
+      "levels": "Critical: deleting outside the workspace or home, disk/system commands, sudo, curl {'|'} sh, touching credentials, force-push to main, cloud teardown. High: rm -rf inside the workspace, git push / reset --hard, publishing packages, editing CI or git hooks.",
       "row": {
         "local": "You, on this computer",
         "relay": "Approved from a chat app",
@@ -10909,7 +11034,7 @@
       "resume": "Resume",
       "run-n": "Run {n}",
       "title": "Executions",
-      "unattributed": "{count} older run(s) were recorded before runs named their pipeline and are not listed.",
+      "unattributed": "{count} older run was recorded before runs named their pipeline and is not listed. | {count} older runs were recorded before runs named their pipeline and are not listed.",
       "unreadable": "Could not read the run history."
     },
     "gate": {
@@ -11131,8 +11256,8 @@
       "one-click": "Turn on",
       "one-click-hint": "Every field already has a default; one click turns it on for this workspace only.",
       "run-started": "Started. The announcements centre will tell you when it finishes.",
-      "legacy-disabled": "Turned off {n} old scheduled job(s) (not deleted).",
-      "legacy-hint": "Turning this on turns off {n} old scheduled job(s) (not deleted):",
+      "legacy-disabled": "Turned off {n} old scheduled job (not deleted). | Turned off {n} old scheduled jobs (not deleted).",
+      "legacy-hint": "Turning this on turns off {n} old scheduled job (not deleted): | Turning this on turns off {n} old scheduled jobs (not deleted):",
       "disclose-title": "What this does:",
       "disclose-git": "Every day an agent reads this workspace's logs, diagnostics and issues to find pain points; it fixes bugs in a separate worktree outside the repo and commits them to the local {branch} of {root}. It never pushes, releases or deletes features. Fixes take effect after the next release or in a dev build.",
       "disclose-subdir": "This workspace is a subfolder of the repo ({subdir}); only files under it are changed.",
@@ -11149,7 +11274,9 @@
       "ledger-open-failed": "Could not open the ledger plan",
       "pending-catch-up": "A missed run is waiting for this workspace to be opened.",
       "system-pane": "✦ system",
-      "system-pane-title": "Opened by self-evolution"
+      "system-pane-title": "Opened by self-evolution",
+      "run-tokens": "{tokens} token",
+      "run-pane": "pane “{name}”"
     },
     "field": {
       "time": "Time",
@@ -11184,7 +11311,8 @@
       "rules-hide": "Hide",
       "extra-placeholder": "Extra instructions (this workspace only)…",
       "ledger": "Ledger",
-      "ledger-placeholder": "Plan path, e.g. .agent-team/plans/xxx.html; empty = none"
+      "ledger-placeholder": "Plan path, e.g. .agent-team/plans/xxx.html; empty = none",
+      "effort-option": "effort: {effort}"
     },
     "error": {
       "at": "Use HH:MM",
@@ -11206,7 +11334,8 @@
       "date": "Date",
       "result": "Result",
       "fixes": "Fixes",
-      "proposals": "Proposals"
+      "proposals": "Proposals",
+      "tokens": "Tokens"
     },
     "reason": {
       "busy": "A run is already in progress for this workspace",
@@ -11225,7 +11354,7 @@
       "fallback_auto": "Self-evolution used a new pane · {workspace}",
       "not_git": "Self-evolution is propose-only · {workspace}",
       "started-body": "Opened pane \"{pane}\" ({agent}).",
-      "finished-body": "{fixes} bug(s) fixed · {proposals} proposal(s) · {tokens} tokens",
+      "finished-body": "Bugs fixed: {fixes} · Proposals: {proposals} · {tokens} tokens",
       "reclaimed": "The pane was reclaimed.",
       "timeout-body": "No result after the time cap. The pane is still running; the app never stops it on its own.",
       "fallback-body": "The chosen pane \"{pane}\" is gone, so this run opened a new pane.",
@@ -11262,11 +11391,11 @@
     "switch-title": "Switched to {account} — move these panes too?",
     "switch-body": "These Claude panes run on another account's own folder, so the switch did not reach them. Ticked panes reopen on the new account and resume their conversation.",
     "switch-skip": "Leave them",
-    "switch-confirm": "Move {count} pane(s)",
+    "switch-confirm": "Move {count} pane | Move {count} panes",
     "quota-title": "{pane} is out of quota — resume on another account",
     "quota-pick": "Reopen this pane on:",
     "quota-peers": "Also move these panes that ran out on the same account:",
-    "quota-confirm": "Switch and resume {count} pane(s)",
+    "quota-confirm": "Switch and resume {count} pane | Switch and resume {count} panes",
     "cancel": "Cancel",
     "needs-dir-sign-in": "Sign in inside its own folder first",
     "default-needs-switch": "Switch to it first",
@@ -11277,8 +11406,8 @@
     "note-window": "Only panes in this window are listed.",
     "quota-button": "Switch account ›",
     "quota-button-tooltip": "Reopen this pane on another account and resume its conversation",
-    "done-partial": "{failed} of {total} pane(s) could not be moved to the new account — see the log for details.",
-    "follow-title": "{count} following pane(s) running — move to {account}?",
+    "done-partial": "Panes not moved to the new account: {failed} of {total} — see the log for details.",
+    "follow-title": "{count} following pane running — move to {account}? | {count} following panes running — move to {account}?",
     "follow-body": "These following panes are mid-turn. They can move once they finish, or stay on their current account this time. The idle ones move now.",
     "follow-wait": "Move when finished",
     "follow-skip-running": "Skip running panes",
@@ -11286,7 +11415,7 @@
     "follow-switch-hint": "On: this pane moves to the new account on its next turn. Off: it stays in its account’s own folder. Either change reopens it once.",
     "pinned-indicator-label": "Fixed to its account",
     "pinned-indicator-tooltip": "Fixed: switching accounts does not move this pane. Open the account badge to make it follow again.",
-    "unpin-title": "{count} pane(s) to make follow are working",
+    "unpin-title": "{count} pane to make follow is working | {count} panes to make follow are working",
     "unpin-body": "Making a pane follow reopens it on the current login and picks up its conversation. Wait for these to finish, or skip them this time. Idle panes switch now.",
     "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",
     "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
@@ -11447,7 +11576,12 @@
       "publisher": "Publisher: {publisher}",
       "selfDeclared": "Self-declared: {publisher}",
       "localSignedBy": "Signed by developer {publisher} (vetted by Navide); this version was not reviewed by Navide",
-      "signatureRevoked": "Signature no longer valid"
+      "signatureRevoked": "Signature no longer valid",
+      "unsignedNote": "The author cannot be confirmed; the file may have been changed.",
+      "showDetails": "Show the source, SHA-256 and install time",
+      "fileDigest": "SHA-256 of the installed file: {digest}",
+      "contentDigest": "SHA-256 of the installed contents: {digest}",
+      "installedAt": "Installed: {time}"
     },
     "diff": {
       "heading": "What this update changes",
@@ -11502,10 +11636,11 @@
       "system": "{key}"
     },
     "scanHeading": "What the publish-time scan found",
+    "scanHeadingLocal": "What Navide's scan of this file found",
     "declaredHeading": "What this Navide plugin declares",
     "registryHeading": "Navide Registry records (unsigned)",
     "provenance": {
-      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and was not scanned by Navide.",
+      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and Navide has not reviewed it.",
       "unverified": "Provided by the Navide Registry, not yet verified; before installing, Navide verifies the signature and compares it with the package.",
       "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid.",
       "verifiedNoScan": "Verified: the disclosure matches the downloaded package. This version has no system scan."
@@ -11513,7 +11648,9 @@
     "noDisclosure": "This version was published without disclosure data.",
     "signedByRegistry": "The scan was run and signed by the Navide Registry.",
     "scannedByRegistry": "The scan was run by the Navide Registry.",
+    "scannedLocally": "The scan informs this card; it never decides the install.",
     "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
+    "limitsWithoutScanLocal": "Navide did not scan this file; the above is only this Navide plugin's own declaration.",
     "viewNetwork": "A Navide plugin's views can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "viewNetworkIfViews": "If this Navide plugin has views, they can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
     "summary": {
@@ -11542,10 +11679,10 @@
         "remoteRead": "This Navide plugin runs {commands}, which connects to a remote with your sign-in to read data.",
         "localWrite": "This Navide plugin runs {commands}, which changes your local repository.",
         "local": "This Navide plugin runs {commands}, which reads your local repository's state.",
-        "dynamic": "{count} command(s) are built at run time; a static scan cannot fully tell what they run."
+        "dynamic": "{count} command is built at run time; a static scan cannot fully tell what it runs. | {count} commands are built at run time; a static scan cannot fully tell what they run."
       },
       "files": {
-        "write": "This Navide plugin writes {paths} ({dynamic} more path(s) are decided at run time).",
+        "write": "This Navide plugin writes {paths} (more paths decided at run time: {dynamic}).",
         "read": "This Navide plugin reads {paths}."
       },
       "network": {
@@ -11553,8 +11690,8 @@
       },
       "code": {
         "eval": {
-          "frontend": "The view code builds and runs code at run time ({count} place(s)); the Navide plugin frame's security policy blocks such calls.",
-          "backend": "The native code shows signs of building and running code at run time ({count} place(s))."
+          "frontend": "The view code builds and runs code at run time ({count} place); the Navide plugin frame's security policy blocks such calls. | The view code builds and runs code at run time ({count} places); the Navide plugin frame's security policy blocks such calls.",
+          "backend": "The native code shows signs of building and running code at run time ({count} place). | The native code shows signs of building and running code at run time ({count} places)."
         },
         "obfuscated": "The code shows signs of obfuscation ({signals}); the scan may be incomplete."
       },
@@ -11564,7 +11701,8 @@
       },
       "coverage": {
         "base": "Scanned by the Navide Registry at publish (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list.",
-        "incomplete": "Scan incomplete: {reasons}."
+        "incomplete": "Scan incomplete: {reasons}.",
+        "local": "Scanned by Navide on this computer (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list."
       },
       "notFound": {
         "shell": "The static scan found no commands.",
@@ -11572,7 +11710,8 @@
         "files": "The static scan found no file paths.",
         "dynamicCode": "The static scan found no code built at run time."
       },
-      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration."
+      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration.",
+      "noScanLocal": "Navide did not scan this file; below is only this Navide plugin's own declaration."
     },
     "incompleteReason": {
       "timedOut": "the scan ran out of time",
@@ -11606,7 +11745,7 @@
         "not-run": "Secret scan: not run",
         "findings": "Secret scan: findings"
       },
-      "secretFindings": "Secret scan: {count} possible secret(s), confirmed by the reviewer",
+      "secretFindings": "Secret scan: {count} possible secret, confirmed by the reviewer | Secret scan: {count} possible secrets, confirmed by the reviewer",
       "similar": "Name is similar to another Navide plugin"
     }
   },
@@ -11636,6 +11775,7 @@
   "plugin-staged": {
     "notice": {
       "title": "The Navide plugin {plugin} has version {staged} waiting to be applied; version {active} is running.",
+      "failedTitle": "Switching {plugin} to {staged} failed: {reason}. Version {active} runs again.",
       "detail": "It was installed without Restart, or set aside by a rollback. Apply it to switch now, as Restart does.",
       "applied": "{plugin} now runs version {version}.",
       "stale": "Nothing was applied: the Navide plugin was changed since.",
@@ -11643,6 +11783,23 @@
     },
     "button": {
       "apply": "Apply now"
+    }
+  },
+  "plugin-switch": {
+    "notice": {
+      "title": "{plugin} switched from {from} to {to}",
+      "titleAgent": "An automatic update started by {caller} switched {plugin} from {from} to {to}",
+      "detail": "Switched at {time} ({source}). Its open views reloaded.",
+      "reverted": "{plugin} is back to version {version}.",
+      "stale": "Nothing was changed: the Navide plugin was changed since, or no earlier version is kept.",
+      "failed": "Could not go back: {error}"
+    },
+    "button": {
+      "back": "Back to {version}"
+    },
+    "source": {
+      "marketplace": "Navide Marketplace",
+      "local": "local file"
     }
   },
   "testplace": {

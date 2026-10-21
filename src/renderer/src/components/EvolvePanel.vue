@@ -459,7 +459,7 @@ async function openProposal(rel: string): Promise<void> {
               />
               <select v-if="knownEfforts.length" v-model="draft.effort" class="nv-select" data-field="effort" :disabled="!effortSupported">
                 <option value="">{{ t('evolve.field.effort-default') }}</option>
-                <option v-for="e in knownEfforts" :key="e" :value="e">effort: {{ e }}</option>
+                <option v-for="e in knownEfforts" :key="e" :value="e">{{ t('evolve.field.effort-option', { effort: e }) }}</option>
               </select>
               <input
                 v-else
@@ -569,9 +569,9 @@ async function openProposal(rel: string): Promise<void> {
               <div>
                 <span class="ev-dot" :class="lastRun.status" />
                 <b>{{ statusText(lastRun.status) }}</b>
-                · {{ runSpan(lastRun) }} · {{ fmtTokens(lastRun.tokens) }} token
+                · {{ runSpan(lastRun) }} · {{ t('evolve.panel.run-tokens', { tokens: fmtTokens(lastRun.tokens) }) }}
                 <template v-if="lastRun.pane_name || lastRun.pane_id">
-                  · pane「{{ lastRun.pane_name || lastRun.pane_id }}」
+                  · {{ t('evolve.panel.run-pane', { name: lastRun.pane_name || lastRun.pane_id }) }}
                   <span v-if="lastRun.reclaimed" class="ev-muted">{{ t('evolve.panel.reclaimed') }}</span>
                   <span v-else-if="lastRun.reclaimed === false && lastRun.status !== 'running'" class="ev-muted">{{ t('evolve.panel.not-reclaimed') }}</span>
                 </template>
@@ -598,7 +598,7 @@ async function openProposal(rel: string): Promise<void> {
                   <th>{{ t('evolve.history.result') }}</th>
                   <th>{{ t('evolve.history.fixes') }}</th>
                   <th>{{ t('evolve.history.proposals') }}</th>
-                  <th>token</th>
+                  <th>{{ t('evolve.history.tokens') }}</th>
                 </tr>
               </thead>
               <tbody>

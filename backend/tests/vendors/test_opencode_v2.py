@@ -559,3 +559,56 @@ async def test_cli_get_status_says_the_opencode_db_cannot_be_read(monkeypatch) -
         assert "log_reader" not in await plan_mcp.cli_get_status("boss", ctx)
     finally:
         agent_messaging._reset_for_test()
+
+
+# ── #485 follow-ups (review-485 NEW-1, LOW-2) ────────────────────────────────
+
+
+def test_a_conditional_read_problem_clears_after_a_full_healthy_pass(data_dir: Path) -> None:
+    """NEW-1: the anchor, drop-path and turn-text reads run only on some
+    passes, so a problem one of them hit could outlive a healthy db."""
+    reader = OpencodeLogReader()
+    db = _Db(data_dir / "opencode.db")
+    db.session(_SID, "/ws")
+    db.assistant(_SID, tokens=_tokens())
+    reader._report_problem(opencode_mod._V2_TURN_TEXT_SQL, db.path, "query-failed", "no such table: x")
+    reader._report_problem(opencode_mod._ANCHOR_SQL, db.path, "query-failed", "no such table: message")
+    assert opencode_mod.read_problem("opencode")["problems"] == 2
+
+    assert len(reader.parse_incremental(db.path, {}).events) == 1
+    assert opencode_mod.read_problem("opencode") is None
+
+
+def test_an_every_pass_read_problem_still_holds_still_after_a_usage_pass(data_dir: Path) -> None:
+    """The reads that run on every pass keep MED-1's behaviour: their entry
+    clears only when they themselves work again."""
+    reader = OpencodeLogReader()
+    db = _Db(data_dir / "opencode.db")
+    db.session(_SID, "/ws")
+    reader._report_problem(opencode_mod._V2_ACTIVITY_SQL, db.path, "query-failed", "disk I/O error")
+    reader.parse_incremental(db.path, {})
+    assert opencode_mod.read_problem("opencode")["detail"] == "disk I/O error"
+
+
+def test_a_half_v2_db_is_read_as_1x_and_disclosed(data_dir: Path) -> None:
+    """LOW-2: `session_v2` without `session_message` is not OpenCode 2's
+    schema; the 1.x tables are read, and the db says so."""
+    con = sqlite3.connect(data_dir / "opencode.db")
+    con.executescript(_V1_LEFTOVER_SCHEMA + "CREATE TABLE session_v2 (id TEXT);")
+    con.commit()
+    con.close()
+    reader = OpencodeLogReader()
+    assert reader._schema(data_dir / "opencode.db") == "v1"
+    problem = opencode_mod.read_problem("opencode")
+    assert problem is not None
+    assert (problem["status"], problem["reason"]) == ("partial", "partial-v2-schema")
+    assert "session_message" in problem["detail"]
+
+
+def test_a_pure_1x_db_is_still_read_without_a_disclosure(data_dir: Path) -> None:
+    con = sqlite3.connect(data_dir / "opencode.db")
+    con.executescript(_V1_LEFTOVER_SCHEMA)
+    con.commit()
+    con.close()
+    assert OpencodeLogReader()._schema(data_dir / "opencode.db") == "v1"
+    assert opencode_mod.read_problem("opencode") is None

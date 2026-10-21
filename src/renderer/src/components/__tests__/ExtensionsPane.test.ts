@@ -76,6 +76,33 @@ describe('ExtensionsPane', () => {
     expect(row.get('.ext-update-badge').text()).toContain('1.3.1-beta.2')
   })
 
+  it('G3: says who had a loaded developer folder loaded, the user or an agent the user approved', async () => {
+    const folder = (pluginId: string, loadedBy: unknown) => ({ pluginId, path: `/dev/${pluginId}`, consentedAt: '2026-10-21T01:00:00.000Z', loaded: true, loadedBy })
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.mine', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.asked', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.older', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+      ]),
+      developerMode: vi.fn().mockResolvedValue({
+        enabled: true,
+        folders: [
+          folder('acme.mine', { kind: 'user' }),
+          folder('acme.asked', { kind: 'agent', callerKind: 'pane', paneName: 'builder', approvedAt: '2026-10-21T01:00:00.000Z' }),
+          folder('acme.older', { kind: 'unknown' }),
+        ],
+      }),
+      selfHostedQuarantine: vi.fn().mockResolvedValue([]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.mine"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUser'))
+    const asked = wrapper.get('[data-id="acme.asked"] .ext-devmode-loaded-by').text()
+    expect(asked).toContain(i18n.global.t('plugin-agent.caller.pane', { pane: 'builder' }))
+    expect(asked).toContain('builder')
+    expect(wrapper.get('[data-id="acme.older"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUnknown'))
+  })
+
   it('labels an installed version this Navide release is too old for, without disabling it', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
@@ -175,7 +202,7 @@ describe('ExtensionsPane', () => {
     await wrapper.get('.ext-pack-remove').trigger('click')
     await flushPromises()
     await wrapper.get('.pack-uninstall-member input').setValue(true)
-    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 Navide plugin(s)')
+    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 Navide plugin')
     await wrapper.get('.pack-uninstall-confirm').trigger('click')
     await flushPromises()
     // The Host removes the chosen members itself, so it can refuse a member
@@ -310,6 +337,7 @@ describe('ExtensionsPane', () => {
         { id: 'acme.two', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: null }, disabled: true },
         { id: 'acme.three', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: 'developer-withdrawn' }, disabled: false },
         { id: 'acme.four', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned' },
+        { id: 'acme.five', requires: [], sensitive: [], packageVersion: '0.3.0', provenance: 'official-registry', source: 'testplace', digestBlock: { reason: 'testplace-withdrawn' }, disabled: false },
       ]),
     })
     wrapper = mountExtensions()
@@ -320,6 +348,9 @@ describe('ExtensionsPane', () => {
     expect(badge('acme.two').attributes('data-reason')).toBe('none')
     expect(badge('acme.three').text()).toBe('Withdrawn by its developer')
     expect(badge('acme.four').exists()).toBe(false)
+    // 0.2.28: a withdrawn Testplace build keeps its label, and stays enabled until the tester chooses.
+    expect(badge('acme.five').text()).toBe('Test build withdrawn')
+    expect(badge('acme.five').attributes('title')).toContain('Testplace')
   })
 
   it('offers no Uninstall for a Marketplace copy of a built-in', async () => {
@@ -1405,5 +1436,41 @@ describe('ExtensionsPane expired Testplace builds (D3)', () => {
     expect(wrapper.find('[data-id="acme.later"] .ext-testplace-expiring').exists()).toBe(false)
     expect(wrapper.get('[data-id="acme.past"] .ext-testplace-kept').text()).toContain('kept in use')
     expect(wrapper.get('[data-id="acme.past"] .nv-source-badge').text()).toBe('Test build, expired 2026-10-01 (kept in use)')
+  })
+})
+
+describe('ExtensionsPane: Developer Mode settings changed outside Navide (A2-5, G5)', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('shows the notice and marks the folder another program added, with Reload to consent again', async () => {
+    const reloadDeveloperPlugin = vi.fn().mockResolvedValue({ reloaded: false, requiresConsent: false })
+    mockPlugins({
+      developerMode: vi.fn().mockResolvedValue({
+        enabled: true,
+        externalChange: { detectedAt: '2026-10-21T01:00:00.000Z', modifiedAt: null },
+        folders: [{ pluginId: 'evil.two', path: '/tmp/other', consentedAt: '', loaded: false, externallyChanged: true }],
+      }),
+      reloadDeveloperPlugin,
+    })
+    const wrapper = mountExtensions()
+    await flushPromises()
+    const notice = wrapper.get('.ext-devmode-external')
+    expect(notice.attributes('role')).toBe('alert')
+    expect(notice.text().startsWith(i18n.global.t('settings.extensions.developerMode.externalChange', { time: 'T' }).split('T')[0]!)).toBe(true)
+    expect(wrapper.get('.ext-devmode-external-folder').text()).toBe(i18n.global.t('settings.extensions.developerMode.externallyChanged'))
+    await wrapper.get('.ext-devmode-folder .ext-devmode-reload').trigger('click')
+    await flushPromises()
+    expect(reloadDeveloperPlugin).toHaveBeenCalledWith('evil.two')
+    wrapper.unmount()
+  })
+
+  it('says nothing more when nothing was changed outside Navide', async () => {
+    mockPlugins({ developerMode: vi.fn().mockResolvedValue({ enabled: true, folders: [] }) })
+    const wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.find('.ext-devmode-external').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

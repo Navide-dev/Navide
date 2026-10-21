@@ -4,6 +4,8 @@ import { createI18n } from 'vue-i18n'
 import zhTW from './locales/zh-TW.json'
 import enUS from './locales/en-US.json'
 import jaJP from './locales/ja-JP.json'
+import koKR from './locales/ko-KR.json'
+import zhCN from './locales/zh-CN.json'
 import { settingsGet } from '../../shared'
 import {
   UI_LOCALE_FALLBACK,
@@ -23,6 +25,8 @@ const messages = {
   'zh-TW': zhTW,
   'en-US': enUS,
   'ja-JP': jaJP,
+  'ko-KR': koKR,
+  'zh-CN': zhCN,
 }
 
 /** A UI locale that has a catalog registered in this build. */
@@ -105,8 +109,10 @@ export {
   UI_PLURAL_RULES,
   formatList,
   isBetaUiLocale,
+  isSingular,
   isUiLocale,
   normalizeSystemLocale,
+  pluralCategory,
   resolveAvailableLocale,
 } from './uiLocales'
 export type { UiLocale } from './uiLocales'
