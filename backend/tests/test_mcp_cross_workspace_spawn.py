@@ -233,7 +233,9 @@ async def test_current_adopts_in_the_callers_window_and_parents_the_child_on_the
 async def test_a_tilde_path_is_expanded_before_it_is_used(
     captured: list[dict[str, Any]], ui: dict[str, Any], projects: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # expanduser reads USERPROFILE on Windows, HOME elsewhere.
     monkeypatch.setenv("HOME", projects["root"])
+    monkeypatch.setenv("USERPROFILE", projects["root"])
     ui["answers"]["ui.workspace.adopt"] = {"ok": True, "result": {"prepared": "already-open"}, "error": None}
     await _run_open(child_workspace=projects["beta"], workspace_path="~/beta")
     assert _spawn_payload(captured)["target_workspace"] == projects["beta"]
