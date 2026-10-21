@@ -11,6 +11,11 @@
 //   release does not know): one warning, where the user keeps using, disables
 //   or removes it. The installed list keeps labelling it.
 // - `developer-withdrawn`: the installed list labels it; nothing else.
+//
+// 0.2.28: a Testplace build installed from the Registry is checked too, by the
+// digest its receipt names, for `testplace-withdrawn` only (every other reason
+// keeps applying to local installs alone). It warns once like `admin`: it
+// keeps running until the tester chooses; nothing is disabled for it.
 
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -95,13 +100,17 @@ export interface DigestBlockPrompt {
   version: string
   reason: LocalBlockReason | null
   action: 'disable' | 'warn'
+  /** A Testplace build installed from the Registry, not from a file. */
+  testBuild?: true
 }
 
 export type DigestBlockChoice = 'keep' | 'disable' | 'remove'
 
 interface DigestBlockStrings {
   title: string
+  testBuildTitle: string
   warned: (plugin: string) => string
+  testBuildWarned: (plugin: string) => string
   disabled: (plugin: string) => string
   reasons: Record<LocalBlockReason | 'none', (publisher: string) => string>
   warnedDetail: string
@@ -113,13 +122,16 @@ interface DigestBlockStrings {
 const STRINGS: HostStringTable<DigestBlockStrings> = {
   'zh-TW': {
     title: 'Navide 外掛已被封鎖',
+    testBuildTitle: '測試版已撤回',
     warned: (plugin) => `你從檔案安裝的 Navide 外掛 ${plugin} 已列入 Navide 的封鎖清單。`,
+    testBuildWarned: (plugin) => `你安裝的 Navide 外掛測試版 ${plugin} 已被撤回。`,
     disabled: (plugin) => `Navide 已停用你從檔案安裝的 Navide 外掛 ${plugin}。`,
     reasons: {
       security: () => 'Navide 因安全問題下架了這一份檔案。',
       admin: () => 'Navide 已下架這一份檔案。',
       'qualification-revoked': (publisher) => `Navide 已撤銷發佈者 ${publisher} 的開發者資格。`,
       'developer-withdrawn': () => '這一份檔案已由開發者撤回。',
+      'testplace-withdrawn': () => '開發者或 Navide 已撤回這個 Testplace 測試版。',
       none: () => 'Navide 已把這一份檔案列入封鎖清單，沒有註明原因。',
     },
     warnedDetail: '它目前仍在執行。你可以繼續使用、停用或移除；「設定 → 擴充」的清單會一直標示它已被封鎖。',
@@ -129,13 +141,16 @@ const STRINGS: HostStringTable<DigestBlockStrings> = {
   },
   'en-US': {
     title: 'Navide plugin blocked',
+    testBuildTitle: 'Test build withdrawn',
     warned: (plugin) => `The Navide plugin ${plugin}, which you installed from a file, is on Navide's blocked list.`,
+    testBuildWarned: (plugin) => `The test build of the Navide plugin ${plugin} you installed was withdrawn.`,
     disabled: (plugin) => `Navide disabled the Navide plugin ${plugin}, which you installed from a file.`,
     reasons: {
       security: () => 'Navide took this file down for a security reason.',
       admin: () => 'Navide took this file down.',
       'qualification-revoked': (publisher) => `Navide revoked the developer qualification of its publisher ${publisher}.`,
       'developer-withdrawn': () => 'Its developer withdrew this file.',
+      'testplace-withdrawn': () => 'Its developer or Navide withdrew this Testplace build.',
       none: () => 'Navide put this file on its blocked list without giving a reason.',
     },
     warnedDetail: 'It still runs. You can keep using it, disable it or remove it; Settings → Extensions keeps showing that it is blocked.',
@@ -145,13 +160,16 @@ const STRINGS: HostStringTable<DigestBlockStrings> = {
   },
   'ja-JP': {
     title: 'Navide プラグインがブロックされました',
+    testBuildTitle: 'テストビルドが取り下げられました',
     warned: (plugin) => `ファイルからインストールした Navide プラグイン ${plugin} が Navide のブロックリストに追加されました。`,
+    testBuildWarned: (plugin) => `インストールした Navide プラグインのテストビルド ${plugin} が取り下げられました。`,
     disabled: (plugin) => `ファイルからインストールした Navide プラグイン ${plugin} を Navide が無効にしました。`,
     reasons: {
       security: () => 'Navide がセキュリティ上の理由でこのファイルを取り下げました。',
       admin: () => 'Navide がこのファイルを取り下げました。',
       'qualification-revoked': (publisher) => `Navide が発行者 ${publisher} の開発者資格を取り消しました。`,
       'developer-withdrawn': () => '開発者がこのファイルを取り下げました。',
+      'testplace-withdrawn': () => '開発者または Navide がこの Testplace ビルドを取り下げました。',
       none: () => 'Navide は理由を示さずにこのファイルをブロックリストに追加しました。',
     },
     warnedDetail: 'まだ動作しています。使い続ける、無効にする、削除する、のいずれかを選べます。「設定 → 拡張機能」の一覧には、ブロックされていることが表示され続けます。',
@@ -180,8 +198,8 @@ export function digestBlockDialogText(
     }
   }
   return {
-    title: strings.title,
-    message: strings.warned(plugin),
+    title: prompt.testBuild ? strings.testBuildTitle : strings.title,
+    message: prompt.testBuild ? strings.testBuildWarned(plugin) : strings.warned(plugin),
     detail: `${reasonLine}\n\n${strings.warnedDetail}`,
     buttons: [...strings.warnButtons],
     choices: ['keep', 'disable', 'remove'],

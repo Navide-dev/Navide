@@ -1929,6 +1929,8 @@
         "security": "Navide が取り下げ（セキュリティ）",
         "qualificationRevoked": "開発者資格が取り消されました",
         "developerWithdrawn": "開発者が取り下げ",
+        "testplaceWithdrawn": "テストビルド取り下げ",
+        "testplaceWithdrawnNote": "インストール後に、開発者または Navide がこの Testplace ビルドを取り下げました。無効にするか削除するまで動作し続けます。",
         "note": "この Navide プラグインをインストールした後、Navide がそのインストール元のファイルをブロックリストに追加しました。"
       },
       "rollback": {

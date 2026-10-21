@@ -108,9 +108,26 @@ describe('local install trust metadata', () => {
     expect(digestBlock(stored, other)).toEqual({ reason: null })
     expect(digestBlock(stored, 'c'.repeat(64))).toBeNull()
     expect(isDigestBlocked(stored, digest)).toBe(true)
-    for (const reason of ['admin', 'qualification-revoked', 'developer-withdrawn'] as const) {
+    for (const reason of ['admin', 'qualification-revoked', 'developer-withdrawn', 'testplace-withdrawn'] as const) {
       expect(digestBlock(metadata({ blockedDigests: [{ digest, reason }] }), digest)).toEqual({ reason })
     }
+  })
+
+  // 0.2.28 compatibility: an App that does not know `testplace-withdrawn`
+  // (0.2.27 and older) still verifies and stores the whole document, reads
+  // that entry as a block with no reason (warned about, never disabled), and
+  // grades every other entry as before.
+  it('a document carrying testplace-withdrawn stays readable to a release that does not know it', () => {
+    const other = 'b'.repeat(64)
+    const doc = metadata({ blockedDigests: [{ digest, reason: 'testplace-withdrawn' }, { digest: other, reason: 'security' }] })
+    writeLocalInstallTrust(pluginsRoot, doc, signRoot(doc), rootPem)
+    const stored = readLocalInstallTrust(pluginsRoot, rootPem)
+    expect(stored?.blockedDigests).toEqual(doc.blockedDigests)
+    expect(digestBlock(stored, other)).toEqual({ reason: 'security' })
+    // An older release's view: the same entry under a reason it has no name for.
+    const older = metadata({ blockedDigests: [{ digest, reason: 'not-yet-known' }, { digest: other, reason: 'security' }] })
+    expect(digestBlock(older, digest)).toEqual({ reason: null })
+    expect(digestBlock(older, other)).toEqual({ reason: 'security' })
   })
 
   it('reads a reason it does not know as none, and refuses a malformed entry', () => {

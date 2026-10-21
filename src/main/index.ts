@@ -1024,8 +1024,6 @@ try {
 const pluginTestplaceStore = new PluginTestplaceStore(pluginsRoot())
 const keepsExpiredTestplace = (packageId: string, artifactDigest: string): boolean =>
   pluginTestplaceStore.keepsExpired(packageId, artifactDigest)
-const withdrawnTestplace = (packageId: string, version: string): boolean =>
-  pluginTestplaceStore.isWithdrawn(packageId, version)
 const installedPluginTrust = {
   pinnedRootKey: installedRegistryRootKey,
   snapshot: readRegistryTrustSnapshot(pluginsRoot()),
@@ -1033,7 +1031,8 @@ const installedPluginTrust = {
   officialRegistryUrl: installedOfficialRegistryUrl,
   expectedTarget: currentPluginHostTarget(),
   keepsExpiredTestplace,
-  withdrawnTestplace,
+  // 0.2.28 (user, 10-21): a Testplace withdrawal never stops a build at
+  // start; Extensions labels it and the tester is asked once.
 }
 
 function currentInstalledRegistryTrust() {
@@ -1046,7 +1045,6 @@ function currentInstalledRegistryTrust() {
     expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
     now: marketplace.trust.now,
     keepsExpiredTestplace,
-    withdrawnTestplace,
   }
 }
 

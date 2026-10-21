@@ -234,7 +234,7 @@ export interface InstalledPluginSummary {
   localSignature?: 'verified' | 'revoked'
   /** Decision d5: Navide blocked the `.vsix` this local install came from;
    *  `reason` null when its list names none. */
-  digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | null }
+  digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn' | null }
   /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
   localInstall?: LocalInstallDetails
   warning?: string

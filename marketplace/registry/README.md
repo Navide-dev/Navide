@@ -69,14 +69,14 @@ uv --project marketplace/registry run pytest marketplace/registry/tests
 | GET/POST | `/api/testplace/{namespace}/{name}/codes` | Developer: list public test codes, or create `{ "max_testers": n }` (any positive number; there is no upper limit). The extension's first code waits for a light admin review (`in-review`); later ones open at once. The code is returned once. |
 | POST | `/api/testplace/{namespace}/{name}/codes/{id}/revoke` | Developer: stop new joins through a code; testers already in keep their seat. |
 | GET | `/api/testplace/{namespace}/{name}/versions` | Developer: testplace versions with expiry and promotion state. |
-| POST | `/api/testplace/{namespace}/{name}/versions/{version}/revoke` | Developer: revoke a testplace version early: it is yanked and listed in the tester detail's `withdrawn`, so each tester's Navide stops it at its next trust refresh and never offers to keep it. Nothing goes into the public blocklist, which would tell anyone the version exists. |
+| POST | `/api/testplace/{namespace}/{name}/versions/{version}/revoke` | Developer: revoke a testplace version early: it is yanked and listed in the tester detail's `withdrawn`, so each tester's Navide labels it at its next trust refresh and asks once whether to keep using, disable or remove it (0.2.28; 0.2.27 stopped it), and never offers to keep it once it has expired. Nothing goes into the public blocklist, which would tell anyone the version exists. |
 | POST | `/api/testplace/{namespace}/{name}/versions/{version}/promote` | Developer: send the same artifact (digest unchanged) for Marketplace review. |
 | GET | `/api/admin/testplace/codes`, `/api/admin/testplace/promotions` | Admin (`X-Admin-Token`): codes waiting for the light review, and promotion requests with tester count, testing period and report count. |
 | POST | `/api/admin/testplace/codes/{id}/decision`, `/api/admin/testplace/promotions/{namespace}/{name}/{version}/decision` | Admin: `{ "approve": bool, "reason": "…" }` (a reason is required to reject; a promotion also names the reviewed `artifacts` digests). An approved promotion is re-signed on its SemVer channel with no expiry and becomes public. |
 | POST | `/api/admin/testplace/{namespace}/{name}/versions/{version}/revoke` | Admin: force-revoke a testplace version (`{ "reason": "…" }`). |
 | POST | `/api/extensions/{namespace}/{name}/featured` | Set the curation flag `{ "featured": bool }`. Admin-gated by `X-Admin-Token` (same gate as `/api/publishers`). |
 
-**Security incidents.** A revoke or yank reaches a test build's testers only, through `/withdrawn`: online and signed in, within 15 minutes; offline or signed out, at the latest when the build expires (up to 90 days). For a security problem an admin does not rely on that: block the package or publisher globally (signed `blockedPackages` / `blockedPublishers`, the existing takedown). Every App applies it at its next trust refresh (within 15 minutes while online), testers and everyone else alike; the tester routes stop serving it at once and list it as withdrawn. The cost is that the public learns the Navide plugin id exists; a security incident is worth it. An ordinary withdrawal goes through `/withdrawn`.
+**Security incidents.** A revoke or yank reaches a test build's testers only, through `/withdrawn`: online and signed in, within 15 minutes; offline or signed out, at the App's next trust refresh that reads the root-signed local-install document, which lists the withdrawn build's digest only (`testplace-withdrawn`; the App labels it and asks once, nothing is disabled), and at the latest when the build expires (up to 90 days). For a security problem an admin does not rely on that: block the package or publisher globally (signed `blockedPackages` / `blockedPublishers`, the existing takedown). Every App applies it at its next trust refresh (within 15 minutes while online), testers and everyone else alike; the tester routes stop serving it at once and list it as withdrawn. The cost is that the public learns the Navide plugin id exists; a security incident is worth it. An ordinary withdrawal goes through `/withdrawn`.
 
 `GET /api/extensions` also accepts `category` (exact category filter) and
 `sort` (`updated` default, `downloads`, `rating`). Each summary now carries
@@ -544,8 +544,14 @@ approved by default.
   blocked package digests (blocklist kind `digest`) as `[{digest, reason}]`.
   `reason` is one of `security`, `admin` (the default for an admin entry),
   `qualification-revoked` or `developer-withdrawn`; the app disables, warns
-  about or only labels an installed copy by it. The existing trust
-  metadata is unchanged: released Apps reject any new field in it.
+  about or only labels an installed copy by it. The document also lists the
+  digest of every withdrawn Testplace build (revoked, yanked or withdrawn with
+  the qualification) as `testplace-withdrawn`, computed from the versions
+  rather than stored as a blocklist entry: only the digest, never the package
+  id or version (R-MED-3), no publish refusal, not on the public removed list,
+  and an existing blocklist entry for the same digest keeps its own reason.
+  The existing trust metadata is unchanged: released Apps reject any new
+  field in it.
 - **Errors**: new and changed JSON errors carry `detail: {code, message}` —
   `TOKEN_MISSING|INVALID|REVOKED|EXPIRED` (401), `TOKEN_SCOPE`,
   `QUALIFICATION_REQUIRED`, `NAMESPACE_FROZEN`, `DIGEST_BLOCKED` (403), yank

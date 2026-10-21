@@ -310,6 +310,7 @@ describe('ExtensionsPane', () => {
         { id: 'acme.two', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: null }, disabled: true },
         { id: 'acme.three', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: 'developer-withdrawn' }, disabled: false },
         { id: 'acme.four', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned' },
+        { id: 'acme.five', requires: [], sensitive: [], packageVersion: '0.3.0', provenance: 'official-registry', source: 'testplace', digestBlock: { reason: 'testplace-withdrawn' }, disabled: false },
       ]),
     })
     wrapper = mountExtensions()
@@ -320,6 +321,9 @@ describe('ExtensionsPane', () => {
     expect(badge('acme.two').attributes('data-reason')).toBe('none')
     expect(badge('acme.three').text()).toBe('Withdrawn by its developer')
     expect(badge('acme.four').exists()).toBe(false)
+    // 0.2.28: a withdrawn Testplace build keeps its label, and stays enabled until the tester chooses.
+    expect(badge('acme.five').text()).toBe('Test build withdrawn')
+    expect(badge('acme.five').attributes('title')).toContain('Testplace')
   })
 
   it('offers no Uninstall for a Marketplace copy of a built-in', async () => {
