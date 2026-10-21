@@ -232,7 +232,14 @@ def _parse_strict(line: bytes) -> Any:
 
 
 def _write_frame(frame: Any) -> None:
-    encoded = json.dumps(frame, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    # The Host refuses a frame holding a raw U+FEFF anywhere
+    # (parseBackendWireFrame), and page text may carry one, so it is written
+    # as the escape `﻿`: the same value, read back.
+    encoded = (
+        json.dumps(frame, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        .replace("﻿", "\\ufeff")
+        .encode("utf-8")
+    )
     if b"\n" in encoded or b"\r" in encoded:
         raise ValueError("frame contains a line break")
     if len(encoded) > MAX_FRAME_BYTES:
