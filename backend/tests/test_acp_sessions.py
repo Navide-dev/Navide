@@ -14,7 +14,7 @@ import pytest
 
 from agent_team_backend import acp_sessions, acp_ws, pty_registry
 from agent_team_backend.acp_sessions import AcpSessionService, AcpStartError
-from agent_team_backend.cli_vendors.base import AcpLaunch
+from agent_team_backend.acp_vendors import AcpLaunch
 
 FAKE_AGENT = Path(__file__).with_name("fake_acp_agent.py")
 
@@ -247,7 +247,7 @@ def fresh_service(registry, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 async def test_a_vendor_without_acp_is_refused(fresh_service, monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=None, spawn_env_defaults=()))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: None)
     window = FakeWindow()
 
     await acp_ws.acp_create(window, "m1", "acp.create", {"agent_key": "aider", "pane_id": "p1", "cwd": str(tmp_path)})
@@ -260,7 +260,8 @@ async def test_requests_drive_a_session_and_its_events_reach_the_creating_window
     fresh_service, monkeypatch, tmp_path,
 ) -> None:
     launch = AcpLaunch(argv=tuple(_argv("reply")))
-    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=launch, spawn_env_defaults=()))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: launch)
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(spawn_env_defaults=()))
     window = FakeWindow()
     try:
         await acp_ws.acp_create(window, "m1", "acp.create", {"agent_key": "opencode", "pane_id": "p1", "cwd": str(tmp_path)})
