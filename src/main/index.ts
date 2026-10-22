@@ -132,7 +132,7 @@ import {
   CLI_BUFFER_REPLY_CHANNEL,
   type CliPaneBufferResult
 } from './cli-buffer-relay'
-import { workspaceIdentityKey } from './workspace-identity'
+import { uniqueOpenWorkspaces, workspaceIdentityKey } from './workspace-identity'
 import {
   PaneActionRelay,
   PANE_ACTION_REPLY_CHANNEL,
@@ -3883,7 +3883,7 @@ ipcMain.handle('workspace:listOpen', () => {
   for (const [win, list] of adoptedWorkspaces) {
     if (!win.isDestroyed()) open.push(...list)
   }
-  return open
+  return uniqueOpenWorkspaces(open)
 })
 
 // Which OTHER window holds a workspace, by title, or '' when none does (or only

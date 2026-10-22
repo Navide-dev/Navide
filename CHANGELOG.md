@@ -22,6 +22,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Windows: programs the backend starts without input of their own (onboarding's version checks such as `pnpm --version`, CLI and tool probes) no longer hang at launch. They inherited the pipe the app keeps open for the backend's `shutdown` line; their standard input is now NUL, and the `shutdown` line still stops the backend. macOS and Linux are unchanged.
 
+- Open workspaces (Welcome badges, `ui_snapshot` `openWorkspaces`) list each folder once. A folder that is both a window's own workspace and one it adopted was listed twice. Paths are compared resolved, without a trailing slash, and case-insensitively on Windows; `~` is not expanded. (#448)
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added
