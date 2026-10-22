@@ -2141,6 +2141,13 @@
         },
         "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
       },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide could not check this Navide plugin: the Registry's trust data is dated later than this computer's clock. Check that your computer's date and time are correct, then try again.",
+          "expired": "Navide could not check this Navide plugin: by this computer's clock, the Registry's trust data has expired. Check that your computer's date and time are correct, then try again.",
+          "signatureNotYetValid": "Navide could not check this Navide plugin: its Registry signature is dated later than this computer's clock. Check that your computer's date and time are correct, then try again."
+        }
+      },
       "localInstall": {
         "agentRequest": "Requested by {requester}. Navide has not reviewed this package; installing it is your decision.",
         "button": "Install from .vsix File…",
