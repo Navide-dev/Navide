@@ -1919,7 +1919,7 @@
       "restartPlugin": "重新启动 Navide 插件",
       "disable": "禁用",
       "enable": "激活",
-      "builtinDisabledTooltip": "Navide 插件 {name} 已禁用，请在“设置 → 扩展”重新激活。",
+      "builtinDisabledTooltip": "Navide 插件 {name} 已禁用，请在“设置 → Navide 插件”重新激活。",
       "builtinDisabledNote": "已禁用：它的画面、窗口与 agent 工具都已关闭。权限与保存的数据都保留，按“激活”即全部恢复。",
       "builtinDataDeletedEarlier": "旧版 Navide 曾移除这个 Navide 插件，当时已删除它保存的数据。激活后会从空白数据开始。",
       "disabledStoreRestored": "已从备份恢复：Navide 插件的禁用设置档已损坏，已用备份重建。",
