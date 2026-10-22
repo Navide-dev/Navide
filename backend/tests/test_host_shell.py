@@ -1184,11 +1184,19 @@ async def test_a_run_never_hands_the_child_the_backends_own_stdin(monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_a_hung_git_does_not_hold_its_slot_forever(monkeypatch) -> None:
+async def test_a_hung_git_does_not_hold_its_slot_forever(monkeypatch, caplog) -> None:
     """A child whose pipes never close (Windows: held by the orphaned real
     git.exe) must still give its git slot back, every time, so a call made
-    after the slots were all spent by hung runs still gets one."""
+    after the slots were all spent by hung runs still gets one. The give-up is
+    logged, and the process-table read stays off the event loop."""
+    import threading
+
     killed: list[int] = []
+    snapshot_threads: list[threading.Thread] = []
+
+    def descendants(pid: int) -> list[int]:
+        snapshot_threads.append(threading.current_thread())
+        return [pid + 1]
 
     class HungProc:
         pid = 4242
@@ -1208,11 +1216,13 @@ async def test_a_hung_git_does_not_hold_its_slot_forever(monkeypatch) -> None:
 
     monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
-    monkeypatch.setattr(host_shell.process_tree, "descendants", lambda pid: [pid + 1])
+    monkeypatch.setattr(host_shell.process_tree, "descendants", descendants)
+    monkeypatch.setattr(host_shell.process_tree, "identity", lambda pid: f"id-{pid}")
     monkeypatch.setattr(
         host_shell.process_tree, "kill", lambda pid, *, force: killed.append(pid)
     )
     monkeypatch.setattr(host_shell, "_KILL_REAP_TIMEOUT_S", 0.05)
+    caplog.set_level("WARNING", logger="agent_team_backend.host_shell")
     real_run = host_shell.run_allowlisted_text
     monkeypatch.setattr(
         git_service,
@@ -1229,4 +1239,47 @@ async def test_a_hung_git_does_not_hold_its_slot_forever(monkeypatch) -> None:
     assert [rc for rc, _, _ in results] == [128] * runs
     # The launcher and what it started, not the launcher alone.
     assert killed.count(4242) == runs and killed.count(4243) == runs
+    assert snapshot_threads and threading.main_thread() not in snapshot_threads
+    gave_up = [r.getMessage() for r in caplog.records if "stopped waiting" in r.getMessage()]
+    assert len(gave_up) == runs and "pid 4242" in gave_up[0] and "[4243]" in gave_up[0]
+
+
+@pytest.mark.asyncio
+async def test_a_descendant_whose_pid_was_reused_is_not_killed(monkeypatch) -> None:
+    """Between the snapshot and the kill the descendant can exit and its pid
+    go to an unrelated process (Windows reuses pids fast): only a pid whose
+    identity (pid + start time) still matches the snapshot is killed."""
+    killed: list[int] = []
+    identities = {4243: "git-start", 4244: "sh-start"}
+
+    class HungProc:
+        pid = 4242
+        returncode = None
+
+        async def communicate(self, *_a):
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            return -9
+
+        def kill(self):
+            # The root dies; 4244 exits and its pid now belongs to another process.
+            killed.append(self.pid)
+            identities[4244] = "someone-else"
+
+    async def fake_exec(*_a, **_k):
+        return HungProc()
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "descendants", lambda pid: [4243, 4244])
+    monkeypatch.setattr(host_shell.process_tree, "identity", lambda pid: identities.get(pid, ""))
+    monkeypatch.setattr(
+        host_shell.process_tree, "kill", lambda pid, *, force: killed.append(pid)
+    )
+
+    rc, _, _ = await run_allowlisted_text(["git", "status"], timeout=0.05)
+
+    assert rc == 128
+    assert killed == [4242, 4243]
 

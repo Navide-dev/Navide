@@ -9,6 +9,7 @@ an allowlisted basename.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 import shlex
@@ -28,6 +29,8 @@ from .git_security import (
     normalize_remote_host,
     public_remote_target,
 )
+
+log = logging.getLogger(__name__)
 
 HOST_SHELL_EXECUTABLE_ALLOWLIST = frozenset({"git", "gh", "glab"})
 _SHELL_SYNTAX = re.compile(r"[;&|<>`\n\r]")
@@ -773,23 +776,49 @@ def _prepare_public_provider_git_context(
 _KILL_REAP_TIMEOUT_S = 2.0
 
 
-async def _kill_tree_and_reap(process: asyncio.subprocess.Process) -> None:
-    """Kill *process* and every descendant, then wait for it -- but not forever."""
-    # Snapshot first: once the root dies its children are no longer findable.
-    try:
-        descendants = process_tree.descendants(process.pid)
-    except OSError:
-        descendants = []
-    process.kill()
-    for pid in descendants:
+def _descendants_with_identity(pid: int) -> list[tuple[int, str]]:
+    """Every descendant of *pid* with the identity (pid + start time) it had."""
+    found = []
+    for child in process_tree.descendants(pid):
+        identity = process_tree.identity(child)
+        if identity:
+            found.append((child, identity))
+    return found
+
+
+def _end_descendants(descendants: list[tuple[int, str]]) -> None:
+    """Kill each descendant only while its pid is still the process that was
+    read (Windows reuses pids fast)."""
+    for pid, identity in descendants:
+        if process_tree.identity(pid) != identity:
+            continue
         try:
             process_tree.kill(pid, force=True)
         except OSError:
             pass
+
+
+async def _kill_tree_and_reap(process: asyncio.subprocess.Process) -> None:
+    """Kill *process* and every descendant, then wait for it -- but not forever."""
+    # Snapshot first: once the root dies its children are no longer findable.
+    # Off the loop: the snapshot is a process-table read (`ps` on POSIX).
+    try:
+        descendants = await asyncio.to_thread(_descendants_with_identity, process.pid)
+    except OSError:
+        descendants = []
+    process.kill()
+    if descendants:
+        await asyncio.to_thread(_end_descendants, descendants)
     try:
         await asyncio.wait_for(process.wait(), timeout=_KILL_REAP_TIMEOUT_S)
     except asyncio.TimeoutError:
-        pass
+        log.warning(
+            "pid %s still running %.0fs after it was killed on timeout (descendants %s); "
+            "stopped waiting for it",
+            process.pid,
+            _KILL_REAP_TIMEOUT_S,
+            [pid for pid, _ in descendants],
+        )
 
 
 async def run_allowlisted(
