@@ -10,8 +10,13 @@ Scenarios (what a session/prompt does):
   ask_navide      call fs/read_text_file on the client, report the error code, end_turn
   bad_lines       write a non-JSON line and a JSON non-message first, then reply
   big             one agent_message_chunk of 2 MiB, then end_turn
-  exit            exit with code 3 in the middle of the turn
+  exit            write "fatal: boom" to stderr, exit with code 3 in the middle of the turn
   version2        answer initialize with protocolVersion 2
+
+Process scenarios (for acp_sessions), with $ACP_FAKE_PIDFILE naming a file
+that gets "<own pid> <child pid>":
+  child           start a grandchild that sleeps; exit on stdin EOF, leaving it
+  stubborn        like child, but ignore stdin EOF and SIGTERM
 
 The session id is "s-1"; session/load replays one user and one agent chunk.
 Standard library only; it reads stdin line by line in one thread.
@@ -20,7 +25,11 @@ Standard library only; it reads stdin line by line in one thread.
 from __future__ import annotations
 
 import json
+import os
+import signal
+import subprocess
 import sys
+import time
 
 SCENARIO = sys.argv[1] if len(sys.argv) > 1 else "reply"
 SESSION = "s-1"
@@ -86,6 +95,8 @@ def prompt(request_id) -> None:
     chunk("Hello")
     chunk(", world")
     if SCENARIO == "exit":
+        sys.stderr.write("fatal: boom\n")
+        sys.stderr.flush()
         sys.exit(3)
     if SCENARIO in ("cancel", "ignore_cancel"):
         for line in sys.stdin:
@@ -97,7 +108,17 @@ def prompt(request_id) -> None:
     answer(request_id, {"stopReason": "end_turn"})
 
 
+def start_child() -> None:
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])
+    with open(os.environ["ACP_FAKE_PIDFILE"], "w") as f:
+        f.write(f"{os.getpid()} {child.pid}")
+
+
 def main() -> None:
+    if SCENARIO in ("child", "stubborn"):
+        start_child()
+        if SCENARIO == "stubborn" and hasattr(signal, "SIGTERM"):
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
     for line in sys.stdin:
         message = json.loads(line)
         method, request_id = message.get("method"), message.get("id")
@@ -122,6 +143,9 @@ def main() -> None:
             prompt(request_id)
         elif request_id is not None:
             send({"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "no such method"}})
+
+    if SCENARIO == "stubborn":
+        time.sleep(300)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,390 @@
+"""ACP sessions: one agent process per ACP pane, and what runs on it.
+
+``AcpSessionService`` is to an ACP pane what ``TerminalService`` is to a
+terminal pane: it starts the agent, keeps it registered for crash recovery,
+runs its turns and stops it. The protocol itself is ``acp_client``.
+
+- Start: the agent runs in a session (POSIX) or kill-on-close Job (Windows) of
+  its own via ``osplat.process_tree.contain``, so stopping it ends everything
+  it started; its pid is recorded in ``pty_registry`` like a PTY child's, so a
+  backend that dies without stopping it has it reaped on the next start.
+- Turns: a prompt sent while a turn runs waits for that turn (no cap on how
+  many wait). A turn ends only when the agent answers it (ACP has no
+  session/stop); ``cancel`` asks it to, and nothing is killed for not obeying.
+- Stop: close the agent's stdin, give it the vendor's grace (``ShutdownSpec``)
+  to exit, then end its whole tree. The agent's own stderr goes to
+  ``logs/acp-<session>.log`` (owner only), whose tail is shown when it exits.
+
+Events go to ``emit`` as dicts: ``acp.state``, ``acp.update`` (each
+session/update as the agent sent it), ``acp.permission`` (a request waiting
+for an answer), ``acp.turn_end`` and ``acp.exit``. Terminal panes and
+``TerminalService`` are not touched.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import logging
+import os
+import uuid
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Awaitable, Callable
+
+from . import osplat, pty_registry
+from .acp_client import AcpClient, AcpClosed, AcpError, AcpInitResult, AcpProtocolError
+from .applog import app_data_dir, in_data_dir, log_dir
+
+log = logging.getLogger("agent_team_backend.acp_sessions")
+
+EventSink = Callable[[dict[str, Any]], Awaitable[None]]
+
+# How long a stopping agent gets after its stdin closes, when its vendor
+# declares no ShutdownSpec; then SIGTERM, then the whole tree is ended.
+_DEFAULT_STOP_GRACE_S = 2.0
+_TERM_GRACE_S = 1.0
+_STDERR_TAIL_LINES = 20
+_STDERR_TAIL_BYTES = 8192
+
+CLIENT_INFO = {"name": "Navide", "title": "Navide"}
+
+
+class AcpStartError(Exception):
+    """The agent could not be started or did not complete the handshake."""
+
+    def __init__(self, code: str, message: str, stderr_tail: str = "") -> None:
+        super().__init__(message)
+        self.code = code
+        self.stderr_tail = stderr_tail
+
+
+@dataclass
+class _Permission:
+    request_id: str
+    params: dict[str, Any]
+    answer: asyncio.Future[str | None]
+
+
+@dataclass
+class AcpSession:
+    id: str
+    pane_id: str
+    agent_key: str
+    cwd: str
+    argv: list[str]
+    proc: asyncio.subprocess.Process
+    client: AcpClient
+    job: int | None = None
+    acp_session_id: str = ""
+    init: AcpInitResult | None = None
+    # starting | idle | running | cancelling | exited
+    state: str = "starting"
+    queue: list[str] = field(default_factory=list)
+    permissions: dict[str, _Permission] = field(default_factory=dict)
+    turn: asyncio.Task[None] | None = None
+    stderr_path: Path | None = None
+    exit_code: int | None = None
+    stopping: bool = False  # kill() owns the exit: no "exited on its own" event
+
+    def stderr_tail(self) -> str:
+        if self.stderr_path is None:
+            return ""
+        try:
+            with open(self.stderr_path, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                f.seek(max(0, f.tell() - _STDERR_TAIL_BYTES))
+                text = f.read().decode("utf-8", errors="replace")
+        except OSError:
+            return ""
+        return "\n".join(text.strip().splitlines()[-_STDERR_TAIL_LINES:])
+
+    def snapshot(self) -> dict[str, Any]:
+        """What a status read (or a reattaching window) needs."""
+        return {
+            "session_id": self.id,
+            "pane_id": self.pane_id,
+            "agent_key": self.agent_key,
+            "acp_session_id": self.acp_session_id,
+            "state": self.state,
+            "queued": len(self.queue),
+            "permissions": [
+                {"request_id": p.request_id, "toolCall": p.params.get("toolCall"),
+                 "options": p.params.get("options")}
+                for p in self.permissions.values()
+            ],
+            "load_session": bool(self.init and self.init.load_session),
+            "agent_info": dict(self.init.agent_info) if self.init else {},
+        }
+
+
+class AcpSessionService:
+    def __init__(self, emit: EventSink) -> None:
+        self._emit = emit
+        self._sessions: dict[str, AcpSession] = {}
+        self._watchers: set[asyncio.Task[None]] = set()
+        self._data_dir = app_data_dir()
+
+    def get(self, session_id: str) -> AcpSession | None:
+        return self._sessions.get(session_id)
+
+    def list(self) -> list[AcpSession]:
+        return list(self._sessions.values())
+
+    # -- start ------------------------------------------------------------
+
+    async def create(
+        self,
+        *,
+        pane_id: str,
+        agent_key: str,
+        argv: list[str],
+        cwd: str,
+        env: dict[str, str] | None = None,
+        load_session_id: str = "",
+        mcp_servers: list[dict[str, Any]] | None = None,
+    ) -> AcpSession:
+        """Start the agent, hand shake, open (or load) its session.
+
+        Raises AcpStartError with a code the pane shows and a stderr tail;
+        whatever was started is stopped first. Nothing falls back to a
+        terminal pane on its own.
+        """
+        session_id = uuid.uuid4().hex
+        stderr_path = log_dir() / f"acp-{session_id}.log"
+        try:
+            fd = os.open(stderr_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        except OSError as err:
+            raise AcpStartError("acp-start-failed", f"cannot open the agent's log: {err}") from err
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=fd,
+                cwd=cwd,
+                env=env if env is not None else dict(os.environ),
+                start_new_session=True,
+            )
+        except OSError as err:
+            os.close(fd)
+            raise AcpStartError("acp-start-failed", f"{argv[0]} could not be started: {err}") from err
+        os.close(fd)  # the child holds its own copy
+        job: int | None = None
+        try:
+            job = osplat.process_tree.contain(proc.pid)
+        except OSError as err:
+            log.warning("ACP %s: not contained (%s); its tree is ended by pid instead", session_id, err)
+        await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.register, proc.pid, argv))
+
+        assert proc.stdout is not None and proc.stdin is not None
+        holder: dict[str, AcpSession] = {}
+        client = AcpClient(
+            proc.stdout, proc.stdin,
+            on_update=lambda params: self._on_update(holder["s"], params),
+            on_permission=lambda params: self._on_permission(holder["s"], params),
+        )
+        session = AcpSession(
+            id=session_id, pane_id=pane_id, agent_key=agent_key, cwd=cwd, argv=list(argv),
+            proc=proc, client=client, job=job, stderr_path=stderr_path,
+        )
+        holder["s"] = session
+        self._sessions[session_id] = session
+        client.start()
+        watcher = asyncio.ensure_future(self._watch_exit(session))
+        self._watchers.add(watcher)
+        watcher.add_done_callback(self._watchers.discard)
+        await self._set_state(session, "starting")
+        try:
+            session.init = await client.initialize(CLIENT_INFO)
+            if load_session_id:
+                if not session.init.load_session:
+                    raise AcpStartError("acp-no-load", "this agent cannot load an earlier session")
+                await client.load_session(load_session_id, cwd, mcp_servers)
+                session.acp_session_id = load_session_id
+            else:
+                session.acp_session_id = await client.new_session(cwd, mcp_servers)
+        except AcpStartError as err:
+            await self.kill(session_id)
+            err.stderr_tail = err.stderr_tail or session.stderr_tail()
+            raise
+        except (AcpClosed, AcpError, AcpProtocolError) as err:
+            await self.kill(session_id)
+            code = "acp-auth-required" if _needs_auth(err, session.init) else "acp-handshake-failed"
+            raise AcpStartError(code, str(err), session.stderr_tail()) from err
+        await self._set_state(session, "idle")
+        return session
+
+    # -- turns ------------------------------------------------------------
+
+    async def prompt(self, session_id: str, text: str) -> str:
+        """Send ``text`` as a prompt: "sent" now, or "queued" behind the running turn."""
+        session = self._require(session_id)
+        if session.state in ("running", "cancelling"):
+            session.queue.append(text)
+            await self._set_state(session, session.state)
+            return "queued"
+        self._start_turn(session, text)
+        return "sent"
+
+    async def cancel(self, session_id: str) -> bool:
+        """Ask the agent to end the running turn; False when none runs."""
+        session = self._require(session_id)
+        if session.state != "running":
+            return False
+        await self._set_state(session, "cancelling")
+        await session.client.cancel(session.acp_session_id)
+        return True
+
+    def answer_permission(self, session_id: str, request_id: str, option_id: str | None) -> bool:
+        """Answer a waiting permission request (None = cancelled); False when it is gone."""
+        session = self._require(session_id)
+        pending = session.permissions.get(request_id)
+        if pending is None or pending.answer.done():
+            return False
+        if option_id is not None and option_id not in {
+            str(o.get("optionId")) for o in pending.params.get("options") or [] if isinstance(o, dict)
+        }:
+            raise ValueError(f"no option {option_id!r} in this request")
+        pending.answer.set_result(option_id)
+        return True
+
+    def _start_turn(self, session: AcpSession, text: str) -> None:
+        session.state = "running"
+        session.turn = asyncio.ensure_future(self._run_turn(session, text))
+
+    async def _run_turn(self, session: AcpSession, text: str) -> None:
+        await self._set_state(session, "running")
+        stop_reason, error = "", ""
+        try:
+            stop_reason = await session.client.prompt(session.acp_session_id, text)
+        except (AcpClosed, AcpError, AcpProtocolError) as err:
+            error = str(err)
+        if session.state == "exited":
+            return
+        await self._emit_event(session, "acp.turn_end", {"stopReason": stop_reason, "error": error})
+        if session.queue and session.client.closed is False:
+            self._start_turn(session, session.queue.pop(0))
+            return
+        await self._set_state(session, "idle")
+
+    # -- agent -> Navide --------------------------------------------------
+
+    async def _on_update(self, session: AcpSession, params: dict[str, Any]) -> None:
+        await self._emit_event(session, "acp.update", {"update": params.get("update")})
+
+    async def _on_permission(self, session: AcpSession, params: dict[str, Any]) -> str | None:
+        request = _Permission(uuid.uuid4().hex, params, asyncio.get_running_loop().create_future())
+        session.permissions[request.request_id] = request
+        try:
+            await self._emit_event(session, "acp.permission", {
+                "request_id": request.request_id,
+                "toolCall": params.get("toolCall"),
+                "options": params.get("options"),
+            })
+            return await request.answer
+        finally:
+            session.permissions.pop(request.request_id, None)
+            await self._emit_event(session, "acp.permission_closed", {"request_id": request.request_id})
+
+    # -- stop -------------------------------------------------------------
+
+    async def kill(self, session_id: str) -> None:
+        """Stop the agent: stdin closed, the vendor's grace, SIGTERM, then its whole tree."""
+        session = self._sessions.get(session_id)
+        if session is None:
+            return
+        from .terminals import _descendant_pids, _kill_breakaway
+
+        session.stopping = True
+        proc = session.proc
+        descendants: dict[int, str] = {}
+        if proc.returncode is None:
+            # Taken while it runs: a grandchild that left its group is found
+            # only here (after the exit it has reparented).
+            descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
+        await session.client.close()
+        await self._wait_exit(proc, _stop_grace(session.agent_key))
+        if proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+                osplat.process_tree.kill_group(osplat.process_tree.group_of(proc.pid), force=False)
+            await self._wait_exit(proc, _TERM_GRACE_S)
+        self._end_tree(session)
+        await self._wait_exit(proc, _TERM_GRACE_S)
+        await asyncio.to_thread(_kill_breakaway, descendants)
+        await self._forget(session)
+
+    async def kill_all(self) -> None:
+        await asyncio.gather(*(self.kill(sid) for sid in list(self._sessions)), return_exceptions=True)
+
+    def _end_tree(self, session: AcpSession) -> None:
+        try:
+            osplat.process_tree.end_contained(session.proc.pid, session.job)
+        except OSError:
+            with contextlib.suppress(OSError):
+                osplat.process_tree.kill_tree(session.proc.pid, force=True)
+
+    @staticmethod
+    async def _wait_exit(proc: asyncio.subprocess.Process, grace: float) -> None:
+        if proc.returncode is not None:
+            return
+        with contextlib.suppress(TimeoutError, asyncio.TimeoutError):
+            await asyncio.wait_for(proc.wait(), grace)
+
+    async def _watch_exit(self, session: AcpSession) -> None:
+        code = await session.proc.wait()
+        session.exit_code = code
+        if session.stopping or session.id not in self._sessions:
+            return
+        # It exited on its own (or was stopped): end what it left running.
+        self._end_tree(session)
+        await session.client.close()
+        await self._emit_event(session, "acp.exit", {"code": code, "stderr_tail": session.stderr_tail()})
+        await self._forget(session)
+
+    async def _forget(self, session: AcpSession) -> None:
+        if self._sessions.pop(session.id, None) is None:
+            return
+        session.state = "exited"
+        for request in list(session.permissions.values()):
+            if not request.answer.done():
+                request.answer.set_result(None)
+        await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, session.proc.pid))
+        await self._emit_event(session, "acp.state", {"state": "exited", "code": session.proc.returncode})
+
+    # -- events -----------------------------------------------------------
+
+    async def _set_state(self, session: AcpSession, state: str) -> None:
+        if session.state == "exited":
+            return
+        session.state = state
+        await self._emit_event(session, "acp.state", {"state": state, "queued": len(session.queue)})
+
+    async def _emit_event(self, session: AcpSession, kind: str, payload: dict[str, Any]) -> None:
+        try:
+            await self._emit({"type": kind, "payload": {
+                "session_id": session.id, "pane_id": session.pane_id, **payload,
+            }})
+        except Exception as err:  # noqa: BLE001
+            log.warning("ACP %s: %s event not delivered: %s", session.id, kind, err)
+
+    def _require(self, session_id: str) -> AcpSession:
+        session = self._sessions.get(session_id)
+        if session is None:
+            raise KeyError(f"no ACP session {session_id}")
+        return session
+
+
+def _stop_grace(agent_key: str) -> float:
+    from .cli_vendors.registry import vendor
+
+    spec = vendor(agent_key)
+    shutdown = spec.shutdown if spec is not None else None
+    return float(shutdown.grace_s) if shutdown is not None else _DEFAULT_STOP_GRACE_S
+
+
+def _needs_auth(err: Exception, init: AcpInitResult | None) -> bool:
+    """The agent wants a sign-in Navide does not perform (ACP `authenticate`):
+    an auth error code (-32000 "auth required" in the ACP schema) on session/new
+    from an agent that declared authentication methods."""
+    return isinstance(err, AcpError) and err.code == -32000 and bool(init and init.auth_methods)

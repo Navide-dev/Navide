@@ -133,6 +133,7 @@ from . import plan_history
 from .plugins import wiring as plugin_wiring
 from .plugins.host import PluginHost
 from . import ws_handlers
+from . import acp_ws  # noqa: F401 — registers the acp.* requests
 from .git_watcher import GitWatcher
 
 log = logging.getLogger("agent_team_backend")
@@ -2563,6 +2564,11 @@ async def _stop_log_watcher() -> None:
                 await _TERMINALS.kill_all()
             except Exception as err:  # noqa: BLE001
                 log.warning("pty shutdown sweep failed: %s", err)
+        # ACP agents run in sessions (jobs on Windows) of their own, like PTY children.
+        try:
+            await acp_ws.shutdown()
+        except Exception as err:  # noqa: BLE001
+            log.warning("ACP shutdown sweep failed: %s", err)
         if _log_watcher is not None:
             # Settle what the drain has read but not yet counted, BEFORE stop()
             # cancels the flush task that would have done it. See
