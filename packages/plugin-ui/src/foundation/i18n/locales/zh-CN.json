@@ -2143,8 +2143,9 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide 无法检查这个扩展：Registry 信任数据的时间晚于这台电脑的时钟。请确认电脑的日期与时间正确，再试一次。",
-          "expired": "Navide 无法检查这个扩展：按这台电脑的时钟，Registry 信任数据已过期。请确认电脑的日期与时间正确，再试一次。"
+          "notYetValid": "Navide 无法检查这个 Navide 插件：Registry 信任数据的时间晚于这台电脑的时钟。请确认电脑的日期与时间正确，再试一次。",
+          "expired": "Navide 无法检查这个 Navide 插件：按这台电脑的时钟，Registry 信任数据已过期。请确认电脑的日期与时间正确，再试一次。",
+          "signatureNotYetValid": "Navide 无法检查这个 Navide 插件：它的 Registry 签名时间晚于这台电脑的时钟。请确认电脑的日期与时间正确，再试一次。"
         }
       },
       "localInstall": {

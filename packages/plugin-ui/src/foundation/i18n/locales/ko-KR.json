@@ -2143,8 +2143,9 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide가 이 확장을 확인하지 못했어요: Registry 신뢰 데이터의 시각이 이 컴퓨터의 시계보다 늦어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요.",
-          "expired": "Navide가 이 확장을 확인하지 못했어요: 이 컴퓨터의 시계로는 Registry 신뢰 데이터가 만료됐어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요."
+          "notYetValid": "Navide가 이 Navide 플러그인을 확인하지 못했어요: Registry 신뢰 데이터의 시각이 이 컴퓨터의 시계보다 늦어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요.",
+          "expired": "Navide가 이 Navide 플러그인을 확인하지 못했어요: 이 컴퓨터의 시계로는 Registry 신뢰 데이터가 만료됐어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요.",
+          "signatureNotYetValid": "Navide가 이 Navide 플러그인을 확인하지 못했어요: Registry 서명 시각이 이 컴퓨터의 시계보다 늦어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요."
         }
       },
       "localInstall": {

@@ -51,9 +51,9 @@ describe('localizeDeveloperModeError (review LOW-2 on #428)', () => {
       "REGISTRY_SIGNATURE_NOT_YET_VALID: registry signature was made at 2026-08-16T12:10:00.000Z, later than this computer's clock (2026-08-16T12:00:00.000Z); check the computer's date and time"
     for (const locale of ['en-US', 'zh-TW', 'zh-CN', 'ja-JP', 'ko-KR'] as const) {
       i18n.global.locale.value = locale
-      expect(localizeDeveloperModeError(signature, i18n.global.t), locale).toBe(
-        localizeDeveloperModeError(notYet, i18n.global.t)
-      )
+      const shownSignature = localizeDeveloperModeError(signature, i18n.global.t)
+      expect(shownSignature, locale).not.toMatch(/REGISTRY_SIGNATURE|settings\.extensions/)
+      expect(shownSignature, locale).not.toBe(localizeDeveloperModeError(notYet, i18n.global.t))
     }
     i18n.global.locale.value = 'en-US'
     expect(localizeDeveloperModeError(notYet, i18n.global.t)).toMatch(/date and time/)

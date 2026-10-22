@@ -16,7 +16,7 @@ const KEYS: Readonly<Record<string, string>> = {
   DIGEST_BLOCKED: 'settings.extensions.localInstall.errors.digestBlocked',
   // A Registry install or update refused over the computer's clock.
   TRUST_METADATA_NOT_YET_VALID: 'settings.extensions.registryTrust.errors.notYetValid',
-  REGISTRY_SIGNATURE_NOT_YET_VALID: 'settings.extensions.registryTrust.errors.notYetValid',
+  REGISTRY_SIGNATURE_NOT_YET_VALID: 'settings.extensions.registryTrust.errors.signatureNotYetValid',
   TRUST_METADATA_EXPIRED: 'settings.extensions.registryTrust.errors.expired',
 }
 

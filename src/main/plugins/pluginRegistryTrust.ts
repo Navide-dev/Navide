@@ -375,11 +375,12 @@ export function verifyRegistryPackageTrust(
     )
   }
   const now = (input.now ?? new Date()).getTime()
+  // One clock read for every time check here: metadata and envelope agree on "now".
   verifyRegistryTrustMetadata(
     input.trustMetadata,
     input.trustMetadataSignature,
     input.pinnedRootKey,
-    input.now
+    new Date(now)
   )
 
   for (const field of [

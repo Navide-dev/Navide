@@ -2143,8 +2143,9 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide 無法檢查這個擴充：Registry 信任資料的時間晚於這台電腦的時鐘。請確認電腦的日期與時間正確，再試一次。",
-          "expired": "Navide 無法檢查這個擴充：依這台電腦的時鐘，Registry 信任資料已過期。請確認電腦的日期與時間正確，再試一次。"
+          "notYetValid": "Navide 無法檢查這個 Navide 外掛：Registry 信任資料的時間晚於這台電腦的時鐘。請確認電腦的日期與時間正確，再試一次。",
+          "expired": "Navide 無法檢查這個 Navide 外掛：依這台電腦的時鐘，Registry 信任資料已過期。請確認電腦的日期與時間正確，再試一次。",
+          "signatureNotYetValid": "Navide 無法檢查這個 Navide 外掛：它的 Registry 簽章時間晚於這台電腦的時鐘。請確認電腦的日期與時間正確，再試一次。"
         }
       },
       "localInstall": {

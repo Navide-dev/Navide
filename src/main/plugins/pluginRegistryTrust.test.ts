@@ -353,6 +353,12 @@ describe('trust metadata time window (clock skew)', () => {
     })
   })
 
+  it('refuses metadata one second past the allowance (5:01)', () => {
+    expect(() => verify(signedEarlier, issued(TRUST_METADATA_CLOCK_SKEW_MS + 1000))).toThrow(
+      /^TRUST_METADATA_NOT_YET_VALID: /
+    )
+  })
+
   it('refuses metadata from a server ten minutes ahead as not valid yet, not as expired', () => {
     let error: unknown
     try {

@@ -2143,8 +2143,9 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide could not check this extension: the Registry's trust data is dated later than this computer's clock. Check that your computer's date and time are correct, then try again.",
-          "expired": "Navide could not check this extension: by this computer's clock, the Registry's trust data has expired. Check that your computer's date and time are correct, then try again."
+          "notYetValid": "Navide could not check this Navide plugin: the Registry's trust data is dated later than this computer's clock. Check that your computer's date and time are correct, then try again.",
+          "expired": "Navide could not check this Navide plugin: by this computer's clock, the Registry's trust data has expired. Check that your computer's date and time are correct, then try again.",
+          "signatureNotYetValid": "Navide could not check this Navide plugin: its Registry signature is dated later than this computer's clock. Check that your computer's date and time are correct, then try again."
         }
       },
       "localInstall": {
