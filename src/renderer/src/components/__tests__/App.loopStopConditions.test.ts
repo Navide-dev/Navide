@@ -55,6 +55,7 @@ function harness() {
     sysNotify: { notifyPaneState: notify }, i18n: { global: { t: (k: string) => k } },
     paneRefs: { p1: { sessionId: 's1', interrupt } }, persistPaneStopped,
     closePopover: vi.fn(), focusPaneFromNotification: vi.fn(), reclaimPaneFromMenu: vi.fn(), evolve: { openPanel: vi.fn() },
+    acp: { owns: () => false }, // lib/acpHost.ts: no ACP pane here
   }
   return { pane, watcher, loopLimitWatchers, loopGen, acquire, inject, notify, interrupt, persistPaneStopped, fns: appFunctions(scope) }
 }

@@ -331,7 +331,8 @@ async def test_abandon_with_nothing_running_or_starting_is_a_no_op(service) -> N
 
 async def test_the_window_closes_a_starting_pane_by_pane_id(fresh_service, monkeypatch, tmp_path) -> None:
     launch = AcpLaunch(argv=tuple(_argv("slow_start")))
-    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=launch, spawn_env_defaults=()))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: launch)
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(spawn_env_defaults=()))
     window = FakeWindow()
     try:
         creating = asyncio.ensure_future(
@@ -347,3 +348,38 @@ async def test_the_window_closes_a_starting_pane_by_pane_id(fresh_service, monke
         assert acp_ws.get_service().list() == []
     finally:
         await acp_ws.shutdown()
+
+
+async def test_two_starts_for_one_pane_both_end_when_it_is_closed(service, registry, tmp_path) -> None:
+    """The closed mark must outlive the first start to end, or the second one runs on."""
+    first = asyncio.ensure_future(
+        service.create(pane_id="p1", agent_key="fake", argv=_argv("slow_start"), cwd=str(tmp_path))
+    )
+    second = asyncio.ensure_future(
+        service.create(pane_id="p1", agent_key="fake", argv=_argv("slow_start"), cwd=str(tmp_path))
+    )
+    await _until(lambda: len(service.list()) == 2)
+
+    assert await service.abandon("p1") is True  # stops one of them; both are marked
+    for task in (first, second):
+        with pytest.raises(AcpStartError) as err:
+            await asyncio.wait_for(task, 10)
+        assert err.value.code in ("acp-cancelled", "acp-handshake-failed")
+    assert service.list() == []
+    assert not any(_alive(pid) for pid in registry["register"])
+    assert service._creating == {} and service._abandoned == set()
+
+
+async def test_a_start_under_way_at_shutdown_never_leaves_its_agent_running(service, registry, tmp_path) -> None:
+    task = asyncio.ensure_future(
+        service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+    )
+    await asyncio.sleep(0)  # under way, nothing spawned yet
+
+    await service.kill_all()
+
+    with pytest.raises(AcpStartError) as err:
+        await asyncio.wait_for(task, 10)
+    assert err.value.code == "acp-cancelled"
+    assert len(registry["register"]) == 1 and not _alive(registry["register"][0])
+    assert service.list() == []

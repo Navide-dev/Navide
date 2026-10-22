@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ACP_PART_MAX,
   acpDisplayStatus,
   acpMessagingHoldKey,
   acpTerminalStatus,
@@ -63,17 +64,29 @@ describe('applyAcpUpdate / transcriptText', () => {
     applyAcpUpdate(entries, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } })
     applyAcpUpdate(entries, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ', world' } })
 
-    // One part per chunk: a long stream appends small pieces, never rewrites one string.
-    expect(entries).toEqual([{ role: 'user', parts: ['hi'] }, { role: 'agent', parts: ['Hello', ', world'] }])
+    // Chunks join the last part while it stays under ACP_PART_MAX.
+    expect(entries).toEqual([{ role: 'user', parts: ['hi'] }, { role: 'agent', parts: ['Hello, world'] }])
     expect(transcriptText(entries)).toBe('> hi\nHello, world')
   })
 
-  it('leaves a refused prompt out of the pane text and starts a new entry after it', () => {
-    const entries: TranscriptEntry[] = [{ role: 'user', parts: ['lost'], unsent: true }]
+  it('starts a new part once the last one would pass ACP_PART_MAX', () => {
+    const entries: TranscriptEntry[] = []
+    applyAcpUpdate(entries, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'a'.repeat(ACP_PART_MAX - 1) } })
+    applyAcpUpdate(entries, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'b' } })
+    applyAcpUpdate(entries, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'c' } })
+
+    expect(entries[0].parts.map((p) => p.length)).toEqual([ACP_PART_MAX, 1])
+  })
+
+  it('keeps an unconfirmed prompt in the pane text (the agent may have it), and a refused one out', () => {
+    const entries: TranscriptEntry[] = [
+      { role: 'user', parts: ['maybe'], delivery: 'unconfirmed' },
+      { role: 'user', parts: ['lost'], delivery: 'unsent' },
+    ]
     applyAcpUpdate(entries, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'again' } })
 
-    expect(entries).toHaveLength(2)
-    expect(transcriptText(entries)).toBe('> again')
+    expect(entries).toHaveLength(3)
+    expect(transcriptText(entries)).toBe('> maybe\n> again')
   })
 
   it('keeps one entry per tool call, updated in place', () => {

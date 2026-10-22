@@ -364,8 +364,6 @@ const showContinueButton = computed<boolean>(
 )
 
 defineExpose({
-  // Which kind of pane App.vue is holding (lib/paneHandle.ts): this one runs the CLI's own TUI in a PTY.
-  display: 'tui' as const,
   spawn: terminal.spawn,
   interrupt: terminal.interrupt,
   kill: terminal.kill,
