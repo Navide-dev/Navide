@@ -25,7 +25,10 @@ def _windows_ci_fd_trace(request: pytest.FixtureRequest, monkeypatch: pytest.Mon
     """Windows CI only: record every os.close (fd, test, call site) in
     test-results/ci/acp-fd-trace.log (uploaded with the backend diagnostics),
     to prove or rule out an fd closed twice or closed under someone else
-    (pytest's own stdout fd went bad once, after an abandoned slow start)."""
+    (pytest's own stdout fd went bad once, after an abandoned slow start).
+    It sees C runtime fds only: asyncio's Windows pipe handles are closed with
+    CloseHandle (_overlapped / _winapi), which never passes through os.close
+    and so never shows up here."""
     if sys.platform != "win32" or not os.environ.get("CI"):
         yield
         return
@@ -40,13 +43,15 @@ def _windows_ci_fd_trace(request: pytest.FixtureRequest, monkeypatch: pytest.Mon
             f.write(line + "\n")
 
     def traced_close(fd: int) -> None:
-        frames = [
-            f"{Path(fr.filename).name}:{fr.lineno} {fr.name}"
-            for fr in traceback.extract_stack(limit=8)[:-1]
-            if "agent_team_backend" in fr.filename or "asyncio" in fr.filename or "subprocess" in fr.filename
-        ]
-        write(f"  close fd={fd} <- {' | '.join(frames) or '(outside backend/asyncio)'}")
-        real_close(fd)
+        try:
+            frames = [
+                f"{Path(fr.filename).name}:{fr.lineno} {fr.name}"
+                for fr in traceback.extract_stack(limit=8)[:-1]
+                if "agent_team_backend" in fr.filename or "asyncio" in fr.filename or "subprocess" in fr.filename
+            ]
+            write(f"  close fd={fd} <- {' | '.join(frames) or '(outside backend/asyncio)'}")
+        finally:
+            real_close(fd)  # the close itself happens whether or not the trace was written
 
     std = []
     for name in ("stdout", "stderr"):
