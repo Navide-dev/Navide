@@ -627,6 +627,15 @@ async def pane_git(pane_id: str, workspace_path: str) -> dict[str, Any] | None:
     return snapshot if snapshot.get("worktreeRoot") else None
 
 
+def pane_git_cached(pane_id: str, workspace_path: str) -> dict[str, Any] | None:
+    """The pane's last git snapshot without waiting (see PaneGitSnapshots.peek),
+    or None outside a repository or before the first one is computed."""
+    from agent_team_backend import git_service
+
+    snapshot = git_service.pane_git_snapshots.peek(_pane_cwd(pane_id) or workspace_path)
+    return snapshot if snapshot is not None and snapshot.get("worktreeRoot") else None
+
+
 async def _with_git(views: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Add `git` to each local target view that has one, in place."""
     snapshots = await asyncio.gather(

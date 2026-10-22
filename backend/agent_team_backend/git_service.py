@@ -7,6 +7,7 @@ never blocked.  No gitpython or other heavy dependency is required.
 from __future__ import annotations
 
 import asyncio
+import copy
 import functools
 import glob
 import json
@@ -330,6 +331,52 @@ async def _read_status_after(
     return await _read_status(workspace_path, include_ignored)
 
 
+# The Git pane re-reads log, branches, stashes, remotes, tags and worktrees on
+# every git.changed, once per Git pane instance (each editor window, each repo
+# of a multi-repo view). Only status was shared; the other reads share a run
+# the same way through ``coalesced``.
+_coalesce_running: dict[tuple[Any, ...], asyncio.Future[Any]] = {}
+_coalesce_queued: dict[tuple[Any, ...], asyncio.Future[Any]] = {}
+
+
+async def coalesced(key: tuple[Any, ...], read: Callable[[], Awaitable[Any]]) -> Any:
+    """Run *read* once for every concurrent caller with the same *key*.
+
+    Same rule as get_status: a caller that arrives while a run is going waits
+    for one queued run that starts after it, so it never gets a result from
+    before the change that prompted it. Each caller gets its own copy.
+    """
+    full = (asyncio.get_running_loop(), *key)
+    task = _coalesce_queued.get(full)
+    if task is None:
+        running = _coalesce_running.get(full)
+        if running is None:
+            task = asyncio.ensure_future(read())
+            _coalesce_running[full] = task
+        else:
+            task = asyncio.ensure_future(_coalesced_after(running, full, read))
+            _coalesce_queued[full] = task
+        task.add_done_callback(lambda done: _forget_coalesced(full, done))
+    return copy.deepcopy(await asyncio.shield(task))
+
+
+def _forget_coalesced(key: tuple[Any, ...], done: asyncio.Future[Any]) -> None:
+    for table in (_coalesce_running, _coalesce_queued):
+        if table.get(key) is done:
+            del table[key]
+
+
+async def _coalesced_after(
+    previous: asyncio.Future[Any], key: tuple[Any, ...], read: Callable[[], Awaitable[Any]]
+) -> Any:
+    await asyncio.wait([previous])
+    this = asyncio.current_task()
+    assert this is not None
+    _coalesce_queued.pop(key, None)
+    _coalesce_running[key] = this
+    return await read()
+
+
 async def _read_status(workspace_path: str, include_ignored: bool) -> dict[str, Any]:
     if not workspace_path or not Path(workspace_path).is_dir():
         return asdict(GitStatus(is_git_repo=False))
@@ -337,8 +384,10 @@ async def _read_status(workspace_path: str, include_ignored: bool) -> dict[str, 
     # Verify it's a git repo. Only git's own answer means "not a repo": a check
     # that timed out or could not start is a failure to report (#144). The C
     # locale keeps that answer in English whatever the user's language.
-    rc, _, err = await _run(
-        ["git", "rev-parse", "--is-inside-work-tree"],
+    # --git-dir rides along (one process instead of two): it locates the
+    # in-progress operation markers read after the status below.
+    rc, rev_parse_out, err = await _run(
+        ["git", "rev-parse", "--is-inside-work-tree", "--git-dir"],
         workspace_path,
         env={**os.environ, "LC_ALL": "C"},
     )
@@ -404,8 +453,9 @@ async def _read_status(workspace_path: str, include_ignored: bool) -> dict[str, 
                     status.unstaged.append(GitFileEntry(path=path, status=y))
 
     # Detect an in-progress operation so the UI can offer an Abort action.
-    rc, git_dir_out, _ = await _run(["git", "rev-parse", "--git-dir"], workspace_path)
-    if rc == 0 and git_dir_out.strip():
+    rev_parse_lines = rev_parse_out.splitlines()
+    git_dir_out = rev_parse_lines[1] if len(rev_parse_lines) > 1 else ""
+    if git_dir_out.strip():
         git_dir = Path(workspace_path) / git_dir_out.strip()
         if (git_dir / "rebase-merge").is_dir() or (git_dir / "rebase-apply").is_dir():
             status.operation_in_progress = "rebase"
@@ -601,6 +651,9 @@ class PaneGitSnapshots:
         #: -> (snapshot, computed_at)
         self._entries: dict[str, tuple[dict[str, Any], float]] = {}
         self._inflight: dict[str, asyncio.Task[dict[str, Any]]] = {}
+        #: Same keys as _entries -> (last snapshot, when it was computed). Kept
+        #: across invalidate, for ``peek``.
+        self._last: dict[str, tuple[dict[str, Any], float]] = {}
         #: Bumped by every invalidate, so a computation that was already running
         #: when the change landed is stored as stale instead of as fresh.
         self._generation = 0
@@ -628,6 +681,21 @@ class PaneGitSnapshots:
         # not cancel the computation every other reader of this root is sharing.
         return dict(await asyncio.shield(task))
 
+    def peek(self, path: str) -> dict[str, Any] | None:
+        """The last snapshot for *path*, without waiting; None before the first.
+
+        For a decoration polled every few seconds (the network view): it is
+        answered from what was last computed, even after a change, and a
+        refresh starts in the background only when that is older than the
+        TTL. A git.changed burst therefore no longer re-runs git on each poll;
+        ``get`` stays the read that waits for a current answer.
+        """
+        key = self._key_for(path)
+        last = self._last.get(key)
+        if (last is None or self._clock() - last[1] >= self._ttl_s) and key not in self._inflight:
+            self._inflight[key] = asyncio.ensure_future(self._refresh(path, key))
+        return dict(last[0]) if last is not None else None
+
     async def _refresh(self, path: str, key: str) -> dict[str, Any]:
         generation = self._generation
         try:
@@ -641,6 +709,7 @@ class PaneGitSnapshots:
         self._root_of[path] = root
         computed_at = self._clock() if generation == self._generation else float("-inf")
         self._entries[root or path] = (snapshot, computed_at)
+        self._last[root or path] = (snapshot, self._clock())
         return snapshot
 
     def invalidate(self, changed_path: str) -> None:

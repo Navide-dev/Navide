@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Backend: fewer Git processes while agents work. The network view's pane branches are answered from the last reading and refreshed in the background, no more than once per 30 seconds per repository. The Git pane's history, branch, stash, remote, tag and worktree reads are shared when several Git panes reload together after one change. Each status read now runs two Git commands instead of three.
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added
