@@ -501,3 +501,21 @@ async def test_a_failing_registry_cleanup_still_reports_the_exit(launchable, mon
         assert sid not in acp_ws._OWNERS and sid not in acp_ws._CREATORS
     finally:
         await acp_ws.shutdown()
+
+
+async def test_an_agent_whose_child_holds_its_output_open_is_still_seen_to_exit(service, tmp_path, monkeypatch) -> None:
+    """A child that inherited the agent's stdout keeps the pipe open after the
+    agent exits; proc.wait() never returns then. The exit is still seen (the
+    return code), the pane says so, and the child is ended with the group."""
+    pidfile = tmp_path / "pids"
+    monkeypatch.setenv("ACP_FAKE_PIDFILE", str(pidfile))
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("orphan_pipe"), cwd=str(tmp_path))
+    await _until(pidfile.exists)
+    agent, child = (int(p) for p in pidfile.read_text().split())
+
+    await service.prompt(session.id, "go")  # the agent exits; its child holds the pipe
+    await _until(lambda: service.events.of("acp.exit"), timeout=10)
+
+    assert service.events.states()[-1] == "exited"
+    await _until(lambda: not _alive(agent) and not _alive(child))
+    assert service.list() == []

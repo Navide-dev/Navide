@@ -20,6 +20,8 @@ that gets "<own pid> <child pid>":
   stubborn        like child, but ignore stdin EOF and SIGTERM
   breakaway       start a grandchild in a session of its own (setsid); exit on
                   the first prompt, as an agent that dies on its own
+  orphan_pipe     start a grandchild in the agent's own group that keeps the
+                  agent's stdout open; exit on the first prompt
 
 The session id is "s-1"; session/load replays one user and one agent chunk.
 Standard library only; it reads stdin line by line in one thread.
@@ -70,7 +72,7 @@ def ask(method: str, params: dict) -> dict:
 
 
 def prompt(request_id) -> None:
-    if SCENARIO == "breakaway":
+    if SCENARIO in ("breakaway", "orphan_pipe"):
         os._exit(0)
     if SCENARIO == "bad_lines":
         sys.stdout.write("this is not json\n")
@@ -122,7 +124,7 @@ def start_child() -> None:
 
 
 def main() -> None:
-    if SCENARIO in ("child", "stubborn", "breakaway"):
+    if SCENARIO in ("child", "stubborn", "breakaway", "orphan_pipe"):
         start_child()
         if SCENARIO == "stubborn" and hasattr(signal, "SIGTERM"):
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
