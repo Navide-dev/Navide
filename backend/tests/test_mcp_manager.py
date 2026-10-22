@@ -867,10 +867,13 @@ class TestColdStart:
             while time.monotonic() < deadline:
                 await asyncio.sleep(0.1)
                 rows = await manager.list_status()
-                if rows and rows[0].get("slow_start"):
+                # The row leaves stderr_tail out until the server's first stderr
+                # line has been read; on a slow Windows start, slow_start is
+                # already set before that, so wait for both.
+                if rows and rows[0].get("slow_start") and rows[0].get("stderr_tail"):
                     entry = rows[0]
                     break
-            assert entry is not None, "a slow start is disclosed while it lasts"
+            assert entry is not None, "a slow start is disclosed, with its stderr, while it lasts"
             assert entry["status"] == "starting"
             assert entry["starting_seconds"] >= 0
             assert "will be installed" in entry["stderr_tail"]

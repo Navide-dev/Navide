@@ -1,0 +1,70 @@
+{
+  "browser": {
+    "app": {
+      "title": "Navide Browser"
+    },
+    "overview": {
+      "title": "Navide Browser – Spaces",
+      "new": "Neuer Space",
+      "pending": "{count} erfordern Ihre Aktion",
+      "open-count": "{count} geöffnet, jeder belegt Arbeitsspeicher",
+      "empty": "Noch keine Spaces. Erstellen Sie einen mit ＋, oder ein Agent öffnet beim ersten Browsen seinen eigenen. Agents verwenden Ihre Anmeldungen im Navide Browser (sie können auf Websites in Ihrem Namen Anfragen senden)."
+    },
+    "state": {
+      "idle": "Leerlauf",
+      "running": "Läuft",
+      "need-action": "Ihre Aktion erforderlich",
+      "done": "Fertig"
+    },
+    "owner": {
+      "agent": "Agent",
+      "user": "Sie"
+    },
+    "space": {
+      "all": "Alle Spaces",
+      "yours": "Ihr Space: Agents können ihn nur verwenden, wenn Sie es erlauben",
+      "default-name": "Space {n}"
+    },
+    "nav": {
+      "back": "Zurück",
+      "forward": "Vorwärts",
+      "reload": "Neu laden",
+      "stop": "Stoppen",
+      "address": "URL eingeben"
+    },
+    "control": {
+      "agent": "Agent hat die Kontrolle",
+      "user": "Sie haben die Kontrolle",
+      "yours": "Ihr Space"
+    },
+    "action": {
+      "take-over": "Übernehmen",
+      "hand-back": "An den Agent zurückgeben",
+      "delegate": "Agent diesen Space verwenden lassen",
+      "reclaim": "Diesen Space zurücknehmen",
+      "close": "Space schließen",
+      "delegate-note": "Agents in jedem pane und jedem Arbeitsbereich können ihn verwenden"
+    },
+    "agent-script": {
+      "warning": "Auf dieser Seite laufen möglicherweise noch Agent-Skripte. Laden Sie sie neu, bevor Sie ein Passwort oder einen Bestätigungscode eingeben.",
+      "reload": "Neu laden",
+      "keep": "Seite behalten"
+    },
+    "settings": {
+      "title": "Einstellungen",
+      "shared-sign-in": "Alle Spaces teilen dieselben Anmeldungen, die auf diesem Computer gespeichert sind. Agents verwenden Ihre Anmeldungen im Navide Browser (sie können auf Websites in Ihrem Namen Anfragen senden). Nachdem Sie übernommen haben, stoppen bereits laufende Agent-Skripte auf einer Seite erst, wenn Sie sie neu laden.",
+      "clear-data": "Alle Anmeldedaten löschen",
+      "clear-data-confirm": "Erneut klicken, um sich im Navide Browser von allen Websites abzumelden",
+      "clear-data-done": "Anmeldedaten gelöscht.",
+      "cancel": "Abbrechen"
+    },
+    "left": {
+      "open": "Navide Browser öffnen",
+      "empty": "Noch keine Spaces."
+    },
+    "errors": {
+      "generic": "Etwas ist schiefgelaufen ({code}).",
+      "invalid-address": "Geben Sie eine http- oder https-Adresse ein."
+    }
+  }
+}

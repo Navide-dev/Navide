@@ -22,47 +22,87 @@ FAKE_AGENT = Path(__file__).with_name("fake_acp_agent.py")
 
 @pytest.fixture(autouse=True)
 def _windows_ci_fd_trace(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
-    """Windows CI only: record every os.close (fd, test, call site) in
-    test-results/ci/acp-fd-trace.log (uploaded with the backend diagnostics),
-    to prove or rule out an fd closed twice or closed under someone else
-    (pytest's own stdout fd went bad once, after an abandoned slow start).
-    It sees C runtime fds only: asyncio's Windows pipe handles are closed with
-    CloseHandle (_overlapped / _winapi), which never passes through os.close
-    and so never shows up here."""
+    """Windows CI only: trace C runtime fds in test-results/ci/acp-fd-trace.log
+    (uploaded with the backend diagnostics), to settle the Bad file descriptor
+    INTERNALERROR pytest hit once on Windows CI after an ACP start test.
+
+    Recorded: every os.close (fd, test, call stack — the full stack for one
+    that came from neither the backend nor asyncio, and whether the garbage
+    collector was running), every os.open / os.dup / os.dup2 /
+    msvcrt.open_osfhandle (the fd it made and who asked), pytest's own
+    stdout/stderr fds per test, and exceptions raised in __del__
+    (sys.unraisablehook). It sees C runtime fds only: asyncio's Windows pipe
+    handles are closed with CloseHandle (_overlapped / _winapi), which never
+    passes through os.close."""
     if sys.platform != "win32" or not os.environ.get("CI"):
         yield
         return
+    import gc
     import traceback
 
     trace = Path(__file__).resolve().parents[2] / "test-results" / "ci" / "acp-fd-trace.log"
     trace.parent.mkdir(parents=True, exist_ok=True)
-    real_close = os.close
+    collecting = {"now": False}
 
     def write(line: str) -> None:
         with open(trace, "a", encoding="utf-8") as f:
             f.write(line + "\n")
 
-    def traced_close(fd: int) -> None:
+    def stack(full: bool = False) -> str:
+        frames = traceback.extract_stack(limit=30)[:-2]
+        ours = [fr for fr in frames if "agent_team_backend" in fr.filename or "asyncio" in fr.filename
+                or "subprocess" in fr.filename]
+        shown = frames if full or not ours else ours
+        return " | ".join(f"{Path(fr.filename).name}:{fr.lineno} {fr.name}" for fr in shown)
+
+    def wrap(name: str, real, made_fd: bool):
+        def traced(*args, **kwargs):
+            if not made_fd:  # os.close: record, then always close
+                try:
+                    ours = any("agent_team_backend" in fr.filename or "asyncio" in fr.filename
+                               for fr in traceback.extract_stack(limit=30)[:-1])
+                    write(f"  {name} fd={args[0]} gc={collecting['now']} <- {stack(full=not ours)}")
+                finally:
+                    return real(*args, **kwargs)
+            result = real(*args, **kwargs)
+            try:
+                write(f"  {name}{args[:2]!r} -> fd={result} gc={collecting['now']} <- {stack()}")
+            except Exception:  # noqa: BLE001 — tracing never changes the call
+                pass
+            return result
+        return traced
+
+    def on_gc(phase: str, _info: dict) -> None:
+        collecting["now"] = phase == "start"
+
+    previous_hook = sys.unraisablehook
+
+    def unraisable(hook_args) -> None:
         try:
-            frames = [
-                f"{Path(fr.filename).name}:{fr.lineno} {fr.name}"
-                for fr in traceback.extract_stack(limit=8)[:-1]
-                if "agent_team_backend" in fr.filename or "asyncio" in fr.filename or "subprocess" in fr.filename
-            ]
-            write(f"  close fd={fd} <- {' | '.join(frames) or '(outside backend/asyncio)'}")
+            write(f"  __del__ raised {hook_args.exc_type.__name__}: {hook_args.exc_value} in {hook_args.object!r}")
         finally:
-            real_close(fd)  # the close itself happens whether or not the trace was written
+            previous_hook(hook_args)
 
     std = []
-    for name in ("stdout", "stderr"):
+    for stream in ("stdout", "stderr"):
         try:
-            std.append(f"{name}={getattr(sys, name).fileno()}")
+            std.append(f"{stream}={getattr(sys, stream).fileno()}")
         except Exception as err:  # noqa: BLE001
-            std.append(f"{name}=? ({err})")
+            std.append(f"{stream}=? ({err})")
     write(f"== {request.node.nodeid} [{', '.join(std)}]")
-    monkeypatch.setattr(os, "close", traced_close)
-    yield
-    write(f"-- end {request.node.nodeid}")
+    monkeypatch.setattr(os, "close", wrap("close", os.close, made_fd=False))
+    for name in ("open", "dup", "dup2"):
+        monkeypatch.setattr(os, name, wrap(name, getattr(os, name), made_fd=True))
+    import msvcrt
+
+    monkeypatch.setattr(msvcrt, "open_osfhandle", wrap("open_osfhandle", msvcrt.open_osfhandle, made_fd=True))
+    monkeypatch.setattr(sys, "unraisablehook", unraisable)
+    gc.callbacks.append(on_gc)
+    try:
+        yield
+    finally:
+        gc.callbacks.remove(on_gc)
+        write(f"-- end {request.node.nodeid}")
 
 
 def _argv(scenario: str) -> list[str]:
@@ -861,4 +901,41 @@ async def test_the_ownerless_deadline_is_not_lost_to_float_rounding(launchable, 
         assert await acp_ws.sweep_ownerless(now=since + app._OWNERLESS_GRACE_SEC) == [sid]
     finally:
         await acp_ws.shutdown()
+
+
+async def test_an_ended_agents_pipes_are_closed_now_not_by_the_garbage_collector(service, tmp_path, monkeypatch) -> None:
+    """Killed, or exited on its own: its transport is closed explicitly (on
+    POSIX asyncio may close it too once every pipe is gone; on Windows that is
+    left to __del__, which is what this rules out)."""
+    closed: list[Any] = []
+    real = acp_sessions._close_transport
+
+    def spy(proc: Any) -> None:
+        real(proc)
+        closed.append(proc)
+
+    monkeypatch.setattr(acp_sessions, "_close_transport", spy)
+    killed = await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+    await service.kill(killed.id)
+    exited = await service.create(pane_id="p2", agent_key="fake", argv=_argv("exit"), cwd=str(tmp_path))
+    await service.prompt(exited.id, "x")
+    await _until(lambda: service.get(exited.id) is None)
+
+    assert killed.proc in closed and exited.proc in closed
+    assert killed.proc._transport.is_closing() and exited.proc._transport.is_closing()  # noqa: SLF001
+
+
+async def test_a_failed_start_closes_its_pipes_too(service, tmp_path, monkeypatch) -> None:
+    closed: list[Any] = []
+    real = acp_sessions._close_transport
+
+    def spy(proc: Any) -> None:
+        real(proc)
+        closed.append(proc._transport)  # noqa: SLF001
+
+    monkeypatch.setattr(acp_sessions, "_close_transport", spy)
+    with pytest.raises(AcpStartError):
+        await service.create(pane_id="p1", agent_key="fake", argv=_argv("version2"), cwd=str(tmp_path))
+
+    assert closed and all(t.is_closing() for t in closed)
 
