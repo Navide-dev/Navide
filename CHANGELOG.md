@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Open workspaces (Welcome badges, `ui_snapshot` `openWorkspaces`) list each folder once. A folder that is both a window's own workspace and one it adopted was listed twice. Paths are compared resolved, without a trailing slash, and case-insensitively on Windows; `~` is not expanded. (#448)
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added
