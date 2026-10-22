@@ -27,6 +27,13 @@ export interface RendererCrashWatchOptions {
 export const RENDERER_RELOAD_MAX = 3
 export const RENDERER_RELOAD_WINDOW_MS = 60_000
 
+const crashWatched = new WeakSet<object>()
+
+/** Whether watchRendererCrashes already logs this WebContents' renderer going away. */
+export function isRendererCrashWatched(contents: object): boolean {
+  return crashWatched.has(contents)
+}
+
 /**
  * Reload a window whose renderer process died, so it reconnects and its panes
  * reattach to the PTYs the backend kept alive. Without this a killed renderer
@@ -36,13 +43,6 @@ export const RENDERER_RELOAD_WINDOW_MS = 60_000
  * Bounded: a renderer that keeps crashing is reloaded at most `maxReloads`
  * times per `windowMs`, then left as it is so a crash loop cannot spin.
  */
-const crashWatched = new WeakSet<object>()
-
-/** Whether watchRendererCrashes already logs this WebContents' renderer going away. */
-export function isRendererCrashWatched(contents: object): boolean {
-  return crashWatched.has(contents)
-}
-
 export function watchRendererCrashes(win: CrashWatchedWindow, opts: RendererCrashWatchOptions): void {
   const now = opts.now ?? Date.now
   const maxReloads = opts.maxReloads ?? RENDERER_RELOAD_MAX

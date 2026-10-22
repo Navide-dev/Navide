@@ -25,15 +25,14 @@ let customLogDir: string | null = null
  * line costs one append syscall and nothing else. `logMain` is called once per
  * stderr line of a plugin backend child, so anything it does per call runs on
  * the main thread once per line of a crash-looping backend's output.
- * `trackedLogPath` is null whenever the count cannot be trusted — before the
- * first write, after a configuration change, and after a failed write.
+ * Kept per log file path (main.log, renderer-console.log); a path is absent
+ * whenever its count cannot be trusted — before the first write, after a
+ * configuration change, and after a failed write.
  */
-let trackedLogPath: string | null = null
-let trackedActiveBytes = 0
+const trackedActiveBytes = new Map<string, number>()
 
 function invalidateSizeBookkeeping(): void {
-  trackedLogPath = null
-  trackedActiveBytes = 0
+  trackedActiveBytes.clear()
 }
 
 export function setMaxDiagnosticLogBytes(bytes: number): void {
@@ -206,10 +205,23 @@ function writeLogEntry(dir: string, logPath: string, entry: string, replace: boo
  * design: a logging failure must never take down the caller.
  */
 export function logMain(line: string): void {
+  appendRotatingLog('main.log', line)
+}
+
+/**
+ * Append one timestamped line to `<userData>/logs/renderer-console.log`, which
+ * rotates exactly as main.log does but separately, so a window's console can
+ * never push main.log's startup and recovery evidence out.
+ */
+export function logRendererConsole(line: string): void {
+  appendRotatingLog('renderer-console.log', line)
+}
+
+function appendRotatingLog(fileName: string, line: string): void {
   try {
     const dir = customLogDir ?? join(app.getPath('userData'), 'logs')
-    const logPath = join(dir, 'main.log')
-    const rotatedPath = join(dir, 'main.log.1')
+    const logPath = join(dir, fileName)
+    const rotatedPath = join(dir, `${fileName}.1`)
 
     const halfCapacity = Math.max(128, Math.floor(configuredMaxLogBytes / 2))
     const rawEntry = `${new Date().toISOString()} ${line}`
@@ -227,14 +239,14 @@ export function logMain(line: string): void {
       entryBytes = rawEntryBytes
     }
 
-    if (trackedLogPath !== logPath) {
-      trackedActiveBytes = initializeSizeBookkeeping(dir, logPath, rotatedPath, halfCapacity)
-      trackedLogPath = logPath
+    let activeBytes = trackedActiveBytes.get(logPath)
+    if (activeBytes === undefined) {
+      activeBytes = initializeSizeBookkeeping(dir, logPath, rotatedPath, halfCapacity)
     }
 
     // Both files are held at or below `halfCapacity` by construction, so the
     // total stays within capacity without re-measuring anything per line.
-    const rotate = trackedActiveBytes + entryBytes > halfCapacity
+    const rotate = activeBytes + entryBytes > halfCapacity
     if (rotate) {
       try {
         renameSync(logPath, rotatedPath)
@@ -245,7 +257,7 @@ export function logMain(line: string): void {
     }
 
     writeLogEntry(dir, logPath, entry, rotate)
-    trackedActiveBytes = rotate ? entryBytes : trackedActiveBytes + entryBytes
+    trackedActiveBytes.set(logPath, rotate ? entryBytes : activeBytes + entryBytes)
   } catch {
     /* observability is never worth a crash */
     invalidateSizeBookkeeping()

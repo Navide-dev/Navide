@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
   logMain,
+  logRendererConsole,
   warnMain,
   infoMain,
   errorMain,
@@ -32,6 +33,20 @@ describe('durable plugin diagnostic persistence in main-log', () => {
     } catch {
       /* ignore */
     }
+  })
+
+  it('writes renderer console lines to their own rotating file, never to main.log', () => {
+    setMaxDiagnosticLogBytes(1024)
+    logMain('[main] startup evidence')
+    for (let i = 0; i < 40; i++) logRendererConsole(`[renderer-console] error wc=1 type=window src=x:1 flood ${i}`)
+
+    const main = readFileSync(join(tempDir, 'main.log'), 'utf8')
+    expect(main).toContain('[main] startup evidence')
+    expect(main).not.toContain('flood')
+    expect(existsSync(join(tempDir, 'main.log.1'))).toBe(false)
+    expect(readFileSync(join(tempDir, 'renderer-console.log'), 'utf8')).toContain('flood 39')
+    expect(existsSync(join(tempDir, 'renderer-console.log.1'))).toBe(true)
+    expect(statSync(join(tempDir, 'renderer-console.log')).size).toBeLessThanOrEqual(512)
   })
 
   it('keeps backend lifecycle info and errors in main.log, not only on stdout', () => {

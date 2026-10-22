@@ -6,7 +6,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Changed
 
-- Diagnostics: `main.log` now records every window's console warnings and errors (one line each, at most 1000 bytes, at most 20 per window every 10 seconds, with a line counting the rest), any renderer that goes away in a window that did not log it already, and a GPU or other child process that dies. Console info, log and debug lines are not recorded, and neither is the console of a web page opened in Navide.
+- Diagnostics: console warnings and errors from Navide's own pages now go to `renderer-console.log` in the logs folder. It rotates like `main.log` but separately, so it cannot push `main.log` out. Messages are recorded whole, one line each. A message repeated back to back is written once and then counted. Only the main frame of a `file:` page, a plugin frame or the dev server is recorded. Never recorded: subframes (plan HTML, file previews), web pages, `about:blank`, `data:`, `blob:`, error pages, and console info, log or debug lines. `main.log` now also records any renderer that goes away in a window that did not log it already, and a GPU or other child process that dies.
 
 ## [0.2.28] — 2026-10-21 — signed release
 

@@ -173,7 +173,7 @@ import {
 import { resolveBackendDataDir, readUiSettingsText, UI_SETTINGS_FILE } from './ui-settings-bootstrap'
 import { PlanWindowRegistry } from './plan-windows'
 import { createTokenMonitorWindowOpener } from './token-monitor-window'
-import { errorMain, infoMain, logMain, warnMain } from './main-log'
+import { errorMain, infoMain, logMain, logRendererConsole, warnMain } from './main-log'
 import { isRendererCrashWatched, watchRendererCrashes } from './renderer-crash-reload'
 import { watchConsoleMessages, watchProcessGone } from './renderer-diagnostics'
 import { recordMainFault, setMainLedgerDataDir } from './error-ledger'
@@ -5880,9 +5880,9 @@ app.on('web-contents-created', (_e, contents) => {
   // Electron has no default right-click menu; without this one, right-click is
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
-  // Every window's console warnings and errors reach main.log (a black window
-  // on Windows left no trace before); web pages' own consoles are skipped.
-  watchConsoleMessages(contents, { log: logMain, appOrigin: DEV_ORIGIN })
+  // Every window's console warnings and errors reach renderer-console.log (a
+  // black window on Windows left no trace before); only Navide's own pages.
+  watchConsoleMessages(contents, { log: logRendererConsole, appOrigin: DEV_ORIGIN })
   contents.on('will-navigate', (e, url) => {
     // A plugin web view enforces its own http(s) allowlist (pluginWebViews.ts).
     if (isPluginWebGuest(contents)) return
