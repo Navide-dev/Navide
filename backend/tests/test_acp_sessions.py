@@ -222,9 +222,6 @@ def test_the_agents_stderr_log_is_owner_only(tmp_path) -> None:
     assert asyncio.run(run()) == 0o600
 
 
-# ── acp.* requests ───────────────────────────────────────────────────────
-
-
 class FakeWindow:
     def __init__(self) -> None:
         self.sent: list[dict[str, Any]] = []
@@ -388,9 +385,6 @@ async def test_a_start_under_way_at_shutdown_never_leaves_its_agent_running(serv
     assert err.value.code == "acp-cancelled"
     assert len(registry["register"]) == 1 and not _alive(registry["register"][0])
     assert service.list() == []
-
-
-# -- #586 review: no process outlives a start; ownership like a PTY's -------------
 
 
 async def test_a_start_cancelled_during_the_handshake_leaves_nothing_running(service, registry, tmp_path) -> None:
@@ -559,7 +553,6 @@ async def test_on_its_own_exit_the_recorded_descendants_are_ended(service, tmp_p
     assert {4242: "id-4242"} in ended
 
 
-
 async def test_only_the_window_starting_a_pane_may_close_it_by_pane_id(fresh_service, monkeypatch, tmp_path) -> None:
     launch = AcpLaunch(argv=tuple(_argv("slow_start")))
     monkeypatch.setattr(acp_ws, "acp_launch", lambda key: launch)
@@ -579,6 +572,8 @@ async def test_only_the_window_starting_a_pane_may_close_it_by_pane_id(fresh_ser
         assert window.result("m2")["payload"] == {"stopped": True}
         await asyncio.wait_for(creating, 10)
         assert acp_ws._STARTING == {}
+    finally:
+        await acp_ws.shutdown()
 
 
 async def test_the_ownerless_sweep_never_raises_into_the_janitor(launchable, monkeypatch) -> None:
