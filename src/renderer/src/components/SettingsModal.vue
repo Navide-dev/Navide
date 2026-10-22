@@ -2197,7 +2197,7 @@ interface McpServer {
   headers?: Record<string, string>
   enabled: boolean
   // Live fields (returned by backend, not saved):
-  status?: 'connected' | 'error' | 'disabled' | 'unknown'
+  status?: 'starting' | 'connected' | 'error' | 'disabled' | 'unknown'
   tool_count?: number; tools?: McpTool[]
 }
 // CatalogEntry type alias (re-exported from mcpCatalog.ts)

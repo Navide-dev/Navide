@@ -3672,6 +3672,10 @@ async def agent_reap_orphans(session: "Session", msg_id: str, msg_type: str, pay
 
 
 # ── MCP servers (mcp.*) ─────────────────────────────────────────────────────
+# Live MCP status fields passed through to Settings -> MCP as they are.
+_MCP_LIVE_DETAIL = ("starting_seconds", "slow_start", "error", "stderr_tail")
+
+
 @handler("mcp.list_servers")
 async def mcp_list_servers(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -3708,6 +3712,8 @@ async def mcp_list_servers(session: "Session", msg_id: str, msg_type: str, paylo
             "status": live_status,
             "tool_count": info.get("tool_count", 0),
             "tools": info.get("tools", []),
+            # Why it is still starting or why it failed (mcp_manager.list_status).
+            **{key: info[key] for key in _MCP_LIVE_DETAIL if key in info},
         })
     await session.send_json(
         make_response(

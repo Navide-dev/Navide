@@ -118,6 +118,19 @@ The Windows installer is not code-signed, so SmartScreen shows "Windows protecte
 
 Documentation injection is best-effort. Check the MCP configuration, package runtime, and network access. A failed fetch should not block a manual task; disable the integration if the workspace must remain offline.
 
+### An MCP server stays "starting" or fails to start
+
+A local (stdio) MCP server started through `npx` or `uvx` downloads its package the first time it runs, before it can answer Navide's handshake (`initialize`). Navide keeps waiting while the server's process is running, so a slow first download is not treated as a failure:
+
+- **Settings → MCP** shows the server as **starting**. After 15 seconds (`SLOW_START_NOTE_AFTER` in `backend/agent_team_backend/mcp_manager.py`) it adds a note saying how long it has waited and that a first `npx`/`uvx` run may be downloading the package. The page refreshes itself until the server connects or fails.
+- If the process exits before answering, the start fails at once and the reason gives its exit code.
+- If the process keeps running but never answers, Navide gives up after **300 seconds** (`STDIO_INIT_HARD_CAP`, same file). The cap is a safety net, not a limit on a slow server. Remote (`http`/`sse`) servers keep a 15-second handshake.
+- Servers start in parallel, so one slow server does not hold up the others.
+
+A failed server shows **Failed to start:** with the reason. It is tried again the next time the MCP configuration is reloaded, for example when you save a change in Settings → MCP.
+
+What a stdio server prints on stderr (npm's download messages, a crash) goes to `logs/mcp-<name>.log` in Navide's data folder: only the latest start is kept, and the file stays on this computer. Settings → MCP shows its last lines as **Last lines the server printed**. That text is the server's own output and may contain whatever the server chose to print. Navide itself writes nothing of the server's configuration there, and no `env` or `headers` values.
+
 ## Git authentication prompts do not complete
 
 - Verify the remote with `git remote -v`.
