@@ -10,7 +10,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Changed
 
-- MCP: `cli_get_status`, `cli_wait_idle` and `cli_send_and_wait` no longer give a Claude turn end that came from the Stop hook another turn's text. Until the conversation log is read, such a turn end has no `last_activity.text`; before, it could carry the previous turn's text. The backend log notes how far apart the hook and the log reported a turn's end (time and pane only).
+- MCP: `cli_get_status`, `cli_wait_idle` and `cli_send_and_wait` no longer give a Claude turn end that came from the Stop hook another turn's text. `cli_wait_idle` and `cli_send_and_wait` then wait up to 10 seconds more (`HOOK_TURN_TEXT_WAIT_S`, within `timeout_s`) for the conversation log's turn end and return its text. If it is still not read, they return with `text_pending: true` and no `last_activity.text`; before, such a turn end could carry the previous turn's text. Other CLIs, and turn ends the log reported itself, return at once as before. The backend log notes how far apart the hook and the log reported a turn's end (time and pane only).
 
 ## [0.2.28] — 2026-10-21 — signed release
 

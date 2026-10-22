@@ -286,11 +286,15 @@ def test_stop_hook_records_pane_activity_so_wait_idle_sees_it(
                 )
             )
         )
+        # A hook carries no text: the wait gives the log HOOK_TURN_TEXT_WAIT_S
+        # for it. Zero here, so what is pinned is that the hook alone settles it.
+        monkeypatch.setattr(plan_mcp, "HOOK_TURN_TEXT_WAIT_S", 0.0)
         result = asyncio.run(plan_mcp.cli_wait_idle("alpha/worker", ctx, timeout_s=5.0))
 
         assert result["idle"] is True
         assert result["source"] == "turn_complete"
         assert result["waited_s"] == 0.0
+        assert result["text_pending"] is True
     finally:
         agent_messaging._reset_for_test()
         app_module._pane_activity.clear()

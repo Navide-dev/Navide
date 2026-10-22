@@ -4221,6 +4221,38 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 _WAIT_IDLE_POLL_S = 1.0
 _WAIT_IDLE_QUIET_S = 10.0
 _WAIT_IDLE_MAX_TIMEOUT_S = 120.0
+# Claude's Stop hook reports a turn end before the conversation log is read, and
+# a hook carries no text. A wait that settles on such a turn end waits this much
+# longer (within its own timeout) for the log's turn end and its text, then
+# returns either way, with `text_pending` when the text has not been read yet.
+HOOK_TURN_TEXT_WAIT_S = 10.0
+_HOOK_TURN_TEXT_POLL_S = 0.25
+
+
+def _hook_turn_without_text(activity: dict[str, Any] | None) -> bool:
+    return bool(
+        activity and activity["event_type"] == "turn_complete"
+        and activity.get("source") == "hook" and not activity["text"]
+    )
+
+
+async def _await_log_turn_text(pane_id: str, hook_end: dict[str, Any], budget: float) -> bool:
+    """Wait up to ``budget`` seconds for the log's own turn end with text after a
+    hook's textless one. True once it is recorded."""
+    from agent_team_backend import app
+
+    deadline = time.monotonic() + max(budget, 0.0)
+    while True:
+        current = app.pane_activity(pane_id)
+        if (
+            current is not None and current is not hook_end
+            and current["event_type"] == "turn_complete"
+            and current.get("source") != "hook" and current["text"]
+        ):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        await asyncio.sleep(_HOOK_TURN_TEXT_POLL_S)
 
 
 # ── Who is parked waiting on a pane (cli_whoami's `waiting_on_me`) ─────────
@@ -4432,7 +4464,11 @@ async def cli_wait_idle(
     `last_activity` is what cli_get_status reports under the same key — {type,
     text? (turn_complete only), age_seconds} — so a caller that waited for a
     turn to end also gets what the turn said, without a second call. It is
-    absent for a pane whose CLI records no activity at all. `ui_status` is the
+    absent for a pane whose CLI records no activity at all. Claude's Stop hook
+    can report the turn end before its text is read from the conversation log;
+    the wait then gives the log up to 10 s more (HOOK_TURN_TEXT_WAIT_S, within
+    `timeout_s`), and if the text is still not read it returns anyway with
+    `text_pending: true` — ask cli_get_status shortly after for the text. `ui_status` is the
     owning window's own word for the pane, present only when a probe reached
     it during the wait.
 
@@ -4537,7 +4573,16 @@ async def cli_wait_idle(
                 if activity is None:
                     return done("quiet_period")
                 if activity["event_type"] == "turn_complete":
-                    return done("turn_complete")
+                    if not _hook_turn_without_text(activity):
+                        return done("turn_complete")
+                    budget = min(HOOK_TURN_TEXT_WAIT_S, timeout - (time.monotonic() - started))
+                    read = await _await_log_turn_text(pane_id, activity, budget)
+                    out = done("turn_complete")
+                    if not read:
+                        # The turn ended, but its text is still on its way from the
+                        # conversation log: cli_get_status shortly after has it.
+                        out["text_pending"] = True
+                    return out
                 if time.monotonic() - activity["ts_monotonic"] >= _WAIT_IDLE_QUIET_S:
                     return done("quiet_period")
             elif ui_reachable and tick >= next_ui_probe_tick:

@@ -232,6 +232,12 @@ CLI Pane 才有收件匣：Host 或外部呼叫端沒有 messaging 名稱可以�
 目標在你送出的當下是 Idle 的，因此單純的等待會在它讀到訊息之前就回報
 「已經 Idle」。它會先等訊息**送進去**，並在送出前記錄目標的最後一次活動，而且只
 接受*更新*的回合作為答案，因此 `last_activity.text` 就是另一個 Agent 的回覆內容。
+Claude 的 Stop hook 可能在 Navide 讀到對話紀錄之前就回報回合結束（負載高時會差上
+數秒），而 hook 不帶文字。這時 `cli_wait_idle`（因此 `cli_send_and_wait` 也是）會
+在 `timeout_s` 之內最多再等 **10 秒**（`HOOK_TURN_TEXT_WAIT_S`），等對話紀錄的回合
+結束並回傳它的文字；若還是沒讀到，照樣返回，但不帶 `text`、加上
+`text_pending: true`，請稍後再呼叫一次 `cli_get_status`。Navide 不會拿較早回合的
+文字來填。其他 CLI，以及由對話紀錄本身回報的回合結束，照舊立即返回。
 它的 Timeout `reason` 沿用 `cli_wait_idle` 的，另外加上 `never_started`，代表目標
 一直維持 Idle、從未顯示任何接手該訊息的跡象。若送出當場被拒絕，則原樣回傳
 `cli_send` 的 `{ok: false, error}`。
