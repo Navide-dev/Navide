@@ -164,29 +164,59 @@ jobs:
           aws cloudfront create-invalidation --distribution-id "${MIRROR_DISTRIBUTION}" \
             --paths '/releases/latest/*' --query Invalidation.Id --output text
 
-      - name: Publish whats-new.json
+      # whats-new.json: each upload and each check is its own best-effort step,
+      # so no one failure keeps another from running. latest/ in particular
+      # never waits on the releases/<tag>/ check: the --delete sync above has
+      # just removed latest/'s copy, and skipping the upload would leave /news
+      # with nothing.
+      - name: Publish whats-new.json to releases/<tag>/
         id: whats_new_publish
         if: steps.whats_new_export.outcome == 'success'
         continue-on-error: true
-        env:
-          LATEST_REPLACED: ${{ steps.replace_latest.outcome == 'success' }}
         run: |
           aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/${TAG}/whats-new.json" \
             --content-type 'application/json' --no-progress
-          curl -fsSL --retry 3 -o whats-new.check.json "https://dl.navide.dev/releases/${TAG}/whats-new.json"
-          cmp whats-new.json whats-new.check.json
-          # Only where latest/ now holds this release. It runs after the
-          # latest/ syncs, whose --delete removed the previous copy.
-          if [ "${LATEST_REPLACED}" = true ]; then
-            aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/latest/whats-new.json" \
-              --content-type 'application/json' --no-progress
-            aws cloudfront create-invalidation --distribution-id "${MIRROR_DISTRIBUTION}" \
-              --paths '/releases/latest/whats-new.json' --query Invalidation.Id --output text
-          fi
+
+      - name: Publish whats-new.json to releases/latest/
+        id: whats_new_latest
+        # Only where latest/ now holds this release.
+        if: steps.whats_new_export.outcome == 'success' && steps.replace_latest.outcome == 'success'
+        continue-on-error: true
+        run: |
+          aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/latest/whats-new.json" \
+            --content-type 'application/json' --no-progress
+          aws cloudfront create-invalidation --distribution-id "${MIRROR_DISTRIBUTION}" \
+            --paths '/releases/latest/whats-new.json' --query Invalidation.Id --output text
+
+      - name: Check the mirrored whats-new.json
+        id: whats_new_check
+        if: steps.whats_new_publish.outcome == 'success' || steps.whats_new_latest.outcome == 'success'
+        continue-on-error: true
+        env:
+          TAG_PUBLISHED: ${{ steps.whats_new_publish.outcome == 'success' }}
+          LATEST_PUBLISHED: ${{ steps.whats_new_latest.outcome == 'success' }}
+        run: |
+          # Each copy is checked on its own and only warns: CloudFront may still
+          # serve an earlier copy for a moment (a re-run after an entry changed).
+          status=0
+          check() {
+            if curl -fsSL --retry 3 -o whats-new.check.json "$1" && cmp -s whats-new.json whats-new.check.json; then
+              echo "$1 matches"
+            else
+              echo "::warning::$1 does not serve the whats-new.json just exported"
+              echo "⚠️ $1 does not serve the whats-new.json just exported" >> "${GITHUB_STEP_SUMMARY}"
+              status=1
+            fi
+          }
+          if [ "${TAG_PUBLISHED}" = true ]; then check "https://dl.navide.dev/releases/${TAG}/whats-new.json"; fi
+          if [ "${LATEST_PUBLISHED}" = true ]; then check "https://dl.navide.dev/releases/latest/whats-new.json"; fi
+          exit "${status}"
 
       - name: Warn when whats-new.json was not published
-        if: steps.whats_new_export.outcome == 'failure' || steps.whats_new_publish.outcome == 'failure'
+        if: >-
+          steps.whats_new_export.outcome == 'failure' || steps.whats_new_publish.outcome == 'failure'
+          || steps.whats_new_latest.outcome == 'failure'
         run: |
-          message="whats-new.json was not published for ${TAG}; the installers are mirrored. The website's /news page falls back to GitHub Releases until a manual mirror run publishes it."
+          message="whats-new.json was not published everywhere for ${TAG} (export: ${{ steps.whats_new_export.outcome }}, releases/${TAG}: ${{ steps.whats_new_publish.outcome }}, latest: ${{ steps.whats_new_latest.outcome }}); the installers are mirrored. Where it is missing, the website's /news page falls back to GitHub Releases until a manual mirror run publishes it."
           echo "::warning::${message}"
           echo "⚠️ ${message}" >> "${GITHUB_STEP_SUMMARY}"

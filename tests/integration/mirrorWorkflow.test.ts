@@ -20,8 +20,13 @@ describe('mirror workflow', () => {
   it('keeps whats-new.json best effort: its steps never fail the mirror', () => {
     // The installers are the mirror's job; the announcements file is extra.
     // Every step that touches it continues on error, and the installer steps
-    // never mention it, so a failed export or upload cannot fail the job.
-    for (const name of ['Set up Node.js', 'Export the announcements as whats-new.json', 'Publish whats-new.json']) {
+    // never mention it, so a failed export, upload or check cannot fail the job.
+    const whatsNew = [
+      'Set up Node.js', 'Export the announcements as whats-new.json',
+      'Publish whats-new.json to releases/<tag>/', 'Publish whats-new.json to releases/latest/',
+      'Check the mirrored whats-new.json',
+    ]
+    for (const name of whatsNew) {
       const step = steps[indexOf(name)] as { 'continue-on-error'?: boolean }
       expect(step, name).toBeDefined()
       expect(step['continue-on-error'], name).toBe(true)
@@ -31,14 +36,18 @@ describe('mirror workflow', () => {
       expect(step.run, name).not.toContain('whats-new')
       expect(step['continue-on-error'], name).toBeUndefined()
     }
-    const publish = steps[indexOf('Publish whats-new.json')] as { if: string; run: string }
-    expect(publish.if).toContain("steps.whats_new_export.outcome == 'success'")
-    // After latest/ is replaced, or that sync's --delete would remove it.
-    expect(indexOf('Publish whats-new.json')).toBeGreaterThan(indexOf('Replace releases/latest/'))
-    expect(publish.run).toContain('releases/latest/whats-new.json')
+    // latest/ is uploaded after Replace (whose --delete removed it), only when
+    // Replace ran, and never waits on the releases/<tag>/ upload or check.
+    const latest = steps[indexOf('Publish whats-new.json to releases/latest/')] as { if: string; run: string }
+    expect(indexOf('Publish whats-new.json to releases/latest/')).toBeGreaterThan(indexOf('Replace releases/latest/'))
+    expect(latest.if).toContain("steps.replace_latest.outcome == 'success'")
+    expect(latest.if).not.toContain('whats_new_publish')
+    expect(latest.if).not.toContain('whats_new_check')
+    expect(indexOf('Check the mirrored whats-new.json')).toBeGreaterThan(indexOf('Publish whats-new.json to releases/latest/'))
+    expect(latest.run).not.toContain('cmp')
     const warn = steps[indexOf('Warn when whats-new.json was not published')] as { if: string; run: string }
-    expect(warn.if).toContain("steps.whats_new_export.outcome == 'failure'")
-    expect(warn.if).toContain("steps.whats_new_publish.outcome == 'failure'")
+    for (const id of ['whats_new_export', 'whats_new_publish', 'whats_new_latest']) expect(warn.if).toContain(id)
     expect(warn.run).toContain('::warning::')
+    expect(warn.run).toContain('GITHUB_STEP_SUMMARY')
   })
 })
