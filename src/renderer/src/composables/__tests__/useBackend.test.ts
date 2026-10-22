@@ -322,7 +322,7 @@ describe('useBackend init() deadline', () => {
   it.each<[PlatformId, number]>([
     ['linux', 120_000],
     ['darwin', 45_000],
-    ['win32', 45_000],
+    ['win32', 120_000],
   ])('falls back to the %s default when the setting is unavailable', async (platform, defaultMs) => {
     const original = platformId()
     setPlatformId(platform)

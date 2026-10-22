@@ -4,14 +4,34 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- MCP: `cli_get_status`, `cli_wait_idle` and `cli_send_and_wait` no longer give a Claude turn end that came from the Stop hook another turn's text. `cli_wait_idle` and `cli_send_and_wait` then wait up to 10 seconds more (`HOOK_TURN_TEXT_WAIT_S`, within `timeout_s`) for the conversation log's turn end and return its text. If it is still not read, they return with `text_pending: true` and no `last_activity.text`; before, such a turn end could carry the previous turn's text. Other CLIs, and turn ends the log reported itself, return at once as before. The backend log notes how far apart the hook and the log reported a turn's end (time and pane only).
+- Diagnostics: console warnings and errors from Navide's own pages now go to `renderer-console.log` in the logs folder, on this machine only. It rotates like `main.log` but separately (4 MB plus one 4 MB older file), so it cannot push `main.log` out. Messages are recorded whole, one line each, except that a single entry over 4 MB is truncated, as in `main.log`. A message repeated back to back is written once and then counted. Only the main frame of a `file:` page, a plugin frame or the dev server is recorded, so the warnings and errors of a third-party plugin's frame are recorded in full too. Never recorded: subframes (plan HTML, file previews), the hidden window that prints a chat attachment to PDF, web pages, `about:blank`, `data:`, `blob:`, error pages, and console info, log or debug lines. `main.log` now also records any renderer that goes away in a window that did not log it already, and a GPU or other child process that dies.
+
+- English UI: Title Case for the buttons, filter chips, preset buttons and undo labels #565 missed: Skip Tour, the What's New buttons (Got It, Take the Tour, Replay the Tour, Not Now), the layout preset Bottom Panel, the CLI Agents filter Needs Attention, the Marketplace category Version Control, Restart for New Version in the status bar, and the pipeline editor's Undo/Redo labels (Undo Edit Prompt, …).
+
 ### Fixed
 
 - Channels: a busy computer no longer makes a chat see "（pane 回合結束，沒有文字輸出）", or the previous turn's reply, for a Claude turn whose text Navide had not read yet. Claude's Stop hook reports a turn end before the conversation log is read; the chat now waits for the log's text. After 10 seconds the status reads "✅ 回合已結束，正在讀取回覆…". After 120 seconds the chat is told the reply will follow, and it does, prefixed "（補送）", under the message that asked, for up to 30 minutes. Text that arrives after the next message went in still answers the message it belongs to. A turn that really wrote no text is reported once the log moves on to the next prompt, or when the 120-second grace runs out with nothing more from it. CLIs without a Stop hook are answered as before.
 
-### Changed
+- MCP: `cli_reclaim_agent` and `cli_close_agent` no longer refuse every pane as your own. Since 0.2.28 the window was told the target pane was the one asking, so every reclaim came back `reason: "self"` and every close `self-close`, whoever called them. The request still goes to the window holding the target, and now names the real caller. Self-evolution had the same fault: after an automatic run its pane was never reclaimed and old cards were never closed.
 
-- MCP: `cli_get_status`, `cli_wait_idle` and `cli_send_and_wait` no longer give a Claude turn end that came from the Stop hook another turn's text. `cli_wait_idle` and `cli_send_and_wait` then wait up to 10 seconds more (`HOOK_TURN_TEXT_WAIT_S`, within `timeout_s`) for the conversation log's turn end and return its text. If it is still not read, they return with `text_pending: true` and no `last_activity.text`; before, such a turn end could carry the previous turn's text. Other CLIs, and turn ends the log reported itself, return at once as before. The backend log notes how far apart the hook and the log reported a turn's end (time and pane only).
-- English UI: Title Case for the buttons, filter chips, preset buttons and undo labels #565 missed: Skip Tour, the What's New buttons (Got It, Take the Tour, Replay the Tour, Not Now), the layout preset Bottom Panel, the CLI Agents filter Needs Attention, the Marketplace category Version Control, Restart for New Version in the status bar, and the pipeline editor's Undo/Redo labels (Undo Edit Prompt, …).
+- Windows: the first launch after a fresh install waits up to 120 seconds for the backend (was 45), as on Linux. Unpacking the backend while Microsoft Defender scans the new files can take longer than 45 seconds, which ended a backend that was still starting with "backend failed to start". The startup screen now also stays up for the whole wait instead of closing after 52 seconds. A timeout set in Settings is unchanged.
+
+- Backend: with many CLI panes open, the resource panel's risk check no longer freezes the backend for seconds at a time. It walked every recorded connection and disk signal once per pane, on the event loop, and that history only grows. It now walks it once, in a worker thread. Results are unchanged.
+
+- Backend: a change in one workspace no longer throws away the cached Git branch and status of every other workspace's panes. While agents kept editing, every refresh re-ran Git for all of them. Looking up the last fetch time also no longer holds up the backend while it lists a repository's worktrees.
+
+- Codex panes: a sub-agent finishing no longer ends its parent pane's turn. Its reply is not taken as the pane's, and its task is not used to name the pane. Before, a waiting `cli_wait_idle` or `cli_send_and_wait` returned while the parent was still working. A sub-agent's tokens still count toward the pane, now under the sub-agent's own session instead of its parent's. The per-account turn count is unchanged and still includes sub-agent turns.
+
+- Backend: fewer Git processes while agents work. The network view's pane branches are answered from the last reading and refreshed in the background, no more than once per 30 seconds per repository. The Git pane's history, branch, stash, remote, tag and worktree reads are shared when several Git panes reload together after one change. Each status read now runs two Git commands instead of three.
+
+- Windows: programs the backend starts without input of their own (onboarding's version checks such as `pnpm --version`, CLI and tool probes) no longer hang at launch. They inherited the pipe the app keeps open for the backend's `shutdown` line; their standard input is now NUL, and the `shutdown` line still stops the backend. macOS and Linux are unchanged.
+
+- Open workspaces (Welcome badges, `ui_snapshot` `openWorkspaces`) list each folder once. A folder that is both a window's own workspace and one it adopted was listed twice. Paths are compared resolved, without a trailing slash, and case-insensitively on Windows; `~` is not expanded. (#448)
+
+- CLI panes: the startup probe's "newer than the last version Navide verified" line now covers Goose (verified on 1.55.0; it has no account switching, so it never had a version to compare against), and Kimi Code compares against 2.2.0, the version its launch and logs were checked on, rather than the 0.39.0 of its account-switch evidence, so Kimi 2.x is no longer called untested. Disclosure only, as before. (#502 follow-up)
 
 ## [0.2.28] — 2026-10-21 — signed release
 

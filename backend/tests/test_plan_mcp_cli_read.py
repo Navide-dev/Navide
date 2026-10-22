@@ -14,6 +14,33 @@ import pytest
 from agent_team_backend import agent_messaging, app
 from agent_team_backend.mcp_server import server as plan_mcp, auth as plan_mcp_auth, wiring as plan_mcp_wiring
 
+class _SteppedWall:
+    """The ``time`` module as app sees it, except that time.time() moves a full
+    second per call: every wall stamp is strictly later than the one before,
+    by far more than a clock tick (time.time() moves in ~15.6 ms ticks on
+    Windows, where two stamps taken back to back are often equal)."""
+
+    def __init__(self) -> None:
+        self._t = time.time()
+
+    def time(self) -> float:
+        self._t += 1.0
+        return self._t
+
+    def __getattr__(self, name: str):
+        return getattr(time, name)
+
+
+@pytest.fixture
+def stepped_wall(monkeypatch: pytest.MonkeyPatch) -> _SteppedWall:
+    clock = _SteppedWall()
+    monkeypatch.setattr(app, "time", clock)
+    # Fresh per-pane stamps: ones a previous test took on another clock would
+    # not compare with this one's.
+    for table in ("_pane_tracked_since", "_last_hook_turn_end", "_last_log_turn_start"):
+        monkeypatch.setattr(app, table, {})
+    return clock
+
 
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch: pytest.MonkeyPatch) -> Any:
@@ -1288,18 +1315,18 @@ def _log_prompt(pane: str = "pw", wall: float | None = None) -> None:
     """A typed prompt the log read; ``wall`` is its transcript stamp (default: now)."""
     app._record_pane_activity(
         pane, "agent_active", "a prompt", source="log", turn_start=True,
-        event_wall=time.time() if wall is None else wall,
+        event_wall=app.time.time() if wall is None else wall,
     )
 
 
 def _log_end(text: str, pane: str = "pw", wall: float | None = None) -> None:
     app._record_pane_activity(
-        pane, "turn_complete", text, source="log", event_wall=time.time() if wall is None else wall,
+        pane, "turn_complete", text, source="log", event_wall=app.time.time() if wall is None else wall,
     )
 
 
 @pytest.mark.asyncio
-async def test_wait_idle_after_a_hook_turn_end_waits_for_the_logs_text(
+async def test_wait_idle_after_a_hook_turn_end_waits_for_the_logs_text(stepped_wall, 
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
@@ -1323,7 +1350,7 @@ async def test_wait_idle_after_a_hook_turn_end_waits_for_the_logs_text(
 
 
 @pytest.mark.asyncio
-async def test_wait_idle_says_the_text_is_pending_when_the_log_is_late(
+async def test_wait_idle_says_the_text_is_pending_when_the_log_is_late(stepped_wall, 
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
@@ -1341,7 +1368,7 @@ async def test_wait_idle_says_the_text_is_pending_when_the_log_is_late(
 
 
 @pytest.mark.asyncio
-async def test_the_text_wait_stays_inside_the_callers_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_the_text_wait_stays_inside_the_callers_timeout(stepped_wall, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
     _seed_watch()
     _hook_end()
@@ -1354,7 +1381,7 @@ async def test_the_text_wait_stays_inside_the_callers_timeout(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
-async def test_a_log_turn_end_and_a_hook_end_with_text_return_at_once() -> None:
+async def test_a_log_turn_end_and_a_hook_end_with_text_return_at_once(stepped_wall) -> None:
     # The log's own turn end, and a hook end that already carries this turn's
     # text (the log was first), need no wait and no flag.
     _seed_watch()
@@ -1370,7 +1397,7 @@ async def test_a_log_turn_end_and_a_hook_end_with_text_return_at_once() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_turn_the_log_already_ended_without_text_returns_at_once() -> None:
+async def test_a_turn_the_log_already_ended_without_text_returns_at_once(stepped_wall) -> None:
     """Review of #581, M4: the reader first, with a turn that wrote no text.
     Nothing more is coming, so no 10 s wait and no text_pending."""
     _seed_watch()
@@ -1387,7 +1414,7 @@ async def test_a_turn_the_log_already_ended_without_text_returns_at_once() -> No
 
 
 @pytest.mark.asyncio
-async def test_an_earlier_turns_text_from_a_lagging_reader_is_never_this_turns(
+async def test_an_earlier_turns_text_from_a_lagging_reader_is_never_this_turns(stepped_wall, 
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Review of #581, M3: the reader lags by a whole turn. Its record of the
@@ -1396,7 +1423,7 @@ async def test_an_earlier_turns_text_from_a_lagging_reader_is_never_this_turns(
     monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
     monkeypatch.setattr(plan_mcp, "HOOK_TURN_TEXT_WAIT_S", 0.5)
     _seed_watch()
-    earlier = time.time() - 10
+    earlier = app.time.time() - 10
     _log_prompt(wall=earlier)            # turn N-1's prompt, read in time
     _hook_end()                          # turn N-1 ends; the reader is behind
     await asyncio.sleep(0.01)
@@ -1415,14 +1442,14 @@ async def test_an_earlier_turns_text_from_a_lagging_reader_is_never_this_turns(
 
 
 @pytest.mark.asyncio
-async def test_send_and_wait_returns_the_logs_text_after_a_hook_turn_end(
+async def test_send_and_wait_returns_the_logs_text_after_a_hook_turn_end(stepped_wall, 
     monkeypatch: pytest.MonkeyPatch, broadcasts: list[dict[str, Any]]
 ) -> None:
     monkeypatch.setattr(plan_mcp, "_WAIT_IDLE_POLL_S", 0.005)
     monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
     _seed_pair()
-    _log_prompt(wall=time.time() - 10)
-    _log_end("stale", wall=time.time() - 9)
+    _log_prompt(wall=app.time.time() - 10)
+    _log_end("stale", wall=app.time.time() - 9)
     _hook_end()
 
     async def worker_replies() -> None:
@@ -1444,16 +1471,16 @@ async def test_send_and_wait_returns_the_logs_text_after_a_hook_turn_end(
 
 
 @pytest.mark.asyncio
-async def test_a_turn_with_no_typed_prompt_still_gets_its_text(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_turn_with_no_typed_prompt_still_gets_its_text(stepped_wall, monkeypatch: pytest.MonkeyPatch) -> None:
     """Review of #581, L1: a turn woken by a <task-notification> (or a slash
     command, a hook-delivered message) has no typed prompt line. Its end,
     stamped after the previous hook turn end, is still this turn's."""
     monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
     _seed_watch()
-    _log_prompt(wall=time.time() - 10)
-    _log_end("turn one", wall=time.time() - 9)
+    _log_prompt(wall=app.time.time() - 10)
+    _log_end("turn one", wall=app.time.time() - 9)
     _hook_end()                       # turn one ends
-    written = time.time()             # the woken turn's end is written…
+    written = app.time.time()             # the woken turn's end is written…
     await asyncio.sleep(0.01)
     _hook_end()                       # …then its Stop hook fires
 
@@ -1470,7 +1497,7 @@ async def test_a_turn_with_no_typed_prompt_still_gets_its_text(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
-async def test_a_log_turn_end_without_a_stamp_never_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_log_turn_end_without_a_stamp_never_counts(stepped_wall, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
     monkeypatch.setattr(plan_mcp, "HOOK_TURN_TEXT_WAIT_S", 0.2)
     _seed_watch()

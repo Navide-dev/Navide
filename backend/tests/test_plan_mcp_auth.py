@@ -230,8 +230,17 @@ def test_a_rewritten_file_is_hardened_again(monkeypatch) -> None:
     plan_mcp_auth.internal_token()
     plan_mcp_auth.internal_token()
     assert len(calls) == 2
-    plan_mcp_auth.auth_path().unlink()
-    plan_mcp_auth.internal_token()  # recreated
+    # Recreated the way the cache exists for: by another writer, left at the
+    # default mode. Not by this module: its own recreate is 0600, the same
+    # size, and on Linux often the freed inode with mtime/ctime from the same
+    # coarse clock tick, so its identity can equal the old file's and nothing
+    # is done -- correctly, since a 0600 file has nothing to tighten.
+    path = plan_mcp_auth.auth_path()
+    content = path.read_bytes()
+    path.unlink()
+    path.write_bytes(content)
+    path.chmod(0o644)
+    plan_mcp_auth.internal_token()
     plan_mcp_auth.internal_token()
     assert len(calls) == 3
 

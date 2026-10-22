@@ -421,4 +421,7 @@ SPEC = VendorSpec(
         install_cmds={"win32": PlatformInstall("")},
         update_cmd="goose update",
         doctor_cmd="goose doctor"),
+    # No account switching to carry a verified version: the live checks of
+    # sessions.db, resume and --version above were on 1.55.0.
+    cli_verified_version="1.55.0",
 )

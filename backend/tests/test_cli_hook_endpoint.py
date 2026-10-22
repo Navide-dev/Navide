@@ -16,6 +16,33 @@ from agent_team_backend import app as app_module
 from agent_team_backend.app import app
 from agent_team_backend import hook_auth, osplat
 
+class _SteppedWall:
+    """The ``time`` module as app sees it, except that time.time() moves a full
+    second per call: every wall stamp is strictly later than the one before,
+    by far more than a clock tick (time.time() moves in ~15.6 ms ticks on
+    Windows, where two stamps taken back to back are often equal)."""
+
+    def __init__(self) -> None:
+        self._t = time.time()
+
+    def time(self) -> float:
+        self._t += 1.0
+        return self._t
+
+    def __getattr__(self, name: str):
+        return getattr(time, name)
+
+
+@pytest.fixture
+def stepped_wall(monkeypatch: pytest.MonkeyPatch) -> _SteppedWall:
+    clock = _SteppedWall()
+    monkeypatch.setattr(app_module, "time", clock)
+    # Fresh per-pane stamps: ones a previous test took on another clock would
+    # not compare with this one's.
+    for table in ("_pane_tracked_since", "_last_hook_turn_end", "_last_log_turn_start"):
+        monkeypatch.setattr(app_module, table, {})
+    return clock
+
 
 @pytest.fixture()
 def client() -> TestClient:
@@ -301,7 +328,7 @@ def test_stop_hook_records_pane_activity_so_wait_idle_sees_it(
         app_module._pane_activity.clear()
 
 
-def test_stop_hook_does_not_blank_the_turn_text_the_log_reader_recorded(
+def test_stop_hook_does_not_blank_the_turn_text_the_log_reader_recorded(stepped_wall, 
     client: TestClient, events: list[dict], monkeypatch
 ) -> None:
     """Hook payloads carry no assistant text. Recording one over a
@@ -312,8 +339,8 @@ def test_stop_hook_does_not_blank_the_turn_text_the_log_reader_recorded(
         app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
     )
     # The reader got there first: this turn's prompt, then its end_turn line.
-    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=time.time())
-    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=time.time())
+    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=app_module.time.time())
+    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=app_module.time.time())
     try:
         client.post(
             "/hooks/claude",
@@ -356,7 +383,7 @@ def test_stop_hook_does_not_borrow_when_the_reader_lags_a_whole_turn(
         app_module._pane_activity.clear()
 
 
-def test_stop_hook_does_not_borrow_the_previous_turns_text_from_a_lagging_reader(
+def test_stop_hook_does_not_borrow_the_previous_turns_text_from_a_lagging_reader(stepped_wall, 
     client: TestClient, events: list[dict], monkeypatch
 ) -> None:
     """Under load the reader lags: what it last recorded is the previous turn's
@@ -369,8 +396,8 @@ def test_stop_hook_does_not_borrow_the_previous_turns_text_from_a_lagging_reader
     )
     stop = {"headers": {"X-Agent-Team-Event": "stop"}, "json": {"session_id": "s-1", "cwd": "/ws/alpha"}}
     try:
-        app_module._record_pane_activity("pw-lag", "agent_active", "turn one", source="log", turn_start=True, event_wall=time.time())
-        written = time.time()  # turn one's reply is written before its Stop hook fires
+        app_module._record_pane_activity("pw-lag", "agent_active", "turn one", source="log", turn_start=True, event_wall=app_module.time.time())
+        written = app_module.time.time()  # turn one's reply is written before its Stop hook fires
         client.post("/hooks/claude", **stop)  # turn one ends; the reader is behind
         app_module._record_pane_activity("pw-lag", "turn_complete", "reply one", source="log", event_wall=written)
         client.post("/hooks/claude", **stop)  # turn two ends; its prompt not read yet
@@ -418,7 +445,7 @@ def test_a_late_tool_result_after_stop_is_not_recorded_as_activity_or_dev_time(
         app_module._pane_activity.clear()
 
 
-def test_a_reattached_panes_hook_keeps_the_text_recorded_under_its_old_id(
+def test_a_reattached_panes_hook_keeps_the_text_recorded_under_its_old_id(stepped_wall, 
     client: TestClient, events: list[dict], monkeypatch
 ) -> None:
     """Session attribution answers with the id the PTY was created under, and a
@@ -435,8 +462,8 @@ def test_a_reattached_panes_hook_keeps_the_text_recorded_under_its_old_id(
     monkeypatch.setattr(
         app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
     )
-    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=time.time())
-    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=time.time())
+    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=app_module.time.time())
+    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=app_module.time.time())
     try:
         client.post(
             "/hooks/claude",
@@ -688,7 +715,7 @@ def test_the_secret_survives_a_restart_so_running_panes_keep_their_hooks() -> No
     ["", "先列恩梯的案例候選給我挑"],
     ids=["empty-composer", "unsent-composer-text"],
 )
-def test_idle_prompt_after_the_turn_ended_keeps_turn_complete(
+def test_idle_prompt_after_the_turn_ended_keeps_turn_complete(stepped_wall, 
     client: TestClient, events: list[dict], monkeypatch, composer: str
 ) -> None:
     """Claude fires Notification(idle_prompt) about a minute after EVERY turn
@@ -717,8 +744,8 @@ def test_idle_prompt_after_the_turn_ended_keeps_turn_complete(
     monkeypatch.setattr(plan_mcp, "_ui_request", _ui)
     try:
         # The transcript's end_turn line, then the Stop hook, a minute ago.
-        app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=time.time())
-        app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=time.time())
+        app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=app_module.time.time())
+        app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=app_module.time.time())
         client.post(
             "/hooks/claude",
             headers={"X-Agent-Team-Event": "stop"},
@@ -838,7 +865,7 @@ def test_the_log_records_transcript_stamp_decides_whose_turn_it_is(
         app_module._pane_activity.clear()
 
 
-def test_a_panes_first_hook_does_not_borrow_a_replayed_log_turn_end(
+def test_a_panes_first_hook_does_not_borrow_a_replayed_log_turn_end(stepped_wall, 
     client: TestClient, events: list[dict], monkeypatch
 ) -> None:
     """The first hook turn end of a pane (backend just started, or the pane was
@@ -852,7 +879,7 @@ def test_a_panes_first_hook_does_not_borrow_a_replayed_log_turn_end(
         app_module.attribution, "pane_for_session", lambda _sid: ("pw-first", "/ws/alpha", "")
     )
     stop = {"headers": {"X-Agent-Team-Event": "stop"}, "json": {"session_id": "s-1", "cwd": "/ws/alpha"}}
-    replayed = time.time() - 600
+    replayed = app_module.time.time() - 600
     try:
         app_module._record_pane_activity("pw-first", "agent_active", "old prompt", source="log", turn_start=True, event_wall=replayed)
         app_module._record_pane_activity("pw-first", "turn_complete", "old reply", source="log", event_wall=replayed + 1)
@@ -860,10 +887,54 @@ def test_a_panes_first_hook_does_not_borrow_a_replayed_log_turn_end(
         assert app_module._pane_activity["pw-first"]["text"] == ""
         assert app_module._pane_activity["pw-first"]["log_ended"] is False
 
-        app_module._record_pane_activity("pw-first", "turn_complete", "this turn", source="log", event_wall=time.time())
+        app_module._record_pane_activity("pw-first", "turn_complete", "this turn", source="log", event_wall=app_module.time.time())
         client.post("/hooks/claude", **stop)
         assert app_module._pane_activity["pw-first"]["text"] == "this turn"
     finally:
         app_module._pane_activity.clear()
         app_module._pane_tracked_since.pop("pw-first", None)
 
+
+
+class _CoarseWall(_SteppedWall):
+    """time.time() as Windows' CPython gives it: whole 15.625 ms ticks, set by the test."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.now = 0.0
+
+    def time(self) -> float:
+        return self.now
+
+
+def test_a_coarse_clock_never_lets_the_previous_turns_text_through(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """The hook's wall time reads up to a tick early on a coarse clock, so the
+    previous turn's log end (stamped to the millisecond by the transcript) can
+    seem to come after it. The bound is pushed a tick later: no text then, never
+    the wrong one."""
+    clock = _CoarseWall()
+    monkeypatch.setattr(app_module, "time", clock)
+    monkeypatch.setattr(app_module, "_WALL_TICK_S", 0.015625)
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw-tick", "/ws/alpha", "")
+    )
+    app_module._pane_activity.clear()
+    app_module._pane_tracked_since["pw-tick"] = 990.0
+    stop = {"headers": {"X-Agent-Team-Event": "stop"}, "json": {"session_id": "s-1", "cwd": "/ws/alpha"}}
+    try:
+        app_module._record_pane_activity("pw-tick", "agent_active", "turn one", source="log", turn_start=True, event_wall=999.0)
+        clock.now = 1000.0  # turn one's Stop hook, really at 1000.012: the tick reads 1000.0
+        client.post("/hooks/claude", **stop)
+        # The reader catches up late: turn one's end, written at 1000.005, before the hook.
+        app_module._record_pane_activity("pw-tick", "turn_complete", "reply one", source="log", event_wall=1000.005)
+
+        clock.now = 1000.03125  # turn two's Stop hook; the reader has not read turn two yet
+        client.post("/hooks/claude", **stop)
+        assert app_module._pane_activity["pw-tick"]["text"] == ""  # not turn one's "reply one"
+    finally:
+        app_module._pane_activity.clear()
+        app_module._pane_tracked_since.pop("pw-tick", None)
+        app_module._last_hook_turn_end.pop("pw-tick", None)
+        app_module._last_log_turn_start.pop("pw-tick", None)

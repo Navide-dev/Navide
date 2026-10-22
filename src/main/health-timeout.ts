@@ -1,5 +1,5 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { isLinux } from '../shared/osplat'
+import { isLinux, isWindows } from '../shared/osplat'
 
 // Health-check timeout (seconds): how long startBackend() waits for /health
 // before giving up. User-configurable (Settings UI), persisted in a small
@@ -10,11 +10,14 @@ import { isLinux } from '../shared/osplat'
 export const DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 45
 // Linux ships the backend as a PyInstaller onefile inside an AppImage: the
 // first launch unpacks through the FUSE mount and imports cold, measured at up
-// to 44s on an arm64 VM — right at the 45s default. Linux alone gets headroom.
-export const LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 120
+// to 44s on an arm64 VM — right at the 45s default. Windows gets the same
+// headroom: a fresh install's first launch unpacks the PyInstaller backend into
+// _MEI while Defender scans every new file, measured at up to 58.75s on a
+// Windows 11 arm64 VM, past the 45s default. macOS stays at 45s.
+export const EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 120
 
 export function defaultHealthCheckTimeoutSec(): number {
-  return isLinux() ? LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
+  return isLinux() || isWindows() ? EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
 }
 export const MIN_HEALTH_CHECK_TIMEOUT_SEC = 15
 // Ceiling on what the user may configure. Waiting longer costs nothing but

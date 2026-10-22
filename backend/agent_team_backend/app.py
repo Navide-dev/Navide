@@ -1368,6 +1368,13 @@ _last_log_turn_start: dict[str, float] = {}
 # written before then, and those are never this turn's.
 _pane_tracked_since: dict[str, float] = {}
 _TRACKING_STARTED = time.time()
+# time.time() moves in whole ticks on some platforms (about 15.6 ms on
+# Windows): a hook turn end's wall time can read up to a tick earlier than it
+# happened, so the previous turn's log end — stamped by the transcript, to
+# the millisecond — could seem to come after it. The bound is pushed one tick
+# later: a turn end inside that tick is never taken as this turn's (better no
+# text than the wrong text).
+_WALL_TICK_S = time.get_clock_info("time").resolution
 # The first of a turn's two turn ends (hook, log) still waiting for the other:
 # (source, monotonic time). Only for the arrival-gap log line below.
 _turn_end_first: dict[str, tuple[str, float]] = {}
@@ -1494,6 +1501,7 @@ def log_turn_end_after(pane_id: str, previous_hook_end: float | None) -> dict[st
     # The first hook turn end a pane has here has no previous one: then the
     # turn began no earlier than when this backend started tracking the pane.
     bound = previous_hook_end if previous_hook_end is not None else _pane_tracked_since.get(key, _TRACKING_STARTED)
+    bound += _WALL_TICK_S
     if written <= bound:
         return None
     prompted = _last_log_turn_start.get(key)
@@ -1550,6 +1558,20 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             # External session — skip; no pane to deliver to.
             return
         pane_id = attributed.pane_id or ""
+        if event.event_type == "subagent_turn_end":
+            # A Codex sub-agent's turn end is not its parent pane's: the pane's
+            # state, reply text and dev time ignore it. The per-account turn
+            # count is recorded exactly as it was when this arrived as a
+            # turn_complete (the record_turn call below); whether a sub-agent
+            # turn should count there is a separate decision.
+            tokens_store.record_turn(
+                event.vendor,
+                pane_account_history.profile_at(
+                    pane_id, parse_event_time(event.timestamp)
+                ),
+                event.timestamp,
+            )
+            return
         # A turn a Stop hook blocked is still written to the conversation log,
         # and its reader reports it as a turn end — after the hook already said
         # the agent is working on the message it was handed. Flagged rather than
@@ -4093,7 +4115,9 @@ def _untested_version_note(agent_key: str, label: str, version: str | None) -> s
     last verified against. Disclosure only: the spawn goes ahead either way."""
     spec = cli_vendor(agent_key)
     switch = spec.account_switch if spec is not None else None
-    verified = switch.verified_version if switch is not None else ""
+    verified = (spec.cli_verified_version if spec is not None else "") or (
+        switch.verified_version if switch is not None else ""
+    )
     found, known = _leading_version(version or ""), _leading_version(verified)
     if not found or not known or found <= known:
         return ""
