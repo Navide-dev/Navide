@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { watch } from 'vue'
-import { createI18n } from 'vue-i18n'
+import { createI18n, type DefineLocaleMessage } from 'vue-i18n'
 import zhTW from './locales/zh-TW.json'
 import enUS from './locales/en-US.json'
 import jaJP from './locales/ja-JP.json'
@@ -19,17 +19,24 @@ import {
 
 const LANGUAGE_KEY = 'agent-team:language'
 
+// Keeps the registered locale codes but types every catalog as vue-i18n's
+// DefineLocaleMessage: an inferred type spelling out each JSON in full is too
+// large for the emitted .d.ts (TS7056), and grows with every language.
+function catalogs<L extends string>(entries: Record<L, DefineLocaleMessage>): Record<L, DefineLocaleMessage> {
+  return entries
+}
+
 // Adding a UI language: import its JSON above and add one entry here. The
 // locale must already be listed in UI_LOCALES (./uiLocales.ts); it then shows
 // up in the language pickers and in system-language detection automatically.
-const messages = {
+const messages = catalogs({
   'zh-TW': zhTW,
   'en-US': enUS,
   'ja-JP': jaJP,
   'ko-KR': koKR,
   'zh-CN': zhCN,
   'de-DE': deDE,
-}
+})
 
 /** A UI locale that has a catalog registered in this build. */
 export type AvailableUiLocale = keyof typeof messages & UiLocale
