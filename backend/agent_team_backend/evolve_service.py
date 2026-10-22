@@ -547,7 +547,7 @@ class LiveHost:
         from .mcp_server import server as mcp
 
         reply = await mcp._ui_request(
-            workspace, "invoke", caller=mcp._pane_caller(pane_id),
+            workspace, "invoke", caller=mcp._Caller(kind="host"), route_pane_id=pane_id,
             action=action, args={"paneId": pane_id},
         )
         if action == "ui.pane.reclaim" and reply.get("ok"):

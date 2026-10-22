@@ -253,6 +253,9 @@ def project(snapshot: dict, panes: list, now: float) -> dict[str, dict]:
                     status = "unknown"
         return {"status": status, **({"lastSuccessAt": value["lastSuccessAt"]} if "lastSuccessAt" in value else {})}
 
+    # Signals are never deleted, only made inactive, so the table only grows;
+    # filter it once rather than once per pane (that ran on the event loop).
+    active = [value for value in snapshot["signals"].values() if value["active"]]
     for pane in panes:
         network = availability("network", pane.pane_id)
         if not pane.hosts:
@@ -265,8 +268,8 @@ def project(snapshot: dict, panes: list, now: float) -> dict[str, dict]:
         if successes:
             disk["lastSuccessAt"] = min(successes)
         signals = []
-        for value in snapshot["signals"].values():
-            if not value["active"] or value["vendor"] != pane.vendor:
+        for value in active:
+            if value["vendor"] != pane.vendor:
                 continue
             if value["kind"] == "network" and value["pane"] != pane.pane_id:
                 continue
