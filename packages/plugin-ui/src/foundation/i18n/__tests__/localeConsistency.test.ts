@@ -45,12 +45,30 @@ const UNTRANSLATED_ALLOWLIST: Record<string, string[]> = JSON.parse(
   readFileSync(resolve('packages/plugin-ui/src/foundation/i18n/__tests__/untranslatedAllowlist.json'), 'utf8')
 )
 
-// A name, path, branch, version or command (one token, or wholly inside
-// <code>) is a value the translation keeps, not English left behind.
-function isValue(text: string): boolean {
-  const t = withoutLiterals(text).replace(/\{[^{}]*\}/g, '').trim()
-  if (/^<code>[\s\S]*<\/code>$/.test(t)) return true
-  return t !== '' && !t.includes(' ') && !/^[A-Z][a-z]+$/.test(t)
+// Whether an en-US value is a name, path, branch, version or command that a
+// translation keeps as is — not English left behind. Deliberately narrow:
+// anything that could be a word ("save", "Saving…", "Re-detect", "STAGED",
+// "{count} files") is prose and gets the word check.
+const ANY_SPACE = /[\s\u00A0\u2000-\u200B\u202F\u205F\u3000]/
+// Sample values the help pages show (a branch, two project folders); a plain
+// lowercase word cannot be told from one by its shape.
+const SAMPLE_VALUES = new Set(['main', 'my-project', 'navide-web'])
+
+export function isValueToken(token: string): boolean {
+  if (!token || ANY_SPACE.test(token) || /\{[^{}]*\}/.test(token)) return false
+  if (SAMPLE_VALUES.has(token)) return true
+  // Sentence punctuation is not a value marker: "Cancelled." "Unbind?" "Loading…"
+  const bare = token.replace(/[…:.?!]+$/, '')
+  if (bare !== token && !/[0-9./_~*<]/.test(bare)) return false
+  if (/^[A-Z]{1,5}$/.test(bare)) return true
+  return /[0-9./_~*<]/.test(bare) || bare.startsWith('-')
+}
+
+export function isValue(text: string): boolean {
+  const t = withoutLiterals(text).trim()
+  // Exactly one <code> span and nothing else: a value only if what it quotes is one.
+  const code = /^<code>([^<]*)<\/code>$/.exec(t)
+  return isValueToken(code ? code[1].trim() : t)
 }
 
 function leaves(value: unknown, prefix = ''): Array<[string, string]> {
@@ -94,10 +112,11 @@ const HTML_TAGS = new Set([
 
 const ITALICS = new Set(['em', 'i'])
 
-// Existing translations that quote a button name 「…」 where en-US bolds it.
-const MARKUP_EXCEPTIONS: Record<string, string[]> = {
-  'zh-TW': ['settings.help.crossPlatform.s1.callout.text'],
-  'zh-CN': ['settings.help.crossPlatform.s1.callout.text']
+// Existing translations that quote two button names where en-US bolds them
+// (zh-TW 「…」, zh-CN “…”): only <strong> is waived, and only for this key.
+const MARKUP_EXCEPTIONS: Record<string, Record<string, string[]>> = {
+  'zh-TW': { 'settings.help.crossPlatform.s1.callout.text': ['strong', '/strong'] },
+  'zh-CN': { 'settings.help.crossPlatform.s1.callout.text': ['strong', '/strong'] }
 }
 
 function tags(text: string): string[] {
@@ -153,13 +172,27 @@ describe('translated catalogs keep each message working', () => {
           // code, strong text or any other tag.
           const bad = [...en].flatMap(([key, enText]) => {
             const text = translated.get(key)
-            if (text === undefined || MARKUP_EXCEPTIONS[locale]?.includes(key)) return []
+            if (text === undefined) return []
             const have = new Set(tags(text))
-            const missing = tags(enText).filter((tag) => !ITALICS.has(tag.replace('/', '')) && !have.has(tag))
+            const waived = MARKUP_EXCEPTIONS[locale]?.[key] ?? []
+            const missing = tags(enText).filter(
+              (tag) => !ITALICS.has(tag.replace('/', '')) && !waived.includes(tag) && !have.has(tag)
+            )
             return missing.length ? [`${key}: missing ${missing.join(' ')}`] : []
           })
           expect(bad, bad.join('\n')).toEqual([])
         })
+
+        const exceptionsHere = Object.entries(MARKUP_EXCEPTIONS[locale] ?? {}).filter(([key]) => en.has(key))
+        if (exceptionsHere.length) {
+          it('still needs each markup exception', () => {
+            // An exception the catalog no longer needs must be deleted, not kept forever.
+            for (const [key, waived] of exceptionsHere) {
+              const have = new Set(tags(translated.get(key) ?? ''))
+              expect(waived.some((tag) => tags(en.get(key) ?? '').includes(tag) && !have.has(tag)), key).toBe(true)
+            }
+          })
+        }
 
         it('has the plural forms its plural rule reads', () => {
           const bad = [...en].flatMap(([key, enText]) => {
@@ -179,7 +212,6 @@ describe('translated catalogs keep each message working', () => {
             const bad = [...en].flatMap(([key, enText]) => {
               if (translated.get(key) !== enText || allowed.has(key) || isValue(enText)) return []
               const words = withoutLiterals(enText)
-                .replace(/<code>[\s\S]*?<\/code>/g, ' ')
                 .replace(/\{[^{}]*\}/g, ' ')
                 .replace(/<[^>]*>/g, ' ')
                 .match(/[A-Za-z][A-Za-z'’-]*/g) ?? []
@@ -203,5 +235,22 @@ describe('every catalog file is a registered language', () => {
     const block = source.slice(source.indexOf('_MESSAGES = {'), source.indexOf('}', source.indexOf('_MESSAGES = {')))
     const registered = [...block.matchAll(/'([a-z]{2}-[A-Z]{2})':/g)].map((m) => m[1]).sort()
     expect(registered).toEqual(localesIn(dir))
+  })
+})
+
+describe('isValue: what the untranslated check may skip', () => {
+  it.each([
+    ['main', true], ['my-project', true], ['navide-web', true], ['v0.2.0', true], ['README.md', true],
+    ['--flag', true], ['~/.codex-panes/', true], ['Node.js', true], ['<code>git status --short</code>', false],
+    ['<code>~/.claude</code>', true], ['OK', true], ['API', true],
+    // Prose the review found exempted by the earlier rule: every one must be checked.
+    ['Save', false], ['Save…', false], ['save', false], ['Saving…', false], ['Loading…', false],
+    ['Cancelled.', false], ['Unbind?', false], ['Testing:', false], ['(optional)', false],
+    ['{count} files', false], ['until {date}', false], ['Status: {status}', false], ['{pct} left', false],
+    ['running', false], ['failed', false], ['memory', false], ['Re-detect', false], ['Built-in', false],
+    ['read-only', false], ['STAGED', false], ['CONFLICT', false], ['Save\u00a0all', false],
+    ['<code>Save your changes now</code>', false], ['<code>a</code> Click here to continue <code>b</code>', false],
+  ])('%s → value: %s', (text, expected) => {
+    expect(isValue(text)).toBe(expected)
   })
 })
