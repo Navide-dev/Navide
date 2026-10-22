@@ -1118,7 +1118,7 @@
     "good-response": "Gute Antwort",
     "bad-response": "Schlechte Antwort",
     "clear-working-set": "Arbeitssatz leeren",
-    "add-memory": "Memory hinzufügen",
+    "add-memory": "Gedächtnis hinzufügen",
     "pin-file-path": "Einen Dateipfad anheften, der immer einbezogen wird",
     "browse": "Durchsuchen …",
     "new-workspace": "Neu …",
@@ -1406,7 +1406,7 @@
       "chat-loading": "Chats werden geladen …",
       "chat-targets-failed": "Chats konnten nicht geladen werden ({code}): {message}",
       "reason": {
-        "memory": "Memory-Dateien von Agents (CLAUDE.md, AGENTS.md und ähnliche) werden nie geteilt.",
+        "memory": "Gedächtnisdateien von Agents (CLAUDE.md, AGENTS.md und ähnliche) werden nie geteilt.",
         "denied_name": "Dieser Dateiname sieht nach einer Schlüssel-, Anmelde- oder Token-Datei aus, die nie geteilt wird.",
         "system": "Dateien in System-, Anmeldeinformations- oder Navide-Datenordnern werden nie geteilt.",
         "hard_link": "Eine Datei mit mehr als einem Namen (ein Hardlink) wird nie geteilt.",
@@ -1566,7 +1566,7 @@
           "summary": "Die Prompt-Skills erstellen und bearbeiten, die ein CLI-pane über seine Loop-Schaltfläche auslösen kann."
         },
         "memory": {
-          "title": "Memory",
+          "title": "Gedächtnis",
           "summary": "Die Anweisungsdateien anzeigen und bearbeiten, die jede CLI liest: CLAUDE.md, AGENTS.md, QWEN.md, .cursor-Regeln."
         },
         "analyzer-backend": {
@@ -1667,7 +1667,7 @@
         },
         "storage": {
           "title": "Speicher",
-          "summary": "Öffnet den Resource Manager, der die Speichernutzung von App-Daten, Electron-Caches, CLI-Home-Verzeichnissen und Arbeitsbereichen scannt und bereinigt."
+          "summary": "Öffnet die Ressourcenverwaltung, die die Speichernutzung von App-Daten, Electron-Caches, CLI-Home-Verzeichnissen und Arbeitsbereichen scannt und bereinigt."
         },
         "execution-policy": {
           "title": "Ausführungsrichtlinie",
@@ -2550,7 +2550,7 @@
       "credentials": "Zugangsdaten",
       "skills": "Skills",
       "prompts": "Prompts",
-      "memory": "Memory",
+      "memory": "Gedächtnis",
       "sharing": "Teilen",
       "analyzer": "Analysator",
       "extensions": "Navide-Plug-ins",
@@ -2584,7 +2584,7 @@
             }
           },
           "resource": {
-            "caption": "Das Fenster „Resource Manager“. Werte und Scans werden nur aktualisiert, wenn Sie auf „Aktualisieren“ klicken.",
+            "caption": "Das Fenster „Ressourcenverwaltung“. Werte und Scans werden nur aktualisiert, wenn Sie auf „Aktualisieren“ klicken.",
             "legend": {
               "totals": {
                 "label": "Die drei Karten oben",
@@ -2627,7 +2627,7 @@
           "title": "Einstellungen im Überblick",
           "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>24 Tabs</strong>.",
           "h1": "Das Suchfeld",
-          "p2": "Unter der Überschrift der Seitenleiste befindet sich ein Suchfeld mit dem Platzhalter <code>Einstellungen durchsuchen …</code>. Es durchsucht Titel, Abschnitte und Stichwörter der Einstellungen <strong>über alle Tabs hinweg</strong> (in der aktuellen Oberflächensprache und mit den indizierten Stichwörtern) und listet höchstens 8 Ergebnisse auf; ein Klick auf ein Ergebnis wechselt zu dessen Tab und scrollt zum Abschnitt (mit einer Ausnahme: „Speicher“ schließt die Einstellungen und öffnet direkt den Resource Manager). Ohne Treffer erscheint <code>Keine passenden Einstellungen</code>. <kbd class=\"syh-kbd\">Esc</kbd> leert das Feld.",
+          "p2": "Unter der Überschrift der Seitenleiste befindet sich ein Suchfeld mit dem Platzhalter <code>Einstellungen durchsuchen …</code>. Es durchsucht Titel, Abschnitte und Stichwörter der Einstellungen <strong>über alle Tabs hinweg</strong> (in der aktuellen Oberflächensprache und mit den indizierten Stichwörtern) und listet höchstens 8 Ergebnisse auf; ein Klick auf ein Ergebnis wechselt zu dessen Tab und scrollt zum Abschnitt (mit einer Ausnahme: „Speicher“ schließt die Einstellungen und öffnet direkt die Ressourcenverwaltung). Ohne Treffer erscheint <code>Keine passenden Einstellungen</code>. <kbd class=\"syh-kbd\">Esc</kbd> leert das Feld.",
           "callout": {
             "title": "Der Suchindex ist nicht vollständig",
             "text": "Der Index ist eine von Hand gepflegte Liste, und <strong>die Tabs {layout}, {notifications}, {security} und {channels} haben überhaupt keine Einträge</strong>, sodass sich darin nichts suchen lässt – Sie müssen sie selbst öffnen. Ein Eintrag unter „CLI-Agents“ öffnet direkt die Einstellungsleiste einer CLI (siehe das Thema „CLI-Agents und Konten“)."
@@ -2860,7 +2860,7 @@
           "note": "Zehn Farben (Grün / Gelb / Orange / Rot / Blau / Lila / Pink / Cyan / Grau / Tinte), alle als Design-Tokens, sodass sie in jedem Design lesbar bleiben. <em>Zurücksetzen</em> pro Zeile, <em>Alle zurücksetzen</em> für die Seite."
         },
         "s3": {
-          "title": "Skills, Prompts und Memory",
+          "title": "Skills, Prompts und Gedächtnis",
           "h1": "Skills – die gemeinsame Skill-Bibliothek",
           "p1": "Ein Skill ist ein Ordner mit einer <code>SKILL.md</code>, die besagt: „Wenn diese Art von Aufgabe kommt, erledige sie so.“ Diese Seite (mit dem Titel <em>Verwaltete Skills</em>) tut drei Dinge: Sie zeigt alle Skills jeder CLI, legt fest, <strong>wer welchen erhält</strong>, und erstellt neue Skills.",
           "callout1": {
@@ -2908,7 +2908,7 @@
             "disabled": "Deaktivierte Skills bleiben auf der Einstellungsseite, <strong>verschwinden aber aus dem Ring</strong>."
           },
           "note": "Jeder Skill hat <em>Name</em>, <em>Symbol</em>, <em>Zusammenfassung</em>, <em>Beim Auslösen gesendeter Prompt</em>, <em>Fortsetzungstext</em> (leer verwendet den globalen Fortsetzungstext), <em>Turn-Limit</em> (0 = unbegrenzt) und <em>Kategorie</em>; jeder Eintrag bietet <em>Als Standard festlegen</em>, <em>Aktivieren</em> / <em>Deaktivieren</em>, <em>Duplizieren</em> und <em>Löschen</em>.",
-          "h3": "Memory – die Anweisungsdateien jeder CLI",
+          "h3": "Gedächtnis – die Anweisungsdateien jeder CLI",
           "p5": "Jede CLI liest vor Arbeitsbeginn eine Anweisungsdatei – <code>CLAUDE.md</code>, <code>AGENTS.md</code>, <code>QWEN.md</code>, <code>.cursor</code>-Regeln. Diese Seite listet <strong>Dateien, nicht CLIs</strong>: eine Zeile pro Datei, dahinter alle CLIs, die sie lesen, und die Datei lässt sich direkt bearbeiten.",
           "memory": {
             "levels": "Aufgeteilt in <strong>Benutzerebene</strong> (das Home-Verzeichnis) und <strong>Projektebene</strong> (der aktuelle Arbeitsbereich). Ist kein Ordner geöffnet, wird nur die Benutzerebene aufgeführt.",
@@ -3086,7 +3086,7 @@
           "p11": "Der erste Block unter Einstellungen ▸ Navide Cloud heißt Sync. <strong>Er ist kein eigener Tab</strong> – er ist der oberste Abschnitt dieser einen Seite. Jeder synchronisierbare Bereich erhält eine Zeile mit einem Schalter; schalten Sie einen ein, bleibt dieser Bereich auf jedem mit <strong>demselben Konto</strong> angemeldeten Gerät gleich. Einträge werden <strong>auf diesem Rechner verschlüsselt</strong>, und der Server speichert nur Chiffretext, für den er keinen Schlüssel hat.",
           "sync": {
             "scopes": "<strong>Fünf Zeilen, eine pro Seite der Agent-Assets und in der Reihenfolge der Seitenleiste; drei lassen sich einschalten</strong>: <em>MCP</em> (die in Navide hinzugefügten Server; ihre Geheimnisse werden verschlüsselt, bevor sie den Rechner verlassen), <em>Skills</em> (welche Skills aktiv sind und an welche CLIs jeder geht, dazu die Dateien der in Navide erstellten Skills; Skills, die Sie selbst in den Ordner gelegt haben, synchronisieren nur ihre Einstellungen) und <em>Prompts</em> (Prompt-Skills und der Loop-Prompt).",
-            "credentials": "<em>Memory</em> und <em>CLI-Erweiterungen</em> sind <strong>aufgeführt, aber ausgegraut</strong>, und ihre Zeile lautet „noch nicht synchronisierbar“. Das bedeutet nicht „standardmäßig aus, wartet darauf, dass Sie es einschalten“ – der Schalter bewegt sich nicht. Ein Memory-Schalter, den eine ältere Version eingeschaltet gelassen hat, lässt sich noch ausschalten. <em>Anmeldeinformationen &amp; Schlüssel</em> hat überhaupt keine Zeile: Kontoanmeldeinformationen und Schlüssel verlassen diesen Rechner nie. Ein Schalter für Anmeldeinformationen, den eine ältere Version eingeschaltet gelassen hat, gilt als ausgeschaltet. MCP-Einstellungen werden bei eingeschaltetem Sync auf diesem Rechner verschlüsselt, bevor sie hochgeladen werden, und der Server hat keinen Schlüssel, um sie zu entschlüsseln.",
+            "credentials": "<em>Gedächtnis</em> und <em>CLI-Erweiterungen</em> sind <strong>aufgeführt, aber ausgegraut</strong>, und ihre Zeile lautet „noch nicht synchronisierbar“. Das bedeutet nicht „standardmäßig aus, wartet darauf, dass Sie es einschalten“ – der Schalter bewegt sich nicht. Ein Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, lässt sich noch ausschalten. <em>Anmeldeinformationen &amp; Schlüssel</em> hat überhaupt keine Zeile: Kontoanmeldeinformationen und Schlüssel verlassen diesen Rechner nie. Ein Schalter für Anmeldeinformationen, den eine ältere Version eingeschaltet gelassen hat, gilt als ausgeschaltet. MCP-Einstellungen werden bei eingeschaltetem Sync auf diesem Rechner verschlüsselt, bevor sie hochgeladen werden, und der Server hat keinen Schlüssel, um sie zu entschlüsseln.",
             "states": "Zwei Zustände werden unter dem Block ausdrücklich genannt: <em>nicht verbunden</em> (eingeschaltete Bereiche holen auf, sobald die Verbindung wieder besteht) und <em>dieses Gerät hat noch keinen Sync-Schlüssel</em> (nichts wird hochgeladen, bis es einen hat). Außerdem gibt es eine Schaltfläche <em>Jetzt synchronisieren</em>, die nur bei bestehender Verbindung aktiv ist.",
             "key": "<strong>Der Sync-Schlüssel wird als die ersten 8 Zeichen seiner ID angezeigt</strong>, nie als der Schlüssel selbst. <em>Schlüssel rotieren</em> erfordert <strong>zwei Klicks</strong>: Der erste macht daraus <em>Jetzt rotieren</em> und fügt daneben <em>Abbrechen</em> hinzu. Das Rotieren setzt den aktuellen Schlüssel außer Dienst, versiegelt jeden synchronisierten Eintrag unter einem neuen und übergibt den neuen Schlüssel Ihren anderen Geräten beim nächsten Schlüsselaustausch – der richtige Schritt bei einem Schlüssel, den Sie für kompromittiert halten.",
             "legacy": "<em>Für dieses Konto übernehmen</em> erscheint nur, wenn dieses Gerät einen Sync-Schlüssel aus der Zeit vor der Kontobindung besitzt <em>und</em> dieses Konto noch keinen Schlüssel hat. Es ist eine einmalige Entscheidung: Ohne Übernahme können Sie nicht lesen, was unter diesem Schlüssel synchronisiert wurde, und ein stattdessen neu erzeugter Schlüssel würde diese Einträge dauerhaft unlesbar machen.",
@@ -3122,7 +3122,7 @@
               "label": "Token-Monitor"
             }
           },
-          "note1": "Pipeline Manager, Resource Manager und Turn Stats sind <strong>Dialoge, die im Hauptfenster geöffnet werden</strong>, keine eigenen Betriebssystemfenster; <strong>der Token Monitor ist als einziger wirklich ein eigenständiges natives Fenster</strong> (1200×800), und das Schließen eines Arbeitsbereichsfensters schließt ihn nicht mit. <strong>Keiner</strong> dieser Einträge im Menü „Fenster“ hat ein Tastenkürzel.",
+          "note1": "Pipeline Manager, Ressourcenverwaltung und Turn Stats sind <strong>Dialoge, die im Hauptfenster geöffnet werden</strong>, keine eigenen Betriebssystemfenster; <strong>der Token Monitor ist als einziger wirklich ein eigenständiges natives Fenster</strong> (1200×800), und das Schließen eines Arbeitsbereichsfensters schließt ihn nicht mit. <strong>Keiner</strong> dieser Einträge im Menü „Fenster“ hat ein Tastenkürzel.",
           "pipeline": {
             "p1": "Zwei Tabs. Unter <strong>Pipelines</strong> besteht ein Ablauf aus mehreren Stufen; eine Stufe hat eine ID, einen Titel, eine <em>Endmarke</em> (z. B. <code>---DONE---</code>) und die Option <em>Für Antworten des Benutzers pausieren</em>. Jede Stufe hat mindestens einen Platz, und ein Platz braucht einen <em>Agent</em>, einen <em>Rollenschlüssel</em>, einen Anzeigenamen und einen <em>Kickoff-Text</em> (den Eröffnungs-Prompt); er kann außerdem als <strong>🎯 Als globalen Manager festlegen</strong> markiert werden – ein solcher Platz wird zum stufenübergreifenden Koordinator, sobald er seine eigene Arbeit erledigt hat, und <strong>ein Ablauf darf nur einen davon haben</strong>. Einen integrierten Ablauf, den Sie beschädigt haben, stellen Sie mit <em>Auf Werksstufen zurücksetzen</em> wieder her (mit vorheriger Bestätigung; lässt sich nicht rückgängig machen).",
             "p2": "Der Tab <strong>Rollen</strong> verwaltet die Rollen selbst (Schlüssel, Bezeichnung, einzeilige Zusammenfassung, System-Prompt) und weist darauf hin, dass <strong>Änderungen nur für danach geöffnete panes gelten</strong>. Beide Tabs bieten <em>⬇ JSON exportieren</em> / <em>⬆ JSON importieren</em> / <em>↺ Auf Standard zurücksetzen</em>."
@@ -3208,7 +3208,7 @@
         "s7": {
           "title": "Ressourcen und Pflege",
           "h1": "Ressourcenverwaltung",
-          "p1": "Zwei Zugänge zu denselben Daten: die Ressourcen-Pille in der Statusleiste (ein kleines Panel) und <strong>Fenster ▸ Resource Manager</strong> (die vollständige Oberfläche). Sie listen die CLIs <strong>des gesamten Rechners</strong> auf, nicht nur die dieses Fensters.",
+          "p1": "Zwei Zugänge zu denselben Daten: die Ressourcen-Pille in der Statusleiste (ein kleines Panel) und <strong>Fenster ▸ Ressourcenverwaltung</strong> (die vollständige Oberfläche). Sie listen die CLIs <strong>des gesamten Rechners</strong> auf, nicht nur die dieses Fensters.",
           "resource": {
             "columns": "Die Spalten sind <em>Name</em>, <em>Verlauf</em> (eine Sparkline des jüngsten Verlaufs), <em>CPU</em> und <em>Arbeitsspeicher</em>. Leerlauf zeigt die Farbe des Punkts vor dem Namen – eine Textbeschriftung gibt es nicht.",
             "totals": "Darüber stehen die Gesamtwerte für CPU und Arbeitsspeicher, jeweils mit einer Zeile dazu, „welcher Anteil dieses Rechners das ist“, sowie <em>Aktualisieren</em>.",
@@ -3223,7 +3223,7 @@
             "text": "Eine CLI im Leerlauf belegt weiterhin den Arbeitsspeicher, den sie zum Starten gebraucht hat, <strong>oft 200–300 MB pro CLI</strong>. Das sind Startkosten, und sie werden nicht kleiner, wenn Sie die CLI „regelmäßig neu starten“ – ein Neustart zahlt einfach denselben Sockel erneut. Das Einzige, was den Arbeitsspeicher wirklich zurückholt, ist die <strong>Freigabe</strong>: Der Prozess wird beendet, das pane wird zu einer Platzhalterkarte, die sich mit einem Klick fortsetzen lässt, und das Gespräch wird aus dem eigenen Transkript der CLI wieder aufgenommen (siehe Abschnitt 3 des Themas „Arbeitsbereiche und panes“)."
           },
           "h2": "Speicher (Festplattennutzung und Bereinigung)",
-          "p2": "Der Abschnitt <strong>Speicher</strong> unter der Prozesstabelle im Resource Manager (klicken Sie auf die Überschrift zum Auf- oder Zuklappen). Er ermittelt, wie viel Festplattenplatz diese App, das Home-Verzeichnis jeder CLI und die geöffneten Arbeitsbereiche belegen – <strong>25 Einträge in vier Kategorien</strong>, von denen sich 17 bereinigen lassen.",
+          "p2": "Der Abschnitt <strong>Speicher</strong> unter der Prozesstabelle in der Ressourcenverwaltung (klicken Sie auf die Überschrift zum Auf- oder Zuklappen). Er ermittelt, wie viel Festplattenplatz diese App, das Home-Verzeichnis jeder CLI und die geöffneten Arbeitsbereiche belegen – <strong>25 Einträge in vier Kategorien</strong>, von denen sich 17 bereinigen lassen.",
           "storageTable": {
             "category": "Kategorie",
             "examples": "Beispiele für den Inhalt"
@@ -3262,11 +3262,11 @@
           "maintenance": {
             "memory": {
               "symptom": "Der Arbeitsspeicherverbrauch ist zu hoch",
-              "where": "Resource Manager ▸ Freigeben; oder die Leerlaufschwelle unter Einstellungen ▸ Allgemein senken"
+              "where": "Ressourcenverwaltung ▸ Freigeben; oder die Leerlaufschwelle unter Einstellungen ▸ Allgemein senken"
             },
             "disk": {
               "symptom": "Die Festplatte ist voll",
-              "where": "Fenster ▸ Resource Manager ▸ Speicher ▸ Sichere Elemente bereinigen"
+              "where": "Fenster ▸ Ressourcenverwaltung ▸ Speicher ▸ Sichere Elemente bereinigen"
             },
             "leftover": {
               "symptom": "⚠ N leftover in der Statusleiste",
@@ -4434,7 +4434,7 @@
             "exempt": "Das fokussierte pane, ein pane, das auf Ihre Antwort wartet, und ein pane mit ungesendetem Text im Eingabefeld werden nie freigegeben.",
             "now": "Derselbe Abschnitt hat eine Schaltfläche <strong>Jetzt freigeben</strong>, die zuerst nennt, wie viele panes infrage kommen und wie viel sie ungefähr belegen."
           },
-          "note": "Das vollständige Verhalten der Freigabe (einschließlich des Aussehens eines Platzhalters) steht im Thema „Arbeitsbereiche und panes“; CPU- und Arbeitsspeicherwerte pro pane und das Fenster „Resource Manager“ stehen in „Einstellungen und System“."
+          "note": "Das vollständige Verhalten der Freigabe (einschließlich des Aussehens eines Platzhalters) steht im Thema „Arbeitsbereiche und panes“; CPU- und Arbeitsspeicherwerte pro pane und das Fenster „Ressourcenverwaltung“ stehen in „Einstellungen und System“."
         },
         "s8": {
           "title": "Fehlerbehebung",
@@ -5525,7 +5525,7 @@
             "legend": {
               "nav": {
                 "label": "Seitenleiste der Einstellungen",
-                "text": "MCP steht unter Agent-Assets, neben Skills, Prompts und Memory."
+                "text": "MCP steht unter Agent-Assets, neben Skills, Prompts und Gedächtnis."
               },
               "actions": {
                 "label": "Aktionen in der oberen Leiste",
@@ -6753,7 +6753,7 @@
         "s7": {
           "title": "Eine Person, mehrere Rechner",
           "p1": "Zwei Rechner mit unterschiedlichen Betriebssystemen zu verbinden, ist an sich keine Plattformfrage: Die Anmeldung bei Navide Cloud, das Koppeln und geräteübergreifende Nachrichten funktionieren auf allen dreien gleich und werden unter <strong>Einstellungen und System</strong> behandelt. Dieser Abschnitt ergänzt nur, was sich ändert, wenn die Rechner nicht dieselbe Plattform haben.",
-          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste derzeit vier Dinge einschalten: Prompt-Skills, MCP, Skills und Memory. <em>Anmeldeinformationen</em> ist ebenfalls aufgeführt, aber der Schalter ist deaktiviert, und die Beschreibung sagt, dass die Synchronisierung noch nicht unterstützt wird – der Eintrag zeigt nur, dass es diesen Bereich gibt, nicht, dass Sie ihn einschalten können.",
+          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste derzeit vier Dinge einschalten: Prompt-Skills, MCP, Skills und Gedächtnis. <em>Anmeldeinformationen</em> ist ebenfalls aufgeführt, aber der Schalter ist deaktiviert, und die Beschreibung sagt, dass die Synchronisierung noch nicht unterstützt wird – der Eintrag zeigt nur, dass es diesen Bereich gibt, nicht, dass Sie ihn einschalten können.",
           "note": "Was ohnehin nie mitreist: die Installation und Anmeldung jeder CLI, Anmeldeinformationen (im eigenen Tresor jeder Plattform gespeichert, in nicht austauschbaren Formaten) und jeder absolute Pfad. Auf einem zweiten Rechner müssen die CLIs eigens installiert und angemeldet werden."
         },
         "mock": {
@@ -7155,7 +7155,7 @@
       "title": "Synchronisierung",
       "hint": "Schalten Sie einen Bereich ein, um ihn auf jedem bei diesem Konto angemeldeten Gerät gleich zu halten. Einträge werden auf diesem Rechner verschlüsselt; der Server speichert Chiffretext, für den er keinen Schlüssel hat.",
       "not-yet": "Noch nicht synchronisierbar.",
-      "retired-memory": "Memory wird nicht mehr synchronisiert. Schalten Sie es aus; Ihre Anweisungsdateien hier und die Kopien in der Cloud bleiben unverändert.",
+      "retired-memory": "Gedächtnis wird nicht mehr synchronisiert. Schalten Sie es aus; Ihre Anweisungsdateien hier und die Kopien in der Cloud bleiben unverändert.",
       "not-connected": "Nicht verbunden – synchronisierte Bereiche holen auf, sobald die Verbindung wieder besteht.",
       "no-key": "Dieses Gerät hat noch keinen Synchronisierungsschlüssel; bis dahin wird nichts hochgeladen.",
       "now": "Jetzt synchronisieren",
@@ -7200,7 +7200,7 @@
       "scope-prompts": "Prompts",
       "scope-mcp": "MCP",
       "scope-skills": "Skills",
-      "scope-memory": "Memory",
+      "scope-memory": "Gedächtnis",
       "scope-hint-prompts": "Prompt-Skills und der Loop-Prompt.",
       "error-load": "Die Synchronisierungseinstellungen konnten nicht gelesen werden.",
       "scope-hint-mcp": "MCP-Server, die Sie in Navide hinzugefügt haben. Ihre Geheimnisse werden verschlüsselt, bevor sie den Rechner verlassen.",
@@ -8823,7 +8823,7 @@
     "resume-existing-pipeline": "↻ Vorhandene Pipeline fortsetzen",
     "resume-stages-done": "{done}/{total} Stufen fertig",
     "focus-pane": "pane fokussieren",
-    "manager-badge": "🎯 Mgr",
+    "manager-badge": "🎯 Manager",
     "docked": "Angedockt",
     "pane-origin-stage": "Stufe {id}",
     "pane-origin-manual": "manuell",
@@ -10300,7 +10300,7 @@
     "average-detailed": "Tokens aus {detailed} mit Details"
   },
   "resource": {
-    "title": "Resource Manager",
+    "title": "Ressourcenverwaltung",
     "statusbar-title": "CLI-Ressourcen",
     "close": "Schließen",
     "cpu": "CPU",
@@ -10315,7 +10315,7 @@
     "result-helper-detail-ready": "Verarbeitet große Ergebnisse von Navide-Plug-ins außerhalb des Backends",
     "result-helper-detail-unavailable": "{error}. Ergebnisse über 1 MiB werden abgelehnt, bis er starten kann",
     "busiest": "Am stärksten ausgelastete CLI",
-    "open-window": "Resource Manager öffnen",
+    "open-window": "Ressourcenverwaltung öffnen",
     "reclaim-action": "{count} jetzt freigeben",
     "reclaim-action-empty": "Nichts freizugeben",
     "jump": "Zu diesem pane springen",
@@ -11652,7 +11652,7 @@
     "riskLabel": "Risikostufe: {level}",
     "variesByPlatform": "(je nach Plattform unterschiedlich; die höchste wird angezeigt)",
     "rescanNotice": "Ein erneuter Scan der Navide Registry von {name} {version} hat {count} neue Einträge gefunden (noch nicht verifiziert). Siehe „Einstellungen → Navide-Plug-ins → Offenlegungsübersicht“.",
-    "resultHelperUnavailable": "Navide konnte den Helfer, der große Ergebnisse von Navide-Plug-ins übermittelt, nicht starten ({error}). Ergebnisse über 1 MiB werden abgelehnt, bis das möglich ist; Navide versucht es in etwa einer Minute erneut. Siehe Resource Manager.",
+    "resultHelperUnavailable": "Navide konnte den Helfer, der große Ergebnisse von Navide-Plug-ins übermittelt, nicht starten ({error}). Ergebnisse über 1 MiB werden abgelehnt, bis das möglich ist; Navide versucht es in etwa einer Minute erneut. Siehe Ressourcenverwaltung.",
     "risk": {
       "low": "Niedrig",
       "medium": "Mittel",
