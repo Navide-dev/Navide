@@ -26,6 +26,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Codex panes: a sub-agent finishing no longer ends its parent pane's turn. Its reply is not taken as the pane's, and its task is not used to name the pane. Before, a waiting `cli_wait_idle` or `cli_send_and_wait` returned while the parent was still working. A sub-agent's tokens still count toward the pane, now under the sub-agent's own session instead of its parent's. The per-account turn count is unchanged and still includes sub-agent turns.
 
+- Settings: a long sidebar label wraps onto a second line instead of being cut off (Spanish "Complementos de Navide", Japanese "Navide マーケットプレイス").
+
 - Backend: fewer Git processes while agents work. The network view's pane branches are answered from the last reading and refreshed in the background, no more than once per 30 seconds per repository. The Git pane's history, branch, stash, remote, tag and worktree reads are shared when several Git panes reload together after one change. Each status read now runs two Git commands instead of three.
 
 - Windows: programs the backend starts without input of their own (onboarding's version checks such as `pnpm --version`, CLI and tool probes) no longer hang at launch. They inherited the pipe the app keeps open for the backend's `shutdown` line; their standard input is now NUL, and the `shutdown` line still stops the backend. macOS and Linux are unchanged.
