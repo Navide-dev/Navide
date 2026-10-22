@@ -214,6 +214,11 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+      # Under `bun run`, `node` on PATH is Bun itself (bunfig.toml [run] bun),
+      # so the test is told where the real one is.
+      - name: Record the plain Node.js binary for the mirror-path test
+        shell: bash
+        run: echo "NAVIDE_PLAIN_NODE=$(node -p process.execPath)" >> "$GITHUB_ENV"
       - name: Install locked dependencies
         run: |
           bun install --frozen-lockfile
