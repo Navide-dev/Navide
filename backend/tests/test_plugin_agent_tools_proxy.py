@@ -63,7 +63,13 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned again by DESIGN-C S4b: cli_open_agent's `window` also takes
 #: "existing", with `window_id`. cli_open_agent is still the only entry that
 #: differs from the S3 pin.
-MAIN_TOOLS_LIST_SHA256 = "898f834e896a2139d75cb075dc9ee3138543f97b58ecf87f33b2fb30b094382c"
+#: Re-pinned for ACP P4 (#592; previous pin 898f834e…): the cli_read_log,
+#: cli_get_status, cli_wait_idle and cli_interrupt descriptions each gain a
+#: paragraph on ACP panes; no other tool changed (the core-tools snapshot,
+#: tests/data/mcp_core_tools_main.json, differs from main in those four only).
+#: #581 re-pins for its own three descriptions: whichever lands second
+#: recomputes this from the merged list.
+MAIN_TOOLS_LIST_SHA256 = "261d166dd12e75d294283a6447b1f04182aa1fdac202878df5f7f57750a4038c"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
