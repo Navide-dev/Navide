@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows: the first launch after a fresh install waits up to 120 seconds for the backend (was 45), as on Linux. Unpacking the backend while Microsoft Defender scans the new files can take longer than 45 seconds, which ended a backend that was still starting with "backend failed to start". The startup screen now also stays up for the whole wait instead of closing after 52 seconds. A timeout set in Settings is unchanged.
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added

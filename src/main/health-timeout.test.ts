@@ -92,7 +92,7 @@ describe('platform default', () => {
   it.each<[PlatformId, number]>([
     ['linux', 120],
     ['darwin', 45],
-    ['win32', 45],
+    ['win32', 120],
   ])('%s defaults to %is when nothing is configured', (platform, expected) => {
     setPlatformId(platform)
     expect(defaultHealthCheckTimeoutSec()).toBe(expected)
@@ -100,7 +100,7 @@ describe('platform default', () => {
     expect(clampHealthCheckTimeoutSec(NaN)).toBe(expected)
   })
 
-  it('keeps macOS and Windows on the original 45s and Linux on 120s', () => {
+  it('keeps macOS on the original 45s and gives Linux and Windows 120s', () => {
     expect(DEFAULT_HEALTH_CHECK_TIMEOUT_SEC).toBe(45)
     expect(LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC).toBe(120)
   })
@@ -114,7 +114,7 @@ describe('platform default', () => {
   it.each<[PlatformId, number]>([
     ['linux', 120],
     ['darwin', 45],
-    ['win32', 45],
+    ['win32', 120],
   ])('a corrupt file on %s falls back to %is', (platform, expected) => {
     setPlatformId(platform)
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)

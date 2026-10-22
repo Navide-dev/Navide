@@ -1032,13 +1032,15 @@ function armBootTimeout(): void {
   if (_bootTimer) clearTimeout(_bootTimer)
   // Safety net: dismiss a stuck spinner so the user is never trapped — but never
   // override an error state, which stays put with a Retry button. Kept just past
-  // useBackend's 50s init deadline: on a slow cold start (e.g. macOS Gatekeeper
-  // scanning an unsigned packaged binary on first launch) the backend may take
-  // up to 50s to report ready (then connect) or to give up and set status='error'.
+  // useBackend's init deadline (health-check timeout + 5s): on a slow cold start
+  // (e.g. macOS Gatekeeper, or Windows Defender scanning a fresh install's
+  // unpacked backend on first launch) the backend may take that long to report
+  // ready (then connect) or to give up and set status='error'.
   // Firing earlier would tear the overlay down mid-startup, revealing a bare
   // unconnected shell and pre-empting the error+Retry the backend failure path
   // is meant to show.
-  _bootTimer = window.setTimeout(() => { if (!bootError.value) dismissBoot() }, 52_000)
+  const ms = (settingsApi.healthCheckTimeoutSec.value + 7) * 1000
+  _bootTimer = window.setTimeout(() => { if (!bootError.value) dismissBoot() }, ms)
 }
 armBootTimeout()
 function retryBackend(): void {

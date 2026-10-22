@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { detectUiLocale, i18n, isAvailableUiLocale, type AvailableUiLocale } from '@navide/plugin-ui/foundation'
 import { onSettingsChanged, settingsGet, settingsReadiness, settingsSet } from '@navide/plugin-ui/shared'
-import { isLinux } from '../../../shared/osplat'
+import { isLinux, isWindows } from '../../../shared/osplat'
 
 const LANGUAGE_KEY = 'agent-team:language'
 // Only locales with a registered catalog are accepted, so a recognized code
@@ -87,11 +87,12 @@ function setLanguage(locale: string, options: { broadcast?: boolean } = {}): voi
 export const DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 45
 export const MIN_HEALTH_CHECK_TIMEOUT_SEC = 15
 export const MAX_HEALTH_CHECK_TIMEOUT_SEC = 120
-// Mirrors src/main/health-timeout.ts: Linux's AppImage first launch needs more.
+// Mirrors src/main/health-timeout.ts: the first launch on Linux (AppImage) and
+// Windows (fresh install, Defender scanning the unpacked backend) needs more.
 export const LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 120
 
 export function defaultHealthCheckTimeoutSec(): number {
-  return isLinux() ? LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
+  return isLinux() || isWindows() ? LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
 }
 
 function clampHealthCheckTimeoutSec(raw: number): number {
