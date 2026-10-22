@@ -16,6 +16,9 @@ All notable released changes to Navide will be documented in this file. The form
 ### Fixed
 
 - Backend: a change in one workspace no longer throws away the cached Git branch and status of every other workspace's panes. While agents kept editing, every refresh re-ran Git for all of them. Looking up the last fetch time also no longer holds up the backend while it lists a repository's worktrees.
+### Fixed
+
+- Codex panes: a sub-agent finishing no longer ends its parent pane's turn. Its reply is not taken as the pane's, and its task is not used to name the pane. Before, a waiting `cli_wait_idle` or `cli_send_and_wait` returned while the parent was still working. A sub-agent's tokens still count toward the pane, now under the sub-agent's own session instead of its parent's. The per-account turn count is unchanged and still includes sub-agent turns.
 
 ## [0.2.28] — 2026-10-21 — signed release
 
