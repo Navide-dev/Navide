@@ -825,7 +825,7 @@ def test_permission_prompt_still_records_the_turn_as_active(
 
 
 def test_the_log_records_transcript_stamp_decides_whose_turn_it_is(
-    client: TestClient, events: list[dict], monkeypatch
+    stepped_wall, client: TestClient, events: list[dict], monkeypatch
 ) -> None:
     """End to end through the log sink: the reader's ISO stamp, not when the
     record arrived, says which turn a log turn end belongs to. A stale one
@@ -855,10 +855,10 @@ def test_the_log_records_transcript_stamp_decides_whose_turn_it_is(
 
     try:
         client.post("/hooks/claude", **stop)                 # a turn ends
-        log_end("stale reply", time.time() - 60, "k1")        # an earlier turn's, read late
+        log_end("stale reply", app_module.time.time() - 60, "k1")  # an earlier turn's, read late
         client.post("/hooks/claude", **stop)                 # the next turn ends
         assert app_module._pane_activity["pw-e2e"]["text"] == ""
-        log_end("fresh reply", time.time(), "k2")             # this turn's, read first
+        log_end("fresh reply", app_module.time.time(), "k2")  # this turn's, read first
         client.post("/hooks/claude", **stop)
         assert app_module._pane_activity["pw-e2e"]["text"] == "fresh reply"
     finally:
