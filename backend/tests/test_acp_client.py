@@ -211,3 +211,182 @@ def test_the_fake_agent_speaks_one_json_message_per_line() -> None:
     ).stdout
     messages = [json.loads(line) for line in out.splitlines()]
     assert messages[-1] == {"jsonrpc": "2.0", "id": 3, "result": {"stopReason": "end_turn"}}
+
+
+# -- hostile or racing input, fed line by line (#584 review) ----------------
+
+
+class FakeWriter:
+    """The agent's stdin: records what Navide writes; drain can be held."""
+
+    def __init__(self) -> None:
+        self.lines: list[dict[str, Any]] = []
+        self.hold: asyncio.Event | None = None
+
+    def write(self, data: bytes) -> None:
+        for line in data.decode("utf-8").splitlines():
+            self.lines.append(json.loads(line))
+
+    async def drain(self) -> None:
+        if self.hold is not None:
+            await self.hold.wait()
+
+    def close(self) -> None:
+        pass
+
+    def replies(self, request_id: Any) -> list[dict[str, Any]]:
+        return [m for m in self.lines if m.get("id") == request_id and "method" not in m]
+
+
+def wired(on_permission=None) -> tuple[AcpClient, asyncio.StreamReader, FakeWriter, list[dict[str, Any]]]:
+    reader = asyncio.StreamReader()
+    writer = FakeWriter()
+    updates: list[dict[str, Any]] = []
+    client = AcpClient(reader, writer, on_update=updates.append, on_permission=on_permission)  # type: ignore[arg-type]
+    client.start()
+    return client, reader, writer, updates
+
+
+def feed(reader: asyncio.StreamReader, message: Any) -> None:
+    reader.feed_data((message if isinstance(message, str) else json.dumps(message)).encode("utf-8") + b"\n")
+
+
+def update(text: str) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "method": "session/update", "params": {
+        "sessionId": "s-1", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}},
+    }}
+
+
+def permission_request(request_id: int) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": request_id, "method": "session/request_permission", "params": {
+        "sessionId": "s-1", "toolCall": {"title": "write"},
+        "options": [{"optionId": "yes", "name": "Allow", "kind": "allow_once"}],
+    }}
+
+
+async def settle() -> None:
+    for _ in range(20):
+        await asyncio.sleep(0)
+
+
+async def test_output_json_cannot_parse_or_nest_is_skipped_and_reading_goes_on() -> None:
+    from agent_team_backend.acp_client import INTERNAL_ERROR, AcpError
+
+    client, reader, writer, updates = wired()
+    try:
+        pending = asyncio.ensure_future(client.request("session/list", {}))
+        await settle()
+        request_id = writer.lines[-1]["id"]
+        feed(reader, '{"n": ' + "9" * 5000 + "}")  # too many digits: ValueError
+        feed(reader, "[" * 200_000)  # too deep: RecursionError
+        feed(reader, {"jsonrpc": "2.0", "id": request_id, "error": {"code": "abc", "message": "bad"}})
+        feed(reader, update("still reading"))
+        await settle()
+
+        with pytest.raises(AcpError) as err:
+            await asyncio.wait_for(pending, 5)
+        assert err.value.code == INTERNAL_ERROR
+        assert [u["update"]["content"]["text"] for u in updates] == ["still reading"]
+        assert client.bad_lines == 2 and not client.closed
+    finally:
+        await client.close()
+
+
+async def test_a_permission_request_after_cancel_is_answered_cancelled_without_asking() -> None:
+    asked: list[dict[str, Any]] = []
+
+    async def choose(params: dict[str, Any]) -> str | None:
+        asked.append(params)
+        return "yes"
+
+    client, reader, writer, _updates = wired(on_permission=choose)
+    try:
+        turn = asyncio.ensure_future(client.prompt("s-1", "x"))
+        await settle()
+        prompt_id = writer.lines[-1]["id"]
+        await client.cancel("s-1")
+        feed(reader, permission_request(900))  # arrives after the cancel
+        await settle()
+
+        assert asked == []
+        assert writer.replies(900)[0]["result"] == {"outcome": {"outcome": "cancelled"}}
+
+        feed(reader, {"jsonrpc": "2.0", "id": prompt_id, "result": {"stopReason": "cancelled"}})
+        assert await asyncio.wait_for(turn, 5) == "cancelled"
+        # The next turn asks again.
+        turn = asyncio.ensure_future(client.prompt("s-1", "y"))
+        await settle()
+        feed(reader, permission_request(901))
+        await settle()
+        assert len(asked) == 1
+        assert writer.replies(901)[0]["result"]["outcome"] == {"outcome": "selected", "optionId": "yes"}
+        turn.cancel()
+    finally:
+        await client.close()
+
+
+async def test_a_boolean_id_answers_no_request() -> None:
+    client, reader, writer, _updates = wired()
+    try:
+        pending = asyncio.ensure_future(client.request("session/list", {}))
+        await settle()
+        assert writer.lines[-1]["id"] == 1
+        feed(reader, {"jsonrpc": "2.0", "id": True, "result": {"sessions": ["wrong"]}})
+        await settle()
+        assert not pending.done()
+        feed(reader, {"jsonrpc": "2.0", "id": 1, "result": {"sessions": []}})
+        assert await asyncio.wait_for(pending, 5) == {"sessions": []}
+    finally:
+        await client.close()
+
+
+async def test_a_long_line_arriving_in_pieces_is_read_whole() -> None:
+    client, reader, _writer, updates = wired()
+    try:
+        line = json.dumps(update("x" * (3 * 1024 * 1024))).encode("utf-8")
+        for start in range(0, len(line), 4096):
+            reader.feed_data(line[start:start + 4096])
+            await asyncio.sleep(0)
+        reader.feed_data(b"\n")
+        await settle()
+        assert len(updates[0]["update"]["content"]["text"]) == 3 * 1024 * 1024
+    finally:
+        await client.close()
+
+
+async def test_a_cancel_racing_the_users_answer_does_not_reply_twice() -> None:
+    client, reader, writer, _updates = wired(on_permission=lambda params: asyncio.sleep(0, "yes"))
+    try:
+        turn = asyncio.ensure_future(client.prompt("s-1", "x"))
+        await settle()
+        writer.hold = asyncio.Event()  # the answer is being written...
+        feed(reader, permission_request(902))
+        await settle()
+        cancel = asyncio.ensure_future(client.cancel("s-1"))  # ...when the cancel lands
+        await settle()
+        writer.hold.set()
+        await asyncio.wait_for(cancel, 5)
+        await settle()
+        assert len(writer.replies(902)) == 1
+        turn.cancel()
+    finally:
+        await client.close()
+
+
+async def test_close_waits_for_the_requests_it_cancels() -> None:
+    started = asyncio.Event()
+
+    async def forever(_params: dict[str, Any]) -> str | None:
+        started.set()
+        await asyncio.sleep(3600)
+        return None
+
+    client, reader, _writer, _updates = wired(on_permission=forever)
+    feed(reader, permission_request(903))
+    await asyncio.wait_for(started.wait(), 5)
+    serving = list(client._serving)  # noqa: SLF001
+    assert serving
+
+    await client.close()
+
+    assert all(task.done() for task in serving)
