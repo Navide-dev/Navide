@@ -12,6 +12,7 @@ Scenarios (what a session/prompt does):
   big             one agent_message_chunk of 2 MiB, then end_turn
   exit            write "fatal: boom" to stderr, exit with code 3 in the middle of the turn
   version2        answer initialize with protocolVersion 2
+  slow_start      never answer initialize (a cold start still downloading)
 
 Process scenarios (for acp_sessions), with $ACP_FAKE_PIDFILE naming a file
 that gets "<own pid> <child pid>":
@@ -123,6 +124,8 @@ def main() -> None:
         message = json.loads(line)
         method, request_id = message.get("method"), message.get("id")
         params = message.get("params") or {}
+        if method == "initialize" and SCENARIO == "slow_start":
+            continue
         if method == "initialize":
             answer(request_id, {
                 "protocolVersion": 2 if SCENARIO == "version2" else params.get("protocolVersion"),

@@ -92,6 +92,60 @@ describe('AcpPane', () => {
     expect(wrapper.find('.acp-transcript').text()).toContain('<script>x</script> done')
   })
 
+  it('marks a refused prompt as not sent and puts its text back in the composer', async () => {
+    const port = new FakePort()
+    const { wrapper, pane } = mountPane(port)
+    await pane.spawn({ command: [], cwd: '/work' })
+    const send = port.send.bind(port)
+    port.send = ((type: string, payload?: Record<string, unknown>) => (type === 'acp.prompt'
+      ? Promise.resolve({ id: 'x', type, timestamp: '', ok: false, payload: null, error: { code: 'ACP_NO_SESSION', message: 'gone' } })
+      : send(type, payload))) as FakePort['send']
+
+    await wrapper.find('textarea').setValue('hello agent')
+    await wrapper.find('[data-testid="acp-send"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="acp-unsent"]').text()).toBe('Not sent')
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('hello agent')
+    expect(pane.cleanBuffer).toBe('')
+  })
+
+  it('streams a reply as one node per chunk', async () => {
+    const port = new FakePort()
+    const { wrapper, pane } = mountPane(port)
+    await pane.spawn({ command: [], cwd: '/work' })
+
+    for (const piece of ['a', 'b', 'c']) {
+      port.emit('acp.update', { update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: piece } } })
+    }
+    await flushPromises()
+
+    expect(wrapper.findAll('.acp-entry[data-role="agent"] > span').map((n) => n.text())).toEqual(['a', 'b', 'c'])
+    expect(pane.cleanBuffer).toBe('abc')
+  })
+
+  it('follows the bottom while text streams in only when the reader is already there', async () => {
+    const port = new FakePort()
+    const { wrapper, pane } = mountPane(port)
+    await pane.spawn({ command: [], cwd: '/work' })
+    const el = wrapper.find('.acp-transcript').element as HTMLElement
+    // The content grows as the DOM does: 100px per rendered chunk.
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => 1000 + 100 * el.querySelectorAll('span').length })
+    Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => 200 })
+    const chunk = async (text: string): Promise<void> => {
+      port.emit('acp.update', { update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } })
+      await flushPromises()
+    }
+
+    el.scrollTop = 800 // at the bottom
+    await chunk('one')
+    expect(el.scrollTop).toBe(1100)
+
+    el.scrollTop = 300 // scrolled up to read
+    await chunk('two')
+    expect(el.scrollTop).toBe(300)
+  })
+
   it('sends what is typed as a prompt', async () => {
     const port = new FakePort()
     const { wrapper, pane } = mountPane(port)
@@ -138,7 +192,7 @@ describe('AcpPane', () => {
     expect(port.count('acp.cancel')).toBe(1)
   })
 
-  it('risk 1: a pane closed while its agent is still starting stops that agent, exactly once', async () => {
+  it('risk 1: closing a pane mid-start takes effect at once, without waiting for the start', async () => {
     const port = new FakePort()
     let answerCreate: (r: Reply) => void = () => {}
     port.createReply = new Promise((resolve) => { answerCreate = resolve })
@@ -147,12 +201,34 @@ describe('AcpPane', () => {
     await flushPromises()
     expect(pane.displayStatus).toBe('starting')
 
-    const killing = pane.kill({ force: true })
-    answerCreate(ok({ session: { session_id: 's1', state: 'idle' } }))
-    await Promise.all([spawning, killing])
+    // The start never answers here: kill() must still resolve (acp.create may take minutes).
+    await pane.kill({ force: true })
 
-    expect(port.count('acp.kill')).toBe(1)
-    expect(port.sent.find((m) => m.type === 'acp.kill')?.payload).toEqual({ session_id: 's1' })
+    expect(port.sent.filter((m) => m.type === 'acp.kill').map((m) => m.payload)).toEqual([{ pane_id: 'p1' }])
+    expect(pane.displayStatus).toBe('exited')
+
+    // The backend abandons the start; its refusal leaves the pane closed, not failed.
+    answerCreate({ ok: false, payload: null, error: { code: 'ACP_CANCELLED', message: 'the pane was closed' } })
+    await spawning
+    expect(pane.displayStatus).toBe('exited')
+  })
+
+  it('risk 1: a start that still answers with a session after the close is stopped too', async () => {
+    const port = new FakePort()
+    let answerCreate: (r: Reply) => void = () => {}
+    port.createReply = new Promise((resolve) => { answerCreate = resolve })
+    const { pane } = mountPane(port)
+    const spawning = pane.spawn({ command: [], cwd: '/work' })
+    await flushPromises()
+
+    await pane.kill({ force: true })
+    answerCreate(ok({ session: { session_id: 's1', state: 'idle' } }))
+    await spawning
+
+    expect(port.sent.filter((m) => m.type === 'acp.kill').map((m) => m.payload)).toEqual([
+      { pane_id: 'p1' }, { session_id: 's1' },
+    ])
+    expect(pane.displayStatus).toBe('exited')
   })
 
   it('risk 1: a pane closed after its agent started stops it, exactly once', async () => {

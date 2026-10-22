@@ -668,6 +668,7 @@
   },
   "pane": {
     "acp": {
+      "unsent": "보내지 못함",
       "mark-tooltip": "이 pane은 Agent Client Protocol(ACP)로 agent를 실행합니다. 대화는 CLI 자체 화면이 아니라 Navide가 그립니다.",
       "permission": "agent의 요청: {title}",
       "failed": "agent를 시작할 수 없습니다: {reason}",

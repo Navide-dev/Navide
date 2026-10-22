@@ -24,8 +24,13 @@ function block(startMarker: string, endMarker: string): string {
 describe('ACP panes in App.vue', () => {
   it('risk 1: onKill stops an ACP pane even though it has no terminal session id', () => {
     const onKill = block('async function onKill(', '\n}\n')
-    expect(onKill).toContain("if (ref?.sessionId || (ref && pane?.display === 'acp')) {")
+    const acp = onKill.indexOf("if (ref?.sessionId || (ref && pane?.display === 'acp')) {")
+    expect(acp).toBeGreaterThan(-1)
     expect(onKill).toContain('await ref.kill({ force: force })')
+    // Nothing may bail out on a missing terminal session id before the ACP
+    // pane's kill is reached (an ACP pane never has one).
+    expect(onKill.slice(0, acp)).not.toMatch(/if \(!ref\?\.sessionId\)[^\n]*return/)
+    expect(onKill.slice(0, acp)).not.toMatch(/if \(!ref\?\.sessionId\)\s*\{?\s*return/)
   })
 
   it('risk 2: the messaging gate answers an ACP pane from its own state, before any PTY gate', () => {
