@@ -447,10 +447,19 @@ export function verifyRegistryPackageTrust(
       `expired signer '${signer.keyId}' cannot sign a new artifact`
     )
   }
-  if (signedAt < notBefore || signedAt > notAfter || signedAt > now) {
+  if (signedAt < notBefore || signedAt > notAfter) {
     throw new RegistryTrustError(
       'SIGNER_INVALID',
       `registry signer '${signer.keyId}' signature is outside its validity window`
+    )
+  }
+  // A version published or approved moments ago carries the server's clock;
+  // the same allowance as the trust metadata's generatedAt, future side only.
+  if (signedAt - TRUST_METADATA_CLOCK_SKEW_MS > now) {
+    throw new RegistryTrustError(
+      'SIGNER_INVALID',
+      `REGISTRY_SIGNATURE_NOT_YET_VALID: registry signature was made at ${input.envelope.signedAt}, ` +
+        `later than this computer's clock (${new Date(now).toISOString()}); check the computer's date and time`
     )
   }
 

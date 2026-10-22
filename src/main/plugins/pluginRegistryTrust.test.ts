@@ -378,3 +378,28 @@ describe('trust metadata time window (clock skew)', () => {
     ).toThrow(/empty validity window/)
   })
 })
+
+describe('registry envelope signedAt (clock skew, future side only)', () => {
+  // A version published moments ago carries the server's clock in signedAt.
+  const signedAfterNow = (ms: number) => envelope({ signedAt: new Date(Date.parse(NOW) + ms).toISOString() })
+
+  it('accepts a signature 4:59 later than this clock', () => {
+    expect(verify(signedAfterNow(4 * 60_000 + 59_000))).toEqual({ publisherId: 'acme', keyId: 'registry-2026' })
+  })
+
+  it('refuses a signature 5:01 later than this clock as not valid yet', () => {
+    let error: unknown
+    try {
+      verify(signedAfterNow(5 * 60_000 + 1_000))
+    } catch (caught) {
+      error = caught
+    }
+    expect((error as { code?: string }).code).toBe('SIGNER_INVALID')
+    expect((error as Error).message).toMatch(/^REGISTRY_SIGNATURE_NOT_YET_VALID: .*check the computer's date and time$/)
+  })
+
+  it("still refuses a signature outside the signer's own window, with no allowance", () => {
+    const before = envelope({ signedAt: new Date(Date.parse('2026-08-01T00:00:00.000Z') - 1).toISOString() })
+    expect(() => verify(before)).toThrow(/outside its validity window/)
+  })
+})
