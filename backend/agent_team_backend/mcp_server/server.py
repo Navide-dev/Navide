@@ -4071,7 +4071,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 
     `target` uses the same addressing as cli_send, and `pane_id` names one
     exact pane instead. Returns {ok, name,
-    agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
+    agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?, display?, acp?}.
+    For an ACP pane (an agent Navide runs over the Agent Client Protocol, with no
+    terminal) `display` is "acp" and `acp` is {state: "starting"|"idle"|"running"|
+    "cancelling", queued, pending_permissions} from the backend's own session;
+    both are absent for every other pane. `last_activity`, when known,
     is {type: "agent_active"|"turn_complete", text? (turn_complete only),
     age_seconds}. `ui`, when the owning Navide window answers in time, is
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
@@ -4444,8 +4448,12 @@ async def cli_wait_idle(
     That last one matters because the busy flag is frontend-reported and can
     stay stale. Returns {idle, source, waited_s, last_activity?, ui_status?}
     where source is "turn_complete", "quiet_period", "ui_status",
-    "never_started", or "timeout"; or {ok: false, error} if `target` cannot be
-    resolved.
+    "never_started", "acp_state", "acp_exited", or "timeout"; or {ok: false,
+    error} if `target` cannot be resolved. For an ACP pane (an agent Navide runs
+    over the Agent Client Protocol, with no terminal) the backend's own session
+    state decides: "acp_state" when the session is idle with no prompt queued,
+    "acp_exited" when its agent has exited; while it waits on a permission
+    request, a timeout reports reason "awaiting".
 
     `last_activity` is what cli_get_status reports under the same key — {type,
     text? (turn_complete only), age_seconds} — so a caller that waited for a
