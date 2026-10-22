@@ -236,8 +236,9 @@ Claude 的 Stop hook 可能在 Navide 讀到對話紀錄之前就回報回合結
 數秒），而 hook 不帶文字。這時 `cli_wait_idle`（因此 `cli_send_and_wait` 也是）會
 在 `timeout_s` 之內最多再等 **10 秒**（`HOOK_TURN_TEXT_WAIT_S`），等對話紀錄的回合
 結束並回傳它的文字；若還是沒讀到，照樣返回，但不帶 `text`、加上
-`text_pending: true`，請稍後再呼叫一次 `cli_get_status`。Navide 不會拿較早回合的
-文字來填。其他 CLI，以及由對話紀錄本身回報的回合結束，照舊立即返回。
+`text_pending: true`，請稍後再呼叫一次 `cli_get_status`。對話紀錄已確認沒有文字的回合會
+立即返回，不帶 `text`，也不加 `text_pending`。Navide 不會拿較早回合的文字來填，
+即使讀取落後了整整幾個回合也一樣。其他 CLI，以及由對話紀錄本身回報的回合結束，照舊立即返回。
 它的 Timeout `reason` 沿用 `cli_wait_idle` 的，另外加上 `never_started`，代表目標
 一直維持 Idle、從未顯示任何接手該訊息的跡象。若送出當場被拒絕，則原樣回傳
 `cli_send` 的 `{ok: false, error}`。

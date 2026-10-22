@@ -4065,7 +4065,9 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     exact pane instead. Returns {ok, name,
     agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
     is {type: "agent_active"|"turn_complete", text? (turn_complete only),
-    age_seconds}. `ui`, when the owning Navide window answers in time, is
+    age_seconds}. Right after a Claude turn end reported by its Stop hook,
+    `text` is absent until Navide has read the turn from the conversation log
+    (under load, seconds later); it is never an earlier turn's. `ui`, when the owning Navide window answers in time, is
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
     effort?, profileId?, loginExpired?, usageLimitUntil?} straight from the
     renderer; it is omitted (not a failure) when the window does not reply.
@@ -4230,28 +4232,33 @@ _HOOK_TURN_TEXT_POLL_S = 0.25
 
 
 def _hook_turn_without_text(activity: dict[str, Any] | None) -> bool:
+    """A Stop hook's turn end whose text the log has not brought yet. One the
+    log had already ended (with or without text) needs no wait."""
     return bool(
         activity and activity["event_type"] == "turn_complete"
         and activity.get("source") == "hook" and not activity["text"]
+        and not activity.get("log_ended")
     )
 
 
-async def _await_log_turn_text(pane_id: str, hook_end: dict[str, Any], budget: float) -> bool:
-    """Wait up to ``budget`` seconds for the log's own turn end with text after a
-    hook's textless one. True once it is recorded."""
+async def _await_log_turn_text(pane_id: str, hook_end: dict[str, Any], budget: float) -> str:
+    """Wait up to ``budget`` seconds for the log's turn end of the turn
+    ``hook_end`` closed. "text" once it is recorded with text; "empty" when only
+    a textless one came (the turn wrote none, or the text half of a split turn
+    end is still to come); "" when none of this turn came. A log turn end of an
+    earlier turn — a reader lagging by whole turns — never counts."""
     from agent_team_backend import app
 
     deadline = time.monotonic() + max(budget, 0.0)
+    seen_empty = False
     while True:
-        current = app.pane_activity(pane_id)
-        if (
-            current is not None and current is not hook_end
-            and current["event_type"] == "turn_complete"
-            and current.get("source") != "hook" and current["text"]
-        ):
-            return True
+        match = app.log_turn_end_after(pane_id, hook_end.get("prev_hook_turn_end"))
+        if match is not None and match is not hook_end:
+            if match["text"]:
+                return "text"
+            seen_empty = True
         if time.monotonic() >= deadline:
-            return False
+            return "empty" if seen_empty else ""
         await asyncio.sleep(_HOOK_TURN_TEXT_POLL_S)
 
 
@@ -4456,7 +4463,7 @@ async def cli_wait_idle(
     passed since its last activity; or, while the registry still reports busy,
     the owning window reports the pane itself as idle/exited/stopped/error.
     That last one matters because the busy flag is frontend-reported and can
-    stay stale. Returns {idle, source, waited_s, last_activity?, ui_status?}
+    stay stale. Returns {idle, source, waited_s, last_activity?, ui_status?, text_pending?}
     where source is "turn_complete", "quiet_period", "ui_status",
     "never_started", or "timeout"; or {ok: false, error} if `target` cannot be
     resolved.
@@ -4578,6 +4585,10 @@ async def cli_wait_idle(
                     budget = min(HOOK_TURN_TEXT_WAIT_S, timeout - (time.monotonic() - started))
                     read = await _await_log_turn_text(pane_id, activity, budget)
                     out = done("turn_complete")
+                    if read != "text":
+                        # Whatever the pane recorded since is not this turn's
+                        # text (an earlier turn's, from a lagging reader).
+                        out.get("last_activity", {}).pop("text", None)
                     if not read:
                         # The turn ended, but its text is still on its way from the
                         # conversation log: cli_get_status shortly after has it.
@@ -5215,7 +5226,11 @@ async def cli_send_and_wait(
     On success returns cli_wait_idle's result — {idle: true, source, waited_s,
     last_activity?, ui_status?} — plus {ok: true, target, msg_key}.
     `last_activity.text` is what the other agent said, when its CLI records
-    that. ALWAYS read `source`, because it says how much the "finished" is
+    that. After a Claude turn end reported by its Stop hook the wait gives the
+    conversation log up to 10 s more (within `timeout_s`) for this turn's text;
+    if it is still not read, `text` is absent and `text_pending: true` says it
+    is on its way (ask cli_get_status shortly after). It is never an earlier
+    turn's text. ALWAYS read `source`, because it says how much the "finished" is
     worth:
 
       - "turn_complete" — the CLI reported the turn ended. Trustworthy.

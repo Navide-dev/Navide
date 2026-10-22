@@ -2043,3 +2043,42 @@ async def test_unbinding_drops_a_run_waiting_for_the_logs_text(env: Env) -> None
     _log_end(env, "not for the old chat")
     await asyncio.sleep(0.3)
     assert not _said(env, "not for the old chat") and not _said(env, mgr_mod.MSG_REPLY_LATE)
+
+
+async def test_a_textless_turn_with_nothing_after_it_says_so_at_the_grace(env: Env, monkeypatch) -> None:
+    # Review of #581, M1: the last message of a conversation, or a turn of tools only.
+    # The log ended the turn without text and no next prompt comes to settle it.
+    monkeypatch.setattr(mgr_mod, "LATE_TEXT_STATUS_AFTER_S", 0.05)
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    _log_end(env, "")
+    await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
+    assert not _said(env, mgr_mod.MSG_REPLY_LATE)
+    assert not _said(env, mgr_mod.MSG_LATE_PREFIX)
+    assert "pane-1" not in env.m._await_text
+
+
+async def test_a_late_hook_does_not_close_the_next_messages_run(env: Env) -> None:
+    # Review of #581, M2: the reader got there first and answered; the next message is
+    # armed before that turn's Stop hook arrives. The hook entry then carries the log's
+    # text (or says the log ended the turn), and must leave the new run alone.
+    await env.inbound("first")
+    await _delivered(env)
+    _log_end(env, "reply one")
+    await _until(lambda: _said(env, "reply one"))
+    await env.inbound("second")
+    env.fake.verdicts["k2"] = {"status": "delivered"}
+    await _until(lambda: env.m._pending.get("pane-1") is not None
+                 and env.m._pending["pane-1"].armed_at is not None)
+    run = env.m._pending["pane-1"]
+    env.m.on_pane_activity("pane-1", {"event_type": "turn_complete", "text": "reply one", "source": "hook",
+                                      "log_ended": True, "ts_monotonic": env.clock() + 1e-6})
+    await asyncio.sleep(0.05)
+    assert env.m._pending.get("pane-1") is run
+    assert "pane-1" not in env.m._await_text
+    _hook_end(env)
+    _log_prompt(env)
+    _log_end(env, "reply two")
+    await _until(lambda: _said(env, "reply two"))
+    assert not _said(env, mgr_mod.MSG_LATE_PREFIX)

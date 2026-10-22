@@ -1355,8 +1355,11 @@ pane_activity_listeners: list[Callable[[str, dict[str, Any] | None], None]] = []
 # else the naming snippet. Must not raise.
 pane_prompt_listeners: list[Callable[[str, str], None]] = []
 _USER_PROMPT_DETAILS = frozenset({"user", "prompt", "user_message"})
-# Per pane, monotonic times that tell whose turn a hook's turn end is: the last
-# Stop-hook turn end, and the last real prompt the conversation-log reader saw.
+# Per pane, wall-clock times that tell whose turn a log turn end is: when the
+# last Stop-hook turn end arrived, and the transcript's own time of the last real
+# prompt the conversation-log reader saw. Transcript time, not arrival time: a
+# lagging reader records an earlier turn's lines after the next hook, but their
+# stamps still say when they were written — before that turn's hook fired.
 _last_hook_turn_end: dict[str, float] = {}
 _last_log_turn_start: dict[str, float] = {}
 # The first of a turn's two turn ends (hook, log) still waiting for the other:
@@ -1397,19 +1400,23 @@ def _note_turn_end_gap(key: str, source: str, now: float) -> None:
 
 def _record_pane_activity(
     pane_id: str, event_type: str, text: str, *, detail: str = "",
-    source: str = "", turn_start: bool = False,
+    source: str = "", turn_start: bool = False, event_wall: float | None = None,
+    hook_turn: dict[str, Any] | None = None,
 ) -> None:
     if not pane_id:
         return
     key = _current_pane_id(pane_id)
     now = time.monotonic()
+    # Only the hook and the log reader take part in matching turns; any other
+    # writer's record stays as it always was (no wall clock read).
+    wall = event_wall if event_wall is not None or source not in ("hook", "log") else time.time()
     prior = _pane_activity.get(key)
     if event_type == "turn_complete" and source in ("hook", "log"):
         _note_turn_end_gap(key, source, now)
         if source == "hook":
-            _last_hook_turn_end[key] = now
+            _last_hook_turn_end[key] = time.time()
     if turn_start:
-        _last_log_turn_start[key] = now
+        _last_log_turn_start[key] = wall
         _turn_end_first.pop(key, None)
     # When the turn this event belongs to began: the first agent_active after
     # the previous turn ended opens a turn, later events of the same turn
@@ -1439,29 +1446,48 @@ def _record_pane_activity(
         "source": source,
         # The log reader saw a real prompt: a new turn began in the transcript.
         "turn_start": turn_start,
+        # When it happened: the transcript's stamp for a log record, the
+        # arrival time otherwise.
+        "event_wall": wall,
+        # A hook turn end only: when the hook turn end before it arrived, and
+        # whether the log had already ended this turn (then its text, if any,
+        # is in "text" and none is still to come).
+        **(hook_turn or {}),
     }
     for listener in pane_activity_listeners:
         listener(key, _pane_activity[key])
 
 
-def _hook_turn_text(pane_id: str) -> str:
-    """The text a Stop hook's turn end may carry: the log reader's turn end for
-    this same turn, when the reader got there first, and "" otherwise.
+def log_turn_end_after(pane_id: str, previous_hook_end: float | None) -> dict[str, Any] | None:
+    """The pane's latest entry when it is the log's turn end of the turn that
+    followed ``previous_hook_end`` (a hook turn end's arrival time), else None.
 
-    It is this turn's only when the reader saw a prompt after the previous hook
-    turn end and then its turn end. Under load the reader lags, and what it last
-    recorded is the previous turn's end: borrowed, that told a chat the
-    previous turn's reply. "" says the text is still on its way; the reader's
-    own turn end brings it.
+    It is that turn's when the transcript has a real prompt written after the
+    previous hook turn end and this turn end was written after the prompt.
+    Under load the reader lags by whole turns: what it records next can be an
+    earlier turn's end, and taken as this turn's it told a chat, or an agent
+    waiting on cli_send_and_wait, the previous reply.
     """
     key = _current_pane_id(pane_id)
-    prior = _pane_activity.get(key)
-    if prior is None or prior["event_type"] != "turn_complete" or prior.get("source") != "log":
-        return ""
-    started = _last_log_turn_start.get(key)
-    if started is None or started <= _last_hook_turn_end.get(key, float("-inf")):
-        return ""
-    return prior["text"] if prior["ts_monotonic"] >= started else ""
+    entry = _pane_activity.get(key)
+    if entry is None or entry["event_type"] != "turn_complete" or entry.get("source") != "log":
+        return None
+    prompted = _last_log_turn_start.get(key)
+    if prompted is None or (previous_hook_end is not None and prompted <= previous_hook_end):
+        return None
+    return entry if entry.get("event_wall", 0.0) >= prompted else None
+
+
+def _hook_turn_end(pane_id: str) -> tuple[str, dict[str, Any]]:
+    """What a Stop hook's turn end records: the log's text for this same turn
+    when the reader got there first ("" otherwise, and when the turn wrote
+    none), and the facts a waiter needs to recognise this turn's log end later.
+    """
+    previous = _last_hook_turn_end.get(_current_pane_id(pane_id))
+    match = log_turn_end_after(pane_id, previous)
+    return (match["text"] if match else ""), {
+        "prev_hook_turn_end": previous, "log_ended": match is not None,
+    }
 
 
 def forget_pane_activity(pane_id: str) -> None:
@@ -1515,6 +1541,7 @@ async def _on_log_activity(event: ActivityEvent) -> None:
         _record_pane_activity(
             pane_id, "agent_active" if superseded else event.event_type, event.text,
             detail=event.detail, source="log", turn_start=prompted,
+            event_wall=parse_event_time(event.timestamp),
         )
         if prompted:
             for prompt_listener in pane_prompt_listeners:
@@ -3139,8 +3166,11 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         # it — it had to sit out the 10s quiet threshold instead. Hook payloads
         # carry no assistant text, so keep the text the sink already recorded
         # for this same turn rather than blanking it.
-        prior_text = _hook_turn_text(pane_id) if event_type == "turn_complete" else ""
-        _record_pane_activity(pane_id, event_type, prior_text, source="hook")
+        if event_type == "turn_complete":
+            prior_text, hook_turn = _hook_turn_end(pane_id)
+            _record_pane_activity(pane_id, event_type, prior_text, source="hook", hook_turn=hook_turn)
+        else:
+            _record_pane_activity(pane_id, event_type, "", source="hook")
     await broadcast(make_event("agent.activity", {
         "vendor": vendor,
         "event_type": event_type,

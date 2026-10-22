@@ -1311,6 +1311,11 @@ class ChannelManager:
                 self._spawn(self._remember_wake_target(bound, pane_id))
         text = str(entry.get("text") or "")
         source = str(entry.get("source") or "")
+        if source == "hook" and is_turn_end and (text.strip() or entry.get("log_ended")):
+            # The log ended this turn before its hook came, and that log turn end has
+            # already answered the run. The run armed now is the NEXT message's: a late
+            # hook must not close it.
+            return
         waiting = self._await_text.get(pane_id)
         if waiting and source != "hook":
             # The conversation log settles the oldest run a hook's turn end left waiting:
@@ -1376,12 +1381,17 @@ class ChannelManager:
     def _settle_await(self, pane_id: str, text: str) -> None:
         """Answer the oldest run waiting on the log with ``text`` ("" when it wrote none)."""
         waiting = self._await_text.get(pane_id)
-        if not waiting:
+        if waiting:
+            self._settle_held(pane_id, waiting[0], text)
+
+    def _settle_held(self, pane_id: str, held: _AwaitText, text: str) -> None:
+        waiting = self._await_text.get(pane_id)
+        if not waiting or held not in waiting:
             return
-        held = waiting.pop(0)
+        waiting.remove(held)
         if not waiting:
             del self._await_text[pane_id]
-        if held.timer is not None:
+        if held.timer is not None and held.timer is not asyncio.current_task():
             held.timer.cancel()
         self._spawn(self._send_reply(held.pending, text))
 
@@ -1401,6 +1411,12 @@ class ChannelManager:
             await self._edit_status(adapter, pending, MSG_READING_REPLY, force=True)
         await asyncio.sleep(max(0.0, EMPTY_TURN_GRACE_S - LATE_TEXT_STATUS_AFTER_S))
         if not still():
+            return
+        if held.log_ended:
+            # The log ended this turn without text and nothing followed within the
+            # grace (the last message of a conversation, a turn of tools only): it
+            # wrote none — the same answer a log-only turn end gets at the grace.
+            self._settle_held(pane_id, held, "")
             return
         pending.late = True
         adapter = self._adapters.get((pending.loc.platform, pending.loc.account))

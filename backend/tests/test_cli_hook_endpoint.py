@@ -325,6 +325,36 @@ def test_stop_hook_does_not_blank_the_turn_text_the_log_reader_recorded(
         app_module._pane_activity.clear()
 
 
+def test_stop_hook_does_not_borrow_when_the_reader_lags_a_whole_turn(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """The reader reads turn one's prompt only after turn one's hook, then its
+    end, and turn two's hook comes. By arrival order the prompt is newer than
+    turn one's hook; by the transcript's own stamps it is older, which is what
+    decides: turn one's reply is not turn two's."""
+    import time
+
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw-lag2", "/ws/alpha", "")
+    )
+    stop = {"headers": {"X-Agent-Team-Event": "stop"}, "json": {"session_id": "s-1", "cwd": "/ws/alpha"}}
+    written = time.time() - 30
+    try:
+        client.post("/hooks/claude", **stop)  # turn one ends; the reader has nothing yet
+        app_module._record_pane_activity(
+            "pw-lag2", "agent_active", "turn one", source="log", turn_start=True, event_wall=written,
+        )
+        app_module._record_pane_activity(
+            "pw-lag2", "turn_complete", "reply one", source="log", event_wall=written + 5,
+        )
+        client.post("/hooks/claude", **stop)  # turn two ends
+        assert app_module._pane_activity["pw-lag2"]["text"] == ""
+        assert app_module._pane_activity["pw-lag2"]["log_ended"] is False
+    finally:
+        app_module._pane_activity.clear()
+
+
 def test_stop_hook_does_not_borrow_the_previous_turns_text_from_a_lagging_reader(
     client: TestClient, events: list[dict], monkeypatch
 ) -> None:

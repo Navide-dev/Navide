@@ -270,7 +270,9 @@ Group を一度も作っていない人の Broadcast が、黙って何もしな
 `timeout_s` の範囲内で最大 **10 秒**（`HOOK_TURN_TEXT_WAIT_S`）追加で待ち、その
 テキストを返します。それでもテキストがまだ読めていなければ、`text` なしで
 `text_pending: true` を付けて返すので、少し後に `cli_get_status` を呼び直してください。
-Navide が以前の Turn のテキストで埋めることはありません。ほかの CLI や、ログ自身が
+ログがすでにテキストなしで終えた Turn は、`text` も `text_pending` も付けずにすぐ
+返ります。Navide が以前の Turn のテキストで埋めることはありません（読み取りが Turn
+単位で遅れていても同じです）。ほかの CLI や、ログ自身が
 報告した Turn 終了は、これまでどおりすぐに返ります。Timeout 時の `reason` は `cli_wait_idle` のものに加え、Idle のまま
 メッセージを拾う気配をまったく見せなかった対象に対する `never_started` があります。
 送信自体が拒否された場合は `cli_send` の `{ok: false, error}` をそのまま返します。
