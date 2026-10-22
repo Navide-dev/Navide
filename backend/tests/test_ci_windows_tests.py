@@ -167,8 +167,161 @@ def test_main_takes_the_verdict_of_a_pytest_that_ended_at_the_cap(tmp_path, monk
     monkeypatch.setattr(ci_windows_tests.psutil, "virtual_memory", lambda: types.SimpleNamespace(percent=1, total=1 << 30))
     monkeypatch.setattr(ci_windows_tests.psutil, "cpu_percent", lambda: 1)
     monkeypatch.setattr(ci_windows_tests.psutil, "pids", lambda: [])
+    monkeypatch.setattr(ci_windows_tests, "_stall_diagnostics", lambda _job: "")
 
     assert ci_windows_tests.main() == 0
     assert Path(ci_windows_tests.DONE).read_text() == "0"
     assert "pytest exit: 0" in output.value
     assert "still running at cap" not in output.value
+
+
+class _Output:
+    value = ""
+
+    def reconfigure(self, **_kwargs):
+        pass
+
+    def write(self, text):
+        self.value += text
+        return len(text)
+
+    def flush(self):
+        pass
+
+
+def _run_main_with_progress(monkeypatch, tmp_path, progress_at, ends_at, report_cost=0.0, diagnostics_error=None):
+    """main() on a fake clock; `progress_at(t)` is the progress line at t.
+    `report_cost` is how long each 60 s report takes."""
+    clock = [0.0]
+    diagnosed: list[str] = []
+
+    class _Child:
+        pid = 789
+
+        def poll(self):
+            return 0 if clock[0] >= ends_at else None
+
+    def sleep(seconds):
+        clock[0] += seconds
+
+    output = _Output()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(ci_windows_tests.sys, "argv", ["ci_windows_tests.py"])
+    monkeypatch.setattr(ci_windows_tests.sys, "stdout", output)
+    monkeypatch.setattr(ci_windows_tests, "_join_job", lambda: object())
+    monkeypatch.setattr(ci_windows_tests, "_job_pids", lambda _job: [])
+    monkeypatch.setattr(ci_windows_tests, "_runner_procs", lambda: "(none)")
+    monkeypatch.setattr(ci_windows_tests.subprocess, "Popen", lambda *_args, **_kwargs: _Child())
+    monkeypatch.setattr(ci_windows_tests.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(ci_windows_tests.time, "sleep", sleep)
+    monkeypatch.setattr(ci_windows_tests.psutil, "virtual_memory", lambda: types.SimpleNamespace(percent=1, total=1 << 30))
+    monkeypatch.setattr(ci_windows_tests.psutil, "cpu_percent", lambda: sleep(report_cost) or 1)
+    monkeypatch.setattr(ci_windows_tests.psutil, "pids", lambda: [])
+    monkeypatch.setattr(ci_windows_tests, "_progress", lambda: progress_at(clock[0]))
+
+    def stall_diagnostics(_job):
+        diagnosed.append(progress_at(clock[0]))
+        if diagnostics_error is not None:
+            raise diagnostics_error
+        return "    host state"
+
+    monkeypatch.setattr(ci_windows_tests, "_stall_diagnostics", stall_diagnostics)
+    assert ci_windows_tests.main() == 0
+    return diagnosed, output.value
+
+
+def test_a_stuck_test_is_diagnosed_once_while_it_is_still_stuck(tmp_path, monkeypatch):
+    """pytest-timeout exits right after its dump, so the host has to be read
+    during the stall, not at the next 60 s report; and once per stuck test."""
+    def progress_at(t):
+        return "10 results; last: a.py::stuck" if t < 100 else "11 results; last: b.py::stuck"
+
+    diagnosed, output = _run_main_with_progress(monkeypatch, tmp_path, progress_at, ends_at=300)
+
+    assert diagnosed == ["10 results; last: a.py::stuck", "11 results; last: b.py::stuck"]
+    assert "--- stalled 45s at: 10 results; last: a.py::stuck\n    host state" in output
+
+
+def test_a_suite_that_keeps_moving_is_never_diagnosed(tmp_path, monkeypatch):
+    diagnosed, _ = _run_main_with_progress(
+        monkeypatch, tmp_path, lambda t: f"{int(t // 20)} results", ends_at=300
+    )
+    assert diagnosed == []
+
+
+def test_timeout_dumps_come_out_whole_however_long():
+    """The console used to show the last 200 lines, which cut the dump short
+    and dropped the stuck threads (a writer inside sqlite COMMIT)."""
+    marker = "+" * 35 + " Timeout " + "+" * 35 + "\n"
+    stacks = [f"  frame {i}\n" for i in range(250)]
+    lines = (
+        [f"t{i} PASSED\n" for i in range(300)]
+        + ["tests/test_db.py::test_writers " + marker]
+        + stacks
+        + [marker]
+        + [f"after {i}\n" for i in range(10)]
+    )
+
+    dumps = ci_windows_tests._timeout_dumps(lines)
+
+    assert dumps == ["tests/test_db.py::test_writers " + marker, *stacks, marker]
+    assert ci_windows_tests._timeout_dumps(["t PASSED\n"]) == []
+
+
+def test_diagnostics_that_raise_are_printed_and_never_decide_the_verdict(tmp_path, monkeypatch):
+    diagnosed, output = _run_main_with_progress(
+        monkeypatch, tmp_path, lambda t: "10 results; last: a.py::stuck", ends_at=300,
+        diagnostics_error=RuntimeError("probe broke"),
+    )
+
+    assert len(diagnosed) == 1
+    assert "diagnostics raised RuntimeError: probe broke" in output
+    assert Path(ci_windows_tests.DONE).read_text() == "0"
+
+
+def test_the_cap_is_judged_at_report_ticks_spaced_as_before(tmp_path, monkeypatch):
+    """With the 60 s sleep, each report's own time pushed the next one later,
+    so the last cap check fell past 1800 s. A suite ending in that slack
+    passed then and has to pass now; the 5 s poll must not judge it sooner."""
+    _, output = _run_main_with_progress(
+        monkeypatch, tmp_path, lambda t: f"{int(t // 20)} results",
+        ends_at=ci_windows_tests.CAP_SECONDS + 30, report_cost=2.0,
+    )
+
+    assert "pytest exit: 0" in output
+    assert "still running at cap" not in output
+
+
+@pytest.mark.parametrize("reaped", [True, False])
+def test_a_probe_past_its_time_is_ended_with_its_children_and_never_waited_on_unbounded(monkeypatch, reaped):
+    waits: list = []
+    killed: list = []
+
+    class _Probe:
+        pid = 4321
+
+        def communicate(self, timeout=None):
+            waits.append(timeout)
+            if len(waits) == 1 or not reaped:
+                raise ci_windows_tests.subprocess.TimeoutExpired("powershell", timeout)
+            return "partial\n", ""
+
+        def kill(self):
+            killed.append("powershell")
+
+    class _Child:
+        def kill(self):
+            killed.append("child")
+
+    monkeypatch.setattr(ci_windows_tests.subprocess, "Popen", lambda *_args, **_kwargs: _Probe())
+    monkeypatch.setattr(
+        ci_windows_tests.psutil, "Process",
+        lambda pid: types.SimpleNamespace(children=lambda recursive: [_Child()]),
+    )
+
+    out = ci_windows_tests._host_probe()
+
+    assert waits == [ci_windows_tests.PROBE_SECONDS, ci_windows_tests.PROBE_REAP_SECONDS]
+    assert killed == ["child", "powershell"]
+    assert out.startswith(f"host probe timed out after {ci_windows_tests.PROBE_SECONDS}s")
+    assert ("partial" in out) is reaped
