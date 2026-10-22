@@ -98,7 +98,7 @@ export interface WhatsNewFeature {
 // is editable in one place without touching the i18n JSON.
 export const WHATS_NEW_CHROME = {
   header: { 'zh-TW': '新版更新', 'en-US': 'What’s New', 'ja-JP': '新機能' } as WhatsNewText,
-  dismiss: { 'zh-TW': '知道了', 'en-US': 'Got it', 'ja-JP': 'OK' } as WhatsNewText,
+  dismiss: { 'zh-TW': '知道了', 'en-US': 'Got It', 'ja-JP': 'OK' } as WhatsNewText,
   /** Replaces `header` on a release marked `major`. */
   majorHeader: { 'zh-TW': '重大更新', 'en-US': 'Major Update', 'ja-JP': 'メジャーアップデート' } as WhatsNewText,
   /** Heading over the bullet list once a spotlight sits above it. */
@@ -108,9 +108,9 @@ export const WHATS_NEW_CHROME = {
   /** Heading over the bullet list once feature cards sit above it. */
   details: { 'zh-TW': '細節', 'en-US': 'The details', 'ja-JP': '詳細' } as WhatsNewText,
   /** Buttons on an entry that carries a tour. */
-  takeTour: { 'zh-TW': '帶我看一遍', 'en-US': 'Take the tour', 'ja-JP': 'ツアーを見る' } as WhatsNewText,
-  retakeTour: { 'zh-TW': '再看一次導覽', 'en-US': 'Replay the tour', 'ja-JP': 'ツアーをもう一度' } as WhatsNewText,
-  notNow: { 'zh-TW': '先不用', 'en-US': 'Not now', 'ja-JP': '今はしない' } as WhatsNewText,
+  takeTour: { 'zh-TW': '帶我看一遍', 'en-US': 'Take the Tour', 'ja-JP': 'ツアーを見る' } as WhatsNewText,
+  retakeTour: { 'zh-TW': '再看一次導覽', 'en-US': 'Replay the Tour', 'ja-JP': 'ツアーをもう一度' } as WhatsNewText,
+  notNow: { 'zh-TW': '先不用', 'en-US': 'Not Now', 'ja-JP': '今はしない' } as WhatsNewText,
   /** Footer hint beside the buttons: where "Not now" leaves the way back. */
   reopenHint: {
     'zh-TW': '之後可從選單列「輔助說明（Help）→ 新版更新…」再打開',
@@ -120,6 +120,32 @@ export const WHATS_NEW_CHROME = {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    version: '0.2.29',
+    // Provisional title: settle it before the 0.2.29 release.
+    title: {
+      'zh-TW': 'Navide 伺服器安全更新',
+      'en-US': 'Navide Server Security Update',
+      'ja-JP': 'Navide サーバーのセキュリティ更新',
+    },
+    highlights: [
+      {
+        'zh-TW': '10 月 22 日我們把 Navide 伺服器（server.navide.dev）的 Node.js 從 22.23.3 升到 22.23.4。Node.js 官方 10 月 21 日的安全更新修補了 10 個漏洞，其中 7 個影響伺服器使用的 Node.js 22，包括 3 個高風險：TLS 憑證主機名稱驗證可被繞過（CVE-2026-106069）、Brotli 解碼越界寫入可能導致遠端執行程式碼（CVE-2026-111497），以及 dns.resolve 處理含 NUL 字元的名稱時會截斷（CVE-2026-105482）。伺服器的程式碼與資料都沒有變動，你不需要做任何事。',
+        'en-US': 'On October 22 we upgraded Node.js on the Navide server (server.navide.dev) from 22.23.3 to 22.23.4. The Node.js security release of October 21 fixes 10 vulnerabilities, 7 of which affect Node.js 22, the line the server runs. Three are rated high: a bypass of TLS certificate hostname verification (CVE-2026-106069), an out-of-bounds write in Brotli decoding that could allow remote code execution (CVE-2026-111497), and truncation in dns.resolve of names containing a NUL character (CVE-2026-105482). The server\'s code and data are unchanged, and you do not need to do anything.',
+        'ja-JP': '10 月 22 日、Navide サーバー（server.navide.dev）の Node.js を 22.23.3 から 22.23.4 に更新しました。Node.js が 10 月 21 日に公開したセキュリティリリースは 10 件の脆弱性を修正しており、そのうち 7 件がサーバーで使っている Node.js 22 に影響します。高リスクは 3 件です：TLS 証明書のホスト名検証の回避（CVE-2026-106069）、Brotli のデコードでの範囲外書き込みによるリモートコード実行の可能性（CVE-2026-111497）、NUL 文字を含む名前を dns.resolve が切り詰める問題（CVE-2026-105482）。サーバーのコードとデータは変わっておらず、お客様の操作は必要ありません。',
+      },
+      {
+        'zh-TW': '桌面版內建的 Node.js 來自 Electron。Electron 官方還沒推出含這次修補的版本，推出後我們會在新版跟上。',
+        'en-US': 'The Node.js built into the desktop app comes from Electron. Electron has not yet released a version with these fixes; we will follow in a new Navide release once it does.',
+        'ja-JP': 'デスクトップ版に組み込まれている Node.js は Electron に由来します。Electron はまだ今回の修正を含むバージョンを公開していません。公開され次第、Navide の新しいバージョンで対応します。',
+      },
+    ],
+    note: {
+      'zh-TW': 'Node.js 官方公告：https://nodejs.org/en/blog/vulnerability/october-2026-security-releases',
+      'en-US': 'Node.js announcement: https://nodejs.org/en/blog/vulnerability/october-2026-security-releases',
+      'ja-JP': 'Node.js の公式発表：https://nodejs.org/en/blog/vulnerability/october-2026-security-releases',
+    },
+  },
   {
     version: '0.2.28',
     title: {

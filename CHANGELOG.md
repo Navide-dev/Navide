@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- English UI: Title Case for the buttons, filter chips, preset buttons and undo labels #565 missed: Skip Tour, the What's New buttons (Got It, Take the Tour, Replay the Tour, Not Now), the layout preset Bottom Panel, the CLI Agents filter Needs Attention, the Marketplace category Version Control, Restart for New Version in the status bar, and the pipeline editor's Undo/Redo labels (Undo Edit Prompt, …).
+
 ### Fixed
 
 - CLI panes: the startup probe's "newer than the last version Navide verified" line now covers Goose (verified on 1.55.0; it has no account switching, so it never had a version to compare against), and Kimi Code compares against 2.2.0, the version its launch and logs were checked on, rather than the 0.39.0 of its account-switch evidence, so Kimi 2.x is no longer called untested. Disclosure only, as before. (#502 follow-up)
