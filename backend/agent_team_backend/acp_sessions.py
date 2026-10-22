@@ -285,6 +285,8 @@ class AcpSessionService:
                     osplat.process_tree.kill_tree(proc.pid, force=True)
             await self._wait_exit(proc, _TERM_GRACE_S)
         await asyncio.to_thread(_kill_breakaway, descendants)
+        if proc.returncode is not None:
+            _close_transport(proc)
         if spawned.registered:
             await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, proc.pid))
 
@@ -451,6 +453,7 @@ class AcpSessionService:
         for request in list(session.permissions.values()):
             if not request.answer.done():
                 request.answer.set_result(None)
+        _close_transport(session.proc)  # its pipes, now, not whenever GC runs
         try:
             await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, session.proc.pid))
         except Exception as err:  # noqa: BLE001 — the exit is still reported (owners cleared on it)
@@ -506,6 +509,21 @@ class _ExitSignal(asyncio.subprocess.SubprocessStreamProtocol):
 _EXIT_SIGNALS: "weakref.WeakKeyDictionary[asyncio.subprocess.Process, asyncio.Future[None]]" = (
     weakref.WeakKeyDictionary()
 )
+# A spawned agent -> its subprocess transport, closed by _close_transport.
+_TRANSPORTS: "weakref.WeakKeyDictionary[asyncio.subprocess.Process, asyncio.SubprocessTransport]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _close_transport(proc: asyncio.subprocess.Process) -> None:
+    """Close the agent's pipes now that it has ended, explicitly. Left to the
+    garbage collector, the transport's __del__ closes them whenever it runs —
+    on Windows the pipes are C runtime fds (msvcrt.open_osfhandle), and by
+    then their numbers may belong to something else (pytest's own stdout went
+    bad that way on Windows CI)."""
+    transport = _TRANSPORTS.pop(proc, None)
+    if transport is not None and not transport.is_closing():
+        transport.close()
 
 
 async def _spawn(
@@ -522,6 +540,7 @@ async def _spawn(
     )
     proc = asyncio.subprocess.Process(transport, protocol, loop)
     _EXIT_SIGNALS[proc] = protocol.exited
+    _TRANSPORTS[proc] = transport
     return proc
 
 
