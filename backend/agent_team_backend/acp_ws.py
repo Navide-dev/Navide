@@ -114,7 +114,7 @@ async def sweep_ownerless(now: float | None = None) -> list[str]:
     try:
         await _sweep(app._OWNERLESS_GRACE_SEC, now, ended)
     except Exception as err:  # noqa: BLE001 — the janitor must survive
-        log.warning("ACP ownerless sweep failed: %s", err)
+        log.warning("ACP ownerless sweep failed: %s", err, exc_info=True)
     return ended
 
 
