@@ -255,8 +255,11 @@ class AcpSessionService:
             job = spawned.job = osplat.process_tree.contain(proc.pid)
         except OSError as err:
             log.warning("ACP %s: not contained (%s); its tree is ended by pid instead", session_id, err)
-        await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.register, proc.pid, argv))
+        # Marked first: a start cancelled while the write runs still unregisters.
+        # Should the write land after that, the entry it leaves is reaped on the
+        # next start only if pid + start time still match (pty_registry.reap_stale).
         spawned.registered = True
+        await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.register, proc.pid, argv))
 
         assert proc.stdout is not None and proc.stdin is not None
         holder: dict[str, AcpSession] = {}
@@ -441,6 +444,8 @@ class AcpSessionService:
             # Taken while it runs: a grandchild that left its group is found
             # only here (after the exit it has reparented).
             descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
+        # With every one recorded earlier (identity-checked before any kill).
+        descendants = {**session.descendants, **descendants}
         await session.client.close()
         await self._wait_exit(proc, _stop_grace(session.agent_key))
         if proc.returncode is None:
@@ -494,7 +499,10 @@ class AcpSessionService:
         for request in list(session.permissions.values()):
             if not request.answer.done():
                 request.answer.set_result(None)
-        await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, session.proc.pid))
+        try:
+            await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, session.proc.pid))
+        except Exception as err:  # noqa: BLE001 — the exit is still reported (owners cleared on it)
+            log.warning("ACP %s: crash-registry entry not removed: %s", session.id, err)
         await self._emit_event(session, "acp.state", {"state": "exited", "code": session.proc.returncode})
 
     # -- events -----------------------------------------------------------

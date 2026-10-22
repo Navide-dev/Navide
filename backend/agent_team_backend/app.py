@@ -1185,9 +1185,9 @@ async def _ownerless_pty_janitor() -> None:
         await asyncio.sleep(_OWNERLESS_SWEEP_INTERVAL_SEC)
         try:
             await _sweep_ownerless_ptys_once()
-            await acp_ws.sweep_ownerless()
         except Exception as err:  # noqa: BLE001 — the janitor must survive
             log.warning("ownerless-pty sweep failed: %s", err)
+        await acp_ws.sweep_ownerless()  # its own errors handled inside
 
 
 # SessionStart is run at the first turn in Codex 0.154, not at TUI startup.
