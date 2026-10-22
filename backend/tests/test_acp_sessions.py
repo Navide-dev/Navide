@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -519,7 +520,7 @@ async def test_the_creating_window_reconnecting_or_the_window_holding_the_pane_c
         await acp_ws.shutdown()
 
 
-async def test_a_session_left_without_a_window_ends_after_the_ownerless_grace(launchable, tmp_path) -> None:
+async def test_a_session_left_without_a_window_ends_after_the_ownerless_grace(launchable, tmp_path, caplog) -> None:
     from agent_team_backend import app
 
     a = Window("win-a")
@@ -529,8 +530,14 @@ async def test_a_session_left_without_a_window_ends_after_the_ownerless_grace(la
         acp_ws.drop_owner(a)
         start = acp_ws._OWNERLESS_SINCE[sid]
 
+        caplog.set_level(logging.DEBUG, logger="agent_team_backend.acp_ws")
         assert await acp_ws.sweep_ownerless(now=start + app._OWNERLESS_GRACE_SEC - 1) == []
-        assert await acp_ws.sweep_ownerless(now=start + app._OWNERLESS_GRACE_SEC) == [sid]
+        ended = await acp_ws.sweep_ownerless(now=start + app._OWNERLESS_GRACE_SEC)
+        # Seen as [] once on Linux CI with no cause in sight: show what the sweep logged.
+        assert ended == [sid], (
+            f"sweep ended {ended}; sessions {[(s.id, s.state, s.proc.returncode) for s in acp_ws.get_service().list()]};"
+            f" owners {dict(acp_ws._OWNERS)}; ownerless {dict(acp_ws._OWNERLESS_SINCE)}; acp_ws log:\n{caplog.text}"
+        )
         assert acp_ws.get_service().get(sid) is None
     finally:
         await acp_ws.shutdown()
@@ -548,7 +555,8 @@ async def test_on_its_own_exit_the_recorded_descendants_are_ended(service, tmp_p
 
     session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("exit"), cwd=str(tmp_path))
     await service.prompt(session.id, "x")
-    await _until(lambda: service.events.of("acp.exit"))
+    # acp.exit goes first; the descendants are ended right after it.
+    await _until(lambda: bool(ended))
 
     assert {4242: "id-4242"} in ended
 
