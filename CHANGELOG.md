@@ -13,6 +13,9 @@ All notable released changes to Navide will be documented in this file. The form
 ### Fixed
 
 - Backend: with many CLI panes open, the resource panel's risk check no longer freezes the backend for seconds at a time. It walked every recorded connection and disk signal once per pane, on the event loop, and that history only grows. It now walks it once, in a worker thread. Results are unchanged.
+### Fixed
+
+- Backend: a change in one workspace no longer throws away the cached Git branch and status of every other workspace's panes. While agents kept editing, every refresh re-ran Git for all of them. Looking up the last fetch time also no longer holds up the backend while it lists a repository's worktrees.
 
 ## [0.2.28] — 2026-10-21 — signed release
 

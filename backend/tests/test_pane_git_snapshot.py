@@ -358,6 +358,24 @@ class TestPaneGitSnapshotsCache:
         assert len(calls) == 2
 
     @pytest.mark.asyncio
+    async def test_a_change_elsewhere_keeps_a_running_computation_fresh(self) -> None:
+        """Agents editing one workspace kept invalidating; a global staleness
+        flag then threw away every other repo's snapshot in flight, so each poll
+        re-ran git for all of them. Only an overlapping change makes it stale."""
+        calls: list[str] = []
+        cache = git_service.PaneGitSnapshots(
+            compute=_fake_compute({"/r": "/r", "/s": "/s"}, calls, delay=0.02), clock=_FakeClock()
+        )
+        pending = asyncio.gather(cache.get("/r"), cache.get("/s"))
+        await asyncio.sleep(0.005)
+        cache.invalidate("/other-workspace")
+        cache.invalidate("/s/src")
+        await pending
+        await cache.get("/r")
+        await cache.get("/s")
+        assert calls == ["/r", "/s", "/s"]
+
+    @pytest.mark.asyncio
     async def test_non_repository_is_cached_until_invalidated(self) -> None:
         calls: list[str] = []
         roots: dict[str, str | None] = {}

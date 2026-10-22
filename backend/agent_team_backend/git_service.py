@@ -510,6 +510,24 @@ _checkout_snapshots_inflight: dict[
 ] = {}
 
 
+def _latest_fetch_head_mtime(common_dir: str) -> float | None:
+    """The newest FETCH_HEAD mtime of a repository, or None when none exists.
+
+    FETCH_HEAD is per worktree (a fetch in a linked worktree writes
+    worktrees/<name>/FETCH_HEAD), but the origin/main it refreshes is shared,
+    so the latest fetch from any worktree is the one that dates the drift.
+    """
+    fetch_heads = [os.path.join(common_dir, "FETCH_HEAD")]
+    fetch_heads += glob.glob(os.path.join(glob.escape(common_dir), "worktrees", "*", "FETCH_HEAD"))
+    mtimes = []
+    for fetch_head in fetch_heads:
+        try:
+            mtimes.append(os.stat(fetch_head).st_mtime)
+        except OSError:
+            pass
+    return max(mtimes) if mtimes else None
+
+
 async def _checkout_snapshot(toplevel: str, git_dir: str, common_dir: str) -> dict[str, Any]:
     snapshot = _empty_pane_git_snapshot()
     snapshot["worktreeRoot"] = toplevel
@@ -545,19 +563,10 @@ async def _checkout_snapshot(toplevel: str, git_dir: str, common_dir: str) -> di
     if rc == 0 and len(counts) == 2 and all(c.isdigit() for c in counts):
         snapshot["behind"], snapshot["ahead"] = int(counts[0]), int(counts[1])
 
-    # FETCH_HEAD is per worktree (a fetch in a linked worktree writes
-    # worktrees/<name>/FETCH_HEAD), but the origin/main it refreshes is shared,
-    # so the latest fetch from any worktree is the one that dates the drift.
-    fetch_heads = [os.path.join(common_dir, "FETCH_HEAD")]
-    fetch_heads += glob.glob(os.path.join(glob.escape(common_dir), "worktrees", "*", "FETCH_HEAD"))
-    mtimes = []
-    for fetch_head in fetch_heads:
-        try:
-            mtimes.append(os.stat(fetch_head).st_mtime)
-        except OSError:
-            pass
-    if mtimes:
-        mtime = max(mtimes)
+    # Listing worktrees/ and stat'ing each FETCH_HEAD is disk work that grows
+    # with the linked worktrees; on the event loop it showed up in its stalls.
+    mtime = await asyncio.to_thread(_latest_fetch_head_mtime, common_dir)
+    if mtime is not None:
         snapshot["fetchedAt"] = (
             datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z")
         )
@@ -604,6 +613,12 @@ class PaneGitSnapshots:
         #: Bumped by every invalidate, so a computation that was already running
         #: when the change landed is stored as stale instead of as fresh.
         self._generation = 0
+        #: comparable changed path -> generation of its latest invalidate. Only
+        #: a change that overlaps a computation's own path or root makes it
+        #: stale: a global flag threw away every other workspace's snapshot
+        #: while agents kept editing one, so git was re-run on every poll.
+        #: One key per watched workspace, so it stays as small as that set.
+        self._changed_at: dict[str, int] = {}
 
     def _key_for(self, path: str) -> str:
         return self._root_of.get(path) or path
@@ -639,9 +654,17 @@ class PaneGitSnapshots:
             self._inflight.pop(key, None)
         root = snapshot.get("worktreeRoot") or ""
         self._root_of[path] = root
-        computed_at = self._clock() if generation == self._generation else float("-inf")
+        computed_at = float("-inf") if self._changed_since(generation, path, root) else self._clock()
         self._entries[root or path] = (snapshot, computed_at)
         return snapshot
+
+    def _changed_since(self, generation: int, path: str, root: str) -> bool:
+        """Whether an invalidate after *generation* touched *path* or *root*."""
+        mine = {_comparable_path(p) for p in (path, root) if p}
+        return any(
+            at > generation and any(_path_within(k, c) or _path_within(c, k) for k in mine)
+            for c, at in self._changed_at.items()
+        )
 
     def invalidate(self, changed_path: str) -> None:
         """Drop every entry a change under *changed_path* can have touched.
@@ -659,6 +682,8 @@ class PaneGitSnapshots:
             _comparable_path(changed_path),
             _comparable_path(os.path.realpath(changed_path)),
         }
+        for c in changed:
+            self._changed_at[c] = self._generation
         for key in list(self._entries):
             k = _comparable_path(key)
             if any(_path_within(k, c) or _path_within(c, k) for c in changed):
