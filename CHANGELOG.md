@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- English UI: Title Case for the buttons, filter chips, preset buttons and undo labels #565 missed: Skip Tour, the What's New buttons (Got It, Take the Tour, Replay the Tour, Not Now), the layout preset Bottom Panel, the CLI Agents filter Needs Attention, the Marketplace category Version Control, Restart for New Version in the status bar, and the pipeline editor's Undo/Redo labels (Undo Edit Prompt, …).
+
 ### Fixed
 
 - Windows: programs the backend starts without input of their own (onboarding's version checks such as `pnpm --version`, CLI and tool probes) no longer hang at launch. They inherited the pipe the app keeps open for the backend's `shutdown` line; their standard input is now NUL, and the `shutdown` line still stops the backend. macOS and Linux are unchanged.
