@@ -89,10 +89,10 @@ export const MIN_HEALTH_CHECK_TIMEOUT_SEC = 15
 export const MAX_HEALTH_CHECK_TIMEOUT_SEC = 120
 // Mirrors src/main/health-timeout.ts: the first launch on Linux (AppImage) and
 // Windows (fresh install, Defender scanning the unpacked backend) needs more.
-export const LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 120
+export const EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 120
 
 export function defaultHealthCheckTimeoutSec(): number {
-  return isLinux() || isWindows() ? LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
+  return isLinux() || isWindows() ? EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
 }
 
 function clampHealthCheckTimeoutSec(raw: number): number {

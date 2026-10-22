@@ -14,10 +14,10 @@ export const DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 45
 // headroom: a fresh install's first launch unpacks the PyInstaller backend into
 // _MEI while Defender scans every new file, measured at up to 58.75s on a
 // Windows 11 arm64 VM, past the 45s default. macOS stays at 45s.
-export const LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 120
+export const EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 120
 
 export function defaultHealthCheckTimeoutSec(): number {
-  return isLinux() || isWindows() ? LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
+  return isLinux() || isWindows() ? EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
 }
 export const MIN_HEALTH_CHECK_TIMEOUT_SEC = 15
 // Ceiling on what the user may configure. Waiting longer costs nothing but

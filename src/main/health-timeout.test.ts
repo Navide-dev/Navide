@@ -10,7 +10,7 @@ import {
   readHealthCheckTimeoutSec,
   writeHealthCheckTimeoutSec,
   DEFAULT_HEALTH_CHECK_TIMEOUT_SEC,
-  LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC,
+  EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC,
   MAX_HEALTH_CHECK_TIMEOUT_SEC,
 } from './health-timeout'
 
@@ -102,7 +102,7 @@ describe('platform default', () => {
 
   it('keeps macOS on the original 45s and gives Linux and Windows 120s', () => {
     expect(DEFAULT_HEALTH_CHECK_TIMEOUT_SEC).toBe(45)
-    expect(LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC).toBe(120)
+    expect(EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC).toBe(120)
   })
 
   it.each<PlatformId>(['linux', 'darwin', 'win32'])('a configured value wins over the %s default', (platform) => {

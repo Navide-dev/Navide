@@ -537,7 +537,11 @@ const settingsApi = useSettings()
 onMounted(() => {
   themeApi.loadTheme()
   settingsApi.loadLanguage()
-  void settingsApi.loadHealthCheckTimeoutSec()
+  // The boot overlay's safety net was armed during setup with the platform
+  // default; re-arm it with the saved timeout once that has loaded.
+  void settingsApi.loadHealthCheckTimeoutSec().then(() => {
+    if (booting.value && !bootError.value) armBootTimeout()
+  })
   window.agentTeam?.onLanguageChanged?.((locale) => {
     settingsApi.setLanguage(locale, { broadcast: false })
     pushQuitConfirmConfig()
@@ -1051,7 +1055,7 @@ function retryBackend(): void {
 }
 // Countdown display for the boot overlay, driven by the configured health-check
 // timeout (Settings → Appearance). Purely cosmetic — it doesn't change when the
-// overlay actually gets dismissed (see armBootTimeout's own 52s safety net above).
+// overlay actually gets dismissed (see armBootTimeout's own timeout + 7s safety net above).
 const bootCountdown = ref<number>(settingsApi.healthCheckTimeoutSec.value)
 let _bootCountdownTimer: number | undefined
 function startBootCountdown(): void {
