@@ -404,6 +404,23 @@ describe('registry envelope signedAt (clock skew, future side only)', () => {
     expect((error as Error).message).toMatch(/^REGISTRY_SIGNATURE_NOT_YET_VALID: .*check the computer's date and time$/)
   })
 
+  it('accepts a signature exactly 5:00 later than this clock', () => {
+    expect(verify(signedAfterNow(5 * 60_000))).toEqual({ publisherId: 'acme', keyId: 'registry-2026' })
+  })
+
+  it('reports an envelope whose signedAt was moved to the future as a bad signature, not a clock problem', () => {
+    const genuine = envelope()
+    const tampered = { ...genuine, signedAt: new Date(Date.parse(NOW) + 10 * 60_000).toISOString() }
+    let error: unknown
+    try {
+      verify(tampered, trust(), signature(genuine))
+    } catch (caught) {
+      error = caught
+    }
+    expect((error as { code?: string }).code).toBe('REGISTRY_SIGNATURE_INVALID')
+    expect((error as Error).message).not.toMatch(/NOT_YET_VALID/)
+  })
+
   it("still refuses a signature outside the signer's own window, with no allowance", () => {
     const before = envelope({ signedAt: new Date(Date.parse('2026-08-01T00:00:00.000Z') - 1).toISOString() })
     expect(() => verify(before)).toThrow(/outside its validity window/)

@@ -454,16 +454,6 @@ export function verifyRegistryPackageTrust(
       `registry signer '${signer.keyId}' signature is outside its validity window`
     )
   }
-  // A version published or approved moments ago carries the server's clock;
-  // the same allowance as the trust metadata's generatedAt, future side only.
-  if (signedAt - TRUST_METADATA_CLOCK_SKEW_MS > now) {
-    throw new RegistryTrustError(
-      'SIGNER_INVALID',
-      `REGISTRY_SIGNATURE_NOT_YET_VALID: registry signature was made at ${input.envelope.signedAt}, ` +
-        `later than this computer's clock (${new Date(now).toISOString()}); check the computer's date and time`
-    )
-  }
-
   if (input.trustMetadata.blockedPublishers.includes(input.envelope.publisherId)) {
     throw new RegistryTrustError(
       'PUBLISHER_BLOCKED',
@@ -487,6 +477,17 @@ export function verifyRegistryPackageTrust(
     throw new RegistryTrustError(
       'REGISTRY_SIGNATURE_INVALID',
       'registry signature failed verification against the authorized signer'
+    )
+  }
+  // A version published or approved moments ago carries the server's clock;
+  // the same allowance as the trust metadata's generatedAt, future side only.
+  // Checked after the signature, so a forged signedAt reads as a bad signature,
+  // not as a wrong computer clock.
+  if (signedAt - TRUST_METADATA_CLOCK_SKEW_MS > now) {
+    throw new RegistryTrustError(
+      'SIGNER_INVALID',
+      `REGISTRY_SIGNATURE_NOT_YET_VALID: registry signature was made at ${input.envelope.signedAt}, ` +
+        `later than this computer's clock (${new Date(now).toISOString()}); check the computer's date and time`
     )
   }
   // Checked after the signature, so only a Registry-signed expiry counts.
