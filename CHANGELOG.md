@@ -6,6 +6,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
+- Interface language: German (Deutsch), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses the formal Sie. Agent, AI, pane, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker. Pick it in Settings → Appearance, or at the first start.
+
 - Release: every release now publishes its What's New announcements as `whats-new.json` on the download mirror (`dl.navide.dev/releases/<tag>/whats-new.json` and `releases/latest/whats-new.json`), exported from the same entries the app shows, for the website's announcements page. The format is in `docs/en-US/release-announcements.md`.
 
 ### Changed
