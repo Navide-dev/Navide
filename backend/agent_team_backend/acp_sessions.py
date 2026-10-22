@@ -34,6 +34,7 @@ import contextlib
 import logging
 import os
 import uuid
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -50,8 +51,6 @@ EventSink = Callable[[dict[str, Any]], Awaitable[None]]
 # declares no ShutdownSpec; then SIGTERM, then the whole tree is ended.
 _DEFAULT_STOP_GRACE_S = 2.0
 _TERM_GRACE_S = 1.0
-# How often an exit is looked for (see _exited).
-_EXIT_POLL_S = 0.05
 _STDERR_TAIL_LINES = 20
 _STDERR_TAIL_BYTES = 8192
 
@@ -193,8 +192,8 @@ class AcpSessionService:
         except OSError as err:
             raise AcpStartError("acp-start-failed", f"cannot open the agent's log: {err}") from err
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *argv,
+            proc = await _spawn(
+                argv,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=fd,
@@ -472,19 +471,53 @@ class AcpSessionService:
         return session
 
 
+class _ExitSignal(asyncio.subprocess.SubprocessStreamProtocol):
+    """asyncio's own subprocess protocol (create_subprocess_exec uses it), plus
+    a future done the moment the process exits: process_exited fires then,
+    whereas Process.wait() also waits for every pipe to close."""
+
+    def __init__(self, *, limit: int, loop: asyncio.AbstractEventLoop) -> None:
+        super().__init__(limit=limit, loop=loop)
+        self.exited: asyncio.Future[None] = loop.create_future()
+
+    def process_exited(self) -> None:
+        super().process_exited()
+        if not self.exited.done():
+            self.exited.set_result(None)
+
+
+# A spawned agent -> its exit signal (see _exited).
+_EXIT_SIGNALS: "weakref.WeakKeyDictionary[asyncio.subprocess.Process, asyncio.Future[None]]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+async def _spawn(argv: list[str], **kwds: Any) -> asyncio.subprocess.Process:
+    """asyncio.create_subprocess_exec, built the same way, with the exit signal."""
+    loop = asyncio.get_running_loop()
+    transport, protocol = await loop.subprocess_exec(
+        lambda: _ExitSignal(limit=2**16, loop=loop), *argv, **kwds,
+    )
+    proc = asyncio.subprocess.Process(transport, protocol, loop)
+    _EXIT_SIGNALS[proc] = protocol.exited
+    return proc
+
+
 async def _exited(proc: asyncio.subprocess.Process) -> int:
     """The agent's exit code once it has exited.
 
-    Not proc.wait(): that also waits for every pipe to close, and a descendant
-    that inherited the agent's stdout keeps it open after the agent is gone —
-    the exit would never be seen, nothing would end that descendant, and the
-    pane would read running forever. The return code is set the moment the
-    process exits (asyncio's child watcher), pipes or not.
+    Not proc.wait() alone: that also waits for every pipe to close, and a
+    descendant that inherited the agent's stdout keeps it open after the agent
+    is gone — the exit would never be seen, nothing would end that descendant,
+    and the pane would read running forever. Event-driven: the exit signal is
+    set by asyncio's child watcher as the process exits, pipes or not.
     """
-    # A poll, not an Event: asyncio has no public signal for "exited" apart
-    # from wait(), which is the pipe-bound one this avoids.
-    while proc.returncode is None:  # noqa: ASYNC110
-        await asyncio.sleep(_EXIT_POLL_S)
+    signal = _EXIT_SIGNALS.get(proc)
+    if signal is None:  # not spawned here
+        return await proc.wait()
+    if proc.returncode is None:
+        await asyncio.shield(signal)
+    assert proc.returncode is not None
     return proc.returncode
 
 
