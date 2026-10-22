@@ -5213,7 +5213,7 @@
             },
             "resource": {
               "where": "Ressourcen-Pille",
-              "what": "CPU und Arbeitsspeicher pro pane plus Gesamtwert, mit „N jetzt freigeben“, Sprung zum pane und Öffnen des Fensters „Ressourcenmanager“ (siehe Thema „Einstellungen und System“)."
+              "what": "CPU und Arbeitsspeicher pro pane plus Gesamtwert, mit „N jetzt freigeben“, Sprung zum pane und Öffnen des Fensters „Ressourcenverwaltung“ (siehe Thema „Einstellungen und System“)."
             }
           },
           "callout": {

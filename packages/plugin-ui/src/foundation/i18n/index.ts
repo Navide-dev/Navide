@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { watch } from 'vue'
-import { createI18n, type DefineLocaleMessage } from 'vue-i18n'
+import { createI18n } from 'vue-i18n'
 import zhTW from './locales/zh-TW.json'
 import enUS from './locales/en-US.json'
 import jaJP from './locales/ja-JP.json'
@@ -19,10 +19,17 @@ import {
 
 const LANGUAGE_KEY = 'agent-team:language'
 
-// Keeps the registered locale codes but types every catalog as vue-i18n's
-// DefineLocaleMessage: an inferred type spelling out each JSON in full is too
-// large for the emitted .d.ts (TS7056), and grows with every language.
-function catalogs<L extends string>(entries: Record<L, DefineLocaleMessage>): Record<L, DefineLocaleMessage> {
+// en-US is the schema: every catalog is typed as en-US's shape, so
+// i18n.global.t still completes its keys for plugin authors, while the emitted
+// .d.ts spells out that one catalog (an inferred map of every JSON in full is
+// too large for the .d.ts emitter, TS7056, and grows with every language).
+// An interface, not a type alias: the .d.ts names it instead of repeating it.
+const enUSSchema = enUS
+type EnUSCatalog = typeof enUSSchema
+interface MessageSchema extends EnUSCatalog {}
+
+// Keeps the registered locale codes; every catalog is checked against en-US.
+function catalogs<L extends string>(entries: Record<L, MessageSchema>): Record<L, MessageSchema> {
   return entries
 }
 
