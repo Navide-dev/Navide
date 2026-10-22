@@ -592,26 +592,6 @@ class PortableCredential:
 
 
 @dataclass(frozen=True)
-class AcpLaunch:
-    """How to start this CLI as an Agent Client Protocol agent (an ACP pane).
-
-    Declared per vendor; a vendor without one has no ACP pane (nothing is
-    borrowed from another vendor). Design: DESIGN-acp-mode.md (0.2.28 plan B).
-    """
-
-    # The command line that speaks ACP on stdio, e.g. ("opencode", "acp").
-    argv: tuple[str, ...]
-    # A separate program that provides ACP for this CLI, when the CLI has no
-    # ACP mode of its own (installed through the usual install flow, disclosed).
-    adapter: Dep | None = None
-    # The version the ACP handshake was last checked against, as --version prints it.
-    verified_version: str = ""
-    # Whether a session started in the terminal can be loaded in ACP and the
-    # other way round. None = not established, so no "reopen in the other mode".
-    session_shared_with_tui: bool | None = None
-
-
-@dataclass(frozen=True)
 class ShutdownSpec:
     """How a kill should treat this CLI on its way out.
 
@@ -1148,8 +1128,6 @@ class VendorSpec:
     # --- install wizard (mirrors the legacy onboarding_deps agent_cli table) ---
     # This vendor's install/detect/update entry; onboarding_deps aggregates it.
     install_dep: Dep | None = None
-    # How to run this CLI as an ACP agent. None = no ACP pane for it.
-    acp: AcpLaunch | None = None
 
     # --- lifecycle hooks ---
     # (backend_port_file: str) -> install result. Set when this CLI can be
