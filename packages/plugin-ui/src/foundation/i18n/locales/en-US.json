@@ -2044,7 +2044,7 @@
         "category": {
           "all": "All",
           "productivity": "Productivity",
-          "version-control": "Version control",
+          "version-control": "Version Control",
           "themes": "Themes",
           "ai": "AI",
           "other": "Other",
@@ -5887,7 +5887,7 @@
             "updateDownloading": {
               "name": "<code>↓</code> plus a percentage",
               "where": "Same place as above",
-              "what": "An update is downloading. When it finishes it becomes <code>Update ready</code> or <code>Restart for new version</code>; on failure, <code>Update failed</code> / <code>Update check failed</code>."
+              "what": "An update is downloading. When it finishes it becomes <code>Update ready</code> or <code>Restart for New Version</code>; on failure, <code>Update failed</code> / <code>Update check failed</code>."
             }
           },
           "right": {
@@ -7677,7 +7677,7 @@
       "filter-label": "Filter CLI agents",
       "filter-all": "All",
       "filter-enabled": "Enabled",
-      "filter-attention": "Needs attention",
+      "filter-attention": "Needs Attention",
       "count": "{visible} of {total} agents · {enabled} enabled",
       "reorder-filtered": "Clear search and choose All to reorder",
       "enabled": "Enabled",
@@ -8893,7 +8893,7 @@
     "preset": {
       "default": "Default",
       "focus": "Focus",
-      "bottom-panel": "Bottom panel"
+      "bottom-panel": "Bottom Panel"
     },
     "presets": "Presets",
     "statusbar-note": "its popovers go with it"
@@ -9018,7 +9018,7 @@
     "downloaded": "Update downloaded — restart to install.",
     "download": "Download",
     "install": "Restart to Install",
-    "restart": "Restart for new version",
+    "restart": "Restart for New Version",
     "restarting": "Restarting…",
     "update": "Update",
     "badge-ready": "v{version} ready",
@@ -10979,7 +10979,7 @@
     "progress": "Step {n} of {total}",
     "next": "Next",
     "back": "Back",
-    "skip": "Skip tour",
+    "skip": "Skip Tour",
     "done": "Done",
     "welcome": {
       "pickFolder": "First, pick a folder for your agents to work in. Have a project? Click Browse…. Starting fresh? Click New…. Just trying it out? Click Home.",
@@ -11089,23 +11089,23 @@
       "add": "Add {name}",
       "edit-cli": "Change CLI",
       "edit-field": "Edit {field}",
-      "edit-gate": "Edit gate message",
-      "edit-layer": "Edit layer settings",
-      "edit-manager": "Change manager",
-      "edit-prompt": "Edit prompt",
-      "edit-role": "Change role",
-      "link": "Link steps",
-      "loop": "Add reject loop",
+      "edit-gate": "Edit Gate Message",
+      "edit-layer": "Edit Layer Settings",
+      "edit-manager": "Change Manager",
+      "edit-prompt": "Edit Prompt",
+      "edit-role": "Change Role",
+      "link": "Link Steps",
+      "loop": "Add Reject Loop",
       "move": "Move {name}",
-      "pin": "Freeze output",
-      "position": "Move on canvas",
+      "pin": "Freeze Output",
+      "position": "Move on Canvas",
       "remove": "Delete {name}",
       "rename": "Rename",
-      "reorder": "Reorder layers",
-      "tidy": "Tidy up",
-      "unlink": "Remove link",
-      "unpin": "Unfreeze output",
-      "loop-budget": "Change retry limit"
+      "reorder": "Reorder Layers",
+      "tidy": "Tidy Up",
+      "unlink": "Remove Link",
+      "unpin": "Unfreeze Output",
+      "loop-budget": "Change Retry Limit"
     },
     "inspector": {
       "aria": "Settings for {name}",

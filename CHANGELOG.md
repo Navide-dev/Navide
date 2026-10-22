@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- English UI: Title Case for the buttons, filter chips, preset buttons and undo labels #565 missed: Skip Tour, the What's New buttons (Got It, Take the Tour, Replay the Tour, Not Now), the layout preset Bottom Panel, the CLI Agents filter Needs Attention, the Marketplace category Version Control, Restart for New Version in the status bar, and the pipeline editor's Undo/Redo labels (Undo Edit Prompt, …).
+
 ### Fixed
 
 - MCP: a local (stdio) server no longer fails after a fixed 15 seconds while `npx`/`uvx` downloads its package the first time (context7 on a cold start). Navide waits while the server's process is running, up to a 300-second safety cap, and fails at once, with the exit code, if the process exits. Settings → MCP shows the server as starting, notes after 15 seconds that a first run may be downloading, says why a start failed, and shows the last lines the server printed (kept in `logs/mcp-<name>.log`, latest start only). Servers now start in parallel, so one slow server does not hold up the others. Remote (`http`/`sse`) servers keep the 15-second handshake.
