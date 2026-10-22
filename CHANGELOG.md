@@ -14,6 +14,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 - MCP: `cli_reclaim_agent` and `cli_close_agent` no longer refuse every pane as your own. Since 0.2.28 the window was told the target pane was the one asking, so every reclaim came back `reason: "self"` and every close `self-close`, whoever called them. The request still goes to the window holding the target, and now names the real caller. Self-evolution had the same fault: after an automatic run its pane was never reclaimed and old cards were never closed.
 
+- Windows: the first launch after a fresh install waits up to 120 seconds for the backend (was 45), as on Linux. Unpacking the backend while Microsoft Defender scans the new files can take longer than 45 seconds, which ended a backend that was still starting with "backend failed to start". The startup screen now also stays up for the whole wait instead of closing after 52 seconds. A timeout set in Settings is unchanged.
+
 - Backend: with many CLI panes open, the resource panel's risk check no longer freezes the backend for seconds at a time. It walked every recorded connection and disk signal once per pane, on the event loop, and that history only grows. It now walks it once, in a worker thread. Results are unchanged.
 
 - Backend: a change in one workspace no longer throws away the cached Git branch and status of every other workspace's panes. While agents kept editing, every refresh re-ran Git for all of them. Looking up the last fetch time also no longer holds up the backend while it lists a repository's worktrees.
