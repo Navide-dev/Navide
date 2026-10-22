@@ -55,6 +55,8 @@ POLL_EVERY = 5
 STALL_SECONDS = 45
 TIMEOUT_RE = re.compile(r"\+{3,} Timeout \+{3,}")
 CREATE_NO_WINDOW = 0x08000000
+PROBE_SECONDS = 60
+PROBE_REAP_SECONDS = 5
 # One PowerShell for the parts psutil cannot read. The Defender log names
 # scans, detections and setting changes, not every file it inspects.
 _HOST_PROBE = r"""
@@ -230,16 +232,45 @@ def _stall_diagnostics(job) -> str:
                 rows.append(f"    MsMpEng.exe({proc.pid}) cpu {proc.cpu_percent(interval=1.0)}%")
             except psutil.Error:
                 pass
-    try:
-        probe = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _HOST_PROBE],
-            stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace",
-            timeout=60, creationflags=CREATE_NO_WINDOW,
-        )
-        rows.extend("    " + line for line in (probe.stdout + probe.stderr).splitlines() if line.strip())
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        rows.append(f"    host probe failed: {type(exc).__name__}")
+    rows.extend("    " + line for line in _host_probe().splitlines() if line.strip())
     return "\n".join(rows)
+
+
+def _host_probe() -> str:
+    """The PowerShell probe's output, waited on for PROBE_SECONDS and then a
+    bounded reap. subprocess.run would kill only powershell.exe on timeout and
+    then wait, with no limit, for pipes a child of it still holds."""
+    try:
+        proc = subprocess.Popen(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _HOST_PROBE],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, errors="replace", creationflags=CREATE_NO_WINDOW,
+        )
+    except OSError as exc:
+        return f"host probe failed: {type(exc).__name__}"
+    try:
+        out, err = proc.communicate(timeout=PROBE_SECONDS)
+        return out + err
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        children = psutil.Process(proc.pid).children(recursive=True)
+    except psutil.Error:
+        children = []
+    for child in children:
+        try:
+            child.kill()
+        except psutil.Error:
+            pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+    try:
+        out, err = proc.communicate(timeout=PROBE_REAP_SECONDS)
+    except subprocess.TimeoutExpired:
+        return f"host probe timed out after {PROBE_SECONDS}s; its pipes were still open {PROBE_REAP_SECONDS}s after the kill"
+    return f"host probe timed out after {PROBE_SECONDS}s; ended it and {len(children)} children\n{out}{err}"
 
 
 def _timeout_dumps(lines: list[str]) -> list[str]:
@@ -323,7 +354,7 @@ def main() -> int:
     next_report = started + REPORT_EVERY
     progress, progress_since, captured = "", started, ""
     rc: int | None = None
-    while time.monotonic() - started < CAP_SECONDS:
+    while True:
         rc = child.poll()
         if rc is not None:
             break
@@ -335,14 +366,23 @@ def main() -> int:
         elif now - progress_since >= STALL_SECONDS and captured != progress:
             # Once per stuck test, while it is still stuck.
             captured = progress
-            print(f"--- stalled {int(now - progress_since)}s at: {progress}\n{_stall_diagnostics(job)}", flush=True)
+            try:
+                diagnostics = _stall_diagnostics(job)
+            except Exception as exc:  # noqa: BLE001 - diagnostics never decide the verdict
+                diagnostics = f"    diagnostics raised {type(exc).__name__}: {exc}"
+            print(f"--- stalled {int(now - progress_since)}s at: {progress}\n{diagnostics}", flush=True)
         if now < next_report:
             continue
-        next_report += REPORT_EVERY
         elapsed = int(now - started)
         peers = _describe(_job_pids(job))
         vm = psutil.virtual_memory()
         print(f"--- {elapsed}s: {_progress()}\n    in job: {peers}\n    vm: {vm.percent}% of {vm.total >> 20} MiB used, cpu {psutil.cpu_percent()}%, {len(psutil.pids())} processes\n    runner: {_runner_procs()}", flush=True)
+        # The cap is judged only here, and the next report is due a full
+        # interval after this one ends, as when the loop slept 60 s between
+        # reports: the 5 s poll is for stall detection, not an earlier cap.
+        if time.monotonic() - started >= CAP_SECONDS:
+            break
+        next_report = time.monotonic() + REPORT_EVERY
     if rc is None:
         # The loop leaves at the cap after a sleep, without polling: pytest
         # may have ended during that last interval, and its exit decides.
