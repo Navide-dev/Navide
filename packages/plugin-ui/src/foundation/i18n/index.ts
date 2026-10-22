@@ -9,6 +9,7 @@ import zhCN from './locales/zh-CN.json'
 import deDE from './locales/de-DE.json'
 import esES from './locales/es-ES.json'
 import frFR from './locales/fr-FR.json'
+import ptBR from './locales/pt-BR.json'
 import { settingsGet } from '../../shared'
 import {
   UI_LOCALE_FALLBACK,
@@ -33,6 +34,7 @@ const messages = {
   'de-DE': deDE,
   'es-ES': esES,
   'fr-FR': frFR,
+  'pt-BR': ptBR,
 }
 
 /** A UI locale that has a catalog registered in this build. */
