@@ -9,7 +9,8 @@ import { buildWhatsNewJson, changelogDates } from '../../scripts/export-whats-ne
 // The mirror job runs the script with Node 22's type stripping and a
 // node:module register() hook. CI runs vitest under Bun, whose execPath is bun
 // and which ignores register(), so the run below names a real `node` from PATH
-// and checks it can strip types; without one the test is skipped, not faked.
+// and checks it can strip types. Without one it is skipped on a developer
+// machine, but fails in CI: there the mirror path must really be exercised.
 function nodeWithTypeStripping(): string | null {
   try {
     execFileSync('node', [
@@ -22,6 +23,7 @@ function nodeWithTypeStripping(): string | null {
   }
 }
 const NODE = nodeWithTypeStripping()
+const IN_CI = !!process.env.CI
 
 describe('whats-new.json export', () => {
   it('keeps entries at or below the release, newest first, with text only', () => {
@@ -42,8 +44,10 @@ describe('whats-new.json export', () => {
       .toEqual({ '0.2.28': '2026-10-21', '0.2.27': '2026-10-20' })
   })
 
-  // Skipped when PATH has no Node >= 22.6 (type stripping): the script needs one, as the mirror job's setup-node gives it.
-  it.skipIf(NODE === null)('runs under plain Node with no dependency install, as the mirror job does', () => {
+  // Needs Node >= 22.6 on PATH (type stripping), as the mirror job's setup-node
+  // gives it. Skipped without one locally; in CI that is a failure, not a skip.
+  it.skipIf(NODE === null && !IN_CI)('runs under plain Node with no dependency install, as the mirror job does', () => {
+    if (NODE === null) throw new Error('CI must provide Node.js >= 22.6 on PATH (actions/setup-node) for the mirror path; none was found')
     const dir = mkdtempSync(join(tmpdir(), 'whats-new-'))
     try {
       const out = join(dir, 'whats-new.json')
