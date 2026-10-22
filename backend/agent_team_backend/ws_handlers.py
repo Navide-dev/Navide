@@ -9610,13 +9610,18 @@ async def terminal_resource_usage(session: "Session", msg_id: str, msg_type: str
         now = time.monotonic()
         cached = _resource_sweep_cache["payload"]
         if cached is not None and now - float(_resource_sweep_cache["at"]) < _RESOURCE_SWEEP_TTL_S:
-            risks = app.cli_risk_service.current(active_panes(session.terminals, app._PTY_OWNERS))
+            # Projection is CPU work over every recorded signal: off the loop.
+            risks = await asyncio.to_thread(
+                app.cli_risk_service.current, active_panes(session.terminals, app._PTY_OWNERS)
+            )
             await session.send_json(make_response(msg_id, msg_type, {**cached, "cliRisks": risks}))
             return
         result = await _collect_resource_usage(session)
         _resource_sweep_cache["at"] = now
         _resource_sweep_cache["payload"] = result
-    risks = app.cli_risk_service.current(active_panes(session.terminals, app._PTY_OWNERS))
+    risks = await asyncio.to_thread(
+        app.cli_risk_service.current, active_panes(session.terminals, app._PTY_OWNERS)
+    )
     await session.send_json(make_response(msg_id, msg_type, {**result, "cliRisks": risks}))
 
 
