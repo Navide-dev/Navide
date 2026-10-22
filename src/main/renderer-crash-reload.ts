@@ -27,6 +27,13 @@ export interface RendererCrashWatchOptions {
 export const RENDERER_RELOAD_MAX = 3
 export const RENDERER_RELOAD_WINDOW_MS = 60_000
 
+const crashWatched = new WeakSet<object>()
+
+/** Whether watchRendererCrashes already logs this WebContents' renderer going away. */
+export function isRendererCrashWatched(contents: object): boolean {
+  return crashWatched.has(contents)
+}
+
 /**
  * Reload a window whose renderer process died, so it reconnects and its panes
  * reattach to the PTYs the backend kept alive. Without this a killed renderer
@@ -42,6 +49,7 @@ export function watchRendererCrashes(win: CrashWatchedWindow, opts: RendererCras
   const windowMs = opts.windowMs ?? RENDERER_RELOAD_WINDOW_MS
   const reloadTimes: number[] = []
   const contents = win.webContents
+  crashWatched.add(contents)
 
   contents.on('render-process-gone', (_event, details) => {
     const what = `[main] renderer gone kind=${opts.kind} reason=${details.reason} exitCode=${details.exitCode}`

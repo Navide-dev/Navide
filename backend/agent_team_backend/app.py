@@ -3995,7 +3995,9 @@ def _untested_version_note(agent_key: str, label: str, version: str | None) -> s
     last verified against. Disclosure only: the spawn goes ahead either way."""
     spec = cli_vendor(agent_key)
     switch = spec.account_switch if spec is not None else None
-    verified = switch.verified_version if switch is not None else ""
+    verified = (spec.cli_verified_version if spec is not None else "") or (
+        switch.verified_version if switch is not None else ""
+    )
     found, known = _leading_version(version or ""), _leading_version(verified)
     if not found or not known or found <= known:
         return ""

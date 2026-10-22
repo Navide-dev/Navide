@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it } from 'vitest'
@@ -12,7 +12,10 @@ const localeDirs = [
   'plugins/navide-plans/src/locales',
   'plugins/navide-browser/src/locales'
 ]
-const LOCALES = ['en-US', 'zh-TW', 'ja-JP', 'ko-KR', 'zh-CN'] as const
+// Every catalog in the folder, so a new language is checked without editing this.
+const localesIn = (dir: string): string[] =>
+  readdirSync(resolve(dir)).filter((name) => name.endsWith('.json')).map((name) => name.replace(/\.json$/, '')).sort()
+const LOCALES = localesIn(localeDirs[0])
 
 // Keys that are meant to be plurals (called with a count).
 const PLURAL_KEYS = [
@@ -126,7 +129,7 @@ function load(dir: string, locale: string): Record<string, unknown> {
 
 describe('locale message syntax', () => {
   for (const dir of localeDirs) {
-    it.each(LOCALES)(`${dir}/%s has no accidental plurals`, (locale) => {
+    it.each(localesIn(dir))(`${dir}/%s has no accidental plurals`, (locale) => {
       // Outside a {…} placeholder every | splits the message into plural cases.
       const plurals = leaves(load(dir, locale))
         .filter(([, text]) => text.replace(/\{[^{}]*\}/g, '').includes('|'))

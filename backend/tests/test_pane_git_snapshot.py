@@ -598,8 +598,83 @@ async def test_network_snapshot_adds_git_to_local_panes_only(monkeypatch, fresh_
         ]
     }
     await ws_handlers._add_local_pane_git(snapshot)
+    # A cold cache answers without waiting and computes in the background.
+    assert all("git" not in pane for device in snapshot["devices"] for pane in device["panes"])
+    await asyncio.gather(*list(fresh_cache._inflight.values()))
+
+    for device in snapshot["devices"]:
+        for pane in device["panes"]:
+            pane.pop("git", None)
+    await ws_handlers._add_local_pane_git(snapshot)
 
     local, remote = snapshot["devices"]
     assert local["panes"][0]["git"]["worktreeRoot"] == "/ws/repo"
     assert "git" not in local["panes"][1]
     assert "git" not in remote["panes"][0]
+
+
+@pytest.mark.asyncio
+async def test_network_polls_do_not_rerun_git_on_every_change(fresh_cache) -> None:
+    """The network view polls every 3 s while agents keep changing files.
+    Each change used to empty the cache and the next poll waited on four git
+    runs again; a poll now answers from the last snapshot and refreshes only
+    once that is older than the TTL."""
+    calls: list[str] = []
+    clock = _FakeClock()
+    cache = git_service.PaneGitSnapshots(
+        ttl_s=30.0, compute=_fake_compute({"/r": "/r"}, calls), clock=clock
+    )
+    assert cache.peek("/r") is None
+    await asyncio.gather(*list(cache._inflight.values()))
+    for _ in range(9):  # 27 s of polls, each after a change
+        cache.invalidate("/r")
+        clock.now += 3
+        assert cache.peek("/r")["worktreeRoot"] == "/r"
+        await asyncio.sleep(0)
+    assert calls == ["/r"]
+
+    clock.now += 3  # 30 s: older than the TTL
+    assert cache.peek("/r")["branch"] == "b1"  # still answered at once
+    await asyncio.gather(*list(cache._inflight.values()))
+    assert calls == ["/r", "/r"]
+    assert cache.peek("/r")["branch"] == "b2"
+    # The waiting read still honours the change: get() recomputes.
+    cache.invalidate("/r")
+    await cache.get("/r")
+    assert calls == ["/r", "/r", "/r"]
+
+
+class TestPaneGitSnapshotsFollowups:
+    @pytest.mark.asyncio
+    async def test_a_sibling_with_a_common_prefix_is_not_the_same_repo(self) -> None:
+        """/rx changing is not /r changing: neither the cached entry nor an
+        in-flight computation of /r is touched."""
+        calls: list[str] = []
+        cache = git_service.PaneGitSnapshots(
+            compute=_fake_compute({"/r": "/r", "/rx": "/rx"}, calls, delay=0.02), clock=_FakeClock()
+        )
+        await cache.get("/r")
+        cache.invalidate("/rx")
+        await cache.get("/r")
+        assert calls == ["/r"]
+
+        pending = asyncio.ensure_future(cache.get("/rx"))
+        await asyncio.sleep(0.005)
+        cache.invalidate("/r")
+        await pending
+        await cache.get("/rx")
+        assert calls == ["/r", "/rx"]
+
+    @pytest.mark.asyncio
+    async def test_a_change_during_a_computation_makes_the_next_peek_refresh(self) -> None:
+        calls: list[str] = []
+        cache = git_service.PaneGitSnapshots(
+            ttl_s=30.0, compute=_fake_compute({"/r": "/r"}, calls, delay=0.02), clock=_FakeClock()
+        )
+        pending = asyncio.ensure_future(cache.get("/r"))
+        await asyncio.sleep(0.005)
+        cache.invalidate("/r")
+        await pending
+        assert cache.peek("/r")["worktreeRoot"] == "/r"  # still answered at once
+        await asyncio.gather(*list(cache._inflight.values()))
+        assert calls == ["/r", "/r"]  # refreshed without waiting out the TTL

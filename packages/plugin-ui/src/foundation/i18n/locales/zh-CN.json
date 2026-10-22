@@ -2141,6 +2141,13 @@
         },
         "selfHostedQuarantine": "{id} {version} 来自自架 Registry，目前没有加载。请打开开发者模式，或改从 Navide 市场安装。"
       },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide 无法检查这个 Navide 插件：Registry 信任数据的时间晚于这台电脑的时钟。请确认电脑的日期与时间正确，再试一次。",
+          "expired": "Navide 无法检查这个 Navide 插件：按这台电脑的时钟，Registry 信任数据已过期。请确认电脑的日期与时间正确，再试一次。",
+          "signatureNotYetValid": "Navide 无法检查这个 Navide 插件：它的 Registry 签名时间晚于这台电脑的时钟。请确认电脑的日期与时间正确，再试一次。"
+        }
+      },
       "localInstall": {
         "agentRequest": "由 {requester} 提出。Navide 没有审核过这个 Navide 插件，要不要安装由你决定。",
         "button": "从文件安装 .vsix…",
