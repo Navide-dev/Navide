@@ -4,6 +4,9 @@ where there is no SIGTERM to deliver."""
 from __future__ import annotations
 
 import io
+import sys
+
+import pytest
 
 from agent_team_backend.__main__ import (
     SHUTDOWN_LINE,
@@ -155,3 +158,78 @@ def test_a_spawned_backend_takes_the_handover_line_and_still_stops_on_shutdown(t
             backend.kill()
             backend.wait(timeout=10)
 
+
+
+# ---- children never inherit the shutdown pipe ------------------------------
+# Windows 0.2.27/0.2.28: every git.exe and node.exe the backend started hung at
+# launch (main thread in Wait:Executive), because each inherited the stdin
+# pipe that the watcher above sits in a synchronous read on.
+
+
+def test_main_isolates_stdin_after_the_handover_and_before_the_watcher() -> None:
+    from pathlib import Path
+
+    import agent_team_backend.__main__ as entry
+
+    source = Path(entry.__file__).read_text(encoding="utf-8")
+    body = source[source.index("def main("):]
+    handover = body.index("_read_handover()")
+    isolate = body.index("osplat.process_tree.isolate_stdin_from_children()")
+    watcher = body.index("target=_watch_stdin_for_shutdown")
+    assert handover < isolate < watcher
+
+
+def test_posix_has_nothing_to_isolate() -> None:
+    from agent_team_backend.osplat import _posix
+
+    assert _posix.PosixProcessTree().isolate_stdin_from_children() is False
+
+
+def _run_a_child_while_stdin_is_a_pipe_being_read(isolate: bool):
+    """Make this process's stdin handle a pipe with a thread parked in a
+    synchronous read on it (the backend's state on Windows), optionally
+    isolate, start a child that never reads stdin, then put everything back."""
+    import os
+    import subprocess
+    import sys
+    import threading
+
+    import msvcrt
+
+    from agent_team_backend.osplat import _windows
+
+    k = _windows._kernel32()
+    original = k.GetStdHandle(_windows.STD_INPUT_HANDLE)
+    read_fd, write_fd = os.pipe()
+
+    reader = threading.Thread(target=os.read, args=(read_fd, 1), daemon=True)
+    try:
+        assert k.SetStdHandle(_windows.STD_INPUT_HANDLE, msvcrt.get_osfhandle(read_fd))
+        reader.start()
+        if isolate:
+            assert _windows.process_tree.isolate_stdin_from_children() is True
+        try:
+            return subprocess.run(
+                [sys.executable, "-c", "pass"], capture_output=True, timeout=10
+            ).returncode
+        except subprocess.TimeoutExpired:
+            return "hung"
+    finally:
+        k.SetStdHandle(_windows.STD_INPUT_HANDLE, original)
+        os.write(write_fd, b"x")
+        reader.join(5)
+        os.close(write_fd)
+        os.close(read_fd)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the synchronous-pipe lock is Windows behaviour")
+def test_windows_a_child_inheriting_the_read_pipe_hangs_at_launch() -> None:
+    """The root cause itself, pinned so a Windows that stops behaving this
+    way is noticed: with nothing isolated, a child that never touches stdin
+    still does not get past its start."""
+    assert _run_a_child_while_stdin_is_a_pipe_being_read(isolate=False) == "hung"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the synchronous-pipe lock is Windows behaviour")
+def test_windows_after_isolation_the_same_child_starts_and_exits() -> None:
+    assert _run_a_child_while_stdin_is_a_pipe_being_read(isolate=True) == 0
