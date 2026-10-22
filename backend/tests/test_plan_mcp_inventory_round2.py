@@ -489,8 +489,10 @@ async def test_close_asks_the_window_holding_the_target_pane_to_close_it(
     assert calls[0]["workspace_path"] == "/ws/alpha"
     assert calls[0]["action"] == "ui.pane.close"
     assert calls[0]["args"] == {"paneId": "pw"}
-    # Addressed at the target, not at the caller: _pane_caller("pw"), not "pa".
-    assert calls[0]["caller"].pane_id == "pw"
+    # Addressed at the target's window, but the window is told the real
+    # caller: its self-close guard reads caller_pane_id.
+    assert calls[0]["route_pane_id"] == "pw"
+    assert calls[0]["caller"].pane_id == "pa"
     assert "advisories" not in result
 
 
