@@ -12,6 +12,22 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Extensions: a computer clock up to 5 minutes behind the Registry's no longer refuses every Registry install and update. The Registry signs its trust data per request, so the slightest lag read as invalid. A larger gap is reported as trust data that is not valid yet, and trust data past its expiry as expired, instead of both as "expired". The same 5 minutes apply to a version published or approved just before you install it. Both messages ask you to check the computer's date and time. Signature checks are unchanged.
 
+- MCP: `cli_reclaim_agent` and `cli_close_agent` no longer refuse every pane as your own. Since 0.2.28 the window was told the target pane was the one asking, so every reclaim came back `reason: "self"` and every close `self-close`, whoever called them. The request still goes to the window holding the target, and now names the real caller. Self-evolution had the same fault: after an automatic run its pane was never reclaimed and old cards were never closed.
+
+- Backend: with many CLI panes open, the resource panel's risk check no longer freezes the backend for seconds at a time. It walked every recorded connection and disk signal once per pane, on the event loop, and that history only grows. It now walks it once, in a worker thread. Results are unchanged.
+
+- Backend: a change in one workspace no longer throws away the cached Git branch and status of every other workspace's panes. While agents kept editing, every refresh re-ran Git for all of them. Looking up the last fetch time also no longer holds up the backend while it lists a repository's worktrees.
+
+- Codex panes: a sub-agent finishing no longer ends its parent pane's turn. Its reply is not taken as the pane's, and its task is not used to name the pane. Before, a waiting `cli_wait_idle` or `cli_send_and_wait` returned while the parent was still working. A sub-agent's tokens still count toward the pane, now under the sub-agent's own session instead of its parent's. The per-account turn count is unchanged and still includes sub-agent turns.
+
+- Backend: fewer Git processes while agents work. The network view's pane branches are answered from the last reading and refreshed in the background, no more than once per 30 seconds per repository. The Git pane's history, branch, stash, remote, tag and worktree reads are shared when several Git panes reload together after one change. Each status read now runs two Git commands instead of three.
+
+- Windows: programs the backend starts without input of their own (onboarding's version checks such as `pnpm --version`, CLI and tool probes) no longer hang at launch. They inherited the pipe the app keeps open for the backend's `shutdown` line; their standard input is now NUL, and the `shutdown` line still stops the backend. macOS and Linux are unchanged.
+
+- Open workspaces (Welcome badges, `ui_snapshot` `openWorkspaces`) list each folder once. A folder that is both a window's own workspace and one it adopted was listed twice. Paths are compared resolved, without a trailing slash, and case-insensitively on Windows; `~` is not expanded. (#448)
+
+- CLI panes: the startup probe's "newer than the last version Navide verified" line now covers Goose (verified on 1.55.0; it has no account switching, so it never had a version to compare against), and Kimi Code compares against 2.2.0, the version its launch and logs were checked on, rather than the 0.39.0 of its account-switch evidence, so Kimi 2.x is no longer called untested. Disclosure only, as before. (#502 follow-up)
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added
