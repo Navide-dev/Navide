@@ -63,8 +63,17 @@ describe('applyAcpUpdate / transcriptText', () => {
     applyAcpUpdate(entries, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } })
     applyAcpUpdate(entries, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ', world' } })
 
-    expect(entries).toEqual([{ role: 'user', text: 'hi' }, { role: 'agent', text: 'Hello, world' }])
+    // One part per chunk: a long stream appends small pieces, never rewrites one string.
+    expect(entries).toEqual([{ role: 'user', parts: ['hi'] }, { role: 'agent', parts: ['Hello', ', world'] }])
     expect(transcriptText(entries)).toBe('> hi\nHello, world')
+  })
+
+  it('leaves a refused prompt out of the pane text and starts a new entry after it', () => {
+    const entries: TranscriptEntry[] = [{ role: 'user', parts: ['lost'], unsent: true }]
+    applyAcpUpdate(entries, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'again' } })
+
+    expect(entries).toHaveLength(2)
+    expect(transcriptText(entries)).toBe('> again')
   })
 
   it('keeps one entry per tool call, updated in place', () => {
@@ -72,7 +81,7 @@ describe('applyAcpUpdate / transcriptText', () => {
     applyAcpUpdate(entries, { sessionUpdate: 'tool_call', toolCallId: 't1', title: 'Read notes.md', status: 'pending' })
     applyAcpUpdate(entries, { sessionUpdate: 'tool_call_update', toolCallId: 't1', status: 'completed' })
 
-    expect(entries).toEqual([{ role: 'tool', text: 'Read notes.md', toolCallId: 't1', status: 'completed' }])
+    expect(entries).toEqual([{ role: 'tool', parts: ['Read notes.md'], toolCallId: 't1', status: 'completed' }])
   })
 
   it('leaves thoughts out of the text other features read, and ignores what it does not know', () => {

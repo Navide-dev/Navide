@@ -93,7 +93,7 @@ export function useAcpSession(paneId: string, port: AcpPort) {
     } else if (type === 'acp.turn_end') {
       turnEndedAt.value = Date.now()
       const failure = typeof p.error === 'string' ? p.error : ''
-      if (failure) transcript.push({ role: 'notice', text: failure })
+      if (failure) transcript.push({ role: 'notice', parts: [failure] })
     } else if (type === 'acp.exit') {
       exitCode.value = typeof p.code === 'number' ? p.code : null
       stderrTail.value = typeof p.stderr_tail === 'string' ? p.stderr_tail : ''
@@ -119,6 +119,11 @@ export function useAcpSession(paneId: string, port: AcpPort) {
           CREATE_TIMEOUT_MS,
         )
         if (!reply.ok || !reply.payload?.session?.session_id) {
+          // Closed while starting: the backend abandoned this start on purpose.
+          if (killRequested) {
+            state.value = 'exited'
+            return
+          }
           state.value = 'failed'
           error.value = reply.error?.message ?? 'the ACP agent could not be started'
           stderrTail.value = String(reply.error?.details?.stderr_tail ?? '')
@@ -140,9 +145,19 @@ export function useAcpSession(paneId: string, port: AcpPort) {
   /** Send one prompt: "sent", "queued" behind the running turn, or "" when refused. */
   async function prompt(textToSend: string): Promise<'sent' | 'queued' | ''> {
     if (!sessionId.value || !textToSend) return ''
-    transcript.push({ role: 'user', text: textToSend })
-    const reply = await port.send<{ status?: 'sent' | 'queued' }>('acp.prompt', { session_id: sessionId.value, text: textToSend })
-    return reply.ok ? (reply.payload?.status ?? '') : ''
+    transcript.push({ role: 'user', parts: [textToSend] })
+    // The reactive copy of what was just pushed, so marking it re-renders.
+    const entry = transcript[transcript.length - 1]
+    let status: 'sent' | 'queued' | '' = ''
+    try {
+      const reply = await port.send<{ status?: 'sent' | 'queued' }>('acp.prompt', { session_id: sessionId.value, text: textToSend })
+      status = reply.ok ? (reply.payload?.status ?? '') : ''
+    } catch {
+      status = ''
+    }
+    // Refused, or never answered: it must not read as sent.
+    if (!status) entry.unsent = true
+    return status
   }
 
   async function cancel(): Promise<boolean> {
@@ -159,14 +174,16 @@ export function useAcpSession(paneId: string, port: AcpPort) {
     return !!(reply.ok && reply.payload?.answered)
   }
 
-  /** Stop the agent. A kill while it is still starting stops it once the
-   *  start answers — closing a pane mid-start must not leave its agent behind. */
+  /** Stop the agent. A kill while it is still starting takes effect at once:
+   *  the backend abandons the start by pane id (a cold start can take minutes,
+   *  and closing the pane must not wait for it), stopping whatever it had
+   *  started; should the start still answer with a session, that is stopped too. */
   async function kill(): Promise<void> {
     if (!sessionId.value) {
-      // Still starting: the start sees killRequested and stops the agent
-      // itself the moment it has an id (or there is nothing to stop).
       killRequested = true
-      if (creating) await creating.catch(() => {})
+      if (!creating) return
+      state.value = 'exited'
+      await port.send('acp.kill', { pane_id: paneId }).catch(() => {})
       return
     }
     killRequested = true

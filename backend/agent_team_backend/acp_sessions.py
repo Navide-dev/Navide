@@ -12,7 +12,9 @@ runs its turns and stops it. The protocol itself is ``acp_client``.
   many wait). A turn ends only when the agent answers it (ACP has no
   session/stop); ``cancel`` asks it to, and nothing is killed for not obeying.
 - Stop: close the agent's stdin, give it the vendor's grace (``ShutdownSpec``)
-  to exit, then end its whole tree. The agent's own stderr goes to
+  to exit, then end its whole tree. ``abandon`` stops a pane's agent by pane id,
+  also one still starting: its start then fails with ``acp-cancelled`` and
+  nothing it started is left running, however far the start had got. The agent's own stderr goes to
   ``logs/acp-<session>.log`` (owner only), whose tail is shown when it exits.
 - Transcript: each prompt and the agent's reply text are appended to the
   pane's output log (the path the window chose, as for a terminal pane's PTY
@@ -137,21 +139,15 @@ class AcpSessionService:
         self._sessions: dict[str, AcpSession] = {}
         self._watchers: set[asyncio.Task[None]] = set()
         self._data_dir = app_data_dir()
+        # Panes with a create in progress, and those of them closed meanwhile.
+        self._creating: set[str] = set()
+        self._abandoned: set[str] = set()
 
     def get(self, session_id: str) -> AcpSession | None:
         return self._sessions.get(session_id)
 
     def list(self) -> list[AcpSession]:
         return list(self._sessions.values())
-
-    def by_pane(self, pane_id: str) -> AcpSession | None:
-        """The pane's running agent, or None (not an ACP pane, or stopped)."""
-        if not pane_id:
-            return None
-        for session in self._sessions.values():
-            if session.pane_id == pane_id and not session.stopping:
-                return session
-        return None
 
     def pid_groups(self) -> dict[str, tuple[str, list[int]]]:
         """``{session id: (pane id, [agent pid, *its descendants])}`` for the
@@ -187,6 +183,43 @@ class AcpSessionService:
         whatever was started is stopped first. Nothing falls back to a
         terminal pane on its own.
         """
+        self._creating.add(pane_id)
+        try:
+            return await self._create(
+                pane_id=pane_id, agent_key=agent_key, argv=argv, cwd=cwd, env=env,
+                load_session_id=load_session_id, mcp_servers=mcp_servers,
+                output_log_file=output_log_file,
+            )
+        finally:
+            self._creating.discard(pane_id)
+            self._abandoned.discard(pane_id)
+
+    async def abandon(self, pane_id: str) -> bool:
+        """Stop the pane's agent now, also while it is still starting (the pane
+        was closed). False when the pane has no agent and no start under way."""
+        starting = pane_id in self._creating
+        if starting:
+            self._abandoned.add(pane_id)
+        session = self.by_pane(pane_id)
+        if session is not None:
+            await self.kill(session.id)
+            return True
+        return starting
+
+    def by_pane(self, pane_id: str) -> AcpSession | None:
+        """The pane's agent (starting or running), or None: not an ACP pane, or stopped."""
+        if not pane_id:
+            return None
+        for session in self._sessions.values():
+            if session.pane_id == pane_id and not session.stopping:
+                return session
+        return None
+
+    async def _create(
+        self, *, pane_id: str, agent_key: str, argv: list[str], cwd: str,
+        env: dict[str, str] | None, load_session_id: str, mcp_servers: list[dict[str, Any]] | None,
+        output_log_file: str,
+    ) -> AcpSession:
         session_id = uuid.uuid4().hex
         stderr_path = log_dir() / f"acp-{session_id}.log"
         try:
@@ -232,6 +265,7 @@ class AcpSessionService:
         watcher = asyncio.ensure_future(self._watch_exit(session))
         self._watchers.add(watcher)
         watcher.add_done_callback(self._watchers.discard)
+        await self._abandon_if_closed(session)
         await self._set_state(session, "starting")
         try:
             session.init = await client.initialize(CLIENT_INFO)
@@ -248,10 +282,19 @@ class AcpSessionService:
             raise
         except (AcpClosed, AcpError, AcpProtocolError) as err:
             await self.kill(session_id)
+            await self._abandon_if_closed(session)
             code = "acp-auth-required" if _needs_auth(err, session.init) else "acp-handshake-failed"
             raise AcpStartError(code, str(err), session.stderr_tail()) from err
+        await self._abandon_if_closed(session)
         await self._set_state(session, "idle")
         return session
+
+    async def _abandon_if_closed(self, session: AcpSession) -> None:
+        """The pane was closed while this start ran: stop what it started, now."""
+        if session.pane_id not in self._abandoned:
+            return
+        await self.kill(session.id)
+        raise AcpStartError("acp-cancelled", "the pane was closed while its agent was starting")
 
     # -- turns ------------------------------------------------------------
 

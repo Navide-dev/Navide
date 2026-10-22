@@ -43,10 +43,20 @@ export type TranscriptRole = 'user' | 'agent' | 'thought' | 'tool' | 'notice'
 
 export interface TranscriptEntry {
   role: TranscriptRole
-  text: string
+  /** The entry's text as it streamed in, one part per chunk: a long reply
+   *  grows by one small node per chunk instead of rewriting one ever-longer
+   *  string (and its DOM text node) every time. A tool call has one part, its title. */
+  parts: string[]
   /** A tool call's id, so its later updates land on the same entry. */
   toolCallId?: string
   status?: string
+  /** A prompt the backend refused: shown as not sent, never as sent. */
+  unsent?: boolean
+}
+
+/** One entry's whole text. */
+export function entryText(entry: TranscriptEntry): string {
+  return entry.parts.join('')
 }
 
 export interface PermissionOption {
@@ -78,8 +88,8 @@ export function applyAcpUpdate(entries: TranscriptEntry[], update: unknown): num
     if (!text) return 0
     const role = chunkRole[kind]
     const last = entries[entries.length - 1]
-    if (last && last.role === role && !last.toolCallId) last.text += text
-    else entries.push({ role, text })
+    if (last && last.role === role && !last.toolCallId && !last.unsent) last.parts.push(text)
+    else entries.push({ role, parts: [text] })
     return text.length
   }
   if (kind === 'tool_call' || kind === 'tool_call_update') {
@@ -88,11 +98,11 @@ export function applyAcpUpdate(entries: TranscriptEntry[], update: unknown): num
     const status = typeof u.status === 'string' ? u.status : undefined
     const existing = id ? entries.find((e) => e.toolCallId === id) : undefined
     if (existing) {
-      if (title) existing.text = title
+      if (title) existing.parts.splice(0, existing.parts.length, title)
       if (status) existing.status = status
       return 0
     }
-    entries.push({ role: 'tool', text: title || id, toolCallId: id || undefined, status })
+    entries.push({ role: 'tool', parts: [title || id], toolCallId: id || undefined, status })
     return (title || id).length
   }
   return 0
@@ -102,8 +112,8 @@ export function applyAcpUpdate(entries: TranscriptEntry[], update: unknown): num
  *  "buffer" (context share, stage summaries, sentinel and question scans). */
 export function transcriptText(entries: TranscriptEntry[]): string {
   return entries
-    .filter((e) => e.role !== 'thought')
-    .map((e) => (e.role === 'user' ? `> ${e.text}` : e.text))
+    .filter((e) => e.role !== 'thought' && !e.unsent)
+    .map((e) => (e.role === 'user' ? `> ${entryText(e)}` : entryText(e)))
     .join('\n')
 }
 

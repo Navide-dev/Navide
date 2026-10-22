@@ -13,6 +13,7 @@ import { vTruncate } from '@navide/plugin-ui/foundation'
 import { paneStatusLabelText } from '../lib/paneStatusLabel'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
 import { useAcpSession, type AcpPort } from '../composables/useAcpSession'
+import { entryText } from '../lib/acpPane'
 import type { PaneHandle } from '../lib/paneHandle'
 
 interface Props {
@@ -49,17 +50,23 @@ const canSend = computed(() => live.value && draft.value.trim().length > 0)
 const canCancel = computed(() => session.state.value === 'running')
 const ended = computed(() => session.state.value === 'exited' || session.state.value === 'failed')
 
-watch(() => session.transcript.length + session.permissions.length, async () => {
+// Follow the bottom while text streams in, but only when the reader is already
+// there: measured before the DOM grows (a 'pre' watcher), scrolled after it.
+const FOLLOW_SLACK_PX = 24
+watch(() => [session.transcript.length, session.permissions.length, session.textSeen.value], async () => {
+  const el = scroller.value
+  const atBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_SLACK_PX
   await nextTick()
-  if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
-})
+  if (atBottom && scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
+}, { flush: 'pre' })
 
 async function send(): Promise<void> {
   const text = draft.value.trim()
   if (!text || !live.value) return
   draft.value = ''
   stopped.value = false
-  await session.prompt(text)
+  // Refused: the text goes back to the composer (unless something new was typed meanwhile).
+  if (!(await session.prompt(text)) && !draft.value) draft.value = text
 }
 
 function onKeydown(ev: KeyboardEvent): void {
@@ -177,10 +184,13 @@ const permissions = session.permissions
     <div ref="scroller" class="acp-transcript">
       <div v-for="(entry, i) in transcript" :key="i" class="acp-entry" :data-role="entry.role">
         <template v-if="entry.role === 'tool'">
-          <span class="acp-tool">{{ entry.text }}</span>
+          <span class="acp-tool">{{ entryText(entry) }}</span>
           <small v-if="entry.status" class="acp-tool-status">{{ entry.status }}</small>
         </template>
-        <template v-else>{{ entry.text }}</template>
+        <template v-else>
+          <span v-for="(part, j) in entry.parts" :key="j">{{ part }}</span>
+          <small v-if="entry.unsent" class="acp-unsent" data-testid="acp-unsent">{{ $t('pane.acp.unsent') }}</small>
+        </template>
       </div>
       <div v-for="request in permissions" :key="request.requestId" class="acp-permission" data-testid="acp-permission">
         <p>{{ $t('pane.acp.permission', { title: request.title || '—' }) }}</p>
@@ -294,6 +304,12 @@ const permissions = session.permissions
 .acp-entry[data-role='thought'] { color: var(--text-secondary); font-style: italic; }
 .acp-entry[data-role='notice'] { color: var(--danger-fg); }
 .acp-tool { font-size: var(--font-xs); }
+.acp-unsent {
+  margin-left: 6px;
+  color: var(--danger-fg);
+  font-size: var(--font-2xs);
+}
+
 .acp-tool-status { margin-left: 6px; color: var(--text-secondary); }
 .acp-permission {
   border: 1px solid var(--warning-fg);

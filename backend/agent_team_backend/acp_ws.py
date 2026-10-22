@@ -179,6 +179,14 @@ async def acp_permission_answer(session: "Session", msg_id: str, msg_type: str, 
 
 @handler("acp.kill")
 async def acp_kill(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """By ``session_id``; or by ``pane_id`` for a pane closed while its agent
+    is still starting (the window has no session id yet and must not wait
+    minutes for one): its start is abandoned and nothing it started survives."""
+    if not payload.get("session_id") and payload.get("pane_id"):
+        stopped = await get_service().abandon(str(payload["pane_id"]))
+        await session.send_json(make_response(msg_id, msg_type, {"stopped": stopped}))
+        return
+
     async def act(service: AcpSessionService, session_id: str) -> dict[str, Any]:
         await service.kill(session_id)
         return {}

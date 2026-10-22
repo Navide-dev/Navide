@@ -388,3 +388,65 @@ async def test_a_relative_output_log_is_refused(fresh_service, monkeypatch, tmp_
 
     assert window.result("m1")["error"]["code"] == "BAD_REQUEST"
     assert acp_ws.session_for_pane("p1") is None
+
+
+async def test_a_pane_closed_during_a_slow_start_stops_its_agent_at_once(service, registry, tmp_path) -> None:
+    """Closing a pane must not wait for a cold start (acp.create can take minutes)."""
+    task = asyncio.ensure_future(
+        service.create(pane_id="p1", agent_key="fake", argv=_argv("slow_start"), cwd=str(tmp_path))
+    )
+    await _until(lambda: service.by_pane("p1") is not None)
+    pid = service.by_pane("p1").proc.pid
+
+    assert await service.abandon("p1") is True
+
+    with pytest.raises(AcpStartError) as err:
+        await asyncio.wait_for(task, 10)
+    assert err.value.code == "acp-cancelled"
+    assert not _alive(pid)
+    assert registry["unregister"] == [pid]
+    assert service.list() == []
+
+
+async def test_a_pane_closed_before_its_agent_even_spawned_leaves_nothing_running(service, registry, tmp_path) -> None:
+    task = asyncio.ensure_future(
+        service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+    )
+    await asyncio.sleep(0)  # the start is under way; no process registered yet
+    assert service.by_pane("p1") is None
+
+    assert await service.abandon("p1") is True
+
+    with pytest.raises(AcpStartError) as err:
+        await asyncio.wait_for(task, 10)
+    assert err.value.code == "acp-cancelled"
+    assert len(registry["register"]) == 1
+    assert not _alive(registry["register"][0])
+    assert registry["unregister"] == registry["register"]
+    assert service.list() == []
+
+
+async def test_abandon_with_nothing_running_or_starting_is_a_no_op(service) -> None:
+    assert await service.abandon("p1") is False
+    # Nothing was remembered: a later start of the same pane is not cancelled.
+    assert service._abandoned == set()
+
+
+async def test_the_window_closes_a_starting_pane_by_pane_id(fresh_service, monkeypatch, tmp_path) -> None:
+    launch = AcpLaunch(argv=tuple(_argv("slow_start")))
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=launch, spawn_env_defaults=()))
+    window = FakeWindow()
+    try:
+        creating = asyncio.ensure_future(
+            acp_ws.acp_create(window, "m1", "acp.create", {"agent_key": "opencode", "pane_id": "p1", "cwd": str(tmp_path)})
+        )
+        await _until(lambda: acp_ws.get_service().by_pane("p1") is not None)
+
+        await acp_ws.acp_kill(window, "m2", "acp.kill", {"pane_id": "p1"})
+        assert window.result("m2")["payload"] == {"stopped": True}
+
+        await asyncio.wait_for(creating, 10)
+        assert window.result("m1")["error"]["code"] == "ACP_CANCELLED"
+        assert acp_ws.get_service().list() == []
+    finally:
+        await acp_ws.shutdown()

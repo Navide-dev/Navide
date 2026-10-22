@@ -668,6 +668,7 @@
   },
   "pane": {
     "acp": {
+      "unsent": "未送出",
       "mark-tooltip": "這個 pane 透過 Agent Client Protocol（ACP）執行 agent：對話由 Navide 繪製，不是 CLI 自己的畫面。",
       "permission": "agent 要求：{title}",
       "failed": "agent 無法啟動：{reason}",
