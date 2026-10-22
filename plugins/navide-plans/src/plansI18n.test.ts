@@ -228,6 +228,13 @@ describe('Plans i18n bootstrap', () => {
     expect(extractLocaleFromSettingsEvent({
       source: 'host',
       settings: { 'agent-team:language': 'de-DE' },
+    })).toBe('de-DE')
+
+    // A recognized language this plugin has no catalog for yet: vi-VN ships last;
+    // its PR moves this to the synthetic case.
+    expect(extractLocaleFromSettingsEvent({
+      source: 'host',
+      settings: { 'agent-team:language': 'vi-VN' },
     })).toBe('en-US')
 
     expect(extractLocaleFromSettingsEvent(null)).toBeNull()
