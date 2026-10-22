@@ -1407,16 +1407,19 @@ def _record_pane_activity(
         return
     key = _current_pane_id(pane_id)
     now = time.monotonic()
-    # Only the hook and the log reader take part in matching turns; any other
-    # writer's record stays as it always was (no wall clock read).
-    wall = event_wall if event_wall is not None or source not in ("hook", "log") else time.time()
+    # When it happened, for matching a hook's turn end to the log's: a hook's
+    # is its arrival; a log record's is the transcript's own stamp, and None
+    # when it has none (it then never matches: arrival time is exactly what a
+    # lagging reader gets wrong). Other writers read no wall clock at all.
+    wall = time.time() if source == "hook" else event_wall
     prior = _pane_activity.get(key)
     if event_type == "turn_complete" and source in ("hook", "log"):
         _note_turn_end_gap(key, source, now)
         if source == "hook":
             _last_hook_turn_end[key] = time.time()
     if turn_start:
-        _last_log_turn_start[key] = wall
+        if wall is not None:
+            _last_log_turn_start[key] = wall
         _turn_end_first.pop(key, None)
     # When the turn this event belongs to began: the first agent_active after
     # the previous turn ended opens a turn, later events of the same turn
@@ -1462,20 +1465,30 @@ def log_turn_end_after(pane_id: str, previous_hook_end: float | None) -> dict[st
     """The pane's latest entry when it is the log's turn end of the turn that
     followed ``previous_hook_end`` (a hook turn end's arrival time), else None.
 
-    It is that turn's when the transcript has a real prompt written after the
-    previous hook turn end and this turn end was written after the prompt.
-    Under load the reader lags by whole turns: what it records next can be an
-    earlier turn's end, and taken as this turn's it told a chat, or an agent
-    waiting on cli_send_and_wait, the previous reply.
+    Claude writes a turn's end line before its Stop hook fires, so a turn end
+    the transcript stamped after the previous hook turn end belongs to the turn
+    after it. That needs no prompt: a turn woken by a <task-notification>, a
+    slash command or a hook-delivered message has no typed prompt line. When the
+    transcript does have a typed prompt after the previous hook turn end, the
+    turn end must also come after it (an earlier turn's text half written late
+    is not this turn's). Under load the reader lags by whole turns, and taken by
+    arrival an earlier turn's end told a chat, or an agent waiting on
+    cli_send_and_wait, the previous reply. A record without a stamp never
+    matches.
     """
     key = _current_pane_id(pane_id)
     entry = _pane_activity.get(key)
     if entry is None or entry["event_type"] != "turn_complete" or entry.get("source") != "log":
         return None
-    prompted = _last_log_turn_start.get(key)
-    if prompted is None or (previous_hook_end is not None and prompted <= previous_hook_end):
+    written = entry.get("event_wall")
+    if written is None:
         return None
-    return entry if entry.get("event_wall", 0.0) >= prompted else None
+    if previous_hook_end is not None and written <= previous_hook_end:
+        return None
+    prompted = _last_log_turn_start.get(key)
+    if prompted is not None and (previous_hook_end is None or prompted > previous_hook_end):
+        return entry if written >= prompted else None
+    return entry
 
 
 def _hook_turn_end(pane_id: str) -> tuple[str, dict[str, Any]]:

@@ -8,6 +8,7 @@ turn", which are indistinguishable on the PTY.
 
 from __future__ import annotations
 
+import time
 import pytest
 from fastapi.testclient import TestClient
 
@@ -311,8 +312,8 @@ def test_stop_hook_does_not_blank_the_turn_text_the_log_reader_recorded(
         app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
     )
     # The reader got there first: this turn's prompt, then its end_turn line.
-    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True)
-    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log")
+    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=time.time())
+    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=time.time())
     try:
         client.post(
             "/hooks/claude",
@@ -368,9 +369,10 @@ def test_stop_hook_does_not_borrow_the_previous_turns_text_from_a_lagging_reader
     )
     stop = {"headers": {"X-Agent-Team-Event": "stop"}, "json": {"session_id": "s-1", "cwd": "/ws/alpha"}}
     try:
-        app_module._record_pane_activity("pw-lag", "agent_active", "turn one", source="log", turn_start=True)
+        app_module._record_pane_activity("pw-lag", "agent_active", "turn one", source="log", turn_start=True, event_wall=time.time())
+        written = time.time()  # turn one's reply is written before its Stop hook fires
         client.post("/hooks/claude", **stop)  # turn one ends; the reader is behind
-        app_module._record_pane_activity("pw-lag", "turn_complete", "reply one", source="log")
+        app_module._record_pane_activity("pw-lag", "turn_complete", "reply one", source="log", event_wall=written)
         client.post("/hooks/claude", **stop)  # turn two ends; its prompt not read yet
         assert app_module._pane_activity["pw-lag"]["text"] == ""
         assert app_module._pane_activity["pw-lag"]["event_type"] == "turn_complete"
@@ -433,8 +435,8 @@ def test_a_reattached_panes_hook_keeps_the_text_recorded_under_its_old_id(
     monkeypatch.setattr(
         app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
     )
-    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True)
-    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log")
+    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=time.time())
+    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=time.time())
     try:
         client.post(
             "/hooks/claude",
@@ -715,8 +717,8 @@ def test_idle_prompt_after_the_turn_ended_keeps_turn_complete(
     monkeypatch.setattr(plan_mcp, "_ui_request", _ui)
     try:
         # The transcript's end_turn line, then the Stop hook, a minute ago.
-        app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True)
-        app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log")
+        app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=time.time())
+        app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=time.time())
         client.post(
             "/hooks/claude",
             headers={"X-Agent-Team-Event": "stop"},
@@ -793,3 +795,45 @@ def test_permission_prompt_still_records_the_turn_as_active(
         assert app_module._pane_activity["pw"]["event_type"] == "agent_active"
     finally:
         app_module._pane_activity.clear()
+
+
+def test_the_log_records_transcript_stamp_decides_whose_turn_it_is(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """End to end through the log sink: the reader's ISO stamp, not when the
+    record arrived, says which turn a log turn end belongs to. A stale one
+    (written before the previous hook) is never borrowed; a fresh one is."""
+    import asyncio
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from agent_team_backend.log_readers.base import ActivityEvent
+
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw-e2e", "/ws/alpha", "")
+    )
+    monkeypatch.setattr(
+        app_module.attribution, "attribute",
+        lambda _usage: SimpleNamespace(pane_id="pw-e2e", workspace_path="/ws/alpha", stage_id=None),
+    )
+    stop = {"headers": {"X-Agent-Team-Event": "stop"}, "json": {"session_id": "s-1", "cwd": "/ws/alpha"}}
+
+    def log_end(text: str, written: float, key: str) -> None:
+        stamp = datetime.fromtimestamp(written, timezone.utc).isoformat().replace("+00:00", "Z")
+        asyncio.run(app_module._on_log_activity(ActivityEvent(
+            vendor="claude", event_type="turn_complete", cwd="/ws/alpha", session_id="s-1",
+            file_path="/logs/pw-e2e.jsonl", dedup_key=key, timestamp=stamp, text=text,
+        )))
+
+    try:
+        client.post("/hooks/claude", **stop)                 # a turn ends
+        log_end("stale reply", time.time() - 60, "k1")        # an earlier turn's, read late
+        client.post("/hooks/claude", **stop)                 # the next turn ends
+        assert app_module._pane_activity["pw-e2e"]["text"] == ""
+        log_end("fresh reply", time.time(), "k2")             # this turn's, read first
+        client.post("/hooks/claude", **stop)
+        assert app_module._pane_activity["pw-e2e"]["text"] == "fresh reply"
+    finally:
+        app_module._pane_activity.clear()
+

@@ -1285,11 +1285,17 @@ def _hook_end(pane: str = "pw") -> None:
 
 
 def _log_prompt(pane: str = "pw", wall: float | None = None) -> None:
-    app._record_pane_activity(pane, "agent_active", "a prompt", source="log", turn_start=True, event_wall=wall)
+    """A typed prompt the log read; ``wall`` is its transcript stamp (default: now)."""
+    app._record_pane_activity(
+        pane, "agent_active", "a prompt", source="log", turn_start=True,
+        event_wall=time.time() if wall is None else wall,
+    )
 
 
 def _log_end(text: str, pane: str = "pw", wall: float | None = None) -> None:
-    app._record_pane_activity(pane, "turn_complete", text, source="log", event_wall=wall)
+    app._record_pane_activity(
+        pane, "turn_complete", text, source="log", event_wall=time.time() if wall is None else wall,
+    )
 
 
 @pytest.mark.asyncio
@@ -1435,3 +1441,44 @@ async def test_send_and_wait_returns_the_logs_text_after_a_hook_turn_end(
     assert result["ok"] is True and result["source"] == "turn_complete"
     assert result["last_activity"]["text"] == "fresh from the log"
     assert "text_pending" not in result
+
+
+@pytest.mark.asyncio
+async def test_a_turn_with_no_typed_prompt_still_gets_its_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review of #581, L1: a turn woken by a <task-notification> (or a slash
+    command, a hook-delivered message) has no typed prompt line. Its end,
+    stamped after the previous hook turn end, is still this turn's."""
+    monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
+    _seed_watch()
+    _log_prompt(wall=time.time() - 10)
+    _log_end("turn one", wall=time.time() - 9)
+    _hook_end()                       # turn one ends
+    written = time.time()             # the woken turn's end is written…
+    await asyncio.sleep(0.01)
+    _hook_end()                       # …then its Stop hook fires
+
+    async def reader_catches_up() -> None:
+        await asyncio.sleep(0.05)
+        _log_end("woken by a task notification", wall=written)
+
+    task = asyncio.create_task(reader_catches_up())
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"))
+    await task
+
+    assert result["last_activity"]["text"] == "woken by a task notification"
+    assert "text_pending" not in result
+
+
+@pytest.mark.asyncio
+async def test_a_log_turn_end_without_a_stamp_never_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
+    monkeypatch.setattr(plan_mcp, "HOOK_TURN_TEXT_WAIT_S", 0.2)
+    _seed_watch()
+    _hook_end()
+    app._record_pane_activity("pw", "turn_complete", "no stamp", source="log", event_wall=None)
+
+    _hook_end()
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"))
+
+    assert result["text_pending"] is True and "text" not in result["last_activity"]
+
