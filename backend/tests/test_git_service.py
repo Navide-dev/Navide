@@ -3246,6 +3246,7 @@ class TestGitProcLimit:
 
         class FakeProc:
             returncode = None
+            pid = 4_194_305  # above any pid_max: no process tree to find
 
             def __init__(self):
                 self.killed = False
@@ -3285,6 +3286,7 @@ class TestGitProcLimit:
 
         class FakeProc:
             returncode = None
+            pid = 4_194_305  # above any pid_max: no process tree to find
 
             def __init__(self):
                 self.killed = False
