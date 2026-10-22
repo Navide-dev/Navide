@@ -20,6 +20,46 @@ from agent_team_backend.acp_vendors import AcpLaunch
 FAKE_AGENT = Path(__file__).with_name("fake_acp_agent.py")
 
 
+@pytest.fixture(autouse=True)
+def _windows_ci_fd_trace(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):
+    """Windows CI only: record every os.close (fd, test, call site) in
+    test-results/ci/acp-fd-trace.log (uploaded with the backend diagnostics),
+    to prove or rule out an fd closed twice or closed under someone else
+    (pytest's own stdout fd went bad once, after an abandoned slow start)."""
+    if sys.platform != "win32" or not os.environ.get("CI"):
+        yield
+        return
+    import traceback
+
+    trace = Path(__file__).resolve().parents[2] / "test-results" / "ci" / "acp-fd-trace.log"
+    trace.parent.mkdir(parents=True, exist_ok=True)
+    real_close = os.close
+
+    def write(line: str) -> None:
+        with open(trace, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    def traced_close(fd: int) -> None:
+        frames = [
+            f"{Path(fr.filename).name}:{fr.lineno} {fr.name}"
+            for fr in traceback.extract_stack(limit=8)[:-1]
+            if "agent_team_backend" in fr.filename or "asyncio" in fr.filename or "subprocess" in fr.filename
+        ]
+        write(f"  close fd={fd} <- {' | '.join(frames) or '(outside backend/asyncio)'}")
+        real_close(fd)
+
+    std = []
+    for name in ("stdout", "stderr"):
+        try:
+            std.append(f"{name}={getattr(sys, name).fileno()}")
+        except Exception as err:  # noqa: BLE001
+            std.append(f"{name}=? ({err})")
+    write(f"== {request.node.nodeid} [{', '.join(std)}]")
+    monkeypatch.setattr(os, "close", traced_close)
+    yield
+    write(f"-- end {request.node.nodeid}")
+
+
 def _argv(scenario: str) -> list[str]:
     return [sys.executable, str(FAKE_AGENT), scenario]
 
@@ -643,3 +683,23 @@ async def test_an_agent_whose_child_holds_its_output_open_is_still_seen_to_exit(
     assert "idle" not in service.events.states()[service.events.states().index("running"):]
     await _until(lambda: not _alive(agent) and not _alive(child))
     assert service.list() == []
+
+
+async def test_the_ownerless_deadline_is_not_lost_to_float_rounding(launchable, tmp_path, monkeypatch) -> None:
+    """(since + 3600) - since is 3599.9999999999995 for this since: the sweep
+    compares against the deadline instead, so the session is ended on time."""
+    from agent_team_backend import app
+
+    a = Window("win-a")
+    try:
+        sid = await _create(a, tmp_path)
+        a.dead = True
+        acp_ws.drop_owner(a)
+        since = 700.685087237
+        acp_ws._OWNERLESS_SINCE[sid] = since
+        assert (since + app._OWNERLESS_GRACE_SEC) - since < app._OWNERLESS_GRACE_SEC  # the trap itself
+
+        assert await acp_ws.sweep_ownerless(now=since + app._OWNERLESS_GRACE_SEC) == [sid]
+    finally:
+        await acp_ws.shutdown()
+
