@@ -6,6 +6,7 @@ import enUS from './locales/en-US.json'
 import jaJP from './locales/ja-JP.json'
 import koKR from './locales/ko-KR.json'
 import zhCN from './locales/zh-CN.json'
+import deDE from './locales/de-DE.json'
 import { settingsGet } from '../../shared'
 import {
   UI_LOCALE_FALLBACK,
@@ -27,6 +28,7 @@ const messages = {
   'ja-JP': jaJP,
   'ko-KR': koKR,
   'zh-CN': zhCN,
+  'de-DE': deDE,
 }
 
 /** A UI locale that has a catalog registered in this build. */

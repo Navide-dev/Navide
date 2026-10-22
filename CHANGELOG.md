@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Interface language: German (Deutsch), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses the formal Sie. Agent, AI, pane, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker. Pick it in Settings → Appearance, or at the first start.
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added

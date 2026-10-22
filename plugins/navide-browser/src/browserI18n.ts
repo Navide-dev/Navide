@@ -3,6 +3,7 @@ import zhTW from './locales/zh-TW.json'
 import jaJP from './locales/ja-JP.json'
 import koKR from './locales/ko-KR.json'
 import zhCN from './locales/zh-CN.json'
+import deDE from './locales/de-DE.json'
 import { isUiLocale } from '@navide/plugin-ui/foundation'
 
 // This plugin's catalogs. Adding a language: import its JSON above and add
@@ -13,6 +14,7 @@ const BROWSER_MESSAGES = {
   'ja-JP': jaJP,
   'ko-KR': koKR,
   'zh-CN': zhCN,
+  'de-DE': deDE,
 }
 
 export type SupportedBrowserLocale = keyof typeof BROWSER_MESSAGES
