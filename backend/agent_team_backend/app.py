@@ -133,7 +133,7 @@ from . import plan_history
 from .plugins import wiring as plugin_wiring
 from .plugins.host import PluginHost
 from . import ws_handlers
-from . import acp_ws  # noqa: F401 — registers the acp.* requests
+from . import acp_ws  # registers the acp.* requests; ACP on disconnect, janitor and shutdown
 from .git_watcher import GitWatcher
 
 log = logging.getLogger("agent_team_backend")
@@ -1185,6 +1185,7 @@ async def _ownerless_pty_janitor() -> None:
         await asyncio.sleep(_OWNERLESS_SWEEP_INTERVAL_SEC)
         try:
             await _sweep_ownerless_ptys_once()
+            await acp_ws.sweep_ownerless()
         except Exception as err:  # noqa: BLE001 — the janitor must survive
             log.warning("ownerless-pty sweep failed: %s", err)
 
@@ -3335,6 +3336,7 @@ async def ws(websocket: WebSocket) -> None:
         orphaned = [tid for tid, owner in _PTY_OWNERS.items() if owner is session]
         for tid in orphaned:
             del _PTY_OWNERS[tid]
+        acp_ws.drop_owner(session)  # its ACP sessions: ownerless, as its PTYs
         # Flag the messaging handles this window mirrored as offline. They are
         # kept for a grace period rather than dropped: the window is usually
         # just reconnecting, and a deleted entry told callers the pane did not

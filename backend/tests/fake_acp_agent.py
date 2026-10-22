@@ -18,6 +18,8 @@ Process scenarios (for acp_sessions), with $ACP_FAKE_PIDFILE naming a file
 that gets "<own pid> <child pid>":
   child           start a grandchild that sleeps; exit on stdin EOF, leaving it
   stubborn        like child, but ignore stdin EOF and SIGTERM
+  breakaway       start a grandchild in a session of its own (setsid); exit on
+                  the first prompt, as an agent that dies on its own
 
 The session id is "s-1"; session/load replays one user and one agent chunk.
 Standard library only; it reads stdin line by line in one thread.
@@ -68,6 +70,8 @@ def ask(method: str, params: dict) -> dict:
 
 
 def prompt(request_id) -> None:
+    if SCENARIO == "breakaway":
+        os._exit(0)
     if SCENARIO == "bad_lines":
         sys.stdout.write("this is not json\n")
         sys.stdout.write(json.dumps({"hello": "world"}) + "\n")
@@ -110,13 +114,15 @@ def prompt(request_id) -> None:
 
 
 def start_child() -> None:
-    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(300)"], start_new_session=SCENARIO == "breakaway",
+    )
     with open(os.environ["ACP_FAKE_PIDFILE"], "w") as f:
         f.write(f"{os.getpid()} {child.pid}")
 
 
 def main() -> None:
-    if SCENARIO in ("child", "stubborn"):
+    if SCENARIO in ("child", "stubborn", "breakaway"):
         start_child()
         if SCENARIO == "stubborn" and hasattr(signal, "SIGTERM"):
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
