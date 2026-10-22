@@ -628,6 +628,15 @@ async def pane_git(pane_id: str, workspace_path: str) -> dict[str, Any] | None:
     return snapshot if snapshot.get("worktreeRoot") else None
 
 
+def pane_git_cached(pane_id: str, workspace_path: str) -> dict[str, Any] | None:
+    """The pane's last git snapshot without waiting (see PaneGitSnapshots.peek),
+    or None outside a repository or before the first one is computed."""
+    from agent_team_backend import git_service
+
+    snapshot = git_service.pane_git_snapshots.peek(_pane_cwd(pane_id) or workspace_path)
+    return snapshot if snapshot is not None and snapshot.get("worktreeRoot") else None
+
+
 async def _with_git(views: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Add `git` to each local target view that has one, in place."""
     snapshots = await asyncio.gather(
@@ -6365,6 +6374,7 @@ async def _ui_request(
     action: str | None = None,
     args: dict[str, Any] | None = None,
     is_global: bool = False,
+    route_pane_id: str = "",
 ) -> dict[str, Any]:
     from agent_team_backend import app
     from agent_team_backend.ipc import make_event
@@ -6374,7 +6384,12 @@ async def _ui_request(
     # goes to any one window; a pane caller's own window is known and is asked
     # directly ("addressed", so it answers without checking workspace_path);
     # anything else is broadcast for the windows to filter, as before.
-    owner = None if is_global else _caller_window(caller, workspace_path)
+    # route_pane_id addresses the window holding that pane instead while
+    # `caller` stays who is asking: handing the subject pane in as the caller
+    # made the window's self guards read every close or reclaim as the
+    # target closing itself.
+    route = _pane_caller(route_pane_id) if route_pane_id else caller
+    owner = None if is_global else _caller_window(route, workspace_path)
     fut = _ui_invoke_pending.register(request_id)
     payload: dict[str, Any] = {
         "request_id": request_id,
@@ -8339,7 +8354,8 @@ async def cli_close_agent(target: str, ctx: Context, pane_id: str = "") -> dict[
     reply = await _ui_request(
         pane.workspace_path,
         "invoke",
-        caller=_pane_caller(pane.pane_id),
+        caller=caller,
+        route_pane_id=pane.pane_id,
         action="ui.pane.close",
         args={"paneId": pane.pane_id},
     )
@@ -8432,7 +8448,8 @@ async def cli_reclaim_agent(target: str, ctx: Context, pane_id: str = "") -> dic
     reply = await _ui_request(
         pane.workspace_path,
         "invoke",
-        caller=_pane_caller(pane.pane_id),
+        caller=caller,
+        route_pane_id=pane.pane_id,
         action="ui.pane.reclaim",
         args={"paneId": pane.pane_id},
     )

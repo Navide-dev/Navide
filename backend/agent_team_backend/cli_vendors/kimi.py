@@ -672,6 +672,9 @@ SPEC = VendorSpec(
         resume="native",
         todo="A -> B -> A round-trip on two real accounts not yet recorded",
     ),
+    # The account-switch evidence above is from 0.39.0; launch, logs (wire.jsonl
+    # turn records), --help and --version were checked live on 2.2.0.
+    cli_verified_version="2.2.0",
     # Late-bound (module global at call time) so tests can monkeypatch.
     fetch_usage=lambda home: fetch_kimi(home),
     resume_id_from_command=_resume_id_from_command,

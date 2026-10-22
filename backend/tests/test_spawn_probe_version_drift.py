@@ -1,7 +1,8 @@
 """Version drift: a CLI newer than the version Navide last verified it at.
 
 The startup probe already parses ``--version``. When that version is higher
-than the vendor's ``verified_version``, the probe result carries an
+than the vendor's ``cli_verified_version`` (else its account-switch
+``verified_version``), the probe result carries an
 ``untested_version`` line that the pane prints. Disclosure only: the spawn is
 never blocked and nothing else in the result changes.
 """
@@ -41,23 +42,47 @@ def _printed(key: str, version: str) -> str:
     return {"grok": f"grok {version} (1474f9cbdd91)"}.get(key, version) + "\n"
 
 
-_VERIFIED = [
-    (spec.key, spec.account_switch.verified_version)
-    for spec in VENDORS.values()
-    if spec.account_switch is not None and spec.account_switch.verified_version
-]
+def _effective(spec) -> str:
+    # The version the probe compares against: the CLI-wide one, else the
+    # account-switch evidence.
+    switch = spec.account_switch.verified_version if spec.account_switch is not None else ""
+    return spec.cli_verified_version or switch
 
 
-# Vendors with no account-switch adapter have no verified_version to compare
-# against, so their probe never adds the note. Goose reads no credential at
-# all (cli_vendors/goose.py); its live-checked 1.55.0 is recorded in that
-# module's docstring and in docs/en-US/cli-vendor-matrix.md.
-_NO_ACCOUNT_SWITCH = {"goose"}
+_VERIFIED = [(spec.key, _effective(spec)) for spec in VENDORS.values() if _effective(spec)]
 
 
 def test_every_vendor_has_a_verified_version() -> None:
-    assert {key for key, _ in _VERIFIED} == set(VENDORS) - _NO_ACCOUNT_SWITCH
-    assert len(_VERIFIED) == 15
+    # Goose has no account switching, so its version is CLI-wide only.
+    assert {key for key, _ in _VERIFIED} == set(VENDORS)
+    assert len(_VERIFIED) == 16
+
+
+def test_goose_and_kimi_compare_against_their_cli_wide_version() -> None:
+    assert VENDORS["goose"].cli_verified_version == "1.55.0"
+    assert VENDORS["kimi"].cli_verified_version == "2.2.0"
+    # The account-switch evidence is a separate record and stays as it was.
+    assert VENDORS["kimi"].account_switch.verified_version == "0.39.0"
+    assert VENDORS["goose"].account_switch is None
+
+
+def test_kimi_2_x_is_not_called_newer_than_the_account_switch_evidence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # 2.2.0 > 0.39.0, but 2.2.0 is what the integration was checked on.
+    result = _probe(monkeypatch, tmp_path, "kimi", "2.2.0\n")
+
+    assert result["version"] == "2.2.0"
+    assert "untested_version" not in result
+
+
+def test_a_newer_goose_is_disclosed_and_still_starts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Goose prints a bare, space-led version.
+    result = _probe(monkeypatch, tmp_path, "goose", " 1.56.0\n")
+
+    assert result["version"] == "1.56.0"
+    assert "Goose (AAIF) 1.56.0 is newer than the last version Navide verified (1.55.0)" in result["untested_version"]
+    assert "warning" not in result
 
 
 @pytest.mark.parametrize(("key", "verified"), _VERIFIED)
