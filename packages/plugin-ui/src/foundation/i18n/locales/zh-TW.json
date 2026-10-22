@@ -2141,6 +2141,12 @@
         },
         "selfHostedQuarantine": "{id} {version} 來自自架 Registry，目前沒有載入。請開啟開發者模式，或改從 Navide 市集安裝。"
       },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide 無法檢查這個擴充：Registry 信任資料的時間晚於這台電腦的時鐘。請確認電腦的日期與時間正確，再試一次。",
+          "expired": "Navide 無法檢查這個擴充：依這台電腦的時鐘，Registry 信任資料已過期。請確認電腦的日期與時間正確，再試一次。"
+        }
+      },
       "localInstall": {
         "agentRequest": "由 {requester} 提出。Navide 沒有審核過這個 Navide 外掛，要不要安裝由你決定。",
         "button": "從檔案安裝 .vsix…",

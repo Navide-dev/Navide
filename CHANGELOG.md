@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Extensions: a computer clock up to 5 minutes behind the Registry's no longer refuses every Registry install and update. The Registry signs its trust data per request, so the slightest lag read as invalid. A larger gap is reported as trust data that is not valid yet, and trust data past its expiry as expired, instead of both as "expired". Both messages ask you to check the computer's date and time. Signature checks are unchanged.
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added

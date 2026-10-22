@@ -293,6 +293,13 @@ export interface VerifiedRegistryPackageTrust {
   expired?: true
 }
 
+/** How far after this computer's clock trust metadata may say it was
+ *  generated. The Registry signs it fresh for each request, so a clock even a
+ *  little behind the server's refused every install and update. The expiry
+ *  side gets no such allowance: a slow clock never trips it, and widening it
+ *  would only let a stale document live longer. */
+export const TRUST_METADATA_CLOCK_SKEW_MS = 5 * 60 * 1000
+
 export function verifyRegistryTrustMetadata(
   metadata: RegistryTrustMetadata,
   metadataSignature: string | null | undefined,
@@ -325,8 +332,24 @@ export function verifyRegistryTrustMetadata(
   const now = nowValue.getTime()
   const generatedAt = timestamp(metadata.generatedAt, 'trust metadata generatedAt')
   const expiresAt = timestamp(metadata.expiresAt, 'trust metadata expiresAt')
-  if (generatedAt > now || expiresAt < now || expiresAt <= generatedAt) {
-    throw new RegistryTrustError('TRUST_METADATA_INVALID', 'registry trust metadata is expired')
+  if (expiresAt <= generatedAt) {
+    throw new RegistryTrustError('TRUST_METADATA_INVALID', 'registry trust metadata has an empty validity window')
+  }
+  // Coded (`CODE: detail`) so the renderer can say it in the user's language
+  // (developerModeErrors.ts); both point at the computer's clock.
+  if (generatedAt - TRUST_METADATA_CLOCK_SKEW_MS > now) {
+    throw new RegistryTrustError(
+      'TRUST_METADATA_INVALID',
+      `TRUST_METADATA_NOT_YET_VALID: registry trust metadata was generated at ${metadata.generatedAt}, ` +
+        `later than this computer's clock (${nowValue.toISOString()}); check the computer's date and time`
+    )
+  }
+  if (expiresAt < now) {
+    throw new RegistryTrustError(
+      'TRUST_METADATA_INVALID',
+      `TRUST_METADATA_EXPIRED: registry trust metadata expired at ${metadata.expiresAt} ` +
+        `by this computer's clock (${nowValue.toISOString()}); check the computer's date and time`
+    )
   }
   if (
     metadata.schemaVersion !== 1 ||

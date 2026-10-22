@@ -34,6 +34,24 @@ describe('localizeDeveloperModeError (review LOW-2 on #428)', () => {
     expect(localizeDeveloperModeError(coded.at(-1)!, i18n.global.t)).toContain('acme.todo')
   })
 
+  it('tells apart trust data that is not valid yet from expired trust data, pointing at the clock', () => {
+    const notYet =
+      "TRUST_METADATA_NOT_YET_VALID: registry trust metadata was generated at 2026-08-16T12:10:00.000Z, later than this computer's clock (2026-08-16T12:00:00.000Z); check the computer's date and time"
+    const expired =
+      "TRUST_METADATA_EXPIRED: registry trust metadata expired at 2026-08-17T10:00:00.000Z by this computer's clock (2026-08-18T00:00:00.000Z); check the computer's date and time"
+    for (const locale of ['en-US', 'zh-TW', 'zh-CN', 'ja-JP', 'ko-KR'] as const) {
+      i18n.global.locale.value = locale
+      const a = localizeDeveloperModeError(notYet, i18n.global.t)
+      const b = localizeDeveloperModeError(expired, i18n.global.t)
+      expect(a, locale).not.toMatch(/TRUST_METADATA|settings\.extensions/)
+      expect(b, locale).not.toMatch(/TRUST_METADATA|settings\.extensions/)
+      expect(a, locale).not.toBe(b)
+    }
+    i18n.global.locale.value = 'en-US'
+    expect(localizeDeveloperModeError(notYet, i18n.global.t)).toMatch(/date and time/)
+    expect(localizeDeveloperModeError(expired, i18n.global.t)).toMatch(/expired.*date and time/)
+  })
+
   it('leaves any other message as it is', () => {
     expect(localizeDeveloperModeError('download failed: HTTP 500', i18n.global.t)).toBe('download failed: HTTP 500')
   })
