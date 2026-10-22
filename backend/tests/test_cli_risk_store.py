@@ -193,3 +193,28 @@ def test_empty_network_sample_becomes_unknown_when_expected_set_expires(store):
     state = project(store.snapshot(), [pane()], 401)["pane"]
     assert state["signals"] == []
     assert state["network"] == {"status": "unknown", "lastSuccessAt": iso(350)}
+
+
+def test_projection_walks_the_signal_table_once_however_many_panes(store):
+    """Signals are never deleted, only made inactive, so the table grows for
+    the app's lifetime. Walking all of it once per pane stalled the event loop
+    for seconds with dozens of panes; it is filtered once per projection."""
+    network(store, 100, pane_id="pane")
+    network(store, 100, {("198.51.100.9", 443): 2}, pane_id="other")
+    network(store, 150, {}, pane_id="other")  # now inactive, still recorded
+    snap = store.snapshot()
+    reads = []
+
+    class CountingSignals(dict):
+        def values(self):
+            reads.append(1)
+            return super().values()
+
+    counted = {**snap, "signals": CountingSignals(snap["signals"])}
+    panes = [pane(pane_id="pane"), pane(pane_id="other"), *(pane(pane_id=f"p{i}") for i in range(30))]
+
+    assert project(counted, panes, 160) == project(snap, panes, 160)
+    assert len(reads) == 1
+    result = project(snap, panes, 160)
+    assert len(result["pane"]["signals"]) == 1
+    assert result["other"]["signals"] == []

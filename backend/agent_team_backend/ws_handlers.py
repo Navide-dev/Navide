@@ -1243,7 +1243,10 @@ async def git_log(session: "Session", msg_id: str, msg_type: str, payload: dict)
     all_branches = bool(payload.get("all", False))
     query = payload.get("query") or None
     order = payload.get("order") or "ancestor"
-    result = await app.git_service.get_log(ws_path, n, all_branches, query, order)
+    result = await app.git_service.coalesced(
+        ("log", ws_path, n, all_branches, query, order),
+        lambda: app.git_service.get_log(ws_path, n, all_branches, query, order),
+    )
     await session.send_json(make_response(msg_id, msg_type, {"commits": result}))
 
 
@@ -1429,7 +1432,9 @@ async def git_branches(session: "Session", msg_id: str, msg_type: str, payload: 
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    result = await app.git_service.list_branches(ws_path)
+    result = await app.git_service.coalesced(
+        ("branches", ws_path), lambda: app.git_service.list_branches(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
@@ -1516,7 +1521,9 @@ async def git_stash_list(session: "Session", msg_id: str, msg_type: str, payload
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    entries = await app.git_service.stash_list(ws_path)
+    entries = await app.git_service.coalesced(
+        ("stash_list", ws_path), lambda: app.git_service.stash_list(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, {"stashes": entries}))
 
 
@@ -1665,7 +1672,9 @@ async def git_remotes(session: "Session", msg_id: str, msg_type: str, payload: d
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    remotes = await app.git_service.list_remotes(ws_path)
+    remotes = await app.git_service.coalesced(
+        ("remotes", ws_path), lambda: app.git_service.list_remotes(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, {"remotes": remotes}))
 
 
@@ -1719,7 +1728,7 @@ async def git_tags(session: "Session", msg_id: str, msg_type: str, payload: dict
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    tags = await app.git_service.list_tags(ws_path)
+    tags = await app.git_service.coalesced(("tags", ws_path), lambda: app.git_service.list_tags(ws_path))
     await session.send_json(make_response(msg_id, msg_type, {"tags": tags}))
 
 
@@ -1849,7 +1858,9 @@ async def git_worktrees(session: "Session", msg_id: str, msg_type: str, payload:
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    entries = await app.git_service.list_worktrees(ws_path)
+    entries = await app.git_service.coalesced(
+        ("worktrees", ws_path), lambda: app.git_service.list_worktrees(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, {"worktrees": entries}))
 
 
@@ -6010,7 +6021,7 @@ async def _add_local_pane_git(snapshot: dict) -> None:
     Local panes only: another machine's checkout is not readable from here, and
     nothing about git is uploaded to the server.
     """
-    from .mcp_server.server import pane_git
+    from .mcp_server.server import pane_git_cached
 
     panes = [
         pane
@@ -6020,9 +6031,10 @@ async def _add_local_pane_git(snapshot: dict) -> None:
         if isinstance(pane, dict) and pane.get("paneId")
     ]
     workspaces = {entry.pane_id: entry.workspace_path for entry in agent_messaging.list_panes()}
-    snapshots = await asyncio.gather(
-        *(pane_git(pane["paneId"], workspaces.get(pane["paneId"], "")) for pane in panes)
-    )
+    # Polled every 3 s by each main window: answered from the last snapshot,
+    # refreshed in the background once it is older than the cache's TTL, so a
+    # stream of git.changed no longer re-runs git on every poll.
+    snapshots = [pane_git_cached(pane["paneId"], workspaces.get(pane["paneId"], "")) for pane in panes]
     for pane, git in zip(panes, snapshots):
         if git is not None:
             pane["git"] = git
@@ -9610,13 +9622,18 @@ async def terminal_resource_usage(session: "Session", msg_id: str, msg_type: str
         now = time.monotonic()
         cached = _resource_sweep_cache["payload"]
         if cached is not None and now - float(_resource_sweep_cache["at"]) < _RESOURCE_SWEEP_TTL_S:
-            risks = app.cli_risk_service.current(active_panes(session.terminals, app._PTY_OWNERS))
+            # Projection is CPU work over every recorded signal: off the loop.
+            risks = await asyncio.to_thread(
+                app.cli_risk_service.current, active_panes(session.terminals, app._PTY_OWNERS)
+            )
             await session.send_json(make_response(msg_id, msg_type, {**cached, "cliRisks": risks}))
             return
         result = await _collect_resource_usage(session)
         _resource_sweep_cache["at"] = now
         _resource_sweep_cache["payload"] = result
-    risks = app.cli_risk_service.current(active_panes(session.terminals, app._PTY_OWNERS))
+    risks = await asyncio.to_thread(
+        app.cli_risk_service.current, active_panes(session.terminals, app._PTY_OWNERS)
+    )
     await session.send_json(make_response(msg_id, msg_type, {**result, "cliRisks": risks}))
 
 
