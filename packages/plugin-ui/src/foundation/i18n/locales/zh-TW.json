@@ -667,6 +667,15 @@
     }
   },
   "pane": {
+    "acp": {
+      "mark-tooltip": "這個 pane 透過 Agent Client Protocol（ACP）執行 agent：對話由 Navide 繪製，不是 CLI 自己的畫面。",
+      "permission": "agent 要求：{title}",
+      "failed": "agent 無法啟動：{reason}",
+      "exited": "agent 已停止（結束碼 {code}）。",
+      "placeholder": "傳訊息給 agent。Enter 送出，Shift+Enter 換行。",
+      "send": "送出",
+      "cancel": "取消這一回合"
+    },
     "opened-by": "由「{parent}」開啟",
     "git": {
       "title": "原始碼控制",

@@ -667,6 +667,15 @@
     }
   },
   "pane": {
+    "acp": {
+      "mark-tooltip": "This pane runs its agent over the Agent Client Protocol (ACP): Navide draws the conversation instead of the CLI's own screen.",
+      "permission": "The agent asks to: {title}",
+      "failed": "The agent could not be started: {reason}",
+      "exited": "The agent has stopped (exit code {code}).",
+      "placeholder": "Message the agent. Enter sends, Shift+Enter adds a line.",
+      "send": "Send",
+      "cancel": "Cancel Turn"
+    },
     "opened-by": "Opened by {parent}",
     "git": {
       "title": "SOURCE CONTROL",

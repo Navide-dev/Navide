@@ -29,7 +29,9 @@ describe('onInterrupt', () => {
     // The two guards the UI button has always had. Removing either would make
     // ui.pane.interrupt write to something that is not there.
     expect(fn).toContain("if (!panes.value.find((p) => p.id === paneId)?.realized) return false")
-    expect(fn).toContain('if (!ref?.sessionId) return false')
+    // A terminal pane needs a live PTY session; an ACP pane has none and is
+    // interrupted through its own session/cancel.
+    expect(fn).toContain("if (!ref || (!ref.sessionId && ref.display !== 'acp')) return false")
   })
 
   it('reports whether the interrupt was issued, taking the answer from the terminal', () => {

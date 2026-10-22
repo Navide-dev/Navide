@@ -30,7 +30,8 @@ describe('idle reclaim wiring', () => {
     expect(wiring).toContain("requestCliRiskAction: (payload) => backend.send('terminal.cli_risk_action', { ...payload })")
     expect(wiring).toContain('paneCount: realizedPaneCount')
     expect(wiring).toContain('provide(cliRiskKey, resourceUsage)')
-    expect(appSource).toMatch(/<TerminalPane\s+v-if="p.realized"/)
+    // An ACP pane mounts AcpPane ahead of it, so TerminalPane is the else-if of that chain.
+    expect(appSource).toMatch(/<TerminalPane\s+v-(else-)?if="p.realized"/)
   })
 
   // markRemoved unspawns the backend record. A reclaim that did that would
