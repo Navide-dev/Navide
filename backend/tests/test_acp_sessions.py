@@ -276,12 +276,187 @@ async def test_requests_drive_a_session_and_its_events_reach_the_creating_window
         await acp_ws.acp_prompt(window, "m3", "acp.prompt", {"session_id": "nope", "text": "hi"})
         assert window.result("m3")["error"]["code"] == "ACP_NO_SESSION"
 
+        # Another window sees none of it and may not take it (#586 review).
         other = FakeWindow()
         await acp_ws.acp_list(other, "m4", "acp.list", {"claim": True})
-        assert [s["session_id"] for s in other.result("m4")["payload"]["sessions"]] == [created["session_id"]]
-
+        assert other.result("m4")["payload"]["sessions"] == []
         await acp_ws.acp_kill(other, "m5", "acp.kill", {"session_id": created["session_id"]})
-        assert other.result("m5")["ok"] is not False
-        assert other.events("acp.state")[-1]["state"] == "exited"  # the claiming window now gets events
+        assert other.result("m5")["error"]["code"] == "ACP_NOT_OWNER"
+
+        await acp_ws.acp_list(window, "m6", "acp.list", {})
+        assert [s["session_id"] for s in window.result("m6")["payload"]["sessions"]] == [created["session_id"]]
+        await acp_ws.acp_kill(window, "m7", "acp.kill", {"session_id": created["session_id"]})
+        assert window.result("m7")["ok"] is not False
+        assert window.events("acp.state")[-1]["state"] == "exited"
     finally:
         await acp_ws.shutdown()
+
+
+# -- #586 review: no process outlives a start; ownership like a PTY's -------------
+
+
+async def test_a_start_cancelled_during_the_handshake_leaves_nothing_running(service, registry, tmp_path) -> None:
+    task = asyncio.ensure_future(
+        service.create(pane_id="p1", agent_key="fake", argv=_argv("slow_start"), cwd=str(tmp_path))
+    )
+    await _until(lambda: bool(registry["register"]))
+    pid = registry["register"][0]
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    await _until(lambda: not _alive(pid))
+    assert registry["unregister"] == [pid]
+    assert service.list() == []
+
+
+async def test_a_registration_failure_does_not_leave_a_true_orphan(service, monkeypatch, tmp_path) -> None:
+    spawned: list[int] = []
+
+    def fail(pid: int, argv: list[str]) -> None:
+        spawned.append(pid)
+        raise OSError("registry unwritable")
+
+    monkeypatch.setattr(pty_registry, "register", fail)
+    with pytest.raises(OSError):
+        await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+
+    await _until(lambda: not _alive(spawned[0]))
+    assert service.list() == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="setsid breakaway is POSIX; the Windows Job holds the tree")
+async def test_an_agent_that_exits_on_its_own_takes_its_breakaway_grandchild_with_it(service, tmp_path, monkeypatch) -> None:
+    from agent_team_backend import terminals
+
+    if not terminals._ps_snapshot():
+        pytest.skip("no process table readable here (sandboxed run); CI reads one")
+    pidfile = tmp_path / "pids"
+    monkeypatch.setenv("ACP_FAKE_PIDFILE", str(pidfile))
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("breakaway"), cwd=str(tmp_path))
+    await _until(pidfile.exists)
+    agent, child = (int(p) for p in pidfile.read_text().split())
+    assert _alive(child)
+
+    await service.prompt(session.id, "go")  # the agent exits on it, on its own
+    await _until(lambda: service.events.of("acp.exit"))
+
+    await _until(lambda: not _alive(agent) and not _alive(child))
+
+
+async def test_a_prompt_sent_while_starting_waits_and_then_runs(service, tmp_path) -> None:
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+    session.state = "starting"
+    assert await service.prompt(session.id, "early") == "queued"
+    assert service.events.of("acp.turn_end") == []
+
+
+class Window(FakeWindow):
+    def __init__(self, window_id: str = "") -> None:
+        super().__init__()
+        self.window_id = window_id
+        self.dead = False
+
+
+@pytest.fixture
+def launchable(fresh_service, monkeypatch) -> None:
+    launch = AcpLaunch(argv=tuple(_argv("reply")))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: launch)
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(spawn_env_defaults=()))
+    monkeypatch.setattr(acp_ws, "_CREATORS", {})
+    monkeypatch.setattr(acp_ws, "_OWNERLESS_SINCE", {})
+
+
+async def _create(window: FakeWindow, tmp_path: Path, pane_id: str = "p1") -> str:
+    await acp_ws.acp_create(window, "c", "acp.create", {"agent_key": "opencode", "pane_id": pane_id, "cwd": str(tmp_path)})
+    return window.result("c")["payload"]["session"]["session_id"]
+
+
+async def test_another_window_can_neither_see_nor_drive_nor_claim_a_session(launchable, tmp_path) -> None:
+    a, b = Window("win-a"), Window("win-b")
+    try:
+        sid = await _create(a, tmp_path)
+
+        await acp_ws.acp_list(b, "l", "acp.list", {"claim": True})
+        assert b.result("l")["payload"]["sessions"] == []
+        for kind, handler, extra in (
+            ("acp.prompt", acp_ws.acp_prompt, {"text": "hi"}),
+            ("acp.cancel", acp_ws.acp_cancel, {}),
+            ("acp.permission_answer", acp_ws.acp_permission_answer, {"request_id": "r", "option_id": "x"}),
+            ("acp.kill", acp_ws.acp_kill, {}),
+        ):
+            await handler(b, kind, kind, {"session_id": sid, **extra})
+            assert b.result(kind)["error"]["code"] == "ACP_NOT_OWNER"
+        assert acp_ws.get_service().get(sid) is not None  # still running, still a's
+
+        # a goes away: still nobody else's to take.
+        a.dead = True
+        acp_ws.drop_owner(a)
+        await acp_ws.acp_list(b, "l2", "acp.list", {"claim": True})
+        assert b.result("l2")["payload"]["sessions"] == []
+    finally:
+        await acp_ws.shutdown()
+
+
+async def test_the_creating_window_reconnecting_or_the_window_holding_the_pane_claims_it(launchable, monkeypatch, tmp_path) -> None:
+    from agent_team_backend import agent_messaging
+
+    a = Window("win-a")
+    try:
+        sid = await _create(a, tmp_path)
+        a.dead = True
+        acp_ws.drop_owner(a)
+
+        again = Window("win-a")  # same page-load id: a reconnect
+        await acp_ws.acp_list(again, "l", "acp.list", {"claim": True})
+        assert [s["session_id"] for s in again.result("l")["payload"]["sessions"]] == [sid]
+        await acp_ws.acp_prompt(again, "p", "acp.prompt", {"session_id": sid, "text": "hi"})
+        assert again.result("p")["ok"] is True
+
+        # A live owner is never displaced, even by the window that holds the pane.
+        holder = Window("win-c")
+        monkeypatch.setattr(agent_messaging, "owner_of", lambda pane_id: holder)
+        await acp_ws.acp_list(holder, "l", "acp.list", {"claim": True})
+        assert holder.result("l")["payload"]["sessions"] == []
+        again.dead = True
+        acp_ws.drop_owner(again)
+        await acp_ws.acp_list(holder, "l2", "acp.list", {"claim": True})
+        assert [s["session_id"] for s in holder.result("l2")["payload"]["sessions"]] == [sid]
+    finally:
+        await acp_ws.shutdown()
+
+
+async def test_a_session_left_without_a_window_ends_after_the_ownerless_grace(launchable, tmp_path) -> None:
+    from agent_team_backend import app
+
+    a = Window("win-a")
+    try:
+        sid = await _create(a, tmp_path)
+        a.dead = True
+        acp_ws.drop_owner(a)
+        start = acp_ws._OWNERLESS_SINCE[sid]
+
+        assert await acp_ws.sweep_ownerless(now=start + app._OWNERLESS_GRACE_SEC - 1) == []
+        assert await acp_ws.sweep_ownerless(now=start + app._OWNERLESS_GRACE_SEC) == [sid]
+        assert acp_ws.get_service().get(sid) is None
+    finally:
+        await acp_ws.shutdown()
+
+
+async def test_on_its_own_exit_the_recorded_descendants_are_ended(service, tmp_path, monkeypatch) -> None:
+    """The same, with the process table stubbed: what was recorded while the
+    agent ran is what gets ended, even when the last record finds nothing."""
+    from agent_team_backend import terminals
+
+    records = iter([{4242: "id-4242"}])
+    monkeypatch.setattr(terminals, "_descendant_pids", lambda pid: next(records, {}))
+    ended: list[dict[int, str]] = []
+    monkeypatch.setattr(terminals, "_kill_breakaway", lambda pids: ended.append(dict(pids)))
+
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("exit"), cwd=str(tmp_path))
+    await service.prompt(session.id, "x")
+    await _until(lambda: service.events.of("acp.exit"))
+
+    assert {4242: "id-4242"} in ended
+

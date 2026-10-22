@@ -12,7 +12,13 @@ runs its turns and stops it. The protocol itself is ``acp_client``.
   many wait). A turn ends only when the agent answers it (ACP has no
   session/stop); ``cancel`` asks it to, and nothing is killed for not obeying.
 - Stop: close the agent's stdin, give it the vendor's grace (``ShutdownSpec``)
-  to exit, then end its whole tree. The agent's own stderr goes to
+  to exit, then end its whole tree. A start that fails or is cancelled at any
+  point after the spawn (registration, handshake, the request being dropped)
+  ends what it started before the error goes on. Descendants are recorded
+  after the handshake and at each turn's start and end, so a grandchild that
+  left the agent's group (setsid) is ended too when the agent exits on its
+  own; one started and detached since the last record can outlive it (POSIX
+  only — on Windows the kill-on-close Job holds the whole tree). The agent's own stderr goes to
   ``logs/acp-<session>.log`` (owner only), whose tail is shown when it exits.
 
 Events go to ``emit`` as dicts: ``acp.state``, ``acp.update`` (each
@@ -67,6 +73,15 @@ class _Permission:
 
 
 @dataclass
+class _Spawned:
+    """A process a start has spawned, until the start ends one way or the other."""
+
+    proc: asyncio.subprocess.Process
+    job: int | None = None
+    registered: bool = False
+
+
+@dataclass
 class AcpSession:
     id: str
     pane_id: str
@@ -86,6 +101,8 @@ class AcpSession:
     stderr_path: Path | None = None
     exit_code: int | None = None
     stopping: bool = False  # kill() owns the exit: no "exited on its own" event
+    # The agent's descendants as last recorded (pid -> start-time identity).
+    descendants: dict[int, str] = field(default_factory=dict)
 
     def stderr_tail(self) -> str:
         if self.stderr_path is None:
@@ -124,6 +141,7 @@ class AcpSessionService:
         self._sessions: dict[str, AcpSession] = {}
         self._watchers: set[asyncio.Task[None]] = set()
         self._data_dir = app_data_dir()
+        self._spawned: dict[str, _Spawned] = {}
 
     def get(self, session_id: str) -> AcpSession | None:
         return self._sessions.get(session_id)
@@ -151,6 +169,22 @@ class AcpSessionService:
         terminal pane on its own.
         """
         session_id = uuid.uuid4().hex
+        try:
+            return await self._start(
+                session_id, pane_id=pane_id, agent_key=agent_key, argv=argv, cwd=cwd, env=env,
+                load_session_id=load_session_id, mcp_servers=mcp_servers,
+            )
+        except BaseException:
+            # Whatever failed or cancelled the start, nothing it spawned outlives it.
+            await asyncio.shield(self._abort_start(session_id))
+            raise
+        finally:
+            self._spawned.pop(session_id, None)
+
+    async def _start(
+        self, session_id: str, *, pane_id: str, agent_key: str, argv: list[str], cwd: str,
+        env: dict[str, str] | None, load_session_id: str, mcp_servers: list[dict[str, Any]] | None,
+    ) -> AcpSession:
         stderr_path = log_dir() / f"acp-{session_id}.log"
         try:
             fd = os.open(stderr_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -170,12 +204,14 @@ class AcpSessionService:
             os.close(fd)
             raise AcpStartError("acp-start-failed", f"{argv[0]} could not be started: {err}") from err
         os.close(fd)  # the child holds its own copy
+        spawned = self._spawned[session_id] = _Spawned(proc)
         job: int | None = None
         try:
-            job = osplat.process_tree.contain(proc.pid)
+            job = spawned.job = osplat.process_tree.contain(proc.pid)
         except OSError as err:
             log.warning("ACP %s: not contained (%s); its tree is ended by pid instead", session_id, err)
         await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.register, proc.pid, argv))
+        spawned.registered = True
 
         assert proc.stdout is not None and proc.stdin is not None
         holder: dict[str, AcpSession] = {}
@@ -190,6 +226,7 @@ class AcpSessionService:
         )
         holder["s"] = session
         self._sessions[session_id] = session
+        spawned.registered = False  # from here kill() unregisters it, with the session
         client.start()
         watcher = asyncio.ensure_future(self._watch_exit(session))
         self._watchers.add(watcher)
@@ -212,15 +249,58 @@ class AcpSessionService:
             await self.kill(session_id)
             code = "acp-auth-required" if _needs_auth(err, session.init) else "acp-handshake-failed"
             raise AcpStartError(code, str(err), session.stderr_tail()) from err
+        await self._note_descendants(session)
         await self._set_state(session, "idle")
+        if session.queue:
+            self._start_turn(session, session.queue.pop(0))
         return session
+
+    async def _abort_start(self, session_id: str) -> None:
+        """End what a failed or cancelled start spawned: the registered session
+        through kill(), or a process not yet a session by its tree."""
+        if session_id in self._sessions:
+            await self.kill(session_id)
+            return
+        spawned = self._spawned.get(session_id)
+        if spawned is None:
+            return
+        from .terminals import _descendant_pids, _kill_breakaway
+
+        proc = spawned.proc
+        descendants: dict[int, str] = {}
+        if proc.returncode is None:
+            with contextlib.suppress(OSError):
+                descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
+            try:
+                osplat.process_tree.end_contained(proc.pid, spawned.job)
+            except OSError:
+                with contextlib.suppress(OSError):
+                    osplat.process_tree.kill_tree(proc.pid, force=True)
+            await self._wait_exit(proc, _TERM_GRACE_S)
+        await asyncio.to_thread(_kill_breakaway, descendants)
+        if spawned.registered:
+            await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, proc.pid))
+
+    async def _note_descendants(self, session: AcpSession) -> None:
+        """Record the agent's descendants while it runs (see the module doc)."""
+        from .terminals import _descendant_pids
+
+        if session.proc.returncode is not None:
+            return
+        try:
+            # Added to, not replaced: a record taken as the agent dies finds no
+            # children, and must not erase the ones seen while it ran.
+            session.descendants.update(await asyncio.to_thread(_descendant_pids, session.proc.pid))
+        except OSError:
+            pass
 
     # -- turns ------------------------------------------------------------
 
     async def prompt(self, session_id: str, text: str) -> str:
         """Send ``text`` as a prompt: "sent" now, or "queued" behind the running turn."""
         session = self._require(session_id)
-        if session.state in ("running", "cancelling"):
+        # Starting: it has no ACP session yet; the prompt goes once it is idle.
+        if session.state in ("starting", "running", "cancelling"):
             session.queue.append(text)
             await self._set_state(session, session.state)
             return "queued"
@@ -243,7 +323,8 @@ class AcpSessionService:
         if pending is None or pending.answer.done():
             return False
         if option_id is not None and option_id not in {
-            str(o.get("optionId")) for o in pending.params.get("options") or [] if isinstance(o, dict)
+            str(o["optionId"]) for o in pending.params.get("options") or []
+            if isinstance(o, dict) and o.get("optionId") is not None
         }:
             raise ValueError(f"no option {option_id!r} in this request")
         pending.answer.set_result(option_id)
@@ -255,6 +336,7 @@ class AcpSessionService:
 
     async def _run_turn(self, session: AcpSession, text: str) -> None:
         await self._set_state(session, "running")
+        await self._note_descendants(session)
         stop_reason, error = "", ""
         try:
             stop_reason = await session.client.prompt(session.acp_session_id, text)
@@ -262,6 +344,7 @@ class AcpSessionService:
             error = str(err)
         if session.state == "exited":
             return
+        await self._note_descendants(session)
         await self._emit_event(session, "acp.turn_end", {"stopReason": stop_reason, "error": error})
         if session.queue and session.client.closed is False:
             self._start_turn(session, session.queue.pop(0))
@@ -336,8 +419,12 @@ class AcpSessionService:
         session.exit_code = code
         if session.stopping or session.id not in self._sessions:
             return
-        # It exited on its own (or was stopped): end what it left running.
+        # It exited on its own (or was stopped): end what it left running,
+        # breakaway grandchildren included (the last record of them).
         self._end_tree(session)
+        from .terminals import _kill_breakaway
+
+        await asyncio.to_thread(_kill_breakaway, session.descendants)
         await session.client.close()
         await self._emit_event(session, "acp.exit", {"code": code, "stderr_tail": session.stderr_tail()})
         await self._forget(session)

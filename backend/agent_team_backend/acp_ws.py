@@ -8,6 +8,15 @@ Requests: ``acp.create``, ``acp.prompt``, ``acp.cancel``,
 with ``ACP_UNAVAILABLE``; nothing falls back to a terminal pane on its own.
 Which CLIs have an ACP mode is ``acp_vendors``, not ``cli_vendors``.
 
+Ownership, like a terminal pane's PTY: a session belongs to the window that
+created it, and only its owner may prompt, cancel, answer or kill it. A window
+that disconnects gives its sessions up (``drop_owner``); they keep running
+and may be claimed back (``acp.list`` with ``claim``) only by a window that
+created them (same page-load window id, i.e. a reconnect) or that now holds
+the session's pane (agent_messaging) — never one another live window owns.
+A session left without an owner is ended after the same grace as an
+ownerless PTY (app._OWNERLESS_GRACE_SEC, one hour), by the same janitor.
+
 Registered on import (app imports this module next to ws_handlers).
 """
 
@@ -15,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import TYPE_CHECKING, Any
 
 from .acp_sessions import AcpSessionService, AcpStartError
@@ -28,16 +38,79 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("agent_team_backend.acp_ws")
 
-# ACP session id -> the window (WS session) that created it, which gets its events.
+# ACP session id -> the window (WS session) that owns it and gets its events.
 _OWNERS: dict[str, "Session"] = {}
+# ACP session id -> the page-load window id of the window that created it.
+_CREATORS: dict[str, str] = {}
+# ACP session id -> when it was last left without a live owner (monotonic).
+_OWNERLESS_SINCE: dict[str, float] = {}
 _SERVICE: AcpSessionService | None = None
+
+
+def _owner(session_id: str) -> "Session | None":
+    owner = _OWNERS.get(session_id)
+    return owner if owner is not None and not getattr(owner, "dead", False) else None
+
+
+def _may_claim(window: "Session", item: Any) -> bool:
+    """A window may take over a session nobody live owns when it created it
+    (a reconnect keeps the page-load id) or holds its pane now."""
+    if _owner(item.id) is not None:
+        return False
+    window_id = getattr(window, "window_id", "")
+    if window_id and _CREATORS.get(item.id) == window_id:
+        return True
+    from . import agent_messaging
+
+    return agent_messaging.owner_of(item.pane_id) is window
+
+
+def _set_owner(session_id: str, window: "Session") -> None:
+    _OWNERS[session_id] = window
+    _OWNERLESS_SINCE.pop(session_id, None)
+
+
+def drop_owner(window: "Session") -> None:
+    """A window disconnected: its sessions keep running, ownerless, until a
+    window claims them back or the janitor ends them (see the module doc)."""
+    now = time.monotonic()
+    for session_id, owner in list(_OWNERS.items()):
+        if owner is window:
+            del _OWNERS[session_id]
+            _OWNERLESS_SINCE[session_id] = now
+
+
+async def sweep_ownerless(now: float | None = None) -> list[str]:
+    """End the sessions ownerless for longer than an ownerless PTY may live.
+    Run by app's ownerless janitor; returns the ended session ids."""
+    from . import app
+
+    if _SERVICE is None:
+        return []
+    now = time.monotonic() if now is None else now
+    ended: list[str] = []
+    for item in _SERVICE.list():
+        if _owner(item.id) is not None:
+            _OWNERLESS_SINCE.pop(item.id, None)
+            continue
+        since = _OWNERLESS_SINCE.setdefault(item.id, now)
+        if now - since < app._OWNERLESS_GRACE_SEC:
+            continue
+        log.info("ACP %s: no window for %.0fs; ending its agent", item.id, now - since)
+        await _SERVICE.kill(item.id)
+        _OWNERLESS_SINCE.pop(item.id, None)
+        ended.append(item.id)
+    return ended
 
 
 async def _emit(event: dict[str, Any]) -> None:
     payload = event.get("payload") or {}
-    owner = _OWNERS.get(str(payload.get("session_id") or ""))
+    session_id = str(payload.get("session_id") or "")
+    owner = _owner(session_id)
     if event.get("type") == "acp.state" and payload.get("state") == "exited":
-        _OWNERS.pop(str(payload.get("session_id") or ""), None)
+        _OWNERS.pop(session_id, None)
+        _CREATORS.pop(session_id, None)
+        _OWNERLESS_SINCE.pop(session_id, None)
     if owner is None:
         return  # no window: the agent keeps running; a window asks with acp.list
     await owner.send_json(make_event(str(event["type"]), payload))
@@ -94,12 +167,22 @@ async def acp_create(session: "Session", msg_id: str, msg_type: str, payload: di
             {"stderr_tail": err.stderr_tail},
         ))
         return
-    _OWNERS[created.id] = session
+    _CREATORS[created.id] = getattr(session, "window_id", "")
+    if getattr(session, "dead", False):
+        # The window went away while the agent started: ownerless from now.
+        _OWNERLESS_SINCE[created.id] = time.monotonic()
+    else:
+        _set_owner(created.id, session)
     await session.send_json(make_response(msg_id, msg_type, {"session": created.snapshot()}))
 
 
 async def _with_session(session: "Session", msg_id: str, msg_type: str, payload: dict, act) -> None:
     session_id = str(payload.get("session_id") or "")
+    if get_service().get(session_id) is not None and _owner(session_id) is not session:
+        await session.send_json(make_error(
+            msg_id, msg_type, "ACP_NOT_OWNER", f"ACP session {session_id} belongs to another window",
+        ))
+        return
     try:
         result = await act(get_service(), session_id)
     except KeyError:
@@ -152,9 +235,13 @@ async def acp_kill(session: "Session", msg_id: str, msg_type: str, payload: dict
 
 @handler("acp.list")
 async def acp_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    """Every running ACP session; with ``claim``, this window takes their events."""
-    sessions = get_service().list()
+    """The ACP sessions this window owns or may claim (see the module doc);
+    with ``claim``, it takes over the claimable ones and gets their events."""
+    sessions = [
+        item for item in get_service().list()
+        if _owner(item.id) is session or _may_claim(session, item)
+    ]
     if payload.get("claim"):
         for item in sessions:
-            _OWNERS[item.id] = session
+            _set_owner(item.id, session)
     await session.send_json(make_response(msg_id, msg_type, {"sessions": [s.snapshot() for s in sessions]}))
