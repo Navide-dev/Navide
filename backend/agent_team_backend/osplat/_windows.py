@@ -526,9 +526,13 @@ class WindowsProcessTree:
                 # Held for the life of the process: it is the std handle now.
                 _stdin_nul_fd = os.open(os.devnull, os.O_RDONLY)
             handle = msvcrt.get_osfhandle(_stdin_nul_fd)
-            return bool(_kernel32().SetStdHandle(STD_INPUT_HANDLE, handle))
-        except OSError:
-            return False
+            if _kernel32().SetStdHandle(STD_INPUT_HANDLE, handle):
+                return True
+            error = ctypes.get_last_error()  # type: ignore[attr-defined]
+            log.warning("SetStdHandle(NUL) failed (error %s); children still inherit stdin", error)
+        except OSError as exc:
+            log.warning("could not point stdin at NUL (%s); children still inherit stdin", exc)
+        return False
 
     def stderr_handle_info(self) -> str:
         try:

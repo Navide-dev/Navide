@@ -149,6 +149,9 @@ def test_a_spawned_backend_takes_the_handover_line_and_still_stops_on_shutdown(t
         log_text = "".join(path.read_text(encoding="utf-8", errors="replace") for path in tmp_path.rglob("*.log"))
         assert "adopted the trust-confirmation key from the parent process" in log_text
         assert "adopted the host token from the parent process" in log_text
+        # Windows: the real backend did take its children off the shutdown pipe.
+        if sys.platform == "win32":
+            assert "children no longer inherit stdin" in log_text
 
         backend.stdin.write(f"{SHUTDOWN_LINE}\n")
         backend.stdin.flush()
@@ -193,6 +196,7 @@ def _run_a_child_while_stdin_is_a_pipe_being_read(isolate: bool):
     import subprocess
     import sys
     import threading
+    import time
 
     import msvcrt
 
@@ -206,6 +210,10 @@ def _run_a_child_while_stdin_is_a_pipe_being_read(isolate: bool):
     try:
         assert k.SetStdHandle(_windows.STD_INPUT_HANDLE, msvcrt.get_osfhandle(read_fd))
         reader.start()
+        # Let the read be pending before the child starts: on a loaded runner
+        # the thread may not have reached ReadFile yet, and a child started
+        # first would not hang, which would read as "mechanism is wrong".
+        time.sleep(0.2)
         if isolate:
             assert _windows.process_tree.isolate_stdin_from_children() is True
         try:
