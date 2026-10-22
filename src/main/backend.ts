@@ -449,7 +449,7 @@ export async function startBackend(
     // by macOS Gatekeeper scanning the bundled binary on first launch after
     // download — 15s was too tight and surfaced as "backend failed to start"
     // even though the process would have come up given more time. Now
-    // configurable via Settings (default 45s, 120s on Linux) — see src/main/health-timeout.ts.
+    // configurable via Settings (default 45s on macOS, 120s on Linux and Windows) — see src/main/health-timeout.ts.
     await waitForHealth(host, port, healthCheckTimeoutMs)
   } catch (err) {
     // Health never came up — kill the orphaned child so it can't linger and
