@@ -46,6 +46,25 @@ DONE = "ci-windows-tests.done"
 CAP_SECONDS = 30 * 60
 REPORT_EVERY = 60
 RESULT_RE = re.compile(r" (PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)")
+# A test still running this long gets the host read while it is stuck:
+# pytest-timeout (90 s, thread method) dumps Python stacks and exits, so a
+# read at the next 60 s report finds the hang already gone. On 2026-10-22 two
+# shards hung inside file calls (a sqlite COMMIT; fsync/os.replace in
+# durable_secret_files.write) at 3-9% CPU, and nothing said why.
+POLL_EVERY = 5
+STALL_SECONDS = 45
+TIMEOUT_RE = re.compile(r"\+{3,} Timeout \+{3,}")
+CREATE_NO_WINDOW = 0x08000000
+# One PowerShell for the parts psutil cannot read. The Defender log names
+# scans, detections and setting changes, not every file it inspects.
+_HOST_PROBE = r"""
+$ErrorActionPreference = 'Continue'
+try { 'defender: ' + (Get-MpComputerStatus | Select-Object AMRunningMode, RealTimeProtectionEnabled, OnAccessProtectionEnabled, IoavProtectionEnabled, BehaviorMonitorEnabled | ConvertTo-Json -Compress) } catch { 'defender: ' + $_ }
+try { 'defender exclusions: ' + ((Get-MpPreference).ExclusionPath -join '; ') } catch { 'defender exclusions: ' + $_ }
+try { 'disk: ' + (((Get-Counter '\PhysicalDisk(*)\Current Disk Queue Length', '\PhysicalDisk(*)\Avg. Disk sec/Write').CounterSamples | ForEach-Object { '{0}={1:N3}' -f $_.Path, $_.CookedValue }) -join '; ') } catch { 'disk: ' + $_ }
+'defender events, last 10 min:'
+try { Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Windows Defender/Operational'; StartTime = (Get-Date).AddMinutes(-10) } -MaxEvents 20 -ErrorAction Stop | ForEach-Object { '  {0:HH:mm:ss} {1} {2}' -f $_.TimeCreated, $_.Id, ($_.Message -split "`n")[0].Trim() } } catch { '  ' + $_ }
+"""
 
 JOB_OBJECT_LIMIT_ACTIVE_PROCESS = 0x0008
 JOB_OBJECT_LIMIT_JOB_MEMORY = 0x0200
@@ -193,6 +212,50 @@ def _progress() -> str:
     return f"{done} results; last: {last}"
 
 
+def _stall_diagnostics(job) -> str:
+    """What the host is doing while a test is stuck: the job's processes with
+    their handle and thread counts, Defender's CPU and state, the disk queue."""
+    rows = []
+    for pid in _job_pids(job):
+        if pid == os.getpid():
+            continue
+        try:
+            proc = psutil.Process(pid)
+            rows.append(f"    {proc.name()}({pid}) handles={proc.num_handles()} threads={proc.num_threads()}")
+        except psutil.Error:
+            rows.append(f"    ?({pid})")
+    for proc in psutil.process_iter(["name"]):
+        if (proc.info.get("name") or "").lower() == "msmpeng.exe":
+            try:
+                rows.append(f"    MsMpEng.exe({proc.pid}) cpu {proc.cpu_percent(interval=1.0)}%")
+            except psutil.Error:
+                pass
+    try:
+        probe = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _HOST_PROBE],
+            stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace",
+            timeout=60, creationflags=CREATE_NO_WINDOW,
+        )
+        rows.extend("    " + line for line in (probe.stdout + probe.stderr).splitlines() if line.strip())
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        rows.append(f"    host probe failed: {type(exc).__name__}")
+    return "\n".join(rows)
+
+
+def _timeout_dumps(lines: list[str]) -> list[str]:
+    """Every pytest-timeout dump in full: the marker opens on the test's own
+    line and closes on a line of its own. The last 200 lines cut them short
+    and left out the very threads that were stuck."""
+    out, inside = [], False
+    for line in lines:
+        if TIMEOUT_RE.search(line):
+            out.append(line)
+            inside = not inside
+        elif inside:
+            out.append(line)
+    return out
+
+
 def _detach() -> int:
     """Start the real run with a log file as its only inherited handle."""
     for stale in (WRAPPER_LOG, DONE, LOG):
@@ -257,13 +320,26 @@ def main() -> int:
     print(f"--- pytest pid {child.pid}, cap {CAP_SECONDS}s, {' '.join(_pytest_args()) or 'no shard'}", flush=True)
 
     started = time.monotonic()
+    next_report = started + REPORT_EVERY
+    progress, progress_since, captured = "", started, ""
     rc: int | None = None
     while time.monotonic() - started < CAP_SECONDS:
         rc = child.poll()
         if rc is not None:
             break
-        time.sleep(REPORT_EVERY)
-        elapsed = int(time.monotonic() - started)
+        time.sleep(POLL_EVERY)
+        now = time.monotonic()
+        current = _progress()
+        if current != progress:
+            progress, progress_since = current, now
+        elif now - progress_since >= STALL_SECONDS and captured != progress:
+            # Once per stuck test, while it is still stuck.
+            captured = progress
+            print(f"--- stalled {int(now - progress_since)}s at: {progress}\n{_stall_diagnostics(job)}", flush=True)
+        if now < next_report:
+            continue
+        next_report += REPORT_EVERY
+        elapsed = int(now - started)
         peers = _describe(_job_pids(job))
         vm = psutil.virtual_memory()
         print(f"--- {elapsed}s: {_progress()}\n    in job: {peers}\n    vm: {vm.percent}% of {vm.total >> 20} MiB used, cpu {psutil.cpu_percent()}%, {len(psutil.pids())} processes\n    runner: {_runner_procs()}", flush=True)
@@ -283,6 +359,10 @@ def main() -> int:
 
     with open(LOG, encoding="utf-8", errors="replace") as fh:
         lines = fh.readlines()
+    dumps = _timeout_dumps(lines)
+    if dumps:
+        print("--- timeout dumps, in full:")
+        sys.stdout.write("".join(dumps))
     print("--- last 200 lines of pytest.log:")
     sys.stdout.write("".join(lines[-200:]))
     print("--- summary:")
