@@ -1919,7 +1919,7 @@
       "restartPlugin": "Navide 플러그인 다시 시작",
       "disable": "사용 안 함",
       "enable": "사용",
-      "builtinDisabledTooltip": "Navide 플러그인 {name}이(가) 꺼져 있어요. “설정 → 확장”에서 켜세요.",
+      "builtinDisabledTooltip": "Navide 플러그인 {name}이(가) 꺼져 있어요. “설정 → Navide 플러그인”에서 켜세요.",
       "builtinDisabledNote": "사용 안 함: 보기, 창, agent 도구가 꺼져 있어요. 권한과 저장된 데이터는 유지되며, 사용을 누르면 모두 다시 켜져요.",
       "builtinDataDeletedEarlier": "이전 버전의 Navide가 이 Navide 플러그인을 제거하면서 저장된 데이터도 삭제했어요. 사용을 누르면 빈 데이터로 시작해요.",
       "disabledStoreRestored": "백업에서 복원됨: Navide 플러그인의 사용 안 함 스위치가 손상되어 백업 사본으로 다시 만들었어요.",

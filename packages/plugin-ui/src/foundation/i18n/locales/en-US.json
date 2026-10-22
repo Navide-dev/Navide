@@ -1919,7 +1919,7 @@
       "restartPlugin": "Restart Navide Plugin",
       "disable": "Disable",
       "enable": "Enable",
-      "builtinDisabledTooltip": "Navide plugin {name} is disabled. Enable it in Settings → Extensions.",
+      "builtinDisabledTooltip": "Navide plugin {name} is disabled. Enable it in Settings → Navide Plugins.",
       "builtinDisabledNote": "Disabled: its views, windows and agent tools are off. Its permissions and stored data are kept; Enable turns everything back on.",
       "builtinDataDeletedEarlier": "An earlier version of Navide removed this Navide plugin and deleted its stored data then. Enable starts it with empty data.",
       "disabledStoreRestored": "Restored from backup: the Navide plugin Disabled switches were damaged and were rebuilt from their backup copy.",
