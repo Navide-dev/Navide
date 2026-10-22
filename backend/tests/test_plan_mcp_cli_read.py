@@ -1265,10 +1265,10 @@ async def test_send_and_wait_sees_a_reply_recorded_in_the_same_clock_tick(
 
 @pytest.fixture(autouse=True)
 def _clean_turn_tracking() -> Any:
-    for table in (app._last_hook_turn_end, app._last_log_turn_start, app._turn_end_first):
+    for table in (app._last_hook_turn_end, app._last_log_turn_start, app._turn_end_first, app._pane_tracked_since):
         table.clear()
     yield
-    for table in (app._last_hook_turn_end, app._last_log_turn_start, app._turn_end_first):
+    for table in (app._last_hook_turn_end, app._last_log_turn_start, app._turn_end_first, app._pane_tracked_since):
         table.clear()
 
 

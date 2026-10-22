@@ -837,3 +837,33 @@ def test_the_log_records_transcript_stamp_decides_whose_turn_it_is(
     finally:
         app_module._pane_activity.clear()
 
+
+def test_a_panes_first_hook_does_not_borrow_a_replayed_log_turn_end(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """The first hook turn end of a pane (backend just started, or the pane was
+    forgotten) has no previous hook to bound it. A reader catching up replays
+    log records written before tracking began; those are not this turn's."""
+    app_module._pane_activity.clear()
+    app_module._pane_tracked_since.pop("pw-first", None)
+    app_module._last_hook_turn_end.pop("pw-first", None)
+    app_module._last_log_turn_start.pop("pw-first", None)
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw-first", "/ws/alpha", "")
+    )
+    stop = {"headers": {"X-Agent-Team-Event": "stop"}, "json": {"session_id": "s-1", "cwd": "/ws/alpha"}}
+    replayed = time.time() - 600
+    try:
+        app_module._record_pane_activity("pw-first", "agent_active", "old prompt", source="log", turn_start=True, event_wall=replayed)
+        app_module._record_pane_activity("pw-first", "turn_complete", "old reply", source="log", event_wall=replayed + 1)
+        client.post("/hooks/claude", **stop)
+        assert app_module._pane_activity["pw-first"]["text"] == ""
+        assert app_module._pane_activity["pw-first"]["log_ended"] is False
+
+        app_module._record_pane_activity("pw-first", "turn_complete", "this turn", source="log", event_wall=time.time())
+        client.post("/hooks/claude", **stop)
+        assert app_module._pane_activity["pw-first"]["text"] == "this turn"
+    finally:
+        app_module._pane_activity.clear()
+        app_module._pane_tracked_since.pop("pw-first", None)
+

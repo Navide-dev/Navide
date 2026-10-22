@@ -1362,6 +1362,12 @@ _USER_PROMPT_DETAILS = frozenset({"user", "prompt", "user_message"})
 # stamps still say when they were written — before that turn's hook fired.
 _last_hook_turn_end: dict[str, float] = {}
 _last_log_turn_start: dict[str, float] = {}
+# When this backend began tracking each pane (its first activity record), and
+# when it began tracking at all: the lower bound for a pane's first hook turn
+# end, which has no previous one. A reader catching up replays log records
+# written before then, and those are never this turn's.
+_pane_tracked_since: dict[str, float] = {}
+_TRACKING_STARTED = time.time()
 # The first of a turn's two turn ends (hook, log) still waiting for the other:
 # (source, monotonic time). Only for the arrival-gap log line below.
 _turn_end_first: dict[str, tuple[str, float]] = {}
@@ -1412,6 +1418,8 @@ def _record_pane_activity(
     # when it has none (it then never matches: arrival time is exactly what a
     # lagging reader gets wrong). Other writers read no wall clock at all.
     wall = time.time() if source == "hook" else event_wall
+    if source in ("hook", "log") and key not in _pane_tracked_since:
+        _pane_tracked_since[key] = time.time()
     prior = _pane_activity.get(key)
     if event_type == "turn_complete" and source in ("hook", "log"):
         _note_turn_end_gap(key, source, now)
@@ -1483,10 +1491,13 @@ def log_turn_end_after(pane_id: str, previous_hook_end: float | None) -> dict[st
     written = entry.get("event_wall")
     if written is None:
         return None
-    if previous_hook_end is not None and written <= previous_hook_end:
+    # The first hook turn end a pane has here has no previous one: then the
+    # turn began no earlier than when this backend started tracking the pane.
+    bound = previous_hook_end if previous_hook_end is not None else _pane_tracked_since.get(key, _TRACKING_STARTED)
+    if written <= bound:
         return None
     prompted = _last_log_turn_start.get(key)
-    if prompted is not None and (previous_hook_end is None or prompted > previous_hook_end):
+    if prompted is not None and prompted > bound:
         return entry if written >= prompted else None
     return entry
 
@@ -1509,6 +1520,7 @@ def forget_pane_activity(pane_id: str) -> None:
     _last_hook_turn_end.pop(pane_id, None)
     _last_log_turn_start.pop(pane_id, None)
     _turn_end_first.pop(pane_id, None)
+    _pane_tracked_since.pop(pane_id, None)
     for listener in pane_activity_listeners:
         listener(pane_id, None)
     hook_drain.forget_pane(pane_id)
