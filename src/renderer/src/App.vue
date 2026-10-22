@@ -537,7 +537,11 @@ const settingsApi = useSettings()
 onMounted(() => {
   themeApi.loadTheme()
   settingsApi.loadLanguage()
-  void settingsApi.loadHealthCheckTimeoutSec()
+  // The boot overlay's safety net was armed during setup with the platform
+  // default; re-arm it with the saved timeout once that has loaded.
+  void settingsApi.loadHealthCheckTimeoutSec().then(() => {
+    if (booting.value && !bootError.value) armBootTimeout()
+  })
   window.agentTeam?.onLanguageChanged?.((locale) => {
     settingsApi.setLanguage(locale, { broadcast: false })
     pushQuitConfirmConfig()
@@ -1032,13 +1036,15 @@ function armBootTimeout(): void {
   if (_bootTimer) clearTimeout(_bootTimer)
   // Safety net: dismiss a stuck spinner so the user is never trapped — but never
   // override an error state, which stays put with a Retry button. Kept just past
-  // useBackend's 50s init deadline: on a slow cold start (e.g. macOS Gatekeeper
-  // scanning an unsigned packaged binary on first launch) the backend may take
-  // up to 50s to report ready (then connect) or to give up and set status='error'.
+  // useBackend's init deadline (health-check timeout + 5s): on a slow cold start
+  // (e.g. macOS Gatekeeper, or Windows Defender scanning a fresh install's
+  // unpacked backend on first launch) the backend may take that long to report
+  // ready (then connect) or to give up and set status='error'.
   // Firing earlier would tear the overlay down mid-startup, revealing a bare
   // unconnected shell and pre-empting the error+Retry the backend failure path
   // is meant to show.
-  _bootTimer = window.setTimeout(() => { if (!bootError.value) dismissBoot() }, 52_000)
+  const ms = (settingsApi.healthCheckTimeoutSec.value + 7) * 1000
+  _bootTimer = window.setTimeout(() => { if (!bootError.value) dismissBoot() }, ms)
 }
 armBootTimeout()
 function retryBackend(): void {
@@ -1049,7 +1055,7 @@ function retryBackend(): void {
 }
 // Countdown display for the boot overlay, driven by the configured health-check
 // timeout (Settings → Appearance). Purely cosmetic — it doesn't change when the
-// overlay actually gets dismissed (see armBootTimeout's own 52s safety net above).
+// overlay actually gets dismissed (see armBootTimeout's own timeout + 7s safety net above).
 const bootCountdown = ref<number>(settingsApi.healthCheckTimeoutSec.value)
 let _bootCountdownTimer: number | undefined
 function startBootCountdown(): void {

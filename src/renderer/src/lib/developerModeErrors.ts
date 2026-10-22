@@ -14,6 +14,10 @@ const KEYS: Readonly<Record<string, string>> = {
   DEVELOPER_FOLDER_TAKEN_DOWN: 'takenDown',
   // A file install the same flows show: a file on Navide's blocked-digest list.
   DIGEST_BLOCKED: 'settings.extensions.localInstall.errors.digestBlocked',
+  // A Registry install or update refused over the computer's clock.
+  TRUST_METADATA_NOT_YET_VALID: 'settings.extensions.registryTrust.errors.notYetValid',
+  REGISTRY_SIGNATURE_NOT_YET_VALID: 'settings.extensions.registryTrust.errors.signatureNotYetValid',
+  TRUST_METADATA_EXPIRED: 'settings.extensions.registryTrust.errors.expired',
 }
 
 /** The localized text of a coded Developer Mode refusal; any other message

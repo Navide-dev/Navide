@@ -16,13 +16,21 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Windows: the Git view no longer stays on "capability call 'git.status' timed out". Every git the backend started inherited the backend's own stdin, the pipe the app keeps open on Windows for its `shutdown` line, and hung at launch. Git now starts with an empty stdin; a git run that does time out ends its whole process tree and gives its slot back within two seconds, so one hung run can no longer block every later one.
+
+- Extensions: a computer clock up to 5 minutes behind the Registry's no longer refuses every Registry install and update. The Registry signs its trust data per request, so the slightest lag read as invalid. A larger gap is reported as trust data that is not valid yet, and trust data past its expiry as expired, instead of both as "expired". The same 5 minutes apply to a version published or approved just before you install it. Both messages ask you to check the computer's date and time. Signature checks are unchanged.
+
 - MCP: `cli_reclaim_agent` and `cli_close_agent` no longer refuse every pane as your own. Since 0.2.28 the window was told the target pane was the one asking, so every reclaim came back `reason: "self"` and every close `self-close`, whoever called them. The request still goes to the window holding the target, and now names the real caller. Self-evolution had the same fault: after an automatic run its pane was never reclaimed and old cards were never closed.
+
+- Windows: the first launch after a fresh install waits up to 120 seconds for the backend (was 45), as on Linux. Unpacking the backend while Microsoft Defender scans the new files can take longer than 45 seconds, which ended a backend that was still starting with "backend failed to start". The startup screen now also stays up for the whole wait instead of closing after 52 seconds. A timeout set in Settings is unchanged.
 
 - Backend: with many CLI panes open, the resource panel's risk check no longer freezes the backend for seconds at a time. It walked every recorded connection and disk signal once per pane, on the event loop, and that history only grows. It now walks it once, in a worker thread. Results are unchanged.
 
 - Backend: a change in one workspace no longer throws away the cached Git branch and status of every other workspace's panes. While agents kept editing, every refresh re-ran Git for all of them. Looking up the last fetch time also no longer holds up the backend while it lists a repository's worktrees.
 
 - Codex panes: a sub-agent finishing no longer ends its parent pane's turn. Its reply is not taken as the pane's, and its task is not used to name the pane. Before, a waiting `cli_wait_idle` or `cli_send_and_wait` returned while the parent was still working. A sub-agent's tokens still count toward the pane, now under the sub-agent's own session instead of its parent's. The per-account turn count is unchanged and still includes sub-agent turns.
+
+- Settings: a long sidebar label wraps onto a second line instead of being cut off (Spanish "Complementos de Navide", Japanese "Navide マーケットプレイス").
 
 - Backend: fewer Git processes while agents work. The network view's pane branches are answered from the last reading and refreshed in the background, no more than once per 30 seconds per repository. The Git pane's history, branch, stash, remote, tag and worktree reads are shared when several Git panes reload together after one change. Each status read now runs two Git commands instead of three.
 

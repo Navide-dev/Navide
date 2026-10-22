@@ -225,3 +225,47 @@ async def test_get_status_still_says_not_a_repository(tmp_path: Path, monkeypatc
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     status = await git_service.get_status(str(plain))
     assert status["is_git_repo"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_list_or_dict_in_the_key_is_shared_not_a_type_error() -> None:
+    """A ws payload can carry a list where git.log expects a string."""
+    calls: list[int] = []
+    read = _counting_read(calls)
+    results = await asyncio.gather(
+        git_service.coalesced(("log", "/w", ["a", "b"], {"x": 1}), read),
+        git_service.coalesced(("log", "/w", ["a", "b"], {"x": 1}), read),
+    )
+    assert results == [[{"run": 1}], [{"run": 2}]]
+    assert len(calls) == 2  # one run plus the queued one, as for any burst
+
+
+@pytest.mark.asyncio
+async def test_a_failure_nobody_awaits_is_not_logged_as_unretrieved() -> None:
+    """Every caller gave up (cancelled through the shield) before the run
+    failed: asyncio must not report "Task exception was never retrieved"."""
+    import gc
+
+    loop = asyncio.get_running_loop()
+    reported: list[str] = []
+    previous = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: reported.append(str(context.get("message"))))
+    try:
+        started = asyncio.Event()
+
+        async def boom() -> None:
+            started.set()
+            await asyncio.sleep(0.02)
+            raise RuntimeError("git failed")
+
+        caller = asyncio.ensure_future(git_service.coalesced(("tags", "/gone"), boom))
+        await started.wait()
+        caller.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await caller
+        await asyncio.sleep(0.05)
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(previous)
+    assert not [m for m in reported if "never retrieved" in m]

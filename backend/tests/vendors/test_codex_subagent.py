@@ -147,3 +147,35 @@ def test_a_parent_rollout_still_takes_its_own_id(pair: tuple[Path, Path]) -> Non
     parent, _child = pair
     result = CodexLogReader().parse_incremental(parent, {})
     assert {u.session_id for u in result.events} == {PARENT_ID}
+
+
+def test_a_header_that_lands_after_the_header_read_still_marks_a_sub_agent(
+    pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The header read can run just before the header lands; the batch that
+    then holds the header and the first turn is still the sub-agent's, not the
+    parent pane's (review of #583). Simulated by a header read that answers
+    "not a sub-agent" while the file already has its header."""
+    _parent, child = pair
+    reader = CodexLogReader()
+    monkeypatch.setattr(reader, "_is_subagent_rollout", lambda path: False)
+
+    events = reader.parse_activity(child, set())
+
+    assert {e.event_type for e in events} == {"subagent_turn_end"}
+    assert not [e for e in events if e.detail == "user_message"]
+
+
+def test_a_later_batch_of_a_parent_rollout_is_not_turned_into_a_sub_agent(pair: tuple[Path, Path]) -> None:
+    """Only the file's first session_meta decides; a batch that starts below
+    the mark never re-reads a replayed meta as the header."""
+    parent, _child = pair
+    reader = CodexLogReader()
+    seen: set[str] = set()
+    first = reader.parse_activity(parent, seen)
+    assert [e.event_type for e in first if e.event_type == "turn_complete"] == ["turn_complete"]
+    with parent.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(_child_meta()) + "\n")
+        fh.write(json.dumps(_ev("2026-09-05T01:20:00Z", "task_complete", turn_id="p2", last_agent_message="Next")) + "\n")
+    later = reader.parse_activity(parent, seen)
+    assert [(e.event_type, e.text) for e in later if e.event_type != "agent_active"] == [("turn_complete", "Next")]
