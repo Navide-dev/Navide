@@ -8,6 +8,7 @@ on first launch so users can customise without touching source code.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -99,8 +100,15 @@ def _exit_code(process: Any) -> int | None:
 
 def stderr_log_path(name: str) -> Path:
     """logs/mcp-<name>.log, with the name reduced to a safe file name: no path
-    separator, no leading dot (so never `..`), bounded length."""
+    separator, no leading dot (so never `..`), bounded length.
+
+    A name that had to change, or that has capitals, gets a short hash of the
+    name as typed, so two servers never share a file: `a/b` and `a_b`, two
+    non-ASCII names of one length, `Foo` and `foo` on a case-insensitive disk.
+    """
     safe = re.sub(r"[^A-Za-z0-9_.-]", "_", name).lstrip(".")[:80] or "server"
+    if safe != name or name != name.lower():
+        safe = f"{safe}-{hashlib.sha256(name.encode('utf-8')).hexdigest()[:8]}"
     return applog.log_dir() / f"mcp-{safe}.log"
 
 
@@ -129,6 +137,30 @@ def load_mcp_config(path: Path | None = None) -> list[MCPServerConfig]:
         log.warning("MCP config not loaded: %s", err)
         return []
     return [MCPServerConfig(**item) for item in raw]
+
+
+def _reason(err: BaseException) -> str:
+    """Why a start failed, for the status: an exception group (the sse client
+    raises one) is reported by its first underlying error."""
+    while isinstance(err, BaseExceptionGroup) and err.exceptions:
+        err = err.exceptions[0]
+    return str(err) or type(err).__name__
+
+
+def _forget_removed_logs(previous: set[str], config_path: Path | None) -> None:
+    """Delete the stderr log of a server that was running and is no longer in
+    the config at all (removed, not switched off)."""
+    if not previous:
+        return
+    try:
+        configured = {str(item.get("name")) for item in MCPSettingsStore(config_path).list_servers()}
+    except (ValueError, OSError):
+        return  # unreadable config: keep the files rather than guess
+    for name in previous - configured:
+        try:
+            stderr_log_path(name).unlink(missing_ok=True)
+        except OSError as err:
+            log.warning("MCP '%s' log not removed: %s", name, err)
 
 
 # ── Single server client ───────────────────────────────────────────────────────
@@ -176,10 +208,13 @@ class MCPClient:
         return "\n".join(text.strip().splitlines()[-_STDERR_TAIL_LINES:])
 
     def _open_errlog(self) -> TextIO:
-        # Truncated on every start: the file holds the latest run only.
+        # Truncated on every start: the file holds the latest run only. Owner
+        # only (0600): a server may print what it was given, such as a token.
         try:
             path = stderr_log_path(self.name)
-            self._errlog = open(path, "w", encoding="utf-8", errors="replace")  # noqa: SIM115
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            os.chmod(path, 0o600)  # a file an earlier version left 0644
+            self._errlog = open(fd, "w", encoding="utf-8", errors="replace")  # noqa: SIM115
             self._stderr_path = path
             return self._errlog
         except OSError as err:
@@ -295,7 +330,7 @@ class MCPClient:
             log.warning("MCP '%s' failed to start: %s", self.name, err)
             self.ready = False
             self.status = "error"
-            self.error = str(err) or type(err).__name__
+            self.error = _reason(err)
             await self.stop()  # ensure spawned subprocess is cleaned up
 
     async def stop(self) -> None:
@@ -311,6 +346,11 @@ class MCPClient:
         cmd.exe can be outside that Job — once cmd.exe is gone nothing walks
         down to it, since Windows never reparents.
         """
+        if self._session_cm is None and self._transport_cm is None and self._errlog is None:
+            # Already stopped (a start that stopped itself on failure or on
+            # cancel, then shutdown): once per server, not a second "stopped".
+            self.ready = False
+            return
         cancelled: asyncio.CancelledError | None = None
         leftovers: list[tuple[int, str]] = []
         if self._transport_cm is not None:
@@ -482,15 +522,26 @@ class MCPManager:
             self._starting = asyncio.current_task()
             try:
                 self._config_path = config_path
+                previous = set(self._clients)
                 await self._shutdown_unlocked()
                 configs = load_mcp_config(config_path)
+                _forget_removed_logs(previous, config_path)
                 # Registered before they start, so the status shows them as
                 # starting; started together, so one slow server (a first npx
-                # download) does not hold up the others. A cancel (shutdown)
-                # reaches every start through gather; each stops itself.
+                # download) does not hold up the others.
                 for cfg in configs:
                     self._clients[cfg.name] = MCPClient(cfg)
-                await asyncio.gather(*(client.start() for client in list(self._clients.values())))
+                starts = [asyncio.ensure_future(client.start()) for client in self._clients.values()]
+                try:
+                    await asyncio.gather(*starts)
+                except asyncio.CancelledError:
+                    # gather gives up at the first start that ends cancelled, and
+                    # each start stops its own server on the way out: wait for
+                    # every one of those stops, so the lock (and with it
+                    # shutdown) is not handed on while a server, and the
+                    # processes it left (#566), is still being stopped.
+                    await asyncio.wait(starts)
+                    raise
                 log.info("MCPManager: %d server(s) initialised", len(self._clients))
             finally:
                 self._starting = None

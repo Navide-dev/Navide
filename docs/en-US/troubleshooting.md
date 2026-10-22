@@ -129,7 +129,7 @@ A local (stdio) MCP server started through `npx` or `uvx` downloads its package 
 
 A failed server shows **Failed to start:** with the reason. It is tried again the next time the MCP configuration is reloaded, for example when you save a change in Settings → MCP.
 
-What a stdio server prints on stderr (npm's download messages, a crash) goes to `logs/mcp-<name>.log` in Navide's data folder: only the latest start is kept, and the file stays on this computer. Settings → MCP shows its last lines as **Last lines the server printed**. That text is the server's own output and may contain whatever the server chose to print. Navide itself writes nothing of the server's configuration there, and no `env` or `headers` values.
+What a stdio server prints on stderr (npm's download messages, a crash) goes to `logs/mcp-<name>.log` in Navide's data folder. The file stays on this computer, readable by your user account only (0600). Only the latest start is kept: each start empties it, and within one run it grows as long as the server keeps printing, with no size cap. A name with characters other than letters, digits, `_`, `.` and `-`, or with capitals, becomes a safe file name plus a short hash of the name, so two servers never share a file. Removing a server from Settings → MCP deletes its file; switching it off keeps it. Settings → MCP shows its last lines as **Last lines the server printed**. That text is the server's own output and may contain whatever the server chose to print. Navide itself writes nothing of the server's configuration there, and no `env` or `headers` values. A start error an agent reads through the `mcp_list` tool has any URL in it masked, like the configured URL.
 
 ## Git authentication prompts do not complete
 

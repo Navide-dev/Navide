@@ -8037,7 +8037,7 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
     as `***` in both halves; names and hosts are kept so an entry stays
     recognisable. This is a global inventory: it does not vary by workspace.
     """
-    from agent_team_backend import app as _app
+    from agent_team_backend import app as _app, native_mcp
     from agent_team_backend.mcp_settings import MCPSettingsError
 
     _resolve_caller(ctx)
@@ -8057,6 +8057,9 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
         # The tool list itself stays out: this is a summary, and a server with
         # dozens of tools would swamp the answer.
         detail = {key: info[key] for key in ("starting_seconds", "error") if key in info}
+        if "error" in detail:
+            # Masked like the URL above: a library may quote the URL it failed on.
+            detail["error"] = native_mcp.mask_urls_in_text(str(detail["error"]))
         servers.append({**row, "status": status, "tool_count": info.get("tool_count", 0), **detail})
     reflected = await asyncio.to_thread(_native_mcp_inventory)
     return {"servers": servers, **reflected}
