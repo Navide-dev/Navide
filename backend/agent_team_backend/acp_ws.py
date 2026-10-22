@@ -82,25 +82,34 @@ def drop_owner(window: "Session") -> None:
 
 async def sweep_ownerless(now: float | None = None) -> list[str]:
     """End the sessions ownerless for longer than an ownerless PTY may live.
-    Run by app's ownerless janitor; returns the ended session ids."""
+    Run by app's ownerless janitor, after (not inside) its PTY sweep; never
+    raises. Returns the ended session ids."""
     from . import app
 
     if _SERVICE is None:
         return []
     now = time.monotonic() if now is None else now
     ended: list[str] = []
+    try:
+        await _sweep(app._OWNERLESS_GRACE_SEC, now, ended)
+    except Exception as err:  # noqa: BLE001 — the janitor must survive
+        log.warning("ACP ownerless sweep failed: %s", err)
+    return ended
+
+
+async def _sweep(grace: float, now: float, ended: list[str]) -> None:
+    assert _SERVICE is not None
     for item in _SERVICE.list():
         if _owner(item.id) is not None:
             _OWNERLESS_SINCE.pop(item.id, None)
             continue
         since = _OWNERLESS_SINCE.setdefault(item.id, now)
-        if now - since < app._OWNERLESS_GRACE_SEC:
+        if now - since < grace:
             continue
         log.info("ACP %s: no window for %.0fs; ending its agent", item.id, now - since)
         await _SERVICE.kill(item.id)
         _OWNERLESS_SINCE.pop(item.id, None)
         ended.append(item.id)
-    return ended
 
 
 async def _emit(event: dict[str, Any]) -> None:

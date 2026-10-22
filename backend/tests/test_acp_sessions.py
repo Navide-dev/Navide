@@ -460,3 +460,44 @@ async def test_on_its_own_exit_the_recorded_descendants_are_ended(service, tmp_p
 
     assert {4242: "id-4242"} in ended
 
+
+
+async def test_the_ownerless_sweep_never_raises_into_the_janitor(launchable, monkeypatch) -> None:
+    service = acp_ws.get_service()
+
+    def broken() -> list[Any]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(service, "list", broken)
+    assert await acp_ws.sweep_ownerless() == []
+
+
+async def test_kill_ends_the_descendants_recorded_earlier_too(service, tmp_path, monkeypatch) -> None:
+    from agent_team_backend import terminals
+
+    ended: list[dict[int, str]] = []
+    monkeypatch.setattr(terminals, "_descendant_pids", lambda pid: {})
+    monkeypatch.setattr(terminals, "_kill_breakaway", lambda pids: ended.append(dict(pids)))
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+    session.descendants[4242] = "id-4242"  # seen while it ran, gone from the last snapshot
+
+    await service.kill(session.id)
+
+    assert {4242: "id-4242"} in ended
+
+
+async def test_a_failing_registry_cleanup_still_reports_the_exit(launchable, monkeypatch, tmp_path) -> None:
+    def broken(pid: int) -> None:
+        raise OSError("registry unwritable")
+
+    monkeypatch.setattr(pty_registry, "unregister", broken)
+    window = Window("win-a")
+    try:
+        sid = await _create(window, tmp_path)
+        await acp_ws.acp_kill(window, "k", "acp.kill", {"session_id": sid})
+
+        assert window.events("acp.state")[-1]["state"] == "exited"
+        assert acp_ws.get_service().get(sid) is None
+        assert sid not in acp_ws._OWNERS and sid not in acp_ws._CREATORS
+    finally:
+        await acp_ws.shutdown()

@@ -19,7 +19,7 @@
   "file": "backend/agent_team_backend/app.py",
   "function": "_ownerless_pty_janitor",
   "hooks": [
-   "            await acp_ws.sweep_ownerless()"
+   "        await acp_ws.sweep_ownerless()  # its own errors handled inside"
   ],
   "main": "async def _ownerless_pty_janitor() -> None:\n    while True:\n        await asyncio.sleep(_OWNERLESS_SWEEP_INTERVAL_SEC)\n        try:\n            await _sweep_ownerless_ptys_once()\n        except Exception as err:  # noqa: BLE001 — the janitor must survive\n            log.warning(\"ownerless-pty sweep failed: %s\", err)"
  }
