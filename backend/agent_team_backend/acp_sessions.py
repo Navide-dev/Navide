@@ -401,7 +401,9 @@ class AcpSessionService:
             stop_reason = await session.client.prompt(session.acp_session_id, text)
         except (AcpClosed, AcpError, AcpProtocolError) as err:
             error = str(err)
-        if session.state == "exited":
+        if session.state == "exited" or session.proc.returncode is not None:
+            # The agent is gone (its own exit is _watch_exit's to report): no
+            # turn end and no "idle" in between, which a pane would flash.
             return
         await self._note_descendants(session)
         await self._emit_event(session, "acp.turn_end", {"stopReason": stop_reason, "error": error})
