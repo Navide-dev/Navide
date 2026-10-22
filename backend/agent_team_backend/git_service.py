@@ -346,7 +346,7 @@ async def coalesced(key: tuple[Any, ...], read: Callable[[], Awaitable[Any]]) ->
     for one queued run that starts after it, so it never gets a result from
     before the change that prompted it. Each caller gets its own copy.
     """
-    full = (asyncio.get_running_loop(), *key)
+    full = (asyncio.get_running_loop(), *(_key_part(part) for part in key))
     task = _coalesce_queued.get(full)
     if task is None:
         running = _coalesce_running.get(full)
@@ -360,10 +360,26 @@ async def coalesced(key: tuple[Any, ...], read: Callable[[], Awaitable[Any]]) ->
     return copy.deepcopy(await asyncio.shield(task))
 
 
+def _key_part(part: Any) -> Any:
+    """A hashable stand-in for a key part: a ws payload may carry a list or a
+    dict where a string is expected (git.log's query/order), which the read
+    itself takes as is."""
+    try:
+        hash(part)
+    except TypeError:
+        return json.dumps(part, sort_keys=True, default=str)
+    return part
+
+
 def _forget_coalesced(key: tuple[Any, ...], done: asyncio.Future[Any]) -> None:
     for table in (_coalesce_running, _coalesce_queued):
         if table.get(key) is done:
             del table[key]
+    # Every caller may have been cancelled (they await through a shield) before
+    # the run failed; retrieve the error so asyncio does not log it as
+    # "Task exception was never retrieved". Callers still awaiting get it raised.
+    if not done.cancelled():
+        done.exception()
 
 
 async def _coalesced_after(
@@ -642,6 +658,17 @@ class PaneGitSnapshots:
     An entry is recomputed when it is older than ``ttl_s`` or when the git
     watcher reports a change under it (``invalidate``), and concurrent reads of
     one cold root share a single computation.
+
+    Staleness follows the changed path (#580), which gave up two safety nets
+    the old process-wide counter had, both bounded by ``ttl_s``:
+
+    - A fetch or commit in a repository's main checkout is reported under that
+      checkout's path, so a linked worktree's computation running at the same
+      time is not marked stale, although its behind/ahead and fetchedAt read
+      the shared refs. It can be up to ``ttl_s`` old.
+    - Paths are compared case-sensitively on macOS (``os.path.normcase`` is a
+      no-op there), so a change reported as /Users/me/Repo does not reach an
+      entry computed for /Users/me/repo on a case-insensitive volume.
     """
 
     def __init__(
@@ -724,7 +751,9 @@ class PaneGitSnapshots:
         self._root_of[path] = root
         computed_at = float("-inf") if self._changed_since(generation, path, root) else self._clock()
         self._entries[root or path] = (snapshot, computed_at)
-        self._last[root or path] = (snapshot, self._clock())
+        # Same clock for peek: a change that landed during the computation makes
+        # the next poll refresh at once instead of serving this for a full TTL.
+        self._last[root or path] = (snapshot, computed_at)
         return snapshot
 
     def _changed_since(self, generation: int, path: str, root: str) -> bool:
