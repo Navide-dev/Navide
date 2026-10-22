@@ -174,7 +174,8 @@ import { resolveBackendDataDir, readUiSettingsText, UI_SETTINGS_FILE } from './u
 import { PlanWindowRegistry } from './plan-windows'
 import { createTokenMonitorWindowOpener } from './token-monitor-window'
 import { errorMain, infoMain, logMain, warnMain } from './main-log'
-import { watchRendererCrashes } from './renderer-crash-reload'
+import { isRendererCrashWatched, watchRendererCrashes } from './renderer-crash-reload'
+import { watchConsoleMessages, watchProcessGone } from './renderer-diagnostics'
 import { recordMainFault, setMainLedgerDataDir } from './error-ledger'
 import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
@@ -5879,6 +5880,9 @@ app.on('web-contents-created', (_e, contents) => {
   // Electron has no default right-click menu; without this one, right-click is
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
+  // Every window's console warnings and errors reach main.log (a black window
+  // on Windows left no trace before); web pages' own consoles are skipped.
+  watchConsoleMessages(contents, { log: logMain, appOrigin: DEV_ORIGIN })
   contents.on('will-navigate', (e, url) => {
     // A plugin web view enforces its own http(s) allowlist (pluginWebViews.ts).
     if (isPluginWebGuest(contents)) return
@@ -5890,6 +5894,9 @@ app.on('web-contents-created', (_e, contents) => {
     return { action: 'deny' }
   })
 })
+// A renderer of a window without its own crash watch, and a GPU or utility
+// process, going away was logged nowhere.
+watchProcessGone(app, { log: warnMain, alreadyWatched: isRendererCrashWatched })
 registerTerminalContextMenu()
 
 app.whenReady().then(async () => {

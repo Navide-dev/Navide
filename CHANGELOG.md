@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- Diagnostics: `main.log` now records every window's console warnings and errors (one line each, at most 1000 bytes, at most 20 per window every 10 seconds, with a line counting the rest), any renderer that goes away in a window that did not log it already, and a GPU or other child process that dies. Console info, log and debug lines are not recorded, and neither is the console of a web page opened in Navide.
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added

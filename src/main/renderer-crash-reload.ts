@@ -36,12 +36,20 @@ export const RENDERER_RELOAD_WINDOW_MS = 60_000
  * Bounded: a renderer that keeps crashing is reloaded at most `maxReloads`
  * times per `windowMs`, then left as it is so a crash loop cannot spin.
  */
+const crashWatched = new WeakSet<object>()
+
+/** Whether watchRendererCrashes already logs this WebContents' renderer going away. */
+export function isRendererCrashWatched(contents: object): boolean {
+  return crashWatched.has(contents)
+}
+
 export function watchRendererCrashes(win: CrashWatchedWindow, opts: RendererCrashWatchOptions): void {
   const now = opts.now ?? Date.now
   const maxReloads = opts.maxReloads ?? RENDERER_RELOAD_MAX
   const windowMs = opts.windowMs ?? RENDERER_RELOAD_WINDOW_MS
   const reloadTimes: number[] = []
   const contents = win.webContents
+  crashWatched.add(contents)
 
   contents.on('render-process-gone', (_event, details) => {
     const what = `[main] renderer gone kind=${opts.kind} reason=${details.reason} exitCode=${details.exitCode}`
