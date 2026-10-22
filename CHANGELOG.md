@@ -6,7 +6,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
-- Interface language: French (Français), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses vous, « » quotes and the no-break spaces French typography requires. Agent, AI, pane, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker.
+- Interface language: French (Français), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses vous, « » quotes and the no-break spaces French typography requires, and says IA for AI. Agent, pane, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker.
 - Interface language: Spanish (Español, España), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses tú and impersonal error messages. Agent, AI, pane, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker.
 - Interface language: German (Deutsch), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses the formal Sie. Agent, AI, pane, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker. Pick it in Settings → Appearance, or at the first start.
 
