@@ -14,6 +14,33 @@ import pytest
 from agent_team_backend import agent_messaging, app
 from agent_team_backend.mcp_server import server as plan_mcp, auth as plan_mcp_auth, wiring as plan_mcp_wiring
 
+class _SteppedWall:
+    """The ``time`` module as app sees it, except that time.time() moves a full
+    second per call: every wall stamp is strictly later than the one before,
+    by far more than a clock tick (time.time() moves in ~15.6 ms ticks on
+    Windows, where two stamps taken back to back are often equal)."""
+
+    def __init__(self) -> None:
+        self._t = time.time()
+
+    def time(self) -> float:
+        self._t += 1.0
+        return self._t
+
+    def __getattr__(self, name: str):
+        return getattr(time, name)
+
+
+@pytest.fixture
+def stepped_wall(monkeypatch: pytest.MonkeyPatch) -> _SteppedWall:
+    clock = _SteppedWall()
+    monkeypatch.setattr(app, "time", clock)
+    # Fresh per-pane stamps: ones a previous test took on another clock would
+    # not compare with this one's.
+    for table in ("_pane_tracked_since", "_last_hook_turn_end", "_last_log_turn_start"):
+        monkeypatch.setattr(app, table, {})
+    return clock
+
 
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch: pytest.MonkeyPatch) -> Any:
@@ -1258,3 +1285,227 @@ async def test_send_and_wait_sees_a_reply_recorded_in_the_same_clock_tick(
     assert result["idle"] is True
     assert result["source"] == "turn_complete"
     assert result["last_activity"]["text"] == "fresh"
+
+
+# ── A Stop hook's turn end ahead of the conversation log (Claude under load) ──
+
+
+@pytest.fixture(autouse=True)
+def _clean_turn_tracking() -> Any:
+    for table in (app._last_hook_turn_end, app._last_log_turn_start, app._turn_end_first, app._pane_tracked_since):
+        table.clear()
+    yield
+    for table in (app._last_hook_turn_end, app._last_log_turn_start, app._turn_end_first, app._pane_tracked_since):
+        table.clear()
+
+
+def _seed_watch() -> None:
+    agent_messaging.register("pw", "worker", "/ws/alpha", agent_key="claude")
+    agent_messaging.register("other", "caller", "/ws/somewhere-else")
+    agent_messaging.set_busy("pw", False)
+
+
+def _hook_end(pane: str = "pw") -> None:
+    """What the Stop hook endpoint records for a turn end."""
+    text, hook_turn = app._hook_turn_end(pane)
+    app._record_pane_activity(pane, "turn_complete", text, source="hook", hook_turn=hook_turn)
+
+
+def _log_prompt(pane: str = "pw", wall: float | None = None) -> None:
+    """A typed prompt the log read; ``wall`` is its transcript stamp (default: now)."""
+    app._record_pane_activity(
+        pane, "agent_active", "a prompt", source="log", turn_start=True,
+        event_wall=app.time.time() if wall is None else wall,
+    )
+
+
+def _log_end(text: str, pane: str = "pw", wall: float | None = None) -> None:
+    app._record_pane_activity(
+        pane, "turn_complete", text, source="log", event_wall=app.time.time() if wall is None else wall,
+    )
+
+
+@pytest.mark.asyncio
+async def test_wait_idle_after_a_hook_turn_end_waits_for_the_logs_text(stepped_wall, 
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
+    _seed_watch()
+    _hook_end()  # the hook first: the log has not read this turn yet
+
+    async def log_catches_up() -> None:
+        await asyncio.sleep(0.1)
+        _log_prompt()
+        _log_end("")  # thinking only
+        await asyncio.sleep(0.05)
+        _log_end("the reply")
+
+    task = asyncio.create_task(log_catches_up())
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"))
+    await task
+
+    assert result["source"] == "turn_complete"
+    assert result["last_activity"]["text"] == "the reply"
+    assert "text_pending" not in result
+
+
+@pytest.mark.asyncio
+async def test_wait_idle_says_the_text_is_pending_when_the_log_is_late(stepped_wall, 
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
+    monkeypatch.setattr(plan_mcp, "HOOK_TURN_TEXT_WAIT_S", 0.1)
+    _seed_watch()
+    _hook_end()
+
+    began = time.monotonic()
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"))
+
+    assert result["idle"] is True and result["source"] == "turn_complete"
+    assert result["text_pending"] is True
+    assert "text" not in result["last_activity"]
+    assert time.monotonic() - began < 5.0
+
+
+@pytest.mark.asyncio
+async def test_the_text_wait_stays_inside_the_callers_timeout(stepped_wall, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
+    _seed_watch()
+    _hook_end()
+
+    began = time.monotonic()
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"), timeout_s=0.2)
+
+    assert result["text_pending"] is True
+    assert time.monotonic() - began < 2.0  # not HOOK_TURN_TEXT_WAIT_S
+
+
+@pytest.mark.asyncio
+async def test_a_log_turn_end_and_a_hook_end_with_text_return_at_once(stepped_wall) -> None:
+    # The log's own turn end, and a hook end that already carries this turn's
+    # text (the log was first), need no wait and no flag.
+    _seed_watch()
+    _log_prompt()
+    _log_end("from the log")
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"))
+    assert result["waited_s"] < 1.0 and "text_pending" not in result
+
+    _hook_end()
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"))
+    assert result["waited_s"] < 1.0 and "text_pending" not in result
+    assert result["last_activity"]["text"] == "from the log"
+
+
+@pytest.mark.asyncio
+async def test_a_turn_the_log_already_ended_without_text_returns_at_once(stepped_wall) -> None:
+    """Review of #581, M4: the reader first, with a turn that wrote no text.
+    Nothing more is coming, so no 10 s wait and no text_pending."""
+    _seed_watch()
+    _log_prompt()
+    _log_end("")
+    _hook_end()
+
+    began = time.monotonic()
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"), timeout_s=3.0)
+
+    assert time.monotonic() - began < 1.0
+    assert result["source"] == "turn_complete"
+    assert "text_pending" not in result and "text" not in result["last_activity"]
+
+
+@pytest.mark.asyncio
+async def test_an_earlier_turns_text_from_a_lagging_reader_is_never_this_turns(stepped_wall, 
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review of #581, M3: the reader lags by a whole turn. Its record of the
+    previous turn's end arrives during the wait for this turn, but its
+    transcript stamp says it was written before the previous hook fired."""
+    monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
+    monkeypatch.setattr(plan_mcp, "HOOK_TURN_TEXT_WAIT_S", 0.5)
+    _seed_watch()
+    earlier = app.time.time() - 10
+    _log_prompt(wall=earlier)            # turn N-1's prompt, read in time
+    _hook_end()                          # turn N-1 ends; the reader is behind
+    await asyncio.sleep(0.01)
+    _hook_end()                          # turn N ends too
+
+    async def lagging_reader() -> None:
+        await asyncio.sleep(0.1)
+        _log_end("turn N-1's reply", wall=earlier + 1)
+
+    task = asyncio.create_task(lagging_reader())
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"))
+    await task
+
+    assert "text" not in result["last_activity"]
+    assert result["text_pending"] is True
+
+
+@pytest.mark.asyncio
+async def test_send_and_wait_returns_the_logs_text_after_a_hook_turn_end(stepped_wall, 
+    monkeypatch: pytest.MonkeyPatch, broadcasts: list[dict[str, Any]]
+) -> None:
+    monkeypatch.setattr(plan_mcp, "_WAIT_IDLE_POLL_S", 0.005)
+    monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
+    _seed_pair()
+    _log_prompt(wall=app.time.time() - 10)
+    _log_end("stale", wall=app.time.time() - 9)
+    _hook_end()
+
+    async def worker_replies() -> None:
+        await asyncio.sleep(0.02)
+        _hook_end()
+        await asyncio.sleep(0.1)
+        _log_prompt()
+        _log_end("fresh from the log")
+
+    delivery = _deliver_when_sent(broadcasts)
+    task = asyncio.create_task(worker_replies())
+    result = await plan_mcp.cli_send_and_wait("worker", "go", _ctx(), timeout_s=_REPLY_BUDGET_S)
+    await task
+    await delivery
+
+    assert result["ok"] is True and result["source"] == "turn_complete"
+    assert result["last_activity"]["text"] == "fresh from the log"
+    assert "text_pending" not in result
+
+
+@pytest.mark.asyncio
+async def test_a_turn_with_no_typed_prompt_still_gets_its_text(stepped_wall, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review of #581, L1: a turn woken by a <task-notification> (or a slash
+    command, a hook-delivered message) has no typed prompt line. Its end,
+    stamped after the previous hook turn end, is still this turn's."""
+    monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
+    _seed_watch()
+    _log_prompt(wall=app.time.time() - 10)
+    _log_end("turn one", wall=app.time.time() - 9)
+    _hook_end()                       # turn one ends
+    written = app.time.time()             # the woken turn's end is written…
+    await asyncio.sleep(0.01)
+    _hook_end()                       # …then its Stop hook fires
+
+    async def reader_catches_up() -> None:
+        await asyncio.sleep(0.05)
+        _log_end("woken by a task notification", wall=written)
+
+    task = asyncio.create_task(reader_catches_up())
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"))
+    await task
+
+    assert result["last_activity"]["text"] == "woken by a task notification"
+    assert "text_pending" not in result
+
+
+@pytest.mark.asyncio
+async def test_a_log_turn_end_without_a_stamp_never_counts(stepped_wall, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(plan_mcp, "_HOOK_TURN_TEXT_POLL_S", 0.01)
+    monkeypatch.setattr(plan_mcp, "HOOK_TURN_TEXT_WAIT_S", 0.2)
+    _seed_watch()
+    _hook_end()
+    app._record_pane_activity("pw", "turn_complete", "no stamp", source="log", event_wall=None)
+
+    _hook_end()
+    result = await plan_mcp.cli_wait_idle("alpha/worker", _ctx(pane_id="other"))
+
+    assert result["text_pending"] is True and "text" not in result["last_activity"]
+

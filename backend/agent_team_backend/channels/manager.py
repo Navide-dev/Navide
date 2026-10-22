@@ -84,6 +84,11 @@ RUN_TICK_S = 0.5
 # 3912 such splits in local transcripts the text came 1.9 s later at the median, 26.6 s at p99
 # and 110 s at most. A turn end with no text waits this long for its text before saying so.
 EMPTY_TURN_GRACE_S = 120.0
+# A CLI hook (Claude's Stop) reports a turn end before the conversation log is read, and
+# under load well before: its text comes from the log reader's turn end. Past this, the
+# status says the reply is being read; past EMPTY_TURN_GRACE_S the chat is told it will
+# follow, and it does, until RUN_WATCH_MAX_S.
+LATE_TEXT_STATUS_AFTER_S = 10.0
 RUN_WATCH_MAX_S = 1800.0  # stop typing/editing after this; a late turn_complete still replies
 VERDICT_POLL_S = 5.0
 # Right after a restart a platform hands over what queued while Navide was down, before the
@@ -131,6 +136,9 @@ MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷�
 MSG_QUEUE_FULL = "⚠️ 這個 pane 已有太多訊息在排隊，請稍後再傳"
 MSG_CHAT_RATE = "⚠️ 1 分鐘內傳了超過 {max} 則，這則沒有送進 pane，請 {wait} 秒後重送"
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
+MSG_READING_REPLY = "✅ 回合已結束，正在讀取回覆…"
+MSG_REPLY_LATE = "⏳ 回合已結束，但還沒讀到回覆文字；讀到後會補送。"
+MSG_LATE_PREFIX = "（補送）"
 MSG_STILL_RUNNING = "⏳ 仍在執行，完成時會再回覆"
 MSG_USAGE_LIMIT = "⚠️ {agent} 額度已用完，{reset} 重置"
 MSG_USAGE_LIMIT_NO_RESET = "⚠️ {agent} 額度已用完（重置時間未知）"
@@ -343,6 +351,16 @@ class _Pending:
     owner: str = ""  # pane whose messages these are, for reply-to routing
     limit_noticed: bool = False  # the chat was told this run's pane hit a usage limit
     next_limit_probe: float = 0.0
+    late: bool = False  # the chat was told the reply would follow: it goes as a follow-up
+
+
+@dataclass
+class _AwaitText:
+    """A run whose turn end came from a CLI hook, waiting for the conversation log's text."""
+
+    pending: _Pending
+    timer: asyncio.Task[None] | None = None
+    log_ended: bool = False  # the log reported this turn's end, with no text (yet)
 
 
 @dataclass
@@ -406,6 +424,8 @@ class ChannelManager:
         self._pending: dict[str, _Pending] = {}
         # pane_id -> a run whose turn ended with no text, and the timer that answers it empty
         self._textless: dict[str, tuple[_Pending, asyncio.Task[Any]]] = {}
+        # pane_id -> runs a hook's turn end closed, oldest first, waiting for the log's text
+        self._await_text: dict[str, list[_AwaitText]] = {}
         self._queued: dict[str, set[str]] = {}  # pane_id -> msg_keys still queued
         self._queued_loc: dict[str, str] = {}  # msg_key -> the chat location that sent it
         self._chat_sends: dict[tuple[str, str], list[float]] = {}  # (pane_id, sender_id) -> send times
@@ -1290,6 +1310,26 @@ class ChannelManager:
             if bound is not None:
                 self._spawn(self._remember_wake_target(bound, pane_id))
         text = str(entry.get("text") or "")
+        source = str(entry.get("source") or "")
+        if source == "hook" and is_turn_end and (text.strip() or entry.get("log_ended")):
+            # The log ended this turn before its hook came, and that log turn end has
+            # already answered the run. The run armed now is the NEXT message's: a late
+            # hook must not close it.
+            return
+        waiting = self._await_text.get(pane_id)
+        if waiting and source != "hook":
+            # The conversation log settles the oldest run a hook's turn end left waiting:
+            # the log is in turn order, whatever arrived in the chat since.
+            head = waiting[0]
+            if is_turn_end:
+                if text.strip():
+                    self._settle_await(pane_id, text)
+                else:
+                    head.log_ended = True  # thinking only so far; the text may follow
+                return
+            if entry.get("turn_start") and head.log_ended:
+                # The log moved on to the next prompt: that turn wrote no text.
+                self._settle_await(pane_id, "")
         if is_turn_end and text.strip() and pane_id in self._textless \
                 and (pending is None or pending.armed_at is None):
             # The text half of a turn end that came in two lines: the reply after all.
@@ -1297,14 +1337,16 @@ class ChannelManager:
             timer.cancel()
             self._spawn(self._send_reply(held, text))
             return
+        # A hook's turn end is mirrored by nothing: the log's own turn end brings the text.
         if pending is None or pending.armed_at is None or not is_turn_end:
-            if is_turn_end:
+            if is_turn_end and source != "hook":
                 self._mirror_unclaimed_turn(pane_id, str(entry.get("text") or ""))
             return
         if float(entry.get("ts_monotonic") or 0) <= pending.armed_at:
             # The turn that was running when the message went in: not this reply's,
             # but still something the chat should hear about.
-            self._mirror_unclaimed_turn(pane_id, str(entry.get("text") or ""))
+            if source != "hook":
+                self._mirror_unclaimed_turn(pane_id, str(entry.get("text") or ""))
             return
         self._pending.pop(pane_id, None)
         if pending.task:
@@ -1313,6 +1355,12 @@ class ChannelManager:
         self._awaiting_posted.discard(pane_id)
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown.pop(pane_id, None)
+        if source == "hook":
+            # The turn ended; its text is still on its way from the conversation log.
+            held = _AwaitText(pending)
+            self._await_text.setdefault(pane_id, []).append(held)
+            held.timer = self._spawn(self._watch_await(pane_id, held))
+            return
         if not text.strip():
             earlier = self._textless.pop(pane_id, None)
             if earlier is not None:
@@ -1329,6 +1377,57 @@ class ChannelManager:
         if held is not None and held[0] is pending:
             del self._textless[pane_id]
             await self._send_reply(pending, "")
+
+    def _settle_await(self, pane_id: str, text: str) -> None:
+        """Answer the oldest run waiting on the log with ``text`` ("" when it wrote none)."""
+        waiting = self._await_text.get(pane_id)
+        if waiting:
+            self._settle_held(pane_id, waiting[0], text)
+
+    def _settle_held(self, pane_id: str, held: _AwaitText, text: str) -> None:
+        waiting = self._await_text.get(pane_id)
+        if not waiting or held not in waiting:
+            return
+        waiting.remove(held)
+        if not waiting:
+            del self._await_text[pane_id]
+        if held.timer is not None and held.timer is not asyncio.current_task():
+            held.timer.cancel()
+        self._spawn(self._send_reply(held.pending, text))
+
+    async def _watch_await(self, pane_id: str, held: _AwaitText) -> None:
+        """While a hook-ended run waits for its text: say it is being read, then that it
+        will follow; give up quietly once RUN_WATCH_MAX_S has passed."""
+        pending = held.pending
+
+        def still() -> bool:
+            return held in self._await_text.get(pane_id, [])
+
+        await asyncio.sleep(LATE_TEXT_STATUS_AFTER_S)
+        adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
+        if not still():
+            return
+        if adapter is not None and (pending.status_id or pending.status_send is not None):
+            await self._edit_status(adapter, pending, MSG_READING_REPLY, force=True)
+        await asyncio.sleep(max(0.0, EMPTY_TURN_GRACE_S - LATE_TEXT_STATUS_AFTER_S))
+        if not still():
+            return
+        if held.log_ended:
+            # The log ended this turn without text and nothing followed within the
+            # grace (the last message of a conversation, a turn of tools only): it
+            # wrote none — the same answer a log-only turn end gets at the grace.
+            self._settle_held(pane_id, held, "")
+            return
+        pending.late = True
+        adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
+        if adapter is not None and not pending.silent:
+            await self._notice(adapter, pending.loc, MSG_REPLY_LATE)
+        await asyncio.sleep(max(0.0, RUN_WATCH_MAX_S - EMPTY_TURN_GRACE_S))
+        waiting = self._await_text.get(pane_id)
+        if waiting and held in waiting:
+            waiting.remove(held)
+            if not waiting:
+                del self._await_text[pane_id]
 
     def _mirror_unclaimed_turn(self, pane_id: str, text: str) -> None:
         """A turn end no chat message asked for (typed at the keyboard, delegated by
@@ -1410,6 +1509,8 @@ class ChannelManager:
         attached as a file, where the platform takes files."""
         body, full = self._for_chat(pending.loc, body), self._for_chat(pending.loc, full)
         raw = body
+        if pending.late:
+            body = f"{MSG_LATE_PREFIX}{body or MSG_EMPTY_REPLY}"
         body = result_text(pending.source, body or MSG_EMPTY_REPLY, pending.child) if pending.source else body
         chunks = chunk_for(pending.loc.platform, redact.redact_text(body)) or [MSG_EMPTY_REPLY]
         whole = full.strip() if len(full.strip()) > CHILD_SUMMARY_CHARS else ""
@@ -3092,6 +3193,9 @@ class ChannelManager:
         held = self._textless.pop(pane_id, None)
         if held is not None:
             held[1].cancel()
+        for waiting in self._await_text.pop(pane_id, []):
+            if waiting.timer is not None:
+                waiting.timer.cancel()
         self._awaiting_posted.discard(pane_id)
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown.pop(pane_id, None)

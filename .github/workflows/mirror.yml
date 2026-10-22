@@ -12,6 +12,12 @@ name: Mirror release
 # — unless a newer release is already Latest (a rerun of an old tag's run).
 # The CloudFront behavior for releases/latest/* caches for 60 s; the
 # invalidation just makes the switch immediate.
+#
+# Beside the release files, both prefixes get whats-new.json: the in-app
+# announcements up to this release (scripts/export-whats-new.mjs), which the
+# website's /news page reads. Format: docs/en-US/release-announcements.md.
+# It is best effort: its steps run apart from the installer steps and only
+# warn when they fail, because the installers matter more than the notes.
 
 on:
   workflow_call:
@@ -60,7 +66,18 @@ jobs:
       - name: Check out the release scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: scripts
+          # whatsNew.ts and CHANGELOG.md feed whats-new.json.
+          sparse-checkout: |
+            scripts
+            src/renderer/src/lib
+            CHANGELOG.md
+
+      - name: Set up Node.js
+        # For whats-new.json only, so its failure must not stop the mirror.
+        continue-on-error: true
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
 
       - name: Verify mirror credentials
         run: |
@@ -84,6 +101,14 @@ jobs:
           ls -la mirror
           (cd mirror && sha256sum -- * > "../${TAG}.sha256")
           cat "${TAG}.sha256"
+
+      - name: Export the announcements as whats-new.json
+        id: whats_new_export
+        continue-on-error: true
+        run: |
+          # Kept out of mirror/ so the checksum list stays exactly GitHub's
+          # files; entries newer than the tag are left out.
+          node --experimental-strip-types scripts/export-whats-new.mjs --version "${TAG}" --out whats-new.json
 
       - name: Upload to releases/<tag>/
         run: |
@@ -127,6 +152,7 @@ jobs:
           fi
 
       - name: Replace releases/latest/
+        id: replace_latest
         if: env.REFRESH_LATEST == 'true' && steps.latest_guard.outputs.is_latest != 'false'
         run: |
           # latest/ is replaced wholesale: --delete drops the previous
@@ -137,3 +163,60 @@ jobs:
             --exclude '*.yml' --content-type 'application/octet-stream' --no-progress
           aws cloudfront create-invalidation --distribution-id "${MIRROR_DISTRIBUTION}" \
             --paths '/releases/latest/*' --query Invalidation.Id --output text
+
+      # whats-new.json: each upload and each check is its own best-effort step,
+      # so no one failure keeps another from running. latest/ in particular
+      # never waits on the releases/<tag>/ check: the --delete sync above has
+      # just removed latest/'s copy, and skipping the upload would leave /news
+      # with nothing.
+      - name: Publish whats-new.json to releases/<tag>/
+        id: whats_new_publish
+        if: steps.whats_new_export.outcome == 'success'
+        continue-on-error: true
+        run: |
+          aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/${TAG}/whats-new.json" \
+            --content-type 'application/json' --no-progress
+
+      - name: Publish whats-new.json to releases/latest/
+        id: whats_new_latest
+        # Only where latest/ now holds this release.
+        if: steps.whats_new_export.outcome == 'success' && steps.replace_latest.outcome == 'success'
+        continue-on-error: true
+        run: |
+          aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/latest/whats-new.json" \
+            --content-type 'application/json' --no-progress
+          aws cloudfront create-invalidation --distribution-id "${MIRROR_DISTRIBUTION}" \
+            --paths '/releases/latest/whats-new.json' --query Invalidation.Id --output text
+
+      - name: Check the mirrored whats-new.json
+        id: whats_new_check
+        if: steps.whats_new_publish.outcome == 'success' || steps.whats_new_latest.outcome == 'success'
+        continue-on-error: true
+        env:
+          TAG_PUBLISHED: ${{ steps.whats_new_publish.outcome == 'success' }}
+          LATEST_PUBLISHED: ${{ steps.whats_new_latest.outcome == 'success' }}
+        run: |
+          # Each copy is checked on its own and only warns: CloudFront may still
+          # serve an earlier copy for a moment (a re-run after an entry changed).
+          status=0
+          check() {
+            if curl -fsSL --retry 3 -o whats-new.check.json "$1" && cmp -s whats-new.json whats-new.check.json; then
+              echo "$1 matches"
+            else
+              echo "::warning::$1 does not serve the whats-new.json just exported"
+              echo "⚠️ $1 does not serve the whats-new.json just exported" >> "${GITHUB_STEP_SUMMARY}"
+              status=1
+            fi
+          }
+          if [ "${TAG_PUBLISHED}" = true ]; then check "https://dl.navide.dev/releases/${TAG}/whats-new.json"; fi
+          if [ "${LATEST_PUBLISHED}" = true ]; then check "https://dl.navide.dev/releases/latest/whats-new.json"; fi
+          exit "${status}"
+
+      - name: Warn when whats-new.json was not published
+        if: >-
+          steps.whats_new_export.outcome == 'failure' || steps.whats_new_publish.outcome == 'failure'
+          || steps.whats_new_latest.outcome == 'failure'
+        run: |
+          message="whats-new.json was not published everywhere for ${TAG} (export: ${{ steps.whats_new_export.outcome }}, releases/${TAG}: ${{ steps.whats_new_publish.outcome }}, latest: ${{ steps.whats_new_latest.outcome }}); the installers are mirrored. Where it is missing, the website's /news page falls back to GitHub Releases until a manual mirror run publishes it."
+          echo "::warning::${message}"
+          echo "⚠️ ${message}" >> "${GITHUB_STEP_SUMMARY}"
