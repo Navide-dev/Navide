@@ -631,6 +631,8 @@ class CodexLogReader(LogReader):
         # log_readers.base.
         high_water = activity_high_water(seen_keys)
         last_line = high_water
+        # Below the mark, the header was read on an earlier poll.
+        header_seen = high_water > 0
 
         try:
             with fh:
@@ -665,6 +667,15 @@ class CodexLogReader(LogReader):
                         payload = rec.get("payload") or {}
                         if isinstance(payload, dict):
                             cwd = str(payload.get("cwd") or cwd)
+                            # The file's own header is the first session_meta (a
+                            # sub-agent replays its parent's after it). When this
+                            # batch holds it, it decides: the header read above
+                            # can run before the header landed and say "not a
+                            # sub-agent", and this batch then went past the
+                            # high-water mark as the parent's turn.
+                            if not header_seen:
+                                header_seen = True
+                                subagent = subagent or is_subagent_session_meta(payload)
                         continue
 
                     ts = str(rec.get("timestamp") or "")
