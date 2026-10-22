@@ -473,6 +473,8 @@ Vendor，而且只在該 TUI 仍然開著它的時候。掉進 `!` shell 模式�
 回報始終沒有到來 —— 另一個視窗被砍掉、機器睡著了 —— 訊息會在大約 30 分鐘後被判
 為失敗。
 
+**ACP pane 收到的是 prompt，不是打字。** 透過 Agent Client Protocol 執行 agent 的 pane 沒有終端機可以打字。最後一步之前，流程和其他 pane 完全相同：接收端視窗把訊息排進佇列、套用速率限制、`ack` 只記錄不投遞、組好信封，並在 agent 回合進行中暫緩投遞。最後一步改成把信封交給後端（`acp.prompt`），由後端以 `session/prompt` 送給 agent。**「已送達」的意思是後端接受了這個 prompt**：已經送出，或排在該 agent 還在進行的回合之後。不代表 agent 已經讀到或回覆；它的回覆和其他 pane 一樣，以該回合的文字回來。沒有開著的視窗時，送往 ACP pane 的訊息和送往終端機 pane 的一樣留在佇列裡，等有視窗再次接管這個 pane 時才投遞。
+
 ---
 
 ## Stop-hook 投遞（claude）

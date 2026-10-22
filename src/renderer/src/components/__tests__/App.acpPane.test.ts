@@ -10,7 +10,8 @@ import { describe, expect, it } from 'vitest'
 // (navide-devmap-mockups/planb/0229/INVENTORY-acp-pty-assumptions.md):
 //   1. closing a pane must stop its ACP agent (it has no terminal session id),
 //   2. the messaging gate must not hold an ACP pane as 'starting' forever,
-//   3. the renderer must never type a message into an ACP pane.
+//   3. a message to an ACP pane is never typed: the messaging layer's last
+//      step hands it to the backend as a prompt (decided 2026-10-23, option B).
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
 function block(startMarker: string, endMarker: string): string {
@@ -36,9 +37,18 @@ describe('ACP panes in App.vue', () => {
     expect(acp).toBeLessThan(gate.indexOf("return 'not-ready'"))
   })
 
-  it('risk 3: the renderer refuses to type into an ACP pane and offers it no push', () => {
+  it('risk 3: a message to an ACP pane goes to the agent as a prompt, before any typing path', () => {
+    const deliver = block('async function deliverAgentMessage(', '\n}\n')
+    const acp = deliver.indexOf("if (panes.value.find((p) => p.id === paneId)?.display === 'acp') {")
+    expect(acp).toBeGreaterThan(-1)
+    expect(deliver).toContain('const sent = await paneRefs[paneId]?.sendPrompt?.(text)')
+    // No session yet (or no pane) puts the message back at the head of the queue.
+    expect(deliver).toContain('return sent === undefined ? null : sent')
+    expect(acp).toBeLessThan(deliver.indexOf('injectPane('))
+    expect(acp).toBeLessThan(deliver.indexOf('markDeliveredPending'))
+    // It is delivered, not refused, and still offered no push into a TUI composer.
     const deps = block('messaging.configureMessaging({', 'persistAppend:')
-    expect(deps).toContain("if (target?.display === 'acp') return rawReason(ACP_PANE_DELIVERY_REFUSAL)")
+    expect(deps).not.toContain('ACP_PANE_DELIVERY_REFUSAL')
     expect(deps).toMatch(/target\?\.isLogin \|\| target\?\.display === 'acp' \? null : pushTargetForMessaging\(paneId\)/)
   })
 
@@ -53,9 +63,12 @@ describe('ACP panes in App.vue', () => {
     expect(spawn).toContain('!acpDisplay && SESSION_MARKER_AGENTS.has(opts.agentKey)')
     const branch = spawn.indexOf("if (pane.display === 'acp') {")
     expect(branch).toBeGreaterThan(-1)
-    // Taken before the PTY log path and the terminal spawn.
-    expect(branch).toBeLessThan(spawn.indexOf('const outputLogFile ='))
+    // Taken before the terminal spawn, after the output log path it shares
+    // with a PTY pane (the backend appends the transcript there).
     expect(branch).toBeLessThan(spawn.indexOf('command: shellCommandArgv('))
+    expect(branch).toBeGreaterThan(spawn.indexOf('const outputLogFile ='))
+    expect(spawn).toContain("await ref.spawn({ command: [], cwd: opts.workspacePath ?? '', agentKey: opts.agentKey, outputLogFile })")
+    expect(spawn.slice(branch)).toMatch(/historyEntry\.outputLogFile = outputLogFile/)
   })
 
   it('mounts an AcpPane for an ACP pane and a TerminalPane otherwise, both kept alive off screen', () => {

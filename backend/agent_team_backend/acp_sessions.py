@@ -14,6 +14,13 @@ runs its turns and stops it. The protocol itself is ``acp_client``.
 - Stop: close the agent's stdin, give it the vendor's grace (``ShutdownSpec``)
   to exit, then end its whole tree. The agent's own stderr goes to
   ``logs/acp-<session>.log`` (owner only), whose tail is shown when it exits.
+- Transcript: each prompt and the agent's reply text are appended to the
+  pane's output log (the path the window chose, as for a terminal pane's PTY
+  log; ``logs/acp-transcript-<session>.log`` when it chose none), which Agent
+  History and ``cli_read_log`` read.
+- Activity: ``on_activity`` hears each turn start (``agent_active``) and end
+  (``turn_complete`` with the turn's reply text and its stop reason), which is
+  what a terminal pane's log reader reports for it.
 
 Events go to ``emit`` as dicts: ``acp.state``, ``acp.update`` (each
 session/update as the agent sent it), ``acp.permission`` (a request waiting
@@ -39,6 +46,8 @@ from .applog import app_data_dir, in_data_dir, log_dir
 log = logging.getLogger("agent_team_backend.acp_sessions")
 
 EventSink = Callable[[dict[str, Any]], Awaitable[None]]
+# (session, "agent_active" | "turn_complete", reply text, detail)
+ActivitySink = Callable[["AcpSession", str, str, str], Awaitable[None]]
 
 # How long a stopping agent gets after its stdin closes, when its vendor
 # declares no ShutdownSpec; then SIGTERM, then the whole tree is ended.
@@ -86,6 +95,9 @@ class AcpSession:
     stderr_path: Path | None = None
     exit_code: int | None = None
     stopping: bool = False  # kill() owns the exit: no "exited on its own" event
+    transcript_path: Path | None = None
+    # The running turn's reply: its agent_message_chunk texts.
+    turn_text: list[str] = field(default_factory=list)
 
     def stderr_tail(self) -> str:
         if self.stderr_path is None:
@@ -119,8 +131,9 @@ class AcpSession:
 
 
 class AcpSessionService:
-    def __init__(self, emit: EventSink) -> None:
+    def __init__(self, emit: EventSink, on_activity: ActivitySink | None = None) -> None:
         self._emit = emit
+        self._on_activity = on_activity
         self._sessions: dict[str, AcpSession] = {}
         self._watchers: set[asyncio.Task[None]] = set()
         self._data_dir = app_data_dir()
@@ -130,6 +143,29 @@ class AcpSessionService:
 
     def list(self) -> list[AcpSession]:
         return list(self._sessions.values())
+
+    def by_pane(self, pane_id: str) -> AcpSession | None:
+        """The pane's running agent, or None (not an ACP pane, or stopped)."""
+        if not pane_id:
+            return None
+        for session in self._sessions.values():
+            if session.pane_id == pane_id and not session.stopping:
+                return session
+        return None
+
+    def pid_groups(self) -> dict[str, tuple[str, list[int]]]:
+        """``{session id: (pane id, [agent pid, *its descendants])}`` for the
+        resource sweep, shaped like ``TerminalService.memory_pid_groups``.
+        Blocking (it lists processes): call it off the event loop."""
+        from .terminals import _descendant_pids
+
+        groups: dict[str, tuple[str, list[int]]] = {}
+        for session in list(self._sessions.values()):
+            if session.proc.returncode is not None:
+                continue
+            pid = session.proc.pid
+            groups[session.id] = (session.pane_id, [pid, *_descendant_pids(pid)])
+        return groups
 
     # -- start ------------------------------------------------------------
 
@@ -143,6 +179,7 @@ class AcpSessionService:
         env: dict[str, str] | None = None,
         load_session_id: str = "",
         mcp_servers: list[dict[str, Any]] | None = None,
+        output_log_file: str = "",
     ) -> AcpSession:
         """Start the agent, hand shake, open (or load) its session.
 
@@ -187,6 +224,7 @@ class AcpSessionService:
         session = AcpSession(
             id=session_id, pane_id=pane_id, agent_key=agent_key, cwd=cwd, argv=list(argv),
             proc=proc, client=client, job=job, stderr_path=stderr_path,
+            transcript_path=Path(output_log_file) if output_log_file else log_dir() / f"acp-transcript-{session_id}.log",
         )
         holder["s"] = session
         self._sessions[session_id] = session
@@ -255,6 +293,9 @@ class AcpSessionService:
 
     async def _run_turn(self, session: AcpSession, text: str) -> None:
         await self._set_state(session, "running")
+        session.turn_text = []
+        _append_transcript(session, "".join(f"> {line}\n" for line in text.splitlines() or [""]) + "\n")
+        await self._activity(session, "agent_active", "", "acp:prompt")
         stop_reason, error = "", ""
         try:
             stop_reason = await session.client.prompt(session.acp_session_id, text)
@@ -262,6 +303,11 @@ class AcpSessionService:
             error = str(err)
         if session.state == "exited":
             return
+        _append_transcript(session, "\n\n")
+        await self._activity(
+            session, "turn_complete", "".join(session.turn_text),
+            stop_reason or (f"error: {error}" if error else ""),
+        )
         await self._emit_event(session, "acp.turn_end", {"stopReason": stop_reason, "error": error})
         if session.queue and session.client.closed is False:
             self._start_turn(session, session.queue.pop(0))
@@ -271,7 +317,17 @@ class AcpSessionService:
     # -- agent -> Navide --------------------------------------------------
 
     async def _on_update(self, session: AcpSession, params: dict[str, Any]) -> None:
-        await self._emit_event(session, "acp.update", {"update": params.get("update")})
+        update = params.get("update")
+        if isinstance(update, dict):
+            kind = update.get("sessionUpdate")
+            content = update.get("content")
+            if kind == "agent_message_chunk" and isinstance(content, dict) and content.get("type") == "text":
+                chunk = str(content.get("text") or "")
+                session.turn_text.append(chunk)
+                _append_transcript(session, chunk)
+            elif kind == "tool_call" and update.get("title"):
+                _append_transcript(session, f"\n[tool] {update.get('title')}\n")
+        await self._emit_event(session, "acp.update", {"update": update})
 
     async def _on_permission(self, session: AcpSession, params: dict[str, Any]) -> str | None:
         request = _Permission(uuid.uuid4().hex, params, asyncio.get_running_loop().create_future())
@@ -354,6 +410,14 @@ class AcpSessionService:
 
     # -- events -----------------------------------------------------------
 
+    async def _activity(self, session: AcpSession, kind: str, text: str, detail: str) -> None:
+        if self._on_activity is None:
+            return
+        try:
+            await self._on_activity(session, kind, text, detail)
+        except Exception as err:  # noqa: BLE001
+            log.warning("ACP %s: %s activity not recorded: %s", session.id, kind, err)
+
     async def _set_state(self, session: AcpSession, state: str) -> None:
         if session.state == "exited":
             return
@@ -373,6 +437,23 @@ class AcpSessionService:
         if session is None:
             raise KeyError(f"no ACP session {session_id}")
         return session
+
+
+def _append_transcript(session: AcpSession, text: str) -> None:
+    """Append to the pane's output log (created owner-only). A write that fails
+    loses that piece of the log, never the turn."""
+    path = session.transcript_path
+    if path is None or not text:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, text.encode("utf-8"))
+        finally:
+            os.close(fd)
+    except OSError as err:
+        log.warning("ACP %s: transcript not written: %s", session.id, err)
 
 
 def _stop_grace(agent_key: str) -> float:

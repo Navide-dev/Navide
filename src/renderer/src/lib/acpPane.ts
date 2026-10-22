@@ -39,12 +39,6 @@ export function acpMessagingHoldKey(status: DisplayStatus | undefined): string |
   return 'not-ready'
 }
 
-/** Why the renderer refuses to type a message into an ACP pane: there is no
- *  PTY, and its messages are the backend's to deliver (session/prompt). Until
- *  that delivery exists the message is refused, never typed somewhere else. */
-export const ACP_PANE_DELIVERY_REFUSAL =
-  'this pane runs its agent over ACP; messages to it are delivered by the backend, which does not do so yet'
-
 export type TranscriptRole = 'user' | 'agent' | 'thought' | 'tool' | 'notice'
 
 export interface TranscriptEntry {

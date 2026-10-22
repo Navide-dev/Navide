@@ -103,14 +103,20 @@ export function useAcpSession(paneId: string, port: AcpPort) {
   }))
 
   /** Start the agent (acp.create). Resolves once it is idle or has failed. */
-  async function create(opts: { agentKey: string; cwd: string }): Promise<void> {
+  async function create(opts: { agentKey: string; cwd: string; outputLogFile?: string }): Promise<void> {
     if (creating) return creating
     state.value = 'starting'
     startingStartedAt.value = Date.now()
     creating = (async () => {
       try {
         const reply = await port.send<{ session?: { session_id?: string; state?: string } }>(
-          'acp.create', { pane_id: paneId, agent_key: opts.agentKey, cwd: opts.cwd }, CREATE_TIMEOUT_MS,
+          'acp.create',
+          {
+            pane_id: paneId, agent_key: opts.agentKey, cwd: opts.cwd,
+            // The pane's output log (Agent History, cli_read_log): the backend appends the transcript.
+            ...(opts.outputLogFile ? { output_log_file: opts.outputLogFile } : {}),
+          },
+          CREATE_TIMEOUT_MS,
         )
         if (!reply.ok || !reply.payload?.session?.session_id) {
           state.value = 'failed'

@@ -7,6 +7,11 @@ Requests: ``acp.create``, ``acp.prompt``, ``acp.cancel``,
 ``acp.turn_end``, ``acp.exit``. A vendor without ``VendorSpec.acp`` is refused
 with ``ACP_UNAVAILABLE``; nothing falls back to a terminal pane on its own.
 
+Each turn's start and end is recorded as the pane's activity and broadcast as
+``agent.activity`` exactly as a terminal pane's log reader reports it, so chat
+channels, ``cli_wait_idle`` / ``cli_send_and_wait`` and the window's MSG and
+SPAWN handling read an ACP pane's turns with no branch of their own.
+
 Registered on import (app imports this module next to ws_handlers).
 """
 
@@ -14,9 +19,10 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from .acp_sessions import AcpSessionService, AcpStartError
+from .acp_sessions import AcpSession, AcpSessionService, AcpStartError
 from .cli_vendors.registry import vendor as cli_vendor
 from .ipc import make_error, make_event, make_response
 from .ws_handlers import handler
@@ -41,12 +47,44 @@ async def _emit(event: dict[str, Any]) -> None:
     await owner.send_json(make_event(str(event["type"]), payload))
 
 
+async def _on_activity(session: AcpSession, kind: str, text: str, detail: str) -> None:
+    """A turn start or end, recorded and broadcast as a log reader's would be."""
+    from . import app
+
+    app._record_pane_activity(session.pane_id, kind, text, detail=detail)
+    await app.broadcast(make_event("agent.activity", {
+        "vendor": session.agent_key,
+        "event_type": kind,
+        "superseded": False,
+        "workspace_path": session.cwd,
+        "pane_id": session.pane_id,
+        "stage_id": "",
+        "session_id": session.acp_session_id,
+        "cwd": session.cwd,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "detail": detail,
+        "text": app._cap_activity_text(text),
+    }))
+
+
 def get_service() -> AcpSessionService:
     """The one app-level AcpSessionService (lazy: it binds to the running loop)."""
     global _SERVICE
     if _SERVICE is None:
-        _SERVICE = AcpSessionService(emit=_emit)
+        _SERVICE = AcpSessionService(emit=_emit, on_activity=_on_activity)
     return _SERVICE
+
+
+def session_for_pane(pane_id: str) -> AcpSession | None:
+    """The pane's running ACP agent, or None: the check every MCP tool makes
+    before treating a pane as an ACP pane. Never starts the service."""
+    return _SERVICE.by_pane(pane_id) if _SERVICE is not None else None
+
+
+def pid_groups() -> dict[str, tuple[str, list[int]]]:
+    """ACP agents for the resource sweep (see AcpSessionService.pid_groups);
+    blocking, so call it off the event loop. Never starts the service."""
+    return _SERVICE.pid_groups() if _SERVICE is not None else {}
 
 
 async def shutdown() -> None:
@@ -67,6 +105,7 @@ async def acp_create(session: "Session", msg_id: str, msg_type: str, payload: di
     agent_key = str(payload.get("agent_key") or "")
     pane_id = str(payload.get("pane_id") or "")
     cwd = str(payload.get("cwd") or "")
+    output_log_file = str(payload.get("output_log_file") or "")
     spec = cli_vendor(agent_key)
     if spec is None or spec.acp is None:
         await session.send_json(make_error(
@@ -76,10 +115,14 @@ async def acp_create(session: "Session", msg_id: str, msg_type: str, payload: di
     if not pane_id or not cwd or not os.path.isabs(cwd):
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "pane_id and an absolute cwd are required"))
         return
+    if output_log_file and not os.path.isabs(output_log_file):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "output_log_file must be absolute"))
+        return
     try:
         created = await get_service().create(
             pane_id=pane_id, agent_key=agent_key, argv=list(spec.acp.argv), cwd=cwd,
             env=_spawn_env(spec), load_session_id=str(payload.get("load_session_id") or ""),
+            output_log_file=output_log_file,
         )
     except AcpStartError as err:
         await session.send_json(make_error(

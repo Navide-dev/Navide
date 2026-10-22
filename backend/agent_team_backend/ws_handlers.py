@@ -9541,13 +9541,18 @@ async def terminal_memory_usage(session: "Session", msg_id: str, msg_type: str, 
     false and the panel says it cannot measure rather than showing a number
     that means something else.
     """
-    from . import process_memory
+    from . import acp_ws, process_memory
 
     groups = session.terminals.memory_pid_groups()
-    pids = [pid for _, pids in groups.values() for pid in pids]
+    # ACP agents run outside the PTY table; same sweep, rows filed under the pane.
+    acp_groups = await asyncio.to_thread(acp_ws.pid_groups)
+    pids = [pid for g in (groups, acp_groups) for _, pids in g.values() for pid in pids]
     measured = await asyncio.to_thread(process_memory.footprints, pids)
     totals = process_memory.sum_by_group(
         {sid: pids for sid, (_, pids) in groups.items()}, measured
+    )
+    acp_totals = process_memory.sum_by_group(
+        {sid: pids for sid, (_, pids) in acp_groups.items()}, measured
     )
     panes = [
         {
@@ -9556,13 +9561,20 @@ async def terminal_memory_usage(session: "Session", msg_id: str, msg_type: str, 
             "bytes": totals.get(sid, 0),
         }
         for sid, (pane_id, _) in groups.items()
+    ] + [
+        {
+            "terminal_session_id": "",
+            "pane_id": pane_id,
+            "bytes": acp_totals.get(sid, 0),
+        }
+        for sid, (pane_id, _) in acp_groups.items()
     ]
     await session.send_json(make_response(msg_id, msg_type, {
         # measured being empty with live panes means the sweep failed, which is
         # not the same as "no panes" — the panel has to tell those apart.
-        "available": process_memory.available() and bool(measured or not groups),
+        "available": process_memory.available() and bool(measured or not (groups or acp_groups)),
         "panes": panes,
-        "total_bytes": sum(totals.values()),
+        "total_bytes": sum(totals.values()) + sum(acp_totals.values()),
     }))
 
 
@@ -9670,17 +9682,22 @@ async def cli_risk_ranges(session: "Session", msg_id: str, msg_type: str, payloa
 
 async def _collect_resource_usage(session: "Session") -> dict:
     """One CPU + memory sweep over every live PTY this backend owns."""
-    from . import process_cpu, process_memory
+    from . import acp_ws, process_cpu, process_memory
 
     groups = session.terminals.memory_pid_groups()
-    pids = [pid for _, pids in groups.values() for pid in pids]
+    # ACP agents run outside the PTY table; same sweep, rows filed under the pane.
+    acp_groups = await asyncio.to_thread(acp_ws.pid_groups)
+    pids = [pid for g in (groups, acp_groups) for _, pids in g.values() for pid in pids]
     by_session = {sid: pids for sid, (_, pids) in groups.items()}
+    acp_by_session = {sid: pids for sid, (_, pids) in acp_groups.items()}
     measured, (cpu_measured, sampled_at) = await asyncio.gather(
         asyncio.to_thread(process_memory.footprints, pids),
         asyncio.to_thread(process_cpu.cpu_times, pids),
     )
     totals = process_memory.sum_by_group(by_session, measured)
     cpu_totals = process_cpu.sum_by_group(by_session, cpu_measured)
+    acp_totals = process_memory.sum_by_group(acp_by_session, measured)
+    acp_cpu_totals = process_cpu.sum_by_group(acp_by_session, cpu_measured)
     panes = [
         {
             "terminal_session_id": sid,
@@ -9689,16 +9706,24 @@ async def _collect_resource_usage(session: "Session") -> dict:
             "cpu_seconds": cpu_totals.get(sid, 0.0),
         }
         for sid, (pane_id, _) in groups.items()
+    ] + [
+        {
+            "terminal_session_id": "",
+            "pane_id": pane_id,
+            "bytes": acp_totals.get(sid, 0),
+            "cpu_seconds": acp_cpu_totals.get(sid, 0.0),
+        }
+        for sid, (pane_id, _) in acp_groups.items()
     ]
     cpu_count, machine_memory = process_cpu.machine_capacity()
     return {
         # An empty sweep with live panes means it failed, which is not the same
         # as "no panes" — the panel has to tell those apart, per metric.
-        "available": process_memory.available() and bool(measured or not groups),
-        "cpu_available": process_cpu.available() and bool(cpu_measured or not groups),
+        "available": process_memory.available() and bool(measured or not (groups or acp_groups)),
+        "cpu_available": process_cpu.available() and bool(cpu_measured or not (groups or acp_groups)),
         "sampled_at": sampled_at,
         "panes": panes,
-        "total_bytes": sum(totals.values()),
+        "total_bytes": sum(totals.values()) + sum(acp_totals.values()),
         # Denominators for "how much of this machine", which is the question the
         # summary answers; the per-pane column stays relative to one core.
         "cpu_count": cpu_count,

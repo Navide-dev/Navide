@@ -284,3 +284,107 @@ async def test_requests_drive_a_session_and_its_events_reach_the_creating_window
         assert other.events("acp.state")[-1]["state"] == "exited"  # the claiming window now gets events
     finally:
         await acp_ws.shutdown()
+
+
+# -- P4: what the rest of the backend reads of an ACP pane ------------------
+
+
+class Activity:
+    def __init__(self) -> None:
+        self.items: list[tuple[str, str, str, str]] = []
+
+    async def __call__(self, session, kind: str, text: str, detail: str) -> None:
+        self.items.append((session.pane_id, kind, text, detail))
+
+
+async def test_a_turn_is_reported_as_activity_with_its_reply_text(registry, tmp_path) -> None:
+    activity = Activity()
+    svc = AcpSessionService(emit=Events(), on_activity=activity)
+    try:
+        session = await svc.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+        await svc.prompt(session.id, "hi")
+        await _until(lambda: len(activity.items) == 2)
+
+        assert activity.items == [
+            ("p1", "agent_active", "", "acp:prompt"),
+            ("p1", "turn_complete", "Hello, world", "end_turn"),
+        ]
+    finally:
+        await svc.kill_all()
+
+
+async def test_the_transcript_lands_in_the_panes_output_log(service, tmp_path) -> None:
+    log_file = tmp_path / ".agent-team" / "manual" / "20261023" / "opencode-p1.log"
+    session = await service.create(
+        pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path), output_log_file=str(log_file),
+    )
+    await service.prompt(session.id, "first line\nsecond line")
+    await _until(lambda: service.events.of("acp.turn_end"))
+
+    assert log_file.read_text(encoding="utf-8") == "> first line\n> second line\n\nHello, world\n\n"
+    if sys.platform != "win32":
+        assert log_file.stat().st_mode & 0o777 == 0o600
+
+
+async def test_without_a_path_the_transcript_goes_to_the_log_dir(service, tmp_path) -> None:
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+
+    assert session.transcript_path is not None
+    assert session.transcript_path.name == f"acp-transcript-{session.id}.log"
+
+
+async def test_a_pane_finds_its_agent_and_the_sweep_sees_its_process(service, tmp_path) -> None:
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+
+    assert service.by_pane("p1") is session
+    assert service.by_pane("p2") is None and service.by_pane("") is None
+    groups = await asyncio.to_thread(service.pid_groups)
+    assert groups[session.id][0] == "p1" and session.proc.pid in groups[session.id][1]
+
+    await service.kill(session.id)
+    assert service.by_pane("p1") is None
+    assert await asyncio.to_thread(service.pid_groups) == {}
+
+
+async def test_the_window_side_records_pane_activity_and_broadcasts_it(fresh_service, monkeypatch, tmp_path) -> None:
+    from agent_team_backend import app
+
+    launch = AcpLaunch(argv=tuple(_argv("reply")))
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=launch, spawn_env_defaults=()))
+    broadcasts: list[dict[str, Any]] = []
+
+    async def fake_broadcast(event: dict[str, Any], **_kw: Any) -> None:
+        broadcasts.append(event)
+
+    monkeypatch.setattr(app, "broadcast", fake_broadcast)
+    window = FakeWindow()
+    try:
+        await acp_ws.acp_create(window, "m1", "acp.create", {"agent_key": "opencode", "pane_id": "pane-acp", "cwd": str(tmp_path)})
+        sid = window.result("m1")["payload"]["session"]["session_id"]
+        assert acp_ws.session_for_pane("pane-acp").id == sid
+
+        await acp_ws.acp_prompt(window, "m2", "acp.prompt", {"session_id": sid, "text": "hi"})
+        await _until(lambda: (app.pane_activity("pane-acp") or {}).get("event_type") == "turn_complete")
+
+        assert app.pane_activity("pane-acp")["text"] == "Hello, world"
+        activity = [e["payload"] for e in broadcasts if e["type"] == "agent.activity"]
+        assert [(a["event_type"], a["text"], a["pane_id"]) for a in activity] == [
+            ("agent_active", "", "pane-acp"), ("turn_complete", "Hello, world", "pane-acp"),
+        ]
+        assert activity[-1]["vendor"] == "opencode" and activity[-1]["detail"] == "end_turn"
+    finally:
+        await acp_ws.shutdown()
+        app.forget_pane_activity("pane-acp")
+
+
+async def test_a_relative_output_log_is_refused(fresh_service, monkeypatch, tmp_path) -> None:
+    launch = AcpLaunch(argv=tuple(_argv("reply")))
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=launch, spawn_env_defaults=()))
+    window = FakeWindow()
+
+    await acp_ws.acp_create(window, "m1", "acp.create", {
+        "agent_key": "opencode", "pane_id": "p1", "cwd": str(tmp_path), "output_log_file": "x.log",
+    })
+
+    assert window.result("m1")["error"]["code"] == "BAD_REQUEST"
+    assert acp_ws.session_for_pane("p1") is None

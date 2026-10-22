@@ -3991,6 +3991,14 @@ async def cli_read_log(
 
     log_path_str = await asyncio.to_thread(_find_log_path)
     if not log_path_str:
+        # An ACP pane's backend appends its transcript itself, so its path is
+        # known here even when the window recorded none.
+        from agent_team_backend import acp_ws
+
+        acp = acp_ws.session_for_pane(result.pane.pane_id)
+        if acp is not None and acp.transcript_path is not None:
+            log_path_str = str(acp.transcript_path)
+    if not log_path_str:
         return {
             "ok": False,
             "error": f"no log file recorded for pane {result.pane.qualified_name!r}",
@@ -4180,6 +4188,16 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     last = _activity_summary(pane.pane_id)
     if last is not None:
         status["last_activity"] = last
+    from agent_team_backend import acp_ws
+
+    acp = acp_ws.session_for_pane(pane.pane_id)
+    if acp is not None:
+        status["display"] = "acp"
+        status["acp"] = {
+            "state": acp.state,
+            "queued": len(acp.queue),
+            "pending_permissions": len(acp.permissions),
+        }
     usage = await _cached_usage_snapshot(pane.agent_key)
     if usage is not None:
         status["usage"] = usage
@@ -4527,12 +4545,27 @@ async def cli_wait_idle(
     # Registered for exactly as long as this call is parked, so the pane
     # being waited on can see the wait (cli_whoami's `waiting_on_me`) and
     # wrap up rather than run out somebody's budget without knowing it.
+    from agent_team_backend import acp_ws
+
+    # An ACP pane's own session state is authoritative; the PTY and window
+    # probes below do not apply to it.
+    was_acp = acp_ws.session_for_pane(pane_id) is not None
     with _waiting_on(pane_id, caller):
         tick = 0
         while True:
             entry = agent_messaging.get(pane_id)
             busy = bool(entry.busy) if entry else False
-            if not busy:
+            if was_acp:
+                acp = acp_ws.session_for_pane(pane_id)
+                if acp is None:
+                    # Its agent exited: nothing is running any more.
+                    return done("acp_exited")
+                if acp.state == "idle" and not acp.queue:
+                    return done("acp_state")
+                # Parked on a permission the user has to answer: a timeout then
+                # says "awaiting", not "busy".
+                ui_status = "awaiting" if acp.permissions else None
+            elif not busy:
                 activity = app.pane_activity(pane_id)
                 if activity is None:
                     return done("quiet_period")
@@ -4671,6 +4704,31 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
             ),
             "error_code": "self-interrupt",
         }
+
+    from agent_team_backend import acp_ws
+
+    acp = acp_ws.session_for_pane(pane.pane_id)
+    if acp is not None:
+        # An ACP pane has no PTY to press a key in: the backend owns the agent
+        # and cancels its turn over the protocol, so no window is involved.
+        status_before = acp.state
+        try:
+            issued = await acp_ws.get_service().cancel(acp.id)
+        except KeyError:
+            issued = False
+        acp_answer: dict[str, Any] = {
+            "ok": True,
+            "target": pane.qualified_name,
+            "name": pane.name,
+            "sent": issued,
+            "status_before": status_before,
+            "via": "acp",
+        }
+        if not issued:
+            acp_answer["advisories"] = [
+                f'"{pane.name}" had no running turn (state {status_before}); nothing was cancelled'
+            ]
+        return acp_answer
 
     reply = await _ui_request(
         pane.workspace_path,

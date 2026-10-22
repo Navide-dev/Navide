@@ -80,7 +80,15 @@ const noop = (): void => {}
 const handle = {
   display: 'acp' as const,
   spawn: async (opts: TerminalSpawnOptions): Promise<void> => {
-    await session.create({ agentKey: opts.agentKey || props.agentKey, cwd: opts.cwd || props.workspacePath || '' })
+    await session.create({
+      agentKey: opts.agentKey || props.agentKey,
+      cwd: opts.cwd || props.workspacePath || '',
+      outputLogFile: opts.outputLogFile,
+    })
+  },
+  sendPrompt: async (text: string): Promise<boolean | null> => {
+    if (!session.sessionId.value) return null
+    return (await session.prompt(text)) !== ''
   },
   interrupt: (): Promise<boolean> => session.cancel(),
   kill: async (_opts?: { force?: boolean; retireRestore?: boolean }): Promise<void> => { await session.kill() },

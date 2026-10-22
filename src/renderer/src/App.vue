@@ -4,7 +4,7 @@ import ViewPanel, { type LayoutMode } from './components/ViewPanel.vue'
 import TerminalPane from './components/TerminalPane.vue'
 import AcpPane from './components/AcpPane.vue'
 import type { PaneDisplay, PaneHandle } from './lib/paneHandle'
-import { ACP_PANE_DELIVERY_REFUSAL, acpMessagingHoldKey } from './lib/acpPane'
+import { acpMessagingHoldKey } from './lib/acpPane'
 import type { AcpPort } from './composables/useAcpSession'
 import WindowControls from './components/WindowControls.vue'
 import RestoredPanePlaceholder from './components/RestoredPanePlaceholder.vue'
@@ -2645,6 +2645,13 @@ async function deliverAgentMessage(
   text: string,
   shouldAbort?: () => boolean,
 ): Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }> {
+  // An ACP pane has no PTY: the message (already queued, rate-limited and
+  // rendered by the messaging layer) is handed to the agent as a prompt
+  // through the backend. Delivered = the backend accepted it.
+  if (panes.value.find((p) => p.id === paneId)?.display === 'acp') {
+    const sent = await paneRefs[paneId]?.sendPrompt?.(text)
+    return sent === undefined ? null : sent
+  }
   // Hold the badge on RUNNING until the recipient's log shows the message
   // consumed — released in the agent.activity handler, fused inside
   // useTerminal. Marked BEFORE the Enter, not after: an idle CLI writes the
@@ -4041,9 +4048,6 @@ onMounted(() => {
       // agent, a chat, another device, a scheduled job) could otherwise finish
       // the sign-in on an account it controls.
       if (target?.isLogin) return rawReason(SIGN_IN_PANE_INPUT_REFUSAL)
-      // Never typed into an ACP pane: it has no PTY, and its messages are the
-      // backend's to deliver (session/prompt), not the renderer's.
-      if (target?.display === 'acp') return rawReason(ACP_PANE_DELIVERY_REFUSAL)
       if (target?.agentKey !== TERMINAL_AGENT_KEY) return null
       const refusal = paneMultilineRefusal(paneId, envelope)
       return refusal ? rawReason(refusal) : null
@@ -7454,12 +7458,31 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
   await nextTick()
   const ref = paneRefs[id]
   if (!ref) return id
+  // Always write the agent conversation to a dedicated log file. Pipeline
+  // panes land inside the run sub-folder (runs/YYYYMMDD-HHmmss-task/) so
+  // each run is self-contained; manual panes land under a flat manual/
+  // folder grouped by date so they're still recoverable.
+  const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  // A sign-in pane writes none: its output is an authorization URL or code,
+  // and a file in the workspace is readable by every agent working there.
+  const outputLogFile = opts.workspacePath && !pane.isLogin
+    ? opts.origin === 'pipeline'
+      ? pipeline.runDir
+        ? `${opts.workspacePath}/.agent-team/${pipeline.runDir}/stage-${opts.stageId}-${id.slice(0, 8)}.log`
+        : `${opts.workspacePath}/.agent-team/stage-${opts.stageId}-${id.slice(0, 8)}.log`
+      : `${opts.workspacePath}/.agent-team/manual/${ymd}/${opts.agentKey}-${id.slice(0, 8)}.log`
+    : undefined
+  pane.outputLogFile = outputLogFile
   if (pane.display === 'acp') {
     // The backend starts the agent over ACP (acp.create): no shell command,
-    // PTY log, startup dialog or session marker applies. Role and kickoff
+    // startup dialog or session marker applies; the backend appends the
+    // transcript to the same output log a PTY pane writes. Role and kickoff
     // prompts reach an ACP pane with the delivery work that follows (P3b).
     try {
-      await ref.spawn({ command: [], cwd: opts.workspacePath ?? '', agentKey: opts.agentKey })
+      await ref.spawn({ command: [], cwd: opts.workspacePath ?? '', agentKey: opts.agentKey, outputLogFile })
+      // Agent History reads the transcript the backend appends there.
+      const historyEntry = spawnHistory.value.find((e) => e.paneId === id)
+      if (historyEntry) historyEntry.outputLogFile = outputLogFile
       pane.injectionStatus = 'skipped'
       setPrepStatus(pane, (ref.status as unknown as string) === 'running' ? 'ready' : 'failed')
     } finally {
@@ -7468,22 +7491,6 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     return id
   }
   try {
-    // Always write the agent conversation to a dedicated log file. Pipeline
-    // panes land inside the run sub-folder (runs/YYYYMMDD-HHmmss-task/) so
-    // each run is self-contained; manual panes land under a flat manual/
-    // folder grouped by date so they're still recoverable.
-    const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    // A sign-in pane writes none: its output is an authorization URL or code,
-    // and a file in the workspace is readable by every agent working there.
-    const outputLogFile = opts.workspacePath && !pane.isLogin
-      ? opts.origin === 'pipeline'
-        ? pipeline.runDir
-          ? `${opts.workspacePath}/.agent-team/${pipeline.runDir}/stage-${opts.stageId}-${id.slice(0, 8)}.log`
-          : `${opts.workspacePath}/.agent-team/stage-${opts.stageId}-${id.slice(0, 8)}.log`
-        : `${opts.workspacePath}/.agent-team/manual/${ymd}/${opts.agentKey}-${id.slice(0, 8)}.log`
-      : undefined
-    pane.outputLogFile = outputLogFile
-
     await ref.spawn({
       // zsh reads ~/.zshrc (where installers add PATH, e.g. Claude Code's
       // ~/.local/bin) only in interactive mode — plain -lc misses it; the

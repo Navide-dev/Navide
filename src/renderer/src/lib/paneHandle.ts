@@ -48,6 +48,11 @@ export type PaneHandleSource =
     setStopped: (stopped: boolean) => void
     /** Which kind of pane this is: a PTY running the CLI's own TUI, or an ACP session. */
     display: PaneDisplay
+    /** ACP panes only: hand a message (an envelope the messaging layer
+     *  rendered) to the agent as a prompt through the backend (acp.prompt).
+     *  true: the backend took it (sent, or queued behind the running turn).
+     *  false: refused. null: no session yet, try again later. */
+    sendPrompt?: (text: string) => Promise<boolean | null>
   }
 
 /** A pane ref as App.vue sees it (refs unwrapped, as on a component instance). */

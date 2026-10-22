@@ -222,4 +222,33 @@ describe('AcpPane', () => {
 
     expect(pane.cleanBuffer).toBe('')
   })
+
+  it('passes the pane output log to the backend, which appends the transcript there', async () => {
+    const port = new FakePort()
+    const { pane } = mountPane(port)
+
+    await pane.spawn({ command: [], cwd: '/work', agentKey: 'opencode', outputLogFile: '/work/.agent-team/manual/20261023/opencode-p1.log' })
+
+    expect(port.sent[0].payload).toEqual({
+      pane_id: 'p1', agent_key: 'opencode', cwd: '/work', output_log_file: '/work/.agent-team/manual/20261023/opencode-p1.log',
+    })
+  })
+
+  it('hands a delivered message to the agent as a prompt, and says when there is no session yet', async () => {
+    const port = new FakePort()
+    let answerCreate: (r: Reply) => void = () => {}
+    port.createReply = new Promise((resolve) => { answerCreate = resolve })
+    const { pane } = mountPane(port)
+    const spawning = pane.spawn({ command: [], cwd: '/work' })
+    await flushPromises()
+
+    // Still starting: null puts the message back at the head of the queue.
+    expect(await pane.sendPrompt?.('[Navide MSG] from: a\nhello')).toBeNull()
+    expect(port.count('acp.prompt')).toBe(0)
+
+    answerCreate(ok({ session: { session_id: 's1', state: 'idle' } }))
+    await spawning
+    expect(await pane.sendPrompt?.('[Navide MSG] from: a\nhello')).toBe(true)
+    expect(port.sent.find((m) => m.type === 'acp.prompt')?.payload).toEqual({ session_id: 's1', text: '[Navide MSG] from: a\nhello' })
+  })
 })
