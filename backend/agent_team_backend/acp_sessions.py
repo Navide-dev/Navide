@@ -447,7 +447,7 @@ class AcpSessionService:
             descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
         # With every one recorded earlier (identity-checked before any kill).
         descendants = {**session.descendants, **descendants}
-        await session.client.close()
+        await _close_client(session)
         await self._wait_exit(proc, _stop_grace(session.agent_key))
         if proc.returncode is None:
             with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
@@ -483,15 +483,17 @@ class AcpSessionService:
         session.exit_code = code
         if session.stopping or session.id not in self._sessions:
             return
-        # It exited on its own (or was stopped): end what it left running,
-        # breakaway grandchildren included (the last record of them).
+        # It exited on its own: say so first, then end what it left running
+        # (breakaway grandchildren included, from the last record of them),
+        # which also releases a pipe one of them still holds, and only then
+        # close the connection — bounded, never waiting on the pipe's EOF.
+        await self._emit_event(session, "acp.exit", {"code": code, "stderr_tail": session.stderr_tail()})
+        await self._forget(session)
         self._end_tree(session)
         from .terminals import _kill_breakaway
 
         await asyncio.to_thread(_kill_breakaway, session.descendants)
-        await session.client.close()
-        await self._emit_event(session, "acp.exit", {"code": code, "stderr_tail": session.stderr_tail()})
-        await self._forget(session)
+        await _close_client(session)
 
     async def _forget(self, session: AcpSession) -> None:
         if self._sessions.pop(session.id, None) is None:
@@ -529,6 +531,13 @@ class AcpSessionService:
         return session
 
 
+async def _close_client(session: AcpSession) -> None:
+    """Close the agent's connection without waiting on its output's EOF, which
+    a descendant holding the pipe can postpone for ever."""
+    with contextlib.suppress(TimeoutError, asyncio.TimeoutError):
+        await asyncio.wait_for(session.client.close(), _TERM_GRACE_S)
+
+
 class _ExitSignal(asyncio.subprocess.SubprocessStreamProtocol):
     """asyncio's own subprocess protocol (create_subprocess_exec uses it), plus
     a future done the moment the process exits: process_exited fires then,
@@ -550,11 +559,17 @@ _EXIT_SIGNALS: "weakref.WeakKeyDictionary[asyncio.subprocess.Process, asyncio.Fu
 )
 
 
-async def _spawn(argv: list[str], **kwds: Any) -> asyncio.subprocess.Process:
-    """asyncio.create_subprocess_exec, built the same way, with the exit signal."""
+async def _spawn(
+    argv: list[str], *, stdin: int, stdout: int, stderr: int, cwd: str,
+    env: dict[str, str], start_new_session: bool,
+) -> asyncio.subprocess.Process:
+    """asyncio.create_subprocess_exec, built the same way, with the exit signal.
+    Every stream is named (no inherited stderr handle: #445)."""
     loop = asyncio.get_running_loop()
     transport, protocol = await loop.subprocess_exec(
-        lambda: _ExitSignal(limit=2**16, loop=loop), *argv, **kwds,
+        lambda: _ExitSignal(limit=2**16, loop=loop), *argv,
+        stdin=stdin, stdout=stdout, stderr=stderr, cwd=cwd, env=env,
+        start_new_session=start_new_session,
     )
     proc = asyncio.subprocess.Process(transport, protocol, loop)
     _EXIT_SIGNALS[proc] = protocol.exited

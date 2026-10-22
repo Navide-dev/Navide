@@ -1444,6 +1444,20 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             # External session — skip; no pane to deliver to.
             return
         pane_id = attributed.pane_id or ""
+        if event.event_type == "subagent_turn_end":
+            # A Codex sub-agent's turn end is not its parent pane's: the pane's
+            # state, reply text and dev time ignore it. The per-account turn
+            # count is recorded exactly as it was when this arrived as a
+            # turn_complete (the record_turn call below); whether a sub-agent
+            # turn should count there is a separate decision.
+            tokens_store.record_turn(
+                event.vendor,
+                pane_account_history.profile_at(
+                    pane_id, parse_event_time(event.timestamp)
+                ),
+                event.timestamp,
+            )
+            return
         # A turn a Stop hook blocked is still written to the conversation log,
         # and its reader reports it as a turn end — after the hook already said
         # the agent is working on the message it was handed. Flagged rather than
@@ -3985,7 +3999,9 @@ def _untested_version_note(agent_key: str, label: str, version: str | None) -> s
     last verified against. Disclosure only: the spawn goes ahead either way."""
     spec = cli_vendor(agent_key)
     switch = spec.account_switch if spec is not None else None
-    verified = switch.verified_version if switch is not None else ""
+    verified = (spec.cli_verified_version if spec is not None else "") or (
+        switch.verified_version if switch is not None else ""
+    )
     found, known = _leading_version(version or ""), _leading_version(verified)
     if not found or not known or found <= known:
         return ""
