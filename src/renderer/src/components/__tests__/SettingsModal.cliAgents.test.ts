@@ -96,10 +96,10 @@ describe('Settings CLI agent cards and drawer', { timeout: 15000 }, () => {
       expect(languageRow.isVisible()).toBe(false)
       const languageButtons = wrapper!.findAll('.ap-lang-btn')
       expect(languageButtons.map(button => button.text().replace('✓', '').trim()))
-        .toEqual(['繁體中文', 'English', '日本語', '한국어 Beta', '简体中文 Beta', 'Deutsch Beta', 'Español (España) Beta', 'Français Beta', 'Português (Brasil) Beta', 'Русский Beta'])
+        .toEqual(['繁體中文', 'English', '日本語', '한국어 Beta', '简体中文 Beta', 'Deutsch Beta', 'Español (España) Beta', 'Français Beta', 'Português (Brasil) Beta', 'Русский Beta', 'Tiếng Việt Beta'])
       // Only the new languages carry the Beta badge.
       expect(languageButtons.map(button => button.find('.scope-badge').exists()))
-        .toEqual([false, false, false, true, true, true, true, true, true, true])
+        .toEqual([false, false, false, true, true, true, true, true, true, true, true])
       await wrapper!.get('.s-search-input').setValue('Japanese')
       const result = wrapper!.findAll('.s-search-result').find(item => item.text().includes('Language'))!
       expect(result).toBeDefined()

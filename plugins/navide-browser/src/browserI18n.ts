@@ -8,6 +8,7 @@ import esES from './locales/es-ES.json'
 import frFR from './locales/fr-FR.json'
 import ptBR from './locales/pt-BR.json'
 import ruRU from './locales/ru-RU.json'
+import viVN from './locales/vi-VN.json'
 import { isUiLocale } from '@navide/plugin-ui/foundation'
 
 // This plugin's catalogs. Adding a language: import its JSON above and add
@@ -23,6 +24,7 @@ const BROWSER_MESSAGES = {
   'fr-FR': frFR,
   'pt-BR': ptBR,
   'ru-RU': ruRU,
+  'vi-VN': viVN,
 }
 
 export type SupportedBrowserLocale = keyof typeof BROWSER_MESSAGES
