@@ -78,6 +78,16 @@ describe('applyAcpUpdate / transcriptText', () => {
     expect(entries[0].parts.map((p) => p.length)).toEqual([ACP_PART_MAX, 1])
   })
 
+  it('never cuts text: a chunk longer than ACP_PART_MAX is kept whole', () => {
+    const entries: TranscriptEntry[] = []
+    const long = 'z'.repeat(ACP_PART_MAX * 3 + 7)
+    applyAcpUpdate(entries, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'head ' } })
+    expect(applyAcpUpdate(entries, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: long } })).toBe(long.length)
+
+    expect(entries[0].parts).toEqual(['head ', long])
+    expect(transcriptText(entries)).toBe(`head ${long}`)
+  })
+
   it('keeps an unconfirmed prompt in the pane text (the agent may have it), and a refused one out', () => {
     const entries: TranscriptEntry[] = [
       { role: 'user', parts: ['maybe'], delivery: 'unconfirmed' },

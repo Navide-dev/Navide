@@ -49,10 +49,12 @@ export type TranscriptRole = 'user' | 'agent' | 'thought' | 'tool' | 'notice'
 
 export interface TranscriptEntry {
   role: TranscriptRole
-  /** The entry's text in parts of at most ACP_PART_MAX characters: a chunk
-   *  joins the last part while it fits, else starts a new one. A long reply
-   *  then grows by appending small nodes; it never rewrites one ever-longer
-   *  string (and its DOM text node) per chunk. A tool call has one part, its title. */
+  /** The entry's text, split into parts for rendering only — never truncated:
+   *  every character of every chunk is kept. A chunk joins the last part
+   *  while the two fit in ACP_PART_MAX, else it starts a new part whole
+   *  (whatever its length). A long reply then grows by appending nodes; it
+   *  never rewrites one ever-longer string (and its DOM text node) per chunk.
+   *  A tool call has one part, its title. */
   parts: string[]
   /** A tool call's id, so its later updates land on the same entry. */
   toolCallId?: string
@@ -63,7 +65,8 @@ export interface TranscriptEntry {
   delivery?: 'unsent' | 'unconfirmed'
 }
 
-/** The longest a transcript part grows before a new one starts. */
+/** How long a transcript part may grow by joining chunks before the next
+ *  chunk starts a new one. A split, not a cap: no text is ever cut or dropped. */
 export const ACP_PART_MAX = 2048
 
 /** One entry's whole text. */
