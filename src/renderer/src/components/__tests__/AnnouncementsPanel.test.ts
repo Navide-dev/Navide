@@ -276,7 +276,7 @@ describe('AnnouncementsPanel — release tours', () => {
     wrapper = mountPanel([withTour, release('0.2.9')])
     const buttons = wrapper.findAll('[data-act="tour"]')
     expect(buttons).toHaveLength(1)
-    expect(buttons[0].text()).toBe('Take the tour')
+    expect(buttons[0].text()).toBe('Take the Tour')
     await buttons[0].trigger('click')
     expect(wrapper.emitted('tour')).toEqual([['0.2.10']])
     // The button does not also expand (and so mark read) the row by itself.

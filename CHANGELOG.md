@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- English UI: Title Case for the buttons, filter chips, preset buttons and undo labels #565 missed: Skip Tour, the What's New buttons (Got It, Take the Tour, Replay the Tour, Not Now), the layout preset Bottom Panel, the CLI Agents filter Needs Attention, the Marketplace category Version Control, Restart for New Version in the status bar, and the pipeline editor's Undo/Redo labels (Undo Edit Prompt, …).
+
 ### Fixed
 
 - Extensions: a computer clock up to 5 minutes behind the Registry's no longer refuses every Registry install and update. The Registry signs its trust data per request, so the slightest lag read as invalid. A larger gap is reported as trust data that is not valid yet, and trust data past its expiry as expired, instead of both as "expired". The same 5 minutes apply to a version published or approved just before you install it. Both messages ask you to check the computer's date and time. Signature checks are unchanged.
