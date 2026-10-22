@@ -16,6 +16,8 @@ name: Mirror release
 # Beside the release files, both prefixes get whats-new.json: the in-app
 # announcements up to this release (scripts/export-whats-new.mjs), which the
 # website's /news page reads. Format: docs/en-US/release-announcements.md.
+# It is best effort: its steps run apart from the installer steps and only
+# warn when they fail, because the installers matter more than the notes.
 
 on:
   workflow_call:
@@ -71,6 +73,8 @@ jobs:
             CHANGELOG.md
 
       - name: Set up Node.js
+        # For whats-new.json only, so its failure must not stop the mirror.
+        continue-on-error: true
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -99,6 +103,8 @@ jobs:
           cat "${TAG}.sha256"
 
       - name: Export the announcements as whats-new.json
+        id: whats_new_export
+        continue-on-error: true
         run: |
           # Kept out of mirror/ so the checksum list stays exactly GitHub's
           # files; entries newer than the tag are left out.
@@ -115,8 +121,6 @@ jobs:
             --exclude '*.yml' --content-type 'application/octet-stream' --no-progress
           aws s3 cp "${TAG}.sha256" "s3://${MIRROR_BUCKET}/releases/${TAG}/SHA256SUMS" \
             --content-type 'text/plain' --no-progress
-          aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/${TAG}/whats-new.json" \
-            --content-type 'application/json' --no-progress
 
       - name: Verify the mirror serves what GitHub serves
         run: |
@@ -130,8 +134,6 @@ jobs:
             curl -fsSL --retry 3 -o "${name}" "https://dl.navide.dev/releases/${TAG}/${name}"
           done < "../${TAG}.sha256"
           sha256sum -c "../${TAG}.sha256"
-          curl -fsSL --retry 3 -o whats-new.json "https://dl.navide.dev/releases/${TAG}/whats-new.json"
-          cmp whats-new.json ../whats-new.json
 
       - name: Refuse to move releases/latest/ back to an older release
         id: latest_guard
@@ -150,6 +152,7 @@ jobs:
           fi
 
       - name: Replace releases/latest/
+        id: replace_latest
         if: env.REFRESH_LATEST == 'true' && steps.latest_guard.outputs.is_latest != 'false'
         run: |
           # latest/ is replaced wholesale: --delete drops the previous
@@ -158,8 +161,30 @@ jobs:
             --exclude '*' --include '*.yml' --content-type 'application/x-yaml' --no-progress
           aws s3 sync mirror "s3://${MIRROR_BUCKET}/releases/latest/" --delete \
             --exclude '*.yml' --content-type 'application/octet-stream' --no-progress
-          # After the syncs: their --delete would drop it, as it is not in mirror/.
-          aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/latest/whats-new.json" \
-            --content-type 'application/json' --no-progress
           aws cloudfront create-invalidation --distribution-id "${MIRROR_DISTRIBUTION}" \
             --paths '/releases/latest/*' --query Invalidation.Id --output text
+
+      - name: Publish whats-new.json
+        id: whats_new_publish
+        if: steps.whats_new_export.outcome == 'success'
+        continue-on-error: true
+        env:
+          LATEST_REPLACED: ${{ steps.replace_latest.outcome == 'success' }}
+        run: |
+          aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/${TAG}/whats-new.json" \
+            --content-type 'application/json' --no-progress
+          curl -fsSL --retry 3 -o whats-new.check.json "https://dl.navide.dev/releases/${TAG}/whats-new.json"
+          cmp whats-new.json whats-new.check.json
+          # Only where latest/ now holds this release. It runs after the
+          # latest/ syncs, whose --delete removed the previous copy.
+          if [ "${LATEST_REPLACED}" = true ]; then
+            aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/latest/whats-new.json" \
+              --content-type 'application/json' --no-progress
+            aws cloudfront create-invalidation --distribution-id "${MIRROR_DISTRIBUTION}" \
+              --paths '/releases/latest/whats-new.json' --query Invalidation.Id --output text
+          fi
+
+      - name: Warn when whats-new.json was not published
+        if: steps.whats_new_export.outcome == 'failure' || steps.whats_new_publish.outcome == 'failure'
+        run: |
+          echo "::warning::whats-new.json was not published for ${TAG}; the installers are mirrored. The website's /news page falls back to GitHub Releases until a manual mirror run publishes it."

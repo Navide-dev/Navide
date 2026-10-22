@@ -106,7 +106,7 @@ the result to two places:
 - `https://dl.navide.dev/releases/latest/whats-new.json`: replaced with
   `releases/latest/`, so it follows the Latest release.
 
-Entries newer than the tag are left out. A release whose entry is missing still
+Publishing it is best effort: if the export or upload fails, the run warns and the installers are still mirrored; a manual `mirror.yml` run publishes it later. Entries newer than the tag are left out. A release whose entry is missing still
 publishes the file, with its newest entry being an older version.
 
 ```jsonc
