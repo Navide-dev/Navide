@@ -4,10 +4,6 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
-### Fixed
-
-- A disabled built-in Navide plugin's tooltip and dialog now send you to Settings → Navide Plugins, where it can be enabled; they pointed to Settings → Extensions, the page for CLI extensions.
-
 ### Changed
 
 - English UI: Title Case for the buttons, filter chips, preset buttons and undo labels #565 missed: Skip Tour, the What's New buttons (Got It, Take the Tour, Replay the Tour, Not Now), the layout preset Bottom Panel, the CLI Agents filter Needs Attention, the Marketplace category Version Control, Restart for New Version in the status bar, and the pipeline editor's Undo/Redo labels (Undo Edit Prompt, …).
@@ -23,6 +19,10 @@ All notable released changes to Navide will be documented in this file. The form
 ### Fixed
 
 - Codex panes: a sub-agent finishing no longer ends its parent pane's turn. Its reply is not taken as the pane's, and its task is not used to name the pane. Before, a waiting `cli_wait_idle` or `cli_send_and_wait` returned while the parent was still working. A sub-agent's tokens still count toward the pane, now under the sub-agent's own session instead of its parent's. The per-account turn count is unchanged and still includes sub-agent turns.
+
+### Fixed
+
+- A disabled built-in Navide plugin's tooltip and dialog now send you to Settings → Navide Plugins, where it can be enabled; they pointed to Settings → Extensions, the page for CLI extensions.
 
 ## [0.2.28] — 2026-10-21 — signed release
 
