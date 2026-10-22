@@ -1896,3 +1896,189 @@ async def test_a_sign_in_pane_gets_no_child_topic(env: Env) -> None:
     await env.m.mirror._adopt_child(root, {"pane_id": "pane-1", "name": "api"},  # noqa: SLF001
                                      {"pane_id": "child-login", "name": "claude-login"})
     assert all(b.pane_id != "child-login" for b in env.store.bindings())
+
+
+# --- a hook's turn end ahead of the conversation log (Claude under load) ----------
+#
+# Claude's Stop hook reports the turn end at once; the log reader brings the text when it
+# gets to the transcript, which under load is well after. The hook's turn end carries no
+# text of its own, so a chat must not be answered with nothing, or with another turn's text.
+
+def _hook_end(env: Env, pane_id: str = "pane-1") -> None:
+    env.m.on_pane_activity(pane_id, {"event_type": "turn_complete", "text": "", "source": "hook",
+                                     "ts_monotonic": env.clock() + 1e-6})
+
+
+def _log_end(env: Env, text: str, pane_id: str = "pane-1") -> None:
+    env.m.on_pane_activity(pane_id, {"event_type": "turn_complete", "text": text, "source": "log",
+                                     "ts_monotonic": env.clock() + 1e-6})
+
+
+def _log_prompt(env: Env, pane_id: str = "pane-1") -> None:
+    env.m.on_pane_activity(pane_id, {"event_type": "agent_active", "text": "next", "source": "log",
+                                     "turn_start": True, "ts_monotonic": env.clock() + 1e-6})
+
+
+async def _delivered(env: Env, key: str = "k1") -> None:
+    env.fake.verdicts[key] = {"status": "delivered"}
+    await _until(lambda: _status_posted(env))
+
+
+async def test_a_hook_turn_end_waits_for_the_logs_text(env: Env) -> None:
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    await asyncio.sleep(0.05)
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+    _log_end(env, "the real reply")
+    await _until(lambda: _said(env, "the real reply"))
+    await asyncio.sleep(0.3)  # past the grace
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY) and not _said(env, mgr_mod.MSG_REPLY_LATE)
+    assert not _said(env, mgr_mod.MSG_LATE_PREFIX)
+    assert sum("the real reply" in t for t in env.tg.texts()) == 1
+
+
+async def test_text_arriving_after_the_next_message_still_answers_the_first(env: Env) -> None:
+    await env.inbound("first")
+    await _delivered(env)
+    _hook_end(env)
+    await env.inbound("second")
+    env.fake.verdicts["k2"] = {"status": "delivered"}
+    await _until(lambda: env.m._pending.get("pane-1") is not None
+                 and env.m._pending["pane-1"].armed_at is not None)
+    _log_end(env, "reply to first")  # the log reaches the first turn now
+    await _until(lambda: _said(env, "reply to first"))
+    # ...and it did not close the second message's run.
+    assert env.m._pending["pane-1"].armed_at is not None
+    _hook_end(env)
+    _log_prompt(env)
+    _log_end(env, "reply to second")
+    await _until(lambda: _said(env, "reply to second"))
+    await asyncio.sleep(0.3)
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+    assert [t for t in env.tg.texts() if "reply to" in t] == [
+        next(t for t in env.tg.texts() if "reply to first" in t),
+        next(t for t in env.tg.texts() if "reply to second" in t),
+    ]
+
+
+async def test_text_later_than_the_grace_follows_as_a_late_reply(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "LATE_TEXT_STATUS_AFTER_S", 0.05)
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    await _until(lambda: any(t == mgr_mod.MSG_READING_REPLY for _, t in env.tg.edits))
+    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LATE))
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+    _log_end(env, "slow reply")
+    await _until(lambda: _said(env, mgr_mod.MSG_LATE_PREFIX + "slow reply"))
+
+
+async def test_a_turn_with_no_text_says_so_once_the_log_moves_on(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "EMPTY_TURN_GRACE_S", 60.0)
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    _log_end(env, "")  # the log's turn end: thinking only, so far
+    await asyncio.sleep(0.05)
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+    _log_prompt(env)  # the next prompt: that turn wrote no text
+    await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
+    assert not _said(env, mgr_mod.MSG_REPLY_LATE)
+
+
+async def test_a_turn_split_over_two_log_lines_after_a_hook_end_replies_with_its_text(env: Env) -> None:
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    _log_end(env, "")
+    _log_end(env, "the text half")
+    await _until(lambda: _said(env, "the text half"))
+    await asyncio.sleep(0.3)
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+
+
+async def test_a_late_reply_is_posted_at_replies_verbosity(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "LATE_TEXT_STATUS_AFTER_S", 0.05)
+    env.store.set_verbosity("pane-1", "replies")
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: env.m._pending.get("pane-1") is not None
+                 and env.m._pending["pane-1"].armed_at is not None)
+    _hook_end(env)
+    await _until(lambda: _said(env, mgr_mod.MSG_REPLY_LATE))
+    _log_end(env, "late but kept")
+    await _until(lambda: _said(env, mgr_mod.MSG_LATE_PREFIX + "late but kept"))
+
+
+async def test_the_log_first_then_the_hook_replies_once(env: Env) -> None:
+    await env.inbound("go")
+    await _delivered(env)
+    _log_end(env, "reader was quicker")
+    await _until(lambda: _said(env, "reader was quicker"))
+    _hook_end(env)
+    await asyncio.sleep(0.3)
+    assert sum("reader was quicker" in t for t in env.tg.texts()) == 1
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+
+
+async def test_a_vendor_without_a_hook_is_answered_as_before(env: Env) -> None:
+    # Only the log reports turn ends: a textless one still waits out the grace and says so.
+    await env.inbound("go")
+    await _delivered(env)
+    _log_end(env, "")
+    await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
+    assert not _said(env, mgr_mod.MSG_REPLY_LATE) and not _said(env, mgr_mod.MSG_LATE_PREFIX)
+    await env.inbound("again")
+    await _delivered(env, "k2")
+    _log_end(env, "plain reply")
+    await _until(lambda: _said(env, "plain reply"))
+
+
+async def test_unbinding_drops_a_run_waiting_for_the_logs_text(env: Env) -> None:
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    await env.m.unbind("pane-1")
+    _log_end(env, "not for the old chat")
+    await asyncio.sleep(0.3)
+    assert not _said(env, "not for the old chat") and not _said(env, mgr_mod.MSG_REPLY_LATE)
+
+
+async def test_a_textless_turn_with_nothing_after_it_says_so_at_the_grace(env: Env, monkeypatch) -> None:
+    # Review of #581, M1: the last message of a conversation, or a turn of tools only.
+    # The log ended the turn without text and no next prompt comes to settle it.
+    monkeypatch.setattr(mgr_mod, "LATE_TEXT_STATUS_AFTER_S", 0.05)
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    _log_end(env, "")
+    await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
+    assert not _said(env, mgr_mod.MSG_REPLY_LATE)
+    assert not _said(env, mgr_mod.MSG_LATE_PREFIX)
+    assert "pane-1" not in env.m._await_text
+
+
+async def test_a_late_hook_does_not_close_the_next_messages_run(env: Env) -> None:
+    # Review of #581, M2: the reader got there first and answered; the next message is
+    # armed before that turn's Stop hook arrives. The hook entry then carries the log's
+    # text (or says the log ended the turn), and must leave the new run alone.
+    await env.inbound("first")
+    await _delivered(env)
+    _log_end(env, "reply one")
+    await _until(lambda: _said(env, "reply one"))
+    await env.inbound("second")
+    env.fake.verdicts["k2"] = {"status": "delivered"}
+    await _until(lambda: env.m._pending.get("pane-1") is not None
+                 and env.m._pending["pane-1"].armed_at is not None)
+    run = env.m._pending["pane-1"]
+    env.m.on_pane_activity("pane-1", {"event_type": "turn_complete", "text": "reply one", "source": "hook",
+                                      "log_ended": True, "ts_monotonic": env.clock() + 1e-6})
+    await asyncio.sleep(0.05)
+    assert env.m._pending.get("pane-1") is run
+    assert "pane-1" not in env.m._await_text
+    _hook_end(env)
+    _log_prompt(env)
+    _log_end(env, "reply two")
+    await _until(lambda: _said(env, "reply two"))
+    assert not _said(env, mgr_mod.MSG_LATE_PREFIX)

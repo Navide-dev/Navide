@@ -467,6 +467,15 @@ def _mask_url(url: str) -> str:
     return urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
 
 
+_URL_IN_TEXT_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"<>]+")
+
+
+def mask_urls_in_text(text: str) -> str:
+    """``text`` (an error message, say) with every URL in it masked as
+    `_mask_url` masks a configured one: userinfo and secret query parameters."""
+    return _URL_IN_TEXT_RE.sub(lambda m: _mask_url(m.group(0)), text)
+
+
 def _mask_args(args: tuple[str, ...]) -> tuple[str, ...]:
     """``args`` with credential-shaped values replaced by the sentinel.
 
