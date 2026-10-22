@@ -53,6 +53,8 @@ EventSink = Callable[[dict[str, Any]], Awaitable[None]]
 # declares no ShutdownSpec; then SIGTERM, then the whole tree is ended.
 _DEFAULT_STOP_GRACE_S = 2.0
 _TERM_GRACE_S = 1.0
+# How often an exit is looked for (see _exited).
+_EXIT_POLL_S = 0.05
 _STDERR_TAIL_LINES = 20
 _STDERR_TAIL_BYTES = 8192
 
@@ -475,10 +477,10 @@ class AcpSessionService:
         if proc.returncode is not None:
             return
         with contextlib.suppress(TimeoutError, asyncio.TimeoutError):
-            await asyncio.wait_for(proc.wait(), grace)
+            await asyncio.wait_for(_exited(proc), grace)
 
     async def _watch_exit(self, session: AcpSession) -> None:
-        code = await session.proc.wait()
+        code = await _exited(session.proc)
         session.exit_code = code
         if session.stopping or session.id not in self._sessions:
             return
@@ -526,6 +528,22 @@ class AcpSessionService:
         if session is None:
             raise KeyError(f"no ACP session {session_id}")
         return session
+
+
+async def _exited(proc: asyncio.subprocess.Process) -> int:
+    """The agent's exit code once it has exited.
+
+    Not proc.wait(): that also waits for every pipe to close, and a descendant
+    that inherited the agent's stdout keeps it open after the agent is gone —
+    the exit would never be seen, nothing would end that descendant, and the
+    pane would read running forever. The return code is set the moment the
+    process exits (asyncio's child watcher), pipes or not.
+    """
+    # A poll, not an Event: asyncio has no public signal for "exited" apart
+    # from wait(), which is the pipe-bound one this avoids.
+    while proc.returncode is None:  # noqa: ASYNC110
+        await asyncio.sleep(_EXIT_POLL_S)
+    return proc.returncode
 
 
 def _stop_grace(agent_key: str) -> float:
