@@ -2141,6 +2141,13 @@
         },
         "selfHostedQuarantine": "{id} {version}은(는) 자체 호스팅 레지스트리에서 받은 것이라 불러오지 않았어요. Developer Mode를 켜거나 Navide 마켓플레이스에서 설치하세요."
       },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide가 이 Navide 플러그인을 확인하지 못했어요: Registry 신뢰 데이터의 시각이 이 컴퓨터의 시계보다 늦어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요.",
+          "expired": "Navide가 이 Navide 플러그인을 확인하지 못했어요: 이 컴퓨터의 시계로는 Registry 신뢰 데이터가 만료됐어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요.",
+          "signatureNotYetValid": "Navide가 이 Navide 플러그인을 확인하지 못했어요: Registry 서명 시각이 이 컴퓨터의 시계보다 늦어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요."
+        }
+      },
       "localInstall": {
         "agentRequest": "{requester}이(가) 요청했어요. Navide는 이 패키지를 검토하지 않았으며, 설치 여부는 직접 결정하세요.",
         "button": ".vsix 파일에서 설치…",

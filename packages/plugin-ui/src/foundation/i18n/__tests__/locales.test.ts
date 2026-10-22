@@ -55,7 +55,10 @@ describe('locale JSON files', () => {
   })
 
   it('keeps every locale key set in parity', () => {
-    const [baseFile, ...otherFiles] = localeFiles
+    // Against en-US, the source every translation is made from; the first file
+    // by name stopped being en-US once de-DE.json and es-ES.json exist.
+    const baseFile = 'en-US.json'
+    const otherFiles = localeFiles.filter((fileName) => fileName !== baseFile)
     const base = leafKeys(JSON.parse(readFileSync(resolve(localesDir, baseFile), 'utf8'))).sort()
     for (const fileName of otherFiles) {
       const keys = leafKeys(JSON.parse(readFileSync(resolve(localesDir, fileName), 'utf8'))).sort()

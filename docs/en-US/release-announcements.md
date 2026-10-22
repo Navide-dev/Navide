@@ -15,13 +15,13 @@ All three surfaces read the same entry and behave the same way:
 |---|---|
 | Post-update popup (`WhatsNewModal`) | Once, on the first launch of a version newer than the last one seen (`agentTeam.whatsNew.lastSeenVersion`). A fresh install is only baselined, never shown it. |
 | **Help → What's New…** | On request. It shows the newest entry at or below the running version, and closing it records nothing. A dev build shows the newest entry authored, so you can try the next release's announcement before `package.json` is bumped. |
-| Announcement centre (📢 in the status bar) | Always lists every shipped entry. A release row whose entry has a tour shows **Take the tour**. |
+| Announcement centre (📢 in the status bar) | Always lists every shipped entry. A release row whose entry has a tour shows **Take the Tour**. |
 
-When the entry has a tour, the popup asks **Take the tour / Not now** instead of
-**Got it**. Every surface starts the tour through
+When the entry has a tour, the popup asks **Take the Tour / Not Now** instead of
+**Got It**. Every surface starts the tour through
 `composables/useReleaseTour.ts`. It records `agentTeam.tour.v<version>.done`
 only when the tour is taken to its last step, and the popup then offers
-**Replay the tour**.
+**Replay the Tour**.
 
 ## Adding a release's announcement
 

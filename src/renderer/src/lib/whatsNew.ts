@@ -98,7 +98,7 @@ export interface WhatsNewFeature {
 // is editable in one place without touching the i18n JSON.
 export const WHATS_NEW_CHROME = {
   header: { 'zh-TW': '新版更新', 'en-US': 'What’s New', 'ja-JP': '新機能' } as WhatsNewText,
-  dismiss: { 'zh-TW': '知道了', 'en-US': 'Got it', 'ja-JP': 'OK' } as WhatsNewText,
+  dismiss: { 'zh-TW': '知道了', 'en-US': 'Got It', 'ja-JP': 'OK' } as WhatsNewText,
   /** Replaces `header` on a release marked `major`. */
   majorHeader: { 'zh-TW': '重大更新', 'en-US': 'Major Update', 'ja-JP': 'メジャーアップデート' } as WhatsNewText,
   /** Heading over the bullet list once a spotlight sits above it. */
@@ -108,9 +108,9 @@ export const WHATS_NEW_CHROME = {
   /** Heading over the bullet list once feature cards sit above it. */
   details: { 'zh-TW': '細節', 'en-US': 'The details', 'ja-JP': '詳細' } as WhatsNewText,
   /** Buttons on an entry that carries a tour. */
-  takeTour: { 'zh-TW': '帶我看一遍', 'en-US': 'Take the tour', 'ja-JP': 'ツアーを見る' } as WhatsNewText,
-  retakeTour: { 'zh-TW': '再看一次導覽', 'en-US': 'Replay the tour', 'ja-JP': 'ツアーをもう一度' } as WhatsNewText,
-  notNow: { 'zh-TW': '先不用', 'en-US': 'Not now', 'ja-JP': '今はしない' } as WhatsNewText,
+  takeTour: { 'zh-TW': '帶我看一遍', 'en-US': 'Take the Tour', 'ja-JP': 'ツアーを見る' } as WhatsNewText,
+  retakeTour: { 'zh-TW': '再看一次導覽', 'en-US': 'Replay the Tour', 'ja-JP': 'ツアーをもう一度' } as WhatsNewText,
+  notNow: { 'zh-TW': '先不用', 'en-US': 'Not Now', 'ja-JP': '今はしない' } as WhatsNewText,
   /** Footer hint beside the buttons: where "Not now" leaves the way back. */
   reopenHint: {
     'zh-TW': '之後可從選單列「輔助說明（Help）→ 新版更新…」再打開',

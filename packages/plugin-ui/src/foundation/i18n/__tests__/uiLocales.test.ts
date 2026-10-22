@@ -71,14 +71,22 @@ describe('uiLocales', () => {
   })
 
   it('registers the translated catalogs only', () => {
-    expect([...AVAILABLE_UI_LOCALES].sort()).toEqual(['en-US', 'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW'])
-    expect(detectUiLocale('ko-KR')).toBe('ko-KR')
+    // Which catalogs exist is checked against the files (localeConsistency);
+    // here: a registered one is used, a recognized one not in this build yet
+    // lands on en-US, whichever languages that currently is.
+    expect(AVAILABLE_UI_LOCALES).toEqual(expect.arrayContaining(['en-US', 'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW']))
+    for (const locale of AVAILABLE_UI_LOCALES) expect(detectUiLocale(locale)).toBe(locale)
+    const unregistered = UI_LOCALES.filter((l) => !(AVAILABLE_UI_LOCALES as readonly string[]).includes(l))
+    // Delete this line (and test the fallback with a synthetic code) when the last language ships.
+    expect(unregistered.length).toBeGreaterThan(0)
+    for (const locale of unregistered) {
+      expect(detectUiLocale(locale)).toBe('en-US')
+      expect(resolveAvailableUiLocale(locale)).toBe('en-US')
+    }
     expect(detectUiLocale('ko')).toBe('ko-KR')
-    expect(detectUiLocale('de-DE')).toBe('en-US')
     expect(detectUiLocale('zh-Hans')).toBe('zh-CN')
     expect(detectUiLocale('zh-SG')).toBe('zh-CN')
     expect(detectUiLocale('zh-HK')).toBe('zh-TW')
-    expect(resolveAvailableUiLocale('ru-RU')).toBe('en-US')
     expect(resolveAvailableUiLocale('ja-JP')).toBe('ja-JP')
     expect(resolveAvailableUiLocale('it-IT')).toBeNull()
   })
