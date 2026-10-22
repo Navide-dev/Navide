@@ -38,6 +38,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 - CLI panes: the startup probe's "newer than the last version Navide verified" line now covers Goose (verified on 1.55.0; it has no account switching, so it never had a version to compare against), and Kimi Code compares against 2.2.0, the version its launch and logs were checked on, rather than the 0.39.0 of its account-switch evidence, so Kimi 2.x is no longer called untested. Disclosure only, as before. (#502 follow-up)
 
+### Security
+
+- Dependencies: DOMPurify 3.4.17, which Mermaid diagrams and the Monaco editor use to sanitize HTML, for published advisories GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and GHSA-c6gr-qvv4-5v3f.
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added
