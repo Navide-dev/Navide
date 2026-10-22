@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- English UI: Title Case for the buttons, filter chips, preset buttons and undo labels #565 missed: Skip Tour, the What's New buttons (Got It, Take the Tour, Replay the Tour, Not Now), the layout preset Bottom Panel, the CLI Agents filter Needs Attention, the Marketplace category Version Control, Restart for New Version in the status bar, and the pipeline editor's Undo/Redo labels (Undo Edit Prompt, …).
+
 ### Fixed
 
 - Windows: the Git view no longer stays on "capability call 'git.status' timed out". Every git the backend started inherited the backend's own stdin, the pipe the app keeps open on Windows for its `shutdown` line, and hung at launch. Git now starts with an empty stdin; a git run that does time out ends its whole process tree and gives its slot back within two seconds, so one hung run can no longer block every later one.
