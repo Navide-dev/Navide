@@ -108,6 +108,9 @@ class AcpClient:
         self._read_task: asyncio.Task[None] | None = None
         # session id -> the permission requests the agent is still waiting on.
         self._asking: dict[str, set[asyncio.Task[None]]] = {}
+        # Sessions cancelled while their prompt runs: their permission requests
+        # are answered "cancelled" on arrival (see cancel / prompt).
+        self._cancelled: set[str] = set()
         self._serving: set[asyncio.Task[None]] = set()  # the agent's requests being answered
         self._closed: BaseException | None = None
         self.bad_lines = 0  # lines that were not JSON-RPC messages; logged, then skipped
@@ -139,8 +142,10 @@ class AcpClient:
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
         self._fail_pending(AcpClosed("the ACP connection was closed"))
-        for task in list(self._serving):
+        serving = list(self._serving)
+        for task in serving:
             task.cancel()
+        await asyncio.gather(*serving, return_exceptions=True)
 
     # -- requests ---------------------------------------------------------
 
@@ -196,9 +201,14 @@ class AcpClient:
         ACP has no session/stop: a turn ends only when the agent answers this
         request, with stopReason "cancelled" after a ``cancel``.
         """
-        result = await self.request(
-            "session/prompt", {"sessionId": session_id, "prompt": [{"type": "text", "text": text}]}
-        )
+        # A new turn: an earlier cancel of this session no longer applies.
+        self._cancelled.discard(session_id)
+        try:
+            result = await self.request(
+                "session/prompt", {"sessionId": session_id, "prompt": [{"type": "text", "text": text}]}
+            )
+        finally:
+            self._cancelled.discard(session_id)
         reason = result.get("stopReason") if isinstance(result, dict) else None
         if not isinstance(reason, str):
             raise AcpProtocolError("session/prompt: the agent sent no stopReason")
@@ -210,8 +220,10 @@ class AcpClient:
         """Ask the agent to end the running turn (a notification: no answer).
 
         The permission requests still open for the session are answered
-        "cancelled" here, as the protocol requires of the client.
+        "cancelled" here, as the protocol requires of the client, and so is any
+        the agent sends from now until its prompt returns.
         """
+        self._cancelled.add(session_id)
         for task in list(self._asking.get(session_id, ())):
             task.cancel()
         await self.notify("session/cancel", {"sessionId": session_id})
@@ -243,19 +255,25 @@ class AcpClient:
                 raise AcpClosed(f"the agent's input is closed: {err}") from err
 
     async def _read_loop(self) -> None:
-        buffer = b""
+        # A bytearray grown in place, searched only past what was already
+        # searched: a line of any length is read in linear time.
+        buffer = bytearray()
+        searched = 0
         try:
             while True:
                 chunk = await self._reader.read(_READ_CHUNK)
                 if not chunk:
                     break
                 buffer += chunk
-                while (newline := buffer.find(b"\n")) >= 0:
-                    line, buffer = buffer[:newline], buffer[newline + 1:]
+                while (newline := buffer.find(b"\n", searched)) >= 0:
+                    line = bytes(buffer[:newline])
+                    del buffer[:newline + 1]
+                    searched = 0
                     if line.strip():
                         await self._handle_line(line)
+                searched = len(buffer)
             if buffer.strip():
-                await self._handle_line(buffer)
+                await self._handle_line(bytes(buffer))
         finally:
             self._fail_pending(AcpClosed("the agent's output ended"))
 
@@ -272,7 +290,10 @@ class AcpClient:
     async def _handle_line(self, line: bytes) -> None:
         try:
             message = json.loads(line.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except (UnicodeDecodeError, ValueError, RecursionError):
+            # ValueError covers JSONDecodeError and a number too long to parse;
+            # RecursionError, nesting too deep. Skipped like any bad line: the
+            # loop must keep reading (a permission request may come next).
             message = None
         if not isinstance(message, dict):
             self.bad_lines += 1
@@ -296,7 +317,11 @@ class AcpClient:
         log.warning("ACP: skipped a message that is neither a request, a notification nor a response")
 
     def _answer(self, message: dict[str, Any]) -> None:
-        entry = self._pending.get(message["id"]) if isinstance(message["id"], int) else None
+        request_id = message["id"]
+        entry = (
+            self._pending.get(request_id)
+            if isinstance(request_id, int) and not isinstance(request_id, bool) else None
+        )
         if entry is None:
             log.warning("ACP: an answer to no request of ours (id %r)", message["id"])
             return
@@ -305,9 +330,10 @@ class AcpClient:
             return
         error = message.get("error")
         if isinstance(error, dict):
+            code = error.get("code")
             future.set_exception(AcpError(
-                method, int(error.get("code") or INTERNAL_ERROR), str(error.get("message") or ""),
-                error.get("data"),
+                method, code if isinstance(code, int) and not isinstance(code, bool) else INTERNAL_ERROR,
+                str(error.get("message") or ""), error.get("data"),
             ))
         else:
             future.set_result(message.get("result"))
@@ -332,11 +358,18 @@ class AcpClient:
 
     async def _ask_permission(self, request_id: Any, params: dict[str, Any]) -> None:
         session_id = str(params.get("sessionId") or "")
+        if session_id in self._cancelled:
+            # Sent after (or racing) the cancel: never shown, never allowed.
+            await self._reply(request_id, _permission_outcome(None))
+            return
+        replying = False
 
         async def ask() -> None:
+            nonlocal replying
             option_id = None
             if self._on_permission is not None:
                 option_id = await self._on_permission(params)
+            replying = True
             await self._reply(request_id, _permission_outcome(option_id))
 
         task = asyncio.ensure_future(ask())
@@ -344,8 +377,9 @@ class AcpClient:
         try:
             await task
         except asyncio.CancelledError:
-            # A cancelled turn, or the connection went away: "cancelled".
-            if self._closed is None:
+            # A cancelled turn, or the connection went away: "cancelled" — unless
+            # the user's answer was already on its way (one reply per id).
+            if self._closed is None and not replying:
                 await self._reply(request_id, _permission_outcome(None))
         except Exception as err:  # noqa: BLE001
             log.warning("ACP: the permission handler failed: %s", err)
