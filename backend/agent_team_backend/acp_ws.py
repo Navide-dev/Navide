@@ -125,7 +125,9 @@ async def _sweep(grace: float, now: float, ended: list[str]) -> None:
             _OWNERLESS_SINCE.pop(item.id, None)
             continue
         since = _OWNERLESS_SINCE.setdefault(item.id, now)
-        if now - since < grace:
+        # The deadline first, then the comparison: (since + grace) - since can
+        # round below grace (3599.9999999999995 for since=700.685087237).
+        if now < since + grace:
             continue
         log.info("ACP %s: no window for %.0fs; ending its agent", item.id, now - since)
         await _SERVICE.kill(item.id)

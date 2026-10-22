@@ -267,6 +267,9 @@ class AcpSessionService:
             fd = os.open(stderr_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         except OSError as err:
             raise AcpStartError("acp-start-failed", f"cannot open the agent's log: {err}") from err
+        # This start owns the log's fd and closes it exactly once, whatever
+        # happens to the spawn (it fails, it is cancelled, it succeeds — the
+        # child then holds its own copy).
         try:
             proc = await _spawn(
                 argv,
@@ -278,9 +281,9 @@ class AcpSessionService:
                 start_new_session=True,
             )
         except OSError as err:
-            os.close(fd)
             raise AcpStartError("acp-start-failed", f"{argv[0]} could not be started: {err}") from err
-        os.close(fd)  # the child holds its own copy
+        finally:
+            os.close(fd)
         spawned = self._spawned[session_id] = _Spawned(proc)
         job: int | None = None
         try:

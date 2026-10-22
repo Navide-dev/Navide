@@ -271,6 +271,21 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+      # The exact command mirror.yml runs to publish whats-new.json: plain Node
+      # with type stripping, before any dependency install.
+      - name: Export What's New on plain Node.js (the mirror path)
+        shell: bash
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          node --experimental-strip-types scripts/export-whats-new.mjs --version "$version" --out "$RUNNER_TEMP/whats-new.json"
+          node -e '
+            const d = require(process.argv[1])
+            const bad = d.schemaVersion !== 1 || !Array.isArray(d.entries) || d.entries.length === 0
+              ? "the document"
+              : d.entries.find((e) => typeof e.version !== "string" || !e.title || typeof e.title["en-US"] !== "string" || !Array.isArray(e.highlights))
+            if (bad) { console.error("unexpected whats-new.json:", JSON.stringify(bad === "the document" ? d : bad).slice(0, 300)); process.exit(1) }
+            console.log("whats-new.json schemaVersion", d.schemaVersion, "entries", d.entries.length)
+          ' "$RUNNER_TEMP/whats-new.json"
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
