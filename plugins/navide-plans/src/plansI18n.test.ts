@@ -110,7 +110,7 @@ describe('Plans i18n bootstrap', () => {
       // Invalid or missing query fails closed to zh-TW
       expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=it-IT')).toBe('zh-TW')
       // A UI locale without a Plans catalog renders in en-US
-      expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=fr-FR')).toBe('en-US')
+      expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=vi-VN')).toBe('en-US')
       expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=ja-JP')).toBe('ja-JP')
       expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace')).toBe('zh-TW')
       expect(parsePlansLocaleFromQuery('')).toBe('zh-TW')
