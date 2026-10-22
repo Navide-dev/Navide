@@ -182,3 +182,21 @@ async def test_a_pane_that_is_not_acp_takes_none_of_these_branches(monkeypatch: 
     assert [c["op"] for c in calls][:1] == ["invoke"]  # the window path was taken
     assert "display" not in status and "acp" not in status
     assert log["ok"] is False and "no log file recorded" in log["error"]
+
+
+@pytest.mark.asyncio
+async def test_wait_idle_on_a_pane_that_is_not_acp_runs_the_tools_own_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The ACP hand-off answers None at once for any other pane, and the tool's
+    own loop decides: here the pane reports no activity at all (never_started)."""
+    from agent_team_backend import acp_mcp, app
+
+    asked: list[str] = []
+    monkeypatch.setattr(acp_ws, "session_for_pane", lambda pane_id: asked.append(pane_id))
+    monkeypatch.setattr(app, "pane_activity", lambda pane_id: None)
+    _no_window(monkeypatch)
+
+    result = await plan_mcp.cli_wait_idle("acp-worker", _ctx(), timeout_s=5)
+
+    assert asked == ["pacp"]  # looked once, found no ACP session, handed back
+    assert result["source"] not in ("acp_state", "acp_exited")
+    assert await acp_mcp.wait_idle("pacp", 1, lambda s: {}, lambda w: {}, lambda: None) is None  # type: ignore[arg-type]

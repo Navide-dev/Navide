@@ -14,7 +14,7 @@ import pytest
 
 from agent_team_backend import acp_sessions, acp_ws, pty_registry
 from agent_team_backend.acp_sessions import AcpSessionService, AcpStartError
-from agent_team_backend.cli_vendors.base import AcpLaunch
+from agent_team_backend.acp_vendors import AcpLaunch
 
 FAKE_AGENT = Path(__file__).with_name("fake_acp_agent.py")
 
@@ -247,7 +247,7 @@ def fresh_service(registry, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 async def test_a_vendor_without_acp_is_refused(fresh_service, monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=None, spawn_env_defaults=()))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: None)
     window = FakeWindow()
 
     await acp_ws.acp_create(window, "m1", "acp.create", {"agent_key": "aider", "pane_id": "p1", "cwd": str(tmp_path)})
@@ -260,7 +260,8 @@ async def test_requests_drive_a_session_and_its_events_reach_the_creating_window
     fresh_service, monkeypatch, tmp_path,
 ) -> None:
     launch = AcpLaunch(argv=tuple(_argv("reply")))
-    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=launch, spawn_env_defaults=()))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: launch)
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(spawn_env_defaults=()))
     window = FakeWindow()
     try:
         await acp_ws.acp_create(window, "m1", "acp.create", {"agent_key": "opencode", "pane_id": "p1", "cwd": str(tmp_path)})
@@ -350,7 +351,8 @@ async def test_the_window_side_records_pane_activity_and_broadcasts_it(fresh_ser
     from agent_team_backend import app
 
     launch = AcpLaunch(argv=tuple(_argv("reply")))
-    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=launch, spawn_env_defaults=()))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: launch)
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(spawn_env_defaults=()))
     broadcasts: list[dict[str, Any]] = []
 
     async def fake_broadcast(event: dict[str, Any], **_kw: Any) -> None:
@@ -379,7 +381,8 @@ async def test_the_window_side_records_pane_activity_and_broadcasts_it(fresh_ser
 
 async def test_a_relative_output_log_is_refused(fresh_service, monkeypatch, tmp_path) -> None:
     launch = AcpLaunch(argv=tuple(_argv("reply")))
-    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=launch, spawn_env_defaults=()))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: launch)
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(spawn_env_defaults=()))
     window = FakeWindow()
 
     await acp_ws.acp_create(window, "m1", "acp.create", {
@@ -434,7 +437,8 @@ async def test_abandon_with_nothing_running_or_starting_is_a_no_op(service) -> N
 
 async def test_the_window_closes_a_starting_pane_by_pane_id(fresh_service, monkeypatch, tmp_path) -> None:
     launch = AcpLaunch(argv=tuple(_argv("slow_start")))
-    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(acp=launch, spawn_env_defaults=()))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: launch)
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(spawn_env_defaults=()))
     window = FakeWindow()
     try:
         creating = asyncio.ensure_future(
@@ -448,5 +452,81 @@ async def test_the_window_closes_a_starting_pane_by_pane_id(fresh_service, monke
         await asyncio.wait_for(creating, 10)
         assert window.result("m1")["error"]["code"] == "ACP_CANCELLED"
         assert acp_ws.get_service().list() == []
+    finally:
+        await acp_ws.shutdown()
+
+
+async def test_two_starts_for_one_pane_both_end_when_it_is_closed(service, registry, tmp_path) -> None:
+    """The closed mark must outlive the first start to end, or the second one runs on."""
+    first = asyncio.ensure_future(
+        service.create(pane_id="p1", agent_key="fake", argv=_argv("slow_start"), cwd=str(tmp_path))
+    )
+    second = asyncio.ensure_future(
+        service.create(pane_id="p1", agent_key="fake", argv=_argv("slow_start"), cwd=str(tmp_path))
+    )
+    await _until(lambda: len(service.list()) == 2)
+
+    assert await service.abandon("p1") is True  # stops one of them; both are marked
+    for task in (first, second):
+        with pytest.raises(AcpStartError) as err:
+            await asyncio.wait_for(task, 10)
+        assert err.value.code in ("acp-cancelled", "acp-handshake-failed")
+    assert service.list() == []
+    assert not any(_alive(pid) for pid in registry["register"])
+    assert service._creating == {} and service._abandoned == set()
+
+
+async def test_a_start_under_way_at_shutdown_never_leaves_its_agent_running(service, registry, tmp_path) -> None:
+    task = asyncio.ensure_future(
+        service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+    )
+    await asyncio.sleep(0)  # under way, nothing spawned yet
+
+    await service.kill_all()
+
+    with pytest.raises(AcpStartError) as err:
+        await asyncio.wait_for(task, 10)
+    assert err.value.code == "acp-cancelled"
+    assert len(registry["register"]) == 1 and not _alive(registry["register"][0])
+    assert service.list() == []
+
+
+async def test_an_existing_transcript_is_tightened_and_odd_text_never_breaks_it(service, tmp_path) -> None:
+    log_file = tmp_path / "pane.log"
+    log_file.write_text("earlier\n", encoding="utf-8")
+    if sys.platform != "win32":
+        log_file.chmod(0o644)
+    session = await service.create(
+        pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path), output_log_file=str(log_file),
+    )
+
+    acp_sessions._append_transcript(session, "lone \ud800 surrogate")
+
+    assert log_file.read_text(encoding="utf-8").endswith("lone ? surrogate")
+    if sys.platform != "win32":
+        assert log_file.stat().st_mode & 0o777 == 0o600
+
+
+async def test_the_resource_sweep_gains_a_row_per_acp_agent_and_nothing_else(fresh_service, monkeypatch, tmp_path) -> None:
+    from agent_team_backend import process_cpu, process_memory
+
+    sweep = {"panes": [{"terminal_session_id": "t1", "pane_id": "tui", "bytes": 10, "cpu_seconds": 1.0}], "total_bytes": 10, "available": True}
+    assert await acp_ws.with_resource_rows(sweep) is sweep  # no ACP agent: untouched
+
+    launch = AcpLaunch(argv=tuple(_argv("reply")))
+    monkeypatch.setattr(acp_ws, "acp_launch", lambda key: launch)
+    monkeypatch.setattr(acp_ws, "cli_vendor", lambda key: SimpleNamespace(spawn_env_defaults=()))
+    monkeypatch.setattr(process_memory, "footprints", lambda pids: {pid: 100 for pid in pids})
+    monkeypatch.setattr(process_cpu, "cpu_times", lambda pids: ({pid: 0.5 for pid in pids}, 1.0))
+    window = FakeWindow()
+    try:
+        await acp_ws.acp_create(window, "m1", "acp.create", {"agent_key": "opencode", "pane_id": "pane-acp", "cwd": str(tmp_path)})
+        result = await acp_ws.with_resource_rows(sweep)
+
+        assert result["panes"][0] == sweep["panes"][0]
+        [row] = result["panes"][1:]
+        assert row["terminal_session_id"] == "" and row["pane_id"] == "pane-acp" and row["bytes"] >= 100
+        assert result["total_bytes"] == 10 + row["bytes"]
+        assert result["available"] is True
     finally:
         await acp_ws.shutdown()

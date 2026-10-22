@@ -6,6 +6,7 @@ Requests: ``acp.create``, ``acp.prompt``, ``acp.cancel``,
 ``acp.state``, ``acp.update``, ``acp.permission``, ``acp.permission_closed``,
 ``acp.turn_end``, ``acp.exit``. A vendor without ``VendorSpec.acp`` is refused
 with ``ACP_UNAVAILABLE``; nothing falls back to a terminal pane on its own.
+Which CLIs have an ACP mode is ``acp_vendors``, not ``cli_vendors``.
 
 Each turn's start and end is recorded as the pane's activity and broadcast as
 ``agent.activity`` exactly as a terminal pane's log reader reports it, so chat
@@ -17,12 +18,14 @@ Registered on import (app imports this module next to ws_handlers).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from .acp_sessions import AcpSession, AcpSessionService, AcpStartError
+from .acp_vendors import acp_launch
 from .cli_vendors.registry import vendor as cli_vendor
 from .ipc import make_error, make_event, make_response
 from .ws_handlers import handler
@@ -81,6 +84,40 @@ def session_for_pane(pane_id: str) -> AcpSession | None:
     return _SERVICE.by_pane(pane_id) if _SERVICE is not None else None
 
 
+async def with_resource_rows(result: dict[str, Any]) -> dict[str, Any]:
+    """terminal.resource_usage's sweep plus a row per ACP agent (its process and
+    descendants), filed under the pane (terminal_session_id ""). Measured on
+    its own, after the terminal sweep, which stays exactly as it was; with no
+    ACP agent running the result is returned untouched."""
+    from . import process_cpu, process_memory
+
+    groups = await asyncio.to_thread(pid_groups)
+    if not groups:
+        return result
+    pids = [pid for _, pids in groups.values() for pid in pids]
+    by_session = {sid: pids for sid, (_, pids) in groups.items()}
+    measured, (cpu_measured, _sampled_at) = await asyncio.gather(
+        asyncio.to_thread(process_memory.footprints, pids),
+        asyncio.to_thread(process_cpu.cpu_times, pids),
+    )
+    totals = process_memory.sum_by_group(by_session, measured)
+    cpu_totals = process_cpu.sum_by_group(by_session, cpu_measured)
+    rows = [
+        {
+            "terminal_session_id": "",
+            "pane_id": pane_id,
+            "bytes": totals.get(sid, 0),
+            "cpu_seconds": cpu_totals.get(sid, 0.0),
+        }
+        for sid, (pane_id, _) in groups.items()
+    ]
+    return {
+        **result,
+        "panes": [*result.get("panes", []), *rows],
+        "total_bytes": int(result.get("total_bytes", 0)) + sum(totals.values()),
+    }
+
+
 def pid_groups() -> dict[str, tuple[str, list[int]]]:
     """ACP agents for the resource sweep (see AcpSessionService.pid_groups);
     blocking, so call it off the event loop. Never starts the service."""
@@ -88,14 +125,19 @@ def pid_groups() -> dict[str, tuple[str, list[int]]]:
 
 
 async def shutdown() -> None:
-    """Stop every ACP agent (backend shutdown)."""
-    if _SERVICE is not None:
+    """Stop every ACP agent (backend shutdown). Never raises: a failed sweep
+    must not skip the rest of the backend's teardown."""
+    if _SERVICE is None:
+        return
+    try:
         await _SERVICE.kill_all()
+    except Exception as err:  # noqa: BLE001
+        log.warning("ACP shutdown sweep failed: %s", err)
 
 
 def _spawn_env(spec: Any) -> dict[str, str]:
     env = dict(os.environ)
-    for key, value in spec.spawn_env_defaults:
+    for key, value in (spec.spawn_env_defaults if spec is not None else ()):
         env.setdefault(key, value)
     return env
 
@@ -106,8 +148,8 @@ async def acp_create(session: "Session", msg_id: str, msg_type: str, payload: di
     pane_id = str(payload.get("pane_id") or "")
     cwd = str(payload.get("cwd") or "")
     output_log_file = str(payload.get("output_log_file") or "")
-    spec = cli_vendor(agent_key)
-    if spec is None or spec.acp is None:
+    launch = acp_launch(agent_key)
+    if launch is None:
         await session.send_json(make_error(
             msg_id, msg_type, "ACP_UNAVAILABLE", f"{agent_key or 'this CLI'} has no ACP mode in Navide",
         ))
@@ -120,8 +162,8 @@ async def acp_create(session: "Session", msg_id: str, msg_type: str, payload: di
         return
     try:
         created = await get_service().create(
-            pane_id=pane_id, agent_key=agent_key, argv=list(spec.acp.argv), cwd=cwd,
-            env=_spawn_env(spec), load_session_id=str(payload.get("load_session_id") or ""),
+            pane_id=pane_id, agent_key=agent_key, argv=list(launch.argv), cwd=cwd,
+            env=_spawn_env(cli_vendor(agent_key)), load_session_id=str(payload.get("load_session_id") or ""),
             output_log_file=output_log_file,
         )
     except AcpStartError as err:

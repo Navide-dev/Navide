@@ -3,9 +3,7 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provi
 import ViewPanel, { type LayoutMode } from './components/ViewPanel.vue'
 import TerminalPane from './components/TerminalPane.vue'
 import AcpPane from './components/AcpPane.vue'
-import type { PaneDisplay, PaneHandle } from './lib/paneHandle'
-import { acpMessagingHoldKey } from './lib/acpPane'
-import type { AcpPort } from './composables/useAcpSession'
+import { createAcpHost } from './lib/acpHost'
 import WindowControls from './components/WindowControls.vue'
 import RestoredPanePlaceholder from './components/RestoredPanePlaceholder.vue'
 import VoiceCapsule from './components/VoiceCapsule.vue'
@@ -489,8 +487,6 @@ setDiagnosticSink((entry) => {
     .catch(() => { /* best effort: the ring buffer still has it */ })
 })
 const terminalPort = createHostTerminalDockPort(backend)
-// ACP panes (no PTY) talk to the backend's acp.* requests directly.
-const acpPort: AcpPort = { send: backend.send, on: backend.on }
 // Hook the settings cache to the ws: reconciles + flushes queued writes once
 // connected, and applies ui.settings_changed broadcasts from other windows.
 initSettingsBackend(createHostGitSettingsPort(backend))
@@ -1710,9 +1706,6 @@ interface ActivePane {
   restoring?: boolean
   agentKey: string
   agentLabel: string
-  /** 'acp': the agent runs over the Agent Client Protocol in an AcpPane (no
-   *  PTY). Absent = the CLI's own TUI in a TerminalPane. */
-  display?: PaneDisplay
   /** User-set display name from the rename action. Overrides agentLabel in all
    *  pane surfaces when non-empty; persisted to project.json (PaneRecord.custom_name). */
   customName?: string
@@ -1895,7 +1888,26 @@ interface ActivePane {
 }
 
 const panes = ref<ActivePane[]>([])
-const paneRefs = reactive<Record<string, PaneHandle | null>>({})
+const paneRefs = reactive<Record<string, InstanceType<typeof TerminalPane> | null>>({})
+// ACP panes (no PTY) live in lib/acpHost.ts, never in paneRefs: code that looks
+// a pane up there finds no ref for one and skips it.
+const acp = createAcpHost({
+  port: { send: backend.send, on: backend.on },
+  pane: (id) => panes.value.find((p) => p.id === id),
+  started: (id, ok) => {
+    const pane = panes.value.find((p) => p.id === id)
+    if (!pane) return
+    pane.injectionStatus = 'skipped'
+    setPrepStatus(pane, ok ? 'ready' : 'failed')
+    syncViews()
+  },
+  stopLoop: (id) => {
+    if (panes.value.find((p) => p.id === id)?.loopActive) stopLoopSpinning(id, 'interrupted')
+  },
+  persistPaneStopped: (id, stopped) => persistPaneStopped(id, stopped),
+  runDir: () => pipeline.runDir,
+  history: (id) => spawnHistory.value.find((e) => e.paneId === id),
+})
 const persistSessionOnce = createPaneSessionPersistence()
 
 // Tracks which issues have been dispatched/handled and to which pane.
@@ -2398,7 +2410,7 @@ watch(spawnHistory, (v) => {
 }, { deep: true })
 
 function setPaneRef(id: string, el: unknown): void {
-  paneRefs[id] = (el as PaneHandle | null) ?? null
+  paneRefs[id] = (el as InstanceType<typeof TerminalPane> | null) ?? null
 }
 
 const paneViews = ref<ActivePaneView[]>([])
@@ -2645,13 +2657,7 @@ async function deliverAgentMessage(
   text: string,
   shouldAbort?: () => boolean,
 ): Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }> {
-  // An ACP pane has no PTY: the message (already queued, rate-limited and
-  // rendered by the messaging layer) is handed to the agent as a prompt
-  // through the backend. Delivered = the backend accepted it.
-  if (panes.value.find((p) => p.id === paneId)?.display === 'acp') {
-    const sent = await paneRefs[paneId]?.sendPrompt?.(text)
-    return sent === undefined ? null : sent
-  }
+  if (acp.owns(paneId)) return acp.deliver(paneId, text)
   // Hold the badge on RUNNING until the recipient's log shows the message
   // consumed — released in the agent.activity handler, fused inside
   // useTerminal. Marked BEFORE the Enter, not after: an idle CLI writes the
@@ -2802,12 +2808,10 @@ function messagingHoldKey(
   paneId: string,
   opts: { ignoreTyping?: boolean } = {},
 ): string | null {
+  if (acp.owns(paneId)) return acp.holdKey(paneId)
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return 'gone'
   const status = paneRefs[paneId]?.displayStatus as string | undefined
-  // An ACP pane has no PTY: the gates below read one (resumeBootHold's hasPty
-  // would hold it as 'starting' forever). Its own state is exact.
-  if (pane.display === 'acp') return acpMessagingHoldKey(paneRefs[paneId]?.displayStatus)
   // A question passes deliberately. Those panes were already reaching this gate
   // as 'idle' (a turn ending on a question, or an AskUserQuestion box the badge
   // used to show as running-then-idle), so holding them back would newly park
@@ -2925,6 +2929,7 @@ const pushUnclearAt = new Map<string, number>()
  *  CLI-side one, and the typing hold only for a channel that writes the
  *  composer — so the composable can treat a non-null answer as "go". */
 function pushTargetForMessaging(paneId: string): { kind: string } | null {
+  if (acp.owns(paneId)) return null
   const kind = pushReadyPanes.get(paneId)
   if (!kind) return null
   const pane = panes.value.find((p) => p.id === paneId)
@@ -4053,11 +4058,7 @@ onMounted(() => {
       return refusal ? rawReason(refusal) : null
     },
     // A push skips refuseDelivery, so a sign-in pane is never offered one.
-    pushTarget: (paneId) => {
-      const target = panes.value.find((p) => p.id === paneId)
-      // An ACP pane takes no push either: that is a path into a TUI's composer.
-      return target?.isLogin || target?.display === 'acp' ? null : pushTargetForMessaging(paneId)
-    },
+    pushTarget: (paneId) => (panes.value.find((p) => p.id === paneId)?.isLogin ? null : pushTargetForMessaging(paneId)),
     pushDeliver: pushDeliverAgentMessage,
     routeRemote: routeRemoteMessage,
     reportDelivery: (msgKey, ok, reason) => {
@@ -6739,7 +6740,7 @@ function reportCodexHookTrustPrompt(paneId: string): void {
   if (!ref) return
   let screen = ''
   try {
-    screen = (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as unknown as string) ?? ''
+    screen = (ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string) ?? ''
   } catch {
     return
   }
@@ -7065,9 +7066,8 @@ interface SpawnInternal {
   quotaTransactionId?: string
   quotaOriginalPaneId?: string
   agentKey: string
-  /** 'acp' starts the agent over ACP in an AcpPane. Refused (TUI) for a plain
-   *  terminal and for sign-in panes, which are interactive by nature. */
-  display?: PaneDisplay
+  /** 'acp' asks for an ACP pane (lib/acpHost.ts decides: never a plain terminal or a sign-in pane). Absent = the TUI. */
+  display?: 'tui' | 'acp'
   roleKey: RoleKey
   stageId: StageId
   /** User-set pane title. Runtime replacements such as rebuild must carry it
@@ -7323,10 +7323,8 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
   // Login panes get NO marker: they sit at an interactive sign-in wizard, and
   // the marker bootstrap (dismissStartupDialog + pasted marker + Enter) would
   // inject input into it. No marker also means no session overlay for them.
-  // An ACP pane gets its session id from session/new: no marker is typed.
-  const acpDisplay = opts.display === 'acp' && opts.agentKey !== 'terminal' && !opts.isLogin && !opts.loginProfileId
   const sessionMarker =
-    !opts.isResume && !opts.isLogin && !acpDisplay && SESSION_MARKER_AGENTS.has(opts.agentKey)
+    !opts.isResume && !opts.isLogin && SESSION_MARKER_AGENTS.has(opts.agentKey)
       ? `at-pane:${id}`
       : ''
   const pane: ActivePane = {
@@ -7335,7 +7333,6 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     restoring: opts.restoring,
     agentKey: opts.agentKey,
     agentLabel: spec.label,
-    display: acpDisplay ? 'acp' : undefined,
     customName: opts.customName,
     nameLocked: opts.nameLocked,
     autoName: opts.autoName,
@@ -7365,6 +7362,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
     isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
   }
+  acp.claim(id, opts)
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
   // follows account switches; one its pin puts in an account dir is fixed.
   if (
@@ -7456,41 +7454,26 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     )
   }
   await nextTick()
+  if (acp.owns(id)) return acp.start(id, opts)
   const ref = paneRefs[id]
   if (!ref) return id
-  // Always write the agent conversation to a dedicated log file. Pipeline
-  // panes land inside the run sub-folder (runs/YYYYMMDD-HHmmss-task/) so
-  // each run is self-contained; manual panes land under a flat manual/
-  // folder grouped by date so they're still recoverable.
-  const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-  // A sign-in pane writes none: its output is an authorization URL or code,
-  // and a file in the workspace is readable by every agent working there.
-  const outputLogFile = opts.workspacePath && !pane.isLogin
-    ? opts.origin === 'pipeline'
-      ? pipeline.runDir
-        ? `${opts.workspacePath}/.agent-team/${pipeline.runDir}/stage-${opts.stageId}-${id.slice(0, 8)}.log`
-        : `${opts.workspacePath}/.agent-team/stage-${opts.stageId}-${id.slice(0, 8)}.log`
-      : `${opts.workspacePath}/.agent-team/manual/${ymd}/${opts.agentKey}-${id.slice(0, 8)}.log`
-    : undefined
-  pane.outputLogFile = outputLogFile
-  if (pane.display === 'acp') {
-    // The backend starts the agent over ACP (acp.create): no shell command,
-    // startup dialog or session marker applies; the backend appends the
-    // transcript to the same output log a PTY pane writes. Role and kickoff
-    // prompts reach an ACP pane with the delivery work that follows (P3b).
-    try {
-      await ref.spawn({ command: [], cwd: opts.workspacePath ?? '', agentKey: opts.agentKey, outputLogFile })
-      // Agent History reads the transcript the backend appends there.
-      const historyEntry = spawnHistory.value.find((e) => e.paneId === id)
-      if (historyEntry) historyEntry.outputLogFile = outputLogFile
-      pane.injectionStatus = 'skipped'
-      setPrepStatus(pane, (ref.status as unknown as string) === 'running' ? 'ready' : 'failed')
-    } finally {
-      syncViews()
-    }
-    return id
-  }
   try {
+    // Always write the agent conversation to a dedicated log file. Pipeline
+    // panes land inside the run sub-folder (runs/YYYYMMDD-HHmmss-task/) so
+    // each run is self-contained; manual panes land under a flat manual/
+    // folder grouped by date so they're still recoverable.
+    const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    // A sign-in pane writes none: its output is an authorization URL or code,
+    // and a file in the workspace is readable by every agent working there.
+    const outputLogFile = opts.workspacePath && !pane.isLogin
+      ? opts.origin === 'pipeline'
+        ? pipeline.runDir
+          ? `${opts.workspacePath}/.agent-team/${pipeline.runDir}/stage-${opts.stageId}-${id.slice(0, 8)}.log`
+          : `${opts.workspacePath}/.agent-team/stage-${opts.stageId}-${id.slice(0, 8)}.log`
+        : `${opts.workspacePath}/.agent-team/manual/${ymd}/${opts.agentKey}-${id.slice(0, 8)}.log`
+      : undefined
+    pane.outputLogFile = outputLogFile
+
     await ref.spawn({
       // zsh reads ~/.zshrc (where installers add PATH, e.g. Claude Code's
       // ~/.local/bin) only in interactive mode — plain -lc misses it; the
@@ -8124,9 +8107,8 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   }
   if (activeQuestion.value?.paneId === paneId) activeQuestion.value = null
   const ref = paneRefs[paneId]
-  // An ACP pane never has a terminal session id; it is stopped through its own
-  // kill (acp.kill), also while it is still starting.
-  if (ref?.sessionId || (ref && pane?.display === 'acp')) {
+  if (acp.owns(paneId)) await acp.kill(paneId, { force })
+  if (ref?.sessionId) {
     try {
       await ref.kill({ force: force })
     } catch (err) {
@@ -9306,8 +9288,8 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
 async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): Promise<boolean> {
   if (!panes.value.find((p) => p.id === paneId)?.realized) return false
   const ref = paneRefs[paneId]
-  // An ACP pane's interrupt is session/cancel; it has no terminal session id.
-  if (!ref || (!ref.sessionId && ref.display !== 'acp')) return false
+  if (acp.owns(paneId)) return acp.interrupt(paneId, opts)
+  if (!ref?.sessionId) return false
   // An explicit interrupt of this pane (user or agent) stops its loop too —
   // otherwise the interrupted turn's end reads as a finished turn and the loop
   // answers it with a continue. Stopped before the interrupt so an in-flight
@@ -22990,24 +22972,27 @@ function paneIsCommander(p: ActivePane): boolean {
           @mousedown.prevent="onGridHandleStart($event, 'dual-focus', 0)"
         />
         <template v-for="p in panes" :key="p.id">
-        <AcpPane
-          v-if="p.realized && p.display === 'acp'"
-          v-show="onScreenPaneIds.has(p.id)"
-          :style="{ ...floatPaneStyle(p.id), ...dualFocusStyle(p.id) }"
-          :ref="(el) => setPaneRef(p.id, el)"
-          :data-pane-id="p.id"
-          :pane-id="p.id"
-          :title="p.messagingName || p.customName || p.autoName || p.agentLabel"
-          :agent-key="p.agentKey"
-          :workspace-path="p.workspacePath"
-          :is-focus="p.id === effectiveFocusPaneId"
-          :acp-port="acpPort"
-          @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
-          @first-output="onPaneFirstOutput(p.id)"
-          @context-menu="(ev) => openPaneCtxMenu(ev, p.id)"
-        />
+        <template v-if="acp.owns(p.id)">
+          <AcpPane
+            v-if="p.realized"
+            v-show="onScreenPaneIds.has(p.id)"
+            :style="{ ...floatPaneStyle(p.id), ...dualFocusStyle(p.id) }"
+            :ref="(el) => acp.setRef(p.id, el)"
+            :data-pane-id="p.id"
+            :pane-id="p.id"
+            :title="p.messagingName || p.customName || p.autoName || p.agentLabel"
+            :agent-key="p.agentKey"
+            :workspace-path="p.workspacePath"
+            :is-focus="p.id === effectiveFocusPaneId"
+            :acp-port="acp.port"
+            @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
+            @first-output="onPaneFirstOutput(p.id)"
+            @context-menu="(ev) => openPaneCtxMenu(ev, p.id)"
+          />
+        </template>
+        <template v-else>
         <TerminalPane
-          v-else-if="p.realized"
+          v-if="p.realized"
           v-show="onScreenPaneIds.has(p.id)"
           :on-screen="onScreenPaneIds.has(p.id)"
           :style="{ ...floatPaneStyle(p.id), ...dualFocusStyle(p.id) }"
@@ -23092,6 +23077,7 @@ function paneIsCommander(p: ActivePane): boolean {
           @minimize="minimizePane(p.id)"
           @context-menu="(ev) => openPaneCtxMenu(ev, p.id)"
         />
+        </template><!-- the TUI branch of acp.owns(p.id) -->
         </template>
         <VoiceCapsule :state="voiceInput.state" @dismiss="voiceInput.dismiss" />
         <ReadbackCapsule :state="readback.current.value" @stop="readback.stop()" />

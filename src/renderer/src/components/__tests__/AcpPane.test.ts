@@ -4,7 +4,6 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
 import AcpPane from '../AcpPane.vue'
 import type { AcpPort } from '../../composables/useAcpSession'
-import type { PaneHandle } from '../../lib/paneHandle'
 
 type Reply = { ok: boolean; payload: unknown; error: { code: string; message: string; details?: Record<string, unknown> } | null }
 
@@ -45,12 +44,30 @@ function ok(payload: unknown): Reply {
 
 let wrapper: VueWrapper | undefined
 
-function mountPane(port: FakePort): { wrapper: VueWrapper; pane: PaneHandle } {
+/** What AcpPane exposes (lib/acpHost.ts AcpPaneApi plus what these tests read). */
+interface PaneApi {
+  spawn(opts: { cwd: string; agentKey?: string; outputLogFile?: string; command?: string[] }): Promise<void>
+  kill(opts?: unknown): Promise<void>
+  interrupt(): Promise<boolean>
+  status: string
+  displayStatus: string
+  awaitingKind: string | null
+  text: string
+  textSeen: number
+  lastActivityAt: number
+  hasDraft: boolean
+  permissionWaitLive(): boolean
+  setStopped(stopped: boolean): void
+  insertText(text: string, opts?: { submit?: boolean }): boolean
+  prompt(text: string): Promise<string>
+}
+
+function mountPane(port: FakePort): { wrapper: VueWrapper; pane: PaneApi } {
   wrapper = mount(AcpPane, {
     props: { paneId: 'p1', title: 'Agent', agentKey: 'opencode', workspacePath: '/work', acpPort: port },
     global: { plugins: [i18n] },
   }) as VueWrapper
-  return { wrapper, pane: wrapper.vm as unknown as PaneHandle }
+  return { wrapper, pane: wrapper.vm as unknown as PaneApi }
 }
 
 afterEach(() => {
@@ -60,20 +77,15 @@ afterEach(() => {
 })
 
 describe('AcpPane', () => {
-  it('starts its agent over ACP with this pane, CLI and folder, and never claims a terminal session', async () => {
+  it('starts its agent over ACP with this pane, CLI and folder', async () => {
     const port = new FakePort()
     const { pane } = mountPane(port)
 
     await pane.spawn({ command: [], cwd: '/work', agentKey: 'opencode' })
 
     expect(port.sent[0]).toEqual({ type: 'acp.create', payload: { pane_id: 'p1', agent_key: 'opencode', cwd: '/work' } })
-    expect(pane.display).toBe('acp')
     expect(pane.status).toBe('running')
     expect(pane.displayStatus).toBe('idle')
-    expect(pane.sessionId).toBe('')
-    // The screen readers stay absent, so screen watchers skip this pane.
-    expect(pane.readScreenTail).toBeUndefined()
-    expect(pane.fitTerminal).toBeUndefined()
   })
 
   it('draws the conversation from acp.update and exposes it as the pane text', async () => {
@@ -84,8 +96,8 @@ describe('AcpPane', () => {
     port.emit('acp.update', { update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: '<script>x</script> done' } } })
     await flushPromises()
 
-    expect(pane.cleanBuffer).toBe('<script>x</script> done')
-    expect(pane.cleanBytesSeen).toBeGreaterThan(0)
+    expect(pane.text).toBe('<script>x</script> done')
+    expect(pane.textSeen).toBeGreaterThan(0)
     expect(pane.lastActivityAt).toBeGreaterThan(0)
     // Shown as text: the agent's output is never rendered as HTML.
     expect(wrapper.find('.acp-transcript script').exists()).toBe(false)
@@ -107,21 +119,61 @@ describe('AcpPane', () => {
 
     expect(wrapper.find('[data-testid="acp-unsent"]').text()).toBe('Not sent')
     expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('hello agent')
-    expect(pane.cleanBuffer).toBe('')
+    expect(pane.text).toBe('')
   })
 
-  it('streams a reply as one node per chunk', async () => {
+  it('streams a reply into bounded parts: small chunks join one, a long reply starts more', async () => {
     const port = new FakePort()
     const { wrapper, pane } = mountPane(port)
     await pane.spawn({ command: [], cwd: '/work' })
-
-    for (const piece of ['a', 'b', 'c']) {
-      port.emit('acp.update', { update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: piece } } })
+    const chunk = (text: string): void => {
+      port.emit('acp.update', { update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } })
     }
+
+    for (const piece of ['a', 'b', 'c']) chunk(piece)
+    await flushPromises()
+    expect(wrapper.findAll('.acp-entry[data-role="agent"] > span').map((n) => n.text())).toEqual(['abc'])
+
+    chunk('x'.repeat(2046))
+    await flushPromises()
+    expect(wrapper.findAll('.acp-entry[data-role="agent"] > span')).toHaveLength(2)
+    expect(pane.text).toBe(`abc${'x'.repeat(2046)}`)
+  })
+
+  it('marks a prompt whose reply was lost as not confirmed, and keeps it out of the composer', async () => {
+    const port = new FakePort()
+    const { wrapper, pane } = mountPane(port)
+    await pane.spawn({ command: [], cwd: '/work' })
+    const send = port.send.bind(port)
+    port.send = ((type: string, payload?: Record<string, unknown>) => (type === 'acp.prompt'
+      ? Promise.reject(new Error('request acp.prompt timeout'))
+      : send(type, payload))) as FakePort['send']
+
+    await wrapper.find('textarea').setValue('hello agent')
+    await wrapper.find('[data-testid="acp-send"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('.acp-entry[data-role="agent"] > span').map((n) => n.text())).toEqual(['a', 'b', 'c'])
-    expect(pane.cleanBuffer).toBe('abc')
+    // The backend may have it: it is neither shown as sent nor offered for a resend.
+    expect(wrapper.find('[data-testid="acp-unconfirmed"]').text()).toBe('Not confirmed')
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('')
+    expect(pane.text).toBe('> hello agent')
+  })
+
+  it('marks a prompt that never left the window as not sent', async () => {
+    const port = new FakePort()
+    const { wrapper, pane } = mountPane(port)
+    await pane.spawn({ command: [], cwd: '/work' })
+    const send = port.send.bind(port)
+    port.send = ((type: string, payload?: Record<string, unknown>) => (type === 'acp.prompt'
+      ? Promise.reject(new Error('ws not open'))
+      : send(type, payload))) as FakePort['send']
+
+    await wrapper.find('textarea').setValue('hello agent')
+    await wrapper.find('[data-testid="acp-send"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="acp-unsent"]').exists()).toBe(true)
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('hello agent')
   })
 
   it('follows the bottom while text streams in only when the reader is already there', async () => {
@@ -129,8 +181,8 @@ describe('AcpPane', () => {
     const { wrapper, pane } = mountPane(port)
     await pane.spawn({ command: [], cwd: '/work' })
     const el = wrapper.find('.acp-transcript').element as HTMLElement
-    // The content grows as the DOM does: 100px per rendered chunk.
-    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => 1000 + 100 * el.querySelectorAll('span').length })
+    // The content grows as the DOM does: 10px per rendered character.
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => 1000 + 10 * (el.textContent ?? '').length })
     Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => 200 })
     const chunk = async (text: string): Promise<void> => {
       port.emit('acp.update', { update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } })
@@ -139,7 +191,7 @@ describe('AcpPane', () => {
 
     el.scrollTop = 800 // at the bottom
     await chunk('one')
-    expect(el.scrollTop).toBe(1100)
+    expect(el.scrollTop).toBe(1030)
 
     el.scrollTop = 300 // scrolled up to read
     await chunk('two')
@@ -269,7 +321,7 @@ describe('AcpPane', () => {
     expect(pane.permissionWaitLive()).toBe(false)
   })
 
-  it('takes inserted text into the composer and survives the calls App.vue makes on any pane', async () => {
+  it('takes inserted text into the composer', async () => {
     const port = new FakePort()
     const { wrapper, pane } = mountPane(port)
     await pane.spawn({ command: [], cwd: '/work' })
@@ -278,12 +330,9 @@ describe('AcpPane', () => {
     await flushPromises()
     expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('dictated')
     expect(pane.hasDraft).toBe(true)
-    // The five calls App.vue makes without `?.` must exist on an ACP pane.
     pane.setStopped(true)
-    expect(typeof pane.markBufferPosition()).toBe('number')
-    expect(typeof pane.cleanBuffer.length).toBe('number')
-    pane.markTurnComplete()
-    pane.markNeedsInput()
+    await flushPromises()
+    expect(wrapper.find('.acp-stopped').exists()).toBe(true)
   })
 
   it('ignores events of another pane', async () => {
@@ -296,7 +345,7 @@ describe('AcpPane', () => {
     }
     await flushPromises()
 
-    expect(pane.cleanBuffer).toBe('')
+    expect(pane.text).toBe('')
   })
 
   it('passes the pane output log to the backend, which appends the transcript there', async () => {
@@ -310,7 +359,7 @@ describe('AcpPane', () => {
     })
   })
 
-  it('hands a delivered message to the agent as a prompt, and says when there is no session yet', async () => {
+  it('hands a prompt to the agent and says how it went; with no session yet, nothing is sent', async () => {
     const port = new FakePort()
     let answerCreate: (r: Reply) => void = () => {}
     port.createReply = new Promise((resolve) => { answerCreate = resolve })
@@ -318,13 +367,12 @@ describe('AcpPane', () => {
     const spawning = pane.spawn({ command: [], cwd: '/work' })
     await flushPromises()
 
-    // Still starting: null puts the message back at the head of the queue.
-    expect(await pane.sendPrompt?.('[Navide MSG] from: a\nhello')).toBeNull()
+    expect(await pane.prompt('[Navide MSG] from: a\nhello')).toBe('')
     expect(port.count('acp.prompt')).toBe(0)
 
     answerCreate(ok({ session: { session_id: 's1', state: 'idle' } }))
     await spawning
-    expect(await pane.sendPrompt?.('[Navide MSG] from: a\nhello')).toBe(true)
+    expect(await pane.prompt('[Navide MSG] from: a\nhello')).toBe('sent')
     expect(port.sent.find((m) => m.type === 'acp.prompt')?.payload).toEqual({ session_id: 's1', text: '[Navide MSG] from: a\nhello' })
   })
 })

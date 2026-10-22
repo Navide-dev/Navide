@@ -139,8 +139,9 @@ class AcpSessionService:
         self._sessions: dict[str, AcpSession] = {}
         self._watchers: set[asyncio.Task[None]] = set()
         self._data_dir = app_data_dir()
-        # Panes with a create in progress, and those of them closed meanwhile.
-        self._creating: set[str] = set()
+        # Creates in progress per pane (two can overlap for one pane), and the
+        # panes closed meanwhile; a pane's mark lasts until its last create ends.
+        self._creating: dict[str, int] = {}
         self._abandoned: set[str] = set()
 
     def get(self, session_id: str) -> AcpSession | None:
@@ -183,7 +184,7 @@ class AcpSessionService:
         whatever was started is stopped first. Nothing falls back to a
         terminal pane on its own.
         """
-        self._creating.add(pane_id)
+        self._creating[pane_id] = self._creating.get(pane_id, 0) + 1
         try:
             return await self._create(
                 pane_id=pane_id, agent_key=agent_key, argv=argv, cwd=cwd, env=env,
@@ -191,20 +192,23 @@ class AcpSessionService:
                 output_log_file=output_log_file,
             )
         finally:
-            self._creating.discard(pane_id)
-            self._abandoned.discard(pane_id)
+            left = self._creating.get(pane_id, 1) - 1
+            if left > 0:
+                self._creating[pane_id] = left
+            else:
+                self._creating.pop(pane_id, None)
+                self._abandoned.discard(pane_id)
 
     async def abandon(self, pane_id: str) -> bool:
         """Stop the pane's agent now, also while it is still starting (the pane
         was closed). False when the pane has no agent and no start under way."""
-        starting = pane_id in self._creating
+        starting = self._creating.get(pane_id, 0) > 0
         if starting:
             self._abandoned.add(pane_id)
-        session = self.by_pane(pane_id)
-        if session is not None:
-            await self.kill(session.id)
-            return True
-        return starting
+        # Every agent of the pane: two overlapping starts each have one.
+        sessions = [s for s in self._sessions.values() if s.pane_id == pane_id and not s.stopping]
+        await asyncio.gather(*(self.kill(s.id) for s in sessions))
+        return starting or bool(sessions)
 
     def by_pane(self, pane_id: str) -> AcpSession | None:
         """The pane's agent (starting or running), or None: not an ACP pane, or stopped."""
@@ -414,6 +418,9 @@ class AcpSessionService:
         await self._forget(session)
 
     async def kill_all(self) -> None:
+        # A start still under way would otherwise spawn its agent after this
+        # sweep (the backend is going away): it stops it the moment it has one.
+        self._abandoned.update(self._creating)
         await asyncio.gather(*(self.kill(sid) for sid in list(self._sessions)), return_exceptions=True)
 
     def _end_tree(self, session: AcpSession) -> None:
@@ -483,8 +490,10 @@ class AcpSessionService:
 
 
 def _append_transcript(session: AcpSession, text: str) -> None:
-    """Append to the pane's output log (created owner-only). A write that fails
-    loses that piece of the log, never the turn."""
+    """Append to the pane's output log, owner-only (a file that already existed
+    is tightened too). Text the agent sent that UTF-8 cannot carry (a lone
+    surrogate) is written as "?". A write that fails loses that piece of the
+    log, never the turn."""
     path = session.transcript_path
     if path is None or not text:
         return
@@ -492,10 +501,12 @@ def _append_transcript(session: AcpSession, text: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
-            os.write(fd, text.encode("utf-8"))
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, 0o600)
+            os.write(fd, text.encode("utf-8", errors="replace"))
         finally:
             os.close(fd)
-    except OSError as err:
+    except (OSError, UnicodeError) as err:
         log.warning("ACP %s: transcript not written: %s", session.id, err)
 
 

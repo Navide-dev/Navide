@@ -668,6 +668,7 @@
   },
   "pane": {
     "acp": {
+      "unconfirmed": "Not confirmed",
       "unsent": "Not sent",
       "mark-tooltip": "This pane runs its agent over the Agent Client Protocol (ACP): Navide draws the conversation instead of the CLI's own screen.",
       "permission": "The agent asks to: {title}",

@@ -2564,11 +2564,7 @@ async def _stop_log_watcher() -> None:
                 await _TERMINALS.kill_all()
             except Exception as err:  # noqa: BLE001
                 log.warning("pty shutdown sweep failed: %s", err)
-        # ACP agents run in sessions (jobs on Windows) of their own, like PTY children.
-        try:
-            await acp_ws.shutdown()
-        except Exception as err:  # noqa: BLE001
-            log.warning("ACP shutdown sweep failed: %s", err)
+        await acp_ws.shutdown()  # ACP agents: never raises (see acp_ws.shutdown)
         if _log_watcher is not None:
             # Settle what the drain has read but not yet counted, BEFORE stop()
             # cancels the flush task that would have done it. See

@@ -1,7 +1,7 @@
 // The pure part of an ACP pane: how the backend's acp.* events map onto the
 // statuses the rest of the app already speaks, and the transcript the pane
 // shows in place of a terminal screen. AcpPane.vue / useAcpSession hold the
-// state; App.vue reads it through the shared PaneHandle.
+// state; App.vue reaches it only through lib/acpHost.ts.
 
 import type { DisplayStatus, TerminalStatus } from '@navide/terminal'
 
@@ -43,16 +43,25 @@ export type TranscriptRole = 'user' | 'agent' | 'thought' | 'tool' | 'notice'
 
 export interface TranscriptEntry {
   role: TranscriptRole
-  /** The entry's text as it streamed in, one part per chunk: a long reply
-   *  grows by one small node per chunk instead of rewriting one ever-longer
-   *  string (and its DOM text node) every time. A tool call has one part, its title. */
+  /** The entry's text, split into parts for rendering only — never truncated:
+   *  every character of every chunk is kept. A chunk joins the last part
+   *  while the two fit in ACP_PART_MAX, else it starts a new part whole
+   *  (whatever its length). A long reply then grows by appending nodes; it
+   *  never rewrites one ever-longer string (and its DOM text node) per chunk.
+   *  A tool call has one part, its title. */
   parts: string[]
   /** A tool call's id, so its later updates land on the same entry. */
   toolCallId?: string
   status?: string
-  /** A prompt the backend refused: shown as not sent, never as sent. */
-  unsent?: boolean
+  /** A prompt that did not plainly go through. 'unsent': refused, the agent
+   *  does not have it. 'unconfirmed': the reply was lost (timeout, socket
+   *  closed after sending), so the agent may have it. Never shown as sent. */
+  delivery?: 'unsent' | 'unconfirmed'
 }
+
+/** How long a transcript part may grow by joining chunks before the next
+ *  chunk starts a new one. A split, not a cap: no text is ever cut or dropped. */
+export const ACP_PART_MAX = 2048
 
 /** One entry's whole text. */
 export function entryText(entry: TranscriptEntry): string {
@@ -88,8 +97,13 @@ export function applyAcpUpdate(entries: TranscriptEntry[], update: unknown): num
     if (!text) return 0
     const role = chunkRole[kind]
     const last = entries[entries.length - 1]
-    if (last && last.role === role && !last.toolCallId && !last.unsent) last.parts.push(text)
-    else entries.push({ role, parts: [text] })
+    if (last && last.role === role && !last.toolCallId && !last.delivery) {
+      const tail = last.parts.length - 1
+      if (last.parts[tail].length + text.length <= ACP_PART_MAX) last.parts[tail] += text
+      else last.parts.push(text)
+    } else {
+      entries.push({ role, parts: [text] })
+    }
     return text.length
   }
   if (kind === 'tool_call' || kind === 'tool_call_update') {
@@ -112,7 +126,7 @@ export function applyAcpUpdate(entries: TranscriptEntry[], update: unknown): num
  *  "buffer" (context share, stage summaries, sentinel and question scans). */
 export function transcriptText(entries: TranscriptEntry[]): string {
   return entries
-    .filter((e) => e.role !== 'thought' && !e.unsent)
+    .filter((e) => e.role !== 'thought' && e.delivery !== 'unsent')
     .map((e) => (e.role === 'user' ? `> ${entryText(e)}` : entryText(e)))
     .join('\n')
 }

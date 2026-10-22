@@ -1,7 +1,7 @@
 // One ACP pane's session with the backend (acp.* requests and events; see
 // backend/agent_team_backend/acp_ws.py). Holds what the pane shows — the
 // transcript, the pending permission requests, the agent's state — and the
-// clocks App.vue reads through the PaneHandle.
+// clocks AcpPane exposes to lib/acpHost.ts.
 //
 // No PTY: nothing here types into a terminal. A prompt is one acp.prompt
 // request; the backend queues it behind a running turn.
@@ -24,6 +24,12 @@ export interface AcpPort {
   send<T = unknown>(type: string, payload?: Record<string, unknown>, timeoutMs?: number): Promise<WsResponse<T>>
   on(type: string, cb: (payload: unknown) => void): () => void
 }
+
+/** How a prompt went: '' when there was nothing to send (no session, no text). */
+export type AcpPromptResult = 'sent' | 'queued' | 'unsent' | 'unconfirmed' | ''
+
+// A request that never left this window (see shared/wsClient.ts): nothing was sent.
+const NOT_DISPATCHED = new Set(['ws not open', 'request denied before dispatch'])
 
 const ACP_EVENTS = [
   'acp.state', 'acp.update', 'acp.permission', 'acp.permission_closed', 'acp.turn_end', 'acp.exit',
@@ -143,21 +149,22 @@ export function useAcpSession(paneId: string, port: AcpPort) {
   }
 
   /** Send one prompt: "sent", "queued" behind the running turn, or "" when refused. */
-  async function prompt(textToSend: string): Promise<'sent' | 'queued' | ''> {
+  async function prompt(textToSend: string): Promise<AcpPromptResult> {
     if (!sessionId.value || !textToSend) return ''
     transcript.push({ role: 'user', parts: [textToSend] })
     // The reactive copy of what was just pushed, so marking it re-renders.
     const entry = transcript[transcript.length - 1]
-    let status: 'sent' | 'queued' | '' = ''
+    let result: AcpPromptResult
     try {
       const reply = await port.send<{ status?: 'sent' | 'queued' }>('acp.prompt', { session_id: sessionId.value, text: textToSend })
-      status = reply.ok ? (reply.payload?.status ?? '') : ''
-    } catch {
-      status = ''
+      result = reply.ok ? (reply.payload?.status ?? 'sent') : 'unsent'
+    } catch (err) {
+      // A timeout or a socket closed after sending: the backend may well have
+      // taken it, so it is not "not sent" (and must not be sent again blindly).
+      result = NOT_DISPATCHED.has(err instanceof Error ? err.message : '') ? 'unsent' : 'unconfirmed'
     }
-    // Refused, or never answered: it must not read as sent.
-    if (!status) entry.unsent = true
-    return status
+    if (result === 'unsent' || result === 'unconfirmed') entry.delivery = result
+    return result
   }
 
   async function cancel(): Promise<boolean> {

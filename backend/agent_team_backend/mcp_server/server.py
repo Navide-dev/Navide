@@ -50,6 +50,7 @@ from starlette.responses import PlainTextResponse
 from starlette.types import Receive, Scope, Send
 
 from agent_team_backend import login_panes
+from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
 from agent_team_backend.fs_service import FsError
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
@@ -3960,6 +3961,11 @@ async def cli_read_log(
     file. If the file was truncated or replaced under you the cursor no longer
     means anything — the call then returns a plain tail with `rotated: true`,
     so treat that read as a fresh start rather than as new output.
+
+    For an ACP pane (an agent Navide runs over the Agent Client Protocol,
+    with no terminal) the log is the transcript the backend writes — each
+    prompt as "> " lines, then the agent's reply text and tool-call titles —
+    read from the backend's own copy when the window recorded no path.
     """
     from agent_team_backend import app
 
@@ -3990,14 +3996,7 @@ async def cli_read_log(
         return record.output_log_file if record else ""
 
     log_path_str = await asyncio.to_thread(_find_log_path)
-    if not log_path_str:
-        # An ACP pane's backend appends its transcript itself, so its path is
-        # known here even when the window recorded none.
-        from agent_team_backend import acp_ws
-
-        acp = acp_ws.session_for_pane(result.pane.pane_id)
-        if acp is not None and acp.transcript_path is not None:
-            log_path_str = str(acp.transcript_path)
+    log_path_str = log_path_str or acp_mcp.transcript_path(result.pane.pane_id)
     if not log_path_str:
         return {
             "ok": False,
@@ -4071,11 +4070,7 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 
     `target` uses the same addressing as cli_send, and `pane_id` names one
     exact pane instead. Returns {ok, name,
-    agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?, display?, acp?}.
-    For an ACP pane (an agent Navide runs over the Agent Client Protocol, with no
-    terminal) `display` is "acp" and `acp` is {state: "starting"|"idle"|"running"|
-    "cancelling", queued, pending_permissions} from the backend's own session;
-    both are absent for every other pane. `last_activity`, when known,
+    agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
     is {type: "agent_active"|"turn_complete", text? (turn_complete only),
     age_seconds}. `ui`, when the owning Navide window answers in time, is
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
@@ -4159,6 +4154,12 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     reading is the last thing the server said about a pane nobody can reach.
     There is no `usage` either: this machine's quota cache describes this
     machine's logins, which is the wrong answer for a pane running elsewhere.
+
+    For an ACP pane (an agent Navide runs over the Agent Client Protocol,
+    with no terminal) the result also has `display`: "acp" and `acp`:
+    {state: "starting"|"idle"|"running"|"cancelling", queued,
+    pending_permissions} from the backend's own session; both are absent for
+    every other pane.
     """
 
     try:
@@ -4192,16 +4193,7 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     last = _activity_summary(pane.pane_id)
     if last is not None:
         status["last_activity"] = last
-    from agent_team_backend import acp_ws
-
-    acp = acp_ws.session_for_pane(pane.pane_id)
-    if acp is not None:
-        status["display"] = "acp"
-        status["acp"] = {
-            "state": acp.state,
-            "queued": len(acp.queue),
-            "pending_permissions": len(acp.permissions),
-        }
+    status.update(acp_mcp.status_fields(pane.pane_id))
     usage = await _cached_usage_snapshot(pane.agent_key)
     if usage is not None:
         status["usage"] = usage
@@ -4448,12 +4440,8 @@ async def cli_wait_idle(
     That last one matters because the busy flag is frontend-reported and can
     stay stale. Returns {idle, source, waited_s, last_activity?, ui_status?}
     where source is "turn_complete", "quiet_period", "ui_status",
-    "never_started", "acp_state", "acp_exited", or "timeout"; or {ok: false,
-    error} if `target` cannot be resolved. For an ACP pane (an agent Navide runs
-    over the Agent Client Protocol, with no terminal) the backend's own session
-    state decides: "acp_state" when the session is idle with no prompt queued,
-    "acp_exited" when its agent has exited; while it waits on a permission
-    request, a timeout reports reason "awaiting".
+    "never_started", or "timeout"; or {ok: false, error} if `target` cannot be
+    resolved.
 
     `last_activity` is what cli_get_status reports under the same key — {type,
     text? (turn_complete only), age_seconds} — so a caller that waited for a
@@ -4486,6 +4474,12 @@ async def cli_wait_idle(
     badge word is reported as `status`, and it is what the far window last
     uploaded (it debounces by 0.5s and re-sweeps every 30s), so it is near-live
     rather than live.
+
+    For an ACP pane (an agent Navide runs over the Agent Client Protocol,
+    with no terminal) the backend's own session state decides: source
+    "acp_state" when the session is idle with no prompt queued, "acp_exited"
+    when its agent has exited; while it waits on a permission request, a
+    timeout reports reason "awaiting".
     """
     from agent_team_backend import agent_messaging, app
 
@@ -4553,27 +4547,14 @@ async def cli_wait_idle(
     # Registered for exactly as long as this call is parked, so the pane
     # being waited on can see the wait (cli_whoami's `waiting_on_me`) and
     # wrap up rather than run out somebody's budget without knowing it.
-    from agent_team_backend import acp_ws
-
-    # An ACP pane's own session state is authoritative; the PTY and window
-    # probes below do not apply to it.
-    was_acp = acp_ws.session_for_pane(pane_id) is not None
+    if (acp := await acp_mcp.wait_idle(pane_id, timeout, done, timed_out, lambda: _waiting_on(pane_id, caller))) is not None:
+        return acp
     with _waiting_on(pane_id, caller):
         tick = 0
         while True:
             entry = agent_messaging.get(pane_id)
             busy = bool(entry.busy) if entry else False
-            if was_acp:
-                acp = acp_ws.session_for_pane(pane_id)
-                if acp is None:
-                    # Its agent exited: nothing is running any more.
-                    return done("acp_exited")
-                if acp.state == "idle" and not acp.queue:
-                    return done("acp_state")
-                # Parked on a permission the user has to answer: a timeout then
-                # says "awaiting", not "busy".
-                ui_status = "awaiting" if acp.permissions else None
-            elif not busy:
+            if not busy:
                 activity = app.pane_activity(pane_id)
                 if activity is None:
                     return done("quiet_period")
@@ -4658,6 +4639,11 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
     `sent` true means the keystroke was issued and accepted; it is not a
     receipt from the CLI, and a PTY write that fails on the far side is logged
     there rather than reported here.
+
+    For an ACP pane (an agent Navide runs over the Agent Client Protocol,
+    with no terminal) the backend cancels the running turn itself
+    (session/cancel; no window is involved) and the result says `via`: "acp";
+    when no turn was running, `sent` is false with an advisory saying so.
     """
     from agent_team_backend import message_routing
 
@@ -4713,31 +4699,8 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
             "error_code": "self-interrupt",
         }
 
-    from agent_team_backend import acp_ws
-
-    acp = acp_ws.session_for_pane(pane.pane_id)
-    if acp is not None:
-        # An ACP pane has no PTY to press a key in: the backend owns the agent
-        # and cancels its turn over the protocol, so no window is involved.
-        status_before = acp.state
-        try:
-            issued = await acp_ws.get_service().cancel(acp.id)
-        except KeyError:
-            issued = False
-        acp_answer: dict[str, Any] = {
-            "ok": True,
-            "target": pane.qualified_name,
-            "name": pane.name,
-            "sent": issued,
-            "status_before": status_before,
-            "via": "acp",
-        }
-        if not issued:
-            acp_answer["advisories"] = [
-                f'"{pane.name}" had no running turn (state {status_before}); nothing was cancelled'
-            ]
-        return acp_answer
-
+    if (acp := await acp_mcp.interrupt(pane)) is not None:
+        return acp
     reply = await _ui_request(
         pane.workspace_path,
         "invoke",

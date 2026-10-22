@@ -2,19 +2,18 @@
 // A CLI pane whose agent runs over the Agent Client Protocol: no PTY, no
 // xterm. Navide draws the conversation from the backend's acp.* events — the
 // agent's messages, its tool calls, its permission requests — and sends what is
-// typed here as a prompt. It exposes the same PaneHandle as TerminalPane, so
-// App.vue drives both alike (lib/paneHandle.ts).
+// typed here as a prompt. App.vue reaches it only through lib/acpHost.ts (the
+// AcpPaneApi it exposes); it never enters App.vue's terminal-pane refs.
 //
 // Text from the agent is shown as text (no HTML is rendered), and the "ACP"
 // mark sits in the header the pane draws, where agent output cannot reach.
 import { computed, nextTick, onBeforeUnmount, ref, watch, type ShallowUnwrapRef } from 'vue'
-import type { TerminalSpawnOptions } from '@navide/terminal'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import { paneStatusLabelText } from '../lib/paneStatusLabel'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
-import { useAcpSession, type AcpPort } from '../composables/useAcpSession'
-import { entryText } from '../lib/acpPane'
-import type { PaneHandle } from '../lib/paneHandle'
+import { useAcpSession, type AcpPort, type AcpPromptResult } from '../composables/useAcpSession'
+import type { AcpPaneApi } from '../lib/acpHost'
+import AcpTranscriptEntry from './AcpTranscriptEntry.vue'
 
 interface Props {
   paneId: string
@@ -37,7 +36,6 @@ session.onFirstOutput(() => emit('first-output'))
 onBeforeUnmount(() => session.dispose())
 
 const draft = ref('')
-const lastUserKeyAt = ref(0)
 const stopped = ref(false)
 const composer = ref<HTMLTextAreaElement | null>(null)
 const scroller = ref<HTMLElement | null>(null)
@@ -65,62 +63,41 @@ async function send(): Promise<void> {
   if (!text || !live.value) return
   draft.value = ''
   stopped.value = false
-  // Refused: the text goes back to the composer (unless something new was typed meanwhile).
-  if (!(await session.prompt(text)) && !draft.value) draft.value = text
+  // Refused for sure: the text goes back to the composer (unless something new
+  // was typed meanwhile). Unconfirmed is not refused: the agent may have it.
+  if ((await session.prompt(text)) === 'unsent' && !draft.value) draft.value = text
 }
 
 function onKeydown(ev: KeyboardEvent): void {
-  lastUserKeyAt.value = Date.now()
   if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
     ev.preventDefault()
     void send()
   }
 }
 
-function lastLines(text: string, maxLines: number): string {
-  const lines = text.split('\n')
-  return lines.slice(Math.max(0, lines.length - maxLines)).join('\n')
-}
-
-const noop = (): void => {}
-
 const handle = {
-  display: 'acp' as const,
-  spawn: async (opts: TerminalSpawnOptions): Promise<void> => {
+  spawn: async (opts: { cwd: string; agentKey: string; outputLogFile?: string }): Promise<void> => {
     await session.create({
       agentKey: opts.agentKey || props.agentKey,
       cwd: opts.cwd || props.workspacePath || '',
       outputLogFile: opts.outputLogFile,
     })
   },
-  sendPrompt: async (text: string): Promise<boolean | null> => {
-    if (!session.sessionId.value) return null
-    return (await session.prompt(text)) !== ''
-  },
+  // A message the messaging layer rendered, as a prompt (lib/acpHost.ts deliver).
+  prompt: (text: string): Promise<AcpPromptResult> => session.prompt(text),
   interrupt: (): Promise<boolean> => session.cancel(),
-  kill: async (_opts?: { force?: boolean; retireRestore?: boolean }): Promise<void> => { await session.kill() },
+  kill: (): Promise<void> => session.kill(),
   focus: (): void => { composer.value?.focus() },
   status: session.status,
   displayStatus,
-  awaitingKind: computed<'permission' | 'question' | null>(() => (session.permissions.length > 0 ? 'permission' : null)),
-  startingStartedAt: session.startingStartedAt,
-  startingAgeMs: computed<number | null>(() => (
-    session.startingStartedAt.value === null ? null : Date.now() - session.startingStartedAt.value
-  )),
-  cancelPendingCreate: async (): Promise<void> => { await session.kill() },
-  // No PTY, so never a terminal session id: nothing may send terminal.* for this pane.
-  sessionId: ref(''),
-  attachedOutputLogFile: ref(''),
-  error: computed(() => session.error.value),
-  lastCommand: ref(''),
-  cleanBuffer: session.text,
-  cleanBytesSeen: session.textSeen,
-  resumeSpawnedAt: ref(0),
+  setStopped: (value: boolean): void => { stopped.value = value },
+  // Read by tests and, later, by features hooked up through acpHost.
+  awaitingKind: computed<'permission' | null>(() => (session.permissions.length > 0 ? 'permission' : null)),
+  text: session.text,
+  textSeen: session.textSeen,
   lastActivityAt: session.lastActivityAt,
-  lastRawActivityAt: session.lastActivityAt,
   hasDraft: computed(() => draft.value.trim().length > 0),
-  lastUserKeyAt,
-  isBracketedPasteActive: (): boolean => false,
+  permissionWaitLive: (): boolean => session.permissions.length > 0,
   // Voice and the ⌘V path put text in the composer; `submit` sends it as a prompt.
   insertText: (text: string, opts: { submit?: boolean; onSubmit?: (sent: boolean) => void } = {}): boolean => {
     if (!text || !live.value) return false
@@ -128,39 +105,16 @@ const handle = {
     if (opts.submit) {
       const toSend = draft.value.trim()
       draft.value = ''
-      void session.prompt(toSend).then((r) => opts.onSubmit?.(r !== ''))
+      void session.prompt(toSend).then((r) => opts.onSubmit?.(r === 'sent' || r === 'queued'))
     }
     return true
   },
-  // The terminal's hook- and screen-driven signals: an ACP pane's own events are
-  // authoritative, so these change nothing here.
-  markTurnComplete: noop,
-  markNeedsInput: noop,
-  clearNeedsInput: noop,
-  holdNeedsInput: (_toolKey: string): void => {},
-  releaseNeedsInputHold: noop,
-  awaitingHeld: (): { since: number; key: string } => ({ since: 0, key: '' }),
-  noteAnswerKeys: (_data: string): void => {},
-  permissionWaitLive: (): boolean => session.permissions.length > 0,
-  markQuestion: noop,
-  clearQuestion: noop,
-  markDeliveredPending: noop,
-  clearDeliveredPending: (_all?: boolean): void => {},
-  noteBackgroundTasks: (_kind: 'start' | 'end', _ids: string[]): void => {},
-  hasLiveBackgroundTasks: (): boolean => false,
-  // Positions in cleanBuffer (the transcript text), as the terminal's are in its clean buffer.
-  markBufferPosition: (): number => session.text.value.length,
-  recleanBuffer: noop,
-  flushPendingClean: noop,
-  readRenderedText: (maxLines: number): string => lastLines(session.text.value, maxLines),
-  serializeScrollback: async (): Promise<string> => '',
-  setStopped: (value: boolean): void => { stopped.value = value },
 }
 
-// Compile-time check: what this pane exposes unwraps to a PaneHandle.
-type ExposesPaneHandle = ShallowUnwrapRef<typeof handle> extends PaneHandle ? true : never
-const exposesPaneHandle: ExposesPaneHandle = true
-void exposesPaneHandle
+// Compile-time check: what this pane exposes is what lib/acpHost.ts drives.
+type ExposesAcpPaneApi = ShallowUnwrapRef<typeof handle> extends AcpPaneApi ? true : never
+const exposesAcpPaneApi: ExposesAcpPaneApi = true
+void exposesAcpPaneApi
 
 defineExpose(handle)
 
@@ -182,16 +136,7 @@ const permissions = session.permissions
       <span class="status" :data-status="displayStatus" :style="statusBadgeVars">{{ statusBadgeText }}</span>
     </header>
     <div ref="scroller" class="acp-transcript">
-      <div v-for="(entry, i) in transcript" :key="i" class="acp-entry" :data-role="entry.role">
-        <template v-if="entry.role === 'tool'">
-          <span class="acp-tool">{{ entryText(entry) }}</span>
-          <small v-if="entry.status" class="acp-tool-status">{{ entry.status }}</small>
-        </template>
-        <template v-else>
-          <span v-for="(part, j) in entry.parts" :key="j">{{ part }}</span>
-          <small v-if="entry.unsent" class="acp-unsent" data-testid="acp-unsent">{{ $t('pane.acp.unsent') }}</small>
-        </template>
-      </div>
+      <AcpTranscriptEntry v-for="(entry, i) in transcript" :key="i" :entry="entry" />
       <div v-for="request in permissions" :key="request.requestId" class="acp-permission" data-testid="acp-permission">
         <p>{{ $t('pane.acp.permission', { title: request.title || '—' }) }}</p>
         <div class="acp-permission-options">
@@ -299,18 +244,6 @@ const permissions = session.permissions
   line-height: 1.5;
   color: var(--text-primary);
 }
-.acp-entry { white-space: pre-wrap; word-break: break-word; margin-bottom: 8px; }
-.acp-entry[data-role='user'] { color: var(--text-secondary); border-left: 2px solid var(--border-default); padding-left: 6px; }
-.acp-entry[data-role='thought'] { color: var(--text-secondary); font-style: italic; }
-.acp-entry[data-role='notice'] { color: var(--danger-fg); }
-.acp-tool { font-size: var(--font-xs); }
-.acp-unsent {
-  margin-left: 6px;
-  color: var(--danger-fg);
-  font-size: var(--font-2xs);
-}
-
-.acp-tool-status { margin-left: 6px; color: var(--text-secondary); }
 .acp-permission {
   border: 1px solid var(--warning-fg);
   border-radius: var(--radius-sm);
