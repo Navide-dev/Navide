@@ -187,4 +187,6 @@ jobs:
       - name: Warn when whats-new.json was not published
         if: steps.whats_new_export.outcome == 'failure' || steps.whats_new_publish.outcome == 'failure'
         run: |
-          echo "::warning::whats-new.json was not published for ${TAG}; the installers are mirrored. The website's /news page falls back to GitHub Releases until a manual mirror run publishes it."
+          message="whats-new.json was not published for ${TAG}; the installers are mirrored. The website's /news page falls back to GitHub Releases until a manual mirror run publishes it."
+          echo "::warning::${message}"
+          echo "⚠️ ${message}" >> "${GITHUB_STEP_SUMMARY}"
