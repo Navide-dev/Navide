@@ -1283,3 +1283,82 @@ async def test_a_descendant_whose_pid_was_reused_is_not_killed(monkeypatch) -> N
     assert rc == 128
     assert killed == [4242, 4243]
 
+
+def _hung_process(killed: list[int]):
+    class HungProc:
+        pid = 4242
+        returncode = None
+
+        async def communicate(self, *_a):
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            return -9
+
+        def kill(self):
+            killed.append(self.pid)
+
+    return HungProc()
+
+
+@pytest.mark.asyncio
+async def test_a_run_cancelled_during_the_tree_read_still_kills_the_root(monkeypatch) -> None:
+    """The snapshot is awaited in front of the kill; a caller cancelled while
+    it runs must not leave the hung root alive."""
+    import threading
+
+    killed: list[int] = []
+    reading = threading.Event()
+    release = threading.Event()
+
+    def slow_descendants(pid: int) -> list[int]:
+        reading.set()
+        release.wait(5)
+        return []
+
+    async def fake_exec(*_a, **_k):
+        return _hung_process(killed)
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "descendants", slow_descendants)
+
+    task = asyncio.ensure_future(run_allowlisted_text(["git", "status"], timeout=0.05))
+    try:
+        for _ in range(500):
+            if reading.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert reading.is_set()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert killed == [4242]
+    finally:
+        release.set()
+
+
+@pytest.mark.asyncio
+async def test_a_tree_read_that_raises_still_kills_the_root_and_returns_the_envelope(
+    monkeypatch, caplog
+) -> None:
+    """Not only OSError: during shutdown `to_thread` itself raises RuntimeError.
+    The root is still killed, the failure is logged, and the caller gets the
+    timeout envelope rather than an exception."""
+    killed: list[int] = []
+
+    def broken_descendants(pid: int) -> list[int]:
+        raise RuntimeError("cannot schedule new futures after shutdown")
+
+    async def fake_exec(*_a, **_k):
+        return _hung_process(killed)
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "descendants", broken_descendants)
+    caplog.set_level("WARNING", logger="agent_team_backend.host_shell")
+
+    rc, _, stderr = await run_allowlisted_text(["git", "status"], timeout=0.05)
+
+    assert (rc, killed) == (128, [4242]) and "timed out" in stderr
+    assert any("could not read the process tree of pid 4242" in r.getMessage() for r in caplog.records)

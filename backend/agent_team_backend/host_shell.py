@@ -802,13 +802,28 @@ async def _kill_tree_and_reap(process: asyncio.subprocess.Process) -> None:
     """Kill *process* and every descendant, then wait for it -- but not forever."""
     # Snapshot first: once the root dies its children are no longer findable.
     # Off the loop: the snapshot is a process-table read (`ps` on POSIX).
+    descendants: list[tuple[int, str]] = []
     try:
         descendants = await asyncio.to_thread(_descendants_with_identity, process.pid)
-    except OSError:
-        descendants = []
-    process.kill()
+    except Exception:  # noqa: BLE001 - e.g. no new threads during shutdown
+        log.warning("could not read the process tree of pid %s; killing it alone", process.pid, exc_info=True)
+    finally:
+        # Also when the caller is cancelled mid-snapshot: the hung root must not
+        # be left running because the read in front of its kill never finished.
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
     if descendants:
-        await asyncio.to_thread(_end_descendants, descendants)
+        try:
+            await asyncio.to_thread(_end_descendants, descendants)
+        except Exception:  # noqa: BLE001 - the root is killed and the wait below is bounded
+            log.warning(
+                "could not end the descendants %s of pid %s",
+                [pid for pid, _ in descendants],
+                process.pid,
+                exc_info=True,
+            )
     try:
         await asyncio.wait_for(process.wait(), timeout=_KILL_REAP_TIMEOUT_S)
     except asyncio.TimeoutError:
