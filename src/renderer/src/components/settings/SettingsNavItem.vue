@@ -93,11 +93,14 @@ const emit = defineEmits<{
   align-items: center;
   flex-shrink: 0;
 }
+/* A long label wraps onto a second line instead of being cut off: some
+   languages cannot shorten a name the glossary fixes (es-ES "Complementos de
+   Navide" is 14px wider than the sidebar). */
 .settings-nav-item-label {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.3;
 }
 
 /* Narrow modal: collapse to an icon-only rail. The label stays in the

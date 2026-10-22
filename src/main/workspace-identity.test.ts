@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, existsSync, symlinkSync, rmSync } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { workspaceIdentityKey } from './workspace-identity'
+import { uniqueOpenWorkspaces, workspaceIdentityKey } from './workspace-identity'
 
 const roots: string[] = []
 afterEach(() => { for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true }) })
@@ -34,5 +34,33 @@ describe('workspaceIdentityKey', () => {
   it('falls back to the trimmed string for a folder that is gone', () => {
     expect(workspaceIdentityKey(' /no/such/folder/ ')).toBe('/no/such/folder')
     expect(workspaceIdentityKey('')).toBe('')
+  })
+})
+
+describe('uniqueOpenWorkspaces', () => {
+  it('lists a primary that is also adopted once, first occurrence kept in order (#448)', () => {
+    expect(uniqueOpenWorkspaces(['/home/u/Navide', '/home/u', '/home/u/Navide'], 'linux')).toEqual([
+      '/home/u/Navide',
+      '/home/u',
+    ])
+  })
+
+  it('treats a trailing slash or a dot segment as the same folder', () => {
+    expect(uniqueOpenWorkspaces(['/a/proj', '/a/proj/', '/a/./proj', '/a/other'], 'darwin')).toEqual([
+      '/a/proj',
+      '/a/other',
+    ])
+  })
+
+  it('ignores case and separator style on Windows only', () => {
+    expect(uniqueOpenWorkspaces(['C:\\Work\\Proj', 'c:/work/proj/', 'C:\\Work\\Other'], 'win32')).toEqual([
+      'C:\\Work\\Proj',
+      'C:\\Work\\Other',
+    ])
+    expect(uniqueOpenWorkspaces(['/a/Proj', '/a/proj'], 'linux')).toEqual(['/a/Proj', '/a/proj'])
+  })
+
+  it('does not expand ~', () => {
+    expect(uniqueOpenWorkspaces(['~/proj', '/home/u/proj'], 'linux')).toEqual(['~/proj', '/home/u/proj'])
   })
 })
