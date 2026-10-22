@@ -12,6 +12,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- MCP: a local (stdio) server no longer fails after a fixed 15 seconds while `npx`/`uvx` downloads its package the first time (context7 on a cold start). Navide waits while the server's process is running, up to a 300-second safety cap, and fails at once, with the exit code, if the process exits. Settings → MCP shows the server as starting, notes after 15 seconds that a first run may be downloading, says why a start failed, and shows the last lines the server printed (kept in `logs/mcp-<name>.log`, latest start only). Servers now start in parallel, so one slow server does not hold up the others. Remote (`http`/`sse`) servers keep the 15-second handshake.
+
 - Windows: the Git view no longer stays on "capability call 'git.status' timed out". Every git the backend started inherited the backend's own stdin, the pipe the app keeps open on Windows for its `shutdown` line, and hung at launch. Git now starts with an empty stdin; a git run that does time out ends its whole process tree and gives its slot back within two seconds, so one hung run can no longer block every later one.
 
 - Extensions: a computer clock up to 5 minutes behind the Registry's no longer refuses every Registry install and update. The Registry signs its trust data per request, so the slightest lag read as invalid. A larger gap is reported as trust data that is not valid yet, and trust data past its expiry as expired, instead of both as "expired". The same 5 minutes apply to a version published or approved just before you install it. Both messages ask you to check the computer's date and time. Signature checks are unchanged.
