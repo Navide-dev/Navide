@@ -45,6 +45,14 @@ const UNTRANSLATED_ALLOWLIST: Record<string, string[]> = JSON.parse(
   readFileSync(resolve('packages/plugin-ui/src/foundation/i18n/__tests__/untranslatedAllowlist.json'), 'utf8')
 )
 
+// A name, path, branch, version or command (one token, or wholly inside
+// <code>) is a value the translation keeps, not English left behind.
+function isValue(text: string): boolean {
+  const t = withoutLiterals(text).replace(/\{[^{}]*\}/g, '').trim()
+  if (/^<code>[\s\S]*<\/code>$/.test(t)) return true
+  return t !== '' && !t.includes(' ') && !/^[A-Z][a-z]+$/.test(t)
+}
+
 function leaves(value: unknown, prefix = ''): Array<[string, string]> {
   if (typeof value === 'string') return [[prefix, value]]
   if (!value || typeof value !== 'object') return []
@@ -169,8 +177,9 @@ describe('translated catalogs keep each message working', () => {
           it('leaves no English text in place', () => {
             const allowed = new Set(UNTRANSLATED_ALLOWLIST[locale] ?? [])
             const bad = [...en].flatMap(([key, enText]) => {
-              if (translated.get(key) !== enText || allowed.has(key)) return []
+              if (translated.get(key) !== enText || allowed.has(key) || isValue(enText)) return []
               const words = withoutLiterals(enText)
+                .replace(/<code>[\s\S]*?<\/code>/g, ' ')
                 .replace(/\{[^{}]*\}/g, ' ')
                 .replace(/<[^>]*>/g, ' ')
                 .match(/[A-Za-z][A-Za-z'’-]*/g) ?? []
