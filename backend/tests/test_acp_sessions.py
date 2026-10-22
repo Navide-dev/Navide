@@ -516,6 +516,7 @@ async def test_an_agent_whose_child_holds_its_output_open_is_still_seen_to_exit(
     await service.prompt(session.id, "go")  # the agent exits; its child holds the pipe
     await _until(lambda: service.events.of("acp.exit"), timeout=10)
 
-    assert service.events.states()[-1] == "exited"
+    # acp.exit, then the exited state as the session is forgotten.
+    await _until(lambda: service.events.states()[-1] == "exited", timeout=10)
     await _until(lambda: not _alive(agent) and not _alive(child))
     assert service.list() == []
