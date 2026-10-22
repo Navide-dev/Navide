@@ -176,6 +176,7 @@ import { createTokenMonitorWindowOpener } from './token-monitor-window'
 import { errorMain, infoMain, logMain, logRendererConsole, warnMain } from './main-log'
 import { isRendererCrashWatched, watchRendererCrashes } from './renderer-crash-reload'
 import { watchConsoleMessages, watchProcessGone } from './renderer-diagnostics'
+import { PDF_PARTITION } from './channel-pdf'
 import { recordMainFault, setMainLedgerDataDir } from './error-ledger'
 import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
@@ -5882,7 +5883,13 @@ app.on('web-contents-created', (_e, contents) => {
   installContextMenu(contents)
   // Every window's console warnings and errors reach renderer-console.log (a
   // black window on Windows left no trace before); only Navide's own pages.
-  watchConsoleMessages(contents, { log: logRendererConsole, appOrigin: DEV_ORIGIN })
+  // The chat-attachment print window loads that attachment from file:; its
+  // console (cancelled requests and their URLs) is the attachment's, not ours.
+  watchConsoleMessages(contents, {
+    log: logRendererConsole,
+    appOrigin: DEV_ORIGIN,
+    skip: () => contents.session === session.fromPartition(PDF_PARTITION),
+  })
   contents.on('will-navigate', (e, url) => {
     // A plugin web view enforces its own http(s) allowlist (pluginWebViews.ts).
     if (isPluginWebGuest(contents)) return

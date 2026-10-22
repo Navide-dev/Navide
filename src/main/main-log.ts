@@ -69,6 +69,13 @@ export function getRetainedLogBytes(dir?: string): number {
     } catch {
       /* file not present */
     }
+    for (const name of ['renderer-console.log', 'renderer-console.log.1']) {
+      try {
+        total += statSync(join(targetDir, name)).size
+      } catch {
+        /* file not present */
+      }
+    }
     return total
   } catch {
     return 0

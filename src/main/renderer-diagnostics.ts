@@ -16,8 +16,12 @@ import { PLUGIN_FRAME_SCHEME } from './plugins/pluginFrameAssetProtocol'
  * pages are never recorded, nor are info/log/debug lines, which is where page
  * content and user text end up.
  *
- * Nothing is capped or cut: a message repeated back to back is written once
- * and then counted, so a loop of one error costs one line plus a count.
+ * The listener sets no cap of its own and does not cut messages: a message
+ * repeated back to back is written once and then counted, so a loop of one
+ * error costs one line plus a count. The file itself rotates like main.log
+ * (logRendererConsole: 4 MB + 4 MB by default, an entry over 4 MB truncated).
+ * A third-party plugin frame is a page this allow list accepts, so its
+ * warnings and errors are recorded whole too, on this machine only.
  */
 
 /** A run of one repeated message is reported this long after it started, or
@@ -88,8 +92,14 @@ function fromAppMainFrame(contents: ConsoleWatchedContents, event: ConsoleMessag
  *  each; a message repeated back to back is written once and then counted. */
 export function watchConsoleMessages(
   contents: ConsoleWatchedContents,
-  opts: DiagnosticsOptions & { appOrigin?: string | null },
+  opts: DiagnosticsOptions & {
+    appOrigin?: string | null
+    /** A contents whose pages are not Navide's although they load from file:
+     *  (the hidden window printing a chat attachment, channel-pdf.ts). */
+    skip?: (contents: ConsoleWatchedContents) => boolean
+  },
 ): void {
+  if (opts.skip?.(contents)) return
   const appOrigin = opts.appOrigin ?? null
   let last = ''
   let repeats = 0

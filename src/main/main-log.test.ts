@@ -49,6 +49,13 @@ describe('durable plugin diagnostic persistence in main-log', () => {
     expect(statSync(join(tempDir, 'renderer-console.log')).size).toBeLessThanOrEqual(512)
   })
 
+  it('counts the renderer console log in the retained bytes', () => {
+    logMain('[main] one line')
+    const mainOnly = getRetainedLogBytes(tempDir)
+    logRendererConsole('[renderer-console] error wc=1 type=window src=x:1 boom')
+    expect(getRetainedLogBytes(tempDir)).toBe(mainOnly + statSync(join(tempDir, 'renderer-console.log')).size)
+  })
+
   it('keeps backend lifecycle info and errors in main.log, not only on stdout', () => {
     // 2026-10-08: a packaged run's "backend failed to start" / auto-restart
     // lines went to console only, so the cause of a Retry screen was lost.

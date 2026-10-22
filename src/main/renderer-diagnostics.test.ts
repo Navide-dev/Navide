@@ -128,6 +128,14 @@ describe('watchConsoleMessages', () => {
     ])
   })
 
+  it('records nothing from a contents the caller skips (the chat-attachment print window)', () => {
+    const lines: string[] = []
+    const fake = fakeContents()
+    watchConsoleMessages(fake.contents, { log: (l) => lines.push(l), skip: (c) => c === fake.contents })
+    fake.emit('error', 'Not allowed to load local resource: file:///Users/me/secret/photo.png')
+    expect(lines).toEqual([])
+  })
+
   it('keeps the dev server and skips a site', () => {
     const dev = watch('http://localhost:5173/', 'http://localhost:5173')
     dev.emit('error', 'app error', { sourceId: 'http://localhost:5173/src/main.ts' })
@@ -218,7 +226,11 @@ describe('main wiring', () => {
 
   it('watches every WebContents and the app-level process events', () => {
     const at = main.indexOf("app.on('web-contents-created'")
-    expect(main.slice(at, main.indexOf('\n})', at))).toContain('watchConsoleMessages(contents, { log: logRendererConsole')
+    const handler = main.slice(at, main.indexOf('\n})', at))
+    expect(handler).toContain('watchConsoleMessages(contents, {')
+    expect(handler).toContain('log: logRendererConsole')
+    // channel-pdf.ts prints a chat attachment from file: in its own partition.
+    expect(handler).toContain('skip: () => contents.session === session.fromPartition(PDF_PARTITION)')
     expect(main).toContain('watchProcessGone(app, { log: warnMain, alreadyWatched: isRendererCrashWatched })')
   })
 })
