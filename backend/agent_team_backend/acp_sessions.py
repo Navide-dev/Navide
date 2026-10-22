@@ -433,11 +433,13 @@ class AcpSessionService:
         # close the connection — bounded, never waiting on the pipe's EOF.
         await self._emit_event(session, "acp.exit", {"code": code, "stderr_tail": session.stderr_tail()})
         await self._forget(session)
-        self._end_tree(session)
-        from .terminals import _kill_breakaway
+        try:
+            self._end_tree(session)
+            from .terminals import _kill_breakaway
 
-        await asyncio.to_thread(_kill_breakaway, session.descendants)
-        await _close_client(session)
+            await asyncio.to_thread(_kill_breakaway, session.descendants)
+        finally:
+            await _close_client(session)
 
     async def _forget(self, session: AcpSession) -> None:
         if self._sessions.pop(session.id, None) is None:
