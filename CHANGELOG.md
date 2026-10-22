@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Release: every release now publishes its What's New announcements as `whats-new.json` on the download mirror (`dl.navide.dev/releases/<tag>/whats-new.json` and `releases/latest/whats-new.json`), exported from the same entries the app shows, for the website's announcements page. The format is in `docs/en-US/release-announcements.md`.
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added

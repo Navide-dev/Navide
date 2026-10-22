@@ -12,6 +12,10 @@ name: Mirror release
 # — unless a newer release is already Latest (a rerun of an old tag's run).
 # The CloudFront behavior for releases/latest/* caches for 60 s; the
 # invalidation just makes the switch immediate.
+#
+# Beside the release files, both prefixes get whats-new.json: the in-app
+# announcements up to this release (scripts/export-whats-new.mjs), which the
+# website's /news page reads. Format: docs/en-US/release-announcements.md.
 
 on:
   workflow_call:
@@ -60,7 +64,16 @@ jobs:
       - name: Check out the release scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: scripts
+          # whatsNew.ts and CHANGELOG.md feed whats-new.json.
+          sparse-checkout: |
+            scripts
+            src/renderer/src/lib
+            CHANGELOG.md
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
 
       - name: Verify mirror credentials
         run: |
@@ -85,6 +98,12 @@ jobs:
           (cd mirror && sha256sum -- * > "../${TAG}.sha256")
           cat "${TAG}.sha256"
 
+      - name: Export the announcements as whats-new.json
+        run: |
+          # Kept out of mirror/ so the checksum list stays exactly GitHub's
+          # files; entries newer than the tag are left out.
+          node --experimental-strip-types scripts/export-whats-new.mjs --version "${TAG}" --out whats-new.json
+
       - name: Upload to releases/<tag>/
         run: |
           # Content-Type is set explicitly: S3 would otherwise guess from the
@@ -96,6 +115,8 @@ jobs:
             --exclude '*.yml' --content-type 'application/octet-stream' --no-progress
           aws s3 cp "${TAG}.sha256" "s3://${MIRROR_BUCKET}/releases/${TAG}/SHA256SUMS" \
             --content-type 'text/plain' --no-progress
+          aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/${TAG}/whats-new.json" \
+            --content-type 'application/json' --no-progress
 
       - name: Verify the mirror serves what GitHub serves
         run: |
@@ -109,6 +130,8 @@ jobs:
             curl -fsSL --retry 3 -o "${name}" "https://dl.navide.dev/releases/${TAG}/${name}"
           done < "../${TAG}.sha256"
           sha256sum -c "../${TAG}.sha256"
+          curl -fsSL --retry 3 -o whats-new.json "https://dl.navide.dev/releases/${TAG}/whats-new.json"
+          cmp whats-new.json ../whats-new.json
 
       - name: Refuse to move releases/latest/ back to an older release
         id: latest_guard
@@ -135,5 +158,8 @@ jobs:
             --exclude '*' --include '*.yml' --content-type 'application/x-yaml' --no-progress
           aws s3 sync mirror "s3://${MIRROR_BUCKET}/releases/latest/" --delete \
             --exclude '*.yml' --content-type 'application/octet-stream' --no-progress
+          # After the syncs: their --delete would drop it, as it is not in mirror/.
+          aws s3 cp whats-new.json "s3://${MIRROR_BUCKET}/releases/latest/whats-new.json" \
+            --content-type 'application/json' --no-progress
           aws cloudfront create-invalidation --distribution-id "${MIRROR_DISTRIBUTION}" \
             --paths '/releases/latest/*' --query Invalidation.Id --output text

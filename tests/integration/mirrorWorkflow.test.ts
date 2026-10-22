@@ -16,4 +16,13 @@ describe('mirror workflow', () => {
     expect(replaceLatest).toBeGreaterThan(-1)
     expect(verify).toBeLessThan(replaceLatest)
   })
+
+  it('exports whats-new.json before uploading it, and puts it in latest/ after the --delete syncs', () => {
+    const exportStep = indexOf('Export the announcements as whats-new.json')
+    expect(exportStep).toBeGreaterThan(-1)
+    expect(exportStep).toBeLessThan(indexOf('Upload to releases/<tag>/'))
+    const run = (steps[indexOf('Replace releases/latest/')] as { run: string }).run
+    const copy = run.indexOf('whats-new.json "s3://${MIRROR_BUCKET}/releases/latest/whats-new.json"')
+    expect(copy).toBeGreaterThan(run.lastIndexOf('--delete'))
+  })
 })
