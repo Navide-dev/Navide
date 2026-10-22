@@ -18,7 +18,7 @@ from typing import Mapping, Sequence
 
 import yaml
 
-from .osplat import paths, secret_files, terminal_backend
+from .osplat import paths, process_tree, secret_files, terminal_backend
 from .git_security import (
     PublicRemoteTarget,
     assert_public_git_config_safe,
@@ -764,6 +764,34 @@ def _prepare_public_provider_git_context(
     env["GIT_WORK_TREE"] = str(Path(workspace_root).resolve())
 
 
+# How long a run that timed out waits for its killed child to be reaped. On
+# Windows `process.wait()` also waits for every pipe to close, and Git for
+# Windows' `cmd\git.exe` is only a launcher: the real git.exe it starts holds
+# the pipes too. Killing the launcher alone and waiting without a bound never
+# returned, so the caller's git slot (`_GIT_PROC_LIMIT`) was never released
+# and every later git call queued behind it.
+_KILL_REAP_TIMEOUT_S = 2.0
+
+
+async def _kill_tree_and_reap(process: asyncio.subprocess.Process) -> None:
+    """Kill *process* and every descendant, then wait for it -- but not forever."""
+    # Snapshot first: once the root dies its children are no longer findable.
+    try:
+        descendants = process_tree.descendants(process.pid)
+    except OSError:
+        descendants = []
+    process.kill()
+    for pid in descendants:
+        try:
+            process_tree.kill(pid, force=True)
+        except OSError:
+            pass
+    try:
+        await asyncio.wait_for(process.wait(), timeout=_KILL_REAP_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        pass
+
+
 async def run_allowlisted(
     args: Sequence[str],
     cwd: str | None = None,
@@ -792,7 +820,12 @@ async def run_allowlisted(
             *launch,
             cwd=cwd,
             env=dict(env) if env is not None else None,
-            stdin=asyncio.subprocess.PIPE if input_bytes is not None else None,
+            # Never the backend's own stdin. On Windows that is the pipe main
+            # keeps open for the `shutdown` line, with a thread parked in a
+            # synchronous read on it; a child handed the same pipe blocks on
+            # its first query of that handle (git.exe and node.exe hung at
+            # start, main thread in Wait:Executive) until the read returns.
+            stdin=asyncio.subprocess.PIPE if input_bytes is not None else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -801,15 +834,13 @@ async def run_allowlisted(
         return process.returncode or 0, stdout, stderr
     except asyncio.TimeoutError:
         if process is not None and process.returncode is None:
-            process.kill()
-            await process.wait()
+            await _kill_tree_and_reap(process)
         return 128, b"", f"{argv[0]} timed out".encode()
     except FileNotFoundError:
         return 127, b"", f"{argv[0]} not found".encode()
     except Exception as exc:  # noqa: BLE001 - preserve service-level error envelope
         if process is not None and process.returncode is None:
-            process.kill()
-            await process.wait()
+            await _kill_tree_and_reap(process)
         return 128, b"", str(exc).encode()
 
 
@@ -883,7 +914,7 @@ async def run_allowlisted_capped(
             *launch,
             cwd=cwd,
             env=dict(env) if env is not None else None,
-            stdin=None,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -892,15 +923,13 @@ async def run_allowlisted_capped(
         )
     except asyncio.TimeoutError:
         if process is not None and process.returncode is None:
-            process.kill()
-            await process.wait()
+            await _kill_tree_and_reap(process)
         return 128, b"", f"{argv[0]} timed out".encode(), False
     except FileNotFoundError:
         return 127, b"", f"{argv[0]} not found".encode(), False
     except Exception as exc:  # noqa: BLE001 - preserve service-level error envelope
         if process is not None and process.returncode is None:
-            process.kill()
-            await process.wait()
+            await _kill_tree_and_reap(process)
         return 128, b"", str(exc).encode(), False
 
 

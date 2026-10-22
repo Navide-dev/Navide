@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from agent_team_backend import host_shell, osplat
+from agent_team_backend import git_service, host_shell, osplat
 from agent_team_backend.host_shell import (
     HOST_SHELL_EXECUTABLE_ALLOWLIST,
     parse_allowlisted_command,
@@ -1138,3 +1138,95 @@ async def test_capped_read_drains_stderr_while_stdout_is_still_coming() -> None:
     assert (rc, stdout, stderr, truncated) == (0, b"x" * 30, b"warning", False)
     assert "stderr" in order
     assert order.index("stderr") < len(order) - 1
+
+
+# ── timeouts ──────────────────────────────────────────────────────────────────
+# Windows Git view (0.2.27/0.2.28): every git.exe the backend started hung at
+# launch, and each timed-out run then waited forever on `process.wait()` --
+# the real git.exe under Git for Windows' launcher outlived the kill and held
+# the pipes -- so all four git slots leaked and the view never loaded again.
+
+
+@pytest.mark.asyncio
+async def test_a_run_never_hands_the_child_the_backends_own_stdin(monkeypatch) -> None:
+    """On Windows the backend's stdin is main's `shutdown` pipe, with a thread
+    parked in a synchronous read on it; a child given that same pipe blocks
+    on its first query of the handle. Only a run that feeds input gets a pipe."""
+    seen: list[object] = []
+
+    class DoneProc:
+        returncode = 0
+
+        async def communicate(self, *_a):
+            return b"", b""
+
+        async def read(self, *_a):
+            return b""
+
+    async def fake_exec(*_a, **kwargs):
+        seen.append(kwargs["stdin"])
+        proc = DoneProc()
+        proc.stdout = proc.stderr = proc
+        return proc
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    await run_allowlisted_text(["git", "status"])
+    await run_allowlisted_capped(["git", "diff"], max_stdout_bytes=10)
+    await run_allowlisted_text(["git", "apply"], input_text="patch")
+
+    assert seen == [
+        asyncio.subprocess.DEVNULL,
+        asyncio.subprocess.DEVNULL,
+        asyncio.subprocess.PIPE,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_hung_git_does_not_hold_its_slot_forever(monkeypatch) -> None:
+    """A child whose pipes never close (Windows: held by the orphaned real
+    git.exe) must still give its git slot back, every time, so a call made
+    after the slots were all spent by hung runs still gets one."""
+    killed: list[int] = []
+
+    class HungProc:
+        pid = 4242
+        returncode = None
+
+        async def communicate(self, *_a):
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            await asyncio.Event().wait()
+
+        def kill(self):
+            killed.append(self.pid)
+
+    async def fake_exec(*_a, **_k):
+        return HungProc()
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "descendants", lambda pid: [pid + 1])
+    monkeypatch.setattr(
+        host_shell.process_tree, "kill", lambda pid, *, force: killed.append(pid)
+    )
+    monkeypatch.setattr(host_shell, "_KILL_REAP_TIMEOUT_S", 0.05)
+    real_run = host_shell.run_allowlisted_text
+    monkeypatch.setattr(
+        git_service,
+        "run_allowlisted_text",
+        lambda args, cwd, **kw: real_run(args, cwd, **{**kw, "timeout": 0.05}),
+    )
+
+    runs = git_service._GIT_PROC_LIMIT * 2 + 1
+    results = await asyncio.wait_for(
+        asyncio.gather(*(git_service._run(["git", "status"], ".") for _ in range(runs))),
+        timeout=5,
+    )
+
+    assert [rc for rc, _, _ in results] == [128] * runs
+    # The launcher and what it started, not the launcher alone.
+    assert killed.count(4242) == runs and killed.count(4243) == runs
+

@@ -34,6 +34,7 @@ NO_SANDBOX_FILES=(
   backend/tests/cli_regression/test_isolation.py
   backend/tests/test_osplat_darwin_pane_helper.py
   backend/tests/test_proc_rusage.py
+  backend/tests/test_host_shell_tree_kill.py
   backend/tests/test_pty_registry.py
   backend/tests/test_terminals_breakaway_kill.py
   backend/tests/test_terminals_exit_orphan_reap.py
