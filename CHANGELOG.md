@@ -4,6 +4,14 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Channels: a busy computer no longer makes a chat see "（pane 回合結束，沒有文字輸出）", or the previous turn's reply, for a Claude turn whose text Navide had not read yet. Claude's Stop hook reports a turn end before the conversation log is read; the chat now waits for the log's text. After 10 seconds the status reads "✅ 回合已結束，正在讀取回覆…". After 120 seconds the chat is told the reply will follow, and it does, prefixed "（補送）", under the message that asked, for up to 30 minutes. Text that arrives after the next message went in still answers the message it belongs to. A turn that really wrote no text is reported once the log moves on to the next prompt. CLIs without a Stop hook are answered as before.
+
+### Changed
+
+- MCP: `cli_get_status`, `cli_wait_idle` and `cli_send_and_wait` no longer give a Claude turn end that came from the Stop hook another turn's text. Until the conversation log is read, such a turn end has no `last_activity.text`; before, it could carry the previous turn's text. The backend log notes how far apart the hook and the log reported a turn's end (time and pane only).
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added

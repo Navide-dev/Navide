@@ -1355,6 +1355,16 @@ pane_activity_listeners: list[Callable[[str, dict[str, Any] | None], None]] = []
 # else the naming snippet. Must not raise.
 pane_prompt_listeners: list[Callable[[str, str], None]] = []
 _USER_PROMPT_DETAILS = frozenset({"user", "prompt", "user_message"})
+# Per pane, monotonic times that tell whose turn a hook's turn end is: the last
+# Stop-hook turn end, and the last real prompt the conversation-log reader saw.
+_last_hook_turn_end: dict[str, float] = {}
+_last_log_turn_start: dict[str, float] = {}
+# The first of a turn's two turn ends (hook, log) still waiting for the other:
+# (source, monotonic time). Only for the arrival-gap log line below.
+_turn_end_first: dict[str, tuple[str, float]] = {}
+_TURN_END_PAIR_MAX_S = 1800.0
+# A log turn end later than its hook by this much is worth a line in backend.log.
+_TURN_END_GAP_INFO_S = 2.0
 
 
 def _current_pane_id(pane_id: str) -> str:
@@ -1374,14 +1384,33 @@ def pane_activity(pane_id: str) -> dict[str, Any] | None:
     return _pane_activity.get(_current_pane_id(pane_id))
 
 
+def _note_turn_end_gap(key: str, source: str, now: float) -> None:
+    """Log how far apart a turn's hook and log turn ends arrived (time and pane only)."""
+    first = _turn_end_first.pop(key, None)
+    if first is not None and first[0] != source and now - first[1] <= _TURN_END_PAIR_MAX_S:
+        gap = now - first[1]
+        level = logging.INFO if source == "log" and gap >= _TURN_END_GAP_INFO_S else logging.DEBUG
+        log.log(level, "turn end for %s: %s first, %s %.2fs later", key, first[0], source, gap)
+        return
+    _turn_end_first[key] = (source, now)
+
+
 def _record_pane_activity(
-    pane_id: str, event_type: str, text: str, *, detail: str = ""
+    pane_id: str, event_type: str, text: str, *, detail: str = "",
+    source: str = "", turn_start: bool = False,
 ) -> None:
     if not pane_id:
         return
     key = _current_pane_id(pane_id)
     now = time.monotonic()
     prior = _pane_activity.get(key)
+    if event_type == "turn_complete" and source in ("hook", "log"):
+        _note_turn_end_gap(key, source, now)
+        if source == "hook":
+            _last_hook_turn_end[key] = now
+    if turn_start:
+        _last_log_turn_start[key] = now
+        _turn_end_first.pop(key, None)
     # When the turn this event belongs to began: the first agent_active after
     # the previous turn ended opens a turn, later events of the same turn
     # carry that start forward, and the turn_complete closes it. The account
@@ -1405,14 +1434,42 @@ def _record_pane_activity(
         # The reader's structured detail (a stop reason such as droid's
         # ``model_usage_exhausted``) — kept only for turn ends, bounded.
         "detail": (detail or "")[:200] if event_type == "turn_complete" else "",
+        # Who wrote it: "hook" (a CLI hook; its turn end carries no text of its
+        # own) or "log" (the conversation-log reader, which has the text).
+        "source": source,
+        # The log reader saw a real prompt: a new turn began in the transcript.
+        "turn_start": turn_start,
     }
     for listener in pane_activity_listeners:
         listener(key, _pane_activity[key])
 
 
+def _hook_turn_text(pane_id: str) -> str:
+    """The text a Stop hook's turn end may carry: the log reader's turn end for
+    this same turn, when the reader got there first, and "" otherwise.
+
+    It is this turn's only when the reader saw a prompt after the previous hook
+    turn end and then its turn end. Under load the reader lags, and what it last
+    recorded is the previous turn's end: borrowed, that told a chat the
+    previous turn's reply. "" says the text is still on its way; the reader's
+    own turn end brings it.
+    """
+    key = _current_pane_id(pane_id)
+    prior = _pane_activity.get(key)
+    if prior is None or prior["event_type"] != "turn_complete" or prior.get("source") != "log":
+        return ""
+    started = _last_log_turn_start.get(key)
+    if started is None or started <= _last_hook_turn_end.get(key, float("-inf")):
+        return ""
+    return prior["text"] if prior["ts_monotonic"] >= started else ""
+
+
 def forget_pane_activity(pane_id: str) -> None:
     """Drop a closed pane's entry so the cache tracks live panes only."""
     _pane_activity.pop(pane_id, None)
+    _last_hook_turn_end.pop(pane_id, None)
+    _last_log_turn_start.pop(pane_id, None)
+    _turn_end_first.pop(pane_id, None)
     for listener in pane_activity_listeners:
         listener(pane_id, None)
     hook_drain.forget_pane(pane_id)
@@ -1451,14 +1508,15 @@ async def _on_log_activity(event: ActivityEvent) -> None:
         superseded = event.event_type == "turn_complete" and hook_drain.turn_end_is_superseded(
             pane_id
         )
+        prompted = (
+            event.event_type == "agent_active" and bool(event.text) and bool(pane_id)
+            and event.detail in _USER_PROMPT_DETAILS
+        )
         _record_pane_activity(
             pane_id, "agent_active" if superseded else event.event_type, event.text,
-            detail=event.detail,
+            detail=event.detail, source="log", turn_start=prompted,
         )
-        if (
-            event.event_type == "agent_active" and event.text and pane_id
-            and event.detail in _USER_PROMPT_DETAILS
-        ):
+        if prompted:
             for prompt_listener in pane_prompt_listeners:
                 try:
                     prompt_listener(
@@ -3081,9 +3139,8 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         # it — it had to sit out the 10s quiet threshold instead. Hook payloads
         # carry no assistant text, so keep the text the sink already recorded
         # for this same turn rather than blanking it.
-        prior = pane_activity(pane_id)
-        prior_text = prior["text"] if prior and event_type == "turn_complete" else ""
-        _record_pane_activity(pane_id, event_type, prior_text)
+        prior_text = _hook_turn_text(pane_id) if event_type == "turn_complete" else ""
+        _record_pane_activity(pane_id, event_type, prior_text, source="hook")
     await broadcast(make_event("agent.activity", {
         "vendor": vendor,
         "event_type": event_type,

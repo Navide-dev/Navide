@@ -306,7 +306,9 @@ def test_stop_hook_does_not_blank_the_turn_text_the_log_reader_recorded(
     monkeypatch.setattr(
         app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
     )
-    app_module._record_pane_activity("pw", "turn_complete", "what the agent said")
+    # The reader got there first: this turn's prompt, then its end_turn line.
+    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True)
+    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log")
     try:
         client.post(
             "/hooks/claude",
@@ -314,6 +316,30 @@ def test_stop_hook_does_not_blank_the_turn_text_the_log_reader_recorded(
             json={"session_id": "s-1", "cwd": "/ws/alpha"},
         )
         assert app_module._pane_activity["pw"]["text"] == "what the agent said"
+        assert app_module._pane_activity["pw"]["source"] == "hook"
+    finally:
+        app_module._pane_activity.clear()
+
+
+def test_stop_hook_does_not_borrow_the_previous_turns_text_from_a_lagging_reader(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """Under load the reader lags: what it last recorded is the previous turn's
+    end. Borrowed, the next Stop hook would hand that text out as this turn's
+    (a chat was told the previous reply); it carries none until the reader
+    brings this turn's own."""
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw-lag", "/ws/alpha", "")
+    )
+    stop = {"headers": {"X-Agent-Team-Event": "stop"}, "json": {"session_id": "s-1", "cwd": "/ws/alpha"}}
+    try:
+        app_module._record_pane_activity("pw-lag", "agent_active", "turn one", source="log", turn_start=True)
+        client.post("/hooks/claude", **stop)  # turn one ends; the reader is behind
+        app_module._record_pane_activity("pw-lag", "turn_complete", "reply one", source="log")
+        client.post("/hooks/claude", **stop)  # turn two ends; its prompt not read yet
+        assert app_module._pane_activity["pw-lag"]["text"] == ""
+        assert app_module._pane_activity["pw-lag"]["event_type"] == "turn_complete"
     finally:
         app_module._pane_activity.clear()
 
@@ -373,7 +399,8 @@ def test_a_reattached_panes_hook_keeps_the_text_recorded_under_its_old_id(
     monkeypatch.setattr(
         app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
     )
-    app_module._record_pane_activity("pw", "turn_complete", "what the agent said")
+    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True)
+    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log")
     try:
         client.post(
             "/hooks/claude",
@@ -654,7 +681,8 @@ def test_idle_prompt_after_the_turn_ended_keeps_turn_complete(
     monkeypatch.setattr(plan_mcp, "_ui_request", _ui)
     try:
         # The transcript's end_turn line, then the Stop hook, a minute ago.
-        app_module._record_pane_activity("pw", "turn_complete", "what the agent said")
+        app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True)
+        app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log")
         client.post(
             "/hooks/claude",
             headers={"X-Agent-Team-Event": "stop"},
