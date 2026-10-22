@@ -121,7 +121,8 @@ const RULES: Record<string, LocaleRules> = {
     terms: [
       { pattern: word('plug-?ins?'), positions: ['hyphen', 'before'] },
       { pattern: word('erweiterung(?:en)?'), positions: ['hyphen'] },
-      { pattern: word('marketplaces?'), positions: ['before'] }
+      // The German noun counts too: a bare "Marktplatz" is the Marketplace unqualified.
+      { pattern: word('marketplaces?|marktpl(?:atz|ätze)'), positions: ['before'] }
     ],
     banned: [word('add-?ons?|erweiterungspakete?')],
     allowed: [],
@@ -298,6 +299,7 @@ describe('glossary: plugin, extension and marketplace terms always carry a prefi
     ['de-DE', 'Plug-in installieren', ['bare "Plug-in"']],
     ['de-DE', 'Erweiterung und Add-on', ['banned "Add-on"', 'bare "Erweiterung"']],
     ['de-DE', 'ein Erweiterungspaket', ['banned "Erweiterungspaket"']],
+    ['de-DE', 'Im Marktplatz suchen', ['bare "Marktplatz"']],
     ['pt-BR', 'um complemento ou suplemento', ['banned "complemento"', 'banned "suplemento"']],
     ['pt-BR', 'um pacote de extensões', ['banned "pacote de extensões"', 'bare "extensões"']],
     ['pt-BR', 'Instalar extensão', ['bare "extensão"']],

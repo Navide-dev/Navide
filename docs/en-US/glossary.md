@@ -123,6 +123,21 @@ open 開啟, save 儲存, refresh 重新整理, run 執行. Not used: 打開, �
 ブラウザー). Quote with 「」, not ASCII double quotes; use a full-width colon
 after Japanese text.
 
+## Terms in the Beta locales (de-DE, es-ES, fr-FR, pt-BR, ru-RU, vi-VN)
+
+These follow the per-locale research; a translator does not coin a second
+rendering for a term the locale already uses.
+
+**Feature names kept in English:** Turn Stats, Pipeline Manager, Loop
+(also in the "∞ Loop" badge), Navide Cloud, Navide Marketplace, Navide Guard,
+Navide Browser, Testplace, Registry. Other feature names are translated like
+ordinary words: Resource Manager is de-DE "Ressourcenverwaltung", ja-JP
+"リソースマネージャー"; Memory (the CLI instruction files) is de-DE
+"Gedächtnis", ja-JP "メモリ".
+
+**Kept in English in de-DE:** turn (an agent's turn, as in Turn Stats; the
+Turn Stats table's "Turns" column too), plus the words zh-TW and zh-CN keep.
+
 ## What stays as it is
 
 Identifiers are contracts, not prose, and keep their names: the Settings tab ids

@@ -203,7 +203,7 @@ describe('OnboardingWizard', () => {
       const select = wrapper.get('select.ob-lang-btn')
       const beta = i18n.global.t('settings.appearance.language-beta')
       expect(select.findAll('option').map(option => option.text())).toEqual(
-        ['繁體中文', 'English', '日本語', `한국어 (${beta})`, `简体中文 (${beta})`]
+        ['繁體中文', 'English', '日本語', `한국어 (${beta})`, `简体中文 (${beta})`, `Deutsch (${beta})`]
       )
       await select.setValue('ja-JP')
       expect(i18n.global.locale.value).toBe('ja-JP')
