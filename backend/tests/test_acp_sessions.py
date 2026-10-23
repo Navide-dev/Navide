@@ -639,21 +639,41 @@ async def test_an_ended_agents_pipes_are_closed_now_not_by_the_garbage_collector
     """Killed, or exited on its own: its transport is closed explicitly (on
     POSIX asyncio may close it too once every pipe is gone; on Windows that is
     left to __del__, which is what this rules out)."""
-    closed: list[Any] = []
+    inside = {"now": False}
+    by_us: dict[int, int] = {}  # id(transport) -> closes made inside _close_transport
     real = acp_sessions._close_transport
 
     def spy(proc: Any) -> None:
-        real(proc)
-        closed.append(proc)
+        inside["now"] = True
+        try:
+            real(proc)
+        finally:
+            inside["now"] = False
+
+    def watch(proc: Any) -> None:
+        transport = proc._transport  # noqa: SLF001
+        original = transport.close
+
+        def close() -> None:
+            if inside["now"]:
+                by_us[id(transport)] = by_us.get(id(transport), 0) + 1
+            original()
+
+        transport.close = close
 
     monkeypatch.setattr(acp_sessions, "_close_transport", spy)
     killed = await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+    watch(killed.proc)
     await service.kill(killed.id)
     exited = await service.create(pane_id="p2", agent_key="fake", argv=_argv("exit"), cwd=str(tmp_path))
+    watch(exited.proc)
     await service.prompt(exited.id, "x")
     await _until(lambda: service.get(exited.id) is None)
 
-    assert killed.proc in closed and exited.proc in closed
+    # Each transport was closed by _close_transport itself — not only by asyncio
+    # closing it on its own once the pipes were done (POSIX), or by __del__.
+    assert by_us.get(id(killed.proc._transport), 0) >= 1  # noqa: SLF001
+    assert by_us.get(id(exited.proc._transport), 0) >= 1  # noqa: SLF001
     assert killed.proc._transport.is_closing() and exited.proc._transport.is_closing()  # noqa: SLF001
 
 
