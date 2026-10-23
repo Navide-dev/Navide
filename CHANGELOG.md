@@ -6,6 +6,16 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
+- Interface language: Vietnamese (Tiếng Việt), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It leaves out pronouns where it can and uses verb-first buttons. Every string is stored precomposed (NFC) with old-style tone placement. Agent, AI, pane, workspace, Plan, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker. With it, all eleven interface languages Navide recognizes have a catalog.
+
+- Interface language: Russian (Русский), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses lowercase вы, « » quotes and Russian's three plural forms. Agent, AI, pane, skill, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker.
+
+- Interface language: Brazilian Portuguese (Português, Brasil), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It leaves out você wherever it can and uses sentence case. Agent, AI, pane, workspace, branch, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker.
+
+- Interface language: French (Français), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses vous, « » quotes and the no-break spaces French typography requires, and says IA for AI. Agent, pane, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker.
+
+- Interface language: Spanish (Español, España), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses tú and impersonal error messages. Agent, AI, pane, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker.
+
 - Interface language: German (Deutsch), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses the formal Sie. Agent, AI, pane, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker. Pick it in Settings → Appearance, or at the first start.
 
 - Release: every release now publishes its What's New announcements as `whats-new.json` on the download mirror (`dl.navide.dev/releases/<tag>/whats-new.json` and `releases/latest/whats-new.json`), exported from the same entries the app shows, for the website's announcements page. The format is in `docs/en-US/release-announcements.md`.
