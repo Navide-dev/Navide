@@ -671,3 +671,39 @@ async def test_a_failed_start_closes_its_pipes_too(service, tmp_path, monkeypatc
 
     assert closed and all(t.is_closing() for t in closed)
 
+
+async def test_an_aborted_start_closes_its_pipes_even_with_the_process_still_running(service, monkeypatch, tmp_path) -> None:
+    """The process outlived the abort's attempts to end it (stuck, a failed
+    kill, a late watcher): its transport is still closed — which kills it."""
+    from agent_team_backend import osplat
+
+    spawned: list[int] = []
+    closed: list[Any] = []
+    real = acp_sessions._close_transport
+
+    def spy(proc: Any) -> None:
+        closed.append((proc, proc.returncode))
+        real(proc)
+
+    def fail_register(pid: int, argv: list[str]) -> None:
+        spawned.append(pid)
+        raise OSError("registry unwritable")
+
+    async def no_wait(_proc: Any, _grace: float) -> None:
+        return None
+
+    monkeypatch.setattr(acp_sessions, "_close_transport", spy)
+    monkeypatch.setattr(pty_registry, "register", fail_register)
+    monkeypatch.setattr(osplat.process_tree, "end_contained", lambda pid, job: None)
+    monkeypatch.setattr(osplat.process_tree, "kill_tree", lambda pid, force=True: None)
+    monkeypatch.setattr(AcpSessionService, "_wait_exit", staticmethod(no_wait))
+
+    with pytest.raises(OSError):
+        await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+
+    assert len(closed) == 1
+    proc, code_at_close = closed[0]
+    assert code_at_close is None  # still running when its pipes were closed
+    assert proc._transport.is_closing()  # noqa: SLF001
+    await _until(lambda: not _alive(spawned[0]))  # and close() ended it
+

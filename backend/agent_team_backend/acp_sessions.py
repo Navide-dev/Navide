@@ -285,8 +285,10 @@ class AcpSessionService:
                     osplat.process_tree.kill_tree(proc.pid, force=True)
             await self._wait_exit(proc, _TERM_GRACE_S)
         await asyncio.to_thread(_kill_breakaway, descendants)
-        if proc.returncode is not None:
-            _close_transport(proc)
+        # Closed whatever state it is in: left open, the transport would fall
+        # to the collector once create() forgets it. close() kills a process
+        # still running (asyncio's BaseSubprocessTransport).
+        _close_transport(proc)
         if spawned.registered:
             await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, proc.pid))
 
