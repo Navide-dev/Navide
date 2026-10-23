@@ -113,7 +113,8 @@ const RULES: Record<string, LocaleRules> = {
       { pattern: word('extensions?'), positions: ['after'] },
       { pattern: word('marketplaces?'), positions: ['after', 'before'] }
     ],
-    banned: [word('modules? complémentaires?|compléments?|greffons?|plugiciels?')],
+    // The user's decision: French UI says IA, never AI (case-sensitive, so "j’ai" passes).
+    banned: [word('modules? complémentaires?|compléments?|greffons?|plugiciels?'), word('AI', 'gu')],
     allowed: [word('extensions? de fichiers?')],
     page: { name: 'Extensions', ref: pageRef('Extensions') }
   },
@@ -296,6 +297,7 @@ describe('glossary: plugin, extension and marketplace terms always carry a prefi
     ['fr-FR', 'un module complémentaire', ['banned "module complémentaire"']],
     ['fr-FR', 'un greffon, un plugiciel, un complément', ['banned "greffon"', 'banned "plugiciel"', 'banned "complément"']],
     ['fr-FR', 'Activer les extensions', ['bare "extensions"']],
+    ['fr-FR', 'Expliquer avec l’AI', ['banned "AI"']],
     ['de-DE', 'Plug-in installieren', ['bare "Plug-in"']],
     ['de-DE', 'Erweiterung und Add-on', ['banned "Add-on"', 'bare "Erweiterung"']],
     ['de-DE', 'ein Erweiterungspaket', ['banned "Erweiterungspaket"']],
@@ -381,6 +383,8 @@ describe('vi-VN strings are NFC', () => {
 // such as `key:value`, `10:30`, `?q=` or `!=`, where the mark is mid-token.
 function frenchPunctuationProblems(text: string): string[] {
   const body = text
+    // The inter-CLI protocol lines are typed literally: "to:" / "from:" take no space.
+    .replace(/---MSG-START---\s*to:|\[Navide MSG\]\s*from:/g, ' ')
     .replace(/<code>[\s\S]*?<\/code>/g, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/`[^`]*`/g, ' ')
@@ -405,5 +409,7 @@ describe('fr-FR puts a no-break space before : ; ? !', () => {
     expect(frenchPunctuationProblems('Supprimer ? Oui!')).toEqual(['r ?', 'i!'])
     expect(frenchPunctuationProblems('Erreur: {error}')).toEqual(['r:'])
     expect(frenchPunctuationProblems('{count}? voir https://navide.dev/a?b=1 et `a: b` à 10:30')).toEqual([])
+    expect(frenchPunctuationProblems('Première ligne\u00a0: ---MSG-START--- to: architect')).toEqual([])
+    expect(frenchPunctuationProblems('[Navide MSG] from: x, puis Note: y')).toEqual(['e:'])
   })
 })

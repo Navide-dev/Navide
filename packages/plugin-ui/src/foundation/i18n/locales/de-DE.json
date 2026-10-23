@@ -1919,7 +1919,7 @@
       "restartPlugin": "Navide-Plug-in neu starten",
       "disable": "Deaktivieren",
       "enable": "Aktivieren",
-      "builtinDisabledTooltip": "Das Navide-Plug-in {name} ist deaktiviert. Aktivieren Sie es unter „Einstellungen → Erweiterungen“.",
+      "builtinDisabledTooltip": "Das Navide-Plug-in {name} ist deaktiviert. Aktivieren Sie es unter „Einstellungen → Navide-Plug-ins“.",
       "builtinDisabledNote": "Deaktiviert: Seine Ansichten, Fenster und Agent-Tools sind aus. Seine Berechtigungen und gespeicherten Daten bleiben erhalten; „Aktivieren“ schaltet alles wieder ein.",
       "builtinDataDeletedEarlier": "Eine frühere Navide-Version hat dieses Navide-Plug-in entfernt und dabei seine gespeicherten Daten gelöscht. „Aktivieren“ startet es mit leeren Daten.",
       "disabledStoreRestored": "Aus Sicherung wiederhergestellt: Die Deaktivierungsschalter der Navide-Plug-ins waren beschädigt und wurden aus ihrer Sicherungskopie neu aufgebaut.",

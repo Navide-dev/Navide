@@ -76,13 +76,10 @@ describe('uiLocales', () => {
     // lands on en-US, whichever languages that currently is.
     expect(AVAILABLE_UI_LOCALES).toEqual(expect.arrayContaining(['en-US', 'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW']))
     for (const locale of AVAILABLE_UI_LOCALES) expect(detectUiLocale(locale)).toBe(locale)
-    const unregistered = UI_LOCALES.filter((l) => !(AVAILABLE_UI_LOCALES as readonly string[]).includes(l))
-    // Delete this line (and test the fallback with a synthetic code) when the last language ships.
-    expect(unregistered.length).toBeGreaterThan(0)
-    for (const locale of unregistered) {
-      expect(detectUiLocale(locale)).toBe('en-US')
-      expect(resolveAvailableUiLocale(locale)).toBe('en-US')
-    }
+    // Every recognized language ships a catalog now; a recognized one without a
+    // catalog still lands on en-US (synthetic list of available catalogs).
+    expect([...AVAILABLE_UI_LOCALES].sort()).toEqual([...UI_LOCALES].sort())
+    expect(resolveAvailableLocale('vi-VN', ['en-US', 'zh-TW'])).toBe('en-US')
     expect(detectUiLocale('ko')).toBe('ko-KR')
     expect(detectUiLocale('zh-Hans')).toBe('zh-CN')
     expect(detectUiLocale('zh-SG')).toBe('zh-CN')
