@@ -563,7 +563,10 @@ class AcpSessionService:
         for request in list(session.permissions.values()):
             if not request.answer.done():
                 request.answer.set_result(None)
-        _close_transport(session.proc)  # its pipes, now, not whenever GC runs
+        try:
+            _close_transport(session.proc)  # its pipes, now, not whenever GC runs
+        except Exception as err:  # noqa: BLE001 — unregister and the exit report still follow
+            log.warning("ACP %s: pipes not closed: %s", session.id, err)
         try:
             await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, session.proc.pid))
         except Exception as err:  # noqa: BLE001 — the exit is still reported (owners cleared on it)
@@ -661,8 +664,8 @@ def _close_transport(proc: asyncio.subprocess.Process) -> None:
     then their numbers may belong to something else (pytest's own stdout went
     bad that way on Windows CI)."""
     transport = _TRANSPORTS.pop(proc, None)
-    if transport is not None and not transport.is_closing():
-        transport.close()
+    if transport is not None:
+        transport.close()  # idempotent: asyncio may have closed it already
 
 
 async def _spawn(
