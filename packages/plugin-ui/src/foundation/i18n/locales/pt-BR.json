@@ -1919,7 +1919,7 @@
       "restartPlugin": "Reiniciar plug-in do Navide",
       "disable": "Desativar",
       "enable": "Ativar",
-      "builtinDisabledTooltip": "O plug-in do Navide {name} está desativado. Ative-o em Configurações → Extensões.",
+      "builtinDisabledTooltip": "O plug-in do Navide {name} está desativado. Ative-o em Configurações → Plug-ins do Navide.",
       "builtinDisabledNote": "Desativado: as visualizações, janelas e ferramentas de agent dele estão desligadas. As permissões e os dados armazenados são mantidos; “Ativar” liga tudo de novo.",
       "builtinDataDeletedEarlier": "Uma versão anterior do Navide removeu este plug-in do Navide e excluiu os dados armazenados dele naquela ocasião. “Ativar” o inicia com dados vazios.",
       "disabledStoreRestored": "Restaurado do backup: as chaves de desativação dos plug-ins do Navide estavam danificadas e foram reconstruídas a partir da cópia de backup.",
@@ -2140,6 +2140,13 @@
           "mayChange": "O conteúdo pode mudar a qualquer momento. A impressão digital só registra o que a pasta continha quando foi carregada; o Navide não a usa para recusar um carregamento."
         },
         "selfHostedQuarantine": "{id} {version} veio de um Registry auto-hospedado e não foi carregado. Ative o modo de desenvolvedor ou instale-o pelo Navide Marketplace."
+      },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "O Navide não conseguiu verificar este plug-in do Navide: os dados de confiança do Registry têm data posterior ao relógio deste computador. Verifique se a data e a hora do computador estão corretas e tente novamente.",
+          "expired": "O Navide não conseguiu verificar este plug-in do Navide: pelo relógio deste computador, os dados de confiança do Registry expiraram. Verifique se a data e a hora do computador estão corretas e tente novamente.",
+          "signatureNotYetValid": "O Navide não conseguiu verificar este plug-in do Navide: a assinatura do Registry dele tem data posterior ao relógio deste computador. Verifique se a data e a hora do computador estão corretas e tente novamente."
+        }
       },
       "localInstall": {
         "agentRequest": "Solicitado por {requester}. O Navide não revisou este pacote; instalá-lo é decisão sua.",
@@ -6827,6 +6834,9 @@
       "state-on": "Ativado",
       "state-off": "Desativado",
       "status": "Status: {status}",
+      "starting-note": "Ainda iniciando após {seconds} s. Se ele roda via npx ou uvx, a primeira execução pode estar baixando o pacote.",
+      "error-reason": "Falha ao iniciar: {reason}",
+      "stderr-tail": "Últimas linhas exibidas pelo servidor",
       "open-config-file": "Abrir arquivo de configuração",
       "native-readonly-hint": "O Navide lê esses arquivos e nunca grava neles. Só a configuração de usuário de cada CLI é verificada; o MCP de projeto não é mostrado. Altere um servidor onde a CLI dele espera e depois atualize.",
       "navide-scope-hint": "O Navide se conecta a este servidor por conta própria. Os panes de CLI não o recebem.",

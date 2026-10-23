@@ -1919,7 +1919,7 @@
       "restartPlugin": "Khởi động lại plugin Navide",
       "disable": "Tắt",
       "enable": "Bật",
-      "builtinDisabledTooltip": "Plugin Navide {name} đã bị tắt. Hãy bật nó trong Cài đặt → Tiện ích mở rộng.",
+      "builtinDisabledTooltip": "Plugin Navide {name} đã bị tắt. Hãy bật nó trong Cài đặt → Plugin Navide.",
       "builtinDisabledNote": "Đã tắt: khung xem, cửa sổ và công cụ agent của nó đều tắt. Quyền và dữ liệu đã lưu được giữ lại; Bật sẽ mở lại mọi thứ.",
       "builtinDataDeletedEarlier": "Một phiên bản Navide trước đây đã gỡ plugin Navide này và xóa dữ liệu đã lưu của nó lúc đó. Bật sẽ khởi động nó với dữ liệu trống.",
       "disabledStoreRestored": "Đã khôi phục từ bản sao lưu: các công tắc Tắt của plugin Navide bị hỏng và đã được dựng lại từ bản sao lưu.",
@@ -2140,6 +2140,13 @@
           "mayChange": "Nội dung của nó có thể thay đổi bất cứ lúc nào. Dấu vân tay chỉ ghi lại những gì thư mục chứa lúc được tải; Navide không dùng nó để từ chối tải."
         },
         "selfHostedQuarantine": "{id} {version} đến từ Registry tự lưu trữ và chưa được tải. Hãy bật Chế độ nhà phát triển hoặc cài nó từ Navide Marketplace."
+      },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide không kiểm tra được plugin Navide này: dữ liệu tin cậy của Registry có thời điểm muộn hơn đồng hồ của máy này. Hãy kiểm tra ngày giờ trên máy đã đúng chưa rồi thử lại.",
+          "expired": "Navide không kiểm tra được plugin Navide này: theo đồng hồ của máy này, dữ liệu tin cậy của Registry đã hết hạn. Hãy kiểm tra ngày giờ trên máy đã đúng chưa rồi thử lại.",
+          "signatureNotYetValid": "Navide không kiểm tra được plugin Navide này: chữ ký Registry của nó có thời điểm muộn hơn đồng hồ của máy này. Hãy kiểm tra ngày giờ trên máy đã đúng chưa rồi thử lại."
+        }
       },
       "localInstall": {
         "agentRequest": "Do {requester} yêu cầu. Navide chưa duyệt gói này; cài đặt hay không là quyết định của bạn.",
@@ -6827,6 +6834,9 @@
       "state-on": "Đã bật",
       "state-off": "Đã tắt",
       "status": "Trạng thái: {status}",
+      "starting-note": "Vẫn đang khởi động sau {seconds} giây. Nếu máy chủ chạy qua npx hoặc uvx, lần chạy đầu có thể đang tải gói về.",
+      "error-reason": "Không khởi động được: {reason}",
+      "stderr-tail": "Những dòng cuối máy chủ đã in ra",
       "open-config-file": "Mở tệp cấu hình",
       "native-readonly-hint": "Navide đọc các tệp này và không bao giờ ghi vào chúng. Chỉ quét cấu hình cấp người dùng của từng CLI — MCP cấp dự án không được hiển thị. Hãy thay đổi máy chủ ở nơi CLI của nó quy định, rồi làm mới.",
       "navide-scope-hint": "Navide tự kết nối với máy chủ này. Pane CLI không nhận được nó.",

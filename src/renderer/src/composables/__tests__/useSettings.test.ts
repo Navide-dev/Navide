@@ -28,7 +28,7 @@ describe('useSettings — health-check timeout', () => {
   it.each<[PlatformId, number]>([
     ['linux', 120],
     ['darwin', 45],
-    ['win32', 45],
+    ['win32', 120],
   ])('the %s default matches main (%is)', (platform, expected) => {
     const original = platformId()
     setPlatformId(platform)

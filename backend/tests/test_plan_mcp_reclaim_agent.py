@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from agent_team_backend import agent_messaging
+from agent_team_backend import agent_messaging, app
 from agent_team_backend.mcp_server import server as plan_mcp, wiring as plan_mcp_wiring
 
 
@@ -67,7 +67,10 @@ async def test_reclaim_asks_the_window_holding_the_target_pane(
     assert calls[0]["op"] == "invoke"
     assert calls[0]["action"] == "ui.pane.reclaim"
     assert calls[0]["args"] == {"paneId": "pw"}
-    assert calls[0]["caller"].pane_id == "pw"
+    # Routed by the target, but the caller stays who is asking: the window's
+    # self guard reads caller_pane_id.
+    assert calls[0]["route_pane_id"] == "pw"
+    assert calls[0]["caller"].pane_id == "pa"
 
 
 @pytest.mark.asyncio
@@ -187,3 +190,42 @@ async def test_reclaim_is_registered_with_the_same_arguments_as_close() -> None:
     assert "click-to-resume" in text
     assert "reclaim-unsupported" in text
     assert "cli_close_agent" in text
+
+
+class _Window:
+    """Stands in for a renderer window's WS session (what owner() hands back)."""
+
+    dead = False
+
+
+@pytest.mark.asyncio
+async def test_the_window_is_told_the_real_caller_not_the_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The window refuses ui.pane.reclaim with reason "self" when
+    caller_pane_id is among the ids asked for. Sending the target as the
+    caller made every cli_reclaim_agent come back "self" for every target,
+    from every caller (0.2.28, release checklist §10)."""
+    caller_window, target_window = _Window(), _Window()
+    agent_messaging.register("pa", "caller", "/ws/alpha", owner=caller_window)
+    agent_messaging.register("pw", "worker", "/ws/beta", agent_key="codex", owner=target_window)
+    sent: list[tuple[Any, dict[str, Any]]] = []
+
+    async def fake_unicast_to(session: Any, event: dict[str, Any]) -> bool:
+        sent.append((session, event))
+        plan_mcp.resolve_ui_invoke(
+            event["payload"]["request_id"],
+            {"ok": True, "result": {"reclaimed": ["pw"], "refused": []}, "error": None},
+        )
+        return True
+
+    monkeypatch.setattr(app, "unicast_to", fake_unicast_to)
+
+    result = await plan_mcp.cli_reclaim_agent("beta/worker", _ctx())
+
+    assert result["ok"] is True
+    assert len(sent) == 1
+    session, event = sent[0]
+    assert session is target_window
+    assert event["payload"]["caller_pane_id"] == "pa"
+    assert event["payload"]["args"] == {"paneId": "pw"}

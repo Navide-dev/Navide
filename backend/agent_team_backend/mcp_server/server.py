@@ -627,6 +627,15 @@ async def pane_git(pane_id: str, workspace_path: str) -> dict[str, Any] | None:
     return snapshot if snapshot.get("worktreeRoot") else None
 
 
+def pane_git_cached(pane_id: str, workspace_path: str) -> dict[str, Any] | None:
+    """The pane's last git snapshot without waiting (see PaneGitSnapshots.peek),
+    or None outside a repository or before the first one is computed."""
+    from agent_team_backend import git_service
+
+    snapshot = git_service.pane_git_snapshots.peek(_pane_cwd(pane_id) or workspace_path)
+    return snapshot if snapshot is not None and snapshot.get("worktreeRoot") else None
+
+
 async def _with_git(views: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Add `git` to each local target view that has one, in place."""
     snapshots = await asyncio.gather(
@@ -4065,7 +4074,9 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     exact pane instead. Returns {ok, name,
     agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
     is {type: "agent_active"|"turn_complete", text? (turn_complete only),
-    age_seconds}. `ui`, when the owning Navide window answers in time, is
+    age_seconds}. Right after a Claude turn end reported by its Stop hook,
+    `text` is absent until Navide has read the turn from the conversation log
+    (under load, seconds later); it is never an earlier turn's. `ui`, when the owning Navide window answers in time, is
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
     effort?, profileId?, loginExpired?, usageLimitUntil?} straight from the
     renderer; it is omitted (not a failure) when the window does not reply.
@@ -4221,6 +4232,43 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 _WAIT_IDLE_POLL_S = 1.0
 _WAIT_IDLE_QUIET_S = 10.0
 _WAIT_IDLE_MAX_TIMEOUT_S = 120.0
+# Claude's Stop hook reports a turn end before the conversation log is read, and
+# a hook carries no text. A wait that settles on such a turn end waits this much
+# longer (within its own timeout) for the log's turn end and its text, then
+# returns either way, with `text_pending` when the text has not been read yet.
+HOOK_TURN_TEXT_WAIT_S = 10.0
+_HOOK_TURN_TEXT_POLL_S = 0.25
+
+
+def _hook_turn_without_text(activity: dict[str, Any] | None) -> bool:
+    """A Stop hook's turn end whose text the log has not brought yet. One the
+    log had already ended (with or without text) needs no wait."""
+    return bool(
+        activity and activity["event_type"] == "turn_complete"
+        and activity.get("source") == "hook" and not activity["text"]
+        and not activity.get("log_ended")
+    )
+
+
+async def _await_log_turn_text(pane_id: str, hook_end: dict[str, Any], budget: float) -> str:
+    """Wait up to ``budget`` seconds for the log's turn end of the turn
+    ``hook_end`` closed. "text" once it is recorded with text; "empty" when only
+    a textless one came (the turn wrote none, or the text half of a split turn
+    end is still to come); "" when none of this turn came. A log turn end of an
+    earlier turn — a reader lagging by whole turns — never counts."""
+    from agent_team_backend import app
+
+    deadline = time.monotonic() + max(budget, 0.0)
+    seen_empty = False
+    while True:
+        match = app.log_turn_end_after(pane_id, hook_end.get("prev_hook_turn_end"))
+        if match is not None and match is not hook_end:
+            if match["text"]:
+                return "text"
+            seen_empty = True
+        if time.monotonic() >= deadline:
+            return "empty" if seen_empty else ""
+        await asyncio.sleep(_HOOK_TURN_TEXT_POLL_S)
 
 
 # ── Who is parked waiting on a pane (cli_whoami's `waiting_on_me`) ─────────
@@ -4424,7 +4472,7 @@ async def cli_wait_idle(
     passed since its last activity; or, while the registry still reports busy,
     the owning window reports the pane itself as idle/exited/stopped/error.
     That last one matters because the busy flag is frontend-reported and can
-    stay stale. Returns {idle, source, waited_s, last_activity?, ui_status?}
+    stay stale. Returns {idle, source, waited_s, last_activity?, ui_status?, text_pending?}
     where source is "turn_complete", "quiet_period", "ui_status",
     "never_started", or "timeout"; or {ok: false, error} if `target` cannot be
     resolved.
@@ -4432,7 +4480,11 @@ async def cli_wait_idle(
     `last_activity` is what cli_get_status reports under the same key — {type,
     text? (turn_complete only), age_seconds} — so a caller that waited for a
     turn to end also gets what the turn said, without a second call. It is
-    absent for a pane whose CLI records no activity at all. `ui_status` is the
+    absent for a pane whose CLI records no activity at all. Claude's Stop hook
+    can report the turn end before its text is read from the conversation log;
+    the wait then gives the log up to 10 s more (HOOK_TURN_TEXT_WAIT_S, within
+    `timeout_s`), and if the text is still not read it returns anyway with
+    `text_pending: true` — ask cli_get_status shortly after for the text. `ui_status` is the
     owning window's own word for the pane, present only when a probe reached
     it during the wait.
 
@@ -4537,7 +4589,20 @@ async def cli_wait_idle(
                 if activity is None:
                     return done("quiet_period")
                 if activity["event_type"] == "turn_complete":
-                    return done("turn_complete")
+                    if not _hook_turn_without_text(activity):
+                        return done("turn_complete")
+                    budget = min(HOOK_TURN_TEXT_WAIT_S, timeout - (time.monotonic() - started))
+                    read = await _await_log_turn_text(pane_id, activity, budget)
+                    out = done("turn_complete")
+                    if read != "text":
+                        # Whatever the pane recorded since is not this turn's
+                        # text (an earlier turn's, from a lagging reader).
+                        out.get("last_activity", {}).pop("text", None)
+                    if not read:
+                        # The turn ended, but its text is still on its way from the
+                        # conversation log: cli_get_status shortly after has it.
+                        out["text_pending"] = True
+                    return out
                 if time.monotonic() - activity["ts_monotonic"] >= _WAIT_IDLE_QUIET_S:
                     return done("quiet_period")
             elif ui_reachable and tick >= next_ui_probe_tick:
@@ -5170,7 +5235,11 @@ async def cli_send_and_wait(
     On success returns cli_wait_idle's result — {idle: true, source, waited_s,
     last_activity?, ui_status?} — plus {ok: true, target, msg_key}.
     `last_activity.text` is what the other agent said, when its CLI records
-    that. ALWAYS read `source`, because it says how much the "finished" is
+    that. After a Claude turn end reported by its Stop hook the wait gives the
+    conversation log up to 10 s more (within `timeout_s`) for this turn's text;
+    if it is still not read, `text` is absent and `text_pending: true` says it
+    is on its way (ask cli_get_status shortly after). It is never an earlier
+    turn's text. ALWAYS read `source`, because it says how much the "finished" is
     worth:
 
       - "turn_complete" — the CLI reported the turn ended. Trustworthy.
@@ -6336,6 +6405,7 @@ async def _ui_request(
     action: str | None = None,
     args: dict[str, Any] | None = None,
     is_global: bool = False,
+    route_pane_id: str = "",
 ) -> dict[str, Any]:
     from agent_team_backend import app
     from agent_team_backend.ipc import make_event
@@ -6345,7 +6415,12 @@ async def _ui_request(
     # goes to any one window; a pane caller's own window is known and is asked
     # directly ("addressed", so it answers without checking workspace_path);
     # anything else is broadcast for the windows to filter, as before.
-    owner = None if is_global else _caller_window(caller, workspace_path)
+    # route_pane_id addresses the window holding that pane instead while
+    # `caller` stays who is asking: handing the subject pane in as the caller
+    # made the window's self guards read every close or reclaim as the
+    # target closing itself.
+    route = _pane_caller(route_pane_id) if route_pane_id else caller
+    owner = None if is_global else _caller_window(route, workspace_path)
     fut = _ui_invoke_pending.register(request_id)
     payload: dict[str, Any] = {
         "request_id": request_id,
@@ -8037,7 +8112,7 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
     as `***` in both halves; names and hosts are kept so an entry stays
     recognisable. This is a global inventory: it does not vary by workspace.
     """
-    from agent_team_backend import app as _app
+    from agent_team_backend import app as _app, native_mcp
     from agent_team_backend.mcp_settings import MCPSettingsError
 
     _resolve_caller(ctx)
@@ -8056,7 +8131,11 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
             status = info.get("status", "unknown")
         # The tool list itself stays out: this is a summary, and a server with
         # dozens of tools would swamp the answer.
-        servers.append({**row, "status": status, "tool_count": info.get("tool_count", 0)})
+        detail = {key: info[key] for key in ("starting_seconds", "error") if key in info}
+        if "error" in detail:
+            # Masked like the URL above: a library may quote the URL it failed on.
+            detail["error"] = native_mcp.mask_urls_in_text(str(detail["error"]))
+        servers.append({**row, "status": status, "tool_count": info.get("tool_count", 0), **detail})
     reflected = await asyncio.to_thread(_native_mcp_inventory)
     return {"servers": servers, **reflected}
 
@@ -8310,7 +8389,8 @@ async def cli_close_agent(target: str, ctx: Context, pane_id: str = "") -> dict[
     reply = await _ui_request(
         pane.workspace_path,
         "invoke",
-        caller=_pane_caller(pane.pane_id),
+        caller=caller,
+        route_pane_id=pane.pane_id,
         action="ui.pane.close",
         args={"paneId": pane.pane_id},
     )
@@ -8403,7 +8483,8 @@ async def cli_reclaim_agent(target: str, ctx: Context, pane_id: str = "") -> dic
     reply = await _ui_request(
         pane.workspace_path,
         "invoke",
-        caller=_pane_caller(pane.pane_id),
+        caller=caller,
+        route_pane_id=pane.pane_id,
         action="ui.pane.reclaim",
         args={"paneId": pane.pane_id},
     )

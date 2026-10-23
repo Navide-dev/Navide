@@ -24,10 +24,26 @@ import {
 
 const LANGUAGE_KEY = 'agent-team:language'
 
+// en-US is the schema: every catalog is typed as en-US's shape, so
+// i18n.global.t still completes its keys for plugin authors, while the emitted
+// .d.ts spells out that one catalog (an inferred map of every JSON in full is
+// too large for the .d.ts emitter, TS7056, and grows with every language).
+// An interface, not a type alias: the .d.ts names it instead of repeating it.
+const enUSSchema = enUS
+type EnUSCatalog = typeof enUSSchema
+interface MessageSchema extends EnUSCatalog {}
+
+// Keeps the registered locale codes. Only en-US is checked against the schema:
+// a key missing from another catalog is locales.test's to report, not a reason
+// to fail every build that compiles this package.
+function catalogs<L extends string>(entries: { 'en-US': MessageSchema } & Record<L, object>): Record<L, MessageSchema> {
+  return entries as Record<L, MessageSchema>
+}
+
 // Adding a UI language: import its JSON above and add one entry here. The
 // locale must already be listed in UI_LOCALES (./uiLocales.ts); it then shows
 // up in the language pickers and in system-language detection automatically.
-const messages = {
+const messages = catalogs({
   'zh-TW': zhTW,
   'en-US': enUS,
   'ja-JP': jaJP,
@@ -39,7 +55,7 @@ const messages = {
   'pt-BR': ptBR,
   'ru-RU': ruRU,
   'vi-VN': viVN,
-}
+})
 
 /** A UI locale that has a catalog registered in this build. */
 export type AvailableUiLocale = keyof typeof messages & UiLocale

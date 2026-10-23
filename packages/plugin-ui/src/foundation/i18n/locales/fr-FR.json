@@ -177,8 +177,8 @@
     "copy-failed": "Échec de la copie.",
     "replaced-occurrences": "{count} occurrence remplacée | {count} occurrences remplacées",
     "search-stale": "Le contenu a changé, relancez la recherche",
-    "ai-terminal-starting": "Le terminal AI démarre. Réessayez dans un instant.",
-    "ai-terminal-not-started": "Démarrez d’abord le terminal AI, puis réessayez.",
+    "ai-terminal-starting": "Le terminal IA démarre. Réessayez dans un instant.",
+    "ai-terminal-not-started": "Démarrez d’abord le terminal IA, puis réessayez.",
     "json-syntax-error": "Erreur de syntaxe JSON : {message}",
     "file-outside-workspace": "Le fichier se trouve hors de cet espace de travail.",
     "no-indented-lines": "Aucune ligne indentée détectée",
@@ -188,7 +188,7 @@
     "no-quick-fixes": "Aucun correctif rapide disponible",
     "create-file-failed": "Impossible de créer le fichier.",
     "saved": "Enregistré",
-    "ai-rewrite-discarded": "Le document a changé : réécriture AI abandonnée",
+    "ai-rewrite-discarded": "Le document a changé : réécriture IA abandonnée",
     "encoding-switch-failed": "Échec du changement d’encodage.",
     "no-completion": "Aucune complétion disponible",
     "reopen-encoding-failed": "Impossible de rouvrir avec cet encodage.",
@@ -208,8 +208,8 @@
     "workspace-symbol": "Accéder à un symbole de l’espace de travail…",
     "symbol": "Accéder à un symbole…",
     "pane": {
-      "ai-complete-title": "Complétion AI (⌘I)",
-      "ai-rewrite-title": "Réécrire la sélection avec l’AI (⌘K)",
+      "ai-complete-title": "Complétion IA (⌘I)",
+      "ai-rewrite-title": "Réécrire la sélection avec l’IA (⌘K)",
       "complete": "Compléter",
       "replace-title": "Remplacer (↵)",
       "replace-all-title": "Tout remplacer (⌥↵)",
@@ -220,7 +220,7 @@
       "thinking": "Réflexion…",
       "ask": "Demander",
       "rewrite": "Réécrire",
-      "proposal-title": "Réécriture suggérée par l’AI",
+      "proposal-title": "Réécriture suggérée par l’IA",
       "proposal-hint": "Tab pour accepter · Esc pour refuser",
       "accept": "Accepter",
       "reject": "Refuser",
@@ -364,17 +364,17 @@
     }
   },
   "ai-cli": {
-    "label": "CLI AI",
-    "title": "CLI AI",
-    "profile": "Profil de CLI AI",
+    "label": "CLI IA",
+    "title": "CLI IA",
+    "profile": "Profil de CLI IA",
     "start": "Démarrer",
     "stop": "Arrêter",
     "interrupt": "Interrompre",
-    "start-failed": "Impossible de démarrer la session de CLI AI.",
-    "stop-failed": "Impossible d’arrêter la session de CLI AI.",
-    "interrupt-failed": "Impossible d’interrompre la session de CLI AI.",
-    "send-failed": "Impossible d’envoyer la saisie à la session de CLI AI.",
-    "resize-failed": "Impossible de redimensionner la session de CLI AI."
+    "start-failed": "Impossible de démarrer la session de CLI IA.",
+    "stop-failed": "Impossible d’arrêter la session de CLI IA.",
+    "interrupt-failed": "Impossible d’interrompre la session de CLI IA.",
+    "send-failed": "Impossible d’envoyer la saisie à la session de CLI IA.",
+    "resize-failed": "Impossible de redimensionner la session de CLI IA."
   },
   "voice": {
     "readback": {
@@ -487,7 +487,7 @@
     "reason-unknown-pane-id": "Aucun pane avec l’identifiant « {pane_id} » sur cet ordinateur",
     "reason-ambiguous-target": "{n} panes de « {ws} » s’appellent « {name} » : renommez l’un d’eux",
     "reason-target-offline": "« {to} » est hors ligne : sa fenêtre s’est déconnectée il y a {seconds} s ; le pane existe toujours",
-    "reason-target-is-dock": "« {to} » est un panneau AI intégré ({surface}) : il ne peut pas encore recevoir de messages",
+    "reason-target-is-dock": "« {to} » est un panneau IA intégré ({surface}) : il ne peut pas encore recevoir de messages",
     "reason-unknown-device": "Appareil inconnu « {device} » : cet ordinateur n’est pas connecté à Navide Cloud et ne peut donc adresser que ses propres panes",
     "rename-collision-title": "Nom de messagerie déjà utilisé",
     "rename-collision-body": "Le nom « {name} » est déjà utilisé par une autre CLI. Choisissez un autre nom de messagerie :",
@@ -528,7 +528,7 @@
     "ws-title": "Fermer l’espace de travail ?",
     "ws-body": "Revenir à l’écran d’accueil et fermer l’espace de travail actuel ?",
     "ws-running-extra": "Cela interrompt le pipeline en cours (son historique est conservé sur le disque et pourra être repris plus tard).",
-    "ws-pm-panel-extra": "Le panneau AI du Pipeline Manager de cet espace de travail s’arrête aussi.",
+    "ws-pm-panel-extra": "Le panneau IA du Pipeline Manager de cet espace de travail s’arrête aussi.",
     "sidebar-ws-title": "Fermer « {name} » ?",
     "sidebar-ws-body": "Cela arrête le pane CLI de cet espace de travail ({count}). Son historique est conservé : à la réouverture de l’espace de travail, il revient sous forme de carte sur laquelle cliquer pour le reprendre. | Cela arrête les {count} panes CLI de cet espace de travail. Leurs historiques sont conservés : à la réouverture, chacun revient sous forme de carte sur laquelle cliquer pour le reprendre.",
     "sidebar-ws-body-pipeline-only": "Cela arrête le pane CLI de cet espace de travail ({count}). Il appartient à une exécution de pipeline : la réouverture de l’espace de travail ne le fera pas revenir. | Cela arrête les {count} panes CLI de cet espace de travail. Ils appartiennent tous à une exécution de pipeline : la réouverture ne les fera pas revenir.",
@@ -676,7 +676,7 @@
       "title": "Explorateur"
     },
     "ai-terminal": {
-      "title": "Terminal AI"
+      "title": "Terminal IA"
     },
     "search": {
       "title": "Recherche"
@@ -1066,7 +1066,7 @@
     "open-with": "Ouvrir avec",
     "open-in-default-editor": "Ouvrir dans l’éditeur par défaut",
     "open-remote-url": "Ouvrir l’URL distante",
-    "ask-ai-about-file": "Interroger l’AI sur ce fichier",
+    "ask-ai-about-file": "Interroger l’IA sur ce fichier",
     "reveal-in-finder": "Afficher dans le Finder",
     "open-in-new-window": "Ouvrir dans une nouvelle fenêtre",
     "lock": "Verrouiller",
@@ -1204,9 +1204,9 @@
     "paste": "Coller",
     "toggle-comment": "Basculer le commentaire",
     "find": "Rechercher",
-    "add-to-ai-chat": "Ajouter au terminal AI",
-    "explain-with-ai": "Expliquer avec l’AI",
-    "fix-with-ai": "Corriger avec l’AI",
+    "add-to-ai-chat": "Ajouter au terminal IA",
+    "explain-with-ai": "Expliquer avec l’IA",
+    "fix-with-ai": "Corriger avec l’IA",
     "insert": "Insérer",
     "explain": "Expliquer",
     "explain-error": "Expliquer l’erreur",
@@ -1253,7 +1253,7 @@
     "show-ignored-files": "Afficher les fichiers ignorés",
     "abort-op": "Interrompre {op}",
     "auto-commit-enabled": "Commit automatique activé",
-    "ai-commit-message": "Message de commit par l’AI",
+    "ai-commit-message": "Message de commit par l’IA",
     "commit-and-push": "Commiter et envoyer (push)",
     "commit-and-sync": "Commiter et synchroniser",
     "undo-last-commit": "Annuler le dernier commit",
@@ -1321,7 +1321,7 @@
     "row-discard": "abandonner",
     "row-agent": "agent",
     "resolve-with-agent": "Résoudre avec un agent",
-    "ai-message": "✨ Message par l’AI",
+    "ai-message": "✨ Message par l’IA",
     "amend": "Modifier (amend)",
     "commit-files-one": "Commiter {count} fichier",
     "commit-files-many": "Commiter {count} fichiers",
@@ -1453,7 +1453,7 @@
     "cliExtensions": {
       "tabInstalled": "Extensions CLI installées",
       "tabConvenience": "Ce que Navide modifie",
-      "intro": "Ce que chaque CLI d’AI a installé pour elle-même – Claude plugins et mods, Codex hooks, extensions Pi, etc. – et ce à quoi chacun peut accéder. Lecture seule : rien ici n’installe, n’active ni ne modifie quoi que ce soit. Les plugins Navide ont leur propre page.",
+      "intro": "Ce que chaque CLI d’IA a installé pour elle-même – Claude plugins et mods, Codex hooks, extensions Pi, etc. – et ce à quoi chacun peut accéder. Lecture seule : rien ici n’installe, n’active ni ne modifie quoi que ce soit. Les plugins Navide ont leur propre page.",
       "summary": "{total} extensions CLI · {l3} exécutent du code dans leur CLI",
       "machineWide": "Un seul ensemble par CLI pour toute la machine : chaque pane Navide et chaque compte de cette CLI chargent les mêmes.",
       "rescan": "Réanalyser",
@@ -1519,7 +1519,7 @@
       "item": {
         "cliExtensions": {
           "title": "Extensions",
-          "summary": "Les extensions CLI et hooks propres à chaque CLI d’AI, avec leur niveau d’exécution et leurs capacités (lecture seule)."
+          "summary": "Les extensions CLI et hooks propres à chaque CLI d’IA, avec leur niveau d’exécution et leurs capacités (lecture seule)."
         },
         "cli-agents-list": {
           "title": "Liste des agents CLI",
@@ -1713,7 +1713,7 @@
       "title": "Gestion des paramètres",
       "export-bundle": "Exporter le lot de paramètres",
       "import-bundle": "Importer un lot de paramètres",
-      "bundle-hint": "Exporte les rôles, les pipelines, MCP, l’analyseur, les paramètres non sensibles du chat AI et les préférences d’apparence. Les clés API et les tokens sont masqués et ne sont pas écrasés à l’importation.",
+      "bundle-hint": "Exporte les rôles, les pipelines, MCP, l’analyseur, les paramètres non sensibles du chat IA et les préférences d’apparence. Les clés API et les tokens sont masqués et ne sont pas écrasés à l’importation.",
       "export-dialog-title": "Exporter le lot de paramètres",
       "exported": "Lot de paramètres exporté",
       "export-failed": "Échec de l’exportation",
@@ -1919,7 +1919,7 @@
       "restartPlugin": "Redémarrer le plugin Navide",
       "disable": "Désactiver",
       "enable": "Activer",
-      "builtinDisabledTooltip": "Le plugin Navide {name} est désactivé. Activez-le dans Paramètres → Extensions.",
+      "builtinDisabledTooltip": "Le plugin Navide {name} est désactivé. Activez-le dans Paramètres → Plugins Navide.",
       "builtinDisabledNote": "Désactivé : ses vues, fenêtres et outils d’agent sont éteints. Ses autorisations et données stockées sont conservées ; « Activer » rallume tout.",
       "builtinDataDeletedEarlier": "Une version antérieure de Navide a supprimé ce plugin Navide et effacé alors ses données stockées. « Activer » le démarre avec des données vides.",
       "disabledStoreRestored": "Restauré depuis la sauvegarde : les commutateurs de désactivation des plugins Navide étaient endommagés et ont été reconstruits à partir de leur copie de sauvegarde.",
@@ -2046,7 +2046,7 @@
           "productivity": "Productivité",
           "version-control": "Gestion de versions",
           "themes": "Thèmes",
-          "ai": "AI",
+          "ai": "IA",
           "other": "Autres",
           "extension-packs": "Packs de plugins Navide"
         },
@@ -2141,6 +2141,13 @@
         },
         "selfHostedQuarantine": "{id} {version} provient d’un Registry auto-hébergé et n’est pas chargé. Activez le mode développeur, ou installez-le depuis la Navide Marketplace."
       },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide n’a pas pu vérifier ce plugin Navide : les données de confiance du Registry sont datées d’un moment postérieur à l’horloge de cet ordinateur. Vérifiez que la date et l’heure de votre ordinateur sont correctes, puis réessayez.",
+          "expired": "Navide n’a pas pu vérifier ce plugin Navide : selon l’horloge de cet ordinateur, les données de confiance du Registry ont expiré. Vérifiez que la date et l’heure de votre ordinateur sont correctes, puis réessayez.",
+          "signatureNotYetValid": "Navide n’a pas pu vérifier ce plugin Navide : sa signature du Registry est datée d’un moment postérieur à l’horloge de cet ordinateur. Vérifiez que la date et l’heure de votre ordinateur sont correctes, puis réessayez."
+        }
+      },
       "localInstall": {
         "agentRequest": "Demandé par {requester}. Navide n’a pas examiné ce paquet ; l’installer relève de votre décision.",
         "button": "Installer depuis un fichier .vsix…",
@@ -2185,7 +2192,7 @@
         "cancel": "Annuler",
         "capability": {
           "fs": "Lire et écrire des fichiers dans votre espace de travail.",
-          "aiCli": "Exécuter les agents CLI d’AI configurés dans Navide.",
+          "aiCli": "Exécuter les agents CLI d’IA configurés dans Navide.",
           "web": "Peut ouvrir et parcourir n’importe quel site web ; les connexions aux sites sont conservées sur cet ordinateur ; les agents utilisent vos connexions dans ce plugin Navide (ils peuvent envoyer des requêtes sur des sites web en votre nom) et peuvent lire chaque page qu’il ouvre ainsi que son état de connexion ; après votre reprise en main, les scripts d’agent déjà en cours dans une page ne s’arrêtent que lorsque vous la rechargez ; il peut ouvrir de nombreuses pages web à la fois, et chacune consomme de la mémoire.",
           "shell": "Exécuter des commandes sur votre ordinateur.",
           "terminal": "Ouvrir et contrôler des terminaux Navide."
@@ -2685,7 +2692,7 @@
               "more": "la rubrique « Agents CLI et comptes »"
             },
             "cliExtensions": {
-              "what": "Les extensions CLI et hooks propres à chaque CLI d’AI (un inventaire en lecture seule)",
+              "what": "Les extensions CLI et hooks propres à chaque CLI d’IA (un inventaire en lecture seule)",
               "more": "la rubrique « Agents CLI et comptes »"
             },
             "analyzer": {
@@ -3363,7 +3370,7 @@
         },
         "s9": {
           "title": "Sécurité : Navide Guard et protection des commandes du terminal",
-          "p1": "Paramètres ▸ {nav} gère deux garde-fous. Tous deux sont <strong>du code fixe, jamais une AI</strong>.",
+          "p1": "Paramètres ▸ {nav} gère deux garde-fous. Tous deux sont <strong>du code fixe, jamais une IA</strong>.",
           "h1": "Navide Guard",
           "p2": "Guard classe chaque action risquée d’une CLI en {critical}, {high} ou normale, puis la traite selon <strong>l’origine de la demande</strong> : vous à cet ordinateur, une application de messagerie, un autre pane ou appareil, ou un pane qui a reçu du contenu extérieur. Le tableau de décision du haut est fixe ; les demandes approuvées depuis une messagerie sont refusées à partir de {high}.",
           "items": {
@@ -3472,8 +3479,8 @@
             }
           },
           "callout": {
-            "title": "Les trois fenêtres embarquent le même terminal AI",
-            "text": "La fenêtre Git, la fenêtre Plans et le Mini-IDE ont chacun une fine barre sur leur bord droit ; ouvrez-la et vous obtenez le <strong>Terminal AI</strong> : un véritable pane d’agent CLI (pas une fenêtre de chat via API) où vous pouvez choisir un agent et utiliser <em>Démarrer</em>, <em>Interrompre</em> et <em>Arrêter</em>. Il transmet automatiquement le contexte actuel à l’agent (chemin de l’espace de travail, plan ouvert, code sélectionné), vous pouvez donc lire un diff et lui dire en même temps quoi corriger."
+            "title": "Les trois fenêtres embarquent le même terminal IA",
+            "text": "La fenêtre Git, la fenêtre Plans et le Mini-IDE ont chacun une fine barre sur leur bord droit ; ouvrez-la et vous obtenez le <strong>Terminal IA</strong> : un véritable pane d’agent CLI (pas une fenêtre de chat via API) où vous pouvez choisir un agent et utiliser <em>Démarrer</em>, <em>Interrompre</em> et <em>Arrêter</em>. Il transmet automatiquement le contexte actuel à l’agent (chemin de l’espace de travail, plan ouvert, code sélectionné), vous pouvez donc lire un diff et lui dire en même temps quoi corriger."
           }
         },
         "s2": {
@@ -3508,7 +3515,7 @@
             "text": "En <em>Afficher sous forme d’arborescence</em>, une ligne de dossier a ses propres <code>＋</code> / <code>↩</code> / <code>−</code>, ce qui permet d’indexer ou d’abandonner toute une sous-arborescence. En <em>Afficher sous forme de liste</em>, en revanche, une ligne indexée <strong>ne conserve que <code>⊡</code></strong> : pour la retirer de l’index, utilisez <em>Retirer toutes les modifications de l’index</em> dans l’en-tête de la section ou le menu contextuel, ou repassez d’abord en vue arborescente."
           },
           "h2": "Rédiger un message de commit",
-          "p3": "Le texte indicatif du champ est <em>Message (⌘↩ pour commiter)</em>, et <kbd class=\"cwh-kbd\">⌘↩</kbd> valide. Le <code>✦</code> à côté est le <strong>Message de commit par l’AI</strong> : il lit ce qui est actuellement indexé et en rédige un pour vous (il devient <code>⟳</code> pendant son exécution).",
+          "p3": "Le texte indicatif du champ est <em>Message (⌘↩ pour commiter)</em>, et <kbd class=\"cwh-kbd\">⌘↩</kbd> valide. Le <code>✦</code> à côté est le <strong>Message de commit par l’IA</strong> : il lit ce qui est actuellement indexé et en rédige un pour vous (il devient <code>⟳</code> pendant son exécution).",
           "p4": "Le bouton principal indique <strong>✓ Commit</strong> ; le <code>▾</code> à côté (<em>Plus d’options</em>) ouvre, de haut en bas :",
           "commitTable": {
             "item": "Élément",
@@ -3534,7 +3541,7 @@
               "what": "Un interrupteur, avec un badge ON / OFF à droite."
             }
           },
-          "p5": "Avec le <strong>commit automatique</strong> activé, la barre d’état passe par une séquence : <em>Commit automatique en attente : déclenchement dans {'{'}count{'}'} s</em> → <em>Indexation de toutes les modifications…</em> → <em>Exécution du lint…</em> → <em>Génération du message de commit par l’AI…</em> → <em>Commit en cours…</em>. Aucune étape de confirmation n’intervient sur ce parcours, réfléchissez donc avant de l’activer.",
+          "p5": "Avec le <strong>commit automatique</strong> activé, la barre d’état passe par une séquence : <em>Commit automatique en attente : déclenchement dans {'{'}count{'}'} s</em> → <em>Indexation de toutes les modifications…</em> → <em>Exécution du lint…</em> → <em>Génération du message de commit par l’IA…</em> → <em>Commit en cours…</em>. Aucune étape de confirmation n’intervient sur ce parcours, réfléchissez donc avant de l’activer.",
           "h3": "Le menu d’affichage <code>···</code>",
           "p6": "Le <code>···</code> de l’en-tête (<em>Plus d’options</em>) contient trois groupes : <em>Afficher sous forme de liste</em> / <em>Afficher sous forme d’arborescence</em> ; <strong>Trier par</strong> avec <em>Nom</em> / <em>Chemin</em> / <em>État</em> ; et <em>Afficher les fichiers ignorés</em>. L’option en vigueur est marquée d’un <code>✓</code>. La liste et l’arborescence disposent aussi de leurs propres boutons dans l’en-tête.",
           "h4": "Les dossiers qui ne sont pas encore un dépôt Git",
@@ -3624,7 +3631,7 @@
             },
             "branch": {
               "how": "⇔ sur une ligne de branche, ou Revue du diff dans l’en-tête du Mini-IDE",
-              "what": "BranchDiffPane : une comparaison de branches complète, avec la liste des fichiers et les blocs côte à côte, un interrupteur de revue par AI et Tout déplier / Tout replier. Revue du diff ouvre toujours une nouvelle fenêtre."
+              "what": "BranchDiffPane : une comparaison de branches complète, avec la liste des fichiers et les blocs côte à côte, un interrupteur de revue par IA et Tout déplier / Tout replier. Revue du diff ouvre toujours une nouvelle fenêtre."
             },
             "inline": {
               "how": "⊡ sur une ligne de fichier",
@@ -3637,8 +3644,8 @@
           },
           "p4": "La carte Historique du panneau dessine son propre graphe en couloirs SVG, avec le point HEAD mis en évidence. La fenêtre Historique Git est le tableau complet : cinq colonnes, <strong>Graphe / Description / Auteur / Date / Commit</strong>, avec un choix entre <em>Toutes les branches</em> et <em>Branche actuelle</em>, <em>Ordre chronologique</em> et <em>Ordre de filiation</em>, ainsi que <em>Afficher les branches distantes</em>, avec <em>Rechercher des commits…</em> en haut et <em>Charger plus</em> en bas. Un clic droit sur un commit propose <em>Extraire (détaché)</em>, <em>Créer une branche…</em>, <em>Créer une étiquette</em>, <em>Fusionner dans la branche actuelle</em>, <em>Cherry-pick</em>, <em>Annuler le commit (revert)</em>, <em>Réinitialiser la branche actuelle sur ce commit…</em>, <em>Copier l’ID du commit</em> et <em>Copier le message du commit</em>.",
           "callout": {
-            "title": "La revue par AI alimente Problèmes",
-            "text": "Les remarques produites par la <em>Revue par l’AI</em> dans BranchDiffPane ne s’affichent pas seulement à côté du diff : elles sont écrites dans les diagnostics de l’éditeur, si bien que le même lot apparaît dans l’onglet <strong>Problèmes</strong> du Mini-IDE (<kbd class=\"cwh-kbd\">⌘⇧M</kbd>), où vous pouvez les parcourir une par une."
+            "title": "La revue par IA alimente Problèmes",
+            "text": "Les remarques produites par la <em>Revue par l’IA</em> dans BranchDiffPane ne s’affichent pas seulement à côté du diff : elles sont écrites dans les diagnostics de l’éditeur, si bien que le même lot apparaît dans l’onglet <strong>Problèmes</strong> du Mini-IDE (<kbd class=\"cwh-kbd\">⌘⇧M</kbd>), où vous pouvez les parcourir une par une."
           }
         },
         "s5": {
@@ -3668,7 +3675,7 @@
           },
           "p7": "Et une règle stricte : <strong>un agent ne commence à écrire du code que lorsque l’étape a atteint <code>approved</code> (ou une étape ultérieure).</strong> Le mot « démarrer » signifie donc concrètement : faire passer l’étape à approved.",
           "h4": "À quoi cela ressemble une fois ouvert",
-          "p8": "Cliquer sur une ligne de la liste ouvre une <strong>fenêtre de revue des plans</strong> distincte : la liste des plans à gauche, le document au centre, le terminal AI à droite. <strong>Un espace de travail n’a jamais qu’une seule fenêtre de ce type</strong> : cliquer sur un autre plan pendant qu’elle est ouverte <strong>change la page</strong> de cette fenêtre au lieu d’en ouvrir une deuxième.",
+          "p8": "Cliquer sur une ligne de la liste ouvre une <strong>fenêtre de revue des plans</strong> distincte : la liste des plans à gauche, le document au centre, le terminal IA à droite. <strong>Un espace de travail n’a jamais qu’une seule fenêtre de ce type</strong> : cliquer sur un autre plan pendant qu’elle est ouverte <strong>change la page</strong> de cette fenêtre au lieu d’en ouvrir une deuxième.",
           "p9": "Le corps du document est affiché selon son format : le HTML de <code>.agent-team/plans/</code> bénéficie de l’aperçu interactif (un iframe isolé où vous pouvez modifier les sections sur place, commenter une section et cliquer sur une tâche pour changer son état) ; le Markdown avec métadonnées utilise <strong>PlanMarkdownBody</strong> (sections modifiables, tâches cochables, mermaid rendu) ; le Markdown sans métadonnées est en lecture seule et n’a donc pas de barre d’outils."
         },
         "s6": {
@@ -3705,7 +3712,7 @@
             "history": "<strong>Historique</strong> : les instantanés précédents, du plus récent au plus ancien, chaque ligne avec <em>Aperçu</em> (ouvre l’ancienne version en lecture seule, avec <em>Revenir au plan actuel</em> en haut pour revenir) et <em>Diff</em> (liste sur place les différences avec la version actuelle : comment la phase a changé, quelle tâche a changé d’état, combien ont été ajoutées ou supprimées, combien de notes de revue diffèrent, combien de lignes ont été ajoutées ou supprimées)."
           },
           "note": "<strong>Les réponses aux notes de revue sont rédigées par l’agent</strong> ; l’interface se contente de les lire. Vous laissez la note et cliquez sur Résoudre, et l’agent remplit la réponse.",
-          "h1": "Le terminal AI à droite",
+          "h1": "Le terminal IA à droite",
           "p3": "Quand vous démarrez un nouvel agent, Navide lui fournit d’abord : le chemin de l’espace de travail, le fichier de plan actuellement ouvert, son nom, sa phase et l’état de chaque tâche, ainsi que le contenu du plan lui-même. Vous pouvez donc demander directement « quels sont les risques de la phase trois de ce plan ? » sans recoller le fichier."
         },
         "s7": {
@@ -3728,7 +3735,7 @@
               "note": "La version intégrée du panneau Git, avec un badge indiquant le nombre de modifications."
             },
             "problems": {
-              "note": "La liste des diagnostics, avec un badge indiquant le nombre d’erreurs ; les remarques de la revue par AI y arrivent aussi."
+              "note": "La liste des diagnostics, avec un badge indiquant le nombre d’erreurs ; les remarques de la revue par IA y arrivent aussi."
             }
           },
           "note1": "Cette section s’appelle <strong>Contrôle de code source</strong>, et non Git : dans le Mini-IDE, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> lui donne le focus, alors que la même combinaison dans la fenêtre principale ouvre la fenêtre Git distincte.",
@@ -3768,17 +3775,17 @@
               "action": "Correction rapide"
             },
             "aiRewrite": {
-              "action": "Réécriture par AI sur place"
+              "action": "Réécriture par IA sur place"
             },
             "aiComplete": {
-              "action": "Suite proposée par AI (texte fantôme)"
+              "action": "Suite proposée par IA (texte fantôme)"
             },
             "aiTerminal": {
-              "action": "Afficher ou masquer le terminal AI",
+              "action": "Afficher ou masquer le terminal IA",
               "note": "(ou ⌘⇧A)"
             },
             "sendSelection": {
-              "action": "Envoyer le code sélectionné au terminal AI",
+              "action": "Envoyer le code sélectionné au terminal IA",
               "note": "(lorsque le curseur est hors de la zone d’édition)"
             },
             "quickOpen": {
@@ -3904,7 +3911,7 @@
               "action": "Commiter / Amender"
             },
             "aiMessage": {
-              "action": "Générer un message de commit par AI"
+              "action": "Générer un message de commit par IA"
             },
             "stageAll": {
               "action": "Tout indexer / Tout retirer de l’index"
@@ -3919,7 +3926,7 @@
               "action": "Actualiser"
             },
             "gotoAiTerminal": {
-              "action": "Aller au terminal AI"
+              "action": "Aller au terminal IA"
             },
             "quickOpenPlan": {
               "action": "Ouvrir rapidement un plan"
@@ -3943,10 +3950,10 @@
               "action": "Correction rapide"
             },
             "aiRewriteComplete": {
-              "action": "Réécriture par AI / Complétion par AI"
+              "action": "Réécriture par IA / Complétion par IA"
             },
             "aiTerminal": {
-              "action": "Afficher ou masquer le terminal AI"
+              "action": "Afficher ou masquer le terminal IA"
             },
             "cheatsheet": {
               "action": "Aide-mémoire des raccourcis"
@@ -3954,7 +3961,7 @@
           },
           "callout": {
             "title": "La même combinaison fait des choses différentes selon la fenêtre",
-            "text": "<kbd class=\"cwh-kbd\">⌘⇧G</kbd>, <kbd class=\"cwh-kbd\">⌘⇧M</kbd>, <kbd class=\"cwh-kbd\">⌘⇧F</kbd> et <kbd class=\"cwh-kbd\">⌘1</kbd>–<kbd class=\"cwh-kbd\">⌘9</kbd> sont chacun réservés par les trois fenêtres, la colonne « Dans quelle fenêtre » ci-dessus est donc une condition, pas une remarque. De plus, dès que le terminal AI de la fenêtre Git ou Plans a le focus, toutes ces touches vont à la CLI et ne sont pas interceptées par la fenêtre."
+            "text": "<kbd class=\"cwh-kbd\">⌘⇧G</kbd>, <kbd class=\"cwh-kbd\">⌘⇧M</kbd>, <kbd class=\"cwh-kbd\">⌘⇧F</kbd> et <kbd class=\"cwh-kbd\">⌘1</kbd>–<kbd class=\"cwh-kbd\">⌘9</kbd> sont chacun réservés par les trois fenêtres, la colonne « Dans quelle fenêtre » ci-dessus est donc une condition, pas une remarque. De plus, dès que le terminal IA de la fenêtre Git ou Plans a le focus, toutes ces touches vont à la CLI et ne sont pas interceptées par la fenêtre."
           }
         },
         "s10": {
@@ -5303,7 +5310,7 @@
         }
       },
       "mcp": {
-        "intro": "MCP (Model Context Protocol) est un protocole général qui permet à un agent AI d’appeler des outils externes. Navide l’utilise dans <strong>trois sens</strong> qui n’ont rien en commun au-delà du nom du protocole – c’est la source de confusion la plus fréquente ; distinguons-les donc d’abord.",
+        "intro": "MCP (Model Context Protocol) est un protocole général qui permet à un agent IA d’appeler des outils externes. Navide l’utilise dans <strong>trois sens</strong> qui n’ont rien en commun au-delà du nom du protocole – c’est la source de confusion la plus fréquente ; distinguons-les donc d’abord.",
         "dirs": {
           "provide": {
             "arrow": "Agent CLI → Navide",
@@ -5365,7 +5372,7 @@
             "workspace_switch": "Faire passer ma propre fenêtre à un autre projet qu’elle contient déjà ; les panes du projet quitté continuent de tourner. Refusé pendant qu’un pipeline tourne dans cette fenêtre, car le changement l’interromprait",
             "prompt_list": "Les skills de prompt que l’utilisateur conserve dans Paramètres → Prompts ; en lecture seule, car les créer et les modifier est le travail de l’utilisateur",
             "mcp_list": "Les serveurs MCP auxquels Navide se connecte et ceux que chaque CLI conserve dans sa propre configuration, avec leur état en direct et leur nombre d’outils ; en lecture seule, et la même liste que celle de Paramètres → MCP",
-            "cli_extensions_list": "Les extensions CLI et hooks propres à chaque CLI d’AI : type, niveau d’exécution, capacités et auteur de l’installation. Noms et métadonnées uniquement ; en lecture seule, le même inventaire que celui de Paramètres → Extensions",
+            "cli_extensions_list": "Les extensions CLI et hooks propres à chaque CLI d’IA : type, niveau d’exécution, capacités et auteur de l’installation. Noms et métadonnées uniquement ; en lecture seule, le même inventaire que celui de Paramètres → Extensions",
             "credentials_list": "Les identifiants inventoriés par l’analyse, avec seulement leur type et leur libellé ; jamais une valeur",
             "credentials_findings": "Les résultats de risque sur les identifiants, avec leur gravité et l’état des rappels ; en lecture seule"
           },
@@ -6044,7 +6051,7 @@
             "generating": {
               "name": "(pas d’info-bulle)",
               "where": "La zone du message de commit",
-              "what": "Affichage uniquement : l’AI génère un message de commit pour vous."
+              "what": "Affichage uniquement : l’IA génère un message de commit pour vous."
             }
           },
           "branch": {
@@ -6827,6 +6834,9 @@
       "state-on": "Activé",
       "state-off": "Désactivé",
       "status": "État : {status}",
+      "starting-note": "Toujours en cours de démarrage après {seconds} s. S’il passe par npx ou uvx, le premier lancement télécharge peut-être le paquet.",
+      "error-reason": "Échec du démarrage : {reason}",
+      "stderr-tail": "Dernières lignes affichées par le serveur",
       "open-config-file": "Ouvrir le fichier de configuration",
       "native-readonly-hint": "Navide lit ces fichiers et n’y écrit jamais. Seule la configuration au niveau utilisateur de chaque CLI est analysée – les MCP au niveau projet ne sont pas affichés. Modifiez un serveur là où sa CLI l’attend, puis actualisez.",
       "navide-scope-hint": "Navide se connecte lui-même à ce serveur. Les panes CLI ne le reçoivent pas.",
@@ -7976,7 +7986,7 @@
         "workbench_action_showCommands": "Afficher la palette de commandes",
         "workbench_action_spawnAgent": "Lancer un agent",
         "workbench_action_splitEditor": "Fractionner l’éditeur",
-        "workbench_action_toggleAIChat": "Basculer le chat AI",
+        "workbench_action_toggleAIChat": "Basculer le chat IA",
         "workbench_action_toggleSidebar": "Basculer la barre latérale",
         "workbench_action_toggleZenMode": "Basculer le mode zen",
         "workbench_action_zoomUiIn": "Agrandir l’interface",
@@ -8232,7 +8242,7 @@
       "badge-pass": "Réussi",
       "badge-excluded": "Exclu",
       "gguf-path-placeholder": "par ex. /Users/me/models/qwen.gguf",
-      "ai-keys-label": "Clés AI :",
+      "ai-keys-label": "Clés IA :",
       "llama-cli-placeholder": "par ex. llama-cli ou /usr/local/bin/llama-completion",
       "gguf-file-found": "Fichier trouvé",
       "gguf-not-detected": "Pas encore détecté",
@@ -8530,7 +8540,7 @@
     "sort-by": "Trier par",
     "staging-changes": "Indexation de toutes les modifications…",
     "running-lint": "Exécution du lint…",
-    "generating-message": "Génération du message de commit par l’AI…",
+    "generating-message": "Génération du message de commit par l’IA…",
     "no-commits": "Aucun historique de commits",
     "optional": "Facultatif",
     "analysis-model": "Modèle d’analyse",
@@ -8538,7 +8548,7 @@
     "recommended": "Recommandé",
     "installed": "Installé",
     "no-problems-detected": "Aucun problème détecté",
-    "ai-review": "Revue par l’AI",
+    "ai-review": "Revue par l’IA",
     "base": "Base",
     "analyzing": "Analyse…",
     "searching": "Recherche…",
@@ -8840,7 +8850,7 @@
     "current-branch-suffix": "{branch} (actuelle)",
     "review-dismissed": "Ignoré",
     "review-general-finding": "(général)",
-    "review-ask-ai-fix": "Demander une correction à l’AI",
+    "review-ask-ai-fix": "Demander une correction à l’IA",
     "review-restore-finding": "Restaurer",
     "review-no-findings": "Aucun problème relevé – tout semble correct !",
     "review-no-findings-filtered": "Aucun résultat à afficher.",
@@ -9257,7 +9267,7 @@
     "editor": "Éditeur",
     "open-in": "Ouvrir dans {window}",
     "resumes-in": "Reprend dans {window}",
-    "resumes-in-window": "Ce panneau AI se trouve dans {window}. Il reprend là-bas, pas comme un pane de cette fenêtre.",
+    "resumes-in-window": "Ce panneau IA se trouve dans {window}. Il reprend là-bas, pas comme un pane de cette fenêtre.",
     "address-title": "Les autres panes joignent ce panneau à l’adresse {'@'}{address}",
     "roster-error": "Les autres panes ne peuvent pas joindre ce panneau, et ses outils Navide sont refusés : {reason}",
     "roster-error-unknown": "erreur inconnue"
@@ -9403,7 +9413,7 @@
     "tab": {
       "log": "Journal du backend",
       "shell": "Shell",
-      "ai": "Demander à l’AI",
+      "ai": "Demander à l’IA",
       "info": "Infos"
     },
     "log": {
@@ -10761,7 +10771,7 @@
     "unavailable": "Navide Guard n’est pas encore disponible avec ce backend. Redémarrez Navide après la mise à jour.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Évaluer chaque action d’une CLI selon sa dangerosité et l’origine de la demande ; arrêter les actions dangereuses ou demander avant. Les règles sont du code fixe, jamais une AI. L’approbation d’une action à haut risque depuis un canal de chat reste refusée même si cette option est désactivée. La protection des commandes du terminal et la vérification d’un agent qui répond à une demande via MCP ne dépendent pas non plus de cet interrupteur."
+      "desc": "Évaluer chaque action d’une CLI selon sa dangerosité et l’origine de la demande ; arrêter les actions dangereuses ou demander avant. Les règles sont du code fixe, jamais une IA. L’approbation d’une action à haut risque depuis un canal de chat reste refusée même si cette option est désactivée. La protection des commandes du terminal et la vérification d’un agent qui répond à une demande via MCP ne dépendent pas non plus de cet interrupteur."
     },
     "counts": {
       "critical": "Critique {n}",
@@ -11703,7 +11713,7 @@
         "full": "Exécute n’importe quelle commande"
       },
       "networkViaShell": "Peut joindre des hôtes distants via ces commandes",
-      "aiCli": "Contrôle des sessions de CLI AI",
+      "aiCli": "Contrôle des sessions de CLI IA",
       "web": "Peut ouvrir et parcourir n’importe quel site web ; les connexions aux sites sont conservées sur cet ordinateur ; les agents utilisent vos connexions dans ce plugin Navide (ils peuvent envoyer des requêtes sur les sites web en votre nom) et peuvent lire chaque page qu’il ouvre ainsi que son état de connexion ; après une prise de contrôle, les scripts d’agent déjà en cours sur une page ne s’arrêtent que lorsque vous la rechargez ; il peut ouvrir de nombreuses pages web à la fois, et chacune utilise de la mémoire.",
       "ui": "Affiche ses propres vues",
       "agentTools": "Propose des outils que les agents peuvent appeler ({read} en lecture seule, {write} en écriture)",

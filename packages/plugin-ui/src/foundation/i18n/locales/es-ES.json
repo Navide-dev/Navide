@@ -1919,7 +1919,7 @@
       "restartPlugin": "Reiniciar complemento de Navide",
       "disable": "Desactivar",
       "enable": "Activar",
-      "builtinDisabledTooltip": "El complemento de Navide {name} está desactivado. Actívalo en «Ajustes → Extensiones».",
+      "builtinDisabledTooltip": "El complemento de Navide {name} está desactivado. Actívalo en «Ajustes → Complementos de Navide».",
       "builtinDisabledNote": "Desactivado: sus vistas, ventanas y herramientas de agent están desactivadas. Sus permisos y datos guardados se conservan; «Activar» vuelve a encenderlo todo.",
       "builtinDataDeletedEarlier": "Una versión anterior de Navide quitó este complemento de Navide y eliminó entonces sus datos guardados. «Activar» lo inicia con los datos vacíos.",
       "disabledStoreRestored": "Restaurado desde la copia de seguridad: los interruptores de desactivación de los complementos de Navide estaban dañados y se han reconstruido a partir de su copia.",
@@ -2140,6 +2140,13 @@
           "mayChange": "Su contenido puede cambiar en cualquier momento. La huella solo registra lo que contenía la carpeta al cargarla; Navide no la usa para rechazar una carga."
         },
         "selfHostedQuarantine": "{id} {version} procede de un Registry autoalojado y no se ha cargado. Activa el modo de desarrollador o instálalo desde Navide Marketplace."
+      },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide no pudo comprobar este complemento de Navide: los datos de confianza del Registry tienen una fecha posterior al reloj de este equipo. Comprueba que la fecha y la hora del equipo sean correctas y vuelve a intentarlo.",
+          "expired": "Navide no pudo comprobar este complemento de Navide: según el reloj de este equipo, los datos de confianza del Registry han caducado. Comprueba que la fecha y la hora del equipo sean correctas y vuelve a intentarlo.",
+          "signatureNotYetValid": "Navide no pudo comprobar este complemento de Navide: su firma del Registry tiene una fecha posterior al reloj de este equipo. Comprueba que la fecha y la hora del equipo sean correctas y vuelve a intentarlo."
+        }
       },
       "localInstall": {
         "agentRequest": "Solicitado por {requester}. Navide no ha revisado este paquete; instalarlo es decisión tuya.",
@@ -6827,6 +6834,9 @@
       "state-on": "Activado",
       "state-off": "Desactivado",
       "status": "Estado: {status}",
+      "starting-note": "Sigue iniciándose tras {seconds} s. Si se ejecuta con npx o uvx, puede que la primera ejecución esté descargando el paquete.",
+      "error-reason": "No se pudo iniciar: {reason}",
+      "stderr-tail": "Últimas líneas que imprimió el servidor",
       "open-config-file": "Abrir archivo de configuración",
       "native-readonly-hint": "Navide lee estos archivos y nunca escribe en ellos. Solo se analiza la configuración de usuario de cada CLI; no se muestra el MCP de proyecto. Cambia un servidor donde lo espera su CLI y luego actualiza.",
       "navide-scope-hint": "Navide se conecta a este servidor por sí mismo. Los panes de CLI no lo reciben.",

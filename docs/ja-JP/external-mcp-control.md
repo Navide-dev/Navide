@@ -264,7 +264,16 @@ Group を一度も作っていない人の Broadcast が、黙って何もしな
 読む前に「すでに Idle」を返してしまうのです。このツールはまずメッセージが**入る**
 のを待ち、そのうえで送信前に記録した対象の最終活動より*新しい* Turn だけを答えと
 して受け入れるため、`last_activity.text` は相手の Agent が返答として述べた内容に
-なります。Timeout 時の `reason` は `cli_wait_idle` のものに加え、Idle のまま
+なります。Claude の Stop hook は、Navide が会話ログを読む前に Turn の終了を報告する
+ことがあり（負荷が高いと数秒後）、hook はテキストを持ちません。その場合
+`cli_wait_idle`（したがって `cli_send_and_wait` も）は、ログ側の Turn 終了を
+`timeout_s` の範囲内で最大 **10 秒**（`HOOK_TURN_TEXT_WAIT_S`）追加で待ち、その
+テキストを返します。それでもテキストがまだ読めていなければ、`text` なしで
+`text_pending: true` を付けて返すので、少し後に `cli_get_status` を呼び直してください。
+ログがすでにテキストなしで終えた Turn は、`text` も `text_pending` も付けずにすぐ
+返ります。Navide が以前の Turn のテキストで埋めることはありません（読み取りが Turn
+単位で遅れていても同じです）。ほかの CLI や、ログ自身が
+報告した Turn 終了は、これまでどおりすぐに返ります。Timeout 時の `reason` は `cli_wait_idle` のものに加え、Idle のまま
 メッセージを拾う気配をまったく見せなかった対象に対する `never_started` があります。
 送信自体が拒否された場合は `cli_send` の `{ok: false, error}` をそのまま返します。
 
