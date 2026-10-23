@@ -10,6 +10,7 @@ renamed `project.json.migrated-v1`.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import logging
@@ -33,6 +34,23 @@ _KV_KEY = "project"
 # Same sanity cap the JSON reader enforced; oversize legacy files are treated
 # as unreadable at import time (kept on disk for inspection).
 _LEGACY_MAX_BYTES = 524_288
+
+
+def _serialized(method):  # type: ignore[no-untyped-def]
+    """Run a store mutation holding the save lock from its read to its save.
+
+    save() alone is atomic, but a mutation reads the whole document first. A
+    worker thread (a PTY exit clearing a live stamp) that read before another
+    mutation saved wrote its stale copy back over it, reviving a pane the user
+    had just closed. The RLock is reentrant, so nested store calls are fine.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        with self._save_lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 def _now_iso() -> str:
@@ -863,6 +881,7 @@ class ProjectStore:
                 return found
         return None
 
+    @_serialized
     def record_manual_pane_spawn(
         self,
         workspace_path: str,
@@ -959,6 +978,7 @@ class ProjectStore:
         )
         return project
 
+    @_serialized
     def record_pane_unspawn_by_id(
         self,
         workspace_path: str,
@@ -997,6 +1017,7 @@ class ProjectStore:
         )
         return project, True
 
+    @_serialized
     def record_manual_pane_unspawn(
         self,
         workspace_path: str,
@@ -1388,6 +1409,7 @@ class ProjectStore:
 
     PANE_TURN_STATES = ("working", "idle")
 
+    @_serialized
     def set_pane_resume_state(
         self,
         workspace_path: str,
