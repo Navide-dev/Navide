@@ -162,6 +162,40 @@ def test_a_spawned_backend_takes_the_handover_line_and_still_stops_on_shutdown(t
             backend.wait(timeout=10)
 
 
+@pytest.mark.parametrize("when", ["before_listening", "as_the_lifespan_starts"])
+def test_a_shutdown_line_that_arrives_during_startup_still_stops_the_backend(tmp_path, when) -> None:
+    """A shutdown requested before the server listens, or while its lifespan is
+    still starting (the cli_regression harness sends one when the startup wait
+    times out), must not be lost: the backend finishes starting and exits."""
+    import subprocess
+    import sys
+
+    from tests.test_main_graceful_shutdown import _read_listen_port
+    from tests.test_main_parent_watch import _isolated_backend_env
+
+    backend = subprocess.Popen(
+        [sys.executable, "-m", "agent_team_backend", "--port", "0", "--log-level", "info"],
+        env=_isolated_backend_env(tmp_path),
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+    )
+    try:
+        assert backend.stdin is not None
+        if when == "before_listening":
+            backend.stdin.write(f"\n{SHUTDOWN_LINE}\n")
+            backend.stdin.flush()
+        else:
+            backend.stdin.write("\n")
+            backend.stdin.flush()
+            _read_listen_port(backend)  # printed just before server.run()
+            backend.stdin.write(f"{SHUTDOWN_LINE}\n")
+            backend.stdin.flush()
+        assert backend.wait(timeout=60) == 0
+    finally:
+        if backend.poll() is None:
+            backend.kill()
+            backend.wait(timeout=10)
+
+
 
 # ---- children never inherit the shutdown pipe ------------------------------
 # Windows 0.2.27/0.2.28: every git.exe and node.exe the backend started hung at
