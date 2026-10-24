@@ -5199,6 +5199,11 @@ watch(activeTab, (tab) => {
    inventory, so the page owns the one scrollbar and both panes inside it are
    plain blocks. Marketplace matches it so the two plugin pages scroll alike. */
 .extensions-scroll,
+.marketplace-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 .marketplace-view-switch {
   display: flex;
   gap: var(--space-2);
@@ -5216,11 +5221,6 @@ watch(activeTab, (tab) => {
 .marketplace-view-tab--active {
   color: var(--text-bright);
   border-bottom-color: var(--accent-fg);
-}
-.marketplace-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 .ext-policy-block { margin-bottom: var(--space-group); }
 .ext-policy-block-title {
