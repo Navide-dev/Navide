@@ -998,6 +998,51 @@ class TestColdStart:
         assert client._transport_cm is None and client._session_cm is None
 
     @pytest.mark.asyncio
+    async def test_initialize_written_to_a_server_that_has_exited_fails_with_its_exit_code(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        # No cancel forced here: the real write to the dead server's stdin,
+        # whichever of the transport's cancel or the failed initialize wins.
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        real = ClientSession.initialize
+
+        async def initialize(session):
+            deadline = time.monotonic() + 10
+            while _exit_code(client._process) is None and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            return await real(session)
+
+        monkeypatch.setattr(ClientSession, "initialize", initialize)
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_a_running_server_whose_stdout_breaks_the_transport_fails_with_a_reason(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        # Not an exit: the server lives on, but its stdout is not UTF-8, so
+        # stdio_client's reader fails and the transport cancels start()'s task.
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        script = tmp_path / "garbled_server.py"
+        script.write_text(
+            "import sys, time\n"
+            "sys.stdout.buffer.write(b'\\xff\\xfe not utf-8\\n'); sys.stdout.buffer.flush()\n"
+            "time.sleep(60)\n"
+        )
+        client = MCPClient(MCPServerConfig(name="garbled", command=sys.executable, args=[str(script)], env={}))
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "decode" in client.error
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
     async def test_a_cancel_of_start_that_arrives_while_it_stops_still_propagates(
         self, tmp_path, fast_polling, monkeypatch,
     ):

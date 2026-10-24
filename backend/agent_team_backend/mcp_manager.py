@@ -186,6 +186,8 @@ class MCPClient:
         self._process: Any = None
         self._errlog: TextIO | None = None
         self._stderr_path: Path | None = None
+        # The error stop() got from leaving the transport, if any (see start()).
+        self._transport_failure: Exception | None = None
 
     def starting_seconds(self) -> float:
         if self._started_at is None:
@@ -271,6 +273,29 @@ class MCPClient:
             if not init.done():
                 init.cancel()
 
+    def _failure_before_initialize(self, process: Any) -> Exception | None:
+        """Why the transport ended a start, read once stop() has left it, or
+        None when nothing shows it did (no transport failure, no exit code).
+
+        A broken or closed pipe means the server is gone, and its exit code
+        says why; any other failure is named itself — the exit code is then
+        only stop() ending a server that was still running.
+        """
+        import anyio
+
+        failure = self._transport_failure
+        cause: BaseException | None = failure
+        while isinstance(cause, BaseExceptionGroup) and cause.exceptions:
+            cause = cause.exceptions[0]
+        if cause is not None and not isinstance(cause, (anyio.BrokenResourceError, anyio.ClosedResourceError)):
+            return RuntimeError(f"the connection to the server failed: {type(cause).__name__}: {cause}")
+        code = _exit_code(process) if process is not None else None
+        if code is not None:
+            return RuntimeError(f"the server exited with code {code} before answering initialize")
+        if failure is not None:
+            return RuntimeError("the connection to the server closed before it answered initialize")
+        return None
+
     async def start(self) -> None:
         """Connect to the MCP server and perform the MCP handshake."""
         if not _MCP_AVAILABLE:
@@ -280,6 +305,7 @@ class MCPClient:
             return
         self.status = "starting"
         self.error = ""
+        self._transport_failure = None
         self._started_at = asyncio.get_running_loop().time()
         task = asyncio.current_task()
         assert task is not None
@@ -328,19 +354,19 @@ class MCPClient:
             log.info("MCP '%s' connected", self.name)
         except asyncio.CancelledError:
             # The transport and session were entered in this task, so their task
-            # groups cancel it: stdio_client's does when writing to a server that
-            # has exited fails, before the liveness poll has seen the exit. Only
-            # once stop() has left those scopes can a cancel of start() itself be
-            # told apart from theirs.
+            # groups cancel it when one of their tasks fails: stdio_client's
+            # writer when the server has exited (before the liveness poll has
+            # seen the exit), its reader when the server's stdout is not
+            # readable. Only once stop() has left those scopes can a cancel of
+            # start() itself be told apart from theirs.
             process = self._process
             try:
                 await self.stop()
             except asyncio.CancelledError:
                 pass
-            code = _exit_code(process) if process is not None else None
-            if code is None or task.cancelling() > outside:
+            err = self._failure_before_initialize(process)
+            if err is None or task.cancelling() > outside:
                 raise
-            err = RuntimeError(f"the server exited with code {code} before answering initialize")
             log.warning("MCP '%s' failed to start: %s", self.name, err)
             self.ready = False
             self.status = "error"
@@ -392,8 +418,10 @@ class MCPClient:
                     await self._exit_bounded(label, cm)
                 except asyncio.CancelledError as err:
                     cancelled = err
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as err:  # noqa: BLE001
+                    if label == "transport":
+                        # What ended the transport's task group, for start().
+                        self._transport_failure = err
         if leftovers:
             try:
                 await asyncio.to_thread(self._end_leftovers, leftovers)
