@@ -17438,6 +17438,9 @@ async function managerReadyFallback(router: StageRouter, stageId: string): Promi
   if (router.managerReady || !router.managerQuietSince || router.preReadyQueue.length === 0) return
   const idleMs = Date.now() - router.managerQuietSince
   if (idleMs < MANAGER_READY_FALLBACK_MS || !isPaneIdleForMessaging(router.managerPaneId)) return
+  // A turn end while its own subagent or background job runs is not idle: the
+  // CLI wakes when that work finishes. The message gate does not count it.
+  if (paneBackgroundRunning(router.managerPaneId)) return
   // Say why the messages arrive now, ahead of them: the Manager never printed
   // READY, so it would otherwise read them as the router breaking protocol.
   const held = router.preReadyQueue.length

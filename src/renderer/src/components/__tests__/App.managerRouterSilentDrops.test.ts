@@ -48,6 +48,7 @@ async function load(opts: {
   kickoffAt?: number
   turnStartedAt?: number
   idle?: boolean
+  background?: () => boolean
 } = {}) {
   const names = [
     'parseDispatchBlocks', 'matchWorkerByLabel', 'injectManagerPane', 'markManagerReady',
@@ -79,6 +80,7 @@ async function load(opts: {
     pipeline: { state: 'running', stageIndex: 1 },
     paneTurnStartedAt: new Map(opts.turnStartedAt === undefined ? [] : [['mgr', opts.turnStartedAt]]),
     isPaneIdleForMessaging: () => opts.idle ?? true,
+    paneBackgroundRunning: () => (opts.background ? opts.background() : false),
     MANAGER_READY_FALLBACK_MS: 180_000,
     MANAGER_READY_REMINDER: `[→ PIPELINE NOTICE]\nYour turn ended without ${MANAGER_READY_SENTINEL}.`,
     stageRouters: new Map([[1, router]]),
@@ -236,6 +238,20 @@ describe('the idle fallback hands held messages to a Manager that never prints R
     t.router.managerQuietSince = Date.now() - 200_000
     await t.api.managerReadyFallback(t.router, 'illustration')
     expect(t.router.managerReady).toBe(false)
+  })
+
+  it('not while the Manager waits on its own background work, and once that work is done', async () => {
+    let running = true
+    const t = await load({ background: () => running })
+    await t.api.routeManagerTurnText('mgr', '背景工作跑著，等它回來。', iso(30_000))
+    t.router.managerQuietSince = Date.now() - 200_000
+    await t.api.managerReadyFallback(t.router, 'illustration')
+    expect(t.router.managerReady).toBe(false)
+    expect(t.injected.some(([, text]) => text.includes('timeout fallback'))).toBe(false)
+    running = false
+    await t.api.managerReadyFallback(t.router, 'illustration')
+    expect(t.router.managerReady).toBe(true)
+    expect(t.injected.some(([, text]) => text.includes('timeout fallback'))).toBe(true)
   })
 
   it('not when no message is held', async () => {
