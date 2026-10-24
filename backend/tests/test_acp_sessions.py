@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import sys
@@ -841,3 +842,74 @@ async def test_an_aborted_start_closes_its_pipes_even_with_the_process_still_run
     assert proc._transport.is_closing()  # noqa: SLF001
     await _until(lambda: not _alive(spawned[0]))  # and close() ended it
 
+
+
+@pytest.fixture
+def fake_jobs(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """contain() hands out fake job numbers and end_contained() records each
+    job it is asked to close. On Windows closing a job is CloseHandle: a second
+    close of the same value can close whatever handle reused it (pytest's own
+    stdout went bad that way on Windows CI), so each job must be closed once.
+    The tree is ended by pid underneath (no real handle is touched); with
+    "kill" off the agent is left running, as a slow exit leaves it."""
+    from agent_team_backend import osplat
+
+    tree = osplat.process_tree
+    real_end = tree.end_contained
+    jobs = iter(range(1000, 2000))
+    state: dict[str, Any] = {"closed": [], "kill": True, "pids": set()}
+    monkeypatch.setattr(tree, "contain", lambda pid: next(jobs))
+
+    def end(pid: int, job: int | None = None) -> None:
+        state["closed"].append(job)
+        state["pids"].add(pid)
+        if state["kill"]:
+            real_end(pid, None)
+
+    monkeypatch.setattr(tree, "end_contained", end)
+    return state
+
+
+async def test_a_failed_start_closes_its_agents_job_once(service, registry, fake_jobs, monkeypatch, tmp_path) -> None:
+    # The agent is still running after kill() has given up waiting (it ignores
+    # stdin EOF and SIGTERM), so the start's own cleanup sees it running too.
+    from agent_team_backend import osplat
+
+    fake_jobs["kill"] = False
+    monkeypatch.setattr(acp_sessions, "_stop_grace", lambda key: 0.2)
+    monkeypatch.setattr(acp_sessions, "_TERM_GRACE_S", 0.2)
+    pidfile = tmp_path / "pids"
+    monkeypatch.setenv("ACP_FAKE_PIDFILE", str(pidfile))
+
+    async def refused(self, client_info):
+        await _until(pidfile.exists)
+        raise acp_sessions.AcpProtocolError("protocol version 2")
+
+    monkeypatch.setattr(acp_sessions.AcpClient, "initialize", refused)
+    try:
+        with pytest.raises(AcpStartError):
+            await service.create(pane_id="p1", agent_key="fake", argv=_argv("stubborn"), cwd=str(tmp_path))
+        assert fake_jobs["closed"] == [1000]
+    finally:
+        for pid in [*fake_jobs["pids"], *(int(p) for p in pidfile.read_text().split())]:
+            with contextlib.suppress(OSError):
+                osplat.process_tree.kill_tree(pid, force=True)
+
+
+async def test_an_agent_killed_while_its_exit_is_reported_closes_its_job_once(registry, fake_jobs, tmp_path) -> None:
+    events = Events()
+    holder: dict[str, AcpSessionService] = {}
+
+    async def emit(event: dict[str, Any]) -> None:
+        await events(event)
+        if event["type"] == "acp.exit":  # a window closing the pane right then
+            await holder["svc"].kill(event["payload"]["session_id"])
+
+    svc = holder["svc"] = AcpSessionService(emit=emit)
+    try:
+        session = await svc.create(pane_id="p1", agent_key="fake", argv=_argv("exit"), cwd=str(tmp_path))
+        await svc.prompt(session.id, "x")
+        await _until(lambda: events.of("acp.exit") and not svc._watchers)  # noqa: SLF001
+        assert fake_jobs["closed"] == [1000]
+    finally:
+        await svc.kill_all()

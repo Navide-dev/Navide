@@ -105,6 +105,7 @@ class AcpSession:
     stderr_path: Path | None = None
     exit_code: int | None = None
     stopping: bool = False  # kill() owns the exit: no "exited on its own" event
+    tree_ended: bool = False  # _end_tree ran (it must run once: see there)
     # The agent's descendants as last recorded (pid -> start-time identity).
     descendants: dict[int, str] = field(default_factory=dict)
 
@@ -278,7 +279,10 @@ class AcpSessionService:
         )
         holder["s"] = session
         self._sessions[session_id] = session
-        spawned.registered = False  # from here kill() unregisters it, with the session
+        # From here the session owns the process: kill() or its own exit ends
+        # the tree (once), closes the pipes and unregisters it, so a failed
+        # start's _abort_start must not end it (or close its job) again.
+        del self._spawned[session_id]
         client.start()
         watcher = asyncio.ensure_future(self._watch_exit(session))
         self._watchers.add(watcher)
@@ -474,6 +478,13 @@ class AcpSessionService:
         await asyncio.gather(*(self.kill(sid) for sid in list(self._sessions)), return_exceptions=True)
 
     def _end_tree(self, session: AcpSession) -> None:
+        # Once per agent: kill() and its own exit can both get here. On Windows
+        # ending the tree closes the job's handle, and a second CloseHandle of
+        # that value closes whatever handle has reused it since (pytest's own
+        # stdout went bad that way on Windows CI: Errno 9).
+        if session.tree_ended:
+            return
+        session.tree_ended = True
         try:
             osplat.process_tree.end_contained(session.proc.pid, session.job)
         except OSError:
