@@ -6,7 +6,10 @@
 // 1. A reply that arrived before the router poll started (the poll waits for
 //    every slot's kickoff) was returned from unread: a DISPATCH in it was gone.
 // 2. A Manager that ended its turn without ---MANAGER-READY--- and without a
-//    DISPATCH left the workers' REPORTs held for a line it would never print.
+//    DISPATCH left the workers' REPORTs held for a line it might never print.
+//    It is now reminded once, and if it then sits idle 90s with messages held,
+//    they are handed over anyway. A turn end alone is not READY: a Manager can
+//    end Phase-1 turns on purpose.
 // 3. A DISPATCH naming no known slot, or one whose injection failed, was at
 //    most a log line: the Manager believed it had dispatched.
 //
@@ -36,13 +39,22 @@ const dispatchTo = (to: string): string => [
   '---DISPATCH-END---',
 ].join('\n')
 
-async function load(opts: { armed?: boolean; injectOk?: (paneId: string) => boolean; managerKickoff?: string } = {}) {
+const KICKOFF_AT = Date.parse('2026-10-24T01:37:02Z')
+const iso = (offsetMs: number): string => new Date(KICKOFF_AT + offsetMs).toISOString()
+
+async function load(opts: {
+  armed?: boolean
+  injectOk?: (paneId: string) => boolean
+  kickoffAt?: number
+  turnStartedAt?: number
+  idle?: boolean
+} = {}) {
   const names = [
     'parseDispatchBlocks', 'matchWorkerByLabel', 'injectManagerPane', 'markManagerReady',
-    'routeManagerDispatch', 'routeManagerTurnText', 'startRouterPoll',
+    'routeManagerDispatch', 'routeManagerTurnText', 'managerReadyFallback', 'startRouterPoll',
   ]
   const { code } = await transformWithEsbuild(
-    `const DISPATCH_RE = /---DISPATCH-START---([\\s\\S]*?)---DISPATCH-END---/g\n${names.map(functionSource).join('\n')}\nreturn { routeManagerTurnText, routeManagerDispatch, startRouterPoll }`,
+    `const DISPATCH_RE = /---DISPATCH-START---([\\s\\S]*?)---DISPATCH-END---/g\n${names.map(functionSource).join('\n')}\nreturn { routeManagerTurnText, routeManagerDispatch, managerReadyFallback, startRouterPoll }`,
     'AppManagerRouterSilentDrops.ts',
     { loader: 'ts' },
   )
@@ -52,17 +64,23 @@ async function load(opts: { armed?: boolean; injectOk?: (paneId: string) => bool
     managerReady: false,
     preReadyQueue: [{ fromLabel: '畫師', kind: 'REPORT', content: 'read the rules, waiting' }],
     routedDispatches: new Set<string>(),
-    earlyTurnTexts: [] as string[],
+    earlyTurnTexts: [] as Array<{ text: string; at: number }>,
+    managerKickoffAt: opts.kickoffAt ?? KICKOFF_AT,
+    readyReminded: false,
+    managerQuietSince: 0,
     finished: false,
     pollHandle: null as number | null,
     watchdogFired: false,
-    armedAt: opts.armed === false ? 0 : Date.now() - 1_000,
+    armedAt: opts.armed === false ? 0 : KICKOFF_AT + 1_000,
   }
   const injected: Array<[string, string]> = []
   const log: string[] = []
   const deps: Record<string, unknown> = {
     pipeline: { state: 'running', stageIndex: 1 },
-    panes: { value: [{ id: 'mgr', kickoffStatus: opts.managerKickoff ?? 'sent' }, { id: 'w1', kickoffStatus: 'sent' }] },
+    paneTurnStartedAt: new Map(opts.turnStartedAt === undefined ? [] : [['mgr', opts.turnStartedAt]]),
+    isPaneIdleForMessaging: () => opts.idle ?? true,
+    MANAGER_READY_FALLBACK_MS: 90_000,
+    MANAGER_READY_REMINDER: `[→ PIPELINE NOTICE]\nYour turn ended without ${MANAGER_READY_SENTINEL}.`,
     stageRouters: new Map([[1, router]]),
     stagesApi: { stages: { value: [{ id: 'storyboard' }, { id: 'illustration' }] } },
     findSentinel,
@@ -81,12 +99,16 @@ async function load(opts: { armed?: boolean; injectOk?: (paneId: string) => bool
   const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as {
     routeManagerTurnText: (paneId: string, text: string, timestamp: string) => Promise<void>
     routeManagerDispatch: (r: typeof router, stageId: string, d: { to: string; message: string }) => Promise<void>
+    managerReadyFallback: (r: typeof router, stageId: string) => Promise<void>
     startRouterPoll: (stageIndex: number) => void
   }
   return { api, router, injected, log }
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
+
+const reminders = (injected: Array<[string, string]>) =>
+  injected.filter(([pane, text]) => pane === 'mgr' && text.includes('PIPELINE NOTICE'))
 
 describe('a Manager reply before the router poll starts is held, not dropped (#539)', () => {
   it('routes a DISPATCH from a reply that arrived before the poll, once the poll starts', async () => {
@@ -108,31 +130,128 @@ describe('a Manager reply before the router poll starts is held, not dropped (#5
     await flush()
     expect(t.injected).toEqual([])
   })
-})
 
-describe('a Manager turn that ends without READY releases the held messages (#539)', () => {
-  it('treats the end of the turn as READY and hands over the held REPORT', async () => {
-    const t = await load()
-    await t.api.routeManagerTurnText('mgr', '讀完守則了，現在進入控場。', new Date().toISOString())
-    expect(t.router.managerReady).toBe(true)
-    expect(t.router.preReadyQueue).toHaveLength(0)
-    expect(t.injected.some(([pane, text]) => pane === 'mgr' && text.includes('[→ REPORT FROM 畫師]'))).toBe(true)
-    expect(t.log.some((l) => l.includes('READY') && l.includes('turn ended'))).toBe(true)
+  it('keeps each held turn\'s own time: a turn that ended before the kickoff gets no reminder on replay', async () => {
+    const t = await load({ armed: false, kickoffAt: Date.now() - 5_000 })
+    await t.api.routeManagerTurnText('mgr', '了解，等待任務。', new Date(Date.now() - 10_000).toISOString())
+    t.api.startRouterPoll(1)
+    await flush()
+    expect(reminders(t.injected)).toEqual([])
+    expect(t.router.managerQuietSince).toBe(0)
+    expect(t.router.managerReady).toBe(false)
   })
 
-  it('a turn before the Manager has its kickoff (the role acknowledgement) holds on', async () => {
-    const t = await load({ managerKickoff: 'pending' })
-    await t.api.routeManagerTurnText('mgr', '了解，等待任務。', new Date().toISOString())
+  it('a held turn that ended after the kickoff is reminded on replay', async () => {
+    const t = await load({ armed: false, kickoffAt: Date.now() - 5_000 })
+    await t.api.routeManagerTurnText('mgr', '讀完守則了。', new Date(Date.now() - 1_000).toISOString())
+    t.api.startRouterPoll(1)
+    await flush()
+    expect(reminders(t.injected)).toHaveLength(1)
+  })
+})
+
+describe('a Manager turn that ends without READY is reminded, not taken as READY (#539)', () => {
+  it('reminds the Manager once and keeps the REPORT held', async () => {
+    const t = await load()
+    await t.api.routeManagerTurnText('mgr', '讀完守則了，現在進入控場。', iso(30_000))
     expect(t.router.managerReady).toBe(false)
     expect(t.router.preReadyQueue).toHaveLength(1)
-    expect(t.injected).toEqual([])
+    expect(reminders(t.injected)).toHaveLength(1)
+    expect(reminders(t.injected)[0][1]).toContain(MANAGER_READY_SENTINEL)
+    expect(t.log.some((l) => l.includes('reminded'))).toBe(true)
+  })
+
+  it('a multi-turn Phase 1 is not taken as READY, and is reminded only once', async () => {
+    const t = await load()
+    await t.api.routeManagerTurnText('mgr', '先用 cli_send 問一下資料。', iso(30_000))
+    await t.api.routeManagerTurnText('mgr', '背景工作跑完了，繼續畫。', iso(60_000))
+    await t.api.routeManagerTurnText('mgr', '還在做我自己的部分。', iso(90_000))
+    expect(t.router.managerReady).toBe(false)
+    expect(reminders(t.injected)).toHaveLength(1)
+    await t.api.routeManagerTurnText('mgr', `做完了\n${MANAGER_READY_SENTINEL}`, iso(120_000))
+    expect(t.router.managerReady).toBe(true)
+    expect(t.injected.some(([pane, text]) => pane === 'mgr' && text.includes('[→ REPORT FROM 畫師]'))).toBe(true)
+  })
+
+  it('a role turn that started before the kickoff and ended after it is not the reply (path a)', async () => {
+    const t = await load({ turnStartedAt: KICKOFF_AT - 20_000 })
+    await t.api.routeManagerTurnText('mgr', '了解，等待任務。', iso(5_000))
+    expect(reminders(t.injected)).toEqual([])
+    expect(t.router.managerQuietSince).toBe(0)
+    expect(t.router.managerReady).toBe(false)
+  })
+
+  it('a late report of a turn that ended before the kickoff changes nothing (path b)', async () => {
+    const t = await load()
+    await t.api.routeManagerTurnText('mgr', '了解，等待任務。', iso(-3_000))
+    expect(reminders(t.injected)).toEqual([])
+    expect(t.router.managerQuietSince).toBe(0)
+    expect(t.router.managerReady).toBe(false)
+  })
+
+  it('nothing counts before the Manager has its kickoff', async () => {
+    const t = await load({ kickoffAt: 0 })
+    await t.api.routeManagerTurnText('mgr', '了解，等待任務。', iso(30_000))
+    expect(reminders(t.injected)).toEqual([])
   })
 
   it('an empty-text turn end changes nothing', async () => {
     const t = await load()
-    await t.api.routeManagerTurnText('mgr', '', new Date().toISOString())
+    await t.api.routeManagerTurnText('mgr', '', iso(30_000))
     expect(t.router.managerReady).toBe(false)
     expect(t.injected).toEqual([])
+  })
+})
+
+describe('the idle fallback hands held messages to a Manager that never prints READY (#539)', () => {
+  it('after 90s idle with messages held, treats it as READY and logs the fallback', async () => {
+    const t = await load()
+    await t.api.routeManagerTurnText('mgr', '讀完守則了。', iso(30_000))
+    t.router.managerQuietSince = Date.now() - 91_000
+    await t.api.managerReadyFallback(t.router, 'illustration')
+    expect(t.router.managerReady).toBe(true)
+    expect(t.injected.some(([pane, text]) => pane === 'mgr' && text.includes('[→ REPORT FROM 畫師]'))).toBe(true)
+    expect(t.log.some((l) => l.includes('READY') && l.includes('fallback'))).toBe(true)
+  })
+
+  it('not before 90s', async () => {
+    const t = await load()
+    await t.api.routeManagerTurnText('mgr', '讀完守則了。', iso(30_000))
+    t.router.managerQuietSince = Date.now() - 60_000
+    await t.api.managerReadyFallback(t.router, 'illustration')
+    expect(t.router.managerReady).toBe(false)
+  })
+
+  it('not while the Manager is busy again', async () => {
+    const t = await load({ idle: false })
+    await t.api.routeManagerTurnText('mgr', '讀完守則了。', iso(30_000))
+    t.router.managerQuietSince = Date.now() - 120_000
+    await t.api.managerReadyFallback(t.router, 'illustration')
+    expect(t.router.managerReady).toBe(false)
+  })
+
+  it('not when no message is held', async () => {
+    const t = await load()
+    t.router.preReadyQueue = []
+    await t.api.routeManagerTurnText('mgr', '讀完守則了。', iso(30_000))
+    t.router.managerQuietSince = Date.now() - 120_000
+    await t.api.managerReadyFallback(t.router, 'illustration')
+    expect(t.router.managerReady).toBe(false)
+  })
+
+  it('not for a Manager that never ended a turn after its kickoff', async () => {
+    const t = await load()
+    await t.api.managerReadyFallback(t.router, 'illustration')
+    expect(t.router.managerReady).toBe(false)
+  })
+
+  it('the router poll runs the fallback, and both kickoff paths record the Manager\'s kickoff time', () => {
+    const scan = functionSource('managerRouterScan')
+    expect(scan).toContain('await managerReadyFallback(router, stage.id)')
+    const activate = appSource.slice(appSource.indexOf('async function activateStage('), appSource.indexOf('\nasync function spawnPipelineStage('))
+    expect(activate).toContain('router.managerKickoffAt = ok ? Date.now() : 0')
+    const schedule = appSource.slice(appSource.indexOf('function scheduleInjection(pane: ActivePane): void {'), appSource.indexOf('\ninterface SpawnInternal'))
+    expect(schedule).toContain('managerRouter.managerKickoffAt = Date.now()')
   })
 })
 
@@ -141,7 +260,7 @@ describe('a DISPATCH that cannot be delivered is reported to the Manager (#539)'
     const t = await load()
     t.router.managerReady = true
     t.router.preReadyQueue = []
-    await t.api.routeManagerTurnText('mgr', dispatchTo('配色師'), new Date().toISOString())
+    await t.api.routeManagerTurnText('mgr', dispatchTo('配色師'), iso(30_000))
     const toManager = t.injected.filter(([pane]) => pane === 'mgr')
     expect(toManager).toHaveLength(1)
     expect(toManager[0][1]).toContain('NOT DELIVERED')
@@ -155,11 +274,11 @@ describe('a DISPATCH that cannot be delivered is reported to the Manager (#539)'
     const t = await load({ injectOk: (pane) => pane !== 'w1' || workerOk })
     t.router.managerReady = true
     t.router.preReadyQueue = []
-    await t.api.routeManagerTurnText('mgr', dispatchTo('畫師'), new Date().toISOString())
+    await t.api.routeManagerTurnText('mgr', dispatchTo('畫師'), iso(30_000))
     expect(t.injected.some(([pane, text]) => pane === 'mgr' && text.includes('NOT DELIVERED') && text.includes('畫師'))).toBe(true)
     expect(t.log.some((l) => l.includes('畫師') && l.includes('not delivered'))).toBe(true)
     workerOk = true
-    await t.api.routeManagerTurnText('mgr', dispatchTo('畫師'), new Date().toISOString())
+    await t.api.routeManagerTurnText('mgr', dispatchTo('畫師'), iso(40_000))
     expect(t.injected.filter(([pane]) => pane === 'w1')).toHaveLength(2)
   })
 
@@ -167,7 +286,7 @@ describe('a DISPATCH that cannot be delivered is reported to the Manager (#539)'
     const t = await load()
     t.router.managerReady = true
     t.router.preReadyQueue = []
-    await t.api.routeManagerTurnText('mgr', dispatchTo('畫師'), new Date().toISOString())
+    await t.api.routeManagerTurnText('mgr', dispatchTo('畫師'), iso(30_000))
     expect(t.injected.filter(([pane]) => pane === 'mgr')).toEqual([])
   })
 })
