@@ -1140,3 +1140,40 @@ async def test_kill_closes_the_pipes_and_forgets_the_session_even_when_a_step_fa
     assert proc._transport.is_closing()  # noqa: SLF001
     assert service.get(session.id) is None
     assert service.events.states()[-1] == "exited"
+
+
+async def test_a_start_whose_agent_already_exited_still_closes_its_job(service, fake_jobs, monkeypatch, tmp_path) -> None:
+    # The agent exits between contain() and registration, and registration
+    # fails: its job (and with it, on Windows, anything still in it) is ended.
+    exited: list[int] = []
+
+    def fail_once_gone(pid: int, argv: list[str]) -> None:
+        deadline = time.monotonic() + 10
+        while _alive(pid) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.2)  # the loop has seen the exit by the time this fails
+        exited.append(pid)
+        raise OSError("registry unwritable")
+
+    monkeypatch.setattr(pty_registry, "register", fail_once_gone)
+    with pytest.raises(OSError):
+        await service.create(pane_id="p1", agent_key="fake", argv=[sys.executable, "-c", "pass"], cwd=str(tmp_path))
+
+    assert exited and fake_jobs["closed"] == [1000]
+
+
+async def test_kill_closes_the_job_even_when_an_earlier_step_fails(service, fake_jobs, monkeypatch, tmp_path) -> None:
+    from agent_team_backend import terminals
+
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+
+    def unreadable(pid: int) -> dict[int, str]:
+        raise OSError("process table unreadable")
+
+    monkeypatch.setattr(terminals, "_descendant_pids", unreadable)
+    with pytest.raises(OSError):
+        await service.kill(session.id)
+
+    assert fake_jobs["closed"] == [1000]
+    assert service.get(session.id) is None
+    await _until(lambda: not _alive(session.proc.pid))
