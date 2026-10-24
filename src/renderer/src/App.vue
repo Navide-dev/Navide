@@ -2,6 +2,8 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import ViewPanel, { type LayoutMode } from './components/ViewPanel.vue'
 import TerminalPane from './components/TerminalPane.vue'
+import AcpPane from './components/AcpPane.vue'
+import { createAcpHost } from './lib/acpHost'
 import WindowControls from './components/WindowControls.vue'
 import RestoredPanePlaceholder from './components/RestoredPanePlaceholder.vue'
 import VoiceCapsule from './components/VoiceCapsule.vue'
@@ -1893,6 +1895,25 @@ interface ActivePane {
 
 const panes = ref<ActivePane[]>([])
 const paneRefs = reactive<Record<string, InstanceType<typeof TerminalPane> | null>>({})
+// ACP panes (no PTY) live in lib/acpHost.ts, never in paneRefs: code that looks
+// a pane up there finds no ref for one and skips it.
+const acp = createAcpHost({
+  port: { send: backend.send, on: backend.on },
+  pane: (id) => panes.value.find((p) => p.id === id),
+  started: (id, ok) => {
+    const pane = panes.value.find((p) => p.id === id)
+    if (!pane) return
+    pane.injectionStatus = 'skipped'
+    setPrepStatus(pane, ok ? 'ready' : 'failed')
+    syncViews()
+  },
+  stopLoop: (id) => {
+    if (panes.value.find((p) => p.id === id)?.loopActive) stopLoopSpinning(id, 'interrupted')
+  },
+  persistPaneStopped: (id, stopped) => persistPaneStopped(id, stopped),
+  runDir: () => pipeline.runDir,
+  history: (id) => spawnHistory.value.find((e) => e.paneId === id),
+})
 const persistSessionOnce = createPaneSessionPersistence()
 
 // Tracks which issues have been dispatched/handled and to which pane.
@@ -2642,6 +2663,7 @@ async function deliverAgentMessage(
   text: string,
   shouldAbort?: () => boolean,
 ): Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }> {
+  if (acp.owns(paneId)) return acp.deliver(paneId, text)
   // Hold the badge on RUNNING until the recipient's log shows the message
   // consumed — released in the agent.activity handler, fused inside
   // useTerminal. Marked BEFORE the Enter, not after: an idle CLI writes the
@@ -2792,6 +2814,7 @@ function messagingHoldKey(
   paneId: string,
   opts: { ignoreTyping?: boolean } = {},
 ): string | null {
+  if (acp.owns(paneId)) return acp.holdKey(paneId)
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return 'gone'
   const status = paneRefs[paneId]?.displayStatus as string | undefined
@@ -2912,6 +2935,7 @@ const pushUnclearAt = new Map<string, number>()
  *  CLI-side one, and the typing hold only for a channel that writes the
  *  composer — so the composable can treat a non-null answer as "go". */
 function pushTargetForMessaging(paneId: string): { kind: string } | null {
+  if (acp.owns(paneId)) return null
   const kind = pushReadyPanes.get(paneId)
   if (!kind) return null
   const pane = panes.value.find((p) => p.id === paneId)
@@ -7061,6 +7085,8 @@ interface SpawnInternal {
   quotaTransactionId?: string
   quotaOriginalPaneId?: string
   agentKey: string
+  /** 'acp' asks for an ACP pane (lib/acpHost.ts decides: never a plain terminal or a sign-in pane). Absent = the TUI. */
+  display?: 'tui' | 'acp'
   roleKey: RoleKey
   stageId: StageId
   /** User-set pane title. Runtime replacements such as rebuild must carry it
@@ -7355,6 +7381,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
     isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
   }
+  acp.claim(id, opts)
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
   // follows account switches; one its pin puts in an account dir is fixed.
   if (
@@ -7446,6 +7473,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     )
   }
   await nextTick()
+  if (acp.owns(id)) return acp.start(id, opts)
   const ref = paneRefs[id]
   if (!ref) return id
   try {
@@ -8098,6 +8126,7 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   }
   if (activeQuestion.value?.paneId === paneId) activeQuestion.value = null
   const ref = paneRefs[paneId]
+  if (acp.owns(paneId)) await acp.kill(paneId, { force })
   if (ref?.sessionId) {
     try {
       await ref.kill({ force: force })
@@ -9278,6 +9307,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
 async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): Promise<boolean> {
   if (!panes.value.find((p) => p.id === paneId)?.realized) return false
   const ref = paneRefs[paneId]
+  if (acp.owns(paneId)) return acp.interrupt(paneId, opts)
   if (!ref?.sessionId) return false
   // An explicit interrupt of this pane (user or agent) stops its loop too —
   // otherwise the interrupted turn's end reads as a finished turn and the loop
@@ -23090,6 +23120,25 @@ function paneIsCommander(p: ActivePane): boolean {
           @mousedown.prevent="onGridHandleStart($event, 'dual-focus', 0)"
         />
         <template v-for="p in panes" :key="p.id">
+        <template v-if="acp.owns(p.id)">
+          <AcpPane
+            v-if="p.realized"
+            v-show="onScreenPaneIds.has(p.id)"
+            :style="{ ...floatPaneStyle(p.id), ...dualFocusStyle(p.id) }"
+            :ref="(el) => acp.setRef(p.id, el)"
+            :data-pane-id="p.id"
+            :pane-id="p.id"
+            :title="p.messagingName || p.customName || p.autoName || p.agentLabel"
+            :agent-key="p.agentKey"
+            :workspace-path="p.workspacePath"
+            :is-focus="p.id === effectiveFocusPaneId"
+            :acp-port="acp.port"
+            @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
+            @first-output="onPaneFirstOutput(p.id)"
+            @context-menu="(ev) => openPaneCtxMenu(ev, p.id)"
+          />
+        </template>
+        <template v-else>
         <TerminalPane
           v-if="p.realized"
           v-show="onScreenPaneIds.has(p.id)"
@@ -23176,6 +23225,7 @@ function paneIsCommander(p: ActivePane): boolean {
           @minimize="minimizePane(p.id)"
           @context-menu="(ev) => openPaneCtxMenu(ev, p.id)"
         />
+        </template><!-- the TUI branch of acp.owns(p.id) -->
         </template>
         <VoiceCapsule :state="voiceInput.state" @dismiss="voiceInput.dismiss" />
         <ReadbackCapsule :state="readback.current.value" @stop="readback.stop()" />

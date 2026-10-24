@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "Не подтверждено",
+      "unsent": "Не отправлено",
+      "mark-tooltip": "Этот pane запускает agent через Agent Client Protocol (ACP): Navide рисует разговор вместо собственного экрана CLI.",
+      "permission": "Agent просит: {title}",
+      "failed": "Не удалось запустить agent: {reason}",
+      "exited": "Agent остановлен (код выхода {code}).",
+      "placeholder": "Сообщение для agent. Enter — отправить, Shift+Enter — новая строка.",
+      "send": "Отправить",
+      "cancel": "Отменить ход"
+    },
     "opened-by": "Открыт из {parent}",
     "git": {
       "title": "СИСТЕМА КОНТРОЛЯ ВЕРСИЙ",
