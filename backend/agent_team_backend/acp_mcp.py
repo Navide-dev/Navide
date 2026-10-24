@@ -14,7 +14,15 @@ this asks a window or reads a terminal.
 TODO(P5): the MCP tool descriptions say nothing about ACP panes yet, so
 tools/list stays byte-identical to main while no pane can be one (user,
 2026-10-24). When an ACP entry point ships, add these paragraphs to the
-docstrings in server.py (and re-pin MAIN_TOOLS_LIST_SHA256):
+docstrings in server.py (and re-pin MAIN_TOOLS_LIST_SHA256), and give
+docs/*/inter-cli-messaging.md (en-US, ja-JP, zh-TW) the section on ACP
+delivery, in the place #592 first had it (end of "Delivery", before
+"Stop-hook delivery (claude)"): "ACP panes are delivered to as prompts,
+not typed" — the window queues, rate-limits, logs acks, renders the
+envelope and holds it mid-turn as for any pane, then hands it to the
+backend (acp.prompt) as session/prompt; delivered = the backend accepted
+the prompt (sent, or queued behind a running turn), not that the agent
+read or answered it; with no window it waits in the queue as for any pane.
 
 cli_read_log:
 For an ACP pane (an agent Navide runs over the Agent Client Protocol,
