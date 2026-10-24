@@ -133,6 +133,7 @@ from . import plan_history
 from .plugins import wiring as plugin_wiring
 from .plugins.host import PluginHost
 from . import ws_handlers
+from . import acp_ws  # registers the acp.* requests; ACP on disconnect, janitor and shutdown
 from .git_watcher import GitWatcher
 
 log = logging.getLogger("agent_team_backend")
@@ -1186,6 +1187,7 @@ async def _ownerless_pty_janitor() -> None:
             await _sweep_ownerless_ptys_once()
         except Exception as err:  # noqa: BLE001 — the janitor must survive
             log.warning("ownerless-pty sweep failed: %s", err)
+        await acp_ws.sweep_ownerless()  # its own errors handled inside
 
 
 # SessionStart is run at the first turn in Codex 0.154, not at TUI startup.
@@ -2695,6 +2697,7 @@ async def _stop_log_watcher() -> None:
                 await _TERMINALS.kill_all()
             except Exception as err:  # noqa: BLE001
                 log.warning("pty shutdown sweep failed: %s", err)
+        await acp_ws.shutdown()  # ACP agents: never raises (see acp_ws.shutdown)
         if _log_watcher is not None:
             # Settle what the drain has read but not yet counted, BEFORE stop()
             # cancels the flush task that would have done it. See
@@ -3467,6 +3470,7 @@ async def ws(websocket: WebSocket) -> None:
         orphaned = [tid for tid, owner in _PTY_OWNERS.items() if owner is session]
         for tid in orphaned:
             del _PTY_OWNERS[tid]
+        acp_ws.drop_owner(session)  # its ACP sessions: ownerless, as its PTYs
         # Flag the messaging handles this window mirrored as offline. They are
         # kept for a grace period rather than dropped: the window is usually
         # just reconnecting, and a deleted entry told callers the pane did not

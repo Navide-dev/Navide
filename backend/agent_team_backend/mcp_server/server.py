@@ -50,6 +50,7 @@ from starlette.responses import PlainTextResponse
 from starlette.types import Receive, Scope, Send
 
 from agent_team_backend import login_panes
+from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
 from agent_team_backend.fs_service import FsError
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
@@ -3999,6 +4000,7 @@ async def cli_read_log(
         return record.output_log_file if record else ""
 
     log_path_str = await asyncio.to_thread(_find_log_path)
+    log_path_str = log_path_str or acp_mcp.transcript_path(result.pane.pane_id)
     if not log_path_str:
         return {
             "ok": False,
@@ -4191,6 +4193,7 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     last = _activity_summary(pane.pane_id)
     if last is not None:
         status["last_activity"] = last
+    status.update(acp_mcp.status_fields(pane.pane_id))
     usage = await _cached_usage_snapshot(pane.agent_key)
     if usage is not None:
         status["usage"] = usage
@@ -4579,6 +4582,8 @@ async def cli_wait_idle(
     # Registered for exactly as long as this call is parked, so the pane
     # being waited on can see the wait (cli_whoami's `waiting_on_me`) and
     # wrap up rather than run out somebody's budget without knowing it.
+    if (acp := await acp_mcp.wait_idle(pane_id, timeout, done, timed_out, lambda: _waiting_on(pane_id, caller))) is not None:
+        return acp
     with _waiting_on(pane_id, caller):
         tick = 0
         while True:
@@ -4737,6 +4742,8 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
             "error_code": "self-interrupt",
         }
 
+    if (acp := await acp_mcp.interrupt(pane)) is not None:
+        return acp
     reply = await _ui_request(
         pane.workspace_path,
         "invoke",
