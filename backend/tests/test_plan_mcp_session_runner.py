@@ -17,6 +17,7 @@ import contextlib
 import logging
 from typing import Any
 
+import anyio
 import httpx
 import pytest
 
@@ -85,6 +86,54 @@ async def test_an_escape_into_the_session_task_group_does_not_strand_every_later
             await host
         with contextlib.suppress(BaseException):
             await plan_mcp.shutdown()
+
+
+async def test_calls_are_served_while_a_cancelled_session_manager_waits_for_its_last_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A cancelled task group drops the SDK's reference to it at once but only
+    # ends once every request in it has; until then each new call raised
+    # "Task group is not initialized" outside the SDK's error handling and no
+    # fresh manager was started, however long the slowest request took.
+    from mcp import types
+
+    handlers = plan_mcp.server._mcp_server.request_handlers  # noqa: SLF001
+    real = handlers[types.ListToolsRequest]
+    release = asyncio.Event()
+    stuck = [True]
+
+    async def handler(request: Any) -> Any:
+        if stuck[0]:
+            stuck[0] = False
+            # Stands in for a request that is slow to honour the cancellation.
+            with anyio.CancelScope(shield=True):
+                await release.wait()
+        return await real(request)
+
+    monkeypatch.setitem(handlers, types.ListToolsRequest, handler)
+    await plan_mcp.startup()
+    try:
+        slow = asyncio.create_task(_post(_host_query()))
+        await asyncio.sleep(0.2)
+
+        async def escape() -> None:
+            raise _Escaped("simulated escape")
+
+        stopped = plan_mcp._runner  # noqa: SLF001
+        assert stopped is not None and stopped.manager._task_group is not None  # noqa: SLF001
+        stopped.manager._task_group.start_soon(escape)  # noqa: SLF001
+        await asyncio.sleep(0.05)
+        assert not stopped.task.done()  # still waiting for the slow request
+        responses = [await asyncio.wait_for(_post(_host_query()), 10) for _ in range(2)]
+        for response in responses:
+            assert response.status_code == 200, response.text[:300]
+            assert response.json()["result"]["tools"]
+        release.set()
+        await asyncio.gather(slow, return_exceptions=True)
+        await asyncio.wait_for(asyncio.wait([stopped.task]), 10)
+    finally:
+        release.set()
+        await plan_mcp.shutdown()
 
 
 async def test_an_internal_failure_names_its_cause_to_the_client_and_in_the_log(
