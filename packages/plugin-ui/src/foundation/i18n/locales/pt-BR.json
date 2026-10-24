@@ -1809,6 +1809,7 @@
       "removeShell": "Remover {name}",
       "none": "Nenhum",
       "save": "Salvar política",
+      "edit": "Editar política",
       "resetUser": "Redefinir política de usuário",
       "sourceTitle": "Fonte de política do workspace",
       "sourceHint": "Uma recomendação do repositório não é confiável até que você a inspecione e a aceite explicitamente. Trocas de fonte exigem a impressão digital atual exata.",

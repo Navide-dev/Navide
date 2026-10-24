@@ -59,7 +59,7 @@ watch(installed, refresh)
 </script>
 
 <template>
-  <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title">
+  <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
     <h3 id="native-backends-title" class="native-backends-title">{{ $t('settings.extensions.nativeBackends.title') }}</h3>
     <div class="native-backends-callout">
       <svg class="native-backends-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -193,14 +193,15 @@ watch(installed, refresh)
   gap: var(--space-2);
   margin: 0 0 var(--space-3);
   color: var(--text-bright);
-  font-size: var(--font-md);
+  font-size: var(--font-lg);
   font-weight: 650;
+  letter-spacing: -0.01em;
 }
 .native-backends-callout {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   border-left: 2px solid var(--risk-fg);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   background: var(--risk-subtle);
@@ -215,8 +216,13 @@ watch(installed, refresh)
 }
 .native-backends-description {
   margin: 0;
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
   line-height: var(--lh-base);
+}
+/* External callers only apply once agent tools are on: indent it under that switch. */
+.native-backends-switch:has([data-agent-tools-switch='externalCallers']),
+.native-backends-switch:has([data-agent-tools-switch='externalCallers']) + .native-backends-description {
+  margin-left: calc(14px + var(--space-2) + var(--space-4));
 }
 .native-backends-switch {
   display: flex;

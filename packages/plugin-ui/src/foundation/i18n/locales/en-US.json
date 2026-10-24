@@ -1809,6 +1809,7 @@
       "removeShell": "Remove {name}",
       "none": "None",
       "save": "Save Policy",
+      "edit": "Edit Policy",
       "resetUser": "Reset User Policy",
       "sourceTitle": "Workspace policy source",
       "sourceHint": "A repository recommendation is untrusted until you inspect it and explicitly accept it. Source changes require an exact current fingerprint.",

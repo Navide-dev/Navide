@@ -1809,6 +1809,7 @@
       "removeShell": "Gỡ {name}",
       "none": "Không có",
       "save": "Lưu chính sách",
+      "edit": "Chỉnh sửa chính sách",
       "resetUser": "Đặt lại chính sách người dùng",
       "sourceTitle": "Nguồn chính sách của workspace",
       "sourceHint": "Đề xuất của kho chưa được tin cậy cho đến khi bạn xem và chấp nhận rõ ràng. Việc đổi nguồn cần đúng dấu vân tay hiện tại.",

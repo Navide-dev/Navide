@@ -1809,6 +1809,7 @@
       "removeShell": "{name} entfernen",
       "none": "Keine",
       "save": "Richtlinie speichern",
+      "edit": "Richtlinie bearbeiten",
       "resetUser": "Benutzerrichtlinie zurücksetzen",
       "sourceTitle": "Richtlinienquelle des Arbeitsbereichs",
       "sourceHint": "Eine Repository-Empfehlung gilt als nicht vertrauenswürdig, bis Sie sie prüfen und ausdrücklich annehmen. Quellenänderungen erfordern einen exakten aktuellen Fingerabdruck.",

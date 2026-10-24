@@ -1809,6 +1809,7 @@
       "removeShell": "Supprimer {name}",
       "none": "Aucun",
       "save": "Enregistrer la politique",
+      "edit": "Modifier la politique",
       "resetUser": "Réinitialiser la politique utilisateur",
       "sourceTitle": "Source de politique de l’espace de travail",
       "sourceHint": "Une recommandation du dépôt n’est pas fiable tant que vous ne l’avez pas examinée et explicitement acceptée. Les changements de source exigent une empreinte actuelle exacte.",

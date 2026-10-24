@@ -117,6 +117,7 @@ onBeforeUnmount(stopPolling)
         :expires-at="entry.expiresAt"
         :publisher="entry.id.split('.')[0]"
         :has-views="entry.hasViews"
+        summary-as-list
       />
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>
       <div class="nv-overview-activity">
@@ -185,6 +186,36 @@ onBeforeUnmount(stopPolling)
   font-weight: 500;
   color: var(--text-bright);
   line-height: var(--lh-base);
+}
+.nv-overview-entry :deep(.nv-disclosure-provenance) {
+  font-size: var(--font-xs);
+}
+/* The risk level leads the card, right under the name. High and Highest are
+   solid pills, a step above the tinted advisory badges on the page, so their
+   severity reads before any of the text. */
+.nv-overview-entry :deep(.nv-disclosure-level) {
+  order: -1;
+  border: 1px solid currentColor;
+}
+.nv-overview-entry :deep(.nv-disclosure-level--high) {
+  border-color: var(--risk-fg);
+  background: var(--risk-fg);
+  color: var(--text-on-emphasis);
+}
+.nv-overview-entry :deep(.nv-disclosure-level--highest) {
+  border-color: var(--danger-emphasis);
+  background: var(--danger-emphasis);
+  color: var(--text-on-emphasis);
+}
+.nv-overview-entry :deep(.nv-disclosure-summary--list) {
+  font-weight: 400;
+  color: var(--text-primary);
+}
+/* The undeclared-use box keeps its red frame and title; its body is set in the
+   neutral foreground, which stays legible on the red tint in dark themes. */
+.nv-overview-entry :deep(.nv-disclosure-undeclared-intro),
+.nv-overview-entry :deep(.nv-disclosure-undeclared li) {
+  color: var(--text-primary);
 }
 /* Recent activity: an inset strip, its counts on one line and the two kinds of
    trouble as tagged lines rather than loose coloured text. */
@@ -255,17 +286,68 @@ onBeforeUnmount(stopPolling)
   color: var(--attention-fg);
   font-weight: 600;
 }
-.nv-overview-details summary {
-  width: max-content;
+/* Sub-headings inside the shared card read as headings here, not captions. */
+.nv-overview-entry :deep(.nv-disclosure h5) {
+  margin-top: var(--space-2);
+  color: var(--text-bright);
+  font-size: var(--font-xs);
+  font-weight: 600;
+}
+/* The scanner and network notes repeat on every card; they stay in full but
+   step down a tier under a hairline so the findings above them lead. */
+.nv-overview-entry :deep(.nv-disclosure-limits),
+.nv-overview-entry :deep(.nv-disclosure-view-network) {
+  margin: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-muted);
   color: var(--text-secondary);
   font-size: var(--font-xs);
+  line-height: var(--lh-base);
+}
+.nv-overview-entry :deep(.nv-disclosure-limits + .nv-disclosure-view-network) {
+  padding-top: 0;
+  border-top: 0;
+}
+/* One disclosure control for the whole page: the same chevron and a 32px row
+   as "Permissions and grants" in the list above. */
+.nv-overview-details > summary,
+.nv-overview-entry :deep(.nv-disclosure-declared > summary) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  min-height: var(--control-h-lg);
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 500;
   cursor: pointer;
   border-radius: var(--radius-xs);
 }
-.nv-overview-details summary:hover {
+.nv-overview-details > summary::-webkit-details-marker,
+.nv-overview-entry :deep(.nv-disclosure-declared > summary::-webkit-details-marker) {
+  display: none;
+}
+.nv-overview-details > summary::before,
+.nv-overview-entry :deep(.nv-disclosure-declared > summary::before) {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--motion-base) var(--ease-out);
+}
+.nv-overview-details[open] > summary::before,
+.nv-overview-entry :deep(.nv-disclosure-declared[open] > summary::before) {
+  transform: rotate(45deg);
+}
+.nv-overview-details > summary:hover,
+.nv-overview-entry :deep(.nv-disclosure-declared > summary:hover) {
   color: var(--text-primary);
 }
-.nv-overview-details summary:focus-visible {
+.nv-overview-details > summary:focus-visible,
+.nv-overview-entry :deep(.nv-disclosure-declared > summary:focus-visible) {
   outline: 2px solid var(--accent-focus);
   outline-offset: 2px;
 }

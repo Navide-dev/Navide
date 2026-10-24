@@ -6,7 +6,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { DisclosureRiskLevel, ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import { cardRiskLevel, type ScanReport } from '../../../shared/pluginDisclosureScan'
-import { disclosureSummaryLine } from '../lib/disclosureText'
+import { disclosureClauses, disclosureSummaryLine } from '../lib/disclosureText'
 
 const props = defineProps<{
   disclosure: ManifestDisclosure
@@ -14,15 +14,21 @@ const props = defineProps<{
   /** The list card's level (D-f): the highest across platforms, from the main process. */
   level?: DisclosureRiskLevel
   variesByPlatform?: boolean
+  /** The same clauses, one per line instead of one joined sentence. */
+  asList?: boolean
 }>()
 const { t, locale } = useI18n()
 
 const level = computed(() => props.level ?? cardRiskLevel(props.disclosure, props.scan))
 const summary = computed(() => disclosureSummaryLine(t, locale.value, props.disclosure))
+const clauses = computed(() => disclosureClauses(t, locale.value, props.disclosure))
 </script>
 
 <template>
-  <p class="nv-disclosure-summary">{{ summary }}</p>
+  <ul v-if="asList" class="nv-disclosure-summary nv-disclosure-summary--list">
+    <li v-for="(clause, index) in clauses" :key="index">{{ clause }}</li>
+  </ul>
+  <p v-else class="nv-disclosure-summary">{{ summary }}</p>
   <p class="nv-disclosure-level" :class="`nv-disclosure-level--${level}`">
     <span class="nv-disclosure-level-icon" aria-hidden="true">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -42,6 +48,11 @@ const summary = computed(() => disclosureSummaryLine(t, locale.value, props.disc
 .nv-disclosure-summary {
   margin: 0;
   font-weight: 600;
+}
+.nv-disclosure-summary--list {
+  display: grid;
+  gap: 2px;
+  padding-left: 1.2em;
 }
 .nv-disclosure-level {
   display: inline-flex;

@@ -328,6 +328,7 @@ const extensionsJumps = [
   { section: 'extensions-bundled', label: 'settings.extensions.bundled' },
   { section: 'extensions-install-from-file', label: 'settings.extensions.installed' },
   { section: 'extensions-developer-mode', label: 'settings.extensions.developerMode.title' },
+  { section: 'extensions-native-backends', label: 'settings.extensions.nativeBackends.title' },
   { section: 'disclosureOverview', label: 'settings.nav.disclosureOverview' },
 ] as const
 // The jump link of the part currently at the top of the page, for aria-current.
@@ -338,13 +339,28 @@ function onExtensionsScroll(event: Event): void {
   let current: string = extensionsJumps[0].section
   for (const jump of extensionsJumps) {
     const el = scroller.querySelector(`[data-settings-section="${jump.section}"]`)
-    if (el && el.getBoundingClientRect().top - top <= 48) current = jump.section
+    if (el && el.getBoundingClientRect().top - top <= scroller.clientHeight / 3) current = jump.section
   }
   // The last part can be too short to ever reach the top; at the bottom it is the one in view.
   if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) {
     current = extensionsJumps[extensionsJumps.length - 1].section
   }
   activeExtensionsJump.value = current
+}
+// A plugin card's link: the overview section, then that plugin's entry once the
+// overview (loaded on first view) has rendered it.
+function openDisclosureOverview(id?: string): void {
+  activeTab.value = 'disclosureOverview'
+  if (!id) return
+  let tries = 0
+  const seek = (): void => {
+    const entry = document.querySelector<HTMLElement>(
+      `[data-settings-section="disclosureOverview"] [data-id="${CSS.escape(id)}"]`,
+    )
+    if (entry) entry.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    else if (++tries < 20) setTimeout(seek, 100)
+  }
+  setTimeout(seek, 50)
 }
 function jumpToExtensionsSection(section: string): void {
   document
@@ -4596,7 +4612,7 @@ watch(activeTab, (tab) => {
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" />
             </section>
-            <ExtensionsPane @open-disclosure-overview="activeTab = 'disclosureOverview'" />
+            <ExtensionsPane @open-disclosure-overview="openDisclosureOverview" />
             <!-- Plan B D5, D-f: records only, it changes nothing a Navide plugin may do. -->
             <section ref="disclosureOverviewSection" class="ext-policy-block" data-settings-section="disclosureOverview">
               <h2 class="ext-policy-block-title">{{ $t('settings.nav.disclosureOverview') }}</h2>
@@ -5263,17 +5279,21 @@ watch(activeTab, (tab) => {
   border-bottom-color: var(--accent-fg);
 }
 /* Jump links under the page title: quiet pills, one per part of the page. */
+/* One row at any width: it scrolls sideways rather than wrapping. */
 .ext-jump {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
   gap: 6px;
   padding: var(--space-3) 22px var(--space-3);
   border-bottom: 1px solid var(--border-muted);
   flex-shrink: 0;
 }
 .ext-jump-link {
-  height: var(--control-h-sm);
-  padding: 0 10px;
+  flex: 0 0 auto;
+  height: var(--control-h-lg);
+  padding: 0 12px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-pill);
   background: var(--bg-base);
@@ -5298,7 +5318,7 @@ watch(activeTab, (tab) => {
   outline-offset: 1px;
 }
 .extensions-scroll { padding-top: var(--space-5); scroll-padding-top: var(--space-4); }
-.ext-policy-block { margin-bottom: var(--space-6); }
+.ext-policy-block { margin-bottom: var(--space-4); }
 /* The page stacks three blocks (policy, inventory, Disclosure overview); an
    inset hairline above each later one marks where the next block starts. */
 .extensions-scroll > * + *::before {
