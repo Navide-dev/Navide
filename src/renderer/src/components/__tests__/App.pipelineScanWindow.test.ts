@@ -248,10 +248,19 @@ describe('the Manager router does not read its own kickoff echo as a result', ()
       // stage is recorded spawned (so a resume continues there) and before a
       // watcher is armed over it.
       expect(act).not.toContain('if (managerSlot && !ok) {')
-      const failed = act.indexOf('await failRunOnKickoff(')
+      // Two exits fail the run: the failed kickoff's, and the one for a role
+      // that never landed, which sends no kickoff (#448). Both are held to it.
+      const failed = act.indexOf('await failRunOnKickoff(index, slot.label, failure, held)')
       expect(failed, 'the failed-kickoff exit').toBeGreaterThan(-1)
-      expect(act.lastIndexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'")).toBeLessThan(failed)
+      expect(act.lastIndexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'", failed)).toBeGreaterThan(inject)
+      expect(act.indexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'", failed)).toBe(-1)
       expect(act.indexOf('startStageWatcher(index, pane.id, kickoffScanFrom)', failed)).toBeGreaterThan(failed)
+      const roleFailed = act.indexOf('await failRunOnKickoff(index, slot.label, roleFailure)')
+      expect(roleFailed, 'the failed-role exit').toBeGreaterThan(-1)
+      expect(roleFailed, 'the failed-role exit sends no kickoff').toBeLessThan(inject)
+      const roleExit = act.slice(act.lastIndexOf("const roleFailure = 'role prompt never reached the agent'", roleFailed), roleFailed)
+      expect(roleExit).toContain("sendQuiet<ProjectPayload>('pipeline.stage_spawn'")
+      expect(roleExit).not.toContain('ensureStageRouter(')
       // Registration with the router is NOT conditional: DISPATCH routing has
       // to know about the pane even when its kickoff never landed.
       const wiring = act.slice(inject, act.indexOf("pane.kickoffStatus = ok ? 'sent' : 'failed'"))
