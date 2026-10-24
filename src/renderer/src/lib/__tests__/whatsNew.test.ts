@@ -221,9 +221,9 @@ describe('0.2.28 — take effect at once, window tools and the English fallback'
   })
 })
 
-// Authored ahead of the 0.2.29 bump. The server security update leads; the
-// title is provisional until the release.
-describe('0.2.29 — server security update', () => {
+// The 0.2.29 entry: six more interface languages, with the server's Node.js
+// security update leading the highlights.
+describe('0.2.29 — six more languages', () => {
   const entry = whatsNewFor('0.2.29')
 
   it('is authored and carries ja-JP for every line', () => {

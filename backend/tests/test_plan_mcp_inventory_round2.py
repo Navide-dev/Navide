@@ -489,8 +489,10 @@ async def test_close_asks_the_window_holding_the_target_pane_to_close_it(
     assert calls[0]["workspace_path"] == "/ws/alpha"
     assert calls[0]["action"] == "ui.pane.close"
     assert calls[0]["args"] == {"paneId": "pw"}
-    # Addressed at the target, not at the caller: _pane_caller("pw"), not "pa".
-    assert calls[0]["caller"].pane_id == "pw"
+    # Addressed at the target's window, but the window is told the real
+    # caller: its self-close guard reads caller_pane_id.
+    assert calls[0]["route_pane_id"] == "pw"
+    assert calls[0]["caller"].pane_id == "pa"
     assert "advisories" not in result
 
 
@@ -933,3 +935,27 @@ async def test_the_round_two_tools_are_registered_with_their_declared_arguments(
     }
     assert set(tools["mcp_list"].inputSchema.get("properties") or {}) == set()
     assert set(tools["prompt_list"].inputSchema.get("properties") or {}) == {"id"}
+
+
+@pytest.mark.asyncio
+async def test_mcp_list_masks_a_start_error_that_quotes_a_url(
+    mcp_sources: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A start error goes to the agent too, and a library may quote the URL it
+    failed on: it is masked like the configured URL."""
+    secret = "sk-" + "live-1"
+    monkeypatch.setattr(
+        backend_app,
+        "mcp_manager",
+        _FakeMcpManager([{
+            "name": "ctx", "status": "error", "tool_count": 0, "tools": [],
+            "error": f"401 from https://u:p@host/mcp?api_key={secret}&x=1 while connecting",
+        }]),
+    )
+    agent_messaging.register("pa", "caller", "/ws")
+
+    result = await plan_mcp.mcp_list(_ctx())
+
+    error = {row["name"]: row for row in result["servers"]}["ctx"]["error"]
+    assert secret not in error and "u:p@" not in error
+    assert error == "401 from https://***@host/mcp?api_key=***&x=1 while connecting"

@@ -895,3 +895,41 @@ async def test_valid_stored_settings_read_back_unchanged(env) -> None:
     answer = await enable(env, env.a, at="06:45", token_budget=123_000, scope="propose", extra="hi")
     again = await env.service.get(env.a)
     assert again["settings"] == answer["settings"] and again["invalid_settings"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["ui.pane.reclaim", "ui.pane.close"])
+async def test_live_pane_action_does_not_name_the_target_as_the_caller(
+    action: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window refuses a reclaim or close whose caller_pane_id is the pane
+    acted on ("self"). Sending the run's pane as the caller made every reclaim
+    after an auto run, and every old card close, fail silently since #534."""
+    from agent_team_backend import agent_messaging, app
+    from agent_team_backend.mcp_server import server as mcp
+
+    agent_messaging._reset_for_test()
+    window = SimpleNamespace(dead=False)
+    agent_messaging.register("p-run", "evolve-x", "/ws/a", owner=window)
+    sent: list[tuple[Any, dict[str, Any]]] = []
+
+    async def fake_unicast_to(session: Any, event: dict[str, Any]) -> bool:
+        sent.append((session, event))
+        mcp.resolve_ui_invoke(
+            event["payload"]["request_id"],
+            {"ok": True, "result": {"reclaimed": ["p-run"], "refused": []}, "error": None},
+        )
+        return True
+
+    monkeypatch.setattr(app, "unicast_to", fake_unicast_to)
+    try:
+        reply = await ev.LiveHost().pane_action("/ws/a", action, "p-run")
+    finally:
+        agent_messaging._reset_for_test()
+
+    assert reply["ok"] is True
+    assert len(sent) == 1
+    session, event = sent[0]
+    assert session is window
+    assert event["payload"]["caller_pane_id"] == ""
+    assert event["payload"]["args"] == {"paneId": "p-run"}

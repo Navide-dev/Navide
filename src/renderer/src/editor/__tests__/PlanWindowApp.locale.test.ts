@@ -121,9 +121,11 @@ describe('PlanWindowApp locale propagation', () => {
     languageCallback!('ko-KR')
     expect(i18n.global.locale.value).toBe('ko-KR')
 
-    // A UI locale without a catalog renders in en-US
+    // Every UI locale ships a catalog now, so a newly added one renders in
+    // itself; the en-US fallback for a missing catalog is covered with a
+    // synthetic catalog list in uiLocales.test.
     languageCallback!('fr-FR')
-    expect(i18n.global.locale.value).toBe('en-US')
+    expect(i18n.global.locale.value).toBe('fr-FR')
 
     wrapper.unmount()
   })

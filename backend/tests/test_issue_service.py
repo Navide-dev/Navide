@@ -11,7 +11,7 @@ import subprocess
 
 import pytest
 
-from agent_team_backend import issue_service, osplat
+from agent_team_backend import host_shell, issue_service, osplat
 
 
 # ── canned CLI output (trimmed real shapes) ────────────────────────────────────
@@ -416,6 +416,7 @@ async def test_run_timeout_kills_and_reaps(monkeypatch):
 
     class FakeProc:
         returncode = None
+        pid = 4_194_305  # only the stubbed process tree ever sees it
 
         def __init__(self):
             self.killed = False
@@ -445,9 +446,16 @@ async def test_run_timeout_kills_and_reaps(monkeypatch):
     # The broker resolves `gh` through the seam before exec; without this a
     # host with no gh (or the seam swapped) reports 127 before the fake runs.
     monkeypatch.setattr(osplat.paths, "resolve_program", lambda name, *, path=None: name)
+    # The tree kill reads the fake's pid: keep it off the real process table.
+    tree_reads: list = []
+    kills: list = []
+    monkeypatch.setattr(host_shell.process_tree, "descendants", lambda pid: tree_reads.append(pid) or [])
+    monkeypatch.setattr(host_shell.process_tree, "identity", lambda pid: "")
+    monkeypatch.setattr(host_shell.process_tree, "kill", lambda pid, *, force: kills.append(pid))
 
     rc, _out, err = await issue_service._run(["gh", "issue", "list"], "/ws")
     assert rc == 128
     assert "timed out" in err
     assert holder["proc"].killed is True
     assert holder["proc"].waited is True
+    assert (tree_reads, kills) == ([holder["proc"].pid], [])

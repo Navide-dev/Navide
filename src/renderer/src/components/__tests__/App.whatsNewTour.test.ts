@@ -39,7 +39,7 @@ describe('Help → What’s New… (menu action show-whats-new)', () => {
     const message = (locale: string): unknown =>
       JSON.parse(readFileSync(resolve(localesDir, `${locale}.json`), 'utf8')).announce?.['whats-new-none']
     const locales = readdirSync(localesDir).filter((f) => f.endsWith('.json')).map((f) => f.replace(/\.json$/, ''))
-    expect(locales.sort()).toEqual(['en-US', 'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW'])
+    expect(locales.sort()).toEqual(['de-DE', 'en-US', 'es-ES', 'fr-FR', 'ja-JP', 'ko-KR', 'pt-BR', 'ru-RU', 'vi-VN', 'zh-CN', 'zh-TW'])
     expect(message('en-US')).toBe('No release notes are available for this version.')
     for (const locale of locales.filter((name) => name !== 'en-US')) {
       expect(typeof message(locale)).toBe('string')

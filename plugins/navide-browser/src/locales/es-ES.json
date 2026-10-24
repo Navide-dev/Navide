@@ -1,0 +1,70 @@
+{
+  "browser": {
+    "app": {
+      "title": "Navide Browser"
+    },
+    "overview": {
+      "title": "Spaces de Navide Browser",
+      "new": "Nuevo Space",
+      "pending": "{count} necesitan tu acción",
+      "open-count": "{count} abiertos, cada uno usa memoria",
+      "empty": "Aún no hay Spaces. Crea uno con ＋, o un agent abrirá el suyo la primera vez que navegue. Los agents usan tus inicios de sesión en Navide Browser (pueden enviar peticiones a sitios web en tu nombre)."
+    },
+    "state": {
+      "idle": "Inactivo",
+      "running": "En ejecución",
+      "need-action": "Necesita tu acción",
+      "done": "Hecho"
+    },
+    "owner": {
+      "agent": "Agent",
+      "user": "Tú"
+    },
+    "space": {
+      "all": "Todos los Spaces",
+      "yours": "Tu Space: los agents no pueden usarlo salvo que se lo permitas",
+      "default-name": "Mi Space {n}"
+    },
+    "nav": {
+      "back": "Atrás",
+      "forward": "Adelante",
+      "reload": "Recargar",
+      "stop": "Detener",
+      "address": "Escribe una URL"
+    },
+    "control": {
+      "agent": "El agent tiene el control",
+      "user": "Tienes el control",
+      "yours": "Tu Space"
+    },
+    "action": {
+      "take-over": "Tomar el control",
+      "hand-back": "Devolver al agent",
+      "delegate": "Dejar que el agent use este Space",
+      "reclaim": "Recuperar este Space",
+      "close": "Cerrar Space",
+      "delegate-note": "Los agents de cualquier pane y de cualquier área de trabajo pueden usarlo"
+    },
+    "agent-script": {
+      "warning": "Puede que aún haya scripts del agent ejecutándose en esta página. Recárgala antes de escribir una contraseña o un código de verificación.",
+      "reload": "Recargar",
+      "keep": "Mantener página"
+    },
+    "settings": {
+      "title": "Ajustes",
+      "shared-sign-in": "Todos los Spaces comparten los mismos inicios de sesión, guardados en este ordenador. Los agents usan tus inicios de sesión en Navide Browser (pueden enviar peticiones a sitios web en tu nombre). Después de tomar el control, los scripts del agent que ya se estén ejecutando en una página solo se detienen cuando la recargas.",
+      "clear-data": "Borrar todos los datos de inicio de sesión",
+      "clear-data-confirm": "Haz clic otra vez para cerrar sesión en todos los sitios de Navide Browser",
+      "clear-data-done": "Datos de inicio de sesión borrados.",
+      "cancel": "Cancelar"
+    },
+    "left": {
+      "open": "Abrir Navide Browser",
+      "empty": "Aún no hay Spaces."
+    },
+    "errors": {
+      "generic": "Algo ha fallado ({code}).",
+      "invalid-address": "Escribe una dirección http o https."
+    }
+  }
+}

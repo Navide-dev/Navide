@@ -264,6 +264,12 @@ def main() -> int:
     else:
         log.info("no host token on stdin; host.register will be refused on this backend")
 
+    # From here on stdin carries only the `shutdown` line, read by the thread
+    # below. Before anything spawns: a child that inherits this pipe on Windows
+    # hangs at launch behind that thread's read (osplat for the mechanism).
+    if osplat.process_tree.isolate_stdin_from_children():
+        log.info("children no longer inherit stdin; it is NUL for them")
+
     # Use the already-imported app object so PyInstaller can detect this
     # dependency statically (string-based import is invisible to the bundler).
     config = uvicorn.Config(
