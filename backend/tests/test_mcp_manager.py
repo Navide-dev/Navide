@@ -1169,6 +1169,40 @@ async def test_an_exit_past_its_deadline_takes_back_the_cancels_it_sent(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_an_exit_past_its_deadline_keeps_a_cancel_from_outside(monkeypatch):
+    # Our cancel and shutdown's arrive together: only ours is taken back, so
+    # the caller still sees exactly one cancel from outside and re-raises.
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.02)
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_GRACE", 0.02)
+    client = MCPClient(MCPServerConfig(name="slow-exit", command="echo", args=[], env={}))
+    seen = {}
+
+    class Exit:
+        async def __aexit__(self, *_exc: object) -> None:
+            task = asyncio.current_task()
+            assert task is not None
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                task.cancel()  # shutdown cancels too, as our own cancel lands
+                raise
+
+    async def runner():
+        task = asyncio.current_task()
+        assert task is not None
+        seen["before"] = task.cancelling()
+        try:
+            await client._exit_bounded("session", Exit())
+        finally:
+            seen["after"] = task.cancelling()
+
+    inner = asyncio.create_task(runner())
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(inner, 5)
+    assert seen["after"] == seen["before"] + 1
+
+
+@pytest.mark.asyncio
 async def test_a_slow_transport_exit_is_not_taken_for_a_cancel_of_start(monkeypatch):
     # The transport's own cancel lands in initialize; leaving the transport
     # outlives the deadline, absorbs the cancel that ends it and raises what
