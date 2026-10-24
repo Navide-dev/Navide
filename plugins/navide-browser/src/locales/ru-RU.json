@@ -1,0 +1,70 @@
+{
+  "browser": {
+    "app": {
+      "title": "Navide Browser"
+    },
+    "overview": {
+      "title": "Spaces Navide Browser",
+      "new": "Новый Space",
+      "pending": "Ждут ваших действий: {count}",
+      "open-count": "Открыто: {count}, каждое расходует память",
+      "empty": "Spaces пока нет. Создайте Space кнопкой ＋, или agent откроет свой, когда впервые зайдёт в интернет. Agents используют ваши входы в Navide Browser (они могут отправлять запросы на сайты от вашего имени)."
+    },
+    "state": {
+      "idle": "Простаивает",
+      "running": "Выполняется",
+      "need-action": "Нужны ваши действия",
+      "done": "Готово"
+    },
+    "owner": {
+      "agent": "Agent",
+      "user": "Вы"
+    },
+    "space": {
+      "all": "Все Spaces",
+      "yours": "Ваш Space: agents не могут им пользоваться, пока вы не разрешите",
+      "default-name": "Мой Space {n}"
+    },
+    "nav": {
+      "back": "Назад",
+      "forward": "Вперёд",
+      "reload": "Перезагрузить",
+      "stop": "Остановить",
+      "address": "Введите URL"
+    },
+    "control": {
+      "agent": "Управляет agent",
+      "user": "Управляете вы",
+      "yours": "Ваш Space"
+    },
+    "action": {
+      "take-over": "Взять управление",
+      "hand-back": "Вернуть управление agent",
+      "delegate": "Разрешить agent использовать этот Space",
+      "reclaim": "Забрать этот Space",
+      "close": "Закрыть Space",
+      "delegate-note": "Им смогут пользоваться agents в любом pane и любой рабочей области"
+    },
+    "agent-script": {
+      "warning": "На этой странице ещё могут выполняться скрипты agent. Перезагрузите её, прежде чем вводить пароль или код подтверждения.",
+      "reload": "Перезагрузить",
+      "keep": "Оставить страницу"
+    },
+    "settings": {
+      "title": "Настройки",
+      "shared-sign-in": "Все Spaces используют одни и те же входы, которые хранятся на этом компьютере. Agents используют ваши входы в Navide Browser (они могут отправлять запросы на сайты от вашего имени). После того как вы возьмёте управление, уже запущенные на странице скрипты agent остановятся только при её перезагрузке.",
+      "clear-data": "Удалить все данные входа",
+      "clear-data-confirm": "Щёлкните ещё раз, чтобы выйти со всех сайтов в Navide Browser",
+      "clear-data-done": "Данные входа удалены.",
+      "cancel": "Отмена"
+    },
+    "left": {
+      "open": "Открыть Navide Browser",
+      "empty": "Spaces пока нет."
+    },
+    "errors": {
+      "generic": "Что-то пошло не так ({code}).",
+      "invalid-address": "Введите адрес http или https."
+    }
+  }
+}

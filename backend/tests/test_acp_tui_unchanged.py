@@ -75,6 +75,29 @@ def test_an_existing_function_is_mains_plus_only_its_acp_hook(entry: dict) -> No
     assert _without_hooks(current, entry["hooks"]) == entry["main"]
 
 
+#: The requests acp_ws registers (its module doc lists the same six).
+ACP_MESSAGE_TYPES = frozenset({
+    "acp.create", "acp.prompt", "acp.cancel", "acp.permission_answer", "acp.kill", "acp.list",
+})
+
+
+def test_acp_launches_is_empty_until_p5() -> None:
+    # No CLI can be started over ACP until its ACP mode is verified (P5). Opening
+    # one up is a deliberate change: edit this test with it.
+    from agent_team_backend.acp_vendors import ACP_LAUNCHES
+
+    assert ACP_LAUNCHES == {}
+
+
+def test_acp_registers_only_acp_message_types() -> None:
+    from agent_team_backend import app, ws_handlers  # noqa: F401 — app imports acp_ws
+
+    by_acp = {mt for mt, fn in ws_handlers._REGISTRY.items() if fn.__module__ == "agent_team_backend.acp_ws"}
+    assert by_acp == ACP_MESSAGE_TYPES
+    # Nothing else answers an acp.* request, and acp_ws answers nothing else.
+    assert {mt for mt in ws_handlers._REGISTRY if mt.startswith("acp.")} == ACP_MESSAGE_TYPES
+
+
 def _regenerate(commit: str) -> None:
     entries = _entries()
     for entry in entries:
