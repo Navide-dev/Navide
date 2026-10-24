@@ -64,6 +64,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Dependencies: DOMPurify 3.4.17, which Mermaid diagrams and the Monaco editor use to sanitize HTML, for published advisories GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and GHSA-c6gr-qvv4-5v3f.
 
+- Electron 44.9.1 (Node 24.22.0, Chromium 152.0.7977.167; was 44.7.0 with Node 24.21.0) for GHSA-jr5w-w6x2-84p9, which stops trusting the compromised eMudhra intermediate certificates.
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added
