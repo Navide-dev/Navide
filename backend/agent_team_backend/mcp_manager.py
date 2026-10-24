@@ -283,7 +283,8 @@ class MCPClient:
         """
         import anyio
 
-        failure = self._transport_failure
+        # Read once: its traceback holds this client's frames until dropped.
+        failure, self._transport_failure = self._transport_failure, None
         cause: BaseException | None = failure
         while isinstance(cause, BaseExceptionGroup) and cause.exceptions:
             cause = cause.exceptions[0]
@@ -384,6 +385,9 @@ class MCPClient:
                 # itself goes on.
                 if task.cancelling() > outside:
                     raise
+            finally:
+                # The reason is already named; nothing reads what stop() kept.
+                self._transport_failure = None
 
     async def stop(self) -> None:
         """Tear down the session and its underlying transport.
@@ -485,10 +489,16 @@ class MCPClient:
             handle.cancel()
             for _ in range(ours):
                 task.uncancel()
+            ours = 0
             if task.cancelling() > outside:
                 raise
         finally:
             handle.cancel()
+            # An exit can absorb our cancel and return, or raise what ended it
+            # (an anyio task group whose own scope is cancelled does): take
+            # those cancels back too, or callers read them as one from outside.
+            for _ in range(ours):
+                task.uncancel()
 
     def _kill_server_group(self) -> None:
         """End the stdio server and everything it started. stdio_client spawns
