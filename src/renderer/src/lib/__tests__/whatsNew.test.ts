@@ -256,11 +256,13 @@ describe('0.2.30 — pipelines no longer stall silently', () => {
     for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
   })
 
-  it('names the 180-second Manager fallback and the Electron advisory', () => {
+  it('names the 180-second Manager fallback, the Electron advisory and the Node.js fixes still pending', () => {
     const all = entry!.highlights.map((text) => text['en-US']).join('\n')
     expect(all).toContain('180 seconds')
     expect(all).toContain('44.9.1')
     expect(all).toContain('GHSA-jr5w-w6x2-84p9')
+    expect(all).toContain('still 24.22.0')
+    expect(all).toContain('High and Untrusted')
   })
 
   it('shows once to someone updating from 0.2.29, as the newest entry, and not to a build still running 0.2.29', () => {

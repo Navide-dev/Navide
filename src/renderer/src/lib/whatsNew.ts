@@ -123,15 +123,20 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.30',
     title: {
-      'zh-TW': 'Pipeline 不再默默卡住，「Navide 外掛」設定頁又能捲動了',
-      'en-US': 'Pipelines No Longer Stall Silently, and the Navide Plugins Settings Page Scrolls Again',
-      'ja-JP': 'Pipeline が黙って止まらなくなり、「Navide プラグイン」設定ページが再びスクロールできます',
+      'zh-TW': '「Navide 外掛」設定頁改版：風險標示一眼就看到，Pipeline 也不再默默卡住',
+      'en-US': 'A Reworked Navide Plugins Page With Risk Labels in Plain Sight, and Pipelines That No Longer Stall Silently',
+      'ja-JP': '「Navide プラグイン」設定ページを刷新：リスク表示がひと目でわかり、Pipeline も黙って止まらなくなりました',
     },
     highlights: [
       {
+        'zh-TW': '「設定 → Navide 外掛」改版：頁面先顯示目前生效的執行政策摘要，按「編輯政策」才展開完整設定，有需要你處理的事時會自動展開。內建和已安裝的外掛合成一份清單，旁邊顯示選中外掛的詳細資料。風險等級、審核狀態、「掃描發現但未宣告」、被拒絕和異常的次數，以及「高」和「不受信任」的標示，都不用點開就看得到；揭露總覽的內容一字未刪。',
+        'en-US': 'Settings → Navide Plugins is reworked: the page opens on a summary of the execution policy in effect, and Edit Policy opens the full editor, which opens by itself when something needs your attention. Bundled and installed plugins share one list, with the selected plugin\'s details beside it. Risk level, review state, "found by the scan but not declared", refused and unusual counts, and the High and Untrusted labels are all visible without a click; nothing in the Disclosure overview is removed.',
+        'ja-JP': '「設定 → Navide プラグイン」を刷新しました：ページの最初に現在有効な実行ポリシーの概要を表示し、「ポリシーを編集」で詳しい設定を開きます。対応が必要なことがあるときは自動で開きます。内蔵とインストール済みのプラグインは 1 つの一覧にまとまり、その横に選択したプラグインの詳細を表示します。リスクレベル、レビューの状態、「スキャンで見つかったが宣言されていない」、拒否と異常の回数、「高」と「未信頼」の表示は、どれも開かなくても見えます。開示の一覧の内容は何も削っていません。',
+      },
+      {
         'zh-TW': '「設定 → Navide 外掛」又可以捲動了，執行政策、外掛清單和揭露總覽也不會再被擠成三欄窄條。這是 0.2.27 起的問題。',
         'en-US': 'Settings → Navide Plugins scrolls again, and its execution policy, plugin list and Disclosure overview are no longer squeezed into three narrow columns. This had been broken since 0.2.27.',
-        'ja-JP': '「設定 → Navide プラグイン」が再びスクロールできるようになり、実行ポリシー、プラグイン一覧、開示の概要が 3 列の細い枠に押し込まれることもなくなりました。0.2.27 から続いていた問題です。',
+        'ja-JP': '「設定 → Navide プラグイン」が再びスクロールできるようになり、実行ポリシー、プラグイン一覧、開示の一覧が 3 列の細い枠に押し込まれることもなくなりました。0.2.27 から続いていた問題です。',
       },
       {
         'zh-TW': 'Pipeline 的 Manager 模式不會再因為 Manager 沒有印出 ---MANAGER-READY--- 而默默卡住：Navide 會先提醒它一次；如果它閒置 180 秒、而且有 worker 的訊息在等它，Navide 會告訴它這是逾時後的替代處理，並把等著的訊息交給它。執行紀錄會記下這件事。',
@@ -154,9 +159,9 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '安定性の向上：閉じた pane が次にプロジェクトを復元したときに戻ってくることはなくなりました。Navide 内蔵の Plan MCP サービスは内部で中断しても正常に再開し、レイアウト・テーマ・言語の変更が同じタイミングで保存された別の変更を上書きすることもなくなりました。',
       },
       {
-        'zh-TW': '安全更新：Electron 升級到 44.9.1（內建 Node.js 24.22.0），修補安全公告 GHSA-jr5w-w6x2-84p9，不再信任已遭入侵的 eMudhra 中繼憑證。',
-        'en-US': 'Security: Electron is updated to 44.9.1 (with Node.js 24.22.0) for advisory GHSA-jr5w-w6x2-84p9; it stops trusting the compromised eMudhra intermediate certificates.',
-        'ja-JP': 'セキュリティ更新：Electron を 44.9.1（Node.js 24.22.0 を内蔵）に更新し、アドバイザリ GHSA-jr5w-w6x2-84p9 に対応しました。侵害された eMudhra の中間証明書を信頼しなくなります。',
+        'zh-TW': '安全更新：Electron 升級到 44.9.1，修補安全公告 GHSA-jr5w-w6x2-84p9，不再信任已遭入侵的 eMudhra 中繼憑證。這個版本內建的 Node.js 仍是 24.22.0，還不含 Node.js 官方 10 月 21 日的安全修補（24.x 線修補在 24.22.1）；Electron 推出內含這批修補的版本後，我們會在新版跟上。',
+        'en-US': 'Security: Electron is updated to 44.9.1 for advisory GHSA-jr5w-w6x2-84p9; it stops trusting the compromised eMudhra intermediate certificates. Its built-in Node.js is still 24.22.0, without the Node.js security fixes of October 21 (24.22.1 on the 24 line); we will follow in a new Navide release once Electron ships a version that includes them.',
+        'ja-JP': 'セキュリティ更新：Electron を 44.9.1 に更新し、アドバイザリ GHSA-jr5w-w6x2-84p9 に対応しました。侵害された eMudhra の中間証明書を信頼しなくなります。内蔵の Node.js は 24.22.0 のままで、Node.js が 10 月 21 日に公開したセキュリティ修正（24 系では 24.22.1）はまだ含まれていません。Electron がこの修正を含むバージョンを公開したら、Navide の新しいバージョンで対応します。',
       },
     ],
   },
