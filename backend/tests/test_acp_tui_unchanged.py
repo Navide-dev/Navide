@@ -159,3 +159,35 @@ def _regenerate(commit: str) -> None:
 
 if __name__ == "__main__":
     _regenerate(sys.argv[1])
+
+
+async def test_acp_requests_never_start_the_service_without_an_acp_pane(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A client asking about ACP (acp.list from an external tool, a stale
+    # window) gets the answer an unknown session gets, and no service exists after.
+    from agent_team_backend import acp_ws, agent_messaging
+
+    monkeypatch.setattr(acp_ws, "_SERVICE", None)
+
+    class Window:
+        def __init__(self) -> None:
+            self.sent: list[dict] = []
+
+        async def send_json(self, message: dict) -> None:
+            self.sent.append(message)
+
+    window = Window()
+    monkeypatch.setattr(agent_messaging, "owner_of", lambda pane_id: window)
+    await acp_ws.acp_list(window, "l", "acp.list", {"claim": True})
+    await acp_ws.acp_prompt(window, "p", "acp.prompt", {"session_id": "s1", "text": "x"})
+    await acp_ws.acp_cancel(window, "c", "acp.cancel", {"session_id": "s1"})
+    await acp_ws.acp_permission_answer(window, "a", "acp.permission_answer", {"session_id": "s1", "request_id": "r"})
+    await acp_ws.acp_kill(window, "k", "acp.kill", {"session_id": "s1"})
+    await acp_ws.acp_kill(window, "kp", "acp.kill", {"pane_id": "p1"})
+
+    by_id = {m["id"]: m for m in window.sent}
+    assert by_id["l"]["payload"] == {"sessions": []}
+    for msg_id in ("p", "c", "a"):
+        assert by_id[msg_id]["error"]["code"] == "ACP_NO_SESSION"
+    assert by_id["k"]["payload"] == {}
+    assert by_id["kp"]["payload"] == {"stopped": False}
+    assert acp_ws._SERVICE is None

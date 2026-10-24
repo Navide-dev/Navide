@@ -596,19 +596,6 @@ target pane queues, injects and reports the outcome. Until that report arrives
 the message stays queued. If the report never comes — the other window was
 killed, the machine slept — the message is failed after about 30 minutes.
 
-**ACP panes are delivered to as prompts, not typed.** A pane whose agent runs
-over the Agent Client Protocol has no terminal to type into. Everything up to
-the last step is the same as for any pane: the receiving window queues the
-message, applies the rate limit, logs an `ack` without delivering it, renders
-the envelope and holds the message while the agent is mid-turn. The last step
-hands the envelope to the backend (`acp.prompt`), which sends it to the agent
-as `session/prompt`. **Delivered means the backend accepted that prompt**: it
-was sent, or queued behind a turn still running on that agent. It does not
-mean the agent has read or answered it; its reply comes back as the turn's
-text like any other pane's. With no window open, a message to an ACP pane
-waits in the queue exactly as one to a terminal pane does, and is delivered
-once a window owns the pane again.
-
 ---
 
 ## Stop-hook delivery (claude)

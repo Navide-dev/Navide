@@ -295,6 +295,9 @@ async def acp_create(session: "Session", msg_id: str, msg_type: str, payload: di
 
 async def _with_session(session: "Session", msg_id: str, msg_type: str, payload: dict, act) -> None:
     session_id = str(payload.get("session_id") or "")
+    if _SERVICE is None:  # no agent ever started: no session to act on (and none is created)
+        await session.send_json(make_error(msg_id, msg_type, "ACP_NO_SESSION", f"no ACP session {session_id}"))
+        return
     if get_service().get(session_id) is not None and _owner(session_id) is not session:
         await session.send_json(make_error(
             msg_id, msg_type, "ACP_NOT_OWNER", f"ACP session {session_id} belongs to another window",
@@ -353,8 +356,11 @@ async def acp_kill(session: "Session", msg_id: str, msg_type: str, payload: dict
                 msg_id, msg_type, "ACP_NOT_OWNER", f"pane {pane_id} is not this window's to close",
             ))
             return
-        stopped = await get_service().abandon(pane_id)
+        stopped = await get_service().abandon(pane_id) if _SERVICE is not None else False
         await session.send_json(make_response(msg_id, msg_type, {"stopped": stopped}))
+        return
+    if _SERVICE is None:  # nothing to stop; as kill() answers an unknown session
+        await session.send_json(make_response(msg_id, msg_type, {}))
         return
 
     async def act(service: AcpSessionService, session_id: str) -> dict[str, Any]:
@@ -369,7 +375,7 @@ async def acp_list(session: "Session", msg_id: str, msg_type: str, payload: dict
     """The ACP sessions this window owns or may claim (see the module doc);
     with ``claim``, it takes over the claimable ones and gets their events."""
     sessions = [
-        item for item in get_service().list()
+        item for item in (_SERVICE.list() if _SERVICE is not None else [])
         if _owner(item.id) is session or _may_claim(session, item)
     ]
     if payload.get("claim"):
