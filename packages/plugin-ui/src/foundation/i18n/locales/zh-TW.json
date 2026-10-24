@@ -1820,6 +1820,7 @@
       "removeShell": "移除 {name}",
       "none": "無",
       "save": "儲存政策",
+      "edit": "編輯政策",
       "resetUser": "重設使用者政策",
       "sourceTitle": "工作區政策來源",
       "sourceHint": "Repository 建議在你檢視並明確接受前都不受信任。切換來源需要精確符合目前指紋。",
@@ -1917,6 +1918,7 @@
         }
       },
       "bundled": "內建",
+      "listTitle": "Navide 外掛",
       "bundledGit": "內建 Git",
       "state": {
         "active": "啟用中",

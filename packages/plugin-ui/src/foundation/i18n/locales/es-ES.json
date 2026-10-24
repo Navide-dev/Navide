@@ -1820,6 +1820,7 @@
       "removeShell": "Quitar {name}",
       "none": "Ninguno",
       "save": "Guardar política",
+      "edit": "Editar política",
       "resetUser": "Restablecer política de usuario",
       "sourceTitle": "Fuente de política del área de trabajo",
       "sourceHint": "Una recomendación del repositorio no es de confianza hasta que la inspecciones y la aceptes explícitamente. Los cambios de fuente requieren la huella digital actual exacta.",
@@ -1917,6 +1918,7 @@
         }
       },
       "bundled": "Integrados",
+      "listTitle": "Complementos de Navide",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Activo",
