@@ -819,6 +819,7 @@ async def test_a_failing_acp_sweep_leaves_the_terminal_panes_result_as_it_was(fr
     def broken() -> dict[str, tuple[str, list[int]]]:
         raise RuntimeError("process table unreadable")
 
+    acp_ws.get_service()  # with none, the sweep returns before it measures anything
     monkeypatch.setattr(acp_ws, "pid_groups", broken)
     assert await acp_ws.with_resource_rows(sweep) is sweep
 

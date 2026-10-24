@@ -190,6 +190,8 @@ async def with_resource_rows(result: dict[str, Any]) -> dict[str, Any]:
     the ACP agents is logged and leaves the terminal panes' result as it was."""
     from . import process_cpu, process_memory
 
+    if _SERVICE is None:
+        return result  # no ACP agent ever started: not even a thread hop
     try:
         groups = await asyncio.to_thread(pid_groups)
         if not groups:
