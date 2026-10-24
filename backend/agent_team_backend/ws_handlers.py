@@ -9635,6 +9635,8 @@ async def terminal_resource_usage(session: "Session", msg_id: str, msg_type: str
             await session.send_json(make_response(msg_id, msg_type, {**cached, "cliRisks": risks}))
             return
         result = await _collect_resource_usage(session)
+        from . import acp_ws
+        result = await acp_ws.with_resource_rows(result)
         _resource_sweep_cache["at"] = now
         _resource_sweep_cache["payload"] = result
     risks = await asyncio.to_thread(
