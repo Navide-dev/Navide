@@ -162,6 +162,10 @@ const editorOpen = ref(false)
 const needsAttention = computed(() => {
   const next = snapshot.value
   if (externalUpdate.value || error.value || rebuildArmed.value || sourceResetArmed.value) return true
+  // The two high-risk warnings live in the editor, so they keep it open: the
+  // draft's own, and a valid repository recommendation's (shown on the same terms).
+  if (draftIsHighRisk.value) return true
+  if (recommendation.value?.state === 'valid' && recommendationIsHighRisk.value) return true
   if (workspaceSnapshot.value && workspaceSnapshot.value.status !== 'active') return true
   if (next && next.recovery.state !== 'healthy' && next.recovery.state !== 'missing') return true
   const sourceState = next?.sourceRecovery.state

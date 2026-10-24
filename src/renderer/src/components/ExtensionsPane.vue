@@ -72,6 +72,34 @@ async function refreshRiskLevels(): Promise<void> {
     riskById.value = new Map()
   }
 }
+// The warnings a package's card carries, in the card's own words, for the
+// list row's "⚠ N" marker: what the card discloses is visible without a click.
+type InstalledRow = (typeof nonFactoryInstalled.value)[number]
+function installedWarnings(p: InstalledRow): string[] {
+  const out: string[] = []
+  if (p.digestBlock) out.push(t(`settings.extensions.digestBlock.${digestBlockKey(p.digestBlock.reason)}`))
+  if (p.sensitive.length) {
+    out.push(t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.sensitive'), value: p.sensitive.join(', ') }))
+  }
+  if (!p.pendingCandidateVersion && updatesById.value.get(p.id)?.permissionChange === 'more') out.push(t('pluginDisclosure.diff.badgeMore'))
+  if (p.engineCompatible === false) out.push(t('settings.extensions.incompatibleInstalled', { version: p.minNavideVersion ?? '' }))
+  if (p.source === 'testplace' && isTestplaceExpired(p.expiresAt)) out.push(t('testplace.expired.kept'))
+  else if (p.source === 'testplace' && testplaceDaysLeft(p.expiresAt) !== null) {
+    out.push(t('testplace.expiring', { days: testplaceDaysLeft(p.expiresAt), date: (p.expiresAt ?? '').slice(0, 10) }))
+  }
+  if (p.source === 'local-unsigned' && p.localSignature !== 'verified') out.push(t('pluginDisclosure.source.local-unsigned'))
+  if (p.warning) out.push(p.provenance === 'developer-local-unpacked' ? t('settings.extensions.devUnpacked') : p.warning)
+  return out
+}
+type FactoryRow = (typeof factoryRows.value)[number]
+function factoryWarnings(p: FactoryRow): string[] {
+  const out: string[] = []
+  if (p.installed?.sensitive.length) {
+    out.push(t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.sensitive'), value: p.installed.sensitive.join(', ') }))
+  }
+  if (p.id === 'navide.plans') out.push(t('settings.extensions.plansRiskNote'))
+  return out
+}
 const busy = ref(false)
 const error = ref('')
 // A failed inventory read, shown apart from the action error it may follow.
@@ -698,11 +726,20 @@ watch(installed, () => {
               >
                 <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="28" />
                 <span class="ext-md-row-text">
-                  <span class="ext-md-row-name">{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id }}</span>
+                  <span class="ext-md-row-name" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id }}</span>
                   <span class="ext-md-row-sub">{{ p.installed?.packageVersion ?? p.version }}</span>
                 </span>
-                <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
-                <span v-else class="ext-md-dot" :class="p.active ? 'ext-md-dot--active' : 'ext-md-dot--off'" aria-hidden="true"></span>
+                <span class="ext-md-row-end">
+                  <span
+                    v-if="factoryWarnings(p).length"
+                    class="ext-md-warn"
+                    role="img"
+                    :aria-label="factoryWarnings(p).join('\n')"
+                    :title="factoryWarnings(p).join('\n')"
+                  >⚠ {{ factoryWarnings(p).length }}</span>
+                  <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
+                  <span v-else class="ext-md-dot" :class="p.active ? 'ext-md-dot--active' : 'ext-md-dot--off'" aria-hidden="true"></span>
+                </span>
               </button>
             </li>
           </ul>
@@ -723,7 +760,7 @@ watch(installed, () => {
               >
                 <MarketplaceIcon v-bind="idParts(pack.id)" :label="pack.displayName || idParts(pack.id).name" :size="28" />
                 <span class="ext-md-row-text">
-                  <span class="ext-md-row-name">{{ reveal(pack.displayName || pack.id) }}</span>
+                  <span class="ext-md-row-name" v-truncate>{{ reveal(pack.displayName || pack.id) }}</span>
                   <span class="ext-md-row-sub">{{ pack.version }}</span>
                 </span>
                 <span class="ext-badge ext-pack-badge">{{ $t('settings.extensions.pack.membersBadge', { count: pack.members.length }) }}</span>
@@ -739,7 +776,7 @@ watch(installed, () => {
               >
                 <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="28" />
                 <span class="ext-md-row-text">
-                  <span class="ext-md-row-name">{{ reveal(p.id) }}</span>
+                  <span class="ext-md-row-name" v-truncate>{{ reveal(p.id) }}</span>
                   <span class="ext-md-row-sub">
                     {{ p.packageVersion }}
                     <span
@@ -749,13 +786,20 @@ watch(installed, () => {
                     >→ {{ updatesById.get(p.id)?.latestVersion }}</span>
                     <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
                     <span
-                      v-else-if="riskById.get(p.id) && riskById.get(p.id) !== 'low'"
+                      v-if="riskById.get(p.id) && riskById.get(p.id) !== 'low'"
                       class="ext-badge ext-md-risk"
                       :class="`ext-md-risk--${riskById.get(p.id)}`"
                       :title="$t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) })"
                     >{{ $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) }}</span>
                   </span>
                 </span>
+                <span
+                  v-if="installedWarnings(p).length"
+                  class="ext-md-warn"
+                  role="img"
+                  :aria-label="installedWarnings(p).join('\n')"
+                  :title="installedWarnings(p).join('\n')"
+                >⚠ {{ installedWarnings(p).length }}</span>
               </button>
             </li>
           </ul>
@@ -1344,14 +1388,35 @@ watch(installed, () => {
 }
 .ext-md-row-sub {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 2px 6px;
   color: var(--text-secondary);
   font-size: var(--font-xs);
   font-variant-numeric: tabular-nums;
 }
 .ext-md-row-update {
   color: var(--accent-fg);
+  white-space: nowrap;
+}
+.ext-md-row-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* "⚠ N": how many warnings the row's card carries; the label lists them. */
+.ext-md-warn {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--risk-subtle);
+  color: var(--risk-fg);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .ext-md-dot {
   width: 7px;

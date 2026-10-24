@@ -8,14 +8,15 @@ import ExtensionsPane from '../ExtensionsPane.vue'
 // so here it is fixed per package.
 vi.mock('../../../../shared/pluginDisclosureScan', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../shared/pluginDisclosureScan')>()),
-  cardRiskLevel: (disclosure: { id: string }) => (disclosure.id === 'acme.tracker' ? 'high' : 'low'),
+  cardRiskLevel: (disclosure: { id: string }) => (disclosure.id === 'low.one' ? 'low' : 'high'),
 }))
 
-function mockPlugins() {
+function mockPlugins(extraInstalled: Array<Record<string, unknown>> = []) {
   const api = {
     listInstalled: vi.fn().mockResolvedValue([
       { id: 'acme.tracker', requires: ['fs'], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
       { id: 'kaito.lint', requires: ['fs'], sensitive: [], packageVersion: '0.3.0' },
+      ...extraInstalled,
     ]),
     listFactoryPackages: vi.fn().mockResolvedValue([{ id: 'navide.git', version: '2.0.0', active: true, optedOut: false }]),
     checkUpdates: vi.fn().mockResolvedValue([]),
@@ -23,6 +24,7 @@ function mockPlugins() {
     disabledStoreStatus: vi.fn().mockResolvedValue({ status: 'ok' }),
     installedDisclosures: vi.fn().mockResolvedValue([
       { id: 'acme.tracker', version: '1.0.0', disclosure: { id: 'acme.tracker' }, scan: null },
+      ...extraInstalled.filter((p) => p.provenance === 'official-registry').map((p) => ({ id: p.id, version: '1.0.0', disclosure: { id: p.id }, scan: null })),
     ]),
   }
   ;(window as unknown as Record<string, unknown>).agentTeam = { plugins: api }
@@ -74,5 +76,40 @@ describe('ExtensionsPane list and detail', () => {
 
     await wrapper.get('[data-id="acme.tracker"] .ext-disclosure-link').trigger('click')
     expect(wrapper.emitted('openDisclosureOverview')).toEqual([['acme.tracker']])
+  })
+
+  it('shows Disabled and the risk level together on a row', async () => {
+    mockPlugins([{ id: 'risky.off', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry', disabled: true }])
+    wrapper = mount(ExtensionsPane, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    const row = wrapper.get('[data-select-id="risky.off"]')
+    expect(row.find('.ext-disabled-badge').exists()).toBe(true)
+    expect(row.get('.ext-md-risk').text()).toBe('High')
+  })
+
+  it("counts the warnings a row's card carries and names them for assistive tech", async () => {
+    mockPlugins([{
+      id: 'kaito.risky',
+      requires: ['shell.run'],
+      sensitive: ['shell.run'],
+      packageVersion: '0.1.0',
+      source: 'local-unsigned',
+      engineCompatible: false,
+      minNavideVersion: '9.9.9',
+    }])
+    wrapper = mount(ExtensionsPane, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    const warn = wrapper.get('[data-select-id="kaito.risky"] .ext-md-warn')
+    expect(warn.text()).toBe('⚠ 3')
+    expect(warn.attributes('role')).toBe('img')
+    expect(warn.attributes('aria-label')!.split('\n')).toEqual([
+      'sensitive: shell.run',
+      'Needs Navide ≥ 9.9.9',
+      'Local file, not reviewed by Navide, unsigned',
+    ])
+    // A row whose card carries none has no marker.
+    expect(wrapper.find('[data-select-id="kaito.lint"] .ext-md-warn').exists()).toBe(false)
   })
 })
