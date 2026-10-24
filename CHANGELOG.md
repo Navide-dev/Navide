@@ -4,6 +4,20 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Pipelines: a Manager-mode stage no longer stalls silently on a Manager that skips or misorders its markers (#539). A Manager reply that ends before the stage's router has started (it waits for every slot's kickoff) is held and routed once it starts, where its DISPATCH used to be dropped. A Manager whose reply to its kickoff ends without `---MANAGER-READY---` is reminded once to print it. If it then sits idle for 180 seconds while workers' messages are held for it, it is told that no `---MANAGER-READY---` was seen and that this is a timeout fallback, and the held messages follow. The run log records the fallback. A Manager that ends several turns of its own work without READY is not taken as ready. A DISPATCH that names no slot, or that could not be typed into its worker, is now reported to the Manager with the slots it can dispatch to, and a failed one is logged as `dispatch to <slot> not delivered`. Stages whose Manager prints its markers as instructed run as before.
+
+- Pipelines: a slot whose role prompt never reached its agent no longer gets its kickoff anyway and runs on as `running` without its role (#448). A role that failed while its pane was pre-spawned is typed once more when the stage starts. If the role still does not land, or a role typed at spawn time does not, the slot takes no kickoff and the run fails the way a failed kickoff does: the node shows `role prompt never reached the agent`, an error toast says which stage and slot, and the panes stay open so the run can be resumed. Slots whose role lands run as before.
+
+### Security
+
+- Dependencies: undici 6.29.1 and 7.30.1, which `node-gyp` and Electron's downloader use while building, for GHSA-xjj6-f33q-929c; happy-dom 21.0.4, the test DOM, for GHSA-834v-8h66-3h79; setuptools 84.1.0, which PyInstaller uses to bundle the backend, for GHSA-xmj3-9gf7-h52w. Build and test tooling only; nothing the app runs changes.
+
+- Dependencies: Electron 44.9.1 (Node 24.22.0, Chromium 152.0.7977.167; was 44.7.0 with Node 24.21.0) for GHSA-jr5w-w6x2-84p9, which stops trusting the compromised eMudhra intermediate certificates.
+
+## [0.2.29] — 2026-10-23 — signed release
+
 ### Added
 
 - Interface language: Vietnamese (Tiếng Việt), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It leaves out pronouns where it can and uses verb-first buttons. Every string is stored precomposed (NFC) with old-style tone placement. Agent, AI, pane, workspace, Plan, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker. With it, all eleven interface languages Navide recognizes have a catalog.
@@ -29,10 +43,6 @@ All notable released changes to Navide will be documented in this file. The form
 - English UI: Title Case for the buttons, filter chips, preset buttons and undo labels #565 missed: Skip Tour, the What's New buttons (Got It, Take the Tour, Replay the Tour, Not Now), the layout preset Bottom Panel, the CLI Agents filter Needs Attention, the Marketplace category Version Control, Restart for New Version in the status bar, and the pipeline editor's Undo/Redo labels (Undo Edit Prompt, …).
 
 ### Fixed
-
-- Pipelines: a Manager-mode stage no longer stalls silently on a Manager that skips or misorders its markers (#539). A Manager reply that ends before the stage's router has started (it waits for every slot's kickoff) is held and routed once it starts, where its DISPATCH used to be dropped. A Manager whose reply to its kickoff ends without `---MANAGER-READY---` is reminded once to print it. If it then sits idle for 180 seconds while workers' messages are held for it, it is told that no `---MANAGER-READY---` was seen and that this is a timeout fallback, and the held messages follow. The run log records the fallback. A Manager that ends several turns of its own work without READY is not taken as ready. A DISPATCH that names no slot, or that could not be typed into its worker, is now reported to the Manager with the slots it can dispatch to, and a failed one is logged as `dispatch to <slot> not delivered`. Stages whose Manager prints its markers as instructed run as before.
-
-- Pipelines: a slot whose role prompt never reached its agent no longer gets its kickoff anyway and runs on as `running` without its role (#448). A role that failed while its pane was pre-spawned is typed once more when the stage starts. If the role still does not land, or a role typed at spawn time does not, the slot takes no kickoff and the run fails the way a failed kickoff does: the node shows `role prompt never reached the agent`, an error toast says which stage and slot, and the panes stay open so the run can be resumed. Slots whose role lands run as before.
 
 - MCP: a local (stdio) server no longer fails after a fixed 15 seconds while `npx`/`uvx` downloads its package the first time (context7 on a cold start). Navide waits while the server's process is running, up to a 300-second safety cap, and fails at once, with the exit code, if the process exits. Settings → MCP shows the server as starting, notes after 15 seconds that a first run may be downloading, says why a start failed, and shows the last lines the server printed (kept in `logs/mcp-<name>.log`, latest start only). Servers now start in parallel, so one slow server does not hold up the others. Remote (`http`/`sse`) servers keep the 15-second handshake.
 
@@ -67,10 +77,6 @@ All notable released changes to Navide will be documented in this file. The form
 ### Security
 
 - Dependencies: DOMPurify 3.4.17, which Mermaid diagrams and the Monaco editor use to sanitize HTML, for published advisories GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and GHSA-c6gr-qvv4-5v3f.
-
-- Dependencies: undici 6.29.1 and 7.30.1, which `node-gyp` and Electron's downloader use while building, for GHSA-xjj6-f33q-929c; happy-dom 21.0.4, the test DOM, for GHSA-834v-8h66-3h79; setuptools 84.1.0, which PyInstaller uses to bundle the backend, for GHSA-xmj3-9gf7-h52w. Build and test tooling only; nothing the app runs changes.
-
-- Electron 44.9.1 (Node 24.22.0, Chromium 152.0.7977.167; was 44.7.0 with Node 24.21.0) for GHSA-jr5w-w6x2-84p9, which stops trusting the compromised eMudhra intermediate certificates.
 
 ## [0.2.28] — 2026-10-21 — signed release
 

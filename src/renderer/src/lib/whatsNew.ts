@@ -121,6 +121,46 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.30',
+    title: {
+      'zh-TW': 'Pipeline 不再默默卡住，「Navide 外掛」設定頁又能捲動了',
+      'en-US': 'Pipelines No Longer Stall Silently, and the Navide Plugins Settings Page Scrolls Again',
+      'ja-JP': 'Pipeline が黙って止まらなくなり、「Navide プラグイン」設定ページが再びスクロールできます',
+    },
+    highlights: [
+      {
+        'zh-TW': '「設定 → Navide 外掛」又可以捲動了，執行政策、外掛清單和揭露總覽也不會再被擠成三欄窄條。這是 0.2.27 起的問題。',
+        'en-US': 'Settings → Navide Plugins scrolls again, and its execution policy, plugin list and Disclosure overview are no longer squeezed into three narrow columns. This had been broken since 0.2.27.',
+        'ja-JP': '「設定 → Navide プラグイン」が再びスクロールできるようになり、実行ポリシー、プラグイン一覧、開示の概要が 3 列の細い枠に押し込まれることもなくなりました。0.2.27 から続いていた問題です。',
+      },
+      {
+        'zh-TW': 'Pipeline 的 Manager 模式不會再因為 Manager 沒有印出 ---MANAGER-READY--- 而默默卡住：Navide 會先提醒它一次；如果它閒置 180 秒、而且有 worker 的訊息在等它，Navide 會告訴它這是逾時後的替代處理，並把等著的訊息交給它。執行紀錄會記下這件事。',
+        'en-US': 'A Manager-mode pipeline stage no longer stalls silently when its Manager never prints ---MANAGER-READY---: Navide reminds it once, and if it then sits idle for 180 seconds while workers\' messages wait for it, tells it this is a timeout fallback and hands it those messages. The run log records the fallback.',
+        'ja-JP': 'Pipeline の Manager モードで、Manager が ---MANAGER-READY--- を出力しないまま黙って止まることはなくなりました：Navide はまず一度だけ促し、その後 180 秒アイドルのままで worker のメッセージが待っている場合は、タイムアウト時の代替処理であることを伝えて、待っていたメッセージを渡します。実行ログにも記録されます。',
+      },
+      {
+        'zh-TW': 'Pipeline 某個 slot 的 role 提示沒有送到 agent 時，run 會明確失敗，不再在沒有 role 的情況下照樣開工：節點會顯示「role prompt never reached the agent」，錯誤通知會指出是哪個階段和 slot，pane 會保留，之後可以接續執行。',
+        'en-US': 'When a pipeline slot\'s role prompt never reaches its agent, the run now fails with the reason instead of starting the slot without its role: the node shows "role prompt never reached the agent", an error toast names the stage and slot, and the panes stay open so the run can be resumed.',
+        'ja-JP': 'Pipeline の slot の role プロンプトが agent に届かなかった場合、role なしのまま作業を始めることはなくなり、run は理由を示して失敗します：ノードに「role prompt never reached the agent」と表示され、エラー通知がどのステージのどの slot かを示し、pane はそのまま残るので run を再開できます。',
+      },
+      {
+        'zh-TW': '本機（stdio）MCP 伺服器在啟動途中結束或連線出錯時，「設定 → MCP」會說出真正的原因（例如伺服器的結束代碼，或連線失敗的錯誤），不再當成啟動被取消，也不會顯示錯誤的結束代碼。',
+        'en-US': 'When a local (stdio) MCP server exits or its connection fails partway through starting, Settings → MCP gives the real reason (the server\'s exit code, or the connection error) instead of calling it a cancelled start or showing the wrong exit code.',
+        'ja-JP': 'ローカル（stdio）の MCP サーバーが起動の途中で終了したり接続に失敗したりした場合、「設定 → MCP」は本当の理由（サーバーの終了コードや接続エラー）を表示し、起動がキャンセルされたと扱ったり、誤った終了コードを表示したりすることはなくなりました。',
+      },
+      {
+        'zh-TW': '更穩定：關掉的 pane 不會在下次還原專案時又冒出來；Navide 內建的 Plan MCP 服務在內部中斷後會正常重新開始；同時更改版面、主題或語言時，不會蓋掉剛存好的其他變更。',
+        'en-US': 'Steadier: a closed pane no longer comes back the next time the project is restored, Navide\'s built-in Plan MCP service starts again cleanly after an internal interruption, and changing the layout, theme or language no longer overwrites another change saved at the same moment.',
+        'ja-JP': '安定性の向上：閉じた pane が次にプロジェクトを復元したときに戻ってくることはなくなりました。Navide 内蔵の Plan MCP サービスは内部で中断しても正常に再開し、レイアウト・テーマ・言語の変更が同じタイミングで保存された別の変更を上書きすることもなくなりました。',
+      },
+      {
+        'zh-TW': '安全更新：Electron 升級到 44.9.1（內建 Node.js 24.22.0），修補安全公告 GHSA-jr5w-w6x2-84p9，不再信任已遭入侵的 eMudhra 中繼憑證。',
+        'en-US': 'Security: Electron is updated to 44.9.1 (with Node.js 24.22.0) for advisory GHSA-jr5w-w6x2-84p9; it stops trusting the compromised eMudhra intermediate certificates.',
+        'ja-JP': 'セキュリティ更新：Electron を 44.9.1（Node.js 24.22.0 を内蔵）に更新し、アドバイザリ GHSA-jr5w-w6x2-84p9 に対応しました。侵害された eMudhra の中間証明書を信頼しなくなります。',
+      },
+    ],
+  },
+  {
     version: '0.2.29',
     title: {
       'zh-TW': 'Navide 會說六種新語言：德、西、法、葡、俄、越文介面（Beta）',
