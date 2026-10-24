@@ -945,6 +945,58 @@ class TestColdStart:
             await asyncio.wait_for(starting[0], timeout=20)
         assert client._transport_cm is None and client._session_cm is None
 
+    @staticmethod
+    def _fail_initialize_then_cancel_transport_in_stop(client: MCPClient, monkeypatch, *, then=None) -> None:
+        """initialize fails as it does once the server has exited ("Connection
+        closed"), and the transport's task group cancels its scope only as
+        start() goes on to clean up: the failed stdin write landing after the
+        poll has already named the exit."""
+        async def initialize(session):
+            deadline = time.monotonic() + 10
+            while _exit_code(client._process) is None and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            raise RuntimeError("Connection closed")
+
+        real_stop = MCPClient.stop
+        stops = [0]
+
+        async def stop(self):
+            stops[0] += 1
+            if stops[0] == 1:
+                self._transport_cm.gen.ag_frame.f_locals["tg"].cancel_scope.cancel()
+                if then is not None:
+                    then()
+            await real_stop(self)
+
+        monkeypatch.setattr(ClientSession, "initialize", initialize)
+        monkeypatch.setattr(MCPClient, "stop", stop)
+
+    @pytest.mark.asyncio
+    async def test_a_failed_start_keeps_its_reason_when_the_transport_cancels_its_cleanup(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        self._fail_initialize_then_cancel_transport_in_stop(client, monkeypatch)
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_a_cancel_of_a_failed_start_during_its_cleanup_still_propagates(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        starting: list[asyncio.Task] = []
+        self._fail_initialize_then_cancel_transport_in_stop(client, monkeypatch, then=lambda: starting[0].cancel())
+        starting.append(asyncio.create_task(client.start()))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(starting[0], timeout=20)
+        assert client._transport_cm is None and client._session_cm is None
+
     @pytest.mark.asyncio
     async def test_a_cancel_of_start_that_arrives_while_it_stops_still_propagates(
         self, tmp_path, fast_polling, monkeypatch,

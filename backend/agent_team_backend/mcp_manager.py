@@ -350,7 +350,14 @@ class MCPClient:
             self.ready = False
             self.status = "error"
             self.error = _reason(err)
-            await self.stop()  # ensure spawned subprocess is cleaned up
+            try:
+                await self.stop()  # ensure spawned subprocess is cleaned up
+            except asyncio.CancelledError:
+                # The same transport cancel can land after the failure has
+                # been named, during this cleanup: only a cancel of start()
+                # itself goes on.
+                if task.cancelling() > outside:
+                    raise
 
     async def stop(self) -> None:
         """Tear down the session and its underlying transport.
