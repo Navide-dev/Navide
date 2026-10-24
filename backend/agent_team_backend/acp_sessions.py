@@ -366,22 +366,25 @@ class AcpSessionService:
 
         proc = spawned.proc
         descendants: dict[int, str] = {}
-        if proc.returncode is None:
-            with contextlib.suppress(OSError):
-                descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
-            try:
-                osplat.process_tree.end_contained(proc.pid, spawned.job)
-            except OSError:
+        try:
+            if proc.returncode is None:
                 with contextlib.suppress(OSError):
-                    osplat.process_tree.kill_tree(proc.pid, force=True)
-            await self._wait_exit(proc, _TERM_GRACE_S)
-        await asyncio.to_thread(_kill_breakaway, descendants)
-        # Closed whatever state it is in: left open, the transport would fall
-        # to the collector once create() forgets it. close() kills a process
-        # still running (asyncio's BaseSubprocessTransport).
-        _close_transport(proc)
-        if spawned.registered:
-            await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, proc.pid))
+                    descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
+                try:
+                    osplat.process_tree.end_contained(proc.pid, spawned.job)
+                except OSError:
+                    with contextlib.suppress(OSError):
+                        osplat.process_tree.kill_tree(proc.pid, force=True)
+                await self._wait_exit(proc, _TERM_GRACE_S)
+            await asyncio.to_thread(_kill_breakaway, descendants)
+        finally:
+            # Closed whatever state it is in, also when ending the tree failed:
+            # left open, the transport would fall to the collector once
+            # create() forgets it. close() kills a process still running
+            # (asyncio's BaseSubprocessTransport).
+            _close_transport(proc)
+            if spawned.registered:
+                await asyncio.to_thread(in_data_dir(self._data_dir, pty_registry.unregister, proc.pid))
 
     async def _note_descendants(self, session: AcpSession) -> None:
         """Record the agent's descendants while it runs (see the module doc)."""
@@ -504,22 +507,26 @@ class AcpSessionService:
         session.stopping = True
         proc = session.proc
         descendants: dict[int, str] = {}
-        if proc.returncode is None:
-            # Taken while it runs: a grandchild that left its group is found
-            # only here (after the exit it has reparented).
-            descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
-        # With every one recorded earlier (identity-checked before any kill).
-        descendants = {**session.descendants, **descendants}
-        await _close_client(session)
-        await self._wait_exit(proc, _stop_grace(session.agent_key))
-        if proc.returncode is None:
-            with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
-                osplat.process_tree.kill_group(osplat.process_tree.group_of(proc.pid), force=False)
+        try:
+            if proc.returncode is None:
+                # Taken while it runs: a grandchild that left its group is found
+                # only here (after the exit it has reparented).
+                descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
+            # With every one recorded earlier (identity-checked before any kill).
+            descendants = {**session.descendants, **descendants}
+            await _close_client(session)
+            await self._wait_exit(proc, _stop_grace(session.agent_key))
+            if proc.returncode is None:
+                with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+                    osplat.process_tree.kill_group(osplat.process_tree.group_of(proc.pid), force=False)
+                await self._wait_exit(proc, _TERM_GRACE_S)
+            self._end_tree(session)
             await self._wait_exit(proc, _TERM_GRACE_S)
-        self._end_tree(session)
-        await self._wait_exit(proc, _TERM_GRACE_S)
-        await asyncio.to_thread(_kill_breakaway, descendants)
-        await self._forget(session)
+            await asyncio.to_thread(_kill_breakaway, descendants)
+        finally:
+            # Also when a step above raised: the pipes are closed and the
+            # session forgotten now, never left to the collector.
+            await self._forget(session)
 
     async def kill_all(self) -> None:
         # A start still under way would otherwise spawn its agent after this
