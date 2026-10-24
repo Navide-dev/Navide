@@ -98,6 +98,54 @@ def test_acp_registers_only_acp_message_types() -> None:
     assert {mt for mt in ws_handlers._REGISTRY if mt.startswith("acp.")} == ACP_MESSAGE_TYPES
 
 
+async def test_acp_hooks_never_start_the_service_without_an_acp_pane(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Every hook main's code now calls answers "not mine" with no ACP agent
+    # ever started: no service is created, nothing goes to a thread.
+    from types import SimpleNamespace
+
+    from agent_team_backend import acp_mcp, acp_ws, app  # noqa: F401 — sweep_ownerless imports app
+
+    monkeypatch.setattr(acp_ws, "_SERVICE", None)
+    monkeypatch.setattr(acp_ws, "_OWNERS", {})
+
+    def no_thread(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("an ACP hook went to a thread with no ACP agent")
+
+    monkeypatch.setattr(acp_ws.asyncio, "to_thread", no_thread)
+
+    def never(*_args: object) -> dict:
+        raise AssertionError("the ACP wait answered for a pane that is not ACP")
+
+    sweep = {"panes": [{"terminal_session_id": "t1", "pane_id": "tui", "bytes": 10, "cpu_seconds": 1.0}], "total_bytes": 10}
+    assert await acp_ws.with_resource_rows(sweep) is sweep
+    assert await acp_ws.sweep_ownerless() == []
+    await acp_ws.shutdown()
+    acp_ws.drop_owner(object())  # type: ignore[arg-type]
+    assert acp_mcp.transcript_path("tui") == ""
+    assert acp_mcp.status_fields("tui") == {}
+    assert await acp_mcp.interrupt(SimpleNamespace(pane_id="tui")) is None
+    assert await acp_mcp.wait_idle("tui", 1.0, never, never, never) is None
+    assert acp_ws._SERVICE is None
+
+
+#: main's dump of its core tools (also pinned by test_share_mcp_tools.py).
+MCP_BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"
+
+
+@pytest.mark.parametrize(
+    "name", ["cli_read_log", "cli_get_status", "cli_wait_idle", "cli_interrupt", "cli_open_agent", "cli_send"],
+)
+def test_the_tools_acp_reaches_are_mains_word_for_word(name: str) -> None:
+    # Description and input schema: no ACP paragraph, no display argument,
+    # until an ACP entry point ships (P5, see acp_mcp's TODO).
+    from agent_team_backend.mcp_server import server as mcp
+
+    [main] = [t for t in json.loads(MCP_BASELINE.read_text(encoding="utf-8")) if t["name"] == name]
+    [tool] = [t for t in mcp.server._tool_manager.list_tools() if t.name == name]  # noqa: SLF001
+    current = {"name": tool.name, "description": tool.description, "parameters": tool.parameters}
+    assert json.loads(json.dumps(current, sort_keys=True)) == main
+
+
 def _regenerate(commit: str) -> None:
     entries = _entries()
     for entry in entries:
