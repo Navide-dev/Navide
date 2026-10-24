@@ -92,6 +92,8 @@ class _Spawned:
     proc: asyncio.subprocess.Process
     job: int | None = None
     registered: bool = False
+    # contain() failed (Windows: typically the agent had already exited).
+    uncontained: bool = False
 
 
 @dataclass
@@ -290,6 +292,7 @@ class AcpSessionService:
         try:
             job = spawned.job = osplat.process_tree.contain(proc.pid)
         except OSError as err:
+            spawned.uncontained = True
             log.warning("ACP %s: not contained (%s); its tree is ended by pid instead", session_id, err)
         # Marked first: a start cancelled while the write runs still unregisters.
         # Should the write land after that, the entry it leaves is reaped on the
@@ -372,13 +375,18 @@ class AcpSessionService:
                     descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
             # Also for an agent that has exited already: its job is closed
             # (once: nothing else ends a process not yet a session), which on
-            # Windows ends whatever it started that is still in the job.
-            try:
-                osplat.process_tree.end_contained(proc.pid, spawned.job)
-            except OSError:
-                if proc.returncode is None:
-                    with contextlib.suppress(OSError):
-                        osplat.process_tree.kill_tree(proc.pid, force=True)
+            # Windows ends whatever it started that is still in the job, and on
+            # POSIX its group is signalled (a pgid is not reused while the group
+            # has members). Not for an exited agent that was never contained:
+            # with no job of its own, only its pid is left, and that may be
+            # another process's (another pane's job, even) by now.
+            if proc.returncode is None or not spawned.uncontained:
+                try:
+                    osplat.process_tree.end_contained(proc.pid, spawned.job)
+                except OSError:
+                    if proc.returncode is None:
+                        with contextlib.suppress(OSError):
+                            osplat.process_tree.kill_tree(proc.pid, force=True)
             await self._wait_exit(proc, _TERM_GRACE_S)
             await asyncio.to_thread(_kill_breakaway, descendants)
         finally:
