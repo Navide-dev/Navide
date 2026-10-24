@@ -11549,6 +11549,10 @@ class _Runner:
 
 
 _runner: _Runner | None = None
+# Replaced runners whose task is still finishing (see _replace_stopped_runner).
+_stopping_runner_tasks: set[asyncio.Task[None]] = set()
+# Stands for an attribute the SDK no longer has (see _runner_stopped).
+_MISSING = object()
 # (pane or client, reason) pairs already logged as refused (see _PlanMcpASGI).
 _logged_refusals: set[tuple[str, str]] = set()
 # Bounds only how many distinct refusals get a log line; no request is ever
@@ -11604,7 +11608,7 @@ class _PlanMcpASGI:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
             return
-        if runner.task.done():
+        if _runner_stopped(runner):
             runner = _replace_stopped_runner(runner)
         await runner.ready.wait()
         if runner.task.done():
@@ -11745,11 +11749,34 @@ def _note_runner_end(runner: _Runner, task: asyncio.Task[None]) -> None:
     )
 
 
+def _runner_stopped(runner: _Runner) -> bool:
+    """Has ``runner`` stopped taking requests?
+
+    A cancelled task group stops at once — the SDK drops its reference to it
+    and answers every new request "Task group is not initialized", outside its
+    own error handling — but its task ends only once the last request still in
+    it has, however long that one takes.
+    """
+    if runner.task.done():
+        return True
+    if not runner.ready.is_set():
+        return False
+    # Private to the SDK: should it go, only an ended task counts, as before.
+    group = getattr(runner.manager, "_task_group", _MISSING)
+    if group is _MISSING:
+        return False
+    return group is None or group.cancel_scope.cancel_called
+
+
 def _replace_stopped_runner(stopped: _Runner) -> _Runner:
     """The running session manager, started anew if ``stopped`` is still it."""
     global _runner, _session_manager
     if _runner is stopped:
         _log.warning("plan-mcp: restarting the MCP session manager")
+        if not stopped.task.done():
+            # Kept until it ends: the loop holds only weak references to tasks.
+            _stopping_runner_tasks.add(stopped.task)
+            stopped.task.add_done_callback(_stopping_runner_tasks.discard)
         _runner = _start_runner()
         _session_manager = _runner.manager
     assert _runner is not None

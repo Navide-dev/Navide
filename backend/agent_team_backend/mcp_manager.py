@@ -281,6 +281,9 @@ class MCPClient:
         self.status = "starting"
         self.error = ""
         self._started_at = asyncio.get_running_loop().time()
+        task = asyncio.current_task()
+        assert task is not None
+        outside = task.cancelling()
         try:
             if self._config.transport == "stdio":
                 final_env = os.environ.copy()
@@ -324,8 +327,24 @@ class MCPClient:
             self.status = "connected"
             log.info("MCP '%s' connected", self.name)
         except asyncio.CancelledError:
-            await self.stop()
-            raise
+            # The transport and session were entered in this task, so their task
+            # groups cancel it: stdio_client's does when writing to a server that
+            # has exited fails, before the liveness poll has seen the exit. Only
+            # once stop() has left those scopes can a cancel of start() itself be
+            # told apart from theirs.
+            process = self._process
+            try:
+                await self.stop()
+            except asyncio.CancelledError:
+                pass
+            code = _exit_code(process) if process is not None else None
+            if code is None or task.cancelling() > outside:
+                raise
+            err = RuntimeError(f"the server exited with code {code} before answering initialize")
+            log.warning("MCP '%s' failed to start: %s", self.name, err)
+            self.ready = False
+            self.status = "error"
+            self.error = _reason(err)
         except Exception as err:  # noqa: BLE001
             log.warning("MCP '%s' failed to start: %s", self.name, err)
             self.ready = False
