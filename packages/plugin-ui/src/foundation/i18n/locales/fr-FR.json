@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "Non confirmé",
+      "unsent": "Non envoyé",
+      "mark-tooltip": "Ce pane exécute son agent via l’Agent Client Protocol (ACP) : Navide dessine la conversation au lieu de l’écran propre à la CLI.",
+      "permission": "L’agent demande : {title}",
+      "failed": "Impossible de démarrer l’agent : {reason}",
+      "exited": "L’agent s’est arrêté (code de sortie {code}).",
+      "placeholder": "Écrivez à l’agent. Entrée envoie, Maj+Entrée ajoute une ligne.",
+      "send": "Envoyer",
+      "cancel": "Annuler le tour"
+    },
     "opened-by": "Ouvert par {parent}",
     "git": {
       "title": "CONTRÔLE DE CODE SOURCE",

@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "Chưa xác nhận",
+      "unsent": "Chưa gửi",
+      "mark-tooltip": "Pane này chạy agent qua Agent Client Protocol (ACP): Navide tự vẽ cuộc trò chuyện thay vì màn hình riêng của CLI.",
+      "permission": "Agent yêu cầu: {title}",
+      "failed": "Không khởi động được agent: {reason}",
+      "exited": "Agent đã dừng (mã thoát {code}).",
+      "placeholder": "Nhắn cho agent. Enter để gửi, Shift+Enter để xuống dòng.",
+      "send": "Gửi",
+      "cancel": "Hủy lượt"
+    },
     "opened-by": "Được mở bởi {parent}",
     "git": {
       "title": "QUẢN LÝ MÃ NGUỒN",

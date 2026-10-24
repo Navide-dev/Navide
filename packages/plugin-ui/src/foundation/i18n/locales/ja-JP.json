@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "未確認",
+      "unsent": "未送信",
+      "mark-tooltip": "この pane は Agent Client Protocol（ACP）で agent を実行します。会話は CLI 自身の画面ではなく Navide が描画します。",
+      "permission": "agent からの要求：{title}",
+      "failed": "agent を起動できませんでした：{reason}",
+      "exited": "agent は停止しました（終了コード {code}）。",
+      "placeholder": "agent にメッセージを送ります。Enter で送信、Shift+Enter で改行。",
+      "send": "送信",
+      "cancel": "このターンを取り消す"
+    },
     "opened-by": "「{parent}」が開いた",
     "git": {
       "title": "ソース管理",

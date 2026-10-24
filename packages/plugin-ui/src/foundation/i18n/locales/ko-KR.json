@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "확인되지 않음",
+      "unsent": "보내지 못함",
+      "mark-tooltip": "이 pane은 Agent Client Protocol(ACP)로 agent를 실행합니다. 대화는 CLI 자체 화면이 아니라 Navide가 그립니다.",
+      "permission": "agent의 요청: {title}",
+      "failed": "agent를 시작할 수 없습니다: {reason}",
+      "exited": "agent가 중지되었습니다(종료 코드 {code}).",
+      "placeholder": "agent에게 메시지를 보냅니다. Enter로 보내고 Shift+Enter로 줄을 바꿉니다.",
+      "send": "보내기",
+      "cancel": "이번 턴 취소"
+    },
     "opened-by": "「{parent}」이(가) 열었습니다",
     "git": {
       "title": "소스 제어",
