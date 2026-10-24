@@ -46,6 +46,7 @@ from . import (
     storage_service,
     trust_store,
 )
+from .cli_vendors.base import apply_spawn_env_extra
 from .cli_vendors.codex import command_with_resume_id as codex_command_with_resume_id
 from .cli_vendors.registry import VENDORS as CLI_VENDORS
 from .cli_vendors.registry import vendor as cli_vendor
@@ -8526,6 +8527,7 @@ async def _terminal_create_impl(
         for key, value in vendor_spec.spawn_env_defaults:
             if key not in os.environ:
                 env.setdefault(key, value)
+        apply_spawn_env_extra(vendor_spec, env, os.environ)
     await app._ensure_fresh_path_for_spawn(agent_key)
     payload["command"] = app._command_with_persisted_cli_binary(
         agent_key, payload.get("command")

@@ -1073,6 +1073,10 @@ class VendorSpec:
     # Vendor-specific defaults added only when neither the request nor the
     # inherited process environment provides the variable.
     spawn_env_defaults: tuple[tuple[str, str], ...] = ()
+    # Like spawn_env_defaults, but computed per spawn (a port, a path). Must
+    # return {} wherever the vendor needs nothing extra; see
+    # apply_spawn_env_extra for the precedence.
+    spawn_env_extra: Callable[[], dict[str, str]] = field(default=lambda: {})
     # Env var names that relocate this CLI's home/config; the backend strips
     # them from inherited env at startup and from probe spawns.
     home_env_vars: tuple[str, ...] = ()
@@ -1163,3 +1167,15 @@ class VendorSpec:
     # override disables this vendor's default network profile; it is never
     # interpreted as a trusted endpoint or persisted as a credential URL.
     network_override_env_vars: tuple[str, ...] = ()
+
+
+def apply_spawn_env_extra(spec: Any, env: dict[str, str], inherited: Mapping[str, str]) -> None:
+    """Merge ``spec.spawn_env_extra()`` into a spawn's env as defaults.
+
+    Same precedence as spawn_env_defaults: a value the request already set, or
+    one the backend inherited, is never displaced (a user's own HTTPS_PROXY
+    wins over the Android loopback proxy).
+    """
+    for key, value in spec.spawn_env_extra().items():
+        if key not in inherited:
+            env.setdefault(key, value)

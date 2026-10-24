@@ -2,3 +2,5 @@
 30d425a86987fde79c5bc7470b4232e2aecfb750:docs/en-US/marketplace-publishing.md:curl-auth-header:139
 # The quick-menu callback token alphabet constant (not a secret); generic-api-key matches its entropy.
 c1cdb5c016fcf1c63227714d4410635b419a739d:backend/agent_team_backend/channels/quick_menu.py:generic-api-key:23
+# The same constant as staged changes see it (a merge from main re-adds the file, so no commit prefix).
+backend/agent_team_backend/channels/quick_menu.py:generic-api-key:23

@@ -25,6 +25,7 @@ import tempfile
 import re
 import shutil
 import sqlite3
+import stat
 import threading
 import time
 import tomllib
@@ -971,7 +972,15 @@ class CodexHomeManager:
             newest = max(stranded, key=lambda p: p.stat().st_mtime)
             self.real_home.mkdir(parents=True, exist_ok=True)
             try:
-                os.link(newest, real_auth)
+                if hasattr(os, "link"):
+                    os.link(newest, real_auth)
+                else:
+                    # Android's CPython has no os.link: an exclusive copy
+                    # keeps "a concurrent writer beating us simply wins".
+                    fd = os.open(real_auth, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    with os.fdopen(fd, "wb") as out:
+                        os.fchmod(out.fileno(), stat.S_IMODE(newest.stat().st_mode))
+                        out.write(newest.read_bytes())
             except FileExistsError:
                 return False
         except OSError as err:
@@ -1876,6 +1885,35 @@ def _risk_data_dirs(ctx: VendorRuntimeContext) -> tuple[Path, ...]:
     return (root,)
 
 
+#: Hosts Codex 0.160.0 was seen reaching through the Android loopback proxy
+#: (2026-10-04, emulator, fake key). Disclosed in the UI, never enforced: the
+#: proxy relays whatever Codex asks for and records it (hosts_seen()).
+ANDROID_DISCLOSED_HOSTS = (
+    "api.openai.com", "chatgpt.com", "api.github.com", "codeload.github.com", "files.openai.com",
+)
+
+
+def _android_network_env() -> dict[str, str]:
+    """Env that lets the static musl Codex reach the network on Android.
+
+    Empty everywhere else. On Android there is no /etc/resolv.conf, so Codex
+    is pointed at the backend's loopback CONNECT proxy (which resolves through
+    the system, and only serves callers holding its per-process token), given a
+    CA bundle, and a writable TMPDIR in place of /tmp.
+    """
+    from .. import osplat
+
+    if not osplat.paths.needs_loopback_dns_proxy():
+        return {}
+    from .. import loopback_connect_proxy
+
+    return {
+        "HTTPS_PROXY": loopback_connect_proxy.proxy_url(),
+        "SSL_CERT_FILE": loopback_connect_proxy.ca_bundle_path(),
+        "TMPDIR": tempfile.gettempdir(),
+    }
+
+
 # Where this CLI keeps the extensions it installed for itself (read-only
 # inventory, cli_extensions). Verified 2026-10-10 against the installed
 # binary's --help and the files on disk.
@@ -1887,6 +1925,7 @@ _EXTENSIONS = ExtensionsSpec(sources=(
 SPEC = VendorSpec(
     extensions=_EXTENSIONS,
     key="codex",
+    spawn_env_extra=_android_network_env,
     # Built-in OpenAI API and ChatGPT service defaults (verified 2026-09-21):
     # https://learn.chatgpt.com/docs/config-file/config-sample
     # https://github.com/openai/codex/blob/main/codex-rs/model-provider-info/src/lib.rs
