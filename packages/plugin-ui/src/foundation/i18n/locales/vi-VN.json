@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "Đi kèm",
+      "listTitle": "Plugin Navide",
       "bundledGit": "Git đi kèm",
       "state": {
         "active": "Đang hoạt động",

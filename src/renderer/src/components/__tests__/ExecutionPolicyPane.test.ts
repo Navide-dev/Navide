@@ -650,3 +650,57 @@ describe('ExecutionPolicyPane', () => {
     expect(api.resetSourceSelections).not.toHaveBeenCalled()
   })
 })
+
+describe('ExecutionPolicyPane summary', () => {
+  let wrapper: VueWrapper | undefined
+
+  beforeEach(() => {
+    i18n.global.locale.value = 'en-US'
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  const editorShown = (w: VueWrapper): boolean =>
+    (w.get('#ep-editor').element as HTMLElement).style.display !== 'none'
+
+  it('leads with the effective policy and opens the editor on Edit Policy', async () => {
+    mockExecutionPolicy()
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(wrapper.findAll('.ep-facts .ep-tag').map((tag) => tag.text())).toEqual(['fs', 'ui', 'aiCli', 'git', 'gh', 'glab'])
+    // The recommendation is untrusted, and says so while the editor is closed.
+    expect(wrapper.get('.ep-summary-note').text()).toContain('Untrusted')
+    expect(editorShown(wrapper)).toBe(false)
+
+    const toggle = wrapper.get('.ep-edit-toggle')
+    expect(toggle.text()).toBe('Edit Policy')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    await toggle.trigger('click')
+    expect(editorShown(wrapper)).toBe(true)
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('.ep-summary-note').exists()).toBe(false)
+  })
+
+  it('keeps the editor open, with no way to close it, while the workspace policy needs attention', async () => {
+    const base = snapshot()
+    mockExecutionPolicy(snapshot({ workspace: { ...base.workspace!, status: 'stale' } }))
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(editorShown(wrapper)).toBe(true)
+    expect(wrapper.find('.ep-edit-toggle').exists()).toBe(false)
+  })
+
+  it('keeps the editor open while policy storage needs recovery', async () => {
+    mockExecutionPolicy(snapshot({ recovery: { state: 'corrupt', canRebuild: true, unsafePaths: [] } }))
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(editorShown(wrapper)).toBe(true)
+    expect(wrapper.get('[data-section="recovery"]').text()).toContain('Rebuild')
+  })
+})

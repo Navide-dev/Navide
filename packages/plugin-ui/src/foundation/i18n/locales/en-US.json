@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "Bundled",
+      "listTitle": "Navide plugins",
       "bundledGit": "Bundled Git",
       "state": {
         "active": "Active",

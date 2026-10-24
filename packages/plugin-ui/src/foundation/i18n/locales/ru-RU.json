@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "Встроенный",
+      "listTitle": "Плагины Navide",
       "bundledGit": "Встроенный Git",
       "state": {
         "active": "Активен",

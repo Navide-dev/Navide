@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "同梱",
+      "listTitle": "Navide プラグイン",
       "bundledGit": "同梱の Git",
       "state": {
         "active": "有効",

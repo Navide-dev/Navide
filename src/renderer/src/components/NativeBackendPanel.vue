@@ -61,6 +61,10 @@ watch(installed, refresh)
 <template>
   <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
     <h3 id="native-backends-title" class="native-backends-title">{{ $t('settings.extensions.nativeBackends.title') }}</h3>
+    <!-- Whether this applies at all comes first; the warning and switches follow. -->
+    <p v-if="overview.plugins.length === 0" class="native-backends-empty">
+      {{ $t('settings.extensions.nativeBackends.empty') }}
+    </p>
     <div class="native-backends-callout">
       <svg class="native-backends-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M7.1 2.6 1.9 12a1 1 0 0 0 .9 1.5h10.4a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0Z" />
@@ -105,10 +109,7 @@ watch(installed, refresh)
       </label>
       <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.agentTools.externalCallersDisclosure') }}</p>
     </template>
-    <p v-if="overview.plugins.length === 0" class="native-backends-empty">
-      {{ $t('settings.extensions.nativeBackends.empty') }}
-    </p>
-    <ul v-else class="ext-list">
+    <ul v-if="overview.plugins.length" class="ext-list">
       <li
         v-for="row in overview.plugins"
         :key="row.pluginId"
@@ -258,7 +259,7 @@ watch(installed, refresh)
   color: var(--text-secondary);
 }
 .native-backends-empty {
-  margin: var(--space-3) 0 0;
+  margin: 0 0 var(--space-3);
   padding: var(--space-3) var(--space-4);
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);

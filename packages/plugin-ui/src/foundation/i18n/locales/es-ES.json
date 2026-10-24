@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "Integrados",
+      "listTitle": "Complementos de Navide",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Activo",

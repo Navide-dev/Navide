@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "内置",
+      "listTitle": "Navide 插件",
       "bundledGit": "内置 Git",
       "state": {
         "active": "激活中",

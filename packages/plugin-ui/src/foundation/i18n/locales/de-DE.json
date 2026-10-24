@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "Mitgeliefert",
+      "listTitle": "Navide-Plug-ins",
       "bundledGit": "Mitgeliefertes Git",
       "state": {
         "active": "Aktiv",

@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "Integrado",
+      "listTitle": "Plug-ins do Navide",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Ativo",

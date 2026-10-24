@@ -357,7 +357,10 @@ function openDisclosureOverview(id?: string): void {
     const entry = document.querySelector<HTMLElement>(
       `[data-settings-section="disclosureOverview"] [data-id="${CSS.escape(id)}"]`,
     )
-    if (entry) entry.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    if (entry) {
+      entry.querySelector<HTMLDetailsElement>('details.nv-overview-record')?.setAttribute('open', '')
+      entry.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
     else if (++tries < 20) setTimeout(seek, 100)
   }
   setTimeout(seek, 50)
@@ -5285,6 +5288,8 @@ watch(activeTab, (tab) => {
   flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
+  /* A soft right edge says the row scrolls when it is wider than the page. */
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
   gap: 6px;
   padding: var(--space-3) 22px var(--space-3);
   border-bottom: 1px solid var(--border-muted);

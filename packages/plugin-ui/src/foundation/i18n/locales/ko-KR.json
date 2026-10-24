@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "기본 포함",
+      "listTitle": "Navide 플러그인",
       "bundledGit": "기본 포함 Git",
       "state": {
         "active": "사용 중",

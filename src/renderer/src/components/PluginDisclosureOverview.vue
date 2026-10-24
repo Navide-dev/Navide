@@ -12,6 +12,8 @@ import type { ScanReport } from '../../../shared/pluginDisclosureScan'
 import type { PluginSource } from '../../../shared/pluginSource'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
+import PluginSourceBadge from './PluginSourceBadge.vue'
+import { cardRiskLevel, declaredVsScanned } from '../../../shared/pluginDisclosureScan'
 import PluginActivityPanel from './PluginActivityPanel.vue'
 import { createQueueTrend, pluginBackendUsage } from '../lib/backendQueueTrend'
 
@@ -73,6 +75,15 @@ async function sampleQueues(): Promise<void> {
   }
 }
 
+// The summary row of each record: its risk level, and whether the scan found
+// anything it does not declare. Both stay visible with the record closed.
+function riskLevel(entry: Entry) {
+  return entry.disclosure ? cardRiskLevel(entry.disclosure, entry.scan) : null
+}
+function scanFoundUndeclared(entry: Entry): boolean {
+  return !!entry.disclosure && !!entry.scan && declaredVsScanned(entry.disclosure, entry.scan).undeclared.length > 0
+}
+
 function onToggle(id: string, event: Event): void {
   const next = new Set(open.value)
   if ((event.target as HTMLDetailsElement).open) next.add(id)
@@ -106,20 +117,20 @@ onBeforeUnmount(stopPolling)
     <p v-if="loading" class="nv-overview-muted">{{ $t('pluginActivity.loading') }}</p>
     <p v-else-if="entries.length === 0" class="nv-overview-muted">{{ $t('pluginActivity.overview.empty') }}</p>
     <article v-for="entry in entries" :key="entry.id" class="nv-overview-entry" :data-id="entry.id">
-      <h3 class="nv-overview-name">{{ reveal(entry.id) }} <span class="nv-overview-muted">{{ reveal(entry.version) }}</span></h3>
-      <p v-if="growing.has(entry.id)" class="nv-overview-growing" role="status">{{ $t('pluginActivity.live.queueGrowing') }}</p>
-      <PluginDisclosureCard
-        :disclosure="entry.disclosure"
-        :scan="entry.scan"
-        :registry="null"
-        :verified="true"
-        :source="entry.source"
-        :expires-at="entry.expiresAt"
-        :publisher="entry.id.split('.')[0]"
-        :has-views="entry.hasViews"
-        summary-as-list
-      />
+      <!-- Always visible: who it is, how risky, and any warning. The full
+           record opens below it; nothing in it is shortened. -->
+      <div class="nv-overview-head">
+        <h3 class="nv-overview-name">{{ reveal(entry.id) }} <span class="nv-overview-muted">{{ reveal(entry.version) }}</span></h3>
+        <div class="nv-overview-flags">
+          <span v-if="riskLevel(entry)" class="nv-overview-risk" :class="`nv-overview-risk--${riskLevel(entry)}`">
+            {{ $t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskLevel(entry)}`) }) }}
+          </span>
+          <PluginSourceBadge v-if="entry.source" :source="entry.source" :publisher="entry.id.split('.')[0]" :expires-at="entry.expiresAt" />
+          <span v-if="scanFoundUndeclared(entry)" class="nv-overview-flag" role="alert">{{ $t('pluginDisclosure.undeclaredHeading') }}</span>
+        </div>
+      </div>
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>
+      <p v-if="growing.has(entry.id)" class="nv-overview-growing" role="status">{{ $t('pluginActivity.live.queueGrowing') }}</p>
       <div class="nv-overview-activity">
         <h4>{{ $t('pluginActivity.overview.activity') }}</h4>
         <template v-if="entry.report">
@@ -130,9 +141,26 @@ onBeforeUnmount(stopPolling)
           <p v-if="entry.report.anomalies.length" class="nv-overview-anomalies">{{ $t('pluginActivity.overview.anomalyCount', { count: entry.report.anomalies.length }) }}</p>
         </template>
         <p v-else-if="entry.reportError" class="nv-overview-muted">{{ $t('pluginActivity.unavailable', { error: entry.reportError }) }}</p>
+      </div>
+      <!-- Both expanders share one footer row; an opened one takes the full width. -->
+      <div class="nv-overview-footer">
         <details class="nv-overview-details" @toggle="onToggle(entry.id, $event)">
           <summary>{{ $t('pluginActivity.tab') }}</summary>
           <PluginActivityPanel v-if="open.has(entry.id)" :plugin-id="entry.id" :poll-ms="props.pollMs" :paused="props.paused" />
+        </details>
+        <details class="nv-overview-record">
+          <summary>{{ $t('pluginDisclosure.title') }}</summary>
+          <PluginDisclosureCard
+            :disclosure="entry.disclosure"
+            :scan="entry.scan"
+            :registry="null"
+            :verified="true"
+            :source="entry.source"
+            :expires-at="entry.expiresAt"
+            :publisher="entry.id.split('.')[0]"
+            :has-views="entry.hasViews"
+            summary-as-list
+          />
         </details>
       </div>
     </article>
@@ -167,6 +195,50 @@ onBeforeUnmount(stopPolling)
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
+.nv-overview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.nv-overview-flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+/* Risk level on one severity scale with the plugin list: Low and Medium
+   tinted, High a solid warning tone, Highest solid danger. */
+.nv-overview-risk,
+.nv-overview-flag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.nv-overview-risk--low { background: var(--success-subtle); color: var(--success-fg); }
+.nv-overview-risk--medium { background: var(--attention-subtle); color: var(--attention-fg); }
+.nv-overview-risk--high { background: var(--warning-fg); color: var(--bg-base); }
+.nv-overview-risk--highest { background: var(--danger-emphasis); color: var(--text-on-emphasis); }
+.nv-overview-flag {
+  background: var(--danger-subtle);
+  color: var(--danger-fg);
+}
+.nv-overview-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-5);
+}
+.nv-overview-footer > details[open] {
+  flex-basis: 100%;
+}
+.nv-overview-record[open] > summary {
+  margin-bottom: var(--space-2);
+}
 .nv-overview-name {
   display: flex;
   align-items: baseline;
@@ -198,9 +270,9 @@ onBeforeUnmount(stopPolling)
   border: 1px solid currentColor;
 }
 .nv-overview-entry :deep(.nv-disclosure-level--high) {
-  border-color: var(--risk-fg);
-  background: var(--risk-fg);
-  color: var(--text-on-emphasis);
+  border-color: var(--warning-fg);
+  background: var(--warning-fg);
+  color: var(--bg-base);
 }
 .nv-overview-entry :deep(.nv-disclosure-level--highest) {
   border-color: var(--danger-emphasis);
@@ -224,15 +296,13 @@ onBeforeUnmount(stopPolling)
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  margin-top: var(--space-1);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  background: var(--bg-base);
   font-size: var(--font-xs);
 }
 .nv-overview-activity h4 {
-  flex-basis: 100%;
+  margin: 0;
+}
+.nv-overview-activity .nv-overview-details {
+  flex-basis: auto;
 }
 .nv-overview-totals {
   font-variant-numeric: tabular-nums;
@@ -311,6 +381,7 @@ onBeforeUnmount(stopPolling)
 /* One disclosure control for the whole page: the same chevron and a 32px row
    as "Permissions and grants" in the list above. */
 .nv-overview-details > summary,
+.nv-overview-record > summary,
 .nv-overview-entry :deep(.nv-disclosure-declared > summary) {
   display: inline-flex;
   align-items: center;
@@ -325,10 +396,12 @@ onBeforeUnmount(stopPolling)
   border-radius: var(--radius-xs);
 }
 .nv-overview-details > summary::-webkit-details-marker,
+.nv-overview-record > summary::-webkit-details-marker,
 .nv-overview-entry :deep(.nv-disclosure-declared > summary::-webkit-details-marker) {
   display: none;
 }
 .nv-overview-details > summary::before,
+.nv-overview-record > summary::before,
 .nv-overview-entry :deep(.nv-disclosure-declared > summary::before) {
   content: '';
   width: 5px;
@@ -339,14 +412,17 @@ onBeforeUnmount(stopPolling)
   transition: transform var(--motion-base) var(--ease-out);
 }
 .nv-overview-details[open] > summary::before,
+.nv-overview-record[open] > summary::before,
 .nv-overview-entry :deep(.nv-disclosure-declared[open] > summary::before) {
   transform: rotate(45deg);
 }
 .nv-overview-details > summary:hover,
+.nv-overview-record > summary:hover,
 .nv-overview-entry :deep(.nv-disclosure-declared > summary:hover) {
   color: var(--text-primary);
 }
 .nv-overview-details > summary:focus-visible,
+.nv-overview-record > summary:focus-visible,
 .nv-overview-entry :deep(.nv-disclosure-declared > summary:focus-visible) {
   outline: 2px solid var(--accent-focus);
   outline-offset: 2px;

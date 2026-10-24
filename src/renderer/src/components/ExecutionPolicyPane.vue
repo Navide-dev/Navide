@@ -714,7 +714,23 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   padding: var(--space-5) 0 0;
   border-top: 1px solid var(--border-muted);
 }
-.ep-effective { border-top: 0; padding-top: var(--space-1); margin-bottom: var(--space-3); }
+/* The summary reads as one line that wraps: heading row, then source, mode
+   and the two tag groups flowing together. */
+.ep-effective {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--space-5);
+  border-top: 0;
+  padding-top: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+.ep-effective > .ep-section-heading,
+.ep-effective > .ep-warning,
+.ep-effective > .ep-summary-note,
+.ep-effective > .ep-hint { flex-basis: 100%; }
+.ep-effective > .ep-summary { margin: 0; }
+.ep-effective > .ep-facts { margin: 0; }
 .ep-edit-toggle { margin-left: auto; }
 .ep-editor { padding-top: var(--space-1); }
 .ep-facts { display: flex; flex-wrap: wrap; gap: 6px var(--space-5); margin: var(--space-2) 0 0; }
@@ -737,9 +753,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin: var(--space-3) 0 0;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border-muted);
+  margin: var(--space-1) 0 0;
   color: var(--text-primary);
   font-size: var(--font-xs);
 }

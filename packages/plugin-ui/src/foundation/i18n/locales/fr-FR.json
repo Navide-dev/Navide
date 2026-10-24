@@ -1907,6 +1907,7 @@
         }
       },
       "bundled": "Fournis",
+      "listTitle": "Plugins Navide",
       "bundledGit": "Git fourni",
       "state": {
         "active": "Actif",

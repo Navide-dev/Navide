@@ -664,6 +664,7 @@ watch(installed, () => {
          the page (only the selected one is shown), so nothing a card offers
          depends on the selection. -->
     <div class="ext-md-toolbar">
+      <h3 class="ext-section-title ext-md-title">{{ $t('settings.extensions.listTitle') }}</h3>
       <!-- Updates are for installed packages; with none installed the line
            would contradict the empty list. -->
       <span v-if="pluginUpdates.count.value && nonFactoryInstalled.length" class="ext-updates-summary" role="status">
@@ -746,15 +747,15 @@ watch(installed, () => {
                       class="ext-md-row-update"
                       :title="$t('settings.extensions.marketplace.updateAvailableVersion', { version: updatesById.get(p.id)?.latestVersion ?? '' })"
                     >→ {{ updatesById.get(p.id)?.latestVersion }}</span>
+                    <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
+                    <span
+                      v-else-if="riskById.get(p.id) && riskById.get(p.id) !== 'low'"
+                      class="ext-badge ext-md-risk"
+                      :class="`ext-md-risk--${riskById.get(p.id)}`"
+                      :title="$t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) })"
+                    >{{ $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) }}</span>
                   </span>
                 </span>
-                <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
-                <span
-                  v-else-if="riskById.get(p.id) && riskById.get(p.id) !== 'low'"
-                  class="ext-badge ext-md-risk"
-                  :class="`ext-md-risk--${riskById.get(p.id)}`"
-                  :title="$t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) })"
-                >{{ $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) }}</span>
               </button>
             </li>
           </ul>
@@ -898,43 +899,47 @@ watch(installed, () => {
               <div class="ext-card-title">
                 <span class="ext-id" v-truncate>{{ reveal(p.id) }}</span>
                 <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
-              <!-- The risk level from its disclosure leads the badges. -->
-              <span
-                v-if="riskById.get(p.id)"
-                class="ext-badge ext-md-risk"
-                :class="`ext-md-risk--${riskById.get(p.id)}`"
-              >{{ $t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) }) }}</span>
-                <!-- K2: the Host's source only; none (an unknown channel) shows no badge.
-                     A3: a signed local file names the publisher its id names, the one whose key signed it. -->
-                <!-- A2-3: a developer folder's badge opens its "Local folder" info card. -->
-                <button
-                  v-if="p.source === 'developer-unpacked' && developerFolderOf(p.id)"
-                  type="button"
-                  class="ext-folder-info-toggle"
-                  :aria-expanded="folderCardFor === p.id"
-                  @click="toggleFolderCard(p.id)"
-                >
-                  <PluginSourceBadge :source="p.source" />
-                </button>
-                <PluginSourceBadge
-                  v-else-if="p.source"
-                  :source="p.source"
-                  :expires-at="p.expiresAt"
-                  :via="p.testplaceVia"
-                  :signature="p.localSignature"
-                  :publisher="p.localSignature ? p.id.split('.')[0] : undefined"
-                  :local-install="p.localInstall"
-                />
-                <!-- d5: Navide blocked the file this local install came from; the label stays.
-                     0.2.28: a withdrawn Testplace build keeps its label the same way. -->
+              </div>
+              <!-- One status line: risk, source and review, then any update, what
+                 it adds, disabled and incompatible. -->
+              <div class="ext-card-sub ext-card-status">
+                <!-- The risk level from its disclosure leads the badges. -->
                 <span
-                  v-if="p.digestBlock"
-                  class="ext-badge ext-digest-blocked-badge"
-                  :data-reason="p.digestBlock.reason ?? 'none'"
-                  :title="$t(p.digestBlock.reason === 'testplace-withdrawn' ? 'settings.extensions.digestBlock.testplaceWithdrawnNote' : 'settings.extensions.digestBlock.note')"
-                >
-                  {{ $t(`settings.extensions.digestBlock.${digestBlockKey(p.digestBlock.reason)}`) }}
-                </span>
+                  v-if="riskById.get(p.id)"
+                  class="ext-badge ext-md-risk"
+                  :class="`ext-md-risk--${riskById.get(p.id)}`"
+                >{{ $t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) }) }}</span>
+                  <!-- K2: the Host's source only; none (an unknown channel) shows no badge.
+                       A3: a signed local file names the publisher its id names, the one whose key signed it. -->
+                  <!-- A2-3: a developer folder's badge opens its "Local folder" info card. -->
+                  <button
+                    v-if="p.source === 'developer-unpacked' && developerFolderOf(p.id)"
+                    type="button"
+                    class="ext-folder-info-toggle"
+                    :aria-expanded="folderCardFor === p.id"
+                    @click="toggleFolderCard(p.id)"
+                  >
+                    <PluginSourceBadge :source="p.source" />
+                  </button>
+                  <PluginSourceBadge
+                    v-else-if="p.source"
+                    :source="p.source"
+                    :expires-at="p.expiresAt"
+                    :via="p.testplaceVia"
+                    :signature="p.localSignature"
+                    :publisher="p.localSignature ? p.id.split('.')[0] : undefined"
+                    :local-install="p.localInstall"
+                  />
+                  <!-- d5: Navide blocked the file this local install came from; the label stays.
+                       0.2.28: a withdrawn Testplace build keeps its label the same way. -->
+                  <span
+                    v-if="p.digestBlock"
+                    class="ext-badge ext-digest-blocked-badge"
+                    :data-reason="p.digestBlock.reason ?? 'none'"
+                    :title="$t(p.digestBlock.reason === 'testplace-withdrawn' ? 'settings.extensions.digestBlock.testplaceWithdrawnNote' : 'settings.extensions.digestBlock.note')"
+                  >
+                    {{ $t(`settings.extensions.digestBlock.${digestBlockKey(p.digestBlock.reason)}`) }}
+                  </span>
                 <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                   {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}
                 </span>
@@ -1243,13 +1248,16 @@ watch(installed, () => {
 }
 .ext-md-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-2);
   margin-bottom: var(--space-3);
 }
-.ext-md-toolbar .ext-updates-summary {
-  margin-right: auto;
+.ext-md-toolbar .ext-md-title {
+  margin: 0;
+}
+.ext-md-toolbar .ext-install-file {
+  margin-left: auto;
 }
 .ext-md {
   display: grid;
@@ -1309,9 +1317,13 @@ watch(installed, () => {
 .ext-md-row:hover {
   background: var(--bg-hover);
 }
+/* Selected is a filled row; keyboard focus keeps the outline, so the two never look alike. */
 .ext-md-row[aria-current] {
-  border-color: var(--accent-emphasis);
-  background: var(--bg-base);
+  background: var(--bg-selected);
+  box-shadow: inset 3px 0 0 var(--accent-emphasis);
+}
+.ext-md-row[aria-current] .ext-md-row-name {
+  color: var(--accent-fg);
 }
 .ext-md-row:focus-visible {
   outline: 2px solid var(--accent-focus);
@@ -1321,8 +1333,7 @@ watch(installed, () => {
   display: grid;
   min-width: 0;
 }
-.ext-md-row-name,
-.ext-md-row-sub {
+.ext-md-row-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1332,6 +1343,9 @@ watch(installed, () => {
   font-weight: 600;
 }
 .ext-md-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text-secondary);
   font-size: var(--font-xs);
   font-variant-numeric: tabular-nums;
@@ -1351,6 +1365,11 @@ watch(installed, () => {
   background: var(--risk-fg);
 }
 /* One severity scale for the risk badges: low and caution tinted, High and Highest solid. */
+.ext-badge.ext-md-risk {
+  height: 20px;
+  padding: 0 8px;
+  font-size: var(--font-xs);
+}
 .ext-badge.ext-md-risk--low {
   background: var(--success-subtle);
   color: var(--success-fg);
@@ -1360,8 +1379,8 @@ watch(installed, () => {
   color: var(--attention-fg);
 }
 .ext-badge.ext-md-risk--high {
-  background: var(--risk-fg);
-  color: var(--text-on-emphasis);
+  background: var(--warning-fg);
+  color: var(--bg-base);
 }
 .ext-badge.ext-md-risk--highest {
   background: var(--danger-emphasis);
@@ -1388,7 +1407,24 @@ watch(installed, () => {
 }
 @container ext-pane (max-width: 640px) {
   .ext-md {
-    grid-template-columns: minmax(150px, 180px) minmax(0, 1fr);
+    grid-template-columns: minmax(190px, 210px) minmax(0, 1fr);
+  }
+  .ext-md-detail .ext-card > .ext-actions > .ext-btn-danger {
+    margin-left: 0;
+  }
+  .ext-md-detail .ext-actions > .nv-btn {
+    padding-inline: 9px;
+  }
+  /* The list beside it already shows the icon; the card gives that column to
+     its content so the action row fits on one line. */
+  .ext-md-detail .ext-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ext-md-detail .ext-card > :first-child {
+    display: none;
+  }
+  .ext-md-detail .ext-card.ext-installed > * {
+    grid-column: 1;
   }
   .ext-md-row {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1586,6 +1622,10 @@ watch(installed, () => {
   justify-self: start;
   color: var(--accent-fg);
 }
+/* A text link in the column's line, not an indented button. */
+.extensions-pane .ext-disclosure-link.nv-btn {
+  padding-inline: 0;
+}
 .ext-card > .ext-actions > .ext-btn-danger {
   margin-left: auto;
 }
@@ -1594,6 +1634,9 @@ watch(installed, () => {
   display: grid;
   gap: 4px;
   container: ext-row / inline-size;
+}
+.ext-card-status:not(:has(> *)) {
+  display: none;
 }
 .ext-card-title,
 .ext-card-sub {
@@ -1735,10 +1778,10 @@ watch(installed, () => {
 .ext-badge {
   display: inline-flex;
   align-items: center;
-  height: 18px;
-  padding: 0 7px;
+  height: 20px;
+  padding: 0 8px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   white-space: nowrap;
 }
