@@ -14178,7 +14178,6 @@ async function activateStage(index: number): Promise<void> {
     // A role that failed at pre-spawn gets the same one more try. A slot whose
     // role never landed takes no kickoff and fails the run below: it used to get
     // the kickoff anyway and run as `running` without its role (#448).
-    let roleFailure = ''
     if (pane.injectionStatus === 'skipped' || pane.injectionStatus === 'failed') {
       const retry = pane.injectionStatus === 'failed'
       const role = rolesApi.find(pane.roleKey)
@@ -14195,8 +14194,33 @@ async function activateStage(index: number): Promise<void> {
       pane.injectionStatus = roleOk ? 'sent' : 'failed'
       syncViews()
       if (!roleOk) {
-        roleFailure = 'role prompt never reached the agent'
+        const roleFailure = 'role prompt never reached the agent'
         pipelineLog(`${tag} ✕ ${retry ? 'retried' : 'deferred'} role injection failed (agent didn't react) — not sending the kickoff`)
+        // The failed-kickoff exit below, without a kickoff: the slot's node and
+        // backend record say so, and pipeline.stage_spawn goes first so a resume
+        // continues at this stage (#453). No kickoff was typed, so there is no
+        // echo to route around and nothing for the router to register.
+        pane.kickoffStatus = 'failed'
+        syncViews()
+        pipelineDag.slotStarted(index, slot.label, pane.id)
+        await sendQuiet('pipeline.slot_kickoff', {
+          workspace_path: pipeline.workspacePath,
+          stage_index: index,
+          slot_label: slot.label,
+          kickoff_status: 'failed',
+        })
+        if (pipeline.state === 'running' && pipeline.stageIndex === index) {
+          const stageResp = await sendQuiet<ProjectPayload>('pipeline.stage_spawn', {
+            workspace_path: pipeline.workspacePath,
+            stage_index: index,
+            pane_id: pane.id,
+            agent: slot.agentKey,
+            role: slot.roleKey,
+          })
+          applyProjectPaths(stageResp ?? undefined)
+        }
+        await failRunOnKickoff(index, slot.label, roleFailure)
+        return
       } else {
         pipelineLog(`${tag} ✓ role injected`)
         // Wait for agent to acknowledge the role before injecting kickoff
@@ -14223,9 +14247,9 @@ async function activateStage(index: number): Promise<void> {
         }),
         index, slot.label) +
       sessionMarkerLine(pane.sessionMarker)
-    if (!roleFailure) pipelineLog(`${tag} ➜ injecting kickoff (${kickoff.length} chars)`)
+    pipelineLog(`${tag} ➜ injecting kickoff (${kickoff.length} chars)`)
     let held = false
-    const kickoffResult = roleFailure ? { sent: false, cancelled: false } : await runPipelineKickoff({
+    const kickoffResult = await runPipelineKickoff({
       inject: async () => {
         const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
         const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence)
@@ -14246,9 +14270,9 @@ async function activateStage(index: number): Promise<void> {
       return
     }
     const ok = kickoffResult.sent
-    const failure = roleFailure || (held
+    const failure = held
       ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
-      : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+      : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`
     // Another slot failed the run (or the user stopped it) while this kickoff
     // was in flight: record nothing and arm nothing for a run that is over.
     const runMovedOn = (): boolean => pipeline.state !== 'running' || pipeline.stageIndex !== index
@@ -14291,7 +14315,6 @@ async function activateStage(index: number): Promise<void> {
       kickoff_status: ok ? 'sent' : 'failed',
     })
     if (ok) pipelineLog(`${tag} ✓ kickoff sent`)
-    else if (roleFailure) pipelineLog(`${tag} ✕ kickoff not sent: ${roleFailure}`)
     else pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
 
     // For question-interactive stages (P01): capture scanFrom AFTER kickoff is
