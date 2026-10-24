@@ -16547,6 +16547,9 @@ interface StageRouter {
   /** DISPATCH blocks already routed (target + message, whitespace dropped).
    *  The screen scan and the Manager's reply text can both carry one block. */
   routedDispatches: Set<string>
+  /** Manager replies that ended before the router poll started, which waits
+   *  for every slot's kickoff. startRouterPoll routes them (#539). */
+  earlyTurnTexts: string[]
 }
 const stageRouters = new Map<number, StageRouter>()
 
@@ -16569,6 +16572,7 @@ function ensureStageRouter(stageIndex: number): StageRouter {
       armedAt: 0,
       watchdogFired: false,
       routedDispatches: new Set(),
+      earlyTurnTexts: [],
     }
     stageRouters.set(stageIndex, r)
   }
@@ -16655,6 +16659,12 @@ function startRouterPoll(stageIndex: number): void {
   router.pollHandle = window.setInterval(() => {
     void managerRouterScan(stageIndex)
   }, ROUTER_POLL_MS)
+  const early = router.earlyTurnTexts.splice(0)
+  if (early.length) {
+    void (async () => {
+      for (const text of early) await routeManagerTurnText(router.managerPaneId, text, '')
+    })()
+  }
 }
 
 function disposeStageRouter(stageIndex: number): void {
@@ -17317,21 +17327,36 @@ async function routeManagerDispatch(router: StageRouter, stageId: string, d: Par
   if (router.routedDispatches.has(key)) return
   router.routedDispatches.add(key)
   await markManagerReady(router, stageId, ' (implied by its DISPATCH)')
+  // The Manager believes it has dispatched; a block that went nowhere must say
+  // so to it, or it waits on a worker that never got the task.
+  const tellManager = (reason: string) => injectPane(
+    router.managerPaneId,
+    `[→ DISPATCH NOT DELIVERED to ${d.to}]\n${reason}. Slots you can dispatch to: ${[...router.workerPaneIds.keys()].join(', ')}. Send the DISPATCH again.`,
+    `dispatch-undelivered:${d.to}`,
+    true
+  )
   const target = matchWorkerByLabel(router, d.to)
   if (!target) {
     pipelineLog(
       `Stage ${stageId} 🎯 dispatch ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`,
     )
+    await tellManager(`No slot is named "${d.to}"`)
     return
   }
   const preview = d.message.slice(0, 50).replace(/\s+/g, ' ')
   pipelineLog(`Stage ${stageId} 🎯 → ${target.label}: ${preview}${d.message.length > 50 ? '…' : ''}`)
-  await injectPane(
+  const delivered = await injectPane(
     target.paneId,
     `[→ DISPATCH FROM Manager]\n${d.message}`,
     `manager-dispatch:${target.label}`,
     true
   )
+  if (!delivered) {
+    // Not routed after all: a resend of the same block must go out.
+    router.routedDispatches.delete(key)
+    pipelineLog(`Stage ${stageId} 🎯 ✕ dispatch to ${target.label} not delivered (injection failed)`)
+    await tellManager(`It could not be typed into ${target.label}`)
+  }
 }
 
 /** The Manager's reply, as its reader reported it at turn end, for the stage
@@ -17343,14 +17368,30 @@ async function routeManagerTurnText(paneId: string, text: string, timestamp: str
   if (!text || pipeline.state !== 'running') return
   const router = stageRouters.get(pipeline.stageIndex)
   const stage = stagesApi.stages.value[pipeline.stageIndex]
-  if (!router || !stage || router.finished || !router.armedAt || router.managerPaneId !== paneId) return
+  if (!router || !stage || router.finished || router.managerPaneId !== paneId) return
   const eventMs = timestamp ? Date.parse(timestamp) : NaN
+  if (!router.armedAt) {
+    // The poll starts only once every slot's kickoff is in, so a fast Manager
+    // can finish a turn first, maybe before its workers are wired. Hold the
+    // reply for startRouterPoll; returning here dropped its DISPATCH (#539).
+    if (!Number.isNaN(eventMs) && eventMs < Date.now() - TURN_TEXT_REPLAY_TOLERANCE_MS) return
+    router.earlyTurnTexts.push(text)
+    pipelineLog(`Stage ${stage.id} 🎯 Manager reply held until the router starts`)
+    return
+  }
   if (!Number.isNaN(eventMs) && eventMs < router.armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS) return
   if (findSentinel(text, MANAGER_READY_SENTINEL, 0) >= 0) {
     await markManagerReady(router, stage.id, ' (reply text)')
   }
   for (const d of parseDispatchBlocks(text, 0).items) {
     await routeManagerDispatch(router, stage.id, d)
+  }
+  // A Manager may not ask the user, and nothing but the router prompts it, so a
+  // turn after its kickoff that ends without READY ends Phase 1 all the same.
+  // Holding the workers' messages for the line would deadlock the stage (#539).
+  // The kickoff check keeps a late role-acknowledgement turn out of this.
+  if (!router.managerReady && panes.value.find((p) => p.id === paneId)?.kickoffStatus === 'sent') {
+    await markManagerReady(router, stage.id, ' (its turn ended without it)')
   }
 }
 
