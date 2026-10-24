@@ -196,22 +196,12 @@ watch(installed, refresh)
   font-size: var(--font-md);
   font-weight: 650;
 }
-/* This panel lets third-party code run natively: the warning leads. */
-.native-backends-title::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 1.5px;
-  background: var(--risk-fg);
-  transform: rotate(45deg);
-}
 .native-backends-callout {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--risk-muted);
-  border-left: 3px solid var(--risk-fg);
+  border-left: 2px solid var(--risk-fg);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   background: var(--risk-subtle);
   color: var(--text-primary);
@@ -241,10 +231,34 @@ watch(installed, refresh)
   font-weight: 600;
   cursor: pointer;
 }
-.native-backends-empty {
-  margin: 0;
+/* A switch and the help text right after it read as one card. */
+.native-backends-switch:has(+ .native-backends-description) {
+  margin-bottom: 0;
+  padding-bottom: var(--space-1);
+  border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.native-backends-switch + .native-backends-description {
+  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 14px + var(--space-2));
+  border: 1px solid var(--border-muted);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--bg-subtle);
   color: var(--text-secondary);
   font-size: var(--font-xs);
+}
+.native-backends-switch:has(input:disabled) {
+  cursor: not-allowed;
+  color: var(--text-secondary);
+}
+.native-backends-empty {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  text-align: center;
 }
 .ext-error {
   margin: var(--space-3) 0;

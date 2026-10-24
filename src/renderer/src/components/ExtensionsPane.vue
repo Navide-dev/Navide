@@ -100,6 +100,13 @@ function formatManifestPermissions(permissions: ManifestPermissionsSummary): str
 // A declared scope is what the package says it reaches, shown as written; the
 // Host neither grants nor enforces it.
 function formatManifestScopes(permissions: ManifestPermissionsSummary): string {
+  return manifestScopeGroups(permissions)
+    .map(([key, patterns]) => `${t(`settings.extensionsPolicy.${key}`)} ${patterns.join(', ')}`)
+    .join('; ')
+}
+
+/** The declared scopes by access, non-empty groups only; rendered as chips. */
+function manifestScopeGroups(permissions: ManifestPermissionsSummary): Array<[string, string[]]> {
   const fs = permissions.scopes?.fs
   const read = fs?.read ?? []
   const write = fs?.write ?? []
@@ -108,10 +115,7 @@ function formatManifestScopes(permissions: ManifestPermissionsSummary): string {
     ['scopeReadOnly', read.filter((pattern) => !write.includes(pattern))],
     ['scopeWriteOnly', write.filter((pattern) => !read.includes(pattern))],
   ]
-  return groups
-    .filter(([, patterns]) => patterns.length > 0)
-    .map(([key, patterns]) => `${t(`settings.extensionsPolicy.${key}`)} ${patterns.join(', ')}`)
-    .join('; ')
+  return groups.filter(([, patterns]) => patterns.length > 0)
 }
 
 function manifestScopesLabel(permissions: ManifestPermissionsSummary): string {
@@ -625,7 +629,7 @@ watch(installed, () => {
       </div>
     </div>
 
-    <section class="ext-section">
+    <section class="ext-section" data-settings-section="extensions-bundled">
       <h3 class="ext-section-title">
         {{ $t('settings.extensions.bundled') }}
         <span class="ext-section-count">{{ factoryRows.length }}</span>
@@ -680,17 +684,26 @@ watch(installed, () => {
           <details v-if="p.installed?.manifestPermissions || p.installed?.packageVersion" class="ext-permission-details">
             <summary>{{ $t('settings.extensions.permissionDetails') }}</summary>
             <span v-if="p.installed?.manifestPermissions" class="ext-manifest-permissions">
-              {{ $t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensionsPolicy.manifestPermissions'), value: formatManifestPermissions(p.installed.manifestPermissions) }) }}
+              <span class="ext-perm-label">{{ $t('settings.extensionsPolicy.manifestPermissions') }}</span><span class="ext-perm-value">{{ formatManifestPermissions(p.installed.manifestPermissions) }}</span>
             </span>
-            <span v-if="p.installed?.manifestPermissions?.scopes" class="ext-manifest-scopes">
-              {{ $t('settings.extensionsPolicy.labeledValue', { label: manifestScopesLabel(p.installed.manifestPermissions), value: formatManifestScopes(p.installed.manifestPermissions) }) }}
+            <span v-if="p.installed?.manifestPermissions?.scopes" class="ext-manifest-scopes" :title="formatManifestScopes(p.installed.manifestPermissions)">
+              <span class="ext-perm-label">{{ manifestScopesLabel(p.installed.manifestPermissions) }}</span>
+              <span
+                v-for="[key, patterns] in manifestScopeGroups(p.installed.manifestPermissions)"
+                :key="key"
+                class="ext-scope-group"
+                :data-access="key"
+              >
+                <span class="ext-scope-kind">{{ $t(`settings.extensionsPolicy.${key}`) }}</span>
+                <span class="ext-globs"><code v-for="pattern in patterns" :key="pattern" class="ext-glob">{{ pattern }}</code></span>
+              </span>
             </span>
             <span
               v-if="p.installed?.packageVersion"
               class="ext-package-grant"
               :class="{ 'ext-package-grant-none': !p.installed.packageVersionGrant }"
             >
-              {{ $t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensionsPolicy.packageVersionGrant'), value: formatPackageGrant(p.installed.packageVersionGrant) }) }}
+              <span class="ext-perm-label">{{ $t('settings.extensionsPolicy.packageVersionGrant') }}</span><span class="ext-perm-value">{{ formatPackageGrant(p.installed.packageVersionGrant) }}</span>
             </span>
           </details>
           <div v-if="p.disabled !== undefined || p.installed?.pendingCandidateVersion" class="ext-actions">
@@ -732,6 +745,11 @@ watch(installed, () => {
       <h3 class="ext-section-title">
         {{ $t('settings.extensions.installed') }}
         <span class="ext-section-count">{{ packs.length + nonFactoryInstalled.length }}</span>
+        <!-- Updates are for installed packages; with none installed the line
+             would contradict the empty list below it. -->
+        <span v-if="pluginUpdates.count.value && nonFactoryInstalled.length" class="ext-updates-summary" role="status">
+          {{ $t('settings.extensions.marketplace.updatesCount', { count: pluginUpdates.count.value }) }}
+        </span>
         <!-- Card K3: the user's own action in this window; the main process
              opens the file dialog, so no path ever comes from here. -->
         <button
@@ -742,11 +760,6 @@ watch(installed, () => {
           {{ $t('settings.extensions.localInstall.button') }}
         </button>
       </h3>
-      <!-- Updates are for installed packages; with none installed the line
-           would contradict the empty list below it. -->
-      <p v-if="pluginUpdates.count.value && nonFactoryInstalled.length" class="ext-updates-summary" role="status">
-        {{ $t('settings.extensions.marketplace.updatesCount', { count: pluginUpdates.count.value }) }}
-      </p>
       <ul class="ext-list">
         <li v-for="pack in packs" :key="`pack:${pack.id}`" class="ext-installed ext-pack ext-card" :data-pack-id="pack.id">
           <MarketplaceIcon v-bind="idParts(pack.id)" :label="pack.displayName || idParts(pack.id).name" :size="36" />
@@ -813,6 +826,16 @@ watch(installed, () => {
               </span>
               <span v-else-if="updatesById.get(p.id)" class="ext-badge ext-update-badge">
                 {{ $t('settings.extensions.marketplace.updateAvailableVersion', { version: updatesById.get(p.id)?.latestVersion ?? '' }) }}
+              </span>
+              <!-- Plan B D2: from the Registry's listing, so labelled unverified;
+                   the update itself asks only when the package adds permissions. -->
+              <span
+                v-if="!p.pendingCandidateVersion && updatesById.get(p.id)?.permissionChange"
+                class="ext-badge ext-permission-change"
+                :class="`ext-permission-change--${updatesById.get(p.id)?.permissionChange}`"
+                :title="$t('pluginDisclosure.diff.badgeTitle')"
+              >
+                {{ $t(updatesById.get(p.id)?.permissionChange === 'more' ? 'pluginDisclosure.diff.badgeMore' : 'pluginDisclosure.diff.badgeSame') }}
               </span>
               <span v-if="p.disabled" class="ext-badge ext-disabled-badge" :title="$t('settings.extensions.disabledNote')">
                 {{ $t('settings.extensions.disabledBadge') }}
@@ -887,17 +910,26 @@ watch(installed, () => {
             >
               <summary>{{ p.provenance === 'official-registry' ? $t('settings.extensions.permissionDetailsWithActivity') : $t('settings.extensions.permissionDetails') }}</summary>
               <span v-if="p.manifestPermissions" class="ext-manifest-permissions">
-                {{ $t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensionsPolicy.manifestPermissions'), value: formatManifestPermissions(p.manifestPermissions) }) }}
+                <span class="ext-perm-label">{{ $t('settings.extensionsPolicy.manifestPermissions') }}</span><span class="ext-perm-value">{{ formatManifestPermissions(p.manifestPermissions) }}</span>
               </span>
-              <span v-if="p.manifestPermissions?.scopes" class="ext-manifest-scopes">
-                {{ $t('settings.extensionsPolicy.labeledValue', { label: manifestScopesLabel(p.manifestPermissions), value: formatManifestScopes(p.manifestPermissions) }) }}
+              <span v-if="p.manifestPermissions?.scopes" class="ext-manifest-scopes" :title="formatManifestScopes(p.manifestPermissions)">
+                <span class="ext-perm-label">{{ manifestScopesLabel(p.manifestPermissions) }}</span>
+                <span
+                  v-for="[key, patterns] in manifestScopeGroups(p.manifestPermissions)"
+                  :key="key"
+                  class="ext-scope-group"
+                  :data-access="key"
+                >
+                  <span class="ext-scope-kind">{{ $t(`settings.extensionsPolicy.${key}`) }}</span>
+                  <span class="ext-globs"><code v-for="pattern in patterns" :key="pattern" class="ext-glob">{{ pattern }}</code></span>
+                </span>
               </span>
               <span
                 v-if="p.packageVersion"
                 class="ext-package-grant"
                 :class="{ 'ext-package-grant-none': !p.packageVersionGrant }"
               >
-                {{ $t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensionsPolicy.packageVersionGrant'), value: formatPackageGrant(p.packageVersionGrant) }) }}
+                <span class="ext-perm-label">{{ $t('settings.extensionsPolicy.packageVersionGrant') }}</span><span class="ext-perm-value">{{ formatPackageGrant(p.packageVersionGrant) }}</span>
               </span>
               <!-- Plan B D-f: the plugin's activity, mounted (and read) only
                    while this section is open, so the page gains no element. -->
@@ -929,16 +961,6 @@ watch(installed, () => {
             >
               {{ $t('settings.extensions.marketplace.update') }}
             </button>
-            <!-- Plan B D2: from the Registry's listing, so labelled unverified;
-                 the update itself asks only when the package adds permissions. -->
-            <span
-              v-if="!p.pendingCandidateVersion && updatesById.get(p.id)?.permissionChange"
-              class="ext-badge ext-permission-change"
-              :class="`ext-permission-change--${updatesById.get(p.id)?.permissionChange}`"
-              :title="$t('pluginDisclosure.diff.badgeTitle')"
-            >
-              {{ $t(updatesById.get(p.id)?.permissionChange === 'more' ? 'pluginDisclosure.diff.badgeMore' : 'pluginDisclosure.diff.badgeSame') }}
-            </span>
             <button
               v-if="p.pendingCandidateVersion"
               class="ext-restart nv-btn nv-btn--primary nv-btn--sm"
@@ -1146,14 +1168,6 @@ watch(installed, () => {
   font-size: var(--font-2xs);
   overflow-wrap: anywhere;
 }
-.ext-section-title::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 1.5px;
-  background: var(--accent-fg);
-  transform: rotate(45deg);
-}
 .ext-section-count {
   min-width: 20px;
   height: 18px;
@@ -1174,11 +1188,6 @@ watch(installed, () => {
   display: grid;
   gap: var(--space-2);
 }
-/* Bundled packages: compact tiles side by side, all one height, their
-   actions on the bottom edge. */
-.ext-bundled-list {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
-}
 .ext-installed {
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-muted);
@@ -1193,6 +1202,7 @@ watch(installed, () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  container: ext-row / inline-size;
 }
 .ext-factory .ext-actions {
   margin-top: auto;
@@ -1213,16 +1223,27 @@ watch(installed, () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Icon on the left; the name, badges and details beside it; the actions on
+   their own row under the details, so a long action list never squeezes the
+   name. The destructive action is pushed to the far end of that row. */
 .ext-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
+}
+.ext-card > .ext-actions {
+  grid-column: 2;
+  justify-content: flex-start;
+}
+.ext-card > .ext-actions > .ext-btn-danger {
+  margin-left: auto;
 }
 .ext-card-main {
   min-width: 0;
   display: grid;
   gap: 4px;
+  container: ext-row / inline-size;
 }
 .ext-card-title,
 .ext-card-sub {
@@ -1345,13 +1366,14 @@ watch(installed, () => {
 }
 .ext-permission-details[open] {
   display: grid;
-  gap: 2px;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  border: 1px solid var(--border-muted);
   border-radius: var(--radius-sm);
-  background: var(--bg-inset);
+  background: var(--bg-base);
+  font-size: var(--font-xs);
 }
 .ext-permission-details[open] summary {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
 }
 /* No grant is the common case for a version nobody has granted anything yet;
    keep it readable but quieter than an actual grant. */
@@ -1413,17 +1435,112 @@ watch(installed, () => {
   color: var(--risk-fg);
 }
 .ext-updates-summary {
-  margin: -4px 0 var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-subtle);
   color: var(--accent-fg);
-  font-size: var(--font-xs);
+  font-size: var(--font-2xs);
+  font-weight: 600;
 }
-.ext-manifest-scopes {
+/* Opened permissions read as a two-column table: what is declared or granted
+   on the left, the value on the right. Below 520px the label stacks on top. */
+.ext-manifest-permissions,
+.ext-manifest-scopes,
+.ext-package-grant {
+  display: grid;
+  grid-template-columns: minmax(110px, 190px) minmax(0, 1fr);
+  gap: 6px var(--space-3);
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-muted);
+}
+.ext-permission-details summary + * {
+  border-top: 0;
+}
+.ext-perm-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.ext-perm-value {
+  color: var(--text-primary);
   overflow-wrap: anywhere;
 }
+.ext-scope-group {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.ext-scope-group + .ext-scope-group {
+  margin-top: 2px;
+}
+/* The access level leads each group; write access is tinted so it stands out
+   from read-only reach at a glance. */
+.ext-scope-kind {
+  flex: 0 0 auto;
+  min-width: 92px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.ext-scope-group[data-access='scopeReadWrite'] .ext-scope-kind,
+.ext-scope-group[data-access='scopeWriteOnly'] .ext-scope-kind {
+  color: var(--risk-fg);
+}
+.ext-globs {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: min(100%, 160px);
+}
+.ext-glob {
+  max-width: 100%;
+  padding: 1px 6px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-xs);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-2xs);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+@container ext-row (max-width: 640px) {
+  .ext-manifest-permissions,
+  .ext-manifest-scopes,
+  .ext-package-grant {
+    grid-template-columns: minmax(96px, 150px) minmax(0, 1fr);
+  }
+  .ext-scope-kind {
+    flex-basis: 100%;
+  }
+}
+@container ext-row (max-width: 520px) {
+  .ext-manifest-permissions,
+  .ext-manifest-scopes,
+  .ext-package-grant {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ext-scope-group {
+    grid-column: 1;
+  }
+}
+/* A first-party package's plain-language risk disclosure: a quiet callout,
+   readable at body size, rather than a block of coloured text. */
 .ext-risk-note {
   margin: 0;
-  color: var(--risk-fg);
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--risk-fg);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--risk-subtle);
+  color: var(--text-primary);
   font-size: var(--font-xs);
+  line-height: var(--lh-base);
 }
 .ext-incompatible-reason {
   margin: 0;

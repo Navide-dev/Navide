@@ -119,19 +119,21 @@ onBeforeUnmount(stopPolling)
         :has-views="entry.hasViews"
       />
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>
-      <h4>{{ $t('pluginActivity.overview.activity') }}</h4>
-      <template v-if="entry.report">
-        <p>{{ $t('pluginActivity.totals', entry.report.totals) }}</p>
-        <p v-if="entry.report.undeclared.length" class="nv-overview-undeclared">
-          {{ $t('pluginActivity.overview.undeclaredCount', { count: entry.report.undeclared.reduce((sum, u) => sum + u.count, 0) }) }}
-        </p>
-        <p v-if="entry.report.anomalies.length">{{ $t('pluginActivity.overview.anomalyCount', { count: entry.report.anomalies.length }) }}</p>
-      </template>
-      <p v-else-if="entry.reportError" class="nv-overview-muted">{{ $t('pluginActivity.unavailable', { error: entry.reportError }) }}</p>
-      <details class="nv-overview-details" @toggle="onToggle(entry.id, $event)">
-        <summary>{{ $t('pluginActivity.tab') }}</summary>
-        <PluginActivityPanel v-if="open.has(entry.id)" :plugin-id="entry.id" :poll-ms="props.pollMs" :paused="props.paused" />
-      </details>
+      <div class="nv-overview-activity">
+        <h4>{{ $t('pluginActivity.overview.activity') }}</h4>
+        <template v-if="entry.report">
+          <p class="nv-overview-totals">{{ $t('pluginActivity.totals', entry.report.totals) }}</p>
+          <p v-if="entry.report.undeclared.length" class="nv-overview-undeclared">
+            {{ $t('pluginActivity.overview.undeclaredCount', { count: entry.report.undeclared.reduce((sum, u) => sum + u.count, 0) }) }}
+          </p>
+          <p v-if="entry.report.anomalies.length" class="nv-overview-anomalies">{{ $t('pluginActivity.overview.anomalyCount', { count: entry.report.anomalies.length }) }}</p>
+        </template>
+        <p v-else-if="entry.reportError" class="nv-overview-muted">{{ $t('pluginActivity.unavailable', { error: entry.reportError }) }}</p>
+        <details class="nv-overview-details" @toggle="onToggle(entry.id, $event)">
+          <summary>{{ $t('pluginActivity.tab') }}</summary>
+          <PluginActivityPanel v-if="open.has(entry.id)" :plugin-id="entry.id" :poll-ms="props.pollMs" :paused="props.paused" />
+        </details>
+      </div>
     </article>
   </div>
 </template>
@@ -140,8 +142,9 @@ onBeforeUnmount(stopPolling)
 .nv-overview {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-4);
+  gap: var(--space-3);
+  /* Same 22px gutter as the settings blocks above it on the page. */
+  padding: var(--space-1) 22px var(--space-6);
   font-size: var(--font-sm);
 }
 .nv-overview p,
@@ -149,23 +152,121 @@ onBeforeUnmount(stopPolling)
 .nv-overview h4 {
   margin: 0;
 }
+.nv-overview-intro {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  line-height: var(--lh-base);
+}
 .nv-overview-entry {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+.nv-overview-name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--text-bright);
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+.nv-overview-name .nv-overview-muted {
+  font-size: var(--font-xs);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+/* The shared disclosure card bolds its whole summary for the install dialog;
+   in a list of several plugins that becomes a wall, so it is regular weight here. */
+.nv-overview-entry :deep(.nv-disclosure-summary) {
+  font-weight: 500;
+  color: var(--text-bright);
+  line-height: var(--lh-base);
+}
+/* Recent activity: an inset strip, its counts on one line and the two kinds of
+   trouble as tagged lines rather than loose coloured text. */
+.nv-overview-activity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  font-size: var(--font-xs);
+}
+.nv-overview-activity h4 {
+  flex-basis: 100%;
+}
+.nv-overview-totals {
+  font-variant-numeric: tabular-nums;
+}
+.nv-overview-undeclared,
+.nv-overview-anomalies {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+}
+.nv-overview-undeclared::before,
+.nv-overview-anomalies::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.nv-overview-anomalies {
+  background: var(--attention-subtle);
+  color: var(--attention-fg);
+  font-weight: 600;
+}
+.nv-overview-details {
+  flex-basis: 100%;
+}
+.nv-overview-entry h4 {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 600;
 }
 .nv-overview-muted {
   color: var(--text-secondary);
 }
+/* Empty and loading states sit in a dashed well, like the empty installed list. */
+.nv-overview > .nv-overview-muted {
+  padding: var(--space-4);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: var(--font-xs);
+  text-align: center;
+}
 .nv-overview-undeclared {
+  background: var(--danger-subtle);
   color: var(--danger-fg);
   font-weight: 600;
 }
 .nv-overview-growing {
   color: var(--attention-fg);
   font-weight: 600;
+}
+.nv-overview-details summary {
+  width: max-content;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+.nv-overview-details summary:hover {
+  color: var(--text-primary);
+}
+.nv-overview-details summary:focus-visible {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: 2px;
 }
 </style>

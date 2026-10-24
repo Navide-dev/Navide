@@ -427,7 +427,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
     <p v-if="notice" class="ep-notice" role="status">{{ notice }}</p>
     <div v-if="externalUpdate" class="ep-conflict" role="alert">
       <span>{{ $t('settings.executionPolicy.externalUpdate') }}</span>
-      <button type="button" :disabled="busy" @click="reloadLatest">
+      <button type="button" class="nv-btn nv-btn--sm" :disabled="busy" @click="reloadLatest">
         {{ $t('settings.executionPolicy.reloadLatest') }}
       </button>
     </div>
@@ -487,7 +487,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <div v-if="draftIsHighRisk" class="ep-full-warning" role="alert">
         {{ $t(highRiskWarningKey(draft.mode)) }}
         <label class="ep-confirm-label">
-          <input v-model="fullConfirmed" type="checkbox" class="ep-full-confirmation" />
+          <input v-model="fullConfirmed" type="checkbox" class="ep-full-confirmation nv-check" />
           {{ $t(highRiskConfirmationKey(draft.mode)) }}
         </label>
       </div>
@@ -500,6 +500,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
             <label v-for="namespace in systemNamespaces" :key="namespace">
               <input
                 type="checkbox"
+                class="nv-check"
                 :checked="draft.system.includes(namespace)"
                 :data-system="namespace"
                 @change="toggleSystem(namespace)"
@@ -517,11 +518,13 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
           <form class="ep-shell-add" @submit.prevent="addShell">
             <input
               v-model="shellInput"
+              class="nv-input"
+              :aria-label="$t(`settings.executionPolicy.${draft.mode === 'denylist' ? 'shellDenylistLabel' : 'shellAllowlistLabel'}`)"
               :placeholder="$t('settings.executionPolicy.shellPlaceholder')"
               :aria-invalid="Boolean(shellInputError)"
               pattern="[A-Za-z0-9][A-Za-z0-9._+-]*"
             />
-            <button type="submit" :disabled="!shellInput.trim()">{{ $t('settings.executionPolicy.add') }}</button>
+            <button type="submit" class="nv-btn" :disabled="!shellInput.trim()">{{ $t('settings.executionPolicy.add') }}</button>
           </form>
           <p v-if="shellInputError" class="ep-error" role="alert">{{ shellInputError }}</p>
           <div v-if="draft.shell.length" class="ep-chip-list">
@@ -535,8 +538,8 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       </template>
 
       <div class="ep-actions">
-        <button class="ep-save" :disabled="!canSave" @click="save">{{ $t('settings.executionPolicy.save') }}</button>
-        <button class="ep-reset" :disabled="busy || !hasUserPolicy || !policyMutationAvailable" @click="resetUser">{{ $t('settings.executionPolicy.resetUser') }}</button>
+        <button class="ep-save nv-btn nv-btn--primary" :disabled="!canSave" @click="save">{{ $t('settings.executionPolicy.save') }}</button>
+        <button class="ep-reset nv-btn" :disabled="busy || !hasUserPolicy || !policyMutationAvailable" @click="resetUser">{{ $t('settings.executionPolicy.resetUser') }}</button>
       </div>
     </section>
 
@@ -573,7 +576,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       </ul>
       <button
         v-if="snapshot.sourceRecovery.canReset && !sourceResetArmed"
-        class="ep-reset-sources"
+        class="ep-reset-sources nv-btn nv-btn--sm"
         :disabled="busy"
         type="button"
         @click="armSourceReset"
@@ -581,12 +584,12 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <form v-if="sourceResetArmed" class="ep-source-reset-confirm" role="dialog" aria-modal="true" @submit.prevent="resetSourceSelections">
         <p>{{ $t('settings.executionPolicy.resetSourceSelectionsBody') }}</p>
         <label>
-          <input v-model="sourceResetConfirmed" type="checkbox" />
+          <input v-model="sourceResetConfirmed" type="checkbox" class="nv-check" />
           {{ $t('settings.executionPolicy.resetSourceSelectionsCheck') }}
         </label>
         <div class="ep-actions">
-          <button type="submit" :disabled="!sourceResetConfirmed || busy">{{ $t('settings.executionPolicy.resetSourceSelectionsConfirm') }}</button>
-          <button type="button" @click="cancelSourceReset">{{ $t('settings.executionPolicy.cancel') }}</button>
+          <button type="submit" class="nv-btn nv-btn--danger nv-btn--sm" :disabled="!sourceResetConfirmed || busy">{{ $t('settings.executionPolicy.resetSourceSelectionsConfirm') }}</button>
+          <button type="button" class="nv-btn nv-btn--sm" @click="cancelSourceReset">{{ $t('settings.executionPolicy.cancel') }}</button>
         </div>
       </form>
     </section>
@@ -606,13 +609,13 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <div v-if="recommendation.state === 'valid' && recommendationIsHighRisk" class="ep-warning">
         <p>{{ $t(highRiskWarningKey(recommendation.policy?.mode)) }}</p>
         <label>
-          <input v-model="repositoryFullConfirmed" type="checkbox" class="ep-repository-full-confirmation" />
+          <input v-model="repositoryFullConfirmed" type="checkbox" class="ep-repository-full-confirmation nv-check" />
           {{ $t(highRiskConfirmationKey(recommendation.policy?.mode)) }}
         </label>
       </div>
       <button
         v-if="recommendation.state === 'valid' && recommendation.fingerprint && workspaceSnapshot?.selectedSource !== 'repository'"
-        class="ep-accept-recommendation"
+        class="ep-accept-recommendation nv-btn"
         :disabled="busy || repositoryNeedsConfirmation"
         @click="selectSource('repository')"
       >{{ $t('settings.executionPolicy.acceptRecommendation') }}</button>
@@ -632,22 +635,22 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <ul v-if="snapshot.recovery.unsafePaths.length" class="ep-path-list">
         <li v-for="path in snapshot.recovery.unsafePaths" :key="path"><code>{{ path }}</code></li>
       </ul>
-      <button v-if="snapshot.recovery.canRebuild && !rebuildArmed" class="ep-rebuild" :disabled="busy" @click="armRebuild">
+      <button v-if="snapshot.recovery.canRebuild && !rebuildArmed" class="ep-rebuild nv-btn nv-btn--sm" :disabled="busy" @click="armRebuild">
         {{ $t('settings.executionPolicy.rebuild') }}
       </button>
       <button
         v-if="snapshot.recovery.state === 'unsafe-entry' || snapshot.recovery.state === 'directory-unsafe' || snapshot.recovery.state === 'directory-unavailable' || snapshot.sourceRecovery.state === 'unsafe-entry' || snapshot.sourceRecovery.state === 'unavailable'"
-        class="ep-recheck"
+        class="ep-recheck nv-btn nv-btn--sm"
         :disabled="busy"
         type="button"
         @click="reloadLatest"
       >{{ $t('settings.executionPolicy.recheck') }}</button>
       <form v-if="rebuildArmed" class="ep-rebuild-confirm" @submit.prevent="rebuild">
         <p>{{ $t('settings.executionPolicy.rebuildConfirmBody') }}</p>
-        <label><input v-model="rebuildConfirmed" type="checkbox" /> {{ $t('settings.executionPolicy.rebuildConfirmCheck') }}</label>
+        <label><input v-model="rebuildConfirmed" type="checkbox" class="nv-check" /> {{ $t('settings.executionPolicy.rebuildConfirmCheck') }}</label>
         <div class="ep-actions">
-          <button type="submit" :disabled="!rebuildConfirmed || busy">{{ $t('settings.executionPolicy.rebuildConfirm') }}</button>
-          <button type="button" @click="cancelRebuild">{{ $t('settings.executionPolicy.cancel') }}</button>
+          <button type="submit" class="nv-btn nv-btn--danger nv-btn--sm" :disabled="!rebuildConfirmed || busy">{{ $t('settings.executionPolicy.rebuildConfirm') }}</button>
+          <button type="button" class="nv-btn nv-btn--sm" @click="cancelRebuild">{{ $t('settings.executionPolicy.cancel') }}</button>
         </div>
       </form>
     </section>
@@ -658,54 +661,179 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .execution-policy-pane {
   /* The Extensions page that hosts this pane owns the scroll, so this is a
      plain block: a second scroller here would split one page into two. */
-  padding: 0 22px 24px;
+  padding: 0 22px var(--space-2);
   font-size: var(--font-sm);
+  color: var(--text-primary);
 }
+/* Each part of the policy is a titled group separated by a hairline, the same
+   rhythm the settings cards use, so the editor reads as one form. */
 .ep-section {
-  margin: 0 0 22px;
-  padding: 16px 0 0;
+  margin: 0 0 var(--space-5);
+  padding: var(--space-5) 0 0;
   border-top: 1px solid var(--border-muted);
 }
-.ep-section:first-of-type { border-top: 0; padding-top: 0; }
-.ep-section-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
-.ep-section h2 { margin: 0; font-size: 15px; color: var(--text-bright); }
-.ep-section h3 { margin: 0 0 4px; font-size: 13px; color: var(--text-bright); }
-.ep-hint, .ep-summary, .ep-recommendation-state, .ep-empty { color: var(--text-secondary); margin: 5px 0 10px; line-height: 1.45; }
-.ep-loading, .ep-notice, .ep-error { margin: 0 0 10px; }
-.ep-error, .ep-warning { color: var(--text-danger, #c44); }
-.ep-notice { color: var(--text-success, #1a7f37); }
-.ep-readonly, .ep-untrusted, .ep-status { font-size: var(--font-2xs); color: var(--text-secondary); }
-.ep-untrusted { color: #c77400; }
-.ep-status { padding: 2px 6px; border-radius: 4px; background: var(--bg-subtle); }
-.ep-status-active, .ep-status-healthy { color: var(--text-success, #1a7f37); }
-.ep-status-corrupt, .ep-status-stale, .ep-status-unavailable, .ep-status-unsafe-entry, .ep-status-directory-unsafe, .ep-status-directory-unavailable { color: #c77400; }
-.ep-policy-card, .ep-rebuild-confirm { padding: 10px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-card); background: var(--bg-subtle); line-height: 1.7; }
-.ep-conflict { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; padding: 9px 12px; border: 1px solid #c77400; border-radius: var(--radius-card); background: rgba(199, 116, 0, .1); color: var(--text-bright); }
+.ep-section:first-of-type { border-top: 0; padding-top: var(--space-1); }
+.ep-section:last-child { margin-bottom: 0; }
+.ep-section-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
+.ep-section h2 { margin: 0; font-size: var(--font-row-title, var(--font-md)); font-weight: 600; color: var(--text-bright); }
+.ep-section h3 { margin: 0 0 2px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
+.ep-hint, .ep-summary, .ep-recommendation-state, .ep-empty {
+  margin: 2px 0 var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  line-height: var(--lh-base);
+}
+.ep-summary { font-size: var(--font-sm); color: var(--text-primary); }
+.ep-summary strong { color: var(--text-bright); font-weight: 600; }
+.ep-loading, .ep-notice, .ep-error { margin: 0 0 var(--space-3); font-size: var(--font-xs); }
+.ep-error, .ep-warning { color: var(--danger-fg); }
+.ep-warning { font-size: var(--font-xs); line-height: var(--lh-base); }
+.ep-notice { color: var(--success-fg); }
+/* Small status words beside a heading: a quiet pill, coloured by meaning. */
+.ep-readonly, .ep-untrusted, .ep-status {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: var(--font-2xs);
+  font-weight: 600;
+}
+.ep-untrusted { background: var(--risk-subtle); color: var(--risk-fg); }
+.ep-status-active, .ep-status-healthy { background: var(--success-subtle); color: var(--success-fg); }
+.ep-status-corrupt, .ep-status-stale, .ep-status-unavailable, .ep-status-unsafe-entry, .ep-status-directory-unsafe, .ep-status-directory-unavailable { background: var(--risk-subtle); color: var(--risk-fg); }
+/* Read-only policies: one quiet line per field. */
+.ep-policy-card {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+  font-size: var(--font-xs);
+  line-height: var(--lh-base);
+}
+.ep-policy-card strong { color: var(--text-secondary); font-weight: 500; }
+.ep-rebuild-confirm, .ep-source-reset-confirm {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--danger-muted);
+  border-radius: var(--radius-card);
+  background: var(--danger-subtle);
+  font-size: var(--font-xs);
+  line-height: var(--lh-base);
+}
+.ep-rebuild-confirm p, .ep-source-reset-confirm p { margin-top: 0; }
+.ep-rebuild-confirm label, .ep-source-reset-confirm label { display: flex; align-items: center; gap: var(--space-2); }
+.ep-conflict {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--risk-muted);
+  border-radius: var(--radius-card);
+  background: var(--risk-subtle);
+  color: var(--text-bright);
+  font-size: var(--font-xs);
+}
 .ep-conflict button { flex: 0 0 auto; }
-.ep-recommendation-policy { margin: 8px 0 10px; }
-.ep-mode-list, .ep-source-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
-.ep-mode-option, .ep-source-option { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--border-default); border-radius: var(--radius-control); }
-.ep-source-option { min-width: 150px; }
-.ep-source-option span { display: flex; flex-direction: column; gap: 2px; }
-.ep-source-option small { color: var(--text-secondary); }
-.ep-full-warning { padding: 10px 12px; border-left: 3px solid #c77400; background: rgba(199, 116, 0, .1); line-height: 1.5; }
-.ep-confirm-label { display: block; margin-top: 9px; font-weight: 600; }
-.ep-editor-block { margin: 14px 0; }
-.ep-checkbox-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-.ep-checkbox-grid label { display: flex; gap: 6px; align-items: center; }
-.ep-shell-add { display: flex; gap: 8px; }
-.ep-shell-add input { min-width: 180px; }
-.ep-chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-.ep-chip { display: inline-flex; gap: 5px; align-items: center; padding: 3px 7px; border-radius: 999px; background: var(--bg-subtle); border: 1px solid var(--border-default); }
-.ep-chip button { border: 0; padding: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
-.ep-path-list { margin: 7px 0 10px; padding-left: 20px; color: var(--text-secondary); }
+.ep-recommendation-policy { margin: var(--space-2) 0 var(--space-3); }
+/* Mode and source choices are selectable cards: the whole card is the hit
+   target, and the checked one carries the accent. */
+.ep-mode-list, .ep-source-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-4);
+}
+.ep-mode-option, .ep-source-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-h-lg);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--bg-base);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
+}
+.ep-mode-option:hover, .ep-source-option:hover:not(:has(input:disabled)) { border-color: var(--border-strong); }
+.ep-mode-option:has(input:checked), .ep-source-option:has(input:checked) {
+  border-color: var(--accent-emphasis);
+  background: var(--accent-subtle);
+  color: var(--text-bright);
+}
+.ep-mode-option:has(input:focus-visible), .ep-source-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: 1px;
+}
+.ep-source-option:has(input:disabled) { cursor: not-allowed; opacity: 0.55; }
+.ep-mode-option input, .ep-source-option input { margin: 0; accent-color: var(--accent-emphasis); }
+.ep-source-option span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ep-source-option strong { font-weight: 500; }
+.ep-source-option small { color: var(--text-secondary); font-size: var(--font-2xs); }
+.ep-full-warning, .ep-warning:has(label) {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--risk-fg);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--risk-subtle);
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  line-height: var(--lh-base);
+}
+.ep-warning:has(label) p { margin: 0; }
+.ep-confirm-label, .ep-warning:has(label) label { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); font-weight: 600; }
+.ep-editor-block {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-card);
+  background: var(--bg-subtle);
+}
+.ep-editor-block .ep-hint { margin-bottom: var(--space-2); }
+.ep-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr));
+  gap: var(--space-1) var(--space-3);
+}
+.ep-checkbox-grid label { display: flex; gap: var(--space-2); align-items: center; min-height: var(--control-h-sm); cursor: pointer; }
+.ep-checkbox-grid code, .ep-chip code { font-family: var(--font-mono); font-size: var(--font-xs); }
+.ep-shell-add { display: flex; gap: var(--space-2); }
+.ep-shell-add input { flex: 0 1 240px; min-width: 0; }
+.ep-chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
+.ep-chip {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  height: 24px;
+  padding: 0 2px 0 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--bg-base);
+}
+.ep-chip button {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.ep-chip button:hover { background: var(--bg-hover-strong); color: var(--text-bright); }
+.ep-chip button:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: 1px; }
+.ep-empty { margin-top: var(--space-2); font-style: italic; }
+.ep-path-list { margin: var(--space-2) 0 var(--space-3); padding-left: 20px; color: var(--text-secondary); font-size: var(--font-xs); }
 .ep-path-list code { overflow-wrap: anywhere; }
-.ep-actions { display: flex; gap: 8px; margin-top: 14px; }
-.ep-actions button, .ep-accept-recommendation, .ep-rebuild, .ep-reset-sources, .ep-recheck { transition: filter var(--motion-fast) var(--ease-out); }
-.ep-actions button:hover:not(:disabled), .ep-accept-recommendation:hover:not(:disabled), .ep-rebuild:hover:not(:disabled), .ep-reset-sources:hover:not(:disabled), .ep-recheck:hover:not(:disabled) { filter: brightness(.93); }
-.ep-rebuild-confirm { margin-top: 10px; }
-.ep-rebuild-confirm p { margin-top: 0; }
-.ep-source-reset-confirm { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-card); background: var(--bg-subtle); line-height: 1.5; }
-.ep-source-reset-confirm p { margin-top: 0; }
-.ep-recheck { margin-left: 8px; }
+.ep-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.ep-recheck { margin-left: var(--space-2); }
 </style>
