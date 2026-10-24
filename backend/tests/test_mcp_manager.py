@@ -19,10 +19,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent_team_backend.mcp_manager import (
+    ClientSession,
     MCPClient,
     MCPManager,
     MCPServerConfig,
     _default_config,
+    _exit_code,
     load_mcp_config,
     stderr_log_path,
 )
@@ -892,6 +894,56 @@ class TestColdStart:
         assert client.status == "error" and not client.ready
         assert "exited with code 3" in client.error
         assert "404 Not Found" in client.stderr_tail()
+
+    @staticmethod
+    def _cancel_transport_once_the_server_exits(client: MCPClient, monkeypatch, *, then=None) -> None:
+        """Make initialize run only once the stdio server has exited, after the
+        transport's task group has cancelled its scope — what stdio_client does
+        when writing initialize to the dead server's stdin fails (its writer
+        catches ClosedResourceError only, not BrokenResourceError)."""
+        real = ClientSession.initialize
+
+        async def initialize(session):
+            deadline = time.monotonic() + 10
+            while _exit_code(client._process) is None and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            client._transport_cm.gen.ag_frame.f_locals["tg"].cancel_scope.cancel()
+            if then is not None:
+                then()
+            return await real(session)
+
+        monkeypatch.setattr(ClientSession, "initialize", initialize)
+
+    @pytest.mark.asyncio
+    async def test_a_server_that_exits_mid_initialize_fails_with_the_reason_not_a_cancel(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        # The liveness poll must not get to see the exit first.
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        self._cancel_transport_once_the_server_exits(client, monkeypatch)
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert "404 Not Found" in client.stderr_tail()
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_a_cancel_of_start_itself_still_propagates_when_the_server_exits(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        starting: list[asyncio.Task] = []
+        # Shutdown cancelling the startup, at the same moment.
+        self._cancel_transport_once_the_server_exits(client, monkeypatch, then=lambda: starting[0].cancel())
+        starting.append(asyncio.create_task(client.start()))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(starting[0], timeout=20)
+        assert client._transport_cm is None and client._session_cm is None
 
     @pytest.mark.asyncio
     async def test_the_hard_cap_ends_a_server_that_never_answers(self, tmp_path, fast_polling, monkeypatch):
