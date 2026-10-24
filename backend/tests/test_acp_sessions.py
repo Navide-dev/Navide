@@ -799,3 +799,75 @@ async def test_an_agent_killed_while_its_exit_is_reported_closes_its_job_once(re
         assert fake_jobs["closed"] == [1000]
     finally:
         await svc.kill_all()
+
+
+@pytest.fixture
+def spawned_procs(monkeypatch: pytest.MonkeyPatch) -> list[asyncio.subprocess.Process]:
+    """Every agent process acp_sessions spawns, to check its transport."""
+    procs: list[asyncio.subprocess.Process] = []
+    real = acp_sessions._spawn
+
+    async def spawn(*args: Any, **kwargs: Any) -> asyncio.subprocess.Process:
+        proc = await real(*args, **kwargs)
+        procs.append(proc)
+        return proc
+
+    monkeypatch.setattr(acp_sessions, "_spawn", spawn)
+    return procs
+
+
+def _breakaway_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    # As psutil can on Windows: ending the leftovers raises another OSError.
+    from agent_team_backend import terminals
+
+    def fail(descendants: dict[int, str]) -> None:
+        raise OSError("process table unreadable")
+
+    monkeypatch.setattr(terminals, "_kill_breakaway", fail)
+
+
+@pytest.mark.filterwarnings("error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning")
+async def test_a_failed_start_closes_the_pipes_even_when_ending_its_leftovers_fails(
+    service, spawned_procs, fake_jobs, monkeypatch, tmp_path,
+) -> None:
+    # The agent outlives the tree's end (it ignores stdin EOF and SIGTERM), so
+    # nothing but the explicit close shuts its transport (and the agent).
+    from agent_team_backend import osplat
+
+    fake_jobs["kill"] = False
+    monkeypatch.setattr(acp_sessions, "_TERM_GRACE_S", 0.2)
+    pidfile = tmp_path / "pids"
+    monkeypatch.setenv("ACP_FAKE_PIDFILE", str(pidfile))
+
+    def unwritable(pid: int, argv: list[str]) -> None:
+        raise OSError("registry unwritable")
+
+    monkeypatch.setattr(pty_registry, "register", unwritable)
+    _breakaway_fails(monkeypatch)
+    try:
+        with pytest.raises(OSError):
+            await service.create(pane_id="p1", agent_key="fake", argv=_argv("stubborn"), cwd=str(tmp_path))
+
+        [proc] = spawned_procs
+        assert proc._transport.is_closing()  # noqa: SLF001 — closed now, not by the collector
+        await _until(lambda: not _alive(proc.pid))  # close() ended it
+    finally:
+        for pid in [*fake_jobs["pids"], *(int(p) for p in pidfile.read_text().split() if pidfile.exists())]:
+            with contextlib.suppress(OSError):
+                osplat.process_tree.kill_tree(pid, force=True)
+
+
+@pytest.mark.filterwarnings("error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning")
+async def test_kill_closes_the_pipes_and_forgets_the_session_even_when_a_step_fails(
+    service, spawned_procs, monkeypatch, tmp_path,
+) -> None:
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+    _breakaway_fails(monkeypatch)
+
+    with pytest.raises(OSError):
+        await service.kill(session.id)
+
+    [proc] = spawned_procs
+    assert proc._transport.is_closing()  # noqa: SLF001
+    assert service.get(session.id) is None
+    assert service.events.states()[-1] == "exited"
