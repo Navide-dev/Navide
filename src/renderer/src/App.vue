@@ -16570,7 +16570,7 @@ const ROUTER_POLL_MS = 4_000
 /** How long a Manager that ended its turn without ---MANAGER-READY--- must sit
  *  idle, with worker messages held for it, before the router hands them over
  *  anyway (#539). */
-const MANAGER_READY_FALLBACK_MS = 90_000
+const MANAGER_READY_FALLBACK_MS = 180_000
 const MANAGER_READY_REMINDER =
   `[→ PIPELINE NOTICE]\nYour turn ended without ${MANAGER_READY_SENTINEL}. The other slots' ASK and REPORT messages are held until you print it on a line by itself. Print it once your own part is done.`
 const _managerScanRunning = new Set<number>()
@@ -17438,6 +17438,16 @@ async function managerReadyFallback(router: StageRouter, stageId: string): Promi
   if (router.managerReady || !router.managerQuietSince || router.preReadyQueue.length === 0) return
   const idleMs = Date.now() - router.managerQuietSince
   if (idleMs < MANAGER_READY_FALLBACK_MS || !isPaneIdleForMessaging(router.managerPaneId)) return
+  // Say why the messages arrive now, ahead of them: the Manager never printed
+  // READY, so it would otherwise read them as the router breaking protocol.
+  const held = router.preReadyQueue.length
+  pipelineLog(`Stage ${stageId} 🎯 no ${MANAGER_READY_SENTINEL} after ${Math.round(idleMs / 1000)}s idle — timeout fallback, handing over ${held} held message(s)`)
+  await injectPane(
+    router.managerPaneId,
+    `[→ PIPELINE NOTICE]\nNo ${MANAGER_READY_SENTINEL} was seen and you have been idle for ${Math.round(idleMs / 1000)}s. This is a timeout fallback: the ${held} held message(s) from the other slots follow now.`,
+    'manager-ready-fallback',
+    true
+  )
   await markManagerReady(
     router, stageId,
     ` (fallback: idle ${Math.round(idleMs / 1000)}s without ${MANAGER_READY_SENTINEL}, ${router.preReadyQueue.length} message(s) held)`,

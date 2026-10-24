@@ -7,7 +7,7 @@
 //    every slot's kickoff) was returned from unread: a DISPATCH in it was gone.
 // 2. A Manager that ended its turn without ---MANAGER-READY--- and without a
 //    DISPATCH left the workers' REPORTs held for a line it might never print.
-//    It is now reminded once, and if it then sits idle 90s with messages held,
+//    It is now reminded once, and if it then sits idle 180s with messages held,
 //    they are handed over anyway. A turn end alone is not READY: a Manager can
 //    end Phase-1 turns on purpose.
 // 3. A DISPATCH naming no known slot, or one whose injection failed, was at
@@ -79,7 +79,7 @@ async function load(opts: {
     pipeline: { state: 'running', stageIndex: 1 },
     paneTurnStartedAt: new Map(opts.turnStartedAt === undefined ? [] : [['mgr', opts.turnStartedAt]]),
     isPaneIdleForMessaging: () => opts.idle ?? true,
-    MANAGER_READY_FALLBACK_MS: 90_000,
+    MANAGER_READY_FALLBACK_MS: 180_000,
     MANAGER_READY_REMINDER: `[→ PIPELINE NOTICE]\nYour turn ended without ${MANAGER_READY_SENTINEL}.`,
     stageRouters: new Map([[1, router]]),
     stagesApi: { stages: { value: [{ id: 'storyboard' }, { id: 'illustration' }] } },
@@ -204,20 +204,28 @@ describe('a Manager turn that ends without READY is reminded, not taken as READY
 })
 
 describe('the idle fallback hands held messages to a Manager that never prints READY (#539)', () => {
-  it('after 90s idle with messages held, treats it as READY and logs the fallback', async () => {
+  it('after 180s idle with messages held, says so to the Manager, then hands them over', async () => {
     const t = await load()
     await t.api.routeManagerTurnText('mgr', '讀完守則了。', iso(30_000))
-    t.router.managerQuietSince = Date.now() - 91_000
+    t.router.managerQuietSince = Date.now() - 181_000
+    const before = t.injected.length
     await t.api.managerReadyFallback(t.router, 'illustration')
     expect(t.router.managerReady).toBe(true)
-    expect(t.injected.some(([pane, text]) => pane === 'mgr' && text.includes('[→ REPORT FROM 畫師]'))).toBe(true)
+    const after = t.injected.slice(before)
+    expect(after.map(([pane]) => pane)).toEqual(['mgr', 'mgr'])
+    expect(after[0][1]).toContain('[→ PIPELINE NOTICE]')
+    expect(after[0][1]).toContain(`No ${MANAGER_READY_SENTINEL} was seen`)
+    expect(after[0][1]).toContain('timeout fallback')
+    expect(after[0][1]).toContain('1 held message(s)')
+    expect(after[1][1]).toContain('[→ REPORT FROM 畫師]')
+    expect(t.log.some((l) => l.includes('timeout fallback') && l.includes('1 held message(s)'))).toBe(true)
     expect(t.log.some((l) => l.includes('READY') && l.includes('fallback'))).toBe(true)
   })
 
-  it('not before 90s', async () => {
+  it('not before 180s', async () => {
     const t = await load()
     await t.api.routeManagerTurnText('mgr', '讀完守則了。', iso(30_000))
-    t.router.managerQuietSince = Date.now() - 60_000
+    t.router.managerQuietSince = Date.now() - 179_000
     await t.api.managerReadyFallback(t.router, 'illustration')
     expect(t.router.managerReady).toBe(false)
   })
@@ -225,7 +233,7 @@ describe('the idle fallback hands held messages to a Manager that never prints R
   it('not while the Manager is busy again', async () => {
     const t = await load({ idle: false })
     await t.api.routeManagerTurnText('mgr', '讀完守則了。', iso(30_000))
-    t.router.managerQuietSince = Date.now() - 120_000
+    t.router.managerQuietSince = Date.now() - 200_000
     await t.api.managerReadyFallback(t.router, 'illustration')
     expect(t.router.managerReady).toBe(false)
   })
@@ -234,7 +242,7 @@ describe('the idle fallback hands held messages to a Manager that never prints R
     const t = await load()
     t.router.preReadyQueue = []
     await t.api.routeManagerTurnText('mgr', '讀完守則了。', iso(30_000))
-    t.router.managerQuietSince = Date.now() - 120_000
+    t.router.managerQuietSince = Date.now() - 200_000
     await t.api.managerReadyFallback(t.router, 'illustration')
     expect(t.router.managerReady).toBe(false)
   })
