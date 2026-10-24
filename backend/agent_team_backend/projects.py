@@ -1473,6 +1473,54 @@ class ProjectStore:
         self.save(project)
         return project
 
+    def set_layout_mode(self, workspace_path: str, layout_mode: str) -> Project | None:
+        """Persist the pane layout mode. Returns None when no project exists
+        for the workspace (peek semantics — never creates one).
+
+        Read and saved under the save lock, so a write another thread makes
+        meanwhile is not overwritten with a stale copy.
+        """
+        with self._save_lock:
+            project = self.peek(workspace_path)
+            if project is None:
+                return None
+            project.layout_mode = layout_mode
+            self.save(project)
+            return project
+
+    def set_theme(
+        self,
+        workspace_path: str,
+        *,
+        theme: str | None,
+        theme_custom: dict[str, Any] | None,
+    ) -> Project | None:
+        """Persist the theme name and/or custom overrides; a None (or empty
+        theme) leaves that field as it is. Peek semantics and locking as
+        set_layout_mode."""
+        with self._save_lock:
+            project = self.peek(workspace_path)
+            if project is None:
+                return None
+            if theme:
+                project.theme = theme
+            if theme_custom is not None:
+                project.theme_custom = theme_custom
+            self.save(project)
+            return project
+
+    def set_language(self, workspace_path: str, language: str | None) -> Project | None:
+        """Persist the UI language; None or empty leaves it as it is. Peek
+        semantics and locking as set_layout_mode."""
+        with self._save_lock:
+            project = self.peek(workspace_path)
+            if project is None:
+                return None
+            if language:
+                project.language = language
+            self.save(project)
+            return project
+
     def set_display_name(
         self,
         workspace_path: str,
