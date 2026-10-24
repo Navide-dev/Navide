@@ -7039,6 +7039,8 @@ function scheduleInjection(pane: ActivePane): void {
         }
       } else {
         pipelineLog(`${tag} ✓ kickoff sent`)
+        const managerRouter = stageIndexForPane >= 0 ? stageRouters.get(stageIndexForPane) : undefined
+        if (managerRouter?.managerPaneId === pane.id) managerRouter.managerKickoffAt = Date.now()
       }
 
       // 5. Arm watcher. For question-interactive stages (P01) capture scanFrom
@@ -14301,8 +14303,10 @@ async function activateStage(index: number): Promise<void> {
     // the run below instead (#448), so no floor is taken for it.
     if (managerSlot) {
       const router = ensureStageRouter(index)
-      if (slot === managerSlot) router.managerPaneId = pane.id
-      else router.workerPaneIds.set(slot.label, pane.id)
+      if (slot === managerSlot) {
+        router.managerPaneId = pane.id
+        router.managerKickoffAt = ok ? Date.now() : 0
+      } else router.workerPaneIds.set(slot.label, pane.id)
       if (ok) armRouterCursors(router, pane.id)
     }
     pane.kickoffStatus = ok ? 'sent' : 'failed'
@@ -16586,10 +16590,28 @@ interface StageRouter {
   /** DISPATCH blocks already routed (target + message, whitespace dropped).
    *  The screen scan and the Manager's reply text can both carry one block. */
   routedDispatches: Set<string>
+  /** Manager replies that ended before the router poll started, which waits
+   *  for every slot's kickoff, with when each turn ended. startRouterPoll
+   *  routes them (#539). */
+  earlyTurnTexts: Array<{ text: string; at: number }>
+  /** When the Manager's kickoff was confirmed sent (0 = not yet). Only a turn
+   *  that started and ended after it is the Manager's reply to its task. */
+  managerKickoffAt: number
+  /** True once the Manager was reminded to print ---MANAGER-READY---. */
+  readyReminded: boolean
+  /** When the Manager last ended a post-kickoff turn without READY (0 = it has
+   *  not). The idle fallback in managerReadyFallback counts from here. */
+  managerQuietSince: number
 }
 const stageRouters = new Map<number, StageRouter>()
 
 const ROUTER_POLL_MS = 4_000
+/** How long a Manager that ended its turn without ---MANAGER-READY--- must sit
+ *  idle, with worker messages held for it, before the router hands them over
+ *  anyway (#539). */
+const MANAGER_READY_FALLBACK_MS = 180_000
+const MANAGER_READY_REMINDER =
+  `[→ PIPELINE NOTICE]\nYour turn ended without ${MANAGER_READY_SENTINEL}. The other slots' ASK and REPORT messages are held until you print it on a line by itself. Print it once your own part is done.`
 const _managerScanRunning = new Set<number>()
 
 function ensureStageRouter(stageIndex: number): StageRouter {
@@ -16608,6 +16630,10 @@ function ensureStageRouter(stageIndex: number): StageRouter {
       armedAt: 0,
       watchdogFired: false,
       routedDispatches: new Set(),
+      earlyTurnTexts: [],
+      managerKickoffAt: 0,
+      readyReminded: false,
+      managerQuietSince: 0,
     }
     stageRouters.set(stageIndex, r)
   }
@@ -16694,6 +16720,12 @@ function startRouterPoll(stageIndex: number): void {
   router.pollHandle = window.setInterval(() => {
     void managerRouterScan(stageIndex)
   }, ROUTER_POLL_MS)
+  const early = router.earlyTurnTexts.splice(0)
+  if (early.length) {
+    void (async () => {
+      for (const e of early) await routeManagerTurnText(router.managerPaneId, e.text, new Date(e.at).toISOString(), true)
+    })()
+  }
 }
 
 function disposeStageRouter(stageIndex: number): void {
@@ -17283,6 +17315,7 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     if (findSentinel(buf, MANAGER_READY_SENTINEL, cursor) >= 0) {
       await markManagerReady(router, stage.id, '')
     }
+    await managerReadyFallback(router, stage.id)
   }
 
   // ── Manager pane: scan for DISPATCH + STAGE-DONE ──────────────────────────
@@ -17356,21 +17389,36 @@ async function routeManagerDispatch(router: StageRouter, stageId: string, d: Par
   if (router.routedDispatches.has(key)) return
   router.routedDispatches.add(key)
   await markManagerReady(router, stageId, ' (implied by its DISPATCH)')
+  // The Manager believes it has dispatched; a block that went nowhere must say
+  // so to it, or it waits on a worker that never got the task.
+  const tellManager = (reason: string) => injectPane(
+    router.managerPaneId,
+    `[→ DISPATCH NOT DELIVERED to ${d.to}]\n${reason}. Slots you can dispatch to: ${[...router.workerPaneIds.keys()].join(', ')}. Send the DISPATCH again.`,
+    `dispatch-undelivered:${d.to}`,
+    true
+  )
   const target = matchWorkerByLabel(router, d.to)
   if (!target) {
     pipelineLog(
       `Stage ${stageId} 🎯 dispatch ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`,
     )
+    await tellManager(`No slot is named "${d.to}"`)
     return
   }
   const preview = d.message.slice(0, 50).replace(/\s+/g, ' ')
   pipelineLog(`Stage ${stageId} 🎯 → ${target.label}: ${preview}${d.message.length > 50 ? '…' : ''}`)
-  await injectPane(
+  const delivered = await injectPane(
     target.paneId,
     `[→ DISPATCH FROM Manager]\n${d.message}`,
     `manager-dispatch:${target.label}`,
     true
   )
+  if (!delivered) {
+    // Not routed after all: a resend of the same block must go out.
+    router.routedDispatches.delete(key)
+    pipelineLog(`Stage ${stageId} 🎯 ✕ dispatch to ${target.label} not delivered (injection failed)`)
+    await tellManager(`It could not be typed into ${target.label}`)
+  }
 }
 
 /** The Manager's reply, as its reader reported it at turn end, for the stage
@@ -17378,19 +17426,74 @@ async function routeManagerDispatch(router: StageRouter, stageId: string, d: Par
  *  TUI's redraw can leave a DISPATCH block that does not parse; it was then
  *  dropped without a trace. A replayed historical turn (backend restart) is
  *  older than the router's arm and is ignored, as judgeTurnText does. */
-async function routeManagerTurnText(paneId: string, text: string, timestamp: string): Promise<void> {
+async function routeManagerTurnText(paneId: string, text: string, timestamp: string, held = false): Promise<void> {
   if (!text || pipeline.state !== 'running') return
   const router = stageRouters.get(pipeline.stageIndex)
   const stage = stagesApi.stages.value[pipeline.stageIndex]
-  if (!router || !stage || router.finished || !router.armedAt || router.managerPaneId !== paneId) return
+  if (!router || !stage || router.finished || router.managerPaneId !== paneId) return
   const eventMs = timestamp ? Date.parse(timestamp) : NaN
-  if (!Number.isNaN(eventMs) && eventMs < router.armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS) return
+  if (!router.armedAt) {
+    // The poll starts only once every slot's kickoff is in, so a fast Manager
+    // can finish a turn first, maybe before its workers are wired. Hold the
+    // reply for startRouterPoll; returning here dropped its DISPATCH (#539).
+    if (!Number.isNaN(eventMs) && eventMs < Date.now() - TURN_TEXT_REPLAY_TOLERANCE_MS) return
+    router.earlyTurnTexts.push({ text, at: Number.isNaN(eventMs) ? Date.now() : eventMs })
+    pipelineLog(`Stage ${stage.id} 🎯 Manager reply held until the router starts`)
+    return
+  }
+  // A held reply was judged live when it was held; the poll may have started
+  // well after that turn ended.
+  if (!held && !Number.isNaN(eventMs) && eventMs < router.armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS) return
   if (findSentinel(text, MANAGER_READY_SENTINEL, 0) >= 0) {
     await markManagerReady(router, stage.id, ' (reply text)')
   }
   for (const d of parseDispatchBlocks(text, 0).items) {
     await routeManagerDispatch(router, stage.id, d)
   }
+  // A Manager can end Phase-1 turns without READY on purpose (it sent a
+  // message, started a background task), so a turn end is not READY. Remind it
+  // once; managerReadyFallback hands over held messages if it then sits idle.
+  // Only its reply to the kickoff counts: a role acknowledgement that started
+  // before the kickoff, or a late report of an older turn, does not (#539).
+  const turnEndAt = Number.isNaN(eventMs) ? Date.now() : eventMs
+  if (
+    !router.managerReady && router.managerKickoffAt > 0 && turnEndAt > router.managerKickoffAt
+    && (paneTurnStartedAt.get(paneId) ?? router.managerKickoffAt) >= router.managerKickoffAt
+  ) {
+    router.managerQuietSince = Date.now()
+    if (!router.readyReminded) {
+      router.readyReminded = true
+      pipelineLog(`Stage ${stage.id} 🎯 Manager turn ended without ${MANAGER_READY_SENTINEL} — reminded it`)
+      await injectPane(router.managerPaneId, MANAGER_READY_REMINDER, 'manager-ready-reminder', true)
+    }
+  }
+}
+
+/** The deadlock fallback (#539): a Manager that ended its turn without READY,
+ *  was reminded, and has sat idle MANAGER_READY_FALLBACK_MS since, while worker
+ *  messages are held for it, gets them anyway. Every pane would otherwise wait
+ *  on another until the stage cap. */
+async function managerReadyFallback(router: StageRouter, stageId: string): Promise<void> {
+  if (router.managerReady || !router.managerQuietSince || router.preReadyQueue.length === 0) return
+  const idleMs = Date.now() - router.managerQuietSince
+  if (idleMs < MANAGER_READY_FALLBACK_MS || !isPaneIdleForMessaging(router.managerPaneId)) return
+  // A turn end while its own subagent or background job runs is not idle: the
+  // CLI wakes when that work finishes. The message gate does not count it.
+  if (paneBackgroundRunning(router.managerPaneId)) return
+  // Say why the messages arrive now, ahead of them: the Manager never printed
+  // READY, so it would otherwise read them as the router breaking protocol.
+  const held = router.preReadyQueue.length
+  pipelineLog(`Stage ${stageId} 🎯 no ${MANAGER_READY_SENTINEL} after ${Math.round(idleMs / 1000)}s idle — timeout fallback, handing over ${held} held message(s)`)
+  await injectPane(
+    router.managerPaneId,
+    `[→ PIPELINE NOTICE]\nNo ${MANAGER_READY_SENTINEL} was seen and you have been idle for ${Math.round(idleMs / 1000)}s. This is a timeout fallback: the ${held} held message(s) from the other slots follow now.`,
+    'manager-ready-fallback',
+    true
+  )
+  await markManagerReady(
+    router, stageId,
+    ` (fallback: idle ${Math.round(idleMs / 1000)}s without ${MANAGER_READY_SENTINEL}, ${router.preReadyQueue.length} message(s) held)`,
+  )
 }
 
 // ── Global Manager cross-stage router ────────────────────────────────────────
