@@ -11544,6 +11544,8 @@ class _Runner:
 _runner: _Runner | None = None
 # Replaced runners whose task is still finishing (see _replace_stopped_runner).
 _stopping_runner_tasks: set[asyncio.Task[None]] = set()
+# Stands for an attribute the SDK no longer has (see _runner_stopped).
+_MISSING = object()
 # (pane or client, reason) pairs already logged as refused (see _PlanMcpASGI).
 _logged_refusals: set[tuple[str, str]] = set()
 # Bounds only how many distinct refusals get a log line; no request is ever
@@ -11752,7 +11754,10 @@ def _runner_stopped(runner: _Runner) -> bool:
         return True
     if not runner.ready.is_set():
         return False
-    group = runner.manager._task_group  # noqa: SLF001
+    # Private to the SDK: should it go, only an ended task counts, as before.
+    group = getattr(runner.manager, "_task_group", _MISSING)
+    if group is _MISSING:
+        return False
     return group is None or group.cancel_scope.cancel_called
 
 

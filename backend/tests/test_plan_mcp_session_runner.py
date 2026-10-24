@@ -136,6 +136,24 @@ async def test_calls_are_served_while_a_cancelled_session_manager_waits_for_its_
         await plan_mcp.shutdown()
 
 
+async def test_a_session_manager_without_the_private_task_group_falls_back_to_its_task() -> None:
+    # _task_group is the SDK's private attribute. Without it, a runner whose
+    # task is running must not count as stopped — that would start a new
+    # manager on every call — and one whose task has ended still must.
+    release = asyncio.Event()
+    task = asyncio.create_task(release.wait())
+    ready = asyncio.Event()
+    ready.set()
+    runner = plan_mcp._Runner(object(), task, ready, asyncio.Event())  # type: ignore[arg-type]  # noqa: SLF001
+    try:
+        assert not plan_mcp._runner_stopped(runner)  # noqa: SLF001
+        release.set()
+        await task
+        assert plan_mcp._runner_stopped(runner)  # noqa: SLF001
+    finally:
+        release.set()
+
+
 async def test_an_internal_failure_names_its_cause_to_the_client_and_in_the_log(
     monkeypatch: pytest.MonkeyPatch, caplog: Any,
 ) -> None:
