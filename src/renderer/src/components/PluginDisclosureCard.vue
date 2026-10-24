@@ -54,6 +54,8 @@ const props = withDefaults(defineProps<{
   /** R2 MED-6 on #436: whether the package declares views; undefined when the
    *  surface cannot tell (Registry listing data). Not part of the signed card. */
   hasViews?: boolean
+  /** Lists the summary one clause per line; for a page with several cards. */
+  summaryAsList?: boolean
 }>(), {
   // Absent must stay unknown, not Vue's boolean-prop false.
   hasViews: undefined,
@@ -173,7 +175,7 @@ const facts = computed(() => {
       <p class="nv-disclosure-provenance" :class="verified ? 'nv-disclosure-provenance--verified' : 'nv-disclosure-provenance--unverified'">
         {{ $t(provenance) }}
       </p>
-      <PluginDisclosureSummary :disclosure="disclosure" :scan="scan" />
+      <PluginDisclosureSummary :disclosure="disclosure" :scan="scan" :as-list="summaryAsList" />
 
       <div v-if="comparison?.undeclared.length" class="nv-disclosure-undeclared" role="alert">
         <h5>{{ $t('pluginDisclosure.undeclaredHeading') }}</h5>
