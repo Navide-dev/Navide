@@ -113,3 +113,126 @@ describe('ExtensionsPane list and detail', () => {
     expect(wrapper.find('[data-select-id="kaito.lint"] .ext-md-warn').exists()).toBe(false)
   })
 })
+
+// One case per warning the "⚠ N" marker counts: each mounts a package whose
+// card carries only that warning, so dropping any one from the count is red.
+describe('ExtensionsPane list row warnings', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  const DAY = 86_400_000
+  const t = (key: string, params: Record<string, unknown> = {}) => i18n.global.t(key, params)
+  const base = { requires: [], sensitive: [], packageVersion: '1.0.0' }
+
+  interface Case {
+    name: string
+    installed?: Array<Record<string, unknown>>
+    factory?: Array<Record<string, unknown>>
+    api?: Record<string, unknown>
+    row: string
+    label: () => string
+  }
+  const soon = new Date(Date.now() + 3 * DAY).toISOString()
+  const past = new Date(Date.now() - DAY).toISOString()
+  const cases: Case[] = [
+    { name: 'a blocked file', installed: [{ ...base, id: 'w.digest', digestBlock: { reason: 'security' } }], row: 'w.digest', label: () => t('settings.extensions.digestBlock.security') },
+    { name: 'a sensitive capability', installed: [{ ...base, id: 'w.sens', requires: ['shell.run'], sensitive: ['shell.run'] }], row: 'w.sens', label: () => t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.sensitive'), value: 'shell.run' }) },
+    {
+      name: 'an update that asks for more permissions',
+      installed: [{ ...base, id: 'w.more', provenance: 'official-registry' }],
+      api: { checkUpdates: vi.fn().mockResolvedValue([{ id: 'w.more', namespace: 'w', name: 'more', installedVersion: '1.0.0', latestVersion: '1.1.0', permissionChange: 'more' }]) },
+      row: 'w.more',
+      label: () => t('pluginDisclosure.diff.badgeMore'),
+    },
+    { name: 'an incompatible version', installed: [{ ...base, id: 'w.incompat', engineCompatible: false, minNavideVersion: '9.0.0' }], row: 'w.incompat', label: () => t('settings.extensions.incompatibleInstalled', { version: '9.0.0' }) },
+    { name: 'an expired Testplace build kept in use', installed: [{ ...base, id: 'w.kept', source: 'testplace', expiresAt: past }], row: 'w.kept', label: () => t('testplace.expired.kept') },
+    { name: 'a Testplace build about to expire', installed: [{ ...base, id: 'w.soon', source: 'testplace', expiresAt: soon }], row: 'w.soon', label: () => t('testplace.expiring', { days: 3, date: soon.slice(0, 10) }) },
+    { name: 'an unsigned local file', installed: [{ ...base, id: 'w.local', source: 'local-unsigned' }], row: 'w.local', label: () => t('pluginDisclosure.source.local-unsigned') },
+    { name: "the Host's warning", installed: [{ ...base, id: 'w.host', warning: 'The Host could not verify this package' }], row: 'w.host', label: () => 'The Host could not verify this package' },
+    {
+      name: 'a developer folder loaded by an unknown party',
+      installed: [{ ...base, id: 'w.folder', provenance: 'developer-local-unpacked' }],
+      api: { developerMode: vi.fn().mockResolvedValue({ enabled: true, folders: [{ pluginId: 'w.folder', path: '/dev/w', consentedAt: past, loaded: true, loadedBy: { kind: 'unknown' } }] }) },
+      row: 'w.folder',
+      label: () => t('settings.extensions.developerMode.loadedByUnknown'),
+    },
+    {
+      name: 'a developer folder whose reload failed',
+      installed: [{ ...base, id: 'w.reload', provenance: 'developer-local-unpacked' }],
+      api: { developerMode: vi.fn().mockResolvedValue({ enabled: true, folders: [{ pluginId: 'w.reload', path: '/dev/w', consentedAt: past, loaded: true, loadedBy: { kind: 'user' }, reloadError: 'manifest is not valid JSON' }] }) },
+      row: 'w.reload',
+      label: () => t('settings.extensions.developerMode.reloadFailed', { error: 'manifest is not valid JSON' }),
+    },
+    {
+      name: "a bundled package's sensitive capability",
+      installed: [{ ...base, id: 'navide.mini-ide', requires: ['terminal'], sensitive: ['terminal'], provenance: 'factory-bundled' }],
+      factory: [{ id: 'navide.mini-ide', version: '1.0.0', active: true, optedOut: false }],
+      row: 'navide.mini-ide',
+      label: () => t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.sensitive'), value: 'terminal' }),
+    },
+    { name: "bundled Plans' risk note", factory: [{ id: 'navide.plans', version: '1.0.0', active: true, optedOut: false }], row: 'navide.plans', label: () => t('settings.extensions.plansRiskNote') },
+  ]
+
+  it.each(cases)('counts $name', async ({ installed = [], factory = [], api = {}, row, label }) => {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        listInstalled: vi.fn().mockResolvedValue(installed),
+        listFactoryPackages: vi.fn().mockResolvedValue(factory),
+        checkUpdates: vi.fn().mockResolvedValue([]),
+        listPacks: vi.fn().mockResolvedValue([]),
+        disabledStoreStatus: vi.fn().mockResolvedValue({ status: 'ok' }),
+        ...api,
+      },
+    }
+    wrapper = mount(ExtensionsPane, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    const warn = wrapper.get(`[data-select-id="${row}"] .ext-md-warn`)
+    expect(warn.text()).toBe('⚠ 1')
+    expect(warn.attributes('aria-label')).toBe(label())
+  })
+
+  it('does not count a developer folder you loaded yourself', async () => {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        listInstalled: vi.fn().mockResolvedValue([{ ...base, id: 'w.mine', provenance: 'developer-local-unpacked', source: 'developer-unpacked' }]),
+        listFactoryPackages: vi.fn().mockResolvedValue([]),
+        checkUpdates: vi.fn().mockResolvedValue([]),
+        listPacks: vi.fn().mockResolvedValue([]),
+        disabledStoreStatus: vi.fn().mockResolvedValue({ status: 'ok' }),
+        developerMode: vi.fn().mockResolvedValue({ enabled: true, folders: [{ pluginId: 'w.mine', path: '/dev/w', consentedAt: past, loaded: true, loadedBy: { kind: 'user' } }] }),
+      },
+    }
+    wrapper = mount(ExtensionsPane, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    const row = wrapper.get('[data-select-id="w.mine"]')
+    expect(row.find('.ext-md-warn').exists()).toBe(false)
+    // Its source still shows, as a folder mark named in the card's words.
+    expect(row.get('.ext-md-source').attributes('data-source-kind')).toBe('folder')
+    expect(row.get('.ext-md-source').attributes('aria-label')).toBe(t('pluginDisclosure.source.developer-unpacked'))
+  })
+
+  it('marks a non-Marketplace source and leaves a Marketplace one unmarked', async () => {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        listInstalled: vi.fn().mockResolvedValue([
+          { ...base, id: 's.test', source: 'testplace' },
+          { ...base, id: 's.market', source: 'marketplace' },
+        ]),
+        listFactoryPackages: vi.fn().mockResolvedValue([]),
+        checkUpdates: vi.fn().mockResolvedValue([]),
+        listPacks: vi.fn().mockResolvedValue([]),
+        disabledStoreStatus: vi.fn().mockResolvedValue({ status: 'ok' }),
+      },
+    }
+    wrapper = mount(ExtensionsPane, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-select-id="s.test"] .ext-md-source').attributes('data-source-kind')).toBe('test')
+    expect(wrapper.find('[data-select-id="s.market"] .ext-md-source').exists()).toBe(false)
+  })
+})

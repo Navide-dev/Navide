@@ -492,6 +492,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <p v-if="recommendation && !editorShown" class="ep-summary-note">
         <span class="ep-untrusted">{{ $t('settings.executionPolicy.untrusted') }}</span>
         {{ $t('settings.executionPolicy.recommendationTitle') }} · {{ recommendationStateLabel(recommendation.state) }}
+        <template v-if="recommendation.policy">· {{ $t('settings.executionPolicy.modeLabel') }}: <strong>{{ modeLabel(recommendation.policy.mode) }}</strong></template>
       </p>
     </section>
 

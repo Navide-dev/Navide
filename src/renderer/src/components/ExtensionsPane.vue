@@ -26,7 +26,7 @@ import MarketplaceIcon from './MarketplaceIcon.vue'
 import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 import PluginSourceBadge from './PluginSourceBadge.vue'
 import DeveloperFolderInfoCard from './DeveloperFolderInfoCard.vue'
-import { isTestplaceExpired, testplaceDaysLeft } from '../lib/pluginSourceMark'
+import { chromeSourceMark, isTestplaceExpired, pluginSourceLabel, testplaceDaysLeft } from '../lib/pluginSourceMark'
 import { cardRiskLevel } from '../../../shared/pluginDisclosureScan'
 import type { DisclosureRiskLevel } from '../../../shared/pluginDisclosure'
 
@@ -89,7 +89,23 @@ function installedWarnings(p: InstalledRow): string[] {
   }
   if (p.source === 'local-unsigned' && p.localSignature !== 'verified') out.push(t('pluginDisclosure.source.local-unsigned'))
   if (p.warning) out.push(p.provenance === 'developer-local-unpacked' ? t('settings.extensions.devUnpacked') : p.warning)
+  const folder = p.provenance === 'developer-local-unpacked' ? developerFolder(p.id) : undefined
+  // Who loaded a developer folder is a warning when it cannot be vouched for:
+  // an unknown loader, an unverified or changed record, or an unsigned one.
+  if (folder && (folder.loadedBy?.kind === 'unknown' || folder.loadedByUnverified || folder.loadedByUnsigned)) {
+    out.push(folderLoadedByText(p.id))
+  }
+  if (folder?.reloadError) out.push(t('settings.extensions.developerMode.reloadFailed', { error: reveal(folder.reloadError) }))
   return out
+}
+// Where a package came from when that is not the Navide Marketplace: an icon
+// in the row, the card's full source wording as its label.
+function rowSource(p: InstalledRow): { kind: 'test' | 'folder' | 'file'; label: string } | null {
+  const mark = chromeSourceMark(p.source)
+  if (!mark) return null
+  const shown = mark === 'local-unsigned' && p.localSignature === 'verified' ? 'local-signed' : mark
+  const kind = mark === 'developer-unpacked' ? 'folder' : mark === 'local-signed' || mark === 'local-unsigned' ? 'file' : 'test'
+  return { kind, label: pluginSourceLabel(t, shown, p.expiresAt, p.testplaceVia) }
 }
 type FactoryRow = (typeof factoryRows.value)[number]
 function factoryWarnings(p: FactoryRow): string[] {
@@ -784,6 +800,18 @@ watch(installed, () => {
                       class="ext-md-row-update"
                       :title="$t('settings.extensions.marketplace.updateAvailableVersion', { version: updatesById.get(p.id)?.latestVersion ?? '' })"
                     >→ {{ updatesById.get(p.id)?.latestVersion }}</span>
+                    <span
+                      v-if="rowSource(p)"
+                      class="ext-md-source"
+                      :data-source-kind="rowSource(p)!.kind"
+                      role="img"
+                      :aria-label="rowSource(p)!.label"
+                      :title="rowSource(p)!.label"
+                    >
+                      <svg v-if="rowSource(p)!.kind === 'folder'" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.8 4.2c0-.6.4-1 1-1h3.3l1.4 1.5h5.7c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H2.8c-.6 0-1-.4-1-1Z" /></svg>
+                      <svg v-else-if="rowSource(p)!.kind === 'file'" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.8h5.6l3.4 3.4v8c0 .6-.4 1-1 1h-8c-.6 0-1-.4-1-1v-10.4c0-.6.4-1 1-1Z" /><path d="M9 1.8v3.5h3.5" /></svg>
+                      <svg v-else viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.8h4M6.6 1.8v4.4L2.9 12.4c-.5.8.1 1.8 1 1.8h8.2c.9 0 1.5-1 1-1.8L9.4 6.2V1.8" /></svg>
+                    </span>
                     <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
                     <span
                       v-if="riskById.get(p.id) && riskById.get(p.id) !== 'low'"
@@ -1403,6 +1431,24 @@ watch(installed, () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+.ext-md-source {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+}
+.ext-md-source svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 /* "⚠ N": how many warnings the row's card carries; the label lists them. */
 .ext-md-warn {

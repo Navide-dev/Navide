@@ -685,6 +685,7 @@ describe('ExecutionPolicyPane summary', () => {
     expect(wrapper.findAll('.ep-facts .ep-tag').map((tag) => tag.text())).toEqual(['fs', 'ui', 'aiCli', 'git', 'gh', 'glab'])
     // The recommendation is untrusted, and says so while the editor is closed.
     expect(wrapper.get('.ep-summary-note').text()).toContain('Untrusted')
+    expect(wrapper.get('.ep-summary-note').text()).toContain('Mode: Allowlist')
     expect(editorShown(wrapper)).toBe(false)
 
     const toggle = wrapper.get('.ep-edit-toggle')
@@ -739,6 +740,24 @@ describe('ExecutionPolicyPane summary', () => {
     // Now it cannot be closed while the warning stands.
     expect(wrapper.find('.ep-edit-toggle').exists()).toBe(false)
     expect(editorShown(wrapper)).toBe(true)
+  })
+
+  it("names a recommendation's mode in the summary even when it is not valid", async () => {
+    // Not valid, so no high-risk warning and the editor may stay closed; its
+    // mode, Full here, is still on the page without a click.
+    const quiet = quietSnapshot()
+    mockExecutionPolicy({
+      ...quiet,
+      workspace: {
+        ...quiet.workspace!,
+        recommendation: { state: 'stale', policy: { ...DEFAULT_POLICY, mode: 'full', system: [], shell: [] }, fingerprint: 'b'.repeat(64) },
+      },
+    } as ExecutionPolicySettingsSnapshot)
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(editorShown(wrapper)).toBe(false)
+    expect(wrapper.get('.ep-summary-note').text()).toContain('Mode: Full')
   })
 
   it('keeps the editor open while policy storage needs recovery', async () => {
