@@ -234,7 +234,7 @@ describe('EditorPane – regex Replace All', () => {
 
     const inputs = wrapper.findAll('.ep-find-input')
     await inputs[1].setValue('using')
-    await wrapper.find('[title="Replace all (⌥↵)"]').trigger('click')
+    await wrapper.find('[title="Replace All (⌥↵)"]').trigger('click')
     await nextTick()
     expect(wrapper.find('.mock-monaco').text()).toBe('using a\nusing b\nusing c')
     vi.runOnlyPendingTimers()

@@ -1263,7 +1263,7 @@ describe('MarketplacePane', () => {
     // The stable latest is still installable here: no platform warning, and
     // the button says the candidate is a pre-release (review #15).
     expect(wrapper.find('.mkt-unavailable').exists()).toBe(false)
-    expect(wrapper.get('.mkt-actions .ext-install').text()).toBe('Install 2.5.0-beta.1 (pre-release)')
+    expect(wrapper.get('.mkt-actions .ext-install').text()).toBe('Install 2.5.0-beta.1 (Pre-release)')
     // The header keeps the stable version and notes the pre-release beside it.
     expect(wrapper.get('.mkt-meta').text()).toContain('Version 2.4.0')
     expect(wrapper.get('.mkt-prerelease-note').text()).toBe('pre-release 2.5.0-beta.1 available')
@@ -1437,7 +1437,7 @@ describe('MarketplacePane', () => {
       expect(members.map((m) => m.classes().includes('mkt-pack-member--skipped'))).toEqual([false, false, false, true])
       // The pack itself grants nothing; it does not say "declares no permissions".
       expect(wrapper!.get('.mkt-no-permissions').text()).toContain('This pack grants no permissions itself')
-      expect(wrapper!.get('.mkt-actions .mkt-pack-install').text()).toBe('Install pack (4)')
+      expect(wrapper!.get('.mkt-actions .mkt-pack-install').text()).toBe('Install Pack (4)')
       // A pack has no Install of its own.
       expect(wrapper!.find('.mkt-actions .ext-install').exists()).toBe(false)
     })
@@ -1458,7 +1458,7 @@ describe('MarketplacePane', () => {
       }
       expect(wrapper!.get('.pack-member--summary[data-member="acme.lint"] .pack-member-caps').findAll('.pack-cap--sensitive').map((c) => c.text())).toEqual(['fs · sensitive', 'shell · sensitive'])
       // Summary: no member has been prepared or installed yet, and there is no accept-all.
-      expect(wrapper!.find('.pack-review').text()).toBe('Review 3 Navide plugins')
+      expect(wrapper!.find('.pack-review').text()).toBe('Review 3 Navide Plugins')
       // The title counts every member and the ones to review, like the detail page.
       const total = wrapper!.findAll('.pack-member--summary').length
       expect(wrapper!.get('#pack-dialog-title').text()).toBe(`Install “Demo Pack”: ${total} Navide plugins, 3 to review`)
@@ -2303,7 +2303,7 @@ describe('MarketplacePane pre-release install (K5)', () => {
     await wrapper.get('[data-id="acme.demo"]').trigger('click')
     await flushPromises()
     const button = wrapper.get('.mkt-actions .mkt-install-prerelease')
-    expect(button.text()).toBe('Install 0.1.0-alpha.1 (pre-release)')
+    expect(button.text()).toBe('Install 0.1.0-alpha.1 (Pre-release)')
     await button.trigger('click')
     await flushPromises()
     expect(api.setPrerelease).toHaveBeenCalledTimes(1)

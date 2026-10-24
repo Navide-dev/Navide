@@ -122,6 +122,12 @@ class Dep:
     # pattern — so Navide detected grok as Cursor and spawned it as Cursor.
     # '' = the name is unambiguous and no probe is run (every other dep).
     identity_regex: str = ""
+    # Output `check_cmd` prints only for the vendor's own CLI, where a
+    # same-named one from someone else installs to the same path (grok). A
+    # mismatch is reported in the pane's startup probe line, never refused —
+    # unlike identity_regex it does not decide which binary is used.
+    # '' = no such check.
+    official_regex: str = ""
     min_version: str = ""            # '' = any version is fine
     install_cmd: str = ""            # shell command (whitelist); '' = no auto-install
     needs_terminal: bool = False     # interactive (sudo / OAuth) → external Terminal
@@ -1126,6 +1132,13 @@ class VendorSpec:
     # --- install wizard (mirrors the legacy onboarding_deps agent_cli table) ---
     # This vendor's install/detect/update entry; onboarding_deps aggregates it.
     install_dep: Dep | None = None
+    # The CLI version the integration as a whole (launch, logs, resume) was
+    # last checked against, as --version prints it. Set it when that is newer
+    # than ``account_switch.verified_version`` (which records only the
+    # account-switch evidence), or when the vendor has no account switching.
+    # The startup probe discloses a newer installed CLI against this first,
+    # then against the account-switch version.
+    cli_verified_version: str = ""
 
     # --- lifecycle hooks ---
     # (backend_port_file: str) -> install result. Set when this CLI can be

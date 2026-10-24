@@ -85,7 +85,7 @@ describe('public web link capability catalog', () => {
     }).methods
       .filter((method) => method.requiresUserGesture === true)
       .map((method) => method.address)
-    expect(flagged).toEqual(['ui.openExternal'])
+    expect(flagged).toEqual(['ui.openExternal', 'web.create', 'web.setOwner', 'web.takeControl', 'web.returnControl', 'web.clearData'])
     for (const address of flagged) {
       expect(PUBLIC_CAPABILITY_CATALOG[address]?.requiresUserGesture).toBe(true)
     }

@@ -1,3 +1,5 @@
+import { validateSupportedLocale } from '../hostLocale'
+
 export interface PluginContributionQueryOptions {
   contributionKey: string
   workspacePath: string
@@ -28,7 +30,7 @@ export function composePluginContributionQuery(options: PluginContributionQueryO
   else params.delete('http_url')
   params.set('theme', options.theme)
   if (options.locale !== undefined) {
-    const validLocale = options.locale === 'zh-TW' || options.locale === 'en-US' || options.locale === 'ja-JP' ? options.locale : 'zh-TW'
+    const validLocale = validateSupportedLocale(options.locale) ?? 'zh-TW'
     params.set('locale', validLocale)
   } else {
     params.delete('locale')

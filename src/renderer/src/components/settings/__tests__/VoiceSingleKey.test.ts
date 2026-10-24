@@ -185,7 +185,7 @@ describe('fn (🌐) key row', () => {
     const w = mountSection()
     await flushPromises()
     expect(w.get('[data-testid="voice-fn-status"]').text()).toContain('pnpm build:fn-key')
-    expect(w.get('[data-testid="voice-fn-status"] button').text()).toBe('Try again')
+    expect(w.get('[data-testid="voice-fn-status"] button').text()).toBe('Try Again')
   })
 
   it('no permission: explains and offers System Settings and a re-check', async () => {

@@ -66,7 +66,7 @@ function surfacePorts(mock: ReturnType<typeof createMockBackend>) {
 
 const mountOpts = { global: { mocks: { $t: (k: string) => k } } }
 
-/** The "Scan for repositories anyway" button rendered by GitPane's init panel. */
+/** The "Scan for Repositories Anyway" button rendered by GitPane's init panel. */
 function scanButton(wrapper: { findAll: (s: string) => { text: () => string }[] }) {
   return wrapper
     .findAll('button')

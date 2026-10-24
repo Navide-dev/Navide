@@ -286,3 +286,54 @@ def test_migration_10_on_a_fresh_database(tmp_path: Path) -> None:
         columns = {row[1] for row in db.execute("PRAGMA table_info(extension_version)")}
     assert {"channel", "expires_at"} <= columns
     assert run_migrations(engine) == []
+
+
+def test_migration_11_on_an_old_database_backfills_key_history(tmp_path: Path) -> None:
+    from registry.signing import generate_keypair, public_key_fingerprint
+
+    _private, public_pem = generate_keypair()
+    path = tmp_path / "registry.db"
+    _create(path, HEAD_SCHEMA)
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE publisher SET public_key = ? WHERE id = 1", (public_pem,))
+        db.execute(
+            "INSERT INTO publisher VALUES (2, 'broken', NULL, 'not a key', NULL, "
+            "'2026-09-01 00:00:00')"
+        )
+
+    engine = create_db_engine(path)
+
+    assert applied_migrations(engine)[11] == "developer-qualification"
+    with sqlite3.connect(path) as db:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(publisher)")}
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        keys = db.execute("SELECT publisher_id, key_id, revoked_at FROM publisher_key").fetchall()
+        qualifications = db.execute("SELECT COUNT(*) FROM developer_qualification").fetchone()
+    assert {"frozen_at", "frozen_reason"} <= columns
+    assert {
+        "developer_qualification",
+        "account_token",
+        "account_auth_code",
+        "publisher_key",
+        "registry_audit",
+    } <= tables
+    # The unparsable key gets no history row; nobody is grandfathered.
+    assert keys == [(1, public_key_fingerprint(public_pem), None)]
+    assert qualifications == (0,)
+
+    # Running the step again (a half-recorded run) changes nothing.
+    step = next(step for number, _, step in MIGRATIONS if number == 11)
+    with sqlite3.connect(path) as db:
+        step(db)
+        assert db.execute("SELECT COUNT(*) FROM publisher_key").fetchone() == (1,)
+    assert run_migrations(engine) == []
+
+
+def test_migration_11_on_a_fresh_database(tmp_path: Path) -> None:
+    path = tmp_path / "registry.db"
+    engine = create_db_engine(path)
+    assert applied_migrations(engine)[11] == "developer-qualification"
+    step = next(step for number, _, step in MIGRATIONS if number == 11)
+    with sqlite3.connect(path) as db:
+        step(db)
+    assert run_migrations(engine) == []

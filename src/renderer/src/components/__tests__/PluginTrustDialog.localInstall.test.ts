@@ -142,3 +142,72 @@ describe('PluginTrustDialog for a file install (K3)', () => {
     expect(dialog.emitted('confirmReplace')).toEqual([[false], [true]])
   })
 })
+
+describe('PluginTrustDialog: the signature of a file install (A3)', () => {
+  const signed = (state: 'verified' | 'revoked' | 'unverifiable') => ({ localSignature: { state, publisherId: 'acme', keyId: 'k1' } })
+
+  it('names the vetted developer who signed it and still says this version was not reviewed', () => {
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      const dialog = render('risk', signed('verified'))
+      expect(dialog.get('.ext-local-warning').text())
+        .toBe(i18n.global.t('settings.extensions.localInstall.signatureState.warningVerified', { publisher: 'acme' }))
+      const line = dialog.get('.ext-local-signature')
+      expect(line.attributes('data-signature')).toBe('verified')
+      expect(line.text()).toBe(i18n.global.t('settings.extensions.localInstall.signatureState.verified', { publisher: 'acme' }))
+      const row = dialog.get('.nv-source-row')
+      expect(row.attributes('data-source')).toBe('local-signed')
+      expect(row.text()).not.toContain(i18n.global.t('pluginDisclosure.source.selfDeclared', { publisher: 'acme' }))
+      // Consent is still asked for exactly as for an unsigned file.
+      expect(dialog.get('.ext-confirm-risk').attributes('disabled')).toBeDefined()
+      dialog.unmount()
+    }
+  })
+
+  it('says a revoked signature is no longer valid', () => {
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      const dialog = render('risk', signed('revoked'))
+      expect(dialog.get('.ext-local-signature').text())
+        .toBe(i18n.global.t('settings.extensions.localInstall.signatureState.revoked', { publisher: 'acme' }))
+      expect(dialog.get('.ext-local-warning').text())
+        .toBe(i18n.global.t('settings.extensions.localInstall.signatureState.warningRevoked', { publisher: 'acme' }))
+      expect(dialog.get('.nv-source-row .nv-source-badge').text()).toBe(i18n.global.t('pluginDisclosure.source.signatureRevoked'))
+      dialog.unmount()
+    }
+  })
+
+  it('treats a signature no vetted key matches as unsigned', () => {
+    i18n.global.locale.value = 'en-US'
+    const dialog = render('risk', signed('unverifiable'))
+    expect(dialog.get('.ext-local-warning').text()).toBe(i18n.global.t('settings.extensions.localInstall.warning'))
+    expect(dialog.get('.ext-local-signature').text())
+      .toBe(i18n.global.t('settings.extensions.localInstall.signatureState.unverifiable', { publisher: 'acme' }))
+    expect(dialog.get('.nv-source-row').attributes('data-source')).toBe('local-unsigned')
+  })
+})
+
+describe('PluginTrustDialog for going back to a kept file version (L4, review M3)', () => {
+  it('shows the renewed-consent note with the kept version disclosure, source and digest', () => {
+    const dialog = mount(PluginTrustDialog, {
+      props: { pending: { ...pending(), rollbackFrom: '1.1.0' }, step: 'risk' } as never,
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    })
+    const note = dialog.get('[data-testid="ext-trust-rollback-consent"]')
+    expect(note.text()).toBe(i18n.global.t('settings.extensions.rollback.confirmLocalConsent', { id: 'acme.todo', version: '1.0.0' }))
+    // The same local disclosure as a file install: fixed warning, source row, digest.
+    expect(dialog.get('.ext-local-warning').text()).toBe(i18n.global.t('settings.extensions.localInstall.warning'))
+    expect(dialog.get('.nv-source-row').attributes('data-source')).toBe('local-unsigned')
+    expect(dialog.text()).toContain('a'.repeat(64))
+    // Consent still needs the explicit acknowledgement.
+    expect(dialog.get('.ext-confirm-risk').attributes('disabled')).toBeDefined()
+    dialog.unmount()
+  })
+
+  it('shows no rollback note for an ordinary file install', () => {
+    const dialog = render('risk')
+    expect(dialog.find('[data-testid="ext-trust-rollback-consent"]').exists()).toBe(false)
+    dialog.unmount()
+  })
+})

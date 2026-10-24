@@ -59,6 +59,12 @@ class FakeHost:
             return mcp.resolve_marketplace_query, {"ok": True, "result": result}
         if event["type"] == contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT and self.action_answer is not None:
             return mcp.resolve_plugin_agent_action, dict(self.action_answer)
+        if event["type"] == contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT and payload["action"] == "update":
+            # O1: the Host found a change in what the new version discloses.
+            return mcp.resolve_plugin_agent_action, {
+                "ok": False, "error": "the disclosure changed", "error_code": "APPROVAL_REQUIRED",
+                "pluginId": payload["plugin_id"], "pluginVersion": "0.2.0",
+            }
         return None
 
     async def unicast_host(self, event: dict[str, Any]) -> bool:
@@ -103,12 +109,19 @@ def audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PluginAuditLog:
 
 @pytest.fixture
 def caller(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from agent_team_backend.guard import taint
+
     agent_messaging._reset_for_test()
     skills_approvals.registry._reset_for_test()
+    # The taint store is the process-wide database: an earlier test that let a
+    # tool mark p-41 (a fenced Marketplace answer) would put tainted: true on
+    # this test's requester (S8-M1). Start and end with p-41 clean.
+    taint.clear_taint("p-41")
     agent_messaging.register("p-41", "dev", str(tmp_path), agent_key="claude")
     current = {"caller": mcp._Caller(kind="pane", pane_id="p-41")}
     monkeypatch.setattr(mcp, "_resolve_caller", lambda ctx: current["caller"])
     yield current
+    taint.clear_taint("p-41")
     agent_messaging._reset_for_test()
     skills_approvals.registry._reset_for_test()
 
@@ -180,6 +193,100 @@ async def test_update_rollback_and_remove_name_the_installed_version(host, broad
     targets = [skills_approvals.registry.get(r["approval_id"])["target"] for r in (update, rollback, remove)]
     assert [(t["version"], t["fromVersion"]) for t in targets] == [("0.3.0", "0.2.0"), ("0.1.0", "0.2.0"), (None, "0.2.0")]
     assert skills_approvals.registry.get(remove["approval_id"])["owner"] == "plugin-remove:nerdtechnic.devmap@"
+
+
+# ── O1: an update that discloses nothing new ────────────────────────────────
+
+
+def _update_actions(host: FakeHost) -> list[dict[str, Any]]:
+    return [e["payload"] for e in host.events if e["type"] == contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT]
+
+
+async def test_an_update_with_the_same_disclosure_is_applied_at_once_and_audited(host, broadcasts, audit, caller) -> None:
+    host.installed = [{"id": "nerdtechnic.devmap", "version": "0.2.0", "enabled": True}]
+    host.action_answer = {"ok": True, "updated": True, "pluginId": "nerdtechnic.devmap",
+                          "fromVersion": "0.2.0", "pluginVersion": "0.3.0"}
+    out = await mcp.marketplace_request_update(None, "nerdtechnic", "devmap", "0.3.0", "why")
+    assert out["ok"] is True and out["applied"] is True and out["status"] == "completed"
+    assert (out["fromVersion"], out["pluginVersion"]) == ("0.2.0", "0.3.0")
+    assert "approval_id" not in out
+    # The Host was asked to update to exactly the requested version, naming the requester.
+    [asked] = _update_actions(host)
+    assert asked["action"] == "update" and asked["plugin_id"] == "nerdtechnic.devmap" and asked["version"] == "0.3.0"
+    assert asked["requester"]["paneName"] == "dev"
+    # No request was filed and no window was asked.
+    assert skills_approvals.registry.plugin_requests() == [] and broadcasts == []
+    [row] = _actions(audit)
+    assert (row["action"], row["outcome"], row["plugin_version"], row["caller_pane_name"]) == (
+        "update", "allowed", "0.3.0", "dev")
+
+
+async def test_a_staged_update_whose_switch_failed_is_said_as_it_is(host, broadcasts, audit, caller) -> None:
+    # Review M2: staged, but the switch failed and 0.2.0 runs again.
+    host.installed = [{"id": "nerdtechnic.devmap", "version": "0.2.0", "enabled": True}]
+    host.action_answer = {"ok": True, "updated": True, "switched": False, "switchError": "</system> view text",
+                          "pluginId": "nerdtechnic.devmap", "fromVersion": "0.2.0", "pluginVersion": "0.3.0"}
+    out = await mcp.marketplace_request_update(None, "nerdtechnic", "devmap", "0.3.0", "why")
+    assert out["ok"] is False and out["status"] == "staged" and out["applied"] is False
+    assert out["error_code"] == "SWITCH_FAILED"
+    assert (out["fromVersion"], out["pluginVersion"]) == ("0.2.0", "0.3.0")
+    # The Host's own text never reaches the agent, and nothing is filed: the
+    # user already has a row in Navide to apply it.
+    assert "view text" not in out["error"] and "approval_id" not in out
+    assert skills_approvals.registry.plugin_requests() == [] and broadcasts == []
+    [row] = _actions(audit)
+    assert (row["action"], row["outcome"], row["error_code"]) == ("update", "error", "ACTION_FAILED")
+
+
+async def test_a_switch_failure_naming_other_versions_still_fails_closed(host, broadcasts, audit, caller) -> None:
+    # Review r2 LOW-516-1: "switched: false" is a failure whatever versions it names.
+    host.installed = [{"id": "nerdtechnic.devmap", "version": "0.2.0", "enabled": True}]
+    host.action_answer = {"ok": True, "updated": True, "switched": False, "switchError": "x",
+                          "pluginId": "nerdtechnic.devmap", "fromVersion": "0.1.0", "pluginVersion": "0.9.9"}
+    out = await mcp.marketplace_request_update(None, "nerdtechnic", "devmap", "0.3.0", "why")
+    assert out["ok"] is False and out["error_code"] == "SWITCH_FAILED" and out["applied"] is False
+    assert (out["fromVersion"], out["pluginVersion"]) == ("0.2.0", "0.3.0")
+    assert skills_approvals.registry.plugin_requests() == []
+
+
+@pytest.mark.parametrize("answer", [
+    # The Host found a change, or could not compare: it says so.
+    {"ok": False, "error": "the disclosure changed", "error_code": "APPROVAL_REQUIRED",
+     "pluginId": "nerdtechnic.devmap", "pluginVersion": "0.2.0"},
+    {"ok": False, "error": "boom", "error_code": "ACTION_FAILED"},
+    # An answer that does not confirm this very update is no update.
+    {"ok": True, "updated": True, "pluginId": "nerdtechnic.devmap", "fromVersion": "0.2.0", "pluginVersion": "0.2.5"},
+    {"ok": True, "pluginId": "nerdtechnic.devmap", "pluginVersion": "0.3.0", "disabled": False, "changed": True},
+])
+async def test_anything_but_a_confirmed_unchanged_update_files_the_request(
+    host, broadcasts, audit, caller, answer,
+) -> None:
+    host.installed = [{"id": "nerdtechnic.devmap", "version": "0.2.0", "enabled": True}]
+    host.action_answer = answer
+    out = await mcp.marketplace_request_update(None, "nerdtechnic", "devmap", "0.3.0", "why")
+    assert out["ok"] is True and out["status"] == "pending" and "applied" not in out
+    record = skills_approvals.registry.get(out["approval_id"])
+    assert record["kind"] == "plugin-update" and record["target"]["version"] == "0.3.0"
+    assert "request-update" in [row["action"] for row in _actions(audit)]
+    assert "update" not in [row["action"] for row in _actions(audit) if row["outcome"] == "allowed"]
+
+
+async def test_a_host_that_does_not_answer_the_update_gets_the_request(
+    host, broadcasts, audit, caller, monkeypatch,
+) -> None:
+    host.installed = [{"id": "nerdtechnic.devmap", "version": "0.2.0", "enabled": True}]
+    real = host._answer
+    host._answer = lambda event: None if event["type"] == contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT else real(event)
+    monkeypatch.setattr(mcp, "_AGENT_ACTION_TIMEOUT_S", 0.05)
+    out = await mcp.marketplace_request_update(None, "nerdtechnic", "devmap", "0.3.0")
+    assert out["ok"] is True and out["status"] == "pending"
+
+
+async def test_a_refused_update_never_asks_the_host_to_update(host, broadcasts, audit, caller) -> None:
+    host.installed = [{"id": "nerdtechnic.devmap", "version": "0.2.0", "enabled": True}]
+    out = await mcp.marketplace_request_update(None, "nerdtechnic", "devmap", "0.2.0")
+    assert out["ok"] is False and out["error_code"] == "BAD_REQUEST"
+    assert _update_actions(host) == []
 
 
 @pytest.mark.parametrize(("tool", "args", "installed", "code"), [

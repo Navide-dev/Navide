@@ -89,6 +89,30 @@ describe('packaged Plans runtime', () => {
     )
   })
 
+  // In the about:srcdoc frame "#id" resolves against the host URL, so the
+  // default click never reaches :target (a CSS lightbox stays shut).
+  it('keeps "#id" link clicks inside the frame so :target lightboxes open and close', () => {
+    const window = new Window({ url: 'about:srcdoc' })
+    windows.push(window)
+    window.document.body.innerHTML =
+      '<div class="rp-z" id="z1"><a id="open" href="#z1"><img alt=""></a><a id="close" href="#_">x</a></div>' +
+      '<a id="external" href="https://example.com/">out</a>'
+    window.eval(buildPlanRuntimeScript({
+      documentToken: 'current', anchors: {}, scrollY: 0,
+      commentLabel: 'Comment', editLabel: 'Edit', deleteLabel: 'Delete', saveLabel: 'Save', cancelLabel: 'Cancel',
+    }))
+    const click = (selector: string) => {
+      const event = new window.MouseEvent('click', { bubbles: true, cancelable: true })
+      window.document.querySelector(selector)!.dispatchEvent(event)
+      return event
+    }
+    expect(click('#open img').defaultPrevented).toBe(true)
+    expect(window.location.hash).toBe('#z1')
+    expect(click('#close').defaultPrevented).toBe(true)
+    expect(window.location.hash).toBe('#_')
+    expect(click('#external').defaultPrevented).toBe(false)
+  })
+
   it('embeds todo IDs containing a script close safely while preserving their values', () => {
     const todoIds = ['</script><script>bad()</script>', 'quote"<&']
     const prepared = preparePlanDocHtml('<html><body><h2>Tasks</h2></body></html>', {

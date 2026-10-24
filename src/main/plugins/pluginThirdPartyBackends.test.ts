@@ -1296,3 +1296,38 @@ describe('native backend consent text', () => {
     expect(detail).not.toMatch(/[\u200b\u202e\ufe0f]/)
   })
 })
+
+describe('first-write confirmation for a first-party agent tool (navide.browser)', () => {
+  function browserSpec(pluginId = 'navide.browser', version = '1.0.0'): ThirdPartyLaunchSpec {
+    return {
+      pluginId, packageVersion: version, packageDir: '/pkgs/browser', entryFile: '/pkgs/browser/backend/navide-browser',
+      protocolVersion: 1, activation: 'startup', approvedMethods: ['browser.act'], agentMethods: [], approvedEvents: [],
+      approvedBridgePorts: ['web'], thirdParty: { name: 'Browser', system: ['ui', 'web'] },
+    }
+  }
+  const tool = { name: 'browser_act', title: 'Act' }
+
+  it('asks once per version and workspace without any native-backend consent', async () => {
+    const promptAgentToolWrite = vi.fn(async () => true)
+    const { instance } = controller({ promptAgentToolWrite })
+    store.setEnabled(false)
+    await expect(instance.confirmFirstPartyAgentToolWrite(browserSpec(), '/w1', tool)).resolves.toBe(true)
+    await expect(instance.confirmFirstPartyAgentToolWrite(browserSpec(), '/w1', tool)).resolves.toBe(true)
+    expect(promptAgentToolWrite).toHaveBeenCalledTimes(1)
+    expect(store.record('navide.browser').consent).toBeUndefined()
+    await expect(instance.confirmFirstPartyAgentToolWrite(browserSpec('navide.browser', '1.0.1'), '/w1', tool)).resolves.toBe(true)
+    expect(promptAgentToolWrite).toHaveBeenCalledTimes(2)
+    promptAgentToolWrite.mockResolvedValue(false)
+    await expect(instance.confirmFirstPartyAgentToolWrite(browserSpec(), '/w2', tool)).resolves.toBe(false)
+  })
+
+  it('never answers for a third-party package, and the third-party path still needs consent', async () => {
+    const promptAgentToolWrite = vi.fn(async () => true)
+    const { instance } = controller({ promptAgentToolWrite })
+    await expect(instance.confirmFirstPartyAgentToolWrite(browserSpec('acme.browser'), '/w1', tool)).resolves.toBe(false)
+    await expect(instance.confirmAgentToolWrite(browserSpec('acme.browser'), '/w1', tool)).resolves.toBe(false)
+    // A first-party write answer is not a consent a third-party path accepts.
+    await expect(instance.confirmAgentToolWrite(browserSpec(), '/w1', tool)).resolves.toBe(false)
+    expect(promptAgentToolWrite).not.toHaveBeenCalled()
+  })
+})

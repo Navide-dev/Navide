@@ -311,14 +311,14 @@ describe('StorageSection', () => {
     expect(wrapper.get('.su-error').text()).toContain('request timed out')
   })
 
-  it('enables "Clean selected" only once a non-safe item is checked', async () => {
+  it('enables "Clean Selected" only once a non-safe item is checked', async () => {
     const mounted = await mountSection()
     wrapper = mounted.wrapper
 
     const cleanSelected = wrapper.get('[data-act="clean-selected"]')
     expect(cleanSelected.attributes('disabled')).toBeDefined()
 
-    // A safe item alone is not enough — that is what "Clean safe items" is for.
+    // A safe item alone is not enough — that is what "Clean Safe Items" is for.
     await wrapper.get('[data-item-id="rotatedLogs"] .su-check').setValue(true)
     expect(wrapper.get('[data-act="clean-selected"]').attributes('disabled')).toBeDefined()
 

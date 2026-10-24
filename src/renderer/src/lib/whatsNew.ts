@@ -13,15 +13,25 @@
 // appears. How to write one: docs/en-US/release-announcements.md.
 //
 // Content lives here (not in the i18n JSON) so an announcement is one self
-// contained edit. Each field carries zh-TW and en-US, and may carry ja-JP;
-// pickText falls back to the default locale (zh-TW) for anything missing.
+// contained edit. Each field carries zh-TW and en-US, and may carry ja-JP or
+// any later UI language; pickText falls back to en-US for a later language
+// and to the default locale (zh-TW) for anything else missing.
 
+import { isBetaUiLocale } from '@navide/plugin-ui/foundation'
 import type { TourStep } from './tours'
 
 export type WhatsNewText = {
   'zh-TW': string
   'en-US': string
   'ja-JP'?: string
+  'zh-CN'?: string
+  'ko-KR'?: string
+  'es-ES'?: string
+  'fr-FR'?: string
+  'de-DE'?: string
+  'pt-BR'?: string
+  'ru-RU'?: string
+  'vi-VN'?: string
 }
 
 /**
@@ -88,7 +98,7 @@ export interface WhatsNewFeature {
 // is editable in one place without touching the i18n JSON.
 export const WHATS_NEW_CHROME = {
   header: { 'zh-TW': '新版更新', 'en-US': 'What’s New', 'ja-JP': '新機能' } as WhatsNewText,
-  dismiss: { 'zh-TW': '知道了', 'en-US': 'Got it', 'ja-JP': 'OK' } as WhatsNewText,
+  dismiss: { 'zh-TW': '知道了', 'en-US': 'Got It', 'ja-JP': 'OK' } as WhatsNewText,
   /** Replaces `header` on a release marked `major`. */
   majorHeader: { 'zh-TW': '重大更新', 'en-US': 'Major Update', 'ja-JP': 'メジャーアップデート' } as WhatsNewText,
   /** Heading over the bullet list once a spotlight sits above it. */
@@ -98,9 +108,9 @@ export const WHATS_NEW_CHROME = {
   /** Heading over the bullet list once feature cards sit above it. */
   details: { 'zh-TW': '細節', 'en-US': 'The details', 'ja-JP': '詳細' } as WhatsNewText,
   /** Buttons on an entry that carries a tour. */
-  takeTour: { 'zh-TW': '帶我看一遍', 'en-US': 'Take the tour', 'ja-JP': 'ツアーを見る' } as WhatsNewText,
-  retakeTour: { 'zh-TW': '再看一次導覽', 'en-US': 'Replay the tour', 'ja-JP': 'ツアーをもう一度' } as WhatsNewText,
-  notNow: { 'zh-TW': '先不用', 'en-US': 'Not now', 'ja-JP': '今はしない' } as WhatsNewText,
+  takeTour: { 'zh-TW': '帶我看一遍', 'en-US': 'Take the Tour', 'ja-JP': 'ツアーを見る' } as WhatsNewText,
+  retakeTour: { 'zh-TW': '再看一次導覽', 'en-US': 'Replay the Tour', 'ja-JP': 'ツアーをもう一度' } as WhatsNewText,
+  notNow: { 'zh-TW': '先不用', 'en-US': 'Not Now', 'ja-JP': '今はしない' } as WhatsNewText,
   /** Footer hint beside the buttons: where "Not now" leaves the way back. */
   reopenHint: {
     'zh-TW': '之後可從選單列「輔助說明（Help）→ 新版更新…」再打開',
@@ -110,6 +120,161 @@ export const WHATS_NEW_CHROME = {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    version: '0.2.29',
+    title: {
+      'zh-TW': 'Navide 會說六種新語言：德、西、法、葡、俄、越文介面（Beta）',
+      'en-US': 'Navide Speaks Six More Languages: German, Spanish, French, Brazilian Portuguese, Russian and Vietnamese (Beta)',
+      'ja-JP': 'Navide が 6 つの新しい言語に対応：ドイツ語・スペイン語・フランス語・ポルトガル語（ブラジル）・ロシア語・ベトナム語（ベータ）',
+    },
+    highlights: [
+      {
+        'zh-TW': '10 月 22 日我們把 Navide 伺服器（server.navide.dev）的 Node.js 從 22.23.3 升到 22.23.4。Node.js 官方 10 月 21 日的安全更新修補了 10 個漏洞，其中 7 個影響伺服器使用的 Node.js 22，包括 3 個高風險：TLS 憑證主機名稱驗證可被繞過（CVE-2026-106069）、Brotli 解碼越界寫入可能導致遠端執行程式碼（CVE-2026-111497），以及 dns.resolve 處理含 NUL 字元的名稱時會截斷（CVE-2026-105482）。伺服器的程式碼與資料都沒有變動，你不需要做任何事。',
+        'en-US': 'On October 22 we upgraded Node.js on the Navide server (server.navide.dev) from 22.23.3 to 22.23.4. The Node.js security release of October 21 fixes 10 vulnerabilities, 7 of which affect Node.js 22, the line the server runs. Three are rated high: a bypass of TLS certificate hostname verification (CVE-2026-106069), an out-of-bounds write in Brotli decoding that could allow remote code execution (CVE-2026-111497), and truncation in dns.resolve of names containing a NUL character (CVE-2026-105482). The server\'s code and data are unchanged, and you do not need to do anything.',
+        'ja-JP': '10 月 22 日、Navide サーバー（server.navide.dev）の Node.js を 22.23.3 から 22.23.4 に更新しました。Node.js が 10 月 21 日に公開したセキュリティリリースは 10 件の脆弱性を修正しており、そのうち 7 件がサーバーで使っている Node.js 22 に影響します。高リスクは 3 件です：TLS 証明書のホスト名検証の回避（CVE-2026-106069）、Brotli のデコードでの範囲外書き込みによるリモートコード実行の可能性（CVE-2026-111497）、NUL 文字を含む名前を dns.resolve が切り詰める問題（CVE-2026-105482）。サーバーのコードとデータは変わっておらず、お客様の操作は必要ありません。',
+      },
+      {
+        'zh-TW': '桌面版內建的 Node.js 來自 Electron。Electron 官方還沒推出含這次修補的版本，推出後我們會在新版跟上。',
+        'en-US': 'The Node.js built into the desktop app comes from Electron. Electron has not yet released a version with these fixes; we will follow in a new Navide release once it does.',
+        'ja-JP': 'デスクトップ版に組み込まれている Node.js は Electron に由来します。Electron はまだ今回の修正を含むバージョンを公開していません。公開され次第、Navide の新しいバージョンで対応します。',
+      },
+      {
+        'zh-TW': '介面多了六種語言（Beta）：德文、西班牙文、法文、巴西葡萄牙文、俄文和越南文。翻譯由 AI pane 完成、另一個 AI pane 審稿，還沒有母語者校對；法文介面把 AI 寫成 IA。到「設定 → 外觀」或第一次啟動時選擇。',
+        'en-US': 'Six more interface languages (Beta): German, Spanish, French, Brazilian Portuguese, Russian and Vietnamese. AI panes translated them and a separate AI pane reviewed them; no native speaker has checked them yet. The French interface writes AI as IA. Pick one in Settings → Appearance, or at the first start.',
+        'ja-JP': '表示言語が 6 つ増えました（ベータ）：ドイツ語、スペイン語、フランス語、ポルトガル語（ブラジル）、ロシア語、ベトナム語。AI pane が翻訳し、別の AI pane がレビューしましたが、ネイティブスピーカーによる確認はまだです。フランス語の表示では AI を IA と書きます。「設定 → 外観」または初回起動時に選べます。',
+      },
+      {
+        'zh-TW': '聊天頻道（Telegram 等）不會再在電腦忙的時候收到「沒有文字輸出」或上一回合的回覆：Navide 會等讀到這一回合的文字再回。10 秒後狀態會顯示「正在讀取回覆」，超過 120 秒會先告訴你回覆稍後補送，讀到後就補上。',
+        'en-US': 'Chat channels (Telegram and others) no longer get "no text output" or the previous turn\'s reply when the computer is busy: Navide waits until it has read this turn\'s text. After 10 seconds the status says the reply is being read; after 120 seconds the chat is told the reply will follow, and it does once read.',
+        'ja-JP': 'チャンネル（Telegram など）で、コンピューターが混んでいるときに「テキスト出力なし」や前のターンの返信が届くことはなくなりました：Navide はこのターンのテキストを読み取ってから返信します。10 秒たつと「返信を読み取り中」と表示し、120 秒を過ぎると返信は後から届くと伝え、読み取れた時点で送ります。',
+      },
+      {
+        'zh-TW': '本機（stdio）MCP 伺服器第一次啟動、npx 或 uvx 還在下載套件時，不會在 15 秒後就失敗：Navide 會一直等到它啟動完成或程序結束（最多 300 秒）。「設定 → MCP」會顯示啟動中，15 秒後說明第一次可能正在下載，失敗時顯示原因。',
+        'en-US': 'A local (stdio) MCP server no longer fails after 15 seconds while npx or uvx downloads its package on the first start: Navide waits until it is up or its process exits (up to 300 seconds). Settings → MCP shows it as starting, explains after 15 seconds that a first run may be downloading, and shows why if it fails.',
+        'ja-JP': 'ローカル（stdio）の MCP サーバーが初回起動で npx や uvx がパッケージをダウンロードしている間に、15 秒で失敗することはなくなりました：Navide は起動が完了するかプロセスが終了するまで（最大 300 秒）待ちます。「設定 → MCP」には起動中と表示され、15 秒後に初回はダウンロード中の可能性があると説明し、失敗した場合は理由を表示します。',
+      },
+      {
+        'zh-TW': 'Windows 上的 Git 檢視不會再一直停在「git.status 逾時」：背景啟動的 git 和其他工具不會再在啟動時卡住，萬一某次 git 真的逾時，也會在兩秒內結束，不會拖住後面的操作。',
+        'en-US': 'On Windows, the Git view no longer stays stuck on a git.status timeout: git and the other tools Navide starts in the background no longer hang at launch, and a git run that does time out ends within two seconds instead of holding up the ones after it.',
+        'ja-JP': 'Windows で Git ビューが「git.status のタイムアウト」のまま止まることはなくなりました：Navide がバックグラウンドで起動する git などのツールは起動時に止まらなくなり、git が本当にタイムアウトした場合も 2 秒以内に終了し、後続の処理を妨げません。',
+      },
+      {
+        'zh-TW': '每個版本的新版說明，現在也會同步發布到 Navide 官網的公告頁（navide.dev/news）。',
+        'en-US': 'Each release\'s What\'s New is now also published on the Navide website\'s announcements page (navide.dev/news).',
+        'ja-JP': '各バージョンの新機能のお知らせは、Navide のウェブサイトのお知らせページ（navide.dev/news）にも掲載されるようになりました。',
+      },
+      {
+        'zh-TW': '電腦時鐘比 Registry 慢 5 分鐘以內時，Registry 的安裝和更新不會再全部被拒絕；差距更大時，會請你檢查電腦的日期和時間。',
+        'en-US': 'A computer clock up to 5 minutes behind the Registry\'s no longer refuses every Registry install and update; a larger gap asks you to check the computer\'s date and time.',
+        'ja-JP': 'コンピューターの時計が Registry より 5 分以内の遅れであれば、Registry からのインストールと更新がすべて拒否されることはなくなりました。それ以上ずれている場合は、コンピューターの日付と時刻を確認するよう案内します。',
+      },
+      {
+        'zh-TW': 'Windows 新安裝後第一次啟動時，等待後端的時間從 45 秒延長到 120 秒（和 Linux 一樣），Microsoft Defender 掃描新檔案時，還在啟動的後端不會再被判定為啟動失敗；啟動畫面也會一直顯示到等待結束。',
+        'en-US': 'On Windows, the first launch after a fresh install waits up to 120 seconds for the backend (was 45), as on Linux, so a backend still starting while Microsoft Defender scans the new files is no longer reported as failed to start; the startup screen stays up for the whole wait.',
+        'ja-JP': 'Windows で新しくインストールした後の初回起動では、バックエンドを待つ時間が 45 秒から 120 秒に延びました（Linux と同じ）。Microsoft Defender が新しいファイルをスキャンしている間に、まだ起動中のバックエンドが起動失敗と判定されることはなくなり、起動画面も待っている間ずっと表示されます。',
+      },
+      {
+        'zh-TW': '開很多 CLI pane 時，資源面板的風險檢查不會再讓後端凍結好幾秒，檢查結果不變。',
+        'en-US': 'With many CLI panes open, the resource panel\'s risk check no longer freezes the backend for seconds at a time; its results are unchanged.',
+        'ja-JP': 'CLI pane をたくさん開いていても、リソースパネルのリスクチェックでバックエンドが数秒止まることはなくなりました。チェックの結果は変わりません。',
+      },
+      {
+        'zh-TW': 'Codex pane 的子 agent 結束時，不會再連帶結束父 pane 的這一回合；子 agent 的回覆不會被當成 pane 的回覆，也不會拿它的任務來為 pane 命名。',
+        'en-US': 'In a Codex pane, a sub-agent finishing no longer ends the parent pane\'s turn; its reply is not taken as the pane\'s, and its task is not used to name the pane.',
+        'ja-JP': 'Codex pane でサブ agent が終了しても、親 pane のターンが一緒に終わることはなくなりました。サブ agent の返信は pane の返信として扱われず、そのタスクで pane に名前が付くこともありません。',
+      },
+      {
+        'zh-TW': '安全更新：Mermaid 圖表和 Monaco 編輯器用來清理 HTML 的 DOMPurify 升級到 3.4.17，修補已公開的安全公告（GHSA-cg2g-xh64-v4q7、GHSA-mrv2-3pqr-j5jr、GHSA-c6gr-qvv4-5v3f）。',
+        'en-US': 'Security: DOMPurify, which Mermaid diagrams and the Monaco editor use to sanitize HTML, is updated to 3.4.17 for the published advisories GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and GHSA-c6gr-qvv4-5v3f.',
+        'ja-JP': 'セキュリティ更新：Mermaid の図と Monaco エディターが HTML のサニタイズに使う DOMPurify を 3.4.17 に更新し、公開されたアドバイザリ（GHSA-cg2g-xh64-v4q7、GHSA-mrv2-3pqr-j5jr、GHSA-c6gr-qvv4-5v3f）に対応しました。',
+      },
+    ],
+    note: {
+      'zh-TW': 'Node.js 官方公告：https://nodejs.org/en/blog/vulnerability/october-2026-security-releases',
+      'en-US': 'Node.js announcement: https://nodejs.org/en/blog/vulnerability/october-2026-security-releases',
+      'ja-JP': 'Node.js の公式発表：https://nodejs.org/en/blog/vulnerability/october-2026-security-releases',
+    },
+  },
+  {
+    version: '0.2.28',
+    title: {
+      'zh-TW': '核准就生效：Navide 外掛不用重新啟動，agent 也能幫你整理視窗',
+      'en-US': 'Approve and It Is Live: No Restart for Navide Plugins, and Agents Can Arrange Your Windows',
+      'ja-JP': '承認すればすぐ有効：Navide プラグインは再起動不要、agent はウィンドウも整理できます',
+    },
+    highlights: [
+      {
+        'zh-TW': '核准的 Navide 外掛安裝和更新會立即生效，不用按「重新啟動」或重開 Navide。核准前對話框會說明這個外掛開著的畫面會重新載入；每次切換都記在公告中心，附「退回」上一版的按鈕。從檔案更新時會保留被取代的版本，退回它需要重新同意。',
+        'en-US': 'Navide plugin installs and updates you approve take effect at once, without Restart or relaunching Navide. The dialog says beforehand that the plugin\'s open views reload; every switch is recorded in the announcements with Back to the previous version. A file update keeps the version it replaced, and going back to it asks for your consent again.',
+        'ja-JP': '承認した Navide プラグインのインストールと更新はすぐに有効になり、再起動も Navide の再起動も不要です。承認の前に、そのプラグインの開いている画面が再読み込みされることをダイアログが説明します。切り替えはすべてお知らせに記録され、前のバージョンに戻すボタンが付きます。ファイルから更新した場合は置き換えたバージョンを保持し、そこへ戻すには改めて同意が必要です。',
+      },
+      {
+        'zh-TW': 'agent 可以管理 Navide 視窗：列出所有視窗並切到前景、把某個 pane 或整個專案移到另一個視窗，以及關掉別的視窗或專案（不會關自己的，也不會結束 CLI）。每個動作都會顯示是哪個 pane 做的，並留下紀錄。',
+        'en-US': 'Agents can arrange Navide windows: list them and bring one to the front, move a pane or a whole project to another window, and close another window or project (never their own, and no CLI ends). Every action shows which pane did it and is recorded.',
+        'ja-JP': 'agent が Navide のウィンドウを整理できます：ウィンドウの一覧と前面への切り替え、pane やプロジェクト全体の別ウィンドウへの移動、ほかのウィンドウやプロジェクトのクローズ（自分自身は閉じず、CLI も終了しません）。どの操作も、どの pane が行ったかが表示され、記録されます。',
+      },
+      {
+        'zh-TW': 'agent 用 cli_open_agent 開子 pane 時可以開在另一個專案裡，子 pane 仍然向開它的 pane 回報。',
+        'en-US': 'An agent can open a child pane in another project with cli_open_agent; the child still reports back to the pane that opened it.',
+        'ja-JP': 'agent は cli_open_agent で別のプロジェクトに子 pane を開けます。子 pane は開いた pane に引き続き報告します。',
+      },
+      {
+        'zh-TW': '從本機資料夾載入的 Navide 外掛標示為「本機資料夾」，點開可以看到資料夾路徑、上次載入的時間和方式、是誰載入的，以及當時內容的指紋。',
+        'en-US': 'A Navide plugin loaded from a folder is labelled Local folder; open it to see the folder path, when and how it last loaded, who loaded it and a fingerprint of its content at that load.',
+        'ja-JP': 'フォルダーから読み込んだ Navide プラグインには「ローカルフォルダー」と表示されます。開くと、フォルダーのパス、前回の読み込み日時と方法、誰が読み込んだか、そのときの内容のフィンガープリントを確認できます。',
+      },
+      {
+        'zh-TW': '行為改變：開發者模式設定被 Navide 以外的程式改過時不再算數，開關維持關閉、資料夾不會載入，直到你重新開啟或重新同意。0.2.27 有在用開發者模式的人，升級後要重新開啟一次，每個本機資料夾也要再同意一次。',
+        'en-US': 'Behaviour change: Developer Mode settings changed by a program other than Navide no longer count; the switch stays off and the folder is not loaded until you turn it on or consent again. If you used Developer Mode in 0.2.27, turn it on once more after upgrading and consent to each local folder again.',
+        'ja-JP': '動作の変更：Navide 以外のプログラムが変更した開発者モードの設定は無効になり、もう一度オンにするか同意し直すまで、スイッチはオフのまま、フォルダーも読み込まれません。0.2.27 で開発者モードを使っていた場合は、アップグレード後にもう一度オンにし、ローカルフォルダーごとに同意し直してください。',
+      },
+      {
+        'zh-TW': '行為改變：被開發者或 Navide 撤回的 Testplace 測試版不再自動停用，而是標示「測試版已撤回」並問你一次要怎麼處理；離線或沒登入 Navide Cloud 的測試者也會收到通知。',
+        'en-US': 'Behaviour change: a Testplace build withdrawn by its developer or by Navide is no longer disabled automatically; it is labelled Test build withdrawn and you are asked once what to do. Testers who are offline or signed out of Navide Cloud are told too.',
+        'ja-JP': '動作の変更：開発者または Navide が取り下げた Testplace のテストビルドは自動で無効にならなくなり、「テストビルドは取り下げ済み」と表示して、どうするかを一度だけ尋ねます。オフラインの、または Navide Cloud にログインしていないテスターにも通知されます。',
+      },
+      {
+        'zh-TW': '介面語言的預設值改了：系統語言不在 Navide 支援的清單裡時，介面改用英文（以前是繁體中文）。你在設定裡自己選過的語言不受影響。',
+        'en-US': 'The default UI language has changed: when your system language is not one Navide supports, the interface now uses English (it used to be Traditional Chinese). A language you picked in Settings is not affected.',
+        'ja-JP': '既定の表示言語が変わりました：システムの言語が Navide の対応言語にない場合、表示は英語になります（以前は繁体字中国語でした）。設定で選んだ言語はそのままです。',
+      },
+    ],
+  },
+  {
+    version: '0.2.27',
+    title: {
+      'zh-TW': 'Navide 瀏覽器：agent 在自己的 Space 上網，你的分頁不會被搶走',
+      'en-US': 'Navide Browser: Agents Browse in Their Own Spaces, Yours Stay Yours',
+      'ja-JP': 'Navide ブラウザー：agent は自分の Space でブラウズし、あなたのタブは奪われません',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Navide 瀏覽器：在 Navide 裡開真正的網頁，從 Navide 市集安裝（不隨 App 內建）。每個 agent pane 在自己的背景 Space 工作，你的 Space 有釘選標記，agent 預設碰不到；總覽卡片顯示縮圖和狀態（執行中、需要你處理、完成）。',
+        'en-US': 'Navide Browser opens real web pages inside Navide. Install it from the Navide Marketplace; it does not ship with the App. Each agent pane works in its own background Space; your own Spaces are pinned and off limits to agents unless you let them in. The overview shows every Space with a thumbnail and its state (Running, Need your action, Done).',
+        'ja-JP': 'Navide ブラウザーで Navide の中に本物の Web ページを開けます。Navide マーケットプレイスからインストールします（App には同梱されません）。agent の pane はそれぞれ自分のバックグラウンド Space で作業し、あなたの Space はピン留めされ、許可しない限り agent は使えません。一覧では各 Space のサムネイルと状態（実行中・対応が必要・完了）が表示されます。',
+      },
+      {
+        'zh-TW': '人機交接：agent 需要你登入、過驗證碼或付款時會把 Space 交給你；你也可以隨時按「接手」。交還前 agent 的操作一律被擋下。',
+        'en-US': 'Hand-offs: an agent hands you its Space when it needs you to sign in, solve a captcha or pay, and you can take over any time; its commands are refused until you hand the Space back.',
+        'ja-JP': '受け渡し：ログインや CAPTCHA、支払いが必要になると agent が Space をあなたに渡します。いつでも操作を引き継ぐこともでき、戻すまで agent の操作はすべて拒否されます。',
+      },
+      {
+        'zh-TW': '所有 Space 共用同一份登入資料，保存在這台電腦上；可在 Navide 瀏覽器的設定裡一鍵清除。',
+        'en-US': 'All Spaces share one set of sign-ins kept on this computer; clear them from the Navide Browser settings.',
+        'ja-JP': 'すべての Space は同じログイン情報を共有し、このコンピューターに保存されます。Navide ブラウザーの設定から消去できます。',
+      },
+      {
+        'zh-TW': '從 .vsix 檔案安裝的 Navide 外掛，每次啟動和每次更新信任清單時都會再檢查一次。Navide 因安全問題下架的會被停用，只能移除；因其他原因被封鎖的會問你一次要繼續使用、停用或移除；開發者撤回的只會標示。「設定 → Navide 外掛」會一直標示它被封鎖的原因。',
+        'en-US': 'A Navide plugin installed from a .vsix file is checked again at every start and every trust refresh. One Navide took down for a security reason is disabled and can only be removed; one blocked for another reason asks you once whether to keep using, disable or remove it; one its developer withdrew is only labelled. Settings → Navide Plugins keeps showing why it is blocked.',
+        'ja-JP': '.vsix ファイルからインストールした Navide プラグインは、起動するたびと信頼リストを更新するたびに再確認されます。Navide がセキュリティ上の理由で取り下げたものは無効になり、削除だけができます。ほかの理由でブロックされたものは、使い続けるか、無効にするか、削除するかを一度だけ尋ねます。開発者が取り下げたものは表示だけです。「設定 → Navide プラグイン」には、ブロックされた理由が表示され続けます。',
+      },
+      {
+        'zh-TW': '行為改變：從檔案安裝的 Navide 外掛現在會記下安裝檔的 digest。降回 0.2.26 時，記有 digest 或開發者簽章的本機安裝會被隔離，不會載入；回到 0.2.27 或之後的版本就會恢復。',
+        'en-US': 'Behaviour change: a Navide plugin installed from a file now records the digest of its file. If you go back to 0.2.26, local installs that carry a digest or a developer signature are quarantined and not loaded; they come back on 0.2.27 or later.',
+        'ja-JP': '動作の変更：ファイルからインストールした Navide プラグインは、インストール元ファイルのダイジェストを記録するようになりました。0.2.26 に戻すと、ダイジェストや開発者の署名が記録されたローカルインストールは隔離され、読み込まれません。0.2.27 以降に戻すと元に戻ります。',
+      },
+    ],
+  },
   {
     version: '0.2.26',
     title: {
@@ -2197,9 +2362,11 @@ export function pickWhatsNewOnDemand(currentVersion: string, dev: boolean): What
   return pickWhatsNew(currentVersion, '')
 }
 
-/** Resolve localized text, falling back to the default locale then en-US. */
+/** Resolve localized text. A later UI language falls back to en-US; every
+ *  other locale falls back to the default locale (zh-TW) then en-US. */
 export function pickText(text: WhatsNewText, locale: string): string {
-  return (
-    (text as Record<string, string>)[locale] ?? text['zh-TW'] ?? text['en-US'] ?? ''
-  )
+  const own = (text as Record<string, string | undefined>)[locale]
+  if (own !== undefined) return own
+  if (isBetaUiLocale(locale)) return text['en-US'] ?? text['zh-TW'] ?? ''
+  return text['zh-TW'] ?? text['en-US'] ?? ''
 }

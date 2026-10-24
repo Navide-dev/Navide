@@ -35,7 +35,7 @@ import re
 import secrets
 import time
 from collections.abc import Iterator
-from contextlib import AsyncExitStack, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape as html_escape
@@ -571,7 +571,23 @@ def _target_view(entry: Any, same_workspace: bool) -> dict[str, Any]:
         view["surface"] = entry.surface
     if entry.window_kind:
         view["window_kind"] = entry.window_kind
+    # The main window mirroring the pane (window_list / window_focus take it).
+    # Absent when no main window with an id holds it, so such a pane keeps
+    # exactly the keys it always had.
+    window_id = _pane_window_id(entry.pane_id)
+    if window_id:
+        view["window_id"] = window_id
     return view
+
+
+def _pane_window_id(pane_id: str) -> str:
+    """The page-load id of the main window mirroring *pane_id*, or ''."""
+    from agent_team_backend import agent_messaging, app
+
+    session = agent_messaging.owner(pane_id)
+    if session is None or getattr(session, "dead", False) or not app.is_main_window(session):
+        return ""
+    return str(getattr(session, "window_id", "") or "")
 
 
 #: How long a read waits for one pane's git snapshot before leaving `git` off
@@ -609,6 +625,15 @@ async def pane_git(pane_id: str, workspace_path: str) -> dict[str, Any] | None:
     except Exception:  # noqa: BLE001 - timeout included: a decoration, never a failure
         return None
     return snapshot if snapshot.get("worktreeRoot") else None
+
+
+def pane_git_cached(pane_id: str, workspace_path: str) -> dict[str, Any] | None:
+    """The pane's last git snapshot without waiting (see PaneGitSnapshots.peek),
+    or None outside a repository or before the first one is computed."""
+    from agent_team_backend import git_service
+
+    snapshot = git_service.pane_git_snapshots.peek(_pane_cwd(pane_id) or workspace_path)
+    return snapshot if snapshot is not None and snapshot.get("worktreeRoot") else None
 
 
 async def _with_git(views: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -657,6 +682,9 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
 
     `offline` marks a pane whose Navide window has lost its connection: it still
     exists and is expected back, but sending to it fails until it returns.
+
+    `window_id` names the Navide window the pane runs in — the id window_list
+    and window_focus use. Absent when no main window is known to hold it.
 
     `git` appears on a local target whose pane works inside a git checkout:
     {branch, worktreeRoot, isLinkedWorktree, dirty, ahead, behind, fetchedAt}.
@@ -800,7 +828,7 @@ async def cli_whoami(ctx: Context) -> dict[str, Any]:
     and has none of these: it gets {ok, caller} only.
     Returns {ok, caller, name, address, pane_id, workspace_path, agent_key,
     busy, offline, delegation_hint, hold_reason?, surface?, window_kind?,
-    spawned_by?, waiting_on_me?,
+    window_id?, spawned_by?, waiting_on_me?,
     cloud?} or {ok: false, error}.
     """
     from agent_team_backend import agent_messaging
@@ -1090,6 +1118,8 @@ async def cli_open_agent(
     pane_id: str = "",
     session_id: str = "",
     run_group_id: str | None = None,
+    window: str = "",
+    window_id: str = "",
 ) -> dict[str, Any]:
     """Open a new CLI pane and give it a task.
 
@@ -1127,8 +1157,25 @@ async def cli_open_agent(
     Without that line it finishes, writes the answer to its own screen, and
     nobody ever sees it.
 
-    Pane callers open the pane in their own workspace; `workspace_path` is
-    ignored for them. A caller with no pane identity (host / external
+    Pane callers open the pane in their own workspace unless `workspace_path`
+    names another project: then the child starts in THAT project (its cwd,
+    CLAUDE.md, memory, Plans and git) and you stay its parent — it reports
+    back to you and you can reclaim it by the returned `address`. `window`
+    says where it goes: "current" (the default) has your own window take the
+    project in the background, without switching what is on screen; "new"
+    opens it in a window of its own, without taking focus; "existing" opens it
+    in the window that already holds the project (any window, not only
+    yours), or — with `window_id` from window_list — in that window, which
+    takes the project in the background when no window holds it yet (a
+    detached group window cannot: "window-cannot-hold"). With "existing" and
+    no window_id, a project no window holds opens as with "new". One project
+    lives in one window at a time, so a project another window already holds
+    is refused with error_code "workspace-in-other-window" and
+    `holding_window_id`, never opened twice. A folder that does not exist is
+    "workspace-not-found". The answer then also carries `workspace_path`,
+    `prepared` ("already-open" | "adopted" | "new-window"), `parent` (your
+    address) and `window_id`. Naming your own workspace is the same as
+    omitting it. A caller with no pane identity (host / external
     credential) has no workspace of its own, so `workspace_path` is required —
     the pane opens there with no parent, so it has no child/depth counts of
     its own; the workspace's CLI-pane count is still tracked for the advisory
@@ -1261,6 +1308,14 @@ async def cli_open_agent(
         return {"ok": False, "error": "agent is required (e.g. \"claude\", \"codex\")"}
     if not pane_name:
         return {"ok": False, "error": "name is required — it doubles as the pane's address"}
+    if "/" in pane_name:
+        # "/" separates <folder>/<pane> in an address, so a name holding one
+        # would read as a pane of another project (review #546 MED-3).
+        return {
+            "ok": False,
+            "error": f'name "{pane_name}" contains "/", which separates a folder from a pane in an address; pick a name without it',
+            "error_code": "invalid-name",
+        }
     # A fresh pane with nothing to do is a mistake; a RESUMED one is not — the
     # conversation already has its own context and the caller may only want it
     # back on screen, talking to it later with cli_send. So an empty task is
@@ -1275,9 +1330,44 @@ async def cli_open_agent(
     refusal = _refuse_unsupported_model(agent_key, (model or "").strip(), (effort or "").strip())
     if refusal:
         return {"ok": False, "error": refusal}
+    choice = (window or "").strip()
+    if choice not in _SPAWN_WINDOW_CHOICES:
+        return {
+            "ok": False,
+            "error": f'window must be "current", "existing" or "new", not "{window}"',
+            "error_code": "invalid-window",
+        }
+    named_window = (window_id or "").strip()
+    if named_window and choice != "existing":
+        return {
+            "ok": False,
+            "error": 'window_id goes with window "existing"',
+            "error_code": "invalid-window",
+        }
     target_workspace = ""
+    # A pane caller naming another project: the child goes there, still
+    # parented on the caller. Empty when omitted or naming its own workspace,
+    # which keeps every step below exactly as it was.
+    if caller.kind == "pane" and (workspace_path or "").strip() and not os.path.isabs(
+        os.path.expanduser((workspace_path or "").strip())
+    ):
+        # Relative to what? The backend's and the window's working folders
+        # differ, and "one project, one window" compares absolute paths.
+        return {
+            "ok": False,
+            "error": f'workspace_path must be an absolute path (or start with "~"), not "{workspace_path}"; no pane was opened',
+            "error_code": "workspace-path-not-absolute",
+        }
+    cross_workspace = _cross_workspace_path(caller, workspace_path)
+    if cross_workspace and not os.path.isdir(cross_workspace):
+        return {
+            "ok": False,
+            "error": f"no folder at {cross_workspace}; no pane was opened",
+            "error_code": "workspace-not-found",
+        }
     if caller.kind == "pane":
         me = caller.pane_id
+        target_workspace = cross_workspace
     else:
         me = ""
         target_workspace = (workspace_path or "").strip()
@@ -1323,13 +1413,21 @@ async def cli_open_agent(
         )
         if refused:
             return refused
+    prepared = ""
+    if cross_workspace:
+        prepared, refusal = await _prepare_cross_workspace(
+            caller, cross_workspace, choice or "current", named_window
+        )
+        if refusal is not None:
+            _record_cross_spawn(caller, cross_workspace, choice, refusal)
+            return refusal
     # The spawn request is a broadcast only the window holding the workspace
     # answers, and it is not replayed: sent before that window is up (a
     # workspace_open a moment ago) or with no such window at all, nobody would
     # answer and the call would sit out the whole verdict deadline. Make sure
     # someone is listening first, and say so plainly when nobody is.
     if target_workspace and not await _wait_window_ready(target_workspace):
-        return {
+        not_ready: dict[str, Any] = {
             "ok": False,
             "error": (
                 f"no Navide window holds {target_workspace} (none answered within "
@@ -1338,6 +1436,12 @@ async def cli_open_agent(
             ),
             "error_code": "window_not_ready",
         }
+        if prepared:
+            # What was already done for it stays done; say so, so the caller
+            # does not prepare the same project a second time.
+            not_ready["prepared"] = prepared
+            _record_cross_spawn(caller, cross_workspace, choice, not_ready)
+        return not_ready
     request_id = f"{me or caller.kind}:spawn:{secrets.token_hex(8)}"
     loop = asyncio.get_running_loop()
     future: asyncio.Future[dict[str, Any]] = loop.create_future()
@@ -1378,6 +1482,13 @@ async def cli_open_agent(
             # by workspace match instead (see App.vue's agent_spawn.request
             # handler).
             spawn_payload["target_workspace"] = target_workspace
+        if cross_workspace:
+            # A parent that lives in another workspace (possibly another
+            # window): the window holding target_workspace creates the pane,
+            # parents it on requester_pane_id, and has it report to this
+            # qualified address, the only form that reaches across workspaces.
+            spawn_payload["cross_workspace"] = True
+            spawn_payload["parent_address"] = _caller_address(caller)
         await app.broadcast(make_event("agent_spawn.request", spawn_payload))
         verdict = await asyncio.wait_for(future, timeout=_SPAWN_VERDICT_TIMEOUT_S)
     except asyncio.TimeoutError:
@@ -1398,7 +1509,10 @@ async def cli_open_agent(
 
     if not verdict.get("ok"):
         _pending_kickoffs.pop(request_id, None)
-        return {"ok": False, "error": str(verdict.get("error") or "spawn refused")}
+        refused_spawn = {"ok": False, "error": str(verdict.get("error") or "spawn refused")}
+        if cross_workspace:
+            _record_cross_spawn(caller, cross_workspace, choice, {**refused_spawn, "prepared": prepared})
+        return refused_spawn
     _taint_spawned(caller, str(verdict.get("pane_id") or ""))
     # The pane exists; now the task. Waited for here rather than reported by
     # message: the caller acts on this answer, and "ok" alone was taken as
@@ -1448,6 +1562,14 @@ async def cli_open_agent(
         }
     if run_group_id is not None:
         result["run_group_id"] = run_group_id
+    if cross_workspace:
+        result["workspace_path"] = cross_workspace
+        result["prepared"] = prepared
+        result["parent"] = _caller_address(caller)
+        window_id = str(getattr(agent_messaging.owner(new_pane_id), "window_id", "") or "")
+        if window_id:
+            result["window_id"] = window_id
+        _record_cross_spawn(caller, cross_workspace, choice, result)
     advisories = list(verdict.get("advisories") or [])
     if agent_key == _TERMINAL_AGENT and not _TERMINAL_PROMPT_CHECK:
         result["prompt_check"] = "unavailable"
@@ -1484,6 +1606,241 @@ async def cli_open_agent(
     if advisories:
         result["advisories"] = advisories
     return result
+
+
+#: cli_open_agent's `window` values. "" means the default, "current".
+_SPAWN_WINDOW_CHOICES = frozenset({"", "current", "existing", "new"})
+
+
+def _record_cross_spawn(caller: _Caller, workspace_path: str, choice: str, outcome: dict[str, Any]) -> None:
+    """Disclose a cross-workspace spawn (DESIGN-C §5) in the window action
+    record: who asked, where the child went, what was prepared for it, and how
+    to undo it."""
+    from agent_team_backend import agent_window_actions
+
+    target: dict[str, Any] = {"workspace_path": workspace_path, "window": choice or "current"}
+    for key in ("pane_id", "address", "window_id", "prepared"):
+        if outcome.get(key):
+            target[key] = outcome[key]
+    undo: list[dict[str, Any]] = []
+    if outcome.get("ok") and outcome.get("address"):
+        undo.append({"tool": "cli_reclaim_agent", "args": {"target": outcome["address"]}})
+    if outcome.get("prepared") == "adopted":
+        undo.append({"tool": "workspace_close", "args": {"path": workspace_path}})
+    agent_window_actions.record(
+        "cli_open_agent",
+        _caller_view(caller),
+        target,
+        ok=bool(outcome.get("ok")),
+        error=str(outcome.get("error_code") or outcome.get("error") or "") if not outcome.get("ok") else "",
+        undo=undo or None,
+    )
+
+
+def _cross_workspace_path(caller: _Caller, workspace_path: str) -> str:
+    """The project a pane caller asked its child to start in, when that is not
+    its own; "" otherwise (omitted, own workspace however spelled, or a caller
+    with no pane, whose workspace_path keeps its old meaning)."""
+    path = (workspace_path or "").strip()
+    if caller.kind != "pane" or not path:
+        return ""
+    # Expanded here, as workspace_open does: a window holds whatever string it
+    # is handed and never expands "~" itself.
+    path = os.path.normpath(os.path.expanduser(path))
+    own = _caller_workspace(caller)
+    # By folder identity, not spelling: a case variant of your own project on
+    # macOS/Windows is still your own (review #546 MED-2).
+    if own and _same_directory(path, own):
+        return ""
+    return _known_spelling(path)
+
+
+def _known_spelling(path: str) -> str:
+    """The spelling a window already holds *path* under, when one does.
+
+    Windows match projects by string; a case variant of a held project would
+    otherwise be adopted a second time, or never matched by the window that
+    holds it. Falls back to *path* itself.
+    """
+    from agent_team_backend import agent_messaging, app
+
+    for session in app.main_window_sessions():
+        for held in getattr(session, "held_workspaces", ()) or ():
+            if _same_directory(held, path):
+                return held
+    for pane in agent_messaging.list_panes():
+        if pane.workspace_path and _same_directory(pane.workspace_path, path):
+            return pane.workspace_path
+    return path
+
+
+def _caller_address(caller: _Caller) -> str:
+    """The caller pane's `<folder>/<name>` address."""
+    from agent_team_backend import agent_messaging
+
+    entry = agent_messaging.get(caller.pane_id)
+    return entry.qualified_name if entry else caller.pane_id
+
+
+def _holding_window_id(workspace_path: str) -> str:
+    """A window known to hold *workspace_path*: the one mirroring a pane of it.
+    "" when no pane of that project is registered (the window is still named
+    by the error text the window gave)."""
+    from agent_team_backend import agent_messaging
+
+    for pane in agent_messaging.list_panes():
+        if pane.workspace_path and _same_directory(pane.workspace_path, workspace_path):
+            window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
+            if window_id:
+                return window_id
+    return ""
+
+
+def _in_other_window(workspace_path: str, detail: str = "") -> dict[str, Any]:
+    """Refusal for a project another window already holds (one project, one
+    window: two would run two sets of PTY and git against one checkout)."""
+    answer: dict[str, Any] = {
+        "ok": False,
+        "error": (
+            f"{workspace_path} is already open in another Navide window"
+            + (f" ({detail})" if detail else "")
+            + "; a project lives in one window at a time, so no pane was opened. "
+            "Ask the user to open the pane from that window, or close the project there first"
+        ),
+        "error_code": "workspace-in-other-window",
+    }
+    window_id = _holding_window_id(workspace_path)
+    if window_id:
+        answer["holding_window_id"] = window_id
+    return answer
+
+
+async def _prepare_in_existing_window(
+    caller: _Caller, workspace_path: str, window_id: str
+) -> tuple[str, dict[str, Any] | None]:
+    """cli_open_agent window "existing" (DESIGN-C §3.1): the window that holds
+    the project, or the named one. Returns (prepared, refusal); prepared ""
+    with no refusal means "nobody holds it and no window was named"."""
+    if "/" in window_id:
+        return "", {
+            "ok": False,
+            "error": "window ids name windows on this machine only; a pane cannot be opened in another device's window",
+            "error_code": "spawn-local-only",
+        }
+    named = _window_session(window_id) if window_id else None
+    if window_id and named is None:
+        return "", {
+            "ok": False,
+            "error": f"no Navide window has id {window_id!r} — it may have closed or reloaded; call window_list for the current ids",
+            "error_code": "unknown-window",
+        }
+    holder = None
+    named_kind = ""
+    for session, answer in await _describe_windows(caller):
+        described = answer.get("result") if answer and answer.get("ok") else None
+        if not isinstance(described, dict):
+            continue
+        if session is named:
+            named_kind = str(described.get("kind") or "")
+        if described.get("kind") == "detached-group":
+            continue
+        if any(_same_directory(str(p), workspace_path) for p in described.get("workspaces") or []):
+            holder = session
+    if holder is not None:
+        if named is not None and holder is not named:
+            refusal = _in_other_window(workspace_path)
+            refusal["holding_window_id"] = holder.window_id
+            return "", refusal
+        return "already-open", None
+    if named is None:
+        return "", None
+    if named_kind == "detached-group":
+        return "", {
+            "ok": False,
+            "error": f"window {window_id} is a detached group window, which shows one workspace only",
+            "error_code": "window-cannot-hold",
+        }
+    reply = await _window_request(named, "ui.workspace.adopt", {"path": workspace_path}, caller)
+    if reply is None:
+        return "", {
+            "ok": False,
+            "error": f"window {window_id} did not answer within {_UI_INVOKE_TIMEOUT_S:.0f}s",
+            "error_code": "ui_action_timeout",
+        }
+    if not reply.get("ok"):
+        error = str(reply.get("error") or "")
+        code, _, detail = error.partition(":")
+        if code.strip() == "workspace-in-other-window":
+            return "", _in_other_window(workspace_path, detail.strip())
+        if code.strip() == "window-cannot-hold":
+            return "", {"ok": False, "error": detail.strip() or error, "error_code": "window-cannot-hold"}
+        return "", {"ok": False, "error": error or "the window did not take the project", "error_code": "ui_action_failed"}
+    result = reply.get("result")
+    prepared = str(result.get("prepared") or "") if isinstance(result, dict) else ""
+    return prepared or "adopted", None
+
+
+async def _prepare_cross_workspace(
+    caller: _Caller, workspace_path: str, choice: str, window_id: str = ""
+) -> tuple[str, dict[str, Any] | None]:
+    """Make sure a window holds *workspace_path* for a cross-workspace spawn.
+
+    "current": the caller's own window takes the project into its sidebar
+    without switching to it. "new": a window of its own, opened without
+    taking focus. "existing": the window already holding it, or the named
+    window (see _prepare_in_existing_window). Returns (prepared, refusal).
+    """
+    if choice == "existing":
+        prepared, refusal = await _prepare_in_existing_window(caller, workspace_path, window_id)
+        if refusal is not None or prepared:
+            return prepared, refusal
+        choice = "new"
+    if choice == "new":
+        if _holding_window_id(workspace_path) or await _probe_window(workspace_path, _WINDOW_PROBE_TIMEOUT_S):
+            return "", _in_other_window(workspace_path)
+        reply = await _ui_request(
+            "",
+            "invoke",
+            caller=caller,
+            action="ui.workspace.open",
+            args={"path": workspace_path, "background": True},
+            is_global=True,
+        )
+        if not reply.get("ok"):
+            return "", {
+                "ok": False,
+                "error": str(reply.get("error") or "no Navide window could open a new window"),
+                "error_code": str(reply.get("error_code") or "ui_action_failed"),
+            }
+        # Same bookkeeping as workspace_open: a window opened this way stays
+        # out of Recent, and this is what lists it in workspace_list.
+        _mcp_opened_workspaces.pop(workspace_path, None)
+        _mcp_opened_workspaces[workspace_path] = (
+            datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        )
+        return "new-window", None
+    reply = await _ui_request(
+        _caller_workspace(caller),
+        "invoke",
+        caller=caller,
+        action="ui.workspace.adopt",
+        args={"path": workspace_path},
+    )
+    if not reply.get("ok"):
+        error = str(reply.get("error") or "")
+        code, _, detail = error.partition(":")
+        if code.strip() == "workspace-in-other-window":
+            return "", _in_other_window(workspace_path, detail.strip())
+        if code.strip() == "window-cannot-hold":
+            return "", {"ok": False, "error": detail.strip() or error, "error_code": "window-cannot-hold"}
+        return "", {
+            "ok": False,
+            "error": error or "your window did not answer",
+            "error_code": str(reply.get("error_code") or "ui_action_failed"),
+        }
+    result = reply.get("result")
+    prepared = str(result.get("prepared") or "") if isinstance(result, dict) else ""
+    return prepared or "adopted", None
 
 
 async def _reopen_pane(pane_id: str) -> dict[str, Any]:
@@ -3715,9 +4072,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 
     `target` uses the same addressing as cli_send, and `pane_id` names one
     exact pane instead. Returns {ok, name,
-    agent_key, busy, last_activity?, usage?, git?, ui?, prompt_fingerprint?}. `last_activity`, when known,
+    agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
     is {type: "agent_active"|"turn_complete", text? (turn_complete only),
-    age_seconds}. `ui`, when the owning Navide window answers in time, is
+    age_seconds}. Right after a Claude turn end reported by its Stop hook,
+    `text` is absent until Navide has read the turn from the conversation log
+    (under load, seconds later); it is never an earlier turn's. `ui`, when the owning Navide window answers in time, is
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
     effort?, profileId?, loginExpired?, usageLimitUntil?} straight from the
     renderer; it is omitted (not a failure) when the window does not reply.
@@ -3752,6 +4111,17 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     cli_list_targets gives it: branch, worktree, dirty count and drift against
     origin/main, cached for up to ~30 s. Absent outside a repository, when git
     did not answer in time, and for a remote target.
+    `log_reader` appears only while Navide cannot fully read this vendor's
+    own conversation store, today OpenCode's or Kilo's shared db: {status,
+    reason, path, detail, since, problems} for the oldest open problem, with
+    `problems` counting all of them. status "unreadable" with reason
+    "unrecognized-schema" (a CLI version whose tables Navide does not know)
+    or "query-failed" (an sqlite error, a db it may not open included);
+    status "partial" with reason "mixed-schema" (OpenCode 1.x and 2 tables
+    both present and the 1.x ones written last, so OpenCode 2 sessions go
+    unread). While it is there, turn ends, token counts and session binding
+    for that vendor can be missed, so `busy` / `last_activity` can be stale;
+    each problem clears when the read that hit it works again.
 
     While `ui.status` is "awaiting", `ui` also carries what the pane is
     waiting on, read off its screen: `awaitingPrompt` (the prompt text) and,
@@ -3827,6 +4197,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     git = await pane_git(pane.pane_id, pane.workspace_path)
     if git is not None:
         status["git"] = git
+    from agent_team_backend.cli_vendors import opencode as opencode_vendor
+
+    log_reader = opencode_vendor.read_problem(pane.agent_key)
+    if log_reader is not None:
+        status["log_reader"] = log_reader
 
     ui_result = await _ui_request(
         pane.workspace_path,
@@ -3857,6 +4232,43 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 _WAIT_IDLE_POLL_S = 1.0
 _WAIT_IDLE_QUIET_S = 10.0
 _WAIT_IDLE_MAX_TIMEOUT_S = 120.0
+# Claude's Stop hook reports a turn end before the conversation log is read, and
+# a hook carries no text. A wait that settles on such a turn end waits this much
+# longer (within its own timeout) for the log's turn end and its text, then
+# returns either way, with `text_pending` when the text has not been read yet.
+HOOK_TURN_TEXT_WAIT_S = 10.0
+_HOOK_TURN_TEXT_POLL_S = 0.25
+
+
+def _hook_turn_without_text(activity: dict[str, Any] | None) -> bool:
+    """A Stop hook's turn end whose text the log has not brought yet. One the
+    log had already ended (with or without text) needs no wait."""
+    return bool(
+        activity and activity["event_type"] == "turn_complete"
+        and activity.get("source") == "hook" and not activity["text"]
+        and not activity.get("log_ended")
+    )
+
+
+async def _await_log_turn_text(pane_id: str, hook_end: dict[str, Any], budget: float) -> str:
+    """Wait up to ``budget`` seconds for the log's turn end of the turn
+    ``hook_end`` closed. "text" once it is recorded with text; "empty" when only
+    a textless one came (the turn wrote none, or the text half of a split turn
+    end is still to come); "" when none of this turn came. A log turn end of an
+    earlier turn — a reader lagging by whole turns — never counts."""
+    from agent_team_backend import app
+
+    deadline = time.monotonic() + max(budget, 0.0)
+    seen_empty = False
+    while True:
+        match = app.log_turn_end_after(pane_id, hook_end.get("prev_hook_turn_end"))
+        if match is not None and match is not hook_end:
+            if match["text"]:
+                return "text"
+            seen_empty = True
+        if time.monotonic() >= deadline:
+            return "empty" if seen_empty else ""
+        await asyncio.sleep(_HOOK_TURN_TEXT_POLL_S)
 
 
 # ── Who is parked waiting on a pane (cli_whoami's `waiting_on_me`) ─────────
@@ -4060,7 +4472,7 @@ async def cli_wait_idle(
     passed since its last activity; or, while the registry still reports busy,
     the owning window reports the pane itself as idle/exited/stopped/error.
     That last one matters because the busy flag is frontend-reported and can
-    stay stale. Returns {idle, source, waited_s, last_activity?, ui_status?}
+    stay stale. Returns {idle, source, waited_s, last_activity?, ui_status?, text_pending?}
     where source is "turn_complete", "quiet_period", "ui_status",
     "never_started", or "timeout"; or {ok: false, error} if `target` cannot be
     resolved.
@@ -4068,7 +4480,11 @@ async def cli_wait_idle(
     `last_activity` is what cli_get_status reports under the same key — {type,
     text? (turn_complete only), age_seconds} — so a caller that waited for a
     turn to end also gets what the turn said, without a second call. It is
-    absent for a pane whose CLI records no activity at all. `ui_status` is the
+    absent for a pane whose CLI records no activity at all. Claude's Stop hook
+    can report the turn end before its text is read from the conversation log;
+    the wait then gives the log up to 10 s more (HOOK_TURN_TEXT_WAIT_S, within
+    `timeout_s`), and if the text is still not read it returns anyway with
+    `text_pending: true` — ask cli_get_status shortly after for the text. `ui_status` is the
     owning window's own word for the pane, present only when a probe reached
     it during the wait.
 
@@ -4173,7 +4589,20 @@ async def cli_wait_idle(
                 if activity is None:
                     return done("quiet_period")
                 if activity["event_type"] == "turn_complete":
-                    return done("turn_complete")
+                    if not _hook_turn_without_text(activity):
+                        return done("turn_complete")
+                    budget = min(HOOK_TURN_TEXT_WAIT_S, timeout - (time.monotonic() - started))
+                    read = await _await_log_turn_text(pane_id, activity, budget)
+                    out = done("turn_complete")
+                    if read != "text":
+                        # Whatever the pane recorded since is not this turn's
+                        # text (an earlier turn's, from a lagging reader).
+                        out.get("last_activity", {}).pop("text", None)
+                    if not read:
+                        # The turn ended, but its text is still on its way from the
+                        # conversation log: cli_get_status shortly after has it.
+                        out["text_pending"] = True
+                    return out
                 if time.monotonic() - activity["ts_monotonic"] >= _WAIT_IDLE_QUIET_S:
                     return done("quiet_period")
             elif ui_reachable and tick >= next_ui_probe_tick:
@@ -4494,7 +4923,7 @@ async def cli_answer_prompt(
 
     request = relay.RelayRequest(
         id="", pane_id=pane.pane_id, kind="question" if choice.isdigit() else "permission",
-        options=options, loc=relay.Location("mcp", "", ""), prompt=prompt)
+        options=options, loc=relay.Location("mcp", "", ""), prompt=prompt, agent_key=pane.agent_key or "")
     if any(relay.is_multi_select(o) for o in options):
         return _answer_refusal(pane, "computer-only", relay.COMPUTER_ONLY)
     if relay.refuses_permanent(request, choice):
@@ -4806,7 +5235,11 @@ async def cli_send_and_wait(
     On success returns cli_wait_idle's result — {idle: true, source, waited_s,
     last_activity?, ui_status?} — plus {ok: true, target, msg_key}.
     `last_activity.text` is what the other agent said, when its CLI records
-    that. ALWAYS read `source`, because it says how much the "finished" is
+    that. After a Claude turn end reported by its Stop hook the wait gives the
+    conversation log up to 10 s more (within `timeout_s`) for this turn's text;
+    if it is still not read, `text` is absent and `text_pending: true` says it
+    is on its way (ask cli_get_status shortly after). It is never an earlier
+    turn's text. ALWAYS read `source`, because it says how much the "finished" is
     worth:
 
       - "turn_complete" — the CLI reported the turn ended. Trustworthy.
@@ -5546,6 +5979,219 @@ _UI_INVOKE_SLOW_TIMEOUT_S = 60.0
 _PANE_PRIVATE_UI_ACTIONS = frozenset({"ui.messaging.readIncoming", "ui.messaging.settleRead"})
 
 
+@dataclass(frozen=True)
+class _SelfScope:
+    """What "your own" means for a pane caller: its pane, its workspace, and
+    every window that holds that workspace.
+
+    Built from the credential alone — the pane id its token names, the
+    workspace the registry recorded for that pane when its window registered
+    it, and the windows mirroring that workspace's panes — so nothing in a
+    call's arguments can move it. The windows include the one mirroring the
+    caller AND any other window holding its workspace: a pane sitting in a
+    detached group window still has its workspace held by the main window, and
+    closing that window closes the caller's workspace.
+    """
+
+    pane_id: str
+    workspace: str
+    window_ids: frozenset[str]
+
+
+def _same_directory(a: str, b: str) -> bool:
+    """Whether two workspace paths name the same folder.
+
+    Compared by the folder's identity (device, inode) rather than by string:
+    on a case-insensitive volume (macOS, Windows) Path.resolve keeps the case
+    it was given, so "/Users/me/Proj" and "/users/me/proj" are one folder
+    with two spellings. Falls back to the normalised strings when either
+    path cannot be stat'ed (a folder that is gone).
+    """
+    if not a or not b:
+        return False
+    a = os.path.expanduser(a)
+    b = os.path.expanduser(b)
+    try:
+        sa, sb = os.stat(a), os.stat(b)
+    except OSError:
+        na, nb = _norm_workspace(a), _norm_workspace(b)
+        if _osplat.paths_ignore_case:
+            # macOS and Windows volumes ignore case, so a folder that is gone
+            # still matches its other spellings.
+            return na.casefold() == nb.casefold()
+        return na == nb
+    return (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino)
+
+
+def _self_scope(caller: _Caller) -> _SelfScope | None:
+    """The caller's own pane, workspace and windows; None for a caller with no
+    pane (host / external), which has nothing of its own to protect."""
+    from agent_team_backend import agent_messaging, app
+
+    if caller.kind != "pane":
+        return None
+    entry = agent_messaging.get(caller.pane_id)
+    if entry is None:
+        return None
+    workspace = entry.workspace_path or ""
+    windows: set[str] = set()
+    for pane in agent_messaging.list_panes():
+        if pane.pane_id != entry.pane_id and not _same_directory(pane.workspace_path, workspace):
+            continue
+        window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
+        if window_id:
+            windows.add(window_id)
+    # A main window holding the caller's workspace with none of its panes in
+    # it — they all sit in detached group windows — is still the caller's
+    # own: closing it closes the caller's workspace. Windows report what they
+    # hold with ui.invoke.ready.
+    for session in app.main_window_sessions():
+        window_id = str(getattr(session, "window_id", "") or "")
+        held = getattr(session, "held_workspaces", ()) or ()
+        if window_id and any(_same_directory(path, workspace) for path in held):
+            windows.add(window_id)
+    return _SelfScope(entry.pane_id, workspace, frozenset(windows))
+
+
+def _named_pane_id(value: Any) -> str:
+    """A pane id from args, followed to the pane it names today: a re-attach
+    leaves the old id as an alias of the live pane, and naming yourself by it
+    is still naming yourself."""
+    from agent_team_backend import agent_messaging
+
+    named = str(value or "")
+    entry = agent_messaging.current(named) if named else None
+    return entry.pane_id if entry is not None else named
+
+
+def _lands_in_own_window(scope: _SelfScope, workspace_path: str) -> bool:
+    """Whether a window-level request (one that acts on whichever window
+    answers it, such as workbench.action.closeWindow) would be answered by one
+    of the caller's own windows.
+
+    An empty workspace_path, or the caller's own workspace, is addressed to
+    the caller's window outright. Another project lands in the window holding
+    it — the caller's own when that window also holds the caller's workspace,
+    as far as the registry shows (a window holding a project with no pane is
+    not visible here; the window repeats the check with what it knows).
+    """
+    from agent_team_backend import agent_messaging, app
+
+    if not workspace_path or _same_directory(workspace_path, scope.workspace):
+        return True
+    for pane in agent_messaging.list_panes():
+        if not _same_directory(pane.workspace_path, workspace_path):
+            continue
+        window_id = str(getattr(agent_messaging.owner(pane.pane_id), "window_id", "") or "")
+        if window_id in scope.window_ids:
+            return True
+    # A window holding that project with no pane of it, as it announced.
+    for session in app.main_window_sessions():
+        held = getattr(session, "held_workspaces", ()) or ()
+        if str(getattr(session, "window_id", "") or "") in scope.window_ids and any(
+            _same_directory(path, workspace_path) for path in held
+        ):
+            return True
+    return False
+
+
+def _self_scope_refusal(
+    caller: _Caller, action: str, args: dict[str, Any] | None, workspace_path: str = ""
+) -> dict[str, Any] | None:
+    """Refuse closing the caller's own pane, workspace or window.
+
+    The same rule as cli_close_agent's "self-close" and cli_reclaim_agent's
+    "self-reclaim", applied to every route that reaches the window's close
+    commands, so ui_invoke is not a way around the dedicated tools. The window
+    makes the same check again with the identity this request carries.
+    """
+    scope = _self_scope(caller)
+    if scope is None:
+        return None
+    a = args or {}
+    # TODO(S4, review #534 MED-3): ui.workspace.close and ui.window.close are
+    # registered in S4, which must use exactly these arg names (`path`,
+    # `windowId`) and must either require `path` or treat an empty one as the
+    # caller's own workspace — an empty path is not refused here.
+    if action == "ui.pane.close" and _named_pane_id(a.get("paneId")) == scope.pane_id:
+        return {
+            "ok": False,
+            "result": None,
+            "error": (
+                "that is your own pane — closing it would take away the turn making "
+                "this call, so you would never see the answer. Ask the user to close it instead."
+            ),
+            "error_code": "self-close",
+        }
+    if action == "ui.workspace.close":
+        path = str(a.get("path") or "")
+        if path.startswith("~"):
+            path = os.path.expanduser(path)
+        if path and _same_directory(path, scope.workspace):
+            return {
+                "ok": False,
+                "result": None,
+                "error": (
+                    "that is your own workspace — closing it would take your own pane "
+                    "with it. Ask the user to close it instead."
+                ),
+                "error_code": "self-workspace-close",
+            }
+    if action == "ui.pipeline.reset" and _lands_in_own_window(scope, workspace_path):
+        # Reset kills every pane in the window that answers it (onKillAll),
+        # pipeline or not, without asking — the caller's own included.
+        return {
+            "ok": False,
+            "result": None,
+            "error": (
+                "a pipeline reset ends every pane in the window that runs it, and that "
+                "window holds your own pane — it would end you with them. Ask the user to reset it."
+            ),
+            "error_code": "self-close",
+        }
+    if (action == "ui.window.close" and str(a.get("windowId") or "") in scope.window_ids) or (
+        action == "workbench.action.closeWindow" and _lands_in_own_window(scope, workspace_path)
+    ):
+        return {
+            "ok": False,
+            "result": None,
+            "error": (
+                "that window holds your own pane or workspace — closing it would close "
+                "you with it. Ask the user to close it instead."
+            ),
+            "error_code": "self-window-close",
+        }
+    return None
+
+
+#: Close actions reachable only through their dedicated tools (S4), which
+#: record the action and show the user who did it. ui_invoke refuses them.
+_DEDICATED_CLOSE_ACTIONS = {
+    "ui.window.close": "window_close",
+    "ui.workspace.close": "workspace_close",
+    # The ⌘⇧W keybinding command closes whichever window answers; aimed at
+    # someone else's window it would close it with no record (review #534 R2).
+    "workbench.action.closeWindow": "window_close",
+    # A move lets go of a pane or project in one window and has another take
+    # it; half of it alone would be a silent close (DESIGN-C S4b).
+    "ui.pane.moveToWindow": "window_move_pane",
+    "ui.workspace.moveToWindow": "window_move_pane",
+    "ui.workspace.receive": "window_move_pane",
+    # Takes a project into a window's sidebar; only cli_open_agent's cross-
+    # workspace spawn asks for it, and that path records the action (review #546).
+    "ui.workspace.adopt": "cli_open_agent with workspace_path",
+}
+
+
+def _self_reclaim_entry(pane_id: str) -> dict[str, str]:
+    """ui.pane.reclaim's refusal row for the caller's own pane."""
+    return {
+        "paneId": pane_id,
+        "reason": "self",
+        "detail": "that is your own pane — reclaiming it would end the CLI making this call",
+    }
+
+
 def _human_only_refusal(action: str, args: dict[str, Any] | None) -> dict[str, Any] | None:
     """Refuse what only the user at the computer may do, for any MCP caller.
 
@@ -5588,6 +6234,9 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     # confirmation ends one ordinary wait before this one, leaving a pane
     # create its wait.
     "ui.accounts.signIn",
+    # Asks the user, then runs the window's own switch, which may restart
+    # panes (cli_account_switch): the same budget as the sign-in.
+    "ui.accounts.switch",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
 
@@ -5730,7 +6379,7 @@ def _ui_timeout_error(
 #: nobody waits for the answer any more (review #438 LOW-1): a sign-in
 #: confirmation must not open a pane after its tool call was cancelled or
 #: timed out. Other actions finish on their own and get no withdrawal.
-_UI_INVOKE_WITHDRAWN_ACTIONS = frozenset({"ui.accounts.signIn"})
+_UI_INVOKE_WITHDRAWN_ACTIONS = frozenset({"ui.accounts.signIn", "ui.accounts.switch"})
 
 
 def _withdraw_ui_request(action: str | None, request_id: str, owner: Any) -> None:
@@ -5756,6 +6405,7 @@ async def _ui_request(
     action: str | None = None,
     args: dict[str, Any] | None = None,
     is_global: bool = False,
+    route_pane_id: str = "",
 ) -> dict[str, Any]:
     from agent_team_backend import app
     from agent_team_backend.ipc import make_event
@@ -5765,7 +6415,12 @@ async def _ui_request(
     # goes to any one window; a pane caller's own window is known and is asked
     # directly ("addressed", so it answers without checking workspace_path);
     # anything else is broadcast for the windows to filter, as before.
-    owner = None if is_global else _caller_window(caller, workspace_path)
+    # route_pane_id addresses the window holding that pane instead while
+    # `caller` stays who is asking: handing the subject pane in as the caller
+    # made the window's self guards read every close or reclaim as the
+    # target closing itself.
+    route = _pane_caller(route_pane_id) if route_pane_id else caller
+    owner = None if is_global else _caller_window(route, workspace_path)
     fut = _ui_invoke_pending.register(request_id)
     payload: dict[str, Any] = {
         "request_id": request_id,
@@ -5779,6 +6434,9 @@ async def _ui_request(
         # refuses the pane-private actions when this is not the pane named in
         # args.paneId. Empty for host / external callers, which have no inbox.
         "caller_pane_id": caller.pane_id if caller is not None and caller.kind == "pane" else "",
+        # The caller's workspace from the registry, never from args: the window
+        # repeats the self-close checks (_self_scope_refusal) with it.
+        "caller_workspace_path": _caller_workspace(caller) if caller is not None else "",
     }
     # The event is built inside each branch, after `addressed` has settled:
     # make_event stores the payload by reference today, so mutating it after
@@ -5876,6 +6534,110 @@ async def _wait_window_ready(workspace_path: str) -> bool:
     return False
 
 
+# ── Window tools (window_list / window_focus) ──────────────────────────────
+# A window is named by its page-load id (`ui.invoke.ready` window_id). A reload
+# mints a new one on purpose: the page an old id named is gone, so the old id
+# answers "unknown-window" instead of reaching the new page. Every request here
+# is addressed to one window's own WS session, never broadcast.
+
+#: One window's budget to describe itself. A window that misses it is listed
+#: with answered false rather than holding up the others.
+_WINDOW_DESCRIBE_TIMEOUT_S = 5.0
+
+
+def _window_session(window_id: str) -> Any | None:
+    """The live main window whose page-load id is *window_id*, or None."""
+    from agent_team_backend import app
+
+    if not window_id:
+        return None
+    for session in app.main_window_sessions():
+        if session.window_id == window_id:
+            return session
+    return None
+
+
+def _caller_view(caller: _Caller) -> dict[str, Any]:
+    """Who is acting, from the credential: {pane_id, address} or {kind}."""
+    from agent_team_backend import agent_messaging
+
+    if caller.kind != "pane":
+        return {"kind": caller.kind}
+    entry = agent_messaging.get(caller.pane_id)
+    return {"pane_id": caller.pane_id, "address": entry.qualified_name if entry else ""}
+
+
+async def _window_request(
+    session: Any,
+    action: str,
+    args: dict[str, Any] | None,
+    caller: _Caller,
+    *,
+    timeout: float = _UI_INVOKE_TIMEOUT_S,
+) -> dict[str, Any] | None:
+    """Ask one window to run *action*; its ui.invoke.result, or None when it
+    could not be reached or did not answer within *timeout*."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    request_id = secrets.token_hex(16)
+    fut = _ui_invoke_pending.register(request_id)
+    payload: dict[str, Any] = {
+        "request_id": request_id,
+        "workspace_path": "",
+        "op": "invoke",
+        "action": action,
+        "args": args,
+        "global": False,
+        # This window and no other: it answers without the ownership test.
+        "addressed": True,
+        "caller_pane_id": caller.pane_id if caller.kind == "pane" else "",
+    }
+    if not await app.unicast_to(session, make_event("ui.invoke.request", payload)):
+        _ui_invoke_pending.discard(request_id)
+        return None
+    result = await _ui_invoke_pending.wait(request_id, fut, timeout=timeout)
+    return None if result is TIMEOUT else result
+
+
+async def _describe_windows(caller: _Caller) -> list[tuple[Any, dict[str, Any] | None]]:
+    """Every main window with its own description (None: did not answer),
+    asked in parallel."""
+    from agent_team_backend import app
+
+    sessions = [s for s in app.main_window_sessions() if getattr(s, "window_id", "")]
+    answers = await asyncio.gather(*(
+        _window_request(s, "ui.window.describe", None, caller, timeout=_WINDOW_DESCRIBE_TIMEOUT_S)
+        for s in sessions
+    ))
+    return list(zip(sessions, answers))
+
+
+def _display_self_windows(caller: _Caller, described: list[tuple[Any, dict[str, Any] | None]]) -> set[str]:
+    """The caller's windows, FOR DISPLAY ONLY (window_list's is_yours).
+
+    The window mirroring the pane, plus every main window holding the pane's
+    workspace. No refusal is decided on this: every "is it your own" check
+    belongs to the self-scope guard (DESIGN-C §2, S1), never to this copy.
+    """
+    from agent_team_backend import agent_messaging
+
+    if caller.kind != "pane":
+        return set()
+    own = {_pane_window_id(caller.pane_id)} - {""}
+    entry = agent_messaging.get(caller.pane_id)
+    if entry is None:
+        return own
+    mine = _norm_workspace(entry.workspace_path)
+    for session, answer in described:
+        result = (answer or {}).get("result") if (answer or {}).get("ok") else None
+        if not isinstance(result, dict) or result.get("kind") == "detached-group":
+            continue
+        if any(_norm_workspace(str(p)) == mine for p in result.get("workspaces") or []):
+            own.add(session.window_id)
+    return own
+
+
 @server.tool()
 async def ui_list_actions(workspace_path: str, ctx: Context) -> dict[str, Any]:
     """List the UI actions registered by the Navide window for workspace_path.
@@ -5963,15 +6725,58 @@ async def ui_invoke(
         refused = _login_pane_input_refusal(named, named)
         if refused is not None:
             return {**refused, "result": None}
+    if action == "ui.window.focus":
+        # The affected window says who did it; that name comes from the
+        # credential, never from what the caller wrote (window_focus does
+        # the same).
+        who = _caller_view(caller)
+        args = {**(args or {}), "caller_address": who.get("address") or who.get("kind", "")}
     if action.startswith("ui.accounts."):
         # Reached through their own tools only, which check the caller and
         # tell the user who asked; the window refuses them off that path too.
         return {
             "ok": False,
             "result": None,
-            "error": f"{action} is not a ui_invoke action; use cli_account_sign_in",
+            "error": f"{action} is not a ui_invoke action; use cli_account_sign_in or cli_account_switch",
             "error_code": "ui_dedicated_tool",
         }
+    if action in _DEDICATED_CLOSE_ACTIONS:
+        # Closing a window or a workspace leaves an action record and tells
+        # the user which pane did it; only the dedicated tools do that, so this
+        # route is closed rather than left as a silent way around them.
+        return {
+            "ok": False,
+            "result": None,
+            "error": f"{action} is not a ui_invoke action; use {_DEDICATED_CLOSE_ACTIONS[action]}",
+            "error_code": "ui_dedicated_tool",
+        }
+    refused_self = _self_scope_refusal(caller, action, args, workspace_path)
+    if refused_self is not None:
+        return refused_self
+    if action == "ui.pane.reclaim":
+        # A batch can half succeed, so the caller's own pane is taken out and
+        # answered as one more refused row rather than failing the others.
+        scope = _self_scope(caller)
+        raw = (args or {}).get("paneId")
+        ids = raw if isinstance(raw, list) else [raw]
+        if scope is not None and any(_named_pane_id(i) == scope.pane_id for i in ids):
+            rest = [i for i in ids if _named_pane_id(i) != scope.pane_id]
+            own = _self_reclaim_entry(scope.pane_id)
+            if not rest:
+                return {"ok": True, "result": {"reclaimed": [], "refused": [own]}, "error": None}
+            reply = await _ui_request(
+                workspace_path,
+                "invoke",
+                caller=caller,
+                action=action,
+                args={**(args or {}), "paneId": rest},
+            )
+            result = reply.get("result")
+            # Kept on an error reply too: the caller must still learn that its
+            # own id was taken out of the batch.
+            base = result if reply.get("ok") and isinstance(result, dict) else {"reclaimed": []}
+            reply["result"] = {**base, "refused": [*(base.get("refused") or []), own]}
+            return reply
     return await _ui_request(
         workspace_path,
         "invoke",
@@ -6381,7 +7186,7 @@ _PIPELINE_SLOT_FIELDS = ("agent_key", "role_key", "label", "is_commander")
 _ROLE_FIELDS = ("key", "label", "one_line", "is_default")
 # NodeRunState (src/renderer/src/lib/pipelineGraph.ts) minus `summary`, which
 # is a whole output tail.
-_NODE_STATE_FIELDS = ("status", "startedAt", "endedAt", "tokens", "paneId", "attempts", "pinned")
+_NODE_STATE_FIELDS = ("status", "startedAt", "endedAt", "tokens", "paneId", "attempts", "pinned", "error")
 
 #: Execution state of a project: the run, not the window it is drawn in.
 #: workspace_path is left out on purpose — the resolved one is reported instead.
@@ -6821,8 +7626,10 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     where every pane is listed.
 
     Per graph node it also carries `nodes` — {node_id: {status, startedAt,
-    endedAt, tokens, paneId, attempts, pinned}}, status one of pending /
-    running / done / awaiting / rejected / failed / skipped / aborted — and
+    endedAt, tokens, paneId, attempts, pinned, error}}, status one of pending /
+    running / done / awaiting / rejected / failed / skipped / aborted, and
+    `error` saying why a failed node failed (e.g. its kickoff never reached
+    the agent, which also ends the run as aborted) — and
     `gate`, the gate the run is paused on ({gateId, label, prompt, nextIndex},
     or {} when it is not paused). Node ids are the ones pipeline_graph op
     "get" returns; a pipeline without a stored graph uses n-<stage_id>-<slot
@@ -7305,7 +8112,7 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
     as `***` in both halves; names and hosts are kept so an entry stays
     recognisable. This is a global inventory: it does not vary by workspace.
     """
-    from agent_team_backend import app as _app
+    from agent_team_backend import app as _app, native_mcp
     from agent_team_backend.mcp_settings import MCPSettingsError
 
     _resolve_caller(ctx)
@@ -7324,7 +8131,11 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
             status = info.get("status", "unknown")
         # The tool list itself stays out: this is a summary, and a server with
         # dozens of tools would swamp the answer.
-        servers.append({**row, "status": status, "tool_count": info.get("tool_count", 0)})
+        detail = {key: info[key] for key in ("starting_seconds", "error") if key in info}
+        if "error" in detail:
+            # Masked like the URL above: a library may quote the URL it failed on.
+            detail["error"] = native_mcp.mask_urls_in_text(str(detail["error"]))
+        servers.append({**row, "status": status, "tool_count": info.get("tool_count", 0), **detail})
     reflected = await asyncio.to_thread(_native_mcp_inventory)
     return {"servers": servers, **reflected}
 
@@ -7578,7 +8389,8 @@ async def cli_close_agent(target: str, ctx: Context, pane_id: str = "") -> dict[
     reply = await _ui_request(
         pane.workspace_path,
         "invoke",
-        caller=_pane_caller(pane.pane_id),
+        caller=caller,
+        route_pane_id=pane.pane_id,
         action="ui.pane.close",
         args={"paneId": pane.pane_id},
     )
@@ -7671,7 +8483,8 @@ async def cli_reclaim_agent(target: str, ctx: Context, pane_id: str = "") -> dic
     reply = await _ui_request(
         pane.workspace_path,
         "invoke",
-        caller=_pane_caller(pane.pane_id),
+        caller=caller,
+        route_pane_id=pane.pane_id,
         action="ui.pane.reclaim",
         args={"paneId": pane.pane_id},
     )
@@ -8562,6 +9375,9 @@ async def pipeline_reset(ctx: Context, workspace_path: str = "") -> dict[str, An
     """
     caller = _resolve_caller(ctx)
     workspace_path = await _run_workspace(caller, workspace_path)
+    refused_self = _self_scope_refusal(caller, "ui.pipeline.reset", {}, workspace_path)
+    if refused_self is not None:
+        return refused_self
     return await _ui_request(
         workspace_path, "invoke", caller=caller, action="ui.pipeline.reset", args={}
     )
@@ -9432,16 +10248,21 @@ _MQ_CURSOR = re.compile(r"0|[1-9][0-9]{0,8}")
 _MQ_ENUMS = frozenset({
     "search", "detail", "installed",
     "read", "write", "readWrite", "low", "medium", "high", "highest",
-    "nativeBackend", "files", "shell", "aiCli", "ui", "agentTools", "network", "networkViaShell", "noPermissions",
-    "system.ui", "system.fs", "system.aiCli", "shell.allowlist", "shell.full", "agentTools.write",
+    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agentTools", "network", "networkViaShell", "noPermissions",
+    "system.ui", "system.fs", "system.aiCli", "system.web", "shell.allowlist", "shell.full", "agentTools.write",
     "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared", "via-shell",
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
     "available", "consent-required", "plugin-disabled", "plugin-quarantined", "plugin-revoked", "name-collision",
+    # PluginSource (src/shared/pluginSource.ts), for plugins_list_installed (W1).
+    "marketplace", "prerelease", "testplace", "local-signed", "local-unsigned", "developer-unpacked",
+    "factory-bundled",
 })
 _MQ_ENUM_KEYS = frozenset({
     "kind", "risk", "level", "key", "mode", "access", "status", "secretScan", "network", "template",
     "state", "root", "projectWrites", "system", "executables",
+    # An installed package's source (W1); a scan's `source` stays fenced.
+    "source",
 })
 _MQ_KNOWN_KEYS = frozenset({
     "kind", "items", "nextCursor", "item", "versions", "card",
@@ -9452,7 +10273,7 @@ _MQ_KNOWN_KEYS = frozenset({
     "timeoutMs", "inputSchema", "dataLocations", "hostStorage", "backendDataDirectory", "projectWrites",
     "patterns", "domainVerifiedAt", "signature", "keyId", "review", "status", "reviewedAt",
     "nativeCodeInspected", "scan", "secretScan", "secretFindings", "similarityWarning", "similarTo",
-    "scannedAt", "enabled", "quarantined", "hasBackend", "state",
+    "scannedAt", "enabled", "quarantined", "hasBackend", "state", "signatureRevoked",
     # The card's scan report (contract 3.4, 3.8); its strings are fenced like any other.
     "scanner", "artifactDigest", "target", "coverage", "filesTotal", "filesScanned", "bytesScanned",
     "skipped", "reason", "count", "truncated", "timedOut", "calls", "executable", "subcommand", "category",
@@ -9702,8 +10523,15 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
 
     The same inventory Settings → Navide Plugins shows. Returns {ok, kind:
     "installed", items}; each item is {id, version, enabled, quarantined,
-    hasBackend, agentTools: [{name, state}]}. Enabling, disabling, updating
-    or removing a plugin is the user's decision and is not possible from here.
+    hasBackend, agentTools: [{name, state}], source, signatureRevoked?}.
+    `source` says where it came from and what review it passed:
+    marketplace / prerelease / testplace (Navide Marketplace), local-signed
+    (a local file a vetted publisher signed; this version not reviewed),
+    local-unsigned (a local file, unsigned and unreviewed), developer-unpacked
+    (a Developer Mode folder) or factory-bundled. `signatureRevoked: true`
+    marks a local file whose publisher key Navide has since revoked. Enabling,
+    disabling, updating or removing a plugin is the user's decision and is not
+    possible from here.
     """
     caller, out = await _marketplace_query(ctx, {"kind": "installed"})
     if out.get("ok") is not True or caller is None:
@@ -9776,12 +10604,28 @@ def _approval_requester(caller: _Caller) -> dict[str, Any]:
     if caller.kind != "pane":
         return {"paneId": None, "paneName": None, "workspace": None, "callerKind": caller.kind}
     pane = agent_messaging.get(caller.pane_id)
-    return {
+    requester: dict[str, Any] = {
         "paneId": caller.pane_id,
         "paneName": neutralize_external_text(pane.name) if pane else None,
         "workspace": neutralize_external_text(pane.workspace_path) if pane and pane.workspace_path else None,
         "callerKind": "pane",
     }
+    # S8-M1: a pane that read third-party content says so on the card and the
+    # form (disclosure only: the request is filed and decided exactly the same).
+    if _pane_tainted(caller.pane_id):
+        requester["tainted"] = True
+    return requester
+
+
+def _pane_tainted(pane_id: str | None) -> bool:
+    """Whether the pane is marked tainted; False when the taint store cannot answer."""
+    from agent_team_backend.guard import taint
+
+    try:
+        return bool(pane_id) and taint.is_tainted(pane_id)
+    except Exception as err:  # noqa: BLE001 - a disclosure line never fails the request
+        _log.warning("could not read the taint of pane %s: %s", pane_id, err)
+        return False
 
 
 def _audit_agent_action(
@@ -9910,6 +10754,10 @@ async def _file_plugin_request(
         return refuse("BAD_REQUEST", f"{version} is not newer than the installed {from_version}")
     if kind == "plugin-rollback" and _semver_key(version) >= _semver_key(from_version):
         return refuse("BAD_REQUEST", f"{version} is not older than the installed {from_version}")
+    if kind == "plugin-update":
+        applied = await _unchanged_update(caller, requester, plugin_id, version, from_version)
+        if applied is not None:
+            return applied
     card = None
     if kind != "plugin-remove":
         card, error = await _registry_card(caller, plugin_id, version)
@@ -9938,6 +10786,74 @@ async def _file_plugin_request(
     }
 
 
+async def _unchanged_update(
+    caller: _Caller, requester: dict[str, Any], plugin_id: str, version: str, from_version: str,
+) -> dict[str, Any] | None:
+    """O1 (user 2026-10-20 01:40): ask the Host to update at once when the new
+    version discloses exactly what the installed one does. The Host decides
+    and does it; None for anything but a confirmed update, and the caller then
+    files the request as before (fail closed)."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    request_id = f"pa:{secrets.token_hex(16)}"
+    future = _agent_action_pending.register(request_id)
+    try:
+        sent = await app.unicast_host(make_event(contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT, {
+            "request_id": request_id, "action": "update", "plugin_id": plugin_id, "version": version,
+            "requester": requester,
+        }))
+        result = await _agent_action_pending.wait(request_id, future, timeout=_AGENT_ACTION_TIMEOUT_S) if sent else TIMEOUT
+    finally:
+        _agent_action_pending.discard(request_id)
+    if result is TIMEOUT:
+        return None
+    if result.get("switched") is False:
+        # Staged, but switching to it failed and the installed version runs
+        # again (review M2). Said as it is, without the Host's error text;
+        # the user already has a row in Navide to apply it, so nothing is filed.
+        # Fail-closed (review r2 LOW-516-1): any answer that says the switch did
+        # not happen is a failure, whatever versions it names; the versions
+        # reported are the ones the agent asked about.
+        # The audit log keeps its own closed set of codes: the switch is a failed action.
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
+                            outcome="error", error_code="ACTION_FAILED")
+        return {
+            "ok": False,
+            "status": "staged",
+            "applied": False,
+            "error_code": "SWITCH_FAILED",
+            "error": (
+                f"{version} is staged, but switching to it failed; {from_version} is still running. "
+                "The user sees this in Navide and can apply it from there."
+            ),
+            "pluginId": plugin_id,
+            "fromVersion": from_version,
+            "pluginVersion": version,
+        }
+    if (result.get("ok") is True and result.get("updated") is True
+            and result.get("pluginVersion") == version and result.get("fromVersion") == from_version):
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
+                            outcome="allowed")
+        return {
+            "ok": True,
+            "status": "completed",
+            "applied": True,
+            "pluginId": plugin_id,
+            "fromVersion": from_version,
+            "pluginVersion": version,
+            "note": (
+                "Updated without asking: this version discloses exactly the same permissions, backend, agent tools "
+                "and network access as the installed one. The user was told, with a one-click downgrade."
+            ),
+        }
+    if result.get("error_code") == "ACTION_FAILED":
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="update",
+                            outcome="error", error_code="ACTION_FAILED")
+    return None
+
+
 @server.tool()
 async def marketplace_request_install(
     ctx: Context, namespace: str, name: str, version: str, reason: str = "",
@@ -9961,13 +10877,18 @@ async def marketplace_request_install(
 async def marketplace_request_update(
     ctx: Context, namespace: str, name: str, version: str, reason: str = "",
 ) -> dict[str, Any]:
-    """Ask the user to update an installed Navide plugin to a newer version.
+    """Update an installed Navide plugin to a newer version, or ask the user to.
 
-    Like marketplace_request_install: files a request for the user's
-    decision in Navide and changes nothing by itself. `version` must be newer
-    than the installed one and listed in the Navide Marketplace.
-
-    Returns {ok, approval_id, status: "pending", expires_at, note}.
+    `version` must be newer than the installed one and listed in the Navide
+    Marketplace. When that version discloses exactly the same permissions,
+    backend, agent tools and network access as the installed one, Navide
+    updates it at once: the user is told which agent did it, with a one-click
+    downgrade, and the change is recorded. The answer is then {ok: true,
+    status: "completed", applied: true, pluginId, fromVersion, pluginVersion,
+    note}. Any change in what it discloses, or anything Navide cannot compare,
+    files a request for the user's decision in Navide instead, like
+    marketplace_request_install: {ok, approval_id, status: "pending",
+    expires_at, note}.
     """
     return await _file_plugin_request(ctx, "plugin-update", namespace, name, version, reason)
 
@@ -10312,8 +11233,10 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
 
     The same accounts Settings → Accounts shows, read from Navide's account
     store only: it says which accounts exist and which is active, not who is
-    signed in to them — no email and no signed-in flag, since both would mean
-    reading the credentials themselves. Read-only: nothing is switched or
+    signed in to them — no signed-in flag, since that would mean reading the
+    credentials themselves. An account's `name` is the name the user gave it,
+    and an account Navide added on its own is named after the email it was
+    signed in with, so a name can be an email. Read-only: nothing is switched or
     refreshed. Quota is in cli_usage, the failover state in
     cli_failover_state.
 
@@ -10466,7 +11389,7 @@ async def cli_account_sign_in(
     if not answer.get("ok"):
         return {
             "ok": False,
-            "error": str(answer.get("error") or "the Navide window did not answer"),
+            "error": "the Navide window did not answer",
             "error_code": "window-unavailable",
         }
     if status != "started":
@@ -10484,10 +11407,184 @@ async def cli_account_sign_in(
         "login_pane_id": str(result.get("loginPaneId") or ""),
     }
 
+
+# ── CLI account switch (plan mcp_614482 P3) ─────────────────────────────────
+
+
+@server.tool()
+async def cli_account_switch(
+    ctx: Context, agent: str, profile_id: str, reason: str,
+) -> dict[str, Any]:
+    """Ask the user to switch one CLI to another of its accounts — for
+    example when the active account's quota ran out and another account of
+    the same vendor still has some.
+
+    Your window first asks the user, naming which agent asked, the account it
+    switches from and to, and your `reason` (required; cut at 300
+    characters); nothing switches until they agree, and a no or no answer in
+    time is a refusal. If this call is cancelled or times out, the window
+    closes the question unanswered. On a yes it is the same switch Settings →
+    Accounts makes, never forced: if panes are running on that CLI, the window
+    asks the user again before restarting them, and a no there is
+    "restart-declined". Once the user says yes in time, the switch runs to
+    the end even if this call has timed out by then. If your own pane runs
+    on that CLI, the restart includes it and this call's result never
+    reaches you — after a restart, read cli_accounts_list to see where the
+    switch stands.
+
+    agent is the vendor key ("claude", "codex", ...); profile_id is an
+    account of that vendor as cli_accounts_list lists it, "__default__" for
+    the built-in Default. Only a CLI pane can call it.
+
+    Returns {ok: true, status, agent, profile_id, from, to}: status
+    "switched", or "switched-signed-out" when the account switched to has no
+    usable sign-in (the window then starts one for the user); from and to are
+    the accounts' display names: the alias or name the user gave them, and an
+    account Navide added on its own is named after its email, so either can be
+    an email. Otherwise {ok: false, error,
+    error_code}: "pane-only", "bad-request", "reason-required",
+    "unknown-profile", "already-active", "unknown-caller", "declined" (the
+    user said no), "confirm-timeout" (the user did not answer in time),
+    "busy" (another agent's switch is waiting for the user),
+    "restart-declined", "refused" (Navide refused the switch; `code` says
+    why, e.g. SWITCH_RATE_LIMITED or UNRECONCILED_STATE) or
+    "window-unavailable". No credential or token ever comes back.
+    """
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    if caller.kind != "pane":
+        return {
+            "ok": False,
+            "error": "only a CLI pane can ask for an account switch; the user is told which pane asked",
+            "error_code": "pane-only",
+        }
+    agent = str(agent or "").strip().lower()
+    profile_id = str(profile_id or "").strip()
+    if not agent or not profile_id:
+        return {"ok": False, "error": "agent and profile_id are required", "error_code": "bad-request"}
+    reason = " ".join(str(reason or "").split())
+    reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
+    reason = reason[:_SIGN_IN_REASON_MAX]
+    if not reason:
+        return {
+            "ok": False,
+            "error": "say why: the reason is shown to the user with the switch",
+            "error_code": "reason-required",
+        }
+    from agent_team_backend import agent_messaging
+
+    pane = agent_messaging.get(caller.pane_id)
+    # As for the sign-in: the user's yes is due one ordinary action's wait
+    # before this action's slow wait ends, leaving the window time to switch.
+    confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
+    answer = await _ui_request(
+        pane.workspace_path if pane else "",
+        "invoke",
+        caller=caller,
+        action="ui.accounts.switch",
+        args={
+            "agentKey": agent, "profileId": profile_id, "reason": reason,
+            "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
+        },
+    )
+    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+    status = str(result.get("status") or "") if answer.get("ok") else ""
+    _log.info(
+        "cli_account_switch from pane %s: agent=%s profile=%s -> %s%s",
+        caller.pane_id, agent, profile_id, status or "window-unavailable",
+        f" ({result.get('code')})" if result.get("code") else "",
+    )
+    if not answer.get("ok"):
+        return {
+            "ok": False,
+            "error": "the Navide window did not answer",
+            "error_code": "window-unavailable",
+        }
+    if status in ("switched", "switched-signed-out"):
+        return {
+            "ok": True,
+            "status": status,
+            "agent": agent,
+            "profile_id": profile_id,
+            "from": str(result.get("from") or ""),
+            "to": str(result.get("to") or ""),
+        }
+    if status == "refused":
+        # The backend's refusal code only; its message is unreviewed text.
+        code = str(result.get("code") or "unknown")
+        return {
+            "ok": False,
+            "error": f"the switch was refused: {code}",
+            "error_code": "refused",
+            "code": code,
+        }
+    return {
+        "ok": False,
+        "error": str(result.get("message") or "the window refused the switch"),
+        "error_code": status or "refused",
+    }
+
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
 
 _session_manager: StreamableHTTPSessionManager | None = None
-_lifecycle = AsyncExitStack()
+
+
+@dataclass
+class _Runner:
+    """A session manager and the task it runs in (see _start_runner)."""
+
+    manager: StreamableHTTPSessionManager
+    task: asyncio.Task[None]
+    ready: asyncio.Event
+    stop: asyncio.Event
+
+
+_runner: _Runner | None = None
+# (pane or client, reason) pairs already logged as refused (see _PlanMcpASGI).
+_logged_refusals: set[tuple[str, str]] = set()
+# Bounds only how many distinct refusals get a log line; no request is ever
+# refused because of it.
+_MAX_LOGGED_REFUSALS = 1024
+# The exceptions the SDK logged while handling the current request: it answers
+# every failure before a tool runs with the same "-32603 Error handling POST
+# request" and keeps the cause in its own log only (issue #490).
+_sdk_failures: contextvars.ContextVar[list[BaseException] | None] = contextvars.ContextVar(
+    "plan_mcp_sdk_failures", default=None
+)
+# How much of a request body is kept to name its JSON-RPC method in an error.
+_METHOD_PEEK_BYTES = 4096
+_METHOD_RE = re.compile(rb'"method"\s*:\s*"([^"\\]{1,100})"')
+
+
+class _SdkFailureCapture(logging.Handler):
+    """Hands the exception the SDK logs to the request whose task logged it."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        failures = _sdk_failures.get()
+        if failures is not None and record.exc_info and record.exc_info[1] is not None:
+            failures.append(record.exc_info[1])
+
+
+logging.getLogger("mcp.server.streamable_http").addHandler(_SdkFailureCapture())
+
+
+def _request_caller_label(caller: _Caller | None) -> str:
+    if caller is None:
+        return "unknown caller"
+    return f"pane {caller.pane_id}" if caller.kind == "pane" else caller.kind
+
+
+def _explained_failure(body: bytes, failure: BaseException, method: str, caller: str) -> bytes:
+    """The SDK's generic JSON-RPC error with its cause, method and caller added."""
+    detail = f"{type(failure).__name__}: {failure} (method {method or 'unknown'}; {caller})"
+    try:
+        document = json.loads(body)
+        document["error"]["message"] = f"{document['error']['message']}: {detail}"
+    except (ValueError, TypeError, KeyError):
+        return body
+    return json.dumps(document).encode("utf-8")
 
 
 class _PlanMcpASGI:
@@ -10495,18 +11592,36 @@ class _PlanMcpASGI:
     ASGI, not a request-response function); 503 until startup() has run."""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        manager = _session_manager
-        if manager is None:
+        runner = _runner
+        if runner is None:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
             return
+        if runner.task.done():
+            runner = _replace_stopped_runner(runner)
+        await runner.ready.wait()
+        if runner.task.done():
+            response = PlainTextResponse("plan MCP server failed to start; see the backend log", status_code=503)
+            await response(scope, receive, send)
+            return
+        manager = runner.manager
         # The credential is checked before any of the body is read: a request
         # without a valid one is answered 401 and its body never received, so
         # only an authenticated caller's body is read, of any size.
+        caller: _Caller | None = None
         if scope.get("type") == "http":
             try:
-                _credential(Request(scope))
+                caller = _credential(Request(scope))
             except CallerUnknown as err:
+                params = Request(scope).query_params
+                # Caller-supplied and unauthenticated: quoted and cut short so it
+                # cannot forge log lines, and the set is capped.
+                who = repr(str(params.get("pane") or params.get("client") or ""))[:64]
+                if (who, str(err)) not in _logged_refusals and len(_logged_refusals) < _MAX_LOGGED_REFUSALS:
+                    # Once per caller and reason: a CLI that keeps calling would
+                    # otherwise write the same line on every call.
+                    _logged_refusals.add((who, str(err)))
+                    _log.warning("plan-mcp: refused %s — %s", who, err)
                 await PlainTextResponse(str(err), status_code=401)(scope, receive, send)
                 return
         # Request bodies have no size limit (agent-tools contract 4.4, A1). Their
@@ -10516,16 +11631,48 @@ class _PlanMcpASGI:
         # body size (_request_body_bytes), set before the call's tasks start.
         received = [0]
         token = _request_body_bytes.set(received)
+        head = bytearray()
 
         async def counting_receive() -> Any:
             message = await receive()
             if message.get("type") == "http.request":
-                received[0] += len(message.get("body", b""))
+                chunk = message.get("body", b"")
+                received[0] += len(chunk)
+                if len(head) < _METHOD_PEEK_BYTES:
+                    head.extend(chunk[: _METHOD_PEEK_BYTES - len(head)])
             return message
 
+        failures: list[BaseException] = []
+        failures_token = _sdk_failures.set(failures)
+        held: dict[str, Any] | None = None
+
+        async def explaining_send(message: dict[str, Any]) -> None:
+            # A failure the SDK caught is answered with a 5xx whose body names
+            # nothing; hold its start until the body can carry the cause.
+            nonlocal held
+            if message["type"] == "http.response.start" and message.get("status", 200) >= 500 and failures:
+                held = message
+                return
+            if held is not None and message["type"] == "http.response.body":
+                start, held = held, None
+                match = _METHOD_RE.search(bytes(head))
+                method = match.group(1).decode("utf-8", "replace") if match else ""
+                who = _request_caller_label(caller)
+                _log.error(
+                    "plan-mcp: %s request from %s failed before reaching a tool",
+                    method or "a", who, exc_info=failures[-1],
+                )
+                body = _explained_failure(message.get("body", b""), failures[-1], method, who)
+                headers = [(k, v) for k, v in start.get("headers", []) if k.lower() != b"content-length"]
+                await send({**start, "headers": [*headers, (b"content-length", str(len(body)).encode())]})
+                await send({**message, "body": body})
+                return
+            await send(message)
+
         try:
-            await manager.handle_request(scope, counting_receive, send)
+            await manager.handle_request(scope, counting_receive, explaining_send)
         finally:
+            _sdk_failures.reset(failures_token)
             _request_body_bytes.reset(token)
             from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
 
@@ -10536,14 +11683,18 @@ class _PlanMcpASGI:
 asgi_app = _PlanMcpASGI()
 
 
-async def startup() -> None:
-    """Start a fresh streamable-HTTP session manager for the mounted endpoint.
+def _start_runner() -> _Runner:
+    """Run a fresh streamable-HTTP session manager in a task of its own.
 
     Stateless + JSON responses: every tool call is an independent POST, no
-    server-side session table. A fresh manager per startup keeps app lifespan
-    cycles (tests) restartable — the SDK's run() is once-only per instance.
+    server-side session table. The SDK runs each request's server task in the
+    manager's one task group, so anything escaping a request ends the whole
+    group (issue #490). In a task of its own that ends this task only, where
+    the endpoint sees it and starts a new one (_replace_stopped_runner) —
+    rather than the group being cancelled inside the app's lifespan task,
+    whose cancellation uvicorn swallows, leaving every later request's server
+    task cancelled before it reads anything.
     """
-    global _session_manager
     manager = StreamableHTTPSessionManager(
         # Same low-level-server access the SDK's own in-memory test helper
         # (mcp.shared.memory) uses; FastMCP has no public accessor.
@@ -10556,12 +11707,79 @@ async def startup() -> None:
         # message; its size is logged by _PlanMcpASGI.
         max_request_body_size=sys.maxsize,
     )
-    await _lifecycle.enter_async_context(manager.run())
-    _session_manager = manager
+    ready = asyncio.Event()
+    stop = asyncio.Event()
+
+    async def run() -> None:
+        try:
+            async with manager.run():
+                ready.set()
+                await stop.wait()
+        finally:
+            ready.set()
+
+    runner = _Runner(manager, asyncio.create_task(run(), name="plan-mcp-session-manager"), ready, stop)
+    runner.task.add_done_callback(lambda task: _note_runner_end(runner, task))
+    return runner
+
+
+def _note_runner_end(runner: _Runner, task: asyncio.Task[None]) -> None:
+    """Log a session manager that stopped without being asked to."""
+    if runner.stop.is_set():
+        return
+    if task.cancelled():
+        _log.error("plan-mcp: the MCP session manager was cancelled; it restarts on the next call")
+        return
+    exc = task.exception()
+    _log.error(
+        "plan-mcp: the MCP session manager stopped (%s); it restarts on the next call",
+        f"{type(exc).__name__}: {exc}" if exc is not None else "it returned",
+        exc_info=exc,
+    )
+
+
+def _replace_stopped_runner(stopped: _Runner) -> _Runner:
+    """The running session manager, started anew if ``stopped`` is still it."""
+    global _runner, _session_manager
+    if _runner is stopped:
+        _log.warning("plan-mcp: restarting the MCP session manager")
+        _runner = _start_runner()
+        _session_manager = _runner.manager
+    assert _runner is not None
+    return _runner
+
+
+async def startup() -> None:
+    """Start a fresh session manager for the mounted endpoint (_start_runner).
+    A fresh manager per startup keeps app lifespan cycles (tests) restartable
+    — the SDK's run() is once-only per instance."""
+    global _runner, _session_manager
+    runner = _start_runner()
+    _runner = runner
+    _session_manager = runner.manager
+    await runner.ready.wait()
+    if runner.task.done():
+        runner.task.result()
 
 
 async def shutdown() -> None:
     """Stop the session manager started by startup(). Idempotent."""
-    global _session_manager
+    global _runner, _session_manager
+    runner, _runner = _runner, None
     _session_manager = None
-    await _lifecycle.aclose()
+    if runner is None:
+        return
+    runner.stop.set()
+    await asyncio.wait([runner.task])
+    if not runner.task.cancelled() and runner.task.exception() is not None:
+        # Already logged by _note_runner_end when it ended on its own.
+        _log.debug("plan-mcp: the stopped session manager had failed", exc_info=runner.task.exception())
+
+
+# The Navide Marketplace developer tools (W3) register on `server` from their own module.
+from agent_team_backend.mcp_server import marketplace_forms as _marketplace_forms  # noqa: E402,F401
+from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  # noqa: E402,F401
+# W1: local Navide plugin package tools (open, validate, package, fill).
+from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401
+# DESIGN-C S3: window_list / window_focus.
+from . import window_tools as _window_tools  # noqa: E402,F401

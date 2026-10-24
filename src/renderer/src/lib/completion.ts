@@ -36,6 +36,12 @@ export interface SlotSignal {
    *  to when it was received (0 = none, or a vendor whose stamp does not
    *  parse). */
   turnSourceAt?: number
+  /** This slot's CLI still has background work running that outlived its turn
+   *  end — a backgrounded shell or an async subagent (claude, qwen), as the
+   *  transcript and hooks report it (see `backgroundWorkPending`). That turn
+   *  ended to WAIT, so its turn_complete is not the slot finishing. Optional
+   *  like quotaBlocked: a caller that leaves it out is unaffected. */
+  backgroundRunning?: boolean
 }
 
 // SUPERSEDED NOTE, kept because it is the reason the rule below has the shape
@@ -72,6 +78,7 @@ export function slotFinished(s: SlotSignal): boolean {
   // for the quota to poison.
   if (s.sentinelSeen) return true
   if (s.quotaBlocked === true) return false
+  if (s.backgroundRunning === true) return false
   if (!quotaTurnIsFresh(s.quotaSeenAt, s.turnSourceAt)) return false
   return s.turnCompleteAt > 0 && s.turnCompleteAt > s.armedAt
 }
@@ -137,6 +144,12 @@ export interface TurnCompleteState {
   /** See SlotSignal.quotaSeenAt / .turnSourceAt — same pair, same rule. */
   quotaSeenAt?: number
   turnSourceAt?: number
+  /** See SlotSignal.backgroundRunning. Passed only by the pipeline's stage
+   *  watcher; the done notification and the loop leave it out. Once the work
+   *  ends, its background:end event is an agent_active that lands after the
+   *  parked turn end, so only the turn the CLI runs on the completion notice
+   *  can satisfy the "latest signal" rule below. */
+  backgroundRunning?: boolean
   /** Wall-clock ms of the latest turn_complete for this pane (0 = none). */
   turnCompleteAt: number
   /** Wall-clock ms of the latest agent_active for this pane (0 = none). */
@@ -160,6 +173,7 @@ export interface TurnCompleteState {
  *     to ask a QUESTION is caught as a question first, never as completion). */
 export function turnCompleteDone(s: TurnCompleteState): boolean {
   if (s.quotaBlocked === true) return false
+  if (s.backgroundRunning === true) return false
   if (!quotaTurnIsFresh(s.quotaSeenAt, s.turnSourceAt)) return false
   return (
     s.turnCompleteAt > s.armedAt &&
@@ -232,6 +246,21 @@ export interface SubagentWaitState {
 export function loopWaitingOnSubagents(s: SubagentWaitState): boolean {
   if (s.pending <= 0 || s.observedAt <= 0) return false
   return s.now - s.observedAt < LOOP_SUBAGENT_WAIT_MAX_MS
+}
+
+/** True when a pane's CLI still has background work running past its turn
+ *  end, for the pipeline's stage verdict. Two independent reports, either is
+ *  enough: the pane's live background-task ids (the readers' background:start
+ *  / background:end, fused in useTerminal) and the hook-reported pending
+ *  subagent count, read with the loop's own cap so a stale count fails open.
+ *  A vendor that reports neither is never held. */
+export function backgroundWorkPending(s: {
+  liveTasks: boolean
+  subagents?: { pending: number; observedAt: number }
+  now: number
+}): boolean {
+  if (s.liveTasks) return true
+  return s.subagents !== undefined && loopWaitingOnSubagents({ ...s.subagents, now: s.now })
 }
 
 /** `detail` values that mean the agent called a TOOL, rather than just

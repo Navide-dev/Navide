@@ -620,7 +620,7 @@ describe('ExecutionPolicyPane', () => {
     })
     await flushPromises()
 
-    expect(wrapper.get('.ep-reset-sources').text()).toBe('Reset all Policy Source selections')
+    expect(wrapper.get('.ep-reset-sources').text()).toBe('Reset All Policy Source Selections')
     await wrapper.get('.ep-reset-sources').trigger('click')
     expect(wrapper.get('.ep-source-reset-confirm').text()).toContain('does not modify or delete repository policy files')
     await wrapper.get('.ep-source-reset-confirm input').setValue(true)
@@ -646,7 +646,7 @@ describe('ExecutionPolicyPane', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Policy Source state is corrupt')
-    expect(wrapper.get('.ep-reset-sources').text()).toBe('Reset all Policy Source selections')
+    expect(wrapper.get('.ep-reset-sources').text()).toBe('Reset All Policy Source Selections')
     expect(api.resetSourceSelections).not.toHaveBeenCalled()
   })
 })

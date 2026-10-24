@@ -31,7 +31,7 @@ describe('App pane context menu — Remove sub-panes', () => {
     expect(appSource).toContain('v-if="ctxDescendantIds.length"')
     expect(appSource).toContain('@click="killDescendants(paneCtxMenu!.paneId); closePaneCtxMenu()"')
     expect(appSource).toContain("$t('action.remove-children', { count: ctxDescendantIds.length })")
-    expect(enLocale).toContain('"remove-children": "Remove {count} sub-panes"')
+    expect(enLocale).toContain('"remove-children": "Remove {count} Sub-panes"')
     expect(zhLocale).toContain('"remove-children": "移除旗下 {count} 個子面板"')
   })
 

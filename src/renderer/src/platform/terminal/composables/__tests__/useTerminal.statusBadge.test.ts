@@ -33,6 +33,10 @@ const ctrl = vi.hoisted(() => ({
   ackedRows: 0,
 }))
 
+// The keyboard: the handlers useTerminal registers on xterm's onData, so a test
+// can type into the pane the way the user does.
+const keyboard = vi.hoisted(() => ({ handlers: [] as Array<(data: string) => void> }))
+
 vi.mock('../useTerminalResize', () => ({
   createResizeController: () => ctrl,
 }))
@@ -53,7 +57,10 @@ vi.mock('@xterm/xterm', () => {
     attachCustomKeyEventHandler(): void {}
     registerLinkProvider(): { dispose(): void } { return { dispose(): void {} } }
     onResize(): { dispose(): void } { return { dispose(): void {} } }
-    onData(): { dispose(): void } { return { dispose(): void {} } }
+    onData(handler: (data: string) => void): { dispose(): void } {
+      keyboard.handlers.push(handler)
+      return { dispose(): void {} }
+    }
     write(): void {}
     writeln(): void {}
     resize(): void {}
@@ -87,7 +94,10 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     vi.useRealTimers()
     vi.clearAllMocks()
     localStorage.clear()
+    keyboard.handlers.length = 0
   })
+
+  const typeKeys = (data: string): void => keyboard.handlers.at(-1)?.(data)
 
   async function spawned() {
     const mock = createMockBackend()
@@ -273,12 +283,99 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     scope.stop()
   })
 
+  // The PermissionRequest hook knows the box is open until it is answered, so
+  // its wait is held: the box's own repaints past the settle window must not
+  // end it, which is how a pane parked on a permission box used to decay.
+  it('keeps a held AWAITING through output past the settle window', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    await vi.advanceTimersByTimeAsync(5_000)
+    await chunkThenWait(mock, 1, 100)
+    expect(result.displayStatus.value).toBe('awaiting')
+    expect(result.awaitingKind.value).toBe('permission')
+    scope.stop()
+  })
+
+  it('leaves a held AWAITING once the hold is released', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    expect(result.awaitingHeld()).toMatchObject({ key: 'Bash:aaaa' })
+    expect(result.awaitingHeld().since).toBeGreaterThan(0)
+    result.releaseNeedsInputHold()
+    expect(result.awaitingHeld()).toEqual({ since: 0, key: '' })
+    expect(result.displayStatus.value).not.toBe('awaiting')
+    scope.stop()
+  })
+
+  it("releasing the hold leaves the Notification hook's own wait standing", async () => {
+    // The same box can be reported by both hooks. Ending the hold must not wipe
+    // the wait the Notification hook raised: that one still settles on output.
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.markNeedsInput()
+    result.holdNeedsInput('Bash:aaaa')
+    result.releaseNeedsInputHold()
+    expect(result.displayStatus.value).toBe('awaiting')
+    expect(result.permissionWaitLive()).toBe(true)
+    // ...and it still ends the way it always did, on output past its settle window.
+    await vi.advanceTimersByTimeAsync(5_000)
+    await chunkThenWait(mock, 1, 100)
+    expect(result.displayStatus.value).not.toBe('awaiting')
+    expect(result.permissionWaitLive()).toBe(false)
+    scope.stop()
+  })
+
+  it('leaves a held AWAITING on an authoritative turn end', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    result.markTurnComplete()
+    expect(result.awaitingHeld().since).toBe(0)
+    expect(result.displayStatus.value).toBe('idle')
+    scope.stop()
+  })
+
+  // The answering key is classified by keysAnswerPermissionBox (its own tests
+  // hold the key matrix); these two pin that typing reaches it.
+  it('releases a held AWAITING when an answering key is typed', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    typeKeys('\r')
+    expect(result.awaitingHeld().since).toBe(0)
+    expect(result.displayStatus.value).not.toBe('awaiting')
+    scope.stop()
+  })
+
+  it('keeps a held AWAITING through navigation', async () => {
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    typeKeys('\x1b[B')
+    expect(result.awaitingHeld().since).toBeGreaterThan(0)
+    expect(result.displayStatus.value).toBe('awaiting')
+    scope.stop()
+  })
+
+  it('releases a held AWAITING on keys relayed straight to the PTY', async () => {
+    // ui.pane.sendKeys writes through terminal.input, not through onData.
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    result.holdNeedsInput('Bash:aaaa')
+    result.noteAnswerKeys('1')
+    expect(result.awaitingHeld().since).toBe(0)
+    scope.stop()
+  })
+
   it('does not carry AWAITING across a respawn', async () => {
     // The composable outlives the PTY, so a pane rebuilt while parked on a
     // prompt would otherwise open showing a question that no longer exists.
     const { result, mock, scope } = await spawnedFake()
     await chunkThenWait(mock, 0, 100)
     result.markNeedsInput()
+    result.holdNeedsInput('Bash:aaaa')
     expect(result.displayStatus.value).toBe('awaiting')
 
     // The PTY ends (backend exit event); spawn() only runs from a dead pane.
@@ -290,6 +387,7 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     await chunkThenWait(mock, 1, 100)
 
     expect(result.displayStatus.value).not.toBe('awaiting')
+    expect(result.awaitingHeld()).toEqual({ since: 0, key: '' })
     scope.stop()
   })
 
@@ -473,6 +571,23 @@ describe('useTerminal — RUNNING badge vs self-triggered repaints', () => {
     expect(result.displayStatus.value).toBe('running')
     await vi.advanceTimersByTimeAsync(11 * 60_000)
     expect(result.displayStatus.value).toBe('idle')
+    scope.stop()
+  })
+
+  it('reports live background tasks to the pipeline on the badge fuse', async () => {
+    // The pipeline reads this instead of the badge: AWAITING outranks RUNNING
+    // on the badge, but a slot parked on a prompt still has its work running.
+    const { result, mock, scope } = await spawnedFake()
+    await chunkThenWait(mock, 0, 100)
+    expect(result.hasLiveBackgroundTasks()).toBe(false)
+    result.noteBackgroundTasks('start', ['ae01b1c4'])
+    result.markTurnComplete()
+    expect(result.hasLiveBackgroundTasks()).toBe(true)
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    expect(result.hasLiveBackgroundTasks()).toBe(false)
+    result.noteBackgroundTasks('start', ['b2'])
+    result.noteBackgroundTasks('end', ['b2'])
+    expect(result.hasLiveBackgroundTasks()).toBe(false)
     scope.stop()
   })
 

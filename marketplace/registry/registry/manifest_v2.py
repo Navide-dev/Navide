@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .agent_tools_contract import validate_agent_tools
+from .agent_tools_contract import derive_agent_tool_prefix, validate_agent_tools
 from .path_policy import canonical_html_path, canonical_package_path
 from .versions import _V2_VERSION_RE
 
@@ -23,7 +23,7 @@ _V2_BACKEND_NAME_RE = re.compile(r"^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$")
 # src/main/plugins/pluginBackendSupervisor.ts); an agent tool forwarded to any
 # other name could never be served, so publish refuses it.
 _AGENT_TOOL_METHOD_RE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
-V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli"})
+V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli", "web"})
 V2_SHELL_MODES: frozenset[str] = frozenset({"allowlist", "full"})
 MAX_EXTENSION_PACK_MEMBERS = 20
 # Manifest-level guard for recognizable source/script filenames. Proving that
@@ -270,8 +270,8 @@ class ManifestV2Scopes(ManifestV2Model):
 class ManifestV2Permissions(ManifestV2Model):
     """Coarse Manifest v2 grants; method access remains Host-catalog-owned."""
 
-    system: list[Literal["fs", "ui", "aiCli"]] | None = Field(
-        default=None, min_length=1, max_length=3
+    system: list[Literal["fs", "ui", "aiCli", "web"]] | None = Field(
+        default=None, min_length=1, max_length=4
     )
     shell: Literal["allowlist", "full"] | None = None
     scopes: ManifestV2Scopes | None = None
@@ -328,7 +328,16 @@ class ManifestV2(ManifestV2Model):
                 first = errors[0]
                 where = "" if first["index"] is None else f"[{first['index']}]"
                 field = f".{first['field']}" if first["index"] is not None and first["field"] else ""
-                raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}")
+                detail = ""
+                if first["code"] == "AGENT_TOOL_PREFIX_MISMATCH":
+                    # Name the prefix that would pass, as `navide-plugin validate` does.
+                    name = value["backend"]["agentTools"][first["index"]].get("name")
+                    prefix = derive_agent_tool_prefix(value.get("id"))
+                    detail = (
+                        f" ({name!r} must start with '{prefix}_', the prefix Navide derives "
+                        f"from id {value.get('id')!r}: its last segment without hyphens)"
+                    )
+                raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}{detail}")
             backend = value.get("backend")
             declared = backend.get("agentTools") if isinstance(backend, Mapping) else None
             for index, tool in enumerate(declared if isinstance(declared, list) else []):

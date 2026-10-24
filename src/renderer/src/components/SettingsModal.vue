@@ -10,7 +10,7 @@ import type { useStages } from '../composables/useStages'
 import type { useAnalyzer } from '../composables/useAnalyzer'
 import type { usePipelines } from '../composables/usePipelines'
 import { MCP_CATALOG, isMcpInstalled, type McpCatalogEntry } from '../data/mcpCatalog'
-import { useTheme, vTruncate } from '@navide/plugin-ui/foundation'
+import { AVAILABLE_UI_LOCALES, isBetaUiLocale, useTheme, vTruncate } from '@navide/plugin-ui/foundation'
 import { useSettings } from '../composables/useSettings'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import {
@@ -126,6 +126,9 @@ import CrossPlatformHelp from './CrossPlatformHelp.vue'
 import ExtensionsPane from './ExtensionsPane.vue'
 import ExecutionPolicyPane from './ExecutionPolicyPane.vue'
 import MarketplacePane from './MarketplacePane.vue'
+import MarketplaceDeveloperPanel from './MarketplaceDeveloperPanel.vue'
+import TestplacePane from './TestplacePane.vue'
+import { marketplaceView, setMarketplaceView } from '../composables/useMarketplaceForms'
 import PluginDisclosureOverview from './PluginDisclosureOverview.vue'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import LayoutSettingsPane from '../layout/LayoutSettingsPane.vue'
@@ -962,7 +965,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     title: t('settings.search.item.appearance-language.title'),
     group: t('settings.nav.language'),
     summary: t('settings.search.item.appearance-language.summary'),
-    keywords: 'language locale 語言 繁體中文 english 日本語 japanese en-us zh-tw ja-jp',
+    keywords: 'language locale 語言 繁體中文 english 日本語 japanese en-us zh-tw ja-jp 简体中文 한국어 español français deutsch português русский tiếng việt zh-cn ko-kr es-es fr-fr de-de pt-br ru-ru vi-vn',
   },
   {
     id: 'appearance-ui-scale',
@@ -1328,12 +1331,15 @@ function onUiScaleChange(value: string): void {
 }
 
 // Locale catalogs keep language names in their native form, so the labels
-// come from those keys rather than a second hardcoded copy.
-const SUPPORTED_LANGUAGES = [
-  { value: 'zh-TW', labelKey: 'settings.appearance.language-zh-TW' },
-  { value: 'en-US', labelKey: 'settings.appearance.language-en-US' },
-  { value: 'ja-JP', labelKey: 'settings.appearance.language-ja-JP' },
-]
+// come from those keys rather than a second hardcoded copy. Every language
+// with a registered catalog is listed, in registration order; a language added
+// later appears here (with a Beta tag while it is machine-translated) without
+// touching this file.
+const SUPPORTED_LANGUAGES = AVAILABLE_UI_LOCALES.map((value) => ({
+  value,
+  labelKey: `settings.appearance.language-${value}`,
+  beta: isBetaUiLocale(value),
+}))
 
 function onHealthTimeoutChange(raw: string): void {
   const n = Number(raw)
@@ -2191,7 +2197,7 @@ interface McpServer {
   headers?: Record<string, string>
   enabled: boolean
   // Live fields (returned by backend, not saved):
-  status?: 'connected' | 'error' | 'disabled' | 'unknown'
+  status?: 'starting' | 'connected' | 'error' | 'disabled' | 'unknown'
   tool_count?: number; tools?: McpTool[]
 }
 // CatalogEntry type alias (re-exported from mcpCatalog.ts)
@@ -3198,7 +3204,7 @@ watch(activeTab, (tab) => {
                 <strong>{{ props.analyzerApi.benchmarkResults.value.filter(r => r.passed).length }}</strong>
                 /
                 {{ props.analyzerApi.benchmarkResults.value.length }}
-                {{ $t('settings.analyzer.models') }}
+                {{ $t('settings.analyzer.models', props.analyzerApi.benchmarkResults.value.length) }}
               </div>
               <table class="az-table">
                 <thead>
@@ -4479,6 +4485,11 @@ watch(activeTab, (tab) => {
                       @click="setLanguage(lang.value)"
                     >
                       {{ $t(lang.labelKey) }}
+                      <span
+                        v-if="lang.beta"
+                        class="scope-badge"
+                        :title="$t('settings.appearance.language-beta-hint')"
+                      >{{ $t('settings.appearance.language-beta') }}</span>
                       <span v-if="currentLanguage === lang.value" class="ap-check">✓</span>
                     </button>
                   </div>
@@ -4557,8 +4568,33 @@ watch(activeTab, (tab) => {
         <!-- ── MARKETPLACE TAB ───────────────────────────────────────────── -->
         <div v-show="activeTab === 'marketplace'" class="s-body s-body--bleed marketplace-body" data-settings-section="marketplace">
           <h1 class="s-page-title">{{ $t('settings.nav.marketplace') }}</h1>
+          <div class="marketplace-view-switch" role="tablist" :aria-label="$t('marketplace-developer.view.label')">
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'browse' }"
+              :aria-selected="marketplaceView === 'browse'"
+              @click="setMarketplaceView('browse')"
+            >{{ $t('marketplace-developer.view.browse') }}</button>
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'developer' }"
+              :aria-selected="marketplaceView === 'developer'"
+              @click="setMarketplaceView('developer')"
+            >{{ $t('marketplace-developer.view.developer') }}</button>
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'testplace' }"
+              :aria-selected="marketplaceView === 'testplace'"
+              @click="setMarketplaceView('testplace')"
+            >{{ $t('testplace.view') }}</button>
+          </div>
           <div class="marketplace-scroll">
-            <MarketplacePane />
+            <MarketplacePane v-show="marketplaceView === 'browse'" />
+            <MarketplaceDeveloperPanel v-if="marketplaceView === 'developer'" :backend="backend" />
+            <TestplacePane v-if="marketplaceView === 'testplace'" />
           </div>
         </div>
 
@@ -5163,6 +5199,24 @@ watch(activeTab, (tab) => {
    inventory, so the page owns the one scrollbar and both panes inside it are
    plain blocks. Marketplace matches it so the two plugin pages scroll alike. */
 .extensions-scroll,
+.marketplace-view-switch {
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-5) var(--space-2);
+}
+.marketplace-view-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--space-1, 4px) var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+.marketplace-view-tab--active {
+  color: var(--text-bright);
+  border-bottom-color: var(--accent-fg);
+}
 .marketplace-scroll {
   flex: 1;
   min-height: 0;

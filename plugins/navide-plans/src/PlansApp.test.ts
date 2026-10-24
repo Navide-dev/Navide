@@ -777,8 +777,8 @@ describe('PlansApp', () => {
       messages: {
         'en-US': {
           action: {
-            'open-in-editor': 'Open in editor',
-            'copy-path': 'Copy path',
+            'open-in-editor': 'Open in Editor',
+            'copy-path': 'Copy Path',
             create: 'Create',
             rename: 'Rename',
             delete: 'Delete',
@@ -826,8 +826,8 @@ describe('PlansApp', () => {
       messages: {
         'en-US': {
           action: {
-            'open-in-editor': 'Open in editor',
-            'copy-path': 'Copy path',
+            'open-in-editor': 'Open in Editor',
+            'copy-path': 'Copy Path',
             create: 'Create',
             rename: 'Rename',
             delete: 'Delete',
@@ -1129,6 +1129,8 @@ describe('PlansApp', () => {
     const view = await mountPlans()
     const iframe = view.find('iframe.plan-doc-frame')
     expect(iframe.exists()).toBe(true)
+    // The Host keeps a frame by this name on its srcdoc (its planFrameNavigation guard).
+    expect(iframe.attributes('name')).toBe('navide-plan-doc')
 
     const srcdoc = iframe.attributes('srcdoc') ?? ''
     expect(srcdoc).not.toContain('alert("evil")')

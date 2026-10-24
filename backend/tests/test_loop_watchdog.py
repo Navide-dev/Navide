@@ -27,21 +27,30 @@ def fast_watchdog(monkeypatch: pytest.MonkeyPatch):
 
 
 class _Reports(logging.Handler):
-    """Signals the watcher's reports about stalls inside _stall_loop."""
+    """Signals the watcher's reports about stalls inside _stall_loop, and
+    whether any stall it reported is still waiting for its recovery."""
 
     def __init__(self) -> None:
         super().__init__()
         self.stalled = threading.Event()
+        self.stalled_elsewhere = threading.Event()
         self.recovered = threading.Event()
+        self.open = False
 
     def emit(self, record: logging.LogRecord) -> None:
         message = record.getMessage()
-        if "stalled for" in message and "_stall_loop" in message:
-            self.stalled.set()
-        elif "recovered" in message and self.stalled.is_set():
-            # Only the recovery from this stall: an earlier stall's can be
-            # reported after _stall_loop has begun blocking the loop.
-            self.recovered.set()
+        if "stalled for" in message:
+            self.open = True
+            if "_stall_loop" in message:
+                self.stalled.set()
+            else:
+                self.stalled_elsewhere.set()
+        elif "recovered" in message:
+            self.open = False
+            if self.stalled.is_set():
+                # Only the recovery from this stall: an earlier stall's can be
+                # reported after _stall_loop has begun blocking the loop.
+                self.recovered.set()
 
 
 @pytest.fixture()
@@ -78,10 +87,27 @@ async def _stall_loop(
     """Block the event-loop thread until the watcher has reported the stall,
     then ``seconds`` more, then let the loop turn again until the recovery is
     reported. A stall of fixed length could pass unseen by a watcher thread
-    the machine schedules late."""
-    reports.stalled.clear()
-    reports.recovered.clear()
-    assert reports.stalled.wait(30), "the watcher never reported the stall"
+    the machine schedules late.
+
+    The watcher reports one stall per episode, and a busy machine can start
+    one just before this (the loop held in _tick_loop, say). Blocking the loop
+    while that episode is open would merge this stall into it and never get
+    its own report, so first let the loop turn until its recovery is reported;
+    and if the watcher still reports a stall from elsewhere (its stack taken
+    just before the block), let that one recover too and block again."""
+    deadline = time.monotonic() + 30
+    while True:
+        while reports.open:
+            assert time.monotonic() < deadline, "an earlier stall never recovered"
+            await asyncio.sleep(0.01)
+        reports.stalled.clear()
+        reports.stalled_elsewhere.clear()
+        reports.recovered.clear()
+        while not (reports.stalled.is_set() or reports.stalled_elsewhere.is_set()):
+            assert time.monotonic() < deadline, "the watcher never reported the stall"
+            time.sleep(0.005)
+        if reports.stalled.is_set():
+            break
     time.sleep(seconds)
     deadline = time.monotonic() + 30
     while await_recovery and not reports.recovered.is_set():
@@ -106,6 +132,27 @@ async def test_stall_is_reported_with_the_loop_thread_stack(
     stalls = [m for m in _messages(caplog) if "stalled for" in m and "_stall_loop" in m]
     assert len(stalls) == 1
     assert "test_loop_watchdog.py" in stalls[0]
+
+
+@pytest.mark.asyncio
+async def test_a_stall_just_before_the_measured_one_does_not_hide_it(
+    fast_watchdog, reports: _Reports, caplog: pytest.LogCaptureFixture
+) -> None:
+    # A busy runner can hold the loop past the threshold right before
+    # _stall_loop starts blocking it. The watcher reports one stall per
+    # episode, so unless the loop turns long enough for it to see the
+    # recovery, the stall the test measures is never reported on its own.
+    caplog.set_level(logging.WARNING, logger="agent_team_backend.loop_watchdog")
+    fast_watchdog.start(asyncio.get_running_loop())
+    try:
+        await asyncio.sleep(0.05)
+        time.sleep(fast_watchdog.STALL_THRESHOLD_S * 3)
+        await _stall_loop(reports)
+    finally:
+        await fast_watchdog.stop()
+
+    stalls = [m for m in _messages(caplog) if "stalled for" in m and "_stall_loop" in m]
+    assert len(stalls) == 1
 
 
 @pytest.mark.asyncio

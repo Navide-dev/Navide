@@ -84,6 +84,9 @@ export type RegistryTrustErrorCode =
   | 'DISCLOSURE_MISMATCH'
   | 'CHANNEL_UNSUPPORTED'
   | 'TESTPLACE_EXPIRED'
+  /** Its developer (or Navide) took a test build back; its testers learn it
+   *  from the tester detail, never from public metadata (S8 T-MED-1). */
+  | 'TESTPLACE_WITHDRAWN'
 
 export class RegistryTrustError extends Error {
   constructor(
@@ -277,12 +280,25 @@ export interface VerifyRegistryPackageTrustInput {
   /** Host-derived target; the Registry response cannot choose this value. */
   expectedHostTarget?: string
   now?: Date
+  /** D3: the user chose to keep using this expired testplace artifact. Only
+   * the expiry check is skipped; it runs after every other check, so a
+   * blocked package or a bad signature is still refused. */
+  allowExpiredTestplace?: boolean
 }
 
 export interface VerifiedRegistryPackageTrust {
   publisherId: string
   keyId: string
+  /** Set when an expired testplace artifact was allowed (allowExpiredTestplace). */
+  expired?: true
 }
+
+/** How far after this computer's clock trust metadata may say it was
+ *  generated. The Registry signs it fresh for each request, so a clock even a
+ *  little behind the server's refused every install and update. The expiry
+ *  side gets no such allowance: a slow clock never trips it, and widening it
+ *  would only let a stale document live longer. */
+export const TRUST_METADATA_CLOCK_SKEW_MS = 5 * 60 * 1000
 
 export function verifyRegistryTrustMetadata(
   metadata: RegistryTrustMetadata,
@@ -316,8 +332,24 @@ export function verifyRegistryTrustMetadata(
   const now = nowValue.getTime()
   const generatedAt = timestamp(metadata.generatedAt, 'trust metadata generatedAt')
   const expiresAt = timestamp(metadata.expiresAt, 'trust metadata expiresAt')
-  if (generatedAt > now || expiresAt < now || expiresAt <= generatedAt) {
-    throw new RegistryTrustError('TRUST_METADATA_INVALID', 'registry trust metadata is expired')
+  if (expiresAt <= generatedAt) {
+    throw new RegistryTrustError('TRUST_METADATA_INVALID', 'registry trust metadata has an empty validity window')
+  }
+  // Coded (`CODE: detail`) so the renderer can say it in the user's language
+  // (developerModeErrors.ts); both point at the computer's clock.
+  if (generatedAt - TRUST_METADATA_CLOCK_SKEW_MS > now) {
+    throw new RegistryTrustError(
+      'TRUST_METADATA_INVALID',
+      `TRUST_METADATA_NOT_YET_VALID: registry trust metadata was generated at ${metadata.generatedAt}, ` +
+        `later than this computer's clock (${nowValue.toISOString()}); check the computer's date and time`
+    )
+  }
+  if (expiresAt < now) {
+    throw new RegistryTrustError(
+      'TRUST_METADATA_INVALID',
+      `TRUST_METADATA_EXPIRED: registry trust metadata expired at ${metadata.expiresAt} ` +
+        `by this computer's clock (${nowValue.toISOString()}); check the computer's date and time`
+    )
   }
   if (
     metadata.schemaVersion !== 1 ||
@@ -343,11 +375,12 @@ export function verifyRegistryPackageTrust(
     )
   }
   const now = (input.now ?? new Date()).getTime()
+  // One clock read for every time check here: metadata and envelope agree on "now".
   verifyRegistryTrustMetadata(
     input.trustMetadata,
     input.trustMetadataSignature,
     input.pinnedRootKey,
-    input.now
+    new Date(now)
   )
 
   for (const field of [
@@ -415,13 +448,12 @@ export function verifyRegistryPackageTrust(
       `expired signer '${signer.keyId}' cannot sign a new artifact`
     )
   }
-  if (signedAt < notBefore || signedAt > notAfter || signedAt > now) {
+  if (signedAt < notBefore || signedAt > notAfter) {
     throw new RegistryTrustError(
       'SIGNER_INVALID',
       `registry signer '${signer.keyId}' signature is outside its validity window`
     )
   }
-
   if (input.trustMetadata.blockedPublishers.includes(input.envelope.publisherId)) {
     throw new RegistryTrustError(
       'PUBLISHER_BLOCKED',
@@ -447,8 +479,22 @@ export function verifyRegistryPackageTrust(
       'registry signature failed verification against the authorized signer'
     )
   }
+  // A version published or approved moments ago carries the server's clock;
+  // the same allowance as the trust metadata's generatedAt, future side only.
+  // Checked after the signature, so a forged signedAt reads as a bad signature,
+  // not as a wrong computer clock.
+  if (signedAt - TRUST_METADATA_CLOCK_SKEW_MS > now) {
+    throw new RegistryTrustError(
+      'SIGNER_INVALID',
+      `REGISTRY_SIGNATURE_NOT_YET_VALID: registry signature was made at ${input.envelope.signedAt}, ` +
+        `later than this computer's clock (${new Date(now).toISOString()}); check the computer's date and time`
+    )
+  }
   // Checked after the signature, so only a Registry-signed expiry counts.
   if (expiresAt !== null && expiresAt <= now) {
+    if (input.allowExpiredTestplace === true) {
+      return { publisherId: input.envelope.publisherId, keyId: signer.keyId, expired: true }
+    }
     throw new RegistryTrustError(
       'TESTPLACE_EXPIRED',
       `testplace version '${input.envelope.packageId}@${input.envelope.version}' expired at ${input.envelope.expiresAt}`

@@ -144,7 +144,7 @@ describe('both ends confirm, and the card says whose turn it is', () => {
   )
 
   it('offers the same two answers whichever end you are', () => {
-    // The initiator used to have only "Cancel request" here, on the reasoning
+    // The initiator used to have only "Cancel Request" here, on the reasoning
     // that comparing digits is one act by one person at two screens. That holds
     // only when there is another machine and another person: a relay can answer
     // with its own key without forwarding anything, and this side would pin it
@@ -473,7 +473,7 @@ describe('PairingPrompt — the end that asked', () => {
     expect(wrapper!.findAll('.pair-prompt')).toHaveLength(1)
     expect(wrapper!.find('.pp-code').text()).toBe('271 604')
     const labels = buttons().map((b) => b.text())
-    // "Allow pairing" belongs to the end that was asked. This end is saying the
+    // "Allow Pairing" belongs to the end that was asked. This end is saying the
     // digits match, which is the only claim either button ever makes.
     expect(labels).toContain(t('settings.p2p.pair.match'))
     expect(labels).not.toContain(t('settings.p2p.pair.allow'))

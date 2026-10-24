@@ -2,6 +2,10 @@ export interface TerminalStartupProbe {
   binary_path?: string
   version?: string
   duration_ms?: number
+  /** The binary does not identify as the CLI it was started as (#402). */
+  warning?: string
+  /** The CLI is newer than the version Navide last verified it at; disclosure only. */
+  untested_version?: string
 }
 
 export interface TerminalExitDetails {

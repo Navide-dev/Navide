@@ -136,6 +136,7 @@ class PaneRecord:
     last_turn_state: str = ""       # "working" (running a turn, or parked on a permission / question prompt) / "idle"; "" = never reported. Read on a cold restore to bring back the panes a manual restart interrupted.
     report_to: str = ""             # messaging handle of the parent this spawned pane owes a report to
     report_pending: bool = False    # that report is still outstanding — persisted so a pane resumed after a restart still reports when its turn ends
+    report_cross: bool = False      # report_to is a parent in ANOTHER project (cli_open_agent with workspace_path); set only by that spawn, never inferred from the name
     last_live_launch: str = ""      # launch id (launch_id.py) the pane's CLI last spawned in; cleared by an idle reclaim. "" = no live CLI known, which is every record written before this field existed. Read by the 'auto' resume scope.
 
 
@@ -1396,6 +1397,7 @@ class ProjectStore:
         report_to: str | None = None,
         report_pending: bool | None = None,
         last_live_launch: str | None = None,
+        report_cross: bool | None = None,
     ) -> Project:
         """Persist what a pane was doing and the report it owes its parent.
 
@@ -1417,6 +1419,9 @@ class ProjectStore:
             changed = True
         if report_pending is not None and pane.report_pending != report_pending:
             pane.report_pending = report_pending
+            changed = True
+        if report_cross is not None and pane.report_cross != report_cross:
+            pane.report_cross = report_cross
             changed = True
         # An idle reclaim sends "" (its CLI is gone); spawns stamp it themselves.
         if last_live_launch is not None and pane.last_live_launch != last_live_launch:

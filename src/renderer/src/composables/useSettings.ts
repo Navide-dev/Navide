@@ -1,31 +1,24 @@
 import { ref } from 'vue'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { detectUiLocale, i18n, isAvailableUiLocale, type AvailableUiLocale } from '@navide/plugin-ui/foundation'
 import { onSettingsChanged, settingsGet, settingsReadiness, settingsSet } from '@navide/plugin-ui/shared'
-import { isLinux } from '../../../shared/osplat'
+import { isLinux, isWindows } from '../../../shared/osplat'
 
 const LANGUAGE_KEY = 'agent-team:language'
-const SUPPORTED = new Set(['zh-TW', 'en-US', 'ja-JP'])
-
-function normalizeLocale(raw: string): string {
-  if (/^zh-(TW|Hant|HK)/i.test(raw) || /^zh/i.test(raw)) return 'zh-TW'
-  if (/^en/i.test(raw)) return 'en-US'
-  if (/^ja/i.test(raw)) return 'ja-JP'
-  return 'zh-TW'
-}
-
-function parseSupportedLocale(raw: unknown): 'zh-TW' | 'en-US' | 'ja-JP' | null {
+// Only locales with a registered catalog are accepted, so a recognized code
+// that has no translations yet never switches the UI to an empty catalog.
+function parseSupportedLocale(raw: unknown): AvailableUiLocale | null {
   if (typeof raw !== 'string') return null
   const candidate = raw.trim()
-  if (SUPPORTED.has(candidate)) return candidate as 'zh-TW' | 'en-US' | 'ja-JP'
+  if (isAvailableUiLocale(candidate)) return candidate
   try {
     const decoded = JSON.parse(candidate)
-    return typeof decoded === 'string' && SUPPORTED.has(decoded) ? (decoded as 'zh-TW' | 'en-US' | 'ja-JP') : null
+    return isAvailableUiLocale(decoded) ? decoded : null
   } catch {
     return null
   }
 }
 
-function readLocal(): 'zh-TW' | 'en-US' | 'ja-JP' | null {
+function readLocal(): AvailableUiLocale | null {
   const v = settingsGet<unknown>(LANGUAGE_KEY, null)
   return parseSupportedLocale(v)
 }
@@ -37,8 +30,8 @@ function writeLocal(value: string): void {
 // Module-level singleton — shared across every component that calls useSettings().
 const initialLocale = readLocal() ?? (i18n.global.locale.value as string)
 const language = ref<string>(initialLocale)
-if (SUPPORTED.has(initialLocale) && i18n.global.locale.value !== initialLocale) {
-  i18n.global.locale.value = initialLocale as 'zh-TW' | 'en-US' | 'ja-JP'
+if (isAvailableUiLocale(initialLocale) && i18n.global.locale.value !== initialLocale) {
+  i18n.global.locale.value = initialLocale
 }
 
 let unwatchSettings: (() => void) | null = null
@@ -65,9 +58,9 @@ function loadLanguage(backendFallback?: { language?: string }): void {
     return
   }
   const backend = backendFallback?.language ? parseSupportedLocale(backendFallback.language) : null
-  const next = backend ?? normalizeLocale(navigator.language)
+  const next = backend ?? detectUiLocale(navigator.language)
   language.value = next
-  i18n.global.locale.value = next as 'zh-TW' | 'en-US' | 'ja-JP'
+  i18n.global.locale.value = next
   // Promote the workspace's dormant backup only once the settings store is
   // authoritative. Before the snapshot lands, readLocal() returns null for a
   // preference the user does have, and this write would bury it — permanently,
@@ -94,11 +87,12 @@ function setLanguage(locale: string, options: { broadcast?: boolean } = {}): voi
 export const DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 45
 export const MIN_HEALTH_CHECK_TIMEOUT_SEC = 15
 export const MAX_HEALTH_CHECK_TIMEOUT_SEC = 120
-// Mirrors src/main/health-timeout.ts: Linux's AppImage first launch needs more.
-export const LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 120
+// Mirrors src/main/health-timeout.ts: the first launch on Linux (AppImage) and
+// Windows (fresh install, Defender scanning the unpacked backend) needs more.
+export const EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC = 120
 
 export function defaultHealthCheckTimeoutSec(): number {
-  return isLinux() ? LINUX_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
+  return isLinux() || isWindows() ? EXTENDED_DEFAULT_HEALTH_CHECK_TIMEOUT_SEC : DEFAULT_HEALTH_CHECK_TIMEOUT_SEC
 }
 
 function clampHealthCheckTimeoutSec(raw: number): number {

@@ -18,7 +18,7 @@
  * matrix to compare where a server is set up. Clicking either opens the same
  * drawer.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
@@ -47,9 +47,16 @@ interface McpServer {
   headers?: Record<string, string>
   enabled: boolean
   // Live fields the backend reports; never saved.
-  status?: 'connected' | 'error' | 'disabled' | 'unknown'
+  status?: 'starting' | 'connected' | 'error' | 'disabled' | 'unknown'
   tool_count?: number
   tools?: McpTool[]
+  /** While starting: seconds so far, and whether it is past the slow mark. */
+  starting_seconds?: number
+  slow_start?: boolean
+  /** Why it failed to start. */
+  error?: string
+  /** The end of what a stdio server printed on stderr (logs/mcp-<name>.log). */
+  stderr_tail?: string
 }
 
 /** One row: a server name and everywhere on this machine it is configured. */
@@ -94,6 +101,30 @@ const selectedKey = ref<string | null>(null)
 const draft = ref<McpServer | null>(null)
 const revealed = ref<Set<string>>(new Set())
 const toolsOpen = ref(false)
+
+// While a server is starting (a first npx/uvx run may be downloading the
+// package), ask the parent to refresh so the status follows it to connected
+// or to the reason it failed.
+const STARTING_REFRESH_MS = 3000
+const anyStarting = computed(() => props.servers.some((server) => server.status === 'starting'))
+let startingTimer: ReturnType<typeof setInterval> | null = null
+watch(
+  anyStarting,
+  (starting) => {
+    if (starting && startingTimer === null) {
+      startingTimer = setInterval(() => {
+        if (!props.loading) emit('refresh')
+      }, STARTING_REFRESH_MS)
+    } else if (!starting && startingTimer !== null) {
+      clearInterval(startingTimer)
+      startingTimer = null
+    }
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => {
+  if (startingTimer !== null) clearInterval(startingTimer)
+})
 
 const agentLabels = computed(() => {
   const map = new Map<string, string>()
@@ -573,6 +604,16 @@ function entries(map: Record<string, string>): [string, string][] {
             <span>
               <strong>{{ t('settings.mcp.state-on') }}</strong>
               <small>{{ t('settings.mcp.status', { status: selectedRow.navide?.status ?? 'unknown' }) }}</small>
+              <small
+                v-if="selectedRow.navide?.status === 'starting' && selectedRow.navide.slow_start"
+                class="mcp-status-note"
+                data-testid="mcp-starting-note"
+              >{{ t('settings.mcp.starting-note', { seconds: selectedRow.navide.starting_seconds ?? 0 }) }}</small>
+              <small
+                v-if="selectedRow.navide?.status === 'error' && selectedRow.navide.error"
+                class="mcp-status-error"
+                data-testid="mcp-error-reason"
+              >{{ t('settings.mcp.error-reason', { reason: selectedRow.navide.error }) }}</small>
             </span>
             <ToggleSwitch
               :model-value="draft.enabled"
@@ -580,6 +621,11 @@ function entries(map: Record<string, string>): [string, string][] {
               @update:model-value="toggleEnabled"
             />
           </div>
+
+          <details v-if="selectedRow.navide?.stderr_tail" class="mcp-stderr" data-testid="mcp-stderr-tail">
+            <summary>{{ t('settings.mcp.stderr-tail') }}</summary>
+            <pre>{{ selectedRow.navide.stderr_tail }}</pre>
+          </details>
 
           <details v-if="selectedRow.navide?.tools?.length" class="mcp-tools" :open="toolsOpen">
             <summary @click.prevent="toolsOpen = !toolsOpen">
@@ -649,7 +695,7 @@ function entries(map: Record<string, string>): [string, string][] {
                   :value="value"
                   :type="isSecretSettingKey(key) && !secretVisible('env', key) ? 'password' : 'text'"
                   spellcheck="false"
-                  placeholder="value"
+                  :placeholder="t('settings.cliLaunch.env-value-placeholder')"
                   @input="setRecordValue(draftEnv(), key, ($event.target as HTMLInputElement).value)"
                 />
                 <button
@@ -687,7 +733,7 @@ function entries(map: Record<string, string>): [string, string][] {
                   :value="key"
                   type="text"
                   spellcheck="false"
-                  placeholder="Header"
+                  :placeholder="t('settings.mcp.header-name-placeholder')"
                   class="mcp-kv-key"
                   @change="setRecordKey(draftHeaders(), key, ($event.target as HTMLInputElement).value)"
                 />
@@ -695,7 +741,7 @@ function entries(map: Record<string, string>): [string, string][] {
                   :value="value"
                   :type="isSecretSettingKey(key) && !secretVisible('header', key) ? 'password' : 'text'"
                   spellcheck="false"
-                  placeholder="value"
+                  :placeholder="t('settings.cliLaunch.env-value-placeholder')"
                   @input="setRecordValue(draftHeaders(), key, ($event.target as HTMLInputElement).value)"
                 />
                 <button
@@ -861,6 +907,10 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-status-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
 .mcp-status-dot.connected { background: var(--success-fg); }
 .mcp-status-dot.error { background: var(--danger-fg); }
+.mcp-status-dot.starting { background: var(--warning-fg); }
+.mcp-status-note { display: block; color: var(--warning-fg); }
+.mcp-status-error { display: block; color: var(--danger-fg); }
+.mcp-stderr pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
 .mcp-status-dot.disabled { background: var(--border-default); }
 .mcp-card-detail {
   font-size: var(--font-2xs);

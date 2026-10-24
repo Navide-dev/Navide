@@ -232,6 +232,13 @@ CLI Pane 才有收件匣：Host 或外部呼叫端沒有 messaging 名稱可以�
 目標在你送出的當下是 Idle 的，因此單純的等待會在它讀到訊息之前就回報
 「已經 Idle」。它會先等訊息**送進去**，並在送出前記錄目標的最後一次活動，而且只
 接受*更新*的回合作為答案，因此 `last_activity.text` 就是另一個 Agent 的回覆內容。
+Claude 的 Stop hook 可能在 Navide 讀到對話紀錄之前就回報回合結束（負載高時會差上
+數秒），而 hook 不帶文字。這時 `cli_wait_idle`（因此 `cli_send_and_wait` 也是）會
+在 `timeout_s` 之內最多再等 **10 秒**（`HOOK_TURN_TEXT_WAIT_S`），等對話紀錄的回合
+結束並回傳它的文字；若還是沒讀到，照樣返回，但不帶 `text`、加上
+`text_pending: true`，請稍後再呼叫一次 `cli_get_status`。對話紀錄已確認沒有文字的回合會
+立即返回，不帶 `text`，也不加 `text_pending`。Navide 不會拿較早回合的文字來填，
+即使讀取落後了整整幾個回合也一樣。其他 CLI，以及由對話紀錄本身回報的回合結束，照舊立即返回。
 它的 Timeout `reason` 沿用 `cli_wait_idle` 的，另外加上 `never_started`，代表目標
 一直維持 Idle、從未顯示任何接手該訊息的跡象。若送出當場被拒絕，則原樣回傳
 `cli_send` 的 `{ok: false, error}`。
@@ -439,8 +446,9 @@ watcher 兜底，以 `source: "watcher"` 且無歸屬的形式記錄。因此 `p
 |---|---|---|
 | `cli_usage` | `agent=""` | 各家 CLI 還剩多少額度，以 Navide 追蹤到的為準。把工作交給別的 Pane 之前值得先看：`cli_send` 對一個方案已經耗盡的 CLI 一樣會照排不誤，訊息送到了、只是換對方在那裡失敗。`agent` 可把答案縮到單一廠商鍵（`claude`、`codex`……），就是 `cli_whoami` 回報的那個 `agent_key`；留空則回傳所有被追蹤的廠商。回傳 `{ok, providers, accounts, enabled, intervalSec}`，有過濾時再加上 `agent`：`providers` 是廠商鍵對應它當下的快照，`accounts` 是廠商鍵對應該廠商的各帳號快照（僅限 Navide 會追蹤多組登入的廠商），以帳號 slot 為鍵。這些數字是各廠商自己的，原樣呈現，Navide 既不重算也不加註，所以請讀該廠商實際給的欄位，不要預期所有廠商同一種形狀。`enabled: false` 代表額度輪詢被關掉了，這裡的東西只是最後一次讀到的值。完全沒有條目的廠商，是 Navide 讀不到它的額度 —— 這跟「這家還有額度」不是同一句話 |
 | `cli_failover_state` | `agent=""` | Navide 額度用完自動切換目前的狀態：對用完額度的 CLI 帳號正在做什麼、還能做什麼。唯讀 —— 不刷新、不切換、不確認，也不讀任何憑證。`agent` 可把答案縮到單一廠商鍵。回傳 `{ok, policy, auditDegraded, capabilities, budget, unreconciled, incidents, transactions, recentIncidents, recentTransactions}`，有過濾時再加上 `agent`。`policy` 是 `off` / `notify` / `auto`；`budget` 依帳號池計算**自動**切換已用幾次（`{used, limit, windowSec, minGapSec, nextAllowedAt}`），手動切換不算在內；列在 `unreconciled` 的廠商在使用者於 Navide 處理那次做到一半的切換之前，任何切換都會被拒。各列只傳指名的欄位：帳號以 slot id 表示，live 登入的身分與指紋、錯誤原文、從 Pane 輸出擷取的證據一律不回傳 |
-| `cli_accounts_list` | `agent=""` | Navide 保存的 CLI 帳號，以及每家 CLI 目前用哪一個 —— 就是 Settings → Accounts 列出的那些帳號，只從 Navide 的帳號設定檔讀取。回傳 `{ok, accounts, active, defaultNames, paneDefaults}`，有過濾時再加上 `agent`：`accounts` 是每個新增過的帳號 `{id, agentKey, name, scope?, createdAt}`；`active` 是廠商對應目前使用的帳號，`"__default__"` 代表內建的 Default 列；`defaultNames` 是 Default 列的自訂名稱；`paneDefaults` 是新 Pane 釘選的帳號（與 `active` 不同時才有）。不含 email 與是否已登入：那得讀取憑證本身（claude 是 Keychain），這個工具永遠不讀。唯讀 |
-| `cli_account_sign_in` | `agent`、`profile_id`、`reason`、`mode="isolated"` | 開啟 Navide 本來就有的某個 CLI 帳號登入流程 —— 就是 Settings → Accounts 會開的那個登入 Pane，在呼叫者的視窗裡執行 CLI 自己的登入指令 —— 使用者只需在瀏覽器完成。使用者在主視窗的確認框按同意之前，什麼都不會開；確認框預設停在「取消」，列出廠商、帳號（名稱，不顯示 email）、提出要求的 pane、登入 pane 會開在哪個 workspace（就是呼叫者的 workspace），以及 agent 給的 `reason`（必填，超過 300 字截斷，有截斷時確認框會註明），標明由 agent 提供，不可見字元會顯示出來。工具呼叫被取消或逾時、或視窗和後端斷線時，還開著的確認框會以 `confirm-timeout` 關閉，不開任何 pane。使用者拒絕、在期限前沒回答（比視窗的等待時間早一個一般 UI 動作的等待時間）、已有別的 agent 的登入在等確認，或視窗在這段期間離開呼叫者的 workspace，都不會開任何 pane，分別回傳 `declined`、`confirm-timeout`、`busy`、`wrong-workspace` 或 `workspace-changed`。`mode` 為 `isolated` 時，停用中的帳號在它自己的私有 home 登入；為 `folder` 時，claude 帳號在它自己的設定資料夾登入。目前使用中的帳號、內建 Default，以及登入時會取代 live 憑證的廠商，一律以 `needs-user` 拒絕；不會切換帳號。只限 CLI Pane 呼叫。回傳 `{ok, status: "started", agent, profile_id, mode, login_pane_id}` 或 `{ok: false, error, error_code}`。不回傳任何 token、代碼或網址，登入 Pane 印出的內容其他 Pane 也讀不到：它不寫 log、`cli_read_log` 拒絕讀取、`cli_get_status` 不帶它的文字、聊天室也不能連接到它。`ui_invoke` 對 `ui.accounts.*` 一律以 `ui_dedicated_tool` 拒絕 |
+| `cli_accounts_list` | `agent=""` | Navide 保存的 CLI 帳號，以及每家 CLI 目前用哪一個 —— 就是 Settings → Accounts 列出的那些帳號，只從 Navide 的帳號設定檔讀取。回傳 `{ok, accounts, active, defaultNames, paneDefaults}`，有過濾時再加上 `agent`：`accounts` 是每個新增過的帳號 `{id, agentKey, name, scope?, createdAt}`；`active` 是廠商對應目前使用的帳號，`"__default__"` 代表內建的 Default 列；`defaultNames` 是 Default 列的自訂名稱；`paneDefaults` 是新 Pane 釘選的帳號（與 `active` 不同時才有）。`name` 是使用者幫帳號取的名稱；Navide 自動登記的帳號會用登入的 email 當名稱，所以名稱可能是 email。不含是否已登入：那得讀取憑證本身（claude 是 Keychain），這個工具永遠不讀。唯讀 |
+| `cli_account_sign_in` | `agent`、`profile_id`、`reason`、`mode="isolated"` | 開啟 Navide 本來就有的某個 CLI 帳號登入流程 —— 就是 Settings → Accounts 會開的那個登入 Pane，在呼叫者的視窗裡執行 CLI 自己的登入指令 —— 使用者只需在瀏覽器完成。使用者在主視窗的確認框按同意之前，什麼都不會開；確認框預設停在「取消」，列出廠商、帳號（名稱；Navide 自動登記的帳號名稱就是它的 email，所以可能顯示 email）、提出要求的 pane、登入 pane 會開在哪個 workspace（就是呼叫者的 workspace），以及 agent 給的 `reason`（必填，超過 300 字截斷，有截斷時確認框會註明），標明由 agent 提供，不可見字元會顯示出來。工具呼叫被取消或逾時、或視窗和後端斷線時，還開著的確認框會以 `confirm-timeout` 關閉，不開任何 pane。使用者拒絕、在期限前沒回答（比視窗的等待時間早一個一般 UI 動作的等待時間）、已有別的 agent 的登入在等確認，或視窗在這段期間離開呼叫者的 workspace，都不會開任何 pane，分別回傳 `declined`、`confirm-timeout`、`busy`、`wrong-workspace` 或 `workspace-changed`。`mode` 為 `isolated` 時，停用中的帳號在它自己的私有 home 登入；為 `folder` 時，claude 帳號在它自己的設定資料夾登入。目前使用中的帳號、內建 Default，以及登入時會取代 live 憑證的廠商，一律以 `needs-user` 拒絕；不會切換帳號。只限 CLI Pane 呼叫。回傳 `{ok, status: "started", agent, profile_id, mode, login_pane_id}` 或 `{ok: false, error, error_code}`。不回傳任何 token、代碼或網址，登入 Pane 印出的內容其他 Pane 也讀不到：它不寫 log、`cli_read_log` 拒絕讀取、`cli_get_status` 不帶它的文字、聊天室也不能連接到它。`ui_invoke` 對 `ui.accounts.*` 一律以 `ui_dedicated_tool` 拒絕 |
+| `cli_account_switch` | `agent`、`profile_id`、`reason` | 請使用者把某個 CLI 切換到它的另一個帳號（`profile_id` 用 `cli_accounts_list` 列出的值，內建 Default 用 `__default__`）。使用者在主視窗的確認框按同意之前，什麼都不會切換；確認框預設停在「取消」，列出廠商、從哪個帳號切到哪個帳號、提出要求的 pane 與它的 workspace，以及 agent 給的 `reason`（必填，超過 300 字截斷，有截斷時確認框會註明），標明由 agent 提供，不可見字元會顯示出來。同意後走主視窗自己的切換（和 Settings → Accounts 同一個），不強制：如果有 pane 正在用這個 CLI，重啟前會再問使用者一次（拒絕則回 `restart-declined`）。使用者拒絕、期限內沒回答、已有別的 agent 的切換在等確認，或工具呼叫被取消或逾時，都不會切換（`declined`、`confirm-timeout`、`busy`）；Navide 拒絕的切換只回 `refused` 與它的 `code`（例如 `SWITCH_RATE_LIMITED`、`UNRECONCILED_STATE`）。只限 CLI Pane 呼叫。回傳 `{ok, status: "switched" \| "switched-signed-out", agent, profile_id, from, to}`（`from`、`to` 是顯示名稱：別名或帳號名稱；Navide 自動登記的帳號名稱就是它的 email）或 `{ok: false, error, error_code}`。不回傳任何憑證或 token。`ui_invoke` 對 `ui.accounts.*` 一律以 `ui_dedicated_tool` 拒絕 |
 | `cli_token_stats` | `workspace_path` | 這個 Workspace 花掉多少 Token，以 Navide 的計數為準 —— 就是 Token 面板背後的那些數字。回傳 `{workspace_path, current_run, cumulative, runs, runs_truncated, live_sessions, live_session_count, all_time, by_vendor, by_day}`。`cumulative` 是這個專案的總計，含 `by_vendor` 與 `by_stage` 拆解；`all_time` 與 `by_vendor` 是所有專案的；沒有 Pipeline 執行開著時 `current_run` 為 `null`；`runs` 是最近幾輪已封存的執行，只有彙總值，較舊的被切掉時 `runs_truncated` 為真；`live_sessions` 是現在跑得最兇的幾個 CLI Session（各自 `{input, output, calls}`），`live_session_count` 是總共有幾個，`by_day` 則是最近一週的全域用量。計數的來源是各廠商自己的 Session Log，所以 Navide 讀不到 Log 的廠商是「沒有貢獻」，而不是回一個零。`cli_usage` 是另外一半 —— 那邊是廠商端還剩多少額度，這邊是這裡記錄到的花費 |
 
 ### Workspace、Skills 與指示檔
@@ -499,6 +507,21 @@ App 自己的固定錯誤文字（所有 `BAD_REQUEST`，以及 `HOST_UNAVAILABL
 | `plugins_enable` | `namespace`、`name` | agent 停用的套件會立刻重新啟用，沿用使用者先前給的同意，回傳 `{ok, pluginId, pluginVersion, disabled: false, changed}`。使用者停用的套件不會被啟用，而是送出請求讓使用者決定，回傳 `{ok: false, error_code: "APPROVAL_REQUIRED", error, approval_id, status: "pending", expires_at}` |
 
 錯誤是 `{ok: false, error, error_code}`，代碼為 `BAD_REQUEST`、`BUILTIN_PLUGIN`、`NOT_INSTALLED`、`NOT_FOUND`、`ACTION_FAILED`、`REGISTRY_UNAVAILABLE` 或 `HOST_UNAVAILABLE`。每一次請求、決定、結果、停用和啟用，都會連同呼叫端（pane 名稱、外部用戶端或 Navide Host）記在 navide.db 的 `plugin_agent_actions` 表。
+
+### 本機 Navide 外掛套件：開啟、檢查、打包、從檔案安裝
+
+每一步都有工具，「開啟」和「填寫」是兩個獨立動作，可以單獨使用。使用者想自己操作時，agent 呼叫 `_open` 工具後就停下來等；使用者要 agent 代勞時，agent 呼叫 `plugins_install_file_fill`（不必先開啟）。這些工具都不會安裝、送出或切換任何東西：只有使用者核准請求、並在和「從檔案安裝」相同的同意對話框確認後，才會安裝。開發者模式仍然只能由使用者自己切換；plugin frame 和環境變數仍然不能從檔案安裝。
+
+| 工具 | 參數 | 作用 |
+|---|---|---|
+| `marketplace_open` | `id=""` | 在呼叫者的 Navide 視窗打開 Navide 市集，或其中某個外掛的頁面 |
+| `plugins_install_file_open` | — | 打開「設定 → Navide 外掛」，使用者在那裡用「從檔案安裝」選 `.vsix` |
+| `plugins_developer_mode_open` | — | 打開開發者模式的開關 |
+| `plugins_validate_package` | `path` | 唯讀檢查 `.vsix` 或外掛資料夾（絕對路徑）：資料夾先套 `navide-plugin package` 的規則，再和檔案一樣套本機安裝的規則（壓縮檔與 manifest、`navide.` 命名空間、Navide 的下架與封鎖檔案清單、`<file>.sig` 簽章）。回傳 `{ok, path, packageKind, valid, errors, id, version, target, digest, signature, risk, disclosure, scan, reviewedByNavide: false}`；`signature` 是 `none`、`verified`（已審核開發者的有效金鑰）、`revoked` 或 `unverifiable` |
+| `plugins_package` | `dir`、`target=""`、`out=""` | 依資料夾的 `artifact-files.json` 產生和 `navide-plugin package` 完全相同的 `.vsix`，寫到 `out` 或資料夾旁的 `<id>-<version>-<target>.vsix`。不覆寫已存在的檔案，不寫進 Navide 的資料夾，不簽章。回傳寫出檔案的檢查報告 |
+| `plugins_install_file_fill` | `path`、`reason=""` | Navide 讀一次 `.vsix`、檢查並保存那一份（資料夾需要開發者模式已開啟），然後建立 `plugin-install-file` 請求。使用者會看到誰提出、理由（標示為 agent 寫的）、路徑、SHA-256，以及 Navide 未審核；核准後打開「從檔案安裝」的同意對話框，裝的是保存的那一份。回傳 `{ok, approval_id, status: "pending", expires_at, id, version, digest, packageKind, signature, reviewedByNavide: false, note}`；本機安裝會拒絕的套件回 `PACKAGE_INVALID` 和 `errors`。之後用 `marketplace_request_status` 查狀態 |
+
+Navide 資料夾內的路徑、比任何套件都大的檔案（256 MiB）都會被拒絕。不論同時開著幾個請求，Navide 都會保留每一份暫存，直到它的請求過期為止：和所有 Navide 外掛請求一樣是 15 分鐘，再多 1 分鐘寬限，所以使用者還能核准的請求，裝的一定是它自己那一份。請求過期後暫存就會刪除，核准卡顯示「這個請求已經過期。」，不是失敗；之後才核准不會安裝任何東西，`marketplace_request_status` 回報 `expired`（若在視窗端才發現，則是 `failed` 並帶 `AGENT_STAGING_EXPIRED`），請重新呼叫 `plugins_install_file_fill`。暫存是 Navide 資料夾裡的檔案，同一個檔案不論被要求幾次都只存一份。沒有數量或總量上限，但 Navide 不會把磁碟寫滿：如果寫入這一份之後剩餘空間會低於 5 GiB（或寫到一半空間用完），這次請求會回 `STAGING_DISK_LOW`，訊息寫出目前剩餘空間和這個檔案的大小，什麼都不寫入；之前的暫存和它們的核准卡都不受影響。過期的暫存每分鐘清理一次；請求被拒絕時（不論在哪個視窗拒絕）立即刪除；上一次執行留下的暫存在 Navide 啟動時清掉。套件自己的文字（id、版本、引用 manifest 的錯誤、揭露內容）照上面的方式框起來，並標記讀取的 pane。`plugins_list_installed` 的每一項另外回傳 `source`（`marketplace`、`prerelease`、`testplace`、`local-signed`、`local-unsigned`、`developer-unpacked`、`factory-bundled`），以及開發者金鑰之後被 Navide 撤銷的本機檔案會帶 `signatureRevoked: true`。
 
 ### Pipeline
 

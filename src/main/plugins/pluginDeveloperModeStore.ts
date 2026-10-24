@@ -8,7 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import { canonicalContractJson } from '../../shared/pluginDisclosure'
@@ -24,7 +24,53 @@ import { canonicalContractJson } from '../../shared/pluginDisclosure'
 // critical where its hooks run; a signed consent is 0.2.27). Off by default:
 // a missing or unreadable file means Developer Mode is off and no folder is
 // loaded.
+//
+// A2-5 (DESIGN-A2 G5): with an integrity provider (Electron safeStorage in the
+// app) Navide also keeps, in a file of its own, an HMAC of every entry it
+// wrote. An entry it did not write (the switch turned on, a folder added or
+// edited by another program) is disclosed and not used until the user turns
+// the switch on or consents to the folder again in the main window. This does
+// not block the program; it only means its edit is not taken as the user's
+// consent. The store file keeps its 0.2.27 shape, so a downgrade reads it.
 const DEVELOPER_MODE_FILE = '.navide-plugin-developer-mode.json'
+const DEVELOPER_MODE_SIGNATURE_FILE = '.navide-plugin-developer-mode.sig.json'
+
+/** Wraps the HMAC key at rest (Electron safeStorage in the app). Never the CLI
+ * account credentials: this key is its own, in its own file. */
+export interface DeveloperModeIntegrity {
+  /** False where secure storage is unavailable: nothing is checked then. */
+  readonly available: boolean
+  encrypt(plain: string): string
+  decrypt(enc: string): string
+  /** Called once when a change made outside Navide is first seen. */
+  onExternalChange?: (change: DeveloperModeExternalChange) => void
+}
+
+/** When Navide first saw entries it did not write. */
+export interface DeveloperModeExternalChange {
+  detectedAt: string
+  /** The settings file's modification time then, when it could be read. */
+  modifiedAt: string | null
+  /** Set when Navide could not sign its own write (secure storage refused):
+   * the entries are asked about again, as after an outside change. */
+  reason?: 'signing-unavailable' | 'signature-missing'
+}
+
+interface PersistedSignature {
+  schemaVersion: 1
+  keyEnc: string
+  /** HMACs of the entries Navide wrote: the switch when on, each folder. */
+  macs: string[]
+  externalChange: DeveloperModeExternalChange | null
+}
+
+interface Evaluated {
+  state: PersistedDeveloperModeState
+  enabledTrusted: boolean
+  /** Indexes into `state.folders` of the entries Navide did not write. */
+  untrusted: Set<number>
+  externalChange: DeveloperModeExternalChange | null
+}
 
 /** One developer folder and the permission set the user consented to. The
  * consent is bound to the folder and the manifest's `permissions` and
@@ -88,45 +134,283 @@ export function developerPermissionsDigest(manifest: { permissions?: unknown; ba
     .digest('hex')
 }
 
+const enabledEntry = (): string => JSON.stringify(['enabled', true])
+const folderEntry = (folder: DeveloperFolderConsent): string =>
+  JSON.stringify(['folder', folder.path, folder.pluginId, folder.permissionsDigest, folder.consentedAt])
+
+function sameMac(a: string, b: string): boolean {
+  const left = Buffer.from(a, 'utf8')
+  const right = Buffer.from(b, 'utf8')
+  return left.length === right.length && timingSafeEqual(left, right)
+}
+
+function readSignature(path: string): PersistedSignature | null {
+  if (!existsSync(path)) return null
+  try {
+    const entry = lstatSync(path)
+    if (!entry.isFile() || entry.isSymbolicLink()) throw new Error('unsafe signature file')
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    const change = parsed.externalChange as Record<string, unknown> | null
+    return {
+      schemaVersion: 1,
+      keyEnc: typeof parsed.keyEnc === 'string' ? parsed.keyEnc : '',
+      macs: Array.isArray(parsed.macs) ? parsed.macs.filter((mac): mac is string => typeof mac === 'string') : [],
+      externalChange: change && typeof change === 'object' && typeof change.detectedAt === 'string'
+        ? {
+            detectedAt: change.detectedAt,
+            modifiedAt: typeof change.modifiedAt === 'string' ? change.modifiedAt : null,
+            ...(change.reason === 'signing-unavailable' || change.reason === 'signature-missing' ? { reason: change.reason } : {}),
+          }
+        : null,
+    }
+  } catch {
+    // Unreadable is not "never signed": every entry is asked about again.
+    return { schemaVersion: 1, keyEnc: '', macs: [], externalChange: null }
+  }
+}
+
+function readSignatureSafely(path: string): PersistedSignature | null {
+  try {
+    return readSignature(path)
+  } catch {
+    return null
+  }
+}
+
 export class PluginDeveloperModeStore {
   private readonly file: string
+  private readonly signatureFile: string
+  private unwrapped: { keyEnc: string; key: Buffer | null } | null = null
+  /** A notice that could not be saved in the signature file. */
+  private unsavedChange: DeveloperModeExternalChange | null = null
 
-  constructor(private readonly root: string) {
+  constructor(private readonly root: string, private readonly integrity?: DeveloperModeIntegrity) {
     this.file = join(root, DEVELOPER_MODE_FILE)
+    this.signatureFile = join(root, DEVELOPER_MODE_SIGNATURE_FILE)
   }
 
-  /** The switch; off when the file is missing or unusable. */
+  /** The switch; off when the file is missing or unusable, or (G5) when
+   * another program turned it on. */
   isEnabled(): boolean {
-    return this.read().enabled
+    const evaluated = this.evaluate()
+    return evaluated.state.enabled && evaluated.enabledTrusted
   }
 
   setEnabled(enabled: boolean): void {
-    const current = this.read()
-    if (current.enabled === enabled) return
-    this.write({ ...current, enabled })
+    const evaluated = this.evaluate()
+    // Turning it off also writes over a switch another program turned on, so
+    // that entry and its notice go (review LOW-2 on #537).
+    if (evaluated.state.enabled === enabled && (!enabled || evaluated.enabledTrusted)) return
+    this.write({ ...evaluated.state, enabled }, evaluated, { enabled: true })
   }
 
+  /** The folders the user consented to in Navide. */
   folders(): DeveloperFolderConsent[] {
-    return this.read().folders.map((folder) => ({ ...folder }))
+    const evaluated = this.evaluate()
+    return evaluated.state.folders.filter((_, index) => !evaluated.untrusted.has(index)).map((folder) => ({ ...folder }))
   }
 
   folder(pluginId: string): DeveloperFolderConsent | undefined {
     return this.folders().find((folder) => folder.pluginId === pluginId)
   }
 
+  /** G5: folder entries another program wrote. Never loaded; listed so the
+   * user can consent to them again or remove them. */
+  untrustedFolders(): DeveloperFolderConsent[] {
+    const evaluated = this.evaluate()
+    return evaluated.state.folders.filter((_, index) => evaluated.untrusted.has(index)).map((folder) => ({ ...folder }))
+  }
+
+  /** A folder entry for the id, consented in Navide or not. */
+  anyFolder(pluginId: string): DeveloperFolderConsent | undefined {
+    return this.folder(pluginId) ?? this.untrustedFolders().find((folder) => folder.pluginId === pluginId)
+  }
+
+  /** An HMAC of `entry` under this store's key, for the developer folder
+   * record beside it (review MED-1 on #536). The key never leaves the store;
+   * a domain prefix keeps these MACs apart from the store's own entries.
+   * Null without secure storage, before Navide signed anything, or when the
+   * key cannot be unwrapped. Never throws. */
+  entryMac(entry: string): string | null {
+    const signing = this.recordSigning()
+    return signing.state === 'ready' ? signing.mac(entry) : null
+  }
+
+  /** How the developer folder record can be signed now (review MED-1 on
+   * #552): `no-secure-storage` (nothing is checked, as for this store),
+   * `no-key` (secure storage works but there is no usable key: the
+   * signature file is gone or its key cannot be unwrapped; nothing verifies,
+   * as this store treats a missing signature), or `ready` with the key's
+   * fingerprint, so a record signed under an earlier key can say so. Never
+   * throws; never exposes the key. */
+  recordSigning():
+    | { state: 'no-secure-storage' }
+    | { state: 'no-key' }
+    | { state: 'ready'; keyId: string; mac(entry: string): string } {
+    if (!this.integrity?.available) return { state: 'no-secure-storage' }
+    try {
+      const signature = readSignature(this.signatureFile)
+      const key = signature?.keyEnc ? this.key(signature) : null
+      if (!key) return { state: 'no-key' }
+      return {
+        state: 'ready',
+        keyId: createHmac('sha256', key).update('developer-folder-record-key-id').digest('hex').slice(0, 16),
+        mac: (entry) => createHmac('sha256', key).update(`developer-folder-record\u0000${entry}`).digest('hex'),
+      }
+    } catch {
+      return { state: 'no-key' }
+    }
+  }
+
+  /** G5: when Navide first saw entries it did not write, while any is left. */
+  externalChange(): DeveloperModeExternalChange | null {
+    return this.evaluate().externalChange
+  }
+
   /** Record (or replace) the consent for one plugin id's developer folder. */
   consent(folder: DeveloperFolderConsent): void {
-    const current = this.read()
-    this.write({
-      ...current,
-      folders: [...current.folders.filter((entry) => entry.pluginId !== folder.pluginId), { ...folder }],
-    })
+    const evaluated = this.evaluate()
+    const kept = evaluated.state.folders.filter((entry) => entry.pluginId !== folder.pluginId)
+    this.write({ ...evaluated.state, folders: [...kept, { ...folder }] }, evaluated, { folder: { ...folder } })
   }
 
   forget(pluginId: string): void {
-    const current = this.read()
-    if (!current.folders.some((entry) => entry.pluginId === pluginId)) return
-    this.write({ ...current, folders: current.folders.filter((entry) => entry.pluginId !== pluginId) })
+    const evaluated = this.evaluate()
+    if (!evaluated.state.folders.some((entry) => entry.pluginId === pluginId)) return
+    this.write(
+      { ...evaluated.state, folders: evaluated.state.folders.filter((entry) => entry.pluginId !== pluginId) },
+      evaluated,
+      {},
+    )
+  }
+
+  /** The HMAC key, unwrapped once per wrapped value; null when it cannot be. */
+  private key(signature: PersistedSignature): Buffer | null {
+    if (this.unwrapped?.keyEnc === signature.keyEnc) return this.unwrapped.key
+    let key: Buffer | null = null
+    try {
+      const raw = Buffer.from(this.integrity!.decrypt(signature.keyEnc), 'base64')
+      key = raw.length === 32 ? raw : null
+    } catch {
+      key = null
+    }
+    this.unwrapped = { keyEnc: signature.keyEnc, key }
+    return key
+  }
+
+  /** Never throws (review MED-2 on #537): when the signature cannot be read,
+   * made or written, every entry is asked about again and that is disclosed. */
+  private evaluate(): Evaluated {
+    const state = this.read()
+    try {
+      return this.evaluateSigned(state)
+    } catch (error) {
+      console.warn('[plugins] Developer Mode settings could not be checked; every entry is asked about again:', error)
+      return {
+        state,
+        enabledTrusted: !state.enabled,
+        untrusted: new Set(state.folders.map((_, index) => index)),
+        externalChange: this.noteChange(null, 'signing-unavailable'),
+      }
+    }
+  }
+
+  /** Records (once, in the signature file when it can) and reports when
+   * Navide first saw entries it did not sign. */
+  private noteChange(signature: PersistedSignature | null, reason?: DeveloperModeExternalChange['reason']): DeveloperModeExternalChange {
+    const known = signature?.externalChange ?? readSignatureSafely(this.signatureFile)?.externalChange ?? this.unsavedChange
+    if (known) return known
+    const change: DeveloperModeExternalChange = {
+      detectedAt: new Date().toISOString(),
+      modifiedAt: this.modifiedAt(),
+      ...(reason ? { reason } : {}),
+    }
+    const base = signature ?? readSignatureSafely(this.signatureFile) ?? { schemaVersion: 1 as const, keyEnc: '', macs: [], externalChange: null }
+    try {
+      this.writeSignature({ ...base, externalChange: change })
+    } catch (error) {
+      // Kept for this run; said again on the next start.
+      this.unsavedChange = change
+      console.warn('[plugins] Developer Mode notice could not be saved:', error)
+    }
+    try {
+      this.integrity?.onExternalChange?.(change)
+    } catch (error) {
+      console.warn('[plugins] Developer Mode external change was not recorded:', error)
+    }
+    return change
+  }
+
+  private evaluateSigned(state: PersistedDeveloperModeState): Evaluated {
+    const all: Evaluated = { state, enabledTrusted: true, untrusted: new Set(), externalChange: null }
+    const integrity = this.integrity
+    if (!integrity || !integrity.available) return all
+    // Nothing to trust: no crypto is touched (Developer Mode never used).
+    if (!state.enabled && state.folders.length === 0) {
+      const signature = readSignature(this.signatureFile)
+      if (signature?.externalChange) this.writeSignature({ ...signature, externalChange: null })
+      this.unsavedChange = null
+      return all
+    }
+    const signature = readSignature(this.signatureFile)
+    if (!signature) {
+      // Review HIGH-1 on #537: no signature file is not proof the entries are
+      // Navide's (deleting it would make any outside edit trusted). A file
+      // from before 0.2.28, or one whose signature file is gone, is asked
+      // about again once; consenting signs it.
+      return {
+        state,
+        enabledTrusted: !state.enabled,
+        untrusted: new Set(state.folders.map((_, index) => index)),
+        externalChange: this.noteChange(null, 'signature-missing'),
+      }
+    }
+    const key = signature.keyEnc ? this.key(signature) : null
+    const signed = (entry: string): boolean => {
+      if (!key) return false
+      const mac = createHmac('sha256', key).update(entry).digest('hex')
+      return signature.macs.some((known) => sameMac(known, mac))
+    }
+    const enabledTrusted = !state.enabled || signed(enabledEntry())
+    const untrusted = new Set<number>()
+    state.folders.forEach((folder, index) => {
+      if (!signed(folderEntry(folder))) untrusted.add(index)
+    })
+    if (enabledTrusted && untrusted.size === 0) {
+      if (signature.externalChange) this.writeSignature({ ...signature, externalChange: null })
+      this.unsavedChange = null
+      return all
+    }
+    return { state, enabledTrusted, untrusted, externalChange: this.noteChange(signature) }
+  }
+
+  private modifiedAt(): string | null {
+    try {
+      return lstatSync(this.file).mtime.toISOString()
+    } catch {
+      return null
+    }
+  }
+
+  /** The signature of `state`: every entry trusted before, plus what this
+   * write is the user's decision on. Entries another program wrote stay
+   * unsigned. */
+  private sign(
+    state: PersistedDeveloperModeState,
+    untrustedFolders: Set<DeveloperFolderConsent>,
+    enabledTrusted: boolean,
+    previous: PersistedSignature | null,
+  ): PersistedSignature {
+    const prior = previous?.keyEnc ? this.key(previous) : null
+    const key = prior ?? randomBytes(32)
+    const keyEnc = prior ? previous!.keyEnc : this.integrity!.encrypt(key.toString('base64'))
+    if (!prior) this.unwrapped = { keyEnc, key }
+    const mac = (entry: string): string => createHmac('sha256', key).update(entry).digest('hex')
+    const macs = new Set<string>()
+    if (state.enabled && enabledTrusted) macs.add(mac(enabledEntry()))
+    for (const folder of state.folders) if (!untrustedFolders.has(folder)) macs.add(mac(folderEntry(folder)))
+    const resolved = (!state.enabled || enabledTrusted) && state.folders.every((folder) => !untrustedFolders.has(folder))
+    return { schemaVersion: 1, keyEnc, macs: [...macs], externalChange: resolved ? null : previous?.externalChange ?? null }
   }
 
   private read(): PersistedDeveloperModeState {
@@ -135,15 +419,52 @@ export class PluginDeveloperModeStore {
     return parsed.state
   }
 
-  private write(state: PersistedDeveloperModeState): void {
-    mkdirSync(this.root, { recursive: true, mode: 0o700 })
-    const temporary = `${this.file}.${randomUUID()}.tmp`
+  /** `decision` is what the user decided in this write (the switch, one
+   * folder's consent); it is signed with every entry trusted before. */
+  private write(
+    state: PersistedDeveloperModeState,
+    evaluated?: Evaluated,
+    decision: { enabled?: true; folder?: DeveloperFolderConsent } = {},
+  ): void {
+    if (!this.integrity?.available || !evaluated) {
+      this.writeAtomic(this.file, state)
+      return
+    }
+    const untrusted = new Set(evaluated.state.folders.filter((_, index) => evaluated.untrusted.has(index)))
+    const enabledTrusted = decision.enabled === true || evaluated.enabledTrusted
+    const previous = readSignature(this.signatureFile)
+    let next: PersistedSignature
     try {
-      writeFileSync(temporary, `${JSON.stringify(state)}\n`, { encoding: 'utf8', mode: 0o600 })
+      next = this.sign(state, untrusted, enabledTrusted, previous)
+    } catch (error) {
+      // Secure storage refused (review MED-2 on #537): the user's change is
+      // still written, unsigned, so it reads as "ask again" and is disclosed.
+      console.warn('[plugins] Developer Mode settings could not be signed:', error)
+      this.writeAtomic(this.file, state)
+      this.noteChange(previous, 'signing-unavailable')
+      return
+    }
+    // Old and new entries are both signed while the two files change, so a
+    // stop in between never reads as a change made outside Navide.
+    const carried = previous && previous.keyEnc === next.keyEnc ? previous.macs : []
+    this.writeSignature({ ...next, macs: [...new Set([...carried, ...next.macs])] })
+    this.writeAtomic(this.file, state)
+    this.writeSignature(next)
+  }
+
+  private writeSignature(signature: PersistedSignature): void {
+    this.writeAtomic(this.signatureFile, signature)
+  }
+
+  private writeAtomic(file: string, value: unknown): void {
+    mkdirSync(this.root, { recursive: true, mode: 0o700 })
+    const temporary = `${file}.${randomUUID()}.tmp`
+    try {
+      writeFileSync(temporary, `${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600 })
       chmodSync(temporary, 0o600)
       fsyncFileSync(temporary)
-      renameSync(temporary, this.file)
-      chmodSync(this.file, 0o600)
+      renameSync(temporary, file)
+      chmodSync(file, 0o600)
       syncDirectorySync(this.root)
     } finally {
       rmSync(temporary, { force: true })

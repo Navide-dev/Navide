@@ -276,7 +276,7 @@ describe('MemoryPane', () => {
     await wrapper.find('.memory-editor-text').setValue('# mine')
     await clickEditorButton(wrapper, 'Save')
 
-    await clickEditorButton(wrapper, 'Reload from disk (discards your draft)')
+    await clickEditorButton(wrapper, 'Reload from Disk (Discards Your Draft)')
     expect(send.mock.calls.filter((call) => call[0] === 'memory.get')).toHaveLength(2)
     expect((wrapper.find('.memory-editor-text').element as HTMLTextAreaElement).value).toBe('# hello')
     expect(wrapper.find('.memory-conflict').exists()).toBe(false)

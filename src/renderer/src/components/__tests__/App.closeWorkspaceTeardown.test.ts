@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// "Close workspace" promised a teardown it never performed: the dialog said the
+// "Close Workspace" promised a teardown it never performed: the dialog said the
 // workspace was closing while its agents kept running in the background.
 //
 // The cause was ordering, not the teardown itself. panesInView is derived from

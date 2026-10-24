@@ -90,6 +90,13 @@ describe('pickText', () => {
 
   it('falls back to zh-TW for an unknown locale', () => {
     expect(pickText(text, 'ja-JP')).toBe('你好')
+    expect(pickText(text, 'it-IT')).toBe('你好')
+  })
+
+  it('falls back to en-US for a later UI language', () => {
+    expect(pickText(text, 'ko-KR')).toBe('hi')
+    expect(pickText(text, 'zh-CN')).toBe('hi')
+    expect(pickText({ ...text, 'ko-KR': '안녕' }, 'ko-KR')).toBe('안녕')
   })
 })
 
@@ -154,12 +161,88 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     for (const text of texts) expect(text['ja-JP'], text['en-US']).toBeTruthy()
   })
 
-  it('shows once to someone updating from 0.2.25, as the newest entry', () => {
+  it('shows once to someone updating from 0.2.25', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[0].version).toBe('0.2.26')
-    expect(WHATS_NEW[1].version).toBe('0.2.25')
+    expect(WHATS_NEW[3].version).toBe('0.2.26')
+    expect(WHATS_NEW[4].version).toBe('0.2.25')
+  })
+})
+
+// Authored ahead of the 0.2.27 bump, like 0.2.26 above. One entry for the
+// release: Navide Browser (#459) and blocked local installs, with the
+// downgrade to 0.2.26 (decision d6 (a)); docs wrap-up adjusts the wording.
+describe('0.2.27 — Navide Browser and blocked local installs', () => {
+  const entry = whatsNewFor('0.2.27')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('names Navide Browser and the downgrade to 0.2.26', () => {
+    expect(entry!.title['en-US']).toContain('Navide Browser')
+    expect(entry!.highlights.some((text) => text['en-US'].startsWith('Navide Browser'))).toBe(true)
+    expect(entry!.highlights.some((text) =>
+      text['en-US'].startsWith('Behaviour change:') && text['en-US'].includes('0.2.26') && text['en-US'].includes('quarantined'),
+    )).toBe(true)
+  })
+
+  it('shows once to someone updating from 0.2.26, and not to a build still running 0.2.26', () => {
+    expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
+    expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
+    expect(WHATS_NEW[2].version).toBe('0.2.27')
+    expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
+  })
+})
+
+// Authored ahead of the 0.2.28 bump, like 0.2.27 above. The default UI
+// language line is the wording #519 settled; Korean (Beta) is added by its own PR.
+describe('0.2.28 — take effect at once, window tools and the English fallback', () => {
+  const entry = whatsNewFor('0.2.28')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('says the default UI language is now English and the Developer Mode re-consent', () => {
+    expect(entry!.highlights.some((text) => text['en-US'].startsWith('The default UI language has changed:'))).toBe(true)
+    expect(entry!.highlights.some((text) =>
+      text['en-US'].startsWith('Behaviour change:') && text['en-US'].includes('Developer Mode') && text['en-US'].includes('0.2.27'),
+    )).toBe(true)
+  })
+
+  it('shows once to someone updating from 0.2.27, and not to a build still running 0.2.27', () => {
+    expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
+    expect(pickWhatsNew('0.2.28', '0.2.28')).toBeNull()
+    expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
+  })
+})
+
+// The 0.2.29 entry: six more interface languages, with the server's Node.js
+// security update leading the highlights.
+describe('0.2.29 — six more languages', () => {
+  const entry = whatsNewFor('0.2.29')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    for (const text of [entry!.title, ...entry!.highlights, entry!.note!]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('leads with the server Node.js upgrade and its three high-severity CVEs', () => {
+    const first = entry!.highlights[0]['en-US']
+    expect(first).toContain('22.23.4')
+    for (const cve of ['CVE-2026-106069', 'CVE-2026-111497', 'CVE-2026-105482']) expect(first).toContain(cve)
+    expect(entry!.note!['en-US']).toContain('https://nodejs.org/en/blog/vulnerability/october-2026-security-releases')
+  })
+
+  it('shows once to someone updating from 0.2.28, as the newest entry, and not to a build still running 0.2.28', () => {
+    expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
+    expect(pickWhatsNew('0.2.29', '0.2.29')).toBeNull()
+    expect(WHATS_NEW[0].version).toBe('0.2.29')
+    expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
   })
 })
 

@@ -109,8 +109,16 @@ def setup_file_logging(level: str = "info") -> Path:
     handler.setFormatter(
         logging.Formatter("[%(asctime)s] %(levelname)s %(name)s: %(message)s")
     )
-    root = logging.getLogger("agent_team_backend")
-    # Avoid duplicate handlers if called twice.
-    if not any(isinstance(h, RotatingFileHandler) and Path(h.baseFilename) == path for h in root.handlers):
-        root.addHandler(handler)
+    # The MCP SDK logs the exception behind every "-32603 Error handling POST
+    # request" under its own ``mcp`` tree (issue #490); its warnings and errors
+    # go to the same file, its per-request info lines do not.
+    handler.addFilter(
+        lambda record: not (record.name == "mcp" or record.name.startswith("mcp."))
+        or record.levelno >= logging.WARNING
+    )
+    for name in ("agent_team_backend", "mcp"):
+        logger = logging.getLogger(name)
+        # Avoid duplicate handlers if called twice.
+        if not any(isinstance(h, RotatingFileHandler) and Path(h.baseFilename) == path for h in logger.handlers):
+            logger.addHandler(handler)
     return path

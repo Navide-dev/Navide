@@ -569,6 +569,243 @@ describe('useUiActionBus — pane-private actions (inbox)', () => {
   })
 })
 
+describe('useUiActionBus — an agent cannot close itself', () => {
+  // The backend refuses these first (_self_scope_refusal); the window repeats
+  // the rule with the identity the backend put on the request, so no route
+  // into this window closes the caller's own pane, workspace or window.
+  function setup(opts: { hostsPane?: (id: string) => boolean } = {}) {
+    const { backend, emit, sent } = createMockBackend()
+    const ran = vi.fn((args: unknown) => args)
+    const reclaim = vi.fn((args: unknown) => ({ reclaimed: (args as { paneId: string[] }).paneId, refused: [] }))
+    for (const action of ['ui.pane.close', 'ui.workspace.close', 'ui.window.close']) registerCommand(action, ran)
+    registerCommand('ui.pane.reclaim', reclaim)
+    useUiActionBus({
+      backend,
+      currentWorkspace: ref('/ws'),
+      buildSnapshot: () => ({}),
+      ownsWorkspace: (p) => p.replace(/\/+$/, '') === '/ws',
+      hostsPane: opts.hostsPane,
+    })
+    const replies = () => sent.filter((s) => s.type === 'ui.invoke.result').map((s) => s.payload as { ok: boolean; error: string | null; result: unknown })
+    return { emit, ran, reclaim, replies }
+  }
+  const asCaller = { caller_pane_id: 'pa', caller_workspace_path: '/ws', addressed: true }
+
+  it('refuses ui.pane.close naming the caller itself', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.close', args: { paneId: 'pa' }, ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0]).toMatchObject({ ok: false })
+    expect(replies()[0].error).toMatch(/^self-close/)
+  })
+
+  it('still closes another pane', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.close', args: { paneId: 'pb' }, ...asCaller }))
+    await flush()
+    expect(ran).toHaveBeenCalledTimes(1)
+    expect(replies()[0]).toMatchObject({ ok: true })
+  })
+
+  it('refuses ui.workspace.close on the caller\'s own workspace, trailing slash or not', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.workspace.close', args: { path: '/ws/' }, ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-workspace-close/)
+  })
+
+  it('refuses ui.window.close in a window holding the caller\'s workspace', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.window.close', args: {}, ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-window-close/)
+  })
+
+  it('refuses ui.window.close in a window hosting the caller pane, whatever its workspace', async () => {
+    const { emit, ran, replies } = setup({ hostsPane: (id) => id === 'pa' })
+    emit('ui.invoke.request', baseRequest({
+      action: 'ui.window.close', args: {}, caller_pane_id: 'pa', caller_workspace_path: '/elsewhere', addressed: true,
+    }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-window-close/)
+  })
+
+  it('takes the caller out of a reclaim batch and reports it refused', async () => {
+    const { emit, reclaim, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.reclaim', args: { paneId: ['pa', 'pb'] }, ...asCaller }))
+    await flush()
+    expect(reclaim).toHaveBeenCalledWith({ paneId: ['pb'] })
+    expect(replies()[0]).toMatchObject({
+      ok: true,
+      result: { reclaimed: ['pb'], refused: [{ paneId: 'pa', reason: 'self' }] },
+    })
+  })
+
+  it('answers a reclaim of only the caller without running it', async () => {
+    const { emit, reclaim, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.reclaim', args: { paneId: 'pa' }, ...asCaller }))
+    await flush()
+    expect(reclaim).not.toHaveBeenCalled()
+    expect(replies()[0]).toMatchObject({ ok: true, result: { reclaimed: [], refused: [{ paneId: 'pa', reason: 'self' }] } })
+  })
+
+  it('leaves a host caller (no pane) unaffected', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.close', args: { paneId: 'pa' } }))
+    await flush()
+    expect(ran).toHaveBeenCalledTimes(1)
+    expect(replies()[0]).toMatchObject({ ok: true })
+  })
+})
+
+describe('useUiActionBus — self protection, review #534', () => {
+  function setup(opts: { hostsPane?: (id: string) => boolean; focused?: string[]; slot?: string[] } = {}) {
+    const { backend, emit, sent } = createMockBackend()
+    const ran = vi.fn(() => 'ran')
+    for (const action of [
+      'workbench.action.closeWindow', 'workbench.action.closeActivePane', 'workbench.action.rebuildFocusedPane',
+      'ui.workspace.close', 'ui.pipeline.abort', 'ui.pipeline.reset', 'ui.pipeline.restart', 'ui.pipeline.restart_from',
+    ]) registerCommand(action, ran)
+    registerCommand('ui.pane.reclaim', () => { throw new Error('boom') })
+    useUiActionBus({
+      backend,
+      currentWorkspace: ref('/ws'),
+      buildSnapshot: () => ({}),
+      ownsWorkspace: (p) => p.replace(/\/+$/, '') === '/ws',
+      hostsPane: opts.hostsPane,
+      focusedPaneIds: () => opts.focused ?? [],
+      isPipelineSlot: (id) => (opts.slot ?? []).includes(id),
+    })
+    const replies = () => sent.filter((s) => s.type === 'ui.invoke.result').map((s) => s.payload as { ok: boolean; error: string | null; result: unknown })
+    return { emit, ran, replies }
+  }
+  const asCaller = { caller_pane_id: 'pa', caller_workspace_path: '/ws', addressed: true }
+
+  it('refuses workbench.action.closeWindow in the caller\'s own window', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'workbench.action.closeWindow', ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-window-close/)
+  })
+
+  it('refuses workbench.action.closeWindow in a window hosting the caller even for another project', async () => {
+    const { emit, ran } = setup({ hostsPane: (id) => id === 'pa' })
+    emit('ui.invoke.request', baseRequest({ action: 'workbench.action.closeWindow', caller_pane_id: 'pa', caller_workspace_path: '/other' }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+  })
+
+  it('lets workbench.action.closeWindow close a window that is not the caller\'s', async () => {
+    const { emit, ran } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'workbench.action.closeWindow', caller_pane_id: 'pa', caller_workspace_path: '/other' }))
+    await flush()
+    expect(ran).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses the focused-pane commands while the focused pane is the caller', async () => {
+    const { emit, ran, replies } = setup({ focused: ['pa'] })
+    emit('ui.invoke.request', baseRequest({ action: 'workbench.action.closeActivePane', ...asCaller }))
+    emit('ui.invoke.request', baseRequest({ request_id: 'req-2', action: 'workbench.action.rebuildFocusedPane', ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies().map((r) => r.error)).toEqual([expect.stringMatching(/^self-close/), expect.stringMatching(/^self-close/)])
+  })
+
+  it('runs the focused-pane commands when another pane has focus', async () => {
+    const { emit, ran } = setup({ focused: ['pb'] })
+    emit('ui.invoke.request', baseRequest({ action: 'workbench.action.closeActivePane', ...asCaller }))
+    await flush()
+    expect(ran).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a pipeline slot tearing down its own run', async () => {
+    const { emit, ran } = setup({ slot: ['pa'] })
+    for (const action of ['ui.pipeline.abort', 'ui.pipeline.reset', 'ui.pipeline.restart', 'ui.pipeline.restart_from']) {
+      emit('ui.invoke.request', baseRequest({ request_id: action, action, ...asCaller }))
+    }
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+  })
+
+  it('lets a pane that is not a slot drive the pipeline', async () => {
+    const { emit, ran } = setup({ slot: ['pb'] })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pipeline.abort', ...asCaller }))
+    await flush()
+    expect(ran).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses ui.pipeline.reset from any pane this window hosts, slot or not', async () => {
+    const { emit, ran, replies } = setup({ hostsPane: (id) => id === 'pa' })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pipeline.reset', ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-close/)
+  })
+
+  it('runs ui.pipeline.reset for a caller in another window', async () => {
+    const { emit, ran } = setup({ hostsPane: () => false })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pipeline.reset', caller_pane_id: 'pa', caller_workspace_path: '/other' }))
+    await flush()
+    expect(ran).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a case variant of the caller\'s own workspace', async () => {
+    const { emit, ran, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.workspace.close', args: { path: '/WS/' }, ...asCaller }))
+    await flush()
+    expect(ran).not.toHaveBeenCalled()
+    expect(replies()[0].error).toMatch(/^self-workspace-close/)
+  })
+
+  it('keeps the caller\'s refused row when the reduced reclaim batch fails', async () => {
+    const { emit, replies } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.pane.reclaim', args: { paneId: ['pa', 'pb'] }, ...asCaller }))
+    await flush()
+    expect(replies()[0]).toMatchObject({ ok: false, result: { refused: [{ paneId: 'pa', reason: 'self' }] } })
+  })
+})
+
+describe('useUiActionBus — announcing the workspaces a window holds', () => {
+  it('announces them once setup is done, and again when they change', async () => {
+    const { backend, sent } = createMockBackend()
+    const held = ref<string[]>(['/ws'])
+    useUiActionBus({
+      backend,
+      currentWorkspace: ref('/ws'),
+      buildSnapshot: () => ({}),
+      connectionStatus: ref('connected'),
+      heldWorkspaces: () => held.value,
+    })
+    await flush()
+    const ready = () => sent.filter((s) => s.type === 'ui.invoke.ready').map((s) => (s.payload as { workspaces?: string[] }).workspaces)
+    expect(ready().at(-1)).toEqual(['/ws'])
+    held.value = ['/ws', '/other']
+    await flush()
+    expect(ready().at(-1)).toEqual(['/ws', '/other'])
+  })
+
+  it('leaves the field out while the held list cannot be read yet', async () => {
+    const { backend, sent } = createMockBackend()
+    let ready = false
+    useUiActionBus({
+      backend,
+      currentWorkspace: ref('/ws'),
+      buildSnapshot: () => ({}),
+      connectionStatus: ref('connected'),
+      heldWorkspaces: () => { if (!ready) throw new ReferenceError('not declared yet'); return ['/ws'] },
+    })
+    const first = sent.find((s) => s.type === 'ui.invoke.ready')?.payload as Record<string, unknown>
+    expect(first).toBeDefined()
+    expect('workspaces' in first).toBe(false)
+    ready = true
+  })
+})
+
 describe('useUiActionBus — announcing the bus to the backend', () => {
   // The backend hands a global request (ui.workspace.open) only to a window
   // that announced it runs this bus; plugin and editor windows never answer.
@@ -656,10 +893,41 @@ describe('useUiActionBus — account actions', () => {
 
   it('refuses an unknown account action', async () => {
     const { signIn, sent, emit } = setup()
-    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args: {}, caller_pane_id: 'pa', addressed: true }))
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.remove', args: {}, caller_pane_id: 'pa', addressed: true }))
     await flush()
     expect(signIn).not.toHaveBeenCalled()
     expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
+  })
+
+  // Plan mcp_614482 P3: cli_account_switch reaches the window's switch the
+  // same way, with the caller pane and the withdrawal signal.
+  it('hands ui.accounts.switch to the account actions with the caller pane', async () => {
+    const { backend, emit, sent } = createMockBackend()
+    const signIn = vi.fn()
+    const switchAccount = vi.fn(async () => ({ status: 'switched', from: 'A', to: 'B' }))
+    useUiActionBus({ backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), accountActions: { signIn, switch: switchAccount } })
+    const args = { agentKey: 'claude', profileId: 'p-2', reason: 'out of quota' }
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args, caller_pane_id: 'pa', addressed: true }))
+    await flush()
+    expect(switchAccount).toHaveBeenCalledWith(args, 'pa', expect.any(AbortSignal))
+    expect(signIn).not.toHaveBeenCalled()
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: true, result: { status: 'switched' } })
+  })
+
+  it('refuses ui.accounts.switch from a caller with no pane, or with no switch action', async () => {
+    const { backend, emit, sent } = createMockBackend()
+    const switchAccount = vi.fn()
+    useUiActionBus({ backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), accountActions: { signIn: vi.fn(), switch: switchAccount } })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args: {}, addressed: true }))
+    await flush()
+    expect(switchAccount).not.toHaveBeenCalled()
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
+
+    const other = createMockBackend()
+    useUiActionBus({ backend: other.backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), accountActions: { signIn: vi.fn() } })
+    other.emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args: {}, caller_pane_id: 'pa', addressed: true }))
+    await flush()
+    expect(other.sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
   })
 
   it('acts only on the project the window is showing', async () => {

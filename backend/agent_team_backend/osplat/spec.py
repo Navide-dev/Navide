@@ -503,6 +503,19 @@ class ProcessTree(Protocol):
         table entry for `pid` is dropped only while it is still that job's."""
         ...
 
+    def isolate_stdin_from_children(self) -> bool:
+        """Stop children that are not given a stdin from inheriting this one.
+
+        On Windows the app keeps the backend's stdin open for the `shutdown`
+        line and a thread waits in a synchronous read on it. A child handed
+        that same pipe blocks on its first query of the handle until the read
+        returns, which is at shutdown (git.exe and node.exe hung at launch).
+        This points the process's standard input handle -- what a spawn
+        without its own stdin hands down -- at NUL, while the already-open
+        `sys.stdin` keeps reading the pipe. True when it did; POSIX has
+        nothing to do and returns False."""
+        ...
+
     def stderr_handle_info(self) -> str:
         """For a child that could not be started: this process's standard
         error handle as the OS reports it (Windows), "" elsewhere. Diagnostics

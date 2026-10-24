@@ -227,7 +227,7 @@ describe('McpPane', () => {
     expect(drawer.findAll('input')).toHaveLength(0)
     expect(drawer.text()).toContain('/Users/x/.codex/config.toml')
 
-    await drawer.findAll('button').find((b) => b.text() === 'Open config file')!.trigger('click')
+    await drawer.findAll('button').find((b) => b.text() === 'Open Config File')!.trigger('click')
     await flushPromises()
     expect(openPath).toHaveBeenCalledWith('/Users/x/.codex/config.toml')
   })
@@ -310,5 +310,66 @@ describe('McpPane', () => {
     await wrapper.find('.mcp-pane-head button').trigger('click')
 
     expect(wrapper.emitted('refresh')).toHaveLength(1)
+  })
+
+  describe('a server that is starting or failed to start', () => {
+    function withStatus(fields: Record<string, unknown>) {
+      return [{ ...navideServers()[0], tool_count: 0, tools: [], ...fields }]
+    }
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('says a slow start may be a first download, and refreshes until it settles', async () => {
+      vi.useFakeTimers()
+      wrapper = mountPane({
+        servers: withStatus({
+          status: 'starting', starting_seconds: 22, slow_start: true,
+          stderr_tail: 'npm warn exec The following package was not found and will be installed',
+        }),
+        selectName: 'context7',
+      })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="mcp-starting-note"]').text()).toContain('22 s')
+      expect(wrapper.find('[data-testid="mcp-starting-note"]').text()).toContain('npx')
+      expect(wrapper.find('[data-testid="mcp-stderr-tail"] pre').text()).toContain('will be installed')
+      expect(wrapper.find('.mcp-status-dot.starting').exists()).toBe(true)
+
+      vi.advanceTimersByTime(3000)
+      expect(wrapper.emitted('refresh')).toHaveLength(1)
+
+      await wrapper.setProps({ servers: withStatus({ status: 'connected' }) })
+      vi.advanceTimersByTime(9000)
+      expect(wrapper.emitted('refresh')).toHaveLength(1)
+    })
+
+    it('shows no note while a start is still quick', async () => {
+      wrapper = mountPane({
+        servers: withStatus({ status: 'starting', starting_seconds: 3, slow_start: false }),
+        selectName: 'context7',
+      })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="mcp-starting-note"]').exists()).toBe(false)
+    })
+
+    it('shows why a server failed to start', async () => {
+      wrapper = mountPane({
+        servers: withStatus({
+          status: 'error',
+          error: 'the server exited with code 1 before answering initialize',
+          stderr_tail: 'npm error 404 Not Found',
+        }),
+        selectName: 'context7',
+      })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="mcp-error-reason"]').text()).toBe(
+        'Failed to start: the server exited with code 1 before answering initialize',
+      )
+      expect(wrapper.find('[data-testid="mcp-stderr-tail"] pre').text()).toBe('npm error 404 Not Found')
+    })
   })
 })

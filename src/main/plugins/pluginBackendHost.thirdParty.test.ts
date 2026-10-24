@@ -420,3 +420,47 @@ describe('agent-tool caller on the runtime the child receives (plan B1-b)', () =
     expect(Object.isFrozen(childRuntime.initiator.caller)).toBe(true)
   })
 })
+
+describe('agent methods of a first-party backend (navide.browser)', () => {
+  const agent = { kind: 'agent', source: 'mcp', id: 'agent-1' } as const
+  const browser: BackendPluginLaunchSpec = {
+    ...thirdParty(),
+    pluginId: 'navide.browser',
+    approvedMethods: ['browser.list', 'browser.act'],
+    approvedBridgePorts: ['web'],
+    thirdParty: undefined,
+  }
+
+  it('opens agent-tool methods and a headless binding outside the third-party gate', async () => {
+    const call = vi.fn(async () => 'ok')
+    const createSupervisor = vi.fn(() => ({ ...fakeSupervisor(), clientFor: vi.fn(() => ({ call })) }) as unknown as PluginBackendSupervisor)
+    const admitThirdParty = vi.fn(async () => admission())
+    const host = new PluginBackendHost({ admitThirdParty, createSupervisor })
+    hosts.push(host)
+    host.register(browser)
+    expect(host.setAgentMethods('navide.browser', '1.0.0', ['browser.list'])).toBe(true)
+    const headless = await host.bindAgentToolWorkspace(
+      { ...runtime('navide.browser'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )
+    expect(admitThirdParty).not.toHaveBeenCalled()
+    await expect(host.call(headless, 'browser.list', null, { initiator: agent })).resolves.toBe('ok')
+    await expect(host.call(headless, 'browser.act', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    expect(host.activationForPlugin('navide.browser')?.agentMethods).toEqual([])
+  })
+
+  it('does not widen to other non-third-party activations: Plans and look-alike ids stay refused', async () => {
+    const host = new PluginBackendHost({ createSupervisor: () => fakeSupervisor() })
+    hosts.push(host)
+    host.register(plans)
+    host.register({ ...browser, pluginId: 'acme.browser' })
+    expect(host.setAgentMethods('navide.plans', '1.0.0', [])).toBe(false)
+    expect(host.setAgentMethods('acme.browser', '1.0.0', ['browser.list'])).toBe(false)
+    await expect(host.bindAgentToolWorkspace(
+      { ...runtime('acme.browser'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )).rejects.toMatchObject({ code: 'INVALID_RUNTIME' })
+  })
+})

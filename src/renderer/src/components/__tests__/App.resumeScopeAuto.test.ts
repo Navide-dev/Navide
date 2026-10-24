@@ -47,9 +47,13 @@ describe('auto resume scope wiring', () => {
   it('runs no workspace close and no kill while the app is ending', () => {
     const calls = appSource.split('\n').filter((line) =>
       /\bcloseWorkspace\b/.test(line) && !/^\s*(\/\/|\*|\/\*)/.test(line))
-    // The definition and the sidebar's own "Close workspace" event, nothing else.
+    // The definition, the sidebar's own "Close Workspace" event, and MCP
+    // workspace_close(keep_panes=false) — the ui.workspace.close command, which
+    // runs only on an agent's request after the user agreed in its dialog
+    // (DESIGN-C S4a), never on the way out of the app. Nothing else.
     expect(calls.map((l) => l.trim())).toEqual([
-      'async function closeWorkspace(path: string): Promise<void> {',
+      'await closeWorkspace(held, { confirmed: true })',
+      'async function closeWorkspace(path: string, opts: { confirmed?: boolean } = {}): Promise<void> {',
       '@close-workspace="closeWorkspace"',
     ])
     const quit = appSource.slice(

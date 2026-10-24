@@ -34,6 +34,7 @@ import {
   PLUGIN_APPROVAL_LIST_MESSAGE,
   PLUGIN_APPROVAL_REQUEST_EVENT,
   PLUGIN_APPROVAL_RESOLVED_EVENT,
+  isFormApprovalKind,
   revealInvisibleText,
   type PluginApprovalRequest,
 } from '../../../shared/pluginAgentTools'
@@ -70,13 +71,18 @@ const installedDisclosure = ref<ManifestDisclosure | null>(null)
 const now = ref(Date.now())
 const current = computed(() => queue.value[0] ?? null)
 // created_at / expires_at are Unix seconds; the backend expires lazily.
-const expired = computed(() => !!current.value && current.value.expires_at * 1000 <= now.value)
+// MED-5 on W1: a file request whose staged copy the Host let go (its request
+// expired meanwhile) reads as expired too, not as a failure.
+const stagingExpired = ref(false)
+const expired = computed(() => !!current.value && (stagingExpired.value || current.value.expires_at * 1000 <= now.value))
 const label = computed(() => (current.value ? `${current.value.target.namespace}.${current.value.target.name}` : ''))
 // A kind this Navide cannot carry out yet is shown but cannot be approved.
 const appliable = computed(() => !!current.value && isAppliableKind(current.value.kind))
 
 function enqueue(request: PluginAgentRequest): void {
   if (!request?.approval_id || request.status !== 'pending') return
+  // A form request (an agent's draft) opens its form in Settings, not this card.
+  if (isFormApprovalKind(request.kind)) return
   if (queue.value.some((r) => r.approval_id === request.approval_id)) return
   queue.value.push(request)
 }
@@ -151,6 +157,7 @@ const diff = computed<DisclosureDiff | null>(() => {
 
 watch(() => current.value?.approval_id, async (approvalId) => {
   error.value = ''
+  stagingExpired.value = false
   outcome.value = null
   finishedLate.value = false
   installedDisclosure.value = null
@@ -192,9 +199,29 @@ function applyDeps(): PluginRequestApplyDeps {
       await installSettled()
       if (flow.error.value) throw new Error(flow.error.value)
     },
+    // W1 (S2): the copy the Host staged when the agent asked, through the same
+    // consent dialog as the user's own "Install from file".
+    async installStaged(stagingId: string, digest: string | null): Promise<void> {
+      const requester = current.value?.requester
+      await flow.prepareAgentFile(stagingId, digest, requesterText.value, requester ? {
+        callerKind: requester.callerKind ?? 'unknown',
+        ...(requester.paneName ? { paneName: requester.paneName } : {}),
+      } : undefined)
+      await installSettled()
+      if (flow.error.value) throw new Error(flow.error.value)
+    },
     async rollback(pluginId: string): Promise<void> {
-      // The same confirmation the Extensions pane asks before a rollback.
       const row = (await plugins().listInstalled()).find((p) => p.id === pluginId)
+      // L4 (review r2): going back to a kept file version is the renewed
+      // consent with its disclosure, the dialog the Extensions pane shows.
+      if (row?.rollbackNeedsConsent === true) {
+        await flow.rollbackWithConsent(pluginId)
+        await installSettled()
+        if (flow.error.value) throw new Error(flow.error.value)
+        await inventory.refresh()
+        return
+      }
+      // The same confirmation the Extensions pane asks before a rollback.
       const confirmed = await notify.confirm(
         row?.rollbackKind === 'factory'
           ? t('settings.extensions.rollback.confirmFactory', { id: pluginId })
@@ -259,6 +286,9 @@ async function decide(approve: boolean): Promise<void> {
       return
     }
     if (!approve) {
+      // MED-5: a rejected file request's staged copy is deleted now, not at expiry.
+      const stagingId = request.kind === 'plugin-install-file' ? request.target.stagingId : undefined
+      if (stagingId) void window.agentTeam?.plugins?.discardAgentStaged?.(stagingId)?.catch(() => undefined)
       drop(request.approval_id)
       return
     }
@@ -270,6 +300,8 @@ async function decide(approve: boolean): Promise<void> {
         { type: finishedLate.value ? 'info' : 'success' },
       )
       drop(request.approval_id)
+    } else if (result.error.includes('AGENT_STAGING_EXPIRED')) {
+      stagingExpired.value = true
     } else {
       outcome.value = 'failed'
       error.value = t('plugin-request.failed', { error: result.error })
@@ -288,7 +320,13 @@ onMounted(() => {
   clock = setInterval(() => { now.value = Date.now() }, 5_000)
   offs.push(props.backend.on(PLUGIN_APPROVAL_REQUEST_EVENT, (raw) => enqueue(raw as PluginAgentRequest)))
   offs.push(props.backend.on(PLUGIN_APPROVAL_RESOLVED_EVENT, (raw) => {
-    const { approval_id: approvalId } = raw as { approval_id: string }
+    const { approval_id: approvalId, status } = raw as { approval_id: string; status?: string }
+    // MED-5: a file request rejected in another window, or expired, drops its
+    // staged copy at once. Never on approval: the approving window takes it.
+    const resolvedFile = queue.value.find((r) => r.approval_id === approvalId && r.kind === 'plugin-install-file')
+    if (resolvedFile?.target.stagingId && (status === 'rejected' || status === 'expired')) {
+      void window.agentTeam?.plugins?.discardAgentStaged?.(resolvedFile.target.stagingId)?.catch(() => undefined)
+    }
     // The request this window is carrying out stays until its own result shows,
     // and a shown failed result stays until dismissed; any other request goes.
     if (approvalId === busyId.value) return
@@ -319,6 +357,8 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
       <main class="pr-main">
         <dl class="pr-facts">
           <dt>{{ $t('plugin-request.requester') }}</dt><dd>{{ requesterText }}</dd>
+          <!-- S8-M1: disclosure only; the decision is the user's exactly as for any request. -->
+          <dd v-if="current.requester.tainted === true" class="pr-tainted" data-testid="plugin-request-tainted">{{ $t('plugin-request.tainted') }}</dd>
           <template v-if="current.requester.workspace">
             <dt>{{ $t('plugin-request.workspace') }}</dt><dd class="pr-mono">{{ current.requester.workspace }}</dd>
           </template>
@@ -326,8 +366,20 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
             <dt>{{ $t('plugin-request.disabled-by') }}</dt><dd data-testid="plugin-request-disabled-by">{{ disabledByText }}</dd>
             <dt>{{ $t('plugin-request.disabled-at') }}</dt><dd data-testid="plugin-request-disabled-at">{{ disabledAtText }}</dd>
           </template>
+          <template v-if="current.kind === 'plugin-install-file'">
+            <dt>{{ $t(current.target.packageKind === 'folder' ? 'plugin-request.file.folder' : 'plugin-request.file.path') }}</dt>
+            <dd class="pr-mono" data-testid="plugin-request-file-path">{{ revealInvisibleText(current.target.path ?? '') }}</dd>
+            <template v-if="current.target.digest">
+              <dt>{{ $t('plugin-request.file.digest') }}</dt>
+              <dd class="pr-mono" data-testid="plugin-request-file-digest">{{ current.target.digest }}</dd>
+            </template>
+          </template>
           <dt>{{ $t('plugin-request.expires') }}</dt><dd>{{ expiresText }}</dd>
         </dl>
+        <!-- W1 (S2): a local file is no Marketplace version; nothing vouches for it. -->
+        <p v-if="current.kind === 'plugin-install-file'" class="pr-note pr-unreviewed" role="note" data-testid="plugin-request-file-unreviewed">
+          {{ $t(current.target.packageKind === 'folder' ? 'plugin-request.file.unreviewed-folder' : 'plugin-request.file.unreviewed') }}
+        </p>
 
         <div v-if="reasonText" class="pr-reason">
           <div class="pr-label">{{ $t('plugin-request.reason') }}</div>
@@ -340,15 +392,17 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
         </div>
 
         <div class="pr-section">
-          <div class="pr-label">{{ $t('plugin-request.card') }}</div>
+          <!-- A file request's card is the Host's reading of the package, not the Marketplace's. -->
+          <div class="pr-label">{{ $t(current.kind === 'plugin-install-file' ? 'plugin-request.file.card' : 'plugin-request.card') }}</div>
           <PluginDisclosureCard
             v-if="shownDisclosure"
             :disclosure="shownDisclosure"
             :scan="current.card?.manifest ? current.card.scan ?? null : null"
             :registry="current.card?.registry ?? null"
             :verified="false"
+            :local-source="current.kind === 'plugin-install-file'"
           />
-          <p v-else class="pr-note" data-testid="plugin-request-no-card">{{ $t('plugin-request.no-card') }}</p>
+          <p v-else class="pr-note" data-testid="plugin-request-no-card">{{ $t(current.kind === 'plugin-install-file' ? 'plugin-request.file.no-card' : 'plugin-request.no-card') }}</p>
         </div>
 
         <p v-if="!appliable" class="pr-note" data-testid="plugin-request-not-appliable">{{ $t('plugin-request.not-appliable') }}</p>
@@ -388,6 +442,7 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
       v-if="flow.pendingConfirm.value"
       :pending="flow.pendingConfirm.value"
       :step="flow.pendingStep.value"
+      @confirm-replace="flow.confirmReplace"
       @confirm-publisher="flow.confirmPublisher"
       @confirm-risk="flow.confirmRisk"
       @cancel="flow.cancel"
@@ -425,6 +480,7 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
 .pr-kicker { color: var(--accent-bright); font-size: var(--font-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 h1 { margin: 6px 0 0; color: var(--text-bright); font-size: 20px; overflow-wrap: anywhere; }
 .pr-desc { margin: 6px 0 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.pr-tainted { grid-column: 1 / -1; margin: 0; color: var(--risk-fg, var(--text-primary)); font-weight: 600; }
 .pr-badge { flex: none; font-size: var(--font-2xs); border-radius: 99px; padding: 2px 9px; background: var(--bg-subtle); color: var(--text-muted); }
 .pr-main { padding: 18px 28px; overflow: auto; }
 .pr-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 14px; font-size: 12.5px; }
@@ -436,6 +492,7 @@ h1 { margin: 6px 0 0; color: var(--text-bright); font-size: 20px; overflow-wrap:
 .pr-reason p { margin: 0; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pr-section { margin: 0 0 14px; }
 .pr-note { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.pr-unreviewed { margin: 0 0 14px; padding: 8px 12px; border-radius: 8px; background: var(--bg-subtle); color: var(--danger-fg); }
 .pr-error {
   margin: 8px 0 0; padding: 10px 12px; max-height: 120px; overflow: auto;
   border-radius: 8px; background: var(--bg-subtle); color: var(--danger-fg);

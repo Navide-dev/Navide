@@ -166,7 +166,7 @@ describe('which vendors get the turn watch', () => {
 
   it('watches the vendors whose log reader reports a turn start', () => {
     for (const key of ['claude', 'codex', 'copilot', 'cursor', 'droid', 'antigravity', 'aider',
-      'muse', 'opencode', 'kilo', 'grok', 'kimi', 'pi', 'qwen']) {
+      'muse', 'opencode', 'kilo', 'grok', 'kimi', 'pi', 'qwen', 'goose']) {
       expect(shouldWatchTurn({ agentKey: key, midTurn: false }), key).toBe(true)
     }
   })
@@ -241,6 +241,85 @@ describe('blockingDialogShown', () => {
   it('reads the whole screen when there is no box', () => {
     const screen = ['Do you want to proceed?', '❯ 1. Yes', '  3. No, and tell Claude what to do differently (esc)'].join('\n')
     expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen })).toBe(true)
+  })
+
+  // The #416 guard for AskUserQuestion rides on the screen alone, so a
+  // statusLine under the picker's footer must not lift it.
+  it('reads an AskUserQuestion footer with a statusLine drawn below it', () => {
+    const screen = [
+      '  1. Merge them into one state',
+      '  2. Keep them separate',
+      'Enter to select · Tab/Arrow keys to navigate · Esc to cancel',
+      '',
+      '  ~/git/navide · main · Opus 4.7 · 42% context',
+    ].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen })).toBe(true)
+  })
+
+  // Border rows left under a live footer pair up like an input box's frame;
+  // with no prompt row between them they are not one, so the dialog above
+  // them is still read.
+  it('reads a dialog footer with border rows drawn below it', () => {
+    const border = ['╰──────────────────────────────────────╯', '│']
+    const pickerScreen = [
+      '  1. Merge them into one state',
+      '  2. Keep them separate',
+      'Enter to select · Tab/Arrow keys to navigate · Esc to cancel',
+      ...border,
+    ].join('\n')
+    const permissionScreen = [
+      'Do you want to proceed?',
+      '❯ 1. Yes',
+      '  2. No',
+      '',
+      'Esc to cancel · Tab to amend',
+      ...border,
+    ].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: pickerScreen })).toBe(true)
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: permissionScreen })).toBe(true)
+  })
+
+  // A dialog's own cursor row ("❯ 1. Yes") is not a composer, so the separators
+  // above it and ONE border row below must not read as the input box's frame.
+  it('reads a dialog whose own rows are the only box-only rows around its cursor', () => {
+    const dashed = '╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌'
+    const bash = [
+      ' Bash command',
+      dashed,
+      ' touch /tmp/navide-permission-test',
+      dashed,
+      ' Do you want to proceed?',
+      ' ❯ 1. Yes',
+      '   2. No',
+      '',
+      ' Esc to cancel · Tab to amend',
+      '╰──────────────────────────────────────╯',
+    ].join('\n')
+    const picker = [
+      '└──────┴───────┘',
+      '  ❯ 1. Merge them into one state',
+      '    2. Keep them separate',
+      'Enter to select · Tab/Arrow keys to navigate · Esc to cancel',
+      '╰──────────────────────────────────────╯',
+    ].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: bash })).toBe(true)
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen: picker })).toBe(true)
+  })
+
+  // The prompt-row test for the frame is Claude's: another vendor's framed
+  // composer may draw no glyph, a heavy bar, or hold a draft starting "1.",
+  // and is still read below its frame as on main.
+  it('keeps a non-claude framed composer without a prompt glyph framed', () => {
+    const rule = '─'.repeat(60)
+    const transcript = ['codex said: "Hooks need review" earlier', '']
+    for (const box of [
+      ['┏' + rule + '┓', '┃ my draft', '┗' + rule + '┛'],
+      ['╭' + rule + '╮', '│ my draft │', '╰' + rule + '╯'],
+      [rule, '› 1. first item', rule],
+    ]) {
+      const screen = [...transcript, ...box].join('\n')
+      expect(blockingDialogShown({ awaitingKind: null, agentKey: 'codex', screen }), screen).toBe(false)
+    }
   })
 
   // Frameless (codex): the composer is the prompt row and what wraps below

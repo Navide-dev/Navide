@@ -32,7 +32,7 @@ CLI_AGENTS_HELP = (
 
 EXPECTED_KEYS = {
     "aider", "antigravity", "claude", "codex", "copilot", "cursor",
-    "droid", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi",
+    "droid", "goose", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi",
     "qwen",
 }
 
@@ -95,6 +95,27 @@ def test_registry_matches_frontend_agent_specs() -> None:
         source = path.read_text(encoding="utf-8")
         frontend_keys |= set(re.findall(r"agentKey: '([a-z]+)'", source))
     assert frontend_keys - NON_VENDOR_AGENT_KEYS == set(registry.VENDORS)
+
+
+# The supported-CLI sentence of each README: (file, the sentence's count and
+# list, the list separator). The names are display names, which no code maps
+# to vendor keys, so the guard checks the count and the list's length.
+_README_VENDOR_LINES = (
+    ("README.md", r"run any of (\d+) supported coding CLIs — (.+?) — or a plain terminal", ", "),
+    ("README.zh-TW.md", r"執行 (\d+) 種支援的 coding CLI（(.+?)）", "、"),
+    ("README.ja-JP.md", r"対応する (\d+) 種類のコーディング CLI（(.+?)）", "、"),
+)
+
+
+def test_readmes_list_every_registered_vendor() -> None:
+    for name, pattern, separator in _README_VENDOR_LINES:
+        match = re.search(pattern, (REPO_ROOT / name).read_text(encoding="utf-8"))
+        assert match, f"{name}: the supported-CLI sentence is gone or reworded"
+        listed = match.group(2).split(separator)
+        assert int(match.group(1)) == len(listed) == len(registry.VENDORS), (
+            f"{name} says {match.group(1)} and lists {len(listed)} CLIs; "
+            f"the registry has {len(registry.VENDORS)}"
+        )
 
 
 # --- turn-end inference cross-check ----------------------------------------

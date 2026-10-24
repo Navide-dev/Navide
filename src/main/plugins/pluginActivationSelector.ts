@@ -140,7 +140,7 @@ function validateGrant(value: unknown, selection: PluginPackageSelection | undef
     keys.some((key) => !['packageVersion', 'system', 'shell', 'highRiskShellConfirmed', 'storage'].includes(key)) ||
     value.packageVersion !== selection.packageVersion ||
     !Array.isArray(value.system) ||
-    value.system.some((item) => item !== 'fs' && item !== 'ui' && item !== 'aiCli') ||
+    value.system.some((item) => item !== 'fs' && item !== 'ui' && item !== 'aiCli' && item !== 'web') ||
     new Set(value.system).size !== value.system.length ||
     (value.shell !== undefined && value.shell !== 'allowlist' && value.shell !== 'full') ||
     (value.highRiskShellConfirmed !== undefined && value.highRiskShellConfirmed !== true) ||

@@ -209,7 +209,7 @@ describe('ControlPane – the buttons on a workspace heading', () => {
 
 })
 
-// "Reclaim this project's CLIs" — the batch the pane menu's Reclaim does one at
+// "Reclaim This Project's CLIs" — the batch the pane menu's Reclaim does one at
 // a time. It is on both of a heading's menus, and both must answer for the
 // heading they hang off: a window can hold several projects, and reclaiming
 // the wrong one's CLIs is the same class of bug the two tests above pin down

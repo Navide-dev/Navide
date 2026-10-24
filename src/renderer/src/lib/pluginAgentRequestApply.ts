@@ -6,12 +6,15 @@
 // `plugins.agent_request.finish`. recoverApplyingRequests settles requests a
 // restart left `applying`.
 
-export type PluginRequestKind = 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
+export type PluginRequestKind =
+  | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
+  /** W1 (S2): a local file or folder the Host staged for an agent. */
+  | 'plugin-install-file'
 
 /** The kinds applyApprovedRequest carries out. A card must not approve any
  *  other kind: approving moves it to `applying`, and nothing here would apply it. */
 const APPLIABLE_KINDS: ReadonlySet<string> = new Set<PluginRequestKind>([
-  'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable',
+  'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable', 'plugin-install-file',
 ])
 
 export function isAppliableKind(kind: string): kind is PluginRequestKind {
@@ -22,7 +25,16 @@ export interface PluginRequestRecord {
   approval_id: string
   kind: PluginRequestKind
   status: string
-  target: { id: string; namespace: string; name: string; version: string | null; fromVersion: string | null }
+  target: {
+    id: string
+    namespace: string
+    name: string
+    version: string | null
+    fromVersion: string | null
+    /** plugin-install-file: the Host's staged copy and the digest the card shows. */
+    stagingId?: string
+    digest?: string | null
+  }
 }
 
 export interface InstalledPackage {
@@ -40,6 +52,9 @@ export interface PluginRequestApplyDeps {
   /** prepareInstall → trust dialog → commitInstall; resolves once the flow has
    *  settled (committed, cancelled or failed). */
   install(namespace: string, name: string, version: string): Promise<void>
+  /** W1 (S2): the staged copy → the local consent dialog → its commit;
+   *  resolves once that flow has settled. */
+  installStaged(stagingId: string, digest: string | null): Promise<void>
   /** Extensions' rollback: restores the retained previous version. */
   rollback(pluginId: string): Promise<void>
   /** The Extensions remove flow (it asks whether to keep native backend data). */
@@ -81,9 +96,21 @@ async function rollbackToApproved(
   if (version === null || retained !== version) {
     return `the version kept for rollback is ${retained ?? 'none'}, not the approved ${version ?? 'none'}`
   }
-  await deps.rollback(pluginId)
+  try {
+    await deps.rollback(pluginId)
+  } catch (error) {
+    // L4 (review r2): the Host's refusal names a consent the agent cannot
+    // give; the agent is told that plainly, never the Host's text.
+    if (errorText(error).includes('ROLLBACK_CONSENT_REQUIRED')) return ROLLBACK_CONSENT_REQUIRED_TEXT
+    throw error
+  }
   return null
 }
+
+/** What an agent's rollback request finishes with when going back to a kept
+ *  file version still waits for the user's renewed consent. */
+export const ROLLBACK_CONSENT_REQUIRED_TEXT =
+  'consent-required: going back to a kept file version needs the user\'s renewed consent, with that version\'s disclosure, in the Navide main window'
 
 /** Carry out one approved request in this window and report the result. */
 export async function applyApprovedRequest(record: PluginRequestRecord, deps: PluginRequestApplyDeps): Promise<FinishStatus> {
@@ -93,6 +120,10 @@ export async function applyApprovedRequest(record: PluginRequestRecord, deps: Pl
     if (record.kind === 'plugin-remove') await deps.remove(id)
     else if (record.kind === 'plugin-enable') await deps.enable(id)
     else if (record.kind === 'plugin-rollback') failure = await rollbackToApproved(id, version, deps)
+    else if (record.kind === 'plugin-install-file') {
+      if (record.target.stagingId) await deps.installStaged(record.target.stagingId, record.target.digest ?? null)
+      else failure = 'the request names no staged package'
+    }
     else if (version !== null) await deps.install(namespace, name, version)
     else failure = 'the request names no version'
   } catch (error) {

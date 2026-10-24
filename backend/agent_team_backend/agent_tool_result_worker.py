@@ -228,6 +228,10 @@ class ResultWorker:
         #: The job contain() made for the running helper (Windows), so that
         #: stopping it ends that job and never another one on a reused pid.
         self._job: int | None = None
+        #: The start time of a running helper contain() could not put in a
+        #: job (None when it could): stopping it then ends its pid's tree only
+        #: while that pid is still this helper.
+        self._loose: str | None = None
         self.state = "idle"
         self.last_error = ""
         self.since = int(time.time() * 1000)
@@ -272,10 +276,22 @@ class ResultWorker:
         process = self._process
         if process is not None and process.returncode is None:
             return process
-        if self._start_failed is not None and time.monotonic() < self._start_failed[0]:
-            raise ResultWorkerUnavailable(self._start_failed[1], attempted=False)
         from agent_team_backend import osplat
 
+        if process is not None:
+            # It exited since the last request, before its idle stop: end what
+            # it left (its own job, once) before a new helper takes its place.
+            # It adds no state change of its own: a start that then fails is
+            # heard as `unavailable` alone (main sent a transient `idle` first).
+            # Without a job (POSIX) its pid is the group to end; a pid alive
+            # again is another process's by now.
+            job, loose = self._job, self._loose
+            self._process, self._job, self._loose = None, None, None
+            if job is not None or loose is not None or not osplat.process_tree.is_alive(process.pid):
+                _stopping[process] = (job, loose)
+                _kill_tree(process)
+        if self._start_failed is not None and time.monotonic() < self._start_failed[0]:
+            raise ResultWorkerUnavailable(self._start_failed[1], attempted=False)
         try:
             # Its own session (process group on POSIX), so stop() ends the
             # whole tree: a onefile build runs Python under a bootloader.
@@ -296,15 +312,20 @@ class ResultWorker:
         except OSError as error:
             info = osplat.process_tree.stderr_handle_info()
             if info:
-                log.warning("result helper could not be started: %s (%s)", error, info)
+                log.warning(
+                    "result helper could not be started: %s (%s; read after the failure, mem_probe may have restored it)",
+                    error,
+                    info,
+                )
             raise self._unavailable(f"it could not be started: {error}") from error
         self._process = process
         self._job = None
+        self._loose = None
         try:
             # The tree stop() can end whole (a kill-on-close job on Windows).
             self._job = osplat.process_tree.contain(process.pid)
         except OSError:
-            pass
+            self._loose = osplat.process_tree.start_time(process.pid)
         assert process.stdout is not None
         try:
             ready = await self._frame(process.stdout, READY_S)
@@ -383,8 +404,8 @@ class ResultWorker:
                 pass  # its event loop is gone, and the pipe with it
         # A timer thread, not the event loop: it runs even if the loop ends
         # first; one still waiting when the backend exits is run then.
-        _stopping[process] = self._job
-        self._job = None
+        _stopping[process] = (self._job, self._loose)
+        self._job = self._loose = None
         timer = threading.Timer(STOP_GRACE_S if process.returncode is None else 0, _kill_tree, args=(process,))
         timer.daemon = True
         timer.start()
@@ -449,8 +470,9 @@ class ResultWorker:
 
 
 #: Helpers stopped whose grace has not run out yet, with the job contain()
-#: made for each (None on POSIX or when there is none).
-_stopping: dict[asyncio.subprocess.Process, int | None] = {}
+#: made for each (None on POSIX or when there is none) and, when contain()
+#: failed, the helper's start time (None otherwise).
+_stopping: dict[asyncio.subprocess.Process, tuple[int | None, str | None]] = {}
 
 
 @atexit.register
@@ -465,12 +487,20 @@ def _kill_tree(process: asyncio.subprocess.Process) -> None:
     try:
         # Taken out before it is ended, so the timer and the exit hook never
         # both end it (closing the same job handle twice).
-        job = _stopping.pop(process)
+        job, loose = _stopping.pop(process)
     except KeyError:
         return
     from agent_team_backend import osplat
 
     try:
+        if loose is not None:
+            # No job of its own: a job table entry for its pid is someone
+            # else's (a pane spawned onto it), so only the pid's tree is
+            # killed, and only while that pid is still this helper. A start
+            # time that could not be read leaves it to its parent watchdog.
+            if loose and osplat.process_tree.start_time(process.pid) == loose:
+                osplat.process_tree.kill_tree(process.pid, force=True)
+            return
         osplat.process_tree.end_contained(process.pid, job)
     except OSError:
         pass

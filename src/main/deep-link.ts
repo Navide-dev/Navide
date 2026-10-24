@@ -11,9 +11,12 @@
 import { ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import {
   DEEP_LINK_OPEN_CHANNEL,
+  DEEP_LINK_PUBLISH_CHANNEL,
   DEEP_LINK_READY_CHANNEL,
+  isPublishDeepLink,
   parseDeepLink,
-  type DeepLinkExtensionTarget,
+  parsePublishDeepLink,
+  type DeepLinkTarget,
 } from '../shared/deepLink'
 
 export const MAX_PENDING_DEEP_LINKS = 8
@@ -35,13 +38,13 @@ export interface DeepLinkRouterDeps {
 
 export interface DeepLinkRouter {
   handle: (url: unknown) => void
-  ready: (contents: WebContents) => DeepLinkExtensionTarget[]
+  ready: (contents: WebContents) => DeepLinkTarget[]
   /** Test/diagnostic view of the queue. */
-  pending: () => readonly DeepLinkExtensionTarget[]
+  pending: () => readonly DeepLinkTarget[]
 }
 
-function idOf(t: DeepLinkExtensionTarget): string {
-  return `${t.namespace}.${t.name}`
+function idOf(t: DeepLinkTarget): string {
+  return isPublishDeepLink(t) ? `publish:${t.path}` : `${t.namespace}.${t.name}`
 }
 
 // Logged, never echoed back anywhere: trimmed and JSON-quoted so control bytes
@@ -52,19 +55,21 @@ function describe(url: unknown): string {
 
 export function createDeepLinkRouter(deps: DeepLinkRouterDeps): DeepLinkRouter {
   const now = deps.now ?? Date.now
-  const queue: DeepLinkExtensionTarget[] = []
+  const queue: DeepLinkTarget[] = []
   const readyIds = new Set<number>()
   // id → when it was last accepted. Per id, so alternating links (A, B, A, B)
   // are each suppressed within the window too; bounded, insertion-ordered.
   const recent = new Map<string, number>()
 
   function handle(url: unknown): void {
-    const parsed = parseDeepLink(url)
+    // A publish link only opens the publish form with that package (W3).
+    const publish = parsePublishDeepLink(url)
+    const parsed = publish.ok ? publish : parseDeepLink(url)
     if (!parsed.ok) {
       deps.log(`[deeplink] rejected ${describe(url)}: ${parsed.reason}`)
       return
     }
-    const target = parsed.target
+    const target: DeepLinkTarget = parsed.target
     const id = idOf(target)
     const at = now()
     const seen = recent.get(id)
@@ -77,8 +82,8 @@ export function createDeepLinkRouter(deps: DeepLinkRouterDeps): DeepLinkRouter {
     if (recent.size > MAX_RECENT_DEEP_LINKS) recent.delete(recent.keys().next().value as string)
     const contents = deps.pickTarget(readyIds)
     if (contents && !contents.isDestroyed()) {
-      deps.log(`[deeplink] open extension ${id}`)
-      contents.send(DEEP_LINK_OPEN_CHANNEL, target)
+      deps.log(isPublishDeepLink(target) ? '[deeplink] open publish form' : `[deeplink] open extension ${id}`)
+      contents.send(isPublishDeepLink(target) ? DEEP_LINK_PUBLISH_CHANNEL : DEEP_LINK_OPEN_CHANNEL, target)
       deps.reveal(contents)
       return
     }
@@ -92,7 +97,7 @@ export function createDeepLinkRouter(deps: DeepLinkRouterDeps): DeepLinkRouter {
     deps.ensureWindow()
   }
 
-  function ready(contents: WebContents): DeepLinkExtensionTarget[] {
+  function ready(contents: WebContents): DeepLinkTarget[] {
     if (!readyIds.has(contents.id)) {
       readyIds.add(contents.id)
       contents.once('destroyed', () => readyIds.delete(contents.id))

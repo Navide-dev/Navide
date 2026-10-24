@@ -158,6 +158,11 @@ class PosixProcessTree:
         except (ProcessLookupError, PermissionError):
             pass
 
+    def isolate_stdin_from_children(self) -> bool:
+        # Main closes the backend's stdin after the handover line here, and a
+        # POSIX pipe has no per-file I/O lock to block a child on anyway.
+        return False
+
     def stderr_handle_info(self) -> str:
         return ""
 

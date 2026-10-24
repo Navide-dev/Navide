@@ -71,7 +71,7 @@ function hover(row: HTMLElement, rect: { left: number; right: number }, viewport
   row.dispatchEvent(new MouseEvent('mouseenter'))
 }
 
-describe('Host GitPane "Add to ignore" submenu placement', () => {
+describe('Host GitPane "Add to Ignore" submenu placement', () => {
   it('keeps opening to the right when there is room', async () => {
     const row = await openFileMenu()
     hover(row, { left: 10, right: 230 }, 800)

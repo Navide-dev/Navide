@@ -178,7 +178,7 @@ const verdictMeta = computed(() =>
     <div v-if="!hideHeader" class="panel-header">
       <span class="panel-title">{{ $t('label.ai-review') }}</span>
       <div class="spacer" />
-      <button class="hdr-btn" title="Close" @click="emit('close')">
+      <button class="hdr-btn" :title="$t('action.close')" @click="emit('close')">
         <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
           <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
         </svg>
@@ -199,7 +199,7 @@ const verdictMeta = computed(() =>
           v-else-if="provider === 'openai_compatible'"
           class="model-select model-select--flex model-input"
           v-model="currentModel"
-          placeholder="Model name (e.g. llama-3.3-70b)"
+          :placeholder="$t('label.review-model-placeholder')"
           @change="saveModel"
         />
         <select v-else class="model-select model-select--flex" v-model="currentModel" @change="saveModel">
@@ -213,10 +213,10 @@ const verdictMeta = computed(() =>
           <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px;opacity:0.7">
             <path d="M2 2.5A2.5 2.5 0 1 1 5 5H4v1h6V5h-1a2.5 2.5 0 1 1 2.5-2.5v.085l.447.224A1.5 1.5 0 0 1 13 4.5V8a1.5 1.5 0 0 1-1.5 1.5H10v1h.5A1.5 1.5 0 0 1 12 12v1.5a2.5 2.5 0 1 1-1 0V12a.5.5 0 0 0-.5-.5H5.5A.5.5 0 0 0 5 12v1.5a2.5 2.5 0 1 1-1 0V12a1.5 1.5 0 0 1 1.5-1.5H6v-1H4.5A1.5 1.5 0 0 1 3 8V4.5a1.5 1.5 0 0 1 .553-1.191L4 3.085V2.5A2.5 2.5 0 0 1 2 2.5z"/>
           </svg>
-          {{ mode === 'working' ? 'Working Changes' : `${baseBranch} → ${compareBranch || currentBranch}` }}
+          {{ mode === 'working' ? $t('label.review-working-changes') : `${baseBranch} → ${compareBranch || currentBranch}` }}
         </span>
         <button class="branch-toggle" @click="mode = mode === 'branch' ? 'working' : 'branch'">
-          {{ mode === 'branch' ? '✕ ' + $t('action.cancel') : '↔ Branch Diff' }}
+          {{ mode === 'branch' ? '✕ ' + $t('action.cancel') : '↔ ' + $t('label.branch-diff') }}
         </button>
       </div>
 
@@ -229,7 +229,7 @@ const verdictMeta = computed(() =>
         </select>
         <span class="branch-arrow">→</span>
         <select class="branch-select" v-model="compareBranch">
-          <option value="">{{ currentBranch || 'HEAD' }} (current)</option>
+          <option value="">{{ $t('label.current-branch-suffix', { branch: currentBranch || 'HEAD' }) }}</option>
           <option v-for="b in localBranches" :key="b" :value="b">{{ b }}</option>
         </select>
       </div>
@@ -284,7 +284,7 @@ const verdictMeta = computed(() =>
           {{ f.label }}<span class="pill-count">{{ f.count }}</span>
         </button>
         <button class="filter-pill dismissed-pill" :class="{ active: showDismissed }" @click="showDismissed = !showDismissed">
-          Dismissed<span v-if="dismissedCount" class="pill-count">{{ dismissedCount }}</span>
+          {{ $t('label.review-dismissed') }}<span v-if="dismissedCount" class="pill-count">{{ dismissedCount }}</span>
         </button>
       </div>
 
@@ -301,13 +301,13 @@ const verdictMeta = computed(() =>
             <span
               class="finding-file" v-truncate
               :class="{ 'finding-file--link': !!f.file }"
-              :title="f.file ? 'Open file' : undefined"
+              :title="f.file ? $t('action.open-file-plain') : undefined"
               @click="openFindingFile(f)"
-            >{{ f.file || '(general)' }}<span v-if="f.line" class="finding-line">:{{ f.line }}</span></span>
-            <button class="finding-ai-btn" title="Ask AI to fix" @click="askAiFix(f)">✦ Ask AI</button>
+            >{{ f.file || $t('label.review-general-finding') }}<span v-if="f.line" class="finding-line">:{{ f.line }}</span></span>
+            <button class="finding-ai-btn" :title="$t('label.review-ask-ai-fix')" @click="askAiFix(f)">✦ {{ $t('debug.tab.ai') }}</button>
             <button
               class="dismiss-btn"
-              :title="dismissed.has(f.id) ? 'Restore' : 'Dismiss'"
+              :title="dismissed.has(f.id) ? $t('label.review-restore-finding') : $t('action.dismiss')"
               @click="toggleDismiss(f.id)"
             >{{ dismissed.has(f.id) ? '↩' : '✕' }}</button>
           </div>
@@ -316,10 +316,10 @@ const verdictMeta = computed(() =>
         </div>
 
         <div v-if="!visibleFindings.length && reviewResult.findings.length === 0" class="no-findings">
-          No findings — looks good!
+          {{ $t('label.review-no-findings') }}
         </div>
         <div v-else-if="!visibleFindings.length" class="no-findings">
-          No {{ severityFilter === 'all' ? '' : severityFilter + ' ' }}findings to show.
+          {{ $t('label.review-no-findings-filtered') }}
         </div>
       </div>
     </div>

@@ -16,6 +16,31 @@
     </div>
     <a class="install-button ns-publish" href="#publish-cli">Publish new version</a>
   </div>
+  {% if publisher.frozen_at %}
+  {# Revoked qualification or an expired grace period (qualification.py). #}
+  <p class="warn warn-block" role="alert">This namespace was frozen on {{ publisher.frozen_at.strftime('%Y-%m-%d') }}:
+    {{ publisher.frozen_reason or 'developer qualification revoked' }}. Its tokens and signing key are revoked,
+    every version is taken down, and their package digests are blocked as <code>qualification-revoked</code>.
+    A frozen namespace is not released: it stays yours and no other account can claim it, it no longer counts
+    toward the namespace limit, and an approved application does not unfreeze it. After approval, claim a new namespace.</p>
+  {% endif %}
+  {% if grandfather %}
+  {# Namespace claimed before developer qualification existed (decision d4(a)). #}
+  {% if grandfather.paused %}
+  <p class="muted" role="status">Your developer application is in review, so the grace period for this
+    namespace is paused with {{ grandfather.days_left }} day{{ '' if grandfather.days_left == 1 else 's' }} left.</p>
+  {% elif grandfather.remind %}
+  <p class="warn warn-block" role="alert">This namespace was claimed before developer qualification
+    existed. Apply for developer qualification by {{ grandfather.until[:10] }}
+    ({{ grandfather.days_left }} day{{ '' if grandfather.days_left == 1 else 's' }} left), or the namespace
+    is reclaimed: it is frozen, its tokens are revoked and its versions are taken down.
+    <a href="{{ base }}/developer/apply">Apply now</a></p>
+  {% else %}
+  <p class="muted" role="status">This namespace was claimed before developer qualification existed.
+    It keeps publishing until {{ grandfather.until[:10] }} while you
+    <a href="{{ base }}/developer/apply">apply for developer qualification</a>.</p>
+  {% endif %}
+  {% endif %}
   <nav class="page-toc" aria-label="On this page">
     <a href="#publish-cli">CLI</a><a href="#versions">Versions</a><a href="#reports">Reports</a><a href="#tokens">Tokens</a><a href="#signing-key">Signing key</a><a href="#verified">Verified publisher</a>
   </nav>

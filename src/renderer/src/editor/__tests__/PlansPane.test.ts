@@ -366,7 +366,7 @@ describe('PlansPane', () => {
     const backend = makeBackend()
     const wrapper = mountPane(backend)
     await flushPromises()
-    await wrapper.findAll('.plans-link-btn').find((b) => b.text() === 'Delete all')!.trigger('click')
+    await wrapper.findAll('.plans-link-btn').find((b) => b.text() === 'Delete All')!.trigger('click')
     await flushPromises()
     expect(backend.send).toHaveBeenCalledWith('fs.delete', {
       workspace_path: '/ws',
@@ -722,7 +722,7 @@ describe('PlansPane', () => {
     const wrapper = mountPane(backend)
     await flushPromises()
 
-    await wrapper.findAll('.plans-link-btn').find((b) => b.text() === 'Delete all')!.trigger('click')
+    await wrapper.findAll('.plans-link-btn').find((b) => b.text() === 'Delete All')!.trigger('click')
     await flushPromises()
 
     expect(backend.send).toHaveBeenCalledWith('fs.delete', {
@@ -910,7 +910,7 @@ describe('PlansPane – context menu', () => {
     await openMenuOn(wrapper, 'HTML Review Plan')
 
     const labels = wrapper.findAll('.menu-item').map((i) => i.text())
-    expect(labels).toEqual(['Open', 'Copy path', 'Share to Git', 'Rename', 'Archive', 'Delete'])
+    expect(labels).toEqual(['Open', 'Copy Path', 'Share to Git', 'Rename', 'Archive', 'Delete'])
   })
 
   it('adds Promote to Plan for HTML docs without meta', async () => {
@@ -931,7 +931,7 @@ describe('PlansPane – context menu', () => {
 
     expect(wrapper.find('.ctx-menu').exists()).toBe(true)
     const labels = wrapper.findAll('.menu-item').map((i) => i.text())
-    expect(labels).toEqual(['Open', 'Copy path', 'Archive', 'Delete'])
+    expect(labels).toEqual(['Open', 'Copy Path', 'Archive', 'Delete'])
     expect(labels).not.toContain('Rename')
     expect(labels).not.toContain('Share to Git')
     expect(labels).not.toContain('Promote to Plan')
@@ -1293,7 +1293,7 @@ describe('PlansPane – archive', () => {
     expect(rowVisible()).toBe(true)
   })
 
-  it('excludes an archived done plan from "Delete all"', async () => {
+  it('excludes an archived done plan from "Delete All"', async () => {
     const backend = makeBackend({
       htmlEntries: [
         { name: 'archived_a1b2c3.html', rel_path: '.agent-team/plans/archived_a1b2c3.html', is_dir: false },
@@ -1305,7 +1305,7 @@ describe('PlansPane – archive', () => {
 
     // The legacy markdown done.plan.md keeps the button enabled; clicking it
     // must delete that one but never touch the archived HTML plan.
-    await wrapper.findAll('.plans-link-btn').find((b) => b.text() === 'Delete all')!.trigger('click')
+    await wrapper.findAll('.plans-link-btn').find((b) => b.text() === 'Delete All')!.trigger('click')
     await flushPromises()
 
     expect(backend.send).toHaveBeenCalledWith('fs.delete', {
@@ -1329,7 +1329,7 @@ describe('PlansPane – archive', () => {
     const wrapper = mountPane(backend)
     await flushPromises()
 
-    const archiveBtn = wrapper.findAll('.plans-link-btn').find((b) => b.text().includes('Archive all done'))!
+    const archiveBtn = wrapper.findAll('.plans-link-btn').find((b) => b.text().includes('Archive All Done'))!
     expect(archiveBtn.attributes('disabled')).toBeUndefined()
     await archiveBtn.trigger('click')
     await flushPromises()
@@ -1505,7 +1505,7 @@ describe('PlansPane – copy path', () => {
     await flushPromises()
     await openMenuOn(wrapper, 'HTML Review Plan')
 
-    await menuItem(wrapper, 'Copy path').trigger('click')
+    await menuItem(wrapper, 'Copy Path').trigger('click')
     await flushPromises()
 
     expect(writeText).toHaveBeenCalledWith('.agent-team/plans/review_a1b2c3.html')
@@ -1518,7 +1518,7 @@ describe('PlansPane – copy path', () => {
     const wrapper = mountPane(docBackend())
     await flushPromises()
     await openMenuOn(wrapper, 'notes_aaaaaa.html')
-    expect(wrapper.findAll('.menu-item').map((i) => i.text())).toContain('Copy path')
+    expect(wrapper.findAll('.menu-item').map((i) => i.text())).toContain('Copy Path')
   })
 })
 

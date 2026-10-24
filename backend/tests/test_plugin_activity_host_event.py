@@ -127,3 +127,11 @@ async def test_a_host_row_never_counts_toward_a_plugins_report(audit: PluginAudi
     report = audit.activity_report("acme.demo")
     assert report["totals"]["calls"] == 1
     assert "developerMode" not in repr(report)
+
+
+async def test_the_host_records_developer_mode_settings_changed_outside_navide(audit: PluginAuditLog) -> None:
+    # A2-5 (G5): the third Host event, in the same exact shape.
+    host = _session(host=True)
+    await _record(host, [_host_row(address="developerMode.externalChange")])
+    assert host.websocket.sent[-1]["payload"]["accepted"] == 1
+    assert [r["address"] for r in _stored(audit)] == ["developerMode.externalChange"]

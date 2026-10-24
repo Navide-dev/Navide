@@ -18,9 +18,11 @@ import {
   useReadbackAnnouncer,
 } from './composables/useVoiceReadback'
 import { requestMarketplaceDetail } from './marketplaceDeepLink'
-import type { DeepLinkExtensionTarget } from '../../shared/deepLink'
+import { isPublishDeepLink, parseDeepLink, type DeepLinkExtensionTarget, type DeepLinkPublishTarget } from '../../shared/deepLink'
+import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceForm } from './composables/useMarketplaceForms'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
+import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
@@ -38,7 +40,7 @@ import { formatCpuPercent, machineCpuShare, machineMemoryShare } from './lib/res
 import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composables/useResourceUsage'
 import { channelsKey, useChannels } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
-import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, type PaneAnswer } from './lib/paneAnswerKeys'
+import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
 import TurnStatsModal from './components/TurnStatsModal.vue'
@@ -169,7 +171,7 @@ import {
   CLI_PASTE_LINE_CAP
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
-import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
+import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -205,6 +207,7 @@ import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
+import { acceptStartupTrust } from './lib/startupTrust'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
 import {
@@ -338,9 +341,12 @@ import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, quotaExhau
 import {
   awaitingClearsOnMiss,
   hasAwaitingPattern,
+  holdOutlivedBox,
+  isToolResultHook,
   matchAwaitingInput,
   notificationEndsAwaiting,
   notificationMeansAwaiting,
+  permissionHoldActionFor,
   questionActionFor,
 } from './lib/cliAwaitingInput'
 import {
@@ -350,17 +356,22 @@ import {
   screenShowsHookTrustPrompt
 } from './lib/sessionMarkerTurn'
 import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
-import { executeCommand, formatKeySpec, initKeybindingsPort, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
+import { executeCommand, formatKeySpec, initKeybindingsPort, invokeCommand, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
+import { WINDOW_INSTANCE_ID } from './lib/windowInstanceId'
 import {
+  pluginAgentCaller,
   pluginAgentNoticeTitle,
   pluginAgentUndoApplies,
+  pluginAgentDowngradeStep,
+  pluginStagedApplyApplies,
+  pluginSwitchBackApplies,
   releaseAnnouncementId,
   useAnnouncements,
   type SchedulerDisabledNotice,
 } from './composables/useAnnouncements'
 import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
-import { PLUGIN_APPROVAL_RECOVER_EVENT } from '../../shared/pluginAgentTools'
+import { PLUGIN_APPROVAL_RECOVER_EVENT, revealInvisibleText } from '../../shared/pluginAgentTools'
 import type {
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
@@ -382,6 +393,7 @@ import {
 } from './composables/useQuotaFailover'
 import { accountLabel } from './lib/accountLabel'
 import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
+import { runAgentAccountSwitch, type AgentAccountSwitchConfirmRequest } from './lib/agentAccountSwitch'
 import {
   DEFAULT_SLOT_ID,
   FOLLOW_SWITCH_AGENT,
@@ -423,6 +435,7 @@ import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } fr
 import { usePermissions } from './composables/usePermissions'
 import { useDisabledBuiltins } from './composables/useDisabledBuiltins'
 import { plansBackendStoppedNotice } from './composables/plansBackendStoppedNotice'
+import { pluginStagedCandidateNotice } from './composables/pluginStagedCandidateNotice'
 import navideMark from './assets/navide-mark.png'
 
 // Modals/wizard that only render behind a v-if (settings opened, run completed,
@@ -453,6 +466,7 @@ const CliInstallDialog = defineAsyncComponent(() => import('./components/CliInst
 const SkillInstallApprovalDialog = defineAsyncComponent(() => import('./components/SkillInstallApprovalDialog.vue'))
 const PluginAgentRequestDialog = defineAsyncComponent(() => import('./components/PluginAgentRequestDialog.vue'))
 const AgentSignInConfirmDialog = defineAsyncComponent(() => import('./components/AgentSignInConfirmDialog.vue'))
+const AgentAccountSwitchConfirmDialog = defineAsyncComponent(() => import('./components/AgentAccountSwitchConfirmDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
@@ -523,7 +537,11 @@ const settingsApi = useSettings()
 onMounted(() => {
   themeApi.loadTheme()
   settingsApi.loadLanguage()
-  void settingsApi.loadHealthCheckTimeoutSec()
+  // The boot overlay's safety net was armed during setup with the platform
+  // default; re-arm it with the saved timeout once that has loaded.
+  void settingsApi.loadHealthCheckTimeoutSec().then(() => {
+    if (booting.value && !bootError.value) armBootTimeout()
+  })
   window.agentTeam?.onLanguageChanged?.((locale) => {
     settingsApi.setLanguage(locale, { broadcast: false })
     pushQuitConfirmConfig()
@@ -955,6 +973,10 @@ watch(() => backend.status.value, (status) => {
   void pluginAgentRequests.recover().catch((error: unknown) => {
     console.warn('[plugins] could not settle interrupted agent plugin requests', error)
   })
+  // An agent's form draft filed before this window connected opens its form.
+  void restorePendingForms(backend).then((shown) => {
+    if (shown) openSettingsAt('marketplace')
+  }).catch(() => {})
 }, { immediate: true })
 // And when a main window went away while carrying out approved requests
 // (review-370 R1): the backend names them, and recover() settles whatever is
@@ -1014,13 +1036,15 @@ function armBootTimeout(): void {
   if (_bootTimer) clearTimeout(_bootTimer)
   // Safety net: dismiss a stuck spinner so the user is never trapped — but never
   // override an error state, which stays put with a Retry button. Kept just past
-  // useBackend's 50s init deadline: on a slow cold start (e.g. macOS Gatekeeper
-  // scanning an unsigned packaged binary on first launch) the backend may take
-  // up to 50s to report ready (then connect) or to give up and set status='error'.
+  // useBackend's init deadline (health-check timeout + 5s): on a slow cold start
+  // (e.g. macOS Gatekeeper, or Windows Defender scanning a fresh install's
+  // unpacked backend on first launch) the backend may take that long to report
+  // ready (then connect) or to give up and set status='error'.
   // Firing earlier would tear the overlay down mid-startup, revealing a bare
   // unconnected shell and pre-empting the error+Retry the backend failure path
   // is meant to show.
-  _bootTimer = window.setTimeout(() => { if (!bootError.value) dismissBoot() }, 52_000)
+  const ms = (settingsApi.healthCheckTimeoutSec.value + 7) * 1000
+  _bootTimer = window.setTimeout(() => { if (!bootError.value) dismissBoot() }, ms)
 }
 armBootTimeout()
 function retryBackend(): void {
@@ -1031,7 +1055,7 @@ function retryBackend(): void {
 }
 // Countdown display for the boot overlay, driven by the configured health-check
 // timeout (Settings → Appearance). Purely cosmetic — it doesn't change when the
-// overlay actually gets dismissed (see armBootTimeout's own 52s safety net above).
+// overlay actually gets dismissed (see armBootTimeout's own timeout + 7s safety net above).
 const bootCountdown = ref<number>(settingsApi.healthCheckTimeoutSec.value)
 let _bootCountdownTimer: number | undefined
 function startBootCountdown(): void {
@@ -1150,6 +1174,8 @@ const pluginContributionsByLocation = computed(() => {
     left: [],
     main: [],
     window: [],
+    // Mounted only by the receiver that owns it; the main window never renders it.
+    detail: [],
   }
   for (const contribution of pluginContributions.value) {
     grouped[contribution.location].push(contribution)
@@ -1157,7 +1183,7 @@ const pluginContributionsByLocation = computed(() => {
   return grouped
 })
 
-function pluginContributionsAt(location: Exclude<PluginRegionLocation, 'left' | 'window'>): PluginRegionContribution[] {
+function pluginContributionsAt(location: Exclude<PluginRegionLocation, 'left' | 'window' | 'detail'>): PluginRegionContribution[] {
   return pluginContributionsByLocation.value[location]
 }
 
@@ -1522,13 +1548,24 @@ function refitAllTerminals(): void {
   }))
 }
 
+// The layout-mode cols cap and its lift on a window widen (lib/stageWidthCap.ts).
+// paneRefs holds null for a pane Vue has unmounted, hence the nullable type.
+const stageWidthCap = createStageWidthCap(
+  () => Object.values(paneRefs) as unknown as Array<CappablePane | null | undefined>,
+  () => window.innerWidth
+)
+
 // Window-level resize safety net. Per-pane ResizeObservers can miss the macOS
 // fullscreen / maximize transition (the renderer is occluded mid-animation, so
 // the observer callback is coalesced away), leaving panes at a stale width with
 // empty space on the right. A debounced window 'resize' listener guarantees a
 // refit on any OS-window size change regardless of the observers.
 let _winResizeTimer: number | null = null
+
 function onWindowResize(): void {
+  // Widening the window lifts the layout-mode cap. That includes moving the
+  // window to a larger monitor, but only when the window itself grows there.
+  stageWidthCap.onWindowResize()
   if (_winResizeTimer !== null) clearTimeout(_winResizeTimer)
   _winResizeTimer = window.setTimeout(() => { _winResizeTimer = null; refitAllTerminals() }, 150)
 }
@@ -1712,6 +1749,11 @@ interface ActivePane {
    *  a resume re-arms it, and the first turn that ends clears it for good. */
   spawnedByName?: string
   spawnReportPending?: boolean
+  /** spawnedByName is a parent in ANOTHER project: set only by the
+   *  cross-workspace spawn branch (cli_open_agent with workspace_path), never
+   *  inferred from the name. Drives the "Opened by" row and lets the stand-in
+   *  report leave this window. Persisted (PaneRecord.report_cross). */
+  spawnedCrossWorkspace?: boolean
   /** Placeholder only: the record says this pane was working (or still owed
    *  its parent a report) when the app closed. Shown on the placeholder, and
    *  read by the relaunch's automatic resume. */
@@ -2541,6 +2583,8 @@ function persistPaneReportDebt(pane: ActivePane): void {
       pane_id: pane.id,
       report_to: pane.spawnedByName ?? '',
       report_pending: !!pane.spawnReportPending,
+      // Only sent when set, so every ordinary pane's write stays as it was.
+      ...(pane.spawnedCrossWorkspace ? { report_cross: true } : {}),
     })
     .catch(() => { /* the report still settles in this session */ })
 }
@@ -2943,8 +2987,11 @@ function settleSpawnReport(
   // is one of the panes a broadcast reaches.
   if (parsed.some((m) => isBroadcastTarget(m.target) || m.target === parentName)) return
   // The parent may have closed while the child worked; there is nowhere to send
-  // and no failure worth reporting to a pane that did not ask for this.
-  if (!panes.value.some((p) => p.messagingName === parentName)) return
+  // and no failure worth reporting to a pane that did not ask for this. A parent
+  // in another workspace (cli_open_agent with workspace_path) is not in this
+  // window's list at all: its `<folder>/<pane>` address goes out through the
+  // cross-workspace route, which answers for it.
+  if (!pane.spawnedCrossWorkspace && !panes.value.some((p) => p.messagingName === parentName)) return
   const report = renderFallbackReport(text)
   if (!report) return
   messaging.sendMessage(senderName, parentName, report, { kind: 'fallback' })
@@ -3136,7 +3183,9 @@ function assertRequestedSpawnGroup(workspacePath: string, groupId: string | unde
 }
 
 async function createRequestedPane(
-  parent: ActivePane,
+  // Only these three are read, which is what lets a cross-workspace spawn hand
+  // in a parent that lives in another workspace, with the child's workspace.
+  parent: Pick<ActivePane, 'id' | 'workspacePath' | 'runGroupId'>,
   req: { agentKey: string; name: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(parent.workspacePath, req.runGroupId)
@@ -3405,7 +3454,7 @@ async function kickoffRequestedPane(
   parentName: string,
   task: string,
   requestId?: string,
-  opts: { resume?: boolean } = {},
+  opts: { resume?: boolean; crossParent?: boolean } = {},
 ): Promise<boolean> {
   // Built before the pane lookup: that lookup has its own early return, and a
   // caller blocked on the verdict would otherwise wait out the whole deadline
@@ -3597,9 +3646,12 @@ async function kickoffRequestedPane(
     // only a messaging handle when a live pane answers to it — the MCP path
     // falls back to a pane id, and a standalone caller passes a workspace path,
     // neither of which anything can be delivered to.
-    if (kicked && panes.value.some((p) => p.messagingName === parentName)) {
+    // A cross-workspace parent (crossParent) is not in this window's list; the
+    // backend checked it exists and handed its qualified address.
+    if (kicked && (opts.crossParent || panes.value.some((p) => p.messagingName === parentName))) {
       const live = panes.value.find((p) => p.id === paneId)
       if (live) {
+        if (opts.crossParent) live.spawnedCrossWorkspace = true
         live.spawnedByName = parentName
         live.spawnReportPending = true
         persistPaneReportDebt(live)
@@ -3698,11 +3750,24 @@ async function handleMcpSpawnRequest(ev: {
   resume_spawned_by?: string
   resume_run_group_id?: string
   run_group_id?: string
+  /** cli_open_agent from a pane naming another project: the child goes into
+   *  target_workspace, parented on requester_pane_id, which may live in
+   *  another workspace or window. */
+  cross_workspace?: boolean
+  /** The requester's `<folder>/<pane>` address, for its report. */
+  parent_address?: string
 }): Promise<void> {
   const standalone = !!ev.target_workspace
+  const cross = !!ev.cross_workspace
   let parent: ActivePane | undefined
   let parentName: string
-  if (standalone) {
+  if (cross) {
+    // The window holding the target project creates the pane, whoever holds
+    // the parent. Same single-owner rule as the standalone branch below.
+    if (!isLocalWorkspace(ev.target_workspace ?? '')) return
+    parent = panes.value.find((p) => p.id === ev.requester_pane_id)
+    parentName = ev.parent_address || ev.requester_pane_id
+  } else if (standalone) {
     // Any workspace this window holds. Exactly one window holds a given
     // workspace — findMainWindowForWorkspace covers adopted ones now, so a
     // second window is sent to this one rather than opening it too — which is
@@ -3762,9 +3827,14 @@ async function handleMcpSpawnRequest(ev: {
     // The gate decides identity (name collisions, model/effort); the session to
     // resume is not its business, so it rides alongside rather than through it.
     const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id }
-    paneId = parent
-      ? await createRequestedPane(parent, spawnReq)
-      : await createStandaloneRequestedPane(ev.target_workspace as string, spawnReq)
+    paneId = cross
+      ? await createRequestedPane(
+          { id: ev.requester_pane_id, workspacePath: ev.target_workspace as string, runGroupId: undefined },
+          spawnReq,
+        )
+      : parent
+        ? await createRequestedPane(parent, spawnReq)
+        : await createStandaloneRequestedPane(ev.target_workspace as string, spawnReq)
   } catch (err) {
     report({ ok: false, error: err instanceof Error ? err.message : String(err) })
     return
@@ -3780,7 +3850,18 @@ async function handleMcpSpawnRequest(ev: {
   // after this and reports a failure by message instead.
   const child = panes.value.find((p) => p.id === paneId)
   const childName = child?.messagingName ?? gate.name
-  if (!parent) {
+  if (cross) {
+    // Disclosed in this window as well as in the backend's action record: an
+    // agent of another project opened a pane here (DESIGN-C §5). The toast
+    // below names both.
+    recordDiagnostic({
+      level: 'info',
+      code: 'agent.window-action',
+      message: `${parentName} opened pane ${childName} in ${ev.target_workspace} from another project`,
+      paneId,
+    })
+  }
+  if (!parent && !cross) {
     // Standalone spawn: createStandaloneRequestedPane already settled the CLI
     // and injected the task (or left the pane empty if there was none) before
     // returning paneId above. There is no parent pane to report back to, so
@@ -3815,6 +3896,7 @@ async function handleMcpSpawnRequest(ev: {
 
   void kickoffRequestedPane(paneId, parentName, gate.task, ev.request_id, {
     resume: !!(ev.session_id ?? '').trim(),
+    crossParent: cross,
   })
     .then((ok) => {
       if (!ok) {
@@ -4038,6 +4120,8 @@ onUnmounted(() => {
 // never reports — so a miss there is not evidence the wait ended and must not
 // clear what the hook raised.
 const AWAITING_SCREEN_LINES = 25
+// Between the steps of a free-text or multi-select answer (lib/paneAnswerKeys).
+const ANSWER_STEP_GAP_MS = 60
 
 /** Flag a pane whose turn is in flight but whose log and screen have both been
  *  quiet past the threshold, and record it once per episode. Reminder only:
@@ -4090,7 +4174,21 @@ function pollAwaitingPanes(): void {
     // A badge must never take messaging down with it.
     try {
       const screen = ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string
-      if (matchAwaitingInput(pane.agentKey, screen)) ref.markNeedsInput?.()
+      const boxOnScreen = matchAwaitingInput(pane.agentKey, screen)
+      // The safety net under a held permission wait (see holdOutlivedBox): the
+      // box is no longer on screen, so nothing is left to hold for.
+      const held = ref.awaitingHeld?.() as { since: number } | undefined
+      if (held && held.since > 0 && holdOutlivedBox({
+        heldMs: Date.now() - held.since,
+        turnInFlight: isTurnInFlight(
+          paneLastActiveAt.get(pane.id) ?? 0,
+          paneTurnCompleteAt.get(pane.id) ?? 0,
+          Date.now(),
+          { inferEndFromSilence: VENDORS_WITHOUT_TURN_END.has(pane.agentKey) },
+        ),
+        boxOnScreen,
+      })) ref.releaseNeedsInputHold?.()
+      if (boxOnScreen) ref.markNeedsInput?.()
       else if (awaitingClearsOnMiss(pane.agentKey)) ref.clearNeedsInput?.()
     } catch {
       /* leave this pane's badge as-is and carry on with the rest */
@@ -4117,6 +4215,9 @@ function syncViews(): void {
       kickoffStatus: p.kickoffStatus,
       origin: p.origin,
       spawnedBy: p.spawnedBy,
+      // Opened by a pane of another project: its `<folder>/<pane>` address,
+      // shown on the row because the tree cannot draw that parent here.
+      openedBy: p.spawnedCrossWorkspace ? p.spawnedByName : undefined,
       workspacePath: p.workspacePath,
       runGroupId: p.runGroupId,
       collapsed: collapsedPanes.value.has(p.id),
@@ -6278,6 +6379,9 @@ let stopGitRecoveryChanged: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
+let stopPluginStagedCandidate: (() => void) | null = null
+let stopPluginStagedUpdates: (() => void) | null = null
+let stopPluginSwitched: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
   stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
@@ -6299,6 +6403,30 @@ onMounted(() => {
     announcements.notePluginAgentNotice(notice)
     notifyRestore.toast(pluginAgentNoticeTitle(notice), { type: 'info' })
   }) ?? null
+  // A plugin installed without Restart could not be activated at launch.
+  stopPluginStagedCandidate = window.agentTeam?.onPluginStagedCandidateNotActivated?.((notice) => {
+    notifyRestore.toast(pluginStagedCandidateNotice(notice), { type: 'error' })
+  }) ?? null
+  // Packages staged beside an active one: a row with "Apply now" stays in the
+  // announcements centre until it is applied.
+  // L3: an approved update took effect at once; record it with its way back.
+  stopPluginSwitched = window.agentTeam?.onPluginSwitched?.((notice) => {
+    announcements.notePluginSwitch(notice)
+    const switchedVersions = { plugin: notice.pluginId, from: notice.fromVersion, to: notice.toVersion }
+    notifyRestore.toast(notice.agent
+      ? i18n.global.t('plugin-switch.notice.titleAgent', { ...switchedVersions, caller: pluginAgentCaller(notice.agent) })
+      : i18n.global.t('plugin-switch.notice.title', switchedVersions), { type: 'info' })
+  }) ?? null
+  stopPluginStagedUpdates = window.agentTeam?.onPluginStagedUpdates?.((updates) => {
+    announcements.notePluginStagedUpdates(updates)
+    for (const update of updates) {
+      notifyRestore.toast(i18n.global.t('plugin-staged.notice.title', {
+        plugin: update.pluginId,
+        staged: update.stagedVersion,
+        active: update.activeVersion,
+      }), { type: 'info' })
+    }
+  }) ?? null
   void refreshPluginContributions()
   stopPluginContributionChanges = window.agentTeam?.plugins?.onContributionsChanged?.(() => {
     void refreshPluginContributions()
@@ -6315,6 +6443,12 @@ onUnmounted(() => {
   stopPlansBackendStopped = null
   stopPluginAgentAction?.()
   stopPluginAgentAction = null
+  stopPluginStagedCandidate?.()
+  stopPluginStagedCandidate = null
+  stopPluginStagedUpdates?.()
+  stopPluginStagedUpdates = null
+  stopPluginSwitched?.()
+  stopPluginSwitched = null
   stopPluginContributionChanges?.()
   stopPluginContributionChanges = null
 })
@@ -6446,7 +6580,45 @@ async function waitForActivityThenSettle(
   return 'timeout'
 }
 
+// Panes whose vendor declares `startupTrust` (grok): one watcher per spawn
+// answers the prompt with the vendor's own key, and every other startup path
+// waits on it rather than pressing Enter on its own — two answerers could put
+// the second key into the composer, ahead of a kickoff typed next (#402).
+const startupTrustWatches = new Map<string, Promise<boolean>>()
+
+function paneAcceptsStartupTrust(paneId: string): boolean {
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  return !!agentSpecs.find((s) => s.agentKey === agentKey)?.startupTrust
+}
+
+function watchStartupTrust(paneId: string, agentKey: string, folder: string): void {
+  const watch = acceptStartupTrust(agentKey, {
+    readScreen: () => {
+      try {
+        return (paneRefs[paneId]?.readScreenTail?.(AWAITING_SCREEN_LINES) as unknown as string) ?? ''
+      } catch {
+        return ''
+      }
+    },
+    outputBytes: () => paneCleanBytes(paneId),
+    alive: () => paneAlive(paneId),
+    send: async (keys) => {
+      const sid = paneRefs[paneId]?.sessionId
+      if (!sid) return
+      await backend.send('terminal.input', { terminal_session_id: sid as string, data: keys })
+      pipelineLog(`✓ accepted startup trust prompt (pane ${paneId.slice(0, 8)})`)
+    },
+    sleep,
+    now: Date.now,
+    timeoutMs: DISMISS_TIMEOUT_MS,
+    quietMs: NO_DIALOG_QUIET_MS,
+    folder,
+  }).finally(() => startupTrustWatches.delete(paneId))
+  startupTrustWatches.set(paneId, watch)
+}
+
 async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_MS): Promise<boolean> {
+  if (paneAcceptsStartupTrust(paneId)) return (await startupTrustWatches.get(paneId)) ?? false
   const deadline = Date.now() + timeoutMs
   let lastSize = -1
   let stableSince = Date.now()
@@ -6739,7 +6911,7 @@ function scheduleInjection(pane: ActivePane): void {
       await sleep(MIN_INJECTION_LEAD_MS - lead)
       if (!paneAlive(pane.id)) return
     }
-    if (!dismissed) {
+    if (!dismissed && !paneAcceptsStartupTrust(pane.id)) {
       const lateBuf = ((paneRefs[pane.id]?.cleanBuffer as unknown as string) ?? '')
       if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf))) {
         pipelineLog(`${tag} late startup dialog detected — dismissing`)
@@ -6816,6 +6988,7 @@ function scheduleInjection(pane: ActivePane): void {
       // Use bracketed-paste so newlines in the context header (prior-stage
       // documents) are preserved — without it they become Enter keypresses
       // and fragment the prompt into multiple partial submissions.
+      let held = false
       const kickoffResult = await runPipelineKickoff({
         inject: async () => {
           const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
@@ -6824,7 +6997,10 @@ function scheduleInjection(pane: ActivePane): void {
         },
         sleep,
         paneAlive: () => paneAlive(pane.id),
-        onHeld: () => pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`),
+        onHeld: () => {
+          held = true
+          pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+        },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       })
       if (kickoffResult.cancelled) return
@@ -6832,8 +7008,24 @@ function scheduleInjection(pane: ActivePane): void {
       pane.kickoffStatus = ok2 ? 'sent' : 'failed'
       setPrepStatus(pane, ok2 ? 'ready' : 'failed')
       syncViews()
+      const stageIndexForPane = pane.origin === 'pipeline'
+        ? stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
+        : -1
       if (!ok2) {
-        pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts — arming watcher anyway`)
+        pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+        // A pipeline slot without its task cannot finish its stage (#448).
+        if (stageIndexForPane >= 0) {
+          if (held) heldKickoffPanes.add(pane.id)
+          await failRunOnKickoff(
+            stageIndexForPane,
+            pane.slotLabel ?? '',
+            held
+              ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
+              : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`,
+            held,
+          )
+          return
+        }
       } else {
         pipelineLog(`${tag} ✓ kickoff sent`)
       }
@@ -6841,15 +7033,12 @@ function scheduleInjection(pane: ActivePane): void {
       // 5. Arm watcher. For question-interactive stages (P01) capture scanFrom
       //    after kickoff confirmation; for other stages pass undefined so the
       //    watcher uses markBufferPosition() and agentGenerating handles pacing.
-      if (pane.origin === 'pipeline') {
-        const stageIndex = stagesApi.stages.value.findIndex((s) => s.id === pane.stageId)
-        if (stageIndex >= 0) {
-          const stageAllowsQ = stagesApi.stages.value[stageIndex]?.allowQuestions ?? false
-          const kickoffScanFrom2 = stageAllowsQ
-            ? (paneRefs[pane.id]?.markBufferPosition as () => number | undefined)?.()
-            : undefined
-          startStageWatcher(stageIndex, pane.id, kickoffScanFrom2)
-        }
+      if (stageIndexForPane >= 0) {
+        const stageAllowsQ = stagesApi.stages.value[stageIndexForPane]?.allowQuestions ?? false
+        const kickoffScanFrom2 = stageAllowsQ
+          ? (paneRefs[pane.id]?.markBufferPosition as () => number | undefined)?.()
+          : undefined
+        startStageWatcher(stageIndexForPane, pane.id, kickoffScanFrom2)
       }
     }
   })()
@@ -7085,8 +7274,8 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     : undefined
   // Codex keeps a marker fallback during rollout. Antigravity can't pin an id
   // at launch (`agy --conversation` only resumes existing ids), so the marker
-  // is its ONLY session-binding path. Grok likewise can't pin an id (`grok -s`
-  // only resumes existing ids) — marker-based binding via ~/.grok/grok.db.
+  // is its ONLY session-binding path. (Grok left this camp: `--session-id`
+  // names a NEW session, so it pins at launch like Claude — see agents/grok.ts.)
   // Kimi likewise can't pin an id (`kimi --session` only resumes existing ids);
   // its session id is captured from the wire.jsonl containing the marker.
   // OpenCode likewise can't pin an id (`opencode --session` only resumes
@@ -7337,6 +7526,9 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     startPaneHealthWatcher(id)
 
     if ((ref.status as unknown as string) === 'running') {
+      // Fresh or resumed, with a task or without: a resumed pane gets no other
+      // startup handling at all, and sat on the prompt with every message held.
+      if (spec.startupTrust) watchStartupTrust(id, spec.agentKey, opts.workspacePath ?? '')
       if (pane.origin !== 'pipeline' && !pane.roleKey && !pane.kickoffPrompt) {
         pane.injectionStatus = 'skipped'
         setPrepStatus(pane, 'ready')
@@ -9400,7 +9592,7 @@ watch(currentWorkspace, (workspacePath) => {
 // alone is not enough: asking for the tab you are already on leaves the prop
 // unchanged, so the modal's watcher never fires and the request is dropped.
 const settingsTabRequest = ref(0)
-const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications'>('general')
+const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications' | 'extensions'>('general')
 // Needed to retarget an already-open modal: initialTab is only honoured on mount
 // and by its own watcher, so re-issuing the same tab is a no-op without this.
 const settingsModalRef = ref<{
@@ -9419,15 +9611,34 @@ function openMarketplaceDetail(target: DeepLinkExtensionTarget): void {
   requestMarketplaceDetail(target)
   openSettingsAt('marketplace')
 }
+// navide://publish (navide-plugin publish --via-navide): open the publish form
+// with that package. Only opens the form; the user reviews and presses Submit.
+function openPublishFromLink(target: DeepLinkPublishTarget): void {
+  showMarketplaceForm({
+    form: 'publish', origin: 'link', requester: null, request: null,
+    prefill: { path: target.path, ...(target.target ? { target: target.target } : {}) },
+  })
+  openSettingsAt('marketplace')
+}
 let stopDeepLinks: (() => void) | null = null
+let stopPublishLinks: (() => void) | null = null
 onMounted(() => {
   const api = window.agentTeam?.deepLink
   if (!api) return
   stopDeepLinks = api.onOpenExtension(openMarketplaceDetail)
+  stopPublishLinks = api.onOpenPublish?.(openPublishFromLink) ?? null
   // Links that arrived before this window could show them (cold start).
-  void api.ready().then((queued) => queued.forEach(openMarketplaceDetail))
+  void api.ready().then((queued) =>
+    queued.forEach((target) => (isPublishDeepLink(target) ? openPublishFromLink(target) : openMarketplaceDetail(target))))
 })
-onUnmounted(() => stopDeepLinks?.())
+onUnmounted(() => {
+  stopDeepLinks?.()
+  stopPublishLinks?.()
+})
+// An agent's *_open / *_fill for a Navide Marketplace developer form (W3) shows
+// it in Settings > Navide Marketplace > Developer; nothing is sent until Submit.
+const stopMarketplaceForms = installMarketplaceFormListeners(backend, () => openSettingsAt('marketplace'))
+onUnmounted(stopMarketplaceForms)
 // Workspaces the Resource Manager's storage scan walks: the open one first, then the recents that
 // still exist on disk.
 const knownWorkspacePaths = computed<string[]>(() => {
@@ -10094,6 +10305,35 @@ registerCommand('ui.settings.open', (args) => {
   }
 })
 registerCommand('ui.settings.close', () => { showSettings.value = false })
+// W1: the *_open agent tools (marketplace_open, plugins_install_file_open,
+// plugins_developer_mode_open). Each only shows a page; installing, choosing
+// a file and the Developer Mode switch stay the user's own presses.
+registerCommand('ui.plugins.openMarketplace', (args) => {
+  const id = (args as { id?: unknown } | undefined)?.id
+  if (id === undefined || id === null || id === '') {
+    openSettingsAt('marketplace')
+    return { opened: 'marketplace' }
+  }
+  const link = parseDeepLink(`navide://extension/${String(id)}`)
+  if (!link.ok) throw new Error(`not a Navide plugin id: ${link.reason}`)
+  openMarketplaceDetail(link.target)
+  return { opened: 'marketplace-detail' }
+})
+function openExtensionsSection(section: string): void {
+  settingsInitialTab.value = 'extensions'
+  showSettings.value = true
+  void nextTick(() => {
+    void settingsModalRef.value?.setSection('extensions', section)
+  })
+}
+registerCommand('ui.plugins.openInstallFromFile', () => {
+  openExtensionsSection('extensions-install-from-file')
+  return { opened: 'install-from-file' }
+})
+registerCommand('ui.plugins.openDeveloperMode', () => {
+  openExtensionsSection('extensions-developer-mode')
+  return { opened: 'developer-mode' }
+})
 // The permission-bypass toggle. NOT pipeline state and not workspace state:
 // skipFlagFor() reads it on every spawn / resume / restore path this window
 // has, whichever project they belong to — hence a ui.settings.* name and no
@@ -10464,7 +10704,23 @@ registerCommand('ui.pane.sendKeys', async (args) => {
   if (!resolved.ok) {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }
   }
-  const resp = await backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data: resolved.keys })
+  // A free-text or multi-select answer goes in one step at a time, so the CLI
+  // reads arrows, typed text and Enter as separate keys rather than one paste.
+  // Each later step goes in only while the same menu is still up (writeAnswerSteps).
+  const screenTail = () => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
+  const resp = await writeAnswerSteps({
+    steps: resolved.steps ?? [resolved.keys],
+    menu: screenTail(),
+    read: () => ({ displayStatus: ref.displayStatus as string | undefined, screen: screenTail() }),
+    write: (data) => backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data }),
+    gapMs: ANSWER_STEP_GAP_MS,
+  })
+  if (resp === 'prompt-changed') {
+    return { ok: false, sent: false, error: 'the prompt changed while the answer was going in', error_code: 'prompt-changed' }
+  }
+  // This write goes straight to the PTY, not through the terminal's onData, so
+  // tell the pane its held permission box was just answered.
+  if (resp.ok) ref.noteAnswerKeys?.(resolved.keys)
   return resp.ok ? { ok: true, sent: true } : { ok: false, sent: false, error: resp.error?.message ?? 'terminal.input failed' }
 })
 // Diagnostics recorded by uiDiagnostics (e.g. injectText resends) — lets an
@@ -10733,9 +10989,31 @@ registerCommand('ui.pipeline.restart_from', async (args) => {
   return { workspacePath: pipeline.workspacePath, state: restarted, stageIndex: pipeline.stageIndex }
 })
 registerCommand('ui.workspace.open', async (args) => {
+  const a = (args as { path?: string; background?: boolean } | undefined) ?? {}
+  if (!a.path) throw new Error('ui.workspace.open requires path')
+  // background: a window opened for an agent's child pane, shown without
+  // taking focus. Absent for every other caller, which keeps the old call.
+  await window.agentTeam?.openMainWindow?.(
+    a.background ? { workspace_path: a.path, background: true } : { workspace_path: a.path },
+  )
+})
+// cli_open_agent's "current" window for a child in another project: take the
+// project into this window's sidebar without switching to it. A project
+// another window holds is refused with that window named — one project lives
+// in one window — and a detached group window holds one workspace only. The
+// error text starts with the code the backend maps to error_code.
+registerCommand('ui.workspace.adopt', async (args) => {
   const path = (args as { path?: string } | undefined)?.path
-  if (!path) throw new Error('ui.workspace.open requires path')
-  await window.agentTeam?.openMainWindow?.({ workspace_path: path })
+  if (!path) throw new Error('ui.workspace.adopt requires path')
+  if (isLocalWorkspace(path)) return { prepared: 'already-open' }
+  if (isDetachedWindow) {
+    throw new Error('window-cannot-hold: this is a detached group window, which shows one workspace only')
+  }
+  const elsewhere = (await window.agentTeam?.workspaceHolder?.(path)) ?? ''
+  if (elsewhere) throw new Error(`workspace-in-other-window: ${elsewhere}`)
+  adoptWorkspace(path)
+  if (!isLocalWorkspace(path)) throw new Error(`this window did not take ${path}`)
+  return { prepared: 'adopted' }
 })
 // Switch THIS window to another workspace it already holds (one window, many
 // projects). A path this window does not hold is refused rather than opened on
@@ -10774,6 +11052,276 @@ registerCommand('ui.workspace.switch', async (args) => {
     )
   }
   return { path: currentWorkspace.value }
+})
+// MCP window_list (DESIGN-C S3): this window describes itself, under the
+// page-load id the backend knows it by. Read-only.
+registerCommand('ui.window.describe', () => {
+  const held = [...workspaceOrder.value]
+  if (currentWorkspace.value && !held.some((w) => normWs(w) === normWs(currentWorkspace.value))) {
+    held.unshift(currentWorkspace.value)
+  }
+  return {
+    window_id: WINDOW_INSTANCE_ID,
+    kind: isDetachedWindow ? 'detached-group' : 'main',
+    on_screen: currentWorkspace.value,
+    workspaces: held,
+    ...(isDetachedWindow ? { detached_group: detachedGroupId } : {}),
+    focused: document.hasFocus(),
+    panes: panes.value.map((p) => ({ pane_id: p.id, name: p.messagingName ?? '', workspace_path: p.workspacePath })),
+  }
+})
+// MCP window_focus (DESIGN-C S3): optionally switch to a project this window
+// holds — through ui.workspace.switch, so its refusals (not held, pipeline
+// running, switch did not land) are the answer — then bring this window to the
+// front. Main focuses the window that sent the IPC and no other. The window
+// says which pane did it; caller_address is stamped by the backend from the
+// caller's credential.
+registerCommand('ui.window.focus', async (args) => {
+  const a = (args ?? {}) as { workspace_path?: string; caller_address?: string }
+  const previous = currentWorkspace.value
+  if (a.workspace_path && normWs(a.workspace_path) !== normWs(currentWorkspace.value)) {
+    const switched = await invokeCommand('ui.workspace.switch', { path: a.workspace_path })
+    if (!switched.ok) throw new Error(switched.error ?? `could not switch to ${a.workspace_path}`)
+  }
+  const focused = await window.agentTeam?.focusSelf?.()
+  const caller = a.caller_address || 'an agent'
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} brought this window to the front` })
+  notifyRestore.toast(i18n.global.t('msg.window-focused-by', { caller }), { type: 'info' })
+  return { on_screen: currentWorkspace.value, previous_on_screen: previous, focused: focused?.ok === true }
+})
+// MCP window_close (DESIGN-C S4a). Only the window the id names acts — an
+// id that is not this page's is refused, so a broadcast cannot close a
+// bystander. The caller's own window never gets here: the bus refuses it
+// first (selfCloseRefusal), as the backend did. No CLI is ended: a main
+// window lets go of every project the way the sidebar's plain "Close
+// workspace" does (the PTYs keep running and re-attach on reopen) and then
+// closes; a detached group window just closes, which hands its group back to
+// the main window. A running pipeline is refused — stopping it is the user's.
+registerCommand('ui.window.close', async (args) => {
+  const a = (args ?? {}) as { windowId?: string; caller_address?: string }
+  if (!a.windowId || a.windowId !== WINDOW_INSTANCE_ID) {
+    throw new Error(`unknown-window: this window is ${WINDOW_INSTANCE_ID}, not "${a.windowId ?? ''}"`)
+  }
+  if (pipeline.state === 'running') {
+    throw new Error('pipeline-running: a pipeline is running in this window; only the user can stop it')
+  }
+  // Asked before anything is let go of: main refuses the last window off macOS.
+  const can = await window.agentTeam?.canCloseSelf?.()
+  if (can && !can.ok) {
+    throw new Error(`${can.error ?? 'window-close-failed'}: this window cannot be closed (closing the last window would quit Navide)`)
+  }
+  const caller = a.caller_address || 'an agent'
+  const left = panes.value.map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath }))
+  const held = [...workspaceOrder.value]
+  if (currentWorkspace.value && !held.some((w) => normWs(w) === normWs(currentWorkspace.value))) {
+    held.unshift(currentWorkspace.value)
+  }
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} closed this window; its CLIs keep running` })
+  if (!isDetachedWindow) for (const path of held) dropWorkspacePanes(path)
+  // After the answer is on its way: the window that is closing sends it.
+  setTimeout(() => { void window.agentTeam?.closeSelf?.() }, 300)
+  return isDetachedWindow
+    ? { workspaces: [], panes: left, reattached_to_main: true }
+    : { workspaces: held, panes: left }
+})
+// MCP workspace_close (DESIGN-C S4a). `path` is required and must be one this
+// window holds, spelled as it holds it (the backend hands over the window's own
+// spelling) — an empty or near-miss path is refused, never read as "the one on
+// screen". The caller's own workspace was refused before this (backend and
+// bus). keepPanes false ends the CLIs, so it always asks, naming the agent,
+// whatever "don't ask again" says; no answer within 55s is a no, answered
+// before the backend's own minute runs out.
+registerCommand('ui.workspace.close', async (args) => {
+  const a = (args ?? {}) as { path?: string; keepPanes?: boolean; caller_address?: string }
+  const path = typeof a.path === 'string' ? a.path : ''
+  if (!path) throw new Error('path-required: ui.workspace.close requires path')
+  const held = workspaceOrder.value.find((w) => normWs(w) === normWs(path))
+  if (!held) throw new Error(`workspace-not-open: this window does not hold ${path}`)
+  if (workspaceOrder.value.length < 2) {
+    throw new Error(`last-workspace: ${held} is this window's only project; close the window instead`)
+  }
+  if (pipeline.state === 'running' && normWs(pipelineRunWorkspace || pipeline.workspacePath) === normWs(held)) {
+    throw new Error(`pipeline-running: a pipeline is running in ${held}; only the user can stop it`)
+  }
+  const caller = a.caller_address || 'an agent'
+  const name = wsDisplayName(held)
+  const mine = panes.value
+    .filter((p) => normWs(p.workspacePath) === normWs(held))
+    .map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath }))
+  if (a.keepPanes === false) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // The deadline answers THIS dialog only: if another one has replaced it
+    // since, that one is left alone (and this one was already answered no).
+    let ownDialog: unknown = null
+    const noAnswer = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => {
+        if (ownDialog && notifyRestore.dialog.value === ownDialog) notifyRestore.resolveDialog(false)
+        resolve(false)
+      }, 55_000)
+    })
+    const asked = notifyRestore.confirm(
+      i18n.global.t('msg.agent-close-workspace-body', { caller, name, count: mine.length }),
+      {
+        title: i18n.global.t('msg.agent-close-workspace-title', { caller, name }),
+        confirmText: i18n.global.t('confirm-close.sidebar-ws-confirm'),
+        cancelText: i18n.global.t('action.cancel'),
+        danger: true,
+      },
+    )
+    // confirm() puts its dialog up synchronously.
+    ownDialog = notifyRestore.dialog.value
+    const agreed = await Promise.race([asked, noAnswer])
+    clearTimeout(timer)
+    if (!agreed) throw new Error(`user-declined: the user did not agree to end the CLIs in ${held}`)
+    await closeWorkspace(held, { confirmed: true })
+  } else {
+    await closeWorkspaceKeepPanes(held)
+  }
+  if (workspaceOrder.value.some((w) => normWs(w) === normWs(held))) {
+    throw new Error(`workspace-close-failed: ${held} is still open in this window`)
+  }
+  recordDiagnostic({
+    level: 'info',
+    code: 'agent.window-action',
+    message: `${caller} closed ${held}${a.keepPanes === false ? ' and ended its CLIs' : '; its CLIs keep running'}`,
+  })
+  if (a.keepPanes === false) {
+    notifyRestore.toast(i18n.global.t('msg.agent-closed-workspace-ended', { caller, name }), { type: 'info', duration: 8000 })
+  } else {
+    notifyRestore.toast(i18n.global.t('msg.agent-closed-workspace-kept', { caller, name }), {
+      type: 'info',
+      duration: 12000,
+      action: { label: i18n.global.t('msg.undo'), run: () => adoptWorkspace(held) },
+    })
+  }
+  return { path: held, panes: mine }
+})
+// MCP window_move_pane, mode "pane" (DESIGN-C S4b). A pane lives only in a
+// window holding its project, so it moves alone only into a detached window of
+// its own ("new": its tab group, split off when it shares one) or, from one,
+// back into the main window (the whole detached group merges back — the only
+// way a detached window gives panes back). The backend already checked that a
+// window id names the main window holding the project; ui_invoke cannot reach
+// this (window_move_pane only). Nothing is killed.
+registerCommand('ui.pane.moveToWindow', async (args) => {
+  const a = (args ?? {}) as { paneId?: string; to?: string; caller_address?: string }
+  const pane = panes.value.find((p) => p.id === a.paneId)
+  if (!pane) throw new Error(`unknown-pane: this window has no pane ${a.paneId ?? ''}`)
+  if (pane.origin === 'pipeline' && pipeline.state === 'running') {
+    throw new Error('pipeline-running: that pane is a slot of a running pipeline; only the user can move it')
+  }
+  const caller = a.caller_address || 'an agent'
+  const label = pane.messagingName || pane.customName || pane.autoName || pane.agentLabel
+  if (a.to === 'new') {
+    if (isDetachedWindow) throw new Error('already-there: that pane is already in a detached window')
+    if (normWs(pane.workspacePath) !== normWs(currentWorkspace.value)) {
+      throw new Error(
+        `pane-not-on-screen: switch this window to ${pane.workspacePath} first (window_focus with workspace_path)`,
+      )
+    }
+    let groupId = pane.runGroupId ?? ''
+    const sharing = panes.value.filter((p) => (p.runGroupId ?? '') === groupId && normWs(p.workspacePath) === normWs(pane.workspacePath))
+    if (!groupId || sharing.length > 1) {
+      // Split it off into a group of its own, so only this pane goes.
+      const group = createRunGroup(label)
+      const previous = pane.runGroupId
+      pane.runGroupId = group.id
+      if (!(await persistPaneRunGroup(pane, group.id))) {
+        pane.runGroupId = previous
+        throw new Error('move-failed: the pane could not be given a tab group of its own')
+      }
+      groupId = group.id
+    }
+    recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} moved ${label} to a window of its own`, paneId: pane.id })
+    notifyRestore.toast(i18n.global.t('msg.agent-moved-pane', { caller, name: label }), { type: 'info', duration: 8000 })
+    await window.agentTeam?.detachGroup?.({
+      groupId,
+      workspacePath: pane.workspacePath,
+      bounds: { x: 120, y: 120, width: 900, height: 700 },
+    })
+    return { group_id: groupId, panes: [{ pane_id: pane.id, workspace_path: pane.workspacePath }] }
+  }
+  if (!isDetachedWindow) {
+    throw new Error('pane-needs-workspace-move: a single pane moves back only from a detached window')
+  }
+  const moved = panes.value.map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath }))
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} merged this window back into the main window` })
+  // After the answer is on its way: merging back closes this window.
+  setTimeout(() => { reattachThisWindow() }, 300)
+  return { group_id: detachedGroupId, panes: moved }
+})
+// MCP window_move_pane, mode "workspace" (DESIGN-C S4b): this window lets go
+// of a project it holds, with every pane of it and every CLI still running —
+// "new" through the sidebar's drag-out (detachWorkspace, a window of its own),
+// a window id through the plain "Close workspace" (the backend then has that
+// window adopt it, or gives it back here). The window keeps at least one
+// project. ui_invoke cannot reach this (window_move_pane only).
+registerCommand('ui.workspace.moveToWindow', async (args) => {
+  const a = (args ?? {}) as { path?: string; to?: string; caller_address?: string }
+  const path = typeof a.path === 'string' ? a.path : ''
+  if (!path) throw new Error('path-required: ui.workspace.moveToWindow requires path')
+  if (isDetachedWindow) throw new Error('window-cannot-hold: a detached group window does not hold its project')
+  const held = workspaceOrder.value.find((w) => normWs(w) === normWs(path))
+  if (!held) throw new Error(`workspace-not-open: this window does not hold ${path}`)
+  if (workspaceOrder.value.length < 2) {
+    throw new Error(`last-workspace: ${held} is this window's only project; it would leave the window empty`)
+  }
+  if (pipeline.state === 'running' && normWs(pipelineRunWorkspace || pipeline.workspacePath) === normWs(held)) {
+    throw new Error(`pipeline-running: a pipeline is running in ${held}; only the user can move it`)
+  }
+  const caller = a.caller_address || 'an agent'
+  // `realized`: the destination attaches exactly these again at once.
+  const moved = panes.value
+    .filter((p) => normWs(p.workspacePath) === normWs(held))
+    .map((p) => ({ pane_id: p.id, workspace_path: p.workspacePath, realized: p.realized }))
+  if (a.to === 'new') await detachWorkspace(held, 120, 120)
+  else await closeWorkspaceKeepPanes(held)
+  if (workspaceOrder.value.some((w) => normWs(w) === normWs(held))) {
+    throw new Error(`move-failed: ${held} is still in this window`)
+  }
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} moved ${held} to another window; its CLIs keep running` })
+  notifyRestore.toast(i18n.global.t('msg.agent-moved-workspace', { caller, name: wsDisplayName(held) }), { type: 'info', duration: 8000 })
+  return { path: held, panes: moved }
+})
+// MCP window_move_pane, mode "workspace" into an EXISTING window (DESIGN-C
+// S4b, §3.4): this window takes the project the source just let go of and
+// attaches its panes again at once, as a detachWorkspace hand-off does — the
+// panes that were attached in the source are opened the way a click on their
+// card opens them (ui.pane.open: a live PTY is re-attached, nothing is
+// respawned), so none of them goes unread. Also the way back when the
+// destination refused. ui_invoke cannot reach this (window_move_pane only).
+registerCommand('ui.workspace.receive', async (args) => {
+  const a = (args ?? {}) as { path?: string; paneIds?: unknown; caller_address?: string }
+  const path = typeof a.path === 'string' ? a.path : ''
+  if (!path) throw new Error('path-required: ui.workspace.receive requires path')
+  if (isDetachedWindow) throw new Error('window-cannot-hold: this is a detached group window, which shows one workspace only')
+  if (!isLocalWorkspace(path)) {
+    // The source let go of it a moment ago; main may not have heard yet. Wait
+    // for that rather than refuse a move that is about to be legal.
+    let elsewhere = (await window.agentTeam?.workspaceHolder?.(path)) ?? ''
+    for (let i = 0; elsewhere && i < 15; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      elsewhere = (await window.agentTeam?.workspaceHolder?.(path)) ?? ''
+    }
+    if (elsewhere) throw new Error(`workspace-in-other-window: ${elsewhere}`)
+    adoptWorkspace(path)
+    if (!isLocalWorkspace(path)) throw new Error(`move-failed: this window did not take ${path}`)
+  }
+  const resp = await sendQuiet<ProjectPayload>('project.peek', { workspace_path: path })
+  if (resp) await restoreWorkspacePanes(resp, path)
+  const ids = Array.isArray(a.paneIds) ? a.paneIds.filter((id): id is string => typeof id === 'string' && !!id) : []
+  const opened: string[] = []
+  const notOpened: { paneId: string; error: string }[] = []
+  for (const id of ids) {
+    const outcome = await invokeCommand('ui.pane.open', { paneId: id })
+    const answer = outcome.result as { paneId?: string; realized?: boolean } | undefined
+    if (outcome.ok && answer?.realized) opened.push(answer.paneId ?? id)
+    else notOpened.push({ paneId: id, error: outcome.error ?? 'not opened' })
+  }
+  const caller = a.caller_address || 'an agent'
+  recordDiagnostic({ level: 'info', code: 'agent.window-action', message: `${caller} moved ${path} into this window` })
+  notifyRestore.toast(i18n.global.t('msg.agent-moved-workspace-in', { caller, name: wsDisplayName(path) }), { type: 'info', duration: 8000 })
+  return { path, prepared: 'adopted', opened, not_opened: notOpened }
 })
 registerCommand('ui.layout.setMode', (args) => {
   const mode = (args as { mode?: LayoutMode } | undefined)?.mode
@@ -10819,8 +11367,14 @@ useUiActionBus({
   currentWorkspace,
   buildSnapshot: buildUiActionSnapshot,
   ownsWorkspace: isLocalWorkspace,
+  hostsPane: (id) => panes.value.some((p) => p.id === id),
+  // What closeActivePane / rebuildFocusedPane would act on, so neither can be
+  // aimed at the calling pane by way of the user's focus.
+  focusedPaneIds: () => [focusPaneId.value, effectiveFocusPaneId.value].filter((id): id is string => !!id),
+  isPipelineSlot: (id) => panes.value.some((p) => p.id === id && p.origin === 'pipeline'),
+  heldWorkspaces: () => (isDetachedWindow ? [] : workspaceOrder.value),
   connectionStatus: backend.status,
-  accountActions: { signIn: agentSignIn },
+  accountActions: { signIn: agentSignIn, switch: agentAccountSwitch },
 })
 
 // MCP cli_account_sign_in (ui.accounts.signIn — on the bus, never in the
@@ -10856,9 +11410,45 @@ async function agentSignIn(args: Record<string, unknown>, callerPaneId: string, 
   const caller = panes.value.find((p) => p.id === callerPaneId)
   notifyRestore.toast(
     i18n.global.t('settings.accounts.cli.agent-login-started', {
-      agent: caller?.messagingName || caller?.customName || callerPaneId,
+      // Agent-written text: invisible characters shown, as in the dialog.
+      agent: revealInvisibleText(caller?.messagingName || caller?.customName || callerPaneId),
       account: accountLabel(cliProfilesApi, agentKey, profileId, i18n.global.t),
-      reason: String(args.reason ?? ''),
+      reason: revealInvisibleText(String(args.reason ?? '')),
+    }),
+    { type: 'info' },
+  )
+  return outcome
+}
+
+// MCP cli_account_switch (ui.accounts.switch — on the bus, never in the
+// command registry; plan mcp_614482 P3): nothing switches until the user says
+// yes in AgentAccountSwitchConfirmDialog. The switch itself is the window's
+// own cliAccountSwitch, called with the vendor and the account only — no
+// force, no option — so its own restart and live-drift questions still go to
+// the user. The follow-switch offer is the user's own flow and is not made here.
+const agentAccountSwitchConfirm = createSignInConfirm<AgentAccountSwitchConfirmRequest>()
+async function agentAccountSwitch(args: Record<string, unknown>, callerPaneId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const outcome = await runAgentAccountSwitch(args, callerPaneId, {
+    accounts: cliProfilesApi,
+    callerPane: (id) => {
+      const pane = panes.value.find((p) => p.id === id)
+      return pane ? { workspacePath: pane.workspacePath, name: pane.messagingName || pane.customName || id } : undefined
+    },
+    accountLabel: (key, id) => accountLabel(cliProfilesApi, key, id, i18n.global.t),
+    confirm: agentAccountSwitchConfirm.ask,
+    switchAccount: (agentKey, profileId) => cliAccountSwitch(agentKey, profileId),
+    now: () => Date.now(),
+  }, signal)
+  if (outcome.status !== 'switched' && outcome.status !== 'switched-signed-out') return outcome
+  const caller = panes.value.find((p) => p.id === callerPaneId)
+  notifyRestore.toast(
+    i18n.global.t('settings.accounts.cli.agent-switch-done', {
+      // Agent-written text: invisible characters shown, as in the dialog.
+      agent: revealInvisibleText(caller?.messagingName || caller?.customName || callerPaneId),
+      vendor: String(args.agentKey ?? ''),
+      from: String(outcome.from ?? ''),
+      to: String(outcome.to ?? ''),
+      reason: revealInvisibleText(String(args.reason ?? '')),
     }),
     { type: 'info' },
   )
@@ -11247,6 +11837,7 @@ interface ProjectPane {
    *  fields existed. */
   last_turn_state?: string
   report_to?: string
+  report_cross?: boolean
   report_pending?: boolean
   /** The launch the pane's CLI last spawned in ('' after an idle reclaim).
    *  Absent on records written before the field existed. */
@@ -12786,6 +13377,7 @@ async function performRealizeRestoredPane(
       if (revived && saved.report_pending && saved.report_to) {
         revived.spawnedByName = saved.report_to
         revived.spawnReportPending = true
+        if (saved.report_cross) revived.spawnedCrossWorkspace = true
       }
     } else {
       // A fresh restore starts a NEW conversation in a marker-camp CLI, and
@@ -13617,6 +14209,7 @@ async function activateStage(index: number): Promise<void> {
         index, slot.label) +
       sessionMarkerLine(pane.sessionMarker)
     pipelineLog(`${tag} ➜ injecting kickoff (${kickoff.length} chars)`)
+    let held = false
     const kickoffResult = await runPipelineKickoff({
       inject: async () => {
         const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
@@ -13625,14 +14218,32 @@ async function activateStage(index: number): Promise<void> {
       },
       sleep,
       paneAlive: () => paneAlive(pane.id),
-      onHeld: () => pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`),
+      onHeld: () => {
+        held = true
+        pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
+      },
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+      // A resume after a held kickoff: submit the copy still in the box.
+      heldCopy: heldKickoffCopy(pane.id, kickoff),
     })
     if (kickoffResult.cancelled) {
       releaseStageSlot(index, pane.id, `slot "${slot.label}" pane gone before its watcher armed`)
       return
     }
     const ok = kickoffResult.sent
+    const failure = held
+      ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
+      : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`
+    // Another slot failed the run (or the user stopped it) while this kickoff
+    // was in flight: record nothing and arm nothing for a run that is over.
+    const runMovedOn = (): boolean => pipeline.state !== 'running' || pipeline.stageIndex !== index
+    if (runMovedOn()) {
+      if (!ok) {
+        if (held) heldKickoffPanes.add(pane.id)
+        void failRunOnKickoff(index, slot.label, failure, held)
+      }
+      return
+    }
     // Wire the Manager router HERE — the first statement after the kickoff
     // injection resolves, ahead of the render sync and the two backend round
     // trips below. The floor must be taken after the kickoff (its echo carries
@@ -13647,9 +14258,8 @@ async function activateStage(index: number): Promise<void> {
     // the floor. When ok is false the echo was never observed and may still be
     // in flight (this app has a known late paste-ack), and a floor taken now
     // would sit below it — putting the protocol's sentinels back above the
-    // floor, which is the failure the floor exists to prevent. That case takes
-    // the deferred arm after the round trips below, which is the position this
-    // used to have for every slot.
+    // floor, which is the failure the floor exists to prevent. That case ends
+    // the run below instead (#448), so no floor is taken for it.
     if (managerSlot) {
       const router = ensureStageRouter(index)
       if (slot === managerSlot) router.managerPaneId = pane.id
@@ -13665,11 +14275,8 @@ async function activateStage(index: number): Promise<void> {
       slot_label: slot.label,
       kickoff_status: ok ? 'sent' : 'failed',
     })
-    if (!ok) {
-      pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts — arming watcher anyway`)
-    } else {
-      pipelineLog(`${tag} ✓ kickoff sent`)
-    }
+    if (ok) pipelineLog(`${tag} ✓ kickoff sent`)
+    else pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
 
     // For question-interactive stages (P01): capture scanFrom AFTER kickoff is
     // confirmed so the watcher only scans content produced after the kickoff.
@@ -13681,6 +14288,16 @@ async function activateStage(index: number): Promise<void> {
 
     // Notify backend: mark this stage running (and previous completed).
     // Same role as pipeline.stage_spawn in the old spawnPipelineStage flow.
+    // A failed kickoff sends it too, before failing the run: it is the only
+    // call that marks the previous stage completed, and without it a resume
+    // re-ran that stage instead of this one (#448).
+    if (runMovedOn()) {
+      if (!ok) {
+        if (held) heldKickoffPanes.add(pane.id)
+        void failRunOnKickoff(index, slot.label, failure, held)
+      }
+      return
+    }
     const stageResp = await sendQuiet<ProjectPayload>('pipeline.stage_spawn', {
       workspace_path: pipeline.workspacePath,
       stage_index: index,
@@ -13690,16 +14307,20 @@ async function activateStage(index: number): Promise<void> {
     })
     applyProjectPaths(stageResp ?? undefined)
 
-    // Deferred floor for an unverified kickoff — see the note above the router
-    // wiring. The round trips just awaited are the settle time a late echo
-    // needs to land below it.
-    if (managerSlot && !ok) {
-      const router = ensureStageRouter(index)
-      armRouterCursors(router, pane.id)
+    if (!ok) {
+      // A slot without its task cannot finish the stage, and a watcher armed
+      // over it kept the run `running` with nothing to show for it (#448).
+      if (held) heldKickoffPanes.add(pane.id)
+      await failRunOnKickoff(index, slot.label, failure, held)
+      return
     }
-
+    if (runMovedOn()) return
     startStageWatcher(index, pane.id, kickoffScanFrom)
   }))
+
+  // A run failed by one of this stage's kickoffs is over: no router poll, and
+  // no CLIs spawned for a next stage it will never reach.
+  if (pipeline.state !== 'running' || pipeline.stageIndex !== index) return
 
   if (managerSlot) {
     startRouterPoll(index)
@@ -14085,6 +14706,72 @@ async function onPipelineAbort(): Promise<void> {
   if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
 }
 
+/** Panes whose last pipeline kickoff was held in their input box, unsent
+ *  (#448). A resume must not paste the same kickoff on top of that copy. */
+const heldKickoffPanes = new Set<string>()
+
+/** For a pane in heldKickoffPanes (the flag is consumed): read whether the
+ *  box still holds this kickoff, and submit it with Enter — the same framed-box
+ *  check the spawn kickoff trusts. undefined for every other pane. */
+function heldKickoffCopy(paneId: string, text: string): { holds: () => boolean; submit: () => Promise<boolean> } | undefined {
+  if (!heldKickoffPanes.delete(paneId)) return undefined
+  const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
+  const screenTail = (): string => {
+    const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
+    return read ? read(SUBMIT_SCREEN_LINES) : ''
+  }
+  return {
+    holds: () => composerHoldsPayload(screenTail(), tail),
+    submit: () => submitHeldCopy({
+      held: () => framedComposerHolds(screenTail(), tail),
+      pressEnter: async () => {
+        const sid = paneRefs[paneId]?.sessionId
+        if (!sid || !paneAlive(paneId)) return false
+        try {
+          await backend.send('terminal.input', { terminal_session_id: sid, data: '\r' })
+          return true
+        } catch {
+          return false
+        }
+      },
+      sleep,
+      now: Date.now,
+      confirmMs: SUBMIT_CONFIRM_MS,
+    }),
+  }
+}
+
+/** A slot's kickoff never reached its agent: fail its node with the reason and
+ *  end the run as failed, instead of leaving it `running` around a pane that
+ *  never got its task (#448). Like an abort, the panes stay alive for a
+ *  resume. The first failing slot ends the run; later ones only fail their
+ *  own node. */
+async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: string, held = false): Promise<void> {
+  // A kickoff that finishes late, after the user stopped this run and another
+  // one moved to a different stage, must not fail that one.
+  if (pipeline.state === 'running' && pipeline.stageIndex !== stageIndex) return
+  pipelineDag.slotFailed(stageIndex, slotLabel, reason)
+  if (pipeline.state !== 'running') return
+  const stageLabel = stagesApi.stages.value[stageIndex]?.id ?? String(stageIndex + 1)
+  pipelineLog(`Stage ${stageLabel}/${slotLabel} ✕ ${reason} — pipeline failed`)
+  tearDownPipelineOrchestration()
+  await pipelineDag.end('failed', `run stopped: slot "${slotLabel}" failed (${reason})`)
+  const resp = await sendQuiet<ProjectPayload>('pipeline.abort', {
+    workspace_path: pipeline.workspacePath,
+    reason: 'failed'
+  })
+  applyProjectPaths(resp ?? undefined)
+  // A held kickoff is left for resume to submit: one sent by hand would be
+  // pasted again by the resume.
+  notifyRestore.toast(
+    held
+      ? i18n.global.t('error.pipeline-kickoff-held', { stage: stageLabel, slot: slotLabel })
+      : i18n.global.t('error.pipeline-kickoff-failed', { stage: stageLabel, slot: slotLabel, reason }),
+    { type: 'error' },
+  )
+  if (pipeline.workspacePath) await onWorkspaceCheck(pipeline.workspacePath)
+}
+
 /** Approve the gate the run is paused on and carry on with the hand-off. */
 async function onPipelineGateApprove(gateId: string): Promise<boolean> {
   if (pipeline.state !== 'running') return false
@@ -14412,6 +15099,10 @@ const stageCompletions = new Map<number, StageSlotTracker>()
 // Map — NOT on the watcher — so it survives cancelWatcher(), letting the stall
 // path (whose watcher is already cancelled) still judge slotFinished correctly.
 const paneArmedAt = new Map<string, number>()
+/** Each pane's last reply as its reader reported it (turn_complete text), with
+ *  the CLI's own time for it. A finished slot's {{prev.summary}} is taken from
+ *  here — see slotSummarySource. */
+const paneLastReply = new Map<string, { text: string; at: number }>()
 
 // ── Background system notifications (CLI done / needs input) ─────────────────
 // Native OS notification when a pane's turn completes or it needs the user's
@@ -14504,7 +15195,7 @@ const sessionGhostHealGate = createGhostHealGate(async (paneId, pinnedSessionId)
 // is working; turn_complete = its turn ended. We timestamp both per pane; the
 // completion logic reads these instead of guessing from the TUI buffer.
 backend.on('agent.activity', (raw) => {
-  const ev = raw as { event_type?: string; pane_id?: string; vendor?: string; session_id?: string; detail?: string; text?: string; timestamp?: string; notification_type?: string; superseded?: boolean; pending_subagents?: number }
+  const ev = raw as { event_type?: string; pane_id?: string; vendor?: string; session_id?: string; detail?: string; text?: string; timestamp?: string; notification_type?: string; tool_key?: string; superseded?: boolean; pending_subagents?: number }
   if (!ev?.pane_id) return
   // QUESTION badge: "the agent asked you something and is waiting". Decided in
   // one place for both event types because both carry a half of it — the turn
@@ -14525,7 +15216,7 @@ backend.on('agent.activity', (raw) => {
   const questionAction = questionActionFor(ev)
   if (questionAction === 'raise') paneRefs[ev.pane_id]?.markQuestion?.()
   else if (questionAction === 'clear') paneRefs[ev.pane_id]?.clearQuestion?.()
-  // Background tasks the CLI keeps running past its turn end (claude's reader):
+  // Background tasks the CLI keeps running past its turn end (claude's and qwen's readers):
   // they hold the RUNNING badge until the transcript reports them finished.
   if (ev.detail === 'background:start' || ev.detail === 'background:end') {
     paneRefs[ev.pane_id]?.noteBackgroundTasks?.(
@@ -14606,6 +15297,11 @@ backend.on('agent.activity', (raw) => {
     // turn_complete (Claude Stop hook, thinking-only record, Codex cross-batch)
     // must never be judged against a previous turn's text.
     judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    if (ev.text && !markerReply && !isInjectedMessageText(ev.text)) {
+      const at = ev.timestamp ? Date.parse(ev.timestamp) : NaN
+      paneLastReply.set(ev.pane_id, { text: ev.text, at: Number.isNaN(at) ? Date.now() : at })
+    }
+    if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
     // the resume prompt again (runs before the poll's turn-complete continue).
@@ -14642,8 +15338,10 @@ backend.on('agent.activity', (raw) => {
   } else if (ev.event_type === 'agent_active') {
     // idle_prompt fires about a minute after EVERY finished turn: the pane is
     // waiting, not working. Stamping the clocks with it made isTurnInFlight
-    // read a finished pane as mid-turn and hold its queued messages.
-    if (ev.notification_type !== 'idle_prompt') {
+    // read a finished pane as mid-turn and hold its queued messages. A tool
+    // result (async hook) can land after Stop for the same effect, and only
+    // releases a permission hold below.
+    if (ev.notification_type !== 'idle_prompt' && !isToolResultHook(ev.detail)) {
       // First activity after the last turn end = this turn's start. The quota
       // failover's settle needs it: a turn that began under the old account and
       // finished under the new one is the old account's work.
@@ -14686,8 +15384,9 @@ backend.on('agent.activity', (raw) => {
         requestLlmPaneName(ev.pane_id, ev.text)
       }
     }
-    // A new turn re-arms 'done' notifications for this pane.
-    sysNotify.markActive(ev.pane_id)
+    // A new turn re-arms 'done' notifications for this pane. A late tool result
+    // is not one: it would clear the Dock badge the finished turn raised.
+    if (!isToolResultHook(ev.detail)) sysNotify.markActive(ev.pane_id)
     // Claude's Notification hook (user attention requested) arrives as
     // agent_active with detail 'hook:notification'. It is also the only signal
     // that separates "parked on the user" from "done": the prompt paints once
@@ -14704,7 +15403,10 @@ backend.on('agent.activity', (raw) => {
       // once per turn on top of the existing done notification. Builds that
       // send no type at all keep the old always-notify behaviour rather than
       // silently losing a signal the user may already rely on.
-      if (awaiting || !ev.notification_type) notifyAttention(ev.pane_id)
+      // One permission box reports through this hook AND PermissionRequest, in
+      // either order: chime only for whichever lands first.
+      const alreadyWaiting = awaiting && paneRefs[ev.pane_id]?.permissionWaitLive?.() === true
+      if ((awaiting && !alreadyWaiting) || !ev.notification_type) notifyAttention(ev.pane_id)
       if (awaiting) {
         paneRefs[ev.pane_id]?.markNeedsInput?.()
       } else if (notificationEndsAwaiting(ev.notification_type)) {
@@ -14713,6 +15415,19 @@ backend.on('agent.activity', (raw) => {
         // stays excluded from messaging and dispatch — indefinitely.
         paneRefs[ev.pane_id]?.clearNeedsInput?.()
       }
+    }
+    // Claude's PermissionRequest hook opens a hold on AWAITING that the box's own
+    // repaints cannot settle away; see permissionHoldActionFor for what ends it.
+    const holdAction = permissionHoldActionFor(
+      ev,
+      paneRefs[ev.pane_id]?.awaitingHeld?.() ?? { since: 0, key: '' },
+    )
+    if (holdAction === 'hold') {
+      // The Notification hook may have reported this same box first.
+      if (paneRefs[ev.pane_id]?.permissionWaitLive?.() !== true) notifyAttention(ev.pane_id)
+      paneRefs[ev.pane_id]?.holdNeedsInput?.(ev.tool_key ?? '')
+    } else if (holdAction === 'release') {
+      paneRefs[ev.pane_id]?.releaseNeedsInputHold?.()
     }
     // Clear the restore-mode badge once the user interacts with the pane.
     const histEntry = spawnHistory.value.find((e) => e.paneId === ev.pane_id)
@@ -14783,6 +15498,20 @@ backend.on('agent.activity', (raw) => {
 // buffer question pre-check owns that (it advances scanFrom and dedups); we only
 // DEFER completion when the turn also asked a real question, preserving
 // "question wins over sentinel" without a second enqueue path.
+/** What a finished slot hands downstream as {{prev.summary}} (#448): its own
+ *  last reply. The screen tail it used to be carries spinners, status lines and
+ *  repeated blocks. A reply from before the slot was armed belongs to an
+ *  earlier task (its role prompt, a previous stage), and a vendor whose reader
+ *  reports no turn text has nothing else, so both keep the screen tail. */
+function slotSummarySource(paneId: string, stageIndex: number): string {
+  const reply = paneLastReply.get(paneId)
+  // The later arm wins: a pane kept from an earlier stage still holds that
+  // stage's watcher arm when a Manager-mode stage arms it through its router.
+  const armedAt = Math.max(paneArmedAt.get(paneId) ?? 0, stageRouters.get(stageIndex)?.armedAt ?? 0)
+  if (reply && armedAt > 0 && reply.at >= armedAt) return reply.text
+  return (paneRefs[paneId]?.cleanBuffer as unknown as string) ?? ''
+}
+
 function judgeTurnText(paneId: string, text: string, timestamp: string): void {
   const watcher = watchers.get(paneId)
   if (!watcher || watcher.cancelled) return
@@ -14908,6 +15637,27 @@ const SEEN_SPAWN_REQUEST_IDS_CAP = 200
 
 // cli_open_agent wants a pane opened. Every window sees this; only the one
 // owning the requesting pane answers (handleMcpSpawnRequest bails otherwise).
+// The caller's own window hears what its agent did to another window
+// (window_close), with an undo that reopens each project it held.
+backend.on('agent.window_action', (raw) => {
+  const ev = (raw ?? {}) as { tool?: string; caller?: string; workspaces?: string[]; panes_left_running?: string[] }
+  if (ev.tool !== 'window_close') return
+  const paths = Array.isArray(ev.workspaces) ? ev.workspaces.filter((p) => typeof p === 'string' && p) : []
+  notifyRestore.toast(
+    i18n.global.t('msg.agent-closed-window', {
+      caller: ev.caller || 'an agent',
+      names: paths.map((p) => wsDisplayName(p)).join(', '),
+      count: Array.isArray(ev.panes_left_running) ? ev.panes_left_running.length : 0,
+    }),
+    {
+      type: 'info',
+      duration: 12000,
+      ...(paths.length
+        ? { action: { label: i18n.global.t('msg.undo'), run: () => { for (const p of paths) void window.agentTeam?.openMainWindow?.({ workspace_path: p }) } } }
+        : {}),
+    },
+  )
+})
 backend.on('agent_spawn.request', (raw) => {
   const ev = raw as {
     request_id?: string
@@ -14930,6 +15680,8 @@ backend.on('agent_spawn.request', (raw) => {
     resume_spawned_by?: string
     resume_run_group_id?: string
     run_group_id?: string
+    cross_workspace?: boolean
+    parent_address?: string
   }
   // An external caller (no requesting pane) addresses this by target_workspace
   // instead — accept the event as long as one of the two identifies an owner.
@@ -14953,6 +15705,8 @@ backend.on('agent_spawn.request', (raw) => {
     resume_spawned_by: ev.resume_spawned_by ?? '',
     resume_run_group_id: ev.resume_run_group_id ?? '',
     run_group_id: ev.run_group_id ?? undefined,
+    cross_workspace: ev.cross_workspace === true,
+    parent_address: ev.parent_address ?? '',
   })
 })
 
@@ -15070,9 +15824,30 @@ const convenience = useConvenience(backend, {
 /** The undo on an "an agent disabled / enabled a Navide plugin" row: the
  *  user's own Extensions switch, set back (B2-c). */
 async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise<void> {
+  if (action.kind === 'plugin-staged-apply') return applyStagedPluginPackage(action)
+  if (action.kind === 'plugin-switch-back') return revertPluginSwitch(action)
   try {
     // Only what the agent did: if the user changed it since, leave it be.
     const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (action.kind === 'plugin-agent-downgrade') {
+      // O1: back to the version an agent's update replaced.
+      const step = pluginAgentDowngradeStep(action, installed)
+      if (step === null) {
+        notifyRestore.toast(i18n.global.t('plugin-agent.notice.undo-stale'), { type: 'info' })
+        return
+      }
+      if (step === 'discard') await window.agentTeam?.plugins?.discardCandidate?.(action.pluginId)
+      else {
+        const consent = await confirmLocalRollback(installed, action.pluginId, action.fromVersion)
+        if (consent === null) return
+        await window.agentTeam?.plugins?.rollback?.(action.pluginId, consent)
+      }
+      notifyRestore.toast(
+        i18n.global.t('plugin-agent.notice.downgraded', { plugin: action.pluginId, version: action.fromVersion }),
+        { type: 'info' },
+      )
+      return
+    }
     if (!pluginAgentUndoApplies(action, installed)) {
       notifyRestore.toast(i18n.global.t('plugin-agent.notice.undo-stale'), { type: 'info' })
       return
@@ -15081,6 +15856,81 @@ async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise
   } catch (error) {
     notifyRestore.toast(
       i18n.global.t('plugin-agent.notice.undo-failed', { error: error instanceof Error ? error.message : String(error) }),
+      { type: 'error' },
+    )
+  }
+}
+
+/** L4: going back to a kept file version is consented to again, with its
+ *  disclosure, in Settings → Navide Plugins. Returns the rollback options for
+ *  any other target, or null after sending the user there. */
+async function confirmLocalRollback(
+  installed: ReadonlyArray<{ id: string; rollbackNeedsConsent?: true }>,
+  pluginId: string,
+  version: string,
+): Promise<{ consentConfirmed?: boolean } | null> {
+  if (installed.find((pkg) => pkg.id === pluginId)?.rollbackNeedsConsent !== true) return {}
+  // Review M3: that consent shows the kept version's disclosure, which lives
+  // in Settings → Navide Plugins; this row only takes the user there.
+  closePopover()
+  openSettingsAt('extensions')
+  notifyRestore.toast(i18n.global.t('settings.extensions.rollback.consentInSettings', { id: pluginId, version }), { type: 'info' })
+  return null
+}
+
+/** "Back to vA" on a switch row (L3): the rollback in Settings → Navide
+ *  Plugins, only while the switch it names is still what is installed. */
+async function revertPluginSwitch(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-switch-back' }>,
+): Promise<void> {
+  try {
+    const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (!pluginSwitchBackApplies(action, installed)) {
+      notifyRestore.toast(i18n.global.t('plugin-switch.notice.stale'), { type: 'info' })
+      return
+    }
+    const consent = await confirmLocalRollback(installed, action.pluginId, action.fromVersion)
+    if (consent === null) return
+    const reverted = await window.agentTeam?.plugins?.rollback?.(action.pluginId, consent)
+    notifyRestore.toast(
+      i18n.global.t('plugin-switch.notice.reverted', {
+        plugin: action.pluginId,
+        version: reverted?.packageVersion ?? action.fromVersion,
+      }),
+      { type: 'info' },
+    )
+  } catch (error) {
+    notifyRestore.toast(
+      i18n.global.t('plugin-switch.notice.failed', { error: error instanceof Error ? error.message : String(error) }),
+      { type: 'error' },
+    )
+  }
+}
+
+/** "Apply now" on a staged package row: what Restart does in Settings →
+ *  Navide Plugins, for exactly the version the row names. */
+async function applyStagedPluginPackage(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-staged-apply' }>,
+): Promise<void> {
+  try {
+    const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (!pluginStagedApplyApplies(action, installed)) {
+      announcements.dropPluginStagedUpdate(action.pluginId)
+      notifyRestore.toast(i18n.global.t('plugin-staged.notice.stale'), { type: 'info' })
+      return
+    }
+    const applied = await window.agentTeam?.plugins?.restart?.(action.pluginId)
+    announcements.dropPluginStagedUpdate(action.pluginId)
+    notifyRestore.toast(
+      i18n.global.t('plugin-staged.notice.applied', {
+        plugin: action.pluginId,
+        version: applied?.packageVersion ?? action.stagedVersion,
+      }),
+      { type: 'info' },
+    )
+  } catch (error) {
+    notifyRestore.toast(
+      i18n.global.t('plugin-staged.notice.failed', { error: error instanceof Error ? error.message : String(error) }),
       { type: 'error' },
     )
   }
@@ -15637,8 +16487,20 @@ function computeStageSlotSignals(stageIndex: number): SlotSignal[] {
       // that true after the block lifts, which quotaBlocked alone cannot.
       quotaBlocked: paneUsageLimited(p.id),
       quotaSeenAt: p.usageLimitSeenAt ?? 0,
-      turnSourceAt: paneTurnCompleteSourceAt.get(p.id) ?? 0
+      turnSourceAt: paneTurnCompleteSourceAt.get(p.id) ?? 0,
+      backgroundRunning: paneBackgroundRunning(p.id)
     }
+  })
+}
+
+// Background work this pane's CLI keeps running past its turn end (claude's
+// and qwen's readers, claude's hooks). Read by the pipeline's slot verdicts
+// only; a vendor that reports none is never held.
+function paneBackgroundRunning(paneId: string): boolean {
+  return backgroundWorkPending({
+    liveTasks: paneRefs[paneId]?.hasLiveBackgroundTasks?.() === true,
+    subagents: panePendingSubagents.get(paneId),
+    now: Date.now(),
   })
 }
 
@@ -15682,6 +16544,9 @@ interface StageRouter {
   /** True once the watchdog raised a stall for this stage, so the 4s poll does
    *  not re-raise it every tick. Reset by continueWaitingStall. */
   watchdogFired: boolean
+  /** DISPATCH blocks already routed (target + message, whitespace dropped).
+   *  The screen scan and the Manager's reply text can both carry one block. */
+  routedDispatches: Set<string>
 }
 const stageRouters = new Map<number, StageRouter>()
 
@@ -15703,6 +16568,7 @@ function ensureStageRouter(stageIndex: number): StageRouter {
       pollHandle: null,
       armedAt: 0,
       watchdogFired: false,
+      routedDispatches: new Set(),
     }
     stageRouters.set(stageIndex, r)
   }
@@ -15731,7 +16597,8 @@ function armRouterCursors(router: StageRouter, paneId: string): void {
  *  scan, so the pair stays consistent. Without this the 128KB cap shifts every
  *  absolute index by the dropped prefix and the router scans past the worker's
  *  ASK block / the Manager's DISPATCH or STAGE-DONE, which is unrecoverable —
- *  unlike the watcher, the router has no turn-text fallback of any kind. */
+ *  unlike the watcher, the router's only turn-text fallback is the Manager's
+ *  DISPATCH and READY (routeManagerTurnText). */
 function rebaseRouterCursors(router: StageRouter, paneId: string, bufLen: number): void {
   if (!routerObservationIsReal(paneId, bufLen, router.bufferAnchors)) return
   const obs: BufferObservation = { len: bufLen, bytesSeen: paneCleanBytes(paneId) }
@@ -16375,14 +17242,7 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     // kickoff echo that sits below the floor.
     const cursor = router.armedCursors.get(router.managerPaneId) ?? 0
     if (findSentinel(buf, MANAGER_READY_SENTINEL, cursor) >= 0) {
-      router.managerReady = true
-      pipelineLog(
-      `Stage ${stage.id} 🎯 Manager READY — ${i18n.global.t('label.pipeline-log-manager-ready', { count: router.preReadyQueue.length })}`,
-    )
-      const drain = router.preReadyQueue.splice(0)
-      for (const msg of drain) {
-        await injectManagerPane(router, msg)
-      }
+      await markManagerReady(router, stage.id, '')
     }
   }
 
@@ -16395,21 +17255,7 @@ async function managerRouterScan(stageIndex: number): Promise<void> {
     const { items: dispatches, newCursor } = parseDispatchBlocks(buf, cursor)
     router.cursors.set(router.managerPaneId, newCursor)
     for (const d of dispatches) {
-      const target = matchWorkerByLabel(router, d.to)
-      if (!target) {
-        pipelineLog(
-          `Stage ${stage.id} 🎯 dispatch ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`,
-        )
-        continue
-      }
-      const preview = d.message.slice(0, 50).replace(/\s+/g, ' ')
-      pipelineLog(`Stage ${stage.id} 🎯 → ${target.label}: ${preview}${d.message.length > 50 ? '…' : ''}`)
-      await injectPane(
-        target.paneId,
-        `[→ DISPATCH FROM Manager]\n${d.message}`,
-        `manager-dispatch:${target.label}`,
-        true
-      )
+      await routeManagerDispatch(router, stage.id, d)
     }
     // Scan from the armed floor, never from 0: the kickoff protocol prints
     // ---STAGE-DONE--- at line start, so a TUI that echoes the paste back
@@ -16445,6 +17291,67 @@ async function injectManagerPane(router: StageRouter, msg: PendingMessage): Prom
   if (!router.managerPaneId) return
   const text = `[→ ${msg.kind} FROM ${msg.fromLabel}]\n${msg.content}`
   await injectPane(router.managerPaneId, text, `${msg.kind.toLowerCase()}:${msg.fromLabel}`, true)
+}
+
+/** The Manager is coordinating: hand it the worker messages held until now.
+ *  `how` says what showed it, when that was not ---MANAGER-READY--- itself. */
+async function markManagerReady(router: StageRouter, stageId: string, how: string): Promise<void> {
+  if (router.managerReady) return
+  router.managerReady = true
+  pipelineLog(
+    `Stage ${stageId} 🎯 Manager READY${how} — ${i18n.global.t('label.pipeline-log-manager-ready', { count: router.preReadyQueue.length })}`,
+  )
+  const drain = router.preReadyQueue.splice(0)
+  for (const msg of drain) {
+    await injectManagerPane(router, msg)
+  }
+}
+
+/** Route one Manager DISPATCH to its worker, once: the screen scan and the
+ *  reply text can both carry the same block. A DISPATCH means the Manager is
+ *  coordinating, so one sent before ---MANAGER-READY--- implies it (#539).
+ *  Otherwise the workers' REPORTs stay held for a line the Manager may never
+ *  print, and every pane of the stage waits on another. */
+async function routeManagerDispatch(router: StageRouter, stageId: string, d: ParsedDispatch): Promise<void> {
+  const key = `${d.to.toLowerCase()}\u0000${d.message.replace(/\s+/g, '')}`
+  if (router.routedDispatches.has(key)) return
+  router.routedDispatches.add(key)
+  await markManagerReady(router, stageId, ' (implied by its DISPATCH)')
+  const target = matchWorkerByLabel(router, d.to)
+  if (!target) {
+    pipelineLog(
+      `Stage ${stageId} 🎯 dispatch ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`,
+    )
+    return
+  }
+  const preview = d.message.slice(0, 50).replace(/\s+/g, ' ')
+  pipelineLog(`Stage ${stageId} 🎯 → ${target.label}: ${preview}${d.message.length > 50 ? '…' : ''}`)
+  await injectPane(
+    target.paneId,
+    `[→ DISPATCH FROM Manager]\n${d.message}`,
+    `manager-dispatch:${target.label}`,
+    true
+  )
+}
+
+/** The Manager's reply, as its reader reported it at turn end, for the stage
+ *  router (#539). The router otherwise reads only the Manager's screen, where a
+ *  TUI's redraw can leave a DISPATCH block that does not parse; it was then
+ *  dropped without a trace. A replayed historical turn (backend restart) is
+ *  older than the router's arm and is ignored, as judgeTurnText does. */
+async function routeManagerTurnText(paneId: string, text: string, timestamp: string): Promise<void> {
+  if (!text || pipeline.state !== 'running') return
+  const router = stageRouters.get(pipeline.stageIndex)
+  const stage = stagesApi.stages.value[pipeline.stageIndex]
+  if (!router || !stage || router.finished || !router.armedAt || router.managerPaneId !== paneId) return
+  const eventMs = timestamp ? Date.parse(timestamp) : NaN
+  if (!Number.isNaN(eventMs) && eventMs < router.armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS) return
+  if (findSentinel(text, MANAGER_READY_SENTINEL, 0) >= 0) {
+    await markManagerReady(router, stage.id, ' (reply text)')
+  }
+  for (const d of parseDispatchBlocks(text, 0).items) {
+    await routeManagerDispatch(router, stage.id, d)
+  }
 }
 
 // ── Global Manager cross-stage router ────────────────────────────────────────
@@ -16497,6 +17404,14 @@ async function globalManagerRouterScan(): Promise<void> {
   const managerPaneId = globalManagerPaneId()
   if (!managerPaneId) return
   const gm = pipeline.globalManager!
+  // A single commander is the global Manager too, and its stage router already
+  // routes that stage: REPORTs held until READY, DISPATCH to its workers.
+  // Routing them here as well sent a REPORT past the READY queue and every
+  // DISPATCH twice (#539). Panes of other stages still cross over here.
+  const stageRouter = stageRouters.get(pipeline.stageIndex)
+  const ownedByStage = new Set<string>(
+    stageRouter?.managerPaneId === managerPaneId ? stageRouter.workerPaneIds.values() : [],
+  )
 
   // Scan all active Worker panes (any stage, not the Manager itself) for ASK/REPORT
   const workerPanes = panes.value.filter(
@@ -16504,6 +17419,7 @@ async function globalManagerRouterScan(): Promise<void> {
            !(p.stageId === gm.stageId && p.slotLabel === gm.slotLabel)
   )
   for (const wp of workerPanes) {
+    if (ownedByStage.has(wp.id)) continue
     const ref = paneRefs[wp.id]
     const buf: string = (ref?.cleanBuffer as unknown as string) ?? ''
     if (!buf) continue
@@ -16536,6 +17452,7 @@ async function globalManagerRouterScan(): Promise<void> {
       (p) => p.realized && p.origin === 'pipeline' && p.id !== managerPaneId &&
              p.slotLabel.toLowerCase() === d.to.toLowerCase()
     )
+    if (target && ownedByStage.has(target.id)) continue
     if (!target) {
       pipelineLog(`🎯 Global DISPATCH ${i18n.global.t('label.pipeline-log-slot-not-found', { slot: d.to })} — skip`)
       continue
@@ -16590,7 +17507,7 @@ function onStageSlotCompleted(
     pipelineDag.slotFinished(
       stageIndex,
       completedPane.slotLabel,
-      (paneRefs[paneId]?.cleanBuffer as unknown as string) ?? '',
+      slotSummarySource(paneId, stageIndex),
     )
   }
   // Audit trail (→ history.jsonl): every slot finish records its reason so a
@@ -17064,7 +17981,10 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
           // And once the block lifts, only the turn's own clock can tell the
           // failed turn from a real retry.
           quotaSeenAt: panes.value.find((p) => p.id === paneId)?.usageLimitSeenAt ?? 0,
-          turnSourceAt: paneTurnCompleteSourceAt.get(paneId) ?? 0
+          turnSourceAt: paneTurnCompleteSourceAt.get(paneId) ?? 0,
+          // A turn that ended while its background subagent / shell still
+          // runs is not this slot handing off — see paneBackgroundRunning.
+          backgroundRunning: paneBackgroundRunning(paneId)
         })
       ) {
         cancelWatcher(paneId)
@@ -19242,14 +20162,15 @@ async function onRenameWorkspace(path: string, name: string): Promise<void> {
  *  unable to close the project you are looking at only leaves you switching
  *  away first to do the same thing. The one thing it needs is somewhere to
  *  land — see below. */
-async function closeWorkspace(path: string): Promise<void> {
+async function closeWorkspace(path: string, opts: { confirmed?: boolean } = {}): Promise<void> {
   if (!path) return
   if (!workspaceOrder.value.some((w) => normWs(w) === normWs(path))) return
   // Ask BEFORE anything is torn down. Closing ends every CLI running in the
   // workspace: the pane records survive it, so a reopen brings the panes back,
   // but the turn each agent was in the middle of does not come with them — and
-  // the menu row alone does not say so.
-  if (confirmBeforeCloseWorkspace.value) {
+  // the menu row alone does not say so. `confirmed`: the caller already asked
+  // (ui.workspace.close asks every time, naming the agent that wants it).
+  if (confirmBeforeCloseWorkspace.value && !opts.confirmed) {
     const inWorkspace = panes.value.filter((p) => normWs(p.workspacePath) === normWs(path))
     const count = inWorkspace.length
     // Pipeline panes are unspawned below, so the plain wording — which now
@@ -20219,7 +21140,9 @@ async function setPaneCustomName(paneId: string, rawName: string): Promise<void>
   // handle prompts for a unique name (cancel abandons the whole rename);
   // clearing the title reverts the handle to the auto-title or vendor label.
   if (nextCustomName) {
-    const resolved = await resolveManualHandle(paneId, nextCustomName)
+    // The title keeps what the user typed; the messaging handle may not hold
+    // "/", the separator of <folder>/<pane> addresses (review #546).
+    const resolved = await resolveManualHandle(paneId, nextCustomName.replaceAll('/', '-'))
     if (resolved === null) return // cancelled → abandon (title unchanged too)
     const applied = messaging.setDerivedName(pane.id, resolved, pane.agentKey)
     if (applied) {
@@ -20290,6 +21213,9 @@ function setPaneAutoName(paneId: string, name: string, source: 'heuristic' | 'll
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || !name) return
   if (pane.customName || pane.nameLocked) return
+  // A pipeline slot pane keeps its slot label: the name is its messaging
+  // handle, and kickoffs address slots by label (#448).
+  if (pane.slotLabel) return
   if (pane.autoName && !(source === 'llm' && pane.autoNameSource !== 'llm')) return
   pane.autoName = name
   pane.autoNameSource = source
@@ -20342,6 +21268,8 @@ function requestLlmPaneName(paneId: string, rawMaterial: string): void {
   const material = stripCliSessionContext(rawMaterial)
   if (!pane || !pane.workspacePath || !material.trim()) return
   if (pane.customName || pane.nameLocked || pane.autoNameSource === 'llm') return
+  // The backend stores the model's title, so a slot pane must not ask (#448).
+  if (pane.slotLabel) return
   if (llmNameRequested.has(paneId)) return
   llmNameRequested.add(paneId)
   void (async () => {
@@ -20404,16 +21332,17 @@ const effectiveLayoutMode = computed<'grid' | 'spotlight' | 'sidebar' | 'fullscr
 // are a step change in width, and widening makes xterm reflow the scrollback.
 // A CLI that paints absolute-positioned full-width rows (claude) can never
 // repaint what reflow strands there — its redraw addresses the viewport only —
-// so the garbled history is permanent. Cap each pane at its grid-mode width on
-// the way in: the extra space is left blank instead of becoming columns, and
-// switching back is then a no-op resize. Set before the fit below, which is
-// what reads the cap. Panes stay uncapped in grid mode, where the container is
-// the width the user actually chose.
+// so the garbled history is permanent. Cap each pane at the cols it has now
+// (its grid-mode width, or the current width when switching between stage
+// modes) on the way in: the extra space is left blank instead of becoming
+// columns, and switching back to grid is then a no-op resize. Set before the
+// fit below, which is what reads the cap. Panes stay uncapped in grid mode,
+// where the container is the width the user actually chose. Widening the
+// window itself past the width it had on entry lifts the cap (see
+// onWindowResize) — and a pane that was lifted reflows when it goes back to
+// grid, the accepted cost of widening.
 watch(effectiveLayoutMode, (mode) => {
-  const capped = mode !== 'grid'
-  for (const ref of Object.values(paneRefs)) {
-    (ref as unknown as { lockCols?: (locked: boolean) => void })?.lockCols?.(capped)
-  }
+  stageWidthCap.enterMode(mode)
   void nextTick(() => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -21341,6 +22270,12 @@ function paneIsCommander(p: ActivePane): boolean {
     :request="agentSignInConfirm.pending.value"
     @answer="agentSignInConfirm.answer"
   />
+  <!-- An agent's cli_account_switch waits here for the user's yes. -->
+  <AgentAccountSwitchConfirmDialog
+    v-if="agentAccountSwitchConfirm.pending.value"
+    :request="agentAccountSwitchConfirm.pending.value"
+    @answer="agentAccountSwitchConfirm.answer"
+  />
   <RestoreScopeModal
     v-if="showRestoreScopeModal"
     :open="showRestoreScopeModal"
@@ -21370,7 +22305,7 @@ function paneIsCommander(p: ActivePane): boolean {
           <button class="boot-retry" @click="retryBackend">{{ $t('action.retry') }}</button>
         </template>
         <template v-else>
-          <div class="boot-spinner" aria-label="loading" />
+          <div class="boot-spinner" :aria-label="$t('label.loading')" />
           <div class="boot-status">
             <span>{{ $t(bootStatusKey) }}</span>
             <span class="boot-elapsed">{{ $t('label.boot-countdown', { seconds: bootCountdown }) }}</span>
@@ -22318,7 +23253,7 @@ function paneIsCommander(p: ActivePane): boolean {
       >
         <div class="float-pip-header" @mousedown.prevent="onPipDragStart">
           <span class="float-pip-title">
-            Agents ({{ auxiliaryListPanes.length }})
+            {{ $t('label.agents') }} ({{ auxiliaryListPanes.length }})
           </span>
           <button class="float-pip-toggle" @mousedown.stop @click="floatPipExpanded = !floatPipExpanded; clampPipPos()">
             {{ floatPipExpanded ? '▾' : '▸' }}

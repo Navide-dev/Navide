@@ -140,6 +140,8 @@ class PublishResponse(BaseModel):
     yanked: bool
     review_status: str = "approved"
     """'pending' when the namespace is review-required (not public yet)."""
+    notices: list[str] = []
+    """What this acceptance does not cover (a local Registry's skipped gates)."""
 
 
 class YankResponse(BaseModel):
@@ -177,3 +179,30 @@ class FeaturedResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class TestplaceVersionInfo(VersionInfo):
+    """A testplace artifact as its tester sees it (testplace_api.py)."""
+
+    expires_at: datetime | None = None
+    promotion_status: str | None = None
+
+
+class TestplaceExtension(BaseModel):
+    namespace: str
+    name: str
+    identity: str
+    display_name: str | None
+    description: str | None
+    publisher: str
+    trust_metadata: dict
+    trust_metadata_signature: str
+    versions: list[TestplaceVersionInfo]
+    """Installable testplace artifacts, newest version first."""
+    withdrawn: list[dict[str, str]] = []
+    """`{version, target}` of every testplace artifact taken back (yanked or
+    revoked), so a tester's App never keeps one (T-MED-1). Testers only."""
+
+
+class TestplaceListResponse(BaseModel):
+    items: list[TestplaceExtension]

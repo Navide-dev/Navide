@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   canonicalTrustJson,
+  TRUST_METADATA_CLOCK_SKEW_MS,
   verifyRegistryPackageTrust,
   type RegistryPackageEnvelope,
   type RegistryTrustMetadata,
@@ -167,8 +168,10 @@ describe('verifyRegistryPackageTrust', () => {
   })
 
   it('rejects expired or forged root-signed trust metadata', () => {
-    expect(() => verify(envelope(), trust({ expiresAt: '2026-08-15T00:00:00.000Z' }))).toThrow(
-      /trust metadata.*expired/
+    expect(() =>
+      verify(envelope(), trust({ generatedAt: '2026-08-14T00:00:00.000Z', expiresAt: '2026-08-15T00:00:00.000Z' }))
+    ).toThrow(
+      /^TRUST_METADATA_EXPIRED: registry trust metadata expired at .*check the computer's date and time$/
     )
     const value = trust()
     expect(() =>
@@ -276,5 +279,150 @@ describe('verifyRegistryPackageTrust release channel', () => {
     expect(codeOf(() => verify(extended, trust(), signature(signed)))).toBe(
       'REGISTRY_SIGNATURE_INVALID'
     )
+  })
+
+  // D3: the user kept an expired test build; only the expiry check is skipped.
+  function verifyKept(envelopeValue: RegistryPackageEnvelope, trustValue = trust()) {
+    return verifyRegistryPackageTrust({
+      envelope: envelopeValue,
+      envelopeSignature: signature(envelopeValue),
+      trustMetadata: trustValue,
+      trustMetadataSignature: signature(trustValue, root.privateKey),
+      pinnedRootKey: rootPublicKey,
+      expected: {
+        artifactDigest: 'a'.repeat(64),
+        packageId: 'acme.demo',
+        version: '1.0.0',
+        target: 'universal',
+        publisherId: 'acme',
+      },
+      now: new Date(NOW),
+      allowExpiredTestplace: true,
+    })
+  }
+
+  it('allows a kept expired testplace envelope and says it is expired', () => {
+    const expired = envelope({ channel: 'testplace', expiresAt: '2026-08-16T11:59:59Z' })
+    expect(verifyKept(expired)).toEqual({ publisherId: 'acme', keyId: 'registry-2026', expired: true })
+    // Not expired yet: nothing to mark.
+    const live = envelope({ channel: 'testplace', expiresAt: '2026-11-14T11:00:00Z' })
+    expect(verifyKept(live)).toEqual({ publisherId: 'acme', keyId: 'registry-2026' })
+  })
+
+  it('still refuses a kept expired testplace version that was taken down', () => {
+    const expired = envelope({ channel: 'testplace', expiresAt: '2026-08-16T11:59:59Z' })
+    const blocked = trust({ blockedPackages: [{ packageId: 'acme.demo', version: '1.0.0' }] })
+    expect(codeOf(() => verifyKept(expired, blocked))).toBe('PACKAGE_BLOCKED')
+    const tampered = { ...expired, expiresAt: '2099-01-01T00:00:00Z' }
+    expect(codeOf(() => verifyRegistryPackageTrust({
+      envelope: tampered,
+      envelopeSignature: signature(expired),
+      trustMetadata: trust(),
+      trustMetadataSignature: signature(trust(), root.privateKey),
+      pinnedRootKey: rootPublicKey,
+      expected: { artifactDigest: 'a'.repeat(64), packageId: 'acme.demo', version: '1.0.0', target: 'universal', publisherId: 'acme' },
+      now: new Date(NOW),
+      allowExpiredTestplace: true,
+    }))).toBe('REGISTRY_SIGNATURE_INVALID')
+  })
+})
+
+describe('trust metadata time window (clock skew)', () => {
+  // The Registry signs trust metadata per request, so generatedAt is "now" on
+  // the server; NOW is this computer's clock.
+  const generatedAfterNow = (ms: number) => new Date(Date.parse(NOW) + ms).toISOString()
+  const expiringAfter = (generatedAt: string) => new Date(Date.parse(generatedAt) + 24 * 3600_000).toISOString()
+  const issued = (ms: number) => {
+    const generatedAt = generatedAfterNow(ms)
+    return trust({ generatedAt, expiresAt: expiringAfter(generatedAt) })
+  }
+  const signedEarlier = envelope({ signedAt: '2026-08-16T11:00:00.000Z' })
+
+  it('allows five minutes, as a named constant', () => {
+    expect(TRUST_METADATA_CLOCK_SKEW_MS).toBe(5 * 60 * 1000)
+  })
+
+  it('accepts metadata from a server one minute ahead of this clock', () => {
+    expect(verify(signedEarlier, issued(60_000))).toEqual({ publisherId: 'acme', keyId: 'registry-2026' })
+  })
+
+  it('accepts metadata exactly at the allowance', () => {
+    expect(verify(signedEarlier, issued(TRUST_METADATA_CLOCK_SKEW_MS))).toEqual({
+      publisherId: 'acme',
+      keyId: 'registry-2026',
+    })
+  })
+
+  it('refuses metadata one second past the allowance (5:01)', () => {
+    expect(() => verify(signedEarlier, issued(TRUST_METADATA_CLOCK_SKEW_MS + 1000))).toThrow(
+      /^TRUST_METADATA_NOT_YET_VALID: /
+    )
+  })
+
+  it('refuses metadata from a server ten minutes ahead as not valid yet, not as expired', () => {
+    let error: unknown
+    try {
+      verify(signedEarlier, issued(10 * 60_000))
+    } catch (caught) {
+      error = caught
+    }
+    expect((error as { code?: string }).code).toBe('TRUST_METADATA_INVALID')
+    expect((error as Error).message).toMatch(/^TRUST_METADATA_NOT_YET_VALID: .*check the computer's date and time$/)
+    expect((error as Error).message).not.toMatch(/expired/)
+  })
+
+  it('does not widen the expiry side', () => {
+    const expiresAt = new Date(Date.parse(NOW) - 1).toISOString()
+    expect(() => verify(signedEarlier, trust({ generatedAt: '2026-08-15T12:00:00.000Z', expiresAt }))).toThrow(
+      /^TRUST_METADATA_EXPIRED: /
+    )
+  })
+
+  it('still refuses an empty validity window, whatever the clock', () => {
+    expect(() =>
+      verify(signedEarlier, trust({ generatedAt: '2026-08-16T10:00:00.000Z', expiresAt: '2026-08-16T10:00:00.000Z' }))
+    ).toThrow(/empty validity window/)
+  })
+})
+
+describe('registry envelope signedAt (clock skew, future side only)', () => {
+  // A version published moments ago carries the server's clock in signedAt.
+  const signedAfterNow = (ms: number) => envelope({ signedAt: new Date(Date.parse(NOW) + ms).toISOString() })
+
+  it('accepts a signature 4:59 later than this clock', () => {
+    expect(verify(signedAfterNow(4 * 60_000 + 59_000))).toEqual({ publisherId: 'acme', keyId: 'registry-2026' })
+  })
+
+  it('refuses a signature 5:01 later than this clock as not valid yet', () => {
+    let error: unknown
+    try {
+      verify(signedAfterNow(5 * 60_000 + 1_000))
+    } catch (caught) {
+      error = caught
+    }
+    expect((error as { code?: string }).code).toBe('SIGNER_INVALID')
+    expect((error as Error).message).toMatch(/^REGISTRY_SIGNATURE_NOT_YET_VALID: .*check the computer's date and time$/)
+  })
+
+  it('accepts a signature exactly 5:00 later than this clock', () => {
+    expect(verify(signedAfterNow(5 * 60_000))).toEqual({ publisherId: 'acme', keyId: 'registry-2026' })
+  })
+
+  it('reports an envelope whose signedAt was moved to the future as a bad signature, not a clock problem', () => {
+    const genuine = envelope()
+    const tampered = { ...genuine, signedAt: new Date(Date.parse(NOW) + 10 * 60_000).toISOString() }
+    let error: unknown
+    try {
+      verify(tampered, trust(), signature(genuine))
+    } catch (caught) {
+      error = caught
+    }
+    expect((error as { code?: string }).code).toBe('REGISTRY_SIGNATURE_INVALID')
+    expect((error as Error).message).not.toMatch(/NOT_YET_VALID/)
+  })
+
+  it("still refuses a signature outside the signer's own window, with no allowance", () => {
+    const before = envelope({ signedAt: new Date(Date.parse('2026-08-01T00:00:00.000Z') - 1).toISOString() })
+    expect(() => verify(before)).toThrow(/outside its validity window/)
   })
 })

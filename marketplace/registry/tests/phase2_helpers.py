@@ -10,10 +10,12 @@ import urllib.parse
 from dataclasses import dataclass, field
 
 from fastapi.testclient import TestClient
+from sqlmodel import Session
 
 from registry.app import create_app
 from registry.cloud_auth import decode_payload, encode_payload, sign
 from registry.config import VERIFIER_ACCEPTING, Settings
+from registry.models import DeveloperQualification
 from tests.fixtures import build_package, valid_manifest
 
 AUTH_URL = "https://forum.example.test/navide-auth"
@@ -91,7 +93,20 @@ def start_login(client: TestClient, next_path: str = "/publisher") -> str:
     return decode_payload(query["sso"])["nonce"]
 
 
-def sign_in(client: TestClient, member_id: str = "mem-1", name: str = "Neil") -> None:
+def approve_developer(client: TestClient, member_id: str) -> None:
+    """Record an approved developer qualification directly (the review flow
+    itself is covered by test_developer_qualification.py)."""
+    with Session(client.app.state.registry.engine) as session:
+        if session.get(DeveloperQualification, member_id) is None:
+            session.add(DeveloperQualification(navide_member_id=member_id, status="approved"))
+            session.commit()
+
+
+def sign_in(client: TestClient, member_id: str = "mem-1", name: str = "Neil", *, approved: bool = True) -> None:
+    """Sign in through the navide-auth stand-in. `approved` (the default for
+    tests that predate developer qualification) also approves the account."""
+    if approved:
+        approve_developer(client, member_id)
     nonce = start_login(client)
     resp = client.get("/auth/callback", params=navide_auth_callback(nonce, member_id=member_id, name=name))
     assert resp.status_code == 303, resp.text

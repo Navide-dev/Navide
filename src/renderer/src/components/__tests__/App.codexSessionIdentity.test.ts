@@ -216,7 +216,7 @@ describe('Codex session identity without a bootstrap turn', () => {
 
   it('retains marker bootstrap, reply gating, and the waiting overlay for other marker vendors', async () => {
     const h = harness()
-    await h.onManualSpawn({ ...manual, agentKey: 'grok' })
+    await h.onManualSpawn({ ...manual, agentKey: 'kimi' })
     const pane = h.panes.value[0]
     await vi.waitFor(() => expect(pane.markerReplyPending).toBe(true))
     expect(pane.sessionMarker).toBe(`at-pane:${pane.id}`)

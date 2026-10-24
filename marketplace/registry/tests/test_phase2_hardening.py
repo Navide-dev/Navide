@@ -20,6 +20,7 @@ from registry.models import CliAuthCode, Publisher, PublisherToken
 from registry.similarity import check_extension_name
 from tests.fixtures import CONTRACT_FIXTURES, build_v2_package, contract_manifest
 from tests.phase2_helpers import (
+    approve_developer,
     ADMIN_HEADERS,
     claim,
     cloud_settings,
@@ -167,6 +168,8 @@ def test_claim_cap_and_uniqueness_hold_without_the_precheck(client, monkeypatch)
     INSERT itself still enforces the cap, and a duplicate is a clean error."""
     engine = client.app.state.registry.engine
     monkeypatch.setattr(self_service, "check_claim", lambda *a, **k: self_service.ClaimVerdict(True, ""))
+    approve_developer(client, "mem-9")
+    approve_developer(client, "mem-8")
     with Session(engine) as session:
         for name in ("alpha-one", "bravo-two", "charlie-three"):
             self_service.claim_namespace(session, member_id="mem-9", display_name="x", namespace=name)

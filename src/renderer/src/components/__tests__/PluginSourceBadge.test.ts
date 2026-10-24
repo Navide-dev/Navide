@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
 import PluginSourceBadge from '../PluginSourceBadge.vue'
@@ -18,9 +18,14 @@ function render(props: Record<string, unknown>) {
 let saved: typeof i18n.global.locale.value
 beforeEach(() => {
   saved = i18n.global.locale.value
+  // A test build's wording depends on whether its expiry has passed: pin "now"
+  // so the fixed expiries below never turn into a date bomb.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
 })
 afterEach(() => {
   i18n.global.locale.value = saved
+  vi.useRealTimers()
 })
 
 describe('PluginSourceBadge (K2)', () => {
@@ -81,6 +86,43 @@ describe('PluginSourceBadge (K2)', () => {
       expect(render({ source: 'testplace', expiresAt }).text()).toBe('測試版，沒有人工審核，到期日不明')
     }
   })
+
+  it('names the review of a test build by how the user joined it (W5b), in every locale', () => {
+    const expiresAt = '2026-12-31T08:00:00Z'
+    const shown: Record<string, Record<string, string>> = {}
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      shown[locale] = {
+        invite: render({ source: 'testplace', expiresAt, via: 'invite', row: true }).get('.nv-source-badge').text(),
+        code: render({ source: 'testplace', expiresAt, via: 'code', row: true }).get('.nv-source-badge').text(),
+        unknown: render({ source: 'testplace', expiresAt, via: null, row: true }).get('.nv-source-badge').text(),
+      }
+    }
+    expect(shown['zh-TW']).toEqual({
+      invite: '測試版：只經過自動掃描，2026-12-31 到期',
+      code: '測試版：公開測試碼已經過輕量人工審核，這一版沒有人工審核，2026-12-31 到期',
+      unknown: '測試版，沒有人工審核，2026-12-31 到期',
+    })
+    // S8: the row tells a tester when a withdrawal reaches them offline.
+    i18n.global.locale.value = 'zh-TW'
+    expect(render({ source: 'testplace', expiresAt, row: true }).get('.nv-source-revoke').text())
+      .toBe('離線或未登入 Navide Cloud 時，開發者撤回這個版本，最晚要到它到期（最多 90 天）才會生效。')
+    expect(render({ source: 'marketplace', row: true }).find('.nv-source-revoke').exists()).toBe(false)
+    // A public code's review is of the code, never of the version: no locale may call the version reviewed.
+    expect(shown['en-US'].code).toContain('this version had none')
+    expect(shown['ja-JP'].code).toContain('このバージョンは人による審査なし')
+    for (const locale of LOCALES) {
+      for (const text of Object.values(shown[locale])) expect(text, locale).not.toMatch(/verified|safe|已驗證|安全|検証済み/i)
+    }
+  })
+
+  it('says a kept test build is past its expiry (D3)', () => {
+    vi.setSystemTime(new Date('2027-01-02T00:00:00Z'))
+    i18n.global.locale.value = 'zh-TW'
+    expect(render({ source: 'testplace', expiresAt: '2026-12-31T08:00:00Z', via: 'invite' }).text()).toBe('測試版，已於 2026-12-31 到期（繼續使用中）')
+    i18n.global.locale.value = 'en-US'
+    expect(render({ source: 'testplace', expiresAt: '2026-12-31T08:00:00Z' }).text()).toBe('Test build, expired 2026-12-31 (kept in use)')
+  })
 })
 
 describe('PluginTrustDialog source row (K2)', () => {
@@ -112,6 +154,9 @@ describe('PluginTrustDialog source row (K2)', () => {
     i18n.global.locale.value = 'zh-TW'
     expect(at({ source: 'marketplace' }).get('.nv-source-badge').text()).toBe('已審核')
     expect(at({ source: 'prerelease', version: '2.0.0-beta.1' }).get('.nv-source-badge').text()).toBe('預覽版（已審核）')
+    // W5b: a Testplace install shows its expiry and how the user joined.
+    expect(at({ source: 'testplace', expiresAt: '2026-12-31T08:00:00Z', testplaceVia: 'code' }).get('.nv-source-badge').text())
+      .toBe('測試版：公開測試碼已經過輕量人工審核，這一版沒有人工審核，2026-12-31 到期')
   })
 
   it('never reads as reviewed from the version alone (a testplace build versioned 1.0.0)', () => {
@@ -163,5 +208,81 @@ describe('Pre-release source row (K5)', () => {
     const stable = mount(PluginTrustDialog, { props: { pending: pending('2.5.0-beta.1', 'marketplace'), step: 'risk' } as never, global: { plugins: [i18n] } })
     expect(stable.get('.nv-source-row').attributes('data-source')).toBe('marketplace')
     stable.unmount()
+  })
+})
+
+describe('A3: a signed local file', () => {
+  it('reads as signed by the vetted developer only while the key is active, and as no longer valid once revoked', () => {
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      const verified = render({ source: 'local-unsigned', signature: 'verified', publisher: 'acme' })
+      expect(verified.attributes('data-source')).toBe('local-signed')
+      expect(verified.text()).toBe(i18n.global.t('pluginDisclosure.source.localSignedBy', { publisher: 'acme' }))
+      expect(verified.text()).toContain('acme')
+      const revoked = render({ source: 'local-unsigned', signature: 'revoked', publisher: 'acme' })
+      expect(revoked.classes()).toContain('nv-source-badge--signature-revoked')
+      expect(revoked.text()).toBe(i18n.global.t('pluginDisclosure.source.signatureRevoked'))
+      // No signature: the unsigned wording, unchanged.
+      expect(render({ source: 'local-unsigned' }).text()).toBe(i18n.global.t('pluginDisclosure.source.local-unsigned'))
+    }
+  })
+
+  it('names a developer folder "Local folder" in every locale; the row adds that it can change (A2-3)', () => {
+    const expected = { 'zh-TW': '本機資料夾', 'en-US': 'Local folder', 'ja-JP': 'ローカルフォルダー' } as const
+    for (const [locale, text] of Object.entries(expected)) {
+      i18n.global.locale.value = locale as keyof typeof expected
+      expect(render({ source: 'developer-unpacked' }).text()).toBe(text)
+      const row = render({ source: 'developer-unpacked', row: true })
+      expect(row.get('.nv-source-folder-note').text()).toBe(i18n.global.t('pluginDisclosure.source.folderMayChange'))
+      expect(row.get('.nv-source-folder-note').text()).not.toBe('')
+    }
+    // The six other sources keep their words and have no such line.
+    i18n.global.locale.value = 'en-US'
+    expect(render({ source: 'local-unsigned', row: true }).find('.nv-source-folder-note').exists()).toBe(false)
+  })
+
+  it('never lets a signature relabel a source that is not a local file', () => {
+    i18n.global.locale.value = 'en-US'
+    const folder = render({ source: 'developer-unpacked', signature: 'verified', publisher: 'acme' })
+    expect(folder.attributes('data-source')).toBe('developer-unpacked')
+    expect(folder.text()).toBe(i18n.global.t('pluginDisclosure.source.developer-unpacked'))
+  })
+
+  it('gives an unsigned local file its own "author cannot be confirmed" line (DX 9.4 A1)', () => {
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      const row = render({ source: 'local-unsigned', row: true })
+      const note = row.find('.nv-source-unsigned')
+      expect(note.exists(), locale).toBe(true)
+      expect(row.find('.nv-source-badge').text()).not.toContain(note.text())
+    }
+    i18n.global.locale.value = 'en-US'
+    expect(render({ source: 'local-unsigned', row: true }).find('.nv-source-unsigned').text())
+      .toBe('The author cannot be confirmed; the file may have been changed.')
+    expect(render({ source: 'local-unsigned', signature: 'verified', publisher: 'acme', row: true }).find('.nv-source-unsigned').exists()).toBe(false)
+    expect(render({ source: 'marketplace', row: true }).find('.nv-source-unsigned').exists()).toBe(false)
+  })
+
+  it('opens the SHA-256 and install time from a local file badge (DX 9.4 A1)', async () => {
+    i18n.global.locale.value = 'en-US'
+    const digest = 'a'.repeat(64)
+    const badge = render({
+      source: 'local-unsigned',
+      localInstall: { fileDigest: digest, contentDigest: 'b'.repeat(64), installedAt: '2026-10-19T08:30:00Z' },
+    })
+    const button = badge.find('button.nv-source-badge')
+    expect(button.exists()).toBe(true)
+    expect(badge.find('.nv-source-details').exists()).toBe(false)
+    await button.trigger('click')
+    const details = badge.find('.nv-source-details')
+    expect(details.text()).toContain('Local file, not reviewed by Navide, unsigned')
+    expect(details.text()).toContain(`SHA-256 of the installed file: ${digest}`)
+    expect(details.text()).toContain('2026')
+    expect(details.find('.nv-source-unsigned').exists()).toBe(true)
+    await button.trigger('click')
+    expect(badge.find('.nv-source-details').exists()).toBe(false)
+
+    // Without install details (any other source) the badge stays a plain label.
+    expect(render({ source: 'marketplace' }).find('button').exists()).toBe(false)
   })
 })

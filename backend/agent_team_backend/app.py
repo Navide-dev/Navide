@@ -479,6 +479,19 @@ async def nudge_plugin_request_recovery(session: "Session") -> None:
         log.warning("plugin request recovery nudge failed: %s", err)
 
 
+def has_main_window() -> bool:
+    """Whether a main window is connected now (forms open there)."""
+    return any(not s.dead and is_main_window(s) for s in list(_SESSIONS))
+
+
+def main_window_sessions() -> list["Session"]:
+    """The main windows connected now that announced a page-load id."""
+    return [
+        s for s in list(_SESSIONS)
+        if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
+    ]
+
+
 def live_main_window_ids() -> set[str]:
     """The page-load ids (``ui.invoke.ready`` window_id) of the main windows connected now."""
     return {
@@ -653,6 +666,12 @@ class Session:
         # A main window's page-load id (`ui.invoke.ready` window_id): stays the
         # same across reconnects, changes when the window reloads (B2-c).
         self.window_id = ""
+        # The workspaces a main window holds (`ui.invoke.ready` workspaces):
+        # the one it opened with plus the ones its sidebar adopted, re-announced
+        # whenever that list changes. Read by the MCP self-close checks, which
+        # count a window holding the caller's workspace as the caller's own
+        # even when none of that workspace's panes sit in it.
+        self.held_workspaces: tuple[str, ...] = ()
         # Set by `window.prove` answering this connection's challenge (see
         # navide_window_proof_matches): a Navide window, as opposed to any
         # other client holding the token. ui_bus_ready is self-declared.
@@ -1336,6 +1355,32 @@ pane_activity_listeners: list[Callable[[str, dict[str, Any] | None], None]] = []
 # else the naming snippet. Must not raise.
 pane_prompt_listeners: list[Callable[[str, str], None]] = []
 _USER_PROMPT_DETAILS = frozenset({"user", "prompt", "user_message"})
+# Per pane, wall-clock times that tell whose turn a log turn end is: when the
+# last Stop-hook turn end arrived, and the transcript's own time of the last real
+# prompt the conversation-log reader saw. Transcript time, not arrival time: a
+# lagging reader records an earlier turn's lines after the next hook, but their
+# stamps still say when they were written — before that turn's hook fired.
+_last_hook_turn_end: dict[str, float] = {}
+_last_log_turn_start: dict[str, float] = {}
+# When this backend began tracking each pane (its first activity record), and
+# when it began tracking at all: the lower bound for a pane's first hook turn
+# end, which has no previous one. A reader catching up replays log records
+# written before then, and those are never this turn's.
+_pane_tracked_since: dict[str, float] = {}
+_TRACKING_STARTED = time.time()
+# time.time() moves in whole ticks on some platforms (about 15.6 ms on
+# Windows): a hook turn end's wall time can read up to a tick earlier than it
+# happened, so the previous turn's log end — stamped by the transcript, to
+# the millisecond — could seem to come after it. The bound is pushed one tick
+# later: a turn end inside that tick is never taken as this turn's (better no
+# text than the wrong text).
+_WALL_TICK_S = time.get_clock_info("time").resolution
+# The first of a turn's two turn ends (hook, log) still waiting for the other:
+# (source, monotonic time). Only for the arrival-gap log line below.
+_turn_end_first: dict[str, tuple[str, float]] = {}
+_TURN_END_PAIR_MAX_S = 1800.0
+# A log turn end later than its hook by this much is worth a line in backend.log.
+_TURN_END_GAP_INFO_S = 2.0
 
 
 def _current_pane_id(pane_id: str) -> str:
@@ -1355,14 +1400,42 @@ def pane_activity(pane_id: str) -> dict[str, Any] | None:
     return _pane_activity.get(_current_pane_id(pane_id))
 
 
+def _note_turn_end_gap(key: str, source: str, now: float) -> None:
+    """Log how far apart a turn's hook and log turn ends arrived (time and pane only)."""
+    first = _turn_end_first.pop(key, None)
+    if first is not None and first[0] != source and now - first[1] <= _TURN_END_PAIR_MAX_S:
+        gap = now - first[1]
+        level = logging.INFO if source == "log" and gap >= _TURN_END_GAP_INFO_S else logging.DEBUG
+        log.log(level, "turn end for %s: %s first, %s %.2fs later", key, first[0], source, gap)
+        return
+    _turn_end_first[key] = (source, now)
+
+
 def _record_pane_activity(
-    pane_id: str, event_type: str, text: str, *, detail: str = ""
+    pane_id: str, event_type: str, text: str, *, detail: str = "",
+    source: str = "", turn_start: bool = False, event_wall: float | None = None,
+    hook_turn: dict[str, Any] | None = None,
 ) -> None:
     if not pane_id:
         return
     key = _current_pane_id(pane_id)
     now = time.monotonic()
+    # When it happened, for matching a hook's turn end to the log's: a hook's
+    # is its arrival; a log record's is the transcript's own stamp, and None
+    # when it has none (it then never matches: arrival time is exactly what a
+    # lagging reader gets wrong). Other writers read no wall clock at all.
+    wall = time.time() if source == "hook" else event_wall
+    if source in ("hook", "log") and key not in _pane_tracked_since:
+        _pane_tracked_since[key] = time.time()
     prior = _pane_activity.get(key)
+    if event_type == "turn_complete" and source in ("hook", "log"):
+        _note_turn_end_gap(key, source, now)
+        if source == "hook":
+            _last_hook_turn_end[key] = time.time()
+    if turn_start:
+        if wall is not None:
+            _last_log_turn_start[key] = wall
+        _turn_end_first.pop(key, None)
     # When the turn this event belongs to began: the first agent_active after
     # the previous turn ended opens a turn, later events of the same turn
     # carry that start forward, and the turn_complete closes it. The account
@@ -1386,14 +1459,76 @@ def _record_pane_activity(
         # The reader's structured detail (a stop reason such as droid's
         # ``model_usage_exhausted``) — kept only for turn ends, bounded.
         "detail": (detail or "")[:200] if event_type == "turn_complete" else "",
+        # Who wrote it: "hook" (a CLI hook; its turn end carries no text of its
+        # own) or "log" (the conversation-log reader, which has the text).
+        "source": source,
+        # The log reader saw a real prompt: a new turn began in the transcript.
+        "turn_start": turn_start,
+        # When it happened: the transcript's stamp for a log record, the
+        # arrival time otherwise.
+        "event_wall": wall,
+        # A hook turn end only: when the hook turn end before it arrived, and
+        # whether the log had already ended this turn (then its text, if any,
+        # is in "text" and none is still to come).
+        **(hook_turn or {}),
     }
     for listener in pane_activity_listeners:
         listener(key, _pane_activity[key])
 
 
+def log_turn_end_after(pane_id: str, previous_hook_end: float | None) -> dict[str, Any] | None:
+    """The pane's latest entry when it is the log's turn end of the turn that
+    followed ``previous_hook_end`` (a hook turn end's arrival time), else None.
+
+    Claude writes a turn's end line before its Stop hook fires, so a turn end
+    the transcript stamped after the previous hook turn end belongs to the turn
+    after it. That needs no prompt: a turn woken by a <task-notification>, a
+    slash command or a hook-delivered message has no typed prompt line. When the
+    transcript does have a typed prompt after the previous hook turn end, the
+    turn end must also come after it (an earlier turn's text half written late
+    is not this turn's). Under load the reader lags by whole turns, and taken by
+    arrival an earlier turn's end told a chat, or an agent waiting on
+    cli_send_and_wait, the previous reply. A record without a stamp never
+    matches.
+    """
+    key = _current_pane_id(pane_id)
+    entry = _pane_activity.get(key)
+    if entry is None or entry["event_type"] != "turn_complete" or entry.get("source") != "log":
+        return None
+    written = entry.get("event_wall")
+    if written is None:
+        return None
+    # The first hook turn end a pane has here has no previous one: then the
+    # turn began no earlier than when this backend started tracking the pane.
+    bound = previous_hook_end if previous_hook_end is not None else _pane_tracked_since.get(key, _TRACKING_STARTED)
+    bound += _WALL_TICK_S
+    if written <= bound:
+        return None
+    prompted = _last_log_turn_start.get(key)
+    if prompted is not None and prompted > bound:
+        return entry if written >= prompted else None
+    return entry
+
+
+def _hook_turn_end(pane_id: str) -> tuple[str, dict[str, Any]]:
+    """What a Stop hook's turn end records: the log's text for this same turn
+    when the reader got there first ("" otherwise, and when the turn wrote
+    none), and the facts a waiter needs to recognise this turn's log end later.
+    """
+    previous = _last_hook_turn_end.get(_current_pane_id(pane_id))
+    match = log_turn_end_after(pane_id, previous)
+    return (match["text"] if match else ""), {
+        "prev_hook_turn_end": previous, "log_ended": match is not None,
+    }
+
+
 def forget_pane_activity(pane_id: str) -> None:
     """Drop a closed pane's entry so the cache tracks live panes only."""
     _pane_activity.pop(pane_id, None)
+    _last_hook_turn_end.pop(pane_id, None)
+    _last_log_turn_start.pop(pane_id, None)
+    _turn_end_first.pop(pane_id, None)
+    _pane_tracked_since.pop(pane_id, None)
     for listener in pane_activity_listeners:
         listener(pane_id, None)
     hook_drain.forget_pane(pane_id)
@@ -1423,6 +1558,20 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             # External session — skip; no pane to deliver to.
             return
         pane_id = attributed.pane_id or ""
+        if event.event_type == "subagent_turn_end":
+            # A Codex sub-agent's turn end is not its parent pane's: the pane's
+            # state, reply text and dev time ignore it. The per-account turn
+            # count is recorded exactly as it was when this arrived as a
+            # turn_complete (the record_turn call below); whether a sub-agent
+            # turn should count there is a separate decision.
+            tokens_store.record_turn(
+                event.vendor,
+                pane_account_history.profile_at(
+                    pane_id, parse_event_time(event.timestamp)
+                ),
+                event.timestamp,
+            )
+            return
         # A turn a Stop hook blocked is still written to the conversation log,
         # and its reader reports it as a turn end — after the hook already said
         # the agent is working on the message it was handed. Flagged rather than
@@ -1432,14 +1581,16 @@ async def _on_log_activity(event: ActivityEvent) -> None:
         superseded = event.event_type == "turn_complete" and hook_drain.turn_end_is_superseded(
             pane_id
         )
+        prompted = (
+            event.event_type == "agent_active" and bool(event.text) and bool(pane_id)
+            and event.detail in _USER_PROMPT_DETAILS
+        )
         _record_pane_activity(
             pane_id, "agent_active" if superseded else event.event_type, event.text,
-            detail=event.detail,
+            detail=event.detail, source="log", turn_start=prompted,
+            event_wall=parse_event_time(event.timestamp),
         )
-        if (
-            event.event_type == "agent_active" and event.text and pane_id
-            and event.detail in _USER_PROMPT_DETAILS
-        ):
+        if prompted:
             for prompt_listener in pane_prompt_listeners:
                 try:
                     prompt_listener(
@@ -2782,6 +2933,37 @@ _HOOK_VENDORS = frozenset(
 # vendor's hook file, not something the vendor spec exposes.
 _SUBAGENT_COUNTING_VENDORS = frozenset({"claude"})
 
+# Hook events that pair a permission box with the tool result that answers it.
+# PermissionRequest carries no tool_use_id, so the pairing is the tool name plus
+# a fingerprint of its input — both Post events repeat the same tool_input.
+_TOOL_KEYED_EVENTS = frozenset({"permission_request", "post_tool_use", "post_tool_use_failure"})
+
+# The two tool results. Both hooks are installed async, so the last tool's result
+# can land after Stop: they only release a permission hold and must never count
+# as the agent working, or a finished pane would read as mid-turn again.
+_TOOL_RESULT_EVENTS = frozenset({"post_tool_use", "post_tool_use_failure"})
+
+
+# Tools whose answer is written into their input (AskUserQuestion's `answers`,
+# ExitPlanMode's approved plan), so the input a Post event repeats differs from
+# the one the box was raised with. They are keyed by name alone, which is enough:
+# only one such box is ever open at a time.
+_INPUT_REWRITTEN_TOOLS = frozenset({"AskUserQuestion", "ExitPlanMode"})
+
+
+def _hook_tool_key(payload: dict) -> str:
+    """`<tool_name>:<hash of tool_input>`, or "" when the payload names no tool."""
+    name = str(payload.get("tool_name") or "")
+    if not name:
+        return ""
+    if name in _INPUT_REWRITTEN_TOOLS:
+        return name
+    try:
+        canonical = json.dumps(payload.get("tool_input"), sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return ""
+    return f"{name}:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:16]}"
+
 # Tools whose PreToolUse payload names a file the agent is about to write.
 # Read-only tools carry a file_path too, so the set — not the field — is what
 # decides whether a hook becomes a preview record.
@@ -2908,7 +3090,8 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     Hook commands installed by `claude_hooks` / `qwen_hooks` / `copilot_hooks`
     POST here with:
       - Header X-Agent-Team-Event: pre_tool_use | stop | notification |
-        subagent_stop
+        subagent_stop | permission_request | post_tool_use |
+        post_tool_use_failure
       - Body: the JSON payload the CLI pipes to the hook on stdin
 
     The three vendors disagree on where hooks are configured but agree on what
@@ -2946,7 +3129,10 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # a new event_type to keep working.
     if event_kind == "stop":
         event_type = "turn_complete"
-    elif event_kind in ("pre_tool_use", "notification", "subagent_stop"):
+    elif event_kind in (
+        "pre_tool_use", "notification", "subagent_stop",
+        "permission_request", "post_tool_use", "post_tool_use_failure",
+    ):
         event_type = "agent_active"
     else:
         return {"ok": False, "reason": f"unknown event kind: {event_kind!r}"}
@@ -3018,17 +3204,20 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # composer or not). It reports the pane waiting, not working, so recording
     # it as agent_active would replace the turn_complete entry for good —
     # cli_get_status would show a finished pane as active, with no turn text.
-    # The broadcast below still carries it for the renderer to judge.
-    if pane_id and notification_type != "idle_prompt":
+    # The broadcast below still carries it for the renderer to judge. A tool
+    # result is left out for the same reason: it can arrive after Stop.
+    if pane_id and notification_type != "idle_prompt" and event_kind not in _TOOL_RESULT_EVENTS:
         # The log-reader sink is not the only writer of _pane_activity any
         # more: for the hook vendors the Stop hook is the earliest and most
         # reliable end-of-turn signal there is, and cli_wait_idle could not see
         # it — it had to sit out the 10s quiet threshold instead. Hook payloads
         # carry no assistant text, so keep the text the sink already recorded
         # for this same turn rather than blanking it.
-        prior = pane_activity(pane_id)
-        prior_text = prior["text"] if prior and event_type == "turn_complete" else ""
-        _record_pane_activity(pane_id, event_type, prior_text)
+        if event_type == "turn_complete":
+            prior_text, hook_turn = _hook_turn_end(pane_id)
+            _record_pane_activity(pane_id, event_type, prior_text, source="hook", hook_turn=hook_turn)
+        else:
+            _record_pane_activity(pane_id, event_type, "", source="hook")
     await broadcast(make_event("agent.activity", {
         "vendor": vendor,
         "event_type": event_type,
@@ -3040,6 +3229,10 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         "timestamp": "",
         "detail": "hook:stop-blocked" if blocked_envelope else f"hook:{event_kind}",
         "notification_type": notification_type,
+        # Which tool a permission box is for, and which tool a result is of, so
+        # the frontend releases a held box only on its own tool finishing.
+        # Empty on every other event kind.
+        "tool_key": _hook_tool_key(payload) if event_kind in _TOOL_KEYED_EVENTS else "",
         # Background subagents this pane is still waiting on. Always present so
         # the frontend can trust a 0 as "none running" rather than "not
         # reported"; vendors without these hooks never send the field at all
@@ -3047,11 +3240,12 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         "pending_subagents": subagent_tracker.pending(pane_id),
     }))
     # Dev time: only real work signals. A notification (idle_prompt /
-    # permission_prompt) is mapped to agent_active above for the busy-state
-    # path, but it marks the agent WAITING — beating on it would open an agent
+    # permission_prompt) or a permission_request is mapped to agent_active above
+    # for the busy-state path, but it marks the agent WAITING — beating on it would open an agent
     # interval at exactly the moment nothing is running. Guarded like the
     # preview record: this endpoint's response must not depend on the store.
-    if event_kind != "notification":
+    # A late tool result is no work signal either: it can follow Stop.
+    if event_kind not in ("notification", "permission_request", *_TOOL_RESULT_EVENTS):
         try:
             if dev_time_store.agent_event(ws_path or cwd, pane_id or "", event_type, ""):
                 await broadcast(
@@ -3893,7 +4087,44 @@ def _probe_agent_cli_for_spawn(agent_key: str, requested_command: Any = None) ->
             message += f" — {hint}"
             error_details["hint"] = hint
         raise AgentCliProbeError(message, error_details)
+    if dep.official_regex and re.search(dep.official_regex, output) is None:
+        # A same-named CLI from someone else (issue #402: a community `grok`
+        # at ~/.grok/bin/grok). The spawn goes ahead — it may be what the user
+        # wants — but the pane says what it is running.
+        install = dep.install_for(osplat.platform_id).command or dep.docs_url
+        details["warning"] = (
+            f"{executable_display} does not identify as {dep.label} "
+            f"(--version printed {output.splitlines()[0][:60] if output else 'nothing'!r}); "
+            f"to use {dep.label}, install it with: {install}"
+        )
+    else:
+        untested = _untested_version_note(agent_key, dep.label, version)
+        if untested:
+            details["untested_version"] = untested
     return details
+
+
+def _leading_version(text: str) -> tuple[int, ...]:
+    # "2026.08.25-3e8eec8" -> (2026, 8, 25): a build suffix is not a version.
+    m = re.match(r"\d+(?:\.\d+)*", text.strip())
+    return tuple(int(p) for p in m.group(0).split(".")) if m else ()
+
+
+def _untested_version_note(agent_key: str, label: str, version: str | None) -> str:
+    """A line for the pane when the CLI is newer than the version Navide was
+    last verified against. Disclosure only: the spawn goes ahead either way."""
+    spec = cli_vendor(agent_key)
+    switch = spec.account_switch if spec is not None else None
+    verified = (spec.cli_verified_version if spec is not None else "") or (
+        switch.verified_version if switch is not None else ""
+    )
+    found, known = _leading_version(version or ""), _leading_version(verified)
+    if not found or not known or found <= known:
+        return ""
+    return (
+        f"{label} {version} is newer than the last version Navide verified "
+        f"({verified}); it should work, but this version has not been tested"
+    )
 
 
 _HOME_PREFIX = str(Path.home())

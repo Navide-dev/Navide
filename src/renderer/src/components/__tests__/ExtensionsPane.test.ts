@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import ExtensionsPane from '../ExtensionsPane.vue'
@@ -76,6 +76,77 @@ describe('ExtensionsPane', () => {
     expect(row.get('.ext-update-badge').text()).toContain('1.3.1-beta.2')
   })
 
+  it('G3: says who had a loaded developer folder loaded, the user or an agent the user approved', async () => {
+    const folder = (pluginId: string, loadedBy: unknown) => ({ pluginId, path: `/dev/${pluginId}`, consentedAt: '2026-10-21T01:00:00.000Z', loaded: true, loadedBy })
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.mine', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.asked', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.older', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.changed', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.rekeyed', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+      ]),
+      developerMode: vi.fn().mockResolvedValue({
+        enabled: true,
+        folders: [
+          folder('acme.mine', { kind: 'user' }),
+          folder('acme.asked', { kind: 'agent', callerKind: 'pane', paneName: 'builder', approvedAt: '2026-10-21T01:00:00.000Z' }),
+          folder('acme.older', { kind: 'unknown' }),
+          { ...folder('acme.changed', { kind: 'unknown' }), loadedByUnverified: 'changed' },
+          { ...folder('acme.rekeyed', { kind: 'unknown' }), loadedByUnverified: 'key-changed' },
+        ],
+      }),
+      selfHostedQuarantine: vi.fn().mockResolvedValue([]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.mine"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUser'))
+    const asked = wrapper.get('[data-id="acme.asked"] .ext-devmode-loaded-by').text()
+    expect(asked).toContain(i18n.global.t('plugin-agent.caller.pane', { pane: 'builder' }))
+    expect(asked).toContain('builder')
+    expect(wrapper.get('[data-id="acme.older"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUnknown'))
+    expect(wrapper.get('[data-id="acme.changed"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByUnverified'))
+    expect(wrapper.get('[data-id="acme.rekeyed"] .ext-devmode-loaded-by').text()).toBe(i18n.global.t('settings.extensions.developerMode.loadedByKeyChanged'))
+  })
+
+  it('G1: a loaded developer folder reloads on file change by default, can turn it off, and shows the last load', async () => {
+    let emit: ((event: { pluginId: string; kind: string }) => void) | undefined
+    const state = (autoReload: boolean, extra: Record<string, unknown> = {}) => ({
+      enabled: true,
+      folders: [{
+        pluginId: 'acme.dev', path: '/dev/acme', consentedAt: '2026-10-21T01:00:00.000Z', loaded: true,
+        loadedBy: { kind: 'user' }, autoReload, lastLoad: { at: '2026-10-21T01:05:00.000Z', trigger: 'auto-reload' }, ...extra,
+      }],
+    })
+    const developerMode = vi.fn().mockResolvedValueOnce(state(true)).mockResolvedValue(state(true, { reloadError: 'manifest.json: Unexpected end of JSON input' }))
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.dev', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+      ]),
+      developerMode,
+      selfHostedQuarantine: vi.fn().mockResolvedValue([]),
+      setDeveloperFolderAutoReload: vi.fn().mockResolvedValue(state(false)),
+      onDeveloperFolderEvent: vi.fn((handler: typeof emit) => { emit = handler; return () => { emit = undefined } }),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const row = wrapper.get('[data-id="acme.dev"]')
+    const toggle = row.get('.ext-devmode-auto-reload input')
+    expect((toggle.element as HTMLInputElement).checked).toBe(true)
+    expect(row.get('.ext-devmode-last-load').text()).toContain(i18n.global.t('settings.extensions.developerMode.loadTrigger.auto-reload'))
+
+    emit!({ pluginId: 'acme.dev', kind: 'reload-failed' })
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.dev"] .ext-devmode-reload-error').text()).toContain('Unexpected end of JSON input')
+
+    await wrapper.get('[data-id="acme.dev"] .ext-devmode-auto-reload input').setValue(false)
+    await flushPromises()
+    expect((api as unknown as Record<string, ReturnType<typeof vi.fn>>).setDeveloperFolderAutoReload).toHaveBeenCalledWith('acme.dev', false)
+    wrapper.unmount()
+    wrapper = undefined
+    expect(emit).toBeUndefined()
+  })
+
   it('labels an installed version this Navide release is too old for, without disabling it', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
@@ -126,7 +197,7 @@ describe('ExtensionsPane', () => {
     const boxes = dialog.findAll('.pack-uninstall-member input')
     expect(dialog.findAll('.pack-uninstall-member').map((m) => m.attributes('data-member'))).toEqual(['acme.lint', 'acme.notes'])
     expect(boxes.every((b) => !(b.element as HTMLInputElement).checked)).toBe(true)
-    expect(dialog.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack only')
+    expect(dialog.get('.pack-uninstall-confirm').text()).toBe('Uninstall Pack Only')
     await dialog.get('.pack-uninstall-confirm').trigger('click')
     await flushPromises()
     expect(api.remove).not.toHaveBeenCalled()
@@ -175,7 +246,7 @@ describe('ExtensionsPane', () => {
     await wrapper.get('.ext-pack-remove').trigger('click')
     await flushPromises()
     await wrapper.get('.pack-uninstall-member input').setValue(true)
-    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 Navide plugin(s)')
+    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 Navide plugin')
     await wrapper.get('.pack-uninstall-confirm').trigger('click')
     await flushPromises()
     // The Host removes the chosen members itself, so it can refuse a member
@@ -302,6 +373,30 @@ describe('ExtensionsPane', () => {
     expect(wrapper.find('.ext-store-unreadable').exists()).toBe(false)
   })
 
+  // Decision d5: a local install whose file Navide blocked keeps a label naming the reason.
+  it('labels a local install whose file Navide blocked, by reason', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.one', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: 'qualification-revoked' }, disabled: false },
+        { id: 'acme.two', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: null }, disabled: true },
+        { id: 'acme.three', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned', digestBlock: { reason: 'developer-withdrawn' }, disabled: false },
+        { id: 'acme.four', requires: [], sensitive: [], packageVersion: '1.0.0', source: 'local-unsigned' },
+        { id: 'acme.five', requires: [], sensitive: [], packageVersion: '0.3.0', provenance: 'official-registry', source: 'testplace', digestBlock: { reason: 'testplace-withdrawn' }, disabled: false },
+      ]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const badge = (id: string) => wrapper!.find(`[data-id="${id}"] .ext-digest-blocked-badge`)
+    expect(badge('acme.one').text()).toBe('Developer qualification revoked')
+    expect(badge('acme.two').text()).toBe('Blocked by Navide')
+    expect(badge('acme.two').attributes('data-reason')).toBe('none')
+    expect(badge('acme.three').text()).toBe('Withdrawn by its developer')
+    expect(badge('acme.four').exists()).toBe(false)
+    // 0.2.28: a withdrawn Testplace build keeps its label, and stays enabled until the tester chooses.
+    expect(badge('acme.five').text()).toBe('Test build withdrawn')
+    expect(badge('acme.five').attributes('title')).toContain('Testplace')
+  })
+
   it('offers no Uninstall for a Marketplace copy of a built-in', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
@@ -313,6 +408,23 @@ describe('ExtensionsPane', () => {
     await flushPromises()
     expect(wrapper.find('[data-id="navide.git"] .ext-remove').exists()).toBe(false)
     expect(wrapper.find('[data-id="acme.demo"] .ext-remove').exists()).toBe(true)
+  })
+
+  it('offers Uninstall for the Marketplace navide.browser and says removal deletes its sign-ins', async () => {
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([{
+        id: 'navide.browser', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry',
+        manifestPermissions: { system: ['ui', 'web'] }, disabled: false,
+      }]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    await wrapper.get('[data-id="navide.browser"] .ext-remove').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.message).toContain('also deletes its site sign-ins, cookies and cache')
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenCalledWith('navide.browser')
   })
 
   it('shows an active factory Git package only in the Bundled section', async () => {
@@ -577,7 +689,7 @@ describe('ExtensionsPane', () => {
     await flushPromises()
 
     const button = wrapper.get('[data-id="acme.demo"] .ext-rollback')
-    expect(button.text()).toContain('bundled')
+    expect(button.text()).toContain('Bundled')
     await button.trigger('click')
     await flushPromises()
     useNotify().resolveDialog(false)
@@ -1249,6 +1361,12 @@ describe('ExtensionsPane source badge (K2)', () => {
   })
 
   it('badges each installed row by the Host\'s source and never guesses one', async () => {
+    // The Testplace row's expiry is read against the clock: pin it.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
         { id: 'acme.registry', requires: [], sensitive: [], provenance: 'official-registry' },
@@ -1268,5 +1386,170 @@ describe('ExtensionsPane source badge (K2)', () => {
     expect(source('acme.test').attributes('data-source')).toBe('testplace')
     expect(source('acme.test').text()).toContain('2027-01-17')
     expect(source('acme.unknown').exists()).toBe(false)
+  })
+})
+
+describe('ExtensionsPane expired Testplace builds (D3)', () => {
+  let wrapper: VueWrapper | undefined
+  beforeEach(() => {
+    i18n.global.locale.value = 'en-US'
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T00:00:00Z'))
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    vi.useRealTimers()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('lists an expired build with its three choices and never removes it unasked', async () => {
+    const keepExpiredTestplace = vi.fn().mockResolvedValue({ ok: true })
+    const adoptTestplaceRelease = vi.fn().mockResolvedValue({ adopted: false })
+    const prepareInstall = vi.fn().mockRejectedValue(new Error('extension not found: HTTP 404'))
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([]),
+      expiredTestplace: vi.fn().mockResolvedValue([
+        { id: 'acme.kept', version: '1.0.0', expiresAt: '2026-10-01T00:00:00Z', artifactDigest: 'a'.repeat(64), canKeep: true },
+        { id: 'acme.down', version: '2.0.0', expiresAt: '2026-10-02T00:00:00Z', canKeep: false },
+        { id: 'acme.pulled', version: '3.0.0', expiresAt: '2026-12-02T00:00:00Z', canKeep: false, withdrawn: true, keepRefusal: 'withdrawn' },
+        { id: 'acme.unsure', version: '4.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'unreachable' },
+        { id: 'acme.signedout', version: '5.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'signed-out' },
+        { id: 'acme.gone', version: '6.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'not-a-tester' },
+        { id: 'acme.old', version: '7.0.0', expiresAt: '2026-10-03T00:00:00Z', canKeep: false, keepRefusal: 'registry-outdated' },
+      ]),
+      keepExpiredTestplace,
+      prepareInstall,
+      adoptTestplaceRelease,
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const kept = wrapper.get('[data-expired-id="acme.kept"]')
+    expect(kept.text()).toContain('The test build acme.kept 1.0.0 expired on 2026-10-01 and was stopped; its settings and data are kept.')
+    expect(kept.find('.ext-testplace-marketplace').exists()).toBe(true)
+    expect(kept.find('.ext-testplace-remove').exists()).toBe(true)
+    // A takedown (or any failure besides the expiry) is never offered "keep using".
+    const down = wrapper.get('[data-expired-id="acme.down"]')
+    expect(down.find('.ext-testplace-keep').exists()).toBe(false)
+    expect(down.text()).toContain('cannot be kept')
+    // S8 T-MED-1: a withdrawn build says so; an unconfirmed one says why it cannot be kept now.
+    const pulled = wrapper.get('[data-expired-id="acme.pulled"]')
+    expect(pulled.text()).toContain('was withdrawn by its developer or by Navide')
+    expect(pulled.find('.ext-testplace-keep').exists()).toBe(false)
+    expect(pulled.find('.ext-testplace-remove').exists()).toBe(true)
+    const unsure = wrapper.get('[data-expired-id="acme.unsure"]')
+    expect(unsure.find('.ext-testplace-keep').exists()).toBe(false)
+    expect(unsure.text()).toContain('cannot be reached right now')
+    // S8 LOW-R3-2: the advice follows the reason.
+    expect(wrapper.get('[data-expired-id="acme.signedout"]').text()).toContain('Sign in with your Navide Cloud account')
+    expect(wrapper.get('[data-expired-id="acme.gone"]').text()).toContain('no longer a tester')
+    expect(wrapper.get('[data-expired-id="acme.old"]').text()).toContain('too old')
+    expect(api.remove).not.toHaveBeenCalled()
+
+    await kept.get('.ext-testplace-keep').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.message).toContain('acme.kept')
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(keepExpiredTestplace).toHaveBeenCalledWith('acme.kept')
+
+    // "Install the Navide Marketplace Version": a promoted build of the same
+    // digest is adopted in place; otherwise the normal verified install runs.
+    adoptTestplaceRelease.mockResolvedValueOnce({ adopted: true })
+    await kept.get('.ext-testplace-marketplace').trigger('click')
+    await flushPromises()
+    expect(adoptTestplaceRelease).toHaveBeenCalledWith('acme.kept')
+    expect(prepareInstall).not.toHaveBeenCalled()
+    await kept.get('.ext-testplace-marketplace').trigger('click')
+    await flushPromises()
+    expect(prepareInstall).toHaveBeenCalledWith({ namespace: 'acme', name: 'kept' })
+  })
+
+  it('reminds from 7 days before expiry and marks a kept build as expired', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.soon', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2026-10-25T00:00:00Z', testplaceVia: 'invite' },
+        { id: 'acme.later', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2026-12-25T00:00:00Z' },
+        { id: 'acme.past', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2026-10-01T00:00:00Z' },
+      ]),
+      expiredTestplace: vi.fn().mockResolvedValue([]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.soon"] .ext-testplace-expiring').text()).toContain('expires in 5 days (2026-10-25)')
+    expect(wrapper.get('[data-id="acme.soon"] .nv-source-badge').text()).toBe('Test build: automated scan only, expires 2026-10-25')
+    expect(wrapper.find('[data-id="acme.later"] .ext-testplace-expiring').exists()).toBe(false)
+    expect(wrapper.get('[data-id="acme.past"] .ext-testplace-kept').text()).toContain('kept in use')
+    expect(wrapper.get('[data-id="acme.past"] .nv-source-badge').text()).toBe('Test build, expired 2026-10-01 (kept in use)')
+  })
+})
+
+describe('ExtensionsPane: Developer Mode settings changed outside Navide (A2-5, G5)', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('shows the notice and marks the folder another program added, with Reload to consent again', async () => {
+    const reloadDeveloperPlugin = vi.fn().mockResolvedValue({ reloaded: false, requiresConsent: false })
+    mockPlugins({
+      developerMode: vi.fn().mockResolvedValue({
+        enabled: true,
+        externalChange: { detectedAt: '2026-10-21T01:00:00.000Z', modifiedAt: null },
+        folders: [{ pluginId: 'evil.two', path: '/tmp/other', consentedAt: '', loaded: false, externallyChanged: true }],
+      }),
+      reloadDeveloperPlugin,
+    })
+    const wrapper = mountExtensions()
+    await flushPromises()
+    const notice = wrapper.get('.ext-devmode-external')
+    expect(notice.attributes('role')).toBe('alert')
+    expect(notice.text().startsWith(i18n.global.t('settings.extensions.developerMode.externalChange', { time: 'T' }).split('T')[0]!)).toBe(true)
+    expect(wrapper.get('.ext-devmode-external-folder').text()).toBe(i18n.global.t('settings.extensions.developerMode.externallyChanged'))
+    await wrapper.get('.ext-devmode-folder .ext-devmode-reload').trigger('click')
+    await flushPromises()
+    expect(reloadDeveloperPlugin).toHaveBeenCalledWith('evil.two')
+    wrapper.unmount()
+  })
+
+  it('says nothing more when nothing was changed outside Navide', async () => {
+    mockPlugins({ developerMode: vi.fn().mockResolvedValue({ enabled: true, folders: [] }) })
+    const wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.find('.ext-devmode-external').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('ExtensionsPane: the Local folder card (A2-3)', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('opens from a developer folder badge with its path and last load; other sources have no card', async () => {
+    const developerMode = vi.fn().mockResolvedValue({
+      enabled: true,
+      folders: [{
+        pluginId: 'acme.devtodo', path: '/Users/me/dev-todo', consentedAt: '', loaded: true, loadedBy: { kind: 'user' }, autoReload: true,
+        lastLoad: { at: '2026-10-21T01:00:00.000Z', trigger: 'user-load', fingerprint: 'f'.repeat(64), fileCount: 3 },
+      }],
+    })
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.devtodo', requires: [], sensitive: [], provenance: 'developer-local-unpacked', source: 'developer-unpacked' },
+        { id: 'acme.file', requires: [], sensitive: [], source: 'local-unsigned' },
+      ]),
+      developerMode,
+    })
+    const wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.devtodo"] .nv-source-badge').text()).toBe('Local folder')
+    expect(wrapper.find('[data-id="acme.file"] .ext-folder-info-toggle').exists()).toBe(false)
+    await wrapper.get('[data-id="acme.devtodo"] .ext-folder-info-toggle').trigger('click')
+    await flushPromises()
+    const folderCard = wrapper.get('[data-id="acme.devtodo"] .nv-folder-card')
+    expect(folderCard.get('.nv-folder-card-path').text()).toBe('/Users/me/dev-todo')
+    expect(folderCard.get('.nv-folder-card-fingerprint code').text()).toBe('ffffffffffff')
+    await folderCard.get('.nv-folder-card-close').trigger('click')
+    expect(wrapper.find('.nv-folder-card').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

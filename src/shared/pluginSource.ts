@@ -10,6 +10,17 @@
  * fields an older release does not read.
  */
 
+/** A Navide plugin installed from a `.vsix` file (DX report 9.4 A1): what the
+ *  user consented to and when, from its local trust record. */
+export interface LocalInstallDetails {
+  /** sha256 hex of the `.vsix` file; absent for a record written before d5. */
+  fileDigest?: string
+  /** sha256 hex over the installed copy's files. */
+  contentDigest: string
+  /** ISO-8601 time the user consented to the install. */
+  installedAt: string
+}
+
 /** Source and review state, one value per installed package. */
 export type PluginSource =
   /** Marketplace stable release: reviewed and Registry-signed. */

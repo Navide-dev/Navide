@@ -15,18 +15,19 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import re
 import threading
 import time
 import uuid
 from typing import Any
 
-from .plugins.agent_tools_contract import APPROVAL_KINDS, PLUGIN_APPROVAL_TTL_S
+from .plugins.agent_tools_contract import APPROVAL_KINDS, FORM_APPROVAL_KINDS, FORM_APPROVAL_TTL_S, PLUGIN_APPROVAL_TTL_S
 from .plugins.external_content import neutralize_external_text
 from .skills_store import SkillsStoreError, SkillValidationError
 
 MAX_FINISHED = 32
 TERMINAL = frozenset({"installed", "rejected", "failed", "expired"})
-PLUGIN_KINDS = frozenset(APPROVAL_KINDS) - {"skill"}
+PLUGIN_KINDS = frozenset(APPROVAL_KINDS) - {"skill"} - frozenset(FORM_APPROVAL_KINDS)
 _REQUESTER_KEYS = frozenset({"paneId", "paneName", "workspace", "callerKind"})
 
 log = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ def _disabled_by(value: Any) -> dict[str, Any]:
 
 
 def _plugin_requester(requester: Any) -> dict[str, Any]:
-    if not isinstance(requester, dict) or set(requester) != _REQUESTER_KEYS:
+    if not isinstance(requester, dict) or set(requester) - {"tainted"} != _REQUESTER_KEYS:
         raise SkillApprovalError("BAD_REQUEST", "the requester must name paneId, paneName, workspace and callerKind")
     if requester["callerKind"] not in {"pane", "external", "host"}:
         raise SkillApprovalError("BAD_REQUEST", "unknown requester callerKind")
@@ -64,7 +65,26 @@ def _plugin_requester(requester: Any) -> dict[str, Any]:
         if value is not None and not isinstance(value, str):
             raise SkillApprovalError("BAD_REQUEST", f"requester {key} must be a string or null")
         cleaned[key] = None if value is None else _agent_text(value)
+    # S8-M1: present only for a tainted pane, so a clean request keeps its shape.
+    if requester.get("tainted") is True:
+        cleaned["tainted"] = True
     return cleaned
+
+
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+_STAGING_ID = re.compile(r"[0-9a-f]{32}")
+
+
+def _file_target_ok(target: dict[str, Any]) -> bool:
+    """A plugin-install-file target: what the Host staged (W1, S2)."""
+    digest = target.get("digest")
+    return (
+        isinstance(target.get("path"), str) and bool(target["path"])
+        and target.get("packageKind") in ("file", "folder")
+        and isinstance(target.get("stagingId"), str) and _STAGING_ID.fullmatch(target["stagingId"]) is not None
+        # A folder has no single digest: it is loaded in place and may change.
+        and (digest is None if target["packageKind"] == "folder" else isinstance(digest, str) and _SHA256_HEX.fullmatch(digest) is not None)
+    )
 
 
 class SkillApprovalError(SkillsStoreError):
@@ -158,12 +178,22 @@ class ApprovalRegistry:
             raise SkillApprovalError("BAD_REQUEST", "the target id must be <namespace>.<name>")
         if not isinstance(reason, str):
             raise SkillApprovalError("BAD_REQUEST", "the reason must be a string")
+        if kind == "plugin-install-file" and not _file_target_ok(target):
+            raise SkillApprovalError(
+                "BAD_REQUEST", "a file request needs the staged path, digest, stagingId and package kind",
+            )
         requester = _plugin_requester(requester)
         owner = f"{kind}:{target['id']}@{version if kind != 'plugin-remove' else ''}"
+        if kind == "plugin-install-file":
+            # Two files of one id and version are two requests.
+            owner += f"#{target['digest'] or target['path']}"
         with self._lock:
             self._expire()
             for record in self._records.values():
                 if record["status"] == "pending" and record["owner"] == owner:
+                    # A coalesced card names its first requester; a tainted later one is disclosed too.
+                    if requester.get("tainted") is True:
+                        record["requester"]["tainted"] = True
                     return copy.deepcopy(record)
             approval_id = uuid.uuid4().hex
             created_at = time.time()
@@ -183,6 +213,61 @@ class ApprovalRegistry:
                 "error": None,
                 "created_at": created_at,
                 "expires_at": created_at + PLUGIN_APPROVAL_TTL_S,
+            }
+            return copy.deepcopy(self._records[approval_id])
+
+    def request_form(
+        self,
+        *,
+        kind: str,
+        requester: dict[str, Any],
+        reason: str,
+        target: dict[str, Any],
+        draft: dict[str, Any],
+    ) -> dict[str, Any]:
+        """File an agent's draft for a main-window form (P4 *_fill).
+
+        Nothing is sent anywhere by filing: the window opens the form with the
+        draft, and only the user's Submit moves it to ``applying`` (the same
+        decide/finish path as a plugin request). A second draft for the same
+        form and target while one is pending replaces that draft and reason.
+        """
+        if kind not in FORM_APPROVAL_KINDS:
+            raise SkillApprovalError("BAD_REQUEST", f"unknown form request kind: {kind!r}")
+        if not isinstance(target, dict) or not all(
+            isinstance(target.get(key), str) for key in ("id", "namespace", "name")
+        ):
+            raise SkillApprovalError("BAD_REQUEST", "a form request needs a target id, namespace and name")
+        if not isinstance(reason, str):
+            raise SkillApprovalError("BAD_REQUEST", "the reason must be a string")
+        if not isinstance(draft, dict) or not isinstance(draft.get("fields"), dict):
+            raise SkillApprovalError("BAD_REQUEST", "a form request needs draft fields")
+        requester = _plugin_requester(requester)
+        owner = f"{kind}:{target['id']}@{target.get('version') or ''}"
+        with self._lock:
+            self._expire()
+            for record in self._records.values():
+                if record["status"] == "pending" and record["owner"] == owner:
+                    record.update(reason=_agent_text(reason), draft=copy.deepcopy(draft), requester=requester)
+                    return copy.deepcopy(record)
+            approval_id = uuid.uuid4().hex
+            created_at = time.time()
+            self._records[approval_id] = {
+                "approval_id": approval_id,
+                "kind": kind,
+                "owner": owner,
+                "requester": requester,
+                "reason": _agent_text(reason),
+                "target": {"version": None, "fromVersion": None, **copy.deepcopy(target)},
+                "card": None,
+                "diff": None,
+                "disabled": None,
+                # The agent's field values; the form marks each as written by an agent.
+                "draft": copy.deepcopy(draft),
+                "status": "pending",
+                "error": None,
+                "created_at": created_at,
+                "expires_at": created_at + FORM_APPROVAL_TTL_S,
             }
             return copy.deepcopy(self._records[approval_id])
 

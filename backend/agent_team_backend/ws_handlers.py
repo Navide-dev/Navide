@@ -389,6 +389,29 @@ async def marketplace_query_result(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 
 
+@handler("marketplace.developer.result")
+async def marketplace_developer_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``marketplace.developer.request`` (W3 status tools)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import marketplace_forms
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "marketplace.developer.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = marketplace_forms.resolve_developer_query(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
 @handler("plugins.agent_action.result")
 async def plugins_agent_action_result(
     session: "Session", msg_id: str, msg_type: str, payload: dict
@@ -419,10 +442,11 @@ _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "
 _HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
 #: Calls into a plugin's own backend, counted by the Host per batch.
 _BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
-#: Card K4: the one Host event a row may report, the Developer Mode switch. It
-#: is filed under the Host's own event identity, which no plugin can hold.
+#: Card K4: the Host events a row may report, the Developer Mode switch and
+#: (A2-5) its settings changed outside Navide. They are filed under the Host's
+#: own event identity, which no plugin can hold.
 _HOST_EVENT_PLUGIN_ID = "host"
-_HOST_EVENT_ADDRESSES = frozenset(("developerMode.on", "developerMode.off"))
+_HOST_EVENT_ADDRESSES = frozenset(("developerMode.on", "developerMode.off", "developerMode.externalChange"))
 
 
 def _host_event_row(app: Any, row: dict) -> str | None:
@@ -1220,7 +1244,10 @@ async def git_log(session: "Session", msg_id: str, msg_type: str, payload: dict)
     all_branches = bool(payload.get("all", False))
     query = payload.get("query") or None
     order = payload.get("order") or "ancestor"
-    result = await app.git_service.get_log(ws_path, n, all_branches, query, order)
+    result = await app.git_service.coalesced(
+        ("log", ws_path, n, all_branches, query, order),
+        lambda: app.git_service.get_log(ws_path, n, all_branches, query, order),
+    )
     await session.send_json(make_response(msg_id, msg_type, {"commits": result}))
 
 
@@ -1406,7 +1433,9 @@ async def git_branches(session: "Session", msg_id: str, msg_type: str, payload: 
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    result = await app.git_service.list_branches(ws_path)
+    result = await app.git_service.coalesced(
+        ("branches", ws_path), lambda: app.git_service.list_branches(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
@@ -1493,7 +1522,9 @@ async def git_stash_list(session: "Session", msg_id: str, msg_type: str, payload
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    entries = await app.git_service.stash_list(ws_path)
+    entries = await app.git_service.coalesced(
+        ("stash_list", ws_path), lambda: app.git_service.stash_list(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, {"stashes": entries}))
 
 
@@ -1642,7 +1673,9 @@ async def git_remotes(session: "Session", msg_id: str, msg_type: str, payload: d
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    remotes = await app.git_service.list_remotes(ws_path)
+    remotes = await app.git_service.coalesced(
+        ("remotes", ws_path), lambda: app.git_service.list_remotes(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, {"remotes": remotes}))
 
 
@@ -1696,7 +1729,7 @@ async def git_tags(session: "Session", msg_id: str, msg_type: str, payload: dict
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    tags = await app.git_service.list_tags(ws_path)
+    tags = await app.git_service.coalesced(("tags", ws_path), lambda: app.git_service.list_tags(ws_path))
     await session.send_json(make_response(msg_id, msg_type, {"tags": tags}))
 
 
@@ -1826,7 +1859,9 @@ async def git_worktrees(session: "Session", msg_id: str, msg_type: str, payload:
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    entries = await app.git_service.list_worktrees(ws_path)
+    entries = await app.git_service.coalesced(
+        ("worktrees", ws_path), lambda: app.git_service.list_worktrees(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, {"worktrees": entries}))
 
 
@@ -3649,6 +3684,10 @@ async def agent_reap_orphans(session: "Session", msg_id: str, msg_type: str, pay
 
 
 # ── MCP servers (mcp.*) ─────────────────────────────────────────────────────
+# Live MCP status fields passed through to Settings -> MCP as they are.
+_MCP_LIVE_DETAIL = ("starting_seconds", "slow_start", "error", "stderr_tail")
+
+
 @handler("mcp.list_servers")
 async def mcp_list_servers(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -3685,6 +3724,8 @@ async def mcp_list_servers(session: "Session", msg_id: str, msg_type: str, paylo
             "status": live_status,
             "tool_count": info.get("tool_count", 0),
             "tools": info.get("tools", []),
+            # Why it is still starting or why it failed (mcp_manager.list_status).
+            **{key: info[key] for key in _MCP_LIVE_DETAIL if key in info},
         })
     await session.send_json(
         make_response(
@@ -5987,7 +6028,7 @@ async def _add_local_pane_git(snapshot: dict) -> None:
     Local panes only: another machine's checkout is not readable from here, and
     nothing about git is uploaded to the server.
     """
-    from .mcp_server.server import pane_git
+    from .mcp_server.server import pane_git_cached
 
     panes = [
         pane
@@ -5997,9 +6038,10 @@ async def _add_local_pane_git(snapshot: dict) -> None:
         if isinstance(pane, dict) and pane.get("paneId")
     ]
     workspaces = {entry.pane_id: entry.workspace_path for entry in agent_messaging.list_panes()}
-    snapshots = await asyncio.gather(
-        *(pane_git(pane["paneId"], workspaces.get(pane["paneId"], "")) for pane in panes)
-    )
+    # Polled every 3 s by each main window: answered from the last snapshot,
+    # refreshed in the background once it is older than the cache's TTL, so a
+    # stream of git.changed no longer re-runs git on every poll.
+    snapshots = [pane_git_cached(pane["paneId"], workspaces.get(pane["paneId"], "")) for pane in panes]
     for pane, git in zip(panes, snapshots):
         if git is not None:
             pane["git"] = git
@@ -6300,13 +6342,18 @@ async def share_publish(session: "Session", msg_id: str, msg_type: str, payload:
     as a disconnect and nothing else. The error minted here names the file
     export as the way out instead.
     """
-    from . import share_codes
+    from . import settings_bundle, share_codes
 
     bundle = payload.get("bundle")
     if not isinstance(bundle, dict):
         await session.send_json(
             make_error(msg_id, msg_type, "INVALID_BUNDLE", "bundle must be an object")
         )
+        return
+    try:
+        bundle = settings_bundle.without_secrets(bundle)
+    except settings_bundle.BundleError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, err.message, err.details))
         return
     ttl = payload.get("ttlSeconds")
     if not isinstance(ttl, int) or isinstance(ttl, bool) or ttl <= 0:
@@ -9583,13 +9630,18 @@ async def terminal_resource_usage(session: "Session", msg_id: str, msg_type: str
         now = time.monotonic()
         cached = _resource_sweep_cache["payload"]
         if cached is not None and now - float(_resource_sweep_cache["at"]) < _RESOURCE_SWEEP_TTL_S:
-            risks = app.cli_risk_service.current(active_panes(session.terminals, app._PTY_OWNERS))
+            # Projection is CPU work over every recorded signal: off the loop.
+            risks = await asyncio.to_thread(
+                app.cli_risk_service.current, active_panes(session.terminals, app._PTY_OWNERS)
+            )
             await session.send_json(make_response(msg_id, msg_type, {**cached, "cliRisks": risks}))
             return
         result = await _collect_resource_usage(session)
         _resource_sweep_cache["at"] = now
         _resource_sweep_cache["payload"] = result
-    risks = app.cli_risk_service.current(active_panes(session.terminals, app._PTY_OWNERS))
+    risks = await asyncio.to_thread(
+        app.cli_risk_service.current, active_panes(session.terminals, app._PTY_OWNERS)
+    )
     await session.send_json(make_response(msg_id, msg_type, {**result, "cliRisks": risks}))
 
 
@@ -10229,6 +10281,7 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
     turn_state = payload.get("last_turn_state")
     report_to = payload.get("report_to")
     report_pending = payload.get("report_pending")
+    report_cross = payload.get("report_cross")
     live_launch = payload.get("last_live_launch")
     applied = False
     if ws_raw and pane_id:
@@ -10239,6 +10292,7 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
             report_to=report_to if isinstance(report_to, str) else None,
             report_pending=report_pending if isinstance(report_pending, bool) else None,
             last_live_launch=live_launch if isinstance(live_launch, str) else None,
+            report_cross=report_cross if isinstance(report_cross, bool) else None,
         )
         # Not an error, but say so: a write that matched no record is lost.
         applied = any(p.pane_id == pane_id for p in project.panes)
@@ -12130,6 +12184,9 @@ async def ui_invoke_ready(session: "Session", msg_id: str, msg_type: str, payloa
     window_id = payload.get("window_id")
     if isinstance(window_id, str) and _WINDOW_ID.fullmatch(window_id):
         session.window_id = window_id
+    held = payload.get("workspaces")
+    if isinstance(held, list):
+        session.held_workspaces = tuple(p for p in held if isinstance(p, str) and p)
     if payload.get("focused"):
         session.ui_focused_at = next(_UI_FOCUS_SEQ)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))

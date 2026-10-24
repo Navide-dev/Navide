@@ -84,6 +84,11 @@ RUN_TICK_S = 0.5
 # 3912 such splits in local transcripts the text came 1.9 s later at the median, 26.6 s at p99
 # and 110 s at most. A turn end with no text waits this long for its text before saying so.
 EMPTY_TURN_GRACE_S = 120.0
+# A CLI hook (Claude's Stop) reports a turn end before the conversation log is read, and
+# under load well before: its text comes from the log reader's turn end. Past this, the
+# status says the reply is being read; past EMPTY_TURN_GRACE_S the chat is told it will
+# follow, and it does, until RUN_WATCH_MAX_S.
+LATE_TEXT_STATUS_AFTER_S = 10.0
 RUN_WATCH_MAX_S = 1800.0  # stop typing/editing after this; a late turn_complete still replies
 VERDICT_POLL_S = 5.0
 # Right after a restart a platform hands over what queued while Navide was down, before the
@@ -131,6 +136,9 @@ MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷�
 MSG_QUEUE_FULL = "⚠️ 這個 pane 已有太多訊息在排隊，請稍後再傳"
 MSG_CHAT_RATE = "⚠️ 1 分鐘內傳了超過 {max} 則，這則沒有送進 pane，請 {wait} 秒後重送"
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
+MSG_READING_REPLY = "✅ 回合已結束，正在讀取回覆…"
+MSG_REPLY_LATE = "⏳ 回合已結束，但還沒讀到回覆文字；讀到後會補送。"
+MSG_LATE_PREFIX = "（補送）"
 MSG_STILL_RUNNING = "⏳ 仍在執行，完成時會再回覆"
 MSG_USAGE_LIMIT = "⚠️ {agent} 額度已用完，{reset} 重置"
 MSG_USAGE_LIMIT_NO_RESET = "⚠️ {agent} 額度已用完（重置時間未知）"
@@ -151,6 +159,7 @@ MSG_RELAY_TURN_ENDED = "✔ 回合已結束，不需要再確認"
 MSG_RELAY_PANE_GONE = "⚠️ pane 已離線，這個確認已失效"
 MSG_RELAY_ANSWERED_IN_CHAT = "✅ 已在聊天室回答："  # + the answer
 MSG_RELAY_PERMANENT = "⚠️ 這個選項會永久放行，請在電腦前操作"
+MSG_RELAY_NONE_TICKED = "⚠️ 請先勾選至少一個選項，再按「送出」"
 MSG_RELAY_NEEDS_LOCAL = "⚠️ 這個動作需要在電腦前確認"
 MSG_AWAITING_LOCAL = "pane 在等確認，請在電腦上回答"
 MSG_PENDING_NONE = "目前沒有等待確認的 pane"
@@ -282,6 +291,16 @@ async def _no_resume() -> dict[str, Any]:
 AdapterFactory = Callable[[dict[str, Any], dict[str, Any], ChannelStore], ChannelAdapter]
 
 
+def _relay_buttons(adapter: ChannelAdapter, request: relay.RelayRequest) -> list[tuple[str, str]] | None:
+    """The request's buttons on this adapter: a multi-select question gets tick buttons
+    only where they can be redrawn in place (``edit_buttons``)."""
+    if not adapter.capabilities.buttons:
+        return None
+    if request.multi and request.kind == "question" and hasattr(adapter, "edit_buttons"):
+        return relay.toggle_buttons(request)
+    return relay.buttons_for(request)
+
+
 def _bot_key(adapter: ChannelAdapter) -> str:
     """Which bot saw a chat: a short prefix of the token fingerprint (the lease key)."""
     return adapter.token_fingerprint()[:16]
@@ -332,6 +351,16 @@ class _Pending:
     owner: str = ""  # pane whose messages these are, for reply-to routing
     limit_noticed: bool = False  # the chat was told this run's pane hit a usage limit
     next_limit_probe: float = 0.0
+    late: bool = False  # the chat was told the reply would follow: it goes as a follow-up
+
+
+@dataclass
+class _AwaitText:
+    """A run whose turn end came from a CLI hook, waiting for the conversation log's text."""
+
+    pending: _Pending
+    timer: asyncio.Task[None] | None = None
+    log_ended: bool = False  # the log reported this turn's end, with no text (yet)
 
 
 @dataclass
@@ -395,6 +424,8 @@ class ChannelManager:
         self._pending: dict[str, _Pending] = {}
         # pane_id -> a run whose turn ended with no text, and the timer that answers it empty
         self._textless: dict[str, tuple[_Pending, asyncio.Task[Any]]] = {}
+        # pane_id -> runs a hook's turn end closed, oldest first, waiting for the log's text
+        self._await_text: dict[str, list[_AwaitText]] = {}
         self._queued: dict[str, set[str]] = {}  # pane_id -> msg_keys still queued
         self._queued_loc: dict[str, str] = {}  # msg_key -> the chat location that sent it
         self._chat_sends: dict[tuple[str, str], list[float]] = {}  # (pane_id, sender_id) -> send times
@@ -1279,6 +1310,26 @@ class ChannelManager:
             if bound is not None:
                 self._spawn(self._remember_wake_target(bound, pane_id))
         text = str(entry.get("text") or "")
+        source = str(entry.get("source") or "")
+        if source == "hook" and is_turn_end and (text.strip() or entry.get("log_ended")):
+            # The log ended this turn before its hook came, and that log turn end has
+            # already answered the run. The run armed now is the NEXT message's: a late
+            # hook must not close it.
+            return
+        waiting = self._await_text.get(pane_id)
+        if waiting and source != "hook":
+            # The conversation log settles the oldest run a hook's turn end left waiting:
+            # the log is in turn order, whatever arrived in the chat since.
+            head = waiting[0]
+            if is_turn_end:
+                if text.strip():
+                    self._settle_await(pane_id, text)
+                else:
+                    head.log_ended = True  # thinking only so far; the text may follow
+                return
+            if entry.get("turn_start") and head.log_ended:
+                # The log moved on to the next prompt: that turn wrote no text.
+                self._settle_await(pane_id, "")
         if is_turn_end and text.strip() and pane_id in self._textless \
                 and (pending is None or pending.armed_at is None):
             # The text half of a turn end that came in two lines: the reply after all.
@@ -1286,14 +1337,16 @@ class ChannelManager:
             timer.cancel()
             self._spawn(self._send_reply(held, text))
             return
+        # A hook's turn end is mirrored by nothing: the log's own turn end brings the text.
         if pending is None or pending.armed_at is None or not is_turn_end:
-            if is_turn_end:
+            if is_turn_end and source != "hook":
                 self._mirror_unclaimed_turn(pane_id, str(entry.get("text") or ""))
             return
         if float(entry.get("ts_monotonic") or 0) <= pending.armed_at:
             # The turn that was running when the message went in: not this reply's,
             # but still something the chat should hear about.
-            self._mirror_unclaimed_turn(pane_id, str(entry.get("text") or ""))
+            if source != "hook":
+                self._mirror_unclaimed_turn(pane_id, str(entry.get("text") or ""))
             return
         self._pending.pop(pane_id, None)
         if pending.task:
@@ -1302,6 +1355,12 @@ class ChannelManager:
         self._awaiting_posted.discard(pane_id)
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown.pop(pane_id, None)
+        if source == "hook":
+            # The turn ended; its text is still on its way from the conversation log.
+            held = _AwaitText(pending)
+            self._await_text.setdefault(pane_id, []).append(held)
+            held.timer = self._spawn(self._watch_await(pane_id, held))
+            return
         if not text.strip():
             earlier = self._textless.pop(pane_id, None)
             if earlier is not None:
@@ -1318,6 +1377,57 @@ class ChannelManager:
         if held is not None and held[0] is pending:
             del self._textless[pane_id]
             await self._send_reply(pending, "")
+
+    def _settle_await(self, pane_id: str, text: str) -> None:
+        """Answer the oldest run waiting on the log with ``text`` ("" when it wrote none)."""
+        waiting = self._await_text.get(pane_id)
+        if waiting:
+            self._settle_held(pane_id, waiting[0], text)
+
+    def _settle_held(self, pane_id: str, held: _AwaitText, text: str) -> None:
+        waiting = self._await_text.get(pane_id)
+        if not waiting or held not in waiting:
+            return
+        waiting.remove(held)
+        if not waiting:
+            del self._await_text[pane_id]
+        if held.timer is not None and held.timer is not asyncio.current_task():
+            held.timer.cancel()
+        self._spawn(self._send_reply(held.pending, text))
+
+    async def _watch_await(self, pane_id: str, held: _AwaitText) -> None:
+        """While a hook-ended run waits for its text: say it is being read, then that it
+        will follow; give up quietly once RUN_WATCH_MAX_S has passed."""
+        pending = held.pending
+
+        def still() -> bool:
+            return held in self._await_text.get(pane_id, [])
+
+        await asyncio.sleep(LATE_TEXT_STATUS_AFTER_S)
+        adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
+        if not still():
+            return
+        if adapter is not None and (pending.status_id or pending.status_send is not None):
+            await self._edit_status(adapter, pending, MSG_READING_REPLY, force=True)
+        await asyncio.sleep(max(0.0, EMPTY_TURN_GRACE_S - LATE_TEXT_STATUS_AFTER_S))
+        if not still():
+            return
+        if held.log_ended:
+            # The log ended this turn without text and nothing followed within the
+            # grace (the last message of a conversation, a turn of tools only): it
+            # wrote none — the same answer a log-only turn end gets at the grace.
+            self._settle_held(pane_id, held, "")
+            return
+        pending.late = True
+        adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
+        if adapter is not None and not pending.silent:
+            await self._notice(adapter, pending.loc, MSG_REPLY_LATE)
+        await asyncio.sleep(max(0.0, RUN_WATCH_MAX_S - EMPTY_TURN_GRACE_S))
+        waiting = self._await_text.get(pane_id)
+        if waiting and held in waiting:
+            waiting.remove(held)
+            if not waiting:
+                del self._await_text[pane_id]
 
     def _mirror_unclaimed_turn(self, pane_id: str, text: str) -> None:
         """A turn end no chat message asked for (typed at the keyboard, delegated by
@@ -1399,6 +1509,8 @@ class ChannelManager:
         attached as a file, where the platform takes files."""
         body, full = self._for_chat(pending.loc, body), self._for_chat(pending.loc, full)
         raw = body
+        if pending.late:
+            body = f"{MSG_LATE_PREFIX}{body or MSG_EMPTY_REPLY}"
         body = result_text(pending.source, body or MSG_EMPTY_REPLY, pending.child) if pending.source else body
         chunks = chunk_for(pending.loc.platform, redact.redact_text(body)) or [MSG_EMPTY_REPLY]
         whole = full.strip() if len(full.strip()) > CHILD_SUMMARY_CHARS else ""
@@ -1855,11 +1967,15 @@ class ChannelManager:
 
     def _bare_answer(self, msg: InboundMessage) -> relay.RelayAnswer | None:
         """``2`` / ``yes`` with no id answers the chat's prompt when exactly one is live."""
-        choice = relay.parse_bare(msg.text)
+        choice, text = relay.parse_bare(msg.text)
         if not choice:
             return None
         live = self.relay.for_location(msg.location_key())
-        return relay.RelayAnswer(live[0].id, choice) if len(live) == 1 else None
+        if len(live) != 1:
+            return None
+        if (text or "," in choice) and relay.answer_payload(live[0], choice, text) is None:
+            return None  # "2 more tests please" is a message, not an answer
+        return relay.RelayAnswer(live[0].id, choice, text)
 
     async def _held_by_prompt(self, msg: InboundMessage, pane_id: str) -> bool:
         """A pane waiting on a permission-type prompt would queue the text until the
@@ -1897,7 +2013,7 @@ class ChannelManager:
             minutes = int(max(self._clock() - request.created, 0) // 60)
             head = f"📋 {names.get(request.pane_id) or request.pane_id}・{minutes} 分鐘前"
             text = f"{head}\n{relay.prompt_text(request, request.prompt)}"
-            buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
+            buttons = _relay_buttons(adapter, request)
             try:
                 ids = await self.mirror.send(request.loc, text, owner=request.pane_id, buttons=buttons or None)
             except Exception as exc:  # noqa: BLE001
@@ -1922,7 +2038,7 @@ class ChannelManager:
             await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=relay.answer_hint(request)))
             return
         text = MSG_HELD_BY_PROMPT.format(how="\n" + relay.held_text(request))
-        buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
+        buttons = _relay_buttons(adapter, request)
         try:
             ids = await self.mirror.send(loc, text, buttons=buttons or None, reply_to=request.message_id)
         except Exception as exc:  # noqa: BLE001
@@ -1939,13 +2055,21 @@ class ChannelManager:
         if request is None or request.loc.key() != msg.location_key():
             await self._reply(msg, MSG_RELAY_EXPIRED)
             return
+        if answer.choice.startswith("t"):
+            await self._relay_toggle(msg, request, int(answer.choice[1:]))
+            return
+        if answer.choice == "s":
+            answer = dataclasses.replace(answer, choice=relay.ticked_choice(request))
+            if not answer.choice:
+                await self._reply(msg, MSG_RELAY_NONE_TICKED)
+                return
         if relay.refuses_permanent(request, answer.choice):
             await self._reply(msg, MSG_RELAY_PERMANENT)
             return
-        payload = relay.answer_payload(request, answer.choice)
+        payload = relay.answer_payload(request, answer.choice, answer.text)
         if payload is None:
             await self._reply(msg, f"⚠️ {relay.answer_hint(request)}" if request.kind == "permission"
-                              else "⚠️ 請回覆有效的選項編號")
+                              else relay.invalid_reply(request))
             return
         if not relay.is_deny(request, payload) and self._guard_vetoes(request):
             await self._reply(msg, MSG_RELAY_NEEDS_LOCAL)
@@ -1979,6 +2103,22 @@ class ChannelManager:
             await self._reply(msg, f"✅ 已送出：{relay.describe_answer(payload)}")
         else:
             await self._reply(msg, f"⚠️ 送出失敗：{result.get('error') or 'not sent'}")
+
+    async def _relay_toggle(self, msg: InboundMessage, request: relay.RelayRequest, n: int) -> None:
+        """A box button: tick or untick it and redraw the request's buttons. Nothing
+        reaches the pane until 送出."""
+        adapter = self._adapters.get((request.loc.platform, request.loc.account))
+        if not hasattr(adapter, "edit_buttons") or not relay.toggle(request, n):
+            await self._reply(msg, relay.invalid_reply(request))
+            return
+        buttons = relay.toggle_buttons(request)
+        for message_id in [request.message_id, *(mid for mid, _ in request.held)]:
+            if not message_id:
+                continue
+            try:
+                await adapter.edit_buttons(request.loc, message_id, buttons)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("channels: redrawing relay buttons in %s failed: %s", request.loc.key(), exc)
 
     async def _relay_prompt_changed(self, msg: InboundMessage, request: relay.RelayRequest) -> None:
         """The screen moved on: this id is stale, and the pane's prompt as it is now is
@@ -2965,20 +3105,16 @@ class ChannelManager:
             # No keys Navide could press for this vendor: buttons would only fail.
             await self._send_awaiting(pane_id, loc, prompt, who + MSG_AWAITING_LOCAL)
             return
-        if any(relay.is_multi_select(o) for o in options):
-            # Toggling a box is one key, submitting is more: nothing to relay safely.
-            lines = [f"{who}⏸ pane 需要確認（question）", *([prompt.strip()] if prompt.strip() else []),
-                     relay.COMPUTER_ONLY]
-            await self._send_awaiting(pane_id, loc, prompt, "\n".join(lines))
-            return
         if not self._relay_enabled(loc.platform, loc.account):
             await self._notice(adapter, loc, f"{who}⏸ pane 等待確認（{kind}）")
             self._awaiting_shown[pane_id] = _Shown(prompt)
             return
         self._retire_relay(pane_id, MSG_RELAY_SUPERSEDED)  # one live request per pane
-        request = self.relay.create(pane_id, kind, options, loc, prompt=prompt)
+        request = self.relay.create(pane_id, kind, options, loc, prompt=prompt,
+                                    agent_key=str(info.get("agent") or ""),
+                                    multi=any(relay.is_multi_select(o) for o in options))
         text = who + relay.prompt_text(request, prompt)
-        buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
+        buttons = _relay_buttons(adapter, request)
         try:
             ids = await self.mirror.send(loc, text, owner=pane_id, buttons=buttons or None)
         except Exception as exc:  # noqa: BLE001
@@ -3057,6 +3193,9 @@ class ChannelManager:
         held = self._textless.pop(pane_id, None)
         if held is not None:
             held[1].cancel()
+        for waiting in self._await_text.pop(pane_id, []):
+            if waiting.timer is not None:
+                waiting.timer.cancel()
         self._awaiting_posted.discard(pane_id)
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown.pop(pane_id, None)

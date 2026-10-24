@@ -1,0 +1,291 @@
+name: Browser plugin package
+
+# Builds, packs and dry-run signs navide.browser for every platform target, so
+# the per-target packages can be published to the Registry separately from the
+# app. Modelled on plugin-packages.yml (navide.plans).
+#
+# Dry-run by default: each target is validated, packed with the SDK CLI,
+# signed with a throwaway Ed25519 key generated in the job and verified
+# against it; the key is deleted before the step ends and the signature is not
+# uploaded. The uploaded artifact is named `navide.browser-<version>-<target>.vsix`
+# and holds the vsix plus its `.sha256`, the layout
+# scripts/publish-first-party-plugins.sh --from-run reads, so the usual way to
+# publish stays local and keeps the publisher key off GitHub:
+#
+#   scripts/publish-first-party-plugins.sh --from-run <run id> \
+#     --id navide.browser --version <version> --target "<targets>" [--yes]
+#
+# The `publish` job is an opt-in alternative that signs and publishes from CI.
+# It runs only when the `publish` input is true AND both secrets below are set
+# on the repository; otherwise it is skipped. Neither secret exists today: the
+# first-party policy (plugin-packages.yml header) is that the publisher key
+# never reaches GitHub. Add them only after deciding to change that policy.
+#   NAVIDE_PLUGIN_PUBLISHER_KEY  PEM text of the `navide` publisher Ed25519
+#                                private key (the file publish-first-party-
+#                                plugins.sh reads as NAVIDE_PUBLISHER_KEY)
+#   NAVIDE_PLUGIN_TOKEN          `navide` publisher bearer token
+#
+# PyInstaller cannot cross-compile, so each target builds on a runner of that
+# platform and architecture, and the SDK CLI only packs a backend plugin for
+# the host target, so packing happens on the same runner.
+#
+# darwin-x64: release.yml ships no macOS x64 app and publish-first-party-
+# plugins.sh's KNOWN_TARGETS leaves it out, so that package is built and
+# checked here but cannot be published with --from-run until both change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Full 40-character commit SHA, branch or tag to build (actions/checkout does not resolve short SHAs)
+        required: true
+        type: string
+      version:
+        description: Plugin version to stamp (x.y.z). Empty keeps the build default (the root package.json version). Required when publish is true.
+        required: false
+        default: ''
+        type: string
+      publish:
+        description: Sign with the real publisher key and publish to the Registry (needs NAVIDE_PLUGIN_PUBLISHER_KEY and NAVIDE_PLUGIN_TOKEN secrets)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build navide.browser (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-14
+            timeout: 45
+          - target: darwin-x64
+            # Intel macOS image; release.yml has no darwin-x64 job to copy.
+            runner: macos-15-intel
+            timeout: 45
+          - target: linux-x64
+            runner: ubuntu-22.04
+            timeout: 45
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            timeout: 45
+          - target: win32-x64
+            runner: windows-latest
+            timeout: 45
+          - target: win32-arm64
+            runner: windows-11-arm
+            # Two backend dependencies have no win_arm64 wheel and compile
+            # from their sdists here, as in release.yml.
+            timeout: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLUGIN_DIR: dist-plugins/navide-browser
+      STAGE_DIR: dist-plugins/browser-package/stage
+      OUT_DIR: dist-plugins/browser-package/out
+      SDK_CLI: packages/plugin-sdk/bin/navide-plugin.mjs
+
+    steps:
+      - name: Check out requested ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+          cache-suffix: browser-plugin-package-${{ matrix.target }}
+
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          uv --project backend sync --locked
+
+      - name: Check the runner is the target
+        run: |
+          host="$(node -p "process.platform + '-' + process.arch")"
+          echo "runner target: ${host}"
+          test "${host}" = "${{ matrix.target }}"
+
+      - name: Build navide.browser
+        env:
+          NAVIDE_PLUGIN_ARTIFACT_VERSION: ${{ inputs.version }}
+        run: |
+          # An empty value would override the build default with "".
+          if [ -z "${NAVIDE_PLUGIN_ARTIFACT_VERSION}" ]; then unset NAVIDE_PLUGIN_ARTIFACT_VERSION; fi
+          pnpm run build:public-packages
+          pnpm run build:browser:v2
+          pnpm run build:browser:backend
+
+      - name: Validate, stage and pack
+        id: pack
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          target="${{ matrix.target }}"
+          id="$(node -p "require('./${PLUGIN_DIR}/manifest.json').id")"
+          version="$(node -p "require('./${PLUGIN_DIR}/manifest.json').version")"
+          test "${id}" = navide.browser
+          if [ -n "${VERSION_INPUT}" ]; then test "${version}" = "${VERSION_INPUT}"; fi
+          node "${SDK_CLI}" validate "${PLUGIN_DIR}" --target "${target}"
+          # Stage exactly the files artifact-files.json lists, as
+          # scripts/stage-official-plugin-artifacts.mjs does.
+          rm -rf "${STAGE_DIR}" "${OUT_DIR}"
+          mkdir -p "${STAGE_DIR}" "${OUT_DIR}"
+          # shellcheck disable=SC2016 # single-quoted JavaScript, not shell
+          node -e '
+            const fs = require("node:fs"), path = require("node:path")
+            const [from, to] = process.argv.slice(1)
+            const { files } = JSON.parse(fs.readFileSync(path.join(from, "artifact-files.json"), "utf8"))
+            if (!Array.isArray(files) || files.some((file) => typeof file !== "string")) throw new Error("artifact file list is invalid")
+            for (const file of files) {
+              const source = path.join(from, file)
+              if (!fs.lstatSync(source).isFile()) throw new Error(`artifact file is not a regular file: ${source}`)
+              fs.mkdirSync(path.dirname(path.join(to, file)), { recursive: true })
+              fs.cpSync(source, path.join(to, file), { preserveTimestamps: true })
+            }
+            fs.copyFileSync(path.join(from, "artifact-files.json"), path.join(to, "artifact-files.json"))
+          ' "${PLUGIN_DIR}" "${STAGE_DIR}"
+          node "${SDK_CLI}" validate "${STAGE_DIR}" --target "${target}"
+          name="${id}-${version}-${target}.vsix"
+          node "${SDK_CLI}" package "${STAGE_DIR}" --target "${target}" --out "${OUT_DIR}/${name}"
+          # shellcheck disable=SC2016 # single-quoted JavaScript, not shell
+          node -e '
+            const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto")
+            const file = process.argv[1]
+            const digest = crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")
+            fs.writeFileSync(`${file}.sha256`, `${digest}  ${path.basename(file)}\n`)
+          ' "${OUT_DIR}/${name}"
+          cat "${OUT_DIR}/${name}.sha256"
+          echo "name=${name}" >> "${GITHUB_OUTPUT}"
+
+      - name: Dry-run sign and verify with a throwaway key
+        run: |
+          keys="${RUNNER_TEMP}/navide-browser-throwaway-key"
+          vsix="${OUT_DIR}/${{ steps.pack.outputs.name }}"
+          rm -rf "${keys}"
+          trap 'rm -rf "${keys}"' EXIT
+          node "${SDK_CLI}" keygen --out-dir "${keys}" --name throwaway
+          node "${SDK_CLI}" sign "${vsix}" --key "${keys}/throwaway.key" --out "${keys}/package.sig"
+          node "${SDK_CLI}" verify "${vsix}" --key "${keys}/throwaway.pub" --signature "${keys}/package.sig"
+
+      - name: Upload the package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.pack.outputs.name }}
+          path: |
+            ${{ env.OUT_DIR }}/${{ steps.pack.outputs.name }}
+            ${{ env.OUT_DIR }}/${{ steps.pack.outputs.name }}.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-gate:
+    name: Check publish secrets
+    if: ${{ inputs.publish }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check both secrets are set
+        id: check
+        env:
+          HAS_KEY: ${{ secrets.NAVIDE_PLUGIN_PUBLISHER_KEY != '' }}
+          HAS_TOKEN: ${{ secrets.NAVIDE_PLUGIN_TOKEN != '' }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          ready=true
+          if [ "${HAS_KEY}" != true ] || [ "${HAS_TOKEN}" != true ]; then
+            echo "::notice::NAVIDE_PLUGIN_PUBLISHER_KEY or NAVIDE_PLUGIN_TOKEN is not set; skipping publish."
+            ready=false
+          fi
+          if ! printf '%s' "${VERSION}" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::notice::publish needs an x.y.z version input; skipping publish."
+            ready=false
+          fi
+          echo "ready=${ready}" >> "${GITHUB_OUTPUT}"
+
+  publish:
+    name: Sign and publish navide.browser
+    needs: [build, publish-gate]
+    # Publish only after every target built: a partial set is easy to publish
+    # later with --from-run, while a half-published version cannot be undone.
+    if: ${{ inputs.publish && needs.publish-gate.outputs.ready == 'true' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      NAVIDE_REGISTRY_URL: https://server.navide.dev/registry
+      VERSION: ${{ inputs.version }}
+
+    steps:
+      # Only supplies the Registry CLI, so it uses the workflow's own revision.
+      - name: Check out publishing tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+          cache-suffix: browser-plugin-publish
+
+      - name: Download the packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: navide.browser-*
+          path: packages
+
+      - name: Sign and publish each target
+        # The same sign + publish calls as publish_vsix in
+        # scripts/publish-first-party-plugins.sh.
+        env:
+          NAVIDE_PLUGIN_PUBLISHER_KEY: ${{ secrets.NAVIDE_PLUGIN_PUBLISHER_KEY }}
+          NAVIDE_PLUGIN_TOKEN: ${{ secrets.NAVIDE_PLUGIN_TOKEN }}
+        run: |
+          key="${RUNNER_TEMP}/publisher.key"
+          trap 'rm -f "${key}"' EXIT
+          (umask 077 && printf '%s\n' "${NAVIDE_PLUGIN_PUBLISHER_KEY}" > "${key}")
+          unset NAVIDE_PLUGIN_PUBLISHER_KEY
+          for target in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64 win32-arm64; do
+            name="navide.browser-${VERSION}-${target}.vsix"
+            dir="packages/${name}"
+            (cd "${dir}" && sha256sum -c "${name}.sha256")
+            found="$(python3 -c 'import json, sys, zipfile
+          m = json.loads(zipfile.ZipFile(sys.argv[1]).read("manifest.json"))
+          print(m["id"], m["version"])' "${dir}/${name}")"
+            test "${found}" = "navide.browser ${VERSION}"
+            uv --project marketplace/registry run --locked --quiet \
+              navide-plugin sign "${dir}/${name}" --key "${key}" --out "${dir}/${name}.sig"
+            uv --project marketplace/registry run --locked --quiet \
+              navide-plugin publish "${dir}/${name}" --registry "${NAVIDE_REGISTRY_URL}" \
+              --signature "${dir}/${name}.sig" --target "${target}"
+          done

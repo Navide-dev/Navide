@@ -463,6 +463,17 @@ class TelegramAdapter:
     def _keyboard(rows: list[list[tuple[str, str]]]) -> dict[str, Any]:
         return {"inline_keyboard": [[{"text": label, "callback_data": data} for label, data in row] for row in rows]}
 
+    async def edit_buttons(self, loc: Location, message_id: str, buttons: list[tuple[str, str]]) -> None:
+        """Replace the message's buttons only (a multi-select question's ticks)."""
+        params = {"chat_id": loc.chat_id, "message_id": int(message_id),
+                  "reply_markup": self._keyboard(self._button_rows(buttons))}
+        try:
+            await self._call("editMessageReplyMarkup", params)
+        except TelegramApiError as exc:
+            if "message is not modified" in exc.description.lower():
+                return
+            raise
+
     async def send_menu(self, loc: Location, text: str, rows: list[list[tuple[str, str]]]) -> str:
         """One message carrying ``rows`` of buttons (the quick menu); its id."""
         params = {**self._target(loc), "reply_markup": self._keyboard(rows)}

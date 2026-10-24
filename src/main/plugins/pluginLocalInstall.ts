@@ -13,6 +13,8 @@ import { existsSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { REGISTRY_RECEIPT_NAME, type InstalledTrustDecision } from './pluginInstalledTrust'
 import { readLocalTrustRecord, verifyLocalPackage, type PluginLocalTrustContext } from './pluginLocalTrust'
+import { readLocalInstallTrust } from './pluginLocalInstallTrust'
+import { recordDigestBlock, securityBlockReason } from './pluginDigestBlock'
 import { parseManifestJson } from './pluginManifest'
 import { pluginSourceFromLegacyProvenance, type LegacyPluginProvenance, type PluginSource } from '../../shared/pluginSource'
 import { revealUnsafeLineText } from '../../shared/pluginAgentTools'
@@ -24,15 +26,15 @@ import type { SupportedLocale } from '../hostLocale'
  * itself change the content the record covers. */
 export const PLUGIN_LOCAL_TRUST_DIR = 'plugin-local-trust'
 
-export type LocalRecordRole = 'active' | 'candidate'
+export type LocalRecordRole = 'active' | 'candidate' | 'previous'
 
 export function localTrustRecordPath(pluginsRoot: string, pluginId: string, role: LocalRecordRole = 'active'): string {
-  return join(dirname(pluginsRoot), PLUGIN_LOCAL_TRUST_DIR, role === 'active' ? `${pluginId}.json` : `${pluginId}.candidate.json`)
+  return join(dirname(pluginsRoot), PLUGIN_LOCAL_TRUST_DIR, role === 'active' ? `${pluginId}.json` : `${pluginId}.${role}.json`)
 }
 
 /** The consent record covering `pluginId`@`version`, active first. */
 export function localTrustRecordFor(pluginsRoot: string, pluginId: string, version: string): string | null {
-  for (const role of ['active', 'candidate'] as const) {
+  for (const role of ['active', 'candidate', 'previous'] as const) {
     const path = localTrustRecordPath(pluginsRoot, pluginId, role)
     try {
       const record = readLocalTrustRecord(path)
@@ -66,7 +68,8 @@ function localRecordForDir(pluginsRoot: string, packageDir: string, pluginId: st
  * shape the Registry verifier returns, or null when the directory is not a
  * local install (the caller then verifies it as a Registry package, as on
  * main). A taken-down local package is refused like a quarantined one, with
- * the takedown reason.
+ * the takedown reason, and so is one whose `.vsix` digest Navide blocked for a
+ * security reason since it was installed (decision d5, `pluginDigestBlock.ts`).
  */
 export function verifyLocalInstalledPackage(
   pluginsRoot: string,
@@ -78,6 +81,8 @@ export function verifyLocalInstalledPackage(
   if (recordPath === null) return null
   const decision = verifyLocalPackage(packageDir, pluginId, recordPath, trust)
   if (decision.action !== 'allow') return { action: 'quarantine', reason: `${decision.code}: ${decision.reason}` }
+  const block = recordDigestBlock(readLocalTrustRecord(recordPath), readLocalInstallTrust(pluginsRoot, trust.pinnedRootKey))
+  if (block?.action === 'disable') return { action: 'quarantine', reason: securityBlockReason(pluginId) }
   // Immutable layout: <root>/<id>/<version>/<target>/package.
   return { action: 'allow', artifactDigest: decision.contentDigest, target: basename(dirname(packageDir)) }
 }
@@ -89,9 +94,28 @@ export function promoteLocalCandidateRecord(pluginsRoot: string, pluginId: strin
   if (existsSync(candidate)) renameSync(candidate, localTrustRecordPath(pluginsRoot, pluginId, 'active'))
 }
 
+/** L4: a file update over a file install keeps the replaced version as the
+ * rollback target, so its consent record moves to the `previous` role before
+ * the candidate's becomes the active one. Going back to it asks again. */
+export function retainActiveLocalRecordAsPrevious(pluginsRoot: string, pluginId: string): void {
+  const active = localTrustRecordPath(pluginsRoot, pluginId, 'active')
+  if (existsSync(active)) renameSync(active, localTrustRecordPath(pluginsRoot, pluginId, 'previous'))
+}
+
+/** L4: a rollback to the kept file version: its record becomes the active one
+ * again and the displaced version's record becomes the candidate's, matching
+ * the selector (the displaced package is retained as the next candidate). */
+export function swapLocalRecordsForRollback(pluginsRoot: string, pluginId: string): void {
+  const previous = localTrustRecordPath(pluginsRoot, pluginId, 'previous')
+  if (!existsSync(previous)) return
+  const active = localTrustRecordPath(pluginsRoot, pluginId, 'active')
+  if (existsSync(active)) renameSync(active, localTrustRecordPath(pluginsRoot, pluginId, 'candidate'))
+  renameSync(previous, active)
+}
+
 /** Drop the consent records of one plugin (removal, or a Registry install
  * replacing a local one). */
-export function forgetLocalTrustRecords(pluginsRoot: string, pluginId: string, roles: readonly LocalRecordRole[] = ['active', 'candidate']): void {
+export function forgetLocalTrustRecords(pluginsRoot: string, pluginId: string, roles: readonly LocalRecordRole[] = ['active', 'candidate', 'previous']): void {
   for (const role of roles) rmSync(localTrustRecordPath(pluginsRoot, pluginId, role), { force: true })
 }
 
@@ -112,7 +136,7 @@ export function installedPackageSource(
  * never read like a Marketplace one's. */
 const AGENT_APPROVAL_SOURCE_NOTE: Partial<Record<PluginSource, string>> = {
   'local-unsigned': 'Source: a local file, not reviewed by Navide.',
-  'developer-unpacked': 'Source: a developer folder, not reviewed by Navide; its contents can change at any time.',
+  'developer-unpacked': 'Source: a local folder, not reviewed by Navide; its contents can change at any time.',
 }
 
 export function agentApprovalSourceNote(source: PluginSource | undefined): string {
@@ -129,9 +153,9 @@ const LOCAL_SOURCE_CONSENT_LINE: Record<string, string> = {
 }
 
 const DEVELOPER_SOURCE_CONSENT_LINE: Record<string, string> = {
-  'zh-TW': '來源與審核：開發者資料夾，內容隨時可能變動，未經 Navide 審核',
-  'en-US': 'Source and review: Developer folder; its contents can change at any time, not reviewed by Navide',
-  'ja-JP': '提供元と審査：開発者フォルダー。内容はいつでも変わる可能性があります。Navide の審査なし',
+  'zh-TW': '來源與審核：本機資料夾，內容隨時可能變動，未經 Navide 審核',
+  'en-US': 'Source and review: Local folder; its contents can change at any time, not reviewed by Navide',
+  'ja-JP': '提供元と審査：ローカルフォルダー。内容はいつでも変わる可能性があります。Navide の審査なし',
 }
 
 export function localSourceConsentLine(source: PluginSource | undefined, locale: string): string {

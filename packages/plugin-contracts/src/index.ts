@@ -22,6 +22,9 @@ export type { EditorNativeParams, EditorNativeResults, EditorNativeEvents, Edito
 export * from './gitCapabilities.js'
 export * from './issues.js'
 export * from './editorPreferences.js'
+export * from './staticScan.js'
+export { deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
+export type { AgentToolErrorCode, AgentToolValidationError } from './agentToolsValidation.js'
 export type { GitAccountParams, GitAccountResults, GitAccountSummary } from './gitAccounts.js'
 
 export type JsonPrimitive = string | number | boolean | null
@@ -33,7 +36,7 @@ export type StorageGetResult =
 
 export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'window', 'detail'] as const
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
-export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli'] as const
+export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
 /** Most members one Extension Pack may list. */
 export const MAX_EXTENSION_PACK_MEMBERS = 20
@@ -363,6 +366,7 @@ const VERSION_RANGE = /^[~^]?[0-9]+\.[0-9]+\.[0-9]+$/
 const PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
 const PUBLISHER = /^[a-z0-9][a-z0-9-]*$/
 const VIEW_ID = /^[a-z][a-z0-9-]*$/
+const VIEW_ID_RULE = 'a view id is a lower-case letter followed by a-z, 0-9 and -'
 const LICENSE = /^[A-Za-z0-9][A-Za-z0-9.()+ -]*$/
 const SCRIPT_EXTENSIONS = new Set([
   '.py',
@@ -468,7 +472,7 @@ function parseScopes(value: unknown): PluginManifestV2Scopes {
   )
   assertOnlyKeys(fs, ['root', 'read', 'write'], 'manifest permissions.scopes.fs')
   if (fs.root !== undefined && !V2_FS_SCOPE_ROOTS.includes(fs.root as PluginFsScopeRoot)) {
-    fail('manifest permissions.scopes.fs.root must be workspace or repository')
+    fail(`manifest permissions.scopes.fs.root must be workspace or repository, got ${JSON.stringify(fs.root)}`)
   }
   if (fs.read === undefined && fs.write === undefined) {
     fail('manifest permissions.scopes.fs must declare read or write')
@@ -487,16 +491,17 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
   assertOnlyKeys(permissions, ['system', 'shell', 'scopes'], 'manifest permissions')
   let system: PluginSystemNamespace[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'system')) {
-    const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, 3)
-    if (values.some((item) => !V2_SYSTEM_NAMESPACES.includes(item as PluginSystemNamespace))) {
-      fail('manifest permissions.system contains an unknown namespace')
+    const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, 4)
+    const unknown = values.find((item) => !V2_SYSTEM_NAMESPACES.includes(item as PluginSystemNamespace))
+    if (unknown !== undefined) {
+      fail(`manifest permissions.system contains an unknown namespace ${JSON.stringify(unknown)}; allowed: ${V2_SYSTEM_NAMESPACES.join(', ')}`)
     }
     system = values as PluginSystemNamespace[]
   }
   let shell: PluginShellMode | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'shell')) {
     if (!V2_SHELL_MODES.includes(permissions.shell as PluginShellMode)) {
-      fail('manifest permissions.shell contains an unknown mode')
+      fail(`manifest permissions.shell contains an unknown mode ${JSON.stringify(permissions.shell)}; allowed: ${V2_SHELL_MODES.join(', ')}`)
     }
     shell = permissions.shell as PluginShellMode
   }
@@ -515,14 +520,17 @@ function parseMarketplace(value: unknown): PluginManifestV2['marketplace'] {
   )
   const description = displayText(required(marketplace, 'description', 'manifest marketplace'), 'manifest marketplace.description', 280)
   const license = stringValue(required(marketplace, 'license', 'manifest marketplace'), 'manifest marketplace.license', 1, 100)
-  if (!LICENSE.test(license)) fail('manifest marketplace.license contains invalid characters')
+  if (!LICENSE.test(license)) {
+    fail(`manifest marketplace.license ${JSON.stringify(license)} contains invalid characters; allowed: letters, digits, spaces and . ( ) + -`)
+  }
   const result: PluginManifestV2['marketplace'] = { description, license }
   if (marketplace.repository !== undefined) result.repository = httpsUri(marketplace.repository, 'manifest marketplace.repository')
   if (marketplace.homepage !== undefined) result.homepage = httpsUri(marketplace.homepage, 'manifest marketplace.homepage')
   if (marketplace.categories !== undefined) {
     const categories = uniqueStringArray(marketplace.categories, 'manifest marketplace.categories', 0, 5)
-    if (categories.some((category) => !/^[a-z0-9][a-z0-9-]{0,39}$/.test(category))) {
-      fail('manifest marketplace.categories contains an invalid category')
+    const invalid = categories.find((category) => !/^[a-z0-9][a-z0-9-]{0,39}$/.test(category))
+    if (invalid !== undefined) {
+      fail(`manifest marketplace.categories contains an invalid category ${JSON.stringify(invalid)}; a category is 1-40 of a-z, 0-9 and -, starting with a letter or digit`)
     }
     result.categories = categories
   }
@@ -540,10 +548,10 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
     const view = assertObject(raw, `manifest contributes.views[${index}]`)
     assertOnlyKeys(view, ['id', 'kind', 'location', 'title', 'icon', 'entry', 'detailView', 'targetSchema', 'receives'], `manifest contributes.views[${index}]`)
     const id = stringValue(required(view, 'id', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].id`)
-    if (!VIEW_ID.test(id)) fail(`manifest contributes.views[${index}].id is invalid`)
+    if (!VIEW_ID.test(id)) fail(`manifest contributes.views[${index}].id ${JSON.stringify(id)} is invalid; ${VIEW_ID_RULE}`)
     if (view.kind !== 'custom') fail(`manifest contributes.views[${index}].kind must be 'custom'`)
     if (!V2_VIEW_LOCATIONS.includes(view.location as (typeof V2_VIEW_LOCATIONS)[number])) {
-      fail(`manifest contributes.views[${index}].location is invalid`)
+      fail(`manifest contributes.views[${index}].location ${JSON.stringify(view.location)} is invalid; allowed: ${V2_VIEW_LOCATIONS.join(', ')}`)
     }
     const title = displayText(required(view, 'title', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].title`)
     const entry = htmlPath(required(view, 'entry', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].entry`)
@@ -557,7 +565,9 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
     if (view.icon !== undefined) parsed.icon = safePath(view.icon, `manifest contributes.views[${index}].icon`)
     if (view.detailView !== undefined) {
       parsed.detailView = stringValue(view.detailView, `manifest contributes.views[${index}].detailView`)
-      if (!VIEW_ID.test(parsed.detailView)) fail(`manifest contributes.views[${index}].detailView is invalid`)
+      if (!VIEW_ID.test(parsed.detailView)) {
+        fail(`manifest contributes.views[${index}].detailView ${JSON.stringify(parsed.detailView)} is invalid; ${VIEW_ID_RULE}`)
+      }
     }
     if (view.targetSchema !== undefined) {
       parsed.targetSchema = safePath(view.targetSchema, `manifest contributes.views[${index}].targetSchema`)
@@ -568,8 +578,9 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
       assertOnlyKeys(receives, ['protocolVersion', 'locations', 'editorTargets', 'closeGuard'], `manifest contributes.views[${index}].receives`)
       if (receives.protocolVersion !== 1) fail(`manifest contributes.views[${index}].receives.protocolVersion must be 1`)
       const locations = uniqueStringArray(receives.locations, `manifest contributes.views[${index}].receives.locations`, 1, 2)
-      if (locations.some((location) => !V2_RECEIVER_LOCATIONS.includes(location as (typeof V2_RECEIVER_LOCATIONS)[number]))) {
-        fail(`manifest contributes.views[${index}].receives.locations contains an invalid location`)
+      const invalidLocation = locations.find((location) => !V2_RECEIVER_LOCATIONS.includes(location as (typeof V2_RECEIVER_LOCATIONS)[number]))
+      if (invalidLocation !== undefined) {
+        fail(`manifest contributes.views[${index}].receives.locations contains an invalid location ${JSON.stringify(invalidLocation)}; allowed: ${V2_RECEIVER_LOCATIONS.join(', ')}`)
       }
       const receiver: PluginManifestV2Receiver = {
         protocolVersion: 1,
@@ -687,7 +698,7 @@ function backendNameList(value: unknown, label: string, maxItems: number): strin
   const names = uniqueStringArray(value, label, 1, maxItems)
   for (const name of names) {
     if (name.length > 128 || !BACKEND_NAME_PATTERN.test(name)) {
-      fail(`${label} contains an invalid name`)
+      fail(`${label} contains an invalid name ${JSON.stringify(name)}; a name is dot-separated segments that each start with a lower-case letter followed by letters or digits, for example files.search`)
     }
   }
   return names
@@ -703,7 +714,7 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   if (manifest.schemaVersion !== 2) fail('manifest schemaVersion must be 2')
   const apiVersion = stringValue(required(manifest, 'apiVersion', 'manifest'), 'manifest apiVersion')
   if (!VERSION_RANGE.test(apiVersion)) {
-    fail('manifest apiVersion must be a simple semver range')
+    fail(`manifest apiVersion must be a simple semver range such as ^1.0.0, got ${JSON.stringify(apiVersion)}`)
   }
   const id = stringValue(required(manifest, 'id', 'manifest'), 'manifest id')
   if (!PLUGIN_ID.test(id)) {
@@ -713,9 +724,11 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   const version = stringValue(required(manifest, 'version', 'manifest'), 'manifest version')
   if (!SEMVER.test(version)) fail(`manifest version must be semver, got ${version}`)
   const publisher = stringValue(required(manifest, 'publisher', 'manifest'), 'manifest publisher')
-  if (!PUBLISHER.test(publisher)) fail('manifest publisher must be lowercase')
+  if (!PUBLISHER.test(publisher)) {
+    fail(`manifest publisher must be lowercase (a-z, 0-9 and -, starting with a letter or digit), got ${JSON.stringify(publisher)}`)
+  }
   if (id.split('.', 1)[0] !== publisher) {
-    fail('manifest publisher must match id namespace')
+    fail(`manifest publisher must match id namespace: publisher ${JSON.stringify(publisher)}, id namespace ${JSON.stringify(id.split('.', 1)[0])}`)
   }
   let engines: PluginManifestV2['engines'] | undefined
   if (manifest.engines !== undefined) {
@@ -728,7 +741,10 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   let extensionPack: string[] | undefined
   if (manifest.extensionPack !== undefined) {
     extensionPack = uniqueStringArray(manifest.extensionPack, 'manifest extensionPack', 1, MAX_EXTENSION_PACK_MEMBERS)
-    if (extensionPack.some((member) => !PLUGIN_ID.test(member))) fail('manifest extensionPack contains an invalid package id')
+    const invalidMember = extensionPack.find((member) => !PLUGIN_ID.test(member))
+    if (invalidMember !== undefined) {
+      fail(`manifest extensionPack contains an invalid package id ${JSON.stringify(invalidMember)}; a package id is lowercase dot-separated segments, for example acme.tool`)
+    }
     if (extensionPack.includes(id)) fail('manifest extensionPack must not list the pack itself')
     if (manifest.contributes !== undefined || manifest.backend !== undefined) {
       fail('an extension pack must not declare contributes or backend')

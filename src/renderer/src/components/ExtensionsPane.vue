@@ -7,7 +7,7 @@
 // All privileged work is brokered through the main process via
 // `window.agentTeam.plugins`; this component holds no secrets and never touches
 // package bytes.
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
 import type {
@@ -25,6 +25,8 @@ import NativeBackendPanel from './NativeBackendPanel.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 import PluginSourceBadge from './PluginSourceBadge.vue'
+import DeveloperFolderInfoCard from './DeveloperFolderInfoCard.vue'
+import { isTestplaceExpired, testplaceDaysLeft } from '../lib/pluginSourceMark'
 
 const { t } = useI18n()
 
@@ -181,16 +183,23 @@ async function remove(id: string): Promise<void> {
 // the App-bundled factory package for the ids that ship with Navide. The Host
 // decides which of the two applies; the row only offers the button when the Host
 // says a rollback is available.
-async function rollback(id: string, kind: 'factory' | 'previous', version?: string): Promise<void> {
+async function rollback(id: string, kind: 'factory' | 'previous', version?: string, needsConsent = false): Promise<void> {
   const api = pluginsApi()
   if (!api) return
+  // L4 (review M3): a kept file version is consented to again with its own
+  // disclosure, in the install consent dialog.
+  if (needsConsent) {
+    await updateFlow.rollbackWithConsent(id)
+    return
+  }
+  const previousText = t('settings.extensions.rollback.confirmPrevious', {
+    id,
+    version: version ?? t('settings.extensions.rollback.previousVersion'),
+  })
   const confirmed = await notify.confirm(
     kind === 'factory'
       ? t('settings.extensions.rollback.confirmFactory', { id })
-      : t('settings.extensions.rollback.confirmPrevious', {
-          id,
-          version: version ?? t('settings.extensions.rollback.previousVersion'),
-        }),
+      : previousText,
     {
       title: t('settings.extensions.rollback.title'),
       confirmText: t('settings.extensions.rollback.confirm'),
@@ -284,6 +293,17 @@ async function uninstallPack(members: string[]): Promise<void> {
   }
 }
 
+// d5: the label for a local install whose file Navide blocked since; no
+// reason (or one this release does not know) reads as a plain block. A
+// withdrawn Testplace build (0.2.28) is labelled the same way.
+function digestBlockKey(reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn' | null): string {
+  if (reason === 'security') return 'security'
+  if (reason === 'qualification-revoked') return 'qualificationRevoked'
+  if (reason === 'developer-withdrawn') return 'developerWithdrawn'
+  if (reason === 'testplace-withdrawn') return 'testplaceWithdrawn'
+  return 'blocked'
+}
+
 // The user's "Disabled" switch. A disabled package keeps its files, grant and
 // stored data; the Host only stops loading its views and backend. The row says
 // so with a badge and an Enable button, never silently.
@@ -354,8 +374,61 @@ async function restoreFactoryPackage(id: string): Promise<void> {
 // Card K4: the Developer Mode switch (owned by the main process) and its
 // developer folders; D6: packages from a self-hosted Registry it quarantines.
 const developerMode = ref<DeveloperModeState>({ enabled: false, folders: [] })
+// A2-3: the "Local folder" info card opened from a developer folder's badge.
+const folderCardFor = ref<string | null>(null)
+const developerFolderOf = (pluginId: string) => developerMode.value.folders.find((folder) => folder.pluginId === pluginId)
+async function toggleFolderCard(pluginId: string): Promise<void> {
+  if (folderCardFor.value === pluginId) {
+    folderCardFor.value = null
+    return
+  }
+  folderCardFor.value = pluginId
+  // The fingerprint of the last load is taken after it; read it fresh.
+  await refreshDeveloperMode()
+}
 const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>([])
 const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
+/** DESIGN-A2 G1: the developer folder record of a loaded package. */
+function developerFolder(pluginId: string): DeveloperModeState['folders'][number] | undefined {
+  return developerMode.value.folders.find((folder) => folder.pluginId === pluginId)
+}
+function lastLoadText(pluginId: string): string {
+  const lastLoad = developerFolder(pluginId)?.lastLoad
+  if (!lastLoad) return ''
+  return t('settings.extensions.developerMode.lastLoad', {
+    at: new Date(lastLoad.at).toLocaleString(),
+    trigger: t(`settings.extensions.developerMode.loadTrigger.${lastLoad.trigger}`),
+  })
+}
+async function setFolderAutoReload(pluginId: string, enabled: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setDeveloperFolderAutoReload) return
+  try {
+    developerMode.value = await api.setDeveloperFolderAutoReload(pluginId, enabled)
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  }
+}
+/** DESIGN-A2 G3: who had a loaded developer folder loaded, in the wording of agent request cards. */
+function folderLoadedByText(pluginId: string): string {
+  const folder = developerMode.value.folders.find((entry) => entry.pluginId === pluginId)
+  const loadedBy = folder?.loadedBy
+  if (!loadedBy) return ''
+  if (folder.loadedByUnverified === 'key-changed') return t('settings.extensions.developerMode.loadedByKeyChanged')
+  if (folder.loadedByUnverified) return t('settings.extensions.developerMode.loadedByUnverified')
+  if (loadedBy.kind === 'user') {
+    const text = t('settings.extensions.developerMode.loadedByUser')
+    return folder.loadedByUnsigned ? `${text} ${t('settings.extensions.developerMode.loadedByUnsigned')}` : text
+  }
+  if (loadedBy.kind === 'unknown') return t('settings.extensions.developerMode.loadedByUnknown')
+  const requester = loadedBy.callerKind === 'pane'
+    ? (loadedBy.paneName ? t('plugin-agent.caller.pane', { pane: reveal(loadedBy.paneName) }) : t('plugin-agent.caller.pane-unknown'))
+    : loadedBy.callerKind === 'external' ? t('plugin-agent.caller.external')
+      : loadedBy.callerKind === 'host' ? t('plugin-agent.caller.host')
+        : t('plugin-request.caller-unknown')
+  const text = t('settings.extensions.developerMode.loadedByAgent', { requester, at: new Date(loadedBy.approvedAt).toLocaleString() })
+  return folder.loadedByUnsigned ? `${text} ${t('settings.extensions.developerMode.loadedByUnsigned')}` : text
+}
 
 async function refreshDeveloperMode(): Promise<void> {
   const api = pluginsApi()
@@ -410,20 +483,101 @@ async function removeDeveloperFolder(id: string): Promise<void> {
   }
 }
 
+// D3: expired Testplace builds, stopped with their data kept. Each is listed
+// with three choices and never removed without the user: the Navide
+// Marketplace version (the normal verified install), keep using it marked
+// expired (only when it failed on its expiry alone), or remove it.
+const expiredTestplace = ref<ExpiredTestplaceBuild[]>([])
+// S8 LOW-R3-2: each reason "keep using" is refused has its own advice.
+const KEEP_REFUSAL_KEYS: Record<NonNullable<ExpiredTestplaceBuild['keepRefusal']>, string> = {
+  withdrawn: 'cannotKeepWithdrawn',
+  'signed-out': 'cannotKeepSignedOut',
+  'not-a-tester': 'cannotKeepNotTester',
+  'registry-outdated': 'cannotKeepRegistryOutdated',
+  unreachable: 'cannotKeepUnreachable',
+}
+async function refreshExpiredTestplace(): Promise<void> {
+  try {
+    expiredTestplace.value = (await pluginsApi()?.expiredTestplace?.()) ?? []
+  } catch {
+    expiredTestplace.value = []
+  }
+}
+async function keepExpiredTestplace(id: string): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.keepExpiredTestplace) return
+  const confirmed = await notify.confirm(t('testplace.expired.keepConfirm', { id: reveal(id) }), {
+    title: t('testplace.expired.keepTitle'),
+    confirmText: t('testplace.expired.keep'),
+  })
+  if (!confirmed) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api.keepExpiredTestplace(id)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+    await refreshExpiredTestplace()
+  }
+}
+// "Install the Navide Marketplace version": a promoted build of the same digest
+// only takes its new receipt (nothing downloaded, nothing to consent to again);
+// otherwise the normal verified install runs.
+async function expiredToMarketplace(id: string): Promise<void> {
+  const api = pluginsApi()
+  busy.value = true
+  error.value = ''
+  let adopted = false
+  try {
+    adopted = (await api?.adoptTestplaceRelease?.(id))?.adopted === true
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+  if (adopted) {
+    await refreshInstalled()
+    await refreshExpiredTestplace()
+    return
+  }
+  if (!error.value) await updateFlow.install(idParts(id).namespace, idParts(id).name)
+}
+async function removeExpiredTestplace(id: string): Promise<void> {
+  await remove(id)
+  await refreshExpiredTestplace()
+}
+
 // A developer folder consented to or reloaded changes the inventory.
 watch(() => updateFlow.pendingConfirm.value, (pending) => {
   if (!pending) void refreshDeveloperMode()
 })
 
+// G1: an automatic reload refreshes the list; changed permissions stop it and say so.
+let stopDeveloperFolderEvents: (() => void) | undefined
+onBeforeUnmount(() => stopDeveloperFolderEvents?.())
+
 onMounted(() => {
+  stopDeveloperFolderEvents = pluginsApi()?.onDeveloperFolderEvent?.((folderEvent) => {
+    void refreshDeveloperMode()
+    if (folderEvent.kind === 'needs-consent') {
+      notify.toast(t('settings.extensions.developerMode.autoReloadNeedsConsent', { id: reveal(folderEvent.pluginId) }), { type: 'info' })
+    }
+  })
   void reloadInventory()
   void refreshDisabledStoreStatus()
   void pluginUpdates.refresh()
   void refreshPacks()
   void refreshDeveloperMode()
+  void refreshExpiredTestplace()
 })
 // A pack installed from the Marketplace page shows up here without a remount.
-watch(installed, () => void refreshPacks())
+watch(installed, () => {
+  void refreshPacks()
+  void refreshExpiredTestplace()
+})
 </script>
 
 <template>
@@ -435,10 +589,41 @@ watch(installed, () => void refreshPacks())
     <p v-if="developerMode.enabled" class="ext-devmode-banner ext-risk-banner" role="status">
       {{ $t('settings.extensions.developerMode.banner') }}
     </p>
+    <!-- A2-5 (G5): settings another program wrote are disclosed, never applied. -->
+    <p v-if="developerMode.externalChange" class="ext-devmode-external ext-risk-banner" role="alert">
+      {{ $t(developerMode.externalChange.reason === 'signing-unavailable' ? 'settings.extensions.developerMode.externalChangeUnsigned' : developerMode.externalChange.reason === 'signature-missing' ? 'settings.extensions.developerMode.externalChangeMissing' : 'settings.extensions.developerMode.externalChange', { time: new Date(developerMode.externalChange.detectedAt).toLocaleString() }) }}
+    </p>
     <!-- D6: never let a self-hosted Registry package disappear silently. -->
     <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
       {{ $t('settings.extensions.developerMode.selfHostedQuarantine', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
     </p>
+    <!-- D3: an expired test build is stopped, never silently dropped. -->
+    <div v-for="item in expiredTestplace" :key="`expired:${item.id}`" class="ext-testplace-expired ext-risk-banner" role="alert" :data-expired-id="item.id">
+      <p v-if="item.withdrawn">{{ $t('testplace.expired.withdrawnBanner', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}</p>
+      <p v-else>{{ $t('testplace.expired.banner', { id: reveal(item.id), version: reveal(item.version ?? ''), date: (item.expiresAt ?? '').slice(0, 10) }) }}</p>
+      <!-- S8 T-MED-1: say why "keep using" is not offered. -->
+      <p v-if="!item.canKeep" class="ext-testplace-cannot-keep">
+        {{ $t(item.keepRefusal ? `testplace.expired.${KEEP_REFUSAL_KEYS[item.keepRefusal]}` : 'testplace.expired.cannotKeep') }}
+      </p>
+      <div class="ext-actions">
+        <button
+          class="ext-testplace-marketplace nv-btn nv-btn--primary nv-btn--sm"
+          :disabled="busy || updateFlow.busy.value"
+          @click="expiredToMarketplace(item.id)"
+        >{{ $t('testplace.expired.toMarketplace') }}</button>
+        <button
+          v-if="item.canKeep"
+          class="ext-testplace-keep nv-btn nv-btn--sm"
+          :disabled="busy || updateFlow.busy.value"
+          @click="keepExpiredTestplace(item.id)"
+        >{{ $t('testplace.expired.keep') }}</button>
+        <button
+          class="ext-testplace-remove nv-btn nv-btn--sm ext-btn-danger"
+          :disabled="busy || updateFlow.busy.value"
+          @click="removeExpiredTestplace(item.id)"
+        >{{ $t('testplace.expired.remove') }}</button>
+      </div>
+    </div>
 
     <section class="ext-section">
       <h3 class="ext-section-title">
@@ -543,7 +728,7 @@ watch(installed, () => void refreshPacks())
       </ul>
     </section>
 
-    <section class="ext-section">
+    <section class="ext-section" data-settings-section="extensions-install-from-file">
       <h3 class="ext-section-title">
         {{ $t('settings.extensions.installed') }}
         <span class="ext-section-count">{{ packs.length + nonFactoryInstalled.length }}</span>
@@ -592,8 +777,37 @@ watch(installed, () => void refreshPacks())
             <div class="ext-card-title">
               <span class="ext-id" v-truncate>{{ reveal(p.id) }}</span>
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
-              <!-- K2: the Host's source only; none (an unknown channel) shows no badge. -->
-              <PluginSourceBadge v-if="p.source" :source="p.source" :expires-at="p.expiresAt" />
+              <!-- K2: the Host's source only; none (an unknown channel) shows no badge.
+                   A3: a signed local file names the publisher its id names, the one whose key signed it. -->
+              <!-- A2-3: a developer folder's badge opens its "Local folder" info card. -->
+              <button
+                v-if="p.source === 'developer-unpacked' && developerFolderOf(p.id)"
+                type="button"
+                class="ext-folder-info-toggle"
+                :aria-expanded="folderCardFor === p.id"
+                @click="toggleFolderCard(p.id)"
+              >
+                <PluginSourceBadge :source="p.source" />
+              </button>
+              <PluginSourceBadge
+                v-else-if="p.source"
+                :source="p.source"
+                :expires-at="p.expiresAt"
+                :via="p.testplaceVia"
+                :signature="p.localSignature"
+                :publisher="p.localSignature ? p.id.split('.')[0] : undefined"
+                :local-install="p.localInstall"
+              />
+              <!-- d5: Navide blocked the file this local install came from; the label stays.
+                   0.2.28: a withdrawn Testplace build keeps its label the same way. -->
+              <span
+                v-if="p.digestBlock"
+                class="ext-badge ext-digest-blocked-badge"
+                :data-reason="p.digestBlock.reason ?? 'none'"
+                :title="$t(p.digestBlock.reason === 'testplace-withdrawn' ? 'settings.extensions.digestBlock.testplaceWithdrawnNote' : 'settings.extensions.digestBlock.note')"
+              >
+                {{ $t(`settings.extensions.digestBlock.${digestBlockKey(p.digestBlock.reason)}`) }}
+              </span>
               <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                 {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}
               </span>
@@ -631,6 +845,38 @@ watch(installed, () => void refreshPacks())
               </span>
             </div>
             <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
+            <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
+              {{ folderLoadedByText(p.id) }}
+            </p>
+            <!-- G1: reload on file change (on by default), the last load, and a change that could not be read. -->
+            <div v-if="p.provenance === 'developer-local-unpacked' && developerFolder(p.id)" class="ext-card-sub ext-devmode-auto">
+              <label class="ext-devmode-auto-reload">
+                <input
+                  type="checkbox"
+                  :checked="developerFolder(p.id)?.autoReload !== false"
+                  :disabled="busy"
+                  @change="setFolderAutoReload(p.id, ($event.target as HTMLInputElement).checked)"
+                />
+                {{ $t('settings.extensions.developerMode.autoReload') }}
+              </label>
+              <span class="ext-requires ext-devmode-mixed-hint">{{ $t('settings.extensions.developerMode.autoReloadMixedHint') }}</span>
+              <span v-if="lastLoadText(p.id)" class="ext-requires ext-devmode-last-load">{{ lastLoadText(p.id) }}</span>
+              <span v-if="developerFolder(p.id)?.reloadError" class="ext-badge ext-dev-warning ext-devmode-reload-error">
+                {{ $t('settings.extensions.developerMode.reloadFailed', { error: reveal(developerFolder(p.id)?.reloadError ?? '') }) }}
+              </span>
+            </div>
+            <DeveloperFolderInfoCard
+              v-if="folderCardFor === p.id && developerFolderOf(p.id)"
+              :folder="developerFolderOf(p.id)!"
+              @close="folderCardFor = null"
+            />
+            <!-- D3: remind from 7 days before a test build expires; once kept past it, say so. -->
+            <p v-if="p.source === 'testplace' && testplaceDaysLeft(p.expiresAt) !== null" class="ext-disabled-note ext-testplace-expiring" role="status">
+              {{ $t('testplace.expiring', { days: testplaceDaysLeft(p.expiresAt), date: (p.expiresAt ?? '').slice(0, 10) }) }}
+            </p>
+            <p v-if="p.source === 'testplace' && isTestplaceExpired(p.expiresAt)" class="ext-disabled-note ext-testplace-kept">
+              {{ $t('testplace.expired.kept') }}
+            </p>
             <p v-if="p.engineCompatible === false" class="ext-incompatible-reason">
               {{ $t('settings.extensions.incompatibleReason', { version: p.minNavideVersion ?? '' }) }}
             </p>
@@ -723,7 +969,7 @@ watch(installed, () => void refreshPacks())
               v-if="p.rollbackKind"
               class="ext-rollback nv-btn nv-btn--sm"
               :disabled="busy || updateFlow.busy.value"
-              @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion)"
+              @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion, p.rollbackNeedsConsent === true)"
             >
               {{
                 p.rollbackKind === 'factory'
@@ -747,9 +993,12 @@ watch(installed, () => void refreshPacks())
             >
               {{ $t('settings.extensions.enable') }}
             </button>
-            <!-- `navide.` packages ship with Navide: they are disabled, never removed. -->
+            <!-- `navide.` packages ship with Navide: they are disabled, never removed.
+                 A Marketplace first-party package (navide.browser) is the
+                 exception: the Host offers its Disabled switch, and it is
+                 removed like any Marketplace package. -->
             <button
-              v-if="!isFirstPartyId(p.id)"
+              v-if="!isFirstPartyId(p.id) || p.disabled !== undefined"
               class="ext-remove nv-btn nv-btn--sm ext-btn-danger"
               :disabled="busy || updateFlow.busy.value"
               @click="developerMode.folders.some((folder) => folder.pluginId === p.id) ? removeDeveloperFolder(p.id) : remove(p.id)"
@@ -762,7 +1011,7 @@ watch(installed, () => void refreshPacks())
       </ul>
     </section>
 
-    <section class="ext-section ext-devmode">
+    <section class="ext-section ext-devmode" data-settings-section="extensions-developer-mode">
       <h3 class="ext-section-title">{{ $t('settings.extensions.developerMode.title') }}</h3>
       <label class="ext-devmode-switch">
         <input
@@ -788,6 +1037,11 @@ watch(installed, () => void refreshPacks())
           <span class="ext-id" v-truncate>{{ reveal(folder.pluginId) }}</span>
           <code class="ext-devmode-path">{{ reveal(folder.path) }}</code>
           <span v-if="folder.unavailable" class="ext-badge ext-dev-warning ext-devmode-unavailable">{{ localizeDeveloperModeError(folder.unavailable, t) }}</span>
+          <span v-else-if="folder.externallyChanged" class="ext-badge ext-dev-warning ext-devmode-external-folder">{{ $t('settings.extensions.developerMode.externallyChanged') }}</span>
+          <!-- Review MED-3 on #543: a reload that unloaded the old version and could not load the new one. -->
+          <span v-else-if="folder.reloadError" class="ext-badge ext-dev-warning ext-devmode-reload-error">
+            {{ $t('settings.extensions.developerMode.reloadFailedNothingRunning', { error: reveal(folder.reloadError) }) }}
+          </span>
           <span v-else class="ext-badge ext-dev-warning">{{ $t('settings.extensions.developerMode.needsConsent') }}</span>
           <button class="ext-devmode-reload nv-btn nv-btn--sm" :disabled="busy || updateFlow.busy.value" @click="updateFlow.reloadDeveloperPlugin(folder.pluginId)">
             {{ $t('settings.extensions.developerMode.reload') }}
@@ -821,6 +1075,12 @@ watch(installed, () => void refreshPacks())
 </template>
 
 <style scoped>
+.ext-folder-info-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
 .extensions-pane {
   /* Native controls (checkboxes, scrollbars) follow the theme. */
   color-scheme: var(--nv-color-scheme);
@@ -1173,6 +1433,10 @@ watch(installed, () => void refreshPacks())
 .ext-badge.ext-disabled-badge {
   color: var(--risk-fg);
   background: var(--risk-subtle);
+}
+.ext-badge.ext-digest-blocked-badge {
+  color: var(--danger-bright);
+  background: var(--danger-subtle, var(--risk-subtle));
 }
 .ext-store-restored {
   margin: 0 0 var(--space-2, 8px);

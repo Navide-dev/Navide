@@ -105,12 +105,12 @@ describe('SharingBundleSection', () => {
     expect(wrapper.text()).toContain('goes out exactly as written')
 
     const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text() === 'Select all')!.trigger('click')
+    await buttons.find((b) => b.text() === 'Select All')!.trigger('click')
     expect((wrapper.find('#sh-mcp-leaky').element as HTMLInputElement).checked).toBe(false)
     expect((wrapper.find('#sh-mcp-srv').element as HTMLInputElement).checked).toBe(true)
 
     stubBridge('')
-    await buttons.find((b) => b.text() === 'Export to a file')!.trigger('click')
+    await buttons.find((b) => b.text() === 'Export to a File')!.trigger('click')
     await flushPromises()
     const call = send.mock.calls.find((c) => c[0] === 'share.export')
     expect(call?.[1]).toMatchObject({ selection: { prompts: ['p1'], mcp: ['srv'] } })
@@ -121,7 +121,7 @@ describe('SharingBundleSection', () => {
     wrapper = mount(SharingBundleSection, { props: { backend }, global: { plugins: [i18n] } })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text() === 'Export to a file')!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === 'Export to a File')!.trigger('click')
     await flushPromises()
     expect(send.mock.calls.some((c) => c[0] === 'share.export')).toBe(false)
     expect(wrapper.find('.err-msg').text()).toContain('at least one item')
@@ -133,7 +133,7 @@ describe('SharingBundleSection', () => {
     wrapper = mount(SharingBundleSection, { props: { backend }, global: { plugins: [i18n] } })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text() === 'Import from a file')!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === 'Import from a File')!.trigger('click')
     await flushPromises()
 
     expect(send.mock.calls.some((c) => c[0] === 'share.import_preview')).toBe(true)
@@ -185,7 +185,7 @@ describe('SharingBundleSection', () => {
     stubBridge(JSON.stringify(bundle))
     wrapper = mount(SharingBundleSection, { props: { backend }, global: { plugins: [i18n] } })
     await flushPromises()
-    await wrapper.findAll('button').find((b) => b.text() === 'Import from a file')!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === 'Import from a File')!.trigger('click')
     await flushPromises()
     const preview = wrapper.find('[data-settings-section="sharing-import-preview"]')
     expect(preview.text()).toContain('stdio: /bin/sh')
@@ -216,7 +216,7 @@ describe('SharingBundleSection', () => {
     stubBridge(JSON.stringify(bundle))
     wrapper = mount(SharingBundleSection, { props: { backend }, global: { plugins: [i18n] } })
     await flushPromises()
-    await wrapper.findAll('button').find((b) => b.text() === 'Import from a file')!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === 'Import from a File')!.trigger('click')
     await flushPromises()
     const preview = wrapper.find('[data-settings-section="sharing-import-preview"]')
     expect(preview.find('.sh-item-local').text()).toContain('https://api.github.example/mcp')
@@ -243,7 +243,7 @@ describe('SharingBundleSection', () => {
     stubBridge(JSON.stringify(bundle))
     wrapper = mount(SharingBundleSection, { props: { backend }, global: { plugins: [i18n] } })
     await flushPromises()
-    await wrapper.findAll('button').find((b) => b.text() === 'Import from a file')!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === 'Import from a File')!.trigger('click')
     await flushPromises()
     const preview = wrapper.find('[data-settings-section="sharing-import-preview"]')
     expect(preview.find('pre.sync-approval-text').text()).toBe('one\nTWO')
@@ -255,7 +255,7 @@ describe('SharingBundleSection', () => {
     stubBridge(JSON.stringify(bundle))
     wrapper = mount(SharingBundleSection, { props: { backend }, global: { plugins: [i18n] } })
     await flushPromises()
-    await wrapper.findAll('button').find((b) => b.text() === 'Import from a file')!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === 'Import from a File')!.trigger('click')
     await flushPromises()
 
     const preview = wrapper.find('[data-settings-section="sharing-import-preview"]')
@@ -408,7 +408,7 @@ describe('SharingCloudSection', () => {
     await flushPromises()
 
     await wrapper.find('input[aria-label="a"]').setValue(true)
-    await wrapper.findAll('button').find((b) => b.text().startsWith('Push these'))!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text().startsWith('Push These'))!.trigger('click')
     await flushPromises()
 
     expect(send).toHaveBeenCalledWith('sync.push_items', { scope: 'prompts', itemIds: ['a'] })

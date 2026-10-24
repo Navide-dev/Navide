@@ -39,7 +39,7 @@ A pane may show a vendor message such as `✘ Auto-update failed`. Several panes
 
 ## A pane remains on “detecting session”
 
-Codex, Antigravity, and Grok rely on log or database discovery to bind a new CLI session to a Navide pane.
+Codex and Antigravity rely on log or database discovery to bind a new CLI session to a Navide pane. (Grok Build panes start with their own session id and never wait here.)
 
 For Codex, open `/hooks` to inspect pending hook reviews. An MCP startup failure or a third-party `SessionEnd` timeout warning needs separate investigation and does not by itself indicate a session ID collision. Codex 0.154 queues `SessionStart` for the first turn; opening the TUI alone does not guarantee that event has run.
 
@@ -53,6 +53,19 @@ Some Codex builds treat the `SessionStart` hook Navide passes on the command lin
 - Confirm the CLI can write to its normal session directory.
 - Do not immediately rebuild or resume before the first session is detected.
 - If detection never completes, preserve the pane output and relevant backend log before filing an issue.
+
+## Grok Build panes
+
+- **"Do you trust the contents of this directory?"** Navide answers it for every Grok pane it starts, when it asks about the pane's own workspace, and shares the answer with your other Grok panes through `~/.grok/trusted_folders.toml` (convenience feature `grok.folder-trust`, see [Convenience features](convenience-features.md)); only the workspace a pane was opened in, or a folder inside it, is shared to `~/.grok`. A prompt still on screen shows the pane as waiting, and messages wait instead of being typed into it. Trusting a folder lasts, so an agent or a chat relay can only refuse it (`cli_answer_prompt` "deny", which is Grok's "No, quit"); accept it yourself in the pane.
+- **`[startup probe] … does not identify as Grok Build`** means the `grok` on your `PATH` is another program with the same name (for example the community `grok-cli`). Install the official CLI with `curl -fsSL https://x.ai/cli/install.sh | bash`.
+- **Credits show as unavailable.** Grok Build does not report its credits to other programs; type `/usage` in the Grok pane.
+- **A slash command sent while Grok is working runs later.** Grok Build queues it until the current turn ends, so a reply you wait for with `cli_send_and_wait` may belong to the earlier turn.
+- **Turns end slowly.** Grok Build imports your `~/.claude` hooks, skills and MCP servers by default, and runs Claude's stop hooks at the end of every turn. If you do not want that, add this to `~/.grok/config.toml`:
+
+  ```toml
+  [compat.claude]
+  hooks = false
+  ```
 
 ## Resume does not work
 
@@ -104,6 +117,19 @@ The Windows installer is not code-signed, so SmartScreen shows "Windows protecte
 ## Context7 or documentation injection fails
 
 Documentation injection is best-effort. Check the MCP configuration, package runtime, and network access. A failed fetch should not block a manual task; disable the integration if the workspace must remain offline.
+
+### An MCP server stays "starting" or fails to start
+
+A local (stdio) MCP server started through `npx` or `uvx` downloads its package the first time it runs, before it can answer Navide's handshake (`initialize`). Navide keeps waiting while the server's process is running, so a slow first download is not treated as a failure:
+
+- **Settings → MCP** shows the server as **starting**. After 15 seconds (`SLOW_START_NOTE_AFTER` in `backend/agent_team_backend/mcp_manager.py`) it adds a note saying how long it has waited and that a first `npx`/`uvx` run may be downloading the package. The page refreshes itself until the server connects or fails.
+- If the process exits before answering, the start fails at once and the reason gives its exit code.
+- If the process keeps running but never answers, Navide gives up after **300 seconds** (`STDIO_INIT_HARD_CAP`, same file). The cap is a safety net, not a limit on a slow server. Remote (`http`/`sse`) servers keep a 15-second handshake.
+- Servers start in parallel, so one slow server does not hold up the others.
+
+A failed server shows **Failed to start:** with the reason. It is tried again the next time the MCP configuration is reloaded, for example when you save a change in Settings → MCP.
+
+What a stdio server prints on stderr (npm's download messages, a crash) goes to `logs/mcp-<name>.log` in Navide's data folder. The file stays on this computer, readable by your user account only (0600). Only the latest start is kept: each start empties it, and within one run it grows as long as the server keeps printing, with no size cap. A name with characters other than letters, digits, `_`, `.` and `-`, or with capitals, becomes a safe file name plus a short hash of the name, so two servers never share a file. Removing a server from Settings → MCP deletes its file; switching it off keeps it. Settings → MCP shows its last lines as **Last lines the server printed**. That text is the server's own output and may contain whatever the server chose to print. Navide itself writes nothing of the server's configuration there, and no `env` or `headers` values. A start error an agent reads through the `mcp_list` tool has any URL in it masked, like the configured URL.
 
 ## Git authentication prompts do not complete
 

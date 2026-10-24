@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { transpileModule } from 'typescript'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, resolveAvailableUiLocale } from '@navide/plugin-ui/foundation'
 import { initSettingsBackend, seedSettings, settingsGet, settingsReadiness } from '@navide/plugin-ui/shared'
 import { __resetSettingsForTest } from '@navide/plugin-ui/shared/testing'
 import { createMockBackend } from './mockBackend'
@@ -28,7 +28,7 @@ describe('useSettings — health-check timeout', () => {
   it.each<[PlatformId, number]>([
     ['linux', 120],
     ['darwin', 45],
-    ['win32', 45],
+    ['win32', 120],
   ])('the %s default matches main (%is)', (platform, expected) => {
     const original = platformId()
     setPlatformId(platform)
@@ -136,6 +136,38 @@ describe('useSettings — language bootstrap and persistence', () => {
     } finally { language.mockRestore() }
   })
 
+  it.each([
+    ['ko-KR', 'ko-KR'],
+    ['zh-CN', 'zh-CN'],
+    ['zh-Hans', 'zh-CN'],
+    ['nl-NL', 'en-US'],
+    ['it-IT', 'en-US'],
+    ['zh-HK', 'zh-TW'],
+  ])('maps system language %s to an available locale (%s)', (system, expected) => {
+    const language = vi.spyOn(navigator, 'language', 'get').mockReturnValue(system)
+    try {
+      useSettings().loadLanguage()
+      expect(i18n.global.locale.value).toBe(expected)
+      expect(settingsGet(LANGUAGE_KEY, null)).toBeNull()
+    } finally { language.mockRestore() }
+  })
+
+  it('ignores a saved locale that has no catalog yet', () => {
+    seedSettings({ 'agent-team:language': 'nl-NL' })
+    const language = vi.spyOn(navigator, 'language', 'get').mockReturnValue('ja-JP')
+    try {
+      useSettings().loadLanguage()
+      expect(i18n.global.locale.value).toBe('ja-JP')
+    } finally { language.mockRestore() }
+  })
+
+  it('keeps <html lang> on the active locale', async () => {
+    useSettings().setLanguage('ja-JP', { broadcast: false })
+    await vi.waitFor(() => expect(document.documentElement.lang).toBe('ja-JP'))
+    useSettings().setLanguage('zh-TW', { broadcast: false })
+    await vi.waitFor(() => expect(document.documentElement.lang).toBe('zh-TW'))
+  })
+
   it('loads language from bootstrap settings cache and sets i18n locale', () => {
     seedSettings({ 'agent-team:language': 'zh-TW' })
     const { language, loadLanguage } = useSettings()
@@ -184,8 +216,12 @@ describe('useSettings — language bootstrap and persistence', () => {
     setLanguage('zh-TW')
     broadcast.mockClear()
 
-    setLanguage('fr-FR')
+    setLanguage('it-IT')
     expect(language.value).toBe('zh-TW')
+    // Another locale outside UI_LOCALES is rejected too.
+    setLanguage('nl-NL')
+    expect(language.value).toBe('zh-TW')
+    expect(i18n.global.locale.value).toBe('zh-TW')
     expect(broadcast).not.toHaveBeenCalled()
   })
 
@@ -206,7 +242,7 @@ describe('useSettings — language bootstrap and persistence', () => {
     // choice is what used to flip an English first launch to zh-TW on restart.
     const { language, loadLanguage } = useSettings()
     loadLanguage({ language: '' })
-    const system = /^zh/i.test(navigator.language) ? 'zh-TW' : /^en/i.test(navigator.language) ? 'en-US' : 'zh-TW'
+    const system = /^zh-(TW|HK|MO|Hant)/i.test(navigator.language) ? 'zh-TW' : /^ja/i.test(navigator.language) ? 'ja-JP' : 'en-US'
     expect(language.value).toBe(system)
     expect(i18n.global.locale.value).toBe(language.value)
     expect(settingsGet('agent-team:language', null)).toBeNull()
@@ -241,8 +277,8 @@ describe('useSettings — language bootstrap and persistence', () => {
     const end = source.indexOf('// Theme token layers', start)
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeLessThan(source.indexOf('loadRoot()'))
-    const run = new Function('bootstrapSettings', 'i18n', transpileModule(source.slice(start, end), {}).outputText)
-    run(bootstrapSettings, i18n)
+    const run = new Function('bootstrapSettings', 'i18n', 'resolveAvailableUiLocale', transpileModule(source.slice(start, end), {}).outputText)
+    run(bootstrapSettings, i18n, resolveAvailableUiLocale)
     const expected = raw.replaceAll('"', '')
     expect(i18n.global.locale.value).toBe(expected)
     useSettings().loadLanguage()

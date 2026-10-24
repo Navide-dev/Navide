@@ -38,6 +38,7 @@ export const TURN_START_SIGNAL: Readonly<Record<string, boolean>> = {
   kimi: true,
   pi: true,
   qwen: true,
+  goose: true,
   // No log reader: mcode keeps its history in SQLite Navide cannot read yet.
   mcode: false,
   // A plain shell takes its own submit path and never reaches the watch.
@@ -63,6 +64,10 @@ export function extraEnterAllowed(framedHeld: boolean | null, dialogShown: boole
  *  option) that uses the same glyph. */
 const PROMPT_ROW_RE = /^\s*[›>❯]/
 const OPTION_ROW_RE = /^\s*[›>❯]\s*\d+[.)]/
+/** A prompt row inside a drawn frame, whose side border may precede the glyph.
+ *  A numbered option is not one: a dialog's own cursor row ("❯ 1. Yes") sits
+ *  between the box-only rows its separators draw. */
+const FRAMED_PROMPT_ROW_RE = /^[\s│]*[›>❯](?!\s*\d+[.)])/
 
 /** Is a dialog that would take an Enter as its answer on screen?
  *
@@ -97,8 +102,14 @@ export function blockingDialogShown(input: {
   for (let i = close - 1; i >= 0; i--) {
     if (BOX_ONLY_LINE_RE.test(lines[i])) { open = i; break }
   }
+  // For Claude, two box-only rows are the input box only when a prompt row sits
+  // between them: border characters left below a live dialog's footer pair up
+  // the same way, and reading below THEM would skip the dialog. Other vendors
+  // keep main's frame test: their composers may draw no glyph inside the frame.
+  const framed = open >= 0 && (input.agentKey !== 'claude'
+    || lines.slice(open + 1, close).some(line => FRAMED_PROMPT_ROW_RE.test(line)))
   let region = input.screen
-  if (open >= 0) {
+  if (framed) {
     region = lines.slice(close + 1).join('\n')
   } else {
     let prompt = -1
