@@ -36,7 +36,7 @@ function fnBody(header: string): string {
 }
 
 function kickoffCompletion(act: string): number {
-  const call = /const kickoffResult = await runPipelineKickoff\(\{[\s\S]*?\n    \}\)/.exec(act)
+  const call = /const kickoffResult = (?:roleFailure \? \{ sent: false, cancelled: false \} : )?await runPipelineKickoff\(\{[\s\S]*?\n    \}\)/.exec(act)
   expect(call, 'the awaited kickoff call').not.toBeNull()
   return call!.index + call![0].length
 }
