@@ -946,6 +946,33 @@ class TestColdStart:
         assert client._transport_cm is None and client._session_cm is None
 
     @pytest.mark.asyncio
+    async def test_a_cancel_of_start_that_arrives_while_it_stops_still_propagates(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        self._cancel_transport_once_the_server_exits(client, monkeypatch)
+        starting: list[asyncio.Task] = []
+        real_stop = MCPClient.stop
+        stops = [0]
+
+        async def stop(self):
+            stops[0] += 1
+            if stops[0] == 1:
+                # Shutdown cancelling the startup while it is cleaning up after
+                # the transport's own cancel.
+                starting[0].cancel()
+            await real_stop(self)
+
+        monkeypatch.setattr(MCPClient, "stop", stop)
+        starting.append(asyncio.create_task(client.start()))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(starting[0], timeout=20)
+        assert stops[0] == 1
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
     async def test_the_hard_cap_ends_a_server_that_never_answers(self, tmp_path, fast_polling, monkeypatch):
         monkeypatch.setattr("agent_team_backend.mcp_manager.STDIO_INIT_HARD_CAP", 1.0)
         client = _slow_client(tmp_path, "mute", delay=60)
