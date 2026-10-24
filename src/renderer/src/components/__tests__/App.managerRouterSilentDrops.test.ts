@@ -224,6 +224,10 @@ describe('the idle fallback hands held messages to a Manager that never prints R
     expect(t.log.some((l) => l.includes('READY') && l.includes('fallback'))).toBe(true)
   })
 
+  it('App.vue holds the threshold at 180s (the tests above inject it)', () => {
+    expect(appSource).toMatch(/^const MANAGER_READY_FALLBACK_MS = 180_000$/m)
+  })
+
   it('not before 180s', async () => {
     const t = await load()
     await t.api.routeManagerTurnText('mgr', '讀完守則了。', iso(30_000))
