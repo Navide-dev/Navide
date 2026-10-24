@@ -338,12 +338,16 @@ class AcpSessionService:
             if proc.returncode is None:
                 with contextlib.suppress(OSError):
                     descendants = await asyncio.to_thread(_descendant_pids, proc.pid)
-                try:
-                    osplat.process_tree.end_contained(proc.pid, spawned.job)
-                except OSError:
+            # Also for an agent that has exited already: its job is closed
+            # (once: nothing else ends a process not yet a session), which on
+            # Windows ends whatever it started that is still in the job.
+            try:
+                osplat.process_tree.end_contained(proc.pid, spawned.job)
+            except OSError:
+                if proc.returncode is None:
                     with contextlib.suppress(OSError):
                         osplat.process_tree.kill_tree(proc.pid, force=True)
-                await self._wait_exit(proc, _TERM_GRACE_S)
+            await self._wait_exit(proc, _TERM_GRACE_S)
             await asyncio.to_thread(_kill_breakaway, descendants)
         finally:
             # Closed whatever state it is in, also when ending the tree failed:
@@ -474,9 +478,13 @@ class AcpSessionService:
             await self._wait_exit(proc, _TERM_GRACE_S)
             await asyncio.to_thread(_kill_breakaway, descendants)
         finally:
-            # Also when a step above raised: the pipes are closed and the
-            # session forgotten now, never left to the collector.
-            await self._forget(session)
+            # Also when a step above raised: the job is closed (a no-op when
+            # the tree was ended above), the pipes are closed and the session
+            # forgotten now, never left to the collector.
+            try:
+                self._end_tree(session)
+            finally:
+                await self._forget(session)
 
     async def kill_all(self) -> None:
         # A start still under way would otherwise spawn its agent after this
