@@ -122,11 +122,10 @@ export const WHATS_NEW_CHROME = {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.29',
-    // Provisional title: settle it before the 0.2.29 release.
     title: {
-      'zh-TW': 'Navide 伺服器安全更新',
-      'en-US': 'Navide Server Security Update',
-      'ja-JP': 'Navide サーバーのセキュリティ更新',
+      'zh-TW': 'Navide 會說六種新語言：德、西、法、葡、俄、越文介面（Beta）',
+      'en-US': 'Navide Speaks Six More Languages: German, Spanish, French, Brazilian Portuguese, Russian and Vietnamese (Beta)',
+      'ja-JP': 'Navide が 6 つの新しい言語に対応：ドイツ語・スペイン語・フランス語・ポルトガル語（ブラジル）・ロシア語・ベトナム語（ベータ）',
     },
     highlights: [
       {
@@ -138,6 +137,56 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'zh-TW': '桌面版內建的 Node.js 來自 Electron。Electron 官方還沒推出含這次修補的版本，推出後我們會在新版跟上。',
         'en-US': 'The Node.js built into the desktop app comes from Electron. Electron has not yet released a version with these fixes; we will follow in a new Navide release once it does.',
         'ja-JP': 'デスクトップ版に組み込まれている Node.js は Electron に由来します。Electron はまだ今回の修正を含むバージョンを公開していません。公開され次第、Navide の新しいバージョンで対応します。',
+      },
+      {
+        'zh-TW': '介面多了六種語言（Beta）：德文、西班牙文、法文、巴西葡萄牙文、俄文和越南文。翻譯由 AI pane 完成、另一個 AI pane 審稿，還沒有母語者校對；法文介面把 AI 寫成 IA。到「設定 → 外觀」或第一次啟動時選擇。',
+        'en-US': 'Six more interface languages (Beta): German, Spanish, French, Brazilian Portuguese, Russian and Vietnamese. AI panes translated them and a separate AI pane reviewed them; no native speaker has checked them yet. The French interface writes AI as IA. Pick one in Settings → Appearance, or at the first start.',
+        'ja-JP': '表示言語が 6 つ増えました（ベータ）：ドイツ語、スペイン語、フランス語、ポルトガル語（ブラジル）、ロシア語、ベトナム語。AI pane が翻訳し、別の AI pane がレビューしましたが、ネイティブスピーカーによる確認はまだです。フランス語の表示では AI を IA と書きます。「設定 → 外観」または初回起動時に選べます。',
+      },
+      {
+        'zh-TW': '聊天頻道（Telegram 等）不會再在電腦忙的時候收到「沒有文字輸出」或上一回合的回覆：Navide 會等讀到這一回合的文字再回。10 秒後狀態會顯示「正在讀取回覆」，超過 120 秒會先告訴你回覆稍後補送，讀到後就補上。',
+        'en-US': 'Chat channels (Telegram and others) no longer get "no text output" or the previous turn\'s reply when the computer is busy: Navide waits until it has read this turn\'s text. After 10 seconds the status says the reply is being read; after 120 seconds the chat is told the reply will follow, and it does once read.',
+        'ja-JP': 'チャンネル（Telegram など）で、コンピューターが混んでいるときに「テキスト出力なし」や前のターンの返信が届くことはなくなりました：Navide はこのターンのテキストを読み取ってから返信します。10 秒たつと「返信を読み取り中」と表示し、120 秒を過ぎると返信は後から届くと伝え、読み取れた時点で送ります。',
+      },
+      {
+        'zh-TW': '本機（stdio）MCP 伺服器第一次啟動、npx 或 uvx 還在下載套件時，不會在 15 秒後就失敗：Navide 會一直等到它啟動完成或程序結束（最多 300 秒）。「設定 → MCP」會顯示啟動中，15 秒後說明第一次可能正在下載，失敗時顯示原因。',
+        'en-US': 'A local (stdio) MCP server no longer fails after 15 seconds while npx or uvx downloads its package on the first start: Navide waits until it is up or its process exits (up to 300 seconds). Settings → MCP shows it as starting, explains after 15 seconds that a first run may be downloading, and shows why if it fails.',
+        'ja-JP': 'ローカル（stdio）の MCP サーバーが初回起動で npx や uvx がパッケージをダウンロードしている間に、15 秒で失敗することはなくなりました：Navide は起動が完了するかプロセスが終了するまで（最大 300 秒）待ちます。「設定 → MCP」には起動中と表示され、15 秒後に初回はダウンロード中の可能性があると説明し、失敗した場合は理由を表示します。',
+      },
+      {
+        'zh-TW': 'Windows 上的 Git 檢視不會再一直停在「git.status 逾時」：背景啟動的 git 和其他工具不會再在啟動時卡住，萬一某次 git 真的逾時，也會在兩秒內結束，不會拖住後面的操作。',
+        'en-US': 'On Windows, the Git view no longer stays stuck on a git.status timeout: git and the other tools Navide starts in the background no longer hang at launch, and a git run that does time out ends within two seconds instead of holding up the ones after it.',
+        'ja-JP': 'Windows で Git ビューが「git.status のタイムアウト」のまま止まることはなくなりました：Navide がバックグラウンドで起動する git などのツールは起動時に止まらなくなり、git が本当にタイムアウトした場合も 2 秒以内に終了し、後続の処理を妨げません。',
+      },
+      {
+        'zh-TW': '每個版本的新版說明，現在也會同步發布到 Navide 官網的公告頁（navide.dev/news）。',
+        'en-US': 'Each release\'s What\'s New is now also published on the Navide website\'s announcements page (navide.dev/news).',
+        'ja-JP': '各バージョンの新機能のお知らせは、Navide のウェブサイトのお知らせページ（navide.dev/news）にも掲載されるようになりました。',
+      },
+      {
+        'zh-TW': '電腦時鐘比 Registry 慢 5 分鐘以內時，Registry 的安裝和更新不會再全部被拒絕；差距更大時，會請你檢查電腦的日期和時間。',
+        'en-US': 'A computer clock up to 5 minutes behind the Registry\'s no longer refuses every Registry install and update; a larger gap asks you to check the computer\'s date and time.',
+        'ja-JP': 'コンピューターの時計が Registry より 5 分以内の遅れであれば、Registry からのインストールと更新がすべて拒否されることはなくなりました。それ以上ずれている場合は、コンピューターの日付と時刻を確認するよう案内します。',
+      },
+      {
+        'zh-TW': 'Windows 新安裝後第一次啟動時，等待後端的時間從 45 秒延長到 120 秒（和 Linux 一樣），Microsoft Defender 掃描新檔案時，還在啟動的後端不會再被判定為啟動失敗；啟動畫面也會一直顯示到等待結束。',
+        'en-US': 'On Windows, the first launch after a fresh install waits up to 120 seconds for the backend (was 45), as on Linux, so a backend still starting while Microsoft Defender scans the new files is no longer reported as failed to start; the startup screen stays up for the whole wait.',
+        'ja-JP': 'Windows で新しくインストールした後の初回起動では、バックエンドを待つ時間が 45 秒から 120 秒に延びました（Linux と同じ）。Microsoft Defender が新しいファイルをスキャンしている間に、まだ起動中のバックエンドが起動失敗と判定されることはなくなり、起動画面も待っている間ずっと表示されます。',
+      },
+      {
+        'zh-TW': '開很多 CLI pane 時，資源面板的風險檢查不會再讓後端凍結好幾秒，檢查結果不變。',
+        'en-US': 'With many CLI panes open, the resource panel\'s risk check no longer freezes the backend for seconds at a time; its results are unchanged.',
+        'ja-JP': 'CLI pane をたくさん開いていても、リソースパネルのリスクチェックでバックエンドが数秒止まることはなくなりました。チェックの結果は変わりません。',
+      },
+      {
+        'zh-TW': 'Codex pane 的子 agent 結束時，不會再連帶結束父 pane 的這一回合；子 agent 的回覆不會被當成 pane 的回覆，也不會拿它的任務來為 pane 命名。',
+        'en-US': 'In a Codex pane, a sub-agent finishing no longer ends the parent pane\'s turn; its reply is not taken as the pane\'s, and its task is not used to name the pane.',
+        'ja-JP': 'Codex pane でサブ agent が終了しても、親 pane のターンが一緒に終わることはなくなりました。サブ agent の返信は pane の返信として扱われず、そのタスクで pane に名前が付くこともありません。',
+      },
+      {
+        'zh-TW': '安全更新：Mermaid 圖表和 Monaco 編輯器用來清理 HTML 的 DOMPurify 升級到 3.4.17，修補已公開的安全公告（GHSA-cg2g-xh64-v4q7、GHSA-mrv2-3pqr-j5jr、GHSA-c6gr-qvv4-5v3f）。',
+        'en-US': 'Security: DOMPurify, which Mermaid diagrams and the Monaco editor use to sanitize HTML, is updated to 3.4.17 for the published advisories GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and GHSA-c6gr-qvv4-5v3f.',
+        'ja-JP': 'セキュリティ更新：Mermaid の図と Monaco エディターが HTML のサニタイズに使う DOMPurify を 3.4.17 に更新し、公開されたアドバイザリ（GHSA-cg2g-xh64-v4q7、GHSA-mrv2-3pqr-j5jr、GHSA-c6gr-qvv4-5v3f）に対応しました。',
       },
     ],
     note: {

@@ -110,7 +110,7 @@ describe('Plans i18n bootstrap', () => {
       // Invalid or missing query fails closed to zh-TW
       expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=it-IT')).toBe('zh-TW')
       // A UI locale without a Plans catalog renders in en-US
-      expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=fr-FR')).toBe('en-US')
+      expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=vi-VN')).toBe('vi-VN')
       expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=ja-JP')).toBe('ja-JP')
       expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace')).toBe('zh-TW')
       expect(parsePlansLocaleFromQuery('')).toBe('zh-TW')
@@ -230,12 +230,12 @@ describe('Plans i18n bootstrap', () => {
       settings: { 'agent-team:language': 'de-DE' },
     })).toBe('de-DE')
 
-    // A recognized language this plugin has no catalog for yet: vi-VN ships last;
-    // its PR moves this to the synthetic case.
+    // Every UI language now has a Plans catalog, so a recognized language
+    // always resolves to itself here (the en-US fallback has no case left).
     expect(extractLocaleFromSettingsEvent({
       source: 'host',
       settings: { 'agent-team:language': 'vi-VN' },
-    })).toBe('en-US')
+    })).toBe('vi-VN')
 
     expect(extractLocaleFromSettingsEvent(null)).toBeNull()
     expect(extractLocaleFromSettingsEvent({})).toBeNull()
