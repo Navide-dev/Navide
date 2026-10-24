@@ -66,6 +66,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 - Dependencies: undici 6.29.1 and 7.30.1, which `node-gyp` and Electron's downloader use while building, for GHSA-xjj6-f33q-929c; happy-dom 21.0.4, the test DOM, for GHSA-834v-8h66-3h79; setuptools 84.1.0, which PyInstaller uses to bundle the backend, for GHSA-xmj3-9gf7-h52w. Build and test tooling only; nothing the app runs changes.
 
+- Electron 44.9.1 (Node 24.22.0, Chromium 152.0.7977.167; was 44.7.0 with Node 24.21.0) for GHSA-jr5w-w6x2-84p9, which stops trusting the compromised eMudhra intermediate certificates.
+
 ## [0.2.28] — 2026-10-21 — signed release
 
 ### Added
