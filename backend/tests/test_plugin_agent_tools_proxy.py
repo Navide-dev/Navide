@@ -68,11 +68,7 @@ pytestmark = pytest.mark.asyncio
 #: and where a hook turn end's text comes from. No other tool changed (the
 #: core-tools snapshot, tests/data/mcp_core_tools_main.json, differs from
 #: main in those three descriptions only).
-#: Re-pinned for ACP P4 (#592) on top of #581 (previous pin 11c38bd5…): the
-#: cli_read_log, cli_get_status, cli_wait_idle and cli_interrupt descriptions
-#: each gain an ACP paragraph; computed from the merged list (main c41b1febc
-#: with #581, plus #592). No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "4aa66a35bc4e48e02c53f9743529b17a4d3aa0fa6093199a4ac5a45a83e6ba07"
+MAIN_TOOLS_LIST_SHA256 = "11c38bd53bce39512b72d3895dd1caac29822c1dca9f600eb6ea07bccb241b5d"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

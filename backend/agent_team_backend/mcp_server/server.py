@@ -3970,11 +3970,6 @@ async def cli_read_log(
     file. If the file was truncated or replaced under you the cursor no longer
     means anything — the call then returns a plain tail with `rotated: true`,
     so treat that read as a fresh start rather than as new output.
-
-    For an ACP pane (an agent Navide runs over the Agent Client Protocol,
-    with no terminal) the log is the transcript the backend writes — each
-    prompt as "> " lines, then the agent's reply text and tool-call titles —
-    read from the backend's own copy when the window recorded no path.
     """
     from agent_team_backend import app
 
@@ -4165,12 +4160,6 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     reading is the last thing the server said about a pane nobody can reach.
     There is no `usage` either: this machine's quota cache describes this
     machine's logins, which is the wrong answer for a pane running elsewhere.
-
-    For an ACP pane (an agent Navide runs over the Agent Client Protocol,
-    with no terminal) the result also has `display`: "acp" and `acp`:
-    {state: "starting"|"idle"|"running"|"cancelling", queued,
-    pending_permissions} from the backend's own session; both are absent for
-    every other pane.
     """
 
     try:
@@ -4526,12 +4515,6 @@ async def cli_wait_idle(
     badge word is reported as `status`, and it is what the far window last
     uploaded (it debounces by 0.5s and re-sweeps every 30s), so it is near-live
     rather than live.
-
-    For an ACP pane (an agent Navide runs over the Agent Client Protocol,
-    with no terminal) the backend's own session state decides: source
-    "acp_state" when the session is idle with no prompt queued, "acp_exited"
-    when its agent has exited; while it waits on a permission request, a
-    timeout reports reason "awaiting".
     """
     from agent_team_backend import agent_messaging, app
 
@@ -4704,11 +4687,6 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
     `sent` true means the keystroke was issued and accepted; it is not a
     receipt from the CLI, and a PTY write that fails on the far side is logged
     there rather than reported here.
-
-    For an ACP pane (an agent Navide runs over the Agent Client Protocol,
-    with no terminal) the backend cancels the running turn itself
-    (session/cancel; no window is involved) and the result says `via`: "acp";
-    when no turn was running, `sent` is false with an advisory saying so.
     """
     from agent_team_backend import message_routing
 

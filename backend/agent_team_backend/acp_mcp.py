@@ -10,6 +10,37 @@ main's text.
 An ACP pane is one whose agent the backend runs over the Agent Client Protocol
 (acp_ws / acp_sessions); its own session state is authoritative, so none of
 this asks a window or reads a terminal.
+
+TODO(P5): the MCP tool descriptions say nothing about ACP panes yet, so
+tools/list stays byte-identical to main while no pane can be one (user,
+2026-10-24). When an ACP entry point ships, add these paragraphs to the
+docstrings in server.py (and re-pin MAIN_TOOLS_LIST_SHA256):
+
+cli_read_log:
+For an ACP pane (an agent Navide runs over the Agent Client Protocol,
+with no terminal) the log is the transcript the backend writes — each
+prompt as "> " lines, then the agent's reply text and tool-call titles —
+read from the backend's own copy when the window recorded no path.
+
+cli_get_status:
+For an ACP pane (an agent Navide runs over the Agent Client Protocol,
+with no terminal) the result also has `display`: "acp" and `acp`:
+{state: "starting"|"idle"|"running"|"cancelling", queued,
+pending_permissions} from the backend's own session; both are absent for
+every other pane.
+
+cli_wait_idle:
+For an ACP pane (an agent Navide runs over the Agent Client Protocol,
+with no terminal) the backend's own session state decides: source
+"acp_state" when the session is idle with no prompt queued, "acp_exited"
+when its agent has exited; while it waits on a permission request, a
+timeout reports reason "awaiting".
+
+cli_interrupt:
+For an ACP pane (an agent Navide runs over the Agent Client Protocol,
+with no terminal) the backend cancels the running turn itself
+(session/cancel; no window is involved) and the result says `via`: "acp";
+when no turn was running, `sent` is false with an advisory saying so.
 """
 
 from __future__ import annotations
