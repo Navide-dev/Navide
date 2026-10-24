@@ -1022,3 +1022,35 @@ async def test_kill_closes_the_job_even_when_an_earlier_step_fails(service, fake
     assert fake_jobs["closed"] == [1000]
     assert service.get(session.id) is None
     await _until(lambda: not _alive(session.proc.pid))
+
+
+async def test_an_uncontained_agent_that_exited_is_never_ended_by_pid(service, monkeypatch, tmp_path) -> None:
+    # On Windows contain() fails for an agent that has already exited (its job
+    # cannot be assigned). Its pid may belong to another process by now, even
+    # another pane's (whose job end_contained(pid, None) would close), so a
+    # failed start ends nothing by pid for it. POSIX contain() never fails.
+    from agent_team_backend import osplat
+
+    calls: list[tuple] = []
+
+    def no_job(pid: int) -> int:
+        raise OSError("the process has exited")
+
+    monkeypatch.setattr(osplat.process_tree, "contain", no_job)
+    monkeypatch.setattr(osplat.process_tree, "end_contained", lambda pid, job=None: calls.append(("end_contained", pid, job)))
+    monkeypatch.setattr(osplat.process_tree, "kill_tree", lambda pid, force=True: calls.append(("kill_tree", pid)))
+    exited: list[int] = []
+
+    def fail_once_gone(pid: int, argv: list[str]) -> None:
+        deadline = time.monotonic() + 10
+        while _alive(pid) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.2)  # the loop has seen the exit by the time this fails
+        exited.append(pid)
+        raise OSError("registry unwritable")
+
+    monkeypatch.setattr(pty_registry, "register", fail_once_gone)
+    with pytest.raises(OSError):
+        await service.create(pane_id="p1", agent_key="fake", argv=[sys.executable, "-c", "pass"], cwd=str(tmp_path))
+
+    assert exited and calls == []
