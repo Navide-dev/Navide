@@ -79,10 +79,12 @@ describe('Git plugin composition root', () => {
     expect(i18n.global.locale.value).toBe('ko-KR')
     await nextTick()
     expect(document.querySelector('#app button')?.textContent).toBe('닫기')
-    // A UI locale without a catalog renders in en-US
+    // Every UI locale ships a catalog now, so a newly added one renders in
+    // itself; the en-US fallback for a missing catalog is covered with a
+    // synthetic catalog list in uiLocales.test.
     state.language = 'fr-FR'
     state.languageListener?.(['agent-team:language'])
-    expect(i18n.global.locale.value).toBe('en-US')
+    expect(i18n.global.locale.value).toBe('fr-FR')
     expect((window as unknown as { nav?: { ready: ReturnType<typeof vi.fn> } }).nav?.ready)
       .toHaveBeenCalledTimes(1)
   })

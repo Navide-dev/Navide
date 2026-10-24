@@ -140,7 +140,7 @@ describe('useSettings — language bootstrap and persistence', () => {
     ['ko-KR', 'ko-KR'],
     ['zh-CN', 'zh-CN'],
     ['zh-Hans', 'zh-CN'],
-    ['fr-FR', 'en-US'],
+    ['nl-NL', 'en-US'],
     ['it-IT', 'en-US'],
     ['zh-HK', 'zh-TW'],
   ])('maps system language %s to an available locale (%s)', (system, expected) => {
@@ -153,7 +153,7 @@ describe('useSettings — language bootstrap and persistence', () => {
   })
 
   it('ignores a saved locale that has no catalog yet', () => {
-    seedSettings({ 'agent-team:language': 'fr-FR' })
+    seedSettings({ 'agent-team:language': 'nl-NL' })
     const language = vi.spyOn(navigator, 'language', 'get').mockReturnValue('ja-JP')
     try {
       useSettings().loadLanguage()
@@ -218,8 +218,8 @@ describe('useSettings — language bootstrap and persistence', () => {
 
     setLanguage('it-IT')
     expect(language.value).toBe('zh-TW')
-    // A recognized UI locale without a registered catalog is rejected too.
-    setLanguage('fr-FR')
+    // Another locale outside UI_LOCALES is rejected too.
+    setLanguage('nl-NL')
     expect(language.value).toBe('zh-TW')
     expect(i18n.global.locale.value).toBe('zh-TW')
     expect(broadcast).not.toHaveBeenCalled()
