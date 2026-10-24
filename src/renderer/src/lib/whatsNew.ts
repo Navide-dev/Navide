@@ -123,15 +123,15 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.30',
     title: {
-      'zh-TW': '「Navide 外掛」設定頁改版：風險標示一眼就看到，Pipeline 也不再默默卡住',
-      'en-US': 'A Reworked Navide Plugins Page With Risk Labels in Plain Sight, and Pipelines That No Longer Stall Silently',
-      'ja-JP': '「Navide プラグイン」設定ページを刷新：リスク表示がひと目でわかり、Pipeline も黙って止まらなくなりました',
+      'zh-TW': '「Navide 外掛」設定頁改版：風險和警告直接標在清單上，Pipeline 也不再默默卡住',
+      'en-US': 'A Reworked Navide Plugins Page With Risk and Warnings Marked in the List, and Pipelines That No Longer Stall Silently',
+      'ja-JP': '「Navide プラグイン」設定ページを刷新：リスクと警告を一覧に表示し、Pipeline も黙って止まらなくなりました',
     },
     highlights: [
       {
-        'zh-TW': '「設定 → Navide 外掛」改版：頁面先顯示目前生效的執行政策摘要，按「編輯政策」才展開完整設定，有需要你處理的事時會自動展開。內建和已安裝的外掛合成一份清單，旁邊顯示選中外掛的詳細資料。風險等級、審核狀態、「掃描發現但未宣告」、被拒絕和異常的次數，以及「高」和「不受信任」的標示，都不用點開就看得到；揭露總覽的內容一字未刪。',
-        'en-US': 'Settings → Navide Plugins is reworked: the page opens on a summary of the execution policy in effect, and Edit Policy opens the full editor, which opens by itself when something needs your attention. Bundled and installed plugins share one list, with the selected plugin\'s details beside it. Risk level, review state, "found by the scan but not declared", refused and unusual counts, and the High and Untrusted labels are all visible without a click; nothing in the Disclosure overview is removed.',
-        'ja-JP': '「設定 → Navide プラグイン」を刷新しました：ページの最初に現在有効な実行ポリシーの概要を表示し、「ポリシーを編集」で詳しい設定を開きます。対応が必要なことがあるときは自動で開きます。内蔵とインストール済みのプラグインは 1 つの一覧にまとまり、その横に選択したプラグインの詳細を表示します。リスクレベル、レビューの状態、「スキャンで見つかったが宣言されていない」、拒否と異常の回数、「高」と「未信頼」の表示は、どれも開かなくても見えます。開示の一覧の内容は何も削っていません。',
+        'zh-TW': '「設定 → Navide 外掛」改版。頁面先顯示目前生效的執行政策摘要（來源和模式），按「編輯政策」展開編輯器；有 Repository 建議時，摘要會標「不受信任」並列出它的模式。有需要你處理的事時，編輯器會自動展開而且收不起來，包括兩種高風險警告：你正在設定的政策是高風險，或有效的 Repository 建議是高風險。內建和已安裝的外掛合成一份清單，旁邊顯示選中外掛的詳細資料。已安裝外掛的列會同時顯示「已停用」和風險等級（中以上），不是從 Navide Marketplace 安裝的（Testplace 或預先發行版、本機檔案、開發者資料夾）會有來源圖示；每一列有警告時都會顯示「⚠ N」，N 是詳細資料裡的警告數。滑鼠移到標記、圖示或被截斷的名稱上會顯示完整文字；警告的完整內容要選中外掛後在詳細資料裡看。揭露總覽裡，每個外掛的風險等級、來源和「掃描到但未宣告」標示一直顯示，完整的揭露卡在下方展開，內容沒有刪減。',
+        'en-US': 'Settings → Navide Plugins is reworked. The page opens on a summary of the execution policy in effect (its source and Mode), and Edit Policy opens the editor; a repository recommendation is shown there as Untrusted, with its mode. While something needs your attention, the editor opens by itself and cannot be collapsed; that includes both high-risk warnings, for a high-risk policy you are setting and for a valid high-risk repository recommendation. Bundled and installed plugins share one list, with the selected plugin\'s details beside it. An installed plugin\'s row shows Disabled together with its risk level (Medium and above), and an icon when it did not come from the Navide Marketplace (Testplace or pre-release, a local file, a developer folder). Any row with warnings shows ⚠ N, N being the number of warnings in its details. Hover a marker, an icon or a cut-off name to read it in full; the warnings themselves are in the details once you select the plugin. In the Disclosure overview, each plugin\'s risk level, source and any "Found by the scan but not declared" flag stay in view, and the full Disclosure opens below them, unshortened.',
+        'ja-JP': '「設定 → Navide プラグイン」を刷新しました。ページの最初に現在有効な実行ポリシーの概要（ソースとモード）を表示し、「ポリシーを編集」でエディターを開きます。リポジトリの推奨設定がある場合は、概要に「未信頼」と表示し、そのモードも示します。対応が必要なことがあるときは、エディターが自動で開き、閉じることはできません。2 つの高リスク警告（設定中のポリシーが高リスクの場合と、有効なリポジトリの推奨設定が高リスクの場合）もこれに含まれます。同梱とインストール済みのプラグインは 1 つの一覧にまとまり、その横に選択したプラグインの詳細を表示します。インストール済みのプラグインの行には「無効」とリスクレベル（中以上）が並んで表示され、Navide Marketplace 以外から入れたもの（Testplace またはプレリリース、ローカルファイル、開発者フォルダー）にはソースのアイコンが付きます。警告がある行には「⚠ N」が表示され、N は詳細にある警告の数です。マークやアイコン、途中で切れた名前にポインターを合わせると全文が表示されます。警告の全文は、プラグインを選択して詳細で確認できます。開示の一覧では、各プラグインのリスクレベル、ソース、「スキャンで見つかったが宣言されていないもの」の表示が常に見え、完全な開示はその下で開けます。内容は省略していません。',
       },
       {
         'zh-TW': '「設定 → Navide 外掛」又可以捲動了，執行政策、外掛清單和揭露總覽也不會再被擠成三欄窄條。這是 0.2.27 起的問題。',

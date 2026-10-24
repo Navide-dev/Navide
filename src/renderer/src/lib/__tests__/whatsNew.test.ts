@@ -262,7 +262,8 @@ describe('0.2.30 — pipelines no longer stall silently', () => {
     expect(all).toContain('44.9.1')
     expect(all).toContain('GHSA-jr5w-w6x2-84p9')
     expect(all).toContain('still 24.22.0')
-    expect(all).toContain('High and Untrusted')
+    expect(all).toContain('⚠ N')
+    expect(all).toContain('cannot be collapsed')
   })
 
   it('shows once to someone updating from 0.2.29, as the newest entry, and not to a build still running 0.2.29', () => {
