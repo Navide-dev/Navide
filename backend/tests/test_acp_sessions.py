@@ -1209,3 +1209,93 @@ async def test_an_uncontained_agent_that_exited_is_never_ended_by_pid(service, m
         await service.create(pane_id="p1", agent_key="fake", argv=[sys.executable, "-c", "pass"], cwd=str(tmp_path))
 
     assert exited and calls == []
+
+
+async def test_contain_failing_any_other_way_still_marks_the_agent_uncontained(service, monkeypatch, tmp_path) -> None:
+    # Not only an OSError: whatever contain() raises, the agent has no job of
+    # its own, so the failed start ends nothing by pid once it has exited.
+    from agent_team_backend import osplat
+
+    calls: list[tuple] = []
+
+    def no_job_once_gone(pid: int) -> int:
+        deadline = time.monotonic() + 10
+        while _alive(pid) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.2)  # the loop has seen the exit by the time this fails
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(osplat.process_tree, "contain", no_job_once_gone)
+    monkeypatch.setattr(osplat.process_tree, "end_contained", lambda pid, job=None: calls.append(("end_contained", pid, job)))
+    monkeypatch.setattr(osplat.process_tree, "kill_tree", lambda pid, force=True: calls.append(("kill_tree", pid)))
+    with pytest.raises(RuntimeError):
+        await service.create(pane_id="p1", agent_key="fake", argv=[sys.executable, "-c", "pass"], cwd=str(tmp_path))
+
+    assert calls == []
+
+
+@pytest.fixture
+def uncontained(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
+    """contain() fails with the agent still running (the session starts with no
+    job); end_contained() is only recorded, kill_tree() also really kills."""
+    from agent_team_backend import osplat
+
+    tree = osplat.process_tree
+    real_kill_tree = tree.kill_tree
+    calls: list[tuple] = []
+
+    def no_job(pid: int) -> int:
+        raise OSError("cannot assign the job")
+
+    def kill_tree(pid: int, force: bool = True) -> None:
+        calls.append(("kill_tree", pid))
+        real_kill_tree(pid, force=force)
+
+    monkeypatch.setattr(tree, "contain", no_job)
+    monkeypatch.setattr(tree, "end_contained", lambda pid, job=None: calls.append(("end_contained", pid, job)))
+    monkeypatch.setattr(tree, "kill_tree", kill_tree)
+    return calls
+
+
+async def test_an_uncontained_agent_that_exits_on_its_own_is_never_ended_by_pid(service, uncontained, tmp_path) -> None:
+    # Its pid may be another process's by the time the exit is handled (on
+    # Windows end_contained(pid, None) would close that one's job).
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("exit"), cwd=str(tmp_path))
+    await service.prompt(session.id, "x")
+    await _until(lambda: session.tree_ended)
+
+    assert service.events.of("acp.exit")
+    assert uncontained == []
+
+
+async def test_killing_an_uncontained_agent_that_has_exited_never_ends_it_by_pid(service, uncontained, tmp_path) -> None:
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("reply"), cwd=str(tmp_path))
+
+    await service.kill(session.id)
+
+    assert session.proc.returncode is not None
+    assert uncontained == []
+
+
+async def test_killing_an_uncontained_agent_still_running_ends_its_tree(service, uncontained, monkeypatch, tmp_path) -> None:
+    # Still running, the pid is its own: the tree is ended by it, never through
+    # end_contained(pid, None).
+    from agent_team_backend import osplat
+
+    monkeypatch.setattr(acp_sessions, "_stop_grace", lambda key: 0.2)
+    monkeypatch.setattr(acp_sessions, "_TERM_GRACE_S", 0.2)
+    pidfile = tmp_path / "pids"
+    monkeypatch.setenv("ACP_FAKE_PIDFILE", str(pidfile))
+    session = await service.create(pane_id="p1", agent_key="fake", argv=_argv("stubborn"), cwd=str(tmp_path))
+    await _until(pidfile.exists)
+    agent, child = (int(p) for p in pidfile.read_text().split())
+    try:
+        await asyncio.wait_for(service.kill(session.id), 10)
+
+        await _until(lambda: not _alive(agent) and not _alive(child))
+        assert ("kill_tree", agent) in uncontained
+        assert not [c for c in uncontained if c[0] == "end_contained"]
+    finally:
+        for pid in (agent, child):
+            with contextlib.suppress(OSError):
+                osplat.process_tree.kill(pid, force=True)
