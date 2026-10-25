@@ -1919,6 +1919,7 @@
       },
       "bundled": "Mitgeliefert",
       "listTitle": "Navide-Plug-ins",
+      "developerNative": "Entwickler und nativer Code",
       "bundledGit": "Mitgeliefertes Git",
       "state": {
         "active": "Aktiv",

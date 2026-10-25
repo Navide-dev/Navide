@@ -1919,6 +1919,7 @@
       },
       "bundled": "內建",
       "listTitle": "Navide 外掛",
+      "developerNative": "開發者與原生程式碼",
       "bundledGit": "內建 Git",
       "state": {
         "active": "啟用中",

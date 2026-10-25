@@ -140,6 +140,10 @@ const notify = useNotify()
 // D-f: rows whose permissions section is open; the activity panel (and its
 // reads) exists only then.
 const emit = defineEmits<{ openDisclosureOverview: [id?: string] }>()
+// Settings shows this pane on two of the Navide Plugins pages: the plugins
+// themselves, and Developer Mode with native backends. Everything stays
+// mounted; the page only decides what is shown.
+const props = withDefaults(defineProps<{ page?: 'plugins' | 'developer' }>(), { page: 'plugins' })
 const activityOpen = ref(new Set<string>())
 function onActivityToggle(id: string, event: Event): void {
   const next = new Set(activityOpen.value)
@@ -672,11 +676,11 @@ watch(installed, () => {
       {{ $t(developerMode.externalChange.reason === 'signing-unavailable' ? 'settings.extensions.developerMode.externalChangeUnsigned' : developerMode.externalChange.reason === 'signature-missing' ? 'settings.extensions.developerMode.externalChangeMissing' : 'settings.extensions.developerMode.externalChange', { time: new Date(developerMode.externalChange.detectedAt).toLocaleString() }) }}
     </p>
     <!-- D6: never let a self-hosted Registry package disappear silently. -->
-    <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
+    <p v-for="item in selfHostedQuarantine" v-show="props.page === 'plugins'" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
       {{ $t('settings.extensions.developerMode.selfHostedQuarantine', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
     </p>
     <!-- D3: an expired test build is stopped, never silently dropped. -->
-    <div v-for="item in expiredTestplace" :key="`expired:${item.id}`" class="ext-testplace-expired ext-risk-banner" role="alert" :data-expired-id="item.id">
+    <div v-for="item in expiredTestplace" v-show="props.page === 'plugins'" :key="`expired:${item.id}`" class="ext-testplace-expired ext-risk-banner" role="alert" :data-expired-id="item.id">
       <p v-if="item.withdrawn">{{ $t('testplace.expired.withdrawnBanner', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}</p>
       <p v-else>{{ $t('testplace.expired.banner', { id: reveal(item.id), version: reveal(item.version ?? ''), date: (item.expiresAt ?? '').slice(0, 10) }) }}</p>
       <!-- S8 T-MED-1: say why "keep using" is not offered. -->
@@ -707,7 +711,7 @@ watch(installed, () => {
          with its permissions and disclosure, on the right. All cards stay in
          the page (only the selected one is shown), so nothing a card offers
          depends on the selection. -->
-    <div class="ext-md-toolbar">
+    <div v-show="props.page === 'plugins'" class="ext-md-toolbar">
       <h3 class="ext-section-title ext-md-title">{{ $t('settings.extensions.listTitle') }}</h3>
       <!-- Updates are for installed packages; with none installed the line
            would contradict the empty list. -->
@@ -724,7 +728,7 @@ watch(installed, () => {
         {{ $t('settings.extensions.localInstall.button') }}
       </button>
     </div>
-    <div class="ext-md">
+    <div v-show="props.page === 'plugins'" class="ext-md">
       <div class="ext-md-list">
         <section class="ext-section" data-settings-section="extensions-bundled">
           <h3 class="ext-section-title">
@@ -1235,7 +1239,7 @@ watch(installed, () => {
       </div>
     </div>
 
-    <section class="ext-section ext-devmode" data-settings-section="extensions-developer-mode">
+    <section v-show="props.page === 'developer'" class="ext-section ext-devmode" data-settings-section="extensions-developer-mode">
       <h3 class="ext-section-title">{{ $t('settings.extensions.developerMode.title') }}</h3>
       <label class="ext-devmode-switch">
         <input
@@ -1277,7 +1281,9 @@ watch(installed, () => {
       </ul>
     </section>
 
-    <NativeBackendPanel />
+    <div v-show="props.page === 'developer'">
+      <NativeBackendPanel />
+    </div>
 
     <PackUninstallDialog
       v-if="uninstallingPack"
