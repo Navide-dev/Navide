@@ -1293,7 +1293,9 @@ async def test_killing_an_uncontained_agent_still_running_ends_its_tree(service,
         await asyncio.wait_for(service.kill(session.id), 10)
 
         await _until(lambda: not _alive(agent) and not _alive(child))
-        assert ("kill_tree", agent) in uncontained
+        # proc.pid, not the pidfile's: on Windows a venv python.exe is a launcher
+        # whose child writes the pidfile.
+        assert ("kill_tree", session.proc.pid) in uncontained
         assert not [c for c in uncontained if c[0] == "end_contained"]
     finally:
         for pid in (agent, child):
