@@ -345,16 +345,24 @@ third-party native code. The Host never runs it directly; it starts only when
 all of these hold, and they are checked again before every restart:
 
 - Settings → Navide Plugins → "Allow third-party Navide plugins to run native backends"
-  is on. It is off by default and can only be turned on there: while it is
-  off, opening a plugin never prompts and never turns it on.
+  is on. It is on by default for a new profile (since 0.2.31) and the user
+  can turn it off there: while it is off, opening a plugin never prompts and
+  never turns it on. A profile an earlier version already saved keeps the
+  switch as it was saved, so an earlier "off" stays off.
 - The user has not disabled the plugin's backend.
 - The user allowed this exact package content with this exact permission set
   (`permissions`, `backend.methods`, `backend.events`, and - only when the
   package declares any - `backend.agentTools`). The digest covers every
   file in the package (relative path and content), because a backend can read
-  any package file and turn it into code at run time. Any new version that
-  changes any file - frontend files included - is staged but not started until
-  the user allows it again.
+  any package file and turn it into code at run time. Installing is that
+  consent: every install path discloses the native backend and its shell
+  allowlist before it commits and records the version it installed, so that
+  version's first start records the consent without another dialog. A
+  package installed before 0.2.31, a version no install dialog showed (an
+  agent's update, a rollback) and a package whose consent was revoked or
+  dropped to fail closed are asked before they start. Any new version that changes any
+  file - frontend files included - is staged but not started until the user
+  allows it again, in the dialog shown before it starts.
 - The platform sandbox is available. There is no unsandboxed fallback.
 - The package does not declare `permissions.shell: "full"`. A backend package
   may declare `shell: "allowlist"`; see "Shell commands from a backend" below.

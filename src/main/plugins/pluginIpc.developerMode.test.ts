@@ -89,6 +89,7 @@ let dataRoot = ''
 /** G1: folder watches the Host opened, fired by hand instead of the file system. */
 let watches: Array<{ dir: string; onChange: () => void; onError?: (error: Error) => void; closed: boolean }>
 let folderEvents: Array<Record<string, unknown>>
+let installConsents: Array<[string, string]>
 const openWatches = () => watches.filter((entry) => !entry.closed)
 const fireChange = () => { for (const entry of openWatches()) entry.onChange() }
 let integrity: DeveloperModeIntegrity | undefined
@@ -108,6 +109,7 @@ function register(authorize: () => boolean = () => true, manager = new FrontendP
     },
     onDeveloperFolderEvent: (event: Record<string, unknown>) => folderEvents.push(event),
     developerModeIntegrity: integrity,
+    noteInstallConsent: (pluginId, packageVersion) => { installConsents.push([pluginId, packageVersion]) },
   })
   return { manager, controller }
 }
@@ -155,6 +157,7 @@ async function loadFolder(): Promise<void> {
 }
 
 beforeEach(() => {
+  installConsents = []
   handlers.clear()
   packaged.value = false
   setMarketplaceOverridesAllowed(() => true)
@@ -227,7 +230,10 @@ describe('loading a developer folder', () => {
     })
     await expect(call('plugins:commitFolderLoad', { id: 'acme.devtodo' })).rejects.toThrow(/consent is required/)
     expect(manager.listInstalledPackages()).toEqual([])
+    expect(installConsents).toEqual([])
     await call('plugins:commitFolderLoad', { id: 'acme.devtodo', riskConfirmed: true })
+    // 0.2.31: the confirmed dialog disclosed the backend; its first start counts it.
+    expect(installConsents).toEqual([['acme.devtodo', '0.1.0']])
     expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.devtodo', source: 'developer-unpacked' }])
     expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.devtodo', '0.1.0')).toMatchObject({ storage: true })
     const activation = activations.at(-1)?.activation

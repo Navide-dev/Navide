@@ -1273,7 +1273,8 @@ frontendPluginManager.setBackendSpawnTrustVerifier((activation) => {
 })
 // Third-party package backends are someone else's native code. They run only
 // under the OS sandbox, with the user's consent for the exact binary and
-// permission set, behind a global switch that is off by default.
+// permission set (installing is the first one), behind a global switch that
+// is on by default for a new profile.
 const nativeBackendRoot = join(app.getPath('userData'), 'plugin-native-backends')
 const nativeBackendStore = new NativeBackendStore(nativeBackendRoot)
 // Plan B1-b: the third-party agent-tool catalog. Created once the installed
@@ -2013,7 +2014,8 @@ const pluginTrustRefresh = registerPluginIpc(
     // W1: the static scan shown in the consent dialog of a local install,
     // run in a worker thread (the scanner's budget is up to 30 s).
     scanLocalPackage: scanLocalPackageInWorker,
-    forgetBackendConsent: (pluginId) => nativeBackendStore.forgetGrants(pluginId),
+    forgetBackendConsent: (pluginId, keepInstallConsentFor) => nativeBackendStore.forgetGrants(pluginId, keepInstallConsentFor),
+    noteInstallConsent: (pluginId, packageVersion) => nativeBackendStore.noteInstallConsent(pluginId, packageVersion),
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),
     cleanupPluginStorage: async (pluginId) => {
