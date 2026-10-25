@@ -2205,7 +2205,7 @@
         "publisherTitle": "Confiar no publicador",
         "permissionsTitle": "Confirmar permissões do plug-in do Navide",
         "publisherRisk": "Confiar no publicador {publisher} para {id}. Uma assinatura válida do Registry comprova a integridade do pacote, não que você queira executar o código deste publicador.",
-        "backendRisk": "{name} contém um executável de back-end nativo que pode ser executado com as permissões do sistema operacional da sua conta de usuário.",
+        "backendRisk": "{name} contém um programa de back-end nativo. Ao confirmar, você permite que ele seja executado, e o Navide não perguntará de novo a menos que o programa ou suas permissões mudem; você pode desativar os back-ends nativos em Configurações → Plug-ins do Navide → Desenvolvedor e código nativo. Ele só é executado dentro de uma sandbox do sistema operacional sem rede própria (Seatbelt no macOS, bubblewrap no Linux); onde o Navide não tem sandbox, incluindo o Windows por enquanto, ele não é executado.",
         "sensitiveRisk": "{name} solicita recursos sensíveis: {capabilities}.",
         "signed": "Assinado e verificado",
         "unsigned": "Não assinado: não verificado criptograficamente",

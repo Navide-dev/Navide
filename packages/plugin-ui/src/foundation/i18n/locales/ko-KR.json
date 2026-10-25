@@ -2205,7 +2205,7 @@
         "publisherTitle": "게시자 신뢰",
         "permissionsTitle": "Navide 플러그인 권한 확인",
         "publisherRisk": "{id}에 대해 게시자 {publisher}을(를) 신뢰해요. 유효한 레지스트리 서명은 패키지 무결성을 증명할 뿐, 이 게시자의 코드를 실행하고 싶다는 뜻은 아니에요.",
-        "backendRisk": "{name}에는 사용자 계정의 운영 체제 권한으로 실행될 수 있는 네이티브 백엔드 실행 파일이 들어 있어요.",
+        "backendRisk": "{name}에는 네이티브 백엔드 프로그램이 들어 있어요. 확인하면 실행을 허용하는 것이고, 프로그램이나 권한이 바뀌지 않는 한 Navide가 다시 묻지 않아요. 네이티브 백엔드는 설정 → Navide 플러그인 → 개발자 및 네이티브 코드에서 끌 수 있어요. 자체 네트워크가 없는 운영 체제 샌드박스(macOS는 Seatbelt, Linux는 bubblewrap) 안에서만 실행되며, Navide가 샌드박스를 쓸 수 없는 환경(현재 Windows 포함)에서는 실행되지 않아요.",
         "sensitiveRisk": "{name}이(가) 민감한 기능을 요청해요: {capabilities}.",
         "signed": "서명 및 확인됨",
         "unsigned": "서명 없음 — 암호학적으로 확인되지 않음",

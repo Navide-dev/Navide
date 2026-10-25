@@ -2205,7 +2205,7 @@
         "publisherTitle": "Faire confiance à l’éditeur",
         "permissionsTitle": "Confirmer les autorisations du plugin Navide",
         "publisherRisk": "Faire confiance à l’éditeur {publisher} pour {id}. Une signature valide du Registry prouve l’intégrité du paquet, pas que vous souhaitez exécuter le code de cet éditeur.",
-        "backendRisk": "{name} contient un exécutable de backend natif qui peut s’exécuter avec les autorisations système de votre compte utilisateur.",
+        "backendRisk": "{name} contient un programme de backend natif. Confirmer autorise son exécution, et Navide ne redemandera pas tant que le programme et ses autorisations ne changent pas ; vous pouvez désactiver les backends natifs dans Paramètres → Plugins Navide → Développeur et code natif. Il ne s’exécute que dans un bac à sable du système d’exploitation sans accès réseau propre (Seatbelt sous macOS, bubblewrap sous Linux) ; là où Navide n’a pas de bac à sable, y compris Windows pour l’instant, il ne s’exécute pas.",
         "sensitiveRisk": "{name} demande des capacités sensibles : {capabilities}.",
         "signed": "Signé et vérifié",
         "unsigned": "Non signé – non vérifié cryptographiquement",

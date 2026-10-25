@@ -2205,7 +2205,7 @@
         "publisherTitle": "Tin cậy nhà phát hành",
         "permissionsTitle": "Xác nhận quyền của plugin Navide",
         "publisherRisk": "Tin cậy nhà phát hành {publisher} cho {id}. Chữ ký Registry hợp lệ chứng minh gói còn nguyên vẹn, không chứng minh bạn muốn chạy mã của nhà phát hành này.",
-        "backendRisk": "{name} chứa tệp thực thi backend gốc có thể chạy với quyền hệ điều hành của tài khoản người dùng của bạn.",
+        "backendRisk": "{name} chứa một chương trình backend gốc. Xác nhận nghĩa là cho phép chương trình này chạy, và Navide sẽ không hỏi lại trừ khi chương trình hoặc quyền của nó thay đổi; bạn có thể tắt backend gốc trong Cài đặt → Plugin Navide → Nhà phát triển và mã gốc. Chương trình chỉ chạy trong sandbox của hệ điều hành và không có mạng riêng (Seatbelt trên macOS, bubblewrap trên Linux); nơi Navide không có sandbox, kể cả Windows hiện tại, chương trình sẽ không chạy.",
         "sensitiveRisk": "{name} yêu cầu các khả năng nhạy cảm: {capabilities}.",
         "signed": "Đã ký và xác minh",
         "unsigned": "Chưa ký — chưa được xác minh bằng mật mã",

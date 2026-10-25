@@ -2205,7 +2205,7 @@
         "publisherTitle": "Herausgeber vertrauen",
         "permissionsTitle": "Berechtigungen des Navide-Plug-ins bestätigen",
         "publisherRisk": "Herausgeber {publisher} für {id} vertrauen. Eine gültige Registry-Signatur belegt die Integrität des Pakets, nicht aber, dass Sie den Code dieses Herausgebers ausführen möchten.",
-        "backendRisk": "{name} enthält eine ausführbare native Backend-Datei, die mit den Betriebssystemrechten Ihres Benutzerkontos laufen kann.",
+        "backendRisk": "{name} enthält ein natives Backend-Programm. Mit der Bestätigung erlauben Sie dessen Ausführung, und Navide fragt nicht erneut, solange sich das Programm und seine Berechtigungen nicht ändern; native Backends schalten Sie unter Einstellungen → Navide-Plug-ins → Entwickler und nativer Code aus. Es läuft nur in einer Betriebssystem-Sandbox ohne eigenen Netzwerkzugang (Seatbelt unter macOS, bubblewrap unter Linux); wo Navide keine Sandbox hat, derzeit auch unter Windows, läuft es nicht.",
         "sensitiveRisk": "{name} fordert sensible Fähigkeiten an: {capabilities}.",
         "signed": "Signiert und verifiziert",
         "unsigned": "Unsigniert – nicht kryptografisch verifiziert",

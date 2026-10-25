@@ -2205,7 +2205,7 @@
         "publisherTitle": "信任发行者",
         "permissionsTitle": "确认 Navide 插件权限",
         "publisherRisk": "信任发行者 {publisher}，以便安装 {id}。有效的 Registry 签章只能证明套件内容未被窜改，并不代表你愿意运行这个发行者的代码。",
-        "backendRisk": "{name} 内含原生后端可执行文件，该可执行文件会以你的用户账号所拥有的操作系统权限运行。",
+        "backendRisk": "{name} 内含原生后端程序。确认后即允许它运行，之后除非程序或权限有变动，Navide 不会再询问；可在“设置 → Navide 插件 → 开发者与原生代码”中关闭原生后端。它只会在本身没有网络的操作系统沙盒里运行（macOS 用 Seatbelt、Linux 用 bubblewrap）；Navide 没有沙盒可用的环境（目前包括 Windows）不会运行它。",
         "sensitiveRisk": "{name} 要求敏感权限：{capabilities}。",
         "signed": "已签章并通过验证",
         "unsigned": "未签章 — 未经密码学验证",

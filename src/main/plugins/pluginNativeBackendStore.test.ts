@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { NativeBackendStore } from './pluginNativeBackendStore'
+import { isWindows } from '../../shared/osplat'
 
 // The global third-party native backend switch (0.2.31): on for a profile
 // with no decision file yet; once the file exists its `enabled` decides, so a
@@ -57,6 +58,28 @@ describe('NativeBackendStore: the global switch', () => {
     expect(new NativeBackendStore(dir).isEnabled()).toBe(false)
     new NativeBackendStore(dir).setEnabled(true)
     expect(new NativeBackendStore(dir).isEnabled()).toBe(true)
+  })
+
+  it('reads a settings path that is not a directory as off, never as a fresh profile', () => {
+    writeFileSync(dir, 'not a directory', { mode: 0o600 })
+    expect(new NativeBackendStore(dir).isEnabled()).toBe(false)
+  })
+
+  it.skipIf(isWindows())('reads a symlinked settings directory as off', () => {
+    mkdirSync(join(root, 'real'), { mode: 0o700 })
+    symlinkSync(join(root, 'real'), dir)
+    expect(new NativeBackendStore(dir).isEnabled()).toBe(false)
+  })
+
+  it.skipIf(isWindows())('reads a settings directory it cannot look at as off', () => {
+    const parent = join(root, 'locked')
+    mkdirSync(parent, { mode: 0o700 })
+    chmodSync(parent, 0o000)
+    try {
+      expect(new NativeBackendStore(join(parent, 'plugin-native-backends')).isEnabled()).toBe(false)
+    } finally {
+      chmodSync(parent, 0o700)
+    }
   })
 
   it('reads an unreadable file as off (nothing allowed)', () => {

@@ -2205,7 +2205,7 @@
         "publisherTitle": "信任發行者",
         "permissionsTitle": "確認 Navide 外掛權限",
         "publisherRisk": "信任發行者 {publisher}，以便安裝 {id}。有效的 Registry 簽章只能證明套件內容未被竄改，並不代表你願意執行這個發行者的程式碼。",
-        "backendRisk": "{name} 內含原生後端執行檔，該執行檔會以你的使用者帳號所擁有的作業系統權限執行。",
+        "backendRisk": "{name} 內含原生後端程式。確認後即允許它執行，之後除非程式或權限有變動，Navide 不會再詢問；可在「設定 → Navide 外掛 → 開發者與原生程式碼」關閉原生後端。它只會在本身沒有網路的作業系統沙盒裡執行（macOS 用 Seatbelt、Linux 用 bubblewrap）；Navide 沒有沙盒可用的環境（目前包括 Windows）不會執行它。",
         "sensitiveRisk": "{name} 要求敏感權限：{capabilities}。",
         "signed": "已簽章並通過驗證",
         "unsigned": "未簽章 — 未經密碼學驗證",

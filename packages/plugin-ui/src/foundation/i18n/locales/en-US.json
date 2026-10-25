@@ -2205,7 +2205,7 @@
         "publisherTitle": "Trust Publisher",
         "permissionsTitle": "Confirm Navide plugin permissions",
         "publisherRisk": "Trust publisher {publisher} for {id}. A valid Registry signature proves package integrity, not that you want to run this publisher's code.",
-        "backendRisk": "{name} contains a native backend executable that can run with your user account's operating-system permissions.",
+        "backendRisk": "{name} contains a native backend program. Confirming allows it to run, and Navide will not ask again unless the program or its permissions change; you can turn native backends off in Settings → Navide Plugins → Developer and native code. It runs only inside an operating-system sandbox with no network of its own (Seatbelt on macOS, bubblewrap on Linux); where Navide has no sandbox, including Windows for now, it does not run.",
         "sensitiveRisk": "{name} requests sensitive capabilities: {capabilities}.",
         "signed": "Signed & verified",
         "unsigned": "Unsigned — not cryptographically verified",

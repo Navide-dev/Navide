@@ -2205,7 +2205,7 @@
         "publisherTitle": "Confiar en el editor",
         "permissionsTitle": "Confirmar permisos del complemento de Navide",
         "publisherRisk": "Confiar en el editor {publisher} para {id}. Una firma válida del Registry demuestra la integridad del paquete, no que quieras ejecutar el código de este editor.",
-        "backendRisk": "{name} contiene un ejecutable de backend nativo que puede ejecutarse con los permisos del sistema operativo de tu cuenta de usuario.",
+        "backendRisk": "{name} contiene un programa de backend nativo. Al confirmar, permites que se ejecute, y Navide no volverá a preguntar salvo que cambien el programa o sus permisos; puedes desactivar los backends nativos en Ajustes → Complementos de Navide → Desarrollador y código nativo. Solo se ejecuta dentro de un sandbox del sistema operativo sin red propia (Seatbelt en macOS, bubblewrap en Linux); donde Navide no tiene sandbox, incluido Windows por ahora, no se ejecuta.",
         "sensitiveRisk": "{name} solicita capacidades sensibles: {capabilities}.",
         "signed": "Firmado y verificado",
         "unsigned": "Sin firmar: no verificado criptográficamente",
