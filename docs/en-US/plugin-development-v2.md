@@ -2121,14 +2121,19 @@ audience. Another package never sees a session, and neither does another view
 of the same package while the session is attached to its view; input, resize,
 stop and reattach calls for a session the calling view does not own are
 refused. When the view closes the session is detached, and a new view of the
-same contribution in the same workspace can take it over with
-`aiCli.resumeSession`. A detached session that is not taken over within
-60 seconds is ended (the bundled Navide plugins end theirs through their own
-surfaces). Disabling or removing the package ends its sessions at once.
+same package and package version with the same audience and workspace can take
+it over with `aiCli.resumeSession`. A detached session that is not taken over
+within 60 seconds is ended (the bundled Navide plugins end theirs through their
+own surfaces), unless the view started it with `persistView: true` and the
+Host stored it in terminal storage: such a session keeps running until a view
+resumes it, the package is disabled or removed, or Navide quits. Asking for
+`persistView` when the storage write fails does not keep it. Disabling or
+removing the package ends its sessions at once.
 
 Declaring `aiCli` lets a package start the AI CLI agents set up in Navide, send
-them input and read everything they print; the install and update dialogs say
-so, and an update that adds it is shown as added.
+them input and read everything they print, and keep an AI CLI running in the
+background after its window closes; the install and update dialogs say so, and
+an update that adds it is shown as added.
 `shell.run`, raw command/executable/arguments/environment/working-directory
 parameters, and PID control have no `aiCli` mapping and must fail closed.
 The Host executor also enforces the catalog's `requiresUserGesture` flag for

@@ -776,6 +776,10 @@ interface AiSessionLedgerEntry {
   storageIdentity?: AiTerminalStorageIdentity
   /** The reclaim of the latest detach; a newer detach replaces it. */
   reclaimTimer?: ReturnType<typeof setTimeout>
+  /** Set by the Host only: this session's id is in terminal storage (written
+   *  when it started, or it was resumed from there), so a later view can
+   *  resume it. A package's own persistView flag does not set it. */
+  storedForResume?: boolean
 }
 
 interface EarlyAiEventBuffer {
@@ -890,7 +894,10 @@ function usesPublicAiCliEvents(plugin: RunningPlugin | undefined): plugin is Run
 /** These end their detached AI sessions themselves: Git and Plans through
  *  their dock surface (endDockSurface), Mini-IDE through its persisted views.
  *  Any other package's detached session is reclaimed after
- *  AI_SESSION_RECLAIM_MS, so a closed view leaves no PTY behind. */
+ *  AI_SESSION_RECLAIM_MS, so a closed view leaves no PTY behind, unless the
+ *  Host stored it for resume (storedForResume): that one stays to be resumed
+ *  from storage, as before (user decision D1 on #648). Asking for persistView
+ *  without the storage write succeeding does not keep a session. */
 const SELF_ENDING_AI_SESSION_PLUGIN_IDS: ReadonlySet<string> = new Set(['navide.git', 'navide.plans', 'navide.mini-ide'])
 /** How long a detached session waits for a new view of the same contribution
  *  (a reload, a workspace re-prepare) to resume it before it is ended. */
@@ -8485,6 +8492,8 @@ export class FrontendPluginManager {
           createdAt: Date.now(),
           persistView: true,
           storageIdentity: storageIdentity ?? undefined,
+          // Found through storage: its ptyId there is this session.
+          storedForResume: Boolean(storageIdentity && ownerState?.ptyId === sessionId),
         })
       }
       return { sessionId, profileId }
@@ -8584,12 +8593,18 @@ export class FrontendPluginManager {
           storageIdentity: storageIdentity ?? undefined,
         })
         if (persistView && storageIdentity) {
-          await this.terminalStorageRequest(plugin, {
+          const stored = await this.terminalStorageRequest(plugin, {
             operation: 'session',
             resumeKey: storageIdentity.resumeKey,
             ptyId: sessionId,
-          }, beforeDispatch).catch((error) => console.warn(
-            `[plugins] AI terminal storage could not bind session ${sessionId} for ${plugin.id}; it will not resume`, error))
+          }, beforeDispatch).then(() => true, (error) => {
+            console.warn(
+              `[plugins] AI terminal storage could not bind session ${sessionId} for ${plugin.id}; it will not resume`, error)
+            return false
+          })
+          // Only a session the Host actually stored is kept past a close.
+          const entry = this.aiSessions.get(sessionId)
+          if (stored && entry) entry.storedForResume = true
         }
         committed = true
         this.flushEarlyAiEvents(pendingKey)
@@ -10439,7 +10454,10 @@ export class FrontendPluginManager {
    *  meanwhile is left alone, so nothing is ended twice. An app quit ends
    *  every PTY with the backend anyway. */
   private scheduleAiSessionReclaim(entry: AiSessionLedgerEntry): void {
-    if (SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(entry.pluginId)) return
+    if (
+      SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(entry.pluginId) ||
+      (entry.storedForResume === true && entry.storageIdentity !== undefined)
+    ) return
     // Each detach starts the wait over: an earlier detach's timer, from before
     // a resume, must not end the session early.
     if (entry.reclaimTimer !== undefined) clearTimeout(entry.reclaimTimer)

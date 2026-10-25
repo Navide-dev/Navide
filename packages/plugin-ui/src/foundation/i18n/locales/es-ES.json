@@ -2214,7 +2214,7 @@
         "cancel": "Cancelar",
         "capability": {
           "fs": "Leer y escribir archivos en tu área de trabajo.",
-          "aiCli": "Iniciar los agents CLI de AI configurados en Navide, enviarles entradas y leer todo lo que muestran.",
+          "aiCli": "Iniciar los agents CLI de AI configurados en Navide, enviarles entradas y leer todo lo que muestran; también puede mantener una CLI de AI en segundo plano después de cerrar su ventana.",
           "web": "Puede abrir y navegar por cualquier sitio web; los inicios de sesión en sitios se guardan en este equipo; los agents usan tus inicios de sesión en este complemento de Navide (pueden enviar solicitudes a sitios web en tu nombre) y pueden leer todas las páginas que abre y su estado de inicio de sesión; cuando tomas el control, los scripts de agent que ya se ejecutan en una página solo se detienen al recargarla; puede abrir muchas páginas web a la vez y cada una consume memoria.",
           "agents": "Ve tus panes de agent, qué pane abrió cada uno y cuándo se enviaron mensajes, pero no lo que dijeron.",
           "agentMessages": "Lee el texto completo de los mensajes entre tus agents; puede contener código, contenido de archivos o secretos.",

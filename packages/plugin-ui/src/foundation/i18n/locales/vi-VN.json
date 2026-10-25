@@ -2214,7 +2214,7 @@
         "cancel": "Hủy",
         "capability": {
           "fs": "Đọc và ghi tệp trong workspace của bạn.",
-          "aiCli": "Khởi chạy các CLI agent AI đã thiết lập trong Navide, gửi dữ liệu nhập và đọc mọi thứ chúng xuất ra.",
+          "aiCli": "Khởi chạy các CLI agent AI đã thiết lập trong Navide, gửi dữ liệu nhập và đọc mọi thứ chúng xuất ra; cũng có thể giữ AI CLI chạy nền sau khi đóng cửa sổ của nó.",
           "web": "Có thể mở và duyệt bất kỳ trang web nào; thông tin đăng nhập trang web được giữ trên máy tính này; agent dùng thông tin đăng nhập của bạn trong plugin Navide này (chúng có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn tiếp quản, các script agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; nó có thể mở nhiều trang web cùng lúc và mỗi trang đều dùng bộ nhớ.",
           "agents": "Xem các pane agent của bạn, pane nào đã mở pane nào và khi nào chúng nhắn tin cho nhau, nhưng không xem được nội dung tin nhắn.",
           "agentMessages": "Đọc toàn văn tin nhắn giữa các agent của bạn; nội dung có thể chứa mã, nội dung tệp hoặc bí mật.",

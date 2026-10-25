@@ -9139,10 +9139,10 @@ describe('opaque view instance ownership', () => {
 
     async function openThirdParty(
       mgr: FrontendPluginManager,
-      options: { id?: string; audience?: string; sessionId?: string } = {},
+      options: { id?: string; audience?: string; sessionId?: string; packageVersion?: string } = {},
     ) {
       const id = options.id ?? 'acme.devmap'
-      const desc = v2PackageDescriptor(id)
+      const desc = { ...v2PackageDescriptor(id), ...(options.packageVersion ? { packageVersion: options.packageVersion } : {}) }
       mgr.registerDescriptor(desc, id.startsWith('navide.') ? { official: true } : {})
       const host = new FakeBrowserWindow()
       const handle = await mgr.openView(desc, desc.views![0], {
@@ -9152,6 +9152,7 @@ describe('opaque view instance ownership', () => {
         capabilityContext: v2Context({
           pluginId: id,
           workspaceId: mgr.workspaceIdForPath('/workspace') ?? undefined,
+          ...(options.packageVersion ? { packageVersion: options.packageVersion } : {}),
           audience: options.audience ?? 'devmap-main',
           sessionId: options.sessionId,
         }),
@@ -9231,8 +9232,56 @@ describe('opaque view instance ownership', () => {
       expect(socket.sent).toHaveLength(0)
     })
 
+    // Review M2 on #648: resume finds a detached session by package, version,
+    // workspace and audience; same audience and workspace are not enough.
+    it('resumes only a detached session of the same package and version', async () => {
+      const resumeAs = async (options: { id: string; packageVersion?: string }) => {
+        const mgr = new FrontendPluginManager()
+        const opened = await openThirdParty(mgr, options)
+        mgr.setBackendWsUrl(`ws://third-party-aicli-resume-${options.id}-${options.packageVersion ?? ''}`)
+        const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+        socket.open()
+        const internal = mgr as unknown as Internal
+        internal.aiSessions.set('detached', {
+          sessionId: 'detached',
+          profileId: 'claude',
+          pluginId: 'acme.devmap',
+          packageVersion: '1.0.0',
+          workspaceId: mgr.workspaceIdForPath('/workspace'),
+          audience: 'devmap-main',
+          attachedInstanceId: null,
+          client: internal.wsClient,
+          createdAt: Date.now(),
+        })
+        const plugin = internal.running.get(opened.handle.instanceId)!
+        plugin.capabilityContext.aiCliProfiles = ['claude']
+        const result = mgr.executePublicCapability({
+          kind: 'public',
+          address: 'aiCli.resumeSession',
+          scope: 'workspace',
+          runtime: plugin.capabilityContext.runtimeBinding!,
+          args: { cols: 80, rows: 24 },
+        })
+        return { result, socket }
+      }
+
+      // Another package with the same audience and workspace, and a new version.
+      for (const options of [{ id: 'other.spy' }, { id: 'acme.devmap', packageVersion: '2.0.0' }]) {
+        const { result, socket } = await resumeAs(options)
+        await expect(result).resolves.toBeNull()
+        expect(socket.sent).toHaveLength(0)
+      }
+      // The control: the same package and version reaches the backend.
+      const { socket } = await resumeAs({ id: 'acme.devmap' })
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+      expect(JSON.parse(socket.sent[0]!)).toMatchObject({
+        type: 'terminal.reattach',
+        payload: { terminal_session_ids: ['detached'] },
+      })
+    })
+
     describe('a session left behind when its view closes', () => {
-      async function withDetachedSession(id: string) {
+      async function withDetachedSession(id: string, persist: 'no' | 'asked' | 'stored' = 'no') {
         const mgr = new FrontendPluginManager()
         const a = await openThirdParty(mgr, { id, sessionId: 'left-session' })
         mgr.setBackendWsUrl(`ws://reclaim-${id}`)
@@ -9251,12 +9300,18 @@ describe('opaque view instance ownership', () => {
           attachedInstanceId: a.handle.instanceId,
           client: internal.wsClient,
           createdAt: Date.now(),
+          // 'asked': the package passed persistView, but storage never got the
+          // session. 'stored': the Host wrote its ptyId to terminal storage.
+          ...(persist !== 'no'
+            ? { persistView: true, storageIdentity: { origin: 'acme.devmap', resumeKey: 'k' } }
+            : {}),
+          ...(persist === 'stored' ? { storedForResume: true } : {}),
         })
         a.view.webContents.close()
         const kills = () => socket.sent
           .map((raw) => JSON.parse(raw) as { type: string; payload: Record<string, unknown> })
           .filter((message) => message.type === 'terminal.kill')
-        return { mgr, internal, kills }
+        return { mgr, internal, kills, socket, runtime }
       }
 
       it('is ended once, by its own session id, after the reclaim wait', async () => {
@@ -9338,6 +9393,41 @@ describe('opaque view instance ownership', () => {
           mgr.setAppQuittingProbe(() => true)
           await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS)
           expect(kills()).toHaveLength(0)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
+      it('is kept, and can be resumed, when the Host stored it for resume (D1)', async () => {
+        vi.useFakeTimers()
+        try {
+          const { mgr, internal, kills, socket } = await withDetachedSession('acme.devmap', 'stored')
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS * 2)
+          expect(kills()).toHaveLength(0)
+          expect(internal.aiSessions.has('left-session')).toBe(true)
+          const next = await openThirdParty(mgr, { id: 'acme.devmap' })
+          const plugin = internal.running.get(next.handle.instanceId)!
+          plugin.capabilityContext.aiCliProfiles = ['claude']
+          void mgr.executePublicCapability({
+            kind: 'public',
+            address: 'aiCli.resumeSession',
+            scope: 'workspace',
+            runtime: plugin.capabilityContext.runtimeBinding!,
+            args: { cols: 80, rows: 24 },
+          })
+          await vi.waitFor(() => expect(socket.sent.map((raw) => JSON.parse(raw).type)).toContain('terminal.reattach'))
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
+      it('is still reclaimed when the package only asked for persistView', async () => {
+        vi.useFakeTimers()
+        try {
+          const { internal, kills } = await withDetachedSession('acme.devmap', 'asked')
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS)
+          expect(kills()).toHaveLength(1)
+          expect(internal.aiSessions.has('left-session')).toBe(false)
         } finally {
           vi.useRealTimers()
         }
@@ -14957,6 +15047,55 @@ describe('first-party Git private bridge', () => {
       timestamp: '',
     })
     await expect(resume).resolves.toEqual({ sessionId: 'attested-session', profileId: 'claude' })
+  })
+
+  // D1 on #648: a session is kept past its view's close only when the Host
+  // really wrote its ptyId to terminal storage, not because the package asked.
+  it.each([
+    ['written', true],
+    ['refused by storage', false],
+  ])('marks a persistView start stored for resume only when the storage write is %s', async (_case, writes) => {
+    const opened = await openGitView('/workspace', 'git-window')
+    opened.mgr.setTerminalStorageHandler(async (_origin, request) => {
+      if (request.operation === 'session' && !writes) throw new Error('storage unavailable')
+      return null
+    })
+    opened.mgr.setBackendWsUrl(`ws://persist-start-${writes}`)
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const internal = opened.mgr as unknown as {
+      running: Map<string, { capabilityContext: HostCapabilityContext }>
+      aiSessions: Map<string, { storedForResume?: boolean }>
+    }
+    const runtime = internal.running.get(opened.instanceId)!.capabilityContext.runtimeBinding!
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const start = opened.mgr.executePublicCapability({
+        kind: 'public',
+        address: 'aiCli.startSession',
+        scope: 'workspace',
+        runtime,
+        args: { profileId: 'claude', requestId: 'persist-start', cols: 80, rows: 24, persistView: true },
+      })
+      for (let answered = 0; answered < 2; answered += 1) {
+        await vi.waitFor(() => expect(socket.sent.length).toBeGreaterThan(answered))
+        const request = JSON.parse(socket.sent[answered]!) as { id: string; type: string; payload: Record<string, unknown> }
+        socket.receive({
+          id: request.id,
+          type: request.type,
+          ok: true,
+          payload: request.type === 'terminal.create'
+            ? { terminal_session_id: 'persisted', pane_id: request.payload.pane_id, create_generation: 'persist-start' }
+            : { settings: {} },
+          error: null,
+          timestamp: '',
+        })
+      }
+      await expect(start).resolves.toEqual({ sessionId: 'persisted' })
+      expect(internal.aiSessions.get('persisted')?.storedForResume === true).toBe(writes)
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('rejects a detached ledger session whose profile is no longer Host-allowlisted before backend dispatch', async () => {

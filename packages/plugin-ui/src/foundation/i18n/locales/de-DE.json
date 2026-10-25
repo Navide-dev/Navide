@@ -2214,7 +2214,7 @@
         "cancel": "Abbrechen",
         "capability": {
           "fs": "Dateien in Ihrem Arbeitsbereich lesen und schreiben.",
-          "aiCli": "Die in Navide eingerichteten AI-CLI-Agents starten, ihnen Eingaben senden und alles lesen, was sie ausgeben.",
+          "aiCli": "Die in Navide eingerichteten AI-CLI-Agents starten, ihnen Eingaben senden und alles lesen, was sie ausgeben; eine AI CLI kann auch nach dem Schließen ihres Fensters im Hintergrund weiterlaufen.",
           "web": "Kann jede Website öffnen und darin navigieren; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können Anfragen auf Websites in Ihrem Namen senden) und können jede von ihm geöffnete Seite und deren Anmeldestatus lesen; nachdem Sie übernommen haben, enden bereits in einer Seite laufende Agent-Skripte erst, wenn Sie die Seite neu laden; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
           "agents": "Sieht deine Agent-panes, welcher pane welchen geöffnet hat und wann sie einander Nachrichten geschickt haben – nicht, was darin stand.",
           "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents; er kann Code, Dateiinhalte oder Geheimnisse enthalten.",

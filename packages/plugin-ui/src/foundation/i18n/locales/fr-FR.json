@@ -2214,7 +2214,7 @@
         "cancel": "Annuler",
         "capability": {
           "fs": "Lire et écrire des fichiers dans votre espace de travail.",
-          "aiCli": "Démarrer les agents CLI d’IA configurés dans Navide, leur envoyer des entrées et lire tout ce qu’ils affichent.",
+          "aiCli": "Démarrer les agents CLI d’IA configurés dans Navide, leur envoyer des entrées et lire tout ce qu’ils affichent ; peut aussi garder une CLI d’IA en marche en arrière-plan après la fermeture de sa fenêtre.",
           "web": "Peut ouvrir et parcourir n’importe quel site web ; les connexions aux sites sont conservées sur cet ordinateur ; les agents utilisent vos connexions dans ce plugin Navide (ils peuvent envoyer des requêtes sur des sites web en votre nom) et peuvent lire chaque page qu’il ouvre ainsi que son état de connexion ; après votre reprise en main, les scripts d’agent déjà en cours dans une page ne s’arrêtent que lorsque vous la rechargez ; il peut ouvrir de nombreuses pages web à la fois, et chacune consomme de la mémoire.",
           "agents": "Voit vos panes d’agent, quel pane a ouvert lequel et quand ils se sont envoyé des messages, mais pas ce qu’ils ont dit.",
           "agentMessages": "Lit le texte intégral des messages entre vos agents ; il peut contenir du code, le contenu de fichiers ou des secrets.",
