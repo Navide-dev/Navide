@@ -10,6 +10,9 @@ import { ipcErrorMessage } from '../composables/usePluginInstallFlow'
 import { usePluginInventory } from '../composables/usePluginInventory'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import PluginAgentToolsList from './PluginAgentToolsList.vue'
+import SettingsCard from './settings/SettingsCard.vue'
+import SettingRow from './settings/SettingRow.vue'
+import ToggleSwitch from './settings/ToggleSwitch.vue'
 
 const { t } = useI18n()
 const overview = ref<NativeBackendOverview | null>(null)
@@ -65,50 +68,61 @@ watch(installed, refresh)
     <p v-if="overview.plugins.length === 0" class="native-backends-empty">
       {{ $t('settings.extensions.nativeBackends.empty') }}
     </p>
-    <div class="native-backends-callout">
-      <svg class="native-backends-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M7.1 2.6 1.9 12a1 1 0 0 0 .9 1.5h10.4a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0Z" />
-        <path d="M8 6.2v3M8 11.3v.1" />
-      </svg>
-      <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.description') }}</p>
-    </div>
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
-    <label class="native-backends-switch">
-      <input
-        type="checkbox"
-        class="nv-check"
-        :checked="overview.enabled"
-        :disabled="busy"
-        @change="run(() => api()!.setEnabled(($event.target as HTMLInputElement).checked))"
-      />
-      {{ $t('settings.extensions.nativeBackends.enable') }}
-    </label>
-    <template v-if="overview.agentTools && api()?.setAgentTools">
-      <label class="native-backends-switch">
-        <input
-          type="checkbox"
-          class="nv-check"
-          data-agent-tools-switch="enabled"
-          :checked="overview.agentTools.enabled"
-          :disabled="busy"
-          @change="run(() => api()!.setAgentTools!({ enabled: ($event.target as HTMLInputElement).checked }))"
-        />
-        {{ $t('settings.extensions.nativeBackends.agentTools.enable') }}
-      </label>
-      <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.agentTools.description') }}</p>
-      <label class="native-backends-switch">
-        <input
-          type="checkbox"
-          class="nv-check"
-          data-agent-tools-switch="externalCallers"
-          :checked="overview.agentTools.externalCallers"
-          :disabled="busy || !overview.agentTools.enabled"
-          @change="run(() => api()!.setAgentTools!({ externalCallers: ($event.target as HTMLInputElement).checked }))"
-        />
-        {{ $t('settings.extensions.nativeBackends.agentTools.externalCallers') }}
-      </label>
-      <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.agentTools.externalCallersDisclosure') }}</p>
-    </template>
+    <!-- One card: the warning about native code sits right above the switch it
+         governs, and the external-callers switch is indented under the switch
+         it depends on. -->
+    <SettingsCard class="native-backends-card">
+      <div class="native-backends-callout">
+        <svg class="native-backends-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7.1 2.6 1.9 12a1 1 0 0 0 .9 1.5h10.4a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0Z" />
+          <path d="M8 6.2v3M8 11.3v.1" />
+        </svg>
+        <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.description') }}</p>
+      </div>
+      <SettingRow :title="$t('settings.extensions.nativeBackends.enable')">
+        <template #control>
+          <ToggleSwitch
+            data-native-backends-switch="enabled"
+            :model-value="overview.enabled"
+            :disabled="busy"
+            :aria-label="$t('settings.extensions.nativeBackends.enable')"
+            @update:model-value="(on: boolean) => run(() => api()!.setEnabled(on))"
+          />
+        </template>
+      </SettingRow>
+      <template v-if="overview.agentTools && api()?.setAgentTools">
+        <SettingRow
+          :title="$t('settings.extensions.nativeBackends.agentTools.enable')"
+          :description="$t('settings.extensions.nativeBackends.agentTools.description')"
+        >
+          <template #control>
+            <ToggleSwitch
+              data-agent-tools-switch="enabled"
+              :model-value="overview.agentTools.enabled"
+              :disabled="busy"
+              :aria-label="$t('settings.extensions.nativeBackends.agentTools.enable')"
+              @update:model-value="(on: boolean) => run(() => api()!.setAgentTools!({ enabled: on }))"
+            />
+          </template>
+        </SettingRow>
+        <SettingRow
+          class="native-backends-dependent"
+          :title="$t('settings.extensions.nativeBackends.agentTools.externalCallers')"
+          :description="$t('settings.extensions.nativeBackends.agentTools.externalCallersDisclosure')"
+        >
+          <template #control>
+            <ToggleSwitch
+              data-agent-tools-switch="externalCallers"
+              :model-value="overview.agentTools.externalCallers"
+              :disabled="busy || !overview.agentTools.enabled"
+              :aria-label="$t('settings.extensions.nativeBackends.agentTools.externalCallers')"
+              @update:model-value="(on: boolean) => run(() => api()!.setAgentTools!({ externalCallers: on }))"
+            />
+          </template>
+        </SettingRow>
+      </template>
+    </SettingsCard>
     <ul v-if="overview.plugins.length" class="ext-list">
       <li
         v-for="row in overview.plugins"
@@ -198,13 +212,13 @@ watch(installed, refresh)
   font-weight: 650;
   letter-spacing: -0.01em;
 }
+/* The warning is a row of the switch card, tinted and marked on its left edge. */
 .native-backends-callout {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-left: 2px solid var(--risk-fg);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: var(--space-3) var(--space-row-x);
+  box-shadow: inset 2px 0 0 var(--risk-fg);
   background: var(--risk-subtle);
   color: var(--text-primary);
 }
@@ -220,52 +234,18 @@ watch(installed, refresh)
   font-size: var(--font-xs);
   line-height: var(--lh-base);
 }
-/* External callers only apply once agent tools are on: indent it under that switch. */
-.native-backends-switch:has([data-agent-tools-switch='externalCallers']),
-.native-backends-switch:has([data-agent-tools-switch='externalCallers']) + .native-backends-description {
-  margin-left: calc(14px + var(--space-2) + var(--space-4));
+/* External callers only apply once agent tools are on: indented under that switch. */
+.native-backends-dependent {
+  padding-left: calc(var(--space-row-x) + 24px);
 }
-.native-backends-switch {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: var(--space-3) 0;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
-  color: var(--text-bright);
-  font-weight: 600;
-  cursor: pointer;
+.native-backends-card {
+  margin-bottom: var(--space-3);
 }
-/* A switch and the help text right after it read as one card. */
-.native-backends-switch:has(+ .native-backends-description) {
-  margin-bottom: 0;
-  padding-bottom: var(--space-1);
-  border-bottom: 0;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
-.native-backends-switch + .native-backends-description {
-  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 14px + var(--space-2));
-  border: 1px solid var(--border-muted);
-  border-top: 0;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
-}
-.native-backends-switch:has(input:disabled) {
-  cursor: not-allowed;
-  color: var(--text-secondary);
-}
+/* Nothing installed has a native backend: said in a line, not a box. */
 .native-backends-empty {
-  margin: 0 0 var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
+  margin: 0 0 var(--space-2);
   color: var(--text-secondary);
   font-size: var(--font-xs);
-  text-align: center;
 }
 .ext-error {
   margin: var(--space-3) 0;

@@ -22,6 +22,9 @@ import PluginTrustDialog from './PluginTrustDialog.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
+import SettingsCard from './settings/SettingsCard.vue'
+import SettingRow from './settings/SettingRow.vue'
+import ToggleSwitch from './settings/ToggleSwitch.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 import PluginSourceBadge from './PluginSourceBadge.vue'
@@ -1241,17 +1244,20 @@ watch(installed, () => {
 
     <section v-show="props.page === 'developer'" class="ext-section ext-devmode" data-settings-section="extensions-developer-mode">
       <h3 class="ext-section-title">{{ $t('settings.extensions.developerMode.title') }}</h3>
-      <label class="ext-devmode-switch">
-        <input
-          type="checkbox"
-          class="ext-devmode-toggle nv-check"
-          :checked="developerMode.enabled"
-          :disabled="busy"
-          @change="setDeveloperMode(($event.target as HTMLInputElement).checked)"
-        />
-        {{ $t('settings.extensions.developerMode.switch') }}
-      </label>
-      <p class="ext-devmode-hint">{{ $t('settings.extensions.developerMode.hint') }}</p>
+      <!-- The same row as every other setting: what it does on the left, the switch on the right. -->
+      <SettingsCard>
+        <SettingRow :title="$t('settings.extensions.developerMode.switch')" :description="$t('settings.extensions.developerMode.hint')">
+          <template #control>
+            <ToggleSwitch
+              class="ext-devmode-toggle"
+              :model-value="developerMode.enabled"
+              :disabled="busy"
+              :aria-label="$t('settings.extensions.developerMode.switch')"
+              @update:model-value="setDeveloperMode"
+            />
+          </template>
+        </SettingRow>
+      </SettingsCard>
       <button
         v-if="developerMode.enabled"
         class="ext-load-folder nv-btn nv-btn--sm"
@@ -1616,30 +1622,8 @@ watch(installed, () => {
   background: var(--risk-subtle);
   color: var(--risk-fg);
 }
-/* The switch and its hint form one card, matching the Native backends switches. */
-.ext-devmode-switch {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4) var(--space-1);
-  border: 1px solid var(--border-muted);
-  border-bottom: 0;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-  background: var(--bg-subtle);
-  color: var(--text-bright);
-  font-weight: 600;
-  cursor: pointer;
-}
-.ext-devmode-hint {
-  margin: 0 0 var(--space-3);
-  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 14px + var(--space-2));
-  border: 1px solid var(--border-muted);
-  border-top: 0;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
-  line-height: var(--lh-base);
+.ext-devmode .ext-load-folder {
+  margin-top: var(--space-3);
 }
 .ext-devmode-folder {
   display: flex;
