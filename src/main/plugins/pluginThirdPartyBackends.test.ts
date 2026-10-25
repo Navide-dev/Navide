@@ -104,6 +104,8 @@ beforeEach(() => {
   allow.mockClear()
   deny.mockClear()
   store.setEnabled(true)
+  // Installed by 0.2.31 through a dialog that disclosed its backend.
+  store.noteInstallConsent('acme.indexer', '1.0.0')
 })
 
 afterEach(() => {
@@ -246,9 +248,50 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     instance.resetFailures('acme.indexer')
     await refusal(instance.admit(spec))
     expect(deny).toHaveBeenCalledTimes(2)
+    // Removed, then installed again through the dialog: a new disclosure.
     store.forget('acme.indexer')
+    store.noteInstallConsent('acme.indexer', '1.0.0')
     await instance.admit(spec)
     expect(deny).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks once for a package installed before 0.2.31, which has no install record', async () => {
+    store.forget('acme.indexer')
+    const { instance } = controller({ promptConsent: allow })
+    const spec = writePackage()
+    await instance.admit(spec)
+    expect(allow).toHaveBeenCalledTimes(1)
+    expect(allow.mock.calls[0][0]).toMatchObject({ update: false })
+    await instance.admit(spec)
+    expect(allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks for a version no install dialog showed (a rollback or an agent update)', async () => {
+    store.forget('acme.indexer')
+    store.noteInstallConsent('acme.indexer', '0.9.0')
+    const { instance } = controller({ promptConsent: deny })
+    await refusal(instance.admit(writePackage()))
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks when a record carries both a revoke and an install consent (an edited file)', async () => {
+    writeFileSync(join(root, 'store', 'native-backends.json'), JSON.stringify({
+      schemaVersion: 1, enabled: true,
+      plugins: { 'acme.indexer': { consentRevoked: true, installConsent: { packageVersion: '1.0.0' } } },
+    }), { mode: 0o600 })
+    store = new NativeBackendStore(join(root, 'store'))
+    const { instance } = controller({ promptConsent: deny })
+    await refusal(instance.admit(writePackage()))
+    expect(deny).toHaveBeenCalledTimes(1)
+  })
+
+  it('an install dialog after a revoke is a new disclosure: the next start binds without a prompt', async () => {
+    const { instance } = controller({ promptConsent: deny })
+    store.revokeConsent('acme.indexer')
+    expect(store.record('acme.indexer')).not.toHaveProperty('installConsent')
+    store.noteInstallConsent('acme.indexer', '1.0.0')
+    await instance.admit(writePackage())
+    expect(deny).not.toHaveBeenCalled()
   })
 
   it('asks before the bind when an update changes the backend binary, and marks it as an update', async () => {

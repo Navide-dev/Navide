@@ -356,8 +356,11 @@ all of these hold, and they are checked again before every restart:
   file in the package (relative path and content), because a backend can read
   any package file and turn it into code at run time. Installing is that
   consent: every install path discloses the native backend and its shell
-  allowlist before it commits, so a package with no consent yet is recorded
-  on its first start without another dialog. Any new version that changes any
+  allowlist before it commits and records the version it installed, so that
+  version's first start records the consent without another dialog. A
+  package installed before 0.2.31, a version no install dialog showed (an
+  agent's update, a rollback) and a package whose consent was revoked or
+  dropped to fail closed are asked before they start. Any new version that changes any
   file - frontend files included - is staged but not started until the user
   allows it again, in the dialog shown before it starts.
 - The platform sandbox is available. There is no unsandboxed fallback.

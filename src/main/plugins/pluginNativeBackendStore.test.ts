@@ -131,3 +131,36 @@ describe('NativeBackendStore: a consent taken away is marked', () => {
     expect(store.record('acme.indexer')).toEqual({})
   })
 })
+
+describe('NativeBackendStore: install consent (0.2.31)', () => {
+  it('records the installed version, clears a revoke, is dropped by revoke, forgetGrants and uninstall, and persists', () => {
+    const store = new NativeBackendStore(dir)
+    store.revokeConsent('acme.indexer')
+    store.noteInstallConsent('acme.indexer', '1.0.0')
+    expect(store.record('acme.indexer')).toEqual({ installConsent: { packageVersion: '1.0.0' } })
+    expect(new NativeBackendStore(dir).record('acme.indexer')).toEqual({ installConsent: { packageVersion: '1.0.0' } })
+    store.revokeConsent('acme.indexer')
+    expect(store.record('acme.indexer')).toEqual({ consentRevoked: true })
+    store.noteInstallConsent('acme.indexer', '1.0.0')
+    store.forgetGrants('acme.indexer')
+    expect(store.record('acme.indexer')).toEqual({ consentRevoked: true })
+    store.noteInstallConsent('acme.indexer', '1.1.0')
+    store.forget('acme.indexer')
+    expect(store.record('acme.indexer')).toEqual({})
+  })
+
+  it('forgetGrants keeps only the install consent of the replacing version', () => {
+    const store = new NativeBackendStore(dir)
+    store.noteInstallConsent('acme.indexer', '1.1.0')
+    store.grantConsent('acme.indexer', consent)
+    store.forgetGrants('acme.indexer', '1.1.0')
+    expect(store.record('acme.indexer')).toEqual({ installConsent: { packageVersion: '1.1.0' } })
+    store.forgetGrants('acme.indexer', '1.2.0')
+    expect(store.record('acme.indexer')).toEqual({ consentRevoked: true })
+  })
+
+  it('a 0.2.30 package has no install record', () => {
+    write0230(true)
+    expect(new NativeBackendStore(dir).record('acme.indexer')).not.toHaveProperty('installConsent')
+  })
+})

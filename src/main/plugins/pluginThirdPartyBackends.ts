@@ -1028,13 +1028,19 @@ export class ThirdPartyBackendController {
 
   private async requestConsent(spec: ThirdPartyLaunchSpec, digest: string): Promise<void> {
     // Installing is the consent: every install path discloses the native
-    // backend and its shell allowlist before it commits. A package with an
-    // earlier consent changed since then (an update, a rollback, edited
-    // files), and the install-time disclosure of those does not always show
-    // the backend change, so that one is still asked before it runs; so is
-    // one whose consent was taken away (revoked, or forgotten to fail closed).
+    // backend and its shell allowlist before it commits, and records that
+    // for the version it installed (installConsent). Everything else is
+    // still asked before it runs: a package with an earlier consent that
+    // changed since (an update, a rollback, edited files: the install-time
+    // disclosure of those does not always show the backend change), one
+    // whose consent was taken away (revoked, or forgotten to fail closed),
+    // one installed before 0.2.31, and a version no install dialog showed.
     const record = this.store.record(spec.pluginId)
-    if (record.consent === undefined && !record.consentRevoked) {
+    if (
+      record.consent === undefined &&
+      !record.consentRevoked &&
+      record.installConsent?.packageVersion === spec.packageVersion
+    ) {
       this.recordConsent(spec, digest)
       return
     }

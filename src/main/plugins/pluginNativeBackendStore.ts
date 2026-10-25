@@ -40,6 +40,10 @@ export interface NativeBackendPluginRecord {
    * next start asks again instead of counting the install as consent.
    * Cleared by the next consent; uninstalling drops it with the record. */
   consentRevoked?: true
+  /** 0.2.31: the user confirmed the install dialog of this version, which
+   * discloses its native backend, so its first start counts as consent. A
+   * package installed earlier, or of another version, is asked instead. */
+  installConsent?: { packageVersion: string }
   disabled?: boolean
   /** Canonical workspace paths where workspace writes are allowed. */
   workspaceWrite?: string[]
@@ -111,6 +115,9 @@ function parseState(value: unknown): NativeBackendState {
     const consent = parseConsent(raw.consent)
     if (consent) record.consent = consent
     if (raw.consentRevoked === true) record.consentRevoked = true
+    if (isRecord(raw.installConsent) && typeof raw.installConsent.packageVersion === 'string') {
+      record.installConsent = { packageVersion: raw.installConsent.packageVersion }
+    }
     if (raw.disabled === true) record.disabled = true
     if (Array.isArray(raw.workspaceWrite)) {
       const paths = raw.workspaceWrite.filter((path): path is string => typeof path === 'string')
@@ -223,6 +230,15 @@ export class NativeBackendStore {
     })
   }
 
+  /** The user confirmed the install dialog of this version: a new disclosure,
+   * so an earlier revocation no longer applies. */
+  noteInstallConsent(pluginId: string, packageVersion: string): void {
+    this.update(pluginId, (record) => {
+      delete record.consentRevoked
+      return { ...record, installConsent: { packageVersion } }
+    })
+  }
+
   /** DB3: the user allowed agent write-risk tools of this exact package version,
    * under the consent granted at `consentGrantedAt`, in `workspacePath`. */
   allowsAgentToolWrite(pluginId: string, packageVersion: string, consentGrantedAt: string, workspacePath: string): boolean {
@@ -258,6 +274,7 @@ export class NativeBackendStore {
   revokeConsent(pluginId: string): void {
     this.update(pluginId, (record) => {
       delete record.consent
+      delete record.installConsent
       return { ...record, consentRevoked: true }
     })
   }
@@ -330,13 +347,18 @@ export class NativeBackendStore {
    * (Marketplace ↔ local file). Forget every permission given to the replaced
    * one: its consent, every workspace it may change files in, its agent write
    * answers and its agent tool place. Only the user's own Disabled switch for
-   * the id stays. */
-  forgetGrants(pluginId: string): void {
+   * the id stays, and the install consent of `keepInstallConsentFor`: the
+   * replacing version's own install dialog, not the replaced one's consent.
+   * Without it (failing closed), the next start is asked. */
+  forgetGrants(pluginId: string, keepInstallConsentFor?: string): void {
     const current = this.state.plugins[pluginId]
+    const kept = keepInstallConsentFor !== undefined && current?.installConsent?.packageVersion === keepInstallConsentFor
+      ? { installConsent: { packageVersion: keepInstallConsentFor } }
+      : { consentRevoked: true as const }
     // Restricting: even if the file cannot be written, nothing stays granted
     // for the rest of this run. The mark is written even with no record, so
     // the next start asks instead of counting the install as consent.
-    this.update(pluginId, () => ({ ...(current?.disabled ? { disabled: true as const } : {}), consentRevoked: true }), true)
+    this.update(pluginId, () => ({ ...(current?.disabled ? { disabled: true as const } : {}), ...kept }), true)
   }
 
   /** Uninstall: forget every decision about the plugin. */
