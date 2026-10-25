@@ -121,6 +121,41 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.31',
+    title: {
+      'zh-TW': '修正 Linux 記憶體持續增加，「Navide 外掛」設定分成四個子頁',
+      'en-US': 'Linux Memory Growth Fixed, and Navide Plugins Settings in Four Pages',
+      'ja-JP': 'Linux でメモリが増え続ける問題を修正、「Navide プラグイン」の設定を 4 つのページに',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Linux：開啟 pane 之後，後端記憶體不再每分鐘增加約 90 MB，event loop 不再越卡越久，pane 的輸入和捲動也不再延遲。原因是 Git 監看器連 inotify 的「讀取」事件也會反應，agent 在工作區每讀一個檔案就多排一批事件；現在只對檔案新增、刪除、修改和搬移反應，一連串變更也只喚醒 event loop 一次。macOS 和 Windows 不受影響。感謝 @emissionspectrum-creator 在 #622 回報。',
+        'en-US': 'Linux: once a pane is open, the backend\'s memory no longer grows by about 90 MB a minute, the event loop no longer stalls for longer and longer, and pane input and scrolling no longer lag. The Git watcher reacted to inotify\'s read events, so every file an agent read in the workspace queued more events; it now reacts only to files being created, deleted, modified or moved, and a burst of changes wakes the event loop once. macOS and Windows were not affected. Thanks to @emissionspectrum-creator for reporting it in #622.',
+        'ja-JP': 'Linux：pane を開いた後、バックエンドのメモリが毎分約 90 MB ずつ増えることはなくなり、event loop の停止がだんだん長くなることも、pane の入力やスクロールが遅れることもなくなりました。原因は Git の監視が inotify の「読み取り」イベントにも反応していたことで、agent がワークスペースのファイルを読むたびにイベントが溜まっていました。現在はファイルの作成・削除・変更・移動にだけ反応し、まとまった変更でも event loop を起こすのは 1 回だけです。macOS と Windows には影響ありません。#622 で報告してくださった @emissionspectrum-creator さんに感謝します。',
+      },
+      {
+        'zh-TW': '「設定 → Navide 外掛」分成四個子頁，列在側欄的「Navide 外掛」底下：Navide 外掛、執行政策、開發者與原生程式碼、揭露總覽。不用打開子頁也看得到狀態：執行政策頁有警告時，側欄那一列會顯示 ⚠；開發者模式或任何原生後端開關開著時，「開發者與原生程式碼」會顯示「已開啟」。視窗寬度在 720px 以下時，改用頁面上方的分頁列切換。每個外掛的列不用點開就看得到風險等級和「⚠ N」。揭露的文字沒有更動。',
+        'en-US': 'Settings → Navide Plugins is split into four pages, listed in the sidebar under Navide Plugins: Navide plugins, Execution Policy, Developer and native code, and Disclosure overview. You can see their state without opening them: Execution Policy shows ⚠ in the sidebar while that page shows a warning, and Developer and native code shows On while Developer Mode or any native-backend switch is on. At 720px wide or less, a tab strip at the top of the page switches between them. Each plugin row shows its risk level and ⚠ N without a click. Disclosure text is unchanged.',
+        'ja-JP': '「設定 → Navide プラグイン」を 4 つのページに分け、サイドバーの「Navide プラグイン」の下に並べました：Navide プラグイン、実行ポリシー、開発者とネイティブコード、開示の一覧。ページを開かなくても状態がわかります：実行ポリシーのページに警告があるときはサイドバーの行に ⚠ が、開発者モードやネイティブバックエンドのスイッチがどれかオンのときは「開発者とネイティブコード」に「オン」が表示されます。ウィンドウの幅が 720px 以下のときは、ページ上部のタブで切り替えます。各プラグインの行には、クリックしなくてもリスクレベルと「⚠ N」が表示されます。開示の文言は変わっていません。',
+      },
+      {
+        'zh-TW': '外掛現在可以申請讀取同一個工作區的 agent 資訊（pane 清單、哪個 pane 開了哪個、不含內容的訊息傳送紀錄、session 清單），這是中風險權限；訊息內容要另外申請高風險權限，安裝時會再確認一次，而且 agent 要讀到訊息內容，執行政策必須明確寫入。對話紀錄、帳號和額度資料都不開放。內建外掛都沒有申請這兩種權限。',
+        'en-US': 'Plugins can now ask to read agent information in their own workspace (the pane list, which pane opened which, message delivery records without their text, and the session list), a medium-risk permission. Message text needs a separate high-risk permission, confirmed a second time at install, and an agent gets it only from an Execution Policy that names it. Conversation transcripts, account and quota data are never available. None of the bundled plugins asks for either.',
+        'ja-JP': 'プラグインが、同じワークスペースの agent の情報（pane の一覧、どの pane がどの pane を開いたか、本文を含まないメッセージの配信記録、session の一覧）の読み取りを申請できるようになりました。これは中リスクの権限です。メッセージの本文には別の高リスクの権限が必要で、インストール時にもう一度確認され、agent が本文を読めるのは実行ポリシーに明記されている場合だけです。会話の記録、アカウントや使用量のデータは公開されません。同梱のプラグインはどちらも申請していません。',
+      },
+      {
+        'zh-TW': '因為電腦時鐘不準而無法檢查 Registry 外掛時，訊息會說明時鐘似乎慢了或快了，請你改正日期與時間後再試。已安裝的外掛因此停止時，「設定 → Navide 外掛」會顯示橫幅說明，Navide 會在 15 分鐘內及啟動時再檢查一次。',
+        'en-US': 'When a Registry plugin cannot be checked because this computer\'s clock is off, the message now says the clock appears to be behind or ahead, and to correct the date and time and try again. An installed plugin stopped for this reason shows a banner in Settings → Navide Plugins; Navide checks again within 15 minutes and when it starts.',
+        'ja-JP': 'コンピューターの時計がずれているために Registry のプラグインを確認できないとき、時計が遅れているか進んでいるようだと伝え、日付と時刻を直してからやり直すよう案内するようになりました。インストール済みのプラグインがこの理由で停止した場合は「設定 → Navide プラグイン」にバナーが表示され、Navide は 15 分以内と起動時にもう一度確認します。',
+      },
+      {
+        'zh-TW': '用 Anthropic 自動產生 commit 訊息不再每次都失敗。',
+        'en-US': 'Generating a commit message with Anthropic no longer fails every time.',
+        'ja-JP': 'Anthropic での commit メッセージの自動生成が、毎回失敗することはなくなりました。',
+      },
+    ],
+  },
+  {
     version: '0.2.30',
     title: {
       'zh-TW': '「Navide 外掛」設定頁改版：風險和警告直接標在清單上，Pipeline 也不再默默卡住',
