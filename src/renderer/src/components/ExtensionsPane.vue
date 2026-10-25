@@ -1082,6 +1082,11 @@ watch(installed, () => {
               <ul v-if="riskReason(p.id)" class="ext-risk-reason">
                 <li v-for="clause in riskClauses(p.id)" :key="clause">{{ clause }}</li>
               </ul>
+              <!-- The warnings the list row counts as "⚠ N", one per line, so the count
+                   can be traced to what it counts. -->
+              <ul v-if="installedWarnings(p).length" class="ext-card-warnings ext-risk-note">
+                <li v-for="warning in installedWarnings(p)" :key="warning">{{ warning }}</li>
+              </ul>
               <!-- The actions right under the header, before the details. -->
               <div class="ext-actions">
                 <button
@@ -2073,8 +2078,8 @@ watch(installed, () => {
 .ext-scope-group + .ext-scope-group {
   margin-top: 2px;
 }
-/* The access level leads each group; write access is tinted so it stands out
-   from read-only reach at a glance. */
+/* The access level leads each group; write access is in the bright text
+   colour so it stands out from read-only reach without reading as a warning. */
 .ext-scope-kind {
   flex: 0 0 auto;
   min-width: 92px;
@@ -2083,7 +2088,7 @@ watch(installed, () => {
 }
 .ext-scope-group[data-access='scopeReadWrite'] .ext-scope-kind,
 .ext-scope-group[data-access='scopeWriteOnly'] .ext-scope-kind {
-  color: var(--risk-fg);
+  color: var(--text-bright);
 }
 .ext-globs {
   display: flex;
@@ -2153,6 +2158,11 @@ watch(installed, () => {
   color: var(--text-primary);
   font-size: var(--font-sm);
   line-height: var(--lh-base);
+}
+.ext-card-warnings {
+  display: grid;
+  gap: 2px;
+  list-style: none;
 }
 .ext-incompatible-reason {
   margin: 0;
