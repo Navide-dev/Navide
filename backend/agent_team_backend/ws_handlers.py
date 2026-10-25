@@ -12236,6 +12236,43 @@ async def agent_msg_list(session: "Session", msg_id: str, msg_type: str, payload
     await session.send_json(make_response(msg_id, msg_type, {"panes": entries}))
 
 
+@handler("agents.public")
+async def agents_public(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """One read-only plugin `agents.*` query, Host-authenticated. The Host has
+    already checked Manifest, Grant and Execution Policy and binds the
+    workspace; see agents_host_api for what each answer may contain."""
+    from . import agents_host_api
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"workspace_path", "operation", "arguments"}
+        or not isinstance(payload.get("workspace_path"), str)
+        or not payload["workspace_path"].strip()
+        or payload.get("operation") not in agents_host_api.OPERATIONS
+        or not isinstance(payload.get("arguments"), dict)
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "agents.public is malformed")
+        )
+        return
+    try:
+        result = await asyncio.to_thread(
+            agents_host_api.run,
+            payload["workspace_path"],
+            payload["operation"],
+            payload["arguments"],
+        )
+    except agents_host_api.AgentsApiError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, str(err)))
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 @handler("agent_msg.route")
 async def agent_msg_route(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app, message_routing
@@ -12623,6 +12660,12 @@ async def agent_msg_log_append(session: "Session", msg_id: str, msg_type: str, p
             make_error(msg_id, msg_type, "BAD_REQUEST", "agent_msg.log_append needs a rows list")
         )
         return
+    # Which workspace each side is, resolved here while those panes are still
+    # registered; the renderer's own word for it is never taken.
+    for row in rows:
+        if isinstance(row, dict):
+            row["sender_workspace"] = agent_messaging.workspace_of_name(str(row.get("sender") or ""), session)
+            row["recipient_workspace"] = agent_messaging.workspace_of_name(str(row.get("recipient") or ""), session)
     written = app.agent_message_log.append(rows)
     agent_messaging.notify_message_rows(rows)
     await session.send_json(make_response(msg_id, msg_type, {"written": written}))

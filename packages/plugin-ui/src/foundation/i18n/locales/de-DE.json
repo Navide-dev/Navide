@@ -1820,7 +1820,6 @@
       "removeShell": "{name} entfernen",
       "none": "Keine",
       "save": "Richtlinie speichern",
-      "edit": "Richtlinie bearbeiten",
       "resetUser": "Benutzerrichtlinie zurücksetzen",
       "sourceTitle": "Richtlinienquelle des Arbeitsbereichs",
       "sourceHint": "Eine Repository-Empfehlung gilt als nicht vertrauenswürdig, bis Sie sie prüfen und ausdrücklich annehmen. Quellenänderungen erfordern einen exakten aktuellen Fingerabdruck.",
@@ -1881,7 +1880,7 @@
       },
       "nativeBackends": {
         "title": "Native Backends",
-        "description": "Manche Navide-Plug-ins enthalten nativen Code. Navide führt ihn in einer Sandbox ohne eigenen Netzwerkzugriff aus; er kann nur die Arbeitsbereiche lesen, die Sie damit öffnen, und Dateien nur dort ändern, wo Sie es erlauben. Ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (unten als hohes Risiko markiert), kann darüber Netzwerk-Hosts kontaktieren, Daten aus dem Arbeitsbereich senden sowie Dateien im Arbeitsbereich ohne diese Berechtigung lesen und ändern. Nichts Natives läuft, bevor Sie den Schalter unten einschalten.",
+        "description": "Manche Navide-Plug-ins enthalten nativen Code. Navide führt ihn in einer Sandbox ohne eigenen Netzwerkzugriff aus; er kann nur die Arbeitsbereiche lesen, die Sie damit öffnen, und Dateien nur dort ändern, wo Sie es erlauben. Ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (unten als hohes Risiko markiert), kann darüber Netzwerk-Hosts kontaktieren, Daten aus dem Arbeitsbereich senden sowie Dateien im Arbeitsbereich ohne diese Berechtigung lesen und ändern. Solange der Schalter unten eingeschaltet ist, erlauben Sie mit der Installation eines Navide-Plug-ins mit nativem Code dessen Ausführung; schalten Sie ihn aus, um alle zu stoppen.",
         "enable": "Navide-Plug-ins von Drittanbietern erlauben, native Backends auszuführen",
         "agentTools": {
           "enable": "Agents erlauben, Tools aus Navide-Plug-ins von Drittanbietern aufzurufen",
@@ -1890,6 +1889,7 @@
           "externalCallersDisclosure": "Externe Programme teilen sich ein einziges Token, daher kann der Eintrag eines Aufrufs nur „ein externer Client“ angeben, nicht welches Programm es war. Die Host-Anmeldeinformation wird genauso behandelt."
         },
         "empty": "Kein installiertes Navide-Plug-in hat ein natives Backend.",
+        "windowWithout": "{name} wurde ohne sein natives Backend geöffnet: {reason}. Funktionen, die das Backend brauchen, funktionieren nicht. Um das Backend zuzulassen, öffnen Sie „Einstellungen → Navide-Plug-ins → {page}“.",
         "allow": "Erlauben",
         "disable": "Deaktivieren",
         "enable_plugin": "Aktivieren",
@@ -1919,6 +1919,8 @@
       },
       "bundled": "Mitgeliefert",
       "listTitle": "Navide-Plug-ins",
+      "developerNative": "Entwickler und nativer Code",
+      "pageOn": "An",
       "bundledGit": "Mitgeliefertes Git",
       "state": {
         "active": "Aktiv",
@@ -2156,9 +2158,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide konnte dieses Navide-Plug-in nicht prüfen: Die Vertrauensdaten der Registry sind auf einen Zeitpunkt nach der Uhr dieses Rechners datiert. Prüfen Sie, ob Datum und Uhrzeit Ihres Rechners stimmen, und versuchen Sie es dann erneut.",
-          "expired": "Navide konnte dieses Navide-Plug-in nicht prüfen: Nach der Uhr dieses Rechners sind die Vertrauensdaten der Registry abgelaufen. Prüfen Sie, ob Datum und Uhrzeit Ihres Rechners stimmen, und versuchen Sie es dann erneut.",
-          "signatureNotYetValid": "Navide konnte dieses Navide-Plug-in nicht prüfen: Seine Registry-Signatur ist auf einen Zeitpunkt nach der Uhr dieses Rechners datiert. Prüfen Sie, ob Datum und Uhrzeit Ihres Rechners stimmen, und versuchen Sie es dann erneut."
+          "notYetValid": "Navide konnte dieses Navide-Plug-in nicht prüfen: Die Uhr dieses Rechners geht offenbar nach (die Vertrauensdaten der Registry sind auf einen späteren Zeitpunkt datiert). Stellen Sie Datum und Uhrzeit Ihres Rechners richtig ein und versuchen Sie es dann erneut.",
+          "expired": "Navide konnte dieses Navide-Plug-in nicht prüfen: Nach der Uhr dieses Rechners sind die Vertrauensdaten der Registry abgelaufen, die Uhr geht also offenbar vor. Stellen Sie Datum und Uhrzeit Ihres Rechners richtig ein und versuchen Sie es dann erneut.",
+          "signatureNotYetValid": "Navide konnte dieses Navide-Plug-in nicht prüfen: Die Uhr dieses Rechners geht offenbar nach (seine Registry-Signatur ist auf einen späteren Zeitpunkt datiert). Stellen Sie Datum und Uhrzeit Ihres Rechners richtig ein und versuchen Sie es dann erneut."
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version} ist angehalten: Nach der Uhr dieses Rechners sind die Vertrauensdaten der Registry dafür abgelaufen. Entweder geht die Uhr vor, oder Navide hat die Registry seit über einem Tag nicht erreicht. Stellen Sie Datum und Uhrzeit richtig ein oder verbinden Sie sich mit dem Internet; Navide prüft innerhalb von 15 Minuten und beim Start erneut.",
+          "behind": "{id} {version} ist angehalten: Die Uhr dieses Rechners geht offenbar nach, daher sind die Vertrauensdaten der Registry dafür noch nicht gültig. Stellen Sie Datum und Uhrzeit Ihres Rechners richtig ein; Navide prüft innerhalb von 15 Minuten und beim Start erneut."
         }
       },
       "localInstall": {
@@ -2170,6 +2176,9 @@
         "signature": "Keine: Der Urheber kann nicht bestätigt werden, und die Datei wurde möglicherweise verändert",
         "digestLabel": "SHA-256 der Datei",
         "acknowledge": "Mir ist bewusst, dass Navide dieses Navide-Plug-in nicht geprüft hat, und ich möchte seinen Code ausführen.",
+        "versionExists": "Diese Versionsnummer ist bereits mit anderem Inhalt installiert. Erhöhen Sie die Version und packen Sie das Paket erneut.",
+        "installFailed": "Das Navide-Plug-in konnte nicht installiert werden.",
+        "chooseAgain": "Schließen Sie diesen Dialog und wählen Sie die Datei erneut aus, um es noch einmal zu versuchen.",
         "replaceTitle": "Installiertes Navide-Plug-in ersetzen",
         "replaceMarketplace": "{id} (Version {version} aus dem Navide Marketplace) durch die Version aus dieser Datei ersetzen? Es wird dann nicht mehr automatisch aktualisiert.",
         "replaceLocal": "Die Dateiversion {version} von {id} durch diese Datei ersetzen?",
@@ -2196,7 +2205,7 @@
         "publisherTitle": "Herausgeber vertrauen",
         "permissionsTitle": "Berechtigungen des Navide-Plug-ins bestätigen",
         "publisherRisk": "Herausgeber {publisher} für {id} vertrauen. Eine gültige Registry-Signatur belegt die Integrität des Pakets, nicht aber, dass Sie den Code dieses Herausgebers ausführen möchten.",
-        "backendRisk": "{name} enthält eine ausführbare native Backend-Datei, die mit den Betriebssystemrechten Ihres Benutzerkontos laufen kann.",
+        "backendRisk": "{name} enthält ein natives Backend-Programm. Mit der Bestätigung erlauben Sie dessen Ausführung, und Navide fragt nicht erneut, solange sich das Programm und seine Berechtigungen nicht ändern; native Backends schalten Sie unter Einstellungen → Navide-Plug-ins → Entwickler und nativer Code aus. Es läuft nur in einer Betriebssystem-Sandbox ohne eigenen Netzwerkzugang (Seatbelt unter macOS, bubblewrap unter Linux); wo Navide keine Sandbox hat, derzeit auch unter Windows, läuft es nicht.",
         "sensitiveRisk": "{name} fordert sensible Fähigkeiten an: {capabilities}.",
         "signed": "Signiert und verifiziert",
         "unsigned": "Unsigniert – nicht kryptografisch verifiziert",
@@ -2205,8 +2214,10 @@
         "cancel": "Abbrechen",
         "capability": {
           "fs": "Dateien in Ihrem Arbeitsbereich lesen und schreiben.",
-          "aiCli": "Die in Navide eingerichteten AI-CLI-Agents ausführen.",
+          "aiCli": "Die in Navide eingerichteten AI-CLI-Agents starten, ihnen Eingaben senden und alles lesen, was sie ausgeben; eine AI CLI kann auch nach dem Schließen ihres Fensters im Hintergrund weiterlaufen.",
           "web": "Kann jede Website öffnen und darin navigieren; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können Anfragen auf Websites in Ihrem Namen senden) und können jede von ihm geöffnete Seite und deren Anmeldestatus lesen; nachdem Sie übernommen haben, enden bereits in einer Seite laufende Agent-Skripte erst, wenn Sie die Seite neu laden; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
+          "agents": "Sieht deine Agent-panes, welcher pane welchen geöffnet hat und wann sie einander Nachrichten geschickt haben – nicht, was darin stand.",
+          "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents; er kann Code, Dateiinhalte oder Geheimnisse enthalten.",
           "shell": "Befehle auf Ihrem Computer ausführen.",
           "terminal": "Navide-Terminals öffnen und steuern."
         }
@@ -3019,7 +3030,7 @@
           "p7": "Die Installation erfordert <strong>bis zu zwei Bestätigungen</strong>, jede nur bei Bedarf, und vorher wird nichts auf die Festplatte geschrieben: Ist der Herausgeber noch nicht vertrauenswürdig, kommt zuerst „Herausgeber vertrauen“ – der Bildschirm sagt klar, dass <em>eine gültige Signatur nur beweist, dass das Paket nicht manipuliert wurde, nicht aber, dass Sie den Code dieses Herausgebers ausführen wollen</em>; trägt das Paket ein Risiko, das bestätigt werden muss, folgt „Berechtigungen des Navide-Plug-ins bestätigen“ mit einer Liste der angeforderten sensiblen Fähigkeiten und einer ausdrücklichen Warnung, wenn es eine native Backend-Programmdatei mitbringt. Trifft beides nicht zu, wird sofort installiert.",
           "extRollback": "Hat der Host ein Paket, zu dem er zurückkehren kann, erhält die Zeile „{toBundled}“ oder „{toVersion}“: Nach einer Bestätigung wird auf das verdrängte Paket zurückgesetzt, und „{restart}“ schließt den Wechsel ab. Ein abgelehntes oder fehlgeschlagenes Zurücksetzen zeigt die übersetzte Begründung des Hosts, und ein fehlgeschlagenes stellt die Ansichten wieder her, die es geschlossen hatte.",
           "extPrerelease": "Die Zeile jedes Navide-Plug-ins hat ein Kästchen „{prerelease}“, sodass Vorabversionen pro Navide-Plug-in aktiviert werden; die Versionsliste im Navide Marketplace kennzeichnet Vorabversionen und kann eine davon direkt installieren.",
-          "extNative": "<strong>{native}</strong>: Ein Navide-Plug-in eines Drittanbieters kann ein eigenes Backend-Programm mitbringen, das standardmäßig nie ausgeführt wird. Aktivieren Sie „{nativeEnable}“ und klicken Sie dann für genau diese Version des Navide-Plug-ins auf „{allow}“. Es läuft in einer Sandbox ohne eigenen Netzwerkzugang (Seatbelt unter macOS, bubblewrap unter Linux), kann nur den mit ihm geöffneten Arbeitsbereich lesen und nur dort schreiben, wo Sie es erlauben; ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (als hohes Risiko angezeigt), kann darüber Netzwerk-Hosts kontaktieren, Daten des Arbeitsbereichs senden und Dateien im Arbeitsbereich ändern, und bereits gestartete Befehle laufen auch nach dem Deaktivieren zu Ende; jede Änderung am Programm oder an seinen Berechtigungen fragt erneut nach. Windows wird noch nicht unterstützt.",
+          "extNative": "<strong>{native}</strong>: Ein Navide-Plug-in eines Drittanbieters kann ein eigenes Backend-Programm mitbringen. Solange „{nativeEnable}“ eingeschaltet ist (Standard), erlauben Sie mit der Installation des Navide-Plug-ins dessen Ausführung; schalten Sie es aus, um alle zu stoppen. Ändern sich später das Programm oder seine Berechtigungen, fragt Navide erneut, oder Sie klicken für genau diese Version auf „{allow}“. Es läuft in einer Sandbox ohne eigenen Netzwerkzugang (Seatbelt unter macOS, bubblewrap unter Linux), kann nur den mit ihm geöffneten Arbeitsbereich lesen und nur dort schreiben, wo Sie es erlauben; ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (als hohes Risiko angezeigt), kann darüber Netzwerk-Hosts kontaktieren, Daten des Arbeitsbereichs senden und Dateien im Arbeitsbereich ändern, und bereits gestartete Befehle laufen auch nach dem Deaktivieren zu Ende; jede Änderung am Programm oder an seinen Berechtigungen fragt erneut nach. Windows wird noch nicht unterstützt.",
           "marketplace": "Der Tab „{marketplace}“: suchen, nach Kategorie filtern, nach Downloads, letzter Aktualisierung oder Bewertung sortieren, inkompatible Einträge ausblenden, mit bis zu drei Einträgen unter „{featured}“ ganz oben. Eine Detailseite enthält README, Änderungsprotokoll und Versionsliste, daneben Berechtigungen und Kompatibilität; Bewertungen sind hier schreibgeschützt – ein Navide-Plug-in bewerten oder melden Sie nach der Anmeldung auf der Website der Registry. Ein Eintrag mit dem Badge „{pack}“ installiert mit „{packInstall}“ einen ganzen Satz; das Entfernen eines Pakets entfernt nie ein Mitglied, das ein anderes installiertes Paket noch verwendet. Ein <code>navide://</code>-Link öffnet nur die Detailseite des Navide-Plug-ins; auf „Installieren“ klicken Sie immer selbst.",
           "mirror": "<strong>Der Download-Mirror</strong>: Die Dateien jedes Releases werden doppelt veröffentlicht, im GitHub-Release und auf <code>dl.navide.dev</code> – dieselben Bytes, mit sha256-Prüfsummen zum Abgleich. <strong>Der Mirror ist die Standardquelle für Updates</strong>: Die App richtet ihren Feed beim Start auf <code>dl.navide.dev</code> aus, und GitHub ist der Ausweich. Ausgewichen wird nur bei einem <strong>netzwerkbedingten Fehler</strong> (Host nicht erreichbar, Zeitüberschreitung, 5xx/429), und danach <strong>bleibt die App für den Rest der Session bei GitHub</strong> – erst ein Neustart kehrt zum Mirror zurück. <strong>Ein 404 oder ein Signatur-/Prüfsummenfehler löst nie das Ausweichen aus</strong> – beide Hosts haben dieselben Dateien, es würde also auf dieselbe Weise scheitern, und den Fehler so zu melden, wie er ist, hilft mehr, als ihn zu verbergen.",
           "policyIntro": "Die <strong>Ausführungsrichtlinie</strong> legt fest, was das Backend eines Navide-Plug-ins ausführen darf. Sie ist <strong>kein eigener Tab</strong>, sondern der Block oben auf der Seite „Navide-Plug-ins“, mit eigenem Bereichs-Badge (pro Benutzer und pro Arbeitsbereich) und Pfad der Richtliniendatei. Oben steht die <em>wirksame Richtlinie</em> – ihre Quelle, ihr Modus und ihr Status: <em>aktiv</em>, <em>veraltet</em>, <em>nicht verfügbar</em> oder <em>beschädigt</em>.",
@@ -3478,7 +3489,7 @@
             "git": {
               "title": "Git (Quellcodeverwaltung)",
               "tag": "4. Tab der Seitenleiste",
-              "text": "Der Tooltip lautet <em>Git (⌘4)</em>. Im Hauptfenster öffnet <kbd class=\"cwh-kbd\">⌘⇧G</kbd> direkt das <strong>eigene Git-Fenster</strong>; ebenso <em>In neuem Fenster öffnen</em> im Kopf des Panels."
+              "text": "Ist Git als Navide-Plug-in geladen, lautet der Tooltip <em>Navide-Plug-in: Git · navide.git · Herausgeber: navide · In Navide integriert (⌘4)</em>, sonst <em>Git (⌘4)</em>. Im Hauptfenster öffnet <kbd class=\"cwh-kbd\">⌘⇧G</kbd> direkt das <strong>eigene Git-Fenster</strong>; ebenso <em>In neuem Fenster öffnen</em> im Kopf des Panels."
             },
             "plans": {
               "title": "Plans (Plan-Dokumente)",
@@ -6773,7 +6784,7 @@
         "s7": {
           "title": "Eine Person, mehrere Rechner",
           "p1": "Zwei Rechner mit unterschiedlichen Betriebssystemen zu verbinden, ist an sich keine Plattformfrage: Die Anmeldung bei Navide Cloud, das Koppeln und geräteübergreifende Nachrichten funktionieren auf allen dreien gleich und werden unter <strong>Einstellungen und System</strong> behandelt. Dieser Abschnitt ergänzt nur, was sich ändert, wenn die Rechner nicht dieselbe Plattform haben.",
-          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste derzeit vier Dinge einschalten: Prompt-Skills, MCP, Skills und Gedächtnis. <em>Anmeldeinformationen</em> ist ebenfalls aufgeführt, aber der Schalter ist deaktiviert, und die Beschreibung sagt, dass die Synchronisierung noch nicht unterstützt wird – der Eintrag zeigt nur, dass es diesen Bereich gibt, nicht, dass Sie ihn einschalten können.",
+          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste drei Dinge einschalten: MCP, Skills und Prompts. <em>Gedächtnis</em> und <em>CLI-Erweiterungen</em> sind ebenfalls aufgeführt, aber ausgegraut und mit „Noch nicht synchronisierbar.“ beschrieben; einen Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, können Sie weiterhin ausschalten. Für Anmeldeinformationen gibt es keinen Eintrag: Die Anmeldeinformationen von CLI-Konten werden nur auf diesem Computer gespeichert und nie synchronisiert.",
           "note": "Was ohnehin nie mitreist: die Installation und Anmeldung jeder CLI, Anmeldeinformationen (im eigenen Tresor jeder Plattform gespeichert, in nicht austauschbaren Formaten) und jeder absolute Pfad. Auf einem zweiten Rechner müssen die CLIs eigens installiert und angemeldet werden."
         },
         "mock": {
@@ -8946,6 +8957,7 @@
     "status-empty": "Dieser Tab hat keine panes",
     "delete-tab": "Diesen Tab löschen",
     "add-group": "Neue Ausführungsgruppe",
+    "plugin-tab": "Navide-Plug-in: {title}",
     "collapse-families": "Alle pane-Familien in diesem Tab zuklappen",
     "expand-families": "Alle pane-Familien in diesem Tab aufklappen",
     "family-toggle-grid": "Das Zuklappen von Familien ist in den Layouts „Automatisch“, „Spotlight“ und „Vollbild“ verfügbar",
@@ -11652,6 +11664,7 @@
       "none": "Es wurde keine Berechtigung hinzugefügt oder entfernt.",
       "added": "Neu",
       "removed": "Entfernt",
+      "declaredScope": "Angegebener Bereich (nur zur Information)",
       "unchanged": "Unverändert ({count})",
       "fullCard": "Vollständige Offenlegungskarte",
       "badgeMore": "Mehr Berechtigungen",
@@ -11726,8 +11739,10 @@
         "full": "Führt beliebige Befehle aus"
       },
       "networkViaShell": "Kann über diese Befehle entfernte Hosts erreichen",
-      "aiCli": "Steuert AI-CLI-Sessions",
+      "aiCli": "Startet AI-CLI-Sessions und liest ihre Ausgabe",
       "web": "Kann jede Website öffnen und durchsuchen; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können auf Websites in Ihrem Namen Anfragen senden) und können jede geöffnete Seite und ihren Anmeldestatus lesen; nachdem Sie übernommen haben, stoppen bereits laufende Agent-Skripte auf einer Seite erst, wenn Sie sie neu laden; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
+      "agents": "Sieht die Agent-panes in diesem Projekt, welcher pane welchen geöffnet hat, Zustellprotokolle von Nachrichten (ohne Inhalt) und die Session-Liste (ohne Gesprächsinhalt)",
+      "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents in diesem Projekt; er kann Code, Dateiinhalte oder Geheimnisse enthalten",
       "ui": "Zeigt eigene Ansichten",
       "agentTools": "Bietet Tools, die Agents aufrufen können ({read} nur lesend, {write} schreibend)",
       "network": "Kann das Netzwerk verwenden",

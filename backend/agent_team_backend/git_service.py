@@ -3478,12 +3478,13 @@ async def generate_commit_message(
             # left one behind for the garbage collector, which cannot close an
             # async transport reliably.
             async with _anthropic.AsyncAnthropic(api_key=api_key or None) as client:
+                # No temperature: current Claude models reject it (400), and
+                # their default sampling already varies a retry's answer.
                 response = await client.messages.create(
                     model=anthropic_model,
                     max_tokens=256,
                     system=system,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=temperature,
                     timeout=remaining,
                 )
                 raw = ""

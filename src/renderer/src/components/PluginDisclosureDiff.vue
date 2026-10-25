@@ -5,7 +5,7 @@
 // manifests), so this component only words it. Facts, not warnings.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { DisclosureDiff, DisclosureItem } from '../../../shared/pluginDisclosure'
+import { fsScopeChangeWidens, isFsScopeItem, type DisclosureDiff, type DisclosureItem } from '../../../shared/pluginDisclosure'
 import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 
 const props = defineProps<{ diff: DisclosureDiff }>()
@@ -19,6 +19,16 @@ function itemText(item: DisclosureItem): string {
 }
 
 const riskChanged = computed(() => props.diff.from.risk !== props.diff.to.risk)
+
+/** A declared file scope is informational: Navide does not enforce it. When
+ *  this update's scope change claims no more than before (fsScopeChangeWidens),
+ *  its items stay listed under "New" / "Removed" and also say they are a
+ *  declared scope, so a narrower declaration does not read as more access. */
+const scopeIsInformational = computed(() => !fsScopeChangeWidens(
+  [...props.diff.removed, ...props.diff.unchanged],
+  [...props.diff.added, ...props.diff.unchanged],
+))
+const informational = (item: DisclosureItem): boolean => scopeIsInformational.value && isFsScopeItem(item)
 </script>
 
 <template>
@@ -31,12 +41,12 @@ const riskChanged = computed(() => props.diff.from.risk !== props.diff.to.risk)
     <p v-if="!diff.added.length && !diff.removed.length" class="nv-diff-none">{{ $t('pluginDisclosure.diff.none') }}</p>
     <ul v-if="diff.added.length" class="nv-diff-added">
       <li v-for="item in diff.added" :key="`${item.kind}:${item.key}`">
-        <span class="nv-diff-tag">{{ $t('pluginDisclosure.diff.added') }}</span> {{ itemText(item) }}
+        <span class="nv-diff-tag">{{ $t('pluginDisclosure.diff.added') }}</span> <template v-if="informational(item)"><span class="nv-diff-tag nv-diff-tag--info">{{ $t('pluginDisclosure.diff.declaredScope') }}</span>{{ ' ' }}</template>{{ itemText(item) }}
       </li>
     </ul>
     <ul v-if="diff.removed.length" class="nv-diff-removed">
       <li v-for="item in diff.removed" :key="`${item.kind}:${item.key}`">
-        <span class="nv-diff-tag">{{ $t('pluginDisclosure.diff.removed') }}</span> {{ itemText(item) }}
+        <span class="nv-diff-tag">{{ $t('pluginDisclosure.diff.removed') }}</span> <template v-if="informational(item)"><span class="nv-diff-tag nv-diff-tag--info">{{ $t('pluginDisclosure.diff.declaredScope') }}</span>{{ ' ' }}</template>{{ itemText(item) }}
       </li>
     </ul>
     <details v-if="diff.unchanged.length" class="nv-diff-unchanged">
@@ -88,6 +98,12 @@ const riskChanged = computed(() => props.diff.from.risk !== props.diff.to.risk)
   color: var(--text-secondary);
 }
 .nv-diff-removed .nv-diff-tag {
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-muted);
+}
+/* Neutral in both lists: it qualifies the item, it is not a direction. */
+.nv-diff .nv-diff-tag--info {
   color: var(--text-secondary);
   background: var(--bg-subtle);
   border: 1px solid var(--border-muted);

@@ -17,6 +17,7 @@ import {
   type PlansFilesystemPort,
 } from './plansBridge'
 import { firstPartyBridgePorts, isFirstPartyAgentToolActivation, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
+import { validateAgentsOperation } from './agentsCapability'
 import {
   createHostSandboxProbe,
   resolveBackendSandbox,
@@ -67,7 +68,8 @@ import { hostStrings, type HostStringTable, type SupportedLocale } from '../host
  *
  * A third-party child starts only when ALL of these hold, checked again before
  * every (re)spawn: the global switch is on, the user has not disabled the
- * plugin, the user consented to this exact binary and permission set, the
+ * plugin, the user consented to this exact binary and permission set (the
+ * install is the first consent, see requestConsent), the
  * platform sandbox is available, and the crash breaker is closed. The child
  * then runs under the OS sandbox and the resource watchdog, and reaches the
  * Host only through a filesystem bridge limited to its bound workspace and,
@@ -143,6 +145,8 @@ export function thirdPartyBackendLaunchSpec(
     approvedBridgePorts: [
       ...(system.includes('fs') ? ['filesystem' as const] : []),
       ...(manifest.permissions.shell === 'allowlist' ? ['shell' as const] : []),
+      ...(system.includes('agents') ? ['agents' as const] : []),
+      ...(system.includes('agentMessages') ? ['agent-message-bodies' as const] : []),
     ],
     thirdParty: {
       name: manifest.name,
@@ -642,7 +646,9 @@ export interface ThirdPartyBackendControllerOptions {
   /** Root for per-plugin private data directories. */
   dataRoot: string
   probe?: BackendSandboxProbe
-  /** Ask the user to run this backend. Absent = never prompt (deny). */
+  /** Ask the user to run a backend that changed since its consent. Absent =
+   *  never prompt (deny). A package without any consent is not asked: its
+   *  install disclosed the backend. */
   promptConsent?: (prompt: NativeBackendConsentPrompt) => Promise<boolean>
   /** Ask the user to allow file changes in one workspace. Absent = deny. */
   promptWorkspaceWrite?: (prompt: NativeBackendWritePrompt) => Promise<boolean>
@@ -650,6 +656,8 @@ export interface ThirdPartyBackendControllerOptions {
   filesystemPort?: () => PlansFilesystemPort | undefined
   /** Host shell broker port (the same broker a view's shell.run uses). */
   shellPort?: () => PackageShellPort | undefined
+  /** Host agent data port (the same backend query a view's agents.* uses). */
+  agentsPort?: () => PackageAgentsPort | undefined
   /** Stop running children: one plugin, or every third-party plugin (null). */
   stopBackends?: (pluginId: string | null) => Promise<void>
   watchResources?: (
@@ -705,6 +713,13 @@ export function noteBackendFailure(failures: Map<string, number[]>, key: string,
  * `{exitCode, stdout, stderr}`, or throws a PlansBridgeError. */
 export interface PackageShellPort {
   run(command: string, context: PlansBridgeContext): Promise<JsonValue>
+}
+
+/** The Host's read-only agent data as a third-party backend reaches it:
+ * `query` is given a backend operation name (agents_host_api.py) and arguments
+ * already validated, for the workspace the binding authorized. */
+export interface PackageAgentsPort {
+  query(operation: string, args: Record<string, JsonValue>, context: PlansBridgeContext): Promise<JsonValue>
 }
 
 /** Shell syntax the Host broker refuses (host_shell.py `_SHELL_SYNTAX`). */
@@ -950,7 +965,10 @@ export class ThirdPartyBackendController {
       killSandboxProcessesSync(rootPid, id)
     })
 
-    const workspaceRoot = (spec.thirdParty.system.includes('fs') || spec.thirdParty.shell === 'allowlist') && workspacePath
+    const workspaceRoot = (
+      spec.thirdParty.system.includes('fs') || spec.thirdParty.shell === 'allowlist' ||
+      spec.thirdParty.system.includes('agents')
+    ) && workspacePath
       ? canonicalExistingDirectory(workspacePath) ?? undefined
       : undefined
     const instanceId = options.instanceId
@@ -1009,6 +1027,23 @@ export class ThirdPartyBackendController {
   }
 
   private async requestConsent(spec: ThirdPartyLaunchSpec, digest: string): Promise<void> {
+    // Installing is the consent: every install path discloses the native
+    // backend and its shell allowlist before it commits, and records that
+    // for the version it installed (installConsent). Everything else is
+    // still asked before it runs: a package with an earlier consent that
+    // changed since (an update, a rollback, edited files: the install-time
+    // disclosure of those does not always show the backend change), one
+    // whose consent was taken away (revoked, or forgotten to fail closed),
+    // one installed before 0.2.31, and a version no install dialog showed.
+    const record = this.store.record(spec.pluginId)
+    if (
+      record.consent === undefined &&
+      !record.consentRevoked &&
+      record.installConsent?.packageVersion === spec.packageVersion
+    ) {
+      this.recordConsent(spec, digest)
+      return
+    }
     const identity = `${spec.pluginId}\n${digest}\n${backendPermissionsKey(spec)}`
     if (this.declinedConsent.has(identity) || !this.options.promptConsent) {
       throw unavailable('the native backend has not been allowed')
@@ -1034,6 +1069,10 @@ export class ThirdPartyBackendController {
       this.declinedConsent.add(identity)
       throw unavailable('the user did not allow the native backend')
     }
+    this.recordConsent(spec, digest)
+  }
+
+  private recordConsent(spec: ThirdPartyLaunchSpec, digest: string): void {
     if (!this.store.isEnabled()) throw unavailable('third-party native backends are turned off')
     if (!this.consentMatches(spec, digest)) {
       this.store.grantConsent(spec.pluginId, {
@@ -1092,6 +1131,9 @@ export class ThirdPartyBackendController {
       dispatch: async (request: PlansBridgeRequest, context: PlansBridgeContext) => {
         if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
         if (request.port === 'shell') return this.dispatchShell(spec, request, context)
+        if (request.port === 'agents' || request.port === 'agent-message-bodies') {
+          return this.dispatchAgents(spec, request, context)
+        }
         if (request.port !== 'filesystem' || !spec.thirdParty.system.includes('fs')) {
           throw new PlansBridgeError('CAPABILITY_DENIED')
         }
@@ -1183,6 +1225,31 @@ export class ThirdPartyBackendController {
     const port = this.options.shellPort?.()
     if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
     return port.run(args.command, context)
+  }
+
+  /** Read-only agent data at the bound workspace. Each port needs its own
+   * declared namespace; the supervisor has already applied the agent
+   * Execution Policy, and an agent reaches it only inside an admitted
+   * agent-tool call of this package at this workspace. */
+  private async dispatchAgents(
+    spec: ThirdPartyLaunchSpec,
+    request: PlansBridgeRequest,
+    context: PlansBridgeContext,
+  ): Promise<JsonValue> {
+    const namespace = request.port === 'agents' ? 'agents' : 'agentMessages'
+    if (!spec.thirdParty.system.includes(namespace)) throw new PlansBridgeError('CAPABILITY_DENIED')
+    const args = request.arguments
+    if (!validateAgentsOperation(request.operation, args)) throw new PlansBridgeError('INVALID_ARGUMENT')
+    if (!context.authorizedPlanRoot) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
+    if (context.runtime.initiator.kind === 'agent') {
+      const call = this.options.agentToolCall?.(context.runtime.initiator.id)
+      if (!call || call.pluginId !== spec.pluginId || call.workspaceRoot !== context.authorizedPlanRoot) {
+        throw new PlansBridgeError('CAPABILITY_DENIED')
+      }
+    }
+    const port = this.options.agentsPort?.()
+    if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
+    return port.query(request.operation, args as Record<string, JsonValue>, context)
   }
 
   private async ensureWorkspaceWrite(spec: ThirdPartyLaunchSpec, workspacePath: string): Promise<boolean> {

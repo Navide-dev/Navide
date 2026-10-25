@@ -53,6 +53,30 @@ describe('titlebar button order', () => {
     )
   })
 
+  it('gives an icon-less plugin button its title\'s first letter and a Host-written disclosure', () => {
+    // A letter alone could pass for a native control, so the hover text and
+    // accessible name name the plugin, its id, publisher and source, and the
+    // K2 dot stays (pluginSourceMark.test.ts covers the text itself).
+    const start = at('class="titlebar-plugin-actions"')
+    const block = appSource.slice(start, appSource.indexOf('</div>', start))
+    expect(block).toContain('<span v-else class="titlebar-plugin-fallback" aria-hidden="true">{{ pluginIconFallback(contribution.title) }}</span>')
+    expect(block).not.toContain('◇')
+    expect(block).toContain(':title="titlebarPluginLabel(contribution)"')
+    expect(block).toContain(':aria-label="titlebarPluginLabel(contribution)"')
+    expect(block).toContain('<span v-if="chromeSourceMark(contribution.source)" class="titlebar-plugin-source-mark"')
+    expect(appSource).toMatch(
+      /function titlebarPluginLabel\(contribution: PluginRegionContribution\): string \{\s*return pluginDisclosureTitle\(i18n\.global\.t, contribution\)\s*\}/
+    )
+  })
+
+  it('clips the fallback glyph to a fixed box', () => {
+    // The glyph is the plugin's own text: one wide character (﷽) must not
+    // spill over the gear beside it (review M1 on #644).
+    const rule = appSource.match(/\.titlebar-plugin-fallback \{[^}]*\}/)?.[0] ?? ''
+    expect(rule).toContain('overflow: hidden')
+    expect(rule).toMatch(/width: 14px;[\s\S]*height: 14px;/)
+  })
+
   it('keeps the spacer that pins the cluster right', () => {
     // Without flex:1 the cluster would not be right-aligned and the order
     // above would stop meaning anything.
@@ -199,5 +223,96 @@ describe('plugin contribution grouping by location', () => {
     expect(appSource).toMatch(
       /function pluginContributionsAt\(location: Exclude<PluginRegionLocation, 'left' \| 'window' \| 'detail'>\)/
     )
+  })
+})
+
+describe('main plugin views are a stage tab', () => {
+  // devmap 0.0.3 was the first package to declare location "main", and the
+  // layer it landed in covered the whole stage — tab bar, grid and terminals —
+  // with nothing to switch back to. The view is now a tab: hidden until chosen,
+  // and never over the tab bar.
+  const layerStart = appSource.indexOf('class="plugin-region-layer plugin-region-layer--main"')
+  const layerTag = appSource.slice(appSource.lastIndexOf('<div', layerStart), appSource.indexOf('</div>', layerStart))
+  const mainCss = appSource.match(/\.plugin-region-layer--main \{[^}]*\}/)?.[0] ?? ''
+
+  it('shows the main layer only while a plugin tab is active', () => {
+    expect(layerStart).toBeGreaterThan(-1)
+    expect(layerTag).toContain('v-show="activePluginMainKey !== null"')
+    expect(layerTag).toContain(':visible="contribution.contributionKey === activePluginMainKey"')
+    expect(layerTag).not.toContain(':visible="true"')
+  })
+
+  it('keeps the plugin tab state on activeTab and the main views (usePluginMainTab)', () => {
+    expect(appSource).toMatch(
+      /usePluginMainTab\(\s*activeTab,\s*computed\(\(\) => pluginMainTabs\.value\.map\(\(t\) => t\.key\)\)\s*\)/
+    )
+  })
+
+  // The three ways to a run-group tab that do not go through the tab bar's
+  // click. "+" moves activeTab to the new group, which the composable watches;
+  // the other two may ask for the tab already active, so they leave outright.
+  const body = (start: string): string => {
+    const i = appSource.indexOf(start)
+    expect(i, start).toBeGreaterThan(-1)
+    return appSource.slice(i, appSource.indexOf('\n}', i))
+  }
+
+  it('leaves the plugin tab when "+" creates a run group', () => {
+    expect(body('function createRunGroup(')).toContain('activeTab.value = id')
+  })
+
+  it('leaves the plugin tab before revealing a pane from the sidebar', () => {
+    const reveal = body('function revealPaneTab(')
+    expect(reveal.indexOf('leavePluginMainTab()')).toBeGreaterThan(-1)
+    // Before the early return for a pane already on the active tab.
+    expect(reveal.indexOf('leavePluginMainTab()')).toBeLessThan(reveal.indexOf('return'))
+  })
+
+  it('leaves the plugin tab on MCP ui.tab.switch', () => {
+    const sw = body("registerCommand('ui.tab.switch'")
+    expect(sw.indexOf('leavePluginMainTab()')).toBeGreaterThan(-1)
+    expect(sw.indexOf('leavePluginMainTab()')).toBeLessThan(sw.indexOf('activeTab.value = tabId'))
+  })
+
+  it('keeps the tab bar mounted when only a main view exists, and wires the plugin tabs', () => {
+    expect(appSource).toContain('v-if="stageTabs.length > 0 || pluginContributionsAt(\'main\').length > 0"')
+    expect(appSource).toContain(':plugin-tabs="pluginMainTabs"')
+    expect(appSource).toContain('@select-plugin-tab="openPluginMainTab"')
+    // Picking a run-group tab leaves the plugin tab, so the grid comes back.
+    expect(appSource).toMatch(/@update:model-value="\(key\) => \{ leavePluginMainTab\(\);/)
+    // The stage drops its top padding for the bar either way, or the layer
+    // (top: 36px) would cover the bar's last 8px.
+    expect(appSource).toContain(":class=\"{ 'stage--tabbed': stageTabs.length > 0 || pluginContributionsAt('main').length > 0 }\"")
+  })
+
+  it('places the main layer under the tab bar, interactive, instead of over the whole stage', () => {
+    expect(mainCss).toContain('top: 36px;')
+    expect(mainCss).not.toMatch(/inset:\s*0/)
+    expect(mainCss).toContain('pointer-events: auto;')
+  })
+
+  it('stacks the main layer above the grid and paints it opaque', () => {
+    // The grid's own layers (handles, layout bar, overlays) go up to 50.
+    expect(Number(mainCss.match(/z-index:\s*(\d+)/)?.[1])).toBeGreaterThan(50)
+    expect(mainCss).toContain('background: var(--bg-base);')
+  })
+})
+
+describe('a plugin window opened without its native backend', () => {
+  const at = (needle: string): string => {
+    const i = appSource.indexOf(needle)
+    expect(i, needle).toBeGreaterThan(-1)
+    return appSource.slice(i, appSource.indexOf('\n}', i))
+  }
+
+  it('says why once, through the toast, after a successful open', () => {
+    const open = at('async function openPluginContributionWindow(')
+    expect(open).toContain('if (result.backendUnavailable) notePluginWindowWithoutBackend(contribution, result.backendUnavailable)')
+    // A failed open returns before it: there is no window to explain.
+    expect(open.indexOf('return')).toBeLessThan(open.indexOf('result.backendUnavailable'))
+    const note = at('function notePluginWindowWithoutBackend(')
+    expect(note).toContain('if (pluginWindowsWithoutBackend.has(key)) return')
+    expect(note).toContain("'settings.extensions.nativeBackends.windowWithout'")
+    expect(note).toContain('name: revealInvisibleText(contribution.title)')
   })
 })

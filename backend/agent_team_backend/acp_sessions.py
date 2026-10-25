@@ -106,6 +106,8 @@ class AcpSession:
     proc: asyncio.subprocess.Process
     client: AcpClient
     job: int | None = None
+    # contain() failed: no job of its own, its tree is ended by pid only while it runs.
+    uncontained: bool = False
     acp_session_id: str = ""
     init: AcpInitResult | None = None
     # starting | idle | running | cancelling | exited
@@ -294,6 +296,9 @@ class AcpSessionService:
         except OSError as err:
             spawned.uncontained = True
             log.warning("ACP %s: not contained (%s); its tree is ended by pid instead", session_id, err)
+        except Exception:
+            spawned.uncontained = True
+            raise
         # Marked first: a start cancelled while the write runs still unregisters.
         # Should the write land after that, the entry it leaves is reaped on the
         # next start only if pid + start time still match (pty_registry.reap_stale).
@@ -309,7 +314,7 @@ class AcpSessionService:
         )
         session = AcpSession(
             id=session_id, pane_id=pane_id, agent_key=agent_key, cwd=cwd, argv=list(argv),
-            proc=proc, client=client, job=job, stderr_path=stderr_path,
+            proc=proc, client=client, job=job, uncontained=spawned.uncontained, stderr_path=stderr_path,
             transcript_path=Path(output_log_file) if output_log_file else log_dir() / f"acp-transcript-{session_id}.log",
         )
         holder["s"] = session
@@ -558,6 +563,13 @@ class AcpSessionService:
         if session.tree_ended:
             return
         session.tree_ended = True
+        if session.uncontained:
+            # No job of its own: only its pid is left, and once it has exited
+            # that may be another process's (another pane's job, even) by now.
+            if session.proc.returncode is None:
+                with contextlib.suppress(OSError):
+                    osplat.process_tree.kill_tree(session.proc.pid, force=True)
+            return
         try:
             osplat.process_tree.end_contained(session.proc.pid, session.job)
         except OSError:

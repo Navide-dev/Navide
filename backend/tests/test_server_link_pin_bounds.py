@@ -136,8 +136,8 @@ def real_link(server):
     return ServerLink(connect=server.connect, device_name="test-box")
 
 
-async def next_connection(server, n_before):
-    await _until(lambda: len(server.opened) > n_before and bool(server.opened[-1].syncs), timeout=5)
+async def next_connection(server, n_before, timeout=5):
+    await _until(lambda: len(server.opened) > n_before and bool(server.opened[-1].syncs), timeout=timeout)
 
 
 async def confirm_refused(server):

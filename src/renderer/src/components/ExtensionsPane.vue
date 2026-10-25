@@ -22,15 +22,21 @@ import PluginTrustDialog from './PluginTrustDialog.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
+import SettingsCard from './settings/SettingsCard.vue'
+import SettingRow from './settings/SettingRow.vue'
+import ToggleSwitch from './settings/ToggleSwitch.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import { localizeDeveloperModeError } from '../lib/developerModeErrors'
 import PluginSourceBadge from './PluginSourceBadge.vue'
 import DeveloperFolderInfoCard from './DeveloperFolderInfoCard.vue'
 import { chromeSourceMark, isTestplaceExpired, pluginSourceLabel, testplaceDaysLeft } from '../lib/pluginSourceMark'
 import { cardRiskLevel } from '../../../shared/pluginDisclosureScan'
+import { disclosureClauses } from '../lib/disclosureText'
+import { leadSentence } from '../lib/leadSentence'
+import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { DisclosureRiskLevel } from '../../../shared/pluginDisclosure'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 function pluginsApi() {
   return window.agentTeam?.plugins
@@ -61,16 +67,30 @@ const selectedId = computed(() =>
 )
 // Each Registry package's risk level from its installed disclosure, for the
 // list row; the full disclosure is in the selected card and the overview below.
+// The Plans risk note leads with its first sentence in bold; every word stays.
+const plansRiskNote = computed(() => leadSentence(t('settings.extensions.plansRiskNote')))
 const riskById = ref(new Map<string, DisclosureRiskLevel>())
+// What it declares, in the disclosure's own clauses: the card's one-line reason
+// for its risk level. The full record is on the Disclosure page.
+const disclosureById = ref(new Map<string, ManifestDisclosure>())
 async function refreshRiskLevels(): Promise<void> {
   try {
     const records = (await pluginsApi()?.installedDisclosures?.()) ?? []
     riskById.value = new Map(records.flatMap((record) =>
       record.disclosure ? [[record.id, cardRiskLevel(record.disclosure, record.scan)] as const] : []
     ))
+    disclosureById.value = new Map(records.flatMap((record) => (record.disclosure ? [[record.id, record.disclosure] as const] : [])))
   } catch {
     riskById.value = new Map()
+    disclosureById.value = new Map()
   }
+}
+function riskClauses(id: string): string[] {
+  const disclosure = disclosureById.value.get(id)
+  return disclosure ? disclosureClauses(t, locale.value, disclosure) : []
+}
+function riskReason(id: string): string {
+  return riskClauses(id).join(' · ')
 }
 // The warnings a package's card carries, in the card's own words, for the
 // list row's "⚠ N" marker: what the card discloses is visible without a click.
@@ -100,12 +120,16 @@ function installedWarnings(p: InstalledRow): string[] {
 }
 // Where a package came from when that is not the Navide Marketplace: an icon
 // in the row, the card's full source wording as its label.
-function rowSource(p: InstalledRow): { kind: 'test' | 'folder' | 'file'; label: string } | null {
+function rowSource(p: InstalledRow): { kind: 'test' | 'folder' | 'file'; label: string; byAgent: boolean } | null {
   const mark = chromeSourceMark(p.source)
   if (!mark) return null
   const shown = mark === 'local-unsigned' && p.localSignature === 'verified' ? 'local-signed' : mark
   const kind = mark === 'developer-unpacked' ? 'folder' : mark === 'local-signed' || mark === 'local-unsigned' ? 'file' : 'test'
-  return { kind, label: pluginSourceLabel(t, shown, p.expiresAt, p.testplaceVia) }
+  const label = pluginSourceLabel(t, shown, p.expiresAt, p.testplaceVia)
+  // A developer folder an agent had loaded (with the user's approval) says so in
+  // the row too, in the card's words: who loaded it is part of where it came from.
+  const byAgent = kind === 'folder' && developerFolder(p.id)?.loadedBy?.kind === 'agent'
+  return { kind, label: byAgent ? `${label} · ${folderLoadedByText(p.id)}` : label, byAgent }
 }
 type FactoryRow = (typeof factoryRows.value)[number]
 function factoryWarnings(p: FactoryRow): string[] {
@@ -139,7 +163,11 @@ const updateFlow = usePluginInstallFlow()
 const notify = useNotify()
 // D-f: rows whose permissions section is open; the activity panel (and its
 // reads) exists only then.
-const emit = defineEmits<{ openDisclosureOverview: [id?: string] }>()
+const emit = defineEmits<{ openDisclosureOverview: [id?: string]; developerOn: [switches: string[]] }>()
+// Settings shows this pane on two of the Navide Plugins pages: the plugins
+// themselves, and Developer Mode with native backends. Everything stays
+// mounted; the page only decides what is shown.
+const props = withDefaults(defineProps<{ page?: 'plugins' | 'developer' }>(), { page: 'plugins' })
 const activityOpen = ref(new Set<string>())
 function onActivityToggle(id: string, event: Event): void {
   const next = new Set(activityOpen.value)
@@ -463,6 +491,14 @@ async function toggleFolderCard(pluginId: string): Promise<void> {
   await refreshDeveloperMode()
 }
 const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>([])
+// Developer Mode and the native-backend switches that are on, by their titles:
+// Settings marks the "Developer and native code" page with them.
+const nativeSwitchesOn = ref<string[]>([])
+const developerSwitchesOn = computed(() => [
+  ...(developerMode.value.enabled ? [t('settings.extensions.developerMode.switch')] : []),
+  ...nativeSwitchesOn.value,
+])
+watch(developerSwitchesOn, (switches) => emit('developerOn', switches), { immediate: true })
 const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
 /** DESIGN-A2 G1: the developer folder record of a loaded package. */
 function developerFolder(pluginId: string): DeveloperModeState['folders'][number] | undefined {
@@ -572,6 +608,16 @@ const KEEP_REFUSAL_KEYS: Record<NonNullable<ExpiredTestplaceBuild['keepRefusal']
   'registry-outdated': 'cannotKeepRegistryOutdated',
   unreachable: 'cannotKeepUnreachable',
 }
+// Disclose, don't restrict: packages stopped because their trust data fails
+// against this computer's clock, with the way the clock looks off.
+const clockQuarantine = ref<Array<{ id: string; version: string | null; clock: 'behind' | 'ahead' }>>([])
+async function refreshClockQuarantine(): Promise<void> {
+  try {
+    clockQuarantine.value = (await pluginsApi()?.clockQuarantine?.()) ?? []
+  } catch {
+    clockQuarantine.value = []
+  }
+}
 async function refreshExpiredTestplace(): Promise<void> {
   try {
     expiredTestplace.value = (await pluginsApi()?.expiredTestplace?.()) ?? []
@@ -648,12 +694,14 @@ onMounted(() => {
   void refreshPacks()
   void refreshDeveloperMode()
   void refreshExpiredTestplace()
+  void refreshClockQuarantine()
   void refreshRiskLevels()
 })
 // A pack installed from the Marketplace page shows up here without a remount.
 watch(installed, () => {
   void refreshPacks()
   void refreshExpiredTestplace()
+  void refreshClockQuarantine()
   void refreshRiskLevels()
 })
 </script>
@@ -672,11 +720,14 @@ watch(installed, () => {
       {{ $t(developerMode.externalChange.reason === 'signing-unavailable' ? 'settings.extensions.developerMode.externalChangeUnsigned' : developerMode.externalChange.reason === 'signature-missing' ? 'settings.extensions.developerMode.externalChangeMissing' : 'settings.extensions.developerMode.externalChange', { time: new Date(developerMode.externalChange.detectedAt).toLocaleString() }) }}
     </p>
     <!-- D6: never let a self-hosted Registry package disappear silently. -->
-    <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
+    <p v-for="item in selfHostedQuarantine" v-show="props.page === 'plugins'" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
       {{ $t('settings.extensions.developerMode.selfHostedQuarantine', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
     </p>
+    <p v-for="item in clockQuarantine" v-show="props.page === 'plugins'" :key="`clock:${item.id}`" class="ext-clock-quarantine ext-risk-banner" role="alert" :data-clock-id="item.id">
+      {{ $t(`settings.extensions.registryTrust.clockQuarantine.${item.clock}`, { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
+    </p>
     <!-- D3: an expired test build is stopped, never silently dropped. -->
-    <div v-for="item in expiredTestplace" :key="`expired:${item.id}`" class="ext-testplace-expired ext-risk-banner" role="alert" :data-expired-id="item.id">
+    <div v-for="item in expiredTestplace" v-show="props.page === 'plugins'" :key="`expired:${item.id}`" class="ext-testplace-expired ext-risk-banner" role="alert" :data-expired-id="item.id">
       <p v-if="item.withdrawn">{{ $t('testplace.expired.withdrawnBanner', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}</p>
       <p v-else>{{ $t('testplace.expired.banner', { id: reveal(item.id), version: reveal(item.version ?? ''), date: (item.expiresAt ?? '').slice(0, 10) }) }}</p>
       <!-- S8 T-MED-1: say why "keep using" is not offered. -->
@@ -707,8 +758,7 @@ watch(installed, () => {
          with its permissions and disclosure, on the right. All cards stay in
          the page (only the selected one is shown), so nothing a card offers
          depends on the selection. -->
-    <div class="ext-md-toolbar">
-      <h3 class="ext-section-title ext-md-title">{{ $t('settings.extensions.listTitle') }}</h3>
+    <div v-show="props.page === 'plugins'" class="ext-md-toolbar">
       <!-- Updates are for installed packages; with none installed the line
            would contradict the empty list. -->
       <span v-if="pluginUpdates.count.value && nonFactoryInstalled.length" class="ext-updates-summary" role="status">
@@ -724,7 +774,7 @@ watch(installed, () => {
         {{ $t('settings.extensions.localInstall.button') }}
       </button>
     </div>
-    <div class="ext-md">
+    <div v-show="props.page === 'plugins'" class="ext-md">
       <div class="ext-md-list">
         <section class="ext-section" data-settings-section="extensions-bundled">
           <h3 class="ext-section-title">
@@ -754,7 +804,14 @@ watch(installed, () => {
                     :title="factoryWarnings(p).join('\n')"
                   >⚠ {{ factoryWarnings(p).length }}</span>
                   <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
-                  <span v-else class="ext-md-dot" :class="p.active ? 'ext-md-dot--active' : 'ext-md-dot--off'" aria-hidden="true"></span>
+                  <span
+                    v-else
+                    class="ext-md-dot"
+                    :class="p.active ? 'ext-md-dot--active' : 'ext-md-dot--off'"
+                    role="img"
+                    :aria-label="p.active ? $t('settings.extensions.state.active') : $t('settings.extensions.state.unavailable')"
+                    :title="p.active ? $t('settings.extensions.state.active') : $t('settings.extensions.state.unavailable')"
+                  ></span>
                 </span>
               </button>
             </li>
@@ -804,6 +861,7 @@ watch(installed, () => {
                       v-if="rowSource(p)"
                       class="ext-md-source"
                       :data-source-kind="rowSource(p)!.kind"
+                      :data-loaded-by-agent="rowSource(p)!.byAgent ? 'true' : undefined"
                       role="img"
                       :aria-label="rowSource(p)!.label"
                       :title="rowSource(p)!.label"
@@ -813,21 +871,25 @@ watch(installed, () => {
                       <svg v-else viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.8h4M6.6 1.8v4.4L2.9 12.4c-.5.8.1 1.8 1 1.8h8.2c.9 0 1.5-1 1-1.8L9.4 6.2V1.8" /></svg>
                     </span>
                     <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
-                    <span
-                      v-if="riskById.get(p.id) && riskById.get(p.id) !== 'low'"
-                      class="ext-badge ext-md-risk"
-                      :class="`ext-md-risk--${riskById.get(p.id)}`"
-                      :title="$t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) })"
-                    >{{ $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) }}</span>
                   </span>
                 </span>
-                <span
-                  v-if="installedWarnings(p).length"
-                  class="ext-md-warn"
-                  role="img"
-                  :aria-label="installedWarnings(p).join('\n')"
-                  :title="installedWarnings(p).join('\n')"
-                >⚠ {{ installedWarnings(p).length }}</span>
+                <!-- The one severity mark of the row: its risk level, and how
+                     many warnings its card carries. -->
+                <span class="ext-md-row-end">
+                  <span
+                    v-if="riskById.get(p.id) && riskById.get(p.id) !== 'low'"
+                    class="ext-badge ext-md-risk"
+                    :class="`ext-md-risk--${riskById.get(p.id)}`"
+                    :title="$t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) })"
+                  >{{ $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) }}</span>
+                  <span
+                    v-if="installedWarnings(p).length"
+                    class="ext-md-warn"
+                    role="img"
+                    :aria-label="installedWarnings(p).join('\n')"
+                    :title="installedWarnings(p).join('\n')"
+                  >⚠ {{ installedWarnings(p).length }}</span>
+                </span>
               </button>
             </li>
           </ul>
@@ -881,33 +943,8 @@ watch(installed, () => {
             <!-- First-party code with no sandbox: say so plainly. The third-party
                  sandbox wording does not apply to it. -->
             <p v-if="p.id === 'navide.plans'" class="ext-risk-note">
-              {{ $t('settings.extensions.plansRiskNote') }}
+            <strong class="ext-lead">{{ plansRiskNote.lead }}</strong>{{ plansRiskNote.separator }}{{ plansRiskNote.rest }}
             </p>
-            <details v-if="p.installed?.manifestPermissions || p.installed?.packageVersion" class="ext-permission-details">
-              <summary>{{ $t('settings.extensions.permissionDetails') }}</summary>
-              <span v-if="p.installed?.manifestPermissions" class="ext-manifest-permissions">
-                <span class="ext-perm-label">{{ $t('settings.extensionsPolicy.manifestPermissions') }}</span><span class="ext-perm-value">{{ formatManifestPermissions(p.installed.manifestPermissions) }}</span>
-              </span>
-              <span v-if="p.installed?.manifestPermissions?.scopes" class="ext-manifest-scopes" :title="formatManifestScopes(p.installed.manifestPermissions)">
-                <span class="ext-perm-label">{{ manifestScopesLabel(p.installed.manifestPermissions) }}</span>
-                <span
-                  v-for="[key, patterns] in manifestScopeGroups(p.installed.manifestPermissions)"
-                  :key="key"
-                  class="ext-scope-group"
-                  :data-access="key"
-                >
-                  <span class="ext-scope-kind">{{ $t(`settings.extensionsPolicy.${key}`) }}</span>
-                  <span class="ext-globs"><code v-for="pattern in patterns" :key="pattern" class="ext-glob">{{ pattern }}</code></span>
-                </span>
-              </span>
-              <span
-                v-if="p.installed?.packageVersion"
-                class="ext-package-grant"
-                :class="{ 'ext-package-grant-none': !p.installed.packageVersionGrant }"
-              >
-                <span class="ext-perm-label">{{ $t('settings.extensionsPolicy.packageVersionGrant') }}</span><span class="ext-perm-value">{{ formatPackageGrant(p.installed.packageVersionGrant) }}</span>
-              </span>
-            </details>
             <div v-if="p.disabled !== undefined || p.installed?.pendingCandidateVersion" class="ext-actions">
               <button
                 v-if="p.disabled"
@@ -939,6 +976,31 @@ watch(installed, () => {
                 <span class="ext-switch-spinner" aria-hidden="true"></span>{{ $t('settings.extensions.builtinSwitchBusy') }}
               </span>
             </div>
+            <details v-if="p.installed?.manifestPermissions || p.installed?.packageVersion" class="ext-permission-details">
+              <summary>{{ $t('settings.extensions.permissionDetails') }}</summary>
+              <span v-if="p.installed?.manifestPermissions" class="ext-manifest-permissions">
+                <span class="ext-perm-label">{{ $t('settings.extensionsPolicy.manifestPermissions') }}</span><span class="ext-perm-value">{{ formatManifestPermissions(p.installed.manifestPermissions) }}</span>
+              </span>
+              <span v-if="p.installed?.manifestPermissions?.scopes" class="ext-manifest-scopes" :title="formatManifestScopes(p.installed.manifestPermissions)">
+                <span class="ext-perm-label">{{ manifestScopesLabel(p.installed.manifestPermissions) }}</span>
+                <span
+                  v-for="[key, patterns] in manifestScopeGroups(p.installed.manifestPermissions)"
+                  :key="key"
+                  class="ext-scope-group"
+                  :data-access="key"
+                >
+                  <span class="ext-scope-kind">{{ $t(`settings.extensionsPolicy.${key}`) }}</span>
+                  <span class="ext-globs"><code v-for="pattern in patterns" :key="pattern" class="ext-glob">{{ pattern }}</code></span>
+                </span>
+              </span>
+              <span
+                v-if="p.installed?.packageVersion"
+                class="ext-package-grant"
+                :class="{ 'ext-package-grant-none': !p.installed.packageVersionGrant }"
+              >
+                <span class="ext-perm-label">{{ $t('settings.extensionsPolicy.packageVersionGrant') }}</span><span class="ext-perm-value">{{ formatPackageGrant(p.installed.packageVersionGrant) }}</span>
+              </span>
+            </details>
           </li>
         </ul>
         <ul class="ext-list">
@@ -1040,6 +1102,10 @@ watch(installed, () => {
                   {{ $t('settings.extensions.incompatibleInstalled', { version: p.minNavideVersion ?? '' }) }}
                 </span>
               </div>
+              <ul v-if="riskReason(p.id)" class="ext-risk-reason">
+                <li v-for="clause in riskClauses(p.id)" :key="clause">{{ clause }}</li>
+              </ul>
+              <!-- What it may use, next to why it is rated so: facts before actions. -->
               <div class="ext-card-sub">
                 <span v-if="p.requires.length" class="ext-requires ext-caps">
                   <span
@@ -1057,6 +1123,83 @@ watch(installed, () => {
                 <span v-if="p.warning" class="ext-badge ext-dev-warning">
                   {{ p.provenance === 'developer-local-unpacked' ? $t('settings.extensions.devUnpacked') : p.warning }}
                 </span>
+              </div>
+              <!-- The actions right under the header, before the details. -->
+              <div class="ext-actions">
+                <button
+                  v-if="!p.pendingCandidateVersion && updatesById.get(p.id)"
+                  class="ext-update nv-btn nv-btn--primary nv-btn--sm"
+                  :disabled="updateFlow.busy.value || busy"
+                  @click="updateFlow.install(updatesById.get(p.id)!.namespace, updatesById.get(p.id)!.name, updatesById.get(p.id)!.latestVersion)"
+                >
+                  {{ $t('settings.extensions.marketplace.update') }}
+                </button>
+                <button
+                  v-if="p.pendingCandidateVersion"
+                  class="ext-restart nv-btn nv-btn--primary nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="restartPlugin(p.id)"
+                >
+                  {{ $t('settings.extensions.restartPlugin') }}
+                </button>
+                <!-- Card K4: reload a developer folder; changed permissions ask again. -->
+                <button
+                  v-if="p.provenance === 'developer-local-unpacked' && developerMode.folders.some((folder) => folder.pluginId === p.id)"
+                  class="ext-devmode-reload nv-btn nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="updateFlow.reloadDeveloperPlugin(p.id)"
+                >
+                  {{ $t('settings.extensions.developerMode.reload') }}
+                </button>
+                <!-- D7: back to the Marketplace version; the install flow asks first. -->
+                <button
+                  v-if="p.source === 'local-unsigned' && !p.pendingCandidateVersion"
+                  class="ext-back-to-marketplace nv-btn nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="updateFlow.install(idParts(p.id).namespace, idParts(p.id).name)"
+                >
+                  {{ $t('settings.extensions.localInstall.backToMarketplace') }}
+                </button>
+                <button
+                  v-if="p.rollbackKind"
+                  class="ext-rollback nv-btn nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion, p.rollbackNeedsConsent === true)"
+                >
+                  {{
+                    p.rollbackKind === 'factory'
+                      ? $t('settings.extensions.rollback.toBundled')
+                      : $t('settings.extensions.rollback.toVersion', { version: p.rollbackToVersion })
+                  }}
+                </button>
+                <button
+                  v-if="p.disabled === false"
+                  class="ext-disable nv-btn nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="setDisabled(p.id, true)"
+                >
+                  {{ $t('settings.extensions.disable') }}
+                </button>
+                <button
+                  v-else-if="p.disabled"
+                  class="ext-enable nv-btn nv-btn--primary nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="setDisabled(p.id, false)"
+                >
+                  {{ $t('settings.extensions.enable') }}
+                </button>
+                <!-- `navide.` packages ship with Navide: they are disabled, never removed.
+                     A Marketplace first-party package (navide.browser) is the
+                     exception: the Host offers its Disabled switch, and it is
+                     removed like any Marketplace package. -->
+                <button
+                  v-if="!isFirstPartyId(p.id) || p.disabled !== undefined"
+                  class="ext-remove nv-btn nv-btn--sm ext-btn-danger"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="developerMode.folders.some((folder) => folder.pluginId === p.id) ? removeDeveloperFolder(p.id) : remove(p.id)"
+                >
+                  {{ $t('settings.extensions.marketplace.uninstall') }}
+                </button>
               </div>
               <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
               <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
@@ -1132,83 +1275,6 @@ watch(installed, () => {
                 </template>
               </details>
             </div>
-            <!-- Actions sit at the row's right edge; details stay in the middle. -->
-            <div class="ext-actions">
-              <button
-                v-if="!p.pendingCandidateVersion && updatesById.get(p.id)"
-                class="ext-update nv-btn nv-btn--primary nv-btn--sm"
-                :disabled="updateFlow.busy.value || busy"
-                @click="updateFlow.install(updatesById.get(p.id)!.namespace, updatesById.get(p.id)!.name, updatesById.get(p.id)!.latestVersion)"
-              >
-                {{ $t('settings.extensions.marketplace.update') }}
-              </button>
-              <button
-                v-if="p.pendingCandidateVersion"
-                class="ext-restart nv-btn nv-btn--primary nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="restartPlugin(p.id)"
-              >
-                {{ $t('settings.extensions.restartPlugin') }}
-              </button>
-              <!-- Card K4: reload a developer folder; changed permissions ask again. -->
-              <button
-                v-if="p.provenance === 'developer-local-unpacked' && developerMode.folders.some((folder) => folder.pluginId === p.id)"
-                class="ext-devmode-reload nv-btn nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="updateFlow.reloadDeveloperPlugin(p.id)"
-              >
-                {{ $t('settings.extensions.developerMode.reload') }}
-              </button>
-              <!-- D7: back to the Marketplace version; the install flow asks first. -->
-              <button
-                v-if="p.source === 'local-unsigned' && !p.pendingCandidateVersion"
-                class="ext-back-to-marketplace nv-btn nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="updateFlow.install(idParts(p.id).namespace, idParts(p.id).name)"
-              >
-                {{ $t('settings.extensions.localInstall.backToMarketplace') }}
-              </button>
-              <button
-                v-if="p.rollbackKind"
-                class="ext-rollback nv-btn nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion, p.rollbackNeedsConsent === true)"
-              >
-                {{
-                  p.rollbackKind === 'factory'
-                    ? $t('settings.extensions.rollback.toBundled')
-                    : $t('settings.extensions.rollback.toVersion', { version: p.rollbackToVersion })
-                }}
-              </button>
-              <button
-                v-if="p.disabled === false"
-                class="ext-disable nv-btn nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="setDisabled(p.id, true)"
-              >
-                {{ $t('settings.extensions.disable') }}
-              </button>
-              <button
-                v-else-if="p.disabled"
-                class="ext-enable nv-btn nv-btn--primary nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="setDisabled(p.id, false)"
-              >
-                {{ $t('settings.extensions.enable') }}
-              </button>
-              <!-- `navide.` packages ship with Navide: they are disabled, never removed.
-                   A Marketplace first-party package (navide.browser) is the
-                   exception: the Host offers its Disabled switch, and it is
-                   removed like any Marketplace package. -->
-              <button
-                v-if="!isFirstPartyId(p.id) || p.disabled !== undefined"
-                class="ext-remove nv-btn nv-btn--sm ext-btn-danger"
-                :disabled="busy || updateFlow.busy.value"
-                @click="developerMode.folders.some((folder) => folder.pluginId === p.id) ? removeDeveloperFolder(p.id) : remove(p.id)"
-              >
-                {{ $t('settings.extensions.marketplace.uninstall') }}
-              </button>
-            </div>
             <!-- A per-package update setting: under the actions, apart from them. -->
             <label v-if="p.getsPrereleases !== undefined" class="ext-prerelease-toggle">
               <input
@@ -1235,19 +1301,22 @@ watch(installed, () => {
       </div>
     </div>
 
-    <section class="ext-section ext-devmode" data-settings-section="extensions-developer-mode">
+    <section v-show="props.page === 'developer'" class="ext-section ext-devmode" data-settings-section="extensions-developer-mode">
       <h3 class="ext-section-title">{{ $t('settings.extensions.developerMode.title') }}</h3>
-      <label class="ext-devmode-switch">
-        <input
-          type="checkbox"
-          class="ext-devmode-toggle nv-check"
-          :checked="developerMode.enabled"
-          :disabled="busy"
-          @change="setDeveloperMode(($event.target as HTMLInputElement).checked)"
-        />
-        {{ $t('settings.extensions.developerMode.switch') }}
-      </label>
-      <p class="ext-devmode-hint">{{ $t('settings.extensions.developerMode.hint') }}</p>
+      <!-- The same row as every other setting: what it does on the left, the switch on the right. -->
+      <SettingsCard>
+        <SettingRow :title="$t('settings.extensions.developerMode.switch')" :description="$t('settings.extensions.developerMode.hint')">
+          <template #control>
+            <ToggleSwitch
+              class="ext-devmode-toggle"
+              :model-value="developerMode.enabled"
+              :disabled="busy"
+              :aria-label="$t('settings.extensions.developerMode.switch')"
+              @update:model-value="setDeveloperMode"
+            />
+          </template>
+        </SettingRow>
+      </SettingsCard>
       <button
         v-if="developerMode.enabled"
         class="ext-load-folder nv-btn nv-btn--sm"
@@ -1277,7 +1346,9 @@ watch(installed, () => {
       </ul>
     </section>
 
-    <NativeBackendPanel />
+    <div v-show="props.page === 'developer'">
+      <NativeBackendPanel @on="(switches) => (nativeSwitchesOn = switches)" />
+    </div>
 
     <PackUninstallDialog
       v-if="uninstallingPack"
@@ -1325,16 +1396,13 @@ watch(installed, () => {
   gap: var(--space-2);
   margin-bottom: var(--space-3);
 }
-.ext-md-toolbar .ext-md-title {
-  margin: 0;
-}
 .ext-md-toolbar .ext-install-file {
   margin-left: auto;
 }
 .ext-md {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  align-items: stretch;
   margin-bottom: var(--space-6);
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-md);
@@ -1423,6 +1491,14 @@ watch(installed, () => {
   font-size: var(--font-xs);
   font-variant-numeric: tabular-nums;
 }
+/* In the row, Disabled is a word in the status line, not a second badge. */
+.ext-md-row-sub .ext-badge.ext-disabled-badge {
+  height: auto;
+  padding: 0;
+  background: none;
+  color: var(--risk-fg);
+  font-weight: 600;
+}
 .ext-md-row-update {
   color: var(--accent-fg);
   white-space: nowrap;
@@ -1440,6 +1516,11 @@ watch(installed, () => {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xs);
   color: var(--text-secondary);
+}
+/* Loaded by an agent: the folder mark carries the accent so it reads apart. */
+.ext-md-source[data-loaded-by-agent] {
+  border-color: var(--accent-emphasis);
+  color: var(--accent-fg);
 }
 .ext-md-source svg {
   width: 12px;
@@ -1520,9 +1601,6 @@ watch(installed, () => {
   .ext-md {
     grid-template-columns: minmax(190px, 210px) minmax(0, 1fr);
   }
-  .ext-md-detail .ext-card > .ext-actions > .ext-btn-danger {
-    margin-left: 0;
-  }
   .ext-md-detail .ext-actions > .nv-btn {
     padding-inline: 9px;
   }
@@ -1540,8 +1618,32 @@ watch(installed, () => {
   .ext-md-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
+
+  /* The name keeps the whole first line; the version and the risk and warning
+     marks share the second. */
+  .ext-md-row {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    grid-template-areas: 'icon name name' 'icon sub end';
+    column-gap: 8px;
+    row-gap: 2px;
+  }
   .ext-md-row > :first-child {
-    display: none;
+    grid-area: icon;
+    align-self: start;
+    width: 22px;
+    height: 22px;
+  }
+  .ext-md-row-text {
+    display: contents;
+  }
+  .ext-md-row-name {
+    grid-area: name;
+  }
+  .ext-md-row-sub {
+    grid-area: sub;
+  }
+  .ext-md-row-end {
+    grid-area: end;
   }
   .ext-md-detail {
     padding: var(--space-4);
@@ -1610,30 +1712,8 @@ watch(installed, () => {
   background: var(--risk-subtle);
   color: var(--risk-fg);
 }
-/* The switch and its hint form one card, matching the Native backends switches. */
-.ext-devmode-switch {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4) var(--space-1);
-  border: 1px solid var(--border-muted);
-  border-bottom: 0;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-  background: var(--bg-subtle);
-  color: var(--text-bright);
-  font-weight: 600;
-  cursor: pointer;
-}
-.ext-devmode-hint {
-  margin: 0 0 var(--space-3);
-  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 14px + var(--space-2));
-  border: 1px solid var(--border-muted);
-  border-top: 0;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
-  line-height: var(--lh-base);
+.ext-devmode .ext-load-folder {
+  margin-top: var(--space-3);
 }
 .ext-devmode-folder {
   display: flex;
@@ -1693,8 +1773,7 @@ watch(installed, () => {
   grid-row: 1;
 }
 .ext-factory > .ext-actions {
-  grid-column: 2;
-  grid-row: 1;
+  grid-column: 1 / -1;
 }
 .ext-row-head {
   display: flex;
@@ -1721,9 +1800,9 @@ watch(installed, () => {
   align-items: start;
   gap: var(--space-2) var(--space-3);
 }
-.ext-card > .ext-actions {
-  grid-column: 2;
+.ext-card-main > .ext-actions {
   justify-content: flex-start;
+  margin: var(--space-1) 0 var(--space-2);
 }
 .ext-card > .ext-prerelease-toggle {
   grid-column: 2;
@@ -1737,7 +1816,7 @@ watch(installed, () => {
 .extensions-pane .ext-disclosure-link.nv-btn {
   padding-inline: 0;
 }
-.ext-card > .ext-actions > .ext-btn-danger {
+.ext-card-main > .ext-actions > .ext-btn-danger {
   margin-left: auto;
 }
 .ext-card-main {
@@ -1745,6 +1824,38 @@ watch(installed, () => {
   display: grid;
   gap: 4px;
   container: ext-row / inline-size;
+}
+.ext-card-status {
+  column-gap: 6px;
+}
+/* Three roles: the risk level is the one filled badge; states and warnings are
+   outlined in their colour; capabilities are grey mono tokens. */
+.ext-card-status > .ext-badge:not(.ext-md-risk),
+.ext-card-status :deep(.nv-source-badge),
+.ext-card-sub > .ext-badge.ext-sensitive,
+.ext-card-sub > .ext-badge.ext-dev-warning {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+/* Why the risk level: the disclosure's clauses, one per line, under the status. */
+/* What it declares, neutral: colour is kept for the warnings themselves. */
+.ext-risk-reason {
+  display: grid;
+  gap: 2px;
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  list-style: none;
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  line-height: var(--lh-base);
+}
+.ext-risk-reason > li::before {
+  content: '•';
+  margin-right: 6px;
+  color: var(--text-secondary);
 }
 .ext-card-status:not(:has(> *)) {
   display: none;
@@ -1782,9 +1893,10 @@ watch(installed, () => {
   font-family: var(--font-mono);
   font-size: var(--font-2xs);
 }
+/* A sensitive capability is the same grey token in bold; the "sensitive"
+   badge beside it carries the warning colour. */
 .ext-cap--sensitive {
-  background: var(--risk-subtle);
-  color: var(--risk-fg);
+  color: var(--text-bright);
   font-weight: 600;
 }
 .ext-actions {
@@ -1813,15 +1925,16 @@ watch(installed, () => {
   line-height: 1.5;
 }
 .ext-permission-details summary {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-height: var(--control-h-lg);
   list-style: none;
-  width: max-content;
+  width: 100%;
   cursor: pointer;
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-weight: 500;
   border-radius: var(--radius-xs);
 }
 .ext-permission-details summary::-webkit-details-marker {
@@ -1984,8 +2097,8 @@ watch(installed, () => {
 .ext-scope-group + .ext-scope-group {
   margin-top: 2px;
 }
-/* The access level leads each group; write access is tinted so it stands out
-   from read-only reach at a glance. */
+/* The access level leads each group; write access is in the bright text
+   colour so it stands out from read-only reach without reading as a warning. */
 .ext-scope-kind {
   flex: 0 0 auto;
   min-width: 92px;
@@ -1994,7 +2107,7 @@ watch(installed, () => {
 }
 .ext-scope-group[data-access='scopeReadWrite'] .ext-scope-kind,
 .ext-scope-group[data-access='scopeWriteOnly'] .ext-scope-kind {
-  color: var(--risk-fg);
+  color: var(--text-bright);
 }
 .ext-globs {
   display: flex;
@@ -2050,15 +2163,19 @@ watch(installed, () => {
 }
 /* A first-party package's plain-language risk disclosure: a quiet callout,
    readable at body size, rather than a block of coloured text. */
+.ext-lead {
+  color: var(--text-bright);
+  font-weight: 600;
+}
 .ext-risk-note {
   position: relative;
   margin: 0;
   padding: var(--space-2) var(--space-3) var(--space-2) calc(var(--space-3) + 22px);
   border-left: 2px solid var(--risk-fg);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: var(--risk-subtle);
+  border-radius: 0;
+  background: transparent;
   color: var(--text-primary);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   line-height: var(--lh-base);
 }
 .ext-incompatible-reason {
@@ -2132,5 +2249,10 @@ watch(installed, () => {
   color: var(--text-secondary);
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
+}
+/* Long setting descriptions keep a readable line length. */
+:deep(.setting-row-desc) {
+  max-width: 72ch;
+  line-height: var(--lh-base);
 }
 </style>

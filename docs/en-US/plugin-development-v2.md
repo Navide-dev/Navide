@@ -345,16 +345,24 @@ third-party native code. The Host never runs it directly; it starts only when
 all of these hold, and they are checked again before every restart:
 
 - Settings → Navide Plugins → "Allow third-party Navide plugins to run native backends"
-  is on. It is off by default and can only be turned on there: while it is
-  off, opening a plugin never prompts and never turns it on.
+  is on. It is on by default for a new profile (since 0.2.31) and the user
+  can turn it off there: while it is off, opening a plugin never prompts and
+  never turns it on. A profile an earlier version already saved keeps the
+  switch as it was saved, so an earlier "off" stays off.
 - The user has not disabled the plugin's backend.
 - The user allowed this exact package content with this exact permission set
   (`permissions`, `backend.methods`, `backend.events`, and - only when the
   package declares any - `backend.agentTools`). The digest covers every
   file in the package (relative path and content), because a backend can read
-  any package file and turn it into code at run time. Any new version that
-  changes any file - frontend files included - is staged but not started until
-  the user allows it again.
+  any package file and turn it into code at run time. Installing is that
+  consent: every install path discloses the native backend and its shell
+  allowlist before it commits and records the version it installed, so that
+  version's first start records the consent without another dialog. A
+  package installed before 0.2.31, a version no install dialog showed (an
+  agent's update, a rollback) and a package whose consent was revoked or
+  dropped to fail closed are asked before they start. Any new version that changes any
+  file - frontend files included - is staged but not started until the user
+  allows it again, in the dialog shown before it starts.
 - The platform sandbox is available. There is no unsandboxed fallback.
 - The package does not declare `permissions.shell: "full"`. A backend package
   may declare `shell: "allowlist"`; see "Shell commands from a backend" below.
@@ -815,11 +823,26 @@ rejected. A manifest may declare at most 16 views.
 | `bottom` | Bottom workbench region |
 | `right` | Right workbench region |
 | `left` | Left workbench region; use this when migrating a legacy sidebar contribution |
-| `main` | Primary workbench content region |
+| `main` | A tab of its own in the stage tab bar, after the run-group tabs; the view fills the pane area while its tab is active (see below) |
 | `detail` | Detail region filled by a composed receiver; never opens on its own |
 | `window` | Separate top-level window |
 
 `sidebar` is not a v2 location value. Unknown locations fail schema validation.
+
+A `main` view never covers the stage. The Host adds one stage tab per `main`
+view, labelled with the view's `title`, and no tab is active on install: the
+pane grid stays on screen until the user picks the plugin's tab. While it is
+active the view fills the area under the tab bar, and the tab bar stays
+visible so the user can switch back. Any move to a run-group tab leaves it: a
+tab click, the New Run Group button, a pane opened from the sidebar, or MCP
+`ui.tab.switch`. Switching away hides the view without destroying it, so the
+guest keeps running in the background.
+
+The tab carries a Host-drawn Navide plugin mark, and its tooltip and
+accessible name give the plugin id, the publisher and, when the package has
+one, its source, so a view's `title` cannot make its tab pass for a run group.
+A package that is not a reviewed Marketplace release or built into Navide also
+gets the same source dot as its title-bar button.
 
 A package that contains both frontend and backend contributions uses one
 manifest. `contributes` and `backend` are sibling top-level fields; the backend
@@ -918,7 +941,7 @@ matches.
 | `contributes` | no | Object with a required views array (1–16 views) | At least one of `contributes`, `backend` or `extensionPack` |
 | `backend` | no | Object | See [Backend source, development, and publish contract](#backend-source-development-and-publish-contract) |
 | `extensionPack` | no | 1–20 member plugin ids | See [Extension Packs](#extension-packs) |
-| `permissions.system` | no | `fs`, `ui`, `aiCli`, `web` | 1–4 unique entries |
+| `permissions.system` | no | `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages` | 1–6 unique entries; `agentMessages` requires `agents` |
 | `permissions.shell` | no | `allowlist`, `full` | Omission denies `shell.run` |
 | `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
 | `contributes.views[].id` | yes | Lowercase view id | |
@@ -1259,7 +1282,7 @@ Manifest permissions, the capability catalog, the explicit package-version
 Grant, publisher eligibility, request schemas, workspace binding, and runtime
 state remain mandatory for both initiators. `full` mode bypasses only the
 agent-specific namespace and executable filters. `allowlist` and `denylist`
-operate on first-level `fs`, `ui`, `aiCli`, and `web` namespaces and on every resolved
+operate on first-level `fs`, `ui`, `aiCli`, `web`, `agents`, and `agentMessages` namespaces and on every resolved
 top-level executable in a shell pipeline or command chain. Policy v1 does not
 express subcommands, arguments, path patterns, or wrappers. The v1 shell parser
 fails closed on unquoted grouping or negation syntax (`(`, `)`, `{`, `}`, `!`)
@@ -1267,9 +1290,10 @@ and assignment-prefixed commands (`NAME=value`); this applies to both direct
 user and agent shell execution, so quote these characters or assignment-shaped
 arguments when they are intended as command data. For the private Backend
 Bridge, the `filesystem` port maps to the `fs` Execution Policy namespace, the
-`shell` port is judged on its command, and the `web` port maps to `web`. `web`
-is never admitted by omission: a `denylist` does not admit it, only `full` or
-an `allowlist` that names it. All other current Bridge ports fail closed for agent Initiators until
+`shell` port is judged on its command, the `web` port maps to `web`, the
+`agents` port to `agents` and the `agent-message-bodies` port to
+`agentMessages`. `web`, `agents` and `agentMessages` are never admitted by omission: a
+`denylist` does not admit them, only `full` or an `allowlist` that names them. All other current Bridge ports fail closed for agent Initiators until
 an explicit namespace mapping is assigned; user Initiators continue through
 their existing checks.
 
@@ -1402,7 +1426,7 @@ Manifest v2 uses one coarse system namespace array and one shell mode:
 }
 ```
 
-`system` accepts only `fs`, `ui`, `aiCli`, and `web`. It is not a map of methods or
+`system` accepts only `fs`, `ui`, `aiCli`, `web`, `agents`, and `agentMessages`. It is not a map of methods or
 read/write accesses: declaring `fs` allows catalog validation to consider the
 filesystem methods, but does not bypass method schemas, scope checks, or Host
 policy. `shell` accepts only `allowlist` or `full`; omission denies
@@ -1416,6 +1440,8 @@ are not Manifest v2 permissions.
 | `system:ui` | `ui.openExternal` | `plugin` (HTTP/HTTPS web links; Host user-gesture gate) |
 | `system:aiCli` | `aiCli.listProfiles`, `startSession`, `resumeSession`, `cancelStart`, `reattachSession`, `sendInput`, `resizeSession`, `redrawSession`, `interruptSession`, `stopSession`, `output`, `exited` | `workspace` |
 | `system:web` | `web.list`, `create`, `attach`, `detach`, `navigate`, `setOwner`, `takeControl`, `returnControl`, `close`, `capture`, `clearData`, `changed` | `plugin` (see [Plugin browser views](#plugin-browser-views-web)) |
+| `system:agents` | `agents.listPanes`, `lineage`, `listMessages`, `listSessions` | `workspace` (see [Agent data and privacy](#agent-data-and-privacy-agents-agentmessages)) |
+| `system:agentMessages` | `agentMessages.read` | `workspace` |
 | `shell` | `shell.run` | `workspace` |
 
 **`shell.run` output size.** The Host shell broker returns at most 8000
@@ -1621,6 +1647,103 @@ someone it is not.
 - **Views follow the package.** Disabling or removing the package destroys all
   its views. Closing the package's window does not: views keep running in the
   background until the package closes them.
+
+### Agent data and privacy (`agents`, `agentMessages`)
+
+Declaring `agents` lets a package read what only Navide knows about the agent
+panes of its workspace: which panes exist, which pane opened which, when
+messages between them were sent and whether they arrived, and the session
+list. Declaring `agentMessages` as well adds the text of those messages. Both
+are read-only; nothing in either namespace sends, opens, closes or changes a
+pane. The request contract lives in `src/main/plugins/agentsCapability.ts`
+and the types in `@navide/plugin-contracts` (`agents.ts`); the backend
+projection is `backend/agent_team_backend/agents_host_api.py`.
+
+**Disclosure.** The two namespaces are disclosed separately, so a user can
+tell metadata from content before installing:
+
+| Declaration | Risk (reason) | Summary clause | Sensitive |
+|---|---|---|---|
+| `agents` | **medium** (`system.agents`) | `agents`: sees the agent panes of the project, which pane opened which, message delivery records (not what was said) and the session list (no conversation content) | no |
+| `agentMessages` | **high** (`system.agentMessages`) | `agentMessages`: reads the full text of messages between the agents of the project, which can contain code, file contents or secrets | yes: installing asks for the second confirmation |
+
+`agentMessages` requires `agents` in the same manifest; declaring it alone is
+refused at validation and at publish. A version that adds either namespace
+asks again, like any other added permission.
+
+**What is never exposed.** Every answer is a fixed list of fields; nothing is
+copied through from an internal record. In particular:
+
+- **Session transcripts are not exposed** under any declaration: no vendor
+  session file, no pane output log, no conversation content. `listSessions`
+  returns metadata only, and no session id: an id is what a CLI's `--resume`
+  takes, so handing it out would let a plugin that can also run a CLI or a
+  shell reopen the conversation. `resumable` says only whether it could be.
+- Message text and excerpts are not part of `agents`. `listMessages` gives
+  `bodyLength`; only `agentMessages.read` returns `body`.
+- Account, sign-in, profile, usage and quota data, device identity, working
+  directories and log file paths never appear.
+- Panes that are a CLI sign-in are left out everywhere.
+- Scope is the plugin's bound workspace on this machine. Panes and messages of
+  other workspaces and of other devices are not visible, and no request field
+  can choose a workspace.
+
+**Agent Execution Policy.** `agents` and `agentMessages`, like `web`, are
+never admitted by omission, because a `denylist` written before they existed
+never names them: an agent-initiated call (a view capability, or the `agents` /
+`agent-message-bodies` Bridge port) is admitted only in `full` mode or by an
+`allowlist` that names the namespace. An existing denylist policy therefore
+behaves exactly as before. The Host default allowlist includes `agents` but not
+`agentMessages`, so a user has to add it before any agent reads message text.
+Direct user actions are not filtered.
+
+#### Capabilities
+
+All addresses are `workspace`-scoped. Unknown fields are `INVALID_ARGUMENT`;
+`limit` is an integer from 1 to 200 (default 50).
+
+| Address | Request → result | Rule |
+|---|---|---|
+| `agents.listPanes` | `{}` → `{panes: AgentPaneInfo[]}` | Registered panes of the workspace, including ones whose window is offline (`offline: true`) or not yet opened (`realized: false`) |
+| `agents.lineage` | `{includeRemoved?}` → `{nodes: AgentLineageNode[]}` | Parent links from the workspace's saved pane records; closed panes only with `includeRemoved: true`, so a tree survives its middle pane closing |
+| `agents.listMessages` | `{paneId?, since?, limit?}` → `{messages, oldestCreatedAt, truncated}` | Messages whose sender or recipient was stamped as this workspace when the row was written, newest last; `since` is epoch milliseconds (exclusive); `paneId` narrows to one pane |
+| `agents.listSessions` | `{limit?}` → `{sessions: AgentSessionInfo[]}` | The same rows as `cli_list_sessions`, newest first; no conversation content |
+| `agentMessages.read` | `{id}` → `{message}` | One message of `listMessages` plus its `body`; an id outside the workspace is `INVALID_ARGUMENT` |
+
+Limits a plugin must plan for:
+
+- The message log keeps only a bounded window of recent rows for the whole
+  machine. Compare `oldestCreatedAt` with your last `since`: when it is newer,
+  rows you never saw were pruned.
+- A messaging name alone cannot say which workspace it belongs to: a bare name
+  is unique only inside one window, and a qualified `<folder>/<pane>` name only
+  while no other workspace has the same folder name. So the backend stamps
+  each log row, as it is written, with the workspace path of its sender and of
+  its recipient, resolved while those panes are registered; a name it cannot
+  tie to exactly one workspace stays unstamped. `agents.listMessages` and
+  `agentMessages.read` return a row only when one side's stamp equals this
+  workspace's path exactly. Rows written before the stamp existed (Navide
+  0.2.30 and earlier) belong to no workspace and are never returned.
+- The window writing a row vouches only for its own panes: a side is stamped
+  only when its pane belongs to that window, whether the name is bare or
+  qualified. A message routed to or from another workspace window or another
+  device (`remote` set on the row) is not returned at all. Two workspaces open
+  in one window exchange unrouted messages; such a row has both sides stamped
+  and is listed for either workspace, with `sender` / `recipient` showing the
+  other workspace's folder and pane name and `agentMessages.read` returning
+  the text that pane wrote.
+- There is no change event yet; poll.
+
+#### Backend Bridge ports `agents` and `agent-message-bodies`
+
+A third-party native backend reaches the same data through two Bridge ports,
+each projected only when the manifest declares its namespace: `agents`
+(operations `list_panes`, `lineage`, `list_messages`, `list_sessions`) maps to
+the `agents` Execution Policy namespace, and `agent-message-bodies`
+(operation `read_message`) maps to `agentMessages`. Arguments and results are
+those of the matching capability above. Both run at the bound workspace root
+only. An agent reaches them only inside an admitted agent-tool call of the same
+package at that workspace; Plans and first-party packages do not get them.
 
 ### Declared filesystem scopes (disclosure only)
 
@@ -1995,6 +2118,34 @@ the authenticated plugin, package version, workspace, view instance, and
 audience.
 Directed output and exit events are delivered only to the authenticated
 audience that created or reattached the session.
+
+Every v2 package that declares `system: ["aiCli"]` receives them, not only the
+bundled Navide plugins. `aiCli.output` is `{ sessionId, data }` (the PTY text,
+decoded as UTF-8) and `aiCli.exited` is `{ sessionId, exitCode }` (a number,
+or `null`); nothing else is in either, and a v2 view is never sent the raw
+`terminal.*` stream. Ownership is the Host's, recorded when the session is
+started or resumed: the view instance, package, package version, workspace and
+audience. Another package never sees a session, and neither does another view
+of the same package while the session is attached to its view; input, resize,
+stop and reattach calls for a session the calling view does not own are
+refused. When the view closes the session is detached, and a new view of the
+same package and package version with the same audience and workspace can take
+it over with `aiCli.resumeSession`. A detached session that is not taken over
+within 60 seconds is ended (the bundled Navide plugins end theirs through their
+own surfaces), unless the view started it with `persistView: true` and the
+Host stored it in terminal storage: such a session keeps running until a view
+resumes it, the package is disabled or removed, or Navide quits. Asking for
+`persistView` when the storage write fails does not keep it. A stored session
+is found again through terminal storage, which is keyed by package,
+contribution and workspace but not by package version, so a later version of
+the same package can resume it there; another package never can. Updating a
+package ends the sessions of the version it replaces. Disabling or
+removing the package ends its sessions at once.
+
+Declaring `aiCli` lets a package start the AI CLI agents set up in Navide, send
+them input and read everything they print, and keep an AI CLI running in the
+background after its window closes; the install and update dialogs say so, and
+an update that adds it is shown as added.
 `shell.run`, raw command/executable/arguments/environment/working-directory
 parameters, and PID control have no `aiCli` mapping and must fail closed.
 The Host executor also enforces the catalog's `requiresUserGesture` flag for

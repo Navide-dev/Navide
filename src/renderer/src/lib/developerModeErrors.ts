@@ -1,6 +1,8 @@
 // Card K4 (review LOW-2 on #428): the main process words its Developer Mode
 // refusals in English after a stable code (`CODE [id]: text`, the English
 // text kept for logs); the user reads them in their own language.
+import { registryClockRefusalText } from '../../../shared/registryClock'
+
 const CODED = /^(?<code>[A-Z_]+)(?: \[(?<id>[^\]]+)\])?: (?<detail>[\s\S]*)$/
 
 const KEYS: Readonly<Record<string, string>> = {
@@ -26,7 +28,9 @@ export function localizeDeveloperModeError(
   message: string,
   t: (key: string, values?: Record<string, unknown>) => string,
 ): string {
-  const groups = CODED.exec(message)?.groups
+  // A clock refusal may come after a caller's own words ("staged candidate
+  // quarantined: TRUST_METADATA_EXPIRED: ..."); it still points at the clock.
+  const groups = CODED.exec(registryClockRefusalText(message) ?? message)?.groups
   const key = groups ? KEYS[groups.code] : undefined
   if (!groups || !key) return message
   const path = key.includes('.') ? key : `settings.extensions.developerMode.errors.${key}`

@@ -10255,8 +10255,8 @@ _MQ_CURSOR = re.compile(r"0|[1-9][0-9]{0,8}")
 _MQ_ENUMS = frozenset({
     "search", "detail", "installed",
     "read", "write", "readWrite", "low", "medium", "high", "highest",
-    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agentTools", "network", "networkViaShell", "noPermissions",
-    "system.ui", "system.fs", "system.aiCli", "system.web", "shell.allowlist", "shell.full", "agentTools.write",
+    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agents", "agentMessages", "agentTools", "network", "networkViaShell", "noPermissions",
+    "system.ui", "system.fs", "system.aiCli", "system.web", "system.agents", "system.agentMessages", "shell.allowlist", "shell.full", "agentTools.write",
     "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared", "via-shell",
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",

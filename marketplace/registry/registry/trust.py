@@ -7,9 +7,9 @@ can surface to warn users:
 
 - **trust tier** -- `signed-verified` when the registry created its artifact
   signature; otherwise `unsigned` (including pre-migration rows).
-- **sensitive capabilities** -- `fs`, `aiCli`, `web`, and `shell` grant
-  filesystem, brokered process, browser-session, or shell reach, so they
-  warrant higher scrutiny. The
+- **sensitive capabilities** -- `fs`, `aiCli`, `web`, `agentMessages`, and
+  `shell` grant filesystem, brokered process, browser-session, agent message
+  text, or shell reach, so they warrant higher scrutiny. The
   legacy `terminal` label remains sensitive only for the v1 compatibility path.
 
 This is deliberately simple and declarative. Actually sandboxing/enforcing the
@@ -22,7 +22,7 @@ TRUST_SIGNED = "signed-verified"
 TRUST_UNSIGNED = "unsigned"
 
 SENSITIVE_CAPABILITIES: frozenset[str] = frozenset(
-    {"fs", "aiCli", "web", "shell", "terminal"}
+    {"fs", "aiCli", "web", "agentMessages", "shell", "terminal"}
 )
 
 

@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
 import ControlPane from '../ControlPane.vue'
@@ -158,20 +160,62 @@ describe('ControlPane manifest-driven plugin placement', () => {
     wrapper.unmount()
   })
 
-  it('falls back to the generic mark when a contribution is monochrome but iconless', () => {
+  it('falls back to the title\'s first letter when a contribution is monochrome but iconless', () => {
     const wrapper = mountPane([contribution({ icon: null, iconMonochrome: true })])
 
-    expect(wrapper.get('.plugin-tab-fallback').text()).toBe('◇')
+    expect(wrapper.get('.plugin-tab-fallback').text()).toBe('F')
     expect(wrapper.find('.plugin-tab-icon').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('uses the generic fallback when a contribution has no icon', () => {
+  it('shows the title\'s first letter when a contribution has no icon', () => {
     const wrapper = mountPane([contribution()])
 
-    expect(wrapper.get('.plugin-tab-fallback').text()).toBe('◇')
+    expect(wrapper.get('.plugin-tab-fallback').text()).toBe('F')
     expect(wrapper.find('.plugin-tab-icon').exists()).toBe(false)
     wrapper.unmount()
+  })
+
+  it('tells two icon-less plugins apart by their titles, CJK included', async () => {
+    const wrapper = mountPane([
+      contribution({ contributionKey: 'a.left', title: 'Mini-IDE' }),
+      contribution({ contributionKey: 'b.left', title: '開發地圖' }),
+    ])
+    const glyph = (key: string) =>
+      wrapper.get(`.plugin-tab-btn[data-plugin-contribution="${key}"] .plugin-tab-fallback`).text()
+
+    expect(glyph('a.left')).toBe('M')
+    expect(glyph('b.left')).toBe('開')
+    await wrapper.setProps({ collapsed: true })
+    expect(wrapper.findAll('.rail-btn .plugin-tab-fallback').map((glyph) => glyph.text())).toEqual(['M', '開'])
+    wrapper.unmount()
+  })
+
+  it('shows the Git plugin title\'s first letter in the Git slot when its icon is missing', () => {
+    const wrapper = mountPane([contribution({ pluginId: 'navide.git', contributionKey: 'navide.git.left', title: 'Git' })])
+
+    expect(wrapper.get('.tab-btn[data-tab="git"] .plugin-tab-fallback').text()).toBe('G')
+    wrapper.unmount()
+  })
+
+  it('discloses the Git slot\'s plugin like any other plugin tab', () => {
+    const saved = i18n.global.locale.value
+    i18n.global.locale.value = 'en-US'
+    const wrapper = mountPane([contribution({ pluginId: 'navide.git', contributionKey: 'navide.git.left', title: 'Git', source: 'factory-bundled' })])
+    const tab = wrapper.get('.tab-btn[data-tab="git"]')
+    const disclosure = 'Navide plugin: Git · navide.git · Publisher: navide · Built into Navide'
+    expect(tab.attributes('aria-label')).toBe(disclosure)
+    expect(tab.attributes('title')).toBe(`${disclosure} (⌘4)`)
+    wrapper.unmount()
+    i18n.global.locale.value = saved
+  })
+
+  it('clips the fallback glyph to a fixed box', () => {
+    // The glyph is the plugin's own text (review M1 on #644).
+    const source = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/ControlPane.vue'), 'utf8')
+    const rule = source.match(/\n\.plugin-tab-fallback \{[^}]*\}/)?.[0] ?? ''
+    expect(rule).toContain('overflow: hidden')
+    expect(rule).toMatch(/width: 15px;[\s\S]*height: 15px;/)
   })
 
   it('uses the generic fallback when a catalog icon fails to load', async () => {
@@ -181,7 +225,7 @@ describe('ControlPane manifest-driven plugin placement', () => {
 
     await wrapper.get('.plugin-tab-icon').trigger('error')
 
-    expect(wrapper.get('.plugin-tab-fallback').text()).toBe('◇')
+    expect(wrapper.get('.plugin-tab-fallback').text()).toBe('F')
     expect(wrapper.find('.plugin-tab-icon').exists()).toBe(false)
     wrapper.unmount()
   })
@@ -410,9 +454,10 @@ describe('ControlPane manifest-driven plugin placement', () => {
 })
 
 // Card K2: a local or test package keeps a mark on its sidebar tab, in Navide's
-// own chrome; a Marketplace or built-in package keeps the tab as it was.
+// own chrome. Every plugin tab also names its plugin id, publisher and source,
+// since an icon-less tab now shows a letter of the plugin's own title.
 describe('ControlPane plugin tab source mark (K2)', () => {
-  it('marks only sources that are neither Marketplace stable nor built in', () => {
+  it('marks only sources that are neither Marketplace stable nor built in', async () => {
     const saved = i18n.global.locale.value
     i18n.global.locale.value = 'en-US'
     const wrapper = mountPane([
@@ -422,11 +467,18 @@ describe('ControlPane plugin tab source mark (K2)', () => {
     ])
     const tab = (key: string) => wrapper.get(`.plugin-tab-btn[data-plugin-contribution="${key}"]`)
     expect(tab('a.left').find('.plugin-tab-source-mark').exists()).toBe(true)
-    expect(tab('a.left').attributes('title')).toBe('Files · Local file, not reviewed by Navide, unsigned')
+    const unsigned = 'Navide plugin: Files · acme.files · Publisher: Self-declared: acme · Local file, not reviewed by Navide, unsigned'
+    expect(tab('a.left').attributes('title')).toBe(unsigned)
+    expect(tab('a.left').attributes('aria-label')).toBe(unsigned)
     for (const key of ['b.left', 'c.left']) {
       expect(tab(key).find('.plugin-tab-source-mark').exists()).toBe(false)
-      expect(tab(key).attributes('title')).toBe('Files')
     }
+    expect(tab('b.left').attributes('title')).toBe('Navide plugin: Files · acme.files · Publisher: acme · Reviewed')
+    expect(tab('c.left').attributes('title')).toBe('Navide plugin: Files · acme.files · Publisher: Self-declared: acme')
+    await wrapper.setProps({ collapsed: true })
+    const rail = wrapper.findAll('.rail-btn').find((button) => button.find('.plugin-tab-source-mark').exists())
+    expect(rail?.attributes('title')).toBe(unsigned)
+    expect(rail?.attributes('aria-label')).toBe(unsigned)
     wrapper.unmount()
     i18n.global.locale.value = saved
   })

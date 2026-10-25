@@ -3,9 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import sys
+import threading
 from pathlib import Path
 
-from watchdog.events import FileModifiedEvent
+from watchdog.events import (
+    DirCreatedEvent,
+    DirDeletedEvent,
+    DirModifiedEvent,
+    DirMovedEvent,
+    FileClosedEvent,
+    FileClosedNoWriteEvent,
+    FileCreatedEvent,
+    FileDeletedEvent,
+    FileModifiedEvent,
+    FileMovedEvent,
+    FileOpenedEvent,
+    FileSystemEvent,
+)
 
 import pytest
 
@@ -281,3 +296,279 @@ def test_plan_documents_still_fire_after_the_gitignore_layer(tmp_path: Path) -> 
     plan.write_text("<p>x</p>", encoding="utf-8")
     h.on_any_event(FileModifiedEvent(str(plan)))
     assert seen == [str(tmp_path)]
+
+
+# ── #622: read-only events must never reach the handler's work ─────────────
+#
+# watchdog's inotify emitter (Linux) reports reads too: an open() is an
+# `opened` event and a read-only close is `closed_no_write`. Reading
+# .gitignore to judge such an event produced two more of them, so the handler
+# fed itself, the Git panel refreshed every ~2s with nothing changed, and the
+# observer's unbounded queue grew with every file any pane read.
+
+
+class _FutureEvent(FileSystemEvent):
+    """An event type this handler has never heard of."""
+
+    event_type = "accessed"
+
+
+def _counting_handler(root: Path, gitignore: str) -> tuple[_RepoHandler, list, list[str]]:
+    (root / ".gitignore").write_text(gitignore, encoding="utf-8")
+    dirty: list = []
+    reads: list[str] = []
+    ignores = GitIgnore(root.resolve())
+    orig_read = ignores._read
+
+    def read(path: Path) -> str:
+        reads.append(str(path))
+        return orig_read(path)
+
+    ignores._read = read  # type: ignore[method-assign]
+    h = _RepoHandler(
+        root.resolve(), str(root), lambda ws, paths: dirty.append(paths), None, ignores
+    )
+    return h, dirty, reads
+
+
+@pytest.mark.parametrize(
+    "event_cls", [FileOpenedEvent, FileClosedEvent, FileClosedNoWriteEvent, _FutureEvent]
+)
+def test_events_that_change_nothing_are_dropped(tmp_path: Path, event_cls: type) -> None:
+    h, dirty, reads = _counting_handler(tmp_path, "build-out/\n")
+    for rel in (".gitignore", ".git/info/exclude", ".git/HEAD", "src/main.py"):
+        h.on_any_event(event_cls(str(tmp_path / rel)))
+    assert dirty == []
+    assert reads == []
+
+
+def test_reading_the_ignore_files_does_not_feed_itself(tmp_path: Path) -> None:
+    # Replays inotify: every file the handler reads comes back to it as the
+    # opened + closed_no_write pair the kernel would report. Before the fix
+    # this never settled; now the first event is the last.
+    (tmp_path / ".git" / "info").mkdir(parents=True)
+    (tmp_path / ".git" / "info" / "exclude").write_text("", encoding="utf-8")
+    h, dirty, reads = _counting_handler(tmp_path, "build-out/\n")
+    queue = [FileClosedNoWriteEvent(str(tmp_path / ".gitignore"))]
+    handled = 0
+    while queue and handled < 1000:
+        seen = len(reads)
+        h.on_any_event(queue.pop(0))
+        handled += 1
+        for path in reads[seen:]:
+            queue += [FileOpenedEvent(path), FileClosedNoWriteEvent(path)]
+    assert handled == 1
+    assert dirty == []
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        lambda p: FileCreatedEvent(str(p / "a.txt")),
+        lambda p: FileModifiedEvent(str(p / "a.txt")),
+        lambda p: FileDeletedEvent(str(p / "a.txt")),
+        lambda p: FileMovedEvent(str(p / "a.txt"), str(p / "b.txt")),
+        lambda p: DirCreatedEvent(str(p / "d")),
+        lambda p: DirModifiedEvent(str(p / "d")),
+        lambda p: DirDeletedEvent(str(p / "d")),
+        lambda p: DirMovedEvent(str(p / "d"), str(p / "e")),
+    ],
+)
+def test_every_change_event_still_marks_the_workspace_dirty(tmp_path: Path, event) -> None:
+    h, dirty, _ = _counting_handler(tmp_path, "")
+    h.on_any_event(event(tmp_path))
+    assert len(dirty) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="inotify reports reads")
+async def test_reading_files_in_the_repo_fires_nothing_on_inotify(tmp_path: Path) -> None:
+    (tmp_path / ".gitignore").write_text("build-out/\n", encoding="utf-8")
+    (tmp_path / "src.py").write_text("x = 1\n", encoding="utf-8")
+    fired: list[set[str]] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append({rel for rel, _ in paths})
+
+    watcher = GitWatcher(sink, debounce_s=0.1, max_wait_s=0.5)
+    watcher.start()
+    try:
+        watcher.watch(str(tmp_path))
+        await arm(tmp_path, fired, per_probe_s=2.0)
+        # Let the probe windows close, then only read.
+        await asyncio.sleep(1.0)
+        fired.clear()
+        for _ in range(20):
+            (tmp_path / ".gitignore").read_text(encoding="utf-8")
+            (tmp_path / "src.py").read_text(encoding="utf-8")
+        await asyncio.sleep(2.0)
+        assert fired == []
+        # A real write still gets through afterwards.
+        (tmp_path / "sentinel.txt").write_text("x", encoding="utf-8")
+        assert await wait_until(lambda: any("sentinel.txt" in p for p in fired))
+    finally:
+        watcher.stop()
+
+
+# ── #622: each event resolves each of its paths once ───────────────────────
+#
+# `Path.resolve()` walks the path on disk (an lstat per component), and this
+# handler runs on watchdog's single dispatch thread: three resolves of the same
+# path per event made a checkout or a build three times as slow to get through.
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda p: FileModifiedEvent(str(p / "src" / "main.py")),
+        lambda p: FileModifiedEvent(str(p / ".agent-team" / "plans" / "doc.html")),
+        lambda p: FileMovedEvent(str(p / "src" / "a.py"), str(p / "src" / "b.py")),
+    ],
+)
+def test_each_path_is_resolved_once_per_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make
+) -> None:
+    dirty: list = []
+    plans: list[str] = []
+    h = _RepoHandler(
+        tmp_path.resolve(),
+        str(tmp_path),
+        lambda ws, paths: dirty.append(paths),
+        plans.append,
+        GitIgnore(tmp_path.resolve()),
+    )
+    event = make(tmp_path)
+    resolved: list[str] = []
+    orig = Path.resolve
+
+    def counting(self: Path, strict: bool = False) -> Path:
+        resolved.append(str(self))
+        return orig(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", counting)
+    h.on_any_event(event)
+    monkeypatch.setattr(Path, "resolve", orig)
+    paths = [event.src_path] + ([event.dest_path] if event.event_type == "moved" else [])
+    assert sorted(resolved) == sorted(paths)
+    # And the answers are what they were.
+    if "plans" in event.src_path:
+        assert plans == [str(tmp_path)] and dirty == []
+    elif event.event_type == "moved":
+        assert dirty == [[("src/a.py", "deleted"), ("src/b.py", "created")]]
+    else:
+        assert dirty == [[("src/main.py", "modified")]]
+
+
+# ── #622: a burst of events wakes the loop a bounded number of times ───────
+#
+# Every relevant event used to hop to the loop with its own
+# call_soon_threadsafe, and each of those cancelled and re-armed the debounce
+# timer: a checkout, or a flood like #622's, put one callback, one wake-up
+# write and one timer per event onto the event loop. The burst now coalesces
+# on the observer side and the loop drains it in one go.
+
+
+@pytest.mark.asyncio
+async def test_an_event_flood_schedules_a_bounded_number_of_loop_callbacks() -> None:
+    fired: list[tuple[str, list[tuple[str, str]]]] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append((ws, paths))
+
+    loop = asyncio.get_running_loop()
+    watcher = GitWatcher(sink, debounce_s=0.2, max_wait_s=2.0)
+    watcher._loop = loop
+    hops = 0
+    orig = loop.call_soon_threadsafe
+
+    def counting(*args, **kwargs):
+        nonlocal hops
+        hops += 1
+        return orig(*args, **kwargs)
+
+    loop.call_soon_threadsafe = counting  # type: ignore[method-assign]
+    try:
+        sent = {(f"src/f{i}.py", "modified") for i in range(5000)}
+        ordered = sorted(sent)
+
+        def flood(pairs: list[tuple[str, str]], other: bool) -> None:
+            # The observer thread, marking dirty once per event.
+            for pair in pairs:
+                watcher._mark_dirty_threadsafe("/ws", [pair])
+            if other:
+                watcher._mark_dirty_threadsafe("/other", [])
+
+        # Two bursts, each run to the end while the loop is held (joined, not
+        # awaited), so no drain can run inside a burst: the interleaving is
+        # fixed rather than left to the scheduler (#629 counted 82 hops on a
+        # Linux runner where drains slipped in mid-flood). The first mark of a
+        # burst queues one drain and every later one joins it, so each burst
+        # costs exactly one hop. The second burst starts after the first drain
+        # has run, so it must queue a drain of its own.
+        for pairs, other in ((ordered[:2500], False), (ordered[2500:], True)):
+            observer = threading.Thread(target=flood, args=(pairs, other))
+            observer.start()
+            observer.join()
+            assert watcher._drain_queued
+            assert await wait_until(lambda: not watcher._drain_queued, timeout=5.0)
+        assert await wait_until(lambda: {ws for ws, _ in fired} == {"/ws", "/other"}, timeout=5.0)
+    finally:
+        loop.call_soon_threadsafe = orig  # type: ignore[method-assign]
+    assert hops == 2, hops
+    # Nothing was lost on the way: every path reached its workspace's refresh.
+    assert {pair for ws, paths in fired if ws == "/ws" for pair in paths} == sent
+    assert [paths for ws, paths in fired if ws == "/other"] == [[]]
+
+
+@pytest.mark.asyncio
+async def test_a_mark_arriving_while_the_inbox_drains_is_not_lost() -> None:
+    # The drain clears its queued flag before it hands the batch on, so a mark
+    # that lands mid-drain queues the next drain itself. Reset the flag after
+    # the batch instead and that mark sits in the inbox until something else
+    # happens to wake the loop, which may be never.
+    fired: list[str] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append(ws)
+
+    w = GitWatcher(sink, debounce_s=0.05, max_wait_s=0.5)
+    w._loop = asyncio.get_running_loop()
+    orig = w._schedule_fire
+    injected = False
+
+    def sched(ws: str, paths: list[tuple[str, str]]) -> None:
+        nonlocal injected
+        orig(ws, paths)
+        if not injected:
+            injected = True
+            # The observer thread marking dirty while this drain is running.
+            t = threading.Thread(
+                target=w._mark_dirty_threadsafe, args=("/late", [("late.py", "modified")])
+            )
+            t.start()
+            t.join()
+
+    w._schedule_fire = sched  # type: ignore[method-assign]
+    await asyncio.to_thread(w._mark_dirty_threadsafe, "/ws", [("a.py", "modified")])
+    assert await wait_until(lambda: "/late" in fired, timeout=2.0)
+
+
+@pytest.mark.asyncio
+async def test_a_restarted_watcher_drains_again() -> None:
+    # A drain queued on a loop that closed before running it leaves the flag
+    # set; start() must clear it, or every later mark is swallowed.
+    fired: list[str] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append(ws)
+
+    w = GitWatcher(sink, debounce_s=0.05, max_wait_s=0.5)
+    w._drain_queued = True
+    w._inbox = {"/stale": []}
+    w.start()
+    try:
+        await asyncio.to_thread(w._mark_dirty_threadsafe, "/ws", [("a.py", "modified")])
+        assert await wait_until(lambda: "/ws" in fired, timeout=2.0)
+        assert "/stale" not in fired
+    finally:
+        w.stop()

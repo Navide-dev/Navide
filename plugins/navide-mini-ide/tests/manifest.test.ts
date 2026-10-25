@@ -8,6 +8,7 @@ import { parseManifestV2 } from '../../../src/main/plugins/pluginManifestV2'
 const sourceDir = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const stagedDir = resolve(fileURLToPath(new URL('../../../dist-plugins/navide-mini-ide/', import.meta.url)))
 const expectedMarketplace = {
+  icon: 'assets/mini-ide.png',
   description: 'Edit workspace files, review changes and run AI CLI sessions in an independent IDE window.',
   license: 'MIT',
   repository: 'https://github.com/Navide-dev/Navide',

@@ -69,6 +69,7 @@ import {
 } from './pluginCapabilityCatalog'
 import { PUBLIC_GIT_METHODS, gitRequestTimeoutMs, publicGitRequest } from './gitPublicCapability'
 import { GIT_ACCOUNT_PUBLIC_METHODS } from './gitAccountCapability'
+import { agentsOperation } from './agentsCapability'
 import { PUBLIC_ISSUE_METHODS, issueRequest } from './issueCapability'
 import {
   MINI_IDE_PLUGIN_REQUIRES,
@@ -130,7 +131,7 @@ import {
   type PlansFilesystemPort,
   type PlansFilesystemServiceOperation,
 } from './plansBridge'
-import type { PackageShellPort } from './pluginThirdPartyBackends'
+import type { PackageAgentsPort, PackageShellPort } from './pluginThirdPartyBackends'
 import {
   BackendPluginError,
   type BackendPluginLaunchSpec,
@@ -620,6 +621,9 @@ interface RunningPlugin {
   /** The initial Plans backend bind. The dedicated Plans opener awaits this
    *  before claiming that the v2 surface is usable. */
   backendBindingTask: Promise<void> | null
+  /** Why a third-party view's backend bind was refused or failed, once it
+   *  has been; the view runs on with every backend call failing closed. */
+  backendUnavailable?: string
   /** Query string the entry was last loaded with (drives reload-on-change). */
   query: string
   /** webContents.id captured at creation (not readable after destroy). */
@@ -770,6 +774,12 @@ interface AiSessionLedgerEntry {
   createdAt: number
   persistView?: boolean
   storageIdentity?: AiTerminalStorageIdentity
+  /** The reclaim of the latest detach; a newer detach replaces it. */
+  reclaimTimer?: ReturnType<typeof setTimeout>
+  /** Set by the Host only: this session's id is in terminal storage (written
+   *  when it started, or it was resumed from there), so a later view can
+   *  resume it. A package's own persistView flag does not set it. */
+  storedForResume?: boolean
 }
 
 interface EarlyAiEventBuffer {
@@ -869,19 +879,29 @@ const TERMINAL_OWNED_WS_TYPES = new Set([
   'terminal.redraw',
 ])
 
-/** These first-party packages consume the public aiCli event vocabulary. Other
- * v2 packages may declare aiCli for capability admission without opting into
- * the event translation, so their internal terminal ownership remains intact. */
-const PUBLIC_AI_CLI_EVENT_PLUGIN_IDS = new Set(['navide.git', 'navide.plans', 'navide.mini-ide'])
-
+/** Every v2 package that declares aiCli gets its sessions' output as the
+ * documented aiCli.output / aiCli.exited events, and only for sessions its own
+ * view started or resumed (the terminal route). It used to be these three ids
+ * only, which left every other aiCli package with no output at all. */
 function usesPublicAiCliEvents(plugin: RunningPlugin | undefined): plugin is RunningPlugin {
   return Boolean(
     plugin?.hasV2DescriptorIdentity &&
-      PUBLIC_AI_CLI_EVENT_PLUGIN_IDS.has(plugin.id) &&
       plugin.capabilityPolicy.kind === 'manifest-v2' &&
       plugin.capabilityPolicy.system.includes('aiCli')
   )
 }
+
+/** These end their detached AI sessions themselves: Git and Plans through
+ *  their dock surface (endDockSurface), Mini-IDE through its persisted views.
+ *  Any other package's detached session is reclaimed after
+ *  AI_SESSION_RECLAIM_MS, so a closed view leaves no PTY behind, unless the
+ *  Host stored it for resume (storedForResume): that one stays to be resumed
+ *  from storage, as before (user decision D1 on #648). Asking for persistView
+ *  without the storage write succeeding does not keep a session. */
+const SELF_ENDING_AI_SESSION_PLUGIN_IDS: ReadonlySet<string> = new Set(['navide.git', 'navide.plans', 'navide.mini-ide'])
+/** How long a detached session waits for a new view of the same contribution
+ *  (a reload, a workspace re-prepare) to resume it before it is ended. */
+export const AI_SESSION_RECLAIM_MS = 60_000
 
 /** First-party compatibility actions used while the existing Git surface is
  *  moved behind the Manifest v2 package boundary. These are deliberately
@@ -2826,6 +2846,98 @@ export class FrontendPluginManager {
       stderr: String(record.stderr ?? ''),
       ...shellRunTruncation(record),
     }
+  }
+
+  /** The Host's read-only agent data for third-party backends that declare
+   *  `agents` (and `agentMessages` for message text): the same `agents.public`
+   *  backend query a view's agents.* uses, at the bound workspace only. */
+  createThirdPartyAgentsPort(): PackageAgentsPort {
+    return {
+      query: (operation, args, context) => this.sendThirdPartyAgentsQuery(operation, args, context),
+    }
+  }
+
+  /** Revalidated at every dispatch: the registered package version declares
+   *  the namespace and its user Grant holds it, at the canonical bound root;
+   *  and the call comes from a live view of the package there, or from an
+   *  agent-tool call the Host bound headless at that root and still serves. */
+  private thirdPartyAgentsGrantAllows(namespace: 'agents' | 'agentMessages', context: PlansBridgeContext): boolean {
+    const runtime = context.runtime
+    if (
+      context.signal.aborted ||
+      runtime.pluginId === PLANS_PLUGIN_ID ||
+      !nonEmptyString(runtime.packageVersion) ||
+      !nonEmptyString(runtime.instanceId) ||
+      !nonEmptyString(context.workspacePath) ||
+      !nonEmptyString(context.authorizedPlanRoot)
+    ) return false
+    const activation = this.pluginBackendHost.activationForPlugin(runtime.pluginId)
+    if (
+      !activation?.thirdParty?.system.includes(namespace) ||
+      activation.packageVersion !== runtime.packageVersion
+    ) return false
+    const grant = this.capabilityGrantResolver?.(runtime.pluginId, runtime.packageVersion) ?? null
+    if (!grant || grant.packageVersion !== runtime.packageVersion || !grant.system.includes(namespace)) return false
+    const root = canonicalExistingDirectory(context.workspacePath)
+    if (root === null || root !== context.authorizedPlanRoot) return false
+    if (runtime.initiator.kind === 'user') {
+      const view = this.running.get(runtime.instanceId)
+      return Boolean(
+        view &&
+        view.id === runtime.pluginId &&
+        view.workspacePath &&
+        resolve(view.workspacePath) === resolve(context.workspacePath) &&
+        runtime.workspaceId === this.workspaceIdForPath(context.workspacePath),
+      )
+    }
+    const boundRoot = this.headlessAgentToolRoots.get(runtime.instanceId)
+    const call = runtime.initiator.kind === 'agent' ? this.agentToolCalls.get(runtime.initiator.id) : undefined
+    const stillServed = call !== undefined && this.agentToolsHost !== null && this.agentToolsHost.recheck(
+      call.pluginId,
+      call.caller,
+      (pluginId, packageVersion) => this.isPackageVersionStopping(pluginId, packageVersion),
+      call.spec,
+    ).ok
+    return Boolean(
+      boundRoot === root &&
+      call &&
+      stillServed &&
+      call.pluginId === runtime.pluginId &&
+      call.workspaceRoot === boundRoot &&
+      this.pluginBackendHost.isBound(runtime.instanceId) &&
+      !this.isPackageVersionStopping(runtime.pluginId, runtime.packageVersion) &&
+      runtime.workspaceId === this.workspaceIdForPath(boundRoot) &&
+      this.isAgentToolWorkspace(boundRoot),
+    )
+  }
+
+  private async sendThirdPartyAgentsQuery(
+    operation: string,
+    args: Record<string, JsonValue>,
+    context: PlansBridgeContext,
+  ): Promise<JsonValue> {
+    if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+    const namespace = operation === 'read_message' ? 'agentMessages' : 'agents'
+    const allows = (): boolean => this.thirdPartyAgentsGrantAllows(namespace, context)
+    if (!allows()) throw new PlansBridgeError('CAPABILITY_DENIED', 'Agents capability is denied.')
+    let response: unknown
+    try {
+      response = await this.sendPublicBackend(
+        'agents.public',
+        { workspace_path: context.authorizedPlanRoot, operation, arguments: args },
+        allows,
+      )
+    } catch (error) {
+      if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+      if (error instanceof Error && error.message === 'request denied before dispatch') {
+        throw new PlansBridgeError('CAPABILITY_DENIED', 'Agents capability is denied.')
+      }
+      throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Agents service is unavailable.')
+    }
+    if (!isJsonValue(response)) {
+      throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Agents service returned an invalid response.')
+    }
+    return response
   }
 
   /** Delegate immediate pre-spawn trust revalidation to the backend child Host. */
@@ -6421,6 +6533,19 @@ export class FrontendPluginManager {
       )
     }
 
+    const agentsOp = agentsOperation(plan.address)
+    if (agentsOp) {
+      if (!workspacePath) throw new Error('Agents capability workspace binding is missing')
+      if (!this.publicPlanCanDispatch(plan, plugin)) {
+        throw new Error('agent execution policy denied the operation')
+      }
+      return await this.sendPublicBackend(
+        'agents.public',
+        { workspace_path: resolve(workspacePath), operation: agentsOp, arguments: plan.args },
+        () => this.publicPlanCanDispatch(plan, plugin),
+      )
+    }
+
     if ((EDITOR_PREFERENCE_METHODS as readonly string[]).includes(plan.address)) {
       if (!workspacePath) throw new Error('Editor preference capability workspace binding is missing')
       if (!this.publicPlanCanDispatch(plan, plugin)) {
@@ -7728,7 +7853,10 @@ export class FrontendPluginManager {
     const initiator = plan.initiator
     if (!initiator || initiator.kind !== 'agent') return true
     const namespace = plan.address.split('.', 1)[0]
-    if (namespace !== 'fs' && namespace !== 'ui' && namespace !== 'aiCli' && namespace !== 'web' && namespace !== 'shell') {
+    if (
+      namespace !== 'fs' && namespace !== 'ui' && namespace !== 'aiCli' && namespace !== 'web' &&
+      namespace !== 'agents' && namespace !== 'agentMessages' && namespace !== 'shell'
+    ) {
       return true
     }
     let snapshot: ExecutionPolicySnapshot | undefined
@@ -8364,6 +8492,8 @@ export class FrontendPluginManager {
           createdAt: Date.now(),
           persistView: true,
           storageIdentity: storageIdentity ?? undefined,
+          // Found through storage: its ptyId there is this session.
+          storedForResume: Boolean(storageIdentity && ownerState?.ptyId === sessionId),
         })
       }
       return { sessionId, profileId }
@@ -8463,12 +8593,18 @@ export class FrontendPluginManager {
           storageIdentity: storageIdentity ?? undefined,
         })
         if (persistView && storageIdentity) {
-          await this.terminalStorageRequest(plugin, {
+          const stored = await this.terminalStorageRequest(plugin, {
             operation: 'session',
             resumeKey: storageIdentity.resumeKey,
             ptyId: sessionId,
-          }, beforeDispatch).catch((error) => console.warn(
-            `[plugins] AI terminal storage could not bind session ${sessionId} for ${plugin.id}; it will not resume`, error))
+          }, beforeDispatch).then(() => true, (error) => {
+            console.warn(
+              `[plugins] AI terminal storage could not bind session ${sessionId} for ${plugin.id}; it will not resume`, error)
+            return false
+          })
+          // Only a session the Host actually stored is kept past a close.
+          const entry = this.aiSessions.get(sessionId)
+          if (stored && entry) entry.storedForResume = true
         }
         committed = true
         this.flushEarlyAiEvents(pendingKey)
@@ -9885,6 +10021,12 @@ export class FrontendPluginManager {
       return
     }
     const plugin = this.runningPluginForTerminalRoute(route)
+    // Raw PTY events are the v1 adapter's vocabulary. A v2 route gets only
+    // the public aiCli events, through the gate above, never terminal.*.
+    if (plugin && route && !route.legacy && plugin.capabilityPolicy.kind === 'manifest-v2') {
+      this.logDroppedTerminalEvent(event, sessionId, route)
+      return
+    }
     if (plugin) {
       this.emitToInstance(plugin.instanceId, event, payload)
     }
@@ -10142,6 +10284,7 @@ export class FrontendPluginManager {
         const aiSession = this.aiSessions.get(sessionId)
         if (aiSession?.attachedInstanceId === plugin.instanceId) {
           aiSession.attachedInstanceId = null
+          this.scheduleAiSessionReclaim(aiSession)
         }
         this.terminalRoutes.set(sessionId, { ...route, instanceId: null })
       }
@@ -10302,6 +10445,38 @@ export class FrontendPluginManager {
     this.stopAiSessions(
       (session) => session.pluginId === pluginId && session.packageVersion === packageVersion,
     )
+  }
+
+  /** End a detached session of a package that does not end its own, once it
+   *  has waited AI_SESSION_RECLAIM_MS without being resumed. Only this exact
+   *  ledger entry, still detached, is ended, through the Host's own session id
+   *  on the backend that created it: a session resumed, stopped or removed
+   *  meanwhile is left alone, so nothing is ended twice. An app quit ends
+   *  every PTY with the backend anyway. */
+  private scheduleAiSessionReclaim(entry: AiSessionLedgerEntry): void {
+    if (
+      SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(entry.pluginId) ||
+      (entry.storedForResume === true && entry.storageIdentity !== undefined)
+    ) return
+    // Each detach starts the wait over: an earlier detach's timer, from before
+    // a resume, must not end the session early.
+    if (entry.reclaimTimer !== undefined) clearTimeout(entry.reclaimTimer)
+    const timer = setTimeout(() => {
+      entry.reclaimTimer = undefined
+      if (this.appQuitting()) return
+      if (this.aiSessions.get(entry.sessionId) !== entry || entry.attachedInstanceId !== null) return
+      this.aiSessions.delete(entry.sessionId)
+      this.terminalRoutes.delete(entry.sessionId)
+      this.aiTerminalOutputDecoder.dropSession(entry.sessionId)
+      void entry.client.send('terminal.kill', {
+        terminal_session_id: entry.sessionId,
+        force: true,
+      }).catch(() => {
+        // The ledger forgets it either way; a backend that is gone has no PTY.
+      })
+    }, AI_SESSION_RECLAIM_MS)
+    timer.unref?.()
+    entry.reclaimTimer = timer
   }
 
   private stopAiSessions(predicate: (session: AiSessionLedgerEntry) => boolean): void {
@@ -10830,7 +11005,13 @@ export class FrontendPluginManager {
               error instanceof Error ? error.message : 'invalid backend runtime'
             }`,
           )
-          throw error
+          // Not fatal: the view (a window too) opens and stays unbound. Only an
+          // admission refusal's own message is passed on; anything else is
+          // reported generically, since it may carry paths or stack text.
+          record.backendUnavailable =
+            error instanceof BackendPluginError && error.code === 'BACKEND_UNAVAILABLE'
+              ? error.message
+              : 'the native backend could not start'
         })
         void record.backendBindingTask.catch(() => undefined)
       }
@@ -12675,7 +12856,7 @@ export class FrontendPluginManager {
     hostWindow: BrowserWindow,
     contributionKey: string,
     options: Omit<PluginViewOpenOptions, 'hostWindow' | 'bounds'>,
-  ): Promise<{ ok: boolean; error?: string }> {
+  ): Promise<{ ok: boolean; error?: string; backendUnavailable?: string }> {
     const canDispatch = options.canDispatch ?? (() => true)
     if (!canDispatch()) return { ok: false, error: 'request is no longer active' }
     const descriptor = this.enabledDescriptors().find((candidate) =>
@@ -12749,7 +12930,8 @@ export class FrontendPluginManager {
         capabilityContext,
       })
       this.contributionInstances.set(key, handle)
-      return { ok: true }
+      const backendUnavailable = this.running.get(handle.instanceId)?.backendUnavailable
+      return backendUnavailable ? { ok: true, backendUnavailable } : { ok: true }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }

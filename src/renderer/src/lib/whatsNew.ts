@@ -121,6 +121,71 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.31',
+    title: {
+      'zh-TW': 'Linux 不再越用越慢：修正後端記憶體每分鐘增加約 90 MB',
+      'en-US': 'Linux No Longer Slows Down Over Time: Backend Memory Growth of About 90 MB a Minute Fixed',
+      'ja-JP': 'Linux で使うほど重くなる問題を修正：バックエンドのメモリが毎分約 90 MB 増える不具合',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Linux：開啟 pane 之後，後端記憶體不再每分鐘增加約 90 MB，event loop 不再越卡越久，pane 的輸入和捲動也不再延遲。原因是 Git 監看器連 inotify 的「讀取」事件也會反應，agent 在工作區每讀一個檔案就多排一批事件；現在只對檔案新增、刪除、修改和搬移反應，一連串變更也只喚醒 event loop 一次。macOS 和 Windows 不受影響。感謝 @emissionspectrum-creator 在 #622 回報。',
+        'en-US': 'Linux: once a pane is open, the backend\'s memory no longer grows by about 90 MB a minute, the event loop no longer stalls for longer and longer, and pane input and scrolling no longer lag. The Git watcher reacted to inotify\'s read events, so every file an agent read in the workspace queued more events; it now reacts only to files being created, deleted, modified or moved, and a burst of changes wakes the event loop once. macOS and Windows were not affected. Thanks to @emissionspectrum-creator for reporting it in #622.',
+        'ja-JP': 'Linux：pane を開いた後、バックエンドのメモリが毎分約 90 MB ずつ増えることはなくなり、event loop の停止がだんだん長くなることも、pane の入力やスクロールが遅れることもなくなりました。原因は Git の監視が inotify の「読み取り」イベントにも反応していたことで、agent がワークスペースのファイルを読むたびにイベントが溜まっていました。現在はファイルの作成・削除・変更・移動にだけ反応し、まとまった変更でも event loop を起こすのは 1 回だけです。macOS と Windows には影響ありません。#622 で報告してくださった @emissionspectrum-creator さんに感謝します。',
+      },
+      {
+        'zh-TW': '「設定 → Navide 外掛」分成四個子頁，列在側欄的「Navide 外掛」底下：Navide 外掛、執行政策、開發者與原生程式碼、揭露總覽。不用打開子頁也看得到狀態：執行政策頁有警告時，側欄那一列會顯示 ⚠；開發者模式或任何原生後端開關開著時，「開發者與原生程式碼」會顯示「已開啟」。視窗寬度在 720px 以下時，改用頁面上方的分頁列切換。每個外掛的列不用點開就看得到風險等級和「⚠ N」。揭露的文字沒有更動。',
+        'en-US': 'Settings → Navide Plugins is split into four pages, listed in the sidebar under Navide Plugins: Navide plugins, Execution Policy, Developer and native code, and Disclosure overview. You can see their state without opening them: Execution Policy shows ⚠ in the sidebar while that page shows a warning, and Developer and native code shows On while Developer Mode or any native-backend switch is on. At 720px wide or less, a tab strip at the top of the page switches between them. Each plugin row shows its risk level and ⚠ N without a click. Disclosure text is unchanged.',
+        'ja-JP': '「設定 → Navide プラグイン」を 4 つのページに分け、サイドバーの「Navide プラグイン」の下に並べました：Navide プラグイン、実行ポリシー、開発者とネイティブコード、開示の一覧。ページを開かなくても状態がわかります：実行ポリシーのページに警告があるときはサイドバーの行に ⚠ が、開発者モードやネイティブバックエンドのスイッチがどれかオンのときは「開発者とネイティブコード」に「オン」が表示されます。ウィンドウの幅が 720px 以下のときは、ページ上部のタブで切り替えます。各プラグインの行には、クリックしなくてもリスクレベルと「⚠ N」が表示されます。開示の文言は変わっていません。',
+      },
+      {
+        'zh-TW': '安裝了會在主畫面加入 view 的外掛之後，主畫面不會再被整個蓋住，點擊也不會穿透到底下的終端機：外掛的畫面變成舞台上的一個分頁，排在既有分頁後面，標籤是 view 的標題，前面有 Navide 畫的 ◇ 標記；滑鼠移上去會顯示外掛 ID、發行者和來源。安裝時不會自動切過去，點回其他分頁、按「+」或從側欄打開 pane，就會回到 pane 格線。這是 0.1.93 起就有的問題，內建外掛都沒有用到這個位置。',
+        'en-US': 'Installing a plugin that adds a view to the main area no longer covers the whole stage, and clicks no longer fall through to the terminals underneath: the plugin\'s view is now a stage tab after the existing tabs, labelled with the view\'s title and marked ◇ by Navide; hover it for the plugin\'s id, publisher and source. Installing it does not switch to it, and picking another tab, pressing + or opening a pane from the sidebar brings the pane grid back. This had been the case since 0.1.93; no bundled plugin uses that area.',
+        'ja-JP': 'メイン領域に view を追加するプラグインをインストールしても、ステージ全体が覆われることはなくなり、クリックが下のターミナルに抜けることもなくなりました：プラグインの画面はステージのタブの 1 つになり、既存のタブの後ろに view のタイトルで表示され、Navide が付ける ◇ マークが付きます。ポインターを合わせるとプラグインの ID、発行者、ソースが表示されます。インストールしても自動では切り替わらず、ほかのタブを選ぶか、「+」を押すか、サイドバーから pane を開くと pane のグリッドに戻ります。0.1.93 から続いていた問題で、同梱のプラグインはこの領域を使っていません。',
+      },
+      {
+        'zh-TW': '外掛的原生後端被拒絕或無法啟動時，外掛的視窗仍然會開啟，只是需要後端的功能不能用。開啟時會跳出通知說明原因，並指向「設定 → Navide 外掛 → 開發者與原生程式碼」；在那裡允許之後，要把已經開著的視窗關掉再開，才會接上後端。',
+        'en-US': 'A plugin window now opens even when its native backend is refused or cannot start; the parts that need the backend do not work. A notice says why and points to Settings → Navide Plugins → Developer and native code. After you allow the backend there, close the open window and open it again to connect it.',
+        'ja-JP': 'プラグインのネイティブバックエンドが拒否されたり起動できなかったりしても、プラグインのウィンドウは開くようになりました。バックエンドが必要な機能は使えません。開くときに理由を示す通知が表示され、「設定 → Navide プラグイン → 開発者とネイティブコード」へ案内します。そこで許可した後は、開いているウィンドウを閉じて開き直すとバックエンドにつながります。',
+      },
+      {
+        'zh-TW': '安裝第三方外掛就等於允許它的原生後端執行：安裝對話框會說明這一點，之後只有程式或權限改變時才會再問你。0.2.30 以前裝的套件，以及沒有經過安裝對話框的版本（例如 agent 發起的更新或回滾），第一次執行前會先問一次。這個開關現在預設開啟：如果你在 0.2.30 從沒改過原生後端的設定（例如切換這個開關，或允許、停用原生後端），開關現在是開著的；你之前儲存過的值會保留，存成關閉的就維持關閉。原生後端只在作業系統的沙盒裡執行，本身不能連網（macOS 用 Seatbelt、Linux 用 bubblewrap）；沒有沙盒的地方一律不執行，目前包括 Windows。你可以在「設定 → Navide 外掛 → 開發者與原生程式碼」關閉。',
+        'en-US': 'Installing a third-party plugin now allows its native backend to run: the install dialog says so, and Navide asks again only when the program or its permissions change. Packages installed before 0.2.31, and versions no install dialog showed (such as an update or rollback an agent started), are asked once before they first run. The switch is now on by default: if you never changed native-backend settings in 0.2.30 (for example the switch itself, or allowing or disabling a native backend), the switch is now on; a value you saved earlier is kept, so a switch you saved as off stays off. Native backends run only inside an operating-system sandbox with no network of their own (Seatbelt on macOS, bubblewrap on Linux), and do not run where there is no sandbox, including Windows for now. You can turn them off in Settings → Navide Plugins → Developer and native code.',
+        'ja-JP': 'サードパーティ製プラグインをインストールすると、そのネイティブバックエンドの実行を許可したことになります。インストールのダイアログにそう表示され、その後はプログラムや権限が変わったときだけ改めて確認します。0.2.30 以前にインストールしたパッケージと、インストールのダイアログを通っていないバージョン（agent が始めた更新やロールバックなど）は、初めて実行する前に一度確認します。このスイッチは既定でオンになりました。0.2.30 でネイティブバックエンドの設定（このスイッチの切り替えや、ネイティブバックエンドの許可・無効化など）を一度も変更していない場合、スイッチは現在オンです。以前に保存した値は保たれ、オフで保存したものはオフのままです。ネイティブバックエンドは OS のサンドボックス内でだけ動き、それ自体はネットワークに接続できません（macOS は Seatbelt、Linux は bubblewrap）。サンドボックスがない環境では動かず、現在は Windows も含まれます。「設定 → Navide プラグイン → 開発者とネイティブコード」でオフにできます。',
+      },
+      {
+        'zh-TW': '外掛現在可以申請讀取同一個工作區的 agent 資訊（pane 清單、哪個 pane 開了哪個、不含內容的訊息傳送紀錄、session 清單），這是中風險權限；訊息內容要另外申請高風險權限，安裝時會再確認一次，而且 agent 要讀到訊息內容，執行政策必須明確寫入。對話紀錄、帳號和額度資料都不開放。內建外掛都沒有申請這兩種權限。',
+        'en-US': 'Plugins can now ask to read agent information in their own workspace (the pane list, which pane opened which, message delivery records without their text, and the session list), a medium-risk permission. Message text needs a separate high-risk permission, confirmed a second time at install, and an agent gets it only from an Execution Policy that names it. Conversation transcripts, account and quota data are never available. None of the bundled plugins asks for either.',
+        'ja-JP': 'プラグインが、同じワークスペースの agent の情報（pane の一覧、どの pane がどの pane を開いたか、本文を含まないメッセージの配信記録、session の一覧）の読み取りを申請できるようになりました。これは中リスクの権限です。メッセージの本文には別の高リスクの権限が必要で、インストール時にもう一度確認され、agent が本文を読めるのは実行ポリシーに明記されている場合だけです。会話の記録、アカウントや使用量のデータは公開されません。同梱のプラグインはどちらも申請していません。',
+      },
+      {
+        'zh-TW': '因為電腦時鐘不準而無法檢查 Registry 外掛時，訊息會說明時鐘似乎慢了或快了，請你改正日期與時間後再試。已安裝的外掛因此停止時，「設定 → Navide 外掛」的「Navide 外掛」頁會顯示橫幅說明，Navide 會在 15 分鐘內及啟動時再檢查一次。',
+        'en-US': 'When a Registry plugin cannot be checked because this computer\'s clock is off, the message now says the clock appears to be behind or ahead, and to correct the date and time and try again. An installed plugin stopped for this reason shows a banner on the Navide plugins page of Settings → Navide Plugins; Navide checks again within 15 minutes and when it starts.',
+        'ja-JP': 'コンピューターの時計がずれているために Registry のプラグインを確認できないとき、時計が遅れているか進んでいるようだと伝え、日付と時刻を直してからやり直すよう案内するようになりました。インストール済みのプラグインがこの理由で停止した場合は「設定 → Navide プラグイン」の「Navide プラグイン」ページにバナーが表示され、Navide は 15 分以内と起動時にもう一度確認します。',
+      },
+      {
+        'zh-TW': '標題列和側欄裡沒有圖示的外掛按鈕，不再全都顯示同一個 ◇，而是顯示外掛標題的第一個字；Mini-IDE 也有了自己的圖示。這些按鈕的提示會寫出是哪個外掛：它的 id、發佈者（或「自稱」）和來源。',
+        'en-US': 'Plugin buttons without an icon in the title bar and the sidebar no longer all show the same ◇; they show the first character of the plugin\'s title, and Mini-IDE has its own icon. Their tooltip says which plugin it is: its id, its publisher (or "Self-declared") and its source.',
+        'ja-JP': 'タイトルバーとサイドバーにあるアイコンのないプラグインのボタンは、すべて同じ ◇ ではなく、プラグインのタイトルの最初の 1 文字を表示するようになりました。Mini-IDE には専用のアイコンが付きました。これらのボタンのツールチップには、どのプラグインか（id、発行者または「自称」、ソース）が表示されます。',
+      },
+      {
+        'zh-TW': '用 Anthropic 自動產生 commit 訊息不再每次都失敗。',
+        'en-US': 'Generating a commit message with Anthropic no longer fails every time.',
+        'ja-JP': 'Anthropic での commit メッセージの自動生成が、毎回失敗することはなくなりました。',
+      },
+      {
+        'zh-TW': 'Navide 不會把你 CLI 帳號的憑證與金鑰集中保存在雲端，以後也不會：CLI 帳號的憑證與金鑰只存在你的電腦上。0.2.28 起，同步設定已移除「Credentials 與金鑰」選項；這個選項在介面上一直是停用的，從來無法開啟。MCP 設定裡的 token 會先在你的裝置上加密才同步；伺服器無法解密。MCP 同步可隨時在「設定 → Navide Cloud → 同步 → MCP」關閉。',
+        'en-US': 'Navide does not store your CLI account credentials and keys centrally in the cloud, and it never will: your CLI account credentials and keys live only on your own machine. Since 0.2.28 the "Credentials & keys" option is gone from the sync settings; it was always disabled in the interface and could never be turned on. Tokens in your MCP settings are encrypted on your device before they sync; the server cannot decrypt them. You can turn MCP sync off at any time in Settings → Navide Cloud → Sync → MCP.',
+        'ja-JP': 'Navide は CLI アカウントの認証情報やキーをクラウドにまとめて保存せず、今後も保存しません。CLI アカウントの認証情報とキーは、お使いのコンピューターにのみ保存されます。0.2.28 以降、同期設定から「認証情報とキー」の項目は削除されています。この項目は画面上で常に無効になっていて、オンにすることはできませんでした。MCP 設定内のトークンは、同期の前にお使いのデバイス上で暗号化され、サーバーは復号できません。MCP の同期は「設定 → Navide Cloud → 同期 → MCP」でいつでもオフにできます。',
+      },
+    ],
+    note: {
+      'zh-TW': '完整說明：https://navide.dev/posts/credentials-stay-on-your-machine-zh-hant/',
+      'en-US': 'Full announcement: https://navide.dev/posts/credentials-stay-on-your-machine/',
+      'ja-JP': '詳しいお知らせ：https://navide.dev/posts/credentials-stay-on-your-machine-ja/',
+    },
+  },
+  {
     version: '0.2.30',
     title: {
       'zh-TW': '「Navide 外掛」設定頁改版：風險和警告直接標在清單上，Pipeline 也不再默默卡住',

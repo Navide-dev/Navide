@@ -1392,6 +1392,1096 @@
           "projectWrites": "none"
         }
       }
+    },
+    {
+      "name": "agents-messages-ui",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.agentmap",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "agents",
+            "agentMessages",
+            "ui"
+          ]
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "window",
+              "title": "Agent Map",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.agentmap",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "agents",
+              "params": {}
+            },
+            {
+              "key": "agentMessages",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.agents",
+              "level": "medium"
+            },
+            {
+              "key": "system.agentMessages",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "agentMessages",
+            "agents",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "agents-only",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.agentmap",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "agents"
+          ]
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "window",
+              "title": "Agent Map",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.agentmap",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "agents",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.agents",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "agents"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "plans-0.2.9",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^1.0.0",
+        "id": "navide.plans",
+        "name": "Plans",
+        "version": "0.2.9",
+        "publisher": "navide",
+        "engines": {
+          "navide": "^0.1.0"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui",
+            "aiCli"
+          ]
+        },
+        "marketplace": {
+          "description": "Review and update workspace plans.",
+          "license": "MIT",
+          "repository": "https://github.com/nt-nerdtechnic/Navide",
+          "categories": [
+            "productivity",
+            "project-management"
+          ]
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "left",
+              "kind": "custom",
+              "location": "left",
+              "title": "Plans",
+              "entry": "frontend/left/index.html"
+            },
+            {
+              "id": "window",
+              "kind": "custom",
+              "location": "window",
+              "title": "Plans",
+              "entry": "frontend/window/index.html"
+            }
+          ]
+        },
+        "backend": {
+          "entry": "backend/navide-plans",
+          "protocolVersion": 1,
+          "activation": "startup"
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "navide.plans",
+          "version": "0.2.9",
+          "publisher": "navide"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "nativeBackend",
+              "params": {}
+            },
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "aiCli",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "system.aiCli",
+              "level": "high"
+            },
+            {
+              "key": "nativeBackend",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "aiCli",
+            "fs",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": {
+          "methods": [],
+          "events": []
+        },
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": true,
+          "projectWrites": "undeclared"
+        }
+      }
+    },
+    {
+      "name": "plans-0.2.31",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^1.0.0",
+        "id": "navide.plans",
+        "name": "Plans",
+        "version": "0.2.31",
+        "publisher": "navide",
+        "engines": {
+          "navide": "^0.1.0"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui",
+            "aiCli"
+          ],
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**/.agent-team/plans/*",
+                "**/.agent-team/reports/*",
+                "**/.claude/loop-reports/*",
+                "**/.claude/plans/*",
+                "**/.cursor/plans/*",
+                "**/docs/plans/*",
+                "**/docs/reports/*",
+                "**/.agent-team/plans/.history/**",
+                "**/.agent-team/reports/.history/**",
+                "**/.claude/loop-reports/.history/**",
+                "**/.claude/plans/.history/**",
+                "**/.cursor/plans/.history/**",
+                "**/docs/plans/.history/**",
+                "**/docs/reports/.history/**",
+                ".plans/*"
+              ],
+              "write": [
+                "**/.agent-team/plans/*",
+                "**/.agent-team/reports/*",
+                "**/.claude/loop-reports/*",
+                "**/.claude/plans/*",
+                "**/.cursor/plans/*",
+                "**/docs/plans/*",
+                "**/docs/reports/*",
+                ".plans/*"
+              ]
+            }
+          }
+        },
+        "marketplace": {
+          "description": "Review and update workspace plans.",
+          "license": "MIT",
+          "repository": "https://github.com/Navide-dev/Navide",
+          "categories": [
+            "productivity",
+            "project-management"
+          ]
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "left",
+              "kind": "custom",
+              "location": "left",
+              "title": "Plans",
+              "entry": "frontend/left/index.html"
+            },
+            {
+              "id": "window",
+              "kind": "custom",
+              "location": "window",
+              "title": "Plans",
+              "entry": "frontend/window/index.html"
+            }
+          ]
+        },
+        "backend": {
+          "entry": "backend/navide-plans",
+          "protocolVersion": 1,
+          "activation": "startup"
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "navide.plans",
+          "version": "0.2.31",
+          "publisher": "navide"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "nativeBackend",
+              "params": {}
+            },
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "aiCli",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "system.aiCli",
+              "level": "high"
+            },
+            {
+              "key": "nativeBackend",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "aiCli",
+            "fs",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**/.agent-team/plans/*",
+                "**/.agent-team/plans/.history/**",
+                "**/.agent-team/reports/*",
+                "**/.agent-team/reports/.history/**",
+                "**/.claude/loop-reports/*",
+                "**/.claude/loop-reports/.history/**",
+                "**/.claude/plans/*",
+                "**/.claude/plans/.history/**",
+                "**/.cursor/plans/*",
+                "**/.cursor/plans/.history/**",
+                "**/docs/plans/*",
+                "**/docs/plans/.history/**",
+                "**/docs/reports/*",
+                "**/docs/reports/.history/**",
+                ".plans/*"
+              ],
+              "write": [
+                "**/.agent-team/plans/*",
+                "**/.agent-team/reports/*",
+                "**/.claude/loop-reports/*",
+                "**/.claude/plans/*",
+                "**/.cursor/plans/*",
+                "**/docs/plans/*",
+                "**/docs/reports/*",
+                ".plans/*"
+              ]
+            }
+          }
+        },
+        "nativeBackend": {
+          "methods": [],
+          "events": []
+        },
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": true,
+          "projectWrites": {
+            "root": "repository",
+            "patterns": [
+              "**/.agent-team/plans/*",
+              "**/.agent-team/reports/*",
+              "**/.claude/loop-reports/*",
+              "**/.claude/plans/*",
+              "**/.cursor/plans/*",
+              "**/docs/plans/*",
+              "**/docs/reports/*",
+              ".plans/*"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "scope-ui-only",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.scoped",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "ui"
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.scoped",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "low",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "ui"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "scope-fs-unscoped",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.scoped",
+        "name": "Example",
+        "version": "1.1.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.scoped",
+          "version": "1.1.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "undeclared"
+        }
+      }
+    },
+    {
+      "name": "scope-fs-docs-read",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.scoped",
+        "name": "Example",
+        "version": "1.2.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "docs/*"
+              ],
+              "write": []
+            }
+          }
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.scoped",
+          "version": "1.2.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "read"
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "docs/*"
+              ],
+              "write": []
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "scope-fs-docs-src-read",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.scoped",
+        "name": "Example",
+        "version": "1.3.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "docs/*",
+                "src/**"
+              ],
+              "write": []
+            }
+          }
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.scoped",
+          "version": "1.3.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "read"
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "docs/*",
+                "src/**"
+              ],
+              "write": []
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "scope-fs-docs-write",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.scoped",
+        "name": "Example",
+        "version": "1.4.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [],
+              "write": [
+                "docs/*"
+              ]
+            }
+          }
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.scoped",
+          "version": "1.4.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [],
+              "write": [
+                "docs/*"
+              ]
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": {
+            "root": "workspace",
+            "patterns": [
+              "docs/*"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "scope-fs-docs-read-repository",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.scoped",
+        "name": "Example",
+        "version": "1.5.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "docs/*"
+              ],
+              "write": []
+            }
+          }
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.scoped",
+          "version": "1.5.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "read"
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "docs/*"
+              ],
+              "write": []
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "scope-fs-docs-read-web",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.scoped",
+        "name": "Example",
+        "version": "1.6.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui",
+            "web"
+          ],
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "docs/*"
+              ],
+              "write": []
+            }
+          }
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.scoped",
+          "version": "1.6.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "read"
+              }
+            },
+            {
+              "key": "web",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "system.web",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui",
+            "web"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "docs/*"
+              ],
+              "write": []
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
     }
   ]
 }

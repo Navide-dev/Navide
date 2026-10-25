@@ -1820,7 +1820,6 @@
       "removeShell": "Supprimer {name}",
       "none": "Aucun",
       "save": "Enregistrer la politique",
-      "edit": "Modifier la politique",
       "resetUser": "Réinitialiser la politique utilisateur",
       "sourceTitle": "Source de politique de l’espace de travail",
       "sourceHint": "Une recommandation du dépôt n’est pas fiable tant que vous ne l’avez pas examinée et explicitement acceptée. Les changements de source exigent une empreinte actuelle exacte.",
@@ -1881,7 +1880,7 @@
       },
       "nativeBackends": {
         "title": "Backends natifs",
-        "description": "Certains plugins Navide contiennent du code natif. Navide l’exécute dans un bac à sable sans accès réseau propre ; il ne peut lire que les espaces de travail que vous ouvrez avec lui, et ne modifier des fichiers que là où vous l’autorisez. Un plugin Navide qui exécute aussi des commandes git, gh et glab (signalé comme à haut risque ci-dessous) peut, par leur intermédiaire, contacter des hôtes réseau et envoyer des données de l’espace de travail, ainsi que lire et modifier des fichiers de l’espace de travail sans cette autorisation. Rien de natif ne s’exécute tant que vous n’activez pas le commutateur ci-dessous.",
+        "description": "Certains plugins Navide contiennent du code natif. Navide l’exécute dans un bac à sable sans accès réseau propre ; il ne peut lire que les espaces de travail que vous ouvrez avec lui, et ne modifier des fichiers que là où vous l’autorisez. Un plugin Navide qui exécute aussi des commandes git, gh et glab (signalé comme à haut risque ci-dessous) peut, par leur intermédiaire, contacter des hôtes réseau et envoyer des données de l’espace de travail, ainsi que lire et modifier des fichiers de l’espace de travail sans cette autorisation. Tant que le commutateur ci-dessous est activé, installer un plugin Navide doté de code natif autorise son exécution ; le désactiver les arrête tous.",
         "enable": "Autoriser les plugins Navide tiers à exécuter des backends natifs",
         "agentTools": {
           "enable": "Autoriser les agents à appeler les outils des plugins Navide tiers",
@@ -1890,6 +1889,7 @@
           "externalCallersDisclosure": "Les programmes externes partagent un seul token ; l’enregistrement d’un appel peut donc seulement indiquer « un client externe », pas quel programme. L’identifiant de l’hôte est traité de la même façon."
         },
         "empty": "Aucun plugin Navide installé n’a de backend natif.",
+        "windowWithout": "{name} s’est ouvert sans son backend natif : {reason}. Les fonctions qui en ont besoin ne marcheront pas. Pour autoriser le backend, allez dans Paramètres → Plugins Navide → {page}.",
         "allow": "Autoriser",
         "disable": "Désactiver",
         "enable_plugin": "Activer",
@@ -1919,6 +1919,8 @@
       },
       "bundled": "Fournis",
       "listTitle": "Plugins Navide",
+      "developerNative": "Développeur et code natif",
+      "pageOn": "Activé",
       "bundledGit": "Git fourni",
       "state": {
         "active": "Actif",
@@ -2156,9 +2158,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide n’a pas pu vérifier ce plugin Navide : les données de confiance du Registry sont datées d’un moment postérieur à l’horloge de cet ordinateur. Vérifiez que la date et l’heure de votre ordinateur sont correctes, puis réessayez.",
-          "expired": "Navide n’a pas pu vérifier ce plugin Navide : selon l’horloge de cet ordinateur, les données de confiance du Registry ont expiré. Vérifiez que la date et l’heure de votre ordinateur sont correctes, puis réessayez.",
-          "signatureNotYetValid": "Navide n’a pas pu vérifier ce plugin Navide : sa signature du Registry est datée d’un moment postérieur à l’horloge de cet ordinateur. Vérifiez que la date et l’heure de votre ordinateur sont correctes, puis réessayez."
+          "notYetValid": "Navide n’a pas pu vérifier ce plugin Navide : l’horloge de cet ordinateur semble retarder (les données de confiance du Registry sont datées d’un moment postérieur). Corrigez la date et l’heure de votre ordinateur, puis réessayez.",
+          "expired": "Navide n’a pas pu vérifier ce plugin Navide : selon l’horloge de cet ordinateur, les données de confiance du Registry ont expiré ; l’horloge semble donc avancer. Corrigez la date et l’heure de votre ordinateur, puis réessayez.",
+          "signatureNotYetValid": "Navide n’a pas pu vérifier ce plugin Navide : l’horloge de cet ordinateur semble retarder (sa signature du Registry est datée d’un moment postérieur). Corrigez la date et l’heure de votre ordinateur, puis réessayez."
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version} est arrêté : selon l’horloge de cet ordinateur, les données de confiance du Registry le concernant ont expiré. Soit l’horloge avance, soit Navide n’a pas joint le Registry depuis plus d’un jour. Corrigez la date et l’heure ou connectez-vous à Internet ; Navide vérifie à nouveau dans les 15 minutes et à son démarrage.",
+          "behind": "{id} {version} est arrêté : l’horloge de cet ordinateur semble retarder, donc les données de confiance du Registry le concernant ne sont pas encore valides. Corrigez la date et l’heure de votre ordinateur ; Navide vérifie à nouveau dans les 15 minutes et à son démarrage."
         }
       },
       "localInstall": {
@@ -2170,6 +2176,9 @@
         "signature": "Aucune : l’auteur ne peut pas être confirmé et le fichier a peut-être été modifié",
         "digestLabel": "SHA-256 du fichier",
         "acknowledge": "Je comprends que Navide n’a pas examiné ce plugin Navide, et je veux exécuter son code.",
+        "versionExists": "Ce numéro de version est déjà installé avec un autre contenu. Augmentez la version et refaites le paquet.",
+        "installFailed": "Le plugin Navide n’a pas pu être installé.",
+        "chooseAgain": "Fermez cette boîte de dialogue et choisissez à nouveau le fichier pour réessayer.",
         "replaceTitle": "Remplacer un plugin Navide installé",
         "replaceMarketplace": "Remplacer {id} (version {version} de la Navide Marketplace) par la version de ce fichier ? Il ne sera plus mis à jour automatiquement.",
         "replaceLocal": "Remplacer la version de fichier {version} de {id} par ce fichier ?",
@@ -2196,7 +2205,7 @@
         "publisherTitle": "Faire confiance à l’éditeur",
         "permissionsTitle": "Confirmer les autorisations du plugin Navide",
         "publisherRisk": "Faire confiance à l’éditeur {publisher} pour {id}. Une signature valide du Registry prouve l’intégrité du paquet, pas que vous souhaitez exécuter le code de cet éditeur.",
-        "backendRisk": "{name} contient un exécutable de backend natif qui peut s’exécuter avec les autorisations système de votre compte utilisateur.",
+        "backendRisk": "{name} contient un programme de backend natif. Confirmer autorise son exécution, et Navide ne redemandera pas tant que le programme et ses autorisations ne changent pas ; vous pouvez désactiver les backends natifs dans Paramètres → Plugins Navide → Développeur et code natif. Il ne s’exécute que dans un bac à sable du système d’exploitation sans accès réseau propre (Seatbelt sous macOS, bubblewrap sous Linux) ; là où Navide n’a pas de bac à sable, y compris Windows pour l’instant, il ne s’exécute pas.",
         "sensitiveRisk": "{name} demande des capacités sensibles : {capabilities}.",
         "signed": "Signé et vérifié",
         "unsigned": "Non signé – non vérifié cryptographiquement",
@@ -2205,8 +2214,10 @@
         "cancel": "Annuler",
         "capability": {
           "fs": "Lire et écrire des fichiers dans votre espace de travail.",
-          "aiCli": "Exécuter les agents CLI d’IA configurés dans Navide.",
+          "aiCli": "Démarrer les agents CLI d’IA configurés dans Navide, leur envoyer des entrées et lire tout ce qu’ils affichent ; peut aussi garder une CLI d’IA en marche en arrière-plan après la fermeture de sa fenêtre.",
           "web": "Peut ouvrir et parcourir n’importe quel site web ; les connexions aux sites sont conservées sur cet ordinateur ; les agents utilisent vos connexions dans ce plugin Navide (ils peuvent envoyer des requêtes sur des sites web en votre nom) et peuvent lire chaque page qu’il ouvre ainsi que son état de connexion ; après votre reprise en main, les scripts d’agent déjà en cours dans une page ne s’arrêtent que lorsque vous la rechargez ; il peut ouvrir de nombreuses pages web à la fois, et chacune consomme de la mémoire.",
+          "agents": "Voit vos panes d’agent, quel pane a ouvert lequel et quand ils se sont envoyé des messages, mais pas ce qu’ils ont dit.",
+          "agentMessages": "Lit le texte intégral des messages entre vos agents ; il peut contenir du code, le contenu de fichiers ou des secrets.",
           "shell": "Exécuter des commandes sur votre ordinateur.",
           "terminal": "Ouvrir et contrôler des terminaux Navide."
         }
@@ -3019,7 +3030,7 @@
           "p7": "L’installation demande <strong>jusqu’à deux confirmations</strong>, chacune uniquement si nécessaire, et rien n’est écrit sur le disque avant : si l’éditeur n’est pas encore approuvé, « Faire confiance à l’éditeur » vient d’abord, et l’écran précise clairement qu’<em>une signature valide prouve seulement que le paquet n’a pas été modifié, pas que vous acceptez d’exécuter le code de cet éditeur</em> ; si le paquet comporte un risque à confirmer, « Confirmer les autorisations du plugin Navide » suit, avec la liste des capacités sensibles demandées et un avertissement spécifique s’il embarque un exécutable de backend natif. Si aucune des deux ne s’applique, l’installation se fait directement.",
           "extRollback": "Quand l’hôte dispose d’un paquet auquel revenir, la ligne affiche « {toBundled} » ou « {toVersion} » : après confirmation, il revient au paquet qu’il avait remplacé, et « {restart} » termine le changement. Un retour en arrière refusé ou en échec affiche la raison donnée par l’hôte, traduite, et en cas d’échec les vues fermées sont restaurées.",
           "extPrerelease": "La ligne de chaque plugin Navide comporte une case « {prerelease} », l’activation des préversions se fait donc plugin Navide par plugin Navide ; la liste des versions de la Marketplace Navide indique lesquelles sont des préversions et permet d’en installer une directement.",
-          "extNative": "<strong>{native}</strong> : un plugin Navide tiers peut embarquer son propre programme de backend, qui n’est jamais exécuté par défaut. Activez « {nativeEnable} », puis cliquez sur « {allow} » pour cette version précise du plugin Navide. Il s’exécute dans un bac à sable sans accès réseau propre (Seatbelt sous macOS, bubblewrap sous Linux), ne peut lire que l’espace de travail ouvert avec lui et n’écrire que là où vous l’autorisez ; un plugin Navide qui exécute aussi des commandes git, gh et glab (signalé à haut risque) peut, par leur intermédiaire, contacter des hôtes réseau, envoyer des données de l’espace de travail et modifier ses fichiers, et les commandes déjà lancées se terminent même après sa désactivation ; toute modification du programme ou de ses autorisations redemande l’accord. Windows n’est pas encore pris en charge.",
+          "extNative": "<strong>{native}</strong> : un plugin Navide tiers peut embarquer son propre programme de backend. Installer le plugin Navide autorise son exécution tant que « {nativeEnable} » est activé, ce qui est le cas par défaut ; désactivez-le pour tous les arrêter. Si le programme ou ses autorisations changent ensuite, Navide redemande, ou vous cliquez sur « {allow} » pour cette version précise. Il s’exécute dans un bac à sable sans accès réseau propre (Seatbelt sous macOS, bubblewrap sous Linux), ne peut lire que l’espace de travail ouvert avec lui et n’écrire que là où vous l’autorisez ; un plugin Navide qui exécute aussi des commandes git, gh et glab (signalé à haut risque) peut, par leur intermédiaire, contacter des hôtes réseau, envoyer des données de l’espace de travail et modifier ses fichiers, et les commandes déjà lancées se terminent même après sa désactivation ; toute modification du programme ou de ses autorisations redemande l’accord. Windows n’est pas encore pris en charge.",
           "marketplace": "L’onglet « {marketplace} » : rechercher, filtrer par catégorie, trier par téléchargements, dernière mise à jour ou note, masquer les entrées incompatibles, avec jusqu’à trois éléments « {featured} » en haut. La page de détail contient le README, le journal des modifications et la liste des versions, avec à côté les autorisations et la compatibilité ; les notes sont ici en lecture seule : noter ou signaler un plugin Navide se fait sur le site du Registry après connexion. Une entrée portant le badge « {pack} » installe un ensemble complet avec « {packInstall} » ; supprimer un pack ne supprime jamais un membre qu’un autre pack installé utilise encore. Un lien <code>navide://</code> ouvre seulement la page de détail du plugin Navide ; cliquer sur Installer reste toujours votre décision.",
           "mirror": "<strong>Le miroir de téléchargement</strong> : les fichiers de chaque version sont publiés deux fois, sur la GitHub Release et sur <code>dl.navide.dev</code>, avec les mêmes octets et des sommes sha256 pour les vérifier. <strong>Le miroir est la source de mise à jour par défaut</strong> : au démarrage, l’application fait pointer son flux vers <code>dl.navide.dev</code>, GitHub servant de solution de repli. Elle ne bascule qu’en cas d’<strong>échec de type réseau</strong> (hôte injoignable, délai dépassé, 5xx/429), et une fois basculée, elle <strong>reste sur GitHub pour le reste de la session</strong> : seul un redémarrage la ramène au miroir. <strong>Un 404 ou une erreur de signature ou de somme de contrôle ne déclenche jamais le repli</strong> : les deux hôtes ont les mêmes fichiers, l’échec serait donc le même, et signaler l’échec tel quel est plus utile que de le masquer.",
           "policyIntro": "La <strong>politique d’exécution</strong> détermine ce que le backend d’un plugin Navide peut exécuter. <strong>Ce n’est pas un onglet à part</strong> : c’est le bloc en haut de la page Plugins Navide, avec son propre badge de portée (par utilisateur et par espace de travail) et le chemin du fichier de politique. Le haut du bloc affiche la <em>politique effective</em> : sa source, son mode et son état : <em>active</em>, <em>obsolète</em>, <em>indisponible</em> ou <em>corrompue</em>.",
@@ -3478,7 +3489,7 @@
             "git": {
               "title": "Git (contrôle de code source)",
               "tag": "4e onglet de la barre latérale",
-              "text": "L’info-bulle indique <em>Git (⌘4)</em>. Dans la fenêtre principale, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> ouvre directement la <strong>fenêtre Git distincte</strong> ; <em>Ouvrir dans une nouvelle fenêtre</em>, dans l’en-tête du panneau, fait de même."
+              "text": "Quand Git est chargé comme plugin Navide, l’info-bulle indique <em>Plugin Navide : Git · navide.git · Éditeur : navide · Intégré à Navide (⌘4)</em> ; sinon, elle indique <em>Git (⌘4)</em>. Dans la fenêtre principale, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> ouvre directement la <strong>fenêtre Git distincte</strong> ; <em>Ouvrir dans une nouvelle fenêtre</em>, dans l’en-tête du panneau, fait de même."
             },
             "plans": {
               "title": "Plans (documents de plan)",
@@ -6773,7 +6784,7 @@
         "s7": {
           "title": "Une personne, plusieurs machines",
           "p1": "Relier deux machines sous des systèmes d’exploitation différents n’est pas en soi une question de plateforme : la connexion à Navide Cloud, l’appairage et la messagerie entre appareils fonctionnent de la même façon sur les trois, et sont décrits dans <strong>Paramètres et système</strong>. Cette section ajoute seulement ce qui change quand les machines ne sont pas sur la même plateforme.",
-          "p2": "Dans <strong>Paramètres ▸ Navide Cloud</strong>, la liste de synchronisation permet actuellement d’activer quatre éléments : les skills de prompt, MCP, les skills et la mémoire. <em>Identifiants</em> figure aussi dans la liste, mais son commutateur est désactivé et sa description indique que la synchronisation n’est pas encore prise en charge – il est là pour que vous sachiez que cette catégorie existe, pas pour que vous l’activiez.",
+          "p2": "Dans <strong>Paramètres ▸ Navide Cloud</strong>, la liste de synchronisation permet d’activer trois éléments : MCP, Skills et Prompts. <em>Mémoire</em> et <em>extensions CLI</em> figurent aussi dans la liste, grisés et décrits comme « Pas encore synchronisable. » ; un commutateur de mémoire qu’une ancienne version a laissé activé peut toujours être désactivé. Il n’y a pas de ligne pour les identifiants : les identifiants des comptes CLI sont enregistrés uniquement sur cet ordinateur et ne sont jamais synchronisés.",
           "note": "Ce qui ne vous suit jamais de toute façon : l’installation et la connexion propres à chaque CLI, les identifiants (conservés dans le coffre-fort propre à chaque plateforme, dans des formats non interchangeables) et tous les chemins absolus. Une seconde machine a besoin que ses CLI soient installées et connectées de leur côté."
         },
         "mock": {
@@ -8946,6 +8957,7 @@
     "status-empty": "Cet onglet n’a aucun pane",
     "delete-tab": "Supprimer cet onglet",
     "add-group": "Nouveau groupe d’exécution",
+    "plugin-tab": "Plugin Navide : {title}",
     "collapse-families": "Réduire toutes les familles de panes de cet onglet",
     "expand-families": "Développer toutes les familles de panes de cet onglet",
     "family-toggle-grid": "Le repli des familles est disponible dans les dispositions Auto, Spotlight et Plein écran",
@@ -11652,6 +11664,7 @@
       "none": "Aucune autorisation n’a été ajoutée ni retirée.",
       "added": "Nouveau",
       "removed": "Retiré",
+      "declaredScope": "Portée déclarée (à titre informatif)",
       "unchanged": "Inchangé ({count})",
       "fullCard": "Fiche de déclaration complète",
       "badgeMore": "Plus d’autorisations",
@@ -11726,8 +11739,10 @@
         "full": "Exécute n’importe quelle commande"
       },
       "networkViaShell": "Peut joindre des hôtes distants via ces commandes",
-      "aiCli": "Contrôle des sessions de CLI IA",
+      "aiCli": "Démarre des sessions de CLI IA et lit leur sortie",
       "web": "Peut ouvrir et parcourir n’importe quel site web ; les connexions aux sites sont conservées sur cet ordinateur ; les agents utilisent vos connexions dans ce plugin Navide (ils peuvent envoyer des requêtes sur les sites web en votre nom) et peuvent lire chaque page qu’il ouvre ainsi que son état de connexion ; après une prise de contrôle, les scripts d’agent déjà en cours sur une page ne s’arrêtent que lorsque vous la rechargez ; il peut ouvrir de nombreuses pages web à la fois, et chacune utilise de la mémoire.",
+      "agents": "Voit les panes d’agent de ce projet, quel pane a ouvert lequel, les journaux de remise des messages (sans leur contenu) et la liste des sessions (sans le contenu des conversations)",
+      "agentMessages": "Lit le texte intégral des messages entre vos agents dans ce projet, qui peut contenir du code, le contenu de fichiers ou des secrets",
       "ui": "Affiche ses propres vues",
       "agentTools": "Propose des outils que les agents peuvent appeler ({read} en lecture seule, {write} en écriture)",
       "network": "Peut utiliser le réseau",

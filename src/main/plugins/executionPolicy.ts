@@ -16,7 +16,9 @@ export interface ExecutionPolicySnapshot {
 export const HOST_DEFAULT_EXECUTION_POLICY: ExecutionPolicy = {
   schemaVersion: EXECUTION_POLICY_SCHEMA_VERSION,
   mode: 'allowlist',
-  system: [...V2_SYSTEM_NAMESPACES],
+  // Message text reaches an agent only when the user names it in a policy, so
+  // the default allowlist leaves it out.
+  system: V2_SYSTEM_NAMESPACES.filter((namespace) => namespace !== 'agentMessages'),
   shell: [...HOST_SHELL_EXECUTABLE_ALLOWLIST],
 }
 

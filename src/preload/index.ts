@@ -1408,7 +1408,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
     openContributionWindow: (args: {
       contributionKey: string
       workspace_path: string
-    }): Promise<{ ok: boolean; error?: string }> =>
+    }): Promise<{ ok: boolean; error?: string; backendUnavailable?: string }> =>
       ipcRenderer.invoke('plugins:openContributionWindow', args),
     closeContribution: (args: { contributionKey: string }): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('plugins:closeContribution', args),
@@ -1523,6 +1523,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:testplaceInvite', { id, labels }),
     /** D3: expired Testplace builds, stopped with their data kept, and "keep using". */
     expiredTestplace: (): Promise<ExpiredTestplaceBuild[]> => ipcRenderer.invoke('plugins:expiredTestplace'),
+    /** Installed Registry packages stopped because trust data fails against this computer's clock. */
+    clockQuarantine: (): Promise<Array<{ id: string; version: string | null; clock: 'behind' | 'ahead' }>> =>
+      ipcRenderer.invoke('plugins:clockQuarantine'),
     keepExpiredTestplace: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugins:keepExpiredTestplace', { id }),
     /** A promoted test build of the same digest takes the Marketplace receipt in place (no reinstall). */
     adoptTestplaceRelease: (id: string): Promise<{ adopted: boolean }> => ipcRenderer.invoke('plugins:adoptTestplaceRelease', { id }),

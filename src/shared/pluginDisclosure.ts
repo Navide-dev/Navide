@@ -30,6 +30,8 @@ export type DisclosureRiskReasonKey =
   | 'system.fs'
   | 'system.aiCli'
   | 'system.web'
+  | 'system.agents'
+  | 'system.agentMessages'
   | 'shell.allowlist'
   | 'nativeBackend'
   | 'agentTools.write'
@@ -42,6 +44,8 @@ export const DISCLOSURE_RISK_RULES: ReadonlyArray<readonly [DisclosureRiskReason
   ['system.fs', 'medium'],
   ['system.aiCli', 'high'],
   ['system.web', 'high'],
+  ['system.agents', 'medium'],
+  ['system.agentMessages', 'high'],
   ['shell.allowlist', 'high'],
   ['nativeBackend', 'high'],
   ['agentTools.write', 'high'],
@@ -55,6 +59,8 @@ export type DisclosureSummaryClause =
   | { key: 'shell'; params: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } }
   | { key: 'aiCli'; params: Record<string, never> }
   | { key: 'web'; params: Record<string, never> }
+  | { key: 'agents'; params: Record<string, never> }
+  | { key: 'agentMessages'; params: Record<string, never> }
   | { key: 'ui'; params: Record<string, never> }
   | { key: 'agentTools'; params: { read: number; write: number } }
   | { key: 'network'; params: Record<string, never> }
@@ -67,7 +73,7 @@ export interface DisclosureSummary {
 }
 
 export interface DisclosurePermissions {
-  system: Array<'aiCli' | 'fs' | 'ui' | 'web'>
+  system: Array<'aiCli' | 'fs' | 'ui' | 'web' | 'agents' | 'agentMessages'>
   shell: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } | null
   scopes: { fs: { root: 'workspace' | 'repository'; read: string[]; write: string[] } } | null
 }
@@ -162,7 +168,10 @@ export interface DisclosureDiff {
   added: DisclosureItem[]
   removed: DisclosureItem[]
   unchanged: DisclosureItem[]
-  /** Something was added or the risk level rose: only then does an update ask again (D2). */
+  /** Something was added or the risk level rose: only then does an update ask again (D2).
+   *  A declared file scope is informational (see fsScopeChangeWidens), so
+   *  declaring one where there was none does not count; dropping or growing
+   *  one does. */
   widened: boolean
 }
 
@@ -239,6 +248,8 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (hasFs) present.add('system.fs')
   if (system.includes('aiCli')) present.add('system.aiCli')
   if (system.includes('web')) present.add('system.web')
+  if (system.includes('agents')) present.add('system.agents')
+  if (system.includes('agentMessages')) present.add('system.agentMessages')
   if (shell?.mode === 'allowlist') present.add('shell.allowlist')
   if (nativeBackend) present.add('nativeBackend')
   if (writeTools > 0) present.add('agentTools.write')
@@ -255,6 +266,8 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (shell) clauses.push({ key: 'networkViaShell', params: {} })
   if (system.includes('aiCli')) clauses.push({ key: 'aiCli', params: {} })
   if (system.includes('web')) clauses.push({ key: 'web', params: {} })
+  if (system.includes('agents')) clauses.push({ key: 'agents', params: {} })
+  if (system.includes('agentMessages')) clauses.push({ key: 'agentMessages', params: {} })
   if (system.includes('ui')) clauses.push({ key: 'ui', params: {} })
   if (agentTools.length > 0) clauses.push({ key: 'agentTools', params: { read: readTools, write: writeTools } })
   if (clauses.length === 0) clauses.push({ key: 'noPermissions', params: {} })
@@ -325,6 +338,29 @@ export function disclosureItems(disclosure: ManifestDisclosure): DisclosureItem[
   return items.sort((a, b) => compareCodeUnits(a.kind, b.kind) || compareCodeUnits(a.key, b.key))
 }
 
+const FS_SCOPE_KINDS: ReadonlySet<DisclosureItemKind> = new Set(['fsScopeRoot', 'fsScopeRead', 'fsScopeWrite'])
+
+export function isFsScopeItem(item: DisclosureItem): boolean {
+  return FS_SCOPE_KINDS.has(item.kind)
+}
+
+/**
+ * Whether going from the items `before` to `after` widens the declared file
+ * scope. A scope is declared, never enforced: the fs capability reaches the
+ * same files with or without one. So declaring a scope where there was none
+ * claims less than the unscoped fs before it and does not widen. Dropping a
+ * scope while fs stays, a new read or write pattern (including a path moving
+ * from read to write) and a different root all claim more, and do.
+ */
+export function fsScopeChangeWidens(before: readonly DisclosureItem[], after: readonly DisclosureItem[]): boolean {
+  const was = before.filter(isFsScopeItem)
+  const now = after.filter(isFsScopeItem)
+  if (was.length === 0) return false
+  if (now.length === 0) return after.some((item) => item.kind === 'system' && item.key === 'fs')
+  const had = new Set(was.map((item) => `${item.kind}\u0000${item.key}`))
+  return now.some((item) => !had.has(`${item.kind}\u0000${item.key}`))
+}
+
 /** D2: what an update (or rollback) from `from` to `to` adds, removes and keeps. */
 export function diffDisclosure(from: ManifestDisclosure, to: ManifestDisclosure): DisclosureDiff {
   const before = disclosureItems(from)
@@ -339,6 +375,9 @@ export function diffDisclosure(from: ManifestDisclosure, to: ManifestDisclosure)
     added,
     removed: before.filter((item) => !afterKeys.has(canonicalContractJson(item))),
     unchanged: after.filter((item) => beforeKeys.has(canonicalContractJson(item))),
-    widened: added.length > 0 || RISK_RANK[to.risk.level] > RISK_RANK[from.risk.level],
+    widened:
+      added.some((item) => !isFsScopeItem(item)) ||
+      fsScopeChangeWidens(before, after) ||
+      RISK_RANK[to.risk.level] > RISK_RANK[from.risk.level],
   }
 }

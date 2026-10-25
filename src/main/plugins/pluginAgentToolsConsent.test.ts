@@ -200,6 +200,8 @@ describe('consent key (contract section 2.8)', () => {
 
   it.skipIf(isWindows())('passes an empty tool list to the prompt of a package without tools', async () => {
     const promptConsent = vi.fn(async (_prompt: NativeBackendConsentPrompt) => false)
+    // A first install is the consent; the prompt is for a package that changed since.
+    store.grantConsent('acme.devmap', { binarySha256: 'a'.repeat(64), permissionsKey: '{}', packageVersion: '0.9.0' })
     await expect(controller({ promptConsent }).admit(writePackage('acme.devmap'))).rejects.toThrow()
     expect(promptConsent.mock.calls[0][0].agentTools).toEqual([])
     expect(store.record('acme.devmap')).not.toHaveProperty('agentToolsSince')

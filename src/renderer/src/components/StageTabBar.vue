@@ -4,6 +4,9 @@ import { useI18n } from 'vue-i18n'
 import RebuildIcon from './RebuildIcon.vue'
 import { tabRunStatePaneStatus, type TabRunState } from '../lib/tabStatus'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
+import { chromeSourceMark, pluginDisclosureTitle } from '../lib/pluginSourceMark'
+import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
+import type { PluginSource } from '../../../shared/pluginSource'
 
 export interface TabItem {
   key: string
@@ -19,6 +22,16 @@ export interface TabItem {
   status: TabRunState
 }
 
+/** A Navide plugin's "main" view, shown as a tab after the run groups. */
+export interface PluginTabItem {
+  key: string
+  label: string
+  pluginId: string
+  source?: PluginSource
+  expiresAt?: string
+  testplaceVia?: 'invite' | 'code'
+}
+
 const props = withDefaults(defineProps<{
   tabs: TabItem[]
   modelValue: string
@@ -27,10 +40,15 @@ const props = withDefaults(defineProps<{
   rebuildAllTitle?: string
   allFamiliesCollapsed?: boolean
   familyToggleDisabledReason?: 'grid' | 'empty'
+  pluginTabs?: PluginTabItem[]
+  /** Key of the active plugin tab; null while a run-group tab is active. */
+  activePluginTab?: string | null
 }>(), {
   canRebuildAll: false,
   rebuildingAll: false,
-  rebuildAllTitle: 'Rebuild CLI panes in this tab'
+  rebuildAllTitle: 'Rebuild CLI panes in this tab',
+  pluginTabs: () => [],
+  activePluginTab: null
 })
 const emit = defineEmits<{
   (e: 'update:modelValue', v: string): void
@@ -44,6 +62,7 @@ const emit = defineEmits<{
   (e: 'rebuild-all'): void
   (e: 'toggleFamilies'): void
   (e: 'context-menu', key: string, ev: MouseEvent): void
+  (e: 'select-plugin-tab', key: string): void
 }>()
 
 const { t } = useI18n()
@@ -64,6 +83,11 @@ function statusTitle(status: TabRunState): string {
 function dotStyle(status: TabRunState): Record<string, string> | undefined {
   const paneStatus = tabRunStatePaneStatus(status)
   return paneStatus ? statusBadgeStyle(paneStatus) : undefined
+}
+
+/** Disclosure for a plugin tab: see pluginDisclosureTitle. */
+function pluginTabTitle(tab: PluginTabItem): string {
+  return pluginDisclosureTitle(t, { ...tab, title: tab.label })
 }
 
 const actionMenu = ref<{ show: boolean; key: string; x: number; y: number }>({ show: false, key: '', x: 0, y: 0 })
@@ -221,6 +245,22 @@ function onRenameKeydown(e: KeyboardEvent, key: string): void {
         </template>
       </button>
     </template>
+    <button
+      v-for="tab in pluginTabs"
+      :key="`plugin:${tab.key}`"
+      role="tab"
+      :aria-selected="tab.key === activePluginTab"
+      :class="['tab-btn', 'tab-type-plugin', { active: tab.key === activePluginTab }]"
+      :data-plugin-tab="tab.key"
+      :title="pluginTabTitle(tab)"
+      :aria-label="pluginTabTitle(tab)"
+      @click="emit('select-plugin-tab', tab.key)"
+    >
+      <!-- Host-drawn, so a plugin's title cannot make its tab read as a native one. -->
+      <span class="tab-plugin-mark" aria-hidden="true">◇</span>
+      <span class="tab-plugin-label">{{ reveal(tab.label) }}</span>
+      <span v-if="chromeSourceMark(tab.source)" class="tab-plugin-source-mark" aria-hidden="true" />
+    </button>
     <button class="tab-add-btn" :title="$t('stageTab.add-group')" @click="emit('add')">+</button>
     <button
       class="tab-rebuild-all-btn"
@@ -337,6 +377,26 @@ function onRenameKeydown(e: KeyboardEvent, key: string): void {
 .tab-dot[data-state='awaiting'] { background: var(--status-badge-fg, var(--warning-fg)); }
 .tab-dot[data-state='active'] { background: var(--status-badge-fg, var(--success-fg)); }
 .tab-dot[data-state='idle'] { background: var(--status-badge-fg, var(--status-idle-emphasis)); }
+
+.tab-plugin-mark {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--font-3xs);
+}
+/* Same colour as the title bar's mark for a local or test package (K2). */
+.tab-plugin-source-mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--trust-unsigned-fg);
+}
+/* The button's title holds the whole name and more, so no v-truncate. */
+.tab-plugin-label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .tab-close {
   display: inline-flex;
