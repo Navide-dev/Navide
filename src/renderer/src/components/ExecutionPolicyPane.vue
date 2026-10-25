@@ -794,7 +794,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   font-size: var(--font-xs);
 }
 .ep-conflict button { flex: 0 0 auto; }
-.ep-recommendation-policy { margin: var(--space-2) 0 var(--space-3); }
+.ep-recommendation-policy { margin-top: var(--space-2); }
 /* Mode and source are segmented controls: one bordered strip, a segment per
    choice, the checked one tinted. The radio stays in the DOM for keyboard and
    assistive tech; the segment draws its focus. */
@@ -860,9 +860,9 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 }
 .ep-editor-block .ep-hint { margin-bottom: var(--space-2); }
 .ep-checkbox-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr));
-  gap: var(--space-1) var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-5);
 }
 .ep-checkbox-grid label { display: flex; gap: var(--space-2); align-items: center; min-height: var(--control-h-sm); cursor: pointer; }
 .ep-checkbox-grid code, .ep-chip code { font-family: var(--font-mono); font-size: var(--font-xs); }
@@ -900,5 +900,16 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-path-list { margin: var(--space-2) 0 var(--space-3); padding-left: 20px; color: var(--text-secondary); font-size: var(--font-xs); }
 .ep-path-list code { overflow-wrap: anywhere; }
 .ep-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+/* Save and Reset stay in reach while the user policy is edited. */
+[data-section='user-policy'] > .ep-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: var(--space-3) calc(-1 * var(--space-row-x)) calc(-1 * var(--space-row-y));
+  padding: var(--space-2) var(--space-row-x);
+  border-top: 1px solid var(--border-muted);
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
+  background: var(--bg-subtle);
+}
 .ep-recheck { margin-left: var(--space-2); }
 </style>

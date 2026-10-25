@@ -5274,6 +5274,11 @@ watch(activeTab, (tab) => {
   color: var(--text-bright);
   border-bottom-color: var(--accent-fg);
 }
+/* With one of its pages selected under it, the Navide Plugins row is the
+   group's heading: the selected page carries the fill, not both rows. */
+.s-nav-group :deep(.settings-nav-item.active:has(+ .settings-nav-subitem)) {
+  background: transparent;
+}
 /* The Navide Plugins pages as a tab row, only where the sidebar is the
    icon-only rail and has no rows for them. */
 .ext-pages {

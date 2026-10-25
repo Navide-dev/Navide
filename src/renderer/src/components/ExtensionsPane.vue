@@ -897,6 +897,37 @@ watch(installed, () => {
                 {{ p.active ? $t('settings.extensions.state.active') : $t('settings.extensions.state.unavailable') }}
               </span>
             </div>
+            <div v-if="p.disabled !== undefined || p.installed?.pendingCandidateVersion" class="ext-actions">
+              <button
+                v-if="p.disabled"
+                class="ext-enable nv-btn nv-btn--primary nv-btn--sm"
+                :disabled="busy || updateFlow.busy.value"
+                @click="setDisabled(p.id, false)"
+              >
+                {{ $t('settings.extensions.enable') }}
+              </button>
+              <button
+                v-else-if="p.disabled === false"
+                class="ext-disable nv-btn nv-btn--sm"
+                :disabled="busy || updateFlow.busy.value"
+                @click="setDisabled(p.id, true)"
+              >
+                {{ $t('settings.extensions.disable') }}
+              </button>
+              <!-- A rollback leaves the displaced package staged over the bundled
+                   one, and this row is the only place it is still listed. -->
+              <button
+                v-if="p.installed?.pendingCandidateVersion"
+                class="ext-restart nv-btn nv-btn--primary nv-btn--sm"
+                :disabled="busy || updateFlow.busy.value"
+                @click="restartPlugin(p.id)"
+              >
+                {{ $t('settings.extensions.restartPlugin') }}
+              </button>
+              <span v-if="switching === p.id" class="ext-switch-busy" role="status">
+                <span class="ext-switch-spinner" aria-hidden="true"></span>{{ $t('settings.extensions.builtinSwitchBusy') }}
+              </span>
+            </div>
             <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.builtinDisabledNote') }}</p>
             <p v-if="p.dataDeletedByEarlierRemoval" class="ext-disabled-note ext-data-deleted-note">
               {{ $t('settings.extensions.builtinDataDeletedEarlier') }}
@@ -934,37 +965,6 @@ watch(installed, () => {
                 <span class="ext-perm-label">{{ $t('settings.extensionsPolicy.packageVersionGrant') }}</span><span class="ext-perm-value">{{ formatPackageGrant(p.installed.packageVersionGrant) }}</span>
               </span>
             </details>
-            <div v-if="p.disabled !== undefined || p.installed?.pendingCandidateVersion" class="ext-actions">
-              <button
-                v-if="p.disabled"
-                class="ext-enable nv-btn nv-btn--primary nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="setDisabled(p.id, false)"
-              >
-                {{ $t('settings.extensions.enable') }}
-              </button>
-              <button
-                v-else-if="p.disabled === false"
-                class="ext-disable nv-btn nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="setDisabled(p.id, true)"
-              >
-                {{ $t('settings.extensions.disable') }}
-              </button>
-              <!-- A rollback leaves the displaced package staged over the bundled
-                   one, and this row is the only place it is still listed. -->
-              <button
-                v-if="p.installed?.pendingCandidateVersion"
-                class="ext-restart nv-btn nv-btn--primary nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="restartPlugin(p.id)"
-              >
-                {{ $t('settings.extensions.restartPlugin') }}
-              </button>
-              <span v-if="switching === p.id" class="ext-switch-busy" role="status">
-                <span class="ext-switch-spinner" aria-hidden="true"></span>{{ $t('settings.extensions.builtinSwitchBusy') }}
-              </span>
-            </div>
           </li>
         </ul>
         <ul class="ext-list">
@@ -1066,7 +1066,88 @@ watch(installed, () => {
                   {{ $t('settings.extensions.incompatibleInstalled', { version: p.minNavideVersion ?? '' }) }}
                 </span>
               </div>
-              <p v-if="riskReason(p.id)" class="ext-risk-reason">{{ riskReason(p.id) }}</p>
+              <p
+                v-if="riskReason(p.id)"
+                class="ext-risk-reason"
+                :class="{ 'ext-risk-note': riskById.get(p.id) === 'high' || riskById.get(p.id) === 'highest' }"
+              >{{ riskReason(p.id) }}</p>
+              <!-- The actions right under the header, before the details. -->
+              <div class="ext-actions">
+                <button
+                  v-if="!p.pendingCandidateVersion && updatesById.get(p.id)"
+                  class="ext-update nv-btn nv-btn--primary nv-btn--sm"
+                  :disabled="updateFlow.busy.value || busy"
+                  @click="updateFlow.install(updatesById.get(p.id)!.namespace, updatesById.get(p.id)!.name, updatesById.get(p.id)!.latestVersion)"
+                >
+                  {{ $t('settings.extensions.marketplace.update') }}
+                </button>
+                <button
+                  v-if="p.pendingCandidateVersion"
+                  class="ext-restart nv-btn nv-btn--primary nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="restartPlugin(p.id)"
+                >
+                  {{ $t('settings.extensions.restartPlugin') }}
+                </button>
+                <!-- Card K4: reload a developer folder; changed permissions ask again. -->
+                <button
+                  v-if="p.provenance === 'developer-local-unpacked' && developerMode.folders.some((folder) => folder.pluginId === p.id)"
+                  class="ext-devmode-reload nv-btn nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="updateFlow.reloadDeveloperPlugin(p.id)"
+                >
+                  {{ $t('settings.extensions.developerMode.reload') }}
+                </button>
+                <!-- D7: back to the Marketplace version; the install flow asks first. -->
+                <button
+                  v-if="p.source === 'local-unsigned' && !p.pendingCandidateVersion"
+                  class="ext-back-to-marketplace nv-btn nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="updateFlow.install(idParts(p.id).namespace, idParts(p.id).name)"
+                >
+                  {{ $t('settings.extensions.localInstall.backToMarketplace') }}
+                </button>
+                <button
+                  v-if="p.rollbackKind"
+                  class="ext-rollback nv-btn nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion, p.rollbackNeedsConsent === true)"
+                >
+                  {{
+                    p.rollbackKind === 'factory'
+                      ? $t('settings.extensions.rollback.toBundled')
+                      : $t('settings.extensions.rollback.toVersion', { version: p.rollbackToVersion })
+                  }}
+                </button>
+                <button
+                  v-if="p.disabled === false"
+                  class="ext-disable nv-btn nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="setDisabled(p.id, true)"
+                >
+                  {{ $t('settings.extensions.disable') }}
+                </button>
+                <button
+                  v-else-if="p.disabled"
+                  class="ext-enable nv-btn nv-btn--primary nv-btn--sm"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="setDisabled(p.id, false)"
+                >
+                  {{ $t('settings.extensions.enable') }}
+                </button>
+                <!-- `navide.` packages ship with Navide: they are disabled, never removed.
+                     A Marketplace first-party package (navide.browser) is the
+                     exception: the Host offers its Disabled switch, and it is
+                     removed like any Marketplace package. -->
+                <button
+                  v-if="!isFirstPartyId(p.id) || p.disabled !== undefined"
+                  class="ext-remove nv-btn nv-btn--sm ext-btn-danger"
+                  :disabled="busy || updateFlow.busy.value"
+                  @click="developerMode.folders.some((folder) => folder.pluginId === p.id) ? removeDeveloperFolder(p.id) : remove(p.id)"
+                >
+                  {{ $t('settings.extensions.marketplace.uninstall') }}
+                </button>
+              </div>
               <div class="ext-card-sub">
                 <span v-if="p.requires.length" class="ext-requires ext-caps">
                   <span
@@ -1158,83 +1239,6 @@ watch(installed, () => {
                   </button>
                 </template>
               </details>
-            </div>
-            <!-- Actions sit at the row's right edge; details stay in the middle. -->
-            <div class="ext-actions">
-              <button
-                v-if="!p.pendingCandidateVersion && updatesById.get(p.id)"
-                class="ext-update nv-btn nv-btn--primary nv-btn--sm"
-                :disabled="updateFlow.busy.value || busy"
-                @click="updateFlow.install(updatesById.get(p.id)!.namespace, updatesById.get(p.id)!.name, updatesById.get(p.id)!.latestVersion)"
-              >
-                {{ $t('settings.extensions.marketplace.update') }}
-              </button>
-              <button
-                v-if="p.pendingCandidateVersion"
-                class="ext-restart nv-btn nv-btn--primary nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="restartPlugin(p.id)"
-              >
-                {{ $t('settings.extensions.restartPlugin') }}
-              </button>
-              <!-- Card K4: reload a developer folder; changed permissions ask again. -->
-              <button
-                v-if="p.provenance === 'developer-local-unpacked' && developerMode.folders.some((folder) => folder.pluginId === p.id)"
-                class="ext-devmode-reload nv-btn nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="updateFlow.reloadDeveloperPlugin(p.id)"
-              >
-                {{ $t('settings.extensions.developerMode.reload') }}
-              </button>
-              <!-- D7: back to the Marketplace version; the install flow asks first. -->
-              <button
-                v-if="p.source === 'local-unsigned' && !p.pendingCandidateVersion"
-                class="ext-back-to-marketplace nv-btn nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="updateFlow.install(idParts(p.id).namespace, idParts(p.id).name)"
-              >
-                {{ $t('settings.extensions.localInstall.backToMarketplace') }}
-              </button>
-              <button
-                v-if="p.rollbackKind"
-                class="ext-rollback nv-btn nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="rollback(p.id, p.rollbackKind, p.rollbackToVersion, p.rollbackNeedsConsent === true)"
-              >
-                {{
-                  p.rollbackKind === 'factory'
-                    ? $t('settings.extensions.rollback.toBundled')
-                    : $t('settings.extensions.rollback.toVersion', { version: p.rollbackToVersion })
-                }}
-              </button>
-              <button
-                v-if="p.disabled === false"
-                class="ext-disable nv-btn nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="setDisabled(p.id, true)"
-              >
-                {{ $t('settings.extensions.disable') }}
-              </button>
-              <button
-                v-else-if="p.disabled"
-                class="ext-enable nv-btn nv-btn--primary nv-btn--sm"
-                :disabled="busy || updateFlow.busy.value"
-                @click="setDisabled(p.id, false)"
-              >
-                {{ $t('settings.extensions.enable') }}
-              </button>
-              <!-- `navide.` packages ship with Navide: they are disabled, never removed.
-                   A Marketplace first-party package (navide.browser) is the
-                   exception: the Host offers its Disabled switch, and it is
-                   removed like any Marketplace package. -->
-              <button
-                v-if="!isFirstPartyId(p.id) || p.disabled !== undefined"
-                class="ext-remove nv-btn nv-btn--sm ext-btn-danger"
-                :disabled="busy || updateFlow.busy.value"
-                @click="developerMode.folders.some((folder) => folder.pluginId === p.id) ? removeDeveloperFolder(p.id) : remove(p.id)"
-              >
-                {{ $t('settings.extensions.marketplace.uninstall') }}
-              </button>
             </div>
             <!-- A per-package update setting: under the actions, apart from them. -->
             <label v-if="p.getsPrereleases !== undefined" class="ext-prerelease-toggle">
@@ -1564,7 +1568,7 @@ watch(installed, () => {
   .ext-md {
     grid-template-columns: minmax(190px, 210px) minmax(0, 1fr);
   }
-  .ext-md-detail .ext-card > .ext-actions > .ext-btn-danger {
+  .ext-md-detail .ext-card-main > .ext-actions > .ext-btn-danger {
     margin-left: 0;
   }
   .ext-md-detail .ext-actions > .nv-btn {
@@ -1749,9 +1753,9 @@ watch(installed, () => {
   align-items: start;
   gap: var(--space-2) var(--space-3);
 }
-.ext-card > .ext-actions {
-  grid-column: 2;
+.ext-card-main > .ext-actions {
   justify-content: flex-start;
+  margin: var(--space-1) 0 var(--space-2);
 }
 .ext-card > .ext-prerelease-toggle {
   grid-column: 2;
@@ -1765,7 +1769,7 @@ watch(installed, () => {
 .extensions-pane .ext-disclosure-link.nv-btn {
   padding-inline: 0;
 }
-.ext-card > .ext-actions > .ext-btn-danger {
+.ext-card-main > .ext-actions > .ext-btn-danger {
   margin-left: auto;
 }
 .ext-card-main {

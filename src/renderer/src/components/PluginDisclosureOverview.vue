@@ -200,14 +200,53 @@ onBeforeUnmount(stopPolling)
    its name, its risk / review / scan flags and its recent activity in aligned
    columns, and the expanders (full record, activity panel) under the row. */
 @container ledger (min-width: 680px) {
+  /* Fixed columns: name | risk | source and review | recent activity; the
+     scan flag and the expanders take the second line. */
   .nv-overview-entry {
     display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.4fr);
+    grid-template-columns: minmax(0, 1fr) 130px 130px minmax(0, 1.3fr);
     column-gap: var(--space-4);
-    row-gap: var(--space-2);
-    align-items: start;
+    row-gap: var(--space-1);
+    align-items: center;
   }
-  .nv-overview-entry > .nv-overview-head {
+  .nv-overview-entry > .nv-overview-head,
+  .nv-overview-entry .nv-overview-flags {
+    display: contents;
+  }
+  .nv-overview-entry .nv-overview-name {
+    grid-column: 1;
+    grid-row: 1;
+    flex-wrap: wrap;
+  }
+  .nv-overview-flags > .nv-overview-risk {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: start;
+  }
+  .nv-overview-flags > :not(.nv-overview-risk):not(.nv-overview-flag) {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: start;
+  }
+  .nv-overview-flags > .nv-overview-flag {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    justify-self: start;
+  }
+  .nv-overview-entry > .nv-overview-activity {
+    grid-column: 4;
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+  .nv-overview-entry > :not(.nv-overview-head):not(.nv-overview-activity) {
+    grid-column: 1 / -1;
+  }
+  .nv-overview-entry > .nv-overview-footer {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+.nv-overview-head {
     display: contents;
   }
   .nv-overview-entry .nv-overview-name {
@@ -431,7 +470,7 @@ onBeforeUnmount(stopPolling)
   min-height: var(--control-h-lg);
   list-style: none;
   color: var(--text-secondary);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   font-weight: 500;
   cursor: pointer;
   border-radius: var(--radius-xs);

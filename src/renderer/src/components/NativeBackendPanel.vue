@@ -343,4 +343,8 @@ watch(installed, refresh)
   max-width: 72ch;
   line-height: var(--lh-base);
 }
+/* A switch that waits on the one above stays legible while unavailable. */
+:deep(.toggle-switch:disabled) {
+  opacity: 0.6;
+}
 </style>
