@@ -97,9 +97,11 @@ function pluginTabTitle(tab: PluginTabItem): string {
   const parts = [
     t('stageTab.plugin-tab', { title: reveal(tab.label) }),
     reveal(tab.pluginId),
-    !tab.source || SELF_DECLARED.includes(tab.source)
-      ? t('pluginDisclosure.source.selfDeclared', { publisher })
-      : t('pluginDisclosure.source.publisher', { publisher }),
+    t('pluginDisclosure.source.publisher', {
+      publisher: !tab.source || SELF_DECLARED.includes(tab.source)
+        ? t('pluginDisclosure.source.selfDeclared', { publisher })
+        : publisher,
+    }),
   ]
   if (tab.source) parts.push(pluginSourceLabel(t, tab.source, tab.expiresAt, tab.testplaceVia))
   return parts.join(' · ')
@@ -273,7 +275,7 @@ function onRenameKeydown(e: KeyboardEvent, key: string): void {
     >
       <!-- Host-drawn, so a plugin's title cannot make its tab read as a native one. -->
       <span class="tab-plugin-mark" aria-hidden="true">◇</span>
-      <span class="tab-label">{{ tab.label }}</span>
+      <span class="tab-plugin-label">{{ reveal(tab.label) }}</span>
       <span v-if="chromeSourceMark(tab.source)" class="tab-plugin-source-mark" aria-hidden="true" />
     </button>
     <button class="tab-add-btn" :title="$t('stageTab.add-group')" @click="emit('add')">+</button>
@@ -406,7 +408,8 @@ function onRenameKeydown(e: KeyboardEvent, key: string): void {
   border-radius: 50%;
   background: var(--trust-unsigned-fg);
 }
-.tab-type-plugin .tab-label {
+/* The button's title holds the whole name and more, so no v-truncate. */
+.tab-plugin-label {
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;

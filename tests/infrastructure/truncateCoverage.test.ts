@@ -22,6 +22,9 @@ const EXEMPT: Record<string, string> = {
   // a second tooltip with just the name would cover it.
   'src/renderer/src/components/UsageBadge.vue|usage-badge-name-text': 'parent .usage-badge-name has the richer chipTooltip title',
   'src/renderer/src/components/sharing/SharingCloudSection.vue|sc-cell|sc-cell--check': 'holds only a checkbox',
+  // A Navide plugin tab's button already has a title with the full name, the
+  // plugin id, publisher and source; a second tooltip would cover it.
+  'src/renderer/src/components/StageTabBar.vue|tab-plugin-label': 'parent plugin tab button has the full pluginTabTitle title',
 }
 
 /** Repo-relative path with `/` separators, whatever the platform's `path` gives. */
