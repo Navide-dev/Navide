@@ -51,7 +51,7 @@ from .ratelimit import SlidingWindowLimiter
 from .ratings import RATING_LIMIT_PER_HOUR
 from .reports import REPORT_LIMIT_PER_HOUR
 from .repository import RegistryRepository, VersionConflictError, rating_average
-from .registry_trust import RegistryTrustSigner
+from .registry_trust import REGISTRY_TIME_NONCE, RegistryTrustSigner
 from .schemas import (
     CategoryInfo,
     CategoryListResponse,
@@ -1126,6 +1126,18 @@ def _register_routes(app: FastAPI) -> None:
             publisher_keys=keys, blocked_digests=digests
         )
         return {"local_trust_metadata": document, "local_trust_metadata_signature": signature}
+
+    @app.get("/api/trust/time")
+    def registry_time(request: Request, nonce: str = "") -> dict:
+        """Root-signed Registry time for an App whose clock is off (see
+        verifyRegistryTimeAttestation in the App)."""
+        if not REGISTRY_TIME_NONCE.fullmatch(nonce):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_NONCE", "message": "nonce must be 22-86 base64url characters"},
+            )
+        document, signature = request.app.state.registry.trust_signer.signed_time(nonce=nonce)
+        return {"registry_time": document, "registry_time_signature": signature}
 
     @app.post("/api/extensions/{namespace}/{name}/rating")
     def submit_rating(namespace: str, name: str) -> None:

@@ -550,6 +550,14 @@ approved by default.
   rather than stored as a blocklist entry: only the digest, never the package
   id or version (R-MED-3), no publish refusal, not on the public removed list,
   and an existing blocklist entry for the same digest keeps its own reason.
+- **Registry time**: `GET /api/trust/time?nonce=<22-86 base64url chars>`
+  returns `{registry_time, registry_time_signature}`, a root-signed document
+  `{schemaVersion: 1, kind: registry-time, registryProfile, nonce, serverTime}`
+  signed the same way as the local-install document. An App whose clock is off
+  by more than the trust metadata's allowance checks the metadata against this
+  time instead, and tells the user how far off its clock is; the echoed nonce
+  makes a captured answer useless to replay. A malformed nonce is `400
+  INVALID_NONCE`.
   The existing trust metadata is unchanged: released Apps reject any new
   field in it.
 - **Errors**: new and changed JSON errors carry `detail: {code, message}` —

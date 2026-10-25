@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,6 +17,9 @@ from .signing import (
     sign_json,
 )
 from .versions import PRERELEASE_CHANNEL, STABLE_CHANNEL, TESTPLACE_CHANNEL
+
+# 16 to 64 random bytes, base64url without padding (the App sends 32).
+REGISTRY_TIME_NONCE = re.compile(r"[A-Za-z0-9_-]{22,86}")
 
 
 def _timestamp(value: datetime) -> str:
@@ -414,5 +418,20 @@ class RegistryTrustSigner:
                 }
                 for key in publisher_keys
             ],
+        }
+        return document, sign_json(self.root_private_key, document)
+
+    def signed_time(self, *, nonce: str, now: datetime | None = None) -> tuple[dict, str]:
+        """Root-signed Registry time bound to the App's nonce, so an App whose
+        clock is off can check trust metadata against this time instead. Its
+        own `kind` keeps it apart from the other documents under the same root
+        key; the nonce makes a captured answer useless to replay."""
+        server_time = now or datetime.now(timezone.utc)
+        document = {
+            "schemaVersion": 1,
+            "kind": "registry-time",
+            "registryProfile": self.registry_profile,
+            "nonce": nonce,
+            "serverTime": _timestamp(server_time),
         }
         return document, sign_json(self.root_private_key, document)
