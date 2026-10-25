@@ -1869,10 +1869,9 @@ watch(installed, () => {
   font-family: var(--font-mono);
   font-size: var(--font-2xs);
 }
-/* A sensitive capability is outlined in the warning colour; the "sensitive"
-   badge beside it carries the fill. */
+/* A sensitive capability is the same grey token in bold; the "sensitive"
+   badge beside it carries the warning colour. */
 .ext-cap--sensitive {
-  box-shadow: inset 0 0 0 1px var(--risk-fg);
   color: var(--text-bright);
   font-weight: 600;
 }
@@ -2149,10 +2148,10 @@ watch(installed, () => {
   margin: 0;
   padding: var(--space-2) var(--space-3) var(--space-2) calc(var(--space-3) + 22px);
   border-left: 2px solid var(--risk-fg);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: var(--risk-subtle);
+  border-radius: 0;
+  background: transparent;
   color: var(--text-primary);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   line-height: var(--lh-base);
 }
 .ext-incompatible-reason {

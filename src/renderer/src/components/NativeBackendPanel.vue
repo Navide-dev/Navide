@@ -67,10 +67,6 @@ watch(installed, refresh)
 <template>
   <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
     <h3 id="native-backends-title" class="native-backends-title">{{ $t('settings.extensions.nativeBackends.title') }}</h3>
-    <!-- Whether this applies at all comes first; the warning and switches follow. -->
-    <p v-if="overview.plugins.length === 0" class="native-backends-empty">
-      {{ $t('settings.extensions.nativeBackends.empty') }}
-    </p>
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
     <!-- One card: the warning about native code sits right above the switch it
          governs, and the external-callers switch is indented under the switch
@@ -126,6 +122,10 @@ watch(installed, refresh)
         </SettingRow>
       </template>
     </SettingsCard>
+    <!-- Below the switches: what they currently govern, not a precondition read before the warning. -->
+    <p v-if="overview.plugins.length === 0" class="native-backends-empty">
+      {{ $t('settings.extensions.nativeBackends.empty') }}
+    </p>
     <ul v-if="overview.plugins.length" class="ext-list">
       <li
         v-for="row in overview.plugins"
@@ -216,14 +216,14 @@ watch(installed, refresh)
   letter-spacing: -0.01em;
 }
 /* The warning is a row of the switch card, in the page's one warning style:
-   amber tint, a 2px amber edge and the warning icon. */
+   a 2px amber edge and the warning icon over the card's own surface. */
 .native-backends-callout {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-row-x);
   box-shadow: inset 2px 0 0 var(--risk-fg);
-  background: var(--risk-subtle);
+  border-bottom: 1px solid var(--border-muted);
   color: var(--text-primary);
 }
 .native-backends-callout .native-backends-description {
@@ -250,7 +250,7 @@ watch(installed, refresh)
 }
 /* Nothing installed has a native backend: said in a line, not a box. */
 .native-backends-empty {
-  margin: 0 0 var(--space-2);
+  margin: var(--space-2) 0 0;
   color: var(--text-secondary);
   font-size: var(--font-xs);
 }

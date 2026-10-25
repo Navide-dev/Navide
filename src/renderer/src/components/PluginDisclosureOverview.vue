@@ -240,10 +240,12 @@ onBeforeUnmount(stopPolling)
   background: transparent;
   box-shadow: inset 0 0 0 1px currentColor;
 }
+/* Expanders read as disclosure rows (a chevron and a label), not as buttons. */
 .nv-overview-footer {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: 0 var(--space-5);
+  border-top: 1px solid var(--border-muted);
 }
 .nv-overview-footer > details {
   flex-basis: auto;
@@ -403,10 +405,6 @@ onBeforeUnmount(stopPolling)
   gap: 6px;
   width: max-content;
   min-height: var(--control-h-lg);
-  padding: 0 12px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-muted);
   list-style: none;
   color: var(--text-primary);
   font-size: var(--font-sm);
