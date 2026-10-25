@@ -29,6 +29,7 @@ const gitContribution = {
   location: 'left',
   title: 'Git',
   icon: null,
+  source: 'factory-bundled',
 }
 
 const minimalProps = {
@@ -191,7 +192,8 @@ describe('ControlPane – left slot collapse', () => {
     await w.setProps({ views: ['explorer', 'git'] })
     const btns = w.findAll('.sidebar-tabs .tab-btn')
     const active = btns.findIndex((b) => b.classes().includes('active'))
-    expect(btns[active].attributes('title')).toBe('Git (⌘4)')
+    // The Git slot names its plugin like any other plugin tab (#644).
+    expect(btns[active].attributes('title')).toBe('Navide plugin: Git · navide.git · Publisher: navide · Built into Navide (⌘4)')
     w.unmount()
   })
 

@@ -42,7 +42,7 @@ import FolderIcon from './FolderIcon.vue'
 import ExplorerPane from './ExplorerPane.vue'
 import GitPluginHostSlot from './GitPluginHostSlot.vue'
 import PluginRegionHost, { type PluginRegionContribution } from './PluginRegionHost.vue'
-import { chromeSourceMark, pluginSourceLabel } from '../lib/pluginSourceMark'
+import { chromeSourceMark, pluginDisclosureTitle, pluginIconFallback } from '../lib/pluginSourceMark'
 import { readLegacyPlansPreferenceProjection } from '../editor/plansPreferences'
 import { PLANS_STORAGE_RECOVERY_REASON } from '../../../shared/plansRecovery'
 import type { BackendStatus, useBackend } from '../composables/useBackend'
@@ -1536,10 +1536,11 @@ const plansPluginTab = computed(() => pluginTabs.value.find((entry) => entry.plu
 const genericPluginTabs = computed(() => pluginTabs.value.filter((entry) =>
   entry.pluginId !== 'navide.git' && entry.pluginId !== 'navide.plans'
 ))
-/** K2: a local or test package names its source on its sidebar tab. */
+/** A plugin tab names itself, its plugin id, publisher and source: an icon-less
+ *  tab shows a letter of the plugin's title, which alone could pass for a
+ *  native control. */
 function pluginTabLabel(entry: PluginRegionContribution): string {
-  const mark = chromeSourceMark(entry.source)
-  return mark ? `${entry.title} · ${pluginSourceLabel(i18n.global.t, mark, entry.expiresAt, entry.testplaceVia)}` : entry.title
+  return pluginDisclosureTitle(i18n.global.t, entry)
 }
 
 async function projectPlansPreferencesBeforePrepare(): Promise<void> {
@@ -3196,6 +3197,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         class="rail-btn"
         :class="{ active: sidebarTab === pluginTab.tabId }"
         :title="pluginTabLabel(pluginTab)"
+        :aria-label="pluginTabLabel(pluginTab)"
         @click="selectSidebarTab(pluginTab.tabId)"
       >
         <span
@@ -3213,7 +3215,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           alt=""
           @error="markPluginIconFailed(pluginTab)"
         />
-        <span v-else class="plugin-tab-fallback" aria-hidden="true">◇</span>
+        <span v-else class="plugin-tab-fallback" aria-hidden="true">{{ pluginIconFallback(pluginTab.title) }}</span>
         <span class="rail-label">{{ pluginTab.title }}</span>
         <span v-if="chromeSourceMark(pluginTab.source)" class="plugin-tab-source-mark" aria-hidden="true"></span>
       </button>
@@ -3233,8 +3235,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :data-legacy-git-tab="t.id === 'git' && legacyGitRecovery ? '' : undefined"
         :data-plugin-contribution="t.id === 'git' && !legacyGitRecovery ? gitPluginTab?.contributionKey : undefined"
         :title="t.id === 'git' && gitPluginTab
-          ? `${gitPluginTab.title} (${formatKeySpec(sidebarTabKeySpec(4))})`
+          ? `${pluginTabLabel(gitPluginTab)} (${formatKeySpec(sidebarTabKeySpec(4))})`
           : `${$t(t.label)} (${formatKeySpec(sidebarTabKeySpec(Number(t.shortcut)))})`"
+        :aria-label="t.id === 'git' && gitPluginTab ? pluginTabLabel(gitPluginTab) : undefined"
         @click="selectSidebarTab(t.id)"
       >
         <template v-if="t.id === 'git' && !legacyGitRecovery && gitPluginTab">
@@ -3253,7 +3256,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             alt=""
             @error="markPluginIconFailed(gitPluginTab)"
           />
-          <span v-else class="plugin-tab-fallback" aria-hidden="true">◇</span>
+          <span v-else class="plugin-tab-fallback" aria-hidden="true">{{ pluginIconFallback(gitPluginTab.title) }}</span>
         </template>
         <svg v-else width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path :d="t.path"/></svg>
         <span v-if="t.id === 'git' && gitChangesCount > 0" class="git-badge">{{ gitChangesCount > 99 ? '99+' : gitChangesCount }}</span>
@@ -3264,6 +3267,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :class="['tab-btn', 'plugin-tab-btn', { active: sidebarTab === pluginTab.tabId }]"
         :data-plugin-contribution="pluginTab.contributionKey"
         :title="pluginTabLabel(pluginTab)"
+        :aria-label="pluginTabLabel(pluginTab)"
         @click="selectSidebarTab(pluginTab.tabId)"
       >
         <span
@@ -3281,7 +3285,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           alt=""
           @error="markPluginIconFailed(pluginTab)"
         />
-        <span v-else class="plugin-tab-fallback" aria-hidden="true">◇</span>
+        <span v-else class="plugin-tab-fallback" aria-hidden="true">{{ pluginIconFallback(pluginTab.title) }}</span>
         <span v-if="chromeSourceMark(pluginTab.source)" class="plugin-tab-source-mark" aria-hidden="true"></span>
       </button>
       <span class="tab-spacer"></span>
@@ -4788,6 +4792,18 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
   color: var(--text-on-emphasis);
   border-radius: 999px;
   padding: 0 3px;
+}
+/* A fixed, clipping box: the glyph is the plugin's own title text, and a
+   single wide character must not spill over the native tabs beside it. */
+.plugin-tab-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1;
 }
 .plugin-tab-source-mark {
   position: absolute;
