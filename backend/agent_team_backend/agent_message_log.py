@@ -76,12 +76,22 @@ _COLUMNS = (
     "kind",
     "reply_to",
     "correlation_id",
+    "sender_workspace",
+    "recipient_workspace",
 )
+
+# Written once, when the row is first stamped: a re-append (often made after a
+# pane has closed and can no longer be attributed) must not erase them.
+_STAMP_ONCE = ("sender_workspace", "recipient_workspace")
 
 # Upsert: everything but the primary key and ``seq`` is refreshed. Keeping the
 # original ``seq`` is what makes a re-append (the frontend folds a pending
 # status patch into a pending append row) keep its place in the log.
-_CONFLICT_UPDATE = ", ".join(f"{c} = excluded.{c}" for c in _COLUMNS if c != "uid")
+_CONFLICT_UPDATE = ", ".join(
+    f"{c} = COALESCE(agent_message_log.{c}, excluded.{c})" if c in _STAMP_ONCE
+    else f"{c} = excluded.{c}"
+    for c in _COLUMNS if c != "uid"
+)
 
 
 def _create_schema(cur: sqlite3.Cursor) -> None:
@@ -171,6 +181,21 @@ def _add_threading(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE agent_message_log ADD COLUMN correlation_id TEXT")
 
 
+def _add_workspaces(cur: sqlite3.Cursor) -> None:
+    """v6: which workspace each side of a message belonged to.
+
+    Stamped by the backend as a row is written (see
+    ``agent_messaging.workspace_of_name``), never taken from the renderer. A
+    name alone cannot say this: a bare name is unique only inside one window,
+    and a qualified one only while no other workspace shares its folder name.
+
+    Rows written before this migration keep NULL and belong to no workspace —
+    nothing scoped by workspace (the plugin ``agents`` API) ever returns them.
+    """
+    cur.execute("ALTER TABLE agent_message_log ADD COLUMN sender_workspace TEXT")
+    cur.execute("ALTER TABLE agent_message_log ADD COLUMN recipient_workspace TEXT")
+
+
 def _clamp_content(content: str) -> str:
     if len(content) <= MAX_CONTENT_CHARS:
         return content
@@ -240,6 +265,8 @@ def _normalize(row: Any) -> dict[str, Any] | None:
         "kind": _coerce_kind(row.get("kind")),
         "reply_to": _optional_text(row.get("reply_to")),
         "correlation_id": _optional_text(row.get("correlation_id")),
+        "sender_workspace": _optional_text(row.get("sender_workspace")),
+        "recipient_workspace": _optional_text(row.get("recipient_workspace")),
     }
 
 
@@ -263,6 +290,7 @@ class AgentMessageLog:
         self._db.migrate(_COMPONENT, 3, _add_agent_keys)
         self._db.migrate(_COMPONENT, 4, _add_kind)
         self._db.migrate(_COMPONENT, 5, _add_threading)
+        self._db.migrate(_COMPONENT, 6, _add_workspaces)
         self._seq = self._read_max_seq()
 
     def _read_max_seq(self) -> int:

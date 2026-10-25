@@ -60,8 +60,8 @@ export interface AgentMessageInfo {
   bodyLength: number
 }
 
+/** No session id: it is what `--resume` takes, and transcripts stay unreachable. */
 export interface AgentSessionInfo {
-  sessionId: string
   agentKey: string
   paneId: string
   paneName: string
@@ -89,7 +89,6 @@ export interface AgentsResults {
     messages: AgentMessageInfo[]
     /** Oldest message of this workspace still in the bounded log, or null. */
     oldestCreatedAt: number | null
-    scanned: number
     truncated: boolean
   }
   'agents.listSessions': { sessions: AgentSessionInfo[] }

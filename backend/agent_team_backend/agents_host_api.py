@@ -41,7 +41,7 @@ MESSAGE_FIELDS = (
     "deliveredAt", "correlationId", "replyTo", "bodyLength",
 )
 SESSION_FIELDS = (
-    "sessionId", "agentKey", "paneId", "paneName", "spawnedAt", "removedAt",
+    "agentKey", "paneId", "paneName", "spawnedAt", "removedAt",
     "starred", "spawnedBy", "runGroupId", "live", "resumable",
 )
 
@@ -152,44 +152,33 @@ def lineage(workspace_path: str, arguments: dict[str, Any]) -> dict[str, Any]:
     return {"nodes": nodes}
 
 
-def _message_names(workspace_path: str, pane_id: str) -> set[str]:
-    """Qualified messaging names that belong to this workspace (or one pane in it).
+def _workspace_messages(workspace_path: str, pane_id: str = "") -> list[dict[str, Any]]:
+    """Local log rows with a side stamped as this workspace, newest last.
 
-    The log records sender and recipient by name only. A bare name is unique
-    inside one window, not across workspaces, so it cannot be tied to this
-    workspace and never counts: bare-name rows are left out (fail closed).
-    A qualified `<folder>/<pane>` name counts only while no other workspace on
-    this machine shares the folder label. Matching by name is still best
-    effort: a pane renamed since a message was logged no longer matches it."""
-    from . import agent_messaging
+    Scoped by the workspace path the backend stamped on each row when it was
+    written, compared for exact equality. Rows written before that stamp
+    existed belong to no workspace and are never returned (fail closed). With
+    ``pane_id``, only rows where that pane is a side of this workspace."""
+    from . import agent_messaging, app
 
-    panes = _workspace_panes(workspace_path)
-    if pane_id and not any(pane.pane_id == pane_id for pane in panes):
-        raise AgentsApiError("INVALID_ARGUMENT", "no such pane in this workspace")
-    labels = {pane.workspace_label for pane in panes}
-    own_paths = {pane.workspace_path for pane in panes}
-    shared = {
-        pane.workspace_label for pane in agent_messaging.list_panes()
-        if pane.workspace_label in labels and pane.workspace_path not in own_paths
-    }
-    return {
-        pane.qualified_name for pane in panes
-        if (not pane_id or pane.pane_id == pane_id) and pane.name and pane.workspace_label not in shared
-    }
+    target = agent_messaging._normalize_workspace(workspace_path)
+    names: set[str] = set()
+    if pane_id:
+        pane = next((p for p in _workspace_panes(workspace_path) if p.pane_id == pane_id), None)
+        if pane is None:
+            raise AgentsApiError("INVALID_ARGUMENT", "no such pane in this workspace")
+        names = {pane.name, pane.qualified_name}
 
+    def side(row: dict[str, Any], who: str) -> bool:
+        if not target or _text(row.get(f"{who}_workspace")) != target:
+            return False
+        return not names or _text(row.get(who)) in names
 
-def _workspace_messages(workspace_path: str, pane_id: str = "") -> tuple[list[dict[str, Any]], int]:
-    from . import app
-
-    names = _message_names(workspace_path, pane_id)
-    rows = app.agent_message_log.tail()
-    mine = [
-        row for row in rows
+    return [
+        row for row in app.agent_message_log.tail()
         # Local traffic only: a relayed row belongs to another machine's pane.
-        if not row.get("remote")
-        and (_text(row.get("sender")) in names or _text(row.get("recipient")) in names)
+        if not row.get("remote") and (side(row, "sender") or side(row, "recipient"))
     ]
-    return mine, len(rows)
 
 
 def _message(row: dict[str, Any]) -> dict[str, Any]:
@@ -218,7 +207,7 @@ def list_messages(workspace_path: str, arguments: dict[str, Any]) -> dict[str, A
     if not isinstance(since, int) or isinstance(since, bool) or since < 0:
         raise AgentsApiError("INVALID_ARGUMENT", "since must be a non-negative integer")
     limit = _limit(arguments)
-    rows, scanned = _workspace_messages(workspace_path, pane_id)
+    rows = _workspace_messages(workspace_path, pane_id)
     # The log keeps a bounded window of recent rows; oldestCreatedAt tells a
     # caller polling with `since` whether rows it never saw were pruned.
     oldest = int(rows[0].get("created_at") or 0) if rows else None
@@ -226,7 +215,6 @@ def list_messages(workspace_path: str, arguments: dict[str, Any]) -> dict[str, A
     return {
         "messages": [_message(row) for row in newer[-limit:]],
         "oldestCreatedAt": oldest,
-        "scanned": scanned,
         "truncated": len(newer) > limit,
     }
 
@@ -236,7 +224,7 @@ def read_message(workspace_path: str, arguments: dict[str, Any]) -> dict[str, An
     message_id = arguments.get("id")
     if not isinstance(message_id, str) or not message_id:
         raise AgentsApiError("INVALID_ARGUMENT", "id must be a non-empty string")
-    rows, _scanned = _workspace_messages(workspace_path)
+    rows = _workspace_messages(workspace_path)
     for row in rows:
         if row.get("uid") == message_id:
             return {"message": {**_message(row), "body": _text(row.get("content"))}}
@@ -255,7 +243,6 @@ def list_sessions(workspace_path: str, arguments: dict[str, Any]) -> dict[str, A
     return {
         "sessions": [
             {
-                "sessionId": _text(row.get("session_id")),
                 "agentKey": _text(row.get("agent_key")),
                 "paneId": _text(row.get("pane_id")),
                 "paneName": _text(row.get("pane_name")),

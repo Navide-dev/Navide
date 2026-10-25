@@ -28,7 +28,9 @@ FORBIDDEN_KEYS = {
     "usageLimitUntil", "loginExpired", "email", "account", "deviceId",
     "content", "excerpt", "body", "outputLogFile", "output_log_file",
     "workspace_path", "workspacePath", "command", "model",
+    "sessionId", "session_id", "sender_workspace", "recipient_workspace",
 }
+TWIN = "/elsewhere/alpha"  # addresses as "alpha/..." exactly like WS
 
 
 def _record(pane_id: str, **over: Any) -> SimpleNamespace:
@@ -63,18 +65,29 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     log = AgentMessageLog(db=Database(tmp_path / "navide.db"))
     log.append([
         {"uid": "m1", "created_at": 100, "status": "delivered", "sender": "alpha/lead",
-         "recipient": "alpha/worker", "content": "top secret plan"},
+         "recipient": "alpha/worker", "content": "top secret plan",
+         "sender_workspace": WS, "recipient_workspace": WS},
         {"uid": "m2", "created_at": 200, "status": "queued", "sender": "beta/lead",
-         "recipient": "alpha/worker", "content": "cross"},
+         "recipient": "alpha/worker", "content": "cross",
+         "sender_workspace": OTHER, "recipient_workspace": WS},
         {"uid": "m3", "created_at": 300, "status": "delivered", "sender": "stranger",
          "recipient": "nobody", "content": "not ours"},
         {"uid": "m4", "created_at": 400, "status": "delivered", "sender": "alpha/lead",
-         "recipient": "far", "content": "relayed", "remote": "device-x"},
-        # A bare name cannot say which workspace it was: "lead" exists in both.
+         "recipient": "far", "content": "relayed", "remote": "device-x", "sender_workspace": WS},
+        # Bare names stamped by beta's window: "lead" exists in both workspaces.
         {"uid": "m5", "created_at": 500, "status": "delivered", "sender": "lead",
-         "recipient": "worker", "content": "beta bare secret"},
+         "recipient": "worker", "content": "beta bare secret",
+         "sender_workspace": OTHER, "recipient_workspace": OTHER},
         {"uid": "m6", "created_at": 600, "status": "delivered", "sender": "beta/lead",
-         "recipient": "beta/worker", "content": "beta qualified secret"},
+         "recipient": "beta/worker", "content": "beta qualified secret",
+         "sender_workspace": OTHER, "recipient_workspace": OTHER},
+        # Written before rows were stamped (0.2.30 and earlier): nobody's.
+        {"uid": "m7", "created_at": 700, "status": "delivered", "sender": "alpha/lead",
+         "recipient": "alpha/worker", "content": "legacy secret"},
+        # A same-label twin workspace's row: the names are WS's, the stamp is not.
+        {"uid": "t1", "created_at": 800, "status": "delivered", "sender": "alpha/lead",
+         "recipient": "alpha/worker", "content": "twin secret",
+         "sender_workspace": TWIN, "recipient_workspace": TWIN},
     ])
     monkeypatch.setattr(app, "agent_message_log", log)
     yield
@@ -109,7 +122,7 @@ def test_lineage_keeps_closed_panes_only_when_asked() -> None:
 def test_list_messages_is_metadata_only_and_local_to_the_workspace() -> None:
     result = agents_host_api.run(WS, "list_messages", {})
     ids = [m["id"] for m in result["messages"]]
-    # m3/m6 are another workspace's, m4 was relayed, m5 is bare-name only.
+    # m3 unstamped, m4 relayed, m5/m6 beta's, m7 legacy, t1 the twin's.
     assert ids == ["m1", "m2"]
     assert all(tuple(m) == agents_host_api.MESSAGE_FIELDS for m in result["messages"])
     _no_forbidden(result["messages"])
@@ -131,7 +144,7 @@ def test_read_message_returns_the_body_only_inside_the_workspace() -> None:
     message = agents_host_api.run(WS, "read_message", {"id": "m1"})["message"]
     assert message["body"] == "top secret plan"
     assert tuple(message) == (*agents_host_api.MESSAGE_FIELDS, "body")
-    for foreign in ("m3", "m4", "m5", "m6"):
+    for foreign in ("m3", "m4", "m5", "m6", "m7", "t1"):
         with pytest.raises(agents_host_api.AgentsApiError) as err:
             agents_host_api.run(WS, "read_message", {"id": foreign})
         assert err.value.code == "INVALID_ARGUMENT"
@@ -140,7 +153,7 @@ def test_read_message_returns_the_body_only_inside_the_workspace() -> None:
 def test_same_bare_name_in_two_workspaces_never_crosses() -> None:
     # Both workspaces have a pane named "lead"; neither sees the other's rows.
     assert agents_host_api.run(OTHER, "read_message", {"id": "m6"})["message"]["body"] == "beta qualified secret"
-    for workspace, foreign in ((WS, ("m5", "m6")), (OTHER, ("m1", "m5"))):
+    for workspace, foreign in ((WS, ("m5", "m6")), (OTHER, ("m1", "m7"))):
         listed = agents_host_api.run(workspace, "list_messages", {})
         assert not set(foreign) & {m["id"] for m in listed["messages"]}
         for message_id in foreign:
@@ -149,12 +162,62 @@ def test_same_bare_name_in_two_workspaces_never_crosses() -> None:
     assert "secret" not in repr(agents_host_api.run(WS, "list_messages", {}))
 
 
-def test_a_shared_folder_label_hides_qualified_rows_too() -> None:
-    # "/elsewhere/alpha" also addresses as "alpha/...", so "alpha/worker" is ambiguous.
-    agent_messaging.register("p-twin", "worker", "/elsewhere/alpha", agent_key="claude")
-    assert agents_host_api.run(WS, "list_messages", {})["messages"] == []
-    with pytest.raises(agents_host_api.AgentsApiError):
-        agents_host_api.run(WS, "read_message", {"id": "m1"})
+def test_a_same_label_twin_never_leaks_while_open_or_after_it_closed() -> None:
+    def visible() -> set[str]:
+        return {m["id"] for m in agents_host_api.run(WS, "list_messages", {})["messages"]}
+
+    agent_messaging.register("p-twin", "lead", TWIN, agent_key="claude")
+    assert "t1" not in visible()
+    agent_messaging.unregister("p-twin")
+    assert agent_messaging.list_panes(TWIN) == []
+    assert visible() == {"m1", "m2"}
+    for message_id in ("t1", "m7"):
+        with pytest.raises(agents_host_api.AgentsApiError):
+            agents_host_api.run(WS, "read_message", {"id": message_id})
+
+
+def test_rows_are_stamped_from_the_registry_not_from_names_alone() -> None:
+    window_a, window_b = object(), object()
+    agent_messaging._reset_for_test()
+    agent_messaging.register("a1", "lead", WS, owner=window_a)
+    agent_messaging.register("b1", "lead", OTHER, owner=window_b)
+    stamp = agent_messaging.workspace_of_name
+    # A bare name is looked up only among the writing window's own panes.
+    assert stamp("lead", window_a) == WS and stamp("lead", window_b) == OTHER
+    assert stamp("lead", None) == "" and stamp("lead", object()) == ""
+    assert stamp("alpha/lead", window_b) == WS and stamp("ghost/lead", window_a) == ""
+    # A qualified name two open workspaces share stays unattributed.
+    agent_messaging.register("t1", "lead", TWIN, owner=object())
+    assert stamp("alpha/lead", window_a) == ""
+
+
+def test_a_stamp_survives_a_later_unstamped_re_append(tmp_path: Path) -> None:
+    log = AgentMessageLog(db=Database(tmp_path / "stamp.db"))
+    row = {"uid": "u", "created_at": 1, "status": "queued", "sender": "alpha/lead",
+           "recipient": "alpha/worker", "content": "x"}
+    log.append([{**row, "sender_workspace": WS, "recipient_workspace": ""}])
+    log.append([{**row, "status": "delivered", "sender_workspace": "", "recipient_workspace": OTHER}])
+    stored = log.tail()[-1]
+    assert stored["status"] == "delivered"
+    assert (stored["sender_workspace"], stored["recipient_workspace"]) == (WS, OTHER)
+
+
+async def test_log_append_stamps_rows_and_ignores_the_renderers_word(tmp_path: Path) -> None:
+    class FakeWebSocket:
+        async def send_json(self, payload: dict[str, Any]) -> None:
+            pass
+
+    session = app.Session(FakeWebSocket())  # type: ignore[arg-type]
+    agent_messaging.register("p-root", "lead", WS, agent_key="claude", owner=session)
+    agent_messaging.register("p-child", "worker", WS, agent_key="codex", owner=session)
+    await app.handle_message(session, {"id": "a", "type": "agent_msg.log_append", "payload": {"rows": [
+        {"uid": "s1", "created_at": 900, "status": "delivered", "sender": "lead", "recipient": "worker",
+         "content": "bare, this window", "sender_workspace": OTHER, "recipient_workspace": OTHER},
+    ]}})
+    stored = next(row for row in app.agent_message_log.tail() if row["uid"] == "s1")
+    assert (stored["sender_workspace"], stored["recipient_workspace"]) == (WS, WS)
+    assert "s1" in {m["id"] for m in agents_host_api.run(WS, "list_messages", {})["messages"]}
+    assert "s1" not in {m["id"] for m in agents_host_api.run(OTHER, "list_messages", {})["messages"]}
 
 
 def test_list_sessions_projects_the_session_rows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -177,7 +240,8 @@ def test_list_sessions_projects_the_session_rows(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(server, "_session_rows", fake_rows)
     sessions = agents_host_api.run(WS, "list_sessions", {"limit": 10})["sessions"]
     assert seen == [(WS, "", 10, True)]
-    assert [s["sessionId"] for s in sessions] == ["s1"]
+    assert [s["paneId"] for s in sessions] == ["p-root"]  # sign-in pane left out
+    _no_forbidden(sessions)
     assert tuple(sessions[0]) == agents_host_api.SESSION_FIELDS
     assert "transcript" not in repr(sessions)
 

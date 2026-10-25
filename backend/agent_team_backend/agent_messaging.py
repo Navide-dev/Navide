@@ -560,6 +560,32 @@ def get(pane_id: str) -> RegisteredPane | None:
     return _PANES.get(pane_id)
 
 
+def workspace_of_name(name: str, owner: Any) -> str:
+    """The workspace a message-log name belongs to right now, or "" when that
+    cannot be said for certain.
+
+    Used to stamp a log row as it is written, while the panes it names are
+    still registered. A bare name is unique only inside the window that wrote
+    it, so it is looked up among ``owner``'s panes alone; a qualified
+    ``<folder>/<pane>`` name is looked up everywhere. Anything that matches no
+    pane, or panes of more than one workspace, stays unattributed.
+    """
+    name = (name or "").strip()
+    if not name:
+        return ""
+    if "/" in name:
+        hits = [entry for entry in _PANES.values() if entry.qualified_name == name]
+    elif owner is None:
+        return ""
+    else:
+        hits = [
+            entry for pane_id, entry in _PANES.items()
+            if entry.name == name and _OWNERS.get(pane_id) is owner
+        ]
+    paths = {entry.workspace_path for entry in hits}
+    return paths.pop() if len(paths) == 1 else ""
+
+
 def owner(pane_id: str) -> Any | None:
     """The WS connection of the window mirroring this pane, or None.
 

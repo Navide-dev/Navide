@@ -12658,6 +12658,12 @@ async def agent_msg_log_append(session: "Session", msg_id: str, msg_type: str, p
             make_error(msg_id, msg_type, "BAD_REQUEST", "agent_msg.log_append needs a rows list")
         )
         return
+    # Which workspace each side is, resolved here while those panes are still
+    # registered; the renderer's own word for it is never taken.
+    for row in rows:
+        if isinstance(row, dict):
+            row["sender_workspace"] = agent_messaging.workspace_of_name(str(row.get("sender") or ""), session)
+            row["recipient_workspace"] = agent_messaging.workspace_of_name(str(row.get("recipient") or ""), session)
     written = app.agent_message_log.append(rows)
     agent_messaging.notify_message_rows(rows)
     await session.send_json(make_response(msg_id, msg_type, {"written": written}))
