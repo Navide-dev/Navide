@@ -565,7 +565,6 @@ declare global {
           list: () => Promise<NativeBackendOverview>
           setEnabled: (enabled: boolean) => Promise<NativeBackendOverview>
           allow: (id: string) => Promise<NativeBackendOverview>
-          takeDefaultOnNotice?: () => Promise<boolean>
           setDisabled: (id: string, disabled: boolean) => Promise<NativeBackendOverview>
           revokeWorkspaceWrite: (id: string, workspacePath: string) => Promise<NativeBackendOverview>
           setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean }) => Promise<NativeBackendOverview>

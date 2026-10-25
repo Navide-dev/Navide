@@ -183,7 +183,9 @@ describe('HIGH-1: a replacement inherits no permission', () => {
     expect(grantsOf('acme.todo')).toEqual({ consent: true, workspaceWrite: true, agentToolWrite: true, agentToolsSince: true, disabled: true })
     await fileInstall('acme.todo', '1.1.0', { replaceConfirmed: true })
     expect(grantsOf('acme.todo')).toEqual({ consent: false, workspaceWrite: false, agentToolWrite: false, agentToolsSince: false, disabled: true })
-    expect(store.record('acme.todo')).toEqual({ disabled: true })
+    // Marked, so the replacement's backend asks before it runs (0.2.31: a
+    // first install counts as consent, a replacement that dropped one does not).
+    expect(store.record('acme.todo')).toEqual({ disabled: true, consentRevoked: true })
   })
 
   it('keeps every permission of an update within the Marketplace exactly as on main', async () => {

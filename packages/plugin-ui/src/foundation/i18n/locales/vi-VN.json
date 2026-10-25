@@ -1880,7 +1880,7 @@
       },
       "nativeBackends": {
         "title": "Backend gốc",
-        "description": "Một số plugin Navide có chứa mã gốc. Navide chạy mã đó trong sandbox không có quyền truy cập mạng riêng; nó chỉ đọc được các workspace bạn mở cùng nó và chỉ thay đổi tệp ở nơi bạn cho phép. Plugin Navide nào còn chạy lệnh git, gh và glab (được đánh dấu rủi ro cao bên dưới) thì qua các lệnh đó có thể liên lạc với máy chủ mạng và gửi dữ liệu workspace, cũng như đọc và thay đổi tệp workspace mà không cần quyền đó. Cài một plugin Navide có mã gốc nghĩa là cho phép nó chạy; công tắc bên dưới tắt tất cả.",
+        "description": "Một số plugin Navide có chứa mã gốc. Navide chạy mã đó trong sandbox không có quyền truy cập mạng riêng; nó chỉ đọc được các workspace bạn mở cùng nó và chỉ thay đổi tệp ở nơi bạn cho phép. Plugin Navide nào còn chạy lệnh git, gh và glab (được đánh dấu rủi ro cao bên dưới) thì qua các lệnh đó có thể liên lạc với máy chủ mạng và gửi dữ liệu workspace, cũng như đọc và thay đổi tệp workspace mà không cần quyền đó. Khi công tắc bên dưới đang bật, cài một plugin Navide có mã gốc nghĩa là cho phép nó chạy; tắt công tắc để dừng tất cả.",
         "enable": "Cho phép plugin Navide của bên thứ ba chạy backend gốc",
         "agentTools": {
           "enable": "Cho phép agent gọi công cụ từ plugin Navide của bên thứ ba",
@@ -1905,8 +1905,6 @@
         },
         "shellRisk": "Rủi ro cao: chạy git, gh và glab",
         "shellRiskDetail": "Qua git, gh và glab, nó có thể liên lạc với máy chủ mạng và gửi dữ liệu workspace, cũng như đọc và thay đổi tệp workspace mà không cần quyền thay đổi tệp riêng. Các lệnh đã bắt đầu khi bạn tắt nó hoặc thu hồi quyền sẽ chạy đến hết (tối đa khoảng 30 giây).",
-        "defaultOnNotice": "Backend gốc của plugin Navide bên thứ ba giờ được bật theo mặc định. Bạn có thể tắt trong Cài đặt → Plugin Navide → Nhà phát triển và mã gốc.",
-        "defaultOnNoticeAction": "Mở cài đặt",
         "status": {
           "ready": "Đã cho phép",
           "disabledGlobally": "Tắt (cài đặt đang tắt)",

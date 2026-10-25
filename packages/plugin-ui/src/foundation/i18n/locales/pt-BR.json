@@ -1880,7 +1880,7 @@
       },
       "nativeBackends": {
         "title": "Back-ends nativos",
-        "description": "Alguns plug-ins do Navide incluem código nativo. O Navide o executa em uma sandbox sem acesso próprio à rede; ele só pode ler os workspaces que você abrir com ele e só altera arquivos onde você permitir. Um plug-in do Navide que também executa comandos git, gh e glab (marcado como alto risco abaixo) pode, por meio deles, contatar hosts da rede e enviar dados do workspace, além de ler e alterar arquivos do workspace sem essa permissão. Instalar um plug-in do Navide com código nativo permite que ele seja executado; a chave abaixo desativa todos.",
+        "description": "Alguns plug-ins do Navide incluem código nativo. O Navide o executa em uma sandbox sem acesso próprio à rede; ele só pode ler os workspaces que você abrir com ele e só altera arquivos onde você permitir. Um plug-in do Navide que também executa comandos git, gh e glab (marcado como alto risco abaixo) pode, por meio deles, contatar hosts da rede e enviar dados do workspace, além de ler e alterar arquivos do workspace sem essa permissão. Enquanto a chave abaixo estiver ativada, instalar um plug-in do Navide com código nativo permite que ele seja executado; desativá-la para todos.",
         "enable": "Permitir que plug-ins do Navide de terceiros executem back-ends nativos",
         "agentTools": {
           "enable": "Permitir que os agents chamem ferramentas de plug-ins do Navide de terceiros",
@@ -1905,8 +1905,6 @@
         },
         "shellRisk": "Alto risco: executa git, gh e glab",
         "shellRiskDetail": "Por meio de git, gh e glab, ele pode contatar hosts da rede e enviar dados do workspace, além de ler e alterar arquivos do workspace sem a permissão separada de alteração de arquivos. Comandos já iniciados quando você o desativa ou revoga a permissão dele são executados até o fim (por até cerca de 30 segundos).",
-        "defaultOnNotice": "Os back-ends nativos de plug-ins do Navide de terceiros agora vêm ativados por padrão. Você pode desativá-los em Configurações → Plug-ins do Navide → Desenvolvedor e código nativo.",
-        "defaultOnNoticeAction": "Abrir configurações",
         "status": {
           "ready": "Permitido",
           "disabledGlobally": "Desativado (a configuração está desativada)",

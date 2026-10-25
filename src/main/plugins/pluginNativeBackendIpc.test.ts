@@ -19,7 +19,6 @@ function setup(options: { agentTools?: boolean; authorized?: boolean; isEnabled?
     allow: vi.fn(async () => undefined),
     setDisabled: vi.fn(async () => undefined),
     setWorkspaceWrite: vi.fn(async () => undefined),
-    takeDefaultOnNotice: vi.fn(() => true),
   }
   const switches = { enabled: false, externalCallers: false }
   const controls: NativeBackendAgentToolsControls = {
@@ -129,8 +128,7 @@ describe('resource notice IPC', () => {
   })
 })
 
-
-describe('native backend IPC: the default-on notice (0.2.31)', () => {
+describe('native backend IPC: the default switch (0.2.31)', () => {
   it('reports the switch on for a fresh profile and off once the user turns it off (the Developer page and its On badge)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'native-backend-ipc-'))
     try {
@@ -142,14 +140,5 @@ describe('native backend IPC: the default-on notice (0.2.31)', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
-  })
-
-  it('passes the one-time answer through, for the trusted Host window only', async () => {
-    const { invoke, controller } = setup()
-    await expect(invoke('plugins:nativeBackends:takeDefaultOnNotice')).resolves.toBe(true)
-    expect(controller.takeDefaultOnNotice).toHaveBeenCalledTimes(1)
-    const denied = setup({ authorized: false })
-    await expect(denied.invoke('plugins:nativeBackends:takeDefaultOnNotice')).rejects.toThrow('unauthorized')
-    expect(denied.controller.takeDefaultOnNotice).not.toHaveBeenCalled()
   })
 })

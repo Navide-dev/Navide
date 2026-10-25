@@ -1880,7 +1880,7 @@
       },
       "nativeBackends": {
         "title": "Native backends",
-        "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. Installing a Navide plugin that has native code allows it to run; the switch below turns all of them off.",
+        "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. While the switch below is on, installing a Navide plugin that has native code allows it to run; turning the switch off stops all of them.",
         "enable": "Allow third-party Navide plugins to run native backends",
         "agentTools": {
           "enable": "Let agents call tools from third-party Navide plugins",
@@ -1905,8 +1905,6 @@
         },
         "shellRisk": "High risk: runs git, gh and glab",
         "shellRiskDetail": "Through git, gh and glab it can contact network hosts and send workspace data, and read and change workspace files without the separate file-change permission. Commands already started when you disable it or revoke its permission run to completion (up to about 30 seconds).",
-        "defaultOnNotice": "Native backends of third-party Navide plugins are now on by default. You can turn them off in Settings → Navide Plugins → Developer and native code.",
-        "defaultOnNoticeAction": "Open Settings",
         "status": {
           "ready": "Allowed",
           "disabledGlobally": "Off (setting is off)",

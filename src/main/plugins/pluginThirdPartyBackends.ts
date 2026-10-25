@@ -1031,8 +1031,10 @@ export class ThirdPartyBackendController {
     // backend and its shell allowlist before it commits. A package with an
     // earlier consent changed since then (an update, a rollback, edited
     // files), and the install-time disclosure of those does not always show
-    // the backend change, so that one is still asked before it runs.
-    if (this.store.record(spec.pluginId).consent === undefined) {
+    // the backend change, so that one is still asked before it runs; so is
+    // one whose consent was taken away (revoked, or forgotten to fail closed).
+    const record = this.store.record(spec.pluginId)
+    if (record.consent === undefined && !record.consentRevoked) {
       this.recordConsent(spec, digest)
       return
     }
@@ -1483,12 +1485,6 @@ export class ThirdPartyBackendController {
     } finally {
       await this.options.stopBackends?.(null)
     }
-  }
-
-  /** True once when an earlier version's "off" now reads as on by default
-   * (see NativeBackendStore.takeDefaultOnNotice). */
-  takeDefaultOnNotice(): boolean {
-    return this.store.takeDefaultOnNotice()
   }
 
   /** Per-plugin kill switch; fails closed like the global one. */

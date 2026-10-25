@@ -3,8 +3,9 @@ import { OwnerOnlyJsonPersistence } from './ownerOnlyJsonPersistence'
 
 /**
  * Durable user decisions about third-party native backends:
- * - the global "allow third-party native backends" switch (on until the
- *   user sets it; see `SWITCH_FILE_NAME`);
+ * - the global "allow third-party native backends" switch: on for a profile
+ *   that has no decision file yet; once the file exists, its `enabled` is the
+ *   answer, so an earlier version's "off" stays off;
  * - per plugin: the consented (binary digest, permission set) pair, a
  *   user "disabled" switch, and the workspaces where file changes are allowed.
  *
@@ -35,6 +36,10 @@ export interface AgentToolWriteGrant {
 
 export interface NativeBackendPluginRecord {
   consent?: NativeBackendConsent
+  /** A consent was taken away (revoked, or forgotten to fail closed): the
+   * next start asks again instead of counting the install as consent.
+   * Cleared by the next consent; uninstalling drops it with the record. */
+  consentRevoked?: true
   disabled?: boolean
   /** Canonical workspace paths where workspace writes are allowed. */
   workspaceWrite?: string[]
@@ -67,16 +72,10 @@ export interface NativeBackendState {
 }
 
 const FILE_NAME = 'native-backends.json'
-/** Present once the user has set the global switch. Earlier versions wrote
- * `enabled: false` into FILE_NAME as their default on any save and drop keys
- * they do not know when they save, so only a file of its own can tell "never
- * set" (on) from "set": while it exists, FILE_NAME's `enabled` is the answer,
- * which also keeps a later change made by an earlier version. */
-const SWITCH_FILE_NAME = 'native-backends-switch.json'
 const MAX_BYTES = 256 * 1024
 
-function emptyState(): NativeBackendState {
-  return { schemaVersion: 1, enabled: false, plugins: {} }
+function emptyState(enabled = false): NativeBackendState {
+  return { schemaVersion: 1, enabled, plugins: {} }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -111,6 +110,7 @@ function parseState(value: unknown): NativeBackendState {
     const record: NativeBackendPluginRecord = {}
     const consent = parseConsent(raw.consent)
     if (consent) record.consent = consent
+    if (raw.consentRevoked === true) record.consentRevoked = true
     if (raw.disabled === true) record.disabled = true
     if (Array.isArray(raw.workspaceWrite)) {
       const paths = raw.workspaceWrite.filter((path): path is string => typeof path === 'string')
@@ -136,39 +136,23 @@ function parseState(value: unknown): NativeBackendState {
 export class NativeBackendStore {
   private readonly persistence: OwnerOnlyJsonPersistence
   private readonly file: string
-  private readonly switchFile: string
   private state: NativeBackendState
-  /** The user has set the global switch (or its record cannot be read). */
-  private switchSet: boolean
-  /** An earlier version's file with the switch off and no record of the user
-   * setting it: it now reads as on, and the user is told so once. */
-  private defaultOnNotice: boolean
 
   constructor(directory: string) {
     this.persistence = new OwnerOnlyJsonPersistence(directory, MAX_BYTES, MAX_BYTES)
     this.file = join(directory, FILE_NAME)
-    this.switchFile = join(directory, SWITCH_FILE_NAME)
-    const loaded = this.load()
-    this.state = loaded.state
-    this.switchSet = this.loadSwitchSet()
-    this.defaultOnNotice = !this.switchSet && loaded.present && !loaded.state.enabled
+    this.state = this.load()
   }
 
-  /** Only a missing record means "never set"; anything unreadable reads as
-   * set, so FILE_NAME (or its "nothing allowed" default) decides. */
-  private loadSwitchSet(): boolean {
+  private load(): NativeBackendState {
+    // A fresh profile (no directory, or no file in it) has never decided:
+    // the switch is on. Anything unreadable still reads as nothing allowed.
     const directory = this.persistence.ensureDirectory(false)
-    if (directory === 'missing') return false
-    if (directory !== 'ready') return true
-    return this.persistence.read(this.switchFile, 'native backend switch').kind !== 'missing'
-  }
-
-  private load(): { state: NativeBackendState; present: boolean } {
-    if (this.persistence.ensureDirectory(false) !== 'ready') return { state: emptyState(), present: false }
+    if (directory === 'missing') return emptyState(true)
+    if (directory !== 'ready') return emptyState()
     const read = this.persistence.read(this.file, 'native backend decisions')
-    return read.kind === 'present'
-      ? { state: parseState(read.value), present: true }
-      : { state: emptyState(), present: false }
+    if (read.kind === 'missing') return emptyState(true)
+    return read.kind === 'present' ? parseState(read.value) : emptyState()
   }
 
   /**
@@ -178,9 +162,6 @@ export class NativeBackendStore {
    * the session; the save error is still thrown for the UI.
    */
   private save(next: NativeBackendState, restricting = false): void {
-    // A switch the user never set is written as on, so the file never looks
-    // like an earlier version's default off (which would show the notice).
-    if (!this.switchSet && !this.defaultOnNotice) next = { ...next, enabled: true }
     if (restricting) this.state = next
     if (this.persistence.ensureDirectory(true) !== 'ready') {
       throw new Error('native backend decision store is unavailable')
@@ -207,24 +188,11 @@ export class NativeBackendStore {
   }
 
   isEnabled(): boolean {
-    return this.switchSet ? this.state.enabled : true
+    return this.state.enabled
   }
 
   setEnabled(enabled: boolean): void {
-    this.defaultOnNotice = false
-    if (!enabled) this.switchSet = true
     this.save({ ...this.state, enabled }, !enabled)
-    this.persistence.write(this.switchFile, { schemaVersion: 1 })
-    this.switchSet = true
-  }
-
-  /** True once for an earlier version's file whose switch was off and now
-   * reads as on; the switch is then recorded as on, so it is never shown
-   * again. A fresh profile or a switch the user set never shows it. */
-  takeDefaultOnNotice(): boolean {
-    if (!this.defaultOnNotice) return false
-    this.setEnabled(true)
-    return true
   }
 
   agentToolSwitches(): AgentToolSwitches {
@@ -250,6 +218,7 @@ export class NativeBackendStore {
     this.update(pluginId, (record) => {
       // A new consent asks the agent write-tool questions again (DB3).
       delete record.agentToolWrite
+      delete record.consentRevoked
       return { ...record, consent: { ...consent, grantedAt: now.toISOString() } }
     })
   }
@@ -289,7 +258,7 @@ export class NativeBackendStore {
   revokeConsent(pluginId: string): void {
     this.update(pluginId, (record) => {
       delete record.consent
-      return record
+      return { ...record, consentRevoked: true }
     })
   }
 
@@ -364,10 +333,10 @@ export class NativeBackendStore {
    * the id stays. */
   forgetGrants(pluginId: string): void {
     const current = this.state.plugins[pluginId]
-    if (!current) return
     // Restricting: even if the file cannot be written, nothing stays granted
-    // for the rest of this run.
-    this.update(pluginId, () => (current.disabled ? { disabled: true } : {}), true)
+    // for the rest of this run. The mark is written even with no record, so
+    // the next start asks instead of counting the install as consent.
+    this.update(pluginId, () => ({ ...(current?.disabled ? { disabled: true as const } : {}), consentRevoked: true }), true)
   }
 
   /** Uninstall: forget every decision about the plugin. */

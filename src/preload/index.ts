@@ -1570,8 +1570,6 @@ contextBridge.exposeInMainWorld('agentTeam', {
         ipcRenderer.invoke('plugins:nativeBackends:setEnabled', { enabled }),
       allow: (id: string): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:allow', { id }),
-      /** True once: an earlier version's "off" now reads as on by default. */
-      takeDefaultOnNotice: (): Promise<boolean> => ipcRenderer.invoke('plugins:nativeBackends:takeDefaultOnNotice'),
       setDisabled: (id: string, disabled: boolean): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:setDisabled', { id, disabled }),
       revokeWorkspaceWrite: (id: string, workspacePath: string): Promise<NativeBackendOverview> =>

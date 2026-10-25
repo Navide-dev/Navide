@@ -1880,7 +1880,7 @@
       },
       "nativeBackends": {
         "title": "Backends nativos",
-        "description": "Algunos complementos de Navide incluyen código nativo. Navide lo ejecuta en un entorno aislado sin acceso propio a la red; solo puede leer las áreas de trabajo que abras con él y modificar archivos solo donde lo permitas. Un complemento de Navide que además ejecuta comandos git, gh y glab (marcado abajo como de alto riesgo) puede, a través de ellos, contactar con servidores de la red y enviar datos del área de trabajo, y leer y modificar archivos del área de trabajo sin ese permiso. Instalar un complemento de Navide con código nativo permite que se ejecute; el interruptor de abajo los desactiva todos.",
+        "description": "Algunos complementos de Navide incluyen código nativo. Navide lo ejecuta en un entorno aislado sin acceso propio a la red; solo puede leer las áreas de trabajo que abras con él y modificar archivos solo donde lo permitas. Un complemento de Navide que además ejecuta comandos git, gh y glab (marcado abajo como de alto riesgo) puede, a través de ellos, contactar con servidores de la red y enviar datos del área de trabajo, y leer y modificar archivos del área de trabajo sin ese permiso. Mientras el interruptor de abajo esté activado, instalar un complemento de Navide con código nativo permite que se ejecute; al desactivarlo se detienen todos.",
         "enable": "Permitir que los complementos de Navide de terceros ejecuten backends nativos",
         "agentTools": {
           "enable": "Permitir que los agents llamen a herramientas de complementos de Navide de terceros",
@@ -1905,8 +1905,6 @@
         },
         "shellRisk": "Alto riesgo: ejecuta git, gh y glab",
         "shellRiskDetail": "A través de git, gh y glab puede contactar con servidores de la red y enviar datos del área de trabajo, y leer y modificar archivos del área de trabajo sin el permiso aparte para modificar archivos. Los comandos que ya se hayan iniciado cuando lo desactives o revoques su permiso se ejecutan hasta el final (hasta unos 30 segundos).",
-        "defaultOnNotice": "Los backends nativos de los complementos de Navide de terceros ahora están activados de forma predeterminada. Puedes desactivarlos en Ajustes → Complementos de Navide → Desarrollador y código nativo.",
-        "defaultOnNoticeAction": "Abrir ajustes",
         "status": {
           "ready": "Permitido",
           "disabledGlobally": "Desactivado (el ajuste está desactivado)",

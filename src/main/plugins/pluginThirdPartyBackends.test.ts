@@ -233,6 +233,24 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     expect(deny).toHaveBeenCalledTimes(2)
   })
 
+  it('asks again, instead of counting the install, once a consent was taken away; uninstall resets that', async () => {
+    const { instance } = controller({ promptConsent: deny })
+    const spec = writePackage()
+    await instance.admit(spec)
+    store.forgetGrants('acme.indexer')
+    expect((await refusal(instance.admit(spec))).message).toBe('the user did not allow the native backend')
+    expect(deny).toHaveBeenCalledTimes(1)
+    expect(deny.mock.calls[0][0]).toMatchObject({ update: false })
+    store.grantConsent('acme.indexer', { binarySha256: 'b'.repeat(64), permissionsKey: '{}', packageVersion: '1.0.0' })
+    store.revokeConsent('acme.indexer')
+    instance.resetFailures('acme.indexer')
+    await refusal(instance.admit(spec))
+    expect(deny).toHaveBeenCalledTimes(2)
+    store.forget('acme.indexer')
+    await instance.admit(spec)
+    expect(deny).toHaveBeenCalledTimes(2)
+  })
+
   it('asks before the bind when an update changes the backend binary, and marks it as an update', async () => {
     const { instance } = controller({ promptConsent: allow })
     await instance.admit(writePackage({}, 'binary-v1'))

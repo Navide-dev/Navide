@@ -1,26 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { NativeBackendStore } from './pluginNativeBackendStore'
 
-// The global third-party native backend switch: on until the user sets it
-// (0.2.31), with the files read and written by 0.2.30 in both directions.
+// The global third-party native backend switch (0.2.31): on for a profile
+// with no decision file yet; once the file exists its `enabled` decides, so a
+// 0.2.30 "off" stays off. Checked against 0.2.30's own read and save rules in
+// both directions.
 let root: string
 let dir: string
 const mainFile = (): string => join(dir, 'native-backends.json')
-const markerFile = (): string => join(dir, 'native-backends-switch.json')
 const readMain = (): Record<string, unknown> => JSON.parse(readFileSync(mainFile(), 'utf8'))
 const consent = { binarySha256: 'a'.repeat(64), permissionsKey: '{}', packageVersion: '1.0.0' }
 
-/** What 0.2.30 wrote: its default `enabled: false` on any save, no marker. */
+/** A file as 0.2.30 wrote it. */
 function write0230(enabled: boolean): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   writeFileSync(mainFile(), JSON.stringify({ schemaVersion: 1, enabled, plugins: { 'acme.indexer': { consent: { ...consent, grantedAt: '2026-10-20T00:00:00.000Z' } } } }), { mode: 0o600 })
 }
 
-/** How 0.2.30 reads the switch, and how it saves: it keeps only the keys it
- * knows, so it never touches (or knows about) the marker file. */
+/** How 0.2.30 reads the switch, and how it saves: only the keys it knows. */
 function read0230(): boolean {
   return readMain().enabled === true
 }
@@ -38,87 +38,53 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true })
 })
 
-describe('NativeBackendStore: the global switch defaults to on', () => {
-  it('reads a fresh profile as on, with no notice, and keeps it on after any save', () => {
+describe('NativeBackendStore: the global switch', () => {
+  it('is on for a fresh profile (no directory, or no file in it), and stays on after any save', () => {
+    expect(new NativeBackendStore(dir).isEnabled()).toBe(true)
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
     const store = new NativeBackendStore(dir)
     expect(store.isEnabled()).toBe(true)
-    expect(store.takeDefaultOnNotice()).toBe(false)
     store.grantConsent('acme.indexer', consent)
     expect(readMain().enabled).toBe(true)
-    expect(existsSync(markerFile())).toBe(false)
-    const reloaded = new NativeBackendStore(dir)
-    expect(reloaded.isEnabled()).toBe(true)
-    expect(reloaded.takeDefaultOnNotice()).toBe(false)
+    expect(new NativeBackendStore(dir).isEnabled()).toBe(true)
   })
 
-  it('keeps an explicit off across restarts, without a notice', () => {
+  it('keeps a value the user set across restarts and later saves', () => {
     new NativeBackendStore(dir).setEnabled(false)
-    const reloaded = new NativeBackendStore(dir)
-    expect(reloaded.isEnabled()).toBe(false)
-    expect(reloaded.takeDefaultOnNotice()).toBe(false)
-    reloaded.grantConsent('acme.indexer', consent)
+    const off = new NativeBackendStore(dir)
+    expect(off.isEnabled()).toBe(false)
+    off.grantConsent('acme.indexer', consent)
     expect(new NativeBackendStore(dir).isEnabled()).toBe(false)
-  })
-
-  it('keeps an explicit on across restarts, without a notice', () => {
     new NativeBackendStore(dir).setEnabled(true)
-    const reloaded = new NativeBackendStore(dir)
-    expect(reloaded.isEnabled()).toBe(true)
-    expect(reloaded.takeDefaultOnNotice()).toBe(false)
+    expect(new NativeBackendStore(dir).isEnabled()).toBe(true)
   })
 
-  it('reads an unreadable marker as "set", so the main file decides (fail closed)', () => {
-    write0230(false)
-    writeFileSync(markerFile(), '{', { mode: 0o600 })
-    const store = new NativeBackendStore(dir)
-    expect(store.isEnabled()).toBe(false)
-    expect(store.takeDefaultOnNotice()).toBe(false)
+  it('reads an unreadable file as off (nothing allowed)', () => {
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    writeFileSync(mainFile(), '{"schemaVersion":1,"enabled":true,"plugins":', { mode: 0o600 })
+    expect(new NativeBackendStore(dir).isEnabled()).toBe(false)
   })
 })
 
 describe('NativeBackendStore: 0.2.30 settings read by 0.2.31', () => {
-  it('migrates a 0.2.30 "off" to on and reports it exactly once', () => {
+  it('keeps a 0.2.30 "off" off', () => {
     write0230(false)
     const store = new NativeBackendStore(dir)
-    expect(store.isEnabled()).toBe(true)
-    // A save before the notice is taken keeps the file as 0.2.30 wrote it.
-    store.setWorkspaceWrite('acme.indexer', '/w', true)
-    expect(readMain().enabled).toBe(false)
-    expect(new NativeBackendStore(dir).takeDefaultOnNotice()).toBe(true)
-    expect(existsSync(markerFile())).toBe(true)
-    expect(readMain()).toMatchObject({ enabled: true, plugins: { 'acme.indexer': { workspaceWrite: ['/w'] } } })
-    const reloaded = new NativeBackendStore(dir)
-    expect(reloaded.isEnabled()).toBe(true)
-    expect(reloaded.takeDefaultOnNotice()).toBe(false)
-  })
-
-  it('takes the notice once per process too', () => {
-    write0230(false)
-    const store = new NativeBackendStore(dir)
-    expect(store.takeDefaultOnNotice()).toBe(true)
-    expect(store.takeDefaultOnNotice()).toBe(false)
-  })
-
-  it('drops the notice once the user sets the switch first', () => {
-    write0230(false)
-    const store = new NativeBackendStore(dir)
-    store.setEnabled(false)
-    expect(store.takeDefaultOnNotice()).toBe(false)
     expect(store.isEnabled()).toBe(false)
+    store.setWorkspaceWrite('acme.indexer', '/w', true)
     expect(new NativeBackendStore(dir).isEnabled()).toBe(false)
   })
 
-  it('keeps a 0.2.30 "on" on, without a notice, and keeps its consents', () => {
+  it('keeps a 0.2.30 "on" on, with its consents', () => {
     write0230(true)
     const store = new NativeBackendStore(dir)
     expect(store.isEnabled()).toBe(true)
-    expect(store.takeDefaultOnNotice()).toBe(false)
     expect(store.record('acme.indexer').consent).toMatchObject({ packageVersion: '1.0.0' })
   })
 })
 
 describe('NativeBackendStore: 0.2.31 settings read by 0.2.30', () => {
-  it('writes only the keys 0.2.30 parses into its file, with the switch it should see', () => {
+  it('writes the switch 0.2.30 should see, in a file it parses', () => {
     const store = new NativeBackendStore(dir)
     store.grantConsent('acme.indexer', consent)
     expect(Object.keys(readMain()).sort()).toEqual(['enabled', 'plugins', 'schemaVersion'])
@@ -129,7 +95,7 @@ describe('NativeBackendStore: 0.2.31 settings read by 0.2.30', () => {
     expect(read0230()).toBe(true)
   })
 
-  it('follows a change 0.2.30 made after 0.2.31 set the switch (latest wins)', () => {
+  it('follows a change 0.2.30 made after 0.2.31 saved (latest wins)', () => {
     new NativeBackendStore(dir).setEnabled(true)
     save0230(false)
     expect(new NativeBackendStore(dir).isEnabled()).toBe(false)
@@ -137,11 +103,31 @@ describe('NativeBackendStore: 0.2.31 settings read by 0.2.30', () => {
     expect(new NativeBackendStore(dir).isEnabled()).toBe(true)
   })
 
-  it('a 0.2.31 explicit off survives a save by 0.2.30', () => {
-    new NativeBackendStore(dir).setEnabled(false)
-    save0230(false)
-    const reloaded = new NativeBackendStore(dir)
-    expect(reloaded.isEnabled()).toBe(false)
-    expect(reloaded.takeDefaultOnNotice()).toBe(false)
+  it('keeps the consent-revoked mark readable, and harmless to 0.2.30', () => {
+    const store = new NativeBackendStore(dir)
+    store.grantConsent('acme.indexer', consent)
+    store.forgetGrants('acme.indexer')
+    expect(new NativeBackendStore(dir).record('acme.indexer')).toEqual({ consentRevoked: true })
+    save0230(true)
+    expect(read0230()).toBe(true)
+  })
+})
+
+describe('NativeBackendStore: a consent taken away is marked', () => {
+  it('marks revoke and forgetGrants (with or without a record), keeps disabled, and a new consent clears it', () => {
+    const store = new NativeBackendStore(dir)
+    store.forgetGrants('never.bound')
+    expect(store.record('never.bound')).toEqual({ consentRevoked: true })
+    store.grantConsent('acme.indexer', consent)
+    store.setDisabled('acme.indexer', true)
+    store.forgetGrants('acme.indexer')
+    expect(store.record('acme.indexer')).toEqual({ disabled: true, consentRevoked: true })
+    store.grantConsent('acme.indexer', consent)
+    expect(store.record('acme.indexer')).not.toHaveProperty('consentRevoked')
+    store.revokeConsent('acme.indexer')
+    expect(store.record('acme.indexer')).toMatchObject({ consentRevoked: true })
+    expect(store.record('acme.indexer')).not.toHaveProperty('consent')
+    store.forget('acme.indexer')
+    expect(store.record('acme.indexer')).toEqual({})
   })
 })

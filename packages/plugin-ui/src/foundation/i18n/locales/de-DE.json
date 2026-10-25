@@ -1880,7 +1880,7 @@
       },
       "nativeBackends": {
         "title": "Native Backends",
-        "description": "Manche Navide-Plug-ins enthalten nativen Code. Navide führt ihn in einer Sandbox ohne eigenen Netzwerkzugriff aus; er kann nur die Arbeitsbereiche lesen, die Sie damit öffnen, und Dateien nur dort ändern, wo Sie es erlauben. Ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (unten als hohes Risiko markiert), kann darüber Netzwerk-Hosts kontaktieren, Daten aus dem Arbeitsbereich senden sowie Dateien im Arbeitsbereich ohne diese Berechtigung lesen und ändern. Mit der Installation eines Navide-Plug-ins mit nativem Code erlauben Sie dessen Ausführung; mit dem Schalter unten schalten Sie alle aus.",
+        "description": "Manche Navide-Plug-ins enthalten nativen Code. Navide führt ihn in einer Sandbox ohne eigenen Netzwerkzugriff aus; er kann nur die Arbeitsbereiche lesen, die Sie damit öffnen, und Dateien nur dort ändern, wo Sie es erlauben. Ein Navide-Plug-in, das zusätzlich git-, gh- und glab-Befehle ausführt (unten als hohes Risiko markiert), kann darüber Netzwerk-Hosts kontaktieren, Daten aus dem Arbeitsbereich senden sowie Dateien im Arbeitsbereich ohne diese Berechtigung lesen und ändern. Solange der Schalter unten eingeschaltet ist, erlauben Sie mit der Installation eines Navide-Plug-ins mit nativem Code dessen Ausführung; schalten Sie ihn aus, um alle zu stoppen.",
         "enable": "Navide-Plug-ins von Drittanbietern erlauben, native Backends auszuführen",
         "agentTools": {
           "enable": "Agents erlauben, Tools aus Navide-Plug-ins von Drittanbietern aufzurufen",
@@ -1905,8 +1905,6 @@
         },
         "shellRisk": "Hohes Risiko: führt git, gh und glab aus",
         "shellRiskDetail": "Über git, gh und glab kann es Netzwerk-Hosts kontaktieren, Daten aus dem Arbeitsbereich senden sowie Dateien im Arbeitsbereich ohne die gesonderte Berechtigung zum Ändern von Dateien lesen und ändern. Befehle, die beim Deaktivieren oder Widerrufen der Berechtigung bereits gestartet sind, laufen zu Ende (bis zu etwa 30 Sekunden).",
-        "defaultOnNotice": "Native Backends von Navide-Plug-ins von Drittanbietern sind jetzt standardmäßig eingeschaltet. Ausschalten können Sie sie unter Einstellungen → Navide-Plug-ins → Entwickler und nativer Code.",
-        "defaultOnNoticeAction": "Einstellungen öffnen",
         "status": {
           "ready": "Erlaubt",
           "disabledGlobally": "Aus (Einstellung ist aus)",

@@ -345,11 +345,10 @@ third-party native code. The Host never runs it directly; it starts only when
 all of these hold, and they are checked again before every restart:
 
 - Settings → Navide Plugins → "Allow third-party Navide plugins to run native backends"
-  is on. It is on by default (since 0.2.31) and the user can turn it off
-  there: while it is off, opening a plugin never prompts and never turns it
-  on. A profile whose switch an earlier version left off, without a record
-  that the user set it, reads as on and is told so once in a notice that
-  points at the switch.
+  is on. It is on by default for a new profile (since 0.2.31) and the user
+  can turn it off there: while it is off, opening a plugin never prompts and
+  never turns it on. A profile an earlier version already saved keeps the
+  switch as it was saved, so an earlier "off" stays off.
 - The user has not disabled the plugin's backend.
 - The user allowed this exact package content with this exact permission set
   (`permissions`, `backend.methods`, `backend.events`, and - only when the
