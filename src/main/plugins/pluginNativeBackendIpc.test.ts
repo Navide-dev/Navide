@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { NativeBackendStore } from './pluginNativeBackendStore'
 import type { IpcMainInvokeEvent } from 'electron'
 import { registerNativeBackendIpc, type NativeBackendAgentToolsControls } from './pluginNativeBackendIpc'
 import type { ThirdPartyBackendController, ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 
 type Listener = (event: IpcMainInvokeEvent, args: unknown) => unknown
 
-function setup(options: { agentTools?: boolean; authorized?: boolean } = {}) {
+function setup(options: { agentTools?: boolean; authorized?: boolean; isEnabled?: () => boolean } = {}) {
   const handlers = new Map<string, Listener>()
   const controller = {
     status: vi.fn(async (spec: ThirdPartyLaunchSpec) => ({ pluginId: spec.pluginId, status: 'ready' })),
@@ -15,6 +19,7 @@ function setup(options: { agentTools?: boolean; authorized?: boolean } = {}) {
     allow: vi.fn(async () => undefined),
     setDisabled: vi.fn(async () => undefined),
     setWorkspaceWrite: vi.fn(async () => undefined),
+    takeDefaultOnNotice: vi.fn(() => true),
   }
   const switches = { enabled: false, externalCallers: false }
   const controls: NativeBackendAgentToolsControls = {
@@ -27,7 +32,7 @@ function setup(options: { agentTools?: boolean; authorized?: boolean } = {}) {
     () => options.authorized ?? true,
     controller as unknown as ThirdPartyBackendController,
     () => [{ pluginId: 'acme.indexer' } as ThirdPartyLaunchSpec],
-    () => true,
+    options.isEnabled ?? (() => true),
     options.agentTools === false ? undefined : controls,
   )
   const invoke = (channel: string, args?: unknown) =>
@@ -124,3 +129,27 @@ describe('resource notice IPC', () => {
   })
 })
 
+
+describe('native backend IPC: the default-on notice (0.2.31)', () => {
+  it('reports the switch on for a fresh profile and off once the user turns it off (the Developer page and its On badge)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'native-backend-ipc-'))
+    try {
+      const store = new NativeBackendStore(join(dir, 'store'))
+      const { invoke } = setup({ isEnabled: () => store.isEnabled() })
+      await expect(invoke('plugins:nativeBackends:list')).resolves.toMatchObject({ enabled: true })
+      store.setEnabled(false)
+      await expect(invoke('plugins:nativeBackends:list')).resolves.toMatchObject({ enabled: false })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('passes the one-time answer through, for the trusted Host window only', async () => {
+    const { invoke, controller } = setup()
+    await expect(invoke('plugins:nativeBackends:takeDefaultOnNotice')).resolves.toBe(true)
+    expect(controller.takeDefaultOnNotice).toHaveBeenCalledTimes(1)
+    const denied = setup({ authorized: false })
+    await expect(denied.invoke('plugins:nativeBackends:takeDefaultOnNotice')).rejects.toThrow('unauthorized')
+    expect(denied.controller.takeDefaultOnNotice).not.toHaveBeenCalled()
+  })
+})

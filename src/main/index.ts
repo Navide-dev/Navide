@@ -1273,7 +1273,8 @@ frontendPluginManager.setBackendSpawnTrustVerifier((activation) => {
 })
 // Third-party package backends are someone else's native code. They run only
 // under the OS sandbox, with the user's consent for the exact binary and
-// permission set, behind a global switch that is off by default.
+// permission set (installing is the first one), behind a global switch that
+// is on by default.
 const nativeBackendRoot = join(app.getPath('userData'), 'plugin-native-backends')
 const nativeBackendStore = new NativeBackendStore(nativeBackendRoot)
 // Plan B1-b: the third-party agent-tool catalog. Created once the installed

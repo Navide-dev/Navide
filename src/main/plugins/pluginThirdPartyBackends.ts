@@ -68,7 +68,8 @@ import { hostStrings, type HostStringTable, type SupportedLocale } from '../host
  *
  * A third-party child starts only when ALL of these hold, checked again before
  * every (re)spawn: the global switch is on, the user has not disabled the
- * plugin, the user consented to this exact binary and permission set, the
+ * plugin, the user consented to this exact binary and permission set (the
+ * install is the first consent, see requestConsent), the
  * platform sandbox is available, and the crash breaker is closed. The child
  * then runs under the OS sandbox and the resource watchdog, and reaches the
  * Host only through a filesystem bridge limited to its bound workspace and,
@@ -645,7 +646,9 @@ export interface ThirdPartyBackendControllerOptions {
   /** Root for per-plugin private data directories. */
   dataRoot: string
   probe?: BackendSandboxProbe
-  /** Ask the user to run this backend. Absent = never prompt (deny). */
+  /** Ask the user to run a backend that changed since its consent. Absent =
+   *  never prompt (deny). A package without any consent is not asked: its
+   *  install disclosed the backend. */
   promptConsent?: (prompt: NativeBackendConsentPrompt) => Promise<boolean>
   /** Ask the user to allow file changes in one workspace. Absent = deny. */
   promptWorkspaceWrite?: (prompt: NativeBackendWritePrompt) => Promise<boolean>
@@ -1024,6 +1027,15 @@ export class ThirdPartyBackendController {
   }
 
   private async requestConsent(spec: ThirdPartyLaunchSpec, digest: string): Promise<void> {
+    // Installing is the consent: every install path discloses the native
+    // backend and its shell allowlist before it commits. A package with an
+    // earlier consent changed since then (an update, a rollback, edited
+    // files), and the install-time disclosure of those does not always show
+    // the backend change, so that one is still asked before it runs.
+    if (this.store.record(spec.pluginId).consent === undefined) {
+      this.recordConsent(spec, digest)
+      return
+    }
     const identity = `${spec.pluginId}\n${digest}\n${backendPermissionsKey(spec)}`
     if (this.declinedConsent.has(identity) || !this.options.promptConsent) {
       throw unavailable('the native backend has not been allowed')
@@ -1049,6 +1061,10 @@ export class ThirdPartyBackendController {
       this.declinedConsent.add(identity)
       throw unavailable('the user did not allow the native backend')
     }
+    this.recordConsent(spec, digest)
+  }
+
+  private recordConsent(spec: ThirdPartyLaunchSpec, digest: string): void {
     if (!this.store.isEnabled()) throw unavailable('third-party native backends are turned off')
     if (!this.consentMatches(spec, digest)) {
       this.store.grantConsent(spec.pluginId, {
@@ -1467,6 +1483,12 @@ export class ThirdPartyBackendController {
     } finally {
       await this.options.stopBackends?.(null)
     }
+  }
+
+  /** True once when an earlier version's "off" now reads as on by default
+   * (see NativeBackendStore.takeDefaultOnNotice). */
+  takeDefaultOnNotice(): boolean {
+    return this.store.takeDefaultOnNotice()
   }
 
   /** Per-plugin kill switch; fails closed like the global one. */

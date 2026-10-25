@@ -1880,7 +1880,7 @@
       },
       "nativeBackends": {
         "title": "原生后端",
-        "description": "部分 Navide 插件内含原生程序。Navide 会把它放在沙盒里运行，它本身没有网络：只能读取你一起打开的工作区，也只能在你允许的地方修改文件。但同时会运行 git、gh、glab 指令的 Navide 插件（下方标示为高风险）可以通过这些指令连到网络主机、送出工作区数据，也可以不经上述允许就读取与修改工作区文件。在你打开下方开关之前，不会运行任何原生程序。",
+        "description": "部分 Navide 插件内含原生程序。Navide 会把它放在沙盒里运行，它本身没有网络：只能读取你一起打开的工作区，也只能在你允许的地方修改文件。但同时会运行 git、gh、glab 指令的 Navide 插件（下方标示为高风险）可以通过这些指令连到网络主机、送出工作区数据，也可以不经上述允许就读取与修改工作区文件。安装含原生代码的 Navide 插件即表示允许它运行；关闭下方开关可停用全部。",
         "enable": "允许第三方 Navide 插件运行原生后端",
         "agentTools": {
           "enable": "允许 agent 调用第三方 Navide 插件的工具",
@@ -1905,6 +1905,8 @@
         },
         "shellRisk": "高风险：会运行 git、gh、glab",
         "shellRiskDetail": "可以通过 git、gh、glab 连到网络主机并送出工作区数据，也可以不经“修改文件”的允许就读取与修改工作区文件。禁用或撤销权限时已经开始的指令会继续运行到结束（最多约 30 秒）。",
+        "defaultOnNotice": "第三方 Navide 插件的原生后端现在默认开启。可在“设置 → Navide 插件 → 开发者与原生代码”中关闭。",
+        "defaultOnNoticeAction": "打开设置",
         "status": {
           "ready": "已允许",
           "disabledGlobally": "关闭（设置未打开）",
@@ -3026,7 +3028,7 @@
           "p7": "安装<strong>最多两道确认</strong>，只在需要时出现，而且在确认之前不会写入任何文件：发布者还没被信任时先问“信任发布者”——画面明说<em>有效的签章只证明套件没被窜改，不代表你愿意运行这个发布者的程序</em>；套件带有需要确认的风险时再问“确认 Navide 插件权限”，列出它要求的敏感能力，并在带有原生后端可执行文件时特别警告。两者都不需要时直接安装。",
           "extRollback": "Host 留着可以回去的版本时，那一行会多一颗“{toBundled}”或“{toVersion}”：确认后退回被它取代的那个套件，再用“{restart}”完成切换。回复被拒或失败时，画面显示 Host 自己给的原因（已翻译）；失败时会把先卸下的画面还原。",
           "extPrerelease": "每个 Navide 插件的行上有“{prerelease}”勾选，逐一决定要不要收预览版；Navide 市场的版本清单会标出哪些是预览版，也能直接安装。",
-          "extNative": "<strong>{native}</strong>：第三方 Navide 插件可以附带自己的后端程序，默认不会运行。要先打开“{nativeEnable}”，再对那个 Navide 插件的那一个版本按“{allow}”。它在沙盒里跑，本身没有网络（macOS 用 Seatbelt、Linux 用 bubblewrap），只能读你一起开的工作区、只能在你允许的地方写档；但同时会运行 git、gh、glab 指令的 Navide 插件（标示为高风险）可以通过这些指令连到网络主机、送出工作区数据、修改工作区文件，而且禁用前已开始的指令会继续跑完；程序或权限一有变动就要重新允许。Windows 目前不支持。",
+          "extNative": "<strong>{native}</strong>：第三方 Navide 插件可以附带自己的后端程序。“{nativeEnable}”打开时（默认打开），安装该 Navide 插件即表示允许运行；关闭它就会全部停用。之后程序或权限有变动时，Navide 会再问一次，或由你对那一个版本按“{allow}”。它在沙盒里跑，本身没有网络（macOS 用 Seatbelt、Linux 用 bubblewrap），只能读你一起开的工作区、只能在你允许的地方写档；但同时会运行 git、gh、glab 指令的 Navide 插件（标示为高风险）可以通过这些指令连到网络主机、送出工作区数据、修改工作区文件，而且禁用前已开始的指令会继续跑完；程序或权限一有变动就要重新允许。Windows 目前不支持。",
           "marketplace": "“{marketplace}”标签页：可搜索、筛分类、依下载数／更新时间／评分排序、隐藏不兼容的，最上面最多三个“{featured}”。详情页有 README、变更记录与版本清单，旁边列出权限与兼容性；评分在这里只能看，要评分或检举得到登录库网站登录后操作。标着“{pack}”的可以用“{packInstall}”一次装一整组；移除一组时，别的组还在用的成员不会被移掉。<code>navide://</code> 链接只会打开那个 Navide 插件的详情页，按不按安装永远由你决定。",
           "mirror": "<strong>下载镜像</strong>：每个版本的文件同时放在 GitHub Release 与 <code>dl.navide.dev</code>（同样的比特，附 sha256 可比对）。<strong>更新来源默认就是镜像</strong>——app 一启动就把 feed 指到 <code>dl.navide.dev</code>，GitHub 是备援。只有遇到<strong>网络层失败</strong>（连不上、超时、5xx／429）才会退回 GitHub，退过之后<strong>这个 session 就一直用 GitHub</strong>，重开 app 才会回到镜像。<strong>404 与签章／checksum 错误不会退回</strong>——两边放的是同一份档，换过去只会同样失败，照原样回报才有用。",
           "policyIntro": "<strong>执行策略</strong>决定 Navide 插件的后端可以运行什么。它<strong>不是独立标签页</strong>，而是 Navide 插件标签页最上面那一块，带自己的层级徽章（用户＋工作区）与政策档路径。最上面先显示<em>目前生效的政策</em>：来源、模式，以及状态 <em>生效中</em>／<em>已过期</em>／<em>无法使用</em>／<em>损坏</em>。",

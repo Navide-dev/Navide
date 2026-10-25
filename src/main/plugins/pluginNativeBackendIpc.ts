@@ -83,6 +83,10 @@ export function registerNativeBackendIpc(
     }
     return overview()
   })
+  handle('plugins:nativeBackends:takeDefaultOnNotice', async (event) => {
+    assertAuthorized(event)
+    return controller.takeDefaultOnNotice()
+  })
   handle('plugins:nativeBackends:allow', async (event, args) => {
     assertAuthorized(event)
     await controller.allow(specFor(record(args).id))

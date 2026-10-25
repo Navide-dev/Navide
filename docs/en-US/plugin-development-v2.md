@@ -345,16 +345,22 @@ third-party native code. The Host never runs it directly; it starts only when
 all of these hold, and they are checked again before every restart:
 
 - Settings → Navide Plugins → "Allow third-party Navide plugins to run native backends"
-  is on. It is off by default and can only be turned on there: while it is
-  off, opening a plugin never prompts and never turns it on.
+  is on. It is on by default (since 0.2.31) and the user can turn it off
+  there: while it is off, opening a plugin never prompts and never turns it
+  on. A profile whose switch an earlier version left off, without a record
+  that the user set it, reads as on and is told so once in a notice that
+  points at the switch.
 - The user has not disabled the plugin's backend.
 - The user allowed this exact package content with this exact permission set
   (`permissions`, `backend.methods`, `backend.events`, and - only when the
   package declares any - `backend.agentTools`). The digest covers every
   file in the package (relative path and content), because a backend can read
-  any package file and turn it into code at run time. Any new version that
-  changes any file - frontend files included - is staged but not started until
-  the user allows it again.
+  any package file and turn it into code at run time. Installing is that
+  consent: every install path discloses the native backend and its shell
+  allowlist before it commits, so a package with no consent yet is recorded
+  on its first start without another dialog. Any new version that changes any
+  file - frontend files included - is staged but not started until the user
+  allows it again, in the dialog shown before it starts.
 - The platform sandbox is available. There is no unsandboxed fallback.
 - The package does not declare `permissions.shell: "full"`. A backend package
   may declare `shell: "allowlist"`; see "Shell commands from a backend" below.

@@ -382,6 +382,7 @@ import type {
 import { useEvolve } from './composables/useEvolve'
 import { useShareNotices } from './composables/useShareNotices'
 import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
+import { useNativeBackendDefaultOnNotice } from './composables/useNativeBackendDefaultOnNotice'
 import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import {
@@ -15889,6 +15890,7 @@ useShareNotices(backend)
 // Plan B D-f: a Registry rescan of an installed plugin found new items (notice only).
 usePluginRescanNotices()
 usePluginResultHelperNotice()
+useNativeBackendDefaultOnNotice(() => openExtensionsSection('extensions-native-backends'))
 function onEvolveAction(action: EvolveAnnouncementAction): void {
   closePopover()
   const paneId = action.paneId

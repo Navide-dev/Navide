@@ -1,9 +1,9 @@
 <script setup lang="ts">
-// Third-party native backends: the global switch (off by default), and per
+// Third-party native backends: the global switch (on by default), and per
 // plugin the current state, consent, disable, and workspace write grants.
 // The Host owns every decision; this panel only shows it and forwards the
-// user's choices. First-time and changed-binary consent is asked by the Host
-// in a native dialog when the plugin's backend is first needed.
+// user's choices. Installing is the first consent; changed-binary consent is
+// asked by the Host in a native dialog when the plugin's backend is next needed.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ipcErrorMessage } from '../composables/usePluginInstallFlow'

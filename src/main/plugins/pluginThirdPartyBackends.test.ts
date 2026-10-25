@@ -174,8 +174,11 @@ describe('thirdPartyBackendLaunchSpec', () => {
 })
 
 describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
-  it('is off by default, and off means off: no prompt, no spawn, never re-enabled', async () => {
-    expect(new NativeBackendStore(join(root, 'fresh-store')).isEnabled()).toBe(false)
+  it('is on by default for a switch the user never set', () => {
+    expect(new NativeBackendStore(join(root, 'fresh-store')).isEnabled()).toBe(true)
+  })
+
+  it('off means off: no prompt, no spawn, never re-enabled', async () => {
     store.setEnabled(false)
     const spec = writePackage()
     const { instance, spawnImpl } = controller({ promptConsent: allow })
@@ -188,17 +191,18 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
 
   it('never prompts without a prompt handler', async () => {
     const { instance, spawnImpl } = controller()
-    expect((await refusal(instance.admit(writePackage()))).message).toBe('the native backend has not been allowed')
+    await instance.admit(writePackage({}, 'binary-v1'))
+    expect((await refusal(instance.admit(writePackage({}, 'binary-v2')))).message).toBe('the native backend has not been allowed')
     expect(spawnImpl).not.toHaveBeenCalled()
   })
 
-  it('asks once, then records consent and launches through sandbox-exec', async () => {
+  it('treats the install as consent: a fresh package binds without a prompt, through sandbox-exec', async () => {
     const spec = writePackage({ system: ['fs'] })
-    const { instance, spawnImpl } = controller({ promptConsent: allow })
+    const onConsentGranted = vi.fn()
+    const { instance, spawnImpl } = controller({ promptConsent: allow, onConsentGranted })
     const admission = await instance.admit(spec, root)
-    expect(allow).toHaveBeenCalledWith(expect.objectContaining({
-      pluginId: 'acme.indexer', update: false, system: ['fs'],
-    }))
+    expect(allow).not.toHaveBeenCalled()
+    expect(onConsentGranted).toHaveBeenCalledWith('acme.indexer')
     expect(store.isEnabled()).toBe(true)
     expect(store.record('acme.indexer').consent?.permissionsKey).toBe(backendPermissionsKey(spec))
     expect(admission.workspaceRoot).toBe(root)
@@ -212,27 +216,33 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     expect(statSync(instance.dataDirFor('acme.indexer')).mode & 0o777).toBe(0o700)
 
     await instance.admit(spec)
-    expect(allow).toHaveBeenCalledTimes(1)
+    expect(allow).not.toHaveBeenCalled()
   })
 
-  it('does not ask again in the same session after "Not now"', async () => {
-    const spec = writePackage()
+  it('does not ask again in the same session after "Not now" on a changed backend', async () => {
     const { instance } = controller({ promptConsent: deny })
-    await refusal(instance.admit(spec))
-    await refusal(instance.admit(spec))
+    await instance.admit(writePackage({}, 'binary-v1'))
+    const first = store.record('acme.indexer').consent
+    const changed = writePackage({}, 'binary-v2')
+    await refusal(instance.admit(changed))
+    await refusal(instance.admit(changed))
     expect(deny).toHaveBeenCalledTimes(1)
-    expect(store.record('acme.indexer').consent).toBeUndefined()
+    expect(store.record('acme.indexer').consent).toEqual(first)
+    instance.resetFailures('acme.indexer')
+    await refusal(instance.admit(changed))
+    expect(deny).toHaveBeenCalledTimes(2)
   })
 
-  it('asks again when the backend binary changes', async () => {
+  it('asks before the bind when an update changes the backend binary, and marks it as an update', async () => {
     const { instance } = controller({ promptConsent: allow })
     await instance.admit(writePackage({}, 'binary-v1'))
+    expect(allow).not.toHaveBeenCalled()
     const changed = writePackage({}, 'binary-v2')
     expect((await instance.status(changed)).status).toBe('needs-consent')
     expect((await instance.status(changed)).changedSinceConsent).toBe(true)
     await instance.admit(changed)
-    expect(allow).toHaveBeenCalledTimes(2)
-    expect(allow.mock.calls[1][0]).toMatchObject({ update: true })
+    expect(allow).toHaveBeenCalledTimes(1)
+    expect(allow.mock.calls[0][0]).toMatchObject({ update: true })
   })
 
   it('binds consent to the whole package: any changed file asks again', async () => {
@@ -243,31 +253,31 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     // An innocuous-looking asset a loader could decode into a library.
     writeFileSync(join(packageDir, 'frontend', 'asset.bin'), Buffer.from('payload-v1'), { mode: 0o644 })
     await instance.admit(spec)
-    expect(allow).toHaveBeenCalledTimes(1)
+    expect(allow).not.toHaveBeenCalled()
     await instance.admit(spec)
-    expect(allow).toHaveBeenCalledTimes(1)
+    expect(allow).not.toHaveBeenCalled()
 
     writeFileSync(join(packageDir, 'frontend', 'asset.bin'), Buffer.from('payload-v2'))
     await instance.admit(spec)
-    expect(allow).toHaveBeenCalledTimes(2)
+    expect(allow).toHaveBeenCalledTimes(1)
 
     writeFileSync(join(packageDir, 'frontend', 'index.html'), '<p>v2</p>')
     await instance.admit(spec)
-    expect(allow).toHaveBeenCalledTimes(3)
+    expect(allow).toHaveBeenCalledTimes(2)
 
     writeFileSync(join(packageDir, 'frontend', 'script.py'), 'print(1)')
     await instance.admit(spec)
-    expect(allow).toHaveBeenCalledTimes(4)
+    expect(allow).toHaveBeenCalledTimes(3)
 
     mkdirSync(join(packageDir, 'frontend', 'payload_4a5f'))
     await instance.admit(spec)
-    expect(allow).toHaveBeenCalledTimes(5)
+    expect(allow).toHaveBeenCalledTimes(4)
 
     // Files the Host writes into the package directory do not count.
     writeFileSync(join(packageDir, '.navide-registry-receipt.json'), '{}')
     writeFileSync(join(packageDir, '.navide-receipt.json'), '{}')
     await instance.admit(spec)
-    expect(allow).toHaveBeenCalledTimes(5)
+    expect(allow).toHaveBeenCalledTimes(4)
   })
 
   it('re-checks the switches after hashing: a stop during the digest refuses the spawn', async () => {
@@ -326,7 +336,8 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     await instance.admit(writePackage({ methods: ['files.search'] }))
     await instance.admit(writePackage({ methods: ['files.search', 'files.delete'] }))
     await instance.admit(writePackage({ methods: ['files.search', 'files.delete'], system: ['fs'] }))
-    expect(allow).toHaveBeenCalledTimes(3)
+    expect(allow).toHaveBeenCalledTimes(2)
+    expect(allow.mock.calls.every(([prompt]) => prompt.update === true)).toBe(true)
   })
 
   it('refuses a changed binary at respawn time even after admission', async () => {
@@ -358,13 +369,12 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     expect((await instance.status(spec)).status).toBe('shell-not-allowed')
   })
 
-  it('admits a backend with shell: allowlist once the user consents, naming shell in the prompt', async () => {
+  it('admits a freshly installed backend with shell: allowlist without a prompt (the install disclosed it)', async () => {
     const spec = writePackage({ system: ['fs'], shell: 'allowlist' })
     const { instance, spawnImpl } = controller({ promptConsent: allow })
     const admission = await instance.admit(spec, root)
-    expect(allow).toHaveBeenCalledWith(expect.objectContaining({
-      pluginId: 'acme.indexer', system: ['fs'], shell: 'allowlist', update: false,
-    }))
+    expect(allow).not.toHaveBeenCalled()
+    expect(store.record('acme.indexer').consent?.permissionsKey).toBe(backendPermissionsKey(spec))
     expect(admission.workspaceRoot).toBe(root)
     admission.spawnProcess(spec.entryFile, {})
     expect(spawnImpl).toHaveBeenCalledTimes(1)
@@ -375,11 +385,12 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
   it('asks again when an update adds shell, and the prompt marks it as an update', async () => {
     const { instance } = controller({ promptConsent: allow })
     await instance.admit(writePackage({ system: ['fs'] }))
-    expect(allow).toHaveBeenLastCalledWith(expect.not.objectContaining({ shell: expect.anything() }))
+    expect(allow).not.toHaveBeenCalled()
     const withShell = writePackage({ system: ['fs'], shell: 'allowlist' })
     expect((await instance.status(withShell))).toMatchObject({ status: 'needs-consent', changedSinceConsent: true })
+    await refusal(instance.admit(withShell, undefined, { prompt: false }))
     await instance.admit(withShell)
-    expect(allow).toHaveBeenCalledTimes(2)
+    expect(allow).toHaveBeenCalledTimes(1)
     expect(allow).toHaveBeenLastCalledWith(expect.objectContaining({ shell: 'allowlist', update: true }))
     await refusal(instance.admit(writePackage({ system: ['fs'] }), undefined, { prompt: false }))
   })
@@ -488,7 +499,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('kill switches', () => {
     expect(stopBackends).toHaveBeenCalledWith('acme.indexer')
     await refusal(admission.beforeSpawn())
     await refusal(instance.admit(spec))
-    expect(allow).toHaveBeenCalledTimes(1)
+    expect(allow).not.toHaveBeenCalled()
     expect((await instance.status(spec)).status).toBe('disabled')
     await instance.setDisabled('acme.indexer', false)
     await instance.admit(spec)
