@@ -31,7 +31,8 @@ describe('PluginDisclosureDiff (plan B D2)', () => {
     expect(added).toContain('New Can run: git')
     const removed = wrapper.findAll('.nv-diff-removed li').map((li) => li.text())
     expect(removed).toContain('Removed Permission: fs')
-    expect(removed).toContain('Removed Can read: README.md')
+    // fs goes with its scope, so the scope item is a narrower declaration.
+    expect(removed).toContain('Removed Declared scope (informational) Can read: README.md')
     expect(wrapper.text()).toContain('Risk level: Medium → High')
     // Facts, not warnings: no alert role anywhere in the diff.
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
@@ -49,6 +50,48 @@ describe('PluginDisclosureDiff (plan B D2)', () => {
     expect(mount(PluginDisclosureDiff, { props: { diff: widened }, global: { plugins: [i18n] } }).text()).toContain('新增')
     i18n.global.locale.value = 'ja-JP'
     expect(mount(PluginDisclosureDiff, { props: { diff: widened }, global: { plugins: [i18n] } }).text()).toContain('追加')
+  })
+})
+
+// A file scope is declared, never enforced (d14ed3055). Plans 0.2.9 → 0.2.31
+// declared one for its unscoped fs, and every scope item read "New" as if
+// the update asked for more access.
+describe('PluginDisclosureDiff file scopes (0.2.31)', () => {
+  const unscoped = disclosure('1.0.0', { system: ['fs'] })
+  const docs = disclosure('1.1.0', { system: ['fs'], scopes: { fs: { root: 'repository', read: ['docs/*'], write: ['docs/*'] } } })
+  const tags = (diff: ReturnType<typeof diffDisclosure>, list: 'added' | 'removed') =>
+    mount(PluginDisclosureDiff, { props: { diff }, global: { plugins: [i18n] } })
+      .findAll(`.nv-diff-${list} li`)
+      .map((li) => li.text())
+
+  it('lists a newly declared scope as new and informational, every item kept', () => {
+    const diff = diffDisclosure(unscoped, docs)
+    expect(diff.widened).toBe(false)
+    expect(tags(diff, 'added')).toEqual([
+      'New Declared scope (informational) Can read: docs/*',
+      'New Declared scope (informational) File scope: repository',
+      'New Declared scope (informational) Can write: docs/*',
+    ])
+  })
+
+  it('keeps the plain "New" on a scope change that claims more', () => {
+    const more = disclosure('1.2.0', { system: ['fs'], scopes: { fs: { root: 'repository', read: ['docs/*', 'src/**'], write: ['docs/*'] } } })
+    const diff = diffDisclosure(docs, more)
+    expect(diff.widened).toBe(true)
+    expect(tags(diff, 'added')).toEqual(['New Can read: src/**'])
+  })
+
+  it('never tags anything but a scope item', () => {
+    const withShell = disclosure('1.2.0', { system: ['fs'], shell: 'allowlist', scopes: { fs: { root: 'repository', read: ['docs/*'], write: ['docs/*'] } } })
+    const added = tags(diffDisclosure(unscoped, withShell), 'added')
+    expect(added).toContain('New Shell mode: allowlist')
+    expect(added.filter((text) => text.includes('Declared scope'))).toHaveLength(3)
+  })
+
+  it('has the label in every locale', () => {
+    for (const locale of i18n.global.availableLocales) {
+      expect(i18n.global.te('pluginDisclosure.diff.declaredScope', locale), locale).toBe(true)
+    }
   })
 })
 

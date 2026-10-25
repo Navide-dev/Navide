@@ -556,7 +556,15 @@ schema changed shows up once under `removed` (old) and once under `added`
 }
 ```
 
-`widened` is true when `added` is non-empty or the risk level rose.
+`widened` is true when `added` holds anything other than a file-scope item
+(`fsScopeRoot`, `fsScopeRead`, `fsScopeWrite`), when the declared file scope
+grows, or when the risk level rose. A file scope is declared, never enforced:
+the `fs` capability reaches the same files with or without one. So declaring
+a scope for an `fs` that had none claims less and does not widen, while
+dropping a scope that `fs` keeps, any new read or write pattern (a path
+moving from read to write included) and a different `root` do. Scope items
+are listed in `added` and `removed` either way; the diff view tags an
+informational change "Declared scope (informational)".
 
 `diffScan(from, to)` is the scan half: it flattens each scan report (`null`
 counts as empty) into items `{kind, key}` and returns `{added, removed,

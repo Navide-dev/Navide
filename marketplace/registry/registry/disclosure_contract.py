@@ -280,6 +280,31 @@ def disclosure_items(disclosure: ManifestDisclosure) -> list[DisclosureItem]:
     return sorted(items, key=lambda item: (item["kind"], item["key"]))
 
 
+_FS_SCOPE_KINDS = frozenset({"fsScopeRoot", "fsScopeRead", "fsScopeWrite"})
+
+
+def is_fs_scope_item(item: DisclosureItem) -> bool:
+    return item["kind"] in _FS_SCOPE_KINDS
+
+
+def fs_scope_change_widens(before: list[DisclosureItem], after: list[DisclosureItem]) -> bool:
+    """Whether going from ``before`` to ``after`` widens the declared file scope.
+
+    A scope is declared, never enforced: the fs capability reaches the same
+    files with or without one. Declaring a scope where there was none claims
+    less than the unscoped fs before it and does not widen; dropping a scope
+    while fs stays, a new read or write pattern and a different root do.
+    """
+    was = [item for item in before if is_fs_scope_item(item)]
+    now = [item for item in after if is_fs_scope_item(item)]
+    if not was:
+        return False
+    if not now:
+        return any(item["kind"] == "system" and item["key"] == "fs" for item in after)
+    had = {(item["kind"], item["key"]) for item in was}
+    return any((item["kind"], item["key"]) not in had for item in now)
+
+
 def diff_disclosure(old: ManifestDisclosure, new: ManifestDisclosure) -> DisclosureDiff:
     """D2: what an update (or rollback) from ``old`` to ``new`` adds, removes and keeps."""
     before = disclosure_items(old)
@@ -294,5 +319,7 @@ def diff_disclosure(old: ManifestDisclosure, new: ManifestDisclosure) -> Disclos
         "added": added,
         "removed": [item for item in before if canonical_contract_json(item) not in after_keys],
         "unchanged": [item for item in after if canonical_contract_json(item) in before_keys],
-        "widened": bool(added) or _RISK_RANK[new["risk"]["level"]] > _RISK_RANK[old["risk"]["level"]],
+        "widened": any(not is_fs_scope_item(item) for item in added)
+        or fs_scope_change_widens(before, after)
+        or _RISK_RANK[new["risk"]["level"]] > _RISK_RANK[old["risk"]["level"]],
     }
