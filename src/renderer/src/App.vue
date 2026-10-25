@@ -1252,7 +1252,29 @@ async function openPluginContributionWindow(contribution: PluginRegionContributi
   })
   if (!result?.ok) {
     console.warn(`[renderer] plugin window '${contribution.contributionKey}' could not be opened: ${result?.error ?? 'unknown error'}`)
+    return
   }
+  if (result.backendUnavailable) notePluginWindowWithoutBackend(contribution, result.backendUnavailable)
+}
+
+/** Window views whose missing native backend was already explained this
+ *  session, keyed by contribution and reason: said once, not on every open. */
+const pluginWindowsWithoutBackend = new Set<string>()
+
+/** A window view opens even when its native backend was refused or failed;
+ *  say so once, with where the backend is allowed. Nothing here changes it. */
+function notePluginWindowWithoutBackend(contribution: PluginRegionContribution, reason: string): void {
+  const key = `${contribution.contributionKey}\n${reason}`
+  if (pluginWindowsWithoutBackend.has(key)) return
+  pluginWindowsWithoutBackend.add(key)
+  notifyRestore.toast(
+    i18n.global.t('settings.extensions.nativeBackends.windowWithout', {
+      name: revealInvisibleText(contribution.title),
+      reason,
+      page: i18n.global.t('settings.extensions.developerNative'),
+    }),
+    { type: 'info' },
+  )
 }
 
 async function refreshPluginContributions(): Promise<void> {

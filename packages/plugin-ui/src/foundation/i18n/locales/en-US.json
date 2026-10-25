@@ -1889,6 +1889,7 @@
           "externalCallersDisclosure": "External programs share a single token, so the record of a call can only say \"an external client\", not which program it was. The Host credential is treated the same way."
         },
         "empty": "No installed Navide plugin has a native backend.",
+        "windowWithout": "{name} opened without its native backend: {reason}. The parts of it that need the backend will not work. To allow the backend, go to Settings → Navide Plugins → {page}.",
         "allow": "Allow",
         "disable": "Disable",
         "enable_plugin": "Enable",
