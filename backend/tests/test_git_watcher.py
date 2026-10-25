@@ -489,22 +489,35 @@ async def test_an_event_flood_schedules_a_bounded_number_of_loop_callbacks() -> 
     loop.call_soon_threadsafe = counting  # type: ignore[method-assign]
     try:
         sent = {(f"src/f{i}.py", "modified") for i in range(5000)}
+        ordered = sorted(sent)
 
-        def flood() -> None:
+        def flood(pairs: list[tuple[str, str]], other: bool) -> None:
             # The observer thread, marking dirty once per event.
-            for pair in sorted(sent):
+            for pair in pairs:
                 watcher._mark_dirty_threadsafe("/ws", [pair])
-            watcher._mark_dirty_threadsafe("/other", [])
+            if other:
+                watcher._mark_dirty_threadsafe("/other", [])
 
-        await asyncio.to_thread(flood)
-        assert await wait_until(lambda: len(fired) == 2, timeout=5.0)
+        # Two bursts, each run to the end while the loop is held (joined, not
+        # awaited), so no drain can run inside a burst: the interleaving is
+        # fixed rather than left to the scheduler (#629 counted 82 hops on a
+        # Linux runner where drains slipped in mid-flood). The first mark of a
+        # burst queues one drain and every later one joins it, so each burst
+        # costs exactly one hop. The second burst starts after the first drain
+        # has run, so it must queue a drain of its own.
+        for pairs, other in ((ordered[:2500], False), (ordered[2500:], True)):
+            observer = threading.Thread(target=flood, args=(pairs, other))
+            observer.start()
+            observer.join()
+            assert watcher._drain_queued
+            assert await wait_until(lambda: not watcher._drain_queued, timeout=5.0)
+        assert await wait_until(lambda: {ws for ws, _ in fired} == {"/ws", "/other"}, timeout=5.0)
     finally:
         loop.call_soon_threadsafe = orig  # type: ignore[method-assign]
-    assert hops <= 50, hops
-    # Nothing was lost on the way: one refresh per workspace, every path in it.
-    by_ws = dict(fired)
-    assert set(by_ws["/ws"]) == sent
-    assert by_ws["/other"] == []
+    assert hops == 2, hops
+    # Nothing was lost on the way: every path reached its workspace's refresh.
+    assert {pair for ws, paths in fired if ws == "/ws" for pair in paths} == sent
+    assert [paths for ws, paths in fired if ws == "/other"] == [[]]
 
 
 @pytest.mark.asyncio
