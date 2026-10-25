@@ -2156,9 +2156,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide konnte dieses Navide-Plug-in nicht prüfen: Die Vertrauensdaten der Registry sind auf einen Zeitpunkt nach der Uhr dieses Rechners datiert. Prüfen Sie, ob Datum und Uhrzeit Ihres Rechners stimmen, und versuchen Sie es dann erneut.",
-          "expired": "Navide konnte dieses Navide-Plug-in nicht prüfen: Nach der Uhr dieses Rechners sind die Vertrauensdaten der Registry abgelaufen. Prüfen Sie, ob Datum und Uhrzeit Ihres Rechners stimmen, und versuchen Sie es dann erneut.",
-          "signatureNotYetValid": "Navide konnte dieses Navide-Plug-in nicht prüfen: Seine Registry-Signatur ist auf einen Zeitpunkt nach der Uhr dieses Rechners datiert. Prüfen Sie, ob Datum und Uhrzeit Ihres Rechners stimmen, und versuchen Sie es dann erneut."
+          "notYetValid": "Navide konnte dieses Navide-Plug-in nicht prüfen: Die Uhr dieses Rechners geht offenbar nach (die Vertrauensdaten der Registry sind auf einen späteren Zeitpunkt datiert). Stellen Sie Datum und Uhrzeit Ihres Rechners richtig ein und versuchen Sie es dann erneut.",
+          "expired": "Navide konnte dieses Navide-Plug-in nicht prüfen: Nach der Uhr dieses Rechners sind die Vertrauensdaten der Registry abgelaufen, die Uhr geht also offenbar vor. Stellen Sie Datum und Uhrzeit Ihres Rechners richtig ein und versuchen Sie es dann erneut.",
+          "signatureNotYetValid": "Navide konnte dieses Navide-Plug-in nicht prüfen: Die Uhr dieses Rechners geht offenbar nach (seine Registry-Signatur ist auf einen späteren Zeitpunkt datiert). Stellen Sie Datum und Uhrzeit Ihres Rechners richtig ein und versuchen Sie es dann erneut."
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version} ist angehalten: Nach der Uhr dieses Rechners sind die Vertrauensdaten der Registry dafür abgelaufen. Entweder geht die Uhr vor, oder Navide hat die Registry seit über einem Tag nicht erreicht. Stellen Sie Datum und Uhrzeit richtig ein oder verbinden Sie sich mit dem Internet; Navide prüft innerhalb von 15 Minuten und beim Start erneut.",
+          "behind": "{id} {version} ist angehalten: Die Uhr dieses Rechners geht offenbar nach, daher sind die Vertrauensdaten der Registry dafür noch nicht gültig. Stellen Sie Datum und Uhrzeit Ihres Rechners richtig ein; Navide prüft innerhalb von 15 Minuten und beim Start erneut."
         }
       },
       "localInstall": {

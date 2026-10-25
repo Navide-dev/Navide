@@ -2156,9 +2156,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide가 이 Navide 플러그인을 확인하지 못했어요: Registry 신뢰 데이터의 시각이 이 컴퓨터의 시계보다 늦어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요.",
-          "expired": "Navide가 이 Navide 플러그인을 확인하지 못했어요: 이 컴퓨터의 시계로는 Registry 신뢰 데이터가 만료됐어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요.",
-          "signatureNotYetValid": "Navide가 이 Navide 플러그인을 확인하지 못했어요: Registry 서명 시각이 이 컴퓨터의 시계보다 늦어요. 컴퓨터의 날짜와 시간이 맞는지 확인한 뒤 다시 시도해 주세요."
+          "notYetValid": "Navide가 이 Navide 플러그인을 확인하지 못했어요: 이 컴퓨터의 시계가 느린 것 같아요(Registry 신뢰 데이터의 시각이 시계보다 늦어요). 컴퓨터의 날짜와 시간을 바르게 고친 뒤 다시 시도해 주세요.",
+          "expired": "Navide가 이 Navide 플러그인을 확인하지 못했어요: 이 컴퓨터의 시계로는 Registry 신뢰 데이터가 만료됐으니, 시계가 빠른 것 같아요. 컴퓨터의 날짜와 시간을 바르게 고친 뒤 다시 시도해 주세요.",
+          "signatureNotYetValid": "Navide가 이 Navide 플러그인을 확인하지 못했어요: 이 컴퓨터의 시계가 느린 것 같아요(Registry 서명 시각이 시계보다 늦어요). 컴퓨터의 날짜와 시간을 바르게 고친 뒤 다시 시도해 주세요."
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version}이(가) 멈춰 있어요: 이 컴퓨터의 시계로는 Registry 신뢰 데이터가 만료됐어요. 시계가 빠르거나 Navide가 하루 넘게 Registry에 연결하지 못했어요. 날짜와 시간을 바르게 고치거나 인터넷에 연결해 주세요. Navide가 15분 안에, 그리고 시작할 때 다시 확인해요.",
+          "behind": "{id} {version}이(가) 멈춰 있어요: 이 컴퓨터의 시계가 느린 것 같아서 Registry 신뢰 데이터가 아직 유효하지 않아요. 컴퓨터의 날짜와 시간을 바르게 고쳐 주세요. Navide가 15분 안에, 그리고 시작할 때 다시 확인해요."
         }
       },
       "localInstall": {

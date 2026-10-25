@@ -2156,9 +2156,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide 無法檢查這個 Navide 外掛：Registry 信任資料的時間晚於這台電腦的時鐘。請確認電腦的日期與時間正確，再試一次。",
-          "expired": "Navide 無法檢查這個 Navide 外掛：依這台電腦的時鐘，Registry 信任資料已過期。請確認電腦的日期與時間正確，再試一次。",
-          "signatureNotYetValid": "Navide 無法檢查這個 Navide 外掛：它的 Registry 簽章時間晚於這台電腦的時鐘。請確認電腦的日期與時間正確，再試一次。"
+          "notYetValid": "Navide 無法檢查這個 Navide 外掛：這台電腦的時鐘似乎慢了（Registry 信任資料的時間晚於時鐘）。請把電腦的日期與時間改正確，再試一次。",
+          "expired": "Navide 無法檢查這個 Navide 外掛：依這台電腦的時鐘，Registry 信任資料已過期，時鐘似乎快了。請把電腦的日期與時間改正確，再試一次。",
+          "signatureNotYetValid": "Navide 無法檢查這個 Navide 外掛：這台電腦的時鐘似乎慢了（它的 Registry 簽章時間晚於時鐘）。請把電腦的日期與時間改正確，再試一次。"
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version} 已停止：依這台電腦的時鐘，Registry 給它的信任資料已過期。可能是時鐘快了，或 Navide 已超過一天沒連上 Registry。請把日期與時間改正確或連上網路；Navide 會在 15 分鐘內及啟動時再檢查一次。",
+          "behind": "{id} {version} 已停止：這台電腦的時鐘似乎慢了，Registry 給它的信任資料還沒生效。請把電腦的日期與時間改正確；Navide 會在 15 分鐘內及啟動時再檢查一次。"
         }
       },
       "localInstall": {

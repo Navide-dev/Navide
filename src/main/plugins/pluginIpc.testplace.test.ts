@@ -17,6 +17,7 @@ import type { InstallerTrustConfig } from './pluginInstaller'
 import type { PluginActivationCatalogEntry } from './installedPlugins'
 import { writeRegistryTrustSnapshot } from './pluginInstalledTrust'
 import { PluginTestplaceStore } from './pluginTestplaceStore'
+import { registryClockRefusal } from '../../shared/registryClock'
 
 const { handlers, registry } = vi.hoisted(() => ({
   handlers: new Map<string, (...a: unknown[]) => unknown>(),
@@ -452,5 +453,49 @@ describe('the withdrawal check fails safe (S8 round 7)', () => {
     expect(await refusal({ status: 200, body: { items: [] } })).toBe('registry-outdated')
     expect(await refusal({ status: 503, body: null })).toBe('unreachable')
     expect(await refusal({ status: 200, body: { withdrawn: [] } })).toBeUndefined()
+  })
+})
+
+// #575 follow-up (option C, user 10-25): a computer clock more than five
+// minutes slow, or a day or more fast, still fails the unchanged trust check;
+// what changes is that the user is told it is the clock, and which way.
+describe('a computer clock off from the Registry (clock message)', () => {
+  // The trust metadata was signed at 10:00 and lasts a day (metadata()).
+  const SLOW = new Date('2026-08-16T09:50:00.000Z')
+  const FAST = new Date('2026-08-17T11:00:00.000Z')
+
+  it('words an install refused over a slow clock as the clock being behind', async () => {
+    register(SLOW)
+    const refused = await call('plugins:prepareInstall', { namespace: 'acme', name: 'beta', testplace: true })
+      .then(() => '(accepted)', (error: Error) => error.message)
+    expect(refused).toMatch(/TRUST_METADATA_NOT_YET_VALID: /)
+    expect(registryClockRefusal(refused)).toBe('behind')
+  })
+
+  it('words an install refused over a fast clock as the clock being ahead', async () => {
+    register(FAST)
+    const refused = await call('plugins:prepareInstall', { namespace: 'acme', name: 'beta', testplace: true })
+      .then(() => '(accepted)', (error: Error) => error.message)
+    expect(refused).toMatch(/TRUST_METADATA_EXPIRED: /)
+    expect(registryClockRefusal(refused)).toBe('ahead')
+  })
+
+  it('lists an installed build stopped at start over the clock, with the way it looks off', async () => {
+    register()
+    await installTestBuild()
+    expect(await call('plugins:clockQuarantine')).toEqual([])
+    register(SLOW)
+    expect(await call('plugins:clockQuarantine')).toEqual([{ id: ID, version: '0.3.0', clock: 'behind' }])
+    register(FAST)
+    expect(await call('plugins:clockQuarantine')).toEqual([{ id: ID, version: '0.3.0', clock: 'ahead' }])
+  })
+
+  it('does not list a build stopped for any other reason', async () => {
+    register()
+    await installTestBuild()
+    // Past the Testplace expiry but inside the trust metadata's day.
+    register(AFTER_EXPIRY)
+    expect(await call('plugins:expiredTestplace')).toHaveLength(1)
+    expect(await call('plugins:clockQuarantine')).toEqual([])
   })
 })

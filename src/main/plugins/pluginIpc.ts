@@ -29,6 +29,7 @@ import {
 } from './pluginInstaller'
 import { developerRegistryDownload, developerRegistryFetch, registryError } from './developerAccount'
 import type { DeveloperCallResult } from '../../shared/marketplaceDeveloper'
+import { registryClockRefusal, type RegistryClockRefusal } from '../../shared/registryClock'
 import {
   sensitiveCapabilities,
   assertRegistryUrlAllowed,
@@ -3688,6 +3689,30 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:expiredTestplace', async (event): Promise<ExpiredTestplaceBuild[]> => {
     assertAuthorized(event)
     return checkedExpiredTestplaceBuilds()
+  })
+
+  // Disclose, don't restrict: an installed Registry package that is stopped
+  // because its trust data fails against this computer's clock. Only the
+  // console said so before; the Extensions page lists these and points at the
+  // clock. The check itself is the unchanged startup / refresh check.
+  ipcMain.handle('plugins:clockQuarantine', (event): Array<{ id: string; version: string | null; clock: RegistryClockRefusal }> => {
+    assertAuthorized(event)
+    const loaded = new Set(manager.listInstalledPackages().map((pkg) => pkg.id))
+    return discoverInstalledRegistryPackageIds(pluginsRoot).flatMap((id) => {
+      if (loaded.has(id)) return []
+      try {
+        const active = lifecycleSelector.read(id)?.active
+        const dir = active ? lifecycleSelector.packageDir(id, active) : join(pluginsRoot, id)
+        const decision = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext())
+        if (decision.action !== 'quarantine') return []
+        const clock = registryClockRefusal(decision.reason)
+        if (!clock) return []
+        const receipt = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as Record<string, unknown>
+        return [{ id, version: typeof receipt.version === 'string' ? receipt.version : null, clock }]
+      } catch {
+        return []
+      }
+    })
   })
 
   // "Keep using (expired)": the user's choice for this exact artifact. It is
