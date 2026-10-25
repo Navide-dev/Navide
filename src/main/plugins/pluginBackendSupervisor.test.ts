@@ -1031,7 +1031,9 @@ describe('PluginBackendSupervisor', () => {
   it.each([
     ['agents', 'list_panes', 'allowlist', ['agents'], true],
     ['agents', 'list_panes', 'allowlist', ['fs'], false],
-    ['agents', 'list_panes', 'denylist', [], true],
+    // Never admitted by omission: a denylist predating `agents` never names it.
+    ['agents', 'list_panes', 'denylist', [], false],
+    ['agents', 'list_panes', 'full', [], true],
     ['agent-message-bodies', 'read_message', 'allowlist', ['agentMessages'], true],
     ['agent-message-bodies', 'read_message', 'allowlist', ['agents'], false],
     // A denylist written before agentMessages existed never names it.

@@ -128,14 +128,16 @@ describe('agents broker decisions', () => {
     )).toMatchObject({ kind: 'deny', response: { error: { code: 'WORKSPACE_SCOPE_VIOLATION' } } })
   })
 
-  it('never gives an agent message text by omission from a policy', () => {
+  it('never gives an agent agent data or message text by omission from a policy', () => {
     expect(executionPolicyAllows(agent, policySnapshot('denylist', []), 'agentMessages')).toBe(false)
     expect(executionPolicyAllows(agent, policySnapshot('allowlist', ['agents']), 'agentMessages')).toBe(false)
     expect(executionPolicyAllows(agent, policySnapshot('allowlist', ['agentMessages']), 'agentMessages')).toBe(true)
     expect(executionPolicyAllows(agent, policySnapshot('full', []), 'agentMessages')).toBe(true)
-    // Metadata follows the ordinary allowlist / denylist rule.
-    expect(executionPolicyAllows(agent, policySnapshot('denylist', []), 'agents')).toBe(true)
+    // Metadata is never admitted by omission either: a denylist predating it never names it.
+    expect(executionPolicyAllows(agent, policySnapshot('denylist', []), 'agents')).toBe(false)
     expect(executionPolicyAllows(agent, policySnapshot('denylist', ['agents']), 'agents')).toBe(false)
+    expect(executionPolicyAllows(agent, policySnapshot('allowlist', ['agents']), 'agents')).toBe(true)
+    expect(executionPolicyAllows(agent, policySnapshot('full', []), 'agents')).toBe(true)
   })
 })
 

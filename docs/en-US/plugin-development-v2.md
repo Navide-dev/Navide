@@ -1269,7 +1269,7 @@ arguments when they are intended as command data. For the private Backend
 Bridge, the `filesystem` port maps to the `fs` Execution Policy namespace, the
 `shell` port is judged on its command, the `web` port maps to `web`, the
 `agents` port to `agents` and the `agent-message-bodies` port to
-`agentMessages`. `web` and `agentMessages` are never admitted by omission: a
+`agentMessages`. `web`, `agents` and `agentMessages` are never admitted by omission: a
 `denylist` does not admit them, only `full` or an `allowlist` that names them. All other current Bridge ports fail closed for agent Initiators until
 an explicit namespace mapping is assigned; user Initiators continue through
 their existing checks.
@@ -1653,7 +1653,9 @@ copied through from an internal record. In particular:
 
 - **Session transcripts are not exposed** under any declaration: no vendor
   session file, no pane output log, no conversation content. `listSessions`
-  returns metadata only.
+  returns metadata only, and no session id: an id is what a CLI's `--resume`
+  takes, so handing it out would let a plugin that can also run a CLI or a
+  shell reopen the conversation. `resumable` says only whether it could be.
 - Message text and excerpts are not part of `agents`. `listMessages` gives
   `bodyLength`; only `agentMessages.read` returns `body`.
 - Account, sign-in, profile, usage and quota data, device identity, working
@@ -1663,11 +1665,12 @@ copied through from an internal record. In particular:
   other workspaces and of other devices are not visible, and no request field
   can choose a workspace.
 
-**Agent Execution Policy.** `agents` follows the ordinary `allowlist` /
-`denylist` rule. `agentMessages`, like `web`, is never admitted by omission: an
-agent-initiated call (a view capability or the `agent-message-bodies` Bridge
-port) is admitted only in `full` mode or by an `allowlist` that names
-`agentMessages`. The Host default allowlist includes `agents` but not
+**Agent Execution Policy.** `agents` and `agentMessages`, like `web`, are
+never admitted by omission, because a `denylist` written before they existed
+never names them: an agent-initiated call (a view capability, or the `agents` /
+`agent-message-bodies` Bridge port) is admitted only in `full` mode or by an
+`allowlist` that names the namespace. An existing denylist policy therefore
+behaves exactly as before. The Host default allowlist includes `agents` but not
 `agentMessages`, so a user has to add it before any agent reads message text.
 Direct user actions are not filtered.
 
@@ -1680,7 +1683,7 @@ All addresses are `workspace`-scoped. Unknown fields are `INVALID_ARGUMENT`;
 |---|---|---|
 | `agents.listPanes` | `{}` → `{panes: AgentPaneInfo[]}` | Registered panes of the workspace, including ones whose window is offline (`offline: true`) or not yet opened (`realized: false`) |
 | `agents.lineage` | `{includeRemoved?}` → `{nodes: AgentLineageNode[]}` | Parent links from the workspace's saved pane records; closed panes only with `includeRemoved: true`, so a tree survives its middle pane closing |
-| `agents.listMessages` | `{paneId?, since?, limit?}` → `{messages, oldestCreatedAt, scanned, truncated}` | Messages whose sender or recipient is a pane of the workspace, newest last; `since` is epoch milliseconds (exclusive); `paneId` narrows to one pane |
+| `agents.listMessages` | `{paneId?, since?, limit?}` → `{messages, oldestCreatedAt, truncated}` | Messages whose sender or recipient was stamped as this workspace when the row was written, newest last; `since` is epoch milliseconds (exclusive); `paneId` narrows to one pane |
 | `agents.listSessions` | `{limit?}` → `{sessions: AgentSessionInfo[]}` | The same rows as `cli_list_sessions`, newest first; no conversation content |
 | `agentMessages.read` | `{id}` → `{message}` | One message of `listMessages` plus its `body`; an id outside the workspace is `INVALID_ARGUMENT` |
 
@@ -1689,14 +1692,19 @@ Limits a plugin must plan for:
 - The message log keeps only a bounded window of recent rows for the whole
   machine. Compare `oldestCreatedAt` with your last `since`: when it is newer,
   rows you never saw were pruned.
-- Senders and recipients are recorded by messaging name, and a bare name
-  cannot say which workspace it belongs to. Scoping therefore fails closed: a
-  row counts as this workspace's only when its sender or recipient is one of
-  this workspace's qualified `<folder>/<pane>` names, and not even then while
-  another workspace on this machine shares the same folder label. Rows
-  recorded with bare names only are never returned, by `agents.listMessages`
-  or by `agentMessages.read`. Attribution is still best effort: a message
-  logged before a pane was renamed no longer matches that pane.
+- A messaging name alone cannot say which workspace it belongs to: a bare name
+  is unique only inside one window, and a qualified `<folder>/<pane>` name only
+  while no other workspace has the same folder name. So the backend stamps
+  each log row, as it is written, with the workspace path of its sender and of
+  its recipient, resolved while those panes are registered; a name it cannot
+  tie to exactly one workspace stays unstamped. `agents.listMessages` and
+  `agentMessages.read` return a row only when one side's stamp equals this
+  workspace's path exactly. Rows written before the stamp existed (Navide
+  0.2.30 and earlier) belong to no workspace and are never returned.
+- A message to or from a pane of another workspace on this machine is listed
+  when the other side is this workspace's pane: `sender` / `recipient` then
+  show the other workspace's folder and pane name, and `agentMessages.read`
+  returns the text that pane wrote.
 - There is no change event yet; poll.
 
 #### Backend Bridge ports `agents` and `agent-message-bodies`

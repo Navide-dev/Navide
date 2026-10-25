@@ -783,9 +783,12 @@ export function executionPolicyAllows(
   // and a denylist written before the namespace existed never mentions it. So
   // it is never allowed by omission: only full mode or an allowlist naming it.
   if (namespace === 'web') return policy.mode === 'allowlist' && policy.system.includes('web')
-  // Message text: like `web`, a denylist written before the namespace existed
-  // never mentions it, so an agent gets it only from an allowlist naming it.
-  if (namespace === 'agentMessages') return policy.mode === 'allowlist' && policy.system.includes('agentMessages')
+  // Agent data and message text: like `web`, a denylist written before the
+  // namespace existed never mentions it, so an agent gets either only from an
+  // allowlist naming it.
+  if (namespace === 'agents' || namespace === 'agentMessages') {
+    return policy.mode === 'allowlist' && policy.system.includes(namespace)
+  }
   return policy.mode === 'allowlist'
     ? policy.system.includes(namespace)
     : !policy.system.includes(namespace)
