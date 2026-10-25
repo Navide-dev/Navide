@@ -141,7 +141,7 @@ input off, or quitting stops it.
   **Do Nothing**, macOS also switches the input source / opens Emoji /
   starts Dictation on every press; the fn status row points this out.
 - Off macOS fn cannot be detected at all; the recorder says so.
-- The helper is built by `pnpm build` and, in a source checkout, by `pnpm dev`
+- The helper is built by `bun run build` and, in a source checkout, by `bun run dev`
   (`node scripts/build-fn-key-helper.mjs --if-needed`: rebuilt when missing or
   older than `native/fn-key/`; a failed build only warns). A copy without the
   helper says the helper is missing instead of ignoring fn.

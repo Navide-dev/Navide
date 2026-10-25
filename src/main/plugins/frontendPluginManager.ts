@@ -13918,7 +13918,7 @@ function ensureMiniIdeWindow(): BrowserWindow {
 
 /**
  * Dev-only mini-IDE descriptor pointing at the LOCAL build output
- * (`dist-plugins/mini-ide/`, produced by `pnpm run build:mini-ide`). Registered
+ * (`dist-plugins/mini-ide/`, produced by `bun run build:mini-ide`). Registered
  * at startup only under `AGENT_TEAM_PLUGIN_DEV=1` so development never needs a
  * registry install. The bundle is built separately (vite.mini-ide.config.ts)
  * with the `useBackend` → capabilityBackend alias, so it is not served by the
@@ -14281,7 +14281,7 @@ export function plansQuery(
 
 /**
  * Dev-only Plans descriptor pointing at the LOCAL build output
- * (`dist-plugins/plans/`, produced by `pnpm run build:plans`). Registered at
+ * (`dist-plugins/plans/`, produced by `bun run build:plans`). Registered at
  * startup only under `AGENT_TEAM_PLUGIN_DEV=1`, mirroring
  * {@link devMiniIdePluginDescriptor}. The bundle is built separately
  * (vite.plans.config.ts) with the `useBackend` → capabilityBackend alias, so it

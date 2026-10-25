@@ -133,7 +133,7 @@ Linux と Windows は macOS と同じ CI Gate を通過します。Arm 版 Windo
 
 ### Source からのインストール要件
 
-- Node.js 22.12+（22.x）と pnpm 10+
+- Bun（バージョンは `.bun-version` で固定）
 - Python 3.12+ と uv 0.11+
 - 対応する Coding CLI が一つ以上
 - 任意：解析用の Ollama または Local GGUF Model
@@ -143,9 +143,10 @@ Linux と Windows は macOS と同じ CI Gate を通過します。Arm 版 Windo
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-pnpm install
+bun install
+bun node_modules/electron/install.js  # once: Electron 44 downloads its binary lazily
 uv --project backend sync
-pnpm dev
+bun run dev
 ```
 
 Onboarding Wizard は Runtime を確認し、Agent CLI を検出し、関連する macOS 権限を説明します。続きは[はじめに](docs/ja-JP/getting-started.md)と[ユーザーガイド](docs/ja-JP/user-guide.md)を参照してください。
