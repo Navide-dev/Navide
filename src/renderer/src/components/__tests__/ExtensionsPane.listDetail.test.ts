@@ -6,6 +6,10 @@ import ExtensionsPane from '../ExtensionsPane.vue'
 
 // The risk level comes from the disclosure; its derivation has its own tests,
 // so here it is fixed per package.
+vi.mock('../../lib/disclosureText', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/disclosureText')>()),
+  disclosureClauses: (_t: unknown, _locale: unknown, disclosure: { id: string }) => [`declares for ${disclosure.id}`],
+}))
 vi.mock('../../../../shared/pluginDisclosureScan', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../shared/pluginDisclosureScan')>()),
   cardRiskLevel: (disclosure: { id: string }) => (disclosure.id === 'low.one' ? 'low' : 'high'),
@@ -70,6 +74,8 @@ describe('ExtensionsPane list and detail', () => {
 
     expect(wrapper.get('[data-select-id="acme.tracker"] .ext-md-risk').text()).toBe('High')
     expect(wrapper.get('[data-id="acme.tracker"] .ext-md-risk').text()).toBe('Risk level: High')
+    // The card says why, in the disclosure's own clauses.
+    expect(wrapper.get('[data-id="acme.tracker"] .ext-risk-reason').text()).toBe('declares for acme.tracker')
     // A package with no disclosure record has no risk badge and no overview link.
     expect(wrapper.find('[data-select-id="kaito.lint"] .ext-md-risk').exists()).toBe(false)
     expect(wrapper.find('[data-id="kaito.lint"] .ext-disclosure-link').exists()).toBe(false)
@@ -159,6 +165,20 @@ describe('ExtensionsPane list row warnings', () => {
       row: 'w.folder',
       label: () => t('settings.extensions.developerMode.loadedByUnknown'),
     },
+    ...(['changed', 'key-changed', 'no-key'] as const).map((unverified): Case => ({
+      name: `a developer folder whose loader record is unverified (${unverified})`,
+      installed: [{ ...base, id: `w.unverified-${unverified}`, provenance: 'developer-local-unpacked' }],
+      api: { developerMode: vi.fn().mockResolvedValue({ enabled: true, folders: [{ pluginId: `w.unverified-${unverified}`, path: '/dev/w', consentedAt: past, loaded: true, loadedBy: { kind: 'user' }, loadedByUnverified: unverified }] }) },
+      row: `w.unverified-${unverified}`,
+      label: () => t(unverified === 'key-changed' ? 'settings.extensions.developerMode.loadedByKeyChanged' : 'settings.extensions.developerMode.loadedByUnverified'),
+    })),
+    {
+      name: 'a developer folder whose loader record is not signed',
+      installed: [{ ...base, id: 'w.unsigned-loader', provenance: 'developer-local-unpacked' }],
+      api: { developerMode: vi.fn().mockResolvedValue({ enabled: true, folders: [{ pluginId: 'w.unsigned-loader', path: '/dev/w', consentedAt: past, loaded: true, loadedBy: { kind: 'user' }, loadedByUnsigned: true }] }) },
+      row: 'w.unsigned-loader',
+      label: () => `${t('settings.extensions.developerMode.loadedByUser')} ${t('settings.extensions.developerMode.loadedByUnsigned')}`,
+    },
     {
       name: 'a developer folder whose reload failed',
       installed: [{ ...base, id: 'w.reload', provenance: 'developer-local-unpacked' }],
@@ -234,5 +254,30 @@ describe('ExtensionsPane list row warnings', () => {
 
     expect(wrapper.get('[data-select-id="s.test"] .ext-md-source').attributes('data-source-kind')).toBe('test')
     expect(wrapper.find('[data-select-id="s.market"] .ext-md-source').exists()).toBe(false)
+  })
+
+  it('marks a developer folder an agent loaded, naming who in the label, without counting it as a warning', async () => {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        listInstalled: vi.fn().mockResolvedValue([{ ...base, id: 'w.agent', provenance: 'developer-local-unpacked', source: 'developer-unpacked' }]),
+        listFactoryPackages: vi.fn().mockResolvedValue([]),
+        checkUpdates: vi.fn().mockResolvedValue([]),
+        listPacks: vi.fn().mockResolvedValue([]),
+        disabledStoreStatus: vi.fn().mockResolvedValue({ status: 'ok' }),
+        developerMode: vi.fn().mockResolvedValue({
+          enabled: true,
+          folders: [{ pluginId: 'w.agent', path: '/dev/w', consentedAt: past, loaded: true, loadedBy: { kind: 'agent', callerKind: 'pane', paneName: 'Claude', approvedAt: past } }],
+        }),
+      },
+    }
+    wrapper = mount(ExtensionsPane, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    const row = wrapper.get('[data-select-id="w.agent"]')
+    const mark = row.get('.ext-md-source')
+    expect(mark.attributes('data-loaded-by-agent')).toBe('true')
+    expect(mark.attributes('aria-label')).toContain(t('pluginDisclosure.source.developer-unpacked'))
+    expect(mark.attributes('aria-label')).toContain('Claude')
+    expect(row.find('.ext-md-warn').exists()).toBe(false)
   })
 })

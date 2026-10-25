@@ -172,6 +172,7 @@ onBeforeUnmount(stopPolling)
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  container: overview / inline-size;
   /* Same 22px gutter as the settings blocks above it on the page. */
   padding: var(--space-1) 22px var(--space-6);
   font-size: var(--font-sm);
@@ -195,11 +196,48 @@ onBeforeUnmount(stopPolling)
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
+/* One ledger: the records are rows of a single bordered list, not separate
+   cards. From 640px each row has two aligned columns, who it is with its risk
+   and review on the left, its recent activity on the right; the notes and the
+   expanders span the row. */
+.nv-overview-entry + .nv-overview-entry {
+  margin-top: calc(-1 * var(--space-3) - 1px);
+}
+.nv-overview-entry:not(:last-of-type) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.nv-overview-entry + .nv-overview-entry {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+@container overview (min-width: 640px) {
+  .nv-overview-entry {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) minmax(0, 3fr);
+    align-items: start;
+    column-gap: var(--space-5);
+  }
+  .nv-overview-entry > :not(.nv-overview-head, .nv-overview-activity) {
+    grid-column: 1 / -1;
+  }
+  .nv-overview-entry > .nv-overview-activity {
+    grid-column: 2;
+    grid-row: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
 .nv-overview-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-3);
+}
+/* The flags keep one place under the name, so they never wrap unevenly. */
+.nv-overview-head > .nv-overview-flags {
+  flex-basis: 100%;
 }
 .nv-overview-flags {
   display: flex;
@@ -224,14 +262,33 @@ onBeforeUnmount(stopPolling)
 .nv-overview-risk--medium { background: var(--attention-subtle); color: var(--attention-fg); }
 .nv-overview-risk--high { background: var(--warning-fg); color: var(--bg-base); }
 .nv-overview-risk--highest { background: var(--danger-emphasis); color: var(--text-on-emphasis); }
+/* One alert style on the page: the scan flag matches the activity alerts
+   (tint and a dot); only the risk level is solid. */
 .nv-overview-flag {
+  gap: 6px;
   background: var(--danger-subtle);
   color: var(--danger-fg);
 }
+.nv-overview-flag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.nv-overview-flags :deep(.nv-source-badge) {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+/* Expanders read as disclosure rows (a chevron and a label), not as buttons. */
 .nv-overview-footer {
   display: flex;
   flex-wrap: wrap;
   gap: 0 var(--space-5);
+  border-top: 1px solid var(--border-muted);
+}
+.nv-overview-footer > details {
+  flex-basis: auto;
 }
 .nv-overview-footer > details[open] {
   flex-basis: 100%;
@@ -389,8 +446,8 @@ onBeforeUnmount(stopPolling)
   width: max-content;
   min-height: var(--control-h-lg);
   list-style: none;
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
   font-weight: 500;
   cursor: pointer;
   border-radius: var(--radius-xs);

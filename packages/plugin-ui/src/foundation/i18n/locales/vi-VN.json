@@ -1820,7 +1820,6 @@
       "removeShell": "Gỡ {name}",
       "none": "Không có",
       "save": "Lưu chính sách",
-      "edit": "Chỉnh sửa chính sách",
       "resetUser": "Đặt lại chính sách người dùng",
       "sourceTitle": "Nguồn chính sách của workspace",
       "sourceHint": "Đề xuất của kho chưa được tin cậy cho đến khi bạn xem và chấp nhận rõ ràng. Việc đổi nguồn cần đúng dấu vân tay hiện tại.",
@@ -1919,6 +1918,8 @@
       },
       "bundled": "Đi kèm",
       "listTitle": "Plugin Navide",
+      "developerNative": "Nhà phát triển và mã gốc",
+      "pageOn": "Bật",
       "bundledGit": "Git đi kèm",
       "state": {
         "active": "Đang hoạt động",

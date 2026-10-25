@@ -149,6 +149,7 @@ import ChannelsPane from './settings/ChannelsPane.vue'
 import SecurityPane from './settings/SecurityPane.vue'
 import NavideCloudMark from './NavideCloudMark.vue'
 import SettingsNavItem from './settings/SettingsNavItem.vue'
+import SettingsNavSubItem from './settings/SettingsNavSubItem.vue'
 import SettingsSection from './settings/SettingsSection.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingRow from './settings/SettingRow.vue'
@@ -289,68 +290,68 @@ const activeTab = ref<Tab>(props.initialTab ?? 'general')
 // The CLI Extensions page scans every CLI's files, so it mounts on first visit
 // and stays mounted after that.
 const visitedCliExtensions = ref(activeTab.value === 'cliExtensions')
-// D-f: the disclosure overview reads every plugin's activity, so it mounts
-// only once its section of the Navide Plugins page first scrolls into view or
-// a link to it is followed (opening Settings, or that page, reads nothing),
-// and it polls only while the section is in view.
-const visitedDisclosureOverview = ref(activeTab.value === 'disclosureOverview')
-const disclosureOverviewInView = ref(false)
-const disclosureOverviewSection = ref<HTMLElement | null>(null)
-let disclosureOverviewObserver: IntersectionObserver | null = null
-onMounted(() => {
-  if (!disclosureOverviewSection.value || typeof IntersectionObserver === 'undefined') return
-  disclosureOverviewObserver = new IntersectionObserver((entries) => {
-    disclosureOverviewInView.value = entries.some((entry) => entry.isIntersecting)
-    if (disclosureOverviewInView.value) visitedDisclosureOverview.value = true
-  })
-  disclosureOverviewObserver.observe(disclosureOverviewSection.value)
-})
-onBeforeUnmount(() => disclosureOverviewObserver?.disconnect())
-// The overview is a section of the Navide Plugins page now; the old tab id
-// stays accepted (initialTab, setTab, setSection, the plugin row's link) and
-// lands on that page, scrolled to the section.
-watch(activeTab, async (tab) => {
-  if (tab !== 'disclosureOverview') return
-  visitedDisclosureOverview.value = true
-  activeTab.value = 'extensions'
-  await nextTick()
-  requestAnimationFrame(() => {
-    document
-      .querySelector<HTMLElement>('[data-settings-section="disclosureOverview"]')
-      ?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-  })
-}, { immediate: true })
-watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.value = true })
-// The Navide Plugins page is long (policy editor, inventory, Disclosure
-// overview), so its parts are one click away from the top of the page.
-const extensionsJumps = [
-  { section: 'execution-policy', label: 'settings.nav.executionPolicy' },
-  { section: 'extensions-bundled', label: 'settings.extensions.bundled' },
-  { section: 'extensions-install-from-file', label: 'settings.extensions.installed' },
-  { section: 'extensions-developer-mode', label: 'settings.extensions.developerMode.title' },
-  { section: 'extensions-native-backends', label: 'settings.extensions.nativeBackends.title' },
-  { section: 'disclosureOverview', label: 'settings.nav.disclosureOverview' },
-] as const
-// The jump link of the part currently at the top of the page, for aria-current.
-const activeExtensionsJump = ref<string>(extensionsJumps[0].section)
-function onExtensionsScroll(event: Event): void {
-  const scroller = event.currentTarget as HTMLElement
-  const top = scroller.getBoundingClientRect().top
-  let current: string = extensionsJumps[0].section
-  for (const jump of extensionsJumps) {
-    const el = scroller.querySelector(`[data-settings-section="${jump.section}"]`)
-    if (el && el.getBoundingClientRect().top - top <= scroller.clientHeight / 3) current = jump.section
+// Navide Plugins is four pages under its sidebar entry: the plugins, the
+// execution policy, developer and native settings, and the disclosure records.
+type PluginsPage = 'plugins' | 'policy' | 'developer' | 'disclosure'
+const pluginsPages = [
+  { id: 'plugins', label: 'settings.extensions.listTitle' },
+  { id: 'policy', label: 'settings.nav.executionPolicy' },
+  { id: 'developer', label: 'settings.extensions.developerNative' },
+  { id: 'disclosure', label: 'settings.nav.disclosureOverview' },
+] as const satisfies ReadonlyArray<{ id: PluginsPage; label: string }>
+const pluginsPage = ref<PluginsPage>('plugins')
+const pluginsPageLabel = computed(() => pluginsPages.find((page) => page.id === pluginsPage.value)!.label)
+// The pages split what used to be one scrolling page, so each page's state shows
+// on its row before it is opened: ⚠ on Execution Policy while that page shows a
+// warning, "On" on Developer while Developer Mode or a native-backend switch is on.
+const policyAttention = ref<string[]>([])
+const developerSwitchesOn = ref<string[]>([])
+function pluginsPageMarker(page: PluginsPage): { text: string; tone: 'risk' | 'on'; label: string } | null {
+  if (page === 'policy' && policyAttention.value.length) {
+    return { text: '⚠', tone: 'risk', label: policyAttention.value.join('\n') }
   }
-  // The last part can be too short to ever reach the top; at the bottom it is the one in view.
-  if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) {
-    current = extensionsJumps[extensionsJumps.length - 1].section
+  if (page === 'developer' && developerSwitchesOn.value.length) {
+    const on = t('settings.extensions.pageOn')
+    return { text: on, tone: 'on', label: t('settings.extensionsPolicy.labeledValue', { label: on, value: developerSwitchesOn.value.join(', ') }) }
   }
-  activeExtensionsJump.value = current
+  return null
 }
-// A plugin card's link: the overview section, then that plugin's entry once the
+/** The page each section of the former single Navide Plugins page lives on. */
+const PLUGINS_SECTION_PAGE: Readonly<Record<string, PluginsPage>> = {
+  'extensions-bundled': 'plugins',
+  'extensions-install-from-file': 'plugins',
+  'execution-policy': 'policy',
+  'extensions-developer-mode': 'developer',
+  'extensions-native-backends': 'developer',
+  disclosureOverview: 'disclosure',
+}
+function openPluginsPage(page: PluginsPage): void {
+  activeTab.value = 'extensions'
+  pluginsPage.value = page
+}
+// Coming to Navide Plugins from another tab starts on its plugins page. The old
+// `disclosureOverview` tab id stays accepted (initialTab, setTab, setSection,
+// links) and opens the Disclosure page. Synchronous, so a caller that sets the
+// tab and then a page in one go keeps its page.
+watch(activeTab, (tab, previous) => {
+  if (tab === 'disclosureOverview') {
+    pluginsPage.value = 'disclosure'
+    activeTab.value = 'extensions'
+    return
+  }
+  if (tab === 'extensions' && previous !== 'extensions' && previous !== 'disclosureOverview') pluginsPage.value = 'plugins'
+}, { immediate: true, flush: 'sync' })
+watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.value = true })
+// D-f: the disclosure overview reads every plugin's activity, so it mounts the
+// first time its page is shown (opening Settings, or another page, reads
+// nothing), and it polls only while that page is shown.
+const disclosurePageShown = computed(() => activeTab.value === 'extensions' && pluginsPage.value === 'disclosure')
+const visitedDisclosureOverview = ref(false)
+watch(disclosurePageShown, (shown) => { if (shown) visitedDisclosureOverview.value = true }, { immediate: true })
+// A plugin card's link: the Disclosure page, then that plugin's entry once the
 // overview (loaded on first view) has rendered it.
 function openDisclosureOverview(id?: string): void {
-  activeTab.value = 'disclosureOverview'
+  openPluginsPage('disclosure')
   if (!id) return
   let tries = 0
   const seek = (): void => {
@@ -364,11 +365,6 @@ function openDisclosureOverview(id?: string): void {
     else if (++tries < 20) setTimeout(seek, 100)
   }
   setTimeout(seek, 50)
-}
-function jumpToExtensionsSection(section: string): void {
-  document
-    .querySelector<HTMLElement>(`[data-settings-section="extensions"] [data-settings-section="${section}"]`)
-    ?.scrollIntoView({ block: 'start', behavior: 'smooth' })
 }
 // initialTab is only read once at mount by the ref initializer above; when the
 // modal is already open and a new tab is requested (e.g. the ui.settings.open
@@ -398,6 +394,7 @@ defineExpose({
   setSection: async (tab: Tab, section: string): Promise<void> => {
     activeTab.value = tab
     if (tab === 'cross-device') cloudSubtab.value = 'sync'
+    if (tab === 'extensions' && PLUGINS_SECTION_PAGE[section]) pluginsPage.value = PLUGINS_SECTION_PAGE[section]
     if (tab === 'cliAgents') await openCliSection(section)
     await nextTick()
     requestAnimationFrame(() => {
@@ -1311,6 +1308,7 @@ async function openSettingsSearchResult(item: SettingsSearchItem): Promise<void>
   if (item.tab === 'mcp' && item.mcpView) mView.value = item.mcpView
   if (item.tab === 'help' && item.helpTopic) helpTopic.value = item.helpTopic
   if (item.tab === 'cross-device') cloudSubtab.value = 'sync'
+  if (item.tab === 'extensions' && PLUGINS_SECTION_PAGE[item.section]) pluginsPage.value = PLUGINS_SECTION_PAGE[item.section]
   settingsSearchQuery.value = ''
   await nextTick()
   requestAnimationFrame(() => {
@@ -2774,6 +2772,14 @@ watch(activeTab, (tab) => {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
                 </template>
               </SettingsNavItem>
+              <SettingsNavSubItem
+                v-for="page in pluginsPages"
+                :key="page.id"
+                :label="$t(page.label)"
+                :active="activeTab === 'extensions' && pluginsPage === page.id"
+                :marker="pluginsPageMarker(page.id)"
+                @select="openPluginsPage(page.id)"
+              />
               <SettingsNavItem :label="$t('settings.nav.marketplace')" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.4h10.8l-.8 7.1a1.2 1.2 0 0 1-1.2 1.1H4.6a1.2 1.2 0 0 1-1.2-1.1L2.6 5.4Z"/><path d="M5.8 7.2V4.6a2.2 2.2 0 0 1 4.4 0v2.6"/></svg>
@@ -4587,39 +4593,53 @@ watch(activeTab, (tab) => {
           <component :is="helpTopicComponents[helpTopic]" v-if="activeTab === 'help'" />
         </div>
 
-        <!-- ── EXTENSIONS TAB (flag-gated) ───────────────────────────────── -->
-        <!-- One page, two things that belong together: the policy that decides
-             what an extension may execute, then the extensions it applies to.
-             The scope badge sits on the policy block rather than the page,
-             because the policy is the part that is per user and per workspace —
-             the inventory below it is not. -->
+        <!-- ── NAVIDE PLUGINS TAB ────────────────────────────────────────── -->
+        <!-- Four pages under one sidebar entry: the plugins, the policy that
+             decides what they may execute, developer and native settings, and
+             the disclosure records. The scope badge sits on the policy page,
+             because the policy is the part that is per user and per workspace. -->
         <div v-show="activeTab === 'extensions'" class="s-body s-body--bleed extensions-body" data-settings-section="extensions">
-          <h1 class="s-page-title">{{ $t('settings.nav.extensions') }}</h1>
-          <nav class="ext-jump" :aria-label="$t('settings.nav.extensions')">
+          <h1 class="s-page-title">{{ $t(pluginsPageLabel) }}</h1>
+          <!-- In the icon-only sidebar the pages have no rows of their own there. -->
+          <div class="ext-pages" role="tablist" :aria-label="$t('settings.nav.extensions')">
             <button
-              v-for="jump in extensionsJumps"
-              :key="jump.section"
+              v-for="page in pluginsPages"
+              :key="page.id"
               type="button"
-              class="ext-jump-link"
-              :aria-current="activeExtensionsJump === jump.section ? 'location' : undefined"
-              @click="jumpToExtensionsSection(jump.section)"
-            >{{ $t(jump.label) }}</button>
-          </nav>
-          <div class="extensions-scroll" @scroll.passive="onExtensionsScroll">
-            <section class="ext-policy-block" data-settings-section="execution-policy">
-              <h2 class="ext-policy-block-title">{{ $t('settings.nav.executionPolicy') }}</h2>
+              role="tab"
+              class="ext-pages-tab"
+              :aria-selected="pluginsPage === page.id"
+              @click="pluginsPage = page.id"
+            >
+              {{ $t(page.label) }}
+              <span
+                v-if="pluginsPageMarker(page.id)"
+                class="ext-pages-marker"
+                :class="`ext-pages-marker--${pluginsPageMarker(page.id)!.tone}`"
+                role="img"
+                :aria-label="pluginsPageMarker(page.id)!.label"
+                :title="pluginsPageMarker(page.id)!.label"
+              >{{ pluginsPageMarker(page.id)!.text }}</span>
+            </button>
+          </div>
+          <div class="extensions-scroll">
+            <section v-show="pluginsPage === 'policy'" class="ext-policy-block" data-settings-section="execution-policy">
               <div class="settings-meta-row inline">
                 <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
                 <span class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
                 <span class="settings-path" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
               </div>
-              <ExecutionPolicyPane :workspace-path="props.workspacePath" />
+              <ExecutionPolicyPane :workspace-path="props.workspacePath" @attention="(reasons) => (policyAttention = reasons)" />
             </section>
-            <ExtensionsPane @open-disclosure-overview="openDisclosureOverview" />
+            <ExtensionsPane
+              v-show="pluginsPage === 'plugins' || pluginsPage === 'developer'"
+              :page="pluginsPage === 'developer' ? 'developer' : 'plugins'"
+              @open-disclosure-overview="openDisclosureOverview"
+              @developer-on="(switches) => (developerSwitchesOn = switches)"
+            />
             <!-- Plan B D5, D-f: records only, it changes nothing a Navide plugin may do. -->
-            <section ref="disclosureOverviewSection" class="ext-policy-block" data-settings-section="disclosureOverview">
-              <h2 class="ext-policy-block-title">{{ $t('settings.nav.disclosureOverview') }}</h2>
-              <PluginDisclosureOverview v-if="visitedDisclosureOverview" :paused="!disclosureOverviewInView" />
+            <section v-show="pluginsPage === 'disclosure'" class="ext-policy-block" data-settings-section="disclosureOverview">
+              <PluginDisclosureOverview v-if="visitedDisclosureOverview" :paused="!disclosurePageShown" />
             </section>
           </div>
         </div>
@@ -5281,70 +5301,57 @@ watch(activeTab, (tab) => {
   color: var(--text-bright);
   border-bottom-color: var(--accent-fg);
 }
-/* Jump links under the page title: quiet pills, one per part of the page. */
-/* One row at any width: it scrolls sideways rather than wrapping. */
-.ext-jump {
-  display: flex;
+/* With one of its pages selected under it, the Navide Plugins row is the
+   group's heading: the selected page carries the fill, not both rows. */
+.s-nav-group :deep(.settings-nav-item.active:has(+ .settings-nav-subitem)) {
+  background: transparent;
+}
+/* The Navide Plugins pages as a tab row, only where the sidebar is the
+   icon-only rail and has no rows for them. */
+.ext-pages {
+  display: none;
   flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
-  /* A soft right edge says the row scrolls when it is wider than the page. */
-  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-  gap: 6px;
-  padding: var(--space-3) 22px var(--space-3);
+  gap: 2px;
+  padding: var(--space-2) 22px 0;
   border-bottom: 1px solid var(--border-muted);
   flex-shrink: 0;
 }
-.ext-jump-link {
+@media (max-width: 720px) {
+  .ext-pages { display: flex; }
+}
+.ext-pages-tab {
   flex: 0 0 auto;
-  height: var(--control-h-lg);
+  min-height: var(--control-h-lg);
   padding: 0 12px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-pill);
-  background: var(--bg-base);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
   color: var(--text-secondary);
-  font-size: var(--font-xs);
-  font-weight: 500;
+  font-size: var(--font-sm);
   cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
-.ext-jump-link:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
+.ext-pages-tab[aria-selected='true'] {
+  border-bottom-color: var(--accent-emphasis);
   color: var(--text-bright);
+  font-weight: 600;
 }
-.ext-jump-link[aria-current] {
-  border-color: var(--accent-emphasis);
-  background: var(--accent-subtle);
-  color: var(--accent-fg);
+.ext-pages-marker {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-xs);
+  font-weight: 600;
 }
-.ext-jump-link:focus-visible {
+.ext-pages-marker--risk { background: var(--risk-subtle); color: var(--risk-fg); }
+.ext-pages-marker--on { background: var(--bg-muted); color: var(--text-primary); }
+.ext-pages-tab:focus-visible {
   outline: 2px solid var(--accent-focus);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
-.extensions-scroll { padding-top: var(--space-5); scroll-padding-top: var(--space-4); }
-.ext-policy-block { margin-bottom: var(--space-4); }
-/* The page stacks three blocks (policy, inventory, Disclosure overview); an
-   inset hairline above each later one marks where the next block starts. */
-.extensions-scroll > * + *::before {
-  content: '';
-  display: block;
-  height: 1px;
-  margin: 0 22px var(--space-5);
-  background: var(--border-muted);
-}
-.ext-policy-block-title {
-  /* Side margins, not padding or a width: these panels have no border-box, so
-     a width here would push the block past its grid track. */
-  margin: 0 22px;
-  font-size: var(--font-lg);
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--text-bright);
-}
-.ext-policy-block > .settings-meta-row.inline { margin: 8px 22px 14px; background: var(--bg-subtle); }
-/* The inventory pane carries its own 22px gutter, so its divider needs no inset. */
-.extensions-scroll > .extensions-pane::before { margin-left: 0; margin-right: 0; }
+.extensions-scroll { padding-top: var(--space-2); }
+.ext-policy-block > .settings-meta-row.inline { margin: 0 22px 14px; background: var(--bg-subtle); }
 .settings-meta-row {
   display: flex;
   align-items: center;
