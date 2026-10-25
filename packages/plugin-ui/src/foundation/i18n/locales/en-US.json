@@ -8953,6 +8953,7 @@
     "status-empty": "This tab has no panes",
     "delete-tab": "Delete This Tab",
     "add-group": "New Run Group",
+    "plugin-tab": "Navide plugin: {title}",
     "collapse-families": "Collapse all pane families in this tab",
     "expand-families": "Expand all pane families in this tab",
     "family-toggle-grid": "Family folding is available in Auto, Spotlight, and Fullscreen layouts",

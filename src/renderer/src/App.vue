@@ -396,6 +396,7 @@ import {
 import { accountLabel } from './lib/accountLabel'
 import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
 import { runAgentAccountSwitch, type AgentAccountSwitchConfirmRequest } from './lib/agentAccountSwitch'
+import { usePluginMainTab } from './lib/pluginMainTab'
 import {
   DEFAULT_SLOT_ID,
   FOLLOW_SWITCH_AGENT,
@@ -1189,17 +1190,19 @@ function pluginContributionsAt(location: Exclude<PluginRegionLocation, 'left' | 
   return pluginContributionsByLocation.value[location]
 }
 
-/** The "main" view whose stage tab is active, or null while a run-group tab is.
- *  Null by default, so installing a plugin never takes the stage over. */
-const activePluginMainKey = ref<string | null>(null)
+/** Navide plugin "main" views, as stage tabs after the run groups. The tab
+ *  names its plugin id, publisher and source, so a plugin's own title cannot
+ *  pass for a native tab, and two same-named plugins can be told apart. */
 const pluginMainTabs = computed(() =>
-  pluginContributionsAt('main').map((c) => ({ key: c.contributionKey, label: c.title }))
+  pluginContributionsAt('main').map((c) => ({
+    key: c.contributionKey,
+    label: c.title,
+    pluginId: c.pluginId,
+    source: c.source,
+    expiresAt: c.expiresAt,
+    testplaceVia: c.testplaceVia,
+  }))
 )
-watch(pluginMainTabs, (tabs) => {
-  if (activePluginMainKey.value !== null && !tabs.some((t) => t.key === activePluginMainKey.value)) {
-    activePluginMainKey.value = null
-  }
-})
 
 const windowPluginContributions = computed(() =>
   pluginContributionsByLocation.value.window.filter(
@@ -10802,6 +10805,8 @@ registerCommand('ui.tab.switch', (args) => {
   const tabId = (args as { tabId?: string } | undefined)?.tabId
   if (!tabId) throw new Error('ui.tab.switch requires tabId')
   noteViewJump('mcp ui.tab.switch', { tab: tabId })
+  // Asked for the tab already active, activeTab does not change.
+  leavePluginMainTab()
   activeTab.value = tabId
 })
 // Push something into the right rail's preview panel. Reached by MCP
@@ -11538,6 +11543,8 @@ function noteViewJump(source: string, detail: { tab?: string; paneId?: string })
 /** The sidebar agent list shows panes from every tab; focusing one that lives
  *  in another tab must also activate that tab, or the pane stays v-show-hidden. */
 function revealPaneTab(paneId: string): void {
+  // A plugin tab covers the grid even when the pane is on the active run-group tab.
+  leavePluginMainTab()
   if (tabFilteredPaneIds.value.has(paneId)) return
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return
@@ -18852,6 +18859,10 @@ watch(sysNotify.appFocused, (focused) => {
 const runGroups = ref<RunGroup[]>([])
 const currentRunGroupId = ref<string>('')  // ID assigned to newly spawned pipeline panes
 const activeTab = ref<string>('')
+const { activeKey: activePluginMainKey, open: openPluginMainTab, leave: leavePluginMainTab } = usePluginMainTab(
+  activeTab,
+  computed(() => pluginMainTabs.value.map((t) => t.key))
+)
 
 // True while applying a runGroups change received from another window via the
 // `project.ui_state_changed` broadcast. Guards _saveRunGroups so a
@@ -22984,7 +22995,7 @@ function paneIsCommander(p: ActivePane): boolean {
     <main
       ref="stageRef"
       class="stage"
-      :class="{ 'stage--tabbed': stageTabs.length > 0 }"
+      :class="{ 'stage--tabbed': stageTabs.length > 0 || pluginContributionsAt('main').length > 0 }"
       :data-layout="effectiveLayoutMode"
     >
       <!-- A "main" view is a stage tab of its own. The layer stays mounted (a
@@ -23026,8 +23037,8 @@ function paneIsCommander(p: ActivePane): boolean {
         @reorder-tab="(fromKey, toKey) => reorderRunGroupTab(fromKey, toKey)"
         @detach="(key, x, y) => onDetachGroup(key, x, y)"
         @context-menu="(key, ev) => openRunGroupCtxMenu(currentWorkspace, key, ev)"
-        @select-plugin-tab="(key) => (activePluginMainKey = key)"
-        @update:model-value="(key) => { activePluginMainKey = null; void onUserSelectTab(key) }"
+        @select-plugin-tab="openPluginMainTab"
+        @update:model-value="(key) => { leavePluginMainTab(); void onUserSelectTab(key) }"
       >
         <template #actions>
           <ViewPanel :model-value="layoutMode" @update:model-value="onUserChangeLayoutMode" />

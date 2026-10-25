@@ -8953,6 +8953,7 @@
     "status-empty": "Tab này không có pane nào",
     "delete-tab": "Xóa tab này",
     "add-group": "Nhóm chạy mới",
+    "plugin-tab": "Plugin Navide: {title}",
     "collapse-families": "Thu gọn mọi nhóm pane cùng gốc trong tab này",
     "expand-families": "Mở rộng mọi nhóm pane cùng gốc trong tab này",
     "family-toggle-grid": "Thu gọn nhóm pane cùng gốc có trong các bố cục Tự động, Tiêu điểm và Toàn màn hình",

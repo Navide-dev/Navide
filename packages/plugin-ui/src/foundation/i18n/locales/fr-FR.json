@@ -8953,6 +8953,7 @@
     "status-empty": "Cet onglet n’a aucun pane",
     "delete-tab": "Supprimer cet onglet",
     "add-group": "Nouveau groupe d’exécution",
+    "plugin-tab": "Plugin Navide : {title}",
     "collapse-families": "Réduire toutes les familles de panes de cet onglet",
     "expand-families": "Développer toutes les familles de panes de cet onglet",
     "family-toggle-grid": "Le repli des familles est disponible dans les dispositions Auto, Spotlight et Plein écran",

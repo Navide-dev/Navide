@@ -218,21 +218,58 @@ describe('main plugin views are a stage tab', () => {
     expect(layerTag).not.toContain(':visible="true"')
   })
 
-  it('starts with no plugin tab active', () => {
-    expect(appSource).toContain('const activePluginMainKey = ref<string | null>(null)')
+  it('keeps the plugin tab state on activeTab and the main views (usePluginMainTab)', () => {
+    expect(appSource).toMatch(
+      /usePluginMainTab\(\s*activeTab,\s*computed\(\(\) => pluginMainTabs\.value\.map\(\(t\) => t\.key\)\)\s*\)/
+    )
+  })
+
+  // The three ways to a run-group tab that do not go through the tab bar's
+  // click. "+" moves activeTab to the new group, which the composable watches;
+  // the other two may ask for the tab already active, so they leave outright.
+  const body = (start: string): string => {
+    const i = appSource.indexOf(start)
+    expect(i, start).toBeGreaterThan(-1)
+    return appSource.slice(i, appSource.indexOf('\n}', i))
+  }
+
+  it('leaves the plugin tab when "+" creates a run group', () => {
+    expect(body('function createRunGroup(')).toContain('activeTab.value = id')
+  })
+
+  it('leaves the plugin tab before revealing a pane from the sidebar', () => {
+    const reveal = body('function revealPaneTab(')
+    expect(reveal.indexOf('leavePluginMainTab()')).toBeGreaterThan(-1)
+    // Before the early return for a pane already on the active tab.
+    expect(reveal.indexOf('leavePluginMainTab()')).toBeLessThan(reveal.indexOf('return'))
+  })
+
+  it('leaves the plugin tab on MCP ui.tab.switch', () => {
+    const sw = body("registerCommand('ui.tab.switch'")
+    expect(sw.indexOf('leavePluginMainTab()')).toBeGreaterThan(-1)
+    expect(sw.indexOf('leavePluginMainTab()')).toBeLessThan(sw.indexOf('activeTab.value = tabId'))
   })
 
   it('keeps the tab bar mounted when only a main view exists, and wires the plugin tabs', () => {
     expect(appSource).toContain('v-if="stageTabs.length > 0 || pluginContributionsAt(\'main\').length > 0"')
     expect(appSource).toContain(':plugin-tabs="pluginMainTabs"')
-    expect(appSource).toContain('@select-plugin-tab="(key) => (activePluginMainKey = key)"')
+    expect(appSource).toContain('@select-plugin-tab="openPluginMainTab"')
     // Picking a run-group tab leaves the plugin tab, so the grid comes back.
-    expect(appSource).toMatch(/@update:model-value="\(key\) => \{ activePluginMainKey = null;/)
+    expect(appSource).toMatch(/@update:model-value="\(key\) => \{ leavePluginMainTab\(\);/)
+    // The stage drops its top padding for the bar either way, or the layer
+    // (top: 36px) would cover the bar's last 8px.
+    expect(appSource).toContain(":class=\"{ 'stage--tabbed': stageTabs.length > 0 || pluginContributionsAt('main').length > 0 }\"")
   })
 
   it('places the main layer under the tab bar, interactive, instead of over the whole stage', () => {
     expect(mainCss).toContain('top: 36px;')
     expect(mainCss).not.toMatch(/inset:\s*0/)
     expect(mainCss).toContain('pointer-events: auto;')
+  })
+
+  it('stacks the main layer above the grid and paints it opaque', () => {
+    // The grid's own layers (handles, layout bar, overlays) go up to 50.
+    expect(Number(mainCss.match(/z-index:\s*(\d+)/)?.[1])).toBeGreaterThan(50)
+    expect(mainCss).toContain('background: var(--bg-base);')
   })
 })

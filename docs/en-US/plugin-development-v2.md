@@ -825,8 +825,16 @@ A `main` view never covers the stage. The Host adds one stage tab per `main`
 view, labelled with the view's `title`, and no tab is active on install: the
 pane grid stays on screen until the user picks the plugin's tab. While it is
 active the view fills the area under the tab bar, and the tab bar stays
-visible so the user can switch back. Switching away hides the view without
-destroying it, so the guest keeps running in the background.
+visible so the user can switch back. Any move to a run-group tab leaves it: a
+tab click, the New Run Group button, a pane opened from the sidebar, or MCP
+`ui.tab.switch`. Switching away hides the view without destroying it, so the
+guest keeps running in the background.
+
+The tab carries a Host-drawn Navide plugin mark, and its tooltip and
+accessible name give the plugin id, the publisher and, when the package has
+one, its source, so a view's `title` cannot make its tab pass for a run group.
+A package that is not a reviewed Marketplace release or built into Navide also
+gets the same source dot as its title-bar button.
 
 A package that contains both frontend and backend contributions uses one
 manifest. `contributes` and `backend` are sibling top-level fields; the backend

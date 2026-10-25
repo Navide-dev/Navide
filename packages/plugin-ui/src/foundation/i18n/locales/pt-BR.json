@@ -8953,6 +8953,7 @@
     "status-empty": "Esta guia não tem panes",
     "delete-tab": "Excluir esta guia",
     "add-group": "Novo grupo de execução",
+    "plugin-tab": "Plug-in do Navide: {title}",
     "collapse-families": "Recolher todas as famílias de panes desta guia",
     "expand-families": "Expandir todas as famílias de panes desta guia",
     "family-toggle-grid": "O recolhimento de famílias está disponível nos layouts Automático, Destaque e Tela cheia",
