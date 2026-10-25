@@ -1889,6 +1889,7 @@
           "externalCallersDisclosure": "外部程式只共用一組 token，稽核紀錄分不出是哪個程式，只能記成「外部客戶端」。Host 憑證也比照處理。"
         },
         "empty": "目前沒有安裝任何含原生後端的 Navide 外掛。",
+        "windowWithout": "{name} 已開啟，但沒有原生後端：{reason}。需要後端的功能將無法使用。要允許後端，請到「設定 → Navide 外掛 → {page}」。",
         "allow": "允許",
         "disable": "停用",
         "enable_plugin": "啟用",

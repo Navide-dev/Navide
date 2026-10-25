@@ -1889,6 +1889,7 @@
           "externalCallersDisclosure": "Các chương trình bên ngoài dùng chung một token, nên bản ghi một lệnh gọi chỉ có thể ghi là “một client bên ngoài”, không biết là chương trình nào. Thông tin xác thực của Host cũng được xử lý như vậy."
         },
         "empty": "Không plugin Navide nào đã cài có backend gốc.",
+        "windowWithout": "{name} đã mở mà không có backend gốc: {reason}. Các phần cần backend sẽ không hoạt động. Để cho phép backend, hãy vào Cài đặt → Plugin Navide → {page}.",
         "allow": "Cho phép",
         "disable": "Tắt",
         "enable_plugin": "Bật",
