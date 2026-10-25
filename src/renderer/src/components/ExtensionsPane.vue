@@ -1082,6 +1082,25 @@ watch(installed, () => {
               <ul v-if="riskReason(p.id)" class="ext-risk-reason">
                 <li v-for="clause in riskClauses(p.id)" :key="clause">{{ clause }}</li>
               </ul>
+              <!-- What it may use, next to why it is rated so: facts before actions. -->
+              <div class="ext-card-sub">
+                <span v-if="p.requires.length" class="ext-requires ext-caps">
+                  <span
+                    v-for="cap in p.requires"
+                    :key="cap"
+                    class="ext-cap"
+                    :class="{ 'ext-cap--sensitive': p.sensitive.includes(cap) }"
+                  >{{ cap }}</span>
+                </span>
+                <span v-if="p.sensitive.length" class="ext-badge ext-sensitive">
+                  {{ $t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensions.sensitive'), value: p.sensitive.join(', ') }) }}
+                </span>
+                <!-- The Host's warning is English for its logs; the developer-mode
+                     case is known and shown translated. -->
+                <span v-if="p.warning" class="ext-badge ext-dev-warning">
+                  {{ p.provenance === 'developer-local-unpacked' ? $t('settings.extensions.devUnpacked') : p.warning }}
+                </span>
+              </div>
               <!-- The actions right under the header, before the details. -->
               <div class="ext-actions">
                 <button
@@ -1158,24 +1177,6 @@ watch(installed, () => {
                 >
                   {{ $t('settings.extensions.marketplace.uninstall') }}
                 </button>
-              </div>
-              <div class="ext-card-sub">
-                <span v-if="p.requires.length" class="ext-requires ext-caps">
-                  <span
-                    v-for="cap in p.requires"
-                    :key="cap"
-                    class="ext-cap"
-                    :class="{ 'ext-cap--sensitive': p.sensitive.includes(cap) }"
-                  >{{ cap }}</span>
-                </span>
-                <span v-if="p.sensitive.length" class="ext-badge ext-sensitive">
-                  {{ $t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensions.sensitive'), value: p.sensitive.join(', ') }) }}
-                </span>
-                <!-- The Host's warning is English for its logs; the developer-mode
-                     case is known and shown translated. -->
-                <span v-if="p.warning" class="ext-badge ext-dev-warning">
-                  {{ p.provenance === 'developer-local-unpacked' ? $t('settings.extensions.devUnpacked') : p.warning }}
-                </span>
               </div>
               <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
               <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
