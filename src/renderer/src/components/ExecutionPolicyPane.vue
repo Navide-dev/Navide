@@ -698,7 +698,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-effective > .ep-warning,
 .ep-effective > .ep-hint { flex-basis: 100%; }
 .ep-effective > .ep-summary { margin: 0; }
-.ep-effective > .ep-effective-policy { flex-basis: 100%; margin-top: var(--space-2); margin-bottom: calc(-1 * var(--space-row-y)); }
+.ep-effective > .ep-effective-policy { flex-basis: calc(100% + 2 * var(--space-row-x)); margin-top: var(--space-2); margin-bottom: calc(-1 * var(--space-row-y)); }
 .ep-section:last-child { margin-bottom: 0; }
 /* A healthy store is a line, not a card: it only becomes a card with something to say. */
 .ep-section[data-section='recovery']:not(:has(.ep-warning, .ep-path-list, form, button)) {
