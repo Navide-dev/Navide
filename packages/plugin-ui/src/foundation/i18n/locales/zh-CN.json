@@ -1820,7 +1820,6 @@
       "removeShell": "移除 {name}",
       "none": "无",
       "save": "保存政策",
-      "edit": "编辑政策",
       "resetUser": "重设用户政策",
       "sourceTitle": "工作区政策来源",
       "sourceHint": "Repository 建议在你查看并明确接受前都不受信任。切换来源需要精确符合目前指纹。",
