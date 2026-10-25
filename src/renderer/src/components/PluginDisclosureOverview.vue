@@ -247,32 +247,6 @@ onBeforeUnmount(stopPolling)
   }
 }
 .nv-overview-head {
-    display: contents;
-  }
-  .nv-overview-entry .nv-overview-name {
-    grid-column: 1;
-    grid-row: 1;
-    flex-wrap: wrap;
-  }
-  .nv-overview-entry .nv-overview-flags {
-    grid-column: 2;
-    grid-row: 1;
-  }
-  .nv-overview-entry > .nv-overview-activity {
-    grid-column: 3;
-    grid-row: 1;
-  }
-  .nv-overview-entry > :not(.nv-overview-head):not(.nv-overview-activity) {
-    grid-column: 1 / -1;
-  }
-  /* The two expanders sit under the name, so a closed record stays one row high. */
-  .nv-overview-entry > .nv-overview-footer {
-    grid-column: 1;
-    grid-row: 2;
-    margin-top: calc(-1 * var(--space-2));
-  }
-}
-.nv-overview-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
