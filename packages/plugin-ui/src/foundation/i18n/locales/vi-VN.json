@@ -2211,7 +2211,7 @@
         "cancel": "Hủy",
         "capability": {
           "fs": "Đọc và ghi tệp trong workspace của bạn.",
-          "aiCli": "Chạy các CLI agent AI đã thiết lập trong Navide.",
+          "aiCli": "Khởi chạy các CLI agent AI đã thiết lập trong Navide, gửi dữ liệu nhập và đọc mọi thứ chúng xuất ra.",
           "web": "Có thể mở và duyệt bất kỳ trang web nào; thông tin đăng nhập trang web được giữ trên máy tính này; agent dùng thông tin đăng nhập của bạn trong plugin Navide này (chúng có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn tiếp quản, các script agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; nó có thể mở nhiều trang web cùng lúc và mỗi trang đều dùng bộ nhớ.",
           "agents": "Xem các pane agent của bạn, pane nào đã mở pane nào và khi nào chúng nhắn tin cho nhau, nhưng không xem được nội dung tin nhắn.",
           "agentMessages": "Đọc toàn văn tin nhắn giữa các agent của bạn; nội dung có thể chứa mã, nội dung tệp hoặc bí mật.",
@@ -11735,7 +11735,7 @@
         "full": "Chạy bất kỳ lệnh nào"
       },
       "networkViaShell": "Có thể kết nối máy chủ từ xa qua các lệnh đó",
-      "aiCli": "Điều khiển các session AI CLI",
+      "aiCli": "Khởi chạy các session AI CLI và đọc đầu ra của chúng",
       "web": "Có thể mở và duyệt bất kỳ trang web nào; đăng nhập trang web được lưu trên máy tính này; agent dùng các lần đăng nhập của bạn trong plugin Navide này (agent có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn giành quyền điều khiển, script của agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; nó có thể mở nhiều trang web cùng lúc, và mỗi trang đều tốn bộ nhớ.",
       "agents": "Xem các pane agent trong dự án này, pane nào đã mở pane nào, nhật ký gửi tin nhắn (không có nội dung) và danh sách phiên (không có nội dung hội thoại)",
       "agentMessages": "Đọc toàn văn tin nhắn giữa các agent trong dự án này; nội dung có thể chứa mã, nội dung tệp hoặc bí mật",

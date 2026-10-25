@@ -2110,6 +2110,25 @@ the authenticated plugin, package version, workspace, view instance, and
 audience.
 Directed output and exit events are delivered only to the authenticated
 audience that created or reattached the session.
+
+Every v2 package that declares `system: ["aiCli"]` receives them, not only the
+bundled Navide plugins. `aiCli.output` is `{ sessionId, data }` (the PTY text,
+decoded as UTF-8) and `aiCli.exited` is `{ sessionId, exitCode }` (a number,
+or `null`); nothing else is in either, and a v2 view is never sent the raw
+`terminal.*` stream. Ownership is the Host's, recorded when the session is
+started or resumed: the view instance, package, package version, workspace and
+audience. Another package never sees a session, and neither does another view
+of the same package while the session is attached to its view; input, resize,
+stop and reattach calls for a session the calling view does not own are
+refused. When the view closes the session is detached, and a new view of the
+same contribution in the same workspace can take it over with
+`aiCli.resumeSession`. A detached session that is not taken over within
+60 seconds is ended (the bundled Navide plugins end theirs through their own
+surfaces). Disabling or removing the package ends its sessions at once.
+
+Declaring `aiCli` lets a package start the AI CLI agents set up in Navide, send
+them input and read everything they print; the install and update dialogs say
+so, and an update that adds it is shown as added.
 `shell.run`, raw command/executable/arguments/environment/working-directory
 parameters, and PID control have no `aiCli` mapping and must fail closed.
 The Host executor also enforces the catalog's `requiresUserGesture` flag for

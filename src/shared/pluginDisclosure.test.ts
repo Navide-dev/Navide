@@ -66,3 +66,17 @@ describe('diffDisclosure', () => {
     expect(diffDisclosure(a, b)).toEqual(expected)
   })
 })
+
+describe('aiCli in an update', () => {
+  // A package that gains aiCli can start an AI CLI and read all it prints
+  // (aiCli.output reaches every v2 package that declares it), so the update
+  // says so and counts as widened. Disclosure only: nothing is limited.
+  it('lists aiCli as added and the update as widened', () => {
+    const before = byName.get('ui-only')!.manifest as { permissions: { system: string[] } }
+    const after = JSON.parse(JSON.stringify(before)) as typeof before
+    after.permissions.system = [...after.permissions.system, 'aiCli']
+    const diff = diffDisclosure(computeDisclosure(before as never), computeDisclosure(after as never))
+    expect(diff.added).toContainEqual({ kind: 'system', key: 'aiCli', detail: null })
+    expect(diff.widened).toBe(true)
+  })
+})

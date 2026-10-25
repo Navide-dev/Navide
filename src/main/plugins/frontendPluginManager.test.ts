@@ -425,6 +425,7 @@ import {
   MAX_DIAGNOSTIC_LINES_PER_EMISSION,
   builtinPluginDisabledMessage,
   parseAgentToolCallRequest,
+  AI_SESSION_RECLAIM_MS,
   type PluginLaunchDescriptor,
   type PluginViewLaunchDescriptor,
 } from './frontendPluginManager'
@@ -8766,15 +8767,20 @@ describe('opaque view instance ownership', () => {
         bounds: 'fill',
       })
       mgr.noteTerminalRoutes(handle.instanceId, 'terminal.create', {
-        terminal_session_id: 'stable-route',
+        terminal_session_id: 'new-session',
       })
 
       const newContext = v2Context({ audience: 'same-audience', sessionId: 'new-session' })
       mgr.setCapabilityContext(packageDesc.id, newContext)
-      dispatchEvent(mgr, 'terminal.output', output('stable-route', 'still attached'))
+      dispatchEvent(mgr, 'terminal.output', output('new-session', 'still attached'))
       vi.advanceTimersByTime(12)
 
-      expect(eventsOf(host.children[0] as FakeViewLike, 'terminal.output')).toHaveLength(1)
+      // Still attached: the PTY reaches the view, as the public event only.
+      const view = host.children[0] as FakeViewLike
+      expect(eventsOf(view, 'terminal.output')).toHaveLength(0)
+      expect(eventsOf(view, 'aiCli.output')).toEqual([
+        { type: 'aiCli.output', data: { sessionId: 'new-session', data: 'still attached' } },
+      ])
       const source = { ...newContext.runtimeBinding!, instanceId: handle.instanceId }
       mgr.dispatchPublicCapabilityEvent(
         packageDesc.id,
@@ -8782,7 +8788,7 @@ describe('opaque view instance ownership', () => {
         { sessionId: 'new-session', data: 'new binding reached the view' },
         source
       )
-      expect(eventsOf(host.children[0] as FakeViewLike, 'aiCli.output')).toHaveLength(1)
+      expect(eventsOf(view, 'aiCli.output')).toHaveLength(2)
     } finally {
       vi.useRealTimers()
     }
@@ -8948,7 +8954,7 @@ describe('opaque view instance ownership', () => {
       const reopened = await mgr.openView(packageDesc, packageDesc.views![0], {
         hostWindow: asHost(reopenedHost),
         bounds: 'fill',
-        capabilityContext: v2Context({ audience: 'left-audience' }),
+        capabilityContext: v2Context({ audience: 'left-audience', sessionId: 't-v2-reconnect' }),
       })
       expect(
         mgr.filterTerminalReattachPayload(reopened.instanceId, {
@@ -8962,7 +8968,10 @@ describe('opaque view instance ownership', () => {
       })
       dispatchEvent(mgr, 'terminal.output', output('t-v2-reconnect', 'reconnected'))
       vi.advanceTimersByTime(12)
-      expect(eventsOf(reopenedHost.children[0] as FakeViewLike, 'terminal.output')).toHaveLength(1)
+      const reopenedView = reopenedHost.children[0] as FakeViewLike
+      expect(eventsOf(reopenedView, 'aiCli.output')).toHaveLength(1)
+      expect(eventsOf(reopenedView, 'terminal.output')).toHaveLength(0)
+      expect(eventsOf(siblingView, 'aiCli.output')).toHaveLength(0)
       expect(eventsOf(siblingView, 'terminal.output')).toHaveLength(0)
     } finally {
       vi.useRealTimers()
@@ -9116,6 +9125,211 @@ describe('opaque view instance ownership', () => {
     expect(response).toMatchObject({ ok: true, result: { accepted: true } })
     expect(plans[0]).toMatchObject({ runtime: { instanceId: handle.instanceId } })
     expect(plans[0]).not.toMatchObject({ runtime: { instanceId: 'plugin-supplied-instance' } })
+  })
+
+  // A third-party package that declares aiCli used to get no session output at
+  // all: only navide.git/plans/mini-ide were translated to the public events,
+  // everyone else fell through to the undocumented terminal.* stream.
+  describe('a third-party aiCli package', () => {
+    type Internal = {
+      aiSessions: Map<string, Record<string, unknown>>
+      wsClient: unknown
+      running: Map<string, { capabilityContext: HostCapabilityContext }>
+    }
+
+    async function openThirdParty(
+      mgr: FrontendPluginManager,
+      options: { id?: string; audience?: string; sessionId?: string } = {},
+    ) {
+      const id = options.id ?? 'acme.devmap'
+      const desc = v2PackageDescriptor(id)
+      mgr.registerDescriptor(desc, id.startsWith('navide.') ? { official: true } : {})
+      const host = new FakeBrowserWindow()
+      const handle = await mgr.openView(desc, desc.views![0], {
+        hostWindow: asHost(host),
+        bounds: 'fill',
+        workspacePath: '/workspace',
+        capabilityContext: v2Context({
+          pluginId: id,
+          workspaceId: mgr.workspaceIdForPath('/workspace') ?? undefined,
+          audience: options.audience ?? 'devmap-main',
+          sessionId: options.sessionId,
+        }),
+      })
+      return { id, handle, view: host.children[0] as FakeViewLike }
+    }
+
+    function exit(id: string, code: number): Record<string, unknown> {
+      return { terminal_session_id: id, pane_id: 'p', exit_code: code }
+    }
+
+    it('gets its own session as aiCli.output and aiCli.exited, with only sessionId, data and exitCode', async () => {
+      vi.useFakeTimers()
+      try {
+        const mgr = new FrontendPluginManager()
+        const a = await openThirdParty(mgr, { sessionId: 'devmap-session' })
+        mgr.noteTerminalRoutes(a.handle.instanceId, 'terminal.create', { terminal_session_id: 'devmap-session' })
+        dispatchEvent(mgr, 'terminal.output', output('devmap-session', 'hello'))
+        vi.advanceTimersByTime(12)
+        dispatchEvent(mgr, 'terminal.exit', exit('devmap-session', 3))
+        expect(eventsOf(a.view, 'aiCli.output')).toEqual([
+          { type: 'aiCli.output', data: { sessionId: 'devmap-session', data: 'hello' } },
+        ])
+        expect(eventsOf(a.view, 'aiCli.exited')).toEqual([
+          { type: 'aiCli.exited', data: { sessionId: 'devmap-session', exitCode: 3 } },
+        ])
+        // Never the raw PTY vocabulary, which carries the pane id and stream.
+        expect(eventsOf(a.view, 'terminal.output')).toHaveLength(0)
+        expect(eventsOf(a.view, 'terminal.exit')).toHaveLength(0)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('never sees the session of another package, or of another view of its own', async () => {
+      vi.useFakeTimers()
+      try {
+        const mgr = new FrontendPluginManager()
+        const a = await openThirdParty(mgr, { id: 'acme.devmap', sessionId: 'a-session' })
+        const b = await openThirdParty(mgr, { id: 'other.spy', sessionId: 'a-session' })
+        // A second view of the same contribution, its binding naming the id too.
+        const a2 = await openThirdParty(mgr, { id: 'acme.devmap', sessionId: 'a-session' })
+        mgr.noteTerminalRoutes(a.handle.instanceId, 'terminal.create', { terminal_session_id: 'a-session' })
+        dispatchEvent(mgr, 'terminal.output', output('a-session', 'secret'))
+        vi.advanceTimersByTime(12)
+        dispatchEvent(mgr, 'terminal.exit', exit('a-session', 0))
+        expect(eventsOf(a.view, 'aiCli.output')).toHaveLength(1)
+        for (const other of [b, a2]) {
+          expect(eventsOf(other.view, 'aiCli.output')).toHaveLength(0)
+          expect(eventsOf(other.view, 'aiCli.exited')).toHaveLength(0)
+          expect(eventsOf(other.view, 'terminal.output')).toHaveLength(0)
+        }
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('refuses input to a session another package started', async () => {
+      const mgr = new FrontendPluginManager()
+      const a = await openThirdParty(mgr, { id: 'acme.devmap', sessionId: 'a-session' })
+      const b = await openThirdParty(mgr, { id: 'other.spy' })
+      mgr.noteTerminalRoutes(a.handle.instanceId, 'terminal.create', { terminal_session_id: 'a-session' })
+      mgr.setBackendWsUrl('ws://third-party-aicli-write-test')
+      const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      socket.open()
+      const internal = mgr as unknown as Internal
+      const runtime = internal.running.get(b.handle.instanceId)!.capabilityContext.runtimeBinding!
+      for (const address of ['aiCli.sendInput', 'aiCli.stopSession', 'aiCli.reattachSession'] as const) {
+        await expect(mgr.executePublicCapability({
+          kind: 'public',
+          address,
+          scope: 'workspace',
+          runtime,
+          args: { sessionId: 'a-session', data: 'rm -rf ~\n', cols: 80, rows: 24 },
+        })).rejects.toThrow(/no longer owned by this view/)
+      }
+      expect(socket.sent).toHaveLength(0)
+    })
+
+    describe('a session left behind when its view closes', () => {
+      async function withDetachedSession(id: string) {
+        const mgr = new FrontendPluginManager()
+        const a = await openThirdParty(mgr, { id, sessionId: 'left-session' })
+        mgr.setBackendWsUrl(`ws://reclaim-${id}`)
+        const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+        socket.open()
+        const internal = mgr as unknown as Internal
+        const runtime = internal.running.get(a.handle.instanceId)!.capabilityContext.runtimeBinding!
+        mgr.noteTerminalRoutes(a.handle.instanceId, 'terminal.create', { terminal_session_id: 'left-session' })
+        internal.aiSessions.set('left-session', {
+          sessionId: 'left-session',
+          profileId: 'claude',
+          pluginId: runtime.pluginId,
+          packageVersion: runtime.packageVersion,
+          workspaceId: runtime.workspaceId,
+          audience: runtime.audience,
+          attachedInstanceId: a.handle.instanceId,
+          client: internal.wsClient,
+          createdAt: Date.now(),
+        })
+        a.view.webContents.close()
+        const kills = () => socket.sent
+          .map((raw) => JSON.parse(raw) as { type: string; payload: Record<string, unknown> })
+          .filter((message) => message.type === 'terminal.kill')
+        return { mgr, internal, kills }
+      }
+
+      it('is ended once, by its own session id, after the reclaim wait', async () => {
+        vi.useFakeTimers()
+        try {
+          const { internal, kills } = await withDetachedSession('acme.devmap')
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS - 1)
+          expect(kills()).toHaveLength(0)
+          await vi.advanceTimersByTimeAsync(1)
+          expect(kills()).toEqual([
+            expect.objectContaining({ payload: { terminal_session_id: 'left-session', force: true } }),
+          ])
+          expect(internal.aiSessions.has('left-session')).toBe(false)
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS * 2)
+          expect(kills()).toHaveLength(1)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
+      it('is kept when a new view resumed it, or left alone once something else ended it', async () => {
+        vi.useFakeTimers()
+        try {
+          const resumed = await withDetachedSession('acme.devmap')
+          resumed.internal.aiSessions.get('left-session')!.attachedInstanceId = 'a-new-view'
+          const stopped = await withDetachedSession('acme.devmap')
+          stopped.internal.aiSessions.delete('left-session')
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS)
+          expect(resumed.kills()).toHaveLength(0)
+          expect(resumed.internal.aiSessions.has('left-session')).toBe(true)
+          expect(stopped.kills()).toHaveLength(0)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
+      it('is ended once when the package is disabled or removed, not again by the reclaim', async () => {
+        vi.useFakeTimers()
+        try {
+          const { mgr, kills } = await withDetachedSession('acme.devmap')
+          mgr.preparePluginRemoval('acme.devmap')
+          expect(kills()).toHaveLength(1)
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS * 2)
+          expect(kills()).toHaveLength(1)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
+      it('is left to the backend shutdown when the app quits', async () => {
+        vi.useFakeTimers()
+        try {
+          const { mgr, kills } = await withDetachedSession('acme.devmap')
+          mgr.setAppQuittingProbe(() => true)
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS)
+          expect(kills()).toHaveLength(0)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
+      it('is not reclaimed for the first-party packages, which end their own', async () => {
+        vi.useFakeTimers()
+        try {
+          const { internal, kills } = await withDetachedSession('navide.mini-ide')
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS * 2)
+          expect(kills()).toHaveLength(0)
+          expect(internal.aiSessions.has('left-session')).toBe(true)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+    })
   })
 })
 

@@ -2211,7 +2211,7 @@
         "cancel": "Cancelar",
         "capability": {
           "fs": "Leer y escribir archivos en tu área de trabajo.",
-          "aiCli": "Ejecutar los agents CLI de AI configurados en Navide.",
+          "aiCli": "Iniciar los agents CLI de AI configurados en Navide, enviarles entradas y leer todo lo que muestran.",
           "web": "Puede abrir y navegar por cualquier sitio web; los inicios de sesión en sitios se guardan en este equipo; los agents usan tus inicios de sesión en este complemento de Navide (pueden enviar solicitudes a sitios web en tu nombre) y pueden leer todas las páginas que abre y su estado de inicio de sesión; cuando tomas el control, los scripts de agent que ya se ejecutan en una página solo se detienen al recargarla; puede abrir muchas páginas web a la vez y cada una consume memoria.",
           "agents": "Ve tus panes de agent, qué pane abrió cada uno y cuándo se enviaron mensajes, pero no lo que dijeron.",
           "agentMessages": "Lee el texto completo de los mensajes entre tus agents; puede contener código, contenido de archivos o secretos.",
@@ -11735,7 +11735,7 @@
         "full": "Ejecuta cualquier comando"
       },
       "networkViaShell": "Puede llegar a hosts remotos mediante esos comandos",
-      "aiCli": "Controla sessions de CLI de AI",
+      "aiCli": "Inicia sessions de CLI de AI y lee su salida",
       "web": "Puede abrir y navegar por cualquier sitio web; los inicios de sesión en sitios se guardan en este ordenador; los agents usan tus inicios de sesión en este complemento de Navide (pueden enviar peticiones a sitios web en tu nombre) y pueden leer todas las páginas que abre y su estado de inicio de sesión; después de tomar el control, los scripts del agent que ya se estén ejecutando en una página solo se detienen cuando la recargas; puede abrir muchas páginas web a la vez, y cada una usa memoria.",
       "agents": "Ve los panes de agent de este proyecto, qué pane abrió cada uno, los registros de entrega de mensajes (sin su contenido) y la lista de sesiones (sin el contenido de las conversaciones)",
       "agentMessages": "Lee el texto completo de los mensajes entre tus agents en este proyecto, que puede contener código, contenido de archivos o secretos",

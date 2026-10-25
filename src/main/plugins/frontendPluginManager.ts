@@ -873,19 +873,26 @@ const TERMINAL_OWNED_WS_TYPES = new Set([
   'terminal.redraw',
 ])
 
-/** These first-party packages consume the public aiCli event vocabulary. Other
- * v2 packages may declare aiCli for capability admission without opting into
- * the event translation, so their internal terminal ownership remains intact. */
-const PUBLIC_AI_CLI_EVENT_PLUGIN_IDS = new Set(['navide.git', 'navide.plans', 'navide.mini-ide'])
-
+/** Every v2 package that declares aiCli gets its sessions' output as the
+ * documented aiCli.output / aiCli.exited events, and only for sessions its own
+ * view started or resumed (the terminal route). It used to be these three ids
+ * only, which left every other aiCli package with no output at all. */
 function usesPublicAiCliEvents(plugin: RunningPlugin | undefined): plugin is RunningPlugin {
   return Boolean(
     plugin?.hasV2DescriptorIdentity &&
-      PUBLIC_AI_CLI_EVENT_PLUGIN_IDS.has(plugin.id) &&
       plugin.capabilityPolicy.kind === 'manifest-v2' &&
       plugin.capabilityPolicy.system.includes('aiCli')
   )
 }
+
+/** These end their detached AI sessions themselves: Git and Plans through
+ *  their dock surface (endDockSurface), Mini-IDE through its persisted views.
+ *  Any other package's detached session is reclaimed after
+ *  AI_SESSION_RECLAIM_MS, so a closed view leaves no PTY behind. */
+const SELF_ENDING_AI_SESSION_PLUGIN_IDS: ReadonlySet<string> = new Set(['navide.git', 'navide.plans', 'navide.mini-ide'])
+/** How long a detached session waits for a new view of the same contribution
+ *  (a reload, a workspace re-prepare) to resume it before it is ended. */
+export const AI_SESSION_RECLAIM_MS = 60_000
 
 /** First-party compatibility actions used while the existing Git surface is
  *  moved behind the Manifest v2 package boundary. These are deliberately
@@ -9997,6 +10004,12 @@ export class FrontendPluginManager {
       return
     }
     const plugin = this.runningPluginForTerminalRoute(route)
+    // Raw PTY events are the v1 adapter's vocabulary. A v2 route gets only
+    // the public aiCli events, through the gate above, never terminal.*.
+    if (plugin && route && !route.legacy && plugin.capabilityPolicy.kind === 'manifest-v2') {
+      this.logDroppedTerminalEvent(event, sessionId, route)
+      return
+    }
     if (plugin) {
       this.emitToInstance(plugin.instanceId, event, payload)
     }
@@ -10254,6 +10267,7 @@ export class FrontendPluginManager {
         const aiSession = this.aiSessions.get(sessionId)
         if (aiSession?.attachedInstanceId === plugin.instanceId) {
           aiSession.attachedInstanceId = null
+          this.scheduleAiSessionReclaim(aiSession)
         }
         this.terminalRoutes.set(sessionId, { ...route, instanceId: null })
       }
@@ -10414,6 +10428,30 @@ export class FrontendPluginManager {
     this.stopAiSessions(
       (session) => session.pluginId === pluginId && session.packageVersion === packageVersion,
     )
+  }
+
+  /** End a detached session of a package that does not end its own, once it
+   *  has waited AI_SESSION_RECLAIM_MS without being resumed. Only this exact
+   *  ledger entry, still detached, is ended, through the Host's own session id
+   *  on the backend that created it: a session resumed, stopped or removed
+   *  meanwhile is left alone, so nothing is ended twice. An app quit ends
+   *  every PTY with the backend anyway. */
+  private scheduleAiSessionReclaim(entry: AiSessionLedgerEntry): void {
+    if (SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(entry.pluginId)) return
+    const timer = setTimeout(() => {
+      if (this.appQuitting()) return
+      if (this.aiSessions.get(entry.sessionId) !== entry || entry.attachedInstanceId !== null) return
+      this.aiSessions.delete(entry.sessionId)
+      this.terminalRoutes.delete(entry.sessionId)
+      this.aiTerminalOutputDecoder.dropSession(entry.sessionId)
+      void entry.client.send('terminal.kill', {
+        terminal_session_id: entry.sessionId,
+        force: true,
+      }).catch(() => {
+        // The ledger forgets it either way; a backend that is gone has no PTY.
+      })
+    }, AI_SESSION_RECLAIM_MS)
+    timer.unref?.()
   }
 
   private stopAiSessions(predicate: (session: AiSessionLedgerEntry) => boolean): void {
