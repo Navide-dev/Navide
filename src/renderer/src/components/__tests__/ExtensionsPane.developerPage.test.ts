@@ -75,4 +75,19 @@ describe('ExtensionsPane developer page', () => {
       i18n.global.t('settings.extensions.nativeBackends.enable'),
     ])
   })
+
+  it('shows the clock-quarantine banner on the plugins page only', async () => {
+    // Like the self-hosted and expired-test banners beside it: an alert shown on
+    // both sub-pages is announced twice and belongs to the plugin list.
+    mockPlugins({ enabled: false, folders: [] })
+    const plugins = (window as unknown as { agentTeam: { plugins: Record<string, unknown> } }).agentTeam.plugins
+    plugins.clockQuarantine = vi.fn().mockResolvedValue([{ id: 'acme.tool', version: '1.0.0', clock: 'behind' }])
+    wrapper = mount(ExtensionsPane, { props: { page: 'plugins' }, global: { plugins: [i18n] } })
+    await flushPromises()
+    const banner = () => wrapper!.get('[data-clock-id="acme.tool"]').element as HTMLElement
+    expect(banner().style.display).not.toBe('none')
+
+    await wrapper.setProps({ page: 'developer' })
+    expect(banner().style.display).toBe('none')
+  })
 })
