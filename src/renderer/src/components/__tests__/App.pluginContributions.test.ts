@@ -201,3 +201,38 @@ describe('plugin contribution grouping by location', () => {
     )
   })
 })
+
+describe('main plugin views are a stage tab', () => {
+  // devmap 0.0.3 was the first package to declare location "main", and the
+  // layer it landed in covered the whole stage — tab bar, grid and terminals —
+  // with nothing to switch back to. The view is now a tab: hidden until chosen,
+  // and never over the tab bar.
+  const layerStart = appSource.indexOf('class="plugin-region-layer plugin-region-layer--main"')
+  const layerTag = appSource.slice(appSource.lastIndexOf('<div', layerStart), appSource.indexOf('</div>', layerStart))
+  const mainCss = appSource.match(/\.plugin-region-layer--main \{[^}]*\}/)?.[0] ?? ''
+
+  it('shows the main layer only while a plugin tab is active', () => {
+    expect(layerStart).toBeGreaterThan(-1)
+    expect(layerTag).toContain('v-show="activePluginMainKey !== null"')
+    expect(layerTag).toContain(':visible="contribution.contributionKey === activePluginMainKey"')
+    expect(layerTag).not.toContain(':visible="true"')
+  })
+
+  it('starts with no plugin tab active', () => {
+    expect(appSource).toContain('const activePluginMainKey = ref<string | null>(null)')
+  })
+
+  it('keeps the tab bar mounted when only a main view exists, and wires the plugin tabs', () => {
+    expect(appSource).toContain('v-if="stageTabs.length > 0 || pluginContributionsAt(\'main\').length > 0"')
+    expect(appSource).toContain(':plugin-tabs="pluginMainTabs"')
+    expect(appSource).toContain('@select-plugin-tab="(key) => (activePluginMainKey = key)"')
+    // Picking a run-group tab leaves the plugin tab, so the grid comes back.
+    expect(appSource).toMatch(/@update:model-value="\(key\) => \{ activePluginMainKey = null;/)
+  })
+
+  it('places the main layer under the tab bar, interactive, instead of over the whole stage', () => {
+    expect(mainCss).toContain('top: 36px;')
+    expect(mainCss).not.toMatch(/inset:\s*0/)
+    expect(mainCss).toContain('pointer-events: auto;')
+  })
+})

@@ -1189,6 +1189,18 @@ function pluginContributionsAt(location: Exclude<PluginRegionLocation, 'left' | 
   return pluginContributionsByLocation.value[location]
 }
 
+/** The "main" view whose stage tab is active, or null while a run-group tab is.
+ *  Null by default, so installing a plugin never takes the stage over. */
+const activePluginMainKey = ref<string | null>(null)
+const pluginMainTabs = computed(() =>
+  pluginContributionsAt('main').map((c) => ({ key: c.contributionKey, label: c.title }))
+)
+watch(pluginMainTabs, (tabs) => {
+  if (activePluginMainKey.value !== null && !tabs.some((t) => t.key === activePluginMainKey.value)) {
+    activePluginMainKey.value = null
+  }
+})
+
 const windowPluginContributions = computed(() =>
   pluginContributionsByLocation.value.window.filter(
     (contribution) =>
@@ -22975,8 +22987,12 @@ function paneIsCommander(p: ActivePane): boolean {
       :class="{ 'stage--tabbed': stageTabs.length > 0 }"
       :data-layout="effectiveLayoutMode"
     >
+      <!-- A "main" view is a stage tab of its own. The layer stays mounted (a
+           hidden guest keeps running) but shows only while its tab is active,
+           and sits below the tab bar so the bar is never covered. -->
       <div
         v-if="pluginContributionsAt('main').length"
+        v-show="activePluginMainKey !== null"
         class="plugin-region-layer plugin-region-layer--main"
         data-plugin-region="main"
       >
@@ -22985,14 +23001,16 @@ function paneIsCommander(p: ActivePane): boolean {
           :key="contribution.contributionKey"
           :contribution="contribution"
           :workspace-path="currentWorkspace"
-          :visible="true"
+          :visible="contribution.contributionKey === activePluginMainKey"
         />
       </div>
       <StageTabBar
-        v-if="stageTabs.length > 0"
+        v-if="stageTabs.length > 0 || pluginContributionsAt('main').length > 0"
         ref="stageTabBarRef"
         :tabs="stageTabs"
-        :model-value="activeTab"
+        :plugin-tabs="pluginMainTabs"
+        :active-plugin-tab="activePluginMainKey"
+        :model-value="activePluginMainKey === null ? activeTab : ''"
         :can-rebuild-all="rebuildablePaneCount > 0"
         :rebuilding-all="rebuildingTabPanes"
         :rebuild-all-title="$t('action.rebuild-tab-cli-panes')"
@@ -23008,7 +23026,8 @@ function paneIsCommander(p: ActivePane): boolean {
         @reorder-tab="(fromKey, toKey) => reorderRunGroupTab(fromKey, toKey)"
         @detach="(key, x, y) => onDetachGroup(key, x, y)"
         @context-menu="(key, ev) => openRunGroupCtxMenu(currentWorkspace, key, ev)"
-        @update:model-value="onUserSelectTab"
+        @select-plugin-tab="(key) => (activePluginMainKey = key)"
+        @update:model-value="(key) => { activePluginMainKey = null; void onUserSelectTab(key) }"
       >
         <template #actions>
           <ViewPanel :model-value="layoutMode" @update:model-value="onUserChangeLayoutMode" />
@@ -24228,9 +24247,19 @@ function paneIsCommander(p: ActivePane): boolean {
   right: var(--token-panel-width, 36px);
   height: 32px;
 }
+/* Covers the pane area only: the stage tab bar above it (36px) stays visible
+   and clickable. Opaque and interactive, since it is the active tab's content. */
 .plugin-region-layer--main {
-  inset: 0;
+  top: 36px;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 110;
+  background: var(--bg-base);
+  pointer-events: auto;
+}
+.plugin-region-layer--main :deep(.plugin-region-host) {
+  pointer-events: auto;
 }
 .plugin-region-layer--right {
   top: 38px;

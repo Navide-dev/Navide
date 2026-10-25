@@ -19,6 +19,12 @@ export interface TabItem {
   status: TabRunState
 }
 
+/** A plugin's "main" view, shown as a tab after the run groups. */
+export interface PluginTabItem {
+  key: string
+  label: string
+}
+
 const props = withDefaults(defineProps<{
   tabs: TabItem[]
   modelValue: string
@@ -27,10 +33,15 @@ const props = withDefaults(defineProps<{
   rebuildAllTitle?: string
   allFamiliesCollapsed?: boolean
   familyToggleDisabledReason?: 'grid' | 'empty'
+  pluginTabs?: PluginTabItem[]
+  /** Key of the active plugin tab; null while a run-group tab is active. */
+  activePluginTab?: string | null
 }>(), {
   canRebuildAll: false,
   rebuildingAll: false,
-  rebuildAllTitle: 'Rebuild CLI panes in this tab'
+  rebuildAllTitle: 'Rebuild CLI panes in this tab',
+  pluginTabs: () => [],
+  activePluginTab: null
 })
 const emit = defineEmits<{
   (e: 'update:modelValue', v: string): void
@@ -44,6 +55,7 @@ const emit = defineEmits<{
   (e: 'rebuild-all'): void
   (e: 'toggleFamilies'): void
   (e: 'context-menu', key: string, ev: MouseEvent): void
+  (e: 'select-plugin-tab', key: string): void
 }>()
 
 const { t } = useI18n()
@@ -221,6 +233,17 @@ function onRenameKeydown(e: KeyboardEvent, key: string): void {
         </template>
       </button>
     </template>
+    <button
+      v-for="tab in pluginTabs"
+      :key="`plugin:${tab.key}`"
+      role="tab"
+      :aria-selected="tab.key === activePluginTab"
+      :class="['tab-btn', 'tab-type-plugin', { active: tab.key === activePluginTab }]"
+      :data-plugin-tab="tab.key"
+      @click="emit('select-plugin-tab', tab.key)"
+    >
+      <span class="tab-label">{{ tab.label }}</span>
+    </button>
     <button class="tab-add-btn" :title="$t('stageTab.add-group')" @click="emit('add')">+</button>
     <button
       class="tab-rebuild-all-btn"

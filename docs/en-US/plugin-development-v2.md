@@ -815,11 +815,18 @@ rejected. A manifest may declare at most 16 views.
 | `bottom` | Bottom workbench region |
 | `right` | Right workbench region |
 | `left` | Left workbench region; use this when migrating a legacy sidebar contribution |
-| `main` | Primary workbench content region |
+| `main` | A tab of its own in the stage tab bar, after the run-group tabs; the view fills the pane area while its tab is active (see below) |
 | `detail` | Detail region filled by a composed receiver; never opens on its own |
 | `window` | Separate top-level window |
 
 `sidebar` is not a v2 location value. Unknown locations fail schema validation.
+
+A `main` view never covers the stage. The Host adds one stage tab per `main`
+view, labelled with the view's `title`, and no tab is active on install: the
+pane grid stays on screen until the user picks the plugin's tab. While it is
+active the view fills the area under the tab bar, and the tab bar stays
+visible so the user can switch back. Switching away hides the view without
+destroying it, so the guest keeps running in the background.
 
 A package that contains both frontend and backend contributions uses one
 manifest. `contributes` and `backend` are sibling top-level fields; the backend
