@@ -466,7 +466,7 @@ describe('a computer clock off from the Registry (clock message)', () => {
 
   it('words an install refused over a slow clock as the clock being behind', async () => {
     register(SLOW)
-    const refused = await call('plugins:prepareInstall', { namespace: 'acme', name: 'beta', testplace: true })
+    const refused = await Promise.resolve(call('plugins:prepareInstall', { namespace: 'acme', name: 'beta', testplace: true }))
       .then(() => '(accepted)', (error: Error) => error.message)
     expect(refused).toMatch(/TRUST_METADATA_NOT_YET_VALID: /)
     expect(registryClockRefusal(refused)).toBe('behind')
@@ -474,7 +474,7 @@ describe('a computer clock off from the Registry (clock message)', () => {
 
   it('words an install refused over a fast clock as the clock being ahead', async () => {
     register(FAST)
-    const refused = await call('plugins:prepareInstall', { namespace: 'acme', name: 'beta', testplace: true })
+    const refused = await Promise.resolve(call('plugins:prepareInstall', { namespace: 'acme', name: 'beta', testplace: true }))
       .then(() => '(accepted)', (error: Error) => error.message)
     expect(refused).toMatch(/TRUST_METADATA_EXPIRED: /)
     expect(registryClockRefusal(refused)).toBe('ahead')
