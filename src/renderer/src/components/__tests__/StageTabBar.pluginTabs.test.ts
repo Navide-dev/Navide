@@ -77,6 +77,10 @@ describe('StageTabBar – plugin main tabs', () => {
     const b = bar.get('[data-plugin-tab="b.main"]')
     expect(a.attributes('title')).not.toBe(b.attributes('title'))
     expect(b.attributes('title')).toContain(i18n.global.t('pluginDisclosure.source.local-unsigned'))
+    // Nothing vouches for the publisher of an unsigned or unknown package.
+    expect(b.attributes('title')).toContain(i18n.global.t('pluginDisclosure.source.selfDeclared', { publisher: 'other' }))
+    expect(a.attributes('title')).toContain(i18n.global.t('pluginDisclosure.source.selfDeclared', { publisher: 'acme' }))
+    expect(b.attributes('title')).not.toContain(i18n.global.t('pluginDisclosure.source.publisher', { publisher: 'other' }))
     expect(a.find('.tab-plugin-source-mark').exists()).toBe(false)
     expect(b.find('.tab-plugin-source-mark').exists()).toBe(true)
   })
