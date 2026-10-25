@@ -123,9 +123,9 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.31',
     title: {
-      'zh-TW': '修正 Linux 記憶體持續增加，「Navide 外掛」設定分成四個子頁',
-      'en-US': 'Linux Memory Growth Fixed, and Navide Plugins Settings in Four Pages',
-      'ja-JP': 'Linux でメモリが増え続ける問題を修正、「Navide プラグイン」の設定を 4 つのページに',
+      'zh-TW': 'Linux 不再越用越慢：修正後端記憶體每分鐘增加約 90 MB',
+      'en-US': 'Linux No Longer Slows Down Over Time: Backend Memory Growth of About 90 MB a Minute Fixed',
+      'ja-JP': 'Linux で使うほど重くなる問題を修正：バックエンドのメモリが毎分約 90 MB 増える不具合',
     },
     highlights: [
       {
