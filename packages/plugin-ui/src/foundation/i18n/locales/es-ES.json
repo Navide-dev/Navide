@@ -2156,9 +2156,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide no pudo comprobar este complemento de Navide: los datos de confianza del Registry tienen una fecha posterior al reloj de este equipo. Comprueba que la fecha y la hora del equipo sean correctas y vuelve a intentarlo.",
-          "expired": "Navide no pudo comprobar este complemento de Navide: según el reloj de este equipo, los datos de confianza del Registry han caducado. Comprueba que la fecha y la hora del equipo sean correctas y vuelve a intentarlo.",
-          "signatureNotYetValid": "Navide no pudo comprobar este complemento de Navide: su firma del Registry tiene una fecha posterior al reloj de este equipo. Comprueba que la fecha y la hora del equipo sean correctas y vuelve a intentarlo."
+          "notYetValid": "Navide no pudo comprobar este complemento de Navide: el reloj de este equipo parece ir atrasado (los datos de confianza del Registry tienen una fecha posterior). Corrige la fecha y la hora del equipo y vuelve a intentarlo.",
+          "expired": "Navide no pudo comprobar este complemento de Navide: según el reloj de este equipo, los datos de confianza del Registry han caducado, así que el reloj parece ir adelantado. Corrige la fecha y la hora del equipo y vuelve a intentarlo.",
+          "signatureNotYetValid": "Navide no pudo comprobar este complemento de Navide: el reloj de este equipo parece ir atrasado (su firma del Registry tiene una fecha posterior). Corrige la fecha y la hora del equipo y vuelve a intentarlo."
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version} está detenido: según el reloj de este equipo, los datos de confianza del Registry para él han caducado. O el reloj va adelantado, o Navide lleva más de un día sin conectar con el Registry. Corrige la fecha y la hora del equipo o conéctate a internet; Navide vuelve a comprobarlo en 15 minutos y al iniciarse.",
+          "behind": "{id} {version} está detenido: el reloj de este equipo parece ir atrasado, así que los datos de confianza del Registry para él aún no son válidos. Corrige la fecha y la hora del equipo; Navide vuelve a comprobarlo en 15 minutos y al iniciarse."
         }
       },
       "localInstall": {
