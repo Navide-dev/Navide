@@ -17986,3 +17986,95 @@ describe('web.* view capabilities (Host web view registry)', () => {
     expect(webHostMock.cleared).not.toContain('persist:navide-web:acme.not-web')
   })
 })
+
+describe('a third-party window view opens without its native backend', () => {
+  // v0.2.30: a local devmap whose backend the user had not allowed failed to
+  // open as a window ("the user did not allow the native backend") while its
+  // main-location view rendered. A refused or failed bind is now not fatal for
+  // the window either: it opens, stays unbound, and says why.
+  function setup() {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'third-party-window-')))
+    const workspace = join(root, 'workspace')
+    const packageDir = join(root, 'package')
+    mkdirSync(workspace)
+    mkdirSync(join(packageDir, 'backend'), { recursive: true })
+    writeFileSync(join(packageDir, 'backend', 'acme-map'), 'binary', { mode: 0o700 })
+    writeFileSync(join(packageDir, 'manifest.json'), JSON.stringify({
+      schemaVersion: 2, apiVersion: '^1.0.0', id: 'acme.map', name: 'Map', version: '1.0.0', publisher: 'acme',
+      permissions: { system: ['fs'] },
+      marketplace: { description: 'Map a repo.', license: 'MIT' },
+      contributes: { views: [{ id: 'main', kind: 'custom', location: 'window', title: 'Map', entry: 'frontend/main/index.html' }] },
+      backend: { entry: 'backend/acme-map', protocolVersion: 1, activation: 'startup', methods: ['map.read'] },
+    }))
+    const spec = thirdPartyBackendLaunchSpec({
+      pluginId: 'acme.map', packageVersion: '1.0.0', packageDir, views: [],
+      backend: { entryFile: join(packageDir, 'backend', 'acme-map'), protocolVersion: 1, activation: 'startup' },
+    })!
+    const view: NonNullable<PluginLaunchDescriptor['views']>[number] = {
+      id: 'main', contributionKey: 'acme.map.main', kind: 'custom', location: 'window', title: 'Map',
+      entryFile: join(packageDir, 'frontend/main/index.html'),
+    }
+    const descriptor: PluginLaunchDescriptor = {
+      id: 'acme.map', packageVersion: '1.0.0', packageDir, requires: ['fs'],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+      devUrl: '', entryFile: view.entryFile, views: [view],
+    }
+    const mgr = new FrontendPluginManager()
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion: '1.0.0', system: ['fs'], storage: true }))
+    mgr.registerDescriptor(descriptor, { builtin: true })
+    mgr.registerBackendActivation(spec)
+    return { mgr, workspace, root }
+  }
+
+  const running = (mgr: FrontendPluginManager) =>
+    [...(mgr as unknown as { running: Map<string, { backendWorkspaceId: string | null; backendUnavailable?: string }> }).running.values()]
+
+  it.each([
+    ['the global switch is off', new BackendPluginError('BACKEND_UNAVAILABLE', 'third-party native backends are turned off'), 'third-party native backends are turned off'],
+    ['the user declined consent', new BackendPluginError('BACKEND_UNAVAILABLE', 'the user did not allow the native backend'), 'the user did not allow the native backend'],
+    ['consent was declined earlier', new BackendPluginError('BACKEND_UNAVAILABLE', 'the native backend has not been allowed'), 'the native backend has not been allowed'],
+    // Any other failure may carry paths or a stack: only a generic reason leaves.
+    ['the bind failed', new Error('spawn EACCES ' + '/Users/someone/private/acme-map'), 'the native backend could not start'],
+  ])('opens and stays unbound when %s', async (_case, refusal, reason) => {
+    const { mgr, workspace, root } = setup()
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindView').mockRejectedValue(refusal)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const result = await mgr.openContributionWindow(asHost(new FakeBrowserWindow()), 'acme.map.main', {
+        workspacePath: workspace,
+        query: '',
+      })
+      expect(result).toEqual({ ok: true, backendUnavailable: reason })
+      // The view is there, and its backend is not: no second bind tried
+      // another way, and no workspace was bound, so its calls fail closed.
+      const views = running(mgr)
+      expect(views).toHaveLength(1)
+      expect(views[0].backendWorkspaceId).toBeNull()
+      expect(views[0].backendUnavailable).toBe(reason)
+      expect(bind).toHaveBeenCalledOnce()
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('could not bind'))
+    } finally {
+      warning.mockRestore()
+      bind.mockRestore()
+      await mgr.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports nothing when the backend binds', async () => {
+    const { mgr, workspace, root } = setup()
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindView').mockResolvedValue(undefined)
+    try {
+      const result = await mgr.openContributionWindow(asHost(new FakeBrowserWindow()), 'acme.map.main', {
+        workspacePath: workspace,
+        query: '',
+      })
+      expect(result).toEqual({ ok: true })
+      expect(running(mgr)[0].backendWorkspaceId).toBe(mgr.workspaceIdForPath(workspace))
+    } finally {
+      bind.mockRestore()
+      await mgr.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})

@@ -1889,6 +1889,7 @@
           "externalCallersDisclosure": "Programas externos compartilham um único token, então o registro de uma chamada só pode dizer “um cliente externo”, não qual programa foi. A credencial do host é tratada da mesma forma."
         },
         "empty": "Nenhum plug-in do Navide instalado tem back-end nativo.",
+        "windowWithout": "{name} foi aberto sem o seu backend nativo: {reason}. As funções que precisam do backend não vão funcionar. Para permitir o backend, vá em Configurações → Plug-ins do Navide → {page}.",
         "allow": "Permitir",
         "disable": "Desativar",
         "enable_plugin": "Ativar",
