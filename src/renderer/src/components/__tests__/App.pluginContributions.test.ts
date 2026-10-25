@@ -53,6 +53,30 @@ describe('titlebar button order', () => {
     )
   })
 
+  it('gives an icon-less plugin button its title\'s first letter and a Host-written disclosure', () => {
+    // A letter alone could pass for a native control, so the hover text and
+    // accessible name name the plugin, its id, publisher and source, and the
+    // K2 dot stays (pluginSourceMark.test.ts covers the text itself).
+    const start = at('class="titlebar-plugin-actions"')
+    const block = appSource.slice(start, appSource.indexOf('</div>', start))
+    expect(block).toContain('<span v-else class="titlebar-plugin-fallback" aria-hidden="true">{{ pluginIconFallback(contribution.title) }}</span>')
+    expect(block).not.toContain('◇')
+    expect(block).toContain(':title="titlebarPluginLabel(contribution)"')
+    expect(block).toContain(':aria-label="titlebarPluginLabel(contribution)"')
+    expect(block).toContain('<span v-if="chromeSourceMark(contribution.source)" class="titlebar-plugin-source-mark"')
+    expect(appSource).toMatch(
+      /function titlebarPluginLabel\(contribution: PluginRegionContribution\): string \{\s*return pluginDisclosureTitle\(i18n\.global\.t, contribution\)\s*\}/
+    )
+  })
+
+  it('clips the fallback glyph to a fixed box', () => {
+    // The glyph is the plugin's own text: one wide character (﷽) must not
+    // spill over the gear beside it (review M1 on #644).
+    const rule = appSource.match(/\.titlebar-plugin-fallback \{[^}]*\}/)?.[0] ?? ''
+    expect(rule).toContain('overflow: hidden')
+    expect(rule).toMatch(/width: 14px;[\s\S]*height: 14px;/)
+  })
+
   it('keeps the spacer that pins the cluster right', () => {
     // Without flex:1 the cluster would not be right-aligned and the order
     // above would stop meaning anything.
@@ -271,5 +295,24 @@ describe('main plugin views are a stage tab', () => {
     // The grid's own layers (handles, layout bar, overlays) go up to 50.
     expect(Number(mainCss.match(/z-index:\s*(\d+)/)?.[1])).toBeGreaterThan(50)
     expect(mainCss).toContain('background: var(--bg-base);')
+  })
+})
+
+describe('a plugin window opened without its native backend', () => {
+  const at = (needle: string): string => {
+    const i = appSource.indexOf(needle)
+    expect(i, needle).toBeGreaterThan(-1)
+    return appSource.slice(i, appSource.indexOf('\n}', i))
+  }
+
+  it('says why once, through the toast, after a successful open', () => {
+    const open = at('async function openPluginContributionWindow(')
+    expect(open).toContain('if (result.backendUnavailable) notePluginWindowWithoutBackend(contribution, result.backendUnavailable)')
+    // A failed open returns before it: there is no window to explain.
+    expect(open.indexOf('return')).toBeLessThan(open.indexOf('result.backendUnavailable'))
+    const note = at('function notePluginWindowWithoutBackend(')
+    expect(note).toContain('if (pluginWindowsWithoutBackend.has(key)) return')
+    expect(note).toContain("'settings.extensions.nativeBackends.windowWithout'")
+    expect(note).toContain('name: revealInvisibleText(contribution.title)')
   })
 })

@@ -529,6 +529,703 @@
         "unchanged": [],
         "widened": true
       }
+    },
+    {
+      "name": "Plans 0.2.9 -> 0.2.31 declares a file scope for its unscoped fs: listed, not widened",
+      "from": "plans-0.2.9",
+      "to": "plans-0.2.31",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "navide.plans",
+          "version": "0.2.9",
+          "risk": "high"
+        },
+        "to": {
+          "id": "navide.plans",
+          "version": "0.2.31",
+          "risk": "high"
+        },
+        "added": [
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.agent-team/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.agent-team/plans/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.agent-team/reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.agent-team/reports/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.claude/loop-reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.claude/loop-reports/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.claude/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.claude/plans/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.cursor/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.cursor/plans/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/docs/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/docs/plans/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/docs/reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/docs/reports/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": ".plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "repository",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.agent-team/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.agent-team/reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.claude/loop-reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.claude/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.cursor/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/docs/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/docs/reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": ".plans/*",
+            "detail": null
+          }
+        ],
+        "removed": [],
+        "unchanged": [
+          {
+            "kind": "nativeBackend",
+            "key": "native",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "aiCli",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": false
+      }
+    },
+    {
+      "name": "Plans 0.2.31 -> 0.2.9 drops its declared file scope while fs stays: widened",
+      "from": "plans-0.2.31",
+      "to": "plans-0.2.9",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "navide.plans",
+          "version": "0.2.31",
+          "risk": "high"
+        },
+        "to": {
+          "id": "navide.plans",
+          "version": "0.2.9",
+          "risk": "high"
+        },
+        "added": [],
+        "removed": [
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.agent-team/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.agent-team/plans/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.agent-team/reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.agent-team/reports/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.claude/loop-reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.claude/loop-reports/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.claude/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.claude/plans/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.cursor/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.cursor/plans/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/docs/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/docs/plans/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/docs/reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/docs/reports/.history/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": ".plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "repository",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.agent-team/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.agent-team/reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.claude/loop-reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.claude/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.cursor/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/docs/plans/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/docs/reports/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": ".plans/*",
+            "detail": null
+          }
+        ],
+        "unchanged": [
+          {
+            "kind": "nativeBackend",
+            "key": "native",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "aiCli",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
+    },
+    {
+      "name": "declaring a scope for an unscoped fs is not widened",
+      "from": "scope-fs-unscoped",
+      "to": "scope-fs-docs-read",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.scoped",
+          "version": "1.1.0",
+          "risk": "medium"
+        },
+        "to": {
+          "id": "acme.scoped",
+          "version": "1.2.0",
+          "risk": "medium"
+        },
+        "added": [
+          {
+            "kind": "fsScopeRead",
+            "key": "docs/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "workspace",
+            "detail": null
+          }
+        ],
+        "removed": [],
+        "unchanged": [
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": false
+      }
+    },
+    {
+      "name": "dropping a declared scope while fs stays is widened",
+      "from": "scope-fs-docs-read",
+      "to": "scope-fs-unscoped",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.scoped",
+          "version": "1.2.0",
+          "risk": "medium"
+        },
+        "to": {
+          "id": "acme.scoped",
+          "version": "1.1.0",
+          "risk": "medium"
+        },
+        "added": [],
+        "removed": [
+          {
+            "kind": "fsScopeRead",
+            "key": "docs/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "workspace",
+            "detail": null
+          }
+        ],
+        "unchanged": [
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
+    },
+    {
+      "name": "adding unscoped fs is widened",
+      "from": "scope-ui-only",
+      "to": "scope-fs-unscoped",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.scoped",
+          "version": "1.0.0",
+          "risk": "low"
+        },
+        "to": {
+          "id": "acme.scoped",
+          "version": "1.1.0",
+          "risk": "medium"
+        },
+        "added": [
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          }
+        ],
+        "removed": [],
+        "unchanged": [
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
+    },
+    {
+      "name": "a new read pattern in an existing scope is widened",
+      "from": "scope-fs-docs-read",
+      "to": "scope-fs-docs-src-read",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.scoped",
+          "version": "1.2.0",
+          "risk": "medium"
+        },
+        "to": {
+          "id": "acme.scoped",
+          "version": "1.3.0",
+          "risk": "medium"
+        },
+        "added": [
+          {
+            "kind": "fsScopeRead",
+            "key": "src/**",
+            "detail": null
+          }
+        ],
+        "removed": [],
+        "unchanged": [
+          {
+            "kind": "fsScopeRead",
+            "key": "docs/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "workspace",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
+    },
+    {
+      "name": "removing a read pattern from a scope is not widened",
+      "from": "scope-fs-docs-src-read",
+      "to": "scope-fs-docs-read",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.scoped",
+          "version": "1.3.0",
+          "risk": "medium"
+        },
+        "to": {
+          "id": "acme.scoped",
+          "version": "1.2.0",
+          "risk": "medium"
+        },
+        "added": [],
+        "removed": [
+          {
+            "kind": "fsScopeRead",
+            "key": "src/**",
+            "detail": null
+          }
+        ],
+        "unchanged": [
+          {
+            "kind": "fsScopeRead",
+            "key": "docs/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "workspace",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": false
+      }
+    },
+    {
+      "name": "a path moving from read to write is widened",
+      "from": "scope-fs-docs-read",
+      "to": "scope-fs-docs-write",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.scoped",
+          "version": "1.2.0",
+          "risk": "medium"
+        },
+        "to": {
+          "id": "acme.scoped",
+          "version": "1.4.0",
+          "risk": "medium"
+        },
+        "added": [
+          {
+            "kind": "fsScopeWrite",
+            "key": "docs/*",
+            "detail": null
+          }
+        ],
+        "removed": [
+          {
+            "kind": "fsScopeRead",
+            "key": "docs/*",
+            "detail": null
+          }
+        ],
+        "unchanged": [
+          {
+            "kind": "fsScopeRoot",
+            "key": "workspace",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
+    },
+    {
+      "name": "a new scope root is widened",
+      "from": "scope-fs-docs-read",
+      "to": "scope-fs-docs-read-repository",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.scoped",
+          "version": "1.2.0",
+          "risk": "medium"
+        },
+        "to": {
+          "id": "acme.scoped",
+          "version": "1.5.0",
+          "risk": "medium"
+        },
+        "added": [
+          {
+            "kind": "fsScopeRoot",
+            "key": "repository",
+            "detail": null
+          }
+        ],
+        "removed": [
+          {
+            "kind": "fsScopeRoot",
+            "key": "workspace",
+            "detail": null
+          }
+        ],
+        "unchanged": [
+          {
+            "kind": "fsScopeRead",
+            "key": "docs/*",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
+    },
+    {
+      "name": "a new capability beside an unchanged scope is widened",
+      "from": "scope-fs-docs-read",
+      "to": "scope-fs-docs-read-web",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.scoped",
+          "version": "1.2.0",
+          "risk": "medium"
+        },
+        "to": {
+          "id": "acme.scoped",
+          "version": "1.6.0",
+          "risk": "high"
+        },
+        "added": [
+          {
+            "kind": "system",
+            "key": "web",
+            "detail": null
+          }
+        ],
+        "removed": [],
+        "unchanged": [
+          {
+            "kind": "fsScopeRead",
+            "key": "docs/*",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "workspace",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
     }
   ]
 }

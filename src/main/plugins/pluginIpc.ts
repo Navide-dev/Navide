@@ -24,6 +24,7 @@ import {
   isUpdateAvailable,
   defaultInstallerDeps,
   InstallError,
+  localVersionAlreadyInstalled,
   type PreparedInstall,
   type InstallerTrustConfig,
 } from './pluginInstaller'
@@ -669,7 +670,10 @@ export interface PluginIpcOptions {
   pickLocalPackageFile?: (event: IpcMainInvokeEvent) => Promise<string | null>
   /** Card K3 (D7): drop the native backend consent and the agent tool write
    * answers of a package whose source changed, so nothing carries over. */
-  forgetBackendConsent?: (pluginId: string) => void
+  forgetBackendConsent?: (pluginId: string, keepInstallConsentFor?: string) => void
+  /** 0.2.31: the user confirmed this version's install dialog, which
+   *  discloses its native backend; its first start counts that as consent. */
+  noteInstallConsent?: (pluginId: string, packageVersion: string) => void
   /** `<userData>/plugin-storage-v2`: view storage, set aside with the native
    * backend data when a package's source changes (card K3, D7). */
   pluginStorageRoot?: string
@@ -2524,6 +2528,14 @@ export function registerPluginIpc(
   type CommitInstallArgs = {
     id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean
   }
+  // Bookkeeping only: a failed save means the first start asks instead.
+  const noteInstallConsent = (pluginId: string, packageVersion: string): void => {
+    try {
+      options.noteInstallConsent?.(pluginId, packageVersion)
+    } catch (error) {
+      console.warn(`[plugins] install consent for ${pluginId} not recorded: ${errorText(error)}`)
+    }
+  }
   // Shared by the window's install flow and an agent's unchanged update (O1).
   const commitRegistryInstall = async (args: CommitInstallArgs) => {
       assertNoDeveloperFolder(args.id)
@@ -2638,7 +2650,10 @@ export function registerPluginIpc(
   }
   ipcMain.handle('plugins:commitInstall', async (event, args: CommitInstallArgs) => {
     assertAuthorized(event)
-    return activateIfFirstInstall(await commitRegistryInstall(args))
+    const version = prepared.get(args.id)?.pkg.version
+    const committed = await commitRegistryInstall(args)
+    if (version !== undefined) noteInstallConsent(committed.id, version)
+    return activateIfFirstInstall(committed)
   })
 
   // DX report A1 (card K3): install a `.vsix` the user picked in this window.
@@ -2742,6 +2757,10 @@ export function registerPluginIpc(
     }
     assertNoDeveloperFolder(pkg.id)
     assertEngineCompatible(pkg.id, pkg.version, pkg.manifest, hostAppVersion())
+    // Said now, before the consent dialog, in the words staging would use.
+    if (localVersionAlreadyInstalled(pkg, pluginsRoot)) {
+      throw new InstallError(`immutable candidate already exists for ${pkg.id}@${pkg.version}`)
+    }
     preparedLocal.set(pkg.id, pkg)
     const replaced = manager.listInstalledPackages().find((item) => item.id === pkg.id)
     const agentTools = isManifestV2(pkg.manifest) ? computeDisclosure(pkg.manifest).agentTools : []
@@ -2916,6 +2935,7 @@ export function registerPluginIpc(
       } finally {
         activeTransactions.delete(id)
       }
+      noteInstallConsent(id, pkg.version)
       return activateIfFirstInstall(committed)
     }
   )
@@ -3340,6 +3360,7 @@ export function registerPluginIpc(
       consentedAt: new Date().toISOString(),
     })
     folderMeta.setLoadedBy(id, pending.dir, pending.loadedBy)
+    if (typeof described.summary.version === 'string') noteInstallConsent(id, described.summary.version)
     activateDeveloperFolder(id, 'user-load')
     return developerModeState()
   })
@@ -3900,7 +3921,9 @@ export function registerPluginIpc(
     const finishSourceReplacement = (): void => {
       if (!sourceReplaced) return
       if (!localToLocal) lifecycleSelector.forgetPrevious(id)
-      options.forgetBackendConsent?.(id)
+      // The candidate's own install dialog (0.2.31) is not the replaced
+      // package's consent, so it stays.
+      options.forgetBackendConsent?.(id, selectedBeforeRestart.candidate?.packageVersion)
       if (!localCandidate) forgetLocalTrustRecords(pluginsRoot, id)
     }
     const legacyDir = join(pluginsRoot, id)

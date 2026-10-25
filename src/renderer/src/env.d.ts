@@ -461,7 +461,7 @@ declare global {
         openContributionWindow: (args: {
           contributionKey: string
           workspace_path: string
-        }) => Promise<{ ok: boolean; error?: string }>
+        }) => Promise<{ ok: boolean; error?: string; backendUnavailable?: string }>
         closeContribution: (args: { contributionKey: string }) => Promise<{ ok: boolean }>
         onContributionsChanged: (handler: () => void) => () => void
         marketplaceSearch: (

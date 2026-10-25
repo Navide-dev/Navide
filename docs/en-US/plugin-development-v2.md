@@ -345,16 +345,24 @@ third-party native code. The Host never runs it directly; it starts only when
 all of these hold, and they are checked again before every restart:
 
 - Settings → Navide Plugins → "Allow third-party Navide plugins to run native backends"
-  is on. It is off by default and can only be turned on there: while it is
-  off, opening a plugin never prompts and never turns it on.
+  is on. It is on by default for a new profile (since 0.2.31) and the user
+  can turn it off there: while it is off, opening a plugin never prompts and
+  never turns it on. A profile an earlier version already saved keeps the
+  switch as it was saved, so an earlier "off" stays off.
 - The user has not disabled the plugin's backend.
 - The user allowed this exact package content with this exact permission set
   (`permissions`, `backend.methods`, `backend.events`, and - only when the
   package declares any - `backend.agentTools`). The digest covers every
   file in the package (relative path and content), because a backend can read
-  any package file and turn it into code at run time. Any new version that
-  changes any file - frontend files included - is staged but not started until
-  the user allows it again.
+  any package file and turn it into code at run time. Installing is that
+  consent: every install path discloses the native backend and its shell
+  allowlist before it commits and records the version it installed, so that
+  version's first start records the consent without another dialog. A
+  package installed before 0.2.31, a version no install dialog showed (an
+  agent's update, a rollback) and a package whose consent was revoked or
+  dropped to fail closed are asked before they start. Any new version that changes any
+  file - frontend files included - is staged but not started until the user
+  allows it again, in the dialog shown before it starts.
 - The platform sandbox is available. There is no unsandboxed fallback.
 - The package does not declare `permissions.shell: "full"`. A backend package
   may declare `shell: "allowlist"`; see "Shell commands from a backend" below.
@@ -2110,6 +2118,34 @@ the authenticated plugin, package version, workspace, view instance, and
 audience.
 Directed output and exit events are delivered only to the authenticated
 audience that created or reattached the session.
+
+Every v2 package that declares `system: ["aiCli"]` receives them, not only the
+bundled Navide plugins. `aiCli.output` is `{ sessionId, data }` (the PTY text,
+decoded as UTF-8) and `aiCli.exited` is `{ sessionId, exitCode }` (a number,
+or `null`); nothing else is in either, and a v2 view is never sent the raw
+`terminal.*` stream. Ownership is the Host's, recorded when the session is
+started or resumed: the view instance, package, package version, workspace and
+audience. Another package never sees a session, and neither does another view
+of the same package while the session is attached to its view; input, resize,
+stop and reattach calls for a session the calling view does not own are
+refused. When the view closes the session is detached, and a new view of the
+same package and package version with the same audience and workspace can take
+it over with `aiCli.resumeSession`. A detached session that is not taken over
+within 60 seconds is ended (the bundled Navide plugins end theirs through their
+own surfaces), unless the view started it with `persistView: true` and the
+Host stored it in terminal storage: such a session keeps running until a view
+resumes it, the package is disabled or removed, or Navide quits. Asking for
+`persistView` when the storage write fails does not keep it. A stored session
+is found again through terminal storage, which is keyed by package,
+contribution and workspace but not by package version, so a later version of
+the same package can resume it there; another package never can. Updating a
+package ends the sessions of the version it replaces. Disabling or
+removing the package ends its sessions at once.
+
+Declaring `aiCli` lets a package start the AI CLI agents set up in Navide, send
+them input and read everything they print, and keep an AI CLI running in the
+background after its window closes; the install and update dialogs say so, and
+an update that adds it is shown as added.
 `shell.run`, raw command/executable/arguments/environment/working-directory
 parameters, and PID control have no `aiCli` mapping and must fail closed.
 The Host executor also enforces the catalog's `requiresUserGesture` flag for

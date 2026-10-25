@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import RebuildIcon from './RebuildIcon.vue'
 import { tabRunStatePaneStatus, type TabRunState } from '../lib/tabStatus'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
-import { chromeSourceMark, pluginSourceLabel } from '../lib/pluginSourceMark'
+import { chromeSourceMark, pluginDisclosureTitle } from '../lib/pluginSourceMark'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import type { PluginSource } from '../../../shared/pluginSource'
 
@@ -85,26 +85,9 @@ function dotStyle(status: TabRunState): Record<string, string> | undefined {
   return paneStatus ? statusBadgeStyle(paneStatus) : undefined
 }
 
-/** Sources whose publisher id nothing vouches for, as in PluginSourceBadge. */
-const SELF_DECLARED: readonly PluginSource[] = ['local-unsigned', 'developer-unpacked']
-
-/** Disclosure for a plugin tab: its title alone is the plugin's to choose, so
- *  the hover text and accessible name also say it is a Navide plugin and give
- *  its id, publisher and, when the package has one, its source. A publisher
- *  read off an unsigned or unknown package is only self-declared. */
+/** Disclosure for a plugin tab: see pluginDisclosureTitle. */
 function pluginTabTitle(tab: PluginTabItem): string {
-  const publisher = reveal(tab.pluginId.split('.')[0])
-  const parts = [
-    t('stageTab.plugin-tab', { title: reveal(tab.label) }),
-    reveal(tab.pluginId),
-    t('pluginDisclosure.source.publisher', {
-      publisher: !tab.source || SELF_DECLARED.includes(tab.source)
-        ? t('pluginDisclosure.source.selfDeclared', { publisher })
-        : publisher,
-    }),
-  ]
-  if (tab.source) parts.push(pluginSourceLabel(t, tab.source, tab.expiresAt, tab.testplaceVia))
-  return parts.join(' · ')
+  return pluginDisclosureTitle(t, { ...tab, title: tab.label })
 }
 
 const actionMenu = ref<{ show: boolean; key: string; x: number; y: number }>({ show: false, key: '', x: 0, y: 0 })

@@ -158,6 +158,8 @@ function writeConsumerProject(project: string, packageRoot: string): void {
     cpSync(join(packageRoot, file), join(project, file))
   }
   cpSync(join(packageRoot, 'frontend'), join(project, 'frontend'), { recursive: true })
+  // The manifest's icon: part of the package source, as in navide-git.
+  cpSync(join(packageRoot, 'assets'), join(project, 'assets'), { recursive: true })
   // Test sources are not part of the shipped package and would demand test-only
   // dev dependencies in the external consumer typecheck.
   cpSync(join(packageRoot, 'src'), join(project, 'src'), {

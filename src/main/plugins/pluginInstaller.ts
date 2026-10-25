@@ -725,6 +725,25 @@ export interface StagedInstall {
 /** Write a verified package beside, never over, the current active package.
  * Candidate discovery/activation is intentionally a separate Host lifecycle
  * decision: staging does not revoke instances, change grants, or expose routes. */
+/** True when staging this local package would be refused because its id,
+ *  version and target are already installed and referenced: the version has
+ *  to be bumped. The same test {@link stageInstallCandidate} makes, asked at
+ *  prepare so the refusal comes before consent and reaches an agent's request
+ *  too. An unreadable lifecycle record is left to staging, which refuses it
+ *  with its own reason. */
+export function localVersionAlreadyInstalled(prepared: PreparedInstall, pluginsRoot: string): boolean {
+  const target = prepared.localTarget
+  if (!target || !existsSync(immutablePluginPackageDir(pluginsRoot, prepared.id, prepared.version, target))) return false
+  try {
+    const record = new PluginActivationSelector(pluginsRoot).read(prepared.id)
+    return [record?.active, record?.previous, record?.candidate].some((selection) =>
+      selection?.packageVersion === prepared.version && selection.target === target,
+    )
+  } catch {
+    return false
+  }
+}
+
 export function stageInstallCandidate(
   prepared: PreparedInstall,
   pluginsRoot: string,

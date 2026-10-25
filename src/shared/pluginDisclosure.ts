@@ -168,7 +168,10 @@ export interface DisclosureDiff {
   added: DisclosureItem[]
   removed: DisclosureItem[]
   unchanged: DisclosureItem[]
-  /** Something was added or the risk level rose: only then does an update ask again (D2). */
+  /** Something was added or the risk level rose: only then does an update ask again (D2).
+   *  A declared file scope is informational (see fsScopeChangeWidens), so
+   *  declaring one where there was none does not count; dropping or growing
+   *  one does. */
   widened: boolean
 }
 
@@ -335,6 +338,29 @@ export function disclosureItems(disclosure: ManifestDisclosure): DisclosureItem[
   return items.sort((a, b) => compareCodeUnits(a.kind, b.kind) || compareCodeUnits(a.key, b.key))
 }
 
+const FS_SCOPE_KINDS: ReadonlySet<DisclosureItemKind> = new Set(['fsScopeRoot', 'fsScopeRead', 'fsScopeWrite'])
+
+export function isFsScopeItem(item: DisclosureItem): boolean {
+  return FS_SCOPE_KINDS.has(item.kind)
+}
+
+/**
+ * Whether going from the items `before` to `after` widens the declared file
+ * scope. A scope is declared, never enforced: the fs capability reaches the
+ * same files with or without one. So declaring a scope where there was none
+ * claims less than the unscoped fs before it and does not widen. Dropping a
+ * scope while fs stays, a new read or write pattern (including a path moving
+ * from read to write) and a different root all claim more, and do.
+ */
+export function fsScopeChangeWidens(before: readonly DisclosureItem[], after: readonly DisclosureItem[]): boolean {
+  const was = before.filter(isFsScopeItem)
+  const now = after.filter(isFsScopeItem)
+  if (was.length === 0) return false
+  if (now.length === 0) return after.some((item) => item.kind === 'system' && item.key === 'fs')
+  const had = new Set(was.map((item) => `${item.kind}\u0000${item.key}`))
+  return now.some((item) => !had.has(`${item.kind}\u0000${item.key}`))
+}
+
 /** D2: what an update (or rollback) from `from` to `to` adds, removes and keeps. */
 export function diffDisclosure(from: ManifestDisclosure, to: ManifestDisclosure): DisclosureDiff {
   const before = disclosureItems(from)
@@ -349,6 +375,9 @@ export function diffDisclosure(from: ManifestDisclosure, to: ManifestDisclosure)
     added,
     removed: before.filter((item) => !afterKeys.has(canonicalContractJson(item))),
     unchanged: after.filter((item) => beforeKeys.has(canonicalContractJson(item))),
-    widened: added.length > 0 || RISK_RANK[to.risk.level] > RISK_RANK[from.risk.level],
+    widened:
+      added.some((item) => !isFsScopeItem(item)) ||
+      fsScopeChangeWidens(before, after) ||
+      RISK_RANK[to.risk.level] > RISK_RANK[from.risk.level],
   }
 }

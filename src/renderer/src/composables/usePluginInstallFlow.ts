@@ -22,6 +22,21 @@ export interface PendingInstall {
   /** L4: this consent is for going back to the kept file version `prepared`
    *  describes, from the version named here; approving rolls back. */
   rollbackFrom?: string
+  /** Why approving failed, shown in the dialog itself (it covers the pane's
+   *  own error line). Set only after a failed approval. */
+  commitError?: string
+  /** A file's prepared copy is used up by a failed approval: approving again
+   *  would only fail, so the dialog asks for the file to be chosen again. */
+  needsFileAgain?: boolean
+}
+
+/** What the dialog says about a failed approval: a version installed already
+ *  with other contents gets its own sentence, anything else a generic one
+ *  (the main process's text can hold paths). */
+export function installFailureMessage(raw: string, t: (key: string) => string): string {
+  return /immutable candidate already exists for /.test(raw)
+    ? t('settings.extensions.localInstall.versionExists')
+    : t('settings.extensions.localInstall.installFailed')
 }
 
 /** Card K3: the extra step a package of the same id asks for before it is
@@ -51,7 +66,24 @@ export function usePluginInstallFlow() {
   }
 
   function fail(err: unknown): void {
-    error.value = localizeDeveloperModeError(ipcErrorMessage(err), t)
+    const message = ipcErrorMessage(err)
+    // Refused before the dialog (prepare) or by it (commit), in the same words.
+    error.value = /immutable candidate already exists for /.test(message)
+      ? t('settings.extensions.localInstall.versionExists')
+      : localizeDeveloperModeError(message, t)
+  }
+
+  /** A failed approval: the pane's error line as before, and the reason in
+   *  the dialog, which stays open over that line. */
+  function failCommit(err: unknown): void {
+    fail(err)
+    const pending = pendingConfirm.value
+    if (!pending) return
+    pendingConfirm.value = {
+      ...pending,
+      commitError: installFailureMessage(ipcErrorMessage(err), t),
+      ...(pending.prepared.source === 'local-unsigned' ? { needsFileAgain: true } : {}),
+    }
   }
 
   async function commit(
@@ -254,7 +286,7 @@ export function usePluginInstallFlow() {
     try {
       await commit(prepared.id, {})
     } catch (err) {
-      fail(err)
+      failCommit(err)
     } finally {
       busy.value = false
     }
@@ -274,7 +306,7 @@ export function usePluginInstallFlow() {
     try {
       await commit(pendingConfirm.value.prepared.id, { publisherConfirmed: true })
     } catch (err) {
-      fail(err)
+      failCommit(err)
     } finally {
       busy.value = false
     }
@@ -325,7 +357,7 @@ export function usePluginInstallFlow() {
         riskConfirmed: true,
       })
     } catch (err) {
-      fail(err)
+      failCommit(err)
     } finally {
       busy.value = false
     }

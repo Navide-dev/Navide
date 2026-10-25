@@ -254,6 +254,27 @@ describe('Issue 03/04 public Host planner', () => {
     ...overrides,
   })
 
+  // Review M2 on #648: a session is owned by one package and one version, not
+  // just one instance id. A binding that differs only there is refused.
+  it.each([
+    ['another package', { pluginId: 'other.plugin' }],
+    ['another version of the package', { packageVersion: '0.9.0' }],
+  ])('refuses a session bound to %s for input, stop and resize', (_case, differs) => {
+    const calls: Array<Partial<CapabilityCall>> = [
+      { method: 'sendInput', args: { sessionId: 'session-1', data: 'x' } },
+      { method: 'stopSession', args: { sessionId: 'session-1', force: true } },
+      { method: 'resizeSession', args: { sessionId: 'session-1', cols: 80, rows: 24 } },
+    ]
+    for (const overrides of calls) {
+      expect(planPublicCapabilityCall(call(overrides), policy, context({
+        sessionBindings: new Map([['session-1', binding]]),
+      }))).toMatchObject({ kind: 'allow' })
+      expect(planPublicCapabilityCall(call(overrides), policy, context({
+        sessionBindings: new Map([['session-1', { ...binding, ...differs }]]),
+      }))).toMatchObject({ kind: 'deny', response: { error: { message: 'AI CLI session ownership mismatch' } } })
+    }
+  })
+
   it('returns a Host-owned plan only after grant, binding, and schema checks', () => {
     expect(planPublicCapabilityCall(call(), policy, context())).toMatchObject({
       kind: 'allow',
