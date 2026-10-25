@@ -1701,10 +1701,14 @@ Limits a plugin must plan for:
   `agentMessages.read` return a row only when one side's stamp equals this
   workspace's path exactly. Rows written before the stamp existed (Navide
   0.2.30 and earlier) belong to no workspace and are never returned.
-- A message to or from a pane of another workspace on this machine is listed
-  when the other side is this workspace's pane: `sender` / `recipient` then
-  show the other workspace's folder and pane name, and `agentMessages.read`
-  returns the text that pane wrote.
+- The window writing a row vouches only for its own panes: a side is stamped
+  only when its pane belongs to that window, whether the name is bare or
+  qualified. A message routed to or from another workspace window or another
+  device (`remote` set on the row) is not returned at all. Two workspaces open
+  in one window exchange unrouted messages; such a row has both sides stamped
+  and is listed for either workspace, with `sender` / `recipient` showing the
+  other workspace's folder and pane name and `agentMessages.read` returning
+  the text that pane wrote.
 - There is no change event yet; poll.
 
 #### Backend Bridge ports `agents` and `agent-message-bodies`

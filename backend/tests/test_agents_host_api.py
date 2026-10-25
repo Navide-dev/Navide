@@ -67,6 +67,7 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         {"uid": "m1", "created_at": 100, "status": "delivered", "sender": "alpha/lead",
          "recipient": "alpha/worker", "content": "top secret plan",
          "sender_workspace": WS, "recipient_workspace": WS},
+        # Two workspaces in one window: an unrouted row, both sides stamped.
         {"uid": "m2", "created_at": 200, "status": "queued", "sender": "beta/lead",
          "recipient": "alpha/worker", "content": "cross",
          "sender_workspace": OTHER, "recipient_workspace": WS},
@@ -81,6 +82,11 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         {"uid": "m6", "created_at": 600, "status": "delivered", "sender": "beta/lead",
          "recipient": "beta/worker", "content": "beta qualified secret",
          "sender_workspace": OTHER, "recipient_workspace": OTHER},
+        # Routed in from another workspace's window: excluded even though
+        # this workspace's own side is stamped.
+        {"uid": "m8", "created_at": 650, "status": "delivered", "sender": "beta/lead",
+         "recipient": "worker", "content": "routed secret", "remote": "inbound",
+         "remote_workspace": "beta", "recipient_workspace": WS},
         # Written before rows were stamped (0.2.30 and earlier): nobody's.
         {"uid": "m7", "created_at": 700, "status": "delivered", "sender": "alpha/lead",
          "recipient": "alpha/worker", "content": "legacy secret"},
@@ -122,7 +128,7 @@ def test_lineage_keeps_closed_panes_only_when_asked() -> None:
 def test_list_messages_is_metadata_only_and_local_to_the_workspace() -> None:
     result = agents_host_api.run(WS, "list_messages", {})
     ids = [m["id"] for m in result["messages"]]
-    # m3 unstamped, m4 relayed, m5/m6 beta's, m7 legacy, t1 the twin's.
+    # m3 unstamped, m4/m8 routed, m5/m6 beta's, m7 legacy, t1 the twin's.
     assert ids == ["m1", "m2"]
     assert all(tuple(m) == agents_host_api.MESSAGE_FIELDS for m in result["messages"])
     _no_forbidden(result["messages"])
@@ -144,7 +150,7 @@ def test_read_message_returns_the_body_only_inside_the_workspace() -> None:
     message = agents_host_api.run(WS, "read_message", {"id": "m1"})["message"]
     assert message["body"] == "top secret plan"
     assert tuple(message) == (*agents_host_api.MESSAGE_FIELDS, "body")
-    for foreign in ("m3", "m4", "m5", "m6", "m7", "t1"):
+    for foreign in ("m3", "m4", "m5", "m6", "m7", "m8", "t1"):
         with pytest.raises(agents_host_api.AgentsApiError) as err:
             agents_host_api.run(WS, "read_message", {"id": foreign})
         assert err.value.code == "INVALID_ARGUMENT"
@@ -185,10 +191,20 @@ def test_rows_are_stamped_from_the_registry_not_from_names_alone() -> None:
     # A bare name is looked up only among the writing window's own panes.
     assert stamp("lead", window_a) == WS and stamp("lead", window_b) == OTHER
     assert stamp("lead", None) == "" and stamp("lead", object()) == ""
-    assert stamp("alpha/lead", window_b) == WS and stamp("ghost/lead", window_a) == ""
-    # A qualified name two open workspaces share stays unattributed.
-    agent_messaging.register("t1", "lead", TWIN, owner=object())
+    assert stamp("alpha/lead", window_a) == WS and stamp("ghost/lead", window_a) == ""
+    # A window vouches only for its own panes, qualified names included: a
+    # pane of another window (here a same-folder-name twin) is never stamped.
+    assert stamp("alpha/lead", window_b) == ""
+    agent_messaging.unregister("a1")
+    agent_messaging.register("t1", "lead", TWIN, owner=window_b)
     assert stamp("alpha/lead", window_a) == ""
+    assert stamp("alpha/lead", window_b) == TWIN
+    # Two workspaces in one window: the one row gets both sides stamped.
+    agent_messaging.register("b2", "worker", OTHER, owner=window_b)
+    assert (stamp("alpha/lead", window_b), stamp("beta/worker", window_b)) == (TWIN, OTHER)
+    # The same qualified name for two workspaces of one window stays unstamped.
+    agent_messaging.register("a3", "lead", WS, owner=window_b)
+    assert stamp("alpha/lead", window_b) == ""
 
 
 def test_a_stamp_survives_a_later_unstamped_re_append(tmp_path: Path) -> None:

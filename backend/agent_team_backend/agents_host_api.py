@@ -176,7 +176,9 @@ def _workspace_messages(workspace_path: str, pane_id: str = "") -> list[dict[str
 
     return [
         row for row in app.agent_message_log.tail()
-        # Local traffic only: a relayed row belongs to another machine's pane.
+        # Unrouted traffic only. `remote` marks a message routed to another
+        # workspace window or relayed from another device ("outbound" /
+        # "inbound"), so it involves a pane this workspace does not hold.
         if not row.get("remote") and (side(row, "sender") or side(row, "recipient"))
     ]
 
