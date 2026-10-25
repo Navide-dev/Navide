@@ -311,6 +311,11 @@ class GitWatcher:
             return
         self._started = True
         self._loop = asyncio.get_event_loop()
+        # A drain queued on a loop that closed before running it would leave
+        # the flag set, and a restarted watcher would then never drain again.
+        with self._inbox_lock:
+            self._inbox = {}
+            self._drain_queued = False
         self._observer = Observer()
         self._observer.start()
         log.info("GitWatcher started (debounce %.0fms)", self._debounce_s * 1000)

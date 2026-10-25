@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 
 from watchdog.events import FileModifiedEvent
@@ -329,3 +330,57 @@ async def test_an_event_flood_schedules_a_bounded_number_of_loop_callbacks() -> 
     by_ws = dict(fired)
     assert set(by_ws["/ws"]) == sent
     assert by_ws["/other"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_mark_arriving_while_the_inbox_drains_is_not_lost() -> None:
+    # The drain clears its queued flag before it hands the batch on, so a mark
+    # that lands mid-drain queues the next drain itself. Reset the flag after
+    # the batch instead and that mark sits in the inbox until something else
+    # happens to wake the loop, which may be never.
+    fired: list[str] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append(ws)
+
+    w = GitWatcher(sink, debounce_s=0.05, max_wait_s=0.5)
+    w._loop = asyncio.get_running_loop()
+    orig = w._schedule_fire
+    injected = False
+
+    def sched(ws: str, paths: list[tuple[str, str]]) -> None:
+        nonlocal injected
+        orig(ws, paths)
+        if not injected:
+            injected = True
+            # The observer thread marking dirty while this drain is running.
+            t = threading.Thread(
+                target=w._mark_dirty_threadsafe, args=("/late", [("late.py", "modified")])
+            )
+            t.start()
+            t.join()
+
+    w._schedule_fire = sched  # type: ignore[method-assign]
+    await asyncio.to_thread(w._mark_dirty_threadsafe, "/ws", [("a.py", "modified")])
+    assert await wait_until(lambda: "/late" in fired, timeout=2.0)
+
+
+@pytest.mark.asyncio
+async def test_a_restarted_watcher_drains_again() -> None:
+    # A drain queued on a loop that closed before running it leaves the flag
+    # set; start() must clear it, or every later mark is swallowed.
+    fired: list[str] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append(ws)
+
+    w = GitWatcher(sink, debounce_s=0.05, max_wait_s=0.5)
+    w._drain_queued = True
+    w._inbox = {"/stale": []}
+    w.start()
+    try:
+        await asyncio.to_thread(w._mark_dirty_threadsafe, "/ws", [("a.py", "modified")])
+        assert await wait_until(lambda: "/ws" in fired, timeout=2.0)
+        assert "/stale" not in fired
+    finally:
+        w.stop()
