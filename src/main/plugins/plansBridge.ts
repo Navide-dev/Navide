@@ -59,6 +59,11 @@ export const PLANS_BRIDGE_PORTS = [
   // First-party navide.browser only (pluginFirstPartyBackends.ts). Plans
   // never declares it.
   'web',
+  // Third-party package backends only (pluginThirdPartyBackends.ts): read-only
+  // agent metadata (`agents`) and message text (`agentMessages`), each only
+  // when the manifest declares that namespace. Plans never declares them.
+  'agents',
+  'agent-message-bodies',
 ] as const
 
 export type PlansBridgePort = (typeof PLANS_BRIDGE_PORTS)[number]
@@ -257,6 +262,8 @@ const PORT_OPERATIONS: PortOperation = {
   shell: ['run'],
   // Section 9.3 of the browser contract; dispatched by the Host's web port.
   web: ['list', 'create', 'close', 'cdp', 'setState'],
+  agents: ['list_panes', 'lineage', 'list_messages', 'list_sessions'],
+  'agent-message-bodies': ['read_message'],
 }
 
 export function isPlansBridgePort(value: unknown): value is PlansBridgePort {
@@ -935,6 +942,10 @@ export function createPlansBridgeDispatcher(ports: PlansCorePorts): BackendBridg
           // Served by the Host's web port, never by the Plans core ports.
           if (!ports.web) throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no web port.')
           return ports.web.dispatch(request.operation, request.arguments, context)
+        case 'agents':
+        case 'agent-message-bodies':
+          // Only third-party package bridges serve agent data.
+          throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no agents port.')
       }
     },
   })

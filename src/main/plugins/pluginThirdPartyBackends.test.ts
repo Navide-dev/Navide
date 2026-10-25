@@ -146,6 +146,12 @@ describe('thirdPartyBackendLaunchSpec', () => {
     expect(writePackage({ shell: 'full' }).approvedBridgePorts).toEqual([])
   })
 
+  it('projects the agents ports only for the namespaces the manifest declares', () => {
+    expect(writePackage({ system: ['agents'] }).approvedBridgePorts).toEqual(['agents'])
+    expect(writePackage({ system: ['fs', 'agents', 'agentMessages'] }).approvedBridgePorts)
+      .toEqual(['filesystem', 'agents', 'agent-message-bodies'])
+  })
+
   it('keeps the projection and consent key of a package without shell exactly as before', () => {
     const spec = writePackage({ system: ['fs'] })
     expect(spec.approvedBridgePorts).toEqual(['filesystem'])
@@ -891,6 +897,49 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('package bridge', () => {
     await expect(admission.bridgeDispatcher.dispatch(shellRequest({ command: 'git status' }), { ...context(root), authorizedPlanRoot: undefined }))
       .rejects.toMatchObject({ code: 'WORKSPACE_SCOPE_VIOLATION' })
     expect(run).not.toHaveBeenCalled()
+  })
+
+  const agentsRequest = (port: string, operation: string, args: unknown = {}) => ({
+    id: 'bridge:1', origin: { kind: 'call' as const, requestId: 'r' }, port: port as never, operation, arguments: args as never,
+  })
+
+  it('serves agent metadata and message text only for the declared namespace, at the bound workspace', async () => {
+    const query = vi.fn(async () => ({ panes: [] }))
+    const { instance } = controller({ promptConsent: allow, agentsPort: () => ({ query }) })
+    const metadataOnly = await instance.admit(writePackage({ system: ['agents'] }), root)
+    expect(metadataOnly.workspaceRoot).toBe(root)
+    await expect(metadataOnly.bridgeDispatcher.dispatch(agentsRequest('agents', 'list_panes'), context(root)))
+      .resolves.toEqual({ panes: [] })
+    expect(query).toHaveBeenCalledWith('list_panes', {}, expect.objectContaining({ authorizedPlanRoot: root }))
+    await expect(metadataOnly.bridgeDispatcher.dispatch(agentsRequest('agent-message-bodies', 'read_message', { id: 'm1' }), context(root)))
+      .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    await expect(metadataOnly.bridgeDispatcher.dispatch(agentsRequest('agents', 'list_messages', { limit: 0 }), context(root)))
+      .rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(metadataOnly.bridgeDispatcher.dispatch(agentsRequest('agents', 'list_panes'), { ...context(root), authorizedPlanRoot: undefined }))
+      .rejects.toMatchObject({ code: 'WORKSPACE_SCOPE_VIOLATION' })
+
+    const withText = await instance.admit(writePackage({ system: ['agents', 'agentMessages'] }), root)
+    await expect(withText.bridgeDispatcher.dispatch(agentsRequest('agent-message-bodies', 'read_message', { id: 'm1' }), context(root)))
+      .resolves.toEqual({ panes: [] })
+    const none = await instance.admit(writePackage({}), root)
+    await expect(none.bridgeDispatcher.dispatch(agentsRequest('agents', 'list_panes'), context(root)))
+      .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    expect(query).toHaveBeenCalledTimes(2)
+  })
+
+  it('gives an agent the agents ports only inside an admitted agent-tool call at that workspace', async () => {
+    const query = vi.fn(async () => ({ panes: [] }))
+    let call: { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined
+    const { instance } = controller({ promptConsent: allow, agentsPort: () => ({ query }), agentToolCall: () => call })
+    const admission = await instance.admit(writePackage({ system: ['agents'] }), root)
+    const agentContext = { ...context(root), runtime: { ...context(root).runtime, initiator: { kind: 'agent', source: 'mcp', id: 'a-1' } as never } }
+    const list = () => admission.bridgeDispatcher.dispatch(agentsRequest('agents', 'list_panes'), agentContext)
+    await expect(list()).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    call = { pluginId: 'acme.indexer', risk: 'read', workspaceRoot: join(root, 'elsewhere') }
+    await expect(list()).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    call = { pluginId: 'acme.indexer', risk: 'read', workspaceRoot: root }
+    await expect(list()).resolves.toEqual({ panes: [] })
+    expect(query).toHaveBeenCalledOnce()
   })
 
   it('reports an unavailable shell broker and keeps the filesystem closed to a shell-only package', async () => {

@@ -17,6 +17,7 @@ import {
   type PlansFilesystemPort,
 } from './plansBridge'
 import { firstPartyBridgePorts, isFirstPartyAgentToolActivation, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
+import { validateAgentsOperation } from './agentsCapability'
 import {
   createHostSandboxProbe,
   resolveBackendSandbox,
@@ -143,6 +144,8 @@ export function thirdPartyBackendLaunchSpec(
     approvedBridgePorts: [
       ...(system.includes('fs') ? ['filesystem' as const] : []),
       ...(manifest.permissions.shell === 'allowlist' ? ['shell' as const] : []),
+      ...(system.includes('agents') ? ['agents' as const] : []),
+      ...(system.includes('agentMessages') ? ['agent-message-bodies' as const] : []),
     ],
     thirdParty: {
       name: manifest.name,
@@ -650,6 +653,8 @@ export interface ThirdPartyBackendControllerOptions {
   filesystemPort?: () => PlansFilesystemPort | undefined
   /** Host shell broker port (the same broker a view's shell.run uses). */
   shellPort?: () => PackageShellPort | undefined
+  /** Host agent data port (the same backend query a view's agents.* uses). */
+  agentsPort?: () => PackageAgentsPort | undefined
   /** Stop running children: one plugin, or every third-party plugin (null). */
   stopBackends?: (pluginId: string | null) => Promise<void>
   watchResources?: (
@@ -705,6 +710,13 @@ export function noteBackendFailure(failures: Map<string, number[]>, key: string,
  * `{exitCode, stdout, stderr}`, or throws a PlansBridgeError. */
 export interface PackageShellPort {
   run(command: string, context: PlansBridgeContext): Promise<JsonValue>
+}
+
+/** The Host's read-only agent data as a third-party backend reaches it:
+ * `query` is given a backend operation name (agents_host_api.py) and arguments
+ * already validated, for the workspace the binding authorized. */
+export interface PackageAgentsPort {
+  query(operation: string, args: Record<string, JsonValue>, context: PlansBridgeContext): Promise<JsonValue>
 }
 
 /** Shell syntax the Host broker refuses (host_shell.py `_SHELL_SYNTAX`). */
@@ -950,7 +962,10 @@ export class ThirdPartyBackendController {
       killSandboxProcessesSync(rootPid, id)
     })
 
-    const workspaceRoot = (spec.thirdParty.system.includes('fs') || spec.thirdParty.shell === 'allowlist') && workspacePath
+    const workspaceRoot = (
+      spec.thirdParty.system.includes('fs') || spec.thirdParty.shell === 'allowlist' ||
+      spec.thirdParty.system.includes('agents')
+    ) && workspacePath
       ? canonicalExistingDirectory(workspacePath) ?? undefined
       : undefined
     const instanceId = options.instanceId
@@ -1092,6 +1107,9 @@ export class ThirdPartyBackendController {
       dispatch: async (request: PlansBridgeRequest, context: PlansBridgeContext) => {
         if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
         if (request.port === 'shell') return this.dispatchShell(spec, request, context)
+        if (request.port === 'agents' || request.port === 'agent-message-bodies') {
+          return this.dispatchAgents(spec, request, context)
+        }
         if (request.port !== 'filesystem' || !spec.thirdParty.system.includes('fs')) {
           throw new PlansBridgeError('CAPABILITY_DENIED')
         }
@@ -1183,6 +1201,31 @@ export class ThirdPartyBackendController {
     const port = this.options.shellPort?.()
     if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
     return port.run(args.command, context)
+  }
+
+  /** Read-only agent data at the bound workspace. Each port needs its own
+   * declared namespace; the supervisor has already applied the agent
+   * Execution Policy, and an agent reaches it only inside an admitted
+   * agent-tool call of this package at this workspace. */
+  private async dispatchAgents(
+    spec: ThirdPartyLaunchSpec,
+    request: PlansBridgeRequest,
+    context: PlansBridgeContext,
+  ): Promise<JsonValue> {
+    const namespace = request.port === 'agents' ? 'agents' : 'agentMessages'
+    if (!spec.thirdParty.system.includes(namespace)) throw new PlansBridgeError('CAPABILITY_DENIED')
+    const args = request.arguments
+    if (!validateAgentsOperation(request.operation, args)) throw new PlansBridgeError('INVALID_ARGUMENT')
+    if (!context.authorizedPlanRoot) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
+    if (context.runtime.initiator.kind === 'agent') {
+      const call = this.options.agentToolCall?.(context.runtime.initiator.id)
+      if (!call || call.pluginId !== spec.pluginId || call.workspaceRoot !== context.authorizedPlanRoot) {
+        throw new PlansBridgeError('CAPABILITY_DENIED')
+      }
+    }
+    const port = this.options.agentsPort?.()
+    if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
+    return port.query(request.operation, args as Record<string, JsonValue>, context)
   }
 
   private async ensureWorkspaceWrite(spec: ThirdPartyLaunchSpec, workspacePath: string): Promise<boolean> {

@@ -427,6 +427,10 @@ function bridgeOperationForPort(port: PlansBridgePort): string {
       return 'run'
     case 'web':
       return 'list'
+    case 'agents':
+      return 'list_panes'
+    case 'agent-message-bodies':
+      return 'read_message'
   }
   const exhaustive: never = port
   return exhaustive
@@ -918,8 +922,10 @@ describe('PluginBackendSupervisor', () => {
     expect(bridgeDispatcher).not.toHaveBeenCalled()
   })
 
-  // `web` is mapped to its own policy namespace, like filesystem and shell.
-  it.each(PLANS_BRIDGE_PORTS.filter((port) => port !== 'filesystem' && port !== 'shell' && port !== 'web'))(
+  // `web`, `agents` and `agent-message-bodies` are mapped to their own policy
+  // namespaces, like filesystem and shell.
+  const POLICY_MAPPED_PORTS: readonly PlansBridgePort[] = ['filesystem', 'shell', 'web', 'agents', 'agent-message-bodies']
+  it.each(PLANS_BRIDGE_PORTS.filter((port) => !POLICY_MAPPED_PORTS.includes(port)))(
     'rejects agent Bridge use of unmapped %s even in full policy',
     async (port) => {
       const bridgeDispatcher = vi.fn(async () => ({ ok: true }))
@@ -1021,6 +1027,50 @@ describe('PluginBackendSupervisor', () => {
     await expect(run(['web'], agent, ['web'])).resolves.toEqual({ views: [] })
     expect(bridgeDispatcher).toHaveBeenCalledOnce()
   })
+
+  it.each([
+    ['agents', 'list_panes', 'allowlist', ['agents'], true],
+    ['agents', 'list_panes', 'allowlist', ['fs'], false],
+    ['agents', 'list_panes', 'denylist', [], true],
+    ['agent-message-bodies', 'read_message', 'allowlist', ['agentMessages'], true],
+    ['agent-message-bodies', 'read_message', 'allowlist', ['agents'], false],
+    // A denylist written before agentMessages existed never names it.
+    ['agent-message-bodies', 'read_message', 'denylist', [], false],
+    ['agent-message-bodies', 'read_message', 'full', [], true],
+  ] as const)(
+    'checks agent use of the %s Bridge port (%s) against the agent Execution Policy (%s %j)',
+    async (port, operation, mode, system, allowed) => {
+      const bridgeDispatcher = vi.fn(async () => ({ ok: true }))
+      const supervisor = new PluginBackendSupervisor(
+        { ...activation, approvedBridgePorts: [port] },
+        {
+          environment: { NAVIDE_FIXTURE: 'backend-wire' },
+          spawnProcess: () => makeBridgeChild(undefined, port, operation, {}),
+          resolveExecutionPolicy: () => ({
+            policy: { schemaVersion: 1, mode, system: [...system], shell: [] },
+            revision: 1,
+            state: 'user',
+          }) as ExecutionPolicySnapshot,
+          bridgeDispatcher: { dispatch: bridgeDispatcher },
+        },
+      )
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const call = supervisor
+        .clientFor(createAuthenticatedBackendRuntime({
+          ...runtime,
+          initiator: { kind: 'agent', source: 'mcp', id: `${port}-${mode}-agent` },
+        }), { workspacePath: '/workspace' })
+        .call('fixture.bridge', null)
+      if (allowed) {
+        await expect(call).resolves.toEqual({ ok: true })
+        expect(bridgeDispatcher).toHaveBeenCalledOnce()
+      } else {
+        await expect(call).rejects.toMatchObject({ code: 'PLUGIN_ERROR', pluginCode: 'CAPABILITY_DENIED' })
+        expect(bridgeDispatcher).not.toHaveBeenCalled()
+      }
+    },
+  )
 
   it('passes a Bridge refusal reason and message on to the child, keeping data.code', async () => {
     for (const [thrown, data] of [
