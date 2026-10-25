@@ -11664,6 +11664,7 @@
       "none": "Es wurde keine Berechtigung hinzugefügt oder entfernt.",
       "added": "Neu",
       "removed": "Entfernt",
+      "declaredScope": "Angegebener Bereich (nur zur Information)",
       "unchanged": "Unverändert ({count})",
       "fullCard": "Vollständige Offenlegungskarte",
       "badgeMore": "Mehr Berechtigungen",

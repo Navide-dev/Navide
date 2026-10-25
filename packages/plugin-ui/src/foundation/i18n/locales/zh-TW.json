@@ -11664,6 +11664,7 @@
       "none": "沒有新增或移除任何權限。",
       "added": "新增",
       "removed": "已移除",
+      "declaredScope": "宣告的範圍（僅供參考）",
       "unchanged": "沒有變動（{count} 項）",
       "fullCard": "完整揭露卡",
       "badgeMore": "權限變多",

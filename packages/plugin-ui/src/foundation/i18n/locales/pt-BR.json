@@ -11664,6 +11664,7 @@
       "none": "Nenhuma permissão foi adicionada ou removida.",
       "added": "Nova",
       "removed": "Removida",
+      "declaredScope": "Escopo declarado (informativo)",
       "unchanged": "Inalteradas ({count})",
       "fullCard": "Cartão de divulgação completo",
       "badgeMore": "Mais permissões",

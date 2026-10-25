@@ -11664,6 +11664,7 @@
       "none": "No permission was added or removed.",
       "added": "New",
       "removed": "Removed",
+      "declaredScope": "Declared scope (informational)",
       "unchanged": "Unchanged ({count})",
       "fullCard": "Full disclosure card",
       "badgeMore": "More permissions",
