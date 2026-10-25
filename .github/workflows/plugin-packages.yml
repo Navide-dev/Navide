@@ -26,6 +26,11 @@ on:
         description: Full 40-character commit SHA, branch or tag to build (actions/checkout does not resolve short SHAs)
         required: true
         type: string
+      artifact_version:
+        description: Optional MAJOR.MINOR.PATCH to stamp on the packages instead of the ref's package.json version, so a plugin release need not wait for an App version
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -106,7 +111,18 @@ jobs:
 
       - name: Build navide.plans
         # The same build commands scripts/publish-first-party-plugins.sh runs.
+        # The input reaches the build through env, never the script text; empty
+        # keeps the ref's package.json version (the vite configs' default).
+        env:
+          ARTIFACT_VERSION: ${{ inputs.artifact_version }}
         run: |
+          if [ -n "${ARTIFACT_VERSION}" ]; then
+            if ! printf '%s' "${ARTIFACT_VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "artifact_version must be MAJOR.MINOR.PATCH, got '${ARTIFACT_VERSION}'" >&2
+              exit 1
+            fi
+            export NAVIDE_PLUGIN_ARTIFACT_VERSION="${ARTIFACT_VERSION}"
+          fi
           pnpm run build:public-packages
           pnpm run build:plans:v2
           pnpm run build:plans:backend
