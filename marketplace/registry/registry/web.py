@@ -225,6 +225,7 @@ _CAPABILITY_HINTS = {
     "terminal": "runs commands in a terminal",
     "aiCli": "drives AI CLI agents",
     "web": "browses websites with your sign-ins and keeps them",
+    "agentMessages": "reads the text of messages between your agents",
 }
 
 

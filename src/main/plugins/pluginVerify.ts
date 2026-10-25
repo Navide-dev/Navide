@@ -17,7 +17,7 @@
 //
 // Mirrors the registry's own chain: `signing.py` signs/verifies a base64
 // Ed25519 signature over the ascii-encoded sha256 *hex* digest; `trust.py`
-// flags `fs`/`aiCli`/`web`/`shell` as sensitive for v2; `terminal` remains sensitive
+// flags `fs`/`aiCli`/`web`/`agentMessages`/`shell` as sensitive for v2; `terminal` remains sensitive
 // only for the legacy compatibility path. Kept in sync deliberately.
 
 import { createHash, createPublicKey, timingSafeEqual, verify as cryptoVerify } from 'node:crypto'
@@ -33,6 +33,8 @@ export const KNOWN_CAPABILITIES: readonly string[] = [
   'ui',
   'aiCli',
   'web',
+  'agents',
+  'agentMessages',
   'shell',
   // Legacy v1 namespaces remain parseable only through the compatibility path.
   'git',
@@ -45,7 +47,7 @@ export const KNOWN_CAPABILITIES: readonly string[] = [
 
 /** Capabilities that grant filesystem / brokered process / shell reach and
  *  warrant a second confirmation before install. Mirror of the registry. */
-export const SENSITIVE_CAPABILITIES: readonly string[] = ['fs', 'aiCli', 'web', 'shell', 'terminal']
+export const SENSITIVE_CAPABILITIES: readonly string[] = ['fs', 'aiCli', 'web', 'agentMessages', 'shell', 'terminal']
 
 export const TRUST_SIGNED = 'signed-verified'
 export const TRUST_UNSIGNED = 'unsigned'

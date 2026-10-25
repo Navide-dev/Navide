@@ -9,6 +9,7 @@ import type { EditorNativeParams, EditorNativeResults, EditorNativeEvents } from
 import type { GitCapabilityParams, GitCapabilityResults } from './gitCapabilities.js'
 import type { GitAccountParams, GitAccountResults, GitCredentialEvents } from './gitAccounts.js'
 import type { IssueParams, IssueResults } from './issues.js'
+import type { AgentsParams, AgentsResults } from './agents.js'
 import type { EditorPreferenceParams, EditorPreferenceResults, EditorPreferenceEvents } from './editorPreferences.js'
 import type { FilePickerRequest } from './filePicker.js'
 export { validFilePickerRequest } from './filePicker.js'
@@ -21,6 +22,7 @@ export type { EditorAiParams, EditorAiResults, EditorAiEvents, EditorReviewResul
 export type { EditorNativeParams, EditorNativeResults, EditorNativeEvents, EditorFileSelection } from './editorNative.js'
 export * from './gitCapabilities.js'
 export * from './issues.js'
+export * from './agents.js'
 export * from './editorPreferences.js'
 export * from './staticScan.js'
 export { deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
@@ -36,7 +38,7 @@ export type StorageGetResult =
 
 export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'window', 'detail'] as const
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
-export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web'] as const
+export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
 /** Most members one Extension Pack may list. */
 export const MAX_EXTENSION_PACK_MEMBERS = 20
@@ -491,10 +493,14 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
   assertOnlyKeys(permissions, ['system', 'shell', 'scopes'], 'manifest permissions')
   let system: PluginSystemNamespace[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'system')) {
-    const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, 4)
+    const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, V2_SYSTEM_NAMESPACES.length)
     const unknown = values.find((item) => !V2_SYSTEM_NAMESPACES.includes(item as PluginSystemNamespace))
     if (unknown !== undefined) {
       fail(`manifest permissions.system contains an unknown namespace ${JSON.stringify(unknown)}; allowed: ${V2_SYSTEM_NAMESPACES.join(', ')}`)
+    }
+    // Message text is disclosed on top of the agent metadata it belongs to.
+    if (values.includes('agentMessages') && !values.includes('agents')) {
+      fail('manifest permissions.system declares agentMessages without agents')
     }
     system = values as PluginSystemNamespace[]
   }
@@ -940,7 +946,7 @@ export class PluginError extends Error {
   }
 }
 
-export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams {
+export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams {
   'ui.openFilePicker': FilePickerRequest
   'fs.readFile': { path: string; encoding?: string; selectionGrant?: string }
   'fs.writeFile': { path: string; content: string; encoding?: string; expectedMtime?: number; selectionGrant?: string }
@@ -972,7 +978,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'storage.delete': { scope: StoragePartitionScope; key: string }
 }
 
-export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults {
+export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults {
   'ui.openFilePicker': { opened: boolean }
   'fs.readFile': {
     content: string

@@ -30,6 +30,8 @@ export type DisclosureRiskReasonKey =
   | 'system.fs'
   | 'system.aiCli'
   | 'system.web'
+  | 'system.agents'
+  | 'system.agentMessages'
   | 'shell.allowlist'
   | 'nativeBackend'
   | 'agentTools.write'
@@ -42,6 +44,8 @@ export const DISCLOSURE_RISK_RULES: ReadonlyArray<readonly [DisclosureRiskReason
   ['system.fs', 'medium'],
   ['system.aiCli', 'high'],
   ['system.web', 'high'],
+  ['system.agents', 'medium'],
+  ['system.agentMessages', 'high'],
   ['shell.allowlist', 'high'],
   ['nativeBackend', 'high'],
   ['agentTools.write', 'high'],
@@ -55,6 +59,8 @@ export type DisclosureSummaryClause =
   | { key: 'shell'; params: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } }
   | { key: 'aiCli'; params: Record<string, never> }
   | { key: 'web'; params: Record<string, never> }
+  | { key: 'agents'; params: Record<string, never> }
+  | { key: 'agentMessages'; params: Record<string, never> }
   | { key: 'ui'; params: Record<string, never> }
   | { key: 'agentTools'; params: { read: number; write: number } }
   | { key: 'network'; params: Record<string, never> }
@@ -67,7 +73,7 @@ export interface DisclosureSummary {
 }
 
 export interface DisclosurePermissions {
-  system: Array<'aiCli' | 'fs' | 'ui' | 'web'>
+  system: Array<'aiCli' | 'fs' | 'ui' | 'web' | 'agents' | 'agentMessages'>
   shell: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } | null
   scopes: { fs: { root: 'workspace' | 'repository'; read: string[]; write: string[] } } | null
 }
@@ -239,6 +245,8 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (hasFs) present.add('system.fs')
   if (system.includes('aiCli')) present.add('system.aiCli')
   if (system.includes('web')) present.add('system.web')
+  if (system.includes('agents')) present.add('system.agents')
+  if (system.includes('agentMessages')) present.add('system.agentMessages')
   if (shell?.mode === 'allowlist') present.add('shell.allowlist')
   if (nativeBackend) present.add('nativeBackend')
   if (writeTools > 0) present.add('agentTools.write')
@@ -255,6 +263,8 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (shell) clauses.push({ key: 'networkViaShell', params: {} })
   if (system.includes('aiCli')) clauses.push({ key: 'aiCli', params: {} })
   if (system.includes('web')) clauses.push({ key: 'web', params: {} })
+  if (system.includes('agents')) clauses.push({ key: 'agents', params: {} })
+  if (system.includes('agentMessages')) clauses.push({ key: 'agentMessages', params: {} })
   if (system.includes('ui')) clauses.push({ key: 'ui', params: {} })
   if (agentTools.length > 0) clauses.push({ key: 'agentTools', params: { read: readTools, write: writeTools } })
   if (clauses.length === 0) clauses.push({ key: 'noPermissions', params: {} })

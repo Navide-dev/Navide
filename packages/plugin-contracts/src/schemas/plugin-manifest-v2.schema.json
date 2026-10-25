@@ -31,9 +31,11 @@
         "system": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 4,
+          "maxItems": 6,
           "uniqueItems": true,
-          "items": { "enum": ["fs", "ui", "aiCli", "web"] }
+          "items": { "enum": ["fs", "ui", "aiCli", "web", "agents", "agentMessages"] },
+          "if": { "contains": { "const": "agentMessages" } },
+          "then": { "contains": { "const": "agents" } }
         },
         "shell": { "enum": ["allowlist", "full"] },
         "scopes": {

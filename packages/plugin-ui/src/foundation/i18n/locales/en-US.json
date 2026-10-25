@@ -2207,6 +2207,8 @@
           "fs": "Read and write files in your workspace.",
           "aiCli": "Run the AI CLI agents set up in Navide.",
           "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; it can open many web pages at once, and each one uses memory.",
+          "agents": "See your agent panes, which pane opened which, and when they messaged each other — not what they said.",
+          "agentMessages": "Read the full text of messages between your agents; it can contain code, file contents or secrets.",
           "shell": "Run commands on your computer.",
           "terminal": "Open and control Navide terminals."
         }
@@ -11728,6 +11730,8 @@
       "networkViaShell": "Can reach remote hosts through those commands",
       "aiCli": "Controls AI CLI sessions",
       "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; it can open many web pages at once, and each one uses memory.",
+      "agents": "Sees your agent panes in this project, which pane opened which, message delivery records (not what was said) and the session list (no conversation content)",
+      "agentMessages": "Reads the full text of messages between your agents in this project, which can contain code, file contents or secrets",
       "ui": "Shows its own views",
       "agentTools": "Offers tools agents can call ({read} read-only, {write} writing)",
       "network": "Can use the network",

@@ -1392,6 +1392,170 @@
           "projectWrites": "none"
         }
       }
+    },
+    {
+      "name": "agents-messages-ui",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.agentmap",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "agents",
+            "agentMessages",
+            "ui"
+          ]
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "window",
+              "title": "Agent Map",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.agentmap",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "agents",
+              "params": {}
+            },
+            {
+              "key": "agentMessages",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.agents",
+              "level": "medium"
+            },
+            {
+              "key": "system.agentMessages",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "agentMessages",
+            "agents",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "agents-only",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.agentmap",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "agents"
+          ]
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "window",
+              "title": "Agent Map",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.agentmap",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "agents",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.agents",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "agents"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
     }
   ]
 }
