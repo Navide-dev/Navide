@@ -2,7 +2,7 @@
 // lowest Navide release a package supports, the way VS Code reads
 // `engines.vscode`: `^0.2.9`, `~0.2.9`, `>=0.2.9` and a bare `0.2.9` all mean
 // "0.2.9 or newer", and `*` means any release. Upper bounds are not enforced,
-// so the official packages' `^0.1.0` stays installable on 0.2.x. The Registry
+// so `^0.1.0` stays installable on 0.2.x and `>=0.2.30` on 0.3.0. The Registry
 // applies the same rule (marketplace/registry/registry/discovery.py).
 import { compareSemver } from './pluginManifestV2'
 
