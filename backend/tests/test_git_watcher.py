@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from watchdog.events import FileModifiedEvent
+from watchdog.events import FileModifiedEvent, FileMovedEvent
 
 import pytest
 
@@ -281,3 +281,52 @@ def test_plan_documents_still_fire_after_the_gitignore_layer(tmp_path: Path) -> 
     plan.write_text("<p>x</p>", encoding="utf-8")
     h.on_any_event(FileModifiedEvent(str(plan)))
     assert seen == [str(tmp_path)]
+
+
+# ── #622: each event resolves each of its paths once ───────────────────────
+#
+# `Path.resolve()` walks the path on disk (an lstat per component), and this
+# handler runs on watchdog's single dispatch thread: three resolves of the same
+# path per event made a checkout or a build three times as slow to get through.
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda p: FileModifiedEvent(str(p / "src" / "main.py")),
+        lambda p: FileModifiedEvent(str(p / ".agent-team" / "plans" / "doc.html")),
+        lambda p: FileMovedEvent(str(p / "src" / "a.py"), str(p / "src" / "b.py")),
+    ],
+)
+def test_each_path_is_resolved_once_per_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make
+) -> None:
+    dirty: list = []
+    plans: list[str] = []
+    h = _RepoHandler(
+        tmp_path.resolve(),
+        str(tmp_path),
+        lambda ws, paths: dirty.append(paths),
+        plans.append,
+        GitIgnore(tmp_path.resolve()),
+    )
+    event = make(tmp_path)
+    resolved: list[str] = []
+    orig = Path.resolve
+
+    def counting(self: Path, strict: bool = False) -> Path:
+        resolved.append(str(self))
+        return orig(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", counting)
+    h.on_any_event(event)
+    monkeypatch.setattr(Path, "resolve", orig)
+    paths = [event.src_path] + ([event.dest_path] if event.event_type == "moved" else [])
+    assert sorted(resolved) == sorted(paths)
+    # And the answers are what they were.
+    if "plans" in event.src_path:
+        assert plans == [str(tmp_path)] and dirty == []
+    elif event.event_type == "moved":
+        assert dirty == [[("src/a.py", "deleted"), ("src/b.py", "created")]]
+    else:
+        assert dirty == [[("src/main.py", "modified")]]
