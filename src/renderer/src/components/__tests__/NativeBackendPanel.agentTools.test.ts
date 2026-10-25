@@ -64,4 +64,20 @@ describe('NativeBackendPanel agent-tool switches (plan B1-b)', () => {
     await flushPromises()
     expect(setEnabled).toHaveBeenCalledWith(false)
   })
+
+  // The sidebar marks the Developer page "On" with the switches that are on.
+  it.each([
+    ['none', { enabled: false, plugins: [], agentTools: { enabled: false, externalCallers: false } }, []],
+    ['native backends', { enabled: true, plugins: [], agentTools: { enabled: false, externalCallers: false } }, ['settings.extensions.nativeBackends.enable']],
+    ['agent tools', { enabled: false, plugins: [], agentTools: { enabled: true, externalCallers: false } }, ['settings.extensions.nativeBackends.agentTools.enable']],
+    ['agent tools and external callers', { enabled: false, plugins: [], agentTools: { enabled: true, externalCallers: true } }, [
+      'settings.extensions.nativeBackends.agentTools.enable',
+      'settings.extensions.nativeBackends.agentTools.externalCallers',
+    ]],
+  ])('reports the switches that are on: %s', async (_name, state, keys) => {
+    mockApi({ list: vi.fn().mockResolvedValue(state) })
+    wrapper = mount(NativeBackendPanel, { global: { plugins: [i18n] } })
+    await flushPromises()
+    expect((wrapper.emitted('on') as string[][][]).at(-1)![0]).toEqual(keys.map((key) => i18n.global.t(key)))
+  })
 })

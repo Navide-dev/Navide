@@ -20,6 +20,9 @@ import type {
 const props = defineProps<{
   workspacePath?: string
 }>()
+// What this page warns about, one line per warning, for the Settings sidebar:
+// the page is one of several, so its warnings must show before it is opened.
+const emit = defineEmits<{ attention: [reasons: string[]] }>()
 
 const { t, te } = useI18n()
 const snapshot = ref<ExecutionPolicySettingsSnapshot | null>(null)
@@ -154,6 +157,43 @@ const canSave = computed(() => {
   if (!draft.value || busy.value || !policyMutationAvailable.value) return false
   return !draftIsHighRisk.value || fullConfirmed.value
 })
+// The same conditions the page renders its warnings on, worded "<section>: <state>".
+const attention = computed<string[]>(() => {
+  const out: string[] = []
+  const labeled = (label: string, value: string) => t('settings.extensionsPolicy.labeledValue', { label, value })
+  const workspace = workspaceSnapshot.value
+  if (workspace) {
+    if (workspace.status !== 'active') {
+      out.push(labeled(t('settings.executionPolicy.effectiveTitle'), t(`settings.executionPolicy.status.${workspace.status}`)))
+    }
+    if (isHighRiskExecutionPolicy(workspace.policy)) {
+      out.push(labeled(t('settings.executionPolicy.effectiveTitle'), modeLabel(workspace.policy.mode)))
+    }
+  }
+  const sourceState = snapshot.value?.sourceRecovery.state
+  if (sourceState === 'corrupt' || sourceState === 'unsafe-entry' || sourceState === 'unavailable') {
+    out.push(labeled(
+      t('settings.executionPolicy.sourceTitle'),
+      sourceState === 'unavailable' ? t('settings.executionPolicy.status.unavailable') : recoveryStateLabel(sourceState),
+    ))
+  }
+  const rec = recommendation.value
+  if (rec?.state === 'valid' && recommendationIsHighRisk.value && rec.policy) {
+    out.push(labeled(t('settings.executionPolicy.recommendationTitle'), modeLabel(rec.policy.mode)))
+  }
+  if (rec?.state === 'valid' && workspace?.selectedSource !== 'repository') {
+    out.push(labeled(t('settings.executionPolicy.recommendationTitle'), t('settings.executionPolicy.untrusted')))
+  }
+  if (draftIsHighRisk.value && draft.value) {
+    out.push(labeled(t('settings.executionPolicy.userTitle'), modeLabel(draft.value.mode)))
+  }
+  const recoveryState = snapshot.value?.recovery.state
+  if (recoveryState === 'corrupt' || recoveryState === 'unsafe-entry' || recoveryState === 'directory-unsafe' || recoveryState === 'directory-unavailable') {
+    out.push(labeled(t('settings.executionPolicy.recoveryTitle'), recoveryStateLabel(recoveryState)))
+  }
+  return out
+})
+watch(attention, (reasons) => emit('attention', reasons), { immediate: true })
 const hasUserPolicy = computed(() => snapshot.value?.userPolicy !== null && snapshot.value?.userPolicy !== undefined)
 
 function modeLabel(mode: ExecutionPolicyMode): string {
@@ -519,7 +559,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
         <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(recommendation.policy.system) }}</span></div>
         <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(recommendation.policy.shell) }}</span></div>
       </div>
-      <div v-if="recommendation.state === 'valid' && recommendationIsHighRisk" class="ep-warning">
+      <div v-if="recommendation.state === 'valid' && recommendationIsHighRisk" class="ep-warning" role="alert">
         <p>{{ $t(highRiskWarningKey(recommendation.policy?.mode)) }}</p>
         <label>
           <input v-model="repositoryFullConfirmed" type="checkbox" class="ep-repository-full-confirmation nv-check" />

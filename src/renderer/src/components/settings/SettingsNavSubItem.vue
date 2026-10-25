@@ -4,10 +4,13 @@ import { vTruncate } from '@navide/plugin-ui/foundation'
  * A page inside one sidebar entry (Navide Plugins → Execution Policy, …):
  * an indented text row under its parent SettingsNavItem; emits `select`.
  * Hidden in the icon-only rail, where the page itself shows its pages.
+ * `marker` puts the page's state on its row (a warning, or "On"), with
+ * `label` naming what it stands for.
  */
 defineProps<{
   label: string
   active?: boolean
+  marker?: { text: string; tone: 'risk' | 'on'; label: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +27,14 @@ const emit = defineEmits<{
     @click="emit('select')"
   >
     <span class="settings-nav-subitem-label" v-truncate>{{ label }}</span>
+    <span
+      v-if="marker"
+      class="settings-nav-subitem-marker"
+      :class="`settings-nav-subitem-marker--${marker.tone}`"
+      role="img"
+      :aria-label="marker.label"
+      :title="marker.label"
+    >{{ marker.text }}</span>
   </button>
 </template>
 
@@ -71,7 +82,26 @@ const emit = defineEmits<{
   color: var(--accent-bright);
   font-weight: 600;
 }
+.settings-nav-subitem-marker {
+  flex: none;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  line-height: 18px;
+}
+.settings-nav-subitem-marker--risk {
+  background: var(--risk-subtle);
+  color: var(--risk-fg);
+}
+.settings-nav-subitem-marker--on {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
 .settings-nav-subitem-label {
+  min-width: 0;
+  margin-right: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

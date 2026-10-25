@@ -7,6 +7,7 @@ import SettingsModal from '../SettingsModal.vue'
 import ExtensionsPane from '../ExtensionsPane.vue'
 import PluginDisclosureOverview from '../PluginDisclosureOverview.vue'
 import SettingsNavSubItem from '../settings/SettingsNavSubItem.vue'
+import ExecutionPolicyPane from '../ExecutionPolicyPane.vue'
 
 function api(): never {
   const cache = new Map<PropertyKey, unknown>()
@@ -222,5 +223,46 @@ describe('SettingsModal Navide Plugins pages', () => {
     expect(visible('extensions')).toBe(true)
     expect(partShown('disclosureOverview')).toBe(true)
     expect(part('disclosureOverview').findComponent(PluginDisclosureOverview).exists()).toBe(true)
+  })
+
+  // The pages split one scrolling page, so each page's state shows on its row and
+  // in the narrow tab strip: ⚠ while Execution Policy warns, "On" for Developer.
+  const marker = (label: string) => wrapper!.findAllComponents(SettingsNavSubItem).find((n) => n.props('label') === label)!.props('marker')
+  const tabMarker = (label: string) => body('extensions').findAll('.ext-pages-tab').find((tab) => tab.text().startsWith(label))!.find('.ext-pages-marker')
+
+  it('marks Execution Policy with ⚠ and the reasons while the page warns', async () => {
+    await mountModal('general')
+    expect(marker('Execution Policy')).toBeNull()
+    expect(tabMarker('Execution Policy').exists()).toBe(false)
+
+    wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', ['Repository recommendation: Untrusted', 'Effective policy: Stale'])
+    await flushPromises()
+    expect(marker('Execution Policy')).toEqual({ text: '⚠', tone: 'risk', label: 'Repository recommendation: Untrusted\nEffective policy: Stale' })
+    const tab = tabMarker('Execution Policy')
+    expect(tab.text()).toBe('⚠')
+    expect(tab.attributes('role')).toBe('img')
+    expect(tab.attributes('aria-label')).toBe('Repository recommendation: Untrusted\nEffective policy: Stale')
+    // Only that page carries it.
+    expect(marker('Navide plugins')).toBeNull()
+    expect(marker('Developer and native code')).toBeNull()
+
+    wrapper!.findComponent(ExecutionPolicyPane).vm.$emit('attention', [])
+    await flushPromises()
+    expect(marker('Execution Policy')).toBeNull()
+  })
+
+  it('marks Developer and native code "On" with the switches that are on', async () => {
+    await mountModal('general')
+    expect(marker('Developer and native code')).toBeNull()
+
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', ['Turn on Developer Mode', 'Allow native backends'])
+    await flushPromises()
+    expect(marker('Developer and native code')).toEqual({ text: 'On', tone: 'on', label: 'On: Turn on Developer Mode, Allow native backends' })
+    expect(tabMarker('Developer and native code').attributes('aria-label')).toBe('On: Turn on Developer Mode, Allow native backends')
+    expect(marker('Execution Policy')).toBeNull()
+
+    wrapper!.findComponent(ExtensionsPane).vm.$emit('developerOn', [])
+    await flushPromises()
+    expect(marker('Developer and native code')).toBeNull()
   })
 })

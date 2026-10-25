@@ -1919,6 +1919,7 @@
       "bundled": "Встроенный",
       "listTitle": "Плагины Navide",
       "developerNative": "Разработчик и нативный код",
+      "pageOn": "Вкл.",
       "bundledGit": "Встроенный Git",
       "state": {
         "active": "Активен",

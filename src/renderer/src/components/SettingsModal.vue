@@ -301,6 +301,21 @@ const pluginsPages = [
 ] as const satisfies ReadonlyArray<{ id: PluginsPage; label: string }>
 const pluginsPage = ref<PluginsPage>('plugins')
 const pluginsPageLabel = computed(() => pluginsPages.find((page) => page.id === pluginsPage.value)!.label)
+// The pages split what used to be one scrolling page, so each page's state shows
+// on its row before it is opened: ⚠ on Execution Policy while that page shows a
+// warning, "On" on Developer while Developer Mode or a native-backend switch is on.
+const policyAttention = ref<string[]>([])
+const developerSwitchesOn = ref<string[]>([])
+function pluginsPageMarker(page: PluginsPage): { text: string; tone: 'risk' | 'on'; label: string } | null {
+  if (page === 'policy' && policyAttention.value.length) {
+    return { text: '⚠', tone: 'risk', label: policyAttention.value.join('\n') }
+  }
+  if (page === 'developer' && developerSwitchesOn.value.length) {
+    const on = t('settings.extensions.pageOn')
+    return { text: on, tone: 'on', label: t('settings.extensionsPolicy.labeledValue', { label: on, value: developerSwitchesOn.value.join(', ') }) }
+  }
+  return null
+}
 /** The page each section of the former single Navide Plugins page lives on. */
 const PLUGINS_SECTION_PAGE: Readonly<Record<string, PluginsPage>> = {
   'extensions-bundled': 'plugins',
@@ -2762,6 +2777,7 @@ watch(activeTab, (tab) => {
                 :key="page.id"
                 :label="$t(page.label)"
                 :active="activeTab === 'extensions' && pluginsPage === page.id"
+                :marker="pluginsPageMarker(page.id)"
                 @select="openPluginsPage(page.id)"
               />
               <SettingsNavItem :label="$t('settings.nav.marketplace')" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
@@ -4594,7 +4610,17 @@ watch(activeTab, (tab) => {
               class="ext-pages-tab"
               :aria-selected="pluginsPage === page.id"
               @click="pluginsPage = page.id"
-            >{{ $t(page.label) }}</button>
+            >
+              {{ $t(page.label) }}
+              <span
+                v-if="pluginsPageMarker(page.id)"
+                class="ext-pages-marker"
+                :class="`ext-pages-marker--${pluginsPageMarker(page.id)!.tone}`"
+                role="img"
+                :aria-label="pluginsPageMarker(page.id)!.label"
+                :title="pluginsPageMarker(page.id)!.label"
+              >{{ pluginsPageMarker(page.id)!.text }}</span>
+            </button>
           </div>
           <div class="extensions-scroll">
             <section v-show="pluginsPage === 'policy'" class="ext-policy-block" data-settings-section="execution-policy">
@@ -4603,12 +4629,13 @@ watch(activeTab, (tab) => {
                 <span class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
                 <span class="settings-path" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
               </div>
-              <ExecutionPolicyPane :workspace-path="props.workspacePath" />
+              <ExecutionPolicyPane :workspace-path="props.workspacePath" @attention="(reasons) => (policyAttention = reasons)" />
             </section>
             <ExtensionsPane
               v-show="pluginsPage === 'plugins' || pluginsPage === 'developer'"
               :page="pluginsPage === 'developer' ? 'developer' : 'plugins'"
               @open-disclosure-overview="openDisclosureOverview"
+              @developer-on="(switches) => (developerSwitchesOn = switches)"
             />
             <!-- Plan B D5, D-f: records only, it changes nothing a Navide plugin may do. -->
             <section v-show="pluginsPage === 'disclosure'" class="ext-policy-block" data-settings-section="disclosureOverview">
@@ -5310,6 +5337,15 @@ watch(activeTab, (tab) => {
   color: var(--text-bright);
   font-weight: 600;
 }
+.ext-pages-marker {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-xs);
+  font-weight: 600;
+}
+.ext-pages-marker--risk { background: var(--risk-subtle); color: var(--risk-fg); }
+.ext-pages-marker--on { background: var(--bg-muted); color: var(--text-primary); }
 .ext-pages-tab:focus-visible {
   outline: 2px solid var(--accent-focus);
   outline-offset: -2px;

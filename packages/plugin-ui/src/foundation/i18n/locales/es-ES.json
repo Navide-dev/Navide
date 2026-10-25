@@ -1919,6 +1919,7 @@
       "bundled": "Integrados",
       "listTitle": "Complementos de Navide",
       "developerNative": "Desarrollador y código nativo",
+      "pageOn": "Activado",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Activo",

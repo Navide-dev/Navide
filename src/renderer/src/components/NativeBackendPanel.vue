@@ -19,6 +19,18 @@ const { t } = useI18n()
 // The warning leads with its first sentence in bold; every word stays.
 const nativeWarning = computed(() => leadSentence(t('settings.extensions.nativeBackends.description')))
 const overview = ref<NativeBackendOverview | null>(null)
+// The switches that are on, by their titles, for the Settings sidebar's "On" mark.
+const emit = defineEmits<{ on: [switches: string[]] }>()
+const switchesOn = computed<string[]>(() => {
+  const o = overview.value
+  if (!o) return []
+  const out: string[] = []
+  if (o.enabled) out.push(t('settings.extensions.nativeBackends.enable'))
+  if (o.agentTools?.enabled) out.push(t('settings.extensions.nativeBackends.agentTools.enable'))
+  if (o.agentTools?.enabled && o.agentTools.externalCallers) out.push(t('settings.extensions.nativeBackends.agentTools.externalCallers'))
+  return out
+})
+watch(switchesOn, (switches) => emit('on', switches), { immediate: true })
 const busy = ref(false)
 const error = ref('')
 

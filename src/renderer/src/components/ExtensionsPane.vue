@@ -163,7 +163,7 @@ const updateFlow = usePluginInstallFlow()
 const notify = useNotify()
 // D-f: rows whose permissions section is open; the activity panel (and its
 // reads) exists only then.
-const emit = defineEmits<{ openDisclosureOverview: [id?: string] }>()
+const emit = defineEmits<{ openDisclosureOverview: [id?: string]; developerOn: [switches: string[]] }>()
 // Settings shows this pane on two of the Navide Plugins pages: the plugins
 // themselves, and Developer Mode with native backends. Everything stays
 // mounted; the page only decides what is shown.
@@ -491,6 +491,14 @@ async function toggleFolderCard(pluginId: string): Promise<void> {
   await refreshDeveloperMode()
 }
 const selfHostedQuarantine = ref<Array<{ id: string; version: string | null }>>([])
+// Developer Mode and the native-backend switches that are on, by their titles:
+// Settings marks the "Developer and native code" page with them.
+const nativeSwitchesOn = ref<string[]>([])
+const developerSwitchesOn = computed(() => [
+  ...(developerMode.value.enabled ? [t('settings.extensions.developerMode.switch')] : []),
+  ...nativeSwitchesOn.value,
+])
+watch(developerSwitchesOn, (switches) => emit('developerOn', switches), { immediate: true })
 const unloadedFolders = computed(() => developerMode.value.folders.filter((folder) => !folder.loaded))
 /** DESIGN-A2 G1: the developer folder record of a loaded package. */
 function developerFolder(pluginId: string): DeveloperModeState['folders'][number] | undefined {
@@ -1324,7 +1332,7 @@ watch(installed, () => {
     </section>
 
     <div v-show="props.page === 'developer'">
-      <NativeBackendPanel />
+      <NativeBackendPanel @on="(switches) => (nativeSwitchesOn = switches)" />
     </div>
 
     <PackUninstallDialog

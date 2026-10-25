@@ -52,4 +52,16 @@ describe('ExtensionsPane developer page', () => {
     await flushPromises()
     expect(setDeveloperMode).toHaveBeenCalledWith(false)
   })
+
+  it('reports Developer Mode as on to Settings, and nothing once it is off', async () => {
+    mockPlugins({ enabled: true, folders: [] }, vi.fn().mockResolvedValue({ enabled: false, folders: [] }))
+    wrapper = mount(ExtensionsPane, { props: { page: 'developer' }, global: { plugins: [i18n] } })
+    await flushPromises()
+    const last = () => (wrapper!.emitted('developerOn') as string[][][]).at(-1)![0]
+    expect(last()).toEqual([i18n.global.t('settings.extensions.developerMode.switch')])
+
+    await wrapper.get('.ext-devmode-toggle').trigger('click')
+    await flushPromises()
+    expect(last()).toEqual([])
+  })
 })
