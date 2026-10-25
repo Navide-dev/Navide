@@ -2127,7 +2127,11 @@ within 60 seconds is ended (the bundled Navide plugins end theirs through their
 own surfaces), unless the view started it with `persistView: true` and the
 Host stored it in terminal storage: such a session keeps running until a view
 resumes it, the package is disabled or removed, or Navide quits. Asking for
-`persistView` when the storage write fails does not keep it. Disabling or
+`persistView` when the storage write fails does not keep it. A stored session
+is found again through terminal storage, which is keyed by package,
+contribution and workspace but not by package version, so a later version of
+the same package can resume it there; another package never can. Updating a
+package ends the sessions of the version it replaces. Disabling or
 removing the package ends its sessions at once.
 
 Declaring `aiCli` lets a package start the AI CLI agents set up in Navide, send
