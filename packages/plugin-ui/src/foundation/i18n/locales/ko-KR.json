@@ -11660,6 +11660,7 @@
       "none": "추가되거나 제거된 권한이 없어요.",
       "added": "새로 추가",
       "removed": "제거됨",
+      "declaredScope": "선언된 범위(참고용)",
       "unchanged": "변경 없음({count})",
       "fullCard": "전체 공개 정보 카드",
       "badgeMore": "권한 늘어남",

@@ -11660,6 +11660,7 @@
       "none": "No se ha añadido ni quitado ningún permiso.",
       "added": "Nuevo",
       "removed": "Quitado",
+      "declaredScope": "Ámbito declarado (informativo)",
       "unchanged": "Sin cambios ({count})",
       "fullCard": "Ficha de declaración completa",
       "badgeMore": "Más permisos",

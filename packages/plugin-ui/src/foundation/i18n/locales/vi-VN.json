@@ -11660,6 +11660,7 @@
       "none": "Không thêm hay bớt quyền nào.",
       "added": "Mới",
       "removed": "Đã gỡ",
+      "declaredScope": "Phạm vi đã khai báo (chỉ để tham khảo)",
       "unchanged": "Không đổi ({count})",
       "fullCard": "Thẻ công khai thông tin đầy đủ",
       "badgeMore": "Thêm quyền",
