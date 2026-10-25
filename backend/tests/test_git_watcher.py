@@ -281,3 +281,51 @@ def test_plan_documents_still_fire_after_the_gitignore_layer(tmp_path: Path) -> 
     plan.write_text("<p>x</p>", encoding="utf-8")
     h.on_any_event(FileModifiedEvent(str(plan)))
     assert seen == [str(tmp_path)]
+
+
+# ── #622: a burst of events wakes the loop a bounded number of times ───────
+#
+# Every relevant event used to hop to the loop with its own
+# call_soon_threadsafe, and each of those cancelled and re-armed the debounce
+# timer: a checkout, or a flood like #622's, put one callback, one wake-up
+# write and one timer per event onto the event loop. The burst now coalesces
+# on the observer side and the loop drains it in one go.
+
+
+@pytest.mark.asyncio
+async def test_an_event_flood_schedules_a_bounded_number_of_loop_callbacks() -> None:
+    fired: list[tuple[str, list[tuple[str, str]]]] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append((ws, paths))
+
+    loop = asyncio.get_running_loop()
+    watcher = GitWatcher(sink, debounce_s=0.2, max_wait_s=2.0)
+    watcher._loop = loop
+    hops = 0
+    orig = loop.call_soon_threadsafe
+
+    def counting(*args, **kwargs):
+        nonlocal hops
+        hops += 1
+        return orig(*args, **kwargs)
+
+    loop.call_soon_threadsafe = counting  # type: ignore[method-assign]
+    try:
+        sent = {(f"src/f{i}.py", "modified") for i in range(5000)}
+
+        def flood() -> None:
+            # The observer thread, marking dirty once per event.
+            for pair in sorted(sent):
+                watcher._mark_dirty_threadsafe("/ws", [pair])
+            watcher._mark_dirty_threadsafe("/other", [])
+
+        await asyncio.to_thread(flood)
+        assert await wait_until(lambda: len(fired) == 2, timeout=5.0)
+    finally:
+        loop.call_soon_threadsafe = orig  # type: ignore[method-assign]
+    assert hops <= 50, hops
+    # Nothing was lost on the way: one refresh per workspace, every path in it.
+    by_ws = dict(fired)
+    assert set(by_ws["/ws"]) == sent
+    assert by_ws["/other"] == []

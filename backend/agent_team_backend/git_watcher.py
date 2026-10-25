@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -297,6 +298,12 @@ class GitWatcher:
         # so their failures reach the log.
         self._change_tasks: set[asyncio.Task] = set()
         self._pending_plans: dict[str, asyncio.TimerHandle] = {}
+        # Dirty marks from the observer thread waiting for the loop: ws_path ->
+        # the pairs those events touched. One drain is queued per burst, not
+        # one loop callback per event.
+        self._inbox: dict[str, list[tuple[str, str]]] = {}
+        self._inbox_lock = threading.Lock()
+        self._drain_queued = False
         self._started = False
 
     def start(self) -> None:
@@ -361,14 +368,32 @@ class GitWatcher:
     def _mark_dirty_threadsafe(
         self, ws_path: str, paths: list[tuple[str, str]]
     ) -> None:
-        """Called from the watchdog observer thread → hop to the loop thread."""
+        """Called from the watchdog observer thread → hop to the loop thread.
+
+        Coalesced: a burst (a checkout, a build) used to queue one loop
+        callback per event, each cancelling and re-arming the debounce timer.
+        Now the marks collect here and the loop is woken once per burst."""
         loop = self._loop
         if loop is None or loop.is_closed():
             return
+        with self._inbox_lock:
+            self._inbox.setdefault(ws_path, []).extend(paths)
+            if self._drain_queued:
+                return
+            self._drain_queued = True
         try:
-            loop.call_soon_threadsafe(self._schedule_fire, ws_path, paths)
+            loop.call_soon_threadsafe(self._drain_inbox)
         except RuntimeError:
-            pass  # loop closed mid-flight
+            # Loop closed mid-flight.
+            with self._inbox_lock:
+                self._drain_queued = False
+
+    def _drain_inbox(self) -> None:
+        with self._inbox_lock:
+            inbox, self._inbox = self._inbox, {}
+            self._drain_queued = False
+        for ws_path, paths in inbox.items():
+            self._schedule_fire(ws_path, paths)
 
     def _schedule_fire(self, ws_path: str, paths: list[tuple[str, str]]) -> None:
         loop = self._loop
