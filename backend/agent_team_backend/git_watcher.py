@@ -137,8 +137,9 @@ class _RepoHandler(FileSystemEventHandler):
         # first write after someone ignores a directory is still let through,
         # and so is every write until something else evicted the entry.
         # Resolved once and passed down: `Path.resolve()` walks the path on
-        # disk, and both the ignore-rule check and the relevance check need it.
-        # Calling it in each doubled the syscalls this handler makes per event.
+        # disk, and the ignore-rule, plan-document, relevance and changed-path
+        # checks all need it. Resolving in each multiplied the syscalls this
+        # handler makes per event on watchdog's single dispatch thread.
         src_parts = self._parts(src)
         dest_parts = self._parts(dest) if dest else ()
         self._refresh_ignore_rules(src_parts)
@@ -147,21 +148,22 @@ class _RepoHandler(FileSystemEventHandler):
         # Plan documents live under .agent-team/, which the git filter ignores
         # wholesale — check them on a separate channel before that filter.
         if self._on_plans_dirty is not None and (
-            self._is_plan_doc(src) or (dest and self._is_plan_doc(dest))
+            self._is_plan_doc(src_parts) or (dest and self._is_plan_doc(dest_parts))
         ):
             self._on_plans_dirty(self._ws_path)
         src_ok = self._is_relevant(src_parts, event.is_directory)
         dest_ok = bool(dest) and self._is_relevant(dest_parts, event.is_directory)
         if src_ok or dest_ok:
             self._on_dirty(
-                self._ws_path, self._changed_paths(event, src, dest, src_ok, dest_ok)
+                self._ws_path,
+                self._changed_paths(event, src_parts, dest_parts, src_ok, dest_ok),
             )
 
     def _changed_paths(
         self,
         event: FileSystemEvent,
-        src: str,
-        dest: str,
+        src: str | tuple[str, ...],
+        dest: str | tuple[str, ...],
         src_ok: bool,
         dest_ok: bool,
     ) -> list[tuple[str, str]]:
@@ -192,18 +194,17 @@ class _RepoHandler(FileSystemEventHandler):
                 out.append((rel, change))
         return out
 
-    def _rel(self, src: str) -> str:
+    def _rel(self, src: str | tuple[str, ...]) -> str:
         """`src` as a path relative to the repo root, or "" if it is outside.
 
         Posix form: it goes on the wire as a preview `rel_path`, which the
         other writers (`preview.record`, the transcript ingest) already emit
         with forward slashes, and the renderer matches on the string."""
-        try:
-            return Path(src).resolve().relative_to(self._root).as_posix()
-        except (ValueError, OSError):
-            return ""
+        # Accepts the `parts` tuple `on_any_event` already resolved, or a raw path.
+        parts = src if isinstance(src, tuple) else self._parts(src)
+        return "/".join(parts)
 
-    def _is_plan_doc(self, src: str) -> bool:
+    def _is_plan_doc(self, src: str | tuple[str, ...]) -> bool:
         """True for a user-facing plan or report document (HTML or markdown) directly
         under one of the supported plan/report directories — infra files (`_` prefix),
         hidden files and `.history/` snapshots are excluded, so snapshot writes
@@ -214,11 +215,8 @@ class _RepoHandler(FileSystemEventHandler):
         push `plans.changed` too, or the list silently stops refreshing for them.
         Noise segments are still pruned — a plan-shaped path inside
         `node_modules` is a dependency's document, not the user's."""
-        try:
-            rel = Path(src).resolve().relative_to(self._root)
-        except (ValueError, OSError):
-            return False
-        parts = rel.parts
+        # Accepts the `parts` tuple `on_any_event` already resolved, or a raw path.
+        parts = src if isinstance(src, tuple) else self._parts(src)
         if len(parts) < 3:
             return False
         if (parts[-3], parts[-2]) not in PLAN_DOC_DIRS:

@@ -2156,9 +2156,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide n’a pas pu vérifier ce plugin Navide : les données de confiance du Registry sont datées d’un moment postérieur à l’horloge de cet ordinateur. Vérifiez que la date et l’heure de votre ordinateur sont correctes, puis réessayez.",
-          "expired": "Navide n’a pas pu vérifier ce plugin Navide : selon l’horloge de cet ordinateur, les données de confiance du Registry ont expiré. Vérifiez que la date et l’heure de votre ordinateur sont correctes, puis réessayez.",
-          "signatureNotYetValid": "Navide n’a pas pu vérifier ce plugin Navide : sa signature du Registry est datée d’un moment postérieur à l’horloge de cet ordinateur. Vérifiez que la date et l’heure de votre ordinateur sont correctes, puis réessayez."
+          "notYetValid": "Navide n’a pas pu vérifier ce plugin Navide : l’horloge de cet ordinateur semble retarder (les données de confiance du Registry sont datées d’un moment postérieur). Corrigez la date et l’heure de votre ordinateur, puis réessayez.",
+          "expired": "Navide n’a pas pu vérifier ce plugin Navide : selon l’horloge de cet ordinateur, les données de confiance du Registry ont expiré ; l’horloge semble donc avancer. Corrigez la date et l’heure de votre ordinateur, puis réessayez.",
+          "signatureNotYetValid": "Navide n’a pas pu vérifier ce plugin Navide : l’horloge de cet ordinateur semble retarder (sa signature du Registry est datée d’un moment postérieur). Corrigez la date et l’heure de votre ordinateur, puis réessayez."
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version} est arrêté : selon l’horloge de cet ordinateur, les données de confiance du Registry le concernant ont expiré. Soit l’horloge avance, soit Navide n’a pas joint le Registry depuis plus d’un jour. Corrigez la date et l’heure ou connectez-vous à Internet ; Navide vérifie à nouveau dans les 15 minutes et à son démarrage.",
+          "behind": "{id} {version} est arrêté : l’horloge de cet ordinateur semble retarder, donc les données de confiance du Registry le concernant ne sont pas encore valides. Corrigez la date et l’heure de votre ordinateur ; Navide vérifie à nouveau dans les 15 minutes et à son démarrage."
         }
       },
       "localInstall": {
