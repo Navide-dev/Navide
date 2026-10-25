@@ -688,18 +688,12 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   background: var(--bg-subtle);
 }
 /* Weight follows what the user acts on: the effective policy and the editable
-   user policy are raised; the read-only default and a healthy store are flat. */
+   user policy carry the accent edge; the other cards are plain. */
 .ep-effective,
 [data-section='user-policy'] {
   border-color: var(--border-strong);
   background: var(--bg-base);
   box-shadow: inset 3px 0 0 var(--accent-emphasis);
-}
-[data-section='host-default'],
-.ep-section[data-section='recovery']:not(:has(.ep-warning, .ep-path-list, form)) {
-  border-style: dashed;
-  border-color: var(--border-muted);
-  background: transparent;
 }
 .ep-effective {
   display: flex;

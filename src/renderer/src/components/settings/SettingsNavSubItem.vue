@@ -29,6 +29,7 @@ const emit = defineEmits<{
 
 <style scoped>
 .settings-nav-subitem {
+  position: relative;
   display: flex;
   align-items: center;
   width: 100%;
@@ -42,6 +43,20 @@ const emit = defineEmits<{
   text-align: left;
   cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease;
+}
+/* A guide line ties the pages to the entry they belong to. */
+.settings-nav-subitem::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-row-x) + 7px);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-default);
+}
+.settings-nav-subitem.active::before {
+  width: 2px;
+  background: var(--accent-emphasis);
 }
 .settings-nav-subitem:hover {
   background: var(--bg-hover);

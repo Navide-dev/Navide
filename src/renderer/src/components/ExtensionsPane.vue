@@ -82,9 +82,12 @@ async function refreshRiskLevels(): Promise<void> {
     disclosureById.value = new Map()
   }
 }
-function riskReason(id: string): string {
+function riskClauses(id: string): string[] {
   const disclosure = disclosureById.value.get(id)
-  return disclosure ? disclosureClauses(t, locale.value, disclosure).join(' · ') : ''
+  return disclosure ? disclosureClauses(t, locale.value, disclosure) : []
+}
+function riskReason(id: string): string {
+  return riskClauses(id).join(' · ')
 }
 // The warnings a package's card carries, in the card's own words, for the
 // list row's "⚠ N" marker: what the card discloses is visible without a click.
@@ -897,6 +900,18 @@ watch(installed, () => {
                 {{ p.active ? $t('settings.extensions.state.active') : $t('settings.extensions.state.unavailable') }}
               </span>
             </div>
+            <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.builtinDisabledNote') }}</p>
+            <p v-if="p.dataDeletedByEarlierRemoval" class="ext-disabled-note ext-data-deleted-note">
+              {{ $t('settings.extensions.builtinDataDeletedEarlier') }}
+            </p>
+            <span v-if="p.installed?.pendingCandidateVersion" class="ext-badge ext-candidate">
+              {{ $t('settings.extensions.candidateReady', { version: p.installed.pendingCandidateVersion }) }}
+            </span>
+            <!-- First-party code with no sandbox: say so plainly. The third-party
+                 sandbox wording does not apply to it. -->
+            <p v-if="p.id === 'navide.plans'" class="ext-risk-note">
+              {{ $t('settings.extensions.plansRiskNote') }}
+            </p>
             <div v-if="p.disabled !== undefined || p.installed?.pendingCandidateVersion" class="ext-actions">
               <button
                 v-if="p.disabled"
@@ -928,18 +943,6 @@ watch(installed, () => {
                 <span class="ext-switch-spinner" aria-hidden="true"></span>{{ $t('settings.extensions.builtinSwitchBusy') }}
               </span>
             </div>
-            <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.builtinDisabledNote') }}</p>
-            <p v-if="p.dataDeletedByEarlierRemoval" class="ext-disabled-note ext-data-deleted-note">
-              {{ $t('settings.extensions.builtinDataDeletedEarlier') }}
-            </p>
-            <span v-if="p.installed?.pendingCandidateVersion" class="ext-badge ext-candidate">
-              {{ $t('settings.extensions.candidateReady', { version: p.installed.pendingCandidateVersion }) }}
-            </span>
-            <!-- First-party code with no sandbox: say so plainly. The third-party
-                 sandbox wording does not apply to it. -->
-            <p v-if="p.id === 'navide.plans'" class="ext-risk-note">
-              {{ $t('settings.extensions.plansRiskNote') }}
-            </p>
             <details v-if="p.installed?.manifestPermissions || p.installed?.packageVersion" class="ext-permission-details">
               <summary>{{ $t('settings.extensions.permissionDetails') }}</summary>
               <span v-if="p.installed?.manifestPermissions" class="ext-manifest-permissions">
@@ -1066,11 +1069,13 @@ watch(installed, () => {
                   {{ $t('settings.extensions.incompatibleInstalled', { version: p.minNavideVersion ?? '' }) }}
                 </span>
               </div>
-              <p
+              <ul
                 v-if="riskReason(p.id)"
                 class="ext-risk-reason"
                 :class="{ 'ext-risk-note': riskById.get(p.id) === 'high' || riskById.get(p.id) === 'highest' }"
-              >{{ riskReason(p.id) }}</p>
+              >
+                <li v-for="clause in riskClauses(p.id)" :key="clause">{{ clause }}</li>
+              </ul>
               <!-- The actions right under the header, before the details. -->
               <div class="ext-actions">
                 <button
@@ -1787,32 +1792,24 @@ watch(installed, () => {
   gap: 4px;
   container: ext-row / inline-size;
 }
-/* The card's status line: the risk level is the one filled badge; review,
-   update and the other states read as text after it, dot-separated, keeping
-   their colour where it means a warning. */
-.ext-card-status > .ext-badge:not(.ext-md-risk),
-.ext-card-status :deep(.nv-source-badge) {
-  height: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-size: var(--font-xs);
-  font-weight: 500;
-}
-.ext-card-status > .ext-badge.ext-candidate,
-.ext-card-status > .ext-badge.ext-update-badge,
-.ext-card-status > .ext-badge.ext-permission-change--same {
-  color: var(--text-secondary);
-}
 .ext-card-status {
-  column-gap: 12px;
+  column-gap: 6px;
 }
-/* Why the risk level: the disclosure's clauses on one line under the status. */
+/* Why the risk level: the disclosure's clauses, one per line, under the status. */
 .ext-risk-reason {
+  display: grid;
+  gap: 2px;
   margin: 0;
+  padding: 0;
+  list-style: none;
   color: var(--text-secondary);
   font-size: var(--font-xs);
   line-height: var(--lh-base);
+}
+.ext-risk-reason > li::before {
+  content: '•';
+  margin-right: 6px;
+  color: var(--text-secondary);
 }
 .ext-card-status:not(:has(> *)) {
   display: none;

@@ -203,9 +203,9 @@ onBeforeUnmount(stopPolling)
   align-items: center;
   gap: var(--space-2) var(--space-3);
 }
+/* The flags keep one place under the name, so they never wrap unevenly. */
 .nv-overview-head > .nv-overview-flags {
-  margin-left: auto;
-  justify-content: flex-end;
+  flex-basis: 100%;
 }
 .nv-overview-flags {
   display: flex;
