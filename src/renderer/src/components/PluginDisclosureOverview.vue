@@ -230,9 +230,15 @@ onBeforeUnmount(stopPolling)
 .nv-overview-risk--medium { background: var(--attention-subtle); color: var(--attention-fg); }
 .nv-overview-risk--high { background: var(--warning-fg); color: var(--bg-base); }
 .nv-overview-risk--highest { background: var(--danger-emphasis); color: var(--text-on-emphasis); }
+/* Only the risk level is filled; the other marks are outlined in their colour. */
 .nv-overview-flag {
-  background: var(--danger-subtle);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
   color: var(--danger-fg);
+}
+.nv-overview-flags :deep(.nv-source-badge) {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
 }
 .nv-overview-footer {
   display: flex;

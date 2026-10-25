@@ -4,7 +4,7 @@
 // The Host owns every decision; this panel only shows it and forwards the
 // user's choices. First-time and changed-binary consent is asked by the Host
 // in a native dialog when the plugin's backend is first needed.
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ipcErrorMessage } from '../composables/usePluginInstallFlow'
 import { usePluginInventory } from '../composables/usePluginInventory'
@@ -13,8 +13,11 @@ import PluginAgentToolsList from './PluginAgentToolsList.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingRow from './settings/SettingRow.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import { leadSentence } from '../lib/leadSentence'
 
 const { t } = useI18n()
+// The warning leads with its first sentence in bold; every word stays.
+const nativeWarning = computed(() => leadSentence(t('settings.extensions.nativeBackends.description')))
 const overview = ref<NativeBackendOverview | null>(null)
 const busy = ref(false)
 const error = ref('')
@@ -78,7 +81,7 @@ watch(installed, refresh)
           <path d="M7.1 2.6 1.9 12a1 1 0 0 0 .9 1.5h10.4a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0Z" />
           <path d="M8 6.2v3M8 11.3v.1" />
         </svg>
-        <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.description') }}</p>
+        <p class="native-backends-description"><strong class="native-backends-lead">{{ nativeWarning.lead }}</strong>{{ nativeWarning.separator }}{{ nativeWarning.rest }}</p>
       </div>
       <SettingRow :title="$t('settings.extensions.nativeBackends.enable')">
         <template #control>
@@ -347,5 +350,9 @@ watch(installed, refresh)
 /* A switch that waits on the one above stays legible while unavailable. */
 :deep(.toggle-switch:disabled) {
   opacity: 0.6;
+}
+.native-backends-lead {
+  color: var(--text-bright);
+  font-weight: 600;
 }
 </style>

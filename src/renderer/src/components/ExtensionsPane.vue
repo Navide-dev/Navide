@@ -32,6 +32,7 @@ import DeveloperFolderInfoCard from './DeveloperFolderInfoCard.vue'
 import { chromeSourceMark, isTestplaceExpired, pluginSourceLabel, testplaceDaysLeft } from '../lib/pluginSourceMark'
 import { cardRiskLevel } from '../../../shared/pluginDisclosureScan'
 import { disclosureClauses } from '../lib/disclosureText'
+import { leadSentence } from '../lib/leadSentence'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { DisclosureRiskLevel } from '../../../shared/pluginDisclosure'
 
@@ -66,6 +67,8 @@ const selectedId = computed(() =>
 )
 // Each Registry package's risk level from its installed disclosure, for the
 // list row; the full disclosure is in the selected card and the overview below.
+// The Plans risk note leads with its first sentence in bold; every word stays.
+const plansRiskNote = computed(() => leadSentence(t('settings.extensions.plansRiskNote')))
 const riskById = ref(new Map<string, DisclosureRiskLevel>())
 // What it declares, in the disclosure's own clauses: the card's one-line reason
 // for its risk level. The full record is on the Disclosure page.
@@ -778,7 +781,14 @@ watch(installed, () => {
                     :title="factoryWarnings(p).join('\n')"
                   >⚠ {{ factoryWarnings(p).length }}</span>
                   <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
-                  <span v-else class="ext-md-dot" :class="p.active ? 'ext-md-dot--active' : 'ext-md-dot--off'" aria-hidden="true"></span>
+                  <span
+                    v-else
+                    class="ext-md-dot"
+                    :class="p.active ? 'ext-md-dot--active' : 'ext-md-dot--off'"
+                    role="img"
+                    :aria-label="p.active ? $t('settings.extensions.state.active') : $t('settings.extensions.state.unavailable')"
+                    :title="p.active ? $t('settings.extensions.state.active') : $t('settings.extensions.state.unavailable')"
+                  ></span>
                 </span>
               </button>
             </li>
@@ -910,7 +920,7 @@ watch(installed, () => {
             <!-- First-party code with no sandbox: say so plainly. The third-party
                  sandbox wording does not apply to it. -->
             <p v-if="p.id === 'navide.plans'" class="ext-risk-note">
-              {{ $t('settings.extensions.plansRiskNote') }}
+            <strong class="ext-lead">{{ plansRiskNote.lead }}</strong>{{ plansRiskNote.separator }}{{ plansRiskNote.rest }}
             </p>
             <div v-if="p.disabled !== undefined || p.installed?.pendingCandidateVersion" class="ext-actions">
               <button
@@ -1369,8 +1379,6 @@ watch(installed, () => {
   display: grid;
   grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
   align-items: stretch;
-  /* The list and the card fill the page rather than floating over empty space. */
-  min-height: min(600px, 68vh);
   margin-bottom: var(--space-6);
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-md);
@@ -1796,6 +1804,15 @@ watch(installed, () => {
 .ext-card-status {
   column-gap: 6px;
 }
+/* Three roles: the risk level is the one filled badge; states and warnings are
+   outlined in their colour; capabilities are grey mono tokens. */
+.ext-card-status > .ext-badge:not(.ext-md-risk),
+.ext-card-status :deep(.nv-source-badge),
+.ext-card-sub > .ext-badge.ext-sensitive,
+.ext-card-sub > .ext-badge.ext-dev-warning {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
 /* Why the risk level: the disclosure's clauses, one per line, under the status. */
 /* What it declares, neutral: colour is kept for the warnings themselves. */
 .ext-risk-reason {
@@ -2123,6 +2140,10 @@ watch(installed, () => {
 }
 /* A first-party package's plain-language risk disclosure: a quiet callout,
    readable at body size, rather than a block of coloured text. */
+.ext-lead {
+  color: var(--text-bright);
+  font-weight: 600;
+}
 .ext-risk-note {
   position: relative;
   margin: 0;

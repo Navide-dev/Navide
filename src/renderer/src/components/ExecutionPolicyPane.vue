@@ -526,9 +526,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
           {{ $t(highRiskConfirmationKey(recommendation.policy?.mode)) }}
         </label>
       </div>
-      <!-- Accepting trusts the repository's policy: the Untrusted state sits beside the action. -->
       <div v-if="recommendation.state === 'valid' && recommendation.fingerprint && workspaceSnapshot?.selectedSource !== 'repository'" class="ep-accept-row">
-        <span class="ep-untrusted">{{ $t('settings.executionPolicy.untrusted') }}</span>
         <button
           class="ep-accept-recommendation nv-btn"
           :disabled="busy || repositoryNeedsConfirmation"
@@ -676,18 +674,22 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
    and its state on the right, then its description and controls, with
    hairlines between sub-rows — the same grammar as the other Settings pages. */
 .ep-section {
-  margin: 0 0 var(--space-3);
+  margin: 0;
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border-muted);
+}
+.ep-section.ep-effective { border-top: 0; padding-top: var(--space-1); }
+/* Sections are divided by hairlines, Linear-style; the one part the user edits
+   is the page's single card, with the accent edge. */
+[data-section='user-policy'] {
+  margin: var(--space-2) 0 var(--space-4);
   padding: var(--space-row-y) var(--space-row-x);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
-}
-/* The one card the user edits carries the accent edge; the others are plain. */
-[data-section='user-policy'] {
-  border-color: var(--border-strong);
-  background: var(--bg-base);
   box-shadow: inset 3px 0 0 var(--accent-emphasis);
 }
+[data-section='user-policy'] + .ep-section { border-top: 0; }
 .ep-effective {
   display: flex;
   flex-wrap: wrap;
@@ -698,7 +700,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-effective > .ep-warning,
 .ep-effective > .ep-hint { flex-basis: 100%; }
 .ep-effective > .ep-summary { margin: 0; }
-.ep-effective > .ep-effective-policy { flex-basis: calc(100% + 2 * var(--space-row-x)); margin-top: var(--space-2); margin-bottom: calc(-1 * var(--space-row-y)); }
+.ep-effective > .ep-effective-policy { flex-basis: 100%; margin-top: var(--space-2); margin-bottom: 0; }
 .ep-section:last-child { margin-bottom: 0; }
 /* A healthy store is a line, not a card: it only becomes a card with something to say. */
 .ep-section[data-section='recovery']:not(:has(.ep-warning, .ep-path-list, form, button)) {
@@ -749,7 +751,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
    the right, hairlines between — the settings row, read-only. */
 .ep-policy-card {
   display: grid;
-  margin: 0 calc(-1 * var(--space-row-x)) var(--space-3);
+  margin: 0 0 var(--space-3);
   font-size: var(--font-sm);
   line-height: var(--lh-base);
 }
@@ -757,7 +759,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   display: grid;
   grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
   gap: var(--space-3);
-  padding: 6px var(--space-row-x);
+  padding: 6px 0;
   border-top: 1px solid var(--border-muted);
 }
 .ep-policy-card .ep-k { color: var(--text-secondary); }

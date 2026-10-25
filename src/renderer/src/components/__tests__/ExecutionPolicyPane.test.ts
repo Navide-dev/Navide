@@ -695,8 +695,6 @@ describe('ExecutionPolicyPane page', () => {
     const section = wrapper!.get('[data-section="repository-recommendation"]')
     expect(section.find('.ep-repository-full-confirmation').exists()).toBe(true)
     expect(section.text()).toContain('Untrusted')
-    // The Untrusted state sits beside the action that would trust it.
-    expect(section.get('.ep-accept-row .ep-untrusted').text()).toBe('Untrusted')
     expect(section.find('.ep-accept-row .ep-accept-recommendation').exists()).toBe(true)
   })
 
