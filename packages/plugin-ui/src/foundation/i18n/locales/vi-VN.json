@@ -6780,7 +6780,7 @@
         "s7": {
           "title": "Một người, nhiều máy",
           "p1": "Kết nối hai máy chạy hệ điều hành khác nhau bản thân không phải vấn đề nền tảng: đăng nhập Navide Cloud, ghép đôi và nhắn tin giữa các thiết bị đều hoạt động như nhau trên cả ba, và được trình bày trong <strong>Cài đặt và hệ thống</strong>. Phần này chỉ bổ sung những gì thay đổi khi các máy không cùng nền tảng.",
-          "p2": "Trong <strong>Cài đặt ▸ Navide Cloud</strong>, danh sách đồng bộ hiện cho phép bật bốn thứ: prompt skill, MCP, skill và bộ nhớ. <em>Thông tin xác thực</em> cũng có trong danh sách, nhưng công tắc bị vô hiệu hóa và phần mô tả nói rằng chưa hỗ trợ đồng bộ — nó ở đó để bạn biết phạm vi này tồn tại, không phải để bật lên.",
+          "p2": "Trong <strong>Cài đặt ▸ Navide Cloud</strong>, danh sách đồng bộ cho phép bật ba thứ: MCP, Skill và Prompt. <em>Bộ nhớ</em> và <em>tiện ích mở rộng CLI</em> cũng có trong danh sách, nhưng bị làm mờ và được mô tả là “Chưa đồng bộ được.”; công tắc bộ nhớ mà phiên bản cũ để bật vẫn có thể tắt được. Không có mục cho thông tin xác thực: thông tin xác thực của tài khoản CLI chỉ được lưu trên máy tính này và không bao giờ được đồng bộ.",
           "note": "Những thứ vốn không bao giờ đi theo bạn: bản cài và phần đăng nhập của từng CLI, thông tin xác thực (lưu trong kho bảo mật riêng của từng nền tảng, với định dạng không trao đổi được) và mọi đường dẫn tuyệt đối. Máy thứ hai cần tự cài CLI và tự đăng nhập."
         },
         "mock": {

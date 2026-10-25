@@ -282,7 +282,12 @@ describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () 
 
   it('is authored and carries ja-JP for every line', () => {
     expect(entry).toBeDefined()
-    for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+    for (const text of [entry!.title, ...entry!.highlights, entry!.note!]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('says credentials stay on this machine and links the announcement', () => {
+    expect(entry!.highlights.at(-1)!['en-US']).toMatch(/^Navide has never stored your CLI account credentials/)
+    expect(entry!.note!['en-US']).toContain('https://navide.dev/posts/credentials-stay-on-your-machine/')
   })
 
   it('names the Linux leak and its reporter, the four pages and their markers, and agent message text kept apart', () => {

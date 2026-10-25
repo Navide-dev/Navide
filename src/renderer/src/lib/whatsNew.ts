@@ -158,7 +158,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'Generating a commit message with Anthropic no longer fails every time.',
         'ja-JP': 'Anthropic での commit メッセージの自動生成が、毎回失敗することはなくなりました。',
       },
+      {
+        'zh-TW': 'Navide 從來沒有、以後也不會把你的 CLI 帳號憑證與金鑰集中保存在雲端；它們只存在你自己的電腦上。0.2.28 起，同步設定已移除從未開放的「Credentials 與金鑰」選項。MCP 設定若開啟同步，會先在裝置上加密才上傳，伺服器沒有解密金鑰，可隨時在「設定 → Navide Cloud → 同步 → MCP」關閉。',
+        'en-US': 'Navide has never stored your CLI account credentials and keys centrally in the cloud, and it never will: they live only on your own machine. Since 0.2.28 the never-enabled "Credentials & keys" option is gone from the sync settings. If you turn on MCP sync, MCP settings are encrypted on your device before upload; the server has no decryption key, and you can turn it off at any time in Settings → Navide Cloud → Sync → MCP.',
+        'ja-JP': 'Navide はこれまで CLI アカウントの認証情報やキーをクラウドにまとめて保存したことはなく、今後も保存しません。これらはお使いのコンピューターにのみ保存されます。0.2.28 以降、同期設定から未公開の「認証情報とキー」の項目は削除されています。MCP の同期をオンにした場合、MCP 設定はデバイス上で暗号化してからアップロードされ、サーバーは復号キーを持ちません。「設定 → Navide Cloud → 同期 → MCP」でいつでもオフにできます。',
+      },
     ],
+    note: {
+      'zh-TW': '完整說明：https://navide.dev/posts/credentials-stay-on-your-machine-zh-hant/',
+      'en-US': 'Full announcement: https://navide.dev/posts/credentials-stay-on-your-machine/',
+      'ja-JP': '詳しいお知らせ：https://navide.dev/posts/credentials-stay-on-your-machine-ja/',
+    },
   },
   {
     version: '0.2.30',
