@@ -2156,9 +2156,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide không kiểm tra được plugin Navide này: dữ liệu tin cậy của Registry có thời điểm muộn hơn đồng hồ của máy này. Hãy kiểm tra ngày giờ trên máy đã đúng chưa rồi thử lại.",
-          "expired": "Navide không kiểm tra được plugin Navide này: theo đồng hồ của máy này, dữ liệu tin cậy của Registry đã hết hạn. Hãy kiểm tra ngày giờ trên máy đã đúng chưa rồi thử lại.",
-          "signatureNotYetValid": "Navide không kiểm tra được plugin Navide này: chữ ký Registry của nó có thời điểm muộn hơn đồng hồ của máy này. Hãy kiểm tra ngày giờ trên máy đã đúng chưa rồi thử lại."
+          "notYetValid": "Navide không kiểm tra được plugin Navide này: đồng hồ của máy này có vẻ đang chậm (dữ liệu tin cậy của Registry có thời điểm muộn hơn). Hãy chỉnh lại ngày giờ trên máy cho đúng rồi thử lại.",
+          "expired": "Navide không kiểm tra được plugin Navide này: theo đồng hồ của máy này, dữ liệu tin cậy của Registry đã hết hạn, nên đồng hồ có vẻ đang nhanh. Hãy chỉnh lại ngày giờ trên máy cho đúng rồi thử lại.",
+          "signatureNotYetValid": "Navide không kiểm tra được plugin Navide này: đồng hồ của máy này có vẻ đang chậm (chữ ký Registry của nó có thời điểm muộn hơn). Hãy chỉnh lại ngày giờ trên máy cho đúng rồi thử lại."
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version} đang bị dừng: theo đồng hồ của máy này, dữ liệu tin cậy của Registry cho nó đã hết hạn. Có thể đồng hồ đang nhanh, hoặc Navide đã không kết nối được Registry hơn một ngày. Hãy chỉnh lại ngày giờ hoặc kết nối internet; Navide sẽ kiểm tra lại trong vòng 15 phút và khi khởi động.",
+          "behind": "{id} {version} đang bị dừng: đồng hồ của máy này có vẻ đang chậm, nên dữ liệu tin cậy của Registry cho nó chưa có hiệu lực. Hãy chỉnh lại ngày giờ trên máy cho đúng; Navide sẽ kiểm tra lại trong vòng 15 phút và khi khởi động."
         }
       },
       "localInstall": {

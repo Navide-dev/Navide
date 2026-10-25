@@ -2156,9 +2156,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "O Navide não conseguiu verificar este plug-in do Navide: os dados de confiança do Registry têm data posterior ao relógio deste computador. Verifique se a data e a hora do computador estão corretas e tente novamente.",
-          "expired": "O Navide não conseguiu verificar este plug-in do Navide: pelo relógio deste computador, os dados de confiança do Registry expiraram. Verifique se a data e a hora do computador estão corretas e tente novamente.",
-          "signatureNotYetValid": "O Navide não conseguiu verificar este plug-in do Navide: a assinatura do Registry dele tem data posterior ao relógio deste computador. Verifique se a data e a hora do computador estão corretas e tente novamente."
+          "notYetValid": "O Navide não conseguiu verificar este plug-in do Navide: o relógio deste computador parece estar atrasado (os dados de confiança do Registry têm data posterior). Corrija a data e a hora do computador e tente novamente.",
+          "expired": "O Navide não conseguiu verificar este plug-in do Navide: pelo relógio deste computador, os dados de confiança do Registry expiraram, então o relógio parece estar adiantado. Corrija a data e a hora do computador e tente novamente.",
+          "signatureNotYetValid": "O Navide não conseguiu verificar este plug-in do Navide: o relógio deste computador parece estar atrasado (a assinatura do Registry dele tem data posterior). Corrija a data e a hora do computador e tente novamente."
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version} está parado: pelo relógio deste computador, os dados de confiança do Registry para ele expiraram. Ou o relógio está adiantado, ou o Navide não acessa o Registry há mais de um dia. Corrija a data e a hora ou conecte-se à internet; o Navide verifica de novo em até 15 minutos e ao iniciar.",
+          "behind": "{id} {version} está parado: o relógio deste computador parece estar atrasado, então os dados de confiança do Registry para ele ainda não são válidos. Corrija a data e a hora do computador; o Navide verifica de novo em até 15 minutos e ao iniciar."
         }
       },
       "localInstall": {

@@ -533,6 +533,7 @@ declare global {
         testplaceLeave?: (id: string) => Promise<{ ok: true }>
         testplaceInvite?: (id: string, labels: string[]) => Promise<import('../../shared/marketplaceDeveloper').DeveloperCallResult>
         expiredTestplace?: () => Promise<ExpiredTestplaceBuild[]>
+        clockQuarantine?: () => Promise<Array<{ id: string; version: string | null; clock: 'behind' | 'ahead' }>>
         keepExpiredTestplace?: (id: string) => Promise<{ ok: true }>
         adoptTestplaceRelease?: (id: string) => Promise<{ adopted: boolean }>
         restart: (id: string) => Promise<{

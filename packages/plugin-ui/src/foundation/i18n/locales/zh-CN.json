@@ -2156,9 +2156,13 @@
       },
       "registryTrust": {
         "errors": {
-          "notYetValid": "Navide 无法检查这个 Navide 插件：Registry 信任数据的时间晚于这台电脑的时钟。请确认电脑的日期与时间正确，再试一次。",
-          "expired": "Navide 无法检查这个 Navide 插件：按这台电脑的时钟，Registry 信任数据已过期。请确认电脑的日期与时间正确，再试一次。",
-          "signatureNotYetValid": "Navide 无法检查这个 Navide 插件：它的 Registry 签名时间晚于这台电脑的时钟。请确认电脑的日期与时间正确，再试一次。"
+          "notYetValid": "Navide 无法检查这个 Navide 插件：这台电脑的时钟似乎慢了（Registry 信任数据的时间晚于时钟）。请把电脑的日期与时间改正确，再试一次。",
+          "expired": "Navide 无法检查这个 Navide 插件：按这台电脑的时钟，Registry 信任数据已过期，时钟似乎快了。请把电脑的日期与时间改正确，再试一次。",
+          "signatureNotYetValid": "Navide 无法检查这个 Navide 插件：这台电脑的时钟似乎慢了（它的 Registry 签名时间晚于时钟）。请把电脑的日期与时间改正确，再试一次。"
+        },
+        "clockQuarantine": {
+          "ahead": "{id} {version} 已停止：按这台电脑的时钟，Registry 给它的信任数据已过期。可能是时钟快了，或 Navide 已超过一天没连上 Registry。请把日期与时间改正确或连上网络；Navide 会在 15 分钟内及启动时再检查一次。",
+          "behind": "{id} {version} 已停止：这台电脑的时钟似乎慢了，Registry 给它的信任数据还没生效。请把电脑的日期与时间改正确；Navide 会在 15 分钟内及启动时再检查一次。"
         }
       },
       "localInstall": {

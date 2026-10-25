@@ -572,6 +572,16 @@ const KEEP_REFUSAL_KEYS: Record<NonNullable<ExpiredTestplaceBuild['keepRefusal']
   'registry-outdated': 'cannotKeepRegistryOutdated',
   unreachable: 'cannotKeepUnreachable',
 }
+// Disclose, don't restrict: packages stopped because their trust data fails
+// against this computer's clock, with the way the clock looks off.
+const clockQuarantine = ref<Array<{ id: string; version: string | null; clock: 'behind' | 'ahead' }>>([])
+async function refreshClockQuarantine(): Promise<void> {
+  try {
+    clockQuarantine.value = (await pluginsApi()?.clockQuarantine?.()) ?? []
+  } catch {
+    clockQuarantine.value = []
+  }
+}
 async function refreshExpiredTestplace(): Promise<void> {
   try {
     expiredTestplace.value = (await pluginsApi()?.expiredTestplace?.()) ?? []
@@ -648,12 +658,14 @@ onMounted(() => {
   void refreshPacks()
   void refreshDeveloperMode()
   void refreshExpiredTestplace()
+  void refreshClockQuarantine()
   void refreshRiskLevels()
 })
 // A pack installed from the Marketplace page shows up here without a remount.
 watch(installed, () => {
   void refreshPacks()
   void refreshExpiredTestplace()
+  void refreshClockQuarantine()
   void refreshRiskLevels()
 })
 </script>
@@ -674,6 +686,9 @@ watch(installed, () => {
     <!-- D6: never let a self-hosted Registry package disappear silently. -->
     <p v-for="item in selfHostedQuarantine" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
       {{ $t('settings.extensions.developerMode.selfHostedQuarantine', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
+    </p>
+    <p v-for="item in clockQuarantine" :key="`clock:${item.id}`" class="ext-clock-quarantine ext-risk-banner" role="alert" :data-clock-id="item.id">
+      {{ $t(`settings.extensions.registryTrust.clockQuarantine.${item.clock}`, { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
     </p>
     <!-- D3: an expired test build is stopped, never silently dropped. -->
     <div v-for="item in expiredTestplace" :key="`expired:${item.id}`" class="ext-testplace-expired ext-risk-banner" role="alert" :data-expired-id="item.id">
