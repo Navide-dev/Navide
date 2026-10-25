@@ -306,6 +306,8 @@ describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () 
     expect(all).toContain('behind or ahead')
     expect(all).toContain('stage tab')
     expect(all).toContain('since 0.1.93')
+    expect(all).toContain('first character of the plugin\'s title')
+    expect(all).toContain('Mini-IDE has its own icon')
     expect(all).not.toMatch(/\d+(\.\d+)?\s*\/\s*10\b/)
   })
 

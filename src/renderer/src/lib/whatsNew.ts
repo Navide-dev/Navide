@@ -159,6 +159,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'コンピューターの時計がずれているために Registry のプラグインを確認できないとき、時計が遅れているか進んでいるようだと伝え、日付と時刻を直してからやり直すよう案内するようになりました。インストール済みのプラグインがこの理由で停止した場合は「設定 → Navide プラグイン」の「Navide プラグイン」ページにバナーが表示され、Navide は 15 分以内と起動時にもう一度確認します。',
       },
       {
+        'zh-TW': '標題列和側欄裡沒有圖示的外掛按鈕，不再全都顯示同一個 ◇，而是顯示外掛標題的第一個字；Mini-IDE 也有了自己的圖示。這些按鈕的提示會寫出是哪個外掛：它的 id、發佈者（或「自稱」）和來源。',
+        'en-US': 'Plugin buttons without an icon in the title bar and the sidebar no longer all show the same ◇; they show the first character of the plugin\'s title, and Mini-IDE has its own icon. Their tooltip says which plugin it is: its id, its publisher (or "Self-declared") and its source.',
+        'ja-JP': 'タイトルバーとサイドバーにあるアイコンのないプラグインのボタンは、すべて同じ ◇ ではなく、プラグインのタイトルの最初の 1 文字を表示するようになりました。Mini-IDE には専用のアイコンが付きました。これらのボタンのツールチップには、どのプラグインか（id、発行者または「自称」、ソース）が表示されます。',
+      },
+      {
         'zh-TW': '用 Anthropic 自動產生 commit 訊息不再每次都失敗。',
         'en-US': 'Generating a commit message with Anthropic no longer fails every time.',
         'ja-JP': 'Anthropic での commit メッセージの自動生成が、毎回失敗することはなくなりました。',
