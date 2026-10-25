@@ -172,6 +172,7 @@ onBeforeUnmount(stopPolling)
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  container: overview / inline-size;
   /* Same 22px gutter as the settings blocks above it on the page. */
   padding: var(--space-1) 22px var(--space-6);
   font-size: var(--font-sm);
@@ -195,8 +196,39 @@ onBeforeUnmount(stopPolling)
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
-/* Each record: who it is on the left, its risk and review on the right, its
-   recent activity and the expanders under it — the same at every width. */
+/* One ledger: the records are rows of a single bordered list, not separate
+   cards. From 640px each row has two aligned columns, who it is with its risk
+   and review on the left, its recent activity on the right; the notes and the
+   expanders span the row. */
+.nv-overview-entry + .nv-overview-entry {
+  margin-top: calc(-1 * var(--space-3) - 1px);
+}
+.nv-overview-entry:not(:last-of-type) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.nv-overview-entry + .nv-overview-entry {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+@container overview (min-width: 640px) {
+  .nv-overview-entry {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) minmax(0, 3fr);
+    align-items: start;
+    column-gap: var(--space-5);
+  }
+  .nv-overview-entry > :not(.nv-overview-head, .nv-overview-activity) {
+    grid-column: 1 / -1;
+  }
+  .nv-overview-entry > .nv-overview-activity {
+    grid-column: 2;
+    grid-row: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
 .nv-overview-head {
   display: flex;
   flex-wrap: wrap;

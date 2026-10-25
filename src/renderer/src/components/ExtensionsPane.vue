@@ -1082,11 +1082,6 @@ watch(installed, () => {
               <ul v-if="riskReason(p.id)" class="ext-risk-reason">
                 <li v-for="clause in riskClauses(p.id)" :key="clause">{{ clause }}</li>
               </ul>
-              <!-- The warnings the list row counts as "⚠ N", one per line, so the count
-                   can be traced to what it counts. -->
-              <ul v-if="installedWarnings(p).length" class="ext-card-warnings ext-risk-note">
-                <li v-for="warning in installedWarnings(p)" :key="warning">{{ warning }}</li>
-              </ul>
               <!-- The actions right under the header, before the details. -->
               <div class="ext-actions">
                 <button
@@ -2158,11 +2153,6 @@ watch(installed, () => {
   color: var(--text-primary);
   font-size: var(--font-sm);
   line-height: var(--lh-base);
-}
-.ext-card-warnings {
-  display: grid;
-  gap: 2px;
-  list-style: none;
 }
 .ext-incompatible-reason {
   margin: 0;

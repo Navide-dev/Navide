@@ -115,13 +115,6 @@ describe('ExtensionsPane list and detail', () => {
       'Needs Navide ≥ 9.9.9',
       'Local file, not reviewed by Navide, unsigned',
     ])
-    // The card lists the same warnings, so the count can be traced to them.
-    await wrapper.get('[data-select-id="kaito.risky"]').trigger('click')
-    expect(wrapper.findAll('[data-id="kaito.risky"] .ext-card-warnings li').map((li) => li.text())).toEqual([
-      'sensitive: shell.run',
-      'Needs Navide ≥ 9.9.9',
-      'Local file, not reviewed by Navide, unsigned',
-    ])
     // A row whose card carries none has no marker.
     expect(wrapper.find('[data-select-id="kaito.lint"] .ext-md-warn').exists()).toBe(false)
   })
