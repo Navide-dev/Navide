@@ -24,6 +24,7 @@ import {
   isUpdateAvailable,
   defaultInstallerDeps,
   InstallError,
+  localVersionAlreadyInstalled,
   type PreparedInstall,
   type InstallerTrustConfig,
 } from './pluginInstaller'
@@ -2756,6 +2757,10 @@ export function registerPluginIpc(
     }
     assertNoDeveloperFolder(pkg.id)
     assertEngineCompatible(pkg.id, pkg.version, pkg.manifest, hostAppVersion())
+    // Said now, before the consent dialog, in the words staging would use.
+    if (localVersionAlreadyInstalled(pkg, pluginsRoot)) {
+      throw new InstallError(`immutable candidate already exists for ${pkg.id}@${pkg.version}`)
+    }
     preparedLocal.set(pkg.id, pkg)
     const replaced = manager.listInstalledPackages().find((item) => item.id === pkg.id)
     const agentTools = isManifestV2(pkg.manifest) ? computeDisclosure(pkg.manifest).agentTools : []

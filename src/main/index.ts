@@ -4155,7 +4155,7 @@ async function openCatalogContributionWindow(
   extraParams: Record<string, string> = {},
   trustedEditorFileTarget?: TrustedEditorFileTarget,
   canDispatch: () => boolean = () => true,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; backendUnavailable?: string }> {
   if (!canDispatch()) return { ok: false, error: 'request is no longer active' }
   if (!(await prepareCatalogContribution(contributionKey))) {
     return {
@@ -4254,7 +4254,8 @@ async function openCatalogContributionWindow(
     hostWindow.show()
     hostWindow.focus()
   }
-  return { ok: true }
+  // The window opened without its native backend: the main window says why.
+  return result.backendUnavailable ? { ok: true, backendUnavailable: result.backendUnavailable } : { ok: true }
 }
 
 const plansWindowRouter = createPlansWindowRouter({

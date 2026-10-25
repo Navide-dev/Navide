@@ -273,3 +273,22 @@ describe('main plugin views are a stage tab', () => {
     expect(mainCss).toContain('background: var(--bg-base);')
   })
 })
+
+describe('a plugin window opened without its native backend', () => {
+  const at = (needle: string): string => {
+    const i = appSource.indexOf(needle)
+    expect(i, needle).toBeGreaterThan(-1)
+    return appSource.slice(i, appSource.indexOf('\n}', i))
+  }
+
+  it('says why once, through the toast, after a successful open', () => {
+    const open = at('async function openPluginContributionWindow(')
+    expect(open).toContain('if (result.backendUnavailable) notePluginWindowWithoutBackend(contribution, result.backendUnavailable)')
+    // A failed open returns before it: there is no window to explain.
+    expect(open.indexOf('return')).toBeLessThan(open.indexOf('result.backendUnavailable'))
+    const note = at('function notePluginWindowWithoutBackend(')
+    expect(note).toContain('if (pluginWindowsWithoutBackend.has(key)) return')
+    expect(note).toContain("'settings.extensions.nativeBackends.windowWithout'")
+    expect(note).toContain('name: revealInvisibleText(contribution.title)')
+  })
+})

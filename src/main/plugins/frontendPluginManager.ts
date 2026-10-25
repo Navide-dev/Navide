@@ -621,6 +621,9 @@ interface RunningPlugin {
   /** The initial Plans backend bind. The dedicated Plans opener awaits this
    *  before claiming that the v2 surface is usable. */
   backendBindingTask: Promise<void> | null
+  /** Why a third-party view's backend bind was refused or failed, once it
+   *  has been; the view runs on with every backend call failing closed. */
+  backendUnavailable?: string
   /** Query string the entry was last loaded with (drives reload-on-change). */
   query: string
   /** webContents.id captured at creation (not readable after destroy). */
@@ -10939,7 +10942,13 @@ export class FrontendPluginManager {
               error instanceof Error ? error.message : 'invalid backend runtime'
             }`,
           )
-          throw error
+          // Not fatal: the view (a window too) opens and stays unbound. Only an
+          // admission refusal's own message is passed on; anything else is
+          // reported generically, since it may carry paths or stack text.
+          record.backendUnavailable =
+            error instanceof BackendPluginError && error.code === 'BACKEND_UNAVAILABLE'
+              ? error.message
+              : 'the native backend could not start'
         })
         void record.backendBindingTask.catch(() => undefined)
       }
@@ -12784,7 +12793,7 @@ export class FrontendPluginManager {
     hostWindow: BrowserWindow,
     contributionKey: string,
     options: Omit<PluginViewOpenOptions, 'hostWindow' | 'bounds'>,
-  ): Promise<{ ok: boolean; error?: string }> {
+  ): Promise<{ ok: boolean; error?: string; backendUnavailable?: string }> {
     const canDispatch = options.canDispatch ?? (() => true)
     if (!canDispatch()) return { ok: false, error: 'request is no longer active' }
     const descriptor = this.enabledDescriptors().find((candidate) =>
@@ -12858,7 +12867,8 @@ export class FrontendPluginManager {
         capabilityContext,
       })
       this.contributionInstances.set(key, handle)
-      return { ok: true }
+      const backendUnavailable = this.running.get(handle.instanceId)?.backendUnavailable
+      return backendUnavailable ? { ok: true, backendUnavailable } : { ok: true }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }

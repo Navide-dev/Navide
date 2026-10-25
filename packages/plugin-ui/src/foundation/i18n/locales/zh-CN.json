@@ -1889,6 +1889,7 @@
           "externalCallersDisclosure": "外部程序只共用一组 token，审核记录分不出是哪个程序，只能记成“外部客户端”。Host 凭据也比照处理。"
         },
         "empty": "目前没有安装任何含原生后端的 Navide 插件。",
+        "windowWithout": "{name} 已打开，但没有原生后端：{reason}。需要后端的功能将无法使用。要允许后端，请到“设置 → Navide 插件 → {page}”。",
         "allow": "允许",
         "disable": "禁用",
         "enable_plugin": "激活",
@@ -2175,6 +2176,9 @@
         "signature": "无：无法确认作者，文件可能被改过",
         "digestLabel": "文件 SHA-256",
         "acknowledge": "我了解这个 Navide 插件没有经过 Navide 审核，并确定要运行它的代码。",
+        "versionExists": "这个版本号已经以不同的内容安装过了。请提高版本号后重新打包。",
+        "installFailed": "无法安装这个 Navide 插件。",
+        "chooseAgain": "请关闭这个对话框，重新选择文件再试一次。",
         "replaceTitle": "取代已安装的 Navide 插件",
         "replaceMarketplace": "要把 {id}（Navide 市场版本 {version}）换成本机文件版本吗？换了之后不会自动更新。",
         "replaceLocal": "要把 {id} 的本机文件版本 {version} 换成这个文件吗？",
