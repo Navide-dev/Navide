@@ -1069,11 +1069,7 @@ watch(installed, () => {
                   {{ $t('settings.extensions.incompatibleInstalled', { version: p.minNavideVersion ?? '' }) }}
                 </span>
               </div>
-              <ul
-                v-if="riskReason(p.id)"
-                class="ext-risk-reason"
-                :class="{ 'ext-risk-note': riskById.get(p.id) === 'high' || riskById.get(p.id) === 'highest' }"
-              >
+              <ul v-if="riskReason(p.id)" class="ext-risk-reason">
                 <li v-for="clause in riskClauses(p.id)" :key="clause">{{ clause }}</li>
               </ul>
               <!-- The actions right under the header, before the details. -->
@@ -1590,15 +1586,20 @@ watch(installed, () => {
   .ext-md-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-  .ext-md-row > :first-child {
-    display: none;
-  }
+
   /* The name keeps the whole first line; the version and the risk and warning
      marks share the second. */
   .ext-md-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'name name' 'sub end';
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    grid-template-areas: 'icon name name' 'icon sub end';
+    column-gap: 8px;
     row-gap: 2px;
+  }
+  .ext-md-row > :first-child {
+    grid-area: icon;
+    align-self: start;
+    width: 22px;
+    height: 22px;
   }
   .ext-md-row-text {
     display: contents;
@@ -1796,13 +1797,17 @@ watch(installed, () => {
   column-gap: 6px;
 }
 /* Why the risk level: the disclosure's clauses, one per line, under the status. */
+/* What it declares, neutral: colour is kept for the warnings themselves. */
 .ext-risk-reason {
   display: grid;
   gap: 2px;
-  margin: 0;
-  padding: 0;
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
   list-style: none;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: var(--font-xs);
   line-height: var(--lh-base);
 }
@@ -1847,9 +1852,11 @@ watch(installed, () => {
   font-family: var(--font-mono);
   font-size: var(--font-2xs);
 }
+/* A sensitive capability is outlined in the warning colour; the "sensitive"
+   badge beside it carries the fill. */
 .ext-cap--sensitive {
-  background: var(--risk-subtle);
-  color: var(--risk-fg);
+  box-shadow: inset 0 0 0 1px var(--risk-fg);
+  color: var(--text-bright);
   font-weight: 600;
 }
 .ext-actions {
@@ -1878,15 +1885,16 @@ watch(installed, () => {
   line-height: 1.5;
 }
 .ext-permission-details summary {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-height: var(--control-h-lg);
   list-style: none;
-  width: max-content;
+  width: 100%;
   cursor: pointer;
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-weight: 500;
   border-radius: var(--radius-xs);
 }
 .ext-permission-details summary::-webkit-details-marker {

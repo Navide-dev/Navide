@@ -446,17 +446,9 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
           <strong>{{ effectiveSource ? sourceLabel(effectiveSource) : $t('settings.executionPolicy.status.unavailable') }}</strong>
           · {{ $t('settings.executionPolicy.modeLabel') }}: <strong>{{ modeLabel(workspaceSnapshot.policy.mode) }}</strong>
         </p>
-        <div class="ep-facts">
-          <span class="ep-fact">
-            <span class="ep-fact-label">{{ $t('settings.executionPolicy.systemLabel') }}</span>
-            <code v-for="name in workspaceSnapshot.policy.system" :key="name" class="ep-tag">{{ name }}</code>
-            <span v-if="!workspaceSnapshot.policy.system.length" class="ep-fact-none">{{ $t('settings.executionPolicy.none') }}</span>
-          </span>
-          <span class="ep-fact">
-            <span class="ep-fact-label">{{ $t('settings.executionPolicy.shellLabel') }}</span>
-            <code v-for="name in workspaceSnapshot.policy.shell" :key="name" class="ep-tag">{{ name }}</code>
-            <span v-if="!workspaceSnapshot.policy.shell.length" class="ep-fact-none">{{ $t('settings.executionPolicy.none') }}</span>
-          </span>
+        <div class="ep-policy-card ep-effective-policy">
+          <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(workspaceSnapshot.policy.system) }}</span></div>
+          <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(workspaceSnapshot.policy.shell) }}</span></div>
         </div>
         <p v-if="workspaceSnapshot.status !== 'active'" class="ep-warning" role="alert">
           {{ $t(`settings.executionPolicy.statusDetail.${workspaceSnapshot.status}`) }}
@@ -534,12 +526,15 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
           {{ $t(highRiskConfirmationKey(recommendation.policy?.mode)) }}
         </label>
       </div>
-      <button
-        v-if="recommendation.state === 'valid' && recommendation.fingerprint && workspaceSnapshot?.selectedSource !== 'repository'"
-        class="ep-accept-recommendation nv-btn"
-        :disabled="busy || repositoryNeedsConfirmation"
-        @click="selectSource('repository')"
-      >{{ $t('settings.executionPolicy.acceptRecommendation') }}</button>
+      <!-- Accepting trusts the repository's policy: the Untrusted state sits beside the action. -->
+      <div v-if="recommendation.state === 'valid' && recommendation.fingerprint && workspaceSnapshot?.selectedSource !== 'repository'" class="ep-accept-row">
+        <span class="ep-untrusted">{{ $t('settings.executionPolicy.untrusted') }}</span>
+        <button
+          class="ep-accept-recommendation nv-btn"
+          :disabled="busy || repositoryNeedsConfirmation"
+          @click="selectSource('repository')"
+        >{{ $t('settings.executionPolicy.acceptRecommendation') }}</button>
+      </div>
     </section>
 
     <section v-if="snapshot && draft" class="ep-section" data-section="user-policy">
@@ -687,9 +682,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
   border-radius: var(--radius-card);
   background: var(--bg-subtle);
 }
-/* Weight follows what the user acts on: the effective policy and the editable
-   user policy carry the accent edge; the other cards are plain. */
-.ep-effective,
+/* The one card the user edits carries the accent edge; the others are plain. */
 [data-section='user-policy'] {
   border-color: var(--border-strong);
   background: var(--bg-base);
@@ -705,23 +698,15 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-effective > .ep-warning,
 .ep-effective > .ep-hint { flex-basis: 100%; }
 .ep-effective > .ep-summary { margin: 0; }
-.ep-effective > .ep-facts { margin: 0; }
-.ep-facts { display: flex; flex-wrap: wrap; gap: 6px var(--space-5); margin: var(--space-2) 0 0; }
-.ep-fact { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.ep-fact-label { margin-right: 2px; color: var(--text-secondary); font-size: var(--font-xs); }
-.ep-fact-none { color: var(--text-secondary); font-size: var(--font-xs); font-style: italic; }
-.ep-tag {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 7px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-xs);
-  background: var(--bg-base);
-  font-family: var(--font-mono);
-  font-size: var(--font-xs);
-}
+.ep-effective > .ep-effective-policy { flex-basis: 100%; margin-top: var(--space-2); margin-bottom: calc(-1 * var(--space-row-y)); }
 .ep-section:last-child { margin-bottom: 0; }
+/* A healthy store is a line, not a card: it only becomes a card with something to say. */
+.ep-section[data-section='recovery']:not(:has(.ep-warning, .ep-path-list, form, button)) {
+  padding-block: var(--space-1);
+  border-color: transparent;
+  background: transparent;
+}
+.ep-accept-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .ep-section-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: 2px; }
 /* The section's state sits at the row's right edge, where a control would. */
 .ep-section-heading > :nth-child(2) { margin-left: auto; }

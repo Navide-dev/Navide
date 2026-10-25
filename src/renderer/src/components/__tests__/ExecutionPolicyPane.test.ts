@@ -683,7 +683,7 @@ describe('ExecutionPolicyPane page', () => {
   it('leads with what is in effect for the workspace, then the user policy, the default and storage', async () => {
     await mountPane(quietSnapshot())
     expect(order(wrapper!)).toEqual(['effective-policy', 'policy-source', 'repository-recommendation', 'user-policy', 'host-default', 'recovery'])
-    expect(wrapper!.findAll('.ep-facts .ep-tag').map((tag) => tag.text())).toEqual(['fs', 'ui', 'aiCli', 'git', 'gh', 'glab'])
+    expect(wrapper!.findAll('.ep-effective-policy .ep-v').map((value) => value.text())).toEqual(['fs, ui, aiCli', 'git, gh, glab'])
     // The editor is the page: nothing to open first.
     expect(wrapper!.find('#ep-editor').exists()).toBe(false)
     expect(wrapper!.find('[data-mode="allowlist"] input').exists()).toBe(true)
@@ -695,6 +695,9 @@ describe('ExecutionPolicyPane page', () => {
     const section = wrapper!.get('[data-section="repository-recommendation"]')
     expect(section.find('.ep-repository-full-confirmation').exists()).toBe(true)
     expect(section.text()).toContain('Untrusted')
+    // The Untrusted state sits beside the action that would trust it.
+    expect(section.get('.ep-accept-row .ep-untrusted').text()).toBe('Untrusted')
+    expect(section.find('.ep-accept-row .ep-accept-recommendation').exists()).toBe(true)
   })
 
   it('shows the high-risk warning of a saved Full user policy on the page', async () => {

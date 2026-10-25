@@ -237,7 +237,7 @@ onBeforeUnmount(stopPolling)
 .nv-overview-footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 var(--space-5);
+  gap: var(--space-2);
 }
 .nv-overview-footer > details {
   flex-basis: auto;
@@ -397,8 +397,12 @@ onBeforeUnmount(stopPolling)
   gap: 6px;
   width: max-content;
   min-height: var(--control-h-lg);
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
   list-style: none;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: var(--font-sm);
   font-weight: 500;
   cursor: pointer;
