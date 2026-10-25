@@ -144,6 +144,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'メイン領域に view を追加するプラグインをインストールしても、ステージ全体が覆われることはなくなり、クリックが下のターミナルに抜けることもなくなりました：プラグインの画面はステージのタブの 1 つになり、既存のタブの後ろに view のタイトルで表示され、Navide が付ける ◇ マークが付きます。ポインターを合わせるとプラグインの ID、発行者、ソースが表示されます。インストールしても自動では切り替わらず、ほかのタブを選ぶか、「+」を押すか、サイドバーから pane を開くと pane のグリッドに戻ります。0.1.93 から続いていた問題で、同梱のプラグインはこの領域を使っていません。',
       },
       {
+        'zh-TW': '外掛的原生後端被拒絕或無法啟動時，外掛的視窗仍然會開啟，只是需要後端的功能不能用。開啟時會跳出通知說明原因，並指向「設定 → Navide 外掛 → 開發者與原生程式碼」；在那裡允許之後，要把已經開著的視窗關掉再開，才會接上後端。',
+        'en-US': 'A plugin window now opens even when its native backend is refused or cannot start; the parts that need the backend do not work. A notice says why and points to Settings → Navide Plugins → Developer and native code. After you allow the backend there, close the open window and open it again to connect it.',
+        'ja-JP': 'プラグインのネイティブバックエンドが拒否されたり起動できなかったりしても、プラグインのウィンドウは開くようになりました。バックエンドが必要な機能は使えません。開くときに理由を示す通知が表示され、「設定 → Navide プラグイン → 開発者とネイティブコード」へ案内します。そこで許可した後は、開いているウィンドウを閉じて開き直すとバックエンドにつながります。',
+      },
+      {
         'zh-TW': '外掛現在可以申請讀取同一個工作區的 agent 資訊（pane 清單、哪個 pane 開了哪個、不含內容的訊息傳送紀錄、session 清單），這是中風險權限；訊息內容要另外申請高風險權限，安裝時會再確認一次，而且 agent 要讀到訊息內容，執行政策必須明確寫入。對話紀錄、帳號和額度資料都不開放。內建外掛都沒有申請這兩種權限。',
         'en-US': 'Plugins can now ask to read agent information in their own workspace (the pane list, which pane opened which, message delivery records without their text, and the session list), a medium-risk permission. Message text needs a separate high-risk permission, confirmed a second time at install, and an agent gets it only from an Execution Policy that names it. Conversation transcripts, account and quota data are never available. None of the bundled plugins asks for either.',
         'ja-JP': 'プラグインが、同じワークスペースの agent の情報（pane の一覧、どの pane がどの pane を開いたか、本文を含まないメッセージの配信記録、session の一覧）の読み取りを申請できるようになりました。これは中リスクの権限です。メッセージの本文には別の高リスクの権限が必要で、インストール時にもう一度確認され、agent が本文を読めるのは実行ポリシーに明記されている場合だけです。会話の記録、アカウントや使用量のデータは公開されません。同梱のプラグインはどちらも申請していません。',
