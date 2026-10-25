@@ -246,6 +246,8 @@ async def test_a_wake_refused_up_front_does_not_start_the_cooldown(env: Env) -> 
 async def test_cooldown_and_daily_cap(tmp_path) -> None:
     clock = FakeClock()
     env = await _make_env(tmp_path, clock)
+    # Pinned so a run that crosses local midnight does not reset the cap halfway.
+    env.m._wake_limits.today = lambda: "today"
     try:
         fw = _wakeable(env)
         fw.result = {"ok": False, "code": "window-not-ready", "started": True}
