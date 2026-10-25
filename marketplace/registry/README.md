@@ -386,10 +386,10 @@ NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
 scripts/publish-first-party-plugins.sh
 ```
 
-The script builds, packs, signs and publishes `navide.git` as `universal` and
-`navide.plans` for the host target (for example `darwin-arm64`), reusing the
-`navide-plugin` CLI. `--skip-build` reuses `dist-plugins/`, `--only git|plans`
-publishes one. Plans carries a PyInstaller backend, so each other target must
+The script builds, packs, signs and publishes `navide.git` and
+`navide.mini-ide` as `universal` and `navide.plans` for the host target (for
+example `darwin-arm64`), reusing the `navide-plugin` CLI. `--skip-build` reuses
+`dist-plugins/`, `--only git|plans|mini-ide` publishes one. Plans carries a PyInstaller backend, so each other target must
 be built on a machine of that platform and architecture.
 
 Running the script with the same version on each platform adds that

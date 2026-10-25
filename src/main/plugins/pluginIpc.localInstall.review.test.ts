@@ -302,11 +302,23 @@ describe('HIGH-2: view storage when the source changes', () => {
     await marketplaceInstall('acme.todo', '1.0.0')
     const stored = writeStorage('acme.todo', '1.0.0')
     writeFileSync(picked, vsix('acme.todo', '1.0.0'))
-    await call('plugins:installFromFile')
+    // Refused when the file is prepared, before any consent dialog, in the
+    // words staging uses; nothing is held for a commit.
+    await expect(call('plugins:installFromFile')).rejects.toThrow(/immutable candidate already exists for acme\.todo@1\.0\.0/)
     await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true, replaceConfirmed: true }))
-      .rejects.toThrow(/immutable candidate already exists/)
+      .rejects.toThrow(/no prepared local install/)
     expect(existsSync(stored)).toBe(true)
     expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', source: 'marketplace' }])
+  })
+
+  it('refuses a local file of the version a local file already installed, at prepare', async () => {
+    // The user's case: the same version number packaged again.
+    await fileInstall('acme.todo', '1.0.0')
+    writeFileSync(picked, vsix('acme.todo', '1.0.0'))
+    await expect(call('plugins:installFromFile')).rejects.toThrow(/immutable candidate already exists for acme\.todo@1\.0\.0/)
+    // A bumped version prepares as before.
+    writeFileSync(picked, vsix('acme.todo', '1.0.1'))
+    await expect(call('plugins:installFromFile')).resolves.toMatchObject({ id: 'acme.todo', version: '1.0.1' })
   })
 
   it('keeps the storage of an update within the Marketplace exactly as on main', async () => {
