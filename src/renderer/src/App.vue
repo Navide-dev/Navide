@@ -28,7 +28,7 @@ import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
-import { chromeSourceMark, pluginSourceLabel } from './lib/pluginSourceMark'
+import { chromeSourceMark, pluginDisclosureTitle, pluginIconFallback } from './lib/pluginSourceMark'
 import { subtreeSignals } from './lib/paneSubtreeStatus'
 import { closeAdvisoriesFor } from './lib/paneCloseAdvisories'
 import { interruptAdvisoriesFor } from './lib/paneInterruptAdvisories'
@@ -1212,10 +1212,11 @@ const windowPluginContributions = computed(() =>
   )
 )
 
-/** K2: a local or test package names its source on its title-bar button. */
+/** A title-bar plugin button names itself, its plugin id, publisher and source:
+ *  an icon-less one shows a letter of the plugin's title, which alone could
+ *  pass for a native control. */
 function titlebarPluginLabel(contribution: PluginRegionContribution): string {
-  const mark = chromeSourceMark(contribution.source)
-  return mark ? `${contribution.title} · ${pluginSourceLabel(i18n.global.t, mark)}` : contribution.title
+  return pluginDisclosureTitle(i18n.global.t, contribution)
 }
 
 // The titlebar shows these as icons, matching the gear beside them. A plugin
@@ -22642,7 +22643,7 @@ function paneIsCommander(p: ActivePane): boolean {
             alt=""
             @error="markPluginIconFailed(contribution)"
           />
-          <span v-else class="titlebar-plugin-fallback" aria-hidden="true">◇</span>
+          <span v-else class="titlebar-plugin-fallback" aria-hidden="true">{{ pluginIconFallback(contribution.title) }}</span>
           <!-- K2: a local or test package keeps a mark in Navide's own title bar. -->
           <span v-if="chromeSourceMark(contribution.source)" class="titlebar-plugin-source-mark" aria-hidden="true"></span>
         </button>
@@ -24583,6 +24584,14 @@ function paneIsCommander(p: ActivePane): boolean {
   background: var(--trust-unsigned-fg);
 }
 .titlebar-plugin-fallback {
+  /* A fixed, clipping box: the glyph is the plugin's own title text, and a
+     single wide character must not spill over the native buttons beside it. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  overflow: hidden;
   font-size: 12px;
   line-height: 1;
 }
