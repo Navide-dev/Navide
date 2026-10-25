@@ -69,6 +69,14 @@ describe('titlebar button order', () => {
     )
   })
 
+  it('clips the fallback glyph to a fixed box', () => {
+    // The glyph is the plugin's own text: one wide character (﷽) must not
+    // spill over the gear beside it (review M1 on #644).
+    const rule = appSource.match(/\.titlebar-plugin-fallback \{[^}]*\}/)?.[0] ?? ''
+    expect(rule).toContain('overflow: hidden')
+    expect(rule).toMatch(/width: 14px;[\s\S]*height: 14px;/)
+  })
+
   it('keeps the spacer that pins the cluster right', () => {
     // Without flex:1 the cluster would not be right-aligned and the order
     // above would stop meaning anything.

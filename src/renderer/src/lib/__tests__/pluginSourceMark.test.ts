@@ -21,7 +21,7 @@ describe('pluginIconFallback', () => {
   })
 
   it('keeps a joined emoji sequence whole', () => {
-    const family = '\u{1F468}‍\u{1F469}‍\u{1F467}'
+    const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}'
     expect(pluginIconFallback(`${family} Family`)).toBe(family)
   })
 
@@ -30,12 +30,31 @@ describe('pluginIconFallback', () => {
   })
 
   it('skips leading spaces and invisible characters', () => {
-    expect(pluginIconFallback(' ​⁦git')).toBe('G')
+    expect(pluginIconFallback(' \u200B\u2066git')).toBe('G')
   })
 
   it('keeps ◇ for a title with nothing visible in it', () => {
     expect(pluginIconFallback('')).toBe('◇')
-    expect(pluginIconFallback(' ​ ')).toBe('◇')
+    expect(pluginIconFallback(' \u200B ')).toBe('◇')
+  })
+
+  // Blank-looking letters and marks from the shared invisible list (review L1 on #644).
+  it.each(['\u3164', '\u115F', '\u2800', '\u034F', '\uFE0F', '\u0301'])(
+    'skips the blank-looking U+%s at the start',
+    (blank) => {
+      expect(pluginIconFallback(`${blank}files`)).toBe('F')
+      expect(pluginIconFallback(blank.repeat(3))).toBe('◇')
+    }
+  )
+
+  it('falls back to ◇ for a letter stacked with dozens of combining marks', () => {
+    expect(pluginIconFallback(`Z${'\u0301'.repeat(79)}algo`)).toBe('◇')
+  })
+
+  it('keeps a skin-toned family emoji, the longest common grapheme', () => {
+    const family = '\u{1F468}\u{1F3FD}\u200D\u{1F469}\u{1F3FD}\u200D\u{1F467}\u{1F3FD}\u200D\u{1F466}\u{1F3FD}'
+    expect(Array.from(family)).toHaveLength(11)
+    expect(pluginIconFallback(family)).toBe(family)
   })
 })
 
@@ -70,7 +89,7 @@ describe('pluginDisclosureTitle', () => {
 
   it('reveals invisible characters in the plugin\'s own text', () => {
     withEnglish(() => {
-      expect(pluginDisclosureTitle(t, { title: 'Git‮', pluginId: 'acme.files' }))
+      expect(pluginDisclosureTitle(t, { title: 'Git\u202E', pluginId: 'acme.files' }))
         .toContain('Navide plugin: Git\\u{202e}')
     })
   })

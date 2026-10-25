@@ -24562,6 +24562,14 @@ function paneIsCommander(p: ActivePane): boolean {
   background: var(--trust-unsigned-fg);
 }
 .titlebar-plugin-fallback {
+  /* A fixed, clipping box: the glyph is the plugin's own title text, and a
+     single wide character must not spill over the native buttons beside it. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  overflow: hidden;
   font-size: 12px;
   line-height: 1;
 }

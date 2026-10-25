@@ -36,6 +36,8 @@ const emitManifest: Plugin = {
     const manifest = { ...sourceManifest, version: artifactVersion }
     mkdirSync(outputRoot, { recursive: true })
     writeFileSync(resolve(outputRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+    // The manifest's icon lives in the package source (assets/), so a consumer
+    // building from a copy of this package brings it along with frontend/.
     const assetsDir = resolve(outputRoot, 'assets')
     mkdirSync(assetsDir, { recursive: true })
     copyFileSync(resolve(packageRoot, 'assets/mini-ide.png'), resolve(assetsDir, 'mini-ide.png'))

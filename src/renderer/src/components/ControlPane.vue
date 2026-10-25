@@ -3235,8 +3235,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :data-legacy-git-tab="t.id === 'git' && legacyGitRecovery ? '' : undefined"
         :data-plugin-contribution="t.id === 'git' && !legacyGitRecovery ? gitPluginTab?.contributionKey : undefined"
         :title="t.id === 'git' && gitPluginTab
-          ? `${gitPluginTab.title} (${formatKeySpec(sidebarTabKeySpec(4))})`
+          ? `${pluginTabLabel(gitPluginTab)} (${formatKeySpec(sidebarTabKeySpec(4))})`
           : `${$t(t.label)} (${formatKeySpec(sidebarTabKeySpec(Number(t.shortcut)))})`"
+        :aria-label="t.id === 'git' && gitPluginTab ? pluginTabLabel(gitPluginTab) : undefined"
         @click="selectSidebarTab(t.id)"
       >
         <template v-if="t.id === 'git' && !legacyGitRecovery && gitPluginTab">
@@ -4791,6 +4792,18 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
   color: var(--text-on-emphasis);
   border-radius: 999px;
   padding: 0 3px;
+}
+/* A fixed, clipping box: the glyph is the plugin's own title text, and a
+   single wide character must not spill over the native tabs beside it. */
+.plugin-tab-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1;
 }
 .plugin-tab-source-mark {
   position: absolute;

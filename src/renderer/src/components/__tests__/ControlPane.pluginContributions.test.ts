@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
 import ControlPane from '../ControlPane.vue'
@@ -194,6 +196,26 @@ describe('ControlPane manifest-driven plugin placement', () => {
 
     expect(wrapper.get('.tab-btn[data-tab="git"] .plugin-tab-fallback').text()).toBe('G')
     wrapper.unmount()
+  })
+
+  it('discloses the Git slot\'s plugin like any other plugin tab', () => {
+    const saved = i18n.global.locale.value
+    i18n.global.locale.value = 'en-US'
+    const wrapper = mountPane([contribution({ pluginId: 'navide.git', contributionKey: 'navide.git.left', title: 'Git', source: 'factory-bundled' })])
+    const tab = wrapper.get('.tab-btn[data-tab="git"]')
+    const disclosure = 'Navide plugin: Git · navide.git · Publisher: navide · Built into Navide'
+    expect(tab.attributes('aria-label')).toBe(disclosure)
+    expect(tab.attributes('title')).toBe(`${disclosure} (⌘4)`)
+    wrapper.unmount()
+    i18n.global.locale.value = saved
+  })
+
+  it('clips the fallback glyph to a fixed box', () => {
+    // The glyph is the plugin's own text (review M1 on #644).
+    const source = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/ControlPane.vue'), 'utf8')
+    const rule = source.match(/\n\.plugin-tab-fallback \{[^}]*\}/)?.[0] ?? ''
+    expect(rule).toContain('overflow: hidden')
+    expect(rule).toMatch(/width: 15px;[\s\S]*height: 15px;/)
   })
 
   it('uses the generic fallback when a catalog icon fails to load', async () => {

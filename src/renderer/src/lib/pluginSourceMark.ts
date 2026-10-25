@@ -1,5 +1,5 @@
 import type { PluginSource } from '../../../shared/pluginSource'
-import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
+import { INVISIBLE_CHARACTERS, revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 
 /** The badge text of a source. A test build prints its expiry as YYYY-MM-DD,
  *  or says the expiry is unknown when the Host sent none. Its review depends
@@ -78,17 +78,25 @@ export function pluginDisclosureTitle(
   return parts.join(' · ')
 }
 
-const SKIPPED_LEADING = /^[\p{Z}\p{Cc}\p{Cf}]+/u
+/** Spaces, controls, format characters, the shared invisible-character list
+ *  and combining marks: none of them can start a visible glyph. */
+const SKIPPED_LEADING = new RegExp(`^[\\p{Z}\\p{Cc}\\p{Cf}\\p{M}${INVISIBLE_CHARACTERS}]+`, 'u')
 const LATIN = /\p{Script=Latin}/u
+/** The longest grapheme kept, in code points. A skin-toned family emoji is
+ *  11; a letter stacked with dozens of combining marks is one grapheme too,
+ *  and would be drawn far outside the button. */
+const MAX_GLYPH_CODE_POINTS = 11
 
 /** What an icon-less plugin button shows: the first user-perceived character
  *  of its title (a whole emoji or CJK character, never half a surrogate pair),
  *  upper-cased when Latin, so two icon-less plugins can be told apart. Leading
- *  spaces and invisible characters are skipped; ◇ remains for a title with
- *  nothing visible in it. */
+ *  invisible characters and marks are skipped; ◇ remains for a title with
+ *  nothing visible in it and for an oversized grapheme. The button also clips
+ *  the glyph to its own box, so a wide single character cannot cover the
+ *  native controls beside it. */
 export function pluginIconFallback(title: string): string {
   const text = title.replace(SKIPPED_LEADING, '')
   const first = new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)[Symbol.iterator]().next()
-  if (first.done) return '◇'
+  if (first.done || Array.from(first.value.segment).length > MAX_GLYPH_CODE_POINTS) return '◇'
   return LATIN.test(first.value.segment) ? first.value.segment.toUpperCase() : first.value.segment
 }
