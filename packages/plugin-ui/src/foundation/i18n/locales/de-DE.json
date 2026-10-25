@@ -3485,7 +3485,7 @@
             "git": {
               "title": "Git (Quellcodeverwaltung)",
               "tag": "4. Tab der Seitenleiste",
-              "text": "Der Tooltip lautet <em>Git (⌘4)</em>. Im Hauptfenster öffnet <kbd class=\"cwh-kbd\">⌘⇧G</kbd> direkt das <strong>eigene Git-Fenster</strong>; ebenso <em>In neuem Fenster öffnen</em> im Kopf des Panels."
+              "text": "Ist Git als Navide-Plug-in geladen, lautet der Tooltip <em>Navide-Plug-in: Git · navide.git · Herausgeber: navide · In Navide integriert (⌘4)</em>, sonst <em>Git (⌘4)</em>. Im Hauptfenster öffnet <kbd class=\"cwh-kbd\">⌘⇧G</kbd> direkt das <strong>eigene Git-Fenster</strong>; ebenso <em>In neuem Fenster öffnen</em> im Kopf des Panels."
             },
             "plans": {
               "title": "Plans (Plan-Dokumente)",

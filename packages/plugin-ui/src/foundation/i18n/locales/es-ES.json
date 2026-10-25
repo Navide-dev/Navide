@@ -3485,7 +3485,7 @@
             "git": {
               "title": "Git (control de código fuente)",
               "tag": "4.ª pestaña de la barra lateral",
-              "text": "La descripción emergente dice <em>Git (⌘4)</em>. En la ventana principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre directamente la <strong>ventana de Git independiente</strong>; lo mismo hace <em>Abrir en una ventana nueva</em> en la cabecera del panel."
+              "text": "Cuando Git se carga como complemento de Navide, la descripción emergente dice <em>Complemento de Navide: Git · navide.git · Editor: navide · Integrado en Navide (⌘4)</em>; si no, dice <em>Git (⌘4)</em>. En la ventana principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre directamente la <strong>ventana de Git independiente</strong>; lo mismo hace <em>Abrir en una ventana nueva</em> en la cabecera del panel."
             },
             "plans": {
               "title": "Plans (documentos de plan)",

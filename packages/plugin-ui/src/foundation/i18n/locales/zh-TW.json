@@ -3485,7 +3485,7 @@
             "git": {
               "title": "Git（原始碼控制）",
               "tag": "側欄第 4 個分頁",
-              "text": "工具提示寫著 <em>Git (⌘4)</em>。在主視窗按 <kbd class=\"cwh-kbd\">⌘⇧G</kbd> 會直接開<strong>獨立的 Git 視窗</strong>；面板標題列的 <em>在新視窗開啟</em> 也一樣。"
+              "text": "Git 以 Navide 外掛載入時，工具提示寫著 <em>Navide 外掛：Git · navide.git · 發佈者：navide · Navide 內建 (⌘4)</em>；沒有載入時寫著 <em>Git (⌘4)</em>。在主視窗按 <kbd class=\"cwh-kbd\">⌘⇧G</kbd> 會直接開<strong>獨立的 Git 視窗</strong>；面板標題列的 <em>在新視窗開啟</em> 也一樣。"
             },
             "plans": {
               "title": "Plans（計畫文件）",

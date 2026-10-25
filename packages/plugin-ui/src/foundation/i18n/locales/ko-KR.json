@@ -3485,7 +3485,7 @@
             "git": {
               "title": "Git(소스 제어)",
               "tag": "사이드바 네 번째 탭",
-              "text": "툴팁은 <em>Git (⌘4)</em>예요. 메인 창에서 <kbd class=\"cwh-kbd\">⌘⇧G</kbd>를 누르면 <strong>별도의 Git 창</strong>이 바로 열리며, 패널 헤더의 <em>새 창에서 열기</em>도 마찬가지예요."
+              "text": "Git이 Navide 플러그인으로 로드되어 있으면 툴팁은 <em>Navide 플러그인: Git · navide.git · 게시자: navide · Navide에 기본 제공 (⌘4)</em>이고, 로드되지 않았으면 <em>Git (⌘4)</em>예요. 메인 창에서 <kbd class=\"cwh-kbd\">⌘⇧G</kbd>를 누르면 <strong>별도의 Git 창</strong>이 바로 열리며, 패널 헤더의 <em>새 창에서 열기</em>도 마찬가지예요."
             },
             "plans": {
               "title": "계획(계획 문서)",

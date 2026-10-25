@@ -3485,7 +3485,7 @@
             "git": {
               "title": "Git（ソース管理）",
               "tag": "サイドバーの 4 番目のタブ",
-              "text": "ツールチップは <em>Git (⌘4)</em> です。メインウィンドウで <kbd class=\"cwh-kbd\">⌘⇧G</kbd> を押すと、<strong>独立した Git ウィンドウ</strong>を直接開きます。パネルのヘッダーの<em>新しいウィンドウで開く</em>でも同じです。"
+              "text": "Git が Navide プラグインとして読み込まれているとき、ツールチップは <em>Navide プラグイン：Git · navide.git · 発行者：navide · Navide に組み込み (⌘4)</em> です。読み込まれていないときは <em>Git (⌘4)</em> です。メインウィンドウで <kbd class=\"cwh-kbd\">⌘⇧G</kbd> を押すと、<strong>独立した Git ウィンドウ</strong>を直接開きます。パネルのヘッダーの<em>新しいウィンドウで開く</em>でも同じです。"
             },
             "plans": {
               "title": "プラン（プラン文書）",

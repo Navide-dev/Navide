@@ -3485,7 +3485,7 @@
             "git": {
               "title": "Git (Source Control)",
               "tag": "4th sidebar tab",
-              "text": "The tooltip reads <em>Git (⌘4)</em>. In the main window <kbd class=\"cwh-kbd\">⌘⇧G</kbd> opens the <strong>separate Git window</strong> directly; so does <em>Open in New Window</em> in the panel header."
+              "text": "When Git is loaded as a Navide plugin, the tooltip reads <em>Navide plugin: Git · navide.git · Publisher: navide · Built into Navide (⌘4)</em>; otherwise it reads <em>Git (⌘4)</em>. In the main window <kbd class=\"cwh-kbd\">⌘⇧G</kbd> opens the <strong>separate Git window</strong> directly; so does <em>Open in New Window</em> in the panel header."
             },
             "plans": {
               "title": "Plans (plan documents)",

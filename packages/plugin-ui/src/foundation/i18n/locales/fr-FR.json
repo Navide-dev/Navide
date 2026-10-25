@@ -3485,7 +3485,7 @@
             "git": {
               "title": "Git (contrôle de code source)",
               "tag": "4e onglet de la barre latérale",
-              "text": "L’info-bulle indique <em>Git (⌘4)</em>. Dans la fenêtre principale, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> ouvre directement la <strong>fenêtre Git distincte</strong> ; <em>Ouvrir dans une nouvelle fenêtre</em>, dans l’en-tête du panneau, fait de même."
+              "text": "Quand Git est chargé comme plugin Navide, l’info-bulle indique <em>Plugin Navide : Git · navide.git · Éditeur : navide · Intégré à Navide (⌘4)</em> ; sinon, elle indique <em>Git (⌘4)</em>. Dans la fenêtre principale, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> ouvre directement la <strong>fenêtre Git distincte</strong> ; <em>Ouvrir dans une nouvelle fenêtre</em>, dans l’en-tête du panneau, fait de même."
             },
             "plans": {
               "title": "Plans (documents de plan)",

@@ -3485,7 +3485,7 @@
             "git": {
               "title": "Git (quản lý mã nguồn)",
               "tag": "tab thứ 4 trên thanh bên",
-              "text": "Chú thích ghi <em>Git (⌘4)</em>. Trong cửa sổ chính, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> mở thẳng <strong>cửa sổ Git riêng</strong>; <em>Mở trong cửa sổ mới</em> ở đầu bảng cũng vậy."
+              "text": "Khi Git được tải dưới dạng plugin Navide, chú thích ghi <em>Plugin Navide: Git · navide.git · Nhà phát hành: navide · Tích hợp sẵn trong Navide (⌘4)</em>; nếu không, chú thích ghi <em>Git (⌘4)</em>. Trong cửa sổ chính, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> mở thẳng <strong>cửa sổ Git riêng</strong>; <em>Mở trong cửa sổ mới</em> ở đầu bảng cũng vậy."
             },
             "plans": {
               "title": "Plans (tài liệu Plan)",

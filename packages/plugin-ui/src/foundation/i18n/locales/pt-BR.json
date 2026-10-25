@@ -3485,7 +3485,7 @@
             "git": {
               "title": "Git (controle do código-fonte)",
               "tag": "4ª guia da barra lateral",
-              "text": "A dica de ferramenta diz <em>Git (⌘4)</em>. Na janela principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre direto a <strong>janela separada do Git</strong>; <em>Abrir em nova janela</em>, no cabeçalho do painel, faz o mesmo."
+              "text": "Quando o Git é carregado como plug-in do Navide, a dica de ferramenta diz <em>Plug-in do Navide: Git · navide.git · Publicador: navide · Integrado ao Navide (⌘4)</em>; caso contrário, diz <em>Git (⌘4)</em>. Na janela principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre direto a <strong>janela separada do Git</strong>; <em>Abrir em nova janela</em>, no cabeçalho do painel, faz o mesmo."
             },
             "plans": {
               "title": "Plans (documentos de plano)",
