@@ -1591,12 +1591,24 @@ watch(installed, () => {
   .ext-md-row > :first-child {
     display: none;
   }
-  /* The name keeps the row; the risk and warning marks drop to the line under it. */
+  /* The name keeps the whole first line; the version and the risk and warning
+     marks share the second. */
   .ext-md-row {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'name name' 'sub end';
+    row-gap: 2px;
+  }
+  .ext-md-row-text {
+    display: contents;
+  }
+  .ext-md-row-name {
+    grid-area: name;
+  }
+  .ext-md-row-sub {
+    grid-area: sub;
   }
   .ext-md-row-end {
-    justify-content: flex-start;
+    grid-area: end;
   }
   .ext-md-detail {
     padding: var(--space-4);
@@ -1795,11 +1807,8 @@ watch(installed, () => {
 .ext-card-status > .ext-badge.ext-permission-change--same {
   color: var(--text-secondary);
 }
-.ext-card-status > * + *::before {
-  content: '·';
-  margin-right: 6px;
-  color: var(--text-secondary);
-  font-weight: 400;
+.ext-card-status {
+  column-gap: 12px;
 }
 /* Why the risk level: the disclosure's clauses on one line under the status. */
 .ext-risk-reason {
