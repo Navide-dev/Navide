@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import threading
 from pathlib import Path
 
 from watchdog.events import (
@@ -456,3 +457,105 @@ def test_each_path_is_resolved_once_per_event(
         assert dirty == [[("src/a.py", "deleted"), ("src/b.py", "created")]]
     else:
         assert dirty == [[("src/main.py", "modified")]]
+
+
+# ── #622: a burst of events wakes the loop a bounded number of times ───────
+#
+# Every relevant event used to hop to the loop with its own
+# call_soon_threadsafe, and each of those cancelled and re-armed the debounce
+# timer: a checkout, or a flood like #622's, put one callback, one wake-up
+# write and one timer per event onto the event loop. The burst now coalesces
+# on the observer side and the loop drains it in one go.
+
+
+@pytest.mark.asyncio
+async def test_an_event_flood_schedules_a_bounded_number_of_loop_callbacks() -> None:
+    fired: list[tuple[str, list[tuple[str, str]]]] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append((ws, paths))
+
+    loop = asyncio.get_running_loop()
+    watcher = GitWatcher(sink, debounce_s=0.2, max_wait_s=2.0)
+    watcher._loop = loop
+    hops = 0
+    orig = loop.call_soon_threadsafe
+
+    def counting(*args, **kwargs):
+        nonlocal hops
+        hops += 1
+        return orig(*args, **kwargs)
+
+    loop.call_soon_threadsafe = counting  # type: ignore[method-assign]
+    try:
+        sent = {(f"src/f{i}.py", "modified") for i in range(5000)}
+
+        def flood() -> None:
+            # The observer thread, marking dirty once per event.
+            for pair in sorted(sent):
+                watcher._mark_dirty_threadsafe("/ws", [pair])
+            watcher._mark_dirty_threadsafe("/other", [])
+
+        await asyncio.to_thread(flood)
+        assert await wait_until(lambda: len(fired) == 2, timeout=5.0)
+    finally:
+        loop.call_soon_threadsafe = orig  # type: ignore[method-assign]
+    assert hops <= 50, hops
+    # Nothing was lost on the way: one refresh per workspace, every path in it.
+    by_ws = dict(fired)
+    assert set(by_ws["/ws"]) == sent
+    assert by_ws["/other"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_mark_arriving_while_the_inbox_drains_is_not_lost() -> None:
+    # The drain clears its queued flag before it hands the batch on, so a mark
+    # that lands mid-drain queues the next drain itself. Reset the flag after
+    # the batch instead and that mark sits in the inbox until something else
+    # happens to wake the loop, which may be never.
+    fired: list[str] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append(ws)
+
+    w = GitWatcher(sink, debounce_s=0.05, max_wait_s=0.5)
+    w._loop = asyncio.get_running_loop()
+    orig = w._schedule_fire
+    injected = False
+
+    def sched(ws: str, paths: list[tuple[str, str]]) -> None:
+        nonlocal injected
+        orig(ws, paths)
+        if not injected:
+            injected = True
+            # The observer thread marking dirty while this drain is running.
+            t = threading.Thread(
+                target=w._mark_dirty_threadsafe, args=("/late", [("late.py", "modified")])
+            )
+            t.start()
+            t.join()
+
+    w._schedule_fire = sched  # type: ignore[method-assign]
+    await asyncio.to_thread(w._mark_dirty_threadsafe, "/ws", [("a.py", "modified")])
+    assert await wait_until(lambda: "/late" in fired, timeout=2.0)
+
+
+@pytest.mark.asyncio
+async def test_a_restarted_watcher_drains_again() -> None:
+    # A drain queued on a loop that closed before running it leaves the flag
+    # set; start() must clear it, or every later mark is swallowed.
+    fired: list[str] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append(ws)
+
+    w = GitWatcher(sink, debounce_s=0.05, max_wait_s=0.5)
+    w._drain_queued = True
+    w._inbox = {"/stale": []}
+    w.start()
+    try:
+        await asyncio.to_thread(w._mark_dirty_threadsafe, "/ws", [("a.py", "modified")])
+        assert await wait_until(lambda: "/ws" in fired, timeout=2.0)
+        assert "/stale" not in fired
+    finally:
+        w.stop()
