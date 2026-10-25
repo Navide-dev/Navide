@@ -172,6 +172,7 @@ onBeforeUnmount(stopPolling)
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  container: ledger / inline-size;
   /* Same 22px gutter as the settings blocks above it on the page. */
   padding: var(--space-1) 22px var(--space-6);
   font-size: var(--font-sm);
@@ -194,6 +195,43 @@ onBeforeUnmount(stopPolling)
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
+}
+/* Wide enough, the records read as a ledger: one row per Navide plugin with
+   its name, its risk / review / scan flags and its recent activity in aligned
+   columns, and the expanders (full record, activity panel) under the row. */
+@container ledger (min-width: 680px) {
+  .nv-overview-entry {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.4fr);
+    column-gap: var(--space-4);
+    row-gap: var(--space-2);
+    align-items: start;
+  }
+  .nv-overview-entry > .nv-overview-head {
+    display: contents;
+  }
+  .nv-overview-entry .nv-overview-name {
+    grid-column: 1;
+    grid-row: 1;
+    flex-wrap: wrap;
+  }
+  .nv-overview-entry .nv-overview-flags {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .nv-overview-entry > .nv-overview-activity {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .nv-overview-entry > :not(.nv-overview-head):not(.nv-overview-activity) {
+    grid-column: 1 / -1;
+  }
+  /* The two expanders sit under the name, so a closed record stays one row high. */
+  .nv-overview-entry > .nv-overview-footer {
+    grid-column: 1;
+    grid-row: 2;
+    margin-top: calc(-1 * var(--space-2));
+  }
 }
 .nv-overview-head {
   display: flex;
@@ -232,6 +270,9 @@ onBeforeUnmount(stopPolling)
   display: flex;
   flex-wrap: wrap;
   gap: 0 var(--space-5);
+}
+.nv-overview-footer > details {
+  flex-basis: auto;
 }
 .nv-overview-footer > details[open] {
   flex-basis: 100%;

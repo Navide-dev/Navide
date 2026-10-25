@@ -212,15 +212,18 @@ watch(installed, refresh)
   font-weight: 650;
   letter-spacing: -0.01em;
 }
-/* The warning is a row of the switch card, tinted and marked on its left edge. */
+/* The warning is a row of the switch card, marked by its icon and a thin
+   edge rather than a fill, so the switch below stays the row's subject. */
 .native-backends-callout {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-row-x);
   box-shadow: inset 2px 0 0 var(--risk-fg);
-  background: var(--risk-subtle);
   color: var(--text-primary);
+}
+.native-backends-callout .native-backends-description {
+  max-width: 72ch;
 }
 .native-backends-icon {
   flex: none;
@@ -334,5 +337,10 @@ watch(installed, refresh)
   align-items: center;
   gap: var(--space-2);
   overflow-wrap: anywhere;
+}
+/* Long setting descriptions keep a readable line length. */
+:deep(.setting-row-desc) {
+  max-width: 72ch;
+  line-height: var(--lh-base);
 }
 </style>

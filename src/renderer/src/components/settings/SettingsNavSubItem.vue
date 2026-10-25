@@ -32,8 +32,8 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 28px;
-  padding: 4px var(--space-row-x) 4px calc(var(--space-row-x) + 24px);
+  min-height: 32px;
+  padding: 4px var(--space-row-x) 4px calc(var(--space-row-x) + 16px);
   border: none;
   border-radius: var(--radius-control);
   background: transparent;
@@ -52,6 +52,7 @@ const emit = defineEmits<{
   outline-offset: -1px;
 }
 .settings-nav-subitem.active {
+  background: var(--bg-selected);
   color: var(--accent-bright);
   font-weight: 600;
 }

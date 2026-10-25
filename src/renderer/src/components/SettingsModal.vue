@@ -5309,7 +5309,7 @@ watch(activeTab, (tab) => {
   outline: 2px solid var(--accent-focus);
   outline-offset: -2px;
 }
-.extensions-scroll { padding-top: var(--space-4); }
+.extensions-scroll { padding-top: var(--space-2); }
 .ext-policy-block > .settings-meta-row.inline { margin: 0 22px 14px; background: var(--bg-subtle); }
 .settings-meta-row {
   display: flex;

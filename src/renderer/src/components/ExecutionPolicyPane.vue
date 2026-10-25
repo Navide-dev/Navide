@@ -523,9 +523,9 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       <p class="ep-hint">{{ $t('settings.executionPolicy.recommendationHint') }}</p>
       <p class="ep-recommendation-state">{{ recommendationStateLabel(recommendation.state) }}</p>
       <div v-if="recommendation.policy" class="ep-policy-card ep-recommendation-policy">
-        <div><strong>{{ $t('settings.executionPolicy.modeLabel') }}</strong>: {{ modeLabel(recommendation.policy.mode) }}</div>
-        <div><strong>{{ $t('settings.executionPolicy.systemLabel') }}</strong>: {{ listOrNone(recommendation.policy.system) }}</div>
-        <div><strong>{{ $t('settings.executionPolicy.shellLabel') }}</strong>: {{ listOrNone(recommendation.policy.shell) }}</div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.modeLabel') }}</span><span class="ep-v">{{ modeLabel(recommendation.policy.mode) }}</span></div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(recommendation.policy.system) }}</span></div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(recommendation.policy.shell) }}</span></div>
       </div>
       <div v-if="recommendation.state === 'valid' && recommendationIsHighRisk" class="ep-warning">
         <p>{{ $t(highRiskWarningKey(recommendation.policy?.mode)) }}</p>
@@ -627,9 +627,9 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
       </div>
       <p class="ep-hint">{{ $t('settings.executionPolicy.hostDefaultHint') }}</p>
       <div v-if="snapshot" class="ep-policy-card">
-        <div><strong>{{ $t('settings.executionPolicy.modeLabel') }}</strong>: {{ modeLabel(snapshot.defaultPolicy.mode) }}</div>
-        <div><strong>{{ $t('settings.executionPolicy.systemLabel') }}</strong>: {{ listOrNone(snapshot.defaultPolicy.system) }}</div>
-        <div><strong>{{ $t('settings.executionPolicy.shellLabel') }}</strong>: {{ listOrNone(snapshot.defaultPolicy.shell) }}</div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.modeLabel') }}</span><span class="ep-v">{{ modeLabel(snapshot.defaultPolicy.mode) }}</span></div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.systemLabel') }}</span><span class="ep-v">{{ listOrNone(snapshot.defaultPolicy.system) }}</span></div>
+        <div><span class="ep-k">{{ $t('settings.executionPolicy.shellLabel') }}</span><span class="ep-v">{{ listOrNone(snapshot.defaultPolicy.shell) }}</span></div>
       </div>
     </section>
 
@@ -752,16 +752,23 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .execution-policy-pane .nv-btn:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: 2px; }
 .ep-status-active, .ep-status-healthy { background: var(--success-subtle); color: var(--success-fg); }
 .ep-status-corrupt, .ep-status-stale, .ep-status-unavailable, .ep-status-unsafe-entry, .ep-status-directory-unsafe, .ep-status-directory-unavailable { background: var(--risk-subtle); color: var(--risk-fg); }
-/* Read-only policies: the three fields side by side, wrapping when narrow. */
+/* Read-only policies as definition rows: the field on the left, its value on
+   the right, hairlines between — the settings row, read-only. */
 .ep-policy-card {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px var(--space-6);
-  margin-bottom: var(--space-3);
-  font-size: var(--font-xs);
+  display: grid;
+  margin: 0 calc(-1 * var(--space-row-x)) var(--space-3);
+  font-size: var(--font-sm);
   line-height: var(--lh-base);
 }
-.ep-policy-card strong { color: var(--text-secondary); font-weight: 500; }
+.ep-policy-card > div {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: 6px var(--space-row-x);
+  border-top: 1px solid var(--border-muted);
+}
+.ep-policy-card .ep-k { color: var(--text-secondary); }
+.ep-policy-card .ep-v { color: var(--text-primary); font-family: var(--font-mono); font-size: var(--font-xs); }
 .ep-rebuild-confirm, .ep-source-reset-confirm {
   margin-top: var(--space-3);
   padding: var(--space-3) var(--space-4);

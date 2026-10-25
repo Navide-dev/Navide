@@ -730,7 +730,6 @@ watch(installed, () => {
          the page (only the selected one is shown), so nothing a card offers
          depends on the selection. -->
     <div v-show="props.page === 'plugins'" class="ext-md-toolbar">
-      <h3 class="ext-section-title ext-md-title">{{ $t('settings.extensions.listTitle') }}</h3>
       <!-- Updates are for installed packages; with none installed the line
            would contradict the empty list. -->
       <span v-if="pluginUpdates.count.value && nonFactoryInstalled.length" class="ext-updates-summary" role="status">
@@ -1358,16 +1357,15 @@ watch(installed, () => {
   gap: var(--space-2);
   margin-bottom: var(--space-3);
 }
-.ext-md-toolbar .ext-md-title {
-  margin: 0;
-}
 .ext-md-toolbar .ext-install-file {
   margin-left: auto;
 }
 .ext-md {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  align-items: stretch;
+  /* The list and the card fill the page rather than floating over empty space. */
+  min-height: min(600px, 68vh);
   margin-bottom: var(--space-6);
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-md);
@@ -1589,6 +1587,13 @@ watch(installed, () => {
   .ext-md-row > :first-child {
     display: none;
   }
+  /* The name keeps the row; the risk and warning marks drop to the line under it. */
+  .ext-md-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ext-md-row-end {
+    justify-content: flex-start;
+  }
   .ext-md-detail {
     padding: var(--space-4);
   }
@@ -1717,8 +1722,7 @@ watch(installed, () => {
   grid-row: 1;
 }
 .ext-factory > .ext-actions {
-  grid-column: 2;
-  grid-row: 1;
+  grid-column: 1 / -1;
 }
 .ext-row-head {
   display: flex;
@@ -1769,6 +1773,29 @@ watch(installed, () => {
   display: grid;
   gap: 4px;
   container: ext-row / inline-size;
+}
+/* The card's status line: the risk level is the one filled badge; review,
+   update and the other states read as text after it, dot-separated, keeping
+   their colour where it means a warning. */
+.ext-card-status > .ext-badge:not(.ext-md-risk),
+.ext-card-status :deep(.nv-source-badge) {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--font-xs);
+  font-weight: 500;
+}
+.ext-card-status > .ext-badge.ext-candidate,
+.ext-card-status > .ext-badge.ext-update-badge,
+.ext-card-status > .ext-badge.ext-permission-change--same {
+  color: var(--text-secondary);
+}
+.ext-card-status > * + *::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 /* Why the risk level: the disclosure's clauses on one line under the status. */
 .ext-risk-reason {
@@ -2163,5 +2190,10 @@ watch(installed, () => {
   color: var(--text-secondary);
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
+}
+/* Long setting descriptions keep a readable line length. */
+:deep(.setting-row-desc) {
+  max-width: 72ch;
+  line-height: var(--lh-base);
 }
 </style>
