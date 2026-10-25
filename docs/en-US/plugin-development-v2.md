@@ -1689,10 +1689,14 @@ Limits a plugin must plan for:
 - The message log keeps only a bounded window of recent rows for the whole
   machine. Compare `oldestCreatedAt` with your last `since`: when it is newer,
   rows you never saw were pruned.
-- Senders and recipients are recorded by messaging name, so attribution is
-  best effort: a message logged before a pane was renamed no longer matches
-  that pane, and two panes with the same bare name in different workspaces
-  cannot be told apart in a bare-name row.
+- Senders and recipients are recorded by messaging name, and a bare name
+  cannot say which workspace it belongs to. Scoping therefore fails closed: a
+  row counts as this workspace's only when its sender or recipient is one of
+  this workspace's qualified `<folder>/<pane>` names, and not even then while
+  another workspace on this machine shares the same folder label. Rows
+  recorded with bare names only are never returned, by `agents.listMessages`
+  or by `agentMessages.read`. Attribution is still best effort: a message
+  logged before a pane was renamed no longer matches that pane.
 - There is no change event yet; poll.
 
 #### Backend Bridge ports `agents` and `agent-message-bodies`

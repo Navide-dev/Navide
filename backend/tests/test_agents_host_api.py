@@ -62,14 +62,19 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setattr(login_panes, "is_login_pane", lambda pane_id: pane_id == "p-login")
     log = AgentMessageLog(db=Database(tmp_path / "navide.db"))
     log.append([
-        {"uid": "m1", "created_at": 100, "status": "delivered", "sender": "lead",
-         "recipient": "worker", "content": "top secret plan"},
+        {"uid": "m1", "created_at": 100, "status": "delivered", "sender": "alpha/lead",
+         "recipient": "alpha/worker", "content": "top secret plan"},
         {"uid": "m2", "created_at": 200, "status": "queued", "sender": "beta/lead",
          "recipient": "alpha/worker", "content": "cross"},
         {"uid": "m3", "created_at": 300, "status": "delivered", "sender": "stranger",
          "recipient": "nobody", "content": "not ours"},
-        {"uid": "m4", "created_at": 400, "status": "delivered", "sender": "lead",
+        {"uid": "m4", "created_at": 400, "status": "delivered", "sender": "alpha/lead",
          "recipient": "far", "content": "relayed", "remote": "device-x"},
+        # A bare name cannot say which workspace it was: "lead" exists in both.
+        {"uid": "m5", "created_at": 500, "status": "delivered", "sender": "lead",
+         "recipient": "worker", "content": "beta bare secret"},
+        {"uid": "m6", "created_at": 600, "status": "delivered", "sender": "beta/lead",
+         "recipient": "beta/worker", "content": "beta qualified secret"},
     ])
     monkeypatch.setattr(app, "agent_message_log", log)
     yield
@@ -104,7 +109,8 @@ def test_lineage_keeps_closed_panes_only_when_asked() -> None:
 def test_list_messages_is_metadata_only_and_local_to_the_workspace() -> None:
     result = agents_host_api.run(WS, "list_messages", {})
     ids = [m["id"] for m in result["messages"]]
-    assert ids == ["m1", "m2"]  # m3 is another workspace's, m4 was relayed
+    # m3/m6 are another workspace's, m4 was relayed, m5 is bare-name only.
+    assert ids == ["m1", "m2"]
     assert all(tuple(m) == agents_host_api.MESSAGE_FIELDS for m in result["messages"])
     _no_forbidden(result["messages"])
     assert result["messages"][0]["bodyLength"] == len("top secret plan")
@@ -125,10 +131,30 @@ def test_read_message_returns_the_body_only_inside_the_workspace() -> None:
     message = agents_host_api.run(WS, "read_message", {"id": "m1"})["message"]
     assert message["body"] == "top secret plan"
     assert tuple(message) == (*agents_host_api.MESSAGE_FIELDS, "body")
-    for foreign in ("m3", "m4"):
+    for foreign in ("m3", "m4", "m5", "m6"):
         with pytest.raises(agents_host_api.AgentsApiError) as err:
             agents_host_api.run(WS, "read_message", {"id": foreign})
         assert err.value.code == "INVALID_ARGUMENT"
+
+
+def test_same_bare_name_in_two_workspaces_never_crosses() -> None:
+    # Both workspaces have a pane named "lead"; neither sees the other's rows.
+    assert agents_host_api.run(OTHER, "read_message", {"id": "m6"})["message"]["body"] == "beta qualified secret"
+    for workspace, foreign in ((WS, ("m5", "m6")), (OTHER, ("m1", "m5"))):
+        listed = agents_host_api.run(workspace, "list_messages", {})
+        assert not set(foreign) & {m["id"] for m in listed["messages"]}
+        for message_id in foreign:
+            with pytest.raises(agents_host_api.AgentsApiError):
+                agents_host_api.run(workspace, "read_message", {"id": message_id})
+    assert "secret" not in repr(agents_host_api.run(WS, "list_messages", {}))
+
+
+def test_a_shared_folder_label_hides_qualified_rows_too() -> None:
+    # "/elsewhere/alpha" also addresses as "alpha/...", so "alpha/worker" is ambiguous.
+    agent_messaging.register("p-twin", "worker", "/elsewhere/alpha", agent_key="claude")
+    assert agents_host_api.run(WS, "list_messages", {})["messages"] == []
+    with pytest.raises(agents_host_api.AgentsApiError):
+        agents_host_api.run(WS, "read_message", {"id": "m1"})
 
 
 def test_list_sessions_projects_the_session_rows(monkeypatch: pytest.MonkeyPatch) -> None:

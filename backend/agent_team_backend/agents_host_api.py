@@ -153,22 +153,29 @@ def lineage(workspace_path: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def _message_names(workspace_path: str, pane_id: str) -> set[str]:
-    """Messaging names that belong to this workspace (or to one pane in it).
+    """Qualified messaging names that belong to this workspace (or one pane in it).
 
-    The log records sender and recipient by name, bare inside one window and
-    qualified across workspaces, so both forms count. Matching by name is best
+    The log records sender and recipient by name only. A bare name is unique
+    inside one window, not across workspaces, so it cannot be tied to this
+    workspace and never counts: bare-name rows are left out (fail closed).
+    A qualified `<folder>/<pane>` name counts only while no other workspace on
+    this machine shares the folder label. Matching by name is still best
     effort: a pane renamed since a message was logged no longer matches it."""
-    names: set[str] = set()
-    found = False
-    for pane in _workspace_panes(workspace_path):
-        if pane_id and pane.pane_id != pane_id:
-            continue
-        found = True
-        names.update({pane.name, pane.qualified_name})
-    if pane_id and not found:
+    from . import agent_messaging
+
+    panes = _workspace_panes(workspace_path)
+    if pane_id and not any(pane.pane_id == pane_id for pane in panes):
         raise AgentsApiError("INVALID_ARGUMENT", "no such pane in this workspace")
-    names.discard("")
-    return names
+    labels = {pane.workspace_label for pane in panes}
+    own_paths = {pane.workspace_path for pane in panes}
+    shared = {
+        pane.workspace_label for pane in agent_messaging.list_panes()
+        if pane.workspace_label in labels and pane.workspace_path not in own_paths
+    }
+    return {
+        pane.qualified_name for pane in panes
+        if (not pane_id or pane.pane_id == pane_id) and pane.name and pane.workspace_label not in shared
+    }
 
 
 def _workspace_messages(workspace_path: str, pane_id: str = "") -> tuple[list[dict[str, Any]], int]:
