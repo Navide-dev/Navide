@@ -37,7 +37,14 @@ import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from watchdog.events import FileSystemEvent, FileSystemEventHandler
+from watchdog.events import (
+    EVENT_TYPE_CREATED,
+    EVENT_TYPE_DELETED,
+    EVENT_TYPE_MODIFIED,
+    EVENT_TYPE_MOVED,
+    FileSystemEvent,
+    FileSystemEventHandler,
+)
 
 from .fs_observer import Observer
 from .gitignore import GitIgnore
@@ -76,6 +83,13 @@ _IGNORE_GIT_FIRST_LEVEL = frozenset({"objects", "logs", "hooks", "lfs"})
 # still reports changes normally.
 _IGNORE_STORAGE_SUBDIRS = frozenset({"framework", "logs"})
 
+# The watchdog event types that mean something on disk changed. `closed`
+# (close after write) is left out: it always follows a `modified` for the same
+# write, and inotify queues a directory `modified` beside it.
+_CHANGE_EVENT_TYPES = frozenset({
+    EVENT_TYPE_CREATED, EVENT_TYPE_DELETED, EVENT_TYPE_MODIFIED, EVENT_TYPE_MOVED,
+})
+
 # Directories monitored for plan and report documents.
 PLAN_DOC_DIRS = frozenset({
     (".agent-team", "plans"),
@@ -108,9 +122,13 @@ class _RepoHandler(FileSystemEventHandler):
         self._ignores = ignores
 
     def on_any_event(self, event: FileSystemEvent) -> None:
-        # `closed`/`opened` events carry no state change; only react to actual
-        # create/delete/modify/move.
-        if event.event_type in ("opened", "closed"):
+        # Only react to actual create/delete/modify/move. An allowlist, not a
+        # list of what to skip: on Linux, inotify also reports reads (`opened`,
+        # `closed_no_write`), and reading .gitignore to judge one of those
+        # produced two more, so the handler fed itself and the queue grew with
+        # every file any process read (#622). A type added by a later watchdog
+        # must not reopen that.
+        if event.event_type not in _CHANGE_EVENT_TYPES:
             return
         src = str(event.src_path)
         dest = str(event.dest_path) if getattr(event, "dest_path", "") else ""
