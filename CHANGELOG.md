@@ -6,6 +6,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
+- Navide plugins can read agent data of their own workspace (scope B, 10-24). A new read-only `agents` namespace (medium risk) gives `agents.listPanes`, `agents.lineage`, `agents.listMessages` and `agents.listSessions`: the agent panes, which pane opened which, message delivery records with no message text, and the session list with no conversation content. Message text needs a second, separately disclosed namespace, `agentMessages` (high risk, second confirmation at install), with `agentMessages.read`. It must be declared together with `agents`, and an agent gets message text only from an Execution Policy allowlist that names `agentMessages`; the default policy leaves it out. Session transcripts, account and quota data, other workspaces and other devices are not exposed. Third-party native backends reach the same data through the `agents` and `agent-message-bodies` Bridge ports.
+
 - ACP (Agent Client Protocol) groundwork, not reachable in 0.2.30 (#592, which carries #584, #586 and #589): a client that talks to an agent over stdio, a session per pane, an ACP pane, and backend handling of its turns (activity, resource usage, a transcript log, the MCP tools and message delivery). No entry point creates an ACP pane, so nothing changes for users. Terminal panes, and the MCP tools for every pane that is not an ACP pane, behave as before.
 
 ### Changed

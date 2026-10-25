@@ -918,7 +918,7 @@ matches.
 | `contributes` | no | Object with a required views array (1–16 views) | At least one of `contributes`, `backend` or `extensionPack` |
 | `backend` | no | Object | See [Backend source, development, and publish contract](#backend-source-development-and-publish-contract) |
 | `extensionPack` | no | 1–20 member plugin ids | See [Extension Packs](#extension-packs) |
-| `permissions.system` | no | `fs`, `ui`, `aiCli`, `web` | 1–4 unique entries |
+| `permissions.system` | no | `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages` | 1–6 unique entries; `agentMessages` requires `agents` |
 | `permissions.shell` | no | `allowlist`, `full` | Omission denies `shell.run` |
 | `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
 | `contributes.views[].id` | yes | Lowercase view id | |
@@ -1259,7 +1259,7 @@ Manifest permissions, the capability catalog, the explicit package-version
 Grant, publisher eligibility, request schemas, workspace binding, and runtime
 state remain mandatory for both initiators. `full` mode bypasses only the
 agent-specific namespace and executable filters. `allowlist` and `denylist`
-operate on first-level `fs`, `ui`, `aiCli`, and `web` namespaces and on every resolved
+operate on first-level `fs`, `ui`, `aiCli`, `web`, `agents`, and `agentMessages` namespaces and on every resolved
 top-level executable in a shell pipeline or command chain. Policy v1 does not
 express subcommands, arguments, path patterns, or wrappers. The v1 shell parser
 fails closed on unquoted grouping or negation syntax (`(`, `)`, `{`, `}`, `!`)
@@ -1267,9 +1267,10 @@ and assignment-prefixed commands (`NAME=value`); this applies to both direct
 user and agent shell execution, so quote these characters or assignment-shaped
 arguments when they are intended as command data. For the private Backend
 Bridge, the `filesystem` port maps to the `fs` Execution Policy namespace, the
-`shell` port is judged on its command, and the `web` port maps to `web`. `web`
-is never admitted by omission: a `denylist` does not admit it, only `full` or
-an `allowlist` that names it. All other current Bridge ports fail closed for agent Initiators until
+`shell` port is judged on its command, the `web` port maps to `web`, the
+`agents` port to `agents` and the `agent-message-bodies` port to
+`agentMessages`. `web` and `agentMessages` are never admitted by omission: a
+`denylist` does not admit them, only `full` or an `allowlist` that names them. All other current Bridge ports fail closed for agent Initiators until
 an explicit namespace mapping is assigned; user Initiators continue through
 their existing checks.
 
@@ -1402,7 +1403,7 @@ Manifest v2 uses one coarse system namespace array and one shell mode:
 }
 ```
 
-`system` accepts only `fs`, `ui`, `aiCli`, and `web`. It is not a map of methods or
+`system` accepts only `fs`, `ui`, `aiCli`, `web`, `agents`, and `agentMessages`. It is not a map of methods or
 read/write accesses: declaring `fs` allows catalog validation to consider the
 filesystem methods, but does not bypass method schemas, scope checks, or Host
 policy. `shell` accepts only `allowlist` or `full`; omission denies
@@ -1416,6 +1417,8 @@ are not Manifest v2 permissions.
 | `system:ui` | `ui.openExternal` | `plugin` (HTTP/HTTPS web links; Host user-gesture gate) |
 | `system:aiCli` | `aiCli.listProfiles`, `startSession`, `resumeSession`, `cancelStart`, `reattachSession`, `sendInput`, `resizeSession`, `redrawSession`, `interruptSession`, `stopSession`, `output`, `exited` | `workspace` |
 | `system:web` | `web.list`, `create`, `attach`, `detach`, `navigate`, `setOwner`, `takeControl`, `returnControl`, `close`, `capture`, `clearData`, `changed` | `plugin` (see [Plugin browser views](#plugin-browser-views-web)) |
+| `system:agents` | `agents.listPanes`, `lineage`, `listMessages`, `listSessions` | `workspace` (see [Agent data and privacy](#agent-data-and-privacy-agents-agentmessages)) |
+| `system:agentMessages` | `agentMessages.read` | `workspace` |
 | `shell` | `shell.run` | `workspace` |
 
 **`shell.run` output size.** The Host shell broker returns at most 8000
@@ -1621,6 +1624,87 @@ someone it is not.
 - **Views follow the package.** Disabling or removing the package destroys all
   its views. Closing the package's window does not: views keep running in the
   background until the package closes them.
+
+### Agent data and privacy (`agents`, `agentMessages`)
+
+Declaring `agents` lets a package read what only Navide knows about the agent
+panes of its workspace: which panes exist, which pane opened which, when
+messages between them were sent and whether they arrived, and the session
+list. Declaring `agentMessages` as well adds the text of those messages. Both
+are read-only; nothing in either namespace sends, opens, closes or changes a
+pane. The request contract lives in `src/main/plugins/agentsCapability.ts`
+and the types in `@navide/plugin-contracts` (`agents.ts`); the backend
+projection is `backend/agent_team_backend/agents_host_api.py`.
+
+**Disclosure.** The two namespaces are disclosed separately, so a user can
+tell metadata from content before installing:
+
+| Declaration | Risk (reason) | Summary clause | Sensitive |
+|---|---|---|---|
+| `agents` | **medium** (`system.agents`) | `agents`: sees the agent panes of the project, which pane opened which, message delivery records (not what was said) and the session list (no conversation content) | no |
+| `agentMessages` | **high** (`system.agentMessages`) | `agentMessages`: reads the full text of messages between the agents of the project, which can contain code, file contents or secrets | yes: installing asks for the second confirmation |
+
+`agentMessages` requires `agents` in the same manifest; declaring it alone is
+refused at validation and at publish. A version that adds either namespace
+asks again, like any other added permission.
+
+**What is never exposed.** Every answer is a fixed list of fields; nothing is
+copied through from an internal record. In particular:
+
+- **Session transcripts are not exposed** under any declaration: no vendor
+  session file, no pane output log, no conversation content. `listSessions`
+  returns metadata only.
+- Message text and excerpts are not part of `agents`. `listMessages` gives
+  `bodyLength`; only `agentMessages.read` returns `body`.
+- Account, sign-in, profile, usage and quota data, device identity, working
+  directories and log file paths never appear.
+- Panes that are a CLI sign-in are left out everywhere.
+- Scope is the plugin's bound workspace on this machine. Panes and messages of
+  other workspaces and of other devices are not visible, and no request field
+  can choose a workspace.
+
+**Agent Execution Policy.** `agents` follows the ordinary `allowlist` /
+`denylist` rule. `agentMessages`, like `web`, is never admitted by omission: an
+agent-initiated call (a view capability or the `agent-message-bodies` Bridge
+port) is admitted only in `full` mode or by an `allowlist` that names
+`agentMessages`. The Host default allowlist includes `agents` but not
+`agentMessages`, so a user has to add it before any agent reads message text.
+Direct user actions are not filtered.
+
+#### Capabilities
+
+All addresses are `workspace`-scoped. Unknown fields are `INVALID_ARGUMENT`;
+`limit` is an integer from 1 to 200 (default 50).
+
+| Address | Request → result | Rule |
+|---|---|---|
+| `agents.listPanes` | `{}` → `{panes: AgentPaneInfo[]}` | Registered panes of the workspace, including ones whose window is offline (`offline: true`) or not yet opened (`realized: false`) |
+| `agents.lineage` | `{includeRemoved?}` → `{nodes: AgentLineageNode[]}` | Parent links from the workspace's saved pane records; closed panes only with `includeRemoved: true`, so a tree survives its middle pane closing |
+| `agents.listMessages` | `{paneId?, since?, limit?}` → `{messages, oldestCreatedAt, scanned, truncated}` | Messages whose sender or recipient is a pane of the workspace, newest last; `since` is epoch milliseconds (exclusive); `paneId` narrows to one pane |
+| `agents.listSessions` | `{limit?}` → `{sessions: AgentSessionInfo[]}` | The same rows as `cli_list_sessions`, newest first; no conversation content |
+| `agentMessages.read` | `{id}` → `{message}` | One message of `listMessages` plus its `body`; an id outside the workspace is `INVALID_ARGUMENT` |
+
+Limits a plugin must plan for:
+
+- The message log keeps only a bounded window of recent rows for the whole
+  machine. Compare `oldestCreatedAt` with your last `since`: when it is newer,
+  rows you never saw were pruned.
+- Senders and recipients are recorded by messaging name, so attribution is
+  best effort: a message logged before a pane was renamed no longer matches
+  that pane, and two panes with the same bare name in different workspaces
+  cannot be told apart in a bare-name row.
+- There is no change event yet; poll.
+
+#### Backend Bridge ports `agents` and `agent-message-bodies`
+
+A third-party native backend reaches the same data through two Bridge ports,
+each projected only when the manifest declares its namespace: `agents`
+(operations `list_panes`, `lineage`, `list_messages`, `list_sessions`) maps to
+the `agents` Execution Policy namespace, and `agent-message-bodies`
+(operation `read_message`) maps to `agentMessages`. Arguments and results are
+those of the matching capability above. Both run at the bound workspace root
+only. An agent reaches them only inside an admitted agent-tool call of the same
+package at that workspace; Plans and first-party packages do not get them.
 
 ### Declared filesystem scopes (disclosure only)
 

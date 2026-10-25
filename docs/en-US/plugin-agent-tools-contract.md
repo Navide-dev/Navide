@@ -353,6 +353,8 @@ in this order, each only when it applies:
 | `networkViaShell` | `shell` is not `null` (`network` is `"via-shell"`) | `{}` |
 | `aiCli` | `system` contains `aiCli` | `{}` |
 | `web` | `system` contains `web` | `{}` |
+| `agents` | `system` contains `agents` | `{}` |
+| `agentMessages` | `system` contains `agentMessages` | `{}` |
 | `ui` | `system` contains `ui` | `{}` |
 | `agentTools` | at least one tool | `{read: <count>, write: <count>}` |
 | `network` | reserved for DB10; never produced in v1 | `{}` |
@@ -369,6 +371,8 @@ none apply. Reasons are listed in this fixed order:
 | `system.fs` | `system` contains `fs` (workspace read/write) | medium |
 | `system.aiCli` | `system` contains `aiCli` | high |
 | `system.web` | `system` contains `web` (plugin browser views and their saved sign-ins) | high |
+| `system.agents` | `system` contains `agents` (agent panes, lineage, message delivery records, session list; no message text) | medium |
+| `system.agentMessages` | `system` contains `agentMessages` (the text of messages between agents) | high |
 | `shell.allowlist` | `shell` is `allowlist` | high |
 | `nativeBackend` | the manifest has `backend` | high |
 | `agentTools.write` | at least one tool has `risk: "write"` | high |
