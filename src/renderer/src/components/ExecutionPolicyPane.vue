@@ -710,8 +710,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 }
 .ep-accept-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .ep-section-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: 2px; }
-/* The section's state sits at the row's right edge, where a control would. */
-.ep-section-heading > :nth-child(2) { margin-left: auto; }
+/* The section's state sits right beside its title. */
 .ep-section h2 { margin: 0; font-size: var(--font-row-title); font-weight: 600; color: var(--text-bright); }
 .ep-section h3 { margin: 0 0 2px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
 .ep-hint, .ep-summary, .ep-recommendation-state, .ep-empty {

@@ -230,11 +230,19 @@ onBeforeUnmount(stopPolling)
 .nv-overview-risk--medium { background: var(--attention-subtle); color: var(--attention-fg); }
 .nv-overview-risk--high { background: var(--warning-fg); color: var(--bg-base); }
 .nv-overview-risk--highest { background: var(--danger-emphasis); color: var(--text-on-emphasis); }
-/* Only the risk level is filled; the other marks are outlined in their colour. */
+/* One alert style on the page: the scan flag matches the activity alerts
+   (tint and a dot); only the risk level is solid. */
 .nv-overview-flag {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px currentColor;
+  gap: 6px;
+  background: var(--danger-subtle);
   color: var(--danger-fg);
+}
+.nv-overview-flag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .nv-overview-flags :deep(.nv-source-badge) {
   background: transparent;
