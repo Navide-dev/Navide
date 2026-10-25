@@ -31,9 +31,11 @@ import PluginSourceBadge from './PluginSourceBadge.vue'
 import DeveloperFolderInfoCard from './DeveloperFolderInfoCard.vue'
 import { chromeSourceMark, isTestplaceExpired, pluginSourceLabel, testplaceDaysLeft } from '../lib/pluginSourceMark'
 import { cardRiskLevel } from '../../../shared/pluginDisclosureScan'
+import { disclosureClauses } from '../lib/disclosureText'
+import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { DisclosureRiskLevel } from '../../../shared/pluginDisclosure'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 function pluginsApi() {
   return window.agentTeam?.plugins
@@ -65,15 +67,24 @@ const selectedId = computed(() =>
 // Each Registry package's risk level from its installed disclosure, for the
 // list row; the full disclosure is in the selected card and the overview below.
 const riskById = ref(new Map<string, DisclosureRiskLevel>())
+// What it declares, in the disclosure's own clauses: the card's one-line reason
+// for its risk level. The full record is on the Disclosure page.
+const disclosureById = ref(new Map<string, ManifestDisclosure>())
 async function refreshRiskLevels(): Promise<void> {
   try {
     const records = (await pluginsApi()?.installedDisclosures?.()) ?? []
     riskById.value = new Map(records.flatMap((record) =>
       record.disclosure ? [[record.id, cardRiskLevel(record.disclosure, record.scan)] as const] : []
     ))
+    disclosureById.value = new Map(records.flatMap((record) => (record.disclosure ? [[record.id, record.disclosure] as const] : [])))
   } catch {
     riskById.value = new Map()
+    disclosureById.value = new Map()
   }
+}
+function riskReason(id: string): string {
+  const disclosure = disclosureById.value.get(id)
+  return disclosure ? disclosureClauses(t, locale.value, disclosure).join(' · ') : ''
 }
 // The warnings a package's card carries, in the card's own words, for the
 // list row's "⚠ N" marker: what the card discloses is visible without a click.
@@ -103,12 +114,16 @@ function installedWarnings(p: InstalledRow): string[] {
 }
 // Where a package came from when that is not the Navide Marketplace: an icon
 // in the row, the card's full source wording as its label.
-function rowSource(p: InstalledRow): { kind: 'test' | 'folder' | 'file'; label: string } | null {
+function rowSource(p: InstalledRow): { kind: 'test' | 'folder' | 'file'; label: string; byAgent: boolean } | null {
   const mark = chromeSourceMark(p.source)
   if (!mark) return null
   const shown = mark === 'local-unsigned' && p.localSignature === 'verified' ? 'local-signed' : mark
   const kind = mark === 'developer-unpacked' ? 'folder' : mark === 'local-signed' || mark === 'local-unsigned' ? 'file' : 'test'
-  return { kind, label: pluginSourceLabel(t, shown, p.expiresAt, p.testplaceVia) }
+  const label = pluginSourceLabel(t, shown, p.expiresAt, p.testplaceVia)
+  // A developer folder an agent had loaded (with the user's approval) says so in
+  // the row too, in the card's words: who loaded it is part of where it came from.
+  const byAgent = kind === 'folder' && developerFolder(p.id)?.loadedBy?.kind === 'agent'
+  return { kind, label: byAgent ? `${label} · ${folderLoadedByText(p.id)}` : label, byAgent }
 }
 type FactoryRow = (typeof factoryRows.value)[number]
 function factoryWarnings(p: FactoryRow): string[] {
@@ -811,6 +826,7 @@ watch(installed, () => {
                       v-if="rowSource(p)"
                       class="ext-md-source"
                       :data-source-kind="rowSource(p)!.kind"
+                      :data-loaded-by-agent="rowSource(p)!.byAgent ? 'true' : undefined"
                       role="img"
                       :aria-label="rowSource(p)!.label"
                       :title="rowSource(p)!.label"
@@ -820,21 +836,25 @@ watch(installed, () => {
                       <svg v-else viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.8h4M6.6 1.8v4.4L2.9 12.4c-.5.8.1 1.8 1 1.8h8.2c.9 0 1.5-1 1-1.8L9.4 6.2V1.8" /></svg>
                     </span>
                     <span v-if="p.disabled" class="ext-badge ext-disabled-badge">{{ $t('settings.extensions.disabledBadge') }}</span>
-                    <span
-                      v-if="riskById.get(p.id) && riskById.get(p.id) !== 'low'"
-                      class="ext-badge ext-md-risk"
-                      :class="`ext-md-risk--${riskById.get(p.id)}`"
-                      :title="$t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) })"
-                    >{{ $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) }}</span>
                   </span>
                 </span>
-                <span
-                  v-if="installedWarnings(p).length"
-                  class="ext-md-warn"
-                  role="img"
-                  :aria-label="installedWarnings(p).join('\n')"
-                  :title="installedWarnings(p).join('\n')"
-                >⚠ {{ installedWarnings(p).length }}</span>
+                <!-- The one severity mark of the row: its risk level, and how
+                     many warnings its card carries. -->
+                <span class="ext-md-row-end">
+                  <span
+                    v-if="riskById.get(p.id) && riskById.get(p.id) !== 'low'"
+                    class="ext-badge ext-md-risk"
+                    :class="`ext-md-risk--${riskById.get(p.id)}`"
+                    :title="$t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) })"
+                  >{{ $t(`pluginDisclosure.risk.${riskById.get(p.id)}`) }}</span>
+                  <span
+                    v-if="installedWarnings(p).length"
+                    class="ext-md-warn"
+                    role="img"
+                    :aria-label="installedWarnings(p).join('\n')"
+                    :title="installedWarnings(p).join('\n')"
+                  >⚠ {{ installedWarnings(p).length }}</span>
+                </span>
               </button>
             </li>
           </ul>
@@ -1047,6 +1067,7 @@ watch(installed, () => {
                   {{ $t('settings.extensions.incompatibleInstalled', { version: p.minNavideVersion ?? '' }) }}
                 </span>
               </div>
+              <p v-if="riskReason(p.id)" class="ext-risk-reason">{{ riskReason(p.id) }}</p>
               <div class="ext-card-sub">
                 <span v-if="p.requires.length" class="ext-requires ext-caps">
                   <span
@@ -1435,6 +1456,14 @@ watch(installed, () => {
   font-size: var(--font-xs);
   font-variant-numeric: tabular-nums;
 }
+/* In the row, Disabled is a word in the status line, not a second badge. */
+.ext-md-row-sub .ext-badge.ext-disabled-badge {
+  height: auto;
+  padding: 0;
+  background: none;
+  color: var(--risk-fg);
+  font-weight: 600;
+}
 .ext-md-row-update {
   color: var(--accent-fg);
   white-space: nowrap;
@@ -1452,6 +1481,11 @@ watch(installed, () => {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xs);
   color: var(--text-secondary);
+}
+/* Loaded by an agent: the folder mark carries the accent so it reads apart. */
+.ext-md-source[data-loaded-by-agent] {
+  border-color: var(--accent-emphasis);
+  color: var(--accent-fg);
 }
 .ext-md-source svg {
   width: 12px;
@@ -1735,6 +1769,13 @@ watch(installed, () => {
   display: grid;
   gap: 4px;
   container: ext-row / inline-size;
+}
+/* Why the risk level: the disclosure's clauses on one line under the status. */
+.ext-risk-reason {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  line-height: var(--lh-base);
 }
 .ext-card-status:not(:has(> *)) {
   display: none;
