@@ -396,6 +396,7 @@ import {
 import { accountLabel } from './lib/accountLabel'
 import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
 import { runAgentAccountSwitch, type AgentAccountSwitchConfirmRequest } from './lib/agentAccountSwitch'
+import { usePluginMainTab } from './lib/pluginMainTab'
 import {
   DEFAULT_SLOT_ID,
   FOLLOW_SWITCH_AGENT,
@@ -1188,6 +1189,20 @@ const pluginContributionsByLocation = computed(() => {
 function pluginContributionsAt(location: Exclude<PluginRegionLocation, 'left' | 'window' | 'detail'>): PluginRegionContribution[] {
   return pluginContributionsByLocation.value[location]
 }
+
+/** Navide plugin "main" views, as stage tabs after the run groups. The tab
+ *  names its plugin id, publisher and source, so a plugin's own title cannot
+ *  pass for a native tab, and two same-named plugins can be told apart. */
+const pluginMainTabs = computed(() =>
+  pluginContributionsAt('main').map((c) => ({
+    key: c.contributionKey,
+    label: c.title,
+    pluginId: c.pluginId,
+    source: c.source,
+    expiresAt: c.expiresAt,
+    testplaceVia: c.testplaceVia,
+  }))
+)
 
 const windowPluginContributions = computed(() =>
   pluginContributionsByLocation.value.window.filter(
@@ -10790,6 +10805,8 @@ registerCommand('ui.tab.switch', (args) => {
   const tabId = (args as { tabId?: string } | undefined)?.tabId
   if (!tabId) throw new Error('ui.tab.switch requires tabId')
   noteViewJump('mcp ui.tab.switch', { tab: tabId })
+  // Asked for the tab already active, activeTab does not change.
+  leavePluginMainTab()
   activeTab.value = tabId
 })
 // Push something into the right rail's preview panel. Reached by MCP
@@ -11526,6 +11543,8 @@ function noteViewJump(source: string, detail: { tab?: string; paneId?: string })
 /** The sidebar agent list shows panes from every tab; focusing one that lives
  *  in another tab must also activate that tab, or the pane stays v-show-hidden. */
 function revealPaneTab(paneId: string): void {
+  // A plugin tab covers the grid even when the pane is on the active run-group tab.
+  leavePluginMainTab()
   if (tabFilteredPaneIds.value.has(paneId)) return
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return
@@ -18840,6 +18859,10 @@ watch(sysNotify.appFocused, (focused) => {
 const runGroups = ref<RunGroup[]>([])
 const currentRunGroupId = ref<string>('')  // ID assigned to newly spawned pipeline panes
 const activeTab = ref<string>('')
+const { activeKey: activePluginMainKey, open: openPluginMainTab, leave: leavePluginMainTab } = usePluginMainTab(
+  activeTab,
+  computed(() => pluginMainTabs.value.map((t) => t.key))
+)
 
 // True while applying a runGroups change received from another window via the
 // `project.ui_state_changed` broadcast. Guards _saveRunGroups so a
@@ -22972,11 +22995,15 @@ function paneIsCommander(p: ActivePane): boolean {
     <main
       ref="stageRef"
       class="stage"
-      :class="{ 'stage--tabbed': stageTabs.length > 0 }"
+      :class="{ 'stage--tabbed': stageTabs.length > 0 || pluginContributionsAt('main').length > 0 }"
       :data-layout="effectiveLayoutMode"
     >
+      <!-- A "main" view is a stage tab of its own. The layer stays mounted (a
+           hidden guest keeps running) but shows only while its tab is active,
+           and sits below the tab bar so the bar is never covered. -->
       <div
         v-if="pluginContributionsAt('main').length"
+        v-show="activePluginMainKey !== null"
         class="plugin-region-layer plugin-region-layer--main"
         data-plugin-region="main"
       >
@@ -22985,14 +23012,16 @@ function paneIsCommander(p: ActivePane): boolean {
           :key="contribution.contributionKey"
           :contribution="contribution"
           :workspace-path="currentWorkspace"
-          :visible="true"
+          :visible="contribution.contributionKey === activePluginMainKey"
         />
       </div>
       <StageTabBar
-        v-if="stageTabs.length > 0"
+        v-if="stageTabs.length > 0 || pluginContributionsAt('main').length > 0"
         ref="stageTabBarRef"
         :tabs="stageTabs"
-        :model-value="activeTab"
+        :plugin-tabs="pluginMainTabs"
+        :active-plugin-tab="activePluginMainKey"
+        :model-value="activePluginMainKey === null ? activeTab : ''"
         :can-rebuild-all="rebuildablePaneCount > 0"
         :rebuilding-all="rebuildingTabPanes"
         :rebuild-all-title="$t('action.rebuild-tab-cli-panes')"
@@ -23008,7 +23037,8 @@ function paneIsCommander(p: ActivePane): boolean {
         @reorder-tab="(fromKey, toKey) => reorderRunGroupTab(fromKey, toKey)"
         @detach="(key, x, y) => onDetachGroup(key, x, y)"
         @context-menu="(key, ev) => openRunGroupCtxMenu(currentWorkspace, key, ev)"
-        @update:model-value="onUserSelectTab"
+        @select-plugin-tab="openPluginMainTab"
+        @update:model-value="(key) => { leavePluginMainTab(); void onUserSelectTab(key) }"
       >
         <template #actions>
           <ViewPanel :model-value="layoutMode" @update:model-value="onUserChangeLayoutMode" />
@@ -24228,9 +24258,19 @@ function paneIsCommander(p: ActivePane): boolean {
   right: var(--token-panel-width, 36px);
   height: 32px;
 }
+/* Covers the pane area only: the stage tab bar above it (36px) stays visible
+   and clickable. Opaque and interactive, since it is the active tab's content. */
 .plugin-region-layer--main {
-  inset: 0;
+  top: 36px;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 110;
+  background: var(--bg-base);
+  pointer-events: auto;
+}
+.plugin-region-layer--main :deep(.plugin-region-host) {
+  pointer-events: auto;
 }
 .plugin-region-layer--right {
   top: 38px;

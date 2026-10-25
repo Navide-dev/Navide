@@ -8953,6 +8953,7 @@
     "status-empty": "Esta pestaña no tiene panes",
     "delete-tab": "Eliminar esta pestaña",
     "add-group": "Nuevo grupo de ejecución",
+    "plugin-tab": "Complemento de Navide: {title}",
     "collapse-families": "Contraer todas las familias de panes de esta pestaña",
     "expand-families": "Desplegar todas las familias de panes de esta pestaña",
     "family-toggle-grid": "El plegado de familias está disponible en las disposiciones Automática, Foco y Pantalla completa",
