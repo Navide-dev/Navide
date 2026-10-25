@@ -64,4 +64,15 @@ describe('ExtensionsPane developer page', () => {
     await flushPromises()
     expect(last()).toEqual([])
   })
+
+  it('reports the native-backend switches it shows as on to Settings', async () => {
+    mockPlugins({ enabled: false, folders: [] })
+    const plugins = (window as unknown as { agentTeam: { plugins: Record<string, unknown> } }).agentTeam.plugins
+    plugins.nativeBackends = { list: vi.fn().mockResolvedValue({ enabled: true, plugins: [] }) }
+    wrapper = mount(ExtensionsPane, { props: { page: 'developer' }, global: { plugins: [i18n] } })
+    await flushPromises()
+    expect((wrapper.emitted('developerOn') as string[][][]).at(-1)![0]).toEqual([
+      i18n.global.t('settings.extensions.nativeBackends.enable'),
+    ])
+  })
 })
