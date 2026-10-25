@@ -42,6 +42,18 @@ from agent_team_backend.plugins.agent_tools_contract import (
 # parses a whole result on the loop costs hundreds of milliseconds, so both
 # budgets still catch it.
 LOOP_SLICE_BUDGET_S = 0.047 if sys.platform == "win32" else 0.02
+#: For a 10 MiB result the budget also scales with this run's speed: a step
+#: may take up to this fraction of the CPU time the same run spent wrapping
+#: the whole value in process. A slow VM writing fresh pages stretches every
+#: step it runs (one read 20.018 ms on the macOS runner), and it stretches the
+#: whole-value wrap the same way. Reading the whole result in one step costs
+#: at least that wrap, forty times the bound, so the check still catches it.
+LOOP_SLICE_RELATIVE = 1 / 40
+
+
+def _loop_slice_bound(whole_cpu_s: float) -> float:
+    """The most CPU one loop step may take, for a result whose in-process wrap took ``whole_cpu_s`` in this run."""
+    return max(LOOP_SLICE_BUDGET_S, whole_cpu_s * LOOP_SLICE_RELATIVE)
 
 
 pytestmark = pytest.mark.asyncio
@@ -1300,8 +1312,10 @@ def _assert_only_the_join_is_excused(measured: _Measured) -> None:
         pytest.param(lambda: {"rows": [{"k": i, "v": "abcdefgh中"} for i in range(345_000)]}, id="10 MiB of small values"),
     ],
 )
+@pytest.mark.serial
 async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop(monkeypatch, shape) -> None:
     import gc
+    import time
 
     value = shape()
     entry = _devmap_tool(monkeypatch)
@@ -1311,7 +1325,10 @@ async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loo
     assert (await proxy.call("devmap_read", {}, None)).isError is False
     # The backend never holds the parsed value (the helper does): neither
     # does the test while it measures, or collecting it would be counted.
+    # Timed as the baseline: the same wrap in process, in this run.
+    started = time.thread_time()
     expected = proxy.wrap_result(entry, value)
+    bound = _loop_slice_bound(time.thread_time() - started)
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
     del value
     gc.collect()
@@ -1323,8 +1340,8 @@ async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loo
     _assert_only_the_join_is_excused(measured)
     # ... and no other step held the loop.
     longest = max(measured.steps)
-    assert longest < LOOP_SLICE_BUDGET_S, (
-        f"the loop ran {longest * 1000:.1f} ms of CPU without handing back, besides joining the"
+    assert longest < bound, (
+        f"the loop ran {longest * 1000:.1f} ms of CPU (bound {bound * 1000:.1f} ms) without handing back, besides joining the"
         f" text ({measured.excused[0] * 1000:.1f} ms, a copy of the whole result the loop must make:"
         " 1-2 ms on bare metal, 18-29 ms on a VM writing fresh pages)"
     )
@@ -1338,9 +1355,16 @@ async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(mo
     from agent_team_backend.agent_tool_result_worker import strict_loads
 
     import gc
+    import time
 
     entry = _devmap_tool(monkeypatch)
-    _pieces_host(monkeypatch, agent_tool_payload_text({"rows": [{"k": i, "v": "abcdefgh中"} for i in range(34_500)]}))
+    value = {"rows": [{"k": i, "v": "abcdefgh中"} for i in range(34_500)]}
+    # The bound the 10 MiB check uses, from this value's own in-process wrap.
+    started = time.thread_time()
+    proxy.wrap_result(entry, value)
+    bound = _loop_slice_bound(time.thread_time() - started)
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    del value
 
     async def on_the_loop(entry: dict[str, Any], pieces: list[str]) -> str:
         return proxy.wrap_result(entry, strict_loads("".join(pieces)))
@@ -1350,8 +1374,8 @@ async def test_the_loop_check_still_catches_a_result_parsed_whole_on_the_loop(mo
     measured = await _measured_pieces_call(monkeypatch)
     assert measured.result.isError is False
     assert measured.excused == []
-    assert max(measured.steps) >= LOOP_SLICE_BUDGET_S, (
-        f"a whole-result parse on the loop read as {max(measured.steps) * 1000:.1f} ms"
+    assert max(measured.steps) >= bound, (
+        f"a whole-result parse on the loop read as {max(measured.steps) * 1000:.1f} ms (bound {bound * 1000:.1f} ms)"
     )
 
 
