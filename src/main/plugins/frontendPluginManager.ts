@@ -774,6 +774,12 @@ interface AiSessionLedgerEntry {
   createdAt: number
   persistView?: boolean
   storageIdentity?: AiTerminalStorageIdentity
+  /** The reclaim of the latest detach; a newer detach replaces it. */
+  reclaimTimer?: ReturnType<typeof setTimeout>
+  /** Set by the Host only: this session's id is in terminal storage (written
+   *  when it started, or it was resumed from there), so a later view can
+   *  resume it. A package's own persistView flag does not set it. */
+  storedForResume?: boolean
 }
 
 interface EarlyAiEventBuffer {
@@ -873,19 +879,29 @@ const TERMINAL_OWNED_WS_TYPES = new Set([
   'terminal.redraw',
 ])
 
-/** These first-party packages consume the public aiCli event vocabulary. Other
- * v2 packages may declare aiCli for capability admission without opting into
- * the event translation, so their internal terminal ownership remains intact. */
-const PUBLIC_AI_CLI_EVENT_PLUGIN_IDS = new Set(['navide.git', 'navide.plans', 'navide.mini-ide'])
-
+/** Every v2 package that declares aiCli gets its sessions' output as the
+ * documented aiCli.output / aiCli.exited events, and only for sessions its own
+ * view started or resumed (the terminal route). It used to be these three ids
+ * only, which left every other aiCli package with no output at all. */
 function usesPublicAiCliEvents(plugin: RunningPlugin | undefined): plugin is RunningPlugin {
   return Boolean(
     plugin?.hasV2DescriptorIdentity &&
-      PUBLIC_AI_CLI_EVENT_PLUGIN_IDS.has(plugin.id) &&
       plugin.capabilityPolicy.kind === 'manifest-v2' &&
       plugin.capabilityPolicy.system.includes('aiCli')
   )
 }
+
+/** These end their detached AI sessions themselves: Git and Plans through
+ *  their dock surface (endDockSurface), Mini-IDE through its persisted views.
+ *  Any other package's detached session is reclaimed after
+ *  AI_SESSION_RECLAIM_MS, so a closed view leaves no PTY behind, unless the
+ *  Host stored it for resume (storedForResume): that one stays to be resumed
+ *  from storage, as before (user decision D1 on #648). Asking for persistView
+ *  without the storage write succeeding does not keep a session. */
+const SELF_ENDING_AI_SESSION_PLUGIN_IDS: ReadonlySet<string> = new Set(['navide.git', 'navide.plans', 'navide.mini-ide'])
+/** How long a detached session waits for a new view of the same contribution
+ *  (a reload, a workspace re-prepare) to resume it before it is ended. */
+export const AI_SESSION_RECLAIM_MS = 60_000
 
 /** First-party compatibility actions used while the existing Git surface is
  *  moved behind the Manifest v2 package boundary. These are deliberately
@@ -8476,6 +8492,8 @@ export class FrontendPluginManager {
           createdAt: Date.now(),
           persistView: true,
           storageIdentity: storageIdentity ?? undefined,
+          // Found through storage: its ptyId there is this session.
+          storedForResume: Boolean(storageIdentity && ownerState?.ptyId === sessionId),
         })
       }
       return { sessionId, profileId }
@@ -8575,12 +8593,18 @@ export class FrontendPluginManager {
           storageIdentity: storageIdentity ?? undefined,
         })
         if (persistView && storageIdentity) {
-          await this.terminalStorageRequest(plugin, {
+          const stored = await this.terminalStorageRequest(plugin, {
             operation: 'session',
             resumeKey: storageIdentity.resumeKey,
             ptyId: sessionId,
-          }, beforeDispatch).catch((error) => console.warn(
-            `[plugins] AI terminal storage could not bind session ${sessionId} for ${plugin.id}; it will not resume`, error))
+          }, beforeDispatch).then(() => true, (error) => {
+            console.warn(
+              `[plugins] AI terminal storage could not bind session ${sessionId} for ${plugin.id}; it will not resume`, error)
+            return false
+          })
+          // Only a session the Host actually stored is kept past a close.
+          const entry = this.aiSessions.get(sessionId)
+          if (stored && entry) entry.storedForResume = true
         }
         committed = true
         this.flushEarlyAiEvents(pendingKey)
@@ -9997,6 +10021,12 @@ export class FrontendPluginManager {
       return
     }
     const plugin = this.runningPluginForTerminalRoute(route)
+    // Raw PTY events are the v1 adapter's vocabulary. A v2 route gets only
+    // the public aiCli events, through the gate above, never terminal.*.
+    if (plugin && route && !route.legacy && plugin.capabilityPolicy.kind === 'manifest-v2') {
+      this.logDroppedTerminalEvent(event, sessionId, route)
+      return
+    }
     if (plugin) {
       this.emitToInstance(plugin.instanceId, event, payload)
     }
@@ -10254,6 +10284,7 @@ export class FrontendPluginManager {
         const aiSession = this.aiSessions.get(sessionId)
         if (aiSession?.attachedInstanceId === plugin.instanceId) {
           aiSession.attachedInstanceId = null
+          this.scheduleAiSessionReclaim(aiSession)
         }
         this.terminalRoutes.set(sessionId, { ...route, instanceId: null })
       }
@@ -10414,6 +10445,38 @@ export class FrontendPluginManager {
     this.stopAiSessions(
       (session) => session.pluginId === pluginId && session.packageVersion === packageVersion,
     )
+  }
+
+  /** End a detached session of a package that does not end its own, once it
+   *  has waited AI_SESSION_RECLAIM_MS without being resumed. Only this exact
+   *  ledger entry, still detached, is ended, through the Host's own session id
+   *  on the backend that created it: a session resumed, stopped or removed
+   *  meanwhile is left alone, so nothing is ended twice. An app quit ends
+   *  every PTY with the backend anyway. */
+  private scheduleAiSessionReclaim(entry: AiSessionLedgerEntry): void {
+    if (
+      SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(entry.pluginId) ||
+      (entry.storedForResume === true && entry.storageIdentity !== undefined)
+    ) return
+    // Each detach starts the wait over: an earlier detach's timer, from before
+    // a resume, must not end the session early.
+    if (entry.reclaimTimer !== undefined) clearTimeout(entry.reclaimTimer)
+    const timer = setTimeout(() => {
+      entry.reclaimTimer = undefined
+      if (this.appQuitting()) return
+      if (this.aiSessions.get(entry.sessionId) !== entry || entry.attachedInstanceId !== null) return
+      this.aiSessions.delete(entry.sessionId)
+      this.terminalRoutes.delete(entry.sessionId)
+      this.aiTerminalOutputDecoder.dropSession(entry.sessionId)
+      void entry.client.send('terminal.kill', {
+        terminal_session_id: entry.sessionId,
+        force: true,
+      }).catch(() => {
+        // The ledger forgets it either way; a backend that is gone has no PTY.
+      })
+    }, AI_SESSION_RECLAIM_MS)
+    timer.unref?.()
+    entry.reclaimTimer = timer
   }
 
   private stopAiSessions(predicate: (session: AiSessionLedgerEntry) => boolean): void {

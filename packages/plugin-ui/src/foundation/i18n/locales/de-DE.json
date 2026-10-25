@@ -2214,7 +2214,7 @@
         "cancel": "Abbrechen",
         "capability": {
           "fs": "Dateien in Ihrem Arbeitsbereich lesen und schreiben.",
-          "aiCli": "Die in Navide eingerichteten AI-CLI-Agents ausführen.",
+          "aiCli": "Die in Navide eingerichteten AI-CLI-Agents starten, ihnen Eingaben senden und alles lesen, was sie ausgeben; eine AI CLI kann auch nach dem Schließen ihres Fensters im Hintergrund weiterlaufen.",
           "web": "Kann jede Website öffnen und darin navigieren; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können Anfragen auf Websites in Ihrem Namen senden) und können jede von ihm geöffnete Seite und deren Anmeldestatus lesen; nachdem Sie übernommen haben, enden bereits in einer Seite laufende Agent-Skripte erst, wenn Sie die Seite neu laden; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
           "agents": "Sieht deine Agent-panes, welcher pane welchen geöffnet hat und wann sie einander Nachrichten geschickt haben – nicht, was darin stand.",
           "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents; er kann Code, Dateiinhalte oder Geheimnisse enthalten.",
@@ -11739,7 +11739,7 @@
         "full": "Führt beliebige Befehle aus"
       },
       "networkViaShell": "Kann über diese Befehle entfernte Hosts erreichen",
-      "aiCli": "Steuert AI-CLI-Sessions",
+      "aiCli": "Startet AI-CLI-Sessions und liest ihre Ausgabe",
       "web": "Kann jede Website öffnen und durchsuchen; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können auf Websites in Ihrem Namen Anfragen senden) und können jede geöffnete Seite und ihren Anmeldestatus lesen; nachdem Sie übernommen haben, stoppen bereits laufende Agent-Skripte auf einer Seite erst, wenn Sie sie neu laden; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
       "agents": "Sieht die Agent-panes in diesem Projekt, welcher pane welchen geöffnet hat, Zustellprotokolle von Nachrichten (ohne Inhalt) und die Session-Liste (ohne Gesprächsinhalt)",
       "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents in diesem Projekt; er kann Code, Dateiinhalte oder Geheimnisse enthalten",
