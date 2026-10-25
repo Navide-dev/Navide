@@ -774,6 +774,8 @@ interface AiSessionLedgerEntry {
   createdAt: number
   persistView?: boolean
   storageIdentity?: AiTerminalStorageIdentity
+  /** The reclaim of the latest detach; a newer detach replaces it. */
+  reclaimTimer?: ReturnType<typeof setTimeout>
 }
 
 interface EarlyAiEventBuffer {
@@ -10438,7 +10440,11 @@ export class FrontendPluginManager {
    *  every PTY with the backend anyway. */
   private scheduleAiSessionReclaim(entry: AiSessionLedgerEntry): void {
     if (SELF_ENDING_AI_SESSION_PLUGIN_IDS.has(entry.pluginId)) return
+    // Each detach starts the wait over: an earlier detach's timer, from before
+    // a resume, must not end the session early.
+    if (entry.reclaimTimer !== undefined) clearTimeout(entry.reclaimTimer)
     const timer = setTimeout(() => {
+      entry.reclaimTimer = undefined
       if (this.appQuitting()) return
       if (this.aiSessions.get(entry.sessionId) !== entry || entry.attachedInstanceId !== null) return
       this.aiSessions.delete(entry.sessionId)
@@ -10452,6 +10458,7 @@ export class FrontendPluginManager {
       })
     }, AI_SESSION_RECLAIM_MS)
     timer.unref?.()
+    entry.reclaimTimer = timer
   }
 
   private stopAiSessions(predicate: (session: AiSessionLedgerEntry) => boolean): void {

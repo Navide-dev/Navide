@@ -9293,6 +9293,31 @@ describe('opaque view instance ownership', () => {
         }
       })
 
+      it('waits the full time again after each detach, so an earlier close cannot end it early', async () => {
+        vi.useFakeTimers()
+        try {
+          // Review M1 on #648: closed at 0, resumed at 1 s, closed again at 50 s.
+          const { mgr, internal, kills } = await withDetachedSession('acme.devmap')
+          await vi.advanceTimersByTimeAsync(1_000)
+          const entry = internal.aiSessions.get('left-session')!
+          const second = await openThirdParty(mgr, { id: 'acme.devmap', sessionId: 'left-session' })
+          mgr.noteTerminalRoutes(second.handle.instanceId, 'terminal.reattach', { alive: ['left-session'] })
+          entry.attachedInstanceId = second.handle.instanceId
+          await vi.advanceTimersByTimeAsync(49_000)
+          second.view.webContents.close()
+          // 60.5 s: the first close's wait would be over, the second's is not.
+          await vi.advanceTimersByTimeAsync(10_500)
+          expect(kills()).toHaveLength(0)
+          expect(internal.aiSessions.get('left-session')).toBe(entry)
+          await vi.advanceTimersByTimeAsync(AI_SESSION_RECLAIM_MS - 10_500 - 1)
+          expect(kills()).toHaveLength(0)
+          await vi.advanceTimersByTimeAsync(1)
+          expect(kills()).toHaveLength(1)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
       it('is ended once when the package is disabled or removed, not again by the reclaim', async () => {
         vi.useFakeTimers()
         try {
