@@ -80,17 +80,16 @@ _COLUMNS = (
     "recipient_workspace",
 )
 
-# Written once, when the row is first stamped: a re-append (often made after a
-# pane has closed and can no longer be attributed) must not erase them.
+# Final at the uid's first insert, NULL included: a re-append must neither
+# erase a stamp (the pane may have closed since) nor fill in a missing one (a
+# same-name pane may have appeared since and would claim the row).
 _STAMP_ONCE = ("sender_workspace", "recipient_workspace")
 
-# Upsert: everything but the primary key and ``seq`` is refreshed. Keeping the
-# original ``seq`` is what makes a re-append (the frontend folds a pending
-# status patch into a pending append row) keep its place in the log.
+# Upsert: everything but the primary key, ``seq`` and the stamps is refreshed.
+# Keeping the original ``seq`` is what makes a re-append (the frontend folds a
+# pending status patch into a pending append row) keep its place in the log.
 _CONFLICT_UPDATE = ", ".join(
-    f"{c} = COALESCE(agent_message_log.{c}, excluded.{c})" if c in _STAMP_ONCE
-    else f"{c} = excluded.{c}"
-    for c in _COLUMNS if c != "uid"
+    f"{c} = excluded.{c}" for c in _COLUMNS if c != "uid" and c not in _STAMP_ONCE
 )
 
 

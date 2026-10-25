@@ -207,15 +207,35 @@ def test_rows_are_stamped_from_the_registry_not_from_names_alone() -> None:
     assert stamp("alpha/lead", window_b) == ""
 
 
-def test_a_stamp_survives_a_later_unstamped_re_append(tmp_path: Path) -> None:
+def test_stamps_are_final_at_the_first_write(tmp_path: Path) -> None:
     log = AgentMessageLog(db=Database(tmp_path / "stamp.db"))
     row = {"uid": "u", "created_at": 1, "status": "queued", "sender": "alpha/lead",
            "recipient": "alpha/worker", "content": "x"}
     log.append([{**row, "sender_workspace": WS, "recipient_workspace": ""}])
+    # A re-append neither erases a stamp nor fills in a missing one.
     log.append([{**row, "status": "delivered", "sender_workspace": "", "recipient_workspace": OTHER}])
     stored = log.tail()[-1]
     assert stored["status"] == "delivered"
-    assert (stored["sender_workspace"], stored["recipient_workspace"]) == (WS, OTHER)
+    assert (stored["sender_workspace"], stored["recipient_workspace"]) == (WS, None)
+
+
+async def test_a_requeued_unstamped_row_is_never_claimed_later() -> None:
+    class FakeWebSocket:
+        async def send_json(self, payload: dict[str, Any]) -> None:
+            pass
+
+    session = app.Session(FakeWebSocket())  # type: ignore[arg-type]
+    row = {"uid": "r1", "created_at": 950, "status": "queued", "sender": "ghost",
+           "recipient": "worker2", "content": "unattributed secret"}
+    append = {"id": "a", "type": "agent_msg.log_append", "payload": {"rows": [row]}}
+    await app.handle_message(session, append)  # no pane of that name yet: NULL stamps
+    agent_messaging.register("p-g", "ghost", WS, owner=session)
+    agent_messaging.register("p-w", "worker2", WS, owner=session)
+    await app.handle_message(session, {**append, "payload": {"rows": [{**row, "status": "delivered"}]}})
+    stored = next(r for r in app.agent_message_log.tail() if r["uid"] == "r1")
+    assert stored["status"] == "delivered"
+    assert (stored["sender_workspace"], stored["recipient_workspace"]) == (None, None)
+    assert "r1" not in {m["id"] for m in agents_host_api.run(WS, "list_messages", {})["messages"]}
 
 
 async def test_log_append_stamps_rows_and_ignores_the_renderers_word(tmp_path: Path) -> None:
