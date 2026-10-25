@@ -164,9 +164,9 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Anthropic での commit メッセージの自動生成が、毎回失敗することはなくなりました。',
       },
       {
-        'zh-TW': 'Navide 從來沒有、以後也不會把你的 CLI 帳號憑證與金鑰集中保存在雲端；它們只存在你自己的電腦上。0.2.28 起，同步設定已移除從未開放的「Credentials 與金鑰」選項。MCP 設定若開啟同步，會先在裝置上加密才上傳，伺服器沒有解密金鑰，可隨時在「設定 → Navide Cloud → 同步 → MCP」關閉。',
-        'en-US': 'Navide has never stored your CLI account credentials and keys centrally in the cloud, and it never will: they live only on your own machine. Since 0.2.28 the never-enabled "Credentials & keys" option is gone from the sync settings. If you turn on MCP sync, MCP settings are encrypted on your device before upload; the server has no decryption key, and you can turn it off at any time in Settings → Navide Cloud → Sync → MCP.',
-        'ja-JP': 'Navide はこれまで CLI アカウントの認証情報やキーをクラウドにまとめて保存したことはなく、今後も保存しません。これらはお使いのコンピューターにのみ保存されます。0.2.28 以降、同期設定から未公開の「認証情報とキー」の項目は削除されています。MCP の同期をオンにした場合、MCP 設定はデバイス上で暗号化してからアップロードされ、サーバーは復号キーを持ちません。「設定 → Navide Cloud → 同期 → MCP」でいつでもオフにできます。',
+        'zh-TW': 'Navide 不會把你 CLI 帳號的憑證與金鑰集中保存在雲端，以後也不會：CLI 帳號的憑證與金鑰只存在你的電腦上。0.2.28 起，同步設定已移除「Credentials 與金鑰」選項；這個選項在介面上一直是停用的，從來無法開啟。MCP 設定裡的 token 會先在你的裝置上加密才同步；伺服器無法解密。MCP 同步可隨時在「設定 → Navide Cloud → 同步 → MCP」關閉。',
+        'en-US': 'Navide does not store your CLI account credentials and keys centrally in the cloud, and it never will: your CLI account credentials and keys live only on your own machine. Since 0.2.28 the "Credentials & keys" option is gone from the sync settings; it was always disabled in the interface and could never be turned on. Tokens in your MCP settings are encrypted on your device before they sync; the server cannot decrypt them. You can turn MCP sync off at any time in Settings → Navide Cloud → Sync → MCP.',
+        'ja-JP': 'Navide は CLI アカウントの認証情報やキーをクラウドにまとめて保存せず、今後も保存しません。CLI アカウントの認証情報とキーは、お使いのコンピューターにのみ保存されます。0.2.28 以降、同期設定から「認証情報とキー」の項目は削除されています。この項目は画面上で常に無効になっていて、オンにすることはできませんでした。MCP 設定内のトークンは、同期の前にお使いのデバイス上で暗号化され、サーバーは復号できません。MCP の同期は「設定 → Navide Cloud → 同期 → MCP」でいつでもオフにできます。',
       },
     ],
     note: {

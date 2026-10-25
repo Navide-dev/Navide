@@ -286,7 +286,11 @@ describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () 
   })
 
   it('says credentials stay on this machine and links the announcement', () => {
-    expect(entry!.highlights.at(-1)!['en-US']).toMatch(/^Navide has never stored your CLI account credentials/)
+    const last = entry!.highlights.at(-1)!['en-US']
+    expect(last).toMatch(/^Navide does not store your CLI account credentials/)
+    expect(last).toContain('always disabled in the interface and could never be turned on')
+    expect(last).toContain('encrypted on your device before they sync; the server cannot decrypt them')
+    expect(last).not.toMatch(/never been|has never|never stored|from the start/i)
     expect(entry!.note!['en-US']).toContain('https://navide.dev/posts/credentials-stay-on-your-machine/')
   })
 
