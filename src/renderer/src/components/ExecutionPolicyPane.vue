@@ -843,7 +843,7 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-full-warning, .ep-warning:has(label) {
   margin: 0 0 var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border-left: 3px solid var(--risk-fg);
+  border-left: 2px solid var(--risk-fg);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: var(--risk-subtle);
   color: var(--text-primary);
@@ -900,16 +900,5 @@ watch(() => props.workspacePath, () => { void load({ replaceDraft: !draftDirty.v
 .ep-path-list { margin: var(--space-2) 0 var(--space-3); padding-left: 20px; color: var(--text-secondary); font-size: var(--font-xs); }
 .ep-path-list code { overflow-wrap: anywhere; }
 .ep-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
-/* Save and Reset stay in reach while the user policy is edited. */
-[data-section='user-policy'] > .ep-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  margin: var(--space-3) calc(-1 * var(--space-row-x)) calc(-1 * var(--space-row-y));
-  padding: var(--space-2) var(--space-row-x);
-  border-top: 1px solid var(--border-muted);
-  border-radius: 0 0 var(--radius-card) var(--radius-card);
-  background: var(--bg-subtle);
-}
 .ep-recheck { margin-left: var(--space-2); }
 </style>

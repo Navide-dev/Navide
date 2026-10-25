@@ -212,14 +212,15 @@ watch(installed, refresh)
   font-weight: 650;
   letter-spacing: -0.01em;
 }
-/* The warning is a row of the switch card, marked by its icon and a thin
-   edge rather than a fill, so the switch below stays the row's subject. */
+/* The warning is a row of the switch card, in the page's one warning style:
+   amber tint, a 2px amber edge and the warning icon. */
 .native-backends-callout {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-row-x);
   box-shadow: inset 2px 0 0 var(--risk-fg);
+  background: var(--risk-subtle);
   color: var(--text-primary);
 }
 .native-backends-callout .native-backends-description {

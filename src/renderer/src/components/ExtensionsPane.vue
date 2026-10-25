@@ -1568,9 +1568,6 @@ watch(installed, () => {
   .ext-md {
     grid-template-columns: minmax(190px, 210px) minmax(0, 1fr);
   }
-  .ext-md-detail .ext-card-main > .ext-actions > .ext-btn-danger {
-    margin-left: 0;
-  }
   .ext-md-detail .ext-actions > .nv-btn {
     padding-inline: 9px;
   }

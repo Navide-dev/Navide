@@ -172,7 +172,6 @@ onBeforeUnmount(stopPolling)
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  container: ledger / inline-size;
   /* Same 22px gutter as the settings blocks above it on the page. */
   padding: var(--space-1) 22px var(--space-6);
   font-size: var(--font-sm);
@@ -196,61 +195,17 @@ onBeforeUnmount(stopPolling)
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
-/* Wide enough, the records read as a ledger: one row per Navide plugin with
-   its name, its risk / review / scan flags and its recent activity in aligned
-   columns, and the expanders (full record, activity panel) under the row. */
-@container ledger (min-width: 680px) {
-  /* Fixed columns: name | risk | source and review | recent activity; the
-     scan flag and the expanders take the second line. */
-  .nv-overview-entry {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 130px 130px minmax(0, 1.3fr);
-    column-gap: var(--space-4);
-    row-gap: var(--space-1);
-    align-items: center;
-  }
-  .nv-overview-entry > .nv-overview-head,
-  .nv-overview-entry .nv-overview-flags {
-    display: contents;
-  }
-  .nv-overview-entry .nv-overview-name {
-    grid-column: 1;
-    grid-row: 1;
-    flex-wrap: wrap;
-  }
-  .nv-overview-flags > .nv-overview-risk {
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: start;
-  }
-  .nv-overview-flags > :not(.nv-overview-risk):not(.nv-overview-flag) {
-    grid-column: 3;
-    grid-row: 1;
-    justify-self: start;
-  }
-  .nv-overview-flags > .nv-overview-flag {
-    grid-column: 2 / 4;
-    grid-row: 2;
-    justify-self: start;
-  }
-  .nv-overview-entry > .nv-overview-activity {
-    grid-column: 4;
-    grid-row: 1 / span 2;
-    align-self: start;
-  }
-  .nv-overview-entry > :not(.nv-overview-head):not(.nv-overview-activity) {
-    grid-column: 1 / -1;
-  }
-  .nv-overview-entry > .nv-overview-footer {
-    grid-column: 1;
-    grid-row: 2;
-  }
-}
+/* Each record: who it is on the left, its risk and review on the right, its
+   recent activity and the expanders under it — the same at every width. */
 .nv-overview-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-3);
+}
+.nv-overview-head > .nv-overview-flags {
+  margin-left: auto;
+  justify-content: flex-end;
 }
 .nv-overview-flags {
   display: flex;
