@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "Chưa xác nhận",
+      "unsent": "Chưa gửi",
+      "mark-tooltip": "Pane này chạy agent qua Agent Client Protocol (ACP): Navide tự vẽ cuộc trò chuyện thay vì màn hình riêng của CLI.",
+      "permission": "Agent yêu cầu: {title}",
+      "failed": "Không khởi động được agent: {reason}",
+      "exited": "Agent đã dừng (mã thoát {code}).",
+      "placeholder": "Nhắn cho agent. Enter để gửi, Shift+Enter để xuống dòng.",
+      "send": "Gửi",
+      "cancel": "Hủy lượt"
+    },
     "opened-by": "Được mở bởi {parent}",
     "git": {
       "title": "QUẢN LÝ MÃ NGUỒN",
@@ -1809,6 +1820,7 @@
       "removeShell": "Gỡ {name}",
       "none": "Không có",
       "save": "Lưu chính sách",
+      "edit": "Chỉnh sửa chính sách",
       "resetUser": "Đặt lại chính sách người dùng",
       "sourceTitle": "Nguồn chính sách của workspace",
       "sourceHint": "Đề xuất của kho chưa được tin cậy cho đến khi bạn xem và chấp nhận rõ ràng. Việc đổi nguồn cần đúng dấu vân tay hiện tại.",
@@ -1906,6 +1918,7 @@
         }
       },
       "bundled": "Đi kèm",
+      "listTitle": "Plugin Navide",
       "bundledGit": "Git đi kèm",
       "state": {
         "active": "Đang hoạt động",

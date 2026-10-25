@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "Nicht bestätigt",
+      "unsent": "Nicht gesendet",
+      "mark-tooltip": "Dieses pane führt seinen Agent über das Agent Client Protocol (ACP) aus: Navide zeichnet die Unterhaltung statt des eigenen Bildschirms der CLI.",
+      "permission": "Der Agent möchte: {title}",
+      "failed": "Der Agent konnte nicht gestartet werden: {reason}",
+      "exited": "Der Agent wurde beendet (Exit-Code {code}).",
+      "placeholder": "Nachricht an den Agent. Enter zum Senden, Shift+Enter für eine neue Zeile.",
+      "send": "Senden",
+      "cancel": "Turn abbrechen"
+    },
     "opened-by": "Geöffnet von {parent}",
     "git": {
       "title": "QUELLCODEVERWALTUNG",
@@ -1809,6 +1820,7 @@
       "removeShell": "{name} entfernen",
       "none": "Keine",
       "save": "Richtlinie speichern",
+      "edit": "Richtlinie bearbeiten",
       "resetUser": "Benutzerrichtlinie zurücksetzen",
       "sourceTitle": "Richtlinienquelle des Arbeitsbereichs",
       "sourceHint": "Eine Repository-Empfehlung gilt als nicht vertrauenswürdig, bis Sie sie prüfen und ausdrücklich annehmen. Quellenänderungen erfordern einen exakten aktuellen Fingerabdruck.",
@@ -1906,6 +1918,7 @@
         }
       },
       "bundled": "Mitgeliefert",
+      "listTitle": "Navide-Plug-ins",
       "bundledGit": "Mitgeliefertes Git",
       "state": {
         "active": "Aktiv",

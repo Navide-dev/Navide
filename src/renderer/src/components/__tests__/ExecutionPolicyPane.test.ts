@@ -650,3 +650,122 @@ describe('ExecutionPolicyPane', () => {
     expect(api.resetSourceSelections).not.toHaveBeenCalled()
   })
 })
+
+describe('ExecutionPolicyPane summary', () => {
+  let wrapper: VueWrapper | undefined
+
+  beforeEach(() => {
+    i18n.global.locale.value = 'en-US'
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  const editorShown = (w: VueWrapper): boolean =>
+    (w.get('#ep-editor').element as HTMLElement).style.display !== 'none'
+
+  /** The fixture's recommendation is a denylist, which is high risk; a plain allowlist is not. */
+  function quietSnapshot(): ExecutionPolicySettingsSnapshot {
+    const base = snapshot()
+    return snapshot({
+      workspace: {
+        ...base.workspace!,
+        recommendation: { ...base.workspace!.recommendation!, policy: { ...DEFAULT_POLICY, system: ['fs'], shell: ['git'] } },
+      },
+    })
+  }
+
+  it('leads with the effective policy and opens the editor on Edit Policy', async () => {
+    mockExecutionPolicy(quietSnapshot())
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(wrapper.findAll('.ep-facts .ep-tag').map((tag) => tag.text())).toEqual(['fs', 'ui', 'aiCli', 'git', 'gh', 'glab'])
+    // The recommendation is untrusted, and says so while the editor is closed.
+    expect(wrapper.get('.ep-summary-note').text()).toContain('Untrusted')
+    expect(wrapper.get('.ep-summary-note').text()).toContain('Mode: Allowlist')
+    expect(editorShown(wrapper)).toBe(false)
+
+    const toggle = wrapper.get('.ep-edit-toggle')
+    expect(toggle.text()).toBe('Edit Policy')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    await toggle.trigger('click')
+    expect(editorShown(wrapper)).toBe(true)
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('.ep-summary-note').exists()).toBe(false)
+  })
+
+  it('keeps the editor open, with no way to close it, while the workspace policy needs attention', async () => {
+    const base = quietSnapshot()
+    mockExecutionPolicy({ ...base, workspace: { ...base.workspace!, status: 'stale' } })
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(editorShown(wrapper)).toBe(true)
+    expect(wrapper.find('.ep-edit-toggle').exists()).toBe(false)
+  })
+
+  it('keeps the editor open while a valid repository recommendation is high risk', async () => {
+    // The default fixture: a valid denylist recommendation, whose warning is in the editor.
+    mockExecutionPolicy()
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(editorShown(wrapper)).toBe(true)
+    expect(wrapper.find('.ep-edit-toggle').exists()).toBe(false)
+    expect(wrapper.find('.ep-repository-full-confirmation').exists()).toBe(true)
+  })
+
+  it('keeps the editor open while the user policy draft is high risk', async () => {
+    const quiet = quietSnapshot()
+    mockExecutionPolicy({ ...quiet, userPolicy: { ...DEFAULT_POLICY, mode: 'full', system: [...DEFAULT_POLICY.system] } })
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(editorShown(wrapper)).toBe(true)
+    expect(wrapper.find('.ep-edit-toggle').exists()).toBe(false)
+    expect(wrapper.find('.ep-full-warning').exists()).toBe(true)
+  })
+
+  it('opens the editor as soon as the draft becomes high risk', async () => {
+    mockExecutionPolicy(quietSnapshot())
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+    await wrapper.get('.ep-edit-toggle').trigger('click')
+    await wrapper.get('[data-mode="full"] input').setValue(true)
+
+    expect(wrapper.find('.ep-full-warning').exists()).toBe(true)
+    // Now it cannot be closed while the warning stands.
+    expect(wrapper.find('.ep-edit-toggle').exists()).toBe(false)
+    expect(editorShown(wrapper)).toBe(true)
+  })
+
+  it("names a recommendation's mode in the summary even when it is not valid", async () => {
+    // Not valid, so no high-risk warning and the editor may stay closed; its
+    // mode, Full here, is still on the page without a click.
+    const quiet = quietSnapshot()
+    mockExecutionPolicy({
+      ...quiet,
+      workspace: {
+        ...quiet.workspace!,
+        recommendation: { state: 'stale', policy: { ...DEFAULT_POLICY, mode: 'full', system: [], shell: [] }, fingerprint: 'b'.repeat(64) },
+      },
+    } as ExecutionPolicySettingsSnapshot)
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(editorShown(wrapper)).toBe(false)
+    expect(wrapper.get('.ep-summary-note').text()).toContain('Mode: Full')
+  })
+
+  it('keeps the editor open while policy storage needs recovery', async () => {
+    mockExecutionPolicy({ ...quietSnapshot(), recovery: { state: 'corrupt', canRebuild: true, unsafePaths: [] } })
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(editorShown(wrapper)).toBe(true)
+    expect(wrapper.get('[data-section="recovery"]').text()).toContain('Rebuild')
+  })
+})

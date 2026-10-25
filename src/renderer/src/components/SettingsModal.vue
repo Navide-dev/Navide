@@ -321,6 +321,55 @@ watch(activeTab, async (tab) => {
   })
 }, { immediate: true })
 watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.value = true })
+// The Navide Plugins page is long (policy editor, inventory, Disclosure
+// overview), so its parts are one click away from the top of the page.
+const extensionsJumps = [
+  { section: 'execution-policy', label: 'settings.nav.executionPolicy' },
+  { section: 'extensions-bundled', label: 'settings.extensions.bundled' },
+  { section: 'extensions-install-from-file', label: 'settings.extensions.installed' },
+  { section: 'extensions-developer-mode', label: 'settings.extensions.developerMode.title' },
+  { section: 'extensions-native-backends', label: 'settings.extensions.nativeBackends.title' },
+  { section: 'disclosureOverview', label: 'settings.nav.disclosureOverview' },
+] as const
+// The jump link of the part currently at the top of the page, for aria-current.
+const activeExtensionsJump = ref<string>(extensionsJumps[0].section)
+function onExtensionsScroll(event: Event): void {
+  const scroller = event.currentTarget as HTMLElement
+  const top = scroller.getBoundingClientRect().top
+  let current: string = extensionsJumps[0].section
+  for (const jump of extensionsJumps) {
+    const el = scroller.querySelector(`[data-settings-section="${jump.section}"]`)
+    if (el && el.getBoundingClientRect().top - top <= scroller.clientHeight / 3) current = jump.section
+  }
+  // The last part can be too short to ever reach the top; at the bottom it is the one in view.
+  if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) {
+    current = extensionsJumps[extensionsJumps.length - 1].section
+  }
+  activeExtensionsJump.value = current
+}
+// A plugin card's link: the overview section, then that plugin's entry once the
+// overview (loaded on first view) has rendered it.
+function openDisclosureOverview(id?: string): void {
+  activeTab.value = 'disclosureOverview'
+  if (!id) return
+  let tries = 0
+  const seek = (): void => {
+    const entry = document.querySelector<HTMLElement>(
+      `[data-settings-section="disclosureOverview"] [data-id="${CSS.escape(id)}"]`,
+    )
+    if (entry) {
+      entry.querySelector<HTMLDetailsElement>('details.nv-overview-record')?.setAttribute('open', '')
+      entry.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+    else if (++tries < 20) setTimeout(seek, 100)
+  }
+  setTimeout(seek, 50)
+}
+function jumpToExtensionsSection(section: string): void {
+  document
+    .querySelector<HTMLElement>(`[data-settings-section="extensions"] [data-settings-section="${section}"]`)
+    ?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+}
 // initialTab is only read once at mount by the ref initializer above; when the
 // modal is already open and a new tab is requested (e.g. the ui.settings.open
 // action), react to the prop changing too.
@@ -4546,7 +4595,17 @@ watch(activeTab, (tab) => {
              the inventory below it is not. -->
         <div v-show="activeTab === 'extensions'" class="s-body s-body--bleed extensions-body" data-settings-section="extensions">
           <h1 class="s-page-title">{{ $t('settings.nav.extensions') }}</h1>
-          <div class="extensions-scroll">
+          <nav class="ext-jump" :aria-label="$t('settings.nav.extensions')">
+            <button
+              v-for="jump in extensionsJumps"
+              :key="jump.section"
+              type="button"
+              class="ext-jump-link"
+              :aria-current="activeExtensionsJump === jump.section ? 'location' : undefined"
+              @click="jumpToExtensionsSection(jump.section)"
+            >{{ $t(jump.label) }}</button>
+          </nav>
+          <div class="extensions-scroll" @scroll.passive="onExtensionsScroll">
             <section class="ext-policy-block" data-settings-section="execution-policy">
               <h2 class="ext-policy-block-title">{{ $t('settings.nav.executionPolicy') }}</h2>
               <div class="settings-meta-row inline">
@@ -4556,7 +4615,7 @@ watch(activeTab, (tab) => {
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" />
             </section>
-            <ExtensionsPane @open-disclosure-overview="activeTab = 'disclosureOverview'" />
+            <ExtensionsPane @open-disclosure-overview="openDisclosureOverview" />
             <!-- Plan B D5, D-f: records only, it changes nothing a Navide plugin may do. -->
             <section ref="disclosureOverviewSection" class="ext-policy-block" data-settings-section="disclosureOverview">
               <h2 class="ext-policy-block-title">{{ $t('settings.nav.disclosureOverview') }}</h2>
@@ -5199,6 +5258,11 @@ watch(activeTab, (tab) => {
    inventory, so the page owns the one scrollbar and both panes inside it are
    plain blocks. Marketplace matches it so the two plugin pages scroll alike. */
 .extensions-scroll,
+.marketplace-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 .marketplace-view-switch {
   display: flex;
   gap: var(--space-2);
@@ -5217,21 +5281,70 @@ watch(activeTab, (tab) => {
   color: var(--text-bright);
   border-bottom-color: var(--accent-fg);
 }
-.marketplace-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+/* Jump links under the page title: quiet pills, one per part of the page. */
+/* One row at any width: it scrolls sideways rather than wrapping. */
+.ext-jump {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* A soft right edge says the row scrolls when it is wider than the page. */
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  gap: 6px;
+  padding: var(--space-3) 22px var(--space-3);
+  border-bottom: 1px solid var(--border-muted);
+  flex-shrink: 0;
 }
-.ext-policy-block { margin-bottom: var(--space-group); }
+.ext-jump-link {
+  flex: 0 0 auto;
+  height: var(--control-h-lg);
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
+}
+.ext-jump-link:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+.ext-jump-link[aria-current] {
+  border-color: var(--accent-emphasis);
+  background: var(--accent-subtle);
+  color: var(--accent-fg);
+}
+.ext-jump-link:focus-visible {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: 1px;
+}
+.extensions-scroll { padding-top: var(--space-5); scroll-padding-top: var(--space-4); }
+.ext-policy-block { margin-bottom: var(--space-4); }
+/* The page stacks three blocks (policy, inventory, Disclosure overview); an
+   inset hairline above each later one marks where the next block starts. */
+.extensions-scroll > * + *::before {
+  content: '';
+  display: block;
+  height: 1px;
+  margin: 0 22px var(--space-5);
+  background: var(--border-muted);
+}
 .ext-policy-block-title {
   /* Side margins, not padding or a width: these panels have no border-box, so
      a width here would push the block past its grid track. */
   margin: 0 22px;
-  font-size: var(--font-md);
-  font-weight: 600;
+  font-size: var(--font-lg);
+  font-weight: 650;
+  letter-spacing: -0.01em;
   color: var(--text-bright);
 }
-.ext-policy-block > .settings-meta-row.inline { margin: 8px 22px 14px; }
+.ext-policy-block > .settings-meta-row.inline { margin: 8px 22px 14px; background: var(--bg-subtle); }
+/* The inventory pane carries its own 22px gutter, so its divider needs no inset. */
+.extensions-scroll > .extensions-pane::before { margin-left: 0; margin-right: 0; }
 .settings-meta-row {
   display: flex;
   align-items: center;

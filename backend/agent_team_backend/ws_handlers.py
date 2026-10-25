@@ -9637,6 +9637,8 @@ async def terminal_resource_usage(session: "Session", msg_id: str, msg_type: str
             await session.send_json(make_response(msg_id, msg_type, {**cached, "cliRisks": risks}))
             return
         result = await _collect_resource_usage(session)
+        from . import acp_ws
+        result = await acp_ws.with_resource_rows(result)
         _resource_sweep_cache["at"] = now
         _resource_sweep_cache["payload"] = result
     risks = await asyncio.to_thread(
@@ -10200,10 +10202,7 @@ async def project_set_layout_mode(session: "Session", msg_id: str, msg_type: str
     mode = payload.get("layout_mode", "grid")
     if mode not in ("auto", "grid", "spotlight", "fullscreen"):
         mode = "grid"
-    project = app.project_store.peek(ws_raw)
-    if project:
-        project.layout_mode = mode
-        app.project_store.save(project)
+    app.project_store.set_layout_mode(ws_raw, mode)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -10909,15 +10908,13 @@ async def project_set_theme(session: "Session", msg_id: str, msg_type: str, payl
     # of truth. We just stash the latest theme + custom overrides so they
     # can sync across devices. Unknown workspace → silently no-op.
     ws_raw = payload.get("workspace_path", "") or ""
-    project = app.project_store.peek(ws_raw)
-    if project:
-        theme = payload.get("theme")
-        if isinstance(theme, str) and theme:
-            project.theme = theme
-        custom = payload.get("theme_custom")
-        if isinstance(custom, dict):
-            project.theme_custom = custom
-        app.project_store.save(project)
+    theme = payload.get("theme")
+    custom = payload.get("theme_custom")
+    app.project_store.set_theme(
+        ws_raw,
+        theme=theme if isinstance(theme, str) and theme else None,
+        theme_custom=custom if isinstance(custom, dict) else None,
+    )
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -10928,12 +10925,8 @@ async def project_set_language(session: "Session", msg_id: str, msg_type: str, p
     # Backup-only persistence: localStorage in the renderer is the source
     # of truth. Unknown workspace → silently no-op.
     ws_raw = payload.get("workspace_path", "") or ""
-    project = app.project_store.peek(ws_raw)
-    if project:
-        lang = payload.get("language")
-        if isinstance(lang, str) and lang:
-            project.language = lang
-        app.project_store.save(project)
+    lang = payload.get("language")
+    app.project_store.set_language(ws_raw, lang if isinstance(lang, str) and lang else None)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 

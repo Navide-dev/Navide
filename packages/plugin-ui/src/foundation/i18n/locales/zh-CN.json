@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "未确认",
+      "unsent": "未发送",
+      "mark-tooltip": "这个 pane 通过 Agent Client Protocol（ACP）运行 agent：对话由 Navide 绘制，而不是 CLI 自己的界面。",
+      "permission": "agent 请求：{title}",
+      "failed": "agent 无法启动：{reason}",
+      "exited": "agent 已停止（退出码 {code}）。",
+      "placeholder": "给 agent 发消息。Enter 发送，Shift+Enter 换行。",
+      "send": "发送",
+      "cancel": "取消本轮"
+    },
     "opened-by": "由「{parent}」打开",
     "git": {
       "title": "源代码控制",
@@ -1809,6 +1820,7 @@
       "removeShell": "移除 {name}",
       "none": "无",
       "save": "保存政策",
+      "edit": "编辑政策",
       "resetUser": "重设用户政策",
       "sourceTitle": "工作区政策来源",
       "sourceHint": "Repository 建议在你查看并明确接受前都不受信任。切换来源需要精确符合目前指纹。",
@@ -1906,6 +1918,7 @@
         }
       },
       "bundled": "内置",
+      "listTitle": "Navide 插件",
       "bundledGit": "内置 Git",
       "state": {
         "active": "激活中",

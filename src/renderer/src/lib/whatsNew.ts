@@ -121,6 +121,51 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.30',
+    title: {
+      'zh-TW': '「Navide 外掛」設定頁改版：風險和警告直接標在清單上，Pipeline 也不再默默卡住',
+      'en-US': 'A Reworked Navide Plugins Page With Risk and Warnings Marked in the List, and Pipelines That No Longer Stall Silently',
+      'ja-JP': '「Navide プラグイン」設定ページを刷新：リスクと警告を一覧に表示し、Pipeline も黙って止まらなくなりました',
+    },
+    highlights: [
+      {
+        'zh-TW': '「設定 → Navide 外掛」改版。頁面先顯示目前生效的執行政策摘要（來源和模式），按「編輯政策」展開編輯器；有 Repository 建議時，摘要會標「不受信任」並列出它的模式。有需要你處理的事時，編輯器會自動展開而且收不起來，包括兩種高風險警告：你正在設定的政策是高風險，或有效的 Repository 建議是高風險。內建和已安裝的外掛合成一份清單，旁邊顯示選中外掛的詳細資料。已安裝外掛的列會同時顯示「已停用」和風險等級（中以上），不是從 Navide Marketplace 安裝的（Testplace 或預先發行版、本機檔案、開發者資料夾）會有來源圖示；每一列有警告時都會顯示「⚠ N」，N 是詳細資料裡的警告數。滑鼠移到標記、圖示或被截斷的名稱上會顯示完整文字；警告的完整內容要選中外掛後在詳細資料裡看。揭露總覽裡，每個外掛的風險等級、來源和「掃描到但未宣告」標示一直顯示，完整的揭露卡在下方展開，內容沒有刪減。',
+        'en-US': 'Settings → Navide Plugins is reworked. The page opens on a summary of the execution policy in effect (its source and Mode), and Edit Policy opens the editor; a repository recommendation is shown there as Untrusted, with its mode. While something needs your attention, the editor opens by itself and cannot be collapsed; that includes both high-risk warnings, for a high-risk policy you are setting and for a valid high-risk repository recommendation. Bundled and installed plugins share one list, with the selected plugin\'s details beside it. An installed plugin\'s row shows Disabled together with its risk level (Medium and above), and an icon when it did not come from the Navide Marketplace (Testplace or pre-release, a local file, a developer folder). Any row with warnings shows ⚠ N, N being the number of warnings in its details. Hover a marker, an icon or a cut-off name to read it in full; the warnings themselves are in the details once you select the plugin. In the Disclosure overview, each plugin\'s risk level, source and any "Found by the scan but not declared" flag stay in view, and the full Disclosure opens below them, unshortened.',
+        'ja-JP': '「設定 → Navide プラグイン」を刷新しました。ページの最初に現在有効な実行ポリシーの概要（ソースとモード）を表示し、「ポリシーを編集」でエディターを開きます。リポジトリの推奨設定がある場合は、概要に「未信頼」と表示し、そのモードも示します。対応が必要なことがあるときは、エディターが自動で開き、閉じることはできません。2 つの高リスク警告（設定中のポリシーが高リスクの場合と、有効なリポジトリの推奨設定が高リスクの場合）もこれに含まれます。同梱とインストール済みのプラグインは 1 つの一覧にまとまり、その横に選択したプラグインの詳細を表示します。インストール済みのプラグインの行には「無効」とリスクレベル（中以上）が並んで表示され、Navide Marketplace 以外から入れたもの（Testplace またはプレリリース、ローカルファイル、開発者フォルダー）にはソースのアイコンが付きます。警告がある行には「⚠ N」が表示され、N は詳細にある警告の数です。マークやアイコン、途中で切れた名前にポインターを合わせると全文が表示されます。警告の全文は、プラグインを選択して詳細で確認できます。開示の一覧では、各プラグインのリスクレベル、ソース、「スキャンで見つかったが宣言されていないもの」の表示が常に見え、完全な開示はその下で開けます。内容は省略していません。',
+      },
+      {
+        'zh-TW': '「設定 → Navide 外掛」又可以捲動了，執行政策、外掛清單和揭露總覽也不會再被擠成三欄窄條。這是 0.2.27 起的問題。',
+        'en-US': 'Settings → Navide Plugins scrolls again, and its execution policy, plugin list and Disclosure overview are no longer squeezed into three narrow columns. This had been broken since 0.2.27.',
+        'ja-JP': '「設定 → Navide プラグイン」が再びスクロールできるようになり、実行ポリシー、プラグイン一覧、開示の一覧が 3 列の細い枠に押し込まれることもなくなりました。0.2.27 から続いていた問題です。',
+      },
+      {
+        'zh-TW': 'Pipeline 的 Manager 模式不會再因為 Manager 沒有印出 ---MANAGER-READY--- 而默默卡住：Navide 會先提醒它一次；如果它閒置 180 秒、而且有 worker 的訊息在等它，Navide 會告訴它這是逾時後的替代處理，並把等著的訊息交給它。執行紀錄會記下這件事。',
+        'en-US': 'A Manager-mode pipeline stage no longer stalls silently when its Manager never prints ---MANAGER-READY---: Navide reminds it once, and if it then sits idle for 180 seconds while workers\' messages wait for it, tells it this is a timeout fallback and hands it those messages. The run log records the fallback.',
+        'ja-JP': 'Pipeline の Manager モードで、Manager が ---MANAGER-READY--- を出力しないまま黙って止まることはなくなりました：Navide はまず一度だけ促し、その後 180 秒アイドルのままで worker のメッセージが待っている場合は、タイムアウト時の代替処理であることを伝えて、待っていたメッセージを渡します。実行ログにも記録されます。',
+      },
+      {
+        'zh-TW': 'Pipeline 某個 slot 的 role 提示沒有送到 agent 時，run 會明確失敗，不再在沒有 role 的情況下照樣開工：節點會顯示「role prompt never reached the agent」，錯誤通知會指出是哪個階段和 slot，pane 會保留，之後可以接續執行。',
+        'en-US': 'When a pipeline slot\'s role prompt never reaches its agent, the run now fails with the reason instead of starting the slot without its role: the node shows "role prompt never reached the agent", an error toast names the stage and slot, and the panes stay open so the run can be resumed.',
+        'ja-JP': 'Pipeline の slot の role プロンプトが agent に届かなかった場合、role なしのまま作業を始めることはなくなり、run は理由を示して失敗します：ノードに「role prompt never reached the agent」と表示され、エラー通知がどのステージのどの slot かを示し、pane はそのまま残るので run を再開できます。',
+      },
+      {
+        'zh-TW': '本機（stdio）MCP 伺服器在啟動途中結束或連線出錯時，「設定 → MCP」會說出真正的原因（例如伺服器的結束代碼，或連線失敗的錯誤），不再當成啟動被取消，也不會顯示錯誤的結束代碼。',
+        'en-US': 'When a local (stdio) MCP server exits or its connection fails partway through starting, Settings → MCP gives the real reason (the server\'s exit code, or the connection error) instead of calling it a cancelled start or showing the wrong exit code.',
+        'ja-JP': 'ローカル（stdio）の MCP サーバーが起動の途中で終了したり接続に失敗したりした場合、「設定 → MCP」は本当の理由（サーバーの終了コードや接続エラー）を表示し、起動がキャンセルされたと扱ったり、誤った終了コードを表示したりすることはなくなりました。',
+      },
+      {
+        'zh-TW': '更穩定：關掉的 pane 不會在下次還原專案時又冒出來；Navide 內建的 Plan MCP 服務在內部中斷後會正常重新開始；同時更改版面、主題或語言時，不會蓋掉剛存好的其他變更。',
+        'en-US': 'Steadier: a closed pane no longer comes back the next time the project is restored, Navide\'s built-in Plan MCP service starts again cleanly after an internal interruption, and changing the layout, theme or language no longer overwrites another change saved at the same moment.',
+        'ja-JP': '安定性の向上：閉じた pane が次にプロジェクトを復元したときに戻ってくることはなくなりました。Navide 内蔵の Plan MCP サービスは内部で中断しても正常に再開し、レイアウト・テーマ・言語の変更が同じタイミングで保存された別の変更を上書きすることもなくなりました。',
+      },
+      {
+        'zh-TW': '安全更新：Electron 升級到 44.9.1，修補安全公告 GHSA-jr5w-w6x2-84p9，不再信任已遭入侵的 eMudhra 中繼憑證。這個版本內建的 Node.js 仍是 24.22.0，還不含 Node.js 官方 10 月 21 日的安全修補（24.x 線修補在 24.22.1）；Electron 推出內含這批修補的版本後，我們會在新版跟上。',
+        'en-US': 'Security: Electron is updated to 44.9.1 for advisory GHSA-jr5w-w6x2-84p9; it stops trusting the compromised eMudhra intermediate certificates. Its built-in Node.js is still 24.22.0, without the Node.js security fixes of October 21 (24.22.1 on the 24 line); we will follow in a new Navide release once Electron ships a version that includes them.',
+        'ja-JP': 'セキュリティ更新：Electron を 44.9.1 に更新し、アドバイザリ GHSA-jr5w-w6x2-84p9 に対応しました。侵害された eMudhra の中間証明書を信頼しなくなります。内蔵の Node.js は 24.22.0 のままで、Node.js が 10 月 21 日に公開したセキュリティ修正（24 系では 24.22.1）はまだ含まれていません。Electron がこの修正を含むバージョンを公開したら、Navide の新しいバージョンで対応します。',
+      },
+    ],
+  },
+  {
     version: '0.2.29',
     title: {
       'zh-TW': 'Navide 會說六種新語言：德、西、法、葡、俄、越文介面（Beta）',

@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "Não confirmado",
+      "unsent": "Não enviado",
+      "mark-tooltip": "Este pane executa o agent pelo Agent Client Protocol (ACP): o Navide desenha a conversa em vez da tela própria da CLI.",
+      "permission": "O agent pede para: {title}",
+      "failed": "Não foi possível iniciar o agent: {reason}",
+      "exited": "O agent parou (código de saída {code}).",
+      "placeholder": "Escreva para o agent. Enter envia, Shift+Enter adiciona uma linha.",
+      "send": "Enviar",
+      "cancel": "Cancelar turno"
+    },
     "opened-by": "Aberto por {parent}",
     "git": {
       "title": "CONTROLE DO CÓDIGO-FONTE",
@@ -1809,6 +1820,7 @@
       "removeShell": "Remover {name}",
       "none": "Nenhum",
       "save": "Salvar política",
+      "edit": "Editar política",
       "resetUser": "Redefinir política de usuário",
       "sourceTitle": "Fonte de política do workspace",
       "sourceHint": "Uma recomendação do repositório não é confiável até que você a inspecione e a aceite explicitamente. Trocas de fonte exigem a impressão digital atual exata.",
@@ -1906,6 +1918,7 @@
         }
       },
       "bundled": "Integrado",
+      "listTitle": "Plug-ins do Navide",
       "bundledGit": "Git integrado",
       "state": {
         "active": "Ativo",

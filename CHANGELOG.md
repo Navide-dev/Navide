@@ -6,6 +6,36 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
+- ACP (Agent Client Protocol) groundwork, not reachable in 0.2.30 (#592, which carries #584, #586 and #589): a client that talks to an agent over stdio, a session per pane, an ACP pane, and backend handling of its turns (activity, resource usage, a transcript log, the MCP tools and message delivery). No entry point creates an ACP pane, so nothing changes for users. Terminal panes, and the MCP tools for every pane that is not an ACP pane, behave as before.
+
+### Changed
+
+- Settings → Navide Plugins is reworked (#618). The page opens on a summary of the execution policy in effect, with its source and Mode, and Edit Policy opens the editor. A repository recommendation is shown in the summary as Untrusted, with its mode. While something needs attention the editor opens by itself and cannot be collapsed. That includes both high-risk warnings: a high-risk policy you are setting, and a valid high-risk repository recommendation. Bundled and installed plugins share one list, with the selected plugin's details beside it. An installed plugin's row shows Disabled together with its risk level (Medium and above). It also shows an icon when the plugin did not come from the Navide Marketplace (Testplace or pre-release, a local file, a developer folder). Any row with warnings shows ⚠ N, N being the number of warnings its details carry. Hover a marker, an icon or a cut-off name to read it in full; the warnings themselves are in the details once you select the plugin. In the Disclosure overview, each plugin's risk level, source and any "Found by the scan but not declared" flag stay in view, and the full Disclosure opens below them, unshortened. Two new strings in all 11 interface languages.
+
+### Fixed
+
+- Pipelines: a Manager-mode stage no longer stalls silently on a Manager that skips or misorders its markers (#539). A Manager reply that ends before the stage's router has started (it waits for every slot's kickoff) is held and routed once it starts, where its DISPATCH used to be dropped. A Manager whose reply to its kickoff ends without `---MANAGER-READY---` is reminded once to print it. If it then sits idle for 180 seconds while workers' messages are held for it, it is told that no `---MANAGER-READY---` was seen and that this is a timeout fallback, and the held messages follow. The run log records the fallback. A Manager that ends several turns of its own work without READY is not taken as ready. A DISPATCH that names no slot, or that could not be typed into its worker, is now reported to the Manager with the slots it can dispatch to, and a failed one is logged as `dispatch to <slot> not delivered`. Stages whose Manager prints its markers as instructed run as before.
+
+- Pipelines: a slot whose role prompt never reached its agent no longer gets its kickoff anyway and runs on as `running` without its role (#448). A role that failed while its pane was pre-spawned is typed once more when the stage starts. If the role still does not land, or a role typed at spawn time does not, the slot takes no kickoff and the run fails the way a failed kickoff does: the node shows `role prompt never reached the agent`, an error toast says which stage and slot, and the panes stay open so the run can be resumed. Slots whose role lands run as before.
+
+- Settings → Navide Plugins scrolls again (#613). Since 0.2.27 its scroll container had lost its scroll rule and was laid out as a row, so the page could not be scrolled and its three blocks (execution policy, plugin list, Disclosure overview) were squeezed into three columns.
+
+- MCP: a local (stdio) server that exits, or whose connection fails, partway through starting is reported with the real reason in Settings → MCP (#614, #616, #617). It used to be reported as a cancelled start, or with the wrong exit code. The reason is now the server's exit code, or the connection error when the server is still running (for example output that is not UTF-8). A cancel from outside the start, such as shutting down, still goes through as a cancel, as before.
+
+- Projects: a closed pane no longer comes back on the next workspace restore (#603). A write made at the same moment by a background thread could put back the pane's old record. Changing the layout mode, theme or language no longer overwrites another change saved at the same moment, such as a pane closing, a live-stamp clear or a rename (#612). Each project-store method that reads, changes and saves the project now holds its save lock from the read to the save.
+
+- MCP: Navide's own MCP endpoint (`/plan-mcp`), which the CLI panes use for the Plan and `cli_*` tools, no longer answers every call with a bare HTTP 500 ("Task group is not initialized") after its session manager stops while a request is still finishing (#606). It now starts a fresh session manager on the next call.
+
+### Security
+
+- Dependencies: undici 6.29.1 and 7.30.1, which `node-gyp` and Electron's downloader use while building, for GHSA-xjj6-f33q-929c; happy-dom 21.0.4, the test DOM, for GHSA-834v-8h66-3h79; setuptools 84.1.0, which PyInstaller uses to bundle the backend, for GHSA-xmj3-9gf7-h52w. Build and test tooling only; nothing the app runs changes.
+
+- Dependencies: Electron 44.9.1 (Node 24.22.0, Chromium 152.0.7977.167; was 44.7.0 with Node 24.21.0) for GHSA-jr5w-w6x2-84p9, which stops trusting the compromised eMudhra intermediate certificates.
+
+## [0.2.29] — 2026-10-23 — signed release
+
+### Added
+
 - Interface language: Vietnamese (Tiếng Việt), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It leaves out pronouns where it can and uses verb-first buttons. Every string is stored precomposed (NFC) with old-style tone placement. Agent, AI, pane, workspace, Plan, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker. With it, all eleven interface languages Navide recognizes have a catalog.
 
 - Interface language: Russian (Русский), marked Beta. It covers the whole interface, the help pages, and the Plans and Browser plugins. It uses lowercase вы, « » quotes and Russian's three plural forms. Agent, AI, pane, skill, CLI and Git terms stay in English. It was translated by AI panes and reviewed by a separate AI pane, not yet by a native speaker.

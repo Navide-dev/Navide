@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "Not confirmed",
+      "unsent": "Not sent",
+      "mark-tooltip": "This pane runs its agent over the Agent Client Protocol (ACP): Navide draws the conversation instead of the CLI's own screen.",
+      "permission": "The agent asks to: {title}",
+      "failed": "The agent could not be started: {reason}",
+      "exited": "The agent has stopped (exit code {code}).",
+      "placeholder": "Message the agent. Enter sends, Shift+Enter adds a line.",
+      "send": "Send",
+      "cancel": "Cancel Turn"
+    },
     "opened-by": "Opened by {parent}",
     "git": {
       "title": "SOURCE CONTROL",
@@ -1809,6 +1820,7 @@
       "removeShell": "Remove {name}",
       "none": "None",
       "save": "Save Policy",
+      "edit": "Edit Policy",
       "resetUser": "Reset User Policy",
       "sourceTitle": "Workspace policy source",
       "sourceHint": "A repository recommendation is untrusted until you inspect it and explicitly accept it. Source changes require an exact current fingerprint.",
@@ -1906,6 +1918,7 @@
         }
       },
       "bundled": "Bundled",
+      "listTitle": "Navide plugins",
       "bundledGit": "Bundled Git",
       "state": {
         "active": "Active",

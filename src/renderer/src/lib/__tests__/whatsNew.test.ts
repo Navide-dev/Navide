@@ -165,8 +165,8 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[3].version).toBe('0.2.26')
-    expect(WHATS_NEW[4].version).toBe('0.2.25')
+    expect(WHATS_NEW[4].version).toBe('0.2.26')
+    expect(WHATS_NEW[5].version).toBe('0.2.25')
   })
 })
 
@@ -192,7 +192,7 @@ describe('0.2.27 — Navide Browser and blocked local installs', () => {
   it('shows once to someone updating from 0.2.26, and not to a build still running 0.2.26', () => {
     expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
-    expect(WHATS_NEW[2].version).toBe('0.2.27')
+    expect(WHATS_NEW[3].version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
   })
 })
@@ -238,11 +238,39 @@ describe('0.2.29 — six more languages', () => {
     expect(entry!.note!['en-US']).toContain('https://nodejs.org/en/blog/vulnerability/october-2026-security-releases')
   })
 
-  it('shows once to someone updating from 0.2.28, as the newest entry, and not to a build still running 0.2.28', () => {
+  it('shows once to someone updating from 0.2.28, and not to a build still running 0.2.28', () => {
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.29', '0.2.29')).toBeNull()
-    expect(WHATS_NEW[0].version).toBe('0.2.29')
+    expect(WHATS_NEW[1].version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
+  })
+})
+
+// The 0.2.30 entry: pipeline and MCP start-up fixes, the Navide Plugins page
+// scrolling again, and the Electron certificate advisory.
+describe('0.2.30 — pipelines no longer stall silently', () => {
+  const entry = whatsNewFor('0.2.30')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    for (const text of [entry!.title, ...entry!.highlights]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('names the 180-second Manager fallback, the Electron advisory and the Node.js fixes still pending', () => {
+    const all = entry!.highlights.map((text) => text['en-US']).join('\n')
+    expect(all).toContain('180 seconds')
+    expect(all).toContain('44.9.1')
+    expect(all).toContain('GHSA-jr5w-w6x2-84p9')
+    expect(all).toContain('still 24.22.0')
+    expect(all).toContain('⚠ N')
+    expect(all).toContain('cannot be collapsed')
+  })
+
+  it('shows once to someone updating from 0.2.29, as the newest entry, and not to a build still running 0.2.29', () => {
+    expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
+    expect(pickWhatsNew('0.2.30', '0.2.30')).toBeNull()
+    expect(WHATS_NEW[0].version).toBe('0.2.30')
+    expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
   })
 })
 

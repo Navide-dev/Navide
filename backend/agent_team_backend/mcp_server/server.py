@@ -50,6 +50,7 @@ from starlette.responses import PlainTextResponse
 from starlette.types import Receive, Scope, Send
 
 from agent_team_backend import login_panes
+from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
 from agent_team_backend.fs_service import FsError
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
@@ -3999,6 +4000,7 @@ async def cli_read_log(
         return record.output_log_file if record else ""
 
     log_path_str = await asyncio.to_thread(_find_log_path)
+    log_path_str = log_path_str or acp_mcp.transcript_path(result.pane.pane_id)
     if not log_path_str:
         return {
             "ok": False,
@@ -4191,6 +4193,7 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     last = _activity_summary(pane.pane_id)
     if last is not None:
         status["last_activity"] = last
+    status.update(acp_mcp.status_fields(pane.pane_id))
     usage = await _cached_usage_snapshot(pane.agent_key)
     if usage is not None:
         status["usage"] = usage
@@ -4579,6 +4582,8 @@ async def cli_wait_idle(
     # Registered for exactly as long as this call is parked, so the pane
     # being waited on can see the wait (cli_whoami's `waiting_on_me`) and
     # wrap up rather than run out somebody's budget without knowing it.
+    if (acp := await acp_mcp.wait_idle(pane_id, timeout, done, timed_out, lambda: _waiting_on(pane_id, caller))) is not None:
+        return acp
     with _waiting_on(pane_id, caller):
         tick = 0
         while True:
@@ -4737,6 +4742,8 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
             "error_code": "self-interrupt",
         }
 
+    if (acp := await acp_mcp.interrupt(pane)) is not None:
+        return acp
     reply = await _ui_request(
         pane.workspace_path,
         "invoke",
@@ -11542,6 +11549,10 @@ class _Runner:
 
 
 _runner: _Runner | None = None
+# Replaced runners whose task is still finishing (see _replace_stopped_runner).
+_stopping_runner_tasks: set[asyncio.Task[None]] = set()
+# Stands for an attribute the SDK no longer has (see _runner_stopped).
+_MISSING = object()
 # (pane or client, reason) pairs already logged as refused (see _PlanMcpASGI).
 _logged_refusals: set[tuple[str, str]] = set()
 # Bounds only how many distinct refusals get a log line; no request is ever
@@ -11597,7 +11608,7 @@ class _PlanMcpASGI:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
             return
-        if runner.task.done():
+        if _runner_stopped(runner):
             runner = _replace_stopped_runner(runner)
         await runner.ready.wait()
         if runner.task.done():
@@ -11738,11 +11749,34 @@ def _note_runner_end(runner: _Runner, task: asyncio.Task[None]) -> None:
     )
 
 
+def _runner_stopped(runner: _Runner) -> bool:
+    """Has ``runner`` stopped taking requests?
+
+    A cancelled task group stops at once — the SDK drops its reference to it
+    and answers every new request "Task group is not initialized", outside its
+    own error handling — but its task ends only once the last request still in
+    it has, however long that one takes.
+    """
+    if runner.task.done():
+        return True
+    if not runner.ready.is_set():
+        return False
+    # Private to the SDK: should it go, only an ended task counts, as before.
+    group = getattr(runner.manager, "_task_group", _MISSING)
+    if group is _MISSING:
+        return False
+    return group is None or group.cancel_scope.cancel_called
+
+
 def _replace_stopped_runner(stopped: _Runner) -> _Runner:
     """The running session manager, started anew if ``stopped`` is still it."""
     global _runner, _session_manager
     if _runner is stopped:
         _log.warning("plan-mcp: restarting the MCP session manager")
+        if not stopped.task.done():
+            # Kept until it ends: the loop holds only weak references to tasks.
+            _stopping_runner_tasks.add(stopped.task)
+            stopped.task.add_done_callback(_stopping_runner_tasks.discard)
         _runner = _start_runner()
         _session_manager = _runner.manager
     assert _runner is not None

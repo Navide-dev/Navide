@@ -19,10 +19,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent_team_backend.mcp_manager import (
+    ClientSession,
     MCPClient,
     MCPManager,
     MCPServerConfig,
     _default_config,
+    _exit_code,
     load_mcp_config,
     stderr_log_path,
 )
@@ -893,6 +895,182 @@ class TestColdStart:
         assert "exited with code 3" in client.error
         assert "404 Not Found" in client.stderr_tail()
 
+    @staticmethod
+    def _cancel_transport_once_the_server_exits(client: MCPClient, monkeypatch, *, then=None) -> None:
+        """Make initialize run only once the stdio server has exited, after the
+        transport's task group has cancelled its scope — what stdio_client does
+        when writing initialize to the dead server's stdin fails (its writer
+        catches ClosedResourceError only, not BrokenResourceError)."""
+        real = ClientSession.initialize
+
+        async def initialize(session):
+            deadline = time.monotonic() + 10
+            while _exit_code(client._process) is None and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            client._transport_cm.gen.ag_frame.f_locals["tg"].cancel_scope.cancel()
+            if then is not None:
+                then()
+            return await real(session)
+
+        monkeypatch.setattr(ClientSession, "initialize", initialize)
+
+    @pytest.mark.asyncio
+    async def test_a_server_that_exits_mid_initialize_fails_with_the_reason_not_a_cancel(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        # The liveness poll must not get to see the exit first.
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        self._cancel_transport_once_the_server_exits(client, monkeypatch)
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert "404 Not Found" in client.stderr_tail()
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_a_cancel_of_start_itself_still_propagates_when_the_server_exits(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        starting: list[asyncio.Task] = []
+        # Shutdown cancelling the startup, at the same moment.
+        self._cancel_transport_once_the_server_exits(client, monkeypatch, then=lambda: starting[0].cancel())
+        starting.append(asyncio.create_task(client.start()))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(starting[0], timeout=20)
+        assert client._transport_cm is None and client._session_cm is None
+
+    @staticmethod
+    def _fail_initialize_then_cancel_transport_in_stop(client: MCPClient, monkeypatch, *, then=None) -> None:
+        """initialize fails as it does once the server has exited ("Connection
+        closed"), and the transport's task group cancels its scope only as
+        start() goes on to clean up: the failed stdin write landing after the
+        poll has already named the exit."""
+        async def initialize(session):
+            deadline = time.monotonic() + 10
+            while _exit_code(client._process) is None and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            raise RuntimeError("Connection closed")
+
+        real_stop = MCPClient.stop
+        stops = [0]
+
+        async def stop(self):
+            stops[0] += 1
+            if stops[0] == 1:
+                self._transport_cm.gen.ag_frame.f_locals["tg"].cancel_scope.cancel()
+                if then is not None:
+                    then()
+            await real_stop(self)
+
+        monkeypatch.setattr(ClientSession, "initialize", initialize)
+        monkeypatch.setattr(MCPClient, "stop", stop)
+
+    @pytest.mark.asyncio
+    async def test_a_failed_start_keeps_its_reason_when_the_transport_cancels_its_cleanup(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        self._fail_initialize_then_cancel_transport_in_stop(client, monkeypatch)
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_a_cancel_of_a_failed_start_during_its_cleanup_still_propagates(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        starting: list[asyncio.Task] = []
+        self._fail_initialize_then_cancel_transport_in_stop(client, monkeypatch, then=lambda: starting[0].cancel())
+        starting.append(asyncio.create_task(client.start()))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(starting[0], timeout=20)
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_initialize_written_to_a_server_that_has_exited_fails_with_its_exit_code(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        # No cancel forced here: the real write to the dead server's stdin,
+        # whichever of the transport's cancel or the failed initialize wins.
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        real = ClientSession.initialize
+
+        async def initialize(session):
+            deadline = time.monotonic() + 10
+            while _exit_code(client._process) is None and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            return await real(session)
+
+        monkeypatch.setattr(ClientSession, "initialize", initialize)
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_a_running_server_whose_stdout_breaks_the_transport_fails_with_a_reason(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        # Not an exit: the server lives on, but its stdout is not UTF-8, so
+        # stdio_client's reader fails and the transport cancels start()'s task.
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        script = tmp_path / "garbled_server.py"
+        script.write_text(
+            "import sys, time\n"
+            "sys.stdout.buffer.write(b'\\xff\\xfe not utf-8\\n'); sys.stdout.buffer.flush()\n"
+            "time.sleep(60)\n"
+        )
+        client = MCPClient(MCPServerConfig(name="garbled", command=sys.executable, args=[str(script)], env={}))
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "decode" in client.error
+        assert client._transport_cm is None and client._session_cm is None
+        # Read once and dropped: the error's traceback holds this client's frames.
+        assert client._transport_failure is None
+
+    @pytest.mark.asyncio
+    async def test_a_cancel_of_start_that_arrives_while_it_stops_still_propagates(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        self._cancel_transport_once_the_server_exits(client, monkeypatch)
+        starting: list[asyncio.Task] = []
+        real_stop = MCPClient.stop
+        stops = [0]
+
+        async def stop(self):
+            stops[0] += 1
+            if stops[0] == 1:
+                # Shutdown cancelling the startup while it is cleaning up after
+                # the transport's own cancel.
+                starting[0].cancel()
+            await real_stop(self)
+
+        monkeypatch.setattr(MCPClient, "stop", stop)
+        starting.append(asyncio.create_task(client.start()))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(starting[0], timeout=20)
+        assert stops[0] == 1
+        assert client._transport_cm is None and client._session_cm is None
+
     @pytest.mark.asyncio
     async def test_the_hard_cap_ends_a_server_that_never_answers(self, tmp_path, fast_polling, monkeypatch):
         monkeypatch.setattr("agent_team_backend.mcp_manager.STDIO_INIT_HARD_CAP", 1.0)
@@ -949,6 +1127,107 @@ def test_the_stderr_log_name_stays_inside_the_logs_folder(name):
     assert path.name.startswith("mcp-") and path.name.endswith(".log")
     assert "/" not in path.name and "\\" not in path.name
     assert not path.name.removeprefix("mcp-").startswith(".")
+
+
+# ── Review of #616: a teardown past its deadline takes its cancels back ──────
+
+
+class _SlowExit:
+    """A context whose exit outlives _STOP_TIMEOUT and absorbs the cancel that
+    ends it, as an anyio task group does once its own scope is cancelled —
+    then returns, or raises what ended it."""
+
+    def __init__(self, raises: BaseException | None = None) -> None:
+        self.raises = raises
+
+    async def __aexit__(self, *_exc: object) -> None:
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            if self.raises is not None:
+                raise self.raises from None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raises", [None, RuntimeError("reader failed")])
+async def test_an_exit_past_its_deadline_takes_back_the_cancels_it_sent(monkeypatch, raises):
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.05)
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_GRACE", 0.05)
+    client = MCPClient(MCPServerConfig(name="slow-exit", command="echo", args=[], env={}))
+    task = asyncio.current_task()
+    assert task is not None
+    before = task.cancelling()
+
+    if raises is None:
+        await client._exit_bounded("session", _SlowExit())
+    else:
+        with pytest.raises(RuntimeError):
+            await client._exit_bounded("session", _SlowExit(raises))
+
+    assert task.cancelling() == before
+    await asyncio.sleep(0)  # and nothing of it is still pending
+
+
+@pytest.mark.asyncio
+async def test_an_exit_past_its_deadline_keeps_a_cancel_from_outside(monkeypatch):
+    # Our cancel and shutdown's arrive together: only ours is taken back, so
+    # the caller still sees exactly one cancel from outside and re-raises.
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.02)
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_GRACE", 0.02)
+    client = MCPClient(MCPServerConfig(name="slow-exit", command="echo", args=[], env={}))
+    seen = {}
+
+    class Exit:
+        async def __aexit__(self, *_exc: object) -> None:
+            task = asyncio.current_task()
+            assert task is not None
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                task.cancel()  # shutdown cancels too, as our own cancel lands
+                raise
+
+    async def runner():
+        task = asyncio.current_task()
+        assert task is not None
+        seen["before"] = task.cancelling()
+        try:
+            await client._exit_bounded("session", Exit())
+        finally:
+            seen["after"] = task.cancelling()
+
+    inner = asyncio.create_task(runner())
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(inner, 5)
+    assert seen["after"] == seen["before"] + 1
+
+
+@pytest.mark.asyncio
+async def test_a_slow_transport_exit_is_not_taken_for_a_cancel_of_start(monkeypatch):
+    # The transport's own cancel lands in initialize; leaving the transport
+    # outlives the deadline, absorbs the cancel that ends it and raises what
+    # failed. start() must report that, not take its own teardown cancel for
+    # shutdown cancelling the start.
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.05)
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_GRACE", 0.05)
+    client = MCPClient(MCPServerConfig(name="slow-exit", command="echo", args=[], env={}))
+    session = AsyncMock()
+    session.initialize = AsyncMock(side_effect=asyncio.CancelledError)
+    session_cm = AsyncMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session)
+    session_cm.__aexit__ = AsyncMock(return_value=None)
+    transport_cm = AsyncMock()
+    transport_cm.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
+    transport_cm.__aexit__ = _SlowExit(RuntimeError("reader failed")).__aexit__
+
+    with patch("agent_team_backend.mcp_manager.stdio_client", return_value=transport_cm), \
+         patch("agent_team_backend.mcp_manager.ClientSession", return_value=session_cm), \
+         patch("agent_team_backend.mcp_manager.StdioServerParameters", return_value=MagicMock()), \
+         patch("agent_team_backend.mcp_manager._MCP_AVAILABLE", True):
+        await asyncio.wait_for(client.start(), timeout=10)
+
+    assert client.status == "error"
+    assert "reader failed" in client.error
 
 
 # ── Review of #578: H1 (one stop per server, all done before shutdown) ──────
