@@ -106,7 +106,8 @@ function register(): void {
     nativeBackendDataRoot: dataRoot,
     pluginStorageRoot: storageRoot,
     // The production wiring (index.ts), on a real store.
-    forgetBackendConsent: (pluginId) => store.forgetGrants(pluginId),
+    forgetBackendConsent: (pluginId, keepInstallConsentFor) => store.forgetGrants(pluginId, keepInstallConsentFor),
+    noteInstallConsent: (pluginId, packageVersion) => store.noteInstallConsent(pluginId, packageVersion),
   })
 }
 const call = (channel: string, args?: unknown) => handlers.get(channel)!(null, args)
@@ -176,6 +177,28 @@ afterEach(() => {
   rmSync(base, { recursive: true, force: true })
 })
 
+describe('0.2.31: a confirmed install dialog is the first backend consent', () => {
+  it('records the installed version for a Navide Marketplace install and a file install, and nothing before the confirmation', async () => {
+    expect(store.record('acme.todo')).not.toHaveProperty('installConsent')
+    await marketplaceInstall('acme.todo', '1.0.0')
+    expect(store.record('acme.todo').installConsent).toEqual({ packageVersion: '1.0.0' })
+
+    writeFileSync(picked, vsix('acme.files', '2.0.0'))
+    await call('plugins:installFromFile')
+    await expect(call('plugins:commitLocalInstall', { id: 'acme.files' })).rejects.toThrow(/consent is required/)
+    expect(store.record('acme.files')).not.toHaveProperty('installConsent')
+    await call('plugins:commitLocalInstall', { id: 'acme.files', riskConfirmed: true })
+    // A file install's promotion forgets the replaced package's grants, not this.
+    expect(store.record('acme.files')).toEqual({ installConsent: { packageVersion: '2.0.0' } })
+  })
+
+  it('a failed restart of a source-changing candidate still fails closed', () => {
+    store.noteInstallConsent('acme.todo', '1.1.0')
+    store.forgetGrants('acme.todo')
+    expect(store.record('acme.todo')).toEqual({ consentRevoked: true })
+  })
+})
+
 describe('HIGH-1: a replacement inherits no permission', () => {
   it('clears every native backend permission of the replaced package on the real store, keeping only Disabled', async () => {
     await marketplaceInstall('acme.todo', '1.0.0')
@@ -183,7 +206,9 @@ describe('HIGH-1: a replacement inherits no permission', () => {
     expect(grantsOf('acme.todo')).toEqual({ consent: true, workspaceWrite: true, agentToolWrite: true, agentToolsSince: true, disabled: true })
     await fileInstall('acme.todo', '1.1.0', { replaceConfirmed: true })
     expect(grantsOf('acme.todo')).toEqual({ consent: false, workspaceWrite: false, agentToolWrite: false, agentToolsSince: false, disabled: true })
-    expect(store.record('acme.todo')).toEqual({ disabled: true })
+    // Nothing of 1.0.0 carries over; 1.1.0's own install dialog stays its
+    // first backend consent (0.2.31).
+    expect(store.record('acme.todo')).toEqual({ disabled: true, installConsent: { packageVersion: '1.1.0' } })
   })
 
   it('keeps every permission of an update within the Marketplace exactly as on main', async () => {

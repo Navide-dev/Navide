@@ -351,7 +351,7 @@ describe('plugins:installFromFile', () => {
     // rollback target, and going back to it asks for consent again.
     expect(record.previous?.packageVersion).toBe('1.0.0')
     expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.todo', '1.0.0')).toBeNull()
-    expect(forgetBackendConsent).toHaveBeenCalledWith('acme.todo')
+    expect(forgetBackendConsent).toHaveBeenCalledWith('acme.todo', '2.0.0')
     expect(call('plugins:listInstalled')).toMatchObject([{
       id: 'acme.todo',
       packageVersion: '2.0.0',
@@ -380,7 +380,7 @@ describe('plugins:installFromFile', () => {
     expect(record.previous).toBeUndefined()
     expect(record.previousGrant).toBeUndefined()
     expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.todo', '1.0.0')).toBeNull()
-    expect(forgetBackendConsent).toHaveBeenCalledWith('acme.todo')
+    expect(forgetBackendConsent).toHaveBeenCalledWith('acme.todo', '1.1.0-local')
 
     // Back to the Marketplace version: asked first, and the local record goes.
     installRegistryFetch('acme.todo', '1.2.0')
@@ -657,6 +657,7 @@ describe('L4: a file update keeps the replaced file version to go back to', () =
     const record = new PluginActivationSelector(pluginsRoot).read('acme.todo')!
     expect(record.active?.packageVersion).toBe('1.0.0')
     expect(record.candidate?.packageVersion).toBe('1.1.0')
+    // A rollback keeps no install consent: the kept version's backend asks again.
     expect(forgetBackendConsent).toHaveBeenCalledWith('acme.todo')
     expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', packageVersion: '1.0.0', source: 'local-unsigned' }])
     // The consent records follow the selector: the running version's is active.

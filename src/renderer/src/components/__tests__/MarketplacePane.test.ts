@@ -373,7 +373,9 @@ describe('MarketplacePane', () => {
     await flushPromises()
 
     const dialog = wrapper.get('.ext-trust-dialog')
-    expect(dialog.get('.ext-backend-risk').text()).toContain('native backend executable')
+    // 0.2.31: confirming is the backend consent, so the warning says so.
+    expect(dialog.get('.ext-backend-risk').text()).toContain('native backend program')
+    expect(dialog.get('.ext-backend-risk').text()).toContain('Navide will not ask again')
     expect(dialog.text()).not.toContain('requests sensitive capabilities')
     expect(api.commitInstall).not.toHaveBeenCalled()
 

@@ -84,6 +84,7 @@ import {
   resolveConfiguredMarketplace,
 } from './pluginIpc'
 import { FrontendPluginManager } from './frontendPluginManager'
+import { NativeBackendStore } from './pluginNativeBackendStore'
 
 function buildPkg(
   packageId = 'acme.demo',
@@ -2829,8 +2830,17 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     const onPackageSwitched = vi.fn()
     const onPluginAgentAction = vi.fn()
     const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+    // The production wiring, on a real store (0.2.31): only the window's own
+    // confirmed install records an install consent.
+    const nativeStore = new NativeBackendStore(join(root, 'native'))
     try {
-      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, { ...TEST_PREFLIGHT_OPTIONS, onPackageSwitched, onPluginAgentAction })
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS,
+        onPackageSwitched,
+        onPluginAgentAction,
+        noteInstallConsent: (pluginId, packageVersion) => nativeStore.noteInstallConsent(pluginId, packageVersion),
+        forgetBackendConsent: (pluginId, keepInstallConsentFor) => nativeStore.forgetGrants(pluginId, keepInstallConsentFor),
+      })
       const agentAction = captureHandler.mock.calls[0]![0]
       installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
       await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
@@ -2840,6 +2850,8 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await expect(agentAction({ request_id: 'pa:1', action: 'update', plugin_id: 'acme.demo', version: '1.0.1', requester }))
         .resolves.toMatchObject({ ok: true, updated: true, fromVersion: '1.0.0', pluginVersion: '1.0.1' })
 
+      // No dialog showed 1.0.1: its backend is asked before it first runs.
+      expect(nativeStore.record('acme.demo').installConsent).toEqual({ packageVersion: '1.0.0' })
       // Switched at once: 1.0.1 runs, nothing is left staged.
       const record = new PluginActivationSelector(root).read('acme.demo')
       expect(record?.active?.packageVersion).toBe('1.0.1')
