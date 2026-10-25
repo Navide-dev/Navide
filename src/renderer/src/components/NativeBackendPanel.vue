@@ -59,8 +59,12 @@ watch(installed, refresh)
 </script>
 
 <template>
-  <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title">
+  <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
     <h3 id="native-backends-title" class="native-backends-title">{{ $t('settings.extensions.nativeBackends.title') }}</h3>
+    <!-- Whether this applies at all comes first; the warning and switches follow. -->
+    <p v-if="overview.plugins.length === 0" class="native-backends-empty">
+      {{ $t('settings.extensions.nativeBackends.empty') }}
+    </p>
     <div class="native-backends-callout">
       <svg class="native-backends-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M7.1 2.6 1.9 12a1 1 0 0 0 .9 1.5h10.4a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0Z" />
@@ -105,10 +109,7 @@ watch(installed, refresh)
       </label>
       <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.agentTools.externalCallersDisclosure') }}</p>
     </template>
-    <p v-if="overview.plugins.length === 0" class="native-backends-empty">
-      {{ $t('settings.extensions.nativeBackends.empty') }}
-    </p>
-    <ul v-else class="ext-list">
+    <ul v-if="overview.plugins.length" class="ext-list">
       <li
         v-for="row in overview.plugins"
         :key="row.pluginId"
@@ -193,25 +194,16 @@ watch(installed, refresh)
   gap: var(--space-2);
   margin: 0 0 var(--space-3);
   color: var(--text-bright);
-  font-size: var(--font-md);
+  font-size: var(--font-lg);
   font-weight: 650;
-}
-/* This panel lets third-party code run natively: the warning leads. */
-.native-backends-title::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 1.5px;
-  background: var(--risk-fg);
-  transform: rotate(45deg);
+  letter-spacing: -0.01em;
 }
 .native-backends-callout {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--risk-muted);
-  border-left: 3px solid var(--risk-fg);
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--risk-fg);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   background: var(--risk-subtle);
   color: var(--text-primary);
@@ -225,8 +217,13 @@ watch(installed, refresh)
 }
 .native-backends-description {
   margin: 0;
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
   line-height: var(--lh-base);
+}
+/* External callers only apply once agent tools are on: indent it under that switch. */
+.native-backends-switch:has([data-agent-tools-switch='externalCallers']),
+.native-backends-switch:has([data-agent-tools-switch='externalCallers']) + .native-backends-description {
+  margin-left: calc(14px + var(--space-2) + var(--space-4));
 }
 .native-backends-switch {
   display: flex;
@@ -241,10 +238,34 @@ watch(installed, refresh)
   font-weight: 600;
   cursor: pointer;
 }
-.native-backends-empty {
-  margin: 0;
+/* A switch and the help text right after it read as one card. */
+.native-backends-switch:has(+ .native-backends-description) {
+  margin-bottom: 0;
+  padding-bottom: var(--space-1);
+  border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.native-backends-switch + .native-backends-description {
+  padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 14px + var(--space-2));
+  border: 1px solid var(--border-muted);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--bg-subtle);
   color: var(--text-secondary);
   font-size: var(--font-xs);
+}
+.native-backends-switch:has(input:disabled) {
+  cursor: not-allowed;
+  color: var(--text-secondary);
+}
+.native-backends-empty {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  text-align: center;
 }
 .ext-error {
   margin: var(--space-3) 0;

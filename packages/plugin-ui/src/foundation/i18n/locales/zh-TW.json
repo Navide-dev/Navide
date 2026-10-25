@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "未確認",
+      "unsent": "未送出",
+      "mark-tooltip": "這個 pane 透過 Agent Client Protocol（ACP）執行 agent：對話由 Navide 繪製，不是 CLI 自己的畫面。",
+      "permission": "agent 要求：{title}",
+      "failed": "agent 無法啟動：{reason}",
+      "exited": "agent 已停止（結束碼 {code}）。",
+      "placeholder": "傳訊息給 agent。Enter 送出，Shift+Enter 換行。",
+      "send": "送出",
+      "cancel": "取消這一回合"
+    },
     "opened-by": "由「{parent}」開啟",
     "git": {
       "title": "原始碼控制",
@@ -1809,6 +1820,7 @@
       "removeShell": "移除 {name}",
       "none": "無",
       "save": "儲存政策",
+      "edit": "編輯政策",
       "resetUser": "重設使用者政策",
       "sourceTitle": "工作區政策來源",
       "sourceHint": "Repository 建議在你檢視並明確接受前都不受信任。切換來源需要精確符合目前指紋。",
@@ -1906,6 +1918,7 @@
         }
       },
       "bundled": "內建",
+      "listTitle": "Navide 外掛",
       "bundledGit": "內建 Git",
       "state": {
         "active": "啟用中",
@@ -1919,7 +1932,7 @@
       "restartPlugin": "重新啟動 Navide 外掛",
       "disable": "停用",
       "enable": "啟用",
-      "builtinDisabledTooltip": "Navide 外掛 {name} 已停用，請在「設定 → 擴充」重新啟用。",
+      "builtinDisabledTooltip": "Navide 外掛 {name} 已停用，請在「設定 → Navide 外掛」重新啟用。",
       "builtinDisabledNote": "已停用：它的畫面、視窗與 agent 工具都已關閉。權限與儲存的資料都保留，按「啟用」即全部恢復。",
       "builtinDataDeletedEarlier": "舊版 Navide 曾移除這個 Navide 外掛，當時已刪除它儲存的資料。啟用後會從空白資料開始。",
       "disabledStoreRestored": "已從備份恢復：Navide 外掛的停用設定檔已損壞，已用備份重建。",
@@ -2140,6 +2153,13 @@
           "mayChange": "內容隨時可能變動；指紋只記錄載入當下的內容，Navide 不拿它擋載入。"
         },
         "selfHostedQuarantine": "{id} {version} 來自自架 Registry，目前沒有載入。請開啟開發者模式，或改從 Navide 市集安裝。"
+      },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide 無法檢查這個 Navide 外掛：Registry 信任資料的時間晚於這台電腦的時鐘。請確認電腦的日期與時間正確，再試一次。",
+          "expired": "Navide 無法檢查這個 Navide 外掛：依這台電腦的時鐘，Registry 信任資料已過期。請確認電腦的日期與時間正確，再試一次。",
+          "signatureNotYetValid": "Navide 無法檢查這個 Navide 外掛：它的 Registry 簽章時間晚於這台電腦的時鐘。請確認電腦的日期與時間正確，再試一次。"
+        }
       },
       "localInstall": {
         "agentRequest": "由 {requester} 提出。Navide 沒有審核過這個 Navide 外掛，要不要安裝由你決定。",
@@ -6827,6 +6847,9 @@
       "state-on": "已啟用",
       "state-off": "已停用",
       "status": "狀態：{status}",
+      "starting-note": "啟動中，已等 {seconds} 秒。若是透過 npx 或 uvx 執行，第一次可能正在下載套件。",
+      "error-reason": "啟動失敗：{reason}",
+      "stderr-tail": "伺服器最後輸出的幾行",
       "open-config-file": "開啟設定檔",
       "native-readonly-hint": "Navide 只讀取這些檔案，不會寫入。只掃描各 CLI 的使用者層級設定，專案層級的 MCP 不會顯示。要修改請到該 CLI 自己的設定檔，改完回來重新整理。",
       "navide-scope-hint": "這是 Navide 自己連線的 server，CLI pane 不會拿到它。",

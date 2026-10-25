@@ -19,11 +19,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent_team_backend.mcp_manager import (
+    ClientSession,
     MCPClient,
     MCPManager,
     MCPServerConfig,
     _default_config,
+    _exit_code,
     load_mcp_config,
+    stderr_log_path,
 )
 
 
@@ -442,7 +445,10 @@ class TestMCPManager:
             assert slow_cancelled.is_set()
             assert startup.cancelled()
             assert manager._clients == {}
-            stop.assert_awaited_once()  # the server that did start is stopped
+            # Both were registered before starting (so the status can show
+            # them as starting), and shutdown stops every registered client;
+            # stop() on one whose start was cancelled has nothing left to end.
+            assert stop.await_count == 2
 
 
 # ── Shutdown while a stop hangs (0.2.26 packaged check: no "stopped" line) ────
@@ -546,7 +552,7 @@ class TestStopUnderShutdown:
         session_cm.__aexit__ = AsyncMock(return_value=None)
         transports = []
 
-        def make_transport(_params):
+        def make_transport(_params, **_kwargs):
             transports.append(_hanging_exit_cm())
             return transports[-1]
 
@@ -557,16 +563,24 @@ class TestStopUnderShutdown:
              patch("agent_team_backend.mcp_manager.StdioServerParameters", return_value=MagicMock()), \
              patch("agent_team_backend.mcp_manager._MCP_AVAILABLE", True):
             startup = asyncio.create_task(manager.startup(cfg_path))
-            while not transports:
+            while len(transports) < 2:
                 await asyncio.sleep(0.01)
-            await asyncio.sleep(0.05)  # "broken" is now inside its hanging stop()
+            await asyncio.sleep(0.05)  # both are now inside their hanging stop()
 
             await asyncio.wait_for(manager.shutdown(), timeout=2.0)
 
         assert startup.cancelled()
-        assert len(transports) == 1, "startup must not go on to the next server"
+        # Servers start together now, so both were under way; the cancel
+        # still reaches each one's hanging stop() and shutdown does not wait.
+        assert len(transports) == 2
         assert manager._clients == {}
-        assert "MCP 'broken' stopped" in caplog.text
+        # Each server was stopped once, by its own start: a second, concurrent
+        # stop() from shutdown would re-enter the transport's exit and log
+        # "stopped" again (review of #578, H1).
+        for transport in transports:
+            assert transport.__aexit__.await_count == 1
+        assert caplog.text.count("MCP 'broken' stopped") == 1
+        assert caplog.text.count("MCP 'next' stopped") == 1
 
     @pytest.mark.asyncio
     async def test_shutdown_does_not_wait_forever_for_a_start_that_ignores_cancel(
@@ -789,3 +803,551 @@ async def test_stop_ends_a_server_descendant_outside_its_group(tmp_path, monkeyp
                 os.kill(pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+
+
+# ── Cold start: wait while the stdio server lives, say why it failed ─────────
+
+# A stdio MCP server that prints to stderr, then answers initialize after
+# argv[1] seconds; argv[2] = "exit:<code>" exits instead of answering.
+_SLOW_SERVER = r"""
+import json, sys, time
+delay, mode = float(sys.argv[1]), sys.argv[2]
+print("npm warn exec The following package was not found and will be installed", file=sys.stderr, flush=True)
+if mode.startswith("exit:"):
+    print("npm error 404 Not Found", file=sys.stderr, flush=True)
+    sys.exit(int(mode.split(":")[1]))
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg.get("method") == "initialize":
+        time.sleep(delay)
+        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {
+            "protocolVersion": msg["params"]["protocolVersion"],
+            "capabilities": {}, "serverInfo": {"name": "slow", "version": "0"}}}),
+            flush=True)
+"""
+
+
+def _slow_client(tmp_path, name: str, delay: float, mode: str = "answer", env=None) -> MCPClient:
+    script = tmp_path / "slow_server.py"
+    script.write_text(_SLOW_SERVER)
+    return MCPClient(MCPServerConfig(
+        name=name, command=sys.executable, args=[str(script), str(delay), mode], env=env or {},
+    ))
+
+
+@pytest.fixture
+def fast_polling(monkeypatch):
+    monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 0.1)
+    monkeypatch.setattr("agent_team_backend.mcp_manager.SLOW_START_NOTE_AFTER", 0.5)
+    # The fixed handshake budget now applies to remote servers only.
+    monkeypatch.setattr("agent_team_backend.mcp_manager._INIT_TIMEOUT", 0.5)
+
+
+class TestColdStart:
+    @pytest.mark.asyncio
+    async def test_a_stdio_server_slower_than_the_old_budget_still_connects(self, tmp_path, fast_polling):
+        client = _slow_client(tmp_path, "slow", delay=2.0)
+        try:
+            await asyncio.wait_for(client.start(), timeout=20)
+            assert client.ready and client.status == "connected"
+        finally:
+            await client.stop()
+
+    @pytest.mark.asyncio
+    async def test_a_starting_server_is_listed_as_starting_with_its_stderr(self, tmp_path, fast_polling):
+        manager = MCPManager()
+        cfg_path = tmp_path / "mcp_servers.json"
+        script = tmp_path / "slow_server.py"
+        script.write_text(_SLOW_SERVER)
+        cfg_path.write_text(json.dumps([
+            {"name": "slow", "command": sys.executable, "args": [str(script), "3", "answer"], "env": {}, "enabled": True},
+        ]))
+        startup = asyncio.create_task(manager.startup(cfg_path))
+        try:
+            entry = None
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                await asyncio.sleep(0.1)
+                rows = await manager.list_status()
+                # The row leaves stderr_tail out until the server's first stderr
+                # line has been read; on a slow Windows start, slow_start is
+                # already set before that, so wait for both.
+                if rows and rows[0].get("slow_start") and rows[0].get("stderr_tail"):
+                    entry = rows[0]
+                    break
+            assert entry is not None, "a slow start is disclosed, with its stderr, while it lasts"
+            assert entry["status"] == "starting"
+            assert entry["starting_seconds"] >= 0
+            assert "will be installed" in entry["stderr_tail"]
+            await asyncio.wait_for(startup, timeout=20)
+            assert (await manager.list_status())[0]["status"] == "connected"
+        finally:
+            await manager.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_a_server_that_exits_fails_at_once_with_the_reason(self, tmp_path, fast_polling):
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        began = time.monotonic()
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert time.monotonic() - began < 10
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert "404 Not Found" in client.stderr_tail()
+
+    @staticmethod
+    def _cancel_transport_once_the_server_exits(client: MCPClient, monkeypatch, *, then=None) -> None:
+        """Make initialize run only once the stdio server has exited, after the
+        transport's task group has cancelled its scope — what stdio_client does
+        when writing initialize to the dead server's stdin fails (its writer
+        catches ClosedResourceError only, not BrokenResourceError)."""
+        real = ClientSession.initialize
+
+        async def initialize(session):
+            deadline = time.monotonic() + 10
+            while _exit_code(client._process) is None and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            client._transport_cm.gen.ag_frame.f_locals["tg"].cancel_scope.cancel()
+            if then is not None:
+                then()
+            return await real(session)
+
+        monkeypatch.setattr(ClientSession, "initialize", initialize)
+
+    @pytest.mark.asyncio
+    async def test_a_server_that_exits_mid_initialize_fails_with_the_reason_not_a_cancel(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        # The liveness poll must not get to see the exit first.
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        self._cancel_transport_once_the_server_exits(client, monkeypatch)
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert "404 Not Found" in client.stderr_tail()
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_a_cancel_of_start_itself_still_propagates_when_the_server_exits(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        starting: list[asyncio.Task] = []
+        # Shutdown cancelling the startup, at the same moment.
+        self._cancel_transport_once_the_server_exits(client, monkeypatch, then=lambda: starting[0].cancel())
+        starting.append(asyncio.create_task(client.start()))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(starting[0], timeout=20)
+        assert client._transport_cm is None and client._session_cm is None
+
+    @staticmethod
+    def _fail_initialize_then_cancel_transport_in_stop(client: MCPClient, monkeypatch, *, then=None) -> None:
+        """initialize fails as it does once the server has exited ("Connection
+        closed"), and the transport's task group cancels its scope only as
+        start() goes on to clean up: the failed stdin write landing after the
+        poll has already named the exit."""
+        async def initialize(session):
+            deadline = time.monotonic() + 10
+            while _exit_code(client._process) is None and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            raise RuntimeError("Connection closed")
+
+        real_stop = MCPClient.stop
+        stops = [0]
+
+        async def stop(self):
+            stops[0] += 1
+            if stops[0] == 1:
+                self._transport_cm.gen.ag_frame.f_locals["tg"].cancel_scope.cancel()
+                if then is not None:
+                    then()
+            await real_stop(self)
+
+        monkeypatch.setattr(ClientSession, "initialize", initialize)
+        monkeypatch.setattr(MCPClient, "stop", stop)
+
+    @pytest.mark.asyncio
+    async def test_a_failed_start_keeps_its_reason_when_the_transport_cancels_its_cleanup(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        self._fail_initialize_then_cancel_transport_in_stop(client, monkeypatch)
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_a_cancel_of_a_failed_start_during_its_cleanup_still_propagates(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        starting: list[asyncio.Task] = []
+        self._fail_initialize_then_cancel_transport_in_stop(client, monkeypatch, then=lambda: starting[0].cancel())
+        starting.append(asyncio.create_task(client.start()))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(starting[0], timeout=20)
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_initialize_written_to_a_server_that_has_exited_fails_with_its_exit_code(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        # No cancel forced here: the real write to the dead server's stdin,
+        # whichever of the transport's cancel or the failed initialize wins.
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        real = ClientSession.initialize
+
+        async def initialize(session):
+            deadline = time.monotonic() + 10
+            while _exit_code(client._process) is None and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            return await real(session)
+
+        monkeypatch.setattr(ClientSession, "initialize", initialize)
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "exited with code 3" in client.error
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_a_running_server_whose_stdout_breaks_the_transport_fails_with_a_reason(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        # Not an exit: the server lives on, but its stdout is not UTF-8, so
+        # stdio_client's reader fails and the transport cancels start()'s task.
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        script = tmp_path / "garbled_server.py"
+        script.write_text(
+            "import sys, time\n"
+            "sys.stdout.buffer.write(b'\\xff\\xfe not utf-8\\n'); sys.stdout.buffer.flush()\n"
+            "time.sleep(60)\n"
+        )
+        client = MCPClient(MCPServerConfig(name="garbled", command=sys.executable, args=[str(script)], env={}))
+
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error" and not client.ready
+        assert "decode" in client.error
+        assert client._transport_cm is None and client._session_cm is None
+        # Read once and dropped: the error's traceback holds this client's frames.
+        assert client._transport_failure is None
+
+    @pytest.mark.asyncio
+    async def test_a_cancel_of_start_that_arrives_while_it_stops_still_propagates(
+        self, tmp_path, fast_polling, monkeypatch,
+    ):
+        monkeypatch.setattr("agent_team_backend.mcp_manager._ALIVE_POLL", 30.0)
+        client = _slow_client(tmp_path, "gone", delay=0, mode="exit:3")
+        self._cancel_transport_once_the_server_exits(client, monkeypatch)
+        starting: list[asyncio.Task] = []
+        real_stop = MCPClient.stop
+        stops = [0]
+
+        async def stop(self):
+            stops[0] += 1
+            if stops[0] == 1:
+                # Shutdown cancelling the startup while it is cleaning up after
+                # the transport's own cancel.
+                starting[0].cancel()
+            await real_stop(self)
+
+        monkeypatch.setattr(MCPClient, "stop", stop)
+        starting.append(asyncio.create_task(client.start()))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(starting[0], timeout=20)
+        assert stops[0] == 1
+        assert client._transport_cm is None and client._session_cm is None
+
+    @pytest.mark.asyncio
+    async def test_the_hard_cap_ends_a_server_that_never_answers(self, tmp_path, fast_polling, monkeypatch):
+        monkeypatch.setattr("agent_team_backend.mcp_manager.STDIO_INIT_HARD_CAP", 1.0)
+        client = _slow_client(tmp_path, "mute", delay=60)
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        assert client.status == "error"
+        assert "no answer to initialize after 1 s" in client.error
+        assert "still running" in client.error
+        assert client._transport_cm is None  # stopped, its process tree ended
+
+    @pytest.mark.asyncio
+    async def test_one_slow_server_does_not_hold_up_the_others(self, tmp_path, fast_polling):
+        script = tmp_path / "slow_server.py"
+        script.write_text(_SLOW_SERVER)
+        cfg_path = tmp_path / "mcp_servers.json"
+        cfg_path.write_text(json.dumps([
+            {"name": "slow", "command": sys.executable, "args": [str(script), "4", "answer"], "env": {}, "enabled": True},
+            {"name": "fast", "command": sys.executable, "args": [str(script), "0", "answer"], "env": {}, "enabled": True},
+        ]))
+        manager = MCPManager()
+        startup = asyncio.create_task(manager.startup(cfg_path))
+        try:
+            deadline = time.monotonic() + 10
+            statuses: dict[str, str] = {}
+            while time.monotonic() < deadline:
+                await asyncio.sleep(0.1)
+                statuses = {row["name"]: row["status"] for row in await manager.list_status()}
+                if statuses.get("fast") == "connected":
+                    break
+            assert statuses == {"slow": "starting", "fast": "connected"}
+            await asyncio.wait_for(startup, timeout=20)
+        finally:
+            await manager.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_the_stderr_log_never_holds_the_config_env(self, tmp_path, fast_polling):
+        secret = "s3cr" + "3t-value"
+        client = _slow_client(tmp_path, "env", delay=0, mode="exit:1", env={"MCP_TEST_TOKEN": secret})
+        await asyncio.wait_for(client.start(), timeout=20)
+
+        log_text = stderr_log_path("env").read_text()
+        assert "will be installed" in log_text
+        assert secret not in log_text
+        assert secret not in client.error
+
+
+@pytest.mark.parametrize("name", ["../../etc/passwd", "..", "a/b\\c", ".hidden", "", "context7"])
+def test_the_stderr_log_name_stays_inside_the_logs_folder(name):
+    from agent_team_backend import applog
+
+    path = stderr_log_path(name)
+    assert path.parent == applog.log_dir()
+    assert path.name.startswith("mcp-") and path.name.endswith(".log")
+    assert "/" not in path.name and "\\" not in path.name
+    assert not path.name.removeprefix("mcp-").startswith(".")
+
+
+# ── Review of #616: a teardown past its deadline takes its cancels back ──────
+
+
+class _SlowExit:
+    """A context whose exit outlives _STOP_TIMEOUT and absorbs the cancel that
+    ends it, as an anyio task group does once its own scope is cancelled —
+    then returns, or raises what ended it."""
+
+    def __init__(self, raises: BaseException | None = None) -> None:
+        self.raises = raises
+
+    async def __aexit__(self, *_exc: object) -> None:
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            if self.raises is not None:
+                raise self.raises from None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raises", [None, RuntimeError("reader failed")])
+async def test_an_exit_past_its_deadline_takes_back_the_cancels_it_sent(monkeypatch, raises):
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.05)
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_GRACE", 0.05)
+    client = MCPClient(MCPServerConfig(name="slow-exit", command="echo", args=[], env={}))
+    task = asyncio.current_task()
+    assert task is not None
+    before = task.cancelling()
+
+    if raises is None:
+        await client._exit_bounded("session", _SlowExit())
+    else:
+        with pytest.raises(RuntimeError):
+            await client._exit_bounded("session", _SlowExit(raises))
+
+    assert task.cancelling() == before
+    await asyncio.sleep(0)  # and nothing of it is still pending
+
+
+@pytest.mark.asyncio
+async def test_an_exit_past_its_deadline_keeps_a_cancel_from_outside(monkeypatch):
+    # Our cancel and shutdown's arrive together: only ours is taken back, so
+    # the caller still sees exactly one cancel from outside and re-raises.
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.02)
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_GRACE", 0.02)
+    client = MCPClient(MCPServerConfig(name="slow-exit", command="echo", args=[], env={}))
+    seen = {}
+
+    class Exit:
+        async def __aexit__(self, *_exc: object) -> None:
+            task = asyncio.current_task()
+            assert task is not None
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                task.cancel()  # shutdown cancels too, as our own cancel lands
+                raise
+
+    async def runner():
+        task = asyncio.current_task()
+        assert task is not None
+        seen["before"] = task.cancelling()
+        try:
+            await client._exit_bounded("session", Exit())
+        finally:
+            seen["after"] = task.cancelling()
+
+    inner = asyncio.create_task(runner())
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(inner, 5)
+    assert seen["after"] == seen["before"] + 1
+
+
+@pytest.mark.asyncio
+async def test_a_slow_transport_exit_is_not_taken_for_a_cancel_of_start(monkeypatch):
+    # The transport's own cancel lands in initialize; leaving the transport
+    # outlives the deadline, absorbs the cancel that ends it and raises what
+    # failed. start() must report that, not take its own teardown cancel for
+    # shutdown cancelling the start.
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_TIMEOUT", 0.05)
+    monkeypatch.setattr("agent_team_backend.mcp_manager._STOP_GRACE", 0.05)
+    client = MCPClient(MCPServerConfig(name="slow-exit", command="echo", args=[], env={}))
+    session = AsyncMock()
+    session.initialize = AsyncMock(side_effect=asyncio.CancelledError)
+    session_cm = AsyncMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session)
+    session_cm.__aexit__ = AsyncMock(return_value=None)
+    transport_cm = AsyncMock()
+    transport_cm.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
+    transport_cm.__aexit__ = _SlowExit(RuntimeError("reader failed")).__aexit__
+
+    with patch("agent_team_backend.mcp_manager.stdio_client", return_value=transport_cm), \
+         patch("agent_team_backend.mcp_manager.ClientSession", return_value=session_cm), \
+         patch("agent_team_backend.mcp_manager.StdioServerParameters", return_value=MagicMock()), \
+         patch("agent_team_backend.mcp_manager._MCP_AVAILABLE", True):
+        await asyncio.wait_for(client.start(), timeout=10)
+
+    assert client.status == "error"
+    assert "reader failed" in client.error
+
+
+# ── Review of #578: H1 (one stop per server, all done before shutdown) ──────
+
+
+@pytest.mark.asyncio
+async def test_shutdown_waits_for_every_starting_server_to_finish_stopping(tmp_path, caplog):
+    """gather returns at the first start that ends cancelled; the lock must not
+    be handed to shutdown while another server is still being stopped, or its
+    leftover processes (#566) are never ended."""
+    caplog.set_level("INFO", logger="agent_team_backend.mcp_manager")
+    cfg_path = tmp_path / "mcp_servers.json"
+    cfg_path.write_text(json.dumps([
+        {"name": "quick", "command": "echo", "args": ["quick"], "env": {}, "enabled": True},
+        {"name": "slow", "command": "echo", "args": ["slow"], "env": {}, "enabled": True},
+    ]))
+    exited: dict[str, float] = {}
+    transports: dict[str, AsyncMock] = {}
+
+    def make_transport(params, **_kwargs):
+        name = params.args[0]
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
+
+        async def exit_(*_args):
+            await asyncio.sleep(0.1 if name == "quick" else 1.0)
+            exited[name] = time.monotonic()
+
+        cm.__aexit__ = AsyncMock(side_effect=exit_)
+        transports[name] = cm
+        return cm
+
+    def make_session(*_args):
+        session = AsyncMock()
+
+        async def never():
+            await asyncio.sleep(60)
+
+        session.initialize = AsyncMock(side_effect=never)
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=session)
+        cm.__aexit__ = AsyncMock(return_value=None)
+        return cm
+
+    manager = MCPManager()
+    with patch("agent_team_backend.mcp_manager.stdio_client", side_effect=make_transport), \
+         patch("agent_team_backend.mcp_manager.ClientSession", side_effect=make_session), \
+         patch("agent_team_backend.mcp_manager.StdioServerParameters",
+               side_effect=lambda **kw: MagicMock(args=kw["args"])), \
+         patch("agent_team_backend.mcp_manager._MCP_AVAILABLE", True):
+        startup = asyncio.create_task(manager.startup(cfg_path))
+        while len(transports) < 2:
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.05)
+
+        await asyncio.wait_for(manager.shutdown(), timeout=4.0)
+        returned = time.monotonic()
+
+    assert startup.cancelled()
+    assert set(exited) == {"quick", "slow"}, "both stops finished"
+    assert max(exited.values()) <= returned, "before shutdown returned"
+    for transport in transports.values():
+        assert transport.__aexit__.await_count == 1
+    assert caplog.text.count("MCP 'quick' stopped") == 1
+    assert caplog.text.count("MCP 'slow' stopped") == 1
+
+
+# ── Review of #578: N1 (no shared log file), N3 (0600, removed server) ─────
+
+
+@pytest.mark.parametrize(("one", "two"), [("a/b", "a_b"), ("上下文", "資料庫"), ("Foo", "foo")])
+def test_two_servers_never_share_a_log_file(one, two):
+    assert stderr_log_path(one).name.lower() != stderr_log_path(two).name.lower()
+
+
+def test_a_plain_name_keeps_its_plain_log_file():
+    assert stderr_log_path("context7").name == "mcp-context7.log"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
+def test_the_stderr_log_is_owner_only(tmp_path):
+    path = stderr_log_path("perm-check")
+    path.write_text("old")
+    path.chmod(0o644)
+    client = MCPClient(MCPServerConfig(name="perm-check", command="echo"))
+    f = client._open_errlog()
+    try:
+        assert (path.stat().st_mode & 0o777) == 0o600
+        assert path.read_text() == ""  # the latest start only
+    finally:
+        f.close()
+
+
+@pytest.mark.asyncio
+async def test_removing_a_server_deletes_its_log_and_switching_one_off_keeps_it(tmp_path):
+    cfg_path = tmp_path / "mcp_servers.json"
+
+    def write(rows):
+        cfg_path.write_text(json.dumps(rows))
+
+    write([
+        {"name": "gone", "command": "echo", "args": [], "env": {}, "enabled": True},
+        {"name": "off", "command": "echo", "args": [], "env": {}, "enabled": True},
+    ])
+    manager = MCPManager()
+    with patch.object(MCPClient, "start", AsyncMock()), patch.object(MCPClient, "stop", AsyncMock()):
+        await manager.startup(cfg_path)
+        for name in ("gone", "off"):
+            stderr_log_path(name).write_text("what it printed")
+        write([{"name": "off", "command": "echo", "args": [], "env": {}, "enabled": False}])
+        await manager.reload(cfg_path)
+
+    assert not stderr_log_path("gone").exists()
+    assert stderr_log_path("off").exists()
+
+
+def test_a_start_error_from_an_exception_group_names_the_real_error():
+    from agent_team_backend.mcp_manager import _reason
+
+    group = ExceptionGroup("unhandled errors in a TaskGroup", [RuntimeError("401 Unauthorized")])
+    assert _reason(group) == "401 Unauthorized"
+    assert _reason(TimeoutError()) == "TimeoutError"
+

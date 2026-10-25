@@ -1,0 +1,70 @@
+{
+  "browser": {
+    "app": {
+      "title": "Navide Browser"
+    },
+    "overview": {
+      "title": "Các Space của Navide Browser",
+      "new": "Space mới",
+      "pending": "{count} cần bạn xử lý",
+      "open-count": "{count} đang mở, mỗi Space đều tốn bộ nhớ",
+      "empty": "Chưa có Space nào. Tạo một Space bằng ＋, hoặc agent sẽ tự mở Space riêng ở lần duyệt web đầu tiên. Agent dùng các lần đăng nhập của bạn trong Navide Browser (agent có thể thay bạn gửi yêu cầu trên các trang web)."
+    },
+    "state": {
+      "idle": "Rảnh",
+      "running": "Đang chạy",
+      "need-action": "Cần bạn xử lý",
+      "done": "Xong"
+    },
+    "owner": {
+      "agent": "Agent",
+      "user": "Bạn"
+    },
+    "space": {
+      "all": "Mọi Space",
+      "yours": "Space của bạn: agent không dùng được trừ khi bạn cho phép",
+      "default-name": "Space {n} của tôi"
+    },
+    "nav": {
+      "back": "Quay lại",
+      "forward": "Tiến tới",
+      "reload": "Tải lại",
+      "stop": "Dừng",
+      "address": "Nhập URL"
+    },
+    "control": {
+      "agent": "Agent đang điều khiển",
+      "user": "Bạn đang điều khiển",
+      "yours": "Space của bạn"
+    },
+    "action": {
+      "take-over": "Tiếp quản",
+      "hand-back": "Trả lại cho agent",
+      "delegate": "Cho agent dùng Space này",
+      "reclaim": "Lấy lại Space này",
+      "close": "Đóng Space",
+      "delegate-note": "Agent ở bất kỳ pane và workspace nào cũng dùng được"
+    },
+    "agent-script": {
+      "warning": "Script của agent có thể vẫn đang chạy trong trang này. Hãy tải lại trang trước khi nhập mật khẩu hoặc mã xác minh.",
+      "reload": "Tải lại",
+      "keep": "Giữ trang"
+    },
+    "settings": {
+      "title": "Cài đặt",
+      "shared-sign-in": "Mọi Space dùng chung các lần đăng nhập, được lưu trên máy tính này. Agent dùng các lần đăng nhập của bạn trong Navide Browser (agent có thể thay bạn gửi yêu cầu trên các trang web). Sau khi bạn giành quyền điều khiển, script của agent đang chạy trong trang chỉ dừng khi bạn tải lại trang.",
+      "clear-data": "Xóa mọi dữ liệu đăng nhập",
+      "clear-data-confirm": "Nhấp lần nữa để đăng xuất khỏi mọi trang web trong Navide Browser",
+      "clear-data-done": "Đã xóa dữ liệu đăng nhập.",
+      "cancel": "Hủy"
+    },
+    "left": {
+      "open": "Mở Navide Browser",
+      "empty": "Chưa có Space nào."
+    },
+    "errors": {
+      "generic": "Đã xảy ra lỗi ({code}).",
+      "invalid-address": "Hãy nhập một địa chỉ http hoặc https."
+    }
+  }
+}

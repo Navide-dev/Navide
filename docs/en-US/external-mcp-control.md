@@ -265,7 +265,17 @@ pair loses to — the target is idle at the moment you send, so a plain wait
 returns "already idle" before it ever read the message. It waits for the
 message to **go in** first, then records the target's last activity before
 sending and only accepts a *newer* turn as the answer, so `last_activity.text`
-is what the other agent said in reply. Its timeout `reason` is
+is what the other agent said in reply. Claude's Stop hook can report the turn
+end before Navide has read the conversation log (under load, seconds later),
+and a hook carries no text. `cli_wait_idle`, and so `cli_send_and_wait`, then
+wait up to **10 seconds** more (`HOOK_TURN_TEXT_WAIT_S`, within `timeout_s`)
+for the log's turn end and return its text. If the text has still not been
+read, they return anyway with `text_pending: true` and no `text`: ask
+`cli_get_status` again shortly after. A turn the log has already ended without
+text returns at once, with no `text` and no `text_pending`. Navide never fills
+it with an earlier turn's text, even from a reader that lags whole turns
+behind. Other CLIs, and a turn end the log reported itself, return at
+once as before. Its timeout `reason` is
 `cli_wait_idle`'s, plus `never_started` for a target that stayed idle and never
 showed any sign of picking the message up. A send refused outright returns
 `cli_send`'s `{ok: false, error}` unchanged.

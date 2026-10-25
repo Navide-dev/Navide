@@ -292,11 +292,19 @@ def test_claude_guard_hook_prints_the_decision_and_exits_zero(tmp_path, status, 
     assert result.stdout.removesuffix("\n").removesuffix("\r") == expected
 
 
+# Room for the ceiling below; CI's Windows wrapper otherwise stops it at 90 s.
+@pytest.mark.timeout(150)
 def test_claude_guard_hook_without_a_backend_is_no_decision(tmp_path) -> None:
     argv = hook_shell.shell_argv(osplat.scripts.hook_entry(
         claude_hooks._build_guard_command(str(tmp_path / "absent.port"))
     ))
-    result = _run_to_completion(argv, '{"tool_name":"Bash"}', timeout=hook_shell.hang_ceiling(argv, 45))
+    # On the windows-11-arm runner a PowerShell run of a hook script stalls
+    # for about 23 s at a time, even when `exit 0` (what hang_ceiling's cold
+    # start measures) starts in 0.4 s: release run 39898815983, job
+    # 120235386516, ran this hook past its 46.2 s ceiling. Two such stalls
+    # fit on top of the ceiling; a real hang still fails.
+    ceiling = hook_shell.hang_ceiling(argv, 45) + 2 * 25
+    result = _run_to_completion(argv, '{"tool_name":"Bash"}', timeout=ceiling)
     assert result.returncode == 0
     assert result.stdout == ""
 

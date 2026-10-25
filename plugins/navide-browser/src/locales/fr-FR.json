@@ -1,0 +1,70 @@
+{
+  "browser": {
+    "app": {
+      "title": "Navide Browser"
+    },
+    "overview": {
+      "title": "Spaces de Navide Browser",
+      "new": "Nouveau Space",
+      "pending": "{count} attendent votre action",
+      "open-count": "{count} ouverts, chacun utilise de la mémoire",
+      "empty": "Aucun Space pour l’instant. Créez-en un avec ＋, ou un agent ouvre le sien la première fois qu’il navigue. Les agents utilisent vos connexions dans Navide Browser (ils peuvent envoyer des requêtes sur les sites web en votre nom)."
+    },
+    "state": {
+      "idle": "Inactif",
+      "running": "En cours",
+      "need-action": "Votre action est requise",
+      "done": "Terminé"
+    },
+    "owner": {
+      "agent": "Agent",
+      "user": "Vous"
+    },
+    "space": {
+      "all": "Tous les Spaces",
+      "yours": "Votre Space : les agents ne peuvent l’utiliser que si vous les y autorisez",
+      "default-name": "Mon Space {n}"
+    },
+    "nav": {
+      "back": "Précédent",
+      "forward": "Suivant",
+      "reload": "Recharger",
+      "stop": "Arrêter",
+      "address": "Saisissez une URL"
+    },
+    "control": {
+      "agent": "L’agent a la main",
+      "user": "Vous avez la main",
+      "yours": "Votre Space"
+    },
+    "action": {
+      "take-over": "Prendre le contrôle",
+      "hand-back": "Rendre la main à l’agent",
+      "delegate": "Laisser l’agent utiliser ce Space",
+      "reclaim": "Reprendre ce Space",
+      "close": "Fermer le Space",
+      "delegate-note": "Les agents de n’importe quel pane et de n’importe quel espace de travail peuvent l’utiliser"
+    },
+    "agent-script": {
+      "warning": "Des scripts d’agent sont peut-être encore en cours d’exécution sur cette page. Rechargez-la avant de saisir un mot de passe ou un code de vérification.",
+      "reload": "Recharger",
+      "keep": "Conserver la page"
+    },
+    "settings": {
+      "title": "Paramètres",
+      "shared-sign-in": "Tous les Spaces partagent les mêmes connexions, conservées sur cet ordinateur. Les agents utilisent vos connexions dans Navide Browser (ils peuvent envoyer des requêtes sur les sites web en votre nom). Après une prise de contrôle, les scripts d’agent déjà en cours sur une page ne s’arrêtent que lorsque vous la rechargez.",
+      "clear-data": "Effacer toutes les données de connexion",
+      "clear-data-confirm": "Cliquez à nouveau pour vous déconnecter de tous les sites dans Navide Browser",
+      "clear-data-done": "Données de connexion effacées.",
+      "cancel": "Annuler"
+    },
+    "left": {
+      "open": "Ouvrir Navide Browser",
+      "empty": "Aucun Space pour l’instant."
+    },
+    "errors": {
+      "generic": "Une erreur s’est produite ({code}).",
+      "invalid-address": "Saisissez une adresse http ou https."
+    }
+  }
+}

@@ -68,6 +68,13 @@ You never need to read or modify the shared orchestration code.
      it is never a reason to refuse a switch, and it must not be raised without
      the round-trip. Keep `platforms` to the tuple you actually established;
      `todo` names what is still open.
+   - `verified_version` — the CLI version that evidence came from. The
+     pane's startup probe says a newer installed CLI "has not been tested"
+     against `VendorSpec.cli_verified_version` first (the version the
+     integration as a whole — launch, logs, resume — was last checked on) and
+     falls back to this one. Set `cli_verified_version` when it is newer than
+     the account-switch evidence; a vendor without account switching sets only
+     `cli_verified_version`.
    - `shadowing_env` — variable names the CLI ranks above the stored
      credential. A pane launched with one of them present is reported as not
      switchable rather than swapped.

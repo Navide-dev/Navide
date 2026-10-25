@@ -1,0 +1,70 @@
+{
+  "browser": {
+    "app": {
+      "title": "Navide Browser"
+    },
+    "overview": {
+      "title": "Spaces do Navide Browser",
+      "new": "Novo Space",
+      "pending": "{count} aguardando sua ação",
+      "open-count": "{count} abertos, cada um usando memória",
+      "empty": "Nenhum Space ainda. Crie um com ＋, ou um agent abre o próprio na primeira vez que navega. Os agents usam seus logins no Navide Browser (eles podem enviar solicitações em sites em seu nome)."
+    },
+    "state": {
+      "idle": "Ocioso",
+      "running": "Em execução",
+      "need-action": "Requer sua ação",
+      "done": "Concluído"
+    },
+    "owner": {
+      "agent": "Agent",
+      "user": "Você"
+    },
+    "space": {
+      "all": "Todos os Spaces",
+      "yours": "Seu Space: os agents só podem usá-lo se você permitir",
+      "default-name": "Meu Space {n}"
+    },
+    "nav": {
+      "back": "Voltar",
+      "forward": "Avançar",
+      "reload": "Recarregar",
+      "stop": "Parar",
+      "address": "Digite uma URL"
+    },
+    "control": {
+      "agent": "Agent no controle",
+      "user": "Você está no controle",
+      "yours": "Seu Space"
+    },
+    "action": {
+      "take-over": "Assumir o controle",
+      "hand-back": "Devolver ao agent",
+      "delegate": "Deixar o agent usar este Space",
+      "reclaim": "Retomar este Space",
+      "close": "Fechar Space",
+      "delegate-note": "Agents de qualquer pane e de qualquer workspace podem usá-lo"
+    },
+    "agent-script": {
+      "warning": "Scripts de agent ainda podem estar em execução nesta página. Recarregue-a antes de digitar uma senha ou um código de verificação.",
+      "reload": "Recarregar",
+      "keep": "Manter página"
+    },
+    "settings": {
+      "title": "Configurações",
+      "shared-sign-in": "Todos os Spaces compartilham os mesmos logins, guardados neste computador. Os agents usam seus logins no Navide Browser (eles podem enviar solicitações em sites em seu nome). Depois que você assume o controle, os scripts de agent já em execução em uma página só param quando você a recarrega.",
+      "clear-data": "Limpar todos os dados de login",
+      "clear-data-confirm": "Clique novamente para sair de todos os sites no Navide Browser",
+      "clear-data-done": "Dados de login limpos.",
+      "cancel": "Cancelar"
+    },
+    "left": {
+      "open": "Abrir Navide Browser",
+      "empty": "Nenhum Space ainda."
+    },
+    "errors": {
+      "generic": "Algo deu errado ({code}).",
+      "invalid-address": "Digite um endereço http ou https."
+    }
+  }
+}

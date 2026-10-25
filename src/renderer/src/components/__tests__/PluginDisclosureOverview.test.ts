@@ -53,6 +53,31 @@ describe('PluginDisclosureOverview (D5, D-f)', () => {
     expect(wrapper.get('[data-id="acme.quiet"]').text()).toContain('Activity is not available right now: Navide Host session is not ready')
   })
 
+  it('keeps the risk level and the activity counts in the summary row while the full record is closed', async () => {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        installedDisclosures: vi.fn().mockResolvedValue([
+          { id: 'nerdtechnic.devmap', version: '0.2.0', disclosure, scan: null, source: 'marketplace' },
+        ]),
+        activityReport: vi.fn().mockResolvedValue({ ok: true, report }),
+      },
+    }
+    wrapper = mount(PluginDisclosureOverview, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    const devmap = wrapper.get('[data-id="nerdtechnic.devmap"]')
+    const record = devmap.get('details.nv-overview-record')
+    expect((record.element as HTMLDetailsElement).open).toBe(false)
+    // Outside the closed record: the risk level, the source row and the counts.
+    const head = devmap.get('.nv-overview-head')
+    expect(head.get('.nv-overview-risk--high').text()).toBe('Risk level: High')
+    expect(head.find('.nv-source-badge').exists()).toBe(true)
+    expect(devmap.get('.nv-overview-activity .nv-overview-undeclared').text()).toBe('3 undeclared uses refused')
+    // The full card is still all there inside the record, nothing shortened.
+    expect(record.find('.nv-disclosure-level--high').exists()).toBe(true)
+    expect(record.get('summary').text()).toBe('Disclosure')
+  })
+
   it('says when no Marketplace plugin is installed', async () => {
     ;(window as unknown as Record<string, unknown>).agentTeam = { plugins: { installedDisclosures: vi.fn().mockResolvedValue([]) } }
     wrapper = mount(PluginDisclosureOverview, { global: { plugins: [i18n] } })

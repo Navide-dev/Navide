@@ -188,6 +188,8 @@ class CodexLogReader(LogReader):
         # file aged past _HEADER_GRACE_S without one; a rollout whose header
         # has not landed yet is retried next pass.
         self._cwd_cache: dict[str, str] = {}
+        #: Same header read, same lifetime: whether the rollout is a sub-agent's.
+        self._subagent_cache: dict[str, bool] = {}
         self._files_cache: list[Path] = []
         self._files_cached_at: float = float("-inf")
         # Discovery runs concurrently from the rescan worker thread and the
@@ -243,6 +245,9 @@ class CodexLogReader(LogReader):
             for k in list(self._cwd_cache):
                 if k not in existing:
                     del self._cwd_cache[k]
+            for k in list(self._subagent_cache):
+                if k not in existing:
+                    del self._subagent_cache[k]
             return list(out)
 
     def _cwd_from_meta(self, path: Path) -> str:
@@ -271,6 +276,9 @@ class CodexLogReader(LogReader):
                             payload = rec.get("payload") or {}
                             cwd = str(payload.get("cwd") or "") if isinstance(payload, dict) else ""
                             self._cwd_cache[key] = cwd
+                            self._subagent_cache[key] = isinstance(
+                                payload, dict
+                            ) and is_subagent_session_meta(payload)
                             return cwd
             except OSError:
                 return ""
@@ -284,6 +292,13 @@ class CodexLogReader(LogReader):
             except OSError:
                 pass
             return ""
+
+    def _is_subagent_rollout(self, path: Path) -> bool:
+        """Whether *path* is a sub-agent's rollout, from its own (first)
+        session_meta; read once with the cwd header (see _cwd_from_meta)."""
+        self._cwd_from_meta(path)
+        with self._discovery_lock:
+            return self._subagent_cache.get(str(path), False)
 
     def session_files_for_workspace(self, workspace_path: str) -> list[Path]:
         """Only rollouts whose session_meta.cwd matches this workspace.
@@ -410,6 +425,10 @@ class CodexLogReader(LogReader):
         model = "" if replaced else str(checkpoint.get("model") or "")
         cli_version = "" if replaced else str(checkpoint.get("cli_version") or "")
         session_id = path.stem if replaced else str(checkpoint.get("session_id") or path.stem)
+        # The rollout's own id is its FIRST session_meta: a sub-agent's rollout
+        # replays its ancestors' records after it, and taking the last one
+        # filed the sub-agent's tokens under its parent's session.
+        meta_seen = False if replaced else bool(checkpoint.get("meta_seen"))
         latest_event: dict | None = None
         latest_end = int(next_checkpoint.get("offset") or 0)
 
@@ -418,7 +437,8 @@ class CodexLogReader(LogReader):
                 continue
             if rec.get("type") == "session_meta":
                 payload = rec.get("payload") or {}
-                if isinstance(payload, dict):
+                if isinstance(payload, dict) and not meta_seen:
+                    meta_seen = True
                     cwd = str(payload.get("cwd") or cwd)
                     session_id = str(payload.get("id") or session_id)
                     model = str(payload.get("model_provider") or payload.get("model") or model)
@@ -445,6 +465,7 @@ class CodexLogReader(LogReader):
             "model": model,
             "session_id": session_id,
             "cli_version": cli_version,
+            "meta_seen": meta_seen,
         })
         if latest_event is None:
             return IncrementalParseResult([], next_checkpoint)
@@ -491,6 +512,7 @@ class CodexLogReader(LogReader):
             log.debug("open %s failed: %s", path, err)
             return []
         sid = path.stem
+        meta_seen = False
         model = ""
         cli_version = ""
         prev = (0, 0, 0)
@@ -511,9 +533,12 @@ class CodexLogReader(LogReader):
                 if not isinstance(payload, dict):
                     continue
                 if rec.get("type") == "session_meta":
-                    sid = str(payload.get("id") or sid)
-                    model = str(payload.get("model_provider") or payload.get("model") or model)
-                    cli_version = str(payload.get("cli_version") or cli_version)
+                    # The first one is this rollout's own (see parse_incremental).
+                    if not meta_seen:
+                        meta_seen = True
+                        sid = str(payload.get("id") or sid)
+                        model = str(payload.get("model_provider") or payload.get("model") or model)
+                        cli_version = str(payload.get("cli_version") or cli_version)
                     continue
                 if rec.get("type") != "event_msg":
                     continue
@@ -574,9 +599,17 @@ class CodexLogReader(LogReader):
 
         `task_complete` (and `turn_aborted`) is the turn end; `token_count`
         is per model call and is only counted, never used as a boundary.
+
+        A sub-agent's rollout sits in its parent pane's CODEX_HOME and is read
+        as that pane's, but its turns are not the pane's: its task_complete
+        landed inside the parent's turn and freed the pane early, with the
+        sub-agent's text as the pane's reply. It emits only
+        `subagent_turn_end` at each of its turn ends, which keeps the
+        per-account turn count exactly as before and nothing else.
         """
         out: list[ActivityEvent] = []
         session_id = path.stem
+        subagent = self._is_subagent_rollout(path)
         # The session_meta header sits below the high-water mark on every poll
         # after the first, so seed cwd from it rather than from this batch.
         cwd = self._cwd_from_meta(path)
@@ -598,6 +631,8 @@ class CodexLogReader(LogReader):
         # log_readers.base.
         high_water = activity_high_water(seen_keys)
         last_line = high_water
+        # Below the mark, the header was read on an earlier poll.
+        header_seen = high_water > 0
 
         try:
             with fh:
@@ -632,9 +667,28 @@ class CodexLogReader(LogReader):
                         payload = rec.get("payload") or {}
                         if isinstance(payload, dict):
                             cwd = str(payload.get("cwd") or cwd)
+                            # The file's own header is the first session_meta (a
+                            # sub-agent replays its parent's after it). When this
+                            # batch holds it, it decides: the header read above
+                            # can run before the header landed and say "not a
+                            # sub-agent", and this batch then went past the
+                            # high-water mark as the parent's turn.
+                            if not header_seen:
+                                header_seen = True
+                                subagent = subagent or is_subagent_session_meta(payload)
                         continue
 
                     ts = str(rec.get("timestamp") or "")
+                    if subagent:
+                        payload = rec.get("payload") or {}
+                        ptype = str(payload.get("type") or "") if isinstance(payload, dict) else ""
+                        if rtype == "event_msg" and ptype in ("task_complete", "turn_aborted"):
+                            out.append(ActivityEvent(
+                                vendor="codex", event_type="subagent_turn_end",
+                                cwd=cwd, session_id=session_id, file_path=str(path),
+                                dedup_key=f"turn:{line_no}", timestamp=ts, detail=ptype,
+                            ))
+                        continue
                     if rtype == "assistant":
                         out.append(ActivityEvent(
                             vendor="codex", event_type="agent_active",

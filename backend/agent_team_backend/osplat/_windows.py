@@ -151,6 +151,7 @@ PROCESS_TERMINATE = 0x0001
 PROCESS_SET_QUOTA = 0x0100
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 SYNCHRONIZE = 0x00100000
+STD_INPUT_HANDLE = 0xFFFFFFF6  # (DWORD)-10
 STD_ERROR_HANDLE = 0xFFFFFFF4  # (DWORD)-12
 WAIT_OBJECT_0 = 0x00000000
 WAIT_TIMEOUT = 0x00000102
@@ -198,6 +199,8 @@ class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
 
 
 _k32: Any = None
+#: The NUL descriptor `isolate_stdin_from_children` made the stdin handle.
+_stdin_nul_fd: int | None = None
 _sh32: Any = None
 
 
@@ -232,6 +235,8 @@ def _kernel32() -> Any:
         k.GetStdHandle.restype = wintypes.HANDLE
         k.GetHandleInformation.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
         k.GetHandleInformation.restype = wintypes.BOOL
+        k.SetStdHandle.argtypes = [wintypes.DWORD, wintypes.HANDLE]
+        k.SetStdHandle.restype = wintypes.BOOL
         _k32 = k
     return _k32
 
@@ -511,6 +516,23 @@ class WindowsProcessTree:
             self.kill_tree(pid, force=True)
         except OSError:
             pass
+
+    def isolate_stdin_from_children(self) -> bool:
+        global _stdin_nul_fd
+        try:
+            import msvcrt
+
+            if _stdin_nul_fd is None:
+                # Held for the life of the process: it is the std handle now.
+                _stdin_nul_fd = os.open(os.devnull, os.O_RDONLY)
+            handle = msvcrt.get_osfhandle(_stdin_nul_fd)
+            if _kernel32().SetStdHandle(STD_INPUT_HANDLE, handle):
+                return True
+            error = ctypes.get_last_error()  # type: ignore[attr-defined]
+            log.warning("SetStdHandle(NUL) failed (error %s); children still inherit stdin", error)
+        except OSError as exc:
+            log.warning("could not point stdin at NUL (%s); children still inherit stdin", exc)
+        return False
 
     def stderr_handle_info(self) -> str:
         try:

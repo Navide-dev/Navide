@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "未確認",
+      "unsent": "未送信",
+      "mark-tooltip": "この pane は Agent Client Protocol（ACP）で agent を実行します。会話は CLI 自身の画面ではなく Navide が描画します。",
+      "permission": "agent からの要求：{title}",
+      "failed": "agent を起動できませんでした：{reason}",
+      "exited": "agent は停止しました（終了コード {code}）。",
+      "placeholder": "agent にメッセージを送ります。Enter で送信、Shift+Enter で改行。",
+      "send": "送信",
+      "cancel": "このターンを取り消す"
+    },
     "opened-by": "「{parent}」が開いた",
     "git": {
       "title": "ソース管理",
@@ -1809,6 +1820,7 @@
       "removeShell": "{name} を削除",
       "none": "なし",
       "save": "ポリシーを保存",
+      "edit": "ポリシーを編集",
       "resetUser": "ユーザーポリシーをリセット",
       "sourceTitle": "ワークスペースのポリシー適用元",
       "sourceHint": "リポジトリの推奨設定は、内容を確認して明示的に適用するまで信頼されません。適用元の変更には、現在のフィンガープリントとの完全一致が必要です。",
@@ -1906,6 +1918,7 @@
         }
       },
       "bundled": "同梱",
+      "listTitle": "Navide プラグイン",
       "bundledGit": "同梱の Git",
       "state": {
         "active": "有効",
@@ -1919,7 +1932,7 @@
       "restartPlugin": "Navide プラグインを再起動",
       "disable": "無効化",
       "enable": "有効化",
-      "builtinDisabledTooltip": "Navide プラグイン {name} は無効です。「設定 → 拡張機能」で有効にしてください。",
+      "builtinDisabledTooltip": "Navide プラグイン {name} は無効です。「設定 → Navide プラグイン」で有効にしてください。",
       "builtinDisabledNote": "無効：画面、ウィンドウ、エージェントツールはすべてオフです。権限と保存データは残り、「有効化」ですべて元に戻ります。",
       "builtinDataDeletedEarlier": "以前の Navide がこの Navide プラグインを削除し、そのとき保存データも削除しました。有効にすると空のデータから始まります。",
       "disabledStoreRestored": "バックアップから復元しました：Navide プラグインの無効化設定が破損していたため、バックアップから再構築しました。",
@@ -2140,6 +2153,13 @@
           "mayChange": "内容はいつでも変わる可能性があります。フィンガープリントは読み込み時点の内容を記録するだけで、Navide はこれを理由に読み込みを止めません。"
         },
         "selfHostedQuarantine": "{id} {version} は自前の Registry から入れたもので、読み込まれていません。開発者モードをオンにするか、Navide マーケットプレイスからインストールしてください。"
+      },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide はこの Navide プラグインを確認できませんでした：Registry の信頼データの日時が、このコンピューターの時計より後になっています。コンピューターの日付と時刻が正しいか確認してから、もう一度お試しください。",
+          "expired": "Navide はこの Navide プラグインを確認できませんでした：このコンピューターの時計では、Registry の信頼データの有効期限が切れています。コンピューターの日付と時刻が正しいか確認してから、もう一度お試しください。",
+          "signatureNotYetValid": "Navide はこの Navide プラグインを確認できませんでした：Registry の署名の日時が、このコンピューターの時計より後になっています。コンピューターの日付と時刻が正しいか確認してから、もう一度お試しください。"
+        }
       },
       "localInstall": {
         "agentRequest": "{requester} からのリクエストです。Navide はこの Navide プラグインを審査していません。インストールするかどうかはあなたが決めます。",
@@ -6827,6 +6847,9 @@
       "state-on": "有効",
       "state-off": "無効",
       "status": "状態：{status}",
+      "starting-note": "起動中です（{seconds} 秒経過）。npx や uvx で実行している場合、初回はパッケージをダウンロードしている可能性があります。",
+      "error-reason": "起動に失敗しました：{reason}",
+      "stderr-tail": "サーバーが最後に出力した行",
       "open-config-file": "設定ファイルを開く",
       "native-readonly-hint": "Navide はこれらのファイルを読み取るだけで、書き込みません。各 CLI のユーザー設定のみをスキャンするため、プロジェクト単位の MCP は表示されません。CLI が使用する設定場所でサーバーを変更してから、再読み込みしてください。",
       "navide-scope-hint": "Navide 自身がこのサーバーに接続します。CLI ペインには配布されません。",

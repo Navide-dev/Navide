@@ -15,13 +15,13 @@ All three surfaces read the same entry and behave the same way:
 |---|---|
 | Post-update popup (`WhatsNewModal`) | Once, on the first launch of a version newer than the last one seen (`agentTeam.whatsNew.lastSeenVersion`). A fresh install is only baselined, never shown it. |
 | **Help → What's New…** | On request. It shows the newest entry at or below the running version, and closing it records nothing. A dev build shows the newest entry authored, so you can try the next release's announcement before `package.json` is bumped. |
-| Announcement centre (📢 in the status bar) | Always lists every shipped entry. A release row whose entry has a tour shows **Take the tour**. |
+| Announcement centre (📢 in the status bar) | Always lists every shipped entry. A release row whose entry has a tour shows **Take the Tour**. |
 
-When the entry has a tour, the popup asks **Take the tour / Not now** instead of
-**Got it**. Every surface starts the tour through
+When the entry has a tour, the popup asks **Take the Tour / Not Now** instead of
+**Got It**. Every surface starts the tour through
 `composables/useReleaseTour.ts`. It records `agentTeam.tour.v<version>.done`
 only when the tour is taken to its last step, and the popup then offers
-**Replay the tour**.
+**Replay the Tour**.
 
 ## Adding a release's announcement
 
@@ -93,3 +93,41 @@ They fail when any of these is broken:
 - No `tour.v<x_y_z>` locale namespace is left behind without an entry whose
   tour uses it.
 - Locale key sets stay in parity (`locales.test.ts`).
+
+## whats-new.json (the website's copy)
+
+Every release run publishes the announcements to the download mirror as JSON,
+for the website's /news page. `mirror.yml` runs
+[`scripts/export-whats-new.mjs`](../../scripts/export-whats-new.mjs) and uploads
+the result to two places:
+
+- `https://dl.navide.dev/releases/<tag>/whats-new.json`: permanent, the
+  announcements up to that release.
+- `https://dl.navide.dev/releases/latest/whats-new.json`: replaced with
+  `releases/latest/`, so it follows the Latest release.
+
+Publishing it is best effort: if the export or upload fails, the run warns and the installers are still mirrored; a manual `mirror.yml` run publishes it later. Entries newer than the tag are left out. A release whose entry is missing still
+publishes the file, with its newest entry being an older version.
+
+```jsonc
+{
+  "schemaVersion": 1,          // bumped only for a change a reader must handle
+  "version": "0.2.29",         // the release this file was exported for
+  "entries": [                 // newest first, every entry at or below `version`
+    {
+      "version": "0.2.29",
+      "date": "2026-10-23",    // optional: the release date from CHANGELOG.md
+      "major": true,           // optional: present only on a major release
+      "title": { "zh-TW": "…", "en-US": "…", "ja-JP": "…" },
+      "highlights": [ { "zh-TW": "…", "en-US": "…" } ],
+      "note": { "zh-TW": "…", "en-US": "…" }   // optional
+    }
+  ]
+}
+```
+
+Each text object has `zh-TW` and `en-US`, and may have `ja-JP` or any later UI
+language (`zh-CN`, `ko-KR`, …). A reader picks its locale and falls back to
+`en-US`. Texts are plain text: a URL is written out as text, not as markup.
+Tours, `spotlight`, `features` and other fields are not exported. A reader
+ignores fields it does not know.

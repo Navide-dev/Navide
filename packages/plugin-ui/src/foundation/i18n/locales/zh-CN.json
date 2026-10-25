@@ -667,6 +667,17 @@
     }
   },
   "pane": {
+    "acp": {
+      "unconfirmed": "未确认",
+      "unsent": "未发送",
+      "mark-tooltip": "这个 pane 通过 Agent Client Protocol（ACP）运行 agent：对话由 Navide 绘制，而不是 CLI 自己的界面。",
+      "permission": "agent 请求：{title}",
+      "failed": "agent 无法启动：{reason}",
+      "exited": "agent 已停止（退出码 {code}）。",
+      "placeholder": "给 agent 发消息。Enter 发送，Shift+Enter 换行。",
+      "send": "发送",
+      "cancel": "取消本轮"
+    },
     "opened-by": "由「{parent}」打开",
     "git": {
       "title": "源代码控制",
@@ -1809,6 +1820,7 @@
       "removeShell": "移除 {name}",
       "none": "无",
       "save": "保存政策",
+      "edit": "编辑政策",
       "resetUser": "重设用户政策",
       "sourceTitle": "工作区政策来源",
       "sourceHint": "Repository 建议在你查看并明确接受前都不受信任。切换来源需要精确符合目前指纹。",
@@ -1906,6 +1918,7 @@
         }
       },
       "bundled": "内置",
+      "listTitle": "Navide 插件",
       "bundledGit": "内置 Git",
       "state": {
         "active": "激活中",
@@ -1919,7 +1932,7 @@
       "restartPlugin": "重新启动 Navide 插件",
       "disable": "禁用",
       "enable": "激活",
-      "builtinDisabledTooltip": "Navide 插件 {name} 已禁用，请在“设置 → 扩展”重新激活。",
+      "builtinDisabledTooltip": "Navide 插件 {name} 已禁用，请在“设置 → Navide 插件”重新激活。",
       "builtinDisabledNote": "已禁用：它的画面、窗口与 agent 工具都已关闭。权限与保存的数据都保留，按“激活”即全部恢复。",
       "builtinDataDeletedEarlier": "旧版 Navide 曾移除这个 Navide 插件，当时已删除它保存的数据。激活后会从空白数据开始。",
       "disabledStoreRestored": "已从备份恢复：Navide 插件的禁用设置档已损坏，已用备份重建。",
@@ -2140,6 +2153,13 @@
           "mayChange": "内容随时可能变动；指纹只记录加载当下的内容，Navide 不拿它挡加载。"
         },
         "selfHostedQuarantine": "{id} {version} 来自自架 Registry，目前没有加载。请打开开发者模式，或改从 Navide 市场安装。"
+      },
+      "registryTrust": {
+        "errors": {
+          "notYetValid": "Navide 无法检查这个 Navide 插件：Registry 信任数据的时间晚于这台电脑的时钟。请确认电脑的日期与时间正确，再试一次。",
+          "expired": "Navide 无法检查这个 Navide 插件：按这台电脑的时钟，Registry 信任数据已过期。请确认电脑的日期与时间正确，再试一次。",
+          "signatureNotYetValid": "Navide 无法检查这个 Navide 插件：它的 Registry 签名时间晚于这台电脑的时钟。请确认电脑的日期与时间正确，再试一次。"
+        }
       },
       "localInstall": {
         "agentRequest": "由 {requester} 提出。Navide 没有审核过这个 Navide 插件，要不要安装由你决定。",
@@ -6827,6 +6847,9 @@
       "state-on": "已激活",
       "state-off": "已禁用",
       "status": "状态：{status}",
+      "starting-note": "仍在启动（已 {seconds} 秒）。如果通过 npx 或 uvx 运行，首次运行可能正在下载软件包。",
+      "error-reason": "启动失败：{reason}",
+      "stderr-tail": "服务器最后输出的几行",
       "open-config-file": "打开设置档",
       "native-readonly-hint": "Navide 只读取这些文件，不会写入。只扫描各 CLI 的用户层级设置，项目层级的 MCP 不会显示。要修改请到该 CLI 自己的设置档，改完回来刷新。",
       "navide-scope-hint": "这是 Navide 自己连接的 server，CLI pane 不会拿到它。",
