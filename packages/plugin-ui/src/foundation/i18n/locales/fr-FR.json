@@ -2211,6 +2211,8 @@
           "fs": "Lire et écrire des fichiers dans votre espace de travail.",
           "aiCli": "Exécuter les agents CLI d’IA configurés dans Navide.",
           "web": "Peut ouvrir et parcourir n’importe quel site web ; les connexions aux sites sont conservées sur cet ordinateur ; les agents utilisent vos connexions dans ce plugin Navide (ils peuvent envoyer des requêtes sur des sites web en votre nom) et peuvent lire chaque page qu’il ouvre ainsi que son état de connexion ; après votre reprise en main, les scripts d’agent déjà en cours dans une page ne s’arrêtent que lorsque vous la rechargez ; il peut ouvrir de nombreuses pages web à la fois, et chacune consomme de la mémoire.",
+          "agents": "Voit vos panes d’agent, quel pane a ouvert lequel et quand ils se sont envoyé des messages, mais pas ce qu’ils ont dit.",
+          "agentMessages": "Lit le texte intégral des messages entre vos agents ; il peut contenir du code, le contenu de fichiers ou des secrets.",
           "shell": "Exécuter des commandes sur votre ordinateur.",
           "terminal": "Ouvrir et contrôler des terminaux Navide."
         }
@@ -11732,6 +11734,8 @@
       "networkViaShell": "Peut joindre des hôtes distants via ces commandes",
       "aiCli": "Contrôle des sessions de CLI IA",
       "web": "Peut ouvrir et parcourir n’importe quel site web ; les connexions aux sites sont conservées sur cet ordinateur ; les agents utilisent vos connexions dans ce plugin Navide (ils peuvent envoyer des requêtes sur les sites web en votre nom) et peuvent lire chaque page qu’il ouvre ainsi que son état de connexion ; après une prise de contrôle, les scripts d’agent déjà en cours sur une page ne s’arrêtent que lorsque vous la rechargez ; il peut ouvrir de nombreuses pages web à la fois, et chacune utilise de la mémoire.",
+      "agents": "Voit les panes d’agent de ce projet, quel pane a ouvert lequel, les journaux de remise des messages (sans leur contenu) et la liste des sessions (sans le contenu des conversations)",
+      "agentMessages": "Lit le texte intégral des messages entre vos agents dans ce projet, qui peut contenir du code, le contenu de fichiers ou des secrets",
       "ui": "Affiche ses propres vues",
       "agentTools": "Propose des outils que les agents peuvent appeler ({read} en lecture seule, {write} en écriture)",
       "network": "Peut utiliser le réseau",

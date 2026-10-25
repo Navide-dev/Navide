@@ -1290,6 +1290,7 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   dataRoot: join(nativeBackendRoot, 'data'),
   filesystemPort: () => frontendPluginManager.createWorkspaceFilesystemPort(),
   shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
+  agentsPort: () => frontendPluginManager.createThirdPartyAgentsPort(),
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,

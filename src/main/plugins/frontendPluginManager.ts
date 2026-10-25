@@ -69,6 +69,7 @@ import {
 } from './pluginCapabilityCatalog'
 import { PUBLIC_GIT_METHODS, gitRequestTimeoutMs, publicGitRequest } from './gitPublicCapability'
 import { GIT_ACCOUNT_PUBLIC_METHODS } from './gitAccountCapability'
+import { agentsOperation } from './agentsCapability'
 import { PUBLIC_ISSUE_METHODS, issueRequest } from './issueCapability'
 import {
   MINI_IDE_PLUGIN_REQUIRES,
@@ -130,7 +131,7 @@ import {
   type PlansFilesystemPort,
   type PlansFilesystemServiceOperation,
 } from './plansBridge'
-import type { PackageShellPort } from './pluginThirdPartyBackends'
+import type { PackageAgentsPort, PackageShellPort } from './pluginThirdPartyBackends'
 import {
   BackendPluginError,
   type BackendPluginLaunchSpec,
@@ -2826,6 +2827,98 @@ export class FrontendPluginManager {
       stderr: String(record.stderr ?? ''),
       ...shellRunTruncation(record),
     }
+  }
+
+  /** The Host's read-only agent data for third-party backends that declare
+   *  `agents` (and `agentMessages` for message text): the same `agents.public`
+   *  backend query a view's agents.* uses, at the bound workspace only. */
+  createThirdPartyAgentsPort(): PackageAgentsPort {
+    return {
+      query: (operation, args, context) => this.sendThirdPartyAgentsQuery(operation, args, context),
+    }
+  }
+
+  /** Revalidated at every dispatch: the registered package version declares
+   *  the namespace and its user Grant holds it, at the canonical bound root;
+   *  and the call comes from a live view of the package there, or from an
+   *  agent-tool call the Host bound headless at that root and still serves. */
+  private thirdPartyAgentsGrantAllows(namespace: 'agents' | 'agentMessages', context: PlansBridgeContext): boolean {
+    const runtime = context.runtime
+    if (
+      context.signal.aborted ||
+      runtime.pluginId === PLANS_PLUGIN_ID ||
+      !nonEmptyString(runtime.packageVersion) ||
+      !nonEmptyString(runtime.instanceId) ||
+      !nonEmptyString(context.workspacePath) ||
+      !nonEmptyString(context.authorizedPlanRoot)
+    ) return false
+    const activation = this.pluginBackendHost.activationForPlugin(runtime.pluginId)
+    if (
+      !activation?.thirdParty?.system.includes(namespace) ||
+      activation.packageVersion !== runtime.packageVersion
+    ) return false
+    const grant = this.capabilityGrantResolver?.(runtime.pluginId, runtime.packageVersion) ?? null
+    if (!grant || grant.packageVersion !== runtime.packageVersion || !grant.system.includes(namespace)) return false
+    const root = canonicalExistingDirectory(context.workspacePath)
+    if (root === null || root !== context.authorizedPlanRoot) return false
+    if (runtime.initiator.kind === 'user') {
+      const view = this.running.get(runtime.instanceId)
+      return Boolean(
+        view &&
+        view.id === runtime.pluginId &&
+        view.workspacePath &&
+        resolve(view.workspacePath) === resolve(context.workspacePath) &&
+        runtime.workspaceId === this.workspaceIdForPath(context.workspacePath),
+      )
+    }
+    const boundRoot = this.headlessAgentToolRoots.get(runtime.instanceId)
+    const call = runtime.initiator.kind === 'agent' ? this.agentToolCalls.get(runtime.initiator.id) : undefined
+    const stillServed = call !== undefined && this.agentToolsHost !== null && this.agentToolsHost.recheck(
+      call.pluginId,
+      call.caller,
+      (pluginId, packageVersion) => this.isPackageVersionStopping(pluginId, packageVersion),
+      call.spec,
+    ).ok
+    return Boolean(
+      boundRoot === root &&
+      call &&
+      stillServed &&
+      call.pluginId === runtime.pluginId &&
+      call.workspaceRoot === boundRoot &&
+      this.pluginBackendHost.isBound(runtime.instanceId) &&
+      !this.isPackageVersionStopping(runtime.pluginId, runtime.packageVersion) &&
+      runtime.workspaceId === this.workspaceIdForPath(boundRoot) &&
+      this.isAgentToolWorkspace(boundRoot),
+    )
+  }
+
+  private async sendThirdPartyAgentsQuery(
+    operation: string,
+    args: Record<string, JsonValue>,
+    context: PlansBridgeContext,
+  ): Promise<JsonValue> {
+    if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+    const namespace = operation === 'read_message' ? 'agentMessages' : 'agents'
+    const allows = (): boolean => this.thirdPartyAgentsGrantAllows(namespace, context)
+    if (!allows()) throw new PlansBridgeError('CAPABILITY_DENIED', 'Agents capability is denied.')
+    let response: unknown
+    try {
+      response = await this.sendPublicBackend(
+        'agents.public',
+        { workspace_path: context.authorizedPlanRoot, operation, arguments: args },
+        allows,
+      )
+    } catch (error) {
+      if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+      if (error instanceof Error && error.message === 'request denied before dispatch') {
+        throw new PlansBridgeError('CAPABILITY_DENIED', 'Agents capability is denied.')
+      }
+      throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Agents service is unavailable.')
+    }
+    if (!isJsonValue(response)) {
+      throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Agents service returned an invalid response.')
+    }
+    return response
   }
 
   /** Delegate immediate pre-spawn trust revalidation to the backend child Host. */
@@ -6421,6 +6514,19 @@ export class FrontendPluginManager {
       )
     }
 
+    const agentsOp = agentsOperation(plan.address)
+    if (agentsOp) {
+      if (!workspacePath) throw new Error('Agents capability workspace binding is missing')
+      if (!this.publicPlanCanDispatch(plan, plugin)) {
+        throw new Error('agent execution policy denied the operation')
+      }
+      return await this.sendPublicBackend(
+        'agents.public',
+        { workspace_path: resolve(workspacePath), operation: agentsOp, arguments: plan.args },
+        () => this.publicPlanCanDispatch(plan, plugin),
+      )
+    }
+
     if ((EDITOR_PREFERENCE_METHODS as readonly string[]).includes(plan.address)) {
       if (!workspacePath) throw new Error('Editor preference capability workspace binding is missing')
       if (!this.publicPlanCanDispatch(plan, plugin)) {
@@ -7728,7 +7834,10 @@ export class FrontendPluginManager {
     const initiator = plan.initiator
     if (!initiator || initiator.kind !== 'agent') return true
     const namespace = plan.address.split('.', 1)[0]
-    if (namespace !== 'fs' && namespace !== 'ui' && namespace !== 'aiCli' && namespace !== 'web' && namespace !== 'shell') {
+    if (
+      namespace !== 'fs' && namespace !== 'ui' && namespace !== 'aiCli' && namespace !== 'web' &&
+      namespace !== 'agents' && namespace !== 'agentMessages' && namespace !== 'shell'
+    ) {
       return true
     }
     let snapshot: ExecutionPolicySnapshot | undefined

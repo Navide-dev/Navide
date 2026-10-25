@@ -247,6 +247,12 @@ Sessions should publish structured progress back to the Project Intelligence Lay
 - YOLO mode can remove external CLI approval or sandbox gates.
 - Cloud providers and MCP servers receive data according to the selected feature and configuration.
 - Cross-agent handoffs can propagate sensitive text.
+- A Navide plugin can read agent data of its own workspace through the
+  read-only `agents` namespace (panes, lineage, message delivery records,
+  session list) and, separately disclosed, message text through
+  `agentMessages`. Neither reads session transcripts, account or quota data,
+  other workspaces or other devices; the Host binds the workspace and the
+  backend (`agents_host_api.py`) returns fixed field lists only.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is
