@@ -1,4 +1,5 @@
 import type { PluginSource } from '../../../shared/pluginSource'
+import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 
 /** The badge text of a source. A test build prints its expiry as YYYY-MM-DD,
  *  or says the expiry is unknown when the Host sent none. Its review depends
@@ -41,4 +42,53 @@ export function testplaceDaysLeft(expiresAt: string | null | undefined, now: num
  *  plugin's own content cannot cover or imitate it. */
 export function chromeSourceMark(source: PluginSource | undefined): PluginSource | null {
   return source && source !== 'marketplace' && source !== 'factory-bundled' ? source : null
+}
+
+/** Sources whose publisher id nothing vouches for, as in PluginSourceBadge. */
+const SELF_DECLARED: readonly PluginSource[] = ['local-unsigned', 'developer-unpacked']
+
+export interface PluginDisclosureSubject {
+  title: string
+  pluginId: string
+  source?: PluginSource
+  expiresAt?: string | null
+  testplaceVia?: 'invite' | 'code' | null
+}
+
+/** Disclosure for a plugin control in Navide's chrome: its title alone is the
+ *  plugin's to choose, so the hover text and accessible name also say it is a
+ *  Navide plugin and give its id, publisher and, when the package has one, its
+ *  source. A publisher read off an unsigned or unknown package is only
+ *  self-declared. */
+export function pluginDisclosureTitle(
+  t: (key: string, params?: Record<string, unknown>) => string,
+  subject: PluginDisclosureSubject
+): string {
+  const publisher = reveal(subject.pluginId.split('.')[0])
+  const parts = [
+    t('stageTab.plugin-tab', { title: reveal(subject.title) }),
+    reveal(subject.pluginId),
+    t('pluginDisclosure.source.publisher', {
+      publisher: !subject.source || SELF_DECLARED.includes(subject.source)
+        ? t('pluginDisclosure.source.selfDeclared', { publisher })
+        : publisher,
+    }),
+  ]
+  if (subject.source) parts.push(pluginSourceLabel(t, subject.source, subject.expiresAt, subject.testplaceVia))
+  return parts.join(' · ')
+}
+
+const SKIPPED_LEADING = /^[\p{Z}\p{Cc}\p{Cf}]+/u
+const LATIN = /\p{Script=Latin}/u
+
+/** What an icon-less plugin button shows: the first user-perceived character
+ *  of its title (a whole emoji or CJK character, never half a surrogate pair),
+ *  upper-cased when Latin, so two icon-less plugins can be told apart. Leading
+ *  spaces and invisible characters are skipped; ◇ remains for a title with
+ *  nothing visible in it. */
+export function pluginIconFallback(title: string): string {
+  const text = title.replace(SKIPPED_LEADING, '')
+  const first = new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)[Symbol.iterator]().next()
+  if (first.done) return '◇'
+  return LATIN.test(first.value.segment) ? first.value.segment.toUpperCase() : first.value.segment
 }

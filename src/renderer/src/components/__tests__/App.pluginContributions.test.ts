@@ -53,6 +53,22 @@ describe('titlebar button order', () => {
     )
   })
 
+  it('gives an icon-less plugin button its title\'s first letter and a Host-written disclosure', () => {
+    // A letter alone could pass for a native control, so the hover text and
+    // accessible name name the plugin, its id, publisher and source, and the
+    // K2 dot stays (pluginSourceMark.test.ts covers the text itself).
+    const start = at('class="titlebar-plugin-actions"')
+    const block = appSource.slice(start, appSource.indexOf('</div>', start))
+    expect(block).toContain('<span v-else class="titlebar-plugin-fallback" aria-hidden="true">{{ pluginIconFallback(contribution.title) }}</span>')
+    expect(block).not.toContain('◇')
+    expect(block).toContain(':title="titlebarPluginLabel(contribution)"')
+    expect(block).toContain(':aria-label="titlebarPluginLabel(contribution)"')
+    expect(block).toContain('<span v-if="chromeSourceMark(contribution.source)" class="titlebar-plugin-source-mark"')
+    expect(appSource).toMatch(
+      /function titlebarPluginLabel\(contribution: PluginRegionContribution\): string \{\s*return pluginDisclosureTitle\(i18n\.global\.t, contribution\)\s*\}/
+    )
+  })
+
   it('keeps the spacer that pins the cluster right', () => {
     // Without flex:1 the cluster would not be right-aligned and the order
     // above would stop meaning anything.

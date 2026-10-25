@@ -8,6 +8,7 @@
   "engines": { "navide": "^0.1.0" },
   "permissions": { "system": ["fs", "ui", "aiCli"], "shell": "allowlist" },
   "marketplace": {
+    "icon": "assets/mini-ide.png",
     "description": "Edit workspace files, review changes and run AI CLI sessions in an independent IDE window.",
     "license": "MIT",
     "repository": "https://github.com/Navide-dev/Navide",
@@ -19,6 +20,7 @@
       "kind": "custom",
       "location": "window",
       "title": "Mini-IDE",
+      "icon": "assets/mini-ide.png",
       "entry": "frontend/window/index.html",
       "receives": {
         "protocolVersion": 1,

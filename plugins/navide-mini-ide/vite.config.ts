@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 
 const packageRoot = resolve(__dirname)
@@ -36,9 +36,12 @@ const emitManifest: Plugin = {
     const manifest = { ...sourceManifest, version: artifactVersion }
     mkdirSync(outputRoot, { recursive: true })
     writeFileSync(resolve(outputRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+    const assetsDir = resolve(outputRoot, 'assets')
+    mkdirSync(assetsDir, { recursive: true })
+    copyFileSync(resolve(packageRoot, 'assets/mini-ide.png'), resolve(assetsDir, 'mini-ide.png'))
     writeFileSync(
       resolve(outputRoot, 'artifact-files.json'),
-      `${JSON.stringify({ files: ['manifest.json', ...outputFiles(resolve(outputRoot, 'frontend')).map((file) => `frontend/${file}`)] }, null, 2)}\n`,
+      `${JSON.stringify({ files: ['manifest.json', 'assets/mini-ide.png', ...outputFiles(resolve(outputRoot, 'frontend')).map((file) => `frontend/${file}`)] }, null, 2)}\n`,
     )
   },
 }
