@@ -139,14 +139,19 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「設定 → Navide プラグイン」を 4 つのページに分け、サイドバーの「Navide プラグイン」の下に並べました：Navide プラグイン、実行ポリシー、開発者とネイティブコード、開示の一覧。ページを開かなくても状態がわかります：実行ポリシーのページに警告があるときはサイドバーの行に ⚠ が、開発者モードやネイティブバックエンドのスイッチがどれかオンのときは「開発者とネイティブコード」に「オン」が表示されます。ウィンドウの幅が 720px 以下のときは、ページ上部のタブで切り替えます。各プラグインの行には、クリックしなくてもリスクレベルと「⚠ N」が表示されます。開示の文言は変わっていません。',
       },
       {
+        'zh-TW': '安裝了會在主畫面加入 view 的外掛之後，主畫面不會再被整個蓋住，點擊也不會穿透到底下的終端機：外掛的畫面變成舞台上的一個分頁，排在既有分頁後面，標籤是 view 的標題。安裝時不會自動切過去，點回其他分頁就會回到 pane 格線。這是 0.1.93 起就有的問題，內建外掛都沒有用到這個位置。',
+        'en-US': 'Installing a plugin that adds a view to the main area no longer covers the whole stage, and clicks no longer fall through to the terminals underneath: the plugin\'s view is now a stage tab after the existing tabs, labelled with the view\'s title. Installing it does not switch to it, and picking another tab brings the pane grid back. This had been the case since 0.1.93; no bundled plugin uses that area.',
+        'ja-JP': 'メイン領域に view を追加するプラグインをインストールしても、ステージ全体が覆われることはなくなり、クリックが下のターミナルに抜けることもなくなりました：プラグインの画面はステージのタブの 1 つになり、既存のタブの後ろに view のタイトルで表示されます。インストールしても自動では切り替わらず、ほかのタブを選ぶと pane のグリッドに戻ります。0.1.93 から続いていた問題で、同梱のプラグインはこの領域を使っていません。',
+      },
+      {
         'zh-TW': '外掛現在可以申請讀取同一個工作區的 agent 資訊（pane 清單、哪個 pane 開了哪個、不含內容的訊息傳送紀錄、session 清單），這是中風險權限；訊息內容要另外申請高風險權限，安裝時會再確認一次，而且 agent 要讀到訊息內容，執行政策必須明確寫入。對話紀錄、帳號和額度資料都不開放。內建外掛都沒有申請這兩種權限。',
         'en-US': 'Plugins can now ask to read agent information in their own workspace (the pane list, which pane opened which, message delivery records without their text, and the session list), a medium-risk permission. Message text needs a separate high-risk permission, confirmed a second time at install, and an agent gets it only from an Execution Policy that names it. Conversation transcripts, account and quota data are never available. None of the bundled plugins asks for either.',
         'ja-JP': 'プラグインが、同じワークスペースの agent の情報（pane の一覧、どの pane がどの pane を開いたか、本文を含まないメッセージの配信記録、session の一覧）の読み取りを申請できるようになりました。これは中リスクの権限です。メッセージの本文には別の高リスクの権限が必要で、インストール時にもう一度確認され、agent が本文を読めるのは実行ポリシーに明記されている場合だけです。会話の記録、アカウントや使用量のデータは公開されません。同梱のプラグインはどちらも申請していません。',
       },
       {
-        'zh-TW': '因為電腦時鐘不準而無法檢查 Registry 外掛時，訊息會說明時鐘似乎慢了或快了，請你改正日期與時間後再試。已安裝的外掛因此停止時，「設定 → Navide 外掛」會顯示橫幅說明，Navide 會在 15 分鐘內及啟動時再檢查一次。',
-        'en-US': 'When a Registry plugin cannot be checked because this computer\'s clock is off, the message now says the clock appears to be behind or ahead, and to correct the date and time and try again. An installed plugin stopped for this reason shows a banner in Settings → Navide Plugins; Navide checks again within 15 minutes and when it starts.',
-        'ja-JP': 'コンピューターの時計がずれているために Registry のプラグインを確認できないとき、時計が遅れているか進んでいるようだと伝え、日付と時刻を直してからやり直すよう案内するようになりました。インストール済みのプラグインがこの理由で停止した場合は「設定 → Navide プラグイン」にバナーが表示され、Navide は 15 分以内と起動時にもう一度確認します。',
+        'zh-TW': '因為電腦時鐘不準而無法檢查 Registry 外掛時，訊息會說明時鐘似乎慢了或快了，請你改正日期與時間後再試。已安裝的外掛因此停止時，「設定 → Navide 外掛」的「Navide 外掛」頁會顯示橫幅說明，Navide 會在 15 分鐘內及啟動時再檢查一次。',
+        'en-US': 'When a Registry plugin cannot be checked because this computer\'s clock is off, the message now says the clock appears to be behind or ahead, and to correct the date and time and try again. An installed plugin stopped for this reason shows a banner on the Navide plugins page of Settings → Navide Plugins; Navide checks again within 15 minutes and when it starts.',
+        'ja-JP': 'コンピューターの時計がずれているために Registry のプラグインを確認できないとき、時計が遅れているか進んでいるようだと伝え、日付と時刻を直してからやり直すよう案内するようになりました。インストール済みのプラグインがこの理由で停止した場合は「設定 → Navide プラグイン」の「Navide プラグイン」ページにバナーが表示され、Navide は 15 分以内と起動時にもう一度確認します。',
       },
       {
         'zh-TW': '用 Anthropic 自動產生 commit 訊息不再每次都失敗。',
