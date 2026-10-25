@@ -165,8 +165,8 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[4].version).toBe('0.2.26')
-    expect(WHATS_NEW[5].version).toBe('0.2.25')
+    expect(WHATS_NEW[5].version).toBe('0.2.26')
+    expect(WHATS_NEW[6].version).toBe('0.2.25')
   })
 })
 
@@ -192,7 +192,7 @@ describe('0.2.27 — Navide Browser and blocked local installs', () => {
   it('shows once to someone updating from 0.2.26, and not to a build still running 0.2.26', () => {
     expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
-    expect(WHATS_NEW[3].version).toBe('0.2.27')
+    expect(WHATS_NEW[4].version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
   })
 })
@@ -241,7 +241,7 @@ describe('0.2.29 — six more languages', () => {
   it('shows once to someone updating from 0.2.28, and not to a build still running 0.2.28', () => {
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.29', '0.2.29')).toBeNull()
-    expect(WHATS_NEW[1].version).toBe('0.2.29')
+    expect(WHATS_NEW[2].version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
   })
 })
@@ -266,11 +266,62 @@ describe('0.2.30 — pipelines no longer stall silently', () => {
     expect(all).toContain('cannot be collapsed')
   })
 
-  it('shows once to someone updating from 0.2.29, as the newest entry, and not to a build still running 0.2.29', () => {
+  it('shows once to someone updating from 0.2.29, and not to a build still running 0.2.29', () => {
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.30', '0.2.30')).toBeNull()
-    expect(WHATS_NEW[0].version).toBe('0.2.30')
+    expect(WHATS_NEW[1].version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
+  })
+})
+
+// The 0.2.31 entry: the Linux memory growth from #622, Navide Plugins settings
+// as four pages, agent data for plugins, the clock message and the Anthropic
+// commit-message fix.
+describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () => {
+  const entry = whatsNewFor('0.2.31')
+
+  it('is authored and carries ja-JP for every line', () => {
+    expect(entry).toBeDefined()
+    for (const text of [entry!.title, ...entry!.highlights, entry!.note!]) expect(text['ja-JP'], text['en-US']).toBeTruthy()
+  })
+
+  it('says credentials stay on this machine and links the announcement', () => {
+    const last = entry!.highlights.at(-1)!['en-US']
+    expect(last).toMatch(/^Navide does not store your CLI account credentials/)
+    expect(last).toContain('always disabled in the interface and could never be turned on')
+    expect(last).toContain('encrypted on your device before they sync; the server cannot decrypt them')
+    expect(last).not.toMatch(/never been|has never|never stored|from the start/i)
+    expect(entry!.note!['en-US']).toContain('https://navide.dev/posts/credentials-stay-on-your-machine/')
+  })
+
+  it('names the Linux leak and its reporter, the four pages and their markers, and agent message text kept apart', () => {
+    const all = entry!.highlights.map((text) => text['en-US']).join('\n')
+    expect(entry!.highlights[0]['en-US']).toMatch(/^Linux:/)
+    expect(all).toContain('90 MB a minute')
+    expect(all).toContain('@emissionspectrum-creator')
+    expect(all).toContain('#622')
+    expect(all).toContain('four pages')
+    expect(all).toContain('Developer and native code shows On')
+    expect(all).toContain('separate high-risk permission')
+    expect(all).toContain('behind or ahead')
+    expect(all).toContain('stage tab')
+    expect(all).toContain('since 0.1.93')
+    expect(all).toContain('first character of the plugin\'s title')
+    expect(all).toContain('Mini-IDE has its own icon')
+    expect(all).toContain('Installing a third-party plugin now allows its native backend to run')
+    expect(all).toContain('asks again only when the program or its permissions change')
+    expect(all).toContain('if you never changed native-backend settings in 0.2.30')
+    expect(all).toContain('a value you saved earlier is kept')
+    expect(all).toContain('no network of their own')
+    expect(all).toContain('including Windows for now')
+    expect(all).not.toMatch(/\d+(\.\d+)?\s*\/\s*10\b/)
+  })
+
+  it('shows once to someone updating from 0.2.30, as the newest entry, and not to a build still running 0.2.30', () => {
+    expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
+    expect(pickWhatsNew('0.2.31', '0.2.31')).toBeNull()
+    expect(WHATS_NEW[0].version).toBe('0.2.31')
+    expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
   })
 })
 

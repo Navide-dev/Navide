@@ -3489,7 +3489,7 @@
             "git": {
               "title": "Git (control de código fuente)",
               "tag": "4.ª pestaña de la barra lateral",
-              "text": "La descripción emergente dice <em>Git (⌘4)</em>. En la ventana principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre directamente la <strong>ventana de Git independiente</strong>; lo mismo hace <em>Abrir en una ventana nueva</em> en la cabecera del panel."
+              "text": "Cuando Git se carga como complemento de Navide, la descripción emergente dice <em>Complemento de Navide: Git · navide.git · Editor: navide · Integrado en Navide (⌘4)</em>; si no, dice <em>Git (⌘4)</em>. En la ventana principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre directamente la <strong>ventana de Git independiente</strong>; lo mismo hace <em>Abrir en una ventana nueva</em> en la cabecera del panel."
             },
             "plans": {
               "title": "Plans (documentos de plan)",
@@ -6784,7 +6784,7 @@
         "s7": {
           "title": "Una persona, varios equipos",
           "p1": "Conectar dos equipos con sistemas operativos distintos no es en sí una cuestión de plataforma: iniciar sesión en Navide Cloud, emparejar y enviar mensajes entre dispositivos funciona igual en los tres, y se explica en <strong>Ajustes y sistema</strong>. Esta sección solo añade lo que cambia cuando los equipos no son de la misma plataforma.",
-          "p2": "En <strong>Ajustes ▸ Navide Cloud</strong>, la lista de sincronización permite activar ahora mismo cuatro cosas: skills de prompt, MCP, skills y memoria. <em>Credenciales</em> también aparece, pero su interruptor está desactivado y su descripción dice que la sincronización aún no se admite: está ahí para que sepas que ese ámbito existe, no para que lo actives.",
+          "p2": "En <strong>Ajustes ▸ Navide Cloud</strong>, la lista de sincronización permite activar tres cosas: MCP, Skills y Prompts. <em>Memoria</em> y <em>extensiones de CLI</em> también aparecen, atenuadas y con la descripción «Aún no se puede sincronizar.»; un interruptor de memoria que una versión anterior dejó activado todavía se puede desactivar. No hay ninguna fila para credenciales: las credenciales de las cuentas de CLI se guardan solo en este ordenador y nunca se sincronizan.",
           "note": "Lo que nunca viaja contigo de todas formas: la instalación y el inicio de sesión de cada CLI, las credenciales (guardadas en el almacén propio de cada plataforma, en formatos que no son intercambiables) y cualquier ruta absoluta. Un segundo equipo necesita sus CLI instaladas y con la sesión iniciada por su cuenta."
         },
         "mock": {

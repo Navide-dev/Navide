@@ -3489,7 +3489,7 @@
             "git": {
               "title": "Git (Quellcodeverwaltung)",
               "tag": "4. Tab der Seitenleiste",
-              "text": "Der Tooltip lautet <em>Git (⌘4)</em>. Im Hauptfenster öffnet <kbd class=\"cwh-kbd\">⌘⇧G</kbd> direkt das <strong>eigene Git-Fenster</strong>; ebenso <em>In neuem Fenster öffnen</em> im Kopf des Panels."
+              "text": "Ist Git als Navide-Plug-in geladen, lautet der Tooltip <em>Navide-Plug-in: Git · navide.git · Herausgeber: navide · In Navide integriert (⌘4)</em>, sonst <em>Git (⌘4)</em>. Im Hauptfenster öffnet <kbd class=\"cwh-kbd\">⌘⇧G</kbd> direkt das <strong>eigene Git-Fenster</strong>; ebenso <em>In neuem Fenster öffnen</em> im Kopf des Panels."
             },
             "plans": {
               "title": "Plans (Plan-Dokumente)",
@@ -6784,7 +6784,7 @@
         "s7": {
           "title": "Eine Person, mehrere Rechner",
           "p1": "Zwei Rechner mit unterschiedlichen Betriebssystemen zu verbinden, ist an sich keine Plattformfrage: Die Anmeldung bei Navide Cloud, das Koppeln und geräteübergreifende Nachrichten funktionieren auf allen dreien gleich und werden unter <strong>Einstellungen und System</strong> behandelt. Dieser Abschnitt ergänzt nur, was sich ändert, wenn die Rechner nicht dieselbe Plattform haben.",
-          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste derzeit vier Dinge einschalten: Prompt-Skills, MCP, Skills und Gedächtnis. <em>Anmeldeinformationen</em> ist ebenfalls aufgeführt, aber der Schalter ist deaktiviert, und die Beschreibung sagt, dass die Synchronisierung noch nicht unterstützt wird – der Eintrag zeigt nur, dass es diesen Bereich gibt, nicht, dass Sie ihn einschalten können.",
+          "p2": "Unter <strong>Einstellungen ▸ Navide Cloud</strong> lassen sich in der Synchronisierungsliste drei Dinge einschalten: MCP, Skills und Prompts. <em>Gedächtnis</em> und <em>CLI-Erweiterungen</em> sind ebenfalls aufgeführt, aber ausgegraut und mit „Noch nicht synchronisierbar.“ beschrieben; einen Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, können Sie weiterhin ausschalten. Für Anmeldeinformationen gibt es keinen Eintrag: Die Anmeldeinformationen von CLI-Konten werden nur auf diesem Computer gespeichert und nie synchronisiert.",
           "note": "Was ohnehin nie mitreist: die Installation und Anmeldung jeder CLI, Anmeldeinformationen (im eigenen Tresor jeder Plattform gespeichert, in nicht austauschbaren Formaten) und jeder absolute Pfad. Auf einem zweiten Rechner müssen die CLIs eigens installiert und angemeldet werden."
         },
         "mock": {

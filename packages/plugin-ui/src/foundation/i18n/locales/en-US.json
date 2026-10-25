@@ -3489,7 +3489,7 @@
             "git": {
               "title": "Git (Source Control)",
               "tag": "4th sidebar tab",
-              "text": "The tooltip reads <em>Git (⌘4)</em>. In the main window <kbd class=\"cwh-kbd\">⌘⇧G</kbd> opens the <strong>separate Git window</strong> directly; so does <em>Open in New Window</em> in the panel header."
+              "text": "When Git is loaded as a Navide plugin, the tooltip reads <em>Navide plugin: Git · navide.git · Publisher: navide · Built into Navide (⌘4)</em>; otherwise it reads <em>Git (⌘4)</em>. In the main window <kbd class=\"cwh-kbd\">⌘⇧G</kbd> opens the <strong>separate Git window</strong> directly; so does <em>Open in New Window</em> in the panel header."
             },
             "plans": {
               "title": "Plans (plan documents)",
@@ -6784,7 +6784,7 @@
         "s7": {
           "title": "One person, several machines",
           "p1": "Connecting two machines running different operating systems is not itself a platform matter: signing in to Navide Cloud, pairing, and cross-device messaging work the same way on all three, and are covered in <strong>Settings &amp; System</strong>. This section only adds what changes when the machines are not the same platform.",
-          "p2": "In <strong>Settings ▸ Navide Cloud</strong>, the sync list currently lets you turn on four things: prompt skills, MCP, skills and memory. <em>Credentials</em> is listed too, but its switch is disabled and its description says syncing is not supported yet — it is there so you know the scope exists, not so you can turn it on.",
+          "p2": "In <strong>Settings ▸ Navide Cloud</strong>, the sync list lets you turn on three things: MCP, Skills and Prompts. <em>Memory</em> and <em>CLI extensions</em> are listed too, greyed out and described as “Not syncable yet.”; a memory switch an older version left on can still be turned off. There is no row for credentials: CLI account credentials are stored only on this computer and are never synced.",
           "note": "Things that never travel with you anyway: each CLI's own installation and sign-in, credentials (held in each platform's own vault, in formats that do not interchange), and every absolute path. A second machine needs its CLIs installed and signed in on its own."
         },
         "mock": {
