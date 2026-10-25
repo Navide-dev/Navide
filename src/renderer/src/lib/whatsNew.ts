@@ -139,9 +139,9 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': '「設定 → Navide プラグイン」を 4 つのページに分け、サイドバーの「Navide プラグイン」の下に並べました：Navide プラグイン、実行ポリシー、開発者とネイティブコード、開示の一覧。ページを開かなくても状態がわかります：実行ポリシーのページに警告があるときはサイドバーの行に ⚠ が、開発者モードやネイティブバックエンドのスイッチがどれかオンのときは「開発者とネイティブコード」に「オン」が表示されます。ウィンドウの幅が 720px 以下のときは、ページ上部のタブで切り替えます。各プラグインの行には、クリックしなくてもリスクレベルと「⚠ N」が表示されます。開示の文言は変わっていません。',
       },
       {
-        'zh-TW': '安裝了會在主畫面加入 view 的外掛之後，主畫面不會再被整個蓋住，點擊也不會穿透到底下的終端機：外掛的畫面變成舞台上的一個分頁，排在既有分頁後面，標籤是 view 的標題。安裝時不會自動切過去，點回其他分頁就會回到 pane 格線。這是 0.1.93 起就有的問題，內建外掛都沒有用到這個位置。',
-        'en-US': 'Installing a plugin that adds a view to the main area no longer covers the whole stage, and clicks no longer fall through to the terminals underneath: the plugin\'s view is now a stage tab after the existing tabs, labelled with the view\'s title. Installing it does not switch to it, and picking another tab brings the pane grid back. This had been the case since 0.1.93; no bundled plugin uses that area.',
-        'ja-JP': 'メイン領域に view を追加するプラグインをインストールしても、ステージ全体が覆われることはなくなり、クリックが下のターミナルに抜けることもなくなりました：プラグインの画面はステージのタブの 1 つになり、既存のタブの後ろに view のタイトルで表示されます。インストールしても自動では切り替わらず、ほかのタブを選ぶと pane のグリッドに戻ります。0.1.93 から続いていた問題で、同梱のプラグインはこの領域を使っていません。',
+        'zh-TW': '安裝了會在主畫面加入 view 的外掛之後，主畫面不會再被整個蓋住，點擊也不會穿透到底下的終端機：外掛的畫面變成舞台上的一個分頁，排在既有分頁後面，標籤是 view 的標題，前面有 Navide 畫的 ◇ 標記；滑鼠移上去會顯示外掛 ID、發行者和來源。安裝時不會自動切過去，點回其他分頁、按「+」或從側欄打開 pane，就會回到 pane 格線。這是 0.1.93 起就有的問題，內建外掛都沒有用到這個位置。',
+        'en-US': 'Installing a plugin that adds a view to the main area no longer covers the whole stage, and clicks no longer fall through to the terminals underneath: the plugin\'s view is now a stage tab after the existing tabs, labelled with the view\'s title and marked ◇ by Navide; hover it for the plugin\'s id, publisher and source. Installing it does not switch to it, and picking another tab, pressing + or opening a pane from the sidebar brings the pane grid back. This had been the case since 0.1.93; no bundled plugin uses that area.',
+        'ja-JP': 'メイン領域に view を追加するプラグインをインストールしても、ステージ全体が覆われることはなくなり、クリックが下のターミナルに抜けることもなくなりました：プラグインの画面はステージのタブの 1 つになり、既存のタブの後ろに view のタイトルで表示され、Navide が付ける ◇ マークが付きます。ポインターを合わせるとプラグインの ID、発行者、ソースが表示されます。インストールしても自動では切り替わらず、ほかのタブを選ぶか、「+」を押すか、サイドバーから pane を開くと pane のグリッドに戻ります。0.1.93 から続いていた問題で、同梱のプラグインはこの領域を使っていません。',
       },
       {
         'zh-TW': '外掛現在可以申請讀取同一個工作區的 agent 資訊（pane 清單、哪個 pane 開了哪個、不含內容的訊息傳送紀錄、session 清單），這是中風險權限；訊息內容要另外申請高風險權限，安裝時會再確認一次，而且 agent 要讀到訊息內容，執行政策必須明確寫入。對話紀錄、帳號和額度資料都不開放。內建外掛都沒有申請這兩種權限。',
