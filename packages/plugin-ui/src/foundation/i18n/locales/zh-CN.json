@@ -8953,6 +8953,7 @@
     "status-empty": "这个分组没有 pane",
     "delete-tab": "删除此 tab",
     "add-group": "添加分组",
+    "plugin-tab": "Navide 插件：{title}",
     "collapse-families": "收合此 tab 的所有子窗口家族",
     "expand-families": "展开此 tab 的所有子窗口家族",
     "family-toggle-grid": "家族收合适用于 Auto、Spotlight 与 Fullscreen 版面",

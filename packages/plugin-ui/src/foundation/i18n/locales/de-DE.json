@@ -8953,6 +8953,7 @@
     "status-empty": "Dieser Tab hat keine panes",
     "delete-tab": "Diesen Tab löschen",
     "add-group": "Neue Ausführungsgruppe",
+    "plugin-tab": "Navide-Plug-in: {title}",
     "collapse-families": "Alle pane-Familien in diesem Tab zuklappen",
     "expand-families": "Alle pane-Familien in diesem Tab aufklappen",
     "family-toggle-grid": "Das Zuklappen von Familien ist in den Layouts „Automatisch“, „Spotlight“ und „Vollbild“ verfügbar",

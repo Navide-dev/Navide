@@ -8953,6 +8953,7 @@
     "status-empty": "이 탭에는 pane이 없어요",
     "delete-tab": "이 탭 삭제",
     "add-group": "새 실행 그룹",
+    "plugin-tab": "Navide 플러그인: {title}",
     "collapse-families": "이 탭의 모든 pane 계열 접기",
     "expand-families": "이 탭의 모든 pane 계열 펼치기",
     "family-toggle-grid": "계열 접기는 자동, 스포트라이트, 전체 화면 레이아웃에서 사용할 수 있어요",

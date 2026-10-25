@@ -723,7 +723,7 @@ watch(installed, () => {
     <p v-for="item in selfHostedQuarantine" v-show="props.page === 'plugins'" :key="`selfhosted:${item.id}`" class="ext-selfhosted-quarantine ext-risk-banner" role="alert">
       {{ $t('settings.extensions.developerMode.selfHostedQuarantine', { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
     </p>
-    <p v-for="item in clockQuarantine" :key="`clock:${item.id}`" class="ext-clock-quarantine ext-risk-banner" role="alert" :data-clock-id="item.id">
+    <p v-for="item in clockQuarantine" v-show="props.page === 'plugins'" :key="`clock:${item.id}`" class="ext-clock-quarantine ext-risk-banner" role="alert" :data-clock-id="item.id">
       {{ $t(`settings.extensions.registryTrust.clockQuarantine.${item.clock}`, { id: reveal(item.id), version: reveal(item.version ?? '') }) }}
     </p>
     <!-- D3: an expired test build is stopped, never silently dropped. -->

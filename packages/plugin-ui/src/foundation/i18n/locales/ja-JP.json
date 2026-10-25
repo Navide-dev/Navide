@@ -8953,6 +8953,7 @@
     "status-empty": "このタブにはペインがありません",
     "delete-tab": "このタブを削除",
     "add-group": "新しい実行グループ",
+    "plugin-tab": "Navide プラグイン：{title}",
     "collapse-families": "このタブのすべてのペインファミリーを折りたたむ",
     "expand-families": "このタブのすべてのペインファミリーを展開",
     "family-toggle-grid": "ファミリーの折りたたみは、自動・スポットライト・全画面レイアウトで利用できます",
