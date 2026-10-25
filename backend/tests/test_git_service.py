@@ -3457,3 +3457,39 @@ async def test_anthropic_client_is_closed_when_the_api_fails(
     assert result["ok"] is False
     assert "429 overloaded" in result["error"]
     assert closed == ["entered", "closed"], "an API error must still release the client"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_request_carries_no_temperature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Current Claude models reject `temperature` with a 400; the request must
+    not send it, retries (attempt_count) included."""
+    import sys
+
+    sent: list[dict[str, Any]] = []
+    module = _fake_anthropic([])
+    real_init = module.AsyncAnthropic.__init__
+
+    def init(self: Any, **kw: Any) -> None:
+        real_init(self, **kw)
+        create = self.messages.create
+
+        async def strict_create(**params: Any) -> Any:
+            sent.append(params)
+            if "temperature" in params:
+                raise RuntimeError("400 invalid_request_error: temperature is not supported for this model")
+            return await create(**params)
+
+        self.messages.create = strict_create
+
+    monkeypatch.setattr(module.AsyncAnthropic, "__init__", init)
+    monkeypatch.setitem(sys.modules, "anthropic", module)
+    _dirty_repo(tmp_path)
+
+    for attempt in (0, 2):
+        result = await git_service.generate_commit_message(
+            str(tmp_path), "http://unused", attempt_count=attempt, settings=ANTHROPIC_SETTINGS
+        )
+        assert result == {"ok": True, "message": "fix: tidy the widget"}
+    assert len(sent) == 2 and all("temperature" not in p for p in sent)
