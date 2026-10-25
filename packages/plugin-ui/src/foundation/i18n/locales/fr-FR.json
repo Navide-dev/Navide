@@ -11664,6 +11664,7 @@
       "none": "Aucune autorisation n’a été ajoutée ni retirée.",
       "added": "Nouveau",
       "removed": "Retiré",
+      "declaredScope": "Portée déclarée (à titre informatif)",
       "unchanged": "Inchangé ({count})",
       "fullCard": "Fiche de déclaration complète",
       "badgeMore": "Plus d’autorisations",

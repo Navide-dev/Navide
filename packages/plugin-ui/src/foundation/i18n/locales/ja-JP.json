@@ -11664,6 +11664,7 @@
       "none": "追加・削除された権限はありません。",
       "added": "追加",
       "removed": "削除",
+      "declaredScope": "宣言された範囲（参考情報）",
       "unchanged": "変更なし（{count} 件）",
       "fullCard": "開示カード全体",
       "badgeMore": "権限が増える",
