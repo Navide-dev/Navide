@@ -1475,6 +1475,8 @@
       "unsupported": "Navide пока не умеет определять, где эта CLI хранит свои расширения CLI.",
       "invalid": "Не удалось прочитать: {error}",
       "disabled": "Отключено",
+      "enabledUnknown": "Состояние неизвестно",
+      "enabledUnknownReason": "Не удалось определить, включено ли: {error}",
       "ownerNavide": "Установлено Navide",
       "inferred": "выведено",
       "inferredHint": "Определено по исходному тексту; манифест CLI этого не указывает.",

@@ -1475,6 +1475,8 @@
       "unsupported": "Navide kann noch nicht lesen, wo diese CLI ihre CLI-Erweiterungen ablegt.",
       "invalid": "Konnte nicht gelesen werden: {error}",
       "disabled": "Deaktiviert",
+      "enabledUnknown": "Status unbekannt",
+      "enabledUnknownReason": "Ob dies aktiviert ist, lässt sich nicht feststellen: {error}",
       "ownerNavide": "Von Navide installiert",
       "inferred": "abgeleitet",
       "inferredHint": "Aus dem Quelltext abgelesen; das Manifest der CLI gibt dies nicht an.",

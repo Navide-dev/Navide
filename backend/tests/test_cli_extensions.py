@@ -234,6 +234,54 @@ def test_a_broken_file_is_reported_not_raised(tmp_path: Path) -> None:
     assert any(not item.valid and item.error for item in items)
 
 
+def test_unreadable_settings_leave_the_enabled_state_unknown_not_on(claude_home: Path) -> None:
+    """C8: a settings file that will not parse must not turn every plugin
+    "enabled" — the row says its state is unknown and why."""
+    _write(claude_home / ".claude" / "settings.json", "{not json")
+    items = _by(cli_extensions.scan(claude_home, runner=_no_cli).items, "claude")
+    for plugin_id in ("helper@mkt", "nextstep@mkt"):
+        assert items[plugin_id].enabled_error.startswith("cannot parse settings.json")
+        assert str(claude_home) not in items[plugin_id].enabled_error
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_settings_that_cannot_be_opened_leave_the_enabled_state_unknown(claude_home: Path) -> None:
+    settings = claude_home / ".claude" / "settings.json"
+    settings.chmod(0)
+    try:
+        items = _by(cli_extensions.scan(claude_home, runner=_no_cli).items, "claude")
+    finally:
+        settings.chmod(0o600)
+    assert items["nextstep@mkt"].enabled_error == "cannot read settings.json: Permission denied"
+
+
+def test_readable_settings_leave_no_enabled_error(claude_home: Path) -> None:
+    items = _by(cli_extensions.scan(claude_home, runner=_no_cli).items, "claude")
+    assert items["helper@mkt"].enabled_error == "" and items["nextstep@mkt"].enabled_error == ""
+
+
+def test_a_broken_qwen_enablement_file_keeps_its_extensions_listed(tmp_path: Path) -> None:
+    ext = tmp_path / ".qwen" / "extensions"
+    _json(ext / "docs" / "qwen-extension.json", {"name": "docs", "version": "0.1.0"})
+    _write(ext / "extension-enablement.json", "{not json")
+    items = _by(cli_extensions.scan(tmp_path, runner=_no_cli).items, "qwen")
+    assert items["docs"].valid
+    assert items["docs"].enabled_error.startswith("cannot parse extension-enablement.json")
+
+
+def test_agents_are_told_what_could_not_be_read(tmp_path: Path) -> None:
+    """C8: an unreadable file is named with its reason, not dropped, so an
+    agent cannot report "not installed" for "could not read"."""
+    _write(tmp_path / ".claude" / "plugins" / "installed_plugins.json", "{not json")
+    public = cli_extensions.scan(tmp_path, runner=_no_cli).public_dict()
+    broken = [row for row in public["unreadable"] if row["cli"] == "claude"]
+    assert broken and broken[0]["name"] == "installed_plugins.json" and broken[0]["error"]
+    assert set(broken[0]) == {"cli", "id", "name", "kind", "type_label", "error"}
+    assert str(tmp_path) not in json.dumps(public)
+    claude = next(vendor for vendor in public["vendors"] if vendor["cli"] == "claude")
+    assert (claude["count"], claude["unreadable"]) == (0, 1)
+
+
 def _tree(root: Path) -> dict[str, tuple[int, int]]:
     out = {}
     for path in root.rglob("*"):
@@ -257,7 +305,7 @@ def test_agents_get_names_and_metadata_only(claude_home: Path) -> None:
     row = next(item for item in public["items"] if item["id"] == "nextstep@mkt")
     assert set(row) == {
         "cli", "id", "name", "version", "kind", "type_label", "scope", "enabled",
-        "exec_tier", "capabilities", "native_consent", "owner", "evidence",
+        "exec_tier", "capabilities", "native_consent", "owner", "evidence", "enabled_error",
     }
 
 
