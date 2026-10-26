@@ -26,7 +26,11 @@ These files live outside Navide's own folder, so a save must stay reversible:
 before it replaces a file, the text it is about to overwrite is kept in
 Navide's data dir (``memory-backups``, one previous version per file), and
 ``restore_previous`` writes that text back -- through ``save``, so a restore
-can itself be undone the same way.
+can itself be undone the same way. A save that *creates* a file has nothing to
+keep, so it records instead that Navide created it and the exact text it
+wrote; the main process uses that record to move the file to the Trash when
+the user undoes the creation. A later save that changes the file drops the
+record, and the previous-version restore takes over.
 
 The unit listed is the *file*, not the CLI, because one file is usually read by
 several CLIs: ``~/.claude/CLAUDE.md`` is claude's own and is also loaded by
@@ -553,6 +557,9 @@ def read(path: str, home: Path | None = None, workspace: Path | None = None) -> 
     # saved keeps the shape older clients know.
     if kept is not None:
         result["previous"] = kept
+    created = _created_meta(target) if result["exists"] else None
+    if created is not None:
+        result["created"] = created
     return result
 
 
@@ -593,8 +600,14 @@ def save(
         if not written.is_file():
             raise ValueError("the instruction file links to something that is not a file")
     # Keep what is about to be overwritten before touching the file; if that
-    # cannot be kept, the save is refused rather than made irreversible.
-    _keep_previous(target, written, text)
+    # cannot be kept, the save is refused rather than made irreversible. A
+    # file that does not exist yet has nothing to keep: the record that Navide
+    # created it is what makes that save reversible instead.
+    creating = not written.exists()
+    if creating:
+        _record_created(target, text)
+    else:
+        _keep_previous(target, written, text)
     handle, temp = tempfile.mkstemp(dir=str(written.parent), prefix=".navide-", suffix=".tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
@@ -602,13 +615,20 @@ def save(
         os.replace(temp, written)
     except BaseException:
         Path(temp).unlink(missing_ok=True)
+        if creating:
+            _created_path(target).unlink(missing_ok=True)
         raise
+    if not creating:
+        _drop_created_if_changed(target, text)
     log.info("memory file saved: %s (%d bytes)", target, len(text))
     stat = target.stat()
     result: dict[str, Any] = {"path": str(target), "size": stat.st_size, "modified": stat.st_mtime}
     kept = _previous_meta(target)
     if kept is not None:
         result["previous"] = kept
+    created = _created_meta(target)
+    if created is not None:
+        result["created"] = created
     return result
 
 
@@ -638,6 +658,72 @@ def _backup_paths(target: Path) -> tuple[Path, Path]:
     key = hashlib.sha256(str(target).encode("utf-8")).hexdigest()[:32]
     folder = app_data_dir() / BACKUP_DIR_NAME
     return folder / f"{key}.txt", folder / f"{key}.json"
+
+
+def _created_path(target: Path) -> Path:
+    """Where the record that Navide created ``target`` is kept.
+
+    The main process reads it by the same key (``memoryUndoCreate.ts``), so
+    the name and the fields below are a contract with it.
+    """
+    return _backup_paths(target)[0].with_suffix(".created.json")
+
+
+def _record_created(target: Path, text: str) -> None:
+    """Note that a save is about to create ``target`` with exactly ``text``."""
+    data = text.encode("utf-8")
+    record = {
+        "path": str(target),
+        "created_at": time.time(),
+        "size": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "text": text,
+    }
+    _write_atomic(_created_path(target), json.dumps(record).encode("utf-8"))
+
+
+def _drop_created_if_changed(target: Path, text: str) -> None:
+    """Forget the create record once a save wrote something else.
+
+    From then on the kept previous version is the undo; a save of the very
+    text Navide created the file with changes nothing, so the record stays.
+    """
+    record = _created_record(target)
+    if record is not None and record.get("text") != text:
+        _created_path(target).unlink(missing_ok=True)
+
+
+def _created_record(target: Path) -> dict[str, Any] | None:
+    try:
+        record = json.loads(_created_path(target).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(record, dict) or record.get("path") != str(target):
+        return None
+    return record
+
+
+def _created_meta(target: Path) -> dict[str, Any] | None:
+    """``{created_at, size}`` when Navide created ``target``, or None."""
+    record = _created_record(target)
+    if record is None:
+        return None
+    try:
+        return {"created_at": float(record.get("created_at") or 0), "size": int(record.get("size") or 0)}
+    except (TypeError, ValueError):
+        return None
+
+
+def _write_atomic(destination: Path, data: bytes) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    handle, temp = tempfile.mkstemp(dir=str(destination.parent), prefix=".navide-", suffix=".tmp")
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(data)
+        os.replace(temp, destination)
+    except BaseException:
+        Path(temp).unlink(missing_ok=True)
+        raise
 
 
 def _keep_previous(target: Path, written: Path, text: str) -> None:

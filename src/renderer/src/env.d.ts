@@ -233,6 +233,10 @@ declare global {
       stabilizeDroppedPaths: (paths: string[]) => Promise<{ ok: boolean; paths: string[] }>
       saveClipboardImage: (args: { bytes: Uint8Array; mediaType: string }) => Promise<{ ok: boolean; path?: string }>
       openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>
+      trashCreatedMemoryFile: (
+        path: string,
+        acceptChanged?: boolean,
+      ) => Promise<{ ok: boolean; code?: string; error?: string; created?: string; current?: string }>
       legalLinks: Readonly<Record<LegalRoute, string>>
       trustConfirm: (
         action: string,

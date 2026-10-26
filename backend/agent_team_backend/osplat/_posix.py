@@ -148,6 +148,18 @@ class PosixProcessTree:
     def kill_group(self, gid: int, *, force: bool) -> None:
         os.killpg(gid, _signal_for(force))
 
+    def own_group_spawn_kwargs(self) -> dict[str, int]:
+        return {"process_group": 0}
+
+    def end_own_group(self, pid: int) -> None:
+        try:
+            group = os.getpgid(pid)
+            if group != pid or group == os.getpgrp():
+                return
+            self.kill_group(group, force=True)
+        except OSError:
+            pass
+
     def contain(self, pid: int) -> None:
         # Started with start_new_session: its session is the tree.
         return None

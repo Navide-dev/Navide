@@ -22,6 +22,14 @@ from agent_team_backend.plugins import agent_tools_contract as contract
 # parses a whole result on the loop costs hundreds of milliseconds, so both
 # budgets still catch it.
 LOOP_SLICE_BUDGET_S = 0.047 if sys.platform == "win32" else 0.02
+#: The budget also scales with this run's own work: one step may take up to
+#: this fraction of the CPU time all the steps took together. A stall the
+#: process does not cause (a VM's stolen time, a page fault storm) can land
+#: in any step and is billed as its CPU (one read 21.4 ms on the macOS
+#: runner), while the work around it is just as slow. Spelling the whole
+#: value in one step takes all of it, and a whole-value `json.dumps` on the
+#: loop about a tenth of it, so either still fails the check.
+LOOP_SLICE_RELATIVE = 1 / 40
 
 
 class FakeWebSocket:
@@ -283,14 +291,19 @@ async def test_10_mib_of_arguments_never_stalls_the_event_loop(monkeypatch: pyte
         return True
 
     monkeypatch.setattr(app, "unicast_host", host)
-    response, longest = await _longest_loop_slice(monkeypatch, request_host_agent_workspace_backend(
+    response, steps = await _loop_step_times(monkeypatch, request_host_agent_workspace_backend(
         "acme.devmap", "/workspace", {"arguments": arguments}, caller=_Caller(kind="external"), agent_tool=_agent_tool(),
     ))
     assert response == {"ok": True, "result": True}
     assert len(received) >= 80
     # CPU time the loop's thread spent between two hand-backs: what a slow
     # step costs every other pane, whatever the machine's load.
-    assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    spent = [ended - started for started, ended in steps]
+    longest, bound = max(spent), max(LOOP_SLICE_BUDGET_S, sum(spent) * LOOP_SLICE_RELATIVE)
+    assert longest < bound, (
+        f"the loop ran {longest * 1000:.1f} ms of CPU without handing back "
+        f"(bound {bound * 1000:.1f} ms of {sum(spent) * 1000:.0f} ms in {len(spent)} steps)"
+    )
     # Checked after the measurement: the pieces join to the arguments' spelling.
     joined = contract.reassemble_agent_tool_payload_text(
         [{"seq": seq, "data": data} for seq, data in enumerate(received)], summaries[0]

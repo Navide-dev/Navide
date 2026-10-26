@@ -84,6 +84,12 @@ const conflict = ref(false)
 /** The version the last save replaced, kept in Navide's own folder; null when
  *  there is none to restore. `savedAt` is epoch seconds. */
 const previous = ref<{ savedAt: number; size: number } | null>(null)
+/** Set when Navide created the open file, so its creation can be undone by
+ *  moving it to the Trash; `createdAt` is epoch seconds. */
+const created = ref<{ createdAt: number } | null>(null)
+/** The file changed since Navide created it: what Navide wrote and what is
+ *  there now, shown before the user agrees to trash it anyway. */
+const createdChange = ref<{ created: string; current: string } | null>(null)
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -132,6 +138,51 @@ function normalizePrevious(value: unknown): { savedAt: number; size: number } | 
   if (!isRecord(value)) return null
   return { savedAt: numberValue(value.saved_at), size: numberValue(value.size) }
 }
+
+function normalizeCreated(value: unknown): { createdAt: number } | null {
+  if (!isRecord(value)) return null
+  return { createdAt: numberValue(value.created_at) }
+}
+
+/** A line diff of what Navide wrote against what is there now. Past a size
+ *  where the table would be slow, every line is shown as removed then added. */
+function lineDiff(before: string, after: string): Array<{ kind: 'same' | 'del' | 'add'; text: string }> {
+  const a = before.split('\n')
+  const b = after.split('\n')
+  if (a.length * b.length > 1_000_000) {
+    return [
+      ...a.map((text) => ({ kind: 'del' as const, text })),
+      ...b.map((text) => ({ kind: 'add' as const, text })),
+    ]
+  }
+  const lcs = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+    }
+  }
+  const out: Array<{ kind: 'same' | 'del' | 'add'; text: string }> = []
+  let i = 0
+  let j = 0
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      out.push({ kind: 'same', text: a[i] })
+      i++
+      j++
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      out.push({ kind: 'del', text: a[i++] })
+    } else {
+      out.push({ kind: 'add', text: b[j++] })
+    }
+  }
+  while (i < a.length) out.push({ kind: 'del', text: a[i++] })
+  while (j < b.length) out.push({ kind: 'add', text: b[j++] })
+  return out
+}
+
+const createdDiff = computed(() =>
+  createdChange.value ? lineDiff(createdChange.value.created, createdChange.value.current) : [],
+)
 
 function workspacePayload(): Record<string, string> {
   return { workspace_path: props.workspacePath ?? '' }
@@ -215,6 +266,10 @@ const previousLabel = computed(() =>
   previous.value?.savedAt ? new Date(previous.value.savedAt * 1000).toLocaleString() : '',
 )
 
+const createdLabel = computed(() =>
+  created.value?.createdAt ? new Date(created.value.createdAt * 1000).toLocaleString() : '',
+)
+
 /** True when nothing unsaved would be lost, or the user agreed to lose it. */
 function confirmDiscard(): boolean {
   if (!selectedFile.value || !dirty.value) return true
@@ -231,7 +286,12 @@ async function loadFile(file: MemoryFile): Promise<void> {
   conflict.value = false
   busy.value = true
   try {
-    const resp = await props.backend.send<{ text?: unknown; modified?: unknown; previous?: unknown }>('memory.get', {
+    const resp = await props.backend.send<{
+      text?: unknown
+      modified?: unknown
+      previous?: unknown
+      created?: unknown
+    }>('memory.get', {
       path: file.path,
       ...workspacePayload(),
     })
@@ -247,6 +307,8 @@ async function loadFile(file: MemoryFile): Promise<void> {
     // compares against, so creating it twice from two windows still conflicts.
     expectedModified.value = numberValue(resp.payload.modified)
     previous.value = normalizePrevious(resp.payload.previous)
+    created.value = normalizeCreated(resp.payload.created)
+    createdChange.value = null
   } catch (err) {
     error.value = String((err as Error).message ?? err)
   } finally {
@@ -261,7 +323,7 @@ async function save(): Promise<void> {
   conflict.value = false
   busy.value = true
   try {
-    const resp = await props.backend.send<{ modified?: unknown; previous?: unknown }>('memory.save', {
+    const resp = await props.backend.send<{ modified?: unknown; previous?: unknown; created?: unknown }>('memory.save', {
       path: file.path,
       text: draftText.value,
       expected_modified: expectedModified.value,
@@ -279,6 +341,8 @@ async function save(): Promise<void> {
     // is not refused as a conflict with the user's own write.
     expectedModified.value = numberValue(resp.payload?.modified)
     previous.value = normalizePrevious(resp.payload?.previous)
+    created.value = normalizeCreated(resp.payload?.created)
+    createdChange.value = null
     await reload()
   } catch (err) {
     error.value = String((err as Error).message ?? err)
@@ -319,6 +383,41 @@ async function restorePrevious(): Promise<void> {
   }
 }
 
+/** Move the file Navide created to the Trash. Main accepts only a file the
+ *  backend recorded creating, and only moves it -- never a permanent delete.
+ *  A file that changed since comes back with both texts, and is trashed only
+ *  after the user has seen the difference and asked again. */
+async function undoCreate(acceptChanged = false): Promise<void> {
+  const file = selectedFile.value
+  if (!file || !confirmDiscard()) return
+  error.value = ''
+  const trash = window.agentTeam?.trashCreatedMemoryFile
+  if (!trash) {
+    error.value = t('settings.memory.undo-create-unavailable')
+    return
+  }
+  busy.value = true
+  let trashed = false
+  try {
+    const result = await trash(file.path, acceptChanged)
+    if (result.ok) {
+      trashed = true
+    } else if (result.code === 'changed') {
+      createdChange.value = { created: result.created ?? '', current: result.current ?? '' }
+    } else {
+      error.value = t('settings.memory.undo-create-failed', { reason: result.error ?? '' })
+    }
+  } catch (err) {
+    error.value = t('settings.memory.undo-create-failed', { reason: String((err as Error).message ?? err) })
+  } finally {
+    busy.value = false
+  }
+  if (trashed) {
+    await loadFile(file)
+    await reload()
+  }
+}
+
 function closeEditor(): void {
   selectedPath.value = ''
   draftText.value = ''
@@ -326,6 +425,8 @@ function closeEditor(): void {
   expectedModified.value = 0
   conflict.value = false
   previous.value = null
+  created.value = null
+  createdChange.value = null
 }
 
 /** Cancel and ✕: close, but never drop a draft without asking. */
@@ -503,6 +604,31 @@ defineExpose({ reload, confirmDiscard })
           <span>{{ t('settings.memory.restore-hint') }}</span>
           <button type="button" :disabled="busy" @click="restorePrevious">
             {{ t('settings.memory.restore-previous') }}
+          </button>
+        </div>
+        <div v-if="created && selectedFile.exists" class="memory-created">
+          <strong>{{ t('settings.memory.created-by-navide', { when: createdLabel }) }}</strong>
+          <span>{{ t('settings.memory.undo-create-hint') }}</span>
+          <template v-if="createdChange">
+            <span role="alert">{{ t('settings.memory.undo-create-changed') }}</span>
+            <span class="memory-diff-legend">{{ t('settings.memory.undo-create-diff-legend') }}</span>
+            <pre class="memory-diff"><span
+              v-for="(line, index) in createdDiff"
+              :key="index"
+              :class="`memory-diff-${line.kind}`"
+            >{{ line.kind === 'del' ? '− ' : line.kind === 'add' ? '+ ' : '  ' }}{{ line.text }}
+</span></pre>
+            <div class="memory-created-actions">
+              <button type="button" :disabled="busy" @click="createdChange = null">
+                {{ t('settings.memory.undo-create-keep') }}
+              </button>
+              <button type="button" class="danger" :disabled="busy" @click="undoCreate(true)">
+                {{ t('settings.memory.undo-create-confirm') }}
+              </button>
+            </div>
+          </template>
+          <button v-else type="button" :disabled="busy" @click="undoCreate()">
+            {{ t('settings.memory.undo-create') }}
           </button>
         </div>
         <textarea
@@ -716,7 +842,8 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
 }
 .memory-conflict strong { color: var(--danger-fg); }
 .memory-conflict span { color: var(--text-secondary); line-height: 1.4; }
-.memory-previous {
+.memory-previous,
+.memory-created {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -727,7 +854,27 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-e
   background: var(--bg-subtle);
   font-size: var(--font-2xs);
 }
-.memory-previous span { color: var(--text-secondary); line-height: 1.4; }
+.memory-previous span,
+.memory-created span { color: var(--text-secondary); line-height: 1.4; }
+.memory-diff {
+  align-self: stretch;
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-control);
+  background: var(--bg-base);
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.memory-diff .memory-diff-del { color: var(--danger-fg); }
+.memory-diff .memory-diff-add { color: var(--success-fg, var(--text-bright)); }
+.memory-created-actions { display: flex; gap: 8px; }
+.memory-created-actions .danger { color: var(--danger-fg); }
 .memory-editor-text {
   min-height: 320px;
   resize: vertical;

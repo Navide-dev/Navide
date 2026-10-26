@@ -476,6 +476,20 @@ class ProcessTree(Protocol):
         """Kill `pid` and every descendant, including ones that left its group."""
         ...
 
+    def own_group_spawn_kwargs(self) -> dict[str, int]:
+        """Spawn keyword arguments that make the child lead a group of its own.
+
+        POSIX: a new process group (not a new session: the controlling
+        terminal stays), so `end_own_group` also reaches a grandchild forked
+        after any snapshot. Windows has no process groups: none."""
+        ...
+
+    def end_own_group(self, pid: int) -> None:
+        """SIGKILL the group a child spawned with `own_group_spawn_kwargs` leads,
+        only while `pid` still leads it and never the caller's own group.
+        Never raises. A no-op on Windows."""
+        ...
+
     def contain(self, pid: int) -> int | None:
         """Make a child the root of a tree `end_contained` can end whole.
 

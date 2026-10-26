@@ -484,6 +484,12 @@ class WindowsProcessTree:
         # No process groups: the "group" is the subtree rooted at gid.
         self.kill_tree(gid, force=force)
 
+    def own_group_spawn_kwargs(self) -> dict[str, int]:
+        return {}
+
+    def end_own_group(self, pid: int) -> None:
+        return None
+
     def contain(self, pid: int) -> int | None:
         job = _create_kill_on_close_job()
         try:
