@@ -1982,6 +1982,14 @@
       "installed": "Instalados",
       "sensitive": "sensível",
       "empty": "Nenhum plug-in do Navide instalado.",
+      "backgroundAi": {
+        "title": "AI CLI em segundo plano ({count})",
+        "note": "Estas sessões de AI CLI continuaram em execução depois que a janela foi fechada. Elas rodam até você encerrá-las aqui, desativá-lo ou removê-lo, ou sair do Navide.",
+        "item": "{profile} · versão {version} · desde {time}",
+        "end": "Encerrar",
+        "gone": "Essa sessão não está mais em segundo plano.",
+        "endFailed": "Não foi possível encerrar a sessão: {error}"
+      },
       "permissionDetails": "Permissões e concessões",
       "permissionDetailsWithActivity": "Permissões, concessões e atividade",
       "plansRiskNote": "Este plug-in do Navide tem o próprio programa de back-end, que é executado com as permissões do seu usuário e sem sandbox. Ele trabalha nos documentos de plano do projeto atual, a partir da raiz do repositório Git encontrada acima dele (incluindo repositórios aninhados): as pastas de planos e relatórios em .agent-team, .claude, .cursor e docs em qualquer profundidade, .plans na raiz e o .history deles (somente leitura). O back-end lê e grava esses arquivos diretamente; exclusões e renomeações continuam passando pelo Navide.",

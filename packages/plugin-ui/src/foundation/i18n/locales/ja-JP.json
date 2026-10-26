@@ -1982,6 +1982,14 @@
       "installed": "インストール済み",
       "sensitive": "機密性の高い権限",
       "empty": "Navide プラグインはインストールされていません。",
+      "backgroundAi": {
+        "title": "バックグラウンドで実行中の AI CLI（{count}）",
+        "note": "これらの AI CLI セッションは、ウィンドウを閉じた後も実行を続けています。ここで終了するか、無効化・削除するか、Navide を終了するまで実行されます。",
+        "item": "{profile} · バージョン {version} · {time} から",
+        "end": "終了",
+        "gone": "このセッションはもうバックグラウンドで実行されていません。",
+        "endFailed": "セッションを終了できませんでした：{error}"
+      },
       "permissionDetails": "権限と付与",
       "permissionDetailsWithActivity": "権限・付与・アクティビティ",
       "plansRiskNote": "この Navide プラグインは独自のバックエンドプログラムを持ち、あなたのユーザー権限で動作し、サンドボックスはありません。現在のプロジェクトのプランドキュメントを扱います：上方向に見つかった Git リポジトリのルート（その中のネストされたリポジトリを含む）から、任意の深さにある .agent-team・.claude・.cursor・docs 配下の plans／reports 系フォルダー、ルートの .plans、およびそれらの .history（読み取り専用）です。プランドキュメントの読み取りと書き込みはどちらもこの Navide プラグインのバックエンドが直接行い、削除と名前変更は引き続き Navide を経由します。",

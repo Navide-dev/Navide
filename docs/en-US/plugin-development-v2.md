@@ -2201,6 +2201,11 @@ Updating a package ends the sessions of the version it replaces and clears
 them from terminal storage. Disabling or removing the package ends its
 sessions at once, and clears them from terminal storage too.
 
+The plugin's entry in Settings → Navide Plugins lists each session kept
+running this way (its CLI, package version and since when), with an End button
+that ends it as disabling the package would. A session that exits by itself
+leaves the list. Nothing is ended unless the user asks.
+
 Declaring `aiCli` lets a package start the AI CLI agents set up in Navide, send
 them input and read everything they print, and keep an AI CLI running in the
 background after its window closes; the install and update dialogs say so, and

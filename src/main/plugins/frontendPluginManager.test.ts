@@ -9769,6 +9769,64 @@ describe('opaque view instance ownership', () => {
           vi.useRealTimers()
         }
       })
+
+      // 0.2.32 must-do: the sessions kept past a close are listed on the
+      // package's Settings entry, each with an End button.
+      describe('listed in Settings while it keeps running', () => {
+        it('lists only a stored, detached session of a third-party package', async () => {
+          const stored = await withDetachedSession('acme.devmap', 'stored')
+          expect(stored.mgr.backgroundAiSessions('acme.devmap')).toEqual([{
+            sessionId: 'left-session',
+            profileId: 'claude',
+            packageVersion: stored.runtime.packageVersion,
+            since: expect.any(Number),
+          }])
+          expect(stored.mgr.backgroundAiSessions('other.spy')).toEqual([])
+          // Attached to a view again: not in the background.
+          stored.internal.aiSessions.get('left-session')!.attachedInstanceId = 'a-new-view'
+          expect(stored.mgr.backgroundAiSessions('acme.devmap')).toEqual([])
+          // Not stored (reclaimed within the wait), and the bundled plugins: never listed.
+          for (const [id, persist] of [['acme.devmap', 'asked'], ['acme.devmap', 'no'], ['navide.mini-ide', 'stored']] as const) {
+            const other = await withDetachedSession(id, persist)
+            expect(other.mgr.backgroundAiSessions(id)).toEqual([])
+          }
+        })
+
+        it('ends a listed session once, and nothing it does not list', async () => {
+          const { mgr, internal, kills } = await withDetachedSession('acme.devmap', 'stored')
+          expect(mgr.endBackgroundAiSession('other.spy', 'left-session')).toBe(false)
+          expect(mgr.endBackgroundAiSession('acme.devmap', 'unknown')).toBe(false)
+          expect(kills()).toHaveLength(0)
+          expect(mgr.endBackgroundAiSession('acme.devmap', 'left-session')).toBe(true)
+          expect(kills()).toEqual([
+            expect.objectContaining({ payload: { terminal_session_id: 'left-session', force: true } }),
+          ])
+          expect(internal.aiSessions.has('left-session')).toBe(false)
+          expect(mgr.backgroundAiSessions('acme.devmap')).toEqual([])
+          expect(mgr.endBackgroundAiSession('acme.devmap', 'left-session')).toBe(false)
+          expect(kills()).toHaveLength(1)
+        })
+
+        it('does not end a session a view has resumed, or one of a bundled plugin', async () => {
+          const resumed = await withDetachedSession('acme.devmap', 'stored')
+          resumed.internal.aiSessions.get('left-session')!.attachedInstanceId = 'a-new-view'
+          expect(resumed.mgr.endBackgroundAiSession('acme.devmap', 'left-session')).toBe(false)
+          expect(resumed.kills()).toHaveLength(0)
+          const bundled = await withDetachedSession('navide.mini-ide', 'stored')
+          expect(bundled.mgr.endBackgroundAiSession('navide.mini-ide', 'left-session')).toBe(false)
+          expect(bundled.kills()).toHaveLength(0)
+        })
+
+        it('leaves the list when it exits by itself; a bundled plugin keeps its ledger entry as before', async () => {
+          const stored = await withDetachedSession('acme.devmap', 'stored')
+          dispatchEvent(stored.mgr, 'terminal.exit', exit('left-session', 0))
+          expect(stored.mgr.backgroundAiSessions('acme.devmap')).toEqual([])
+          expect(stored.internal.aiSessions.has('left-session')).toBe(false)
+          const bundled = await withDetachedSession('navide.mini-ide', 'stored')
+          dispatchEvent(bundled.mgr, 'terminal.exit', exit('left-session', 0))
+          expect(bundled.internal.aiSessions.has('left-session')).toBe(true)
+        })
+      })
     })
   })
 })
