@@ -967,6 +967,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('dialog:pickFiles', args),
   openExternal: (url: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:openExternal', url),
+  /** Move an instruction file the Memory page created to the Trash; main
+   *  accepts only a path the backend recorded creating (memoryUndoCreate.ts). */
+  trashCreatedMemoryFile: (
+    path: string,
+    acceptChanged = false,
+  ): Promise<{ ok: boolean; code?: string; error?: string; created?: string; current?: string }> =>
+    ipcRenderer.invoke('memory:trashCreated', path, acceptChanged),
   /** The legal pages on navide.dev, by route; the same table main's Help menu uses. */
   legalLinks: { ...LEGAL_LINKS } as Readonly<Record<LegalRoute, string>>,
   /**

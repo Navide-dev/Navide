@@ -375,6 +375,93 @@ describe('MemoryPane', () => {
     expect(send).toHaveBeenLastCalledWith('memory.list', { workspace_path: WORKSPACE })
   })
 
+  describe('undo create', () => {
+    const createdGet = {
+      ok: true,
+      payload: {
+        path: '',
+        text: '# new',
+        exists: true,
+        modified: 1756339200,
+        created: { created_at: 1756339100, size: 5 },
+      },
+    }
+
+    function stubTrash(...results: Array<Record<string, unknown>>) {
+      const trash = vi.fn(async () => results.shift() ?? { ok: true })
+      ;(window as unknown as Record<string, unknown>).agentTeam = { trashCreatedMemoryFile: trash }
+      return trash
+    }
+
+    afterEach(() => {
+      delete (window as unknown as Record<string, unknown>).agentTeam
+    })
+
+    it('moves a file Navide created to the Trash in one click', async () => {
+      const trash = stubTrash({ ok: true })
+      const { backend, send } = mockBackend({ get: createdGet })
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+
+      expect(wrapper.find('.memory-created').text()).toContain('Navide created this file')
+      await clickEditorButton(wrapper, 'Undo Create (Move to Trash)')
+
+      expect(trash).toHaveBeenCalledWith('/Users/x/proj/AGENTS.md', false)
+      // The editor re-reads the (now missing) file and the list is refreshed.
+      expect(send.mock.calls.filter((call) => call[0] === 'memory.get')).toHaveLength(2)
+      expect(send).toHaveBeenLastCalledWith('memory.list', { workspace_path: WORKSPACE })
+    })
+
+    it('shows the difference and asks before trashing a file that changed since', async () => {
+      const trash = stubTrash(
+        { ok: false, code: 'changed', created: '# new', current: '# new\nclaude wrote' },
+        { ok: true },
+      )
+      const { backend } = mockBackend({ get: createdGet })
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+      await clickEditorButton(wrapper, 'Undo Create (Move to Trash)')
+
+      expect(trash).toHaveBeenCalledTimes(1)
+      expect(wrapper.find('.memory-created').text()).toContain('changed after Navide created it')
+      expect(wrapper.find('.memory-diff-add').text()).toBe('+ claude wrote')
+      await clickEditorButton(wrapper, 'Move to Trash Anyway')
+
+      expect(trash).toHaveBeenLastCalledWith('/Users/x/proj/AGENTS.md', true)
+    })
+
+    it('keeps the file when the user declines after seeing the difference', async () => {
+      const trash = stubTrash({ ok: false, code: 'changed', created: 'a', current: 'b' })
+      const { backend } = mockBackend({ get: createdGet })
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+      await clickEditorButton(wrapper, 'Undo Create (Move to Trash)')
+      await clickEditorButton(wrapper, 'Keep File')
+
+      expect(trash).toHaveBeenCalledTimes(1)
+      expect(wrapper.find('.memory-diff').exists()).toBe(false)
+    })
+
+    it('reports a Trash that refused instead of deleting', async () => {
+      stubTrash({ ok: false, code: 'trash-failed', error: 'no trash' })
+      const { backend } = mockBackend({ get: createdGet })
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+      await clickEditorButton(wrapper, 'Undo Create (Move to Trash)')
+
+      expect(wrapper.find('.memory-error').text()).toContain('no trash')
+    })
+
+    it('offers no undo for a file Navide did not create', async () => {
+      stubTrash()
+      const { backend } = mockBackend()
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+
+      expect(wrapper.find('.memory-created').exists()).toBe(false)
+    })
+  })
+
   it('shows no restore offer when nothing was kept', async () => {
     const { backend } = mockBackend()
     wrapper = await mountPane(backend)
