@@ -39,6 +39,8 @@ describe('DeveloperFolderInfoCard', () => {
       expect(notes).toEqual([
         i18n.global.t('settings.extensions.developerMode.infoCard.notReviewed'),
         i18n.global.t('settings.extensions.developerMode.infoCard.mayChange'),
+        // #642 review L1: what does and does not ask again (K4).
+        i18n.global.t('settings.extensions.developerMode.infoCard.consentScope'),
       ])
       wrapper.unmount()
     }

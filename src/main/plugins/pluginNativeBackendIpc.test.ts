@@ -9,7 +9,7 @@ import type { ThirdPartyBackendController, ThirdPartyLaunchSpec } from './plugin
 
 type Listener = (event: IpcMainInvokeEvent, args: unknown) => unknown
 
-function setup(options: { agentTools?: boolean; authorized?: boolean; isEnabled?: () => boolean } = {}) {
+function setup(options: { agentTools?: boolean; authorized?: boolean; isEnabled?: () => boolean; offUnsaved?: () => boolean } = {}) {
   const handlers = new Map<string, Listener>()
   const controller = {
     status: vi.fn(async (spec: ThirdPartyLaunchSpec) => ({ pluginId: spec.pluginId, status: 'ready' })),
@@ -33,6 +33,7 @@ function setup(options: { agentTools?: boolean; authorized?: boolean; isEnabled?
     () => [{ pluginId: 'acme.indexer' } as ThirdPartyLaunchSpec],
     options.isEnabled ?? (() => true),
     options.agentTools === false ? undefined : controls,
+    options.offUnsaved,
   )
   const invoke = (channel: string, args?: unknown) =>
     Promise.resolve(handlers.get(channel)!({} as IpcMainInvokeEvent, args))
@@ -47,6 +48,14 @@ describe('native backend IPC: agent-tool switches (plan B1-b)', () => {
     })
     await expect(invoke('plugins:nativeBackends:setAgentTools', { enabled: true })).rejects.toThrow('unavailable')
     expect(handlers.has('plugins:nativeBackends:setAgentTools')).toBe(true)
+  })
+
+  it('says an "off" is unsaved only while the store says so (#642 L2)', async () => {
+    let unsaved = true
+    const { invoke } = setup({ isEnabled: () => false, offUnsaved: () => unsaved })
+    await expect(invoke('plugins:nativeBackends:list')).resolves.toMatchObject({ enabled: false, offUnsaved: true })
+    unsaved = false
+    expect(await invoke('plugins:nativeBackends:list')).not.toHaveProperty('offUnsaved')
   })
 
   it('reports both switches, off by default, and changes one at a time', async () => {

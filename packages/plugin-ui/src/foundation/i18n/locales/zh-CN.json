@@ -1886,6 +1886,8 @@
         "title": "原生后端",
         "description": "部分 Navide 插件内含原生程序。Navide 会把它放在沙盒里运行，它本身没有网络：只能读取你一起打开的工作区，也只能在你允许的地方修改文件。但同时会运行 git、gh、glab 指令的 Navide 插件（下方标示为高风险）可以通过这些指令连到网络主机、送出工作区数据，也可以不经上述允许就读取与修改工作区文件。下方开关打开时，安装含原生代码的 Navide 插件即表示允许它运行；关闭开关可停用全部。",
         "enable": "允许第三方 Navide 插件运行原生后端",
+        "offUnsaved": "第三方原生后端目前已关闭，但 Navide 无法保存这个设置，重新启动 Navide 后会再变回开启。",
+        "offUnsavedRetry": "再试一次",
         "agentTools": {
           "enable": "允许 agent 调用第三方 Navide 插件的工具",
           "description": "默认关闭。打开后，你允许过的第三方 Navide 插件所声明的工具，pane 里的 agent 就能调用；会修改文件的工具在每个工作区第一次使用时会先问你。关闭时，Navide 的行为就像没有任何 Navide 插件提供工具。",
@@ -2168,7 +2170,8 @@
           "computing": "计算中…",
           "loadedBy": "加载者",
           "notReviewed": "没有经过 Navide 审核、没有签章、未扫描。",
-          "mayChange": "内容随时可能变动；指纹只记录加载当下的内容，Navide 不拿它挡加载。"
+          "mayChange": "内容随时可能变动；指纹只记录加载当下的内容，Navide 不拿它挡加载。",
+          "consentScope": "修改文件夹里的文件（包括原生后端程序本身）不会再询问你。修改声明的权限或后端才会：它会先卸载，等你重新同意。"
         },
         "selfHostedQuarantine": "{id} {version} 来自自架 Registry，目前没有加载。请打开开发者模式，或改从 Navide 市场安装。"
       },
@@ -2195,6 +2198,7 @@
         "versionExists": "这个版本号已经安装过了。请提高版本号后重新打包。",
         "installFailed": "无法安装这个 Navide 插件。",
         "chooseAgain": "请关闭这个对话框，重新选择文件再试一次。",
+        "approveAgain": "文件仍然就绪，可以直接再批准一次。",
         "askAgentAgain": "请关闭这个对话框，再请 agent 重新发送请求。",
         "startAgain": "请关闭这个对话框，从头再试一次。",
         "rollbackFailed": "无法回到这个版本。",

@@ -53,14 +53,26 @@ argument (`ghp_…`, `sk-…`) becomes `""`, the argument after a secret-named
 flag (`--token X`) becomes `""`, and a secret-named pair keeps its name
 (`--api-key=`, `X-Api-Key:`). Each argument keeps its position. A url or
 argument with nothing detected travels exactly as written. On receive, an
-emptied url is filled from this machine's own server of the same name when
-the two strip to the same text; an emptied argument is filled from the same
-position when it and the argument before it strip to the same text there.
+emptied url or argument is filled from this machine's own server of the same
+name when the record's endpoint is this machine's (below); then the url
+strips to the same text, and each argument fills from the same position.
 Anything else stays empty, and Settings → MCP marks the server "Needs setup".
 The stripped form is what a client compares (`McpScope.snapshot` and
 `inbound` both strip), so a record an earlier build sent with a credential
 in it reads as the same record and is neither pushed over nor in conflict;
 its credential is ignored and this machine keeps its own.
+
+This machine's values are bound to its endpoint. A receiver fills in its own
+env and header values and its url and argument credentials only when the
+record runs what its own server of that name runs: the same transport, and
+the same command and args (stdio) or the same url (http/sse), both compared
+stripped (`McpScope`'s `_same_endpoint`, which applies the rule a settings-bundle
+import restores secrets by, `mcp_settings._same_endpoint`). A record that
+changed any of them, approved or not, gets none of this machine's values:
+every env and header value, and every emptied credential, lands empty, and
+Settings → MCP marks the server "Needs setup". Changing only env or header
+names, or the on/off switch, keeps the values; a name the record adds lands
+empty.
 
 Install-only records travel under their own item ids, `i:<name>`. A 0.2.32
 client never writes or deletes a `<name>` row: those rows are what clients

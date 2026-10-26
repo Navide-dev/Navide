@@ -1981,6 +1981,7 @@ registerNativeBackendIpc(
     setSwitches: (change) => agentToolsControls.setSwitches(change),
     refresh: () => agentToolsControls.refresh(),
   },
+  () => nativeBackendStore.offUnsaved(),
 )
 
 const pluginTrustRefresh = registerPluginIpc(

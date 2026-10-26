@@ -91,6 +91,7 @@ function controller(options: Partial<ConstructorParameters<typeof ThirdPartyBack
     watchResources: () => ({ dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
     killSandbox: vi.fn(),
     sweepEscapees: vi.fn(async () => []),
+    offSaveRetryDelaysMs: [0, 0, 0],
     ...options,
   })
   return { instance, spawnImpl }
@@ -551,6 +552,39 @@ describe('kill switches when the decision cannot be saved', () => {
     } finally {
       write.mockRestore()
     }
+  })
+
+  it('retries a failed "off" save, and says nothing is unsaved once one lands (#642 L2)', async () => {
+    const { instance } = controller({ stopBackends: vi.fn(async () => undefined) })
+    let failures = 2
+    const real = OwnerOnlyJsonPersistence.prototype.write
+    const write = vi.spyOn(OwnerOnlyJsonPersistence.prototype, 'write').mockImplementation(function (this: OwnerOnlyJsonPersistence, ...args) {
+      if (failures-- > 0) throw new Error('ENOSPC: no space left on device')
+      return real.apply(this, args)
+    })
+    try {
+      await instance.setEnabled(false)
+      expect(write).toHaveBeenCalledTimes(3)
+      expect(store.offUnsaved()).toBe(false)
+      expect(new NativeBackendStore(join(root, 'store')).isEnabled()).toBe(false)
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  it('keeps saying "off" is unsaved after the bounded retries, until a save lands (#642 L2)', async () => {
+    const { instance } = controller({ stopBackends: vi.fn(async () => undefined) })
+    const write = failingSaves()
+    try {
+      await expect(instance.setEnabled(false)).rejects.toThrow('ENOSPC')
+      expect(write).toHaveBeenCalledTimes(4)
+      expect(store.isEnabled()).toBe(false)
+      expect(store.offUnsaved()).toBe(true)
+    } finally {
+      write.mockRestore()
+    }
+    await instance.setEnabled(false)
+    expect(store.offUnsaved()).toBe(false)
   })
 
   it('turning things on still takes effect only once saved', async () => {

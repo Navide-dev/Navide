@@ -1886,6 +1886,8 @@
         "title": "Back-ends nativos",
         "description": "Alguns plug-ins do Navide incluem código nativo. O Navide o executa em uma sandbox sem acesso próprio à rede; ele só pode ler os workspaces que você abrir com ele e só altera arquivos onde você permitir. Um plug-in do Navide que também executa comandos git, gh e glab (marcado como alto risco abaixo) pode, por meio deles, contatar hosts da rede e enviar dados do workspace, além de ler e alterar arquivos do workspace sem essa permissão. Enquanto a chave abaixo estiver ativada, instalar um plug-in do Navide com código nativo permite que ele seja executado; desativá-la para todos.",
         "enable": "Permitir que plug-ins do Navide de terceiros executem back-ends nativos",
+        "offUnsaved": "Os backends nativos de terceiros estão desativados por enquanto, mas o Navide não conseguiu salvar isso, então eles voltarão a ficar ativados quando o Navide reiniciar.",
+        "offUnsavedRetry": "Tentar de novo",
         "agentTools": {
           "enable": "Permitir que os agents chamem ferramentas de plug-ins do Navide de terceiros",
           "description": "Desativado por padrão. Quando ativado, os agents dos seus panes podem chamar as ferramentas que um plug-in do Navide de terceiros declara, depois que você permitir esse plug-in do Navide. Uma ferramenta que altera arquivos pergunta uma vez por workspace. Com esta opção desativada, o Navide se comporta como se nenhum plug-in do Navide tivesse ferramentas.",
@@ -2168,7 +2170,8 @@
           "computing": "Calculando…",
           "loadedBy": "Carregado por",
           "notReviewed": "Não revisado pelo Navide, não assinado, não verificado.",
-          "mayChange": "O conteúdo pode mudar a qualquer momento. A impressão digital só registra o que a pasta continha quando foi carregada; o Navide não a usa para recusar um carregamento."
+          "mayChange": "O conteúdo pode mudar a qualquer momento. A impressão digital só registra o que a pasta continha quando foi carregada; o Navide não a usa para recusar um carregamento.",
+          "consentScope": "Alterar os arquivos da pasta, incluindo o próprio programa do backend nativo, não pergunta de novo. Alterar as permissões ou o backend declarados pergunta: ele é descarregado até você consentir de novo."
         },
         "selfHostedQuarantine": "{id} {version} veio de um Registry auto-hospedado e não foi carregado. Ative o modo de desenvolvedor ou instale-o pelo Navide Marketplace."
       },
@@ -2195,6 +2198,7 @@
         "versionExists": "Este número de versão já está instalado. Aumente a versão e empacote de novo.",
         "installFailed": "Não foi possível instalar o plug-in do Navide.",
         "chooseAgain": "Feche esta caixa de diálogo e escolha o arquivo de novo para tentar outra vez.",
+        "approveAgain": "O arquivo continua pronto, então você pode aprová-lo de novo.",
         "askAgentAgain": "Feche esta caixa de diálogo e peça ao agente para enviar a solicitação de novo.",
         "startAgain": "Feche esta caixa de diálogo e tente de novo desde o início.",
         "rollbackFailed": "Não foi possível voltar para esta versão.",

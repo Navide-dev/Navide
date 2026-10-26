@@ -1886,6 +1886,8 @@
         "title": "Backends nativos",
         "description": "Algunos complementos de Navide incluyen código nativo. Navide lo ejecuta en un entorno aislado sin acceso propio a la red; solo puede leer las áreas de trabajo que abras con él y modificar archivos solo donde lo permitas. Un complemento de Navide que además ejecuta comandos git, gh y glab (marcado abajo como de alto riesgo) puede, a través de ellos, contactar con servidores de la red y enviar datos del área de trabajo, y leer y modificar archivos del área de trabajo sin ese permiso. Mientras el interruptor de abajo esté activado, instalar un complemento de Navide con código nativo permite que se ejecute; al desactivarlo se detienen todos.",
         "enable": "Permitir que los complementos de Navide de terceros ejecuten backends nativos",
+        "offUnsaved": "Los backends nativos de terceros están desactivados por ahora, pero Navide no pudo guardarlo, así que volverán a estar activados al reiniciar Navide.",
+        "offUnsavedRetry": "Reintentar",
         "agentTools": {
           "enable": "Permitir que los agents llamen a herramientas de complementos de Navide de terceros",
           "description": "Desactivado de forma predeterminada. Si está activado, los agents de tus panes pueden llamar a las herramientas que declara un complemento de Navide de terceros, una vez que hayas permitido ese complemento de Navide. Una herramienta que modifica archivos te pregunta una vez por área de trabajo. Si está desactivado, Navide se comporta como si ningún complemento de Navide tuviera herramientas.",
@@ -2168,7 +2170,8 @@
           "computing": "Calculando…",
           "loadedBy": "Cargado por",
           "notReviewed": "No revisado por Navide, sin firmar y sin analizar.",
-          "mayChange": "Su contenido puede cambiar en cualquier momento. La huella solo registra lo que contenía la carpeta al cargarla; Navide no la usa para rechazar una carga."
+          "mayChange": "Su contenido puede cambiar en cualquier momento. La huella solo registra lo que contenía la carpeta al cargarla; Navide no la usa para rechazar una carga.",
+          "consentScope": "Cambiar los archivos de la carpeta, incluido el propio programa del backend nativo, no vuelve a preguntarte. Cambiar los permisos o el backend declarados sí: se descarga hasta que vuelvas a dar tu consentimiento."
         },
         "selfHostedQuarantine": "{id} {version} procede de un Registry autoalojado y no se ha cargado. Activa el modo de desarrollador o instálalo desde Navide Marketplace."
       },
@@ -2195,6 +2198,7 @@
         "versionExists": "Este número de versión ya está instalado. Sube la versión y vuelve a empaquetarlo.",
         "installFailed": "No se pudo instalar el complemento de Navide.",
         "chooseAgain": "Cierra este cuadro de diálogo y vuelve a elegir el archivo para intentarlo de nuevo.",
+        "approveAgain": "El archivo sigue preparado, así que puedes volver a aprobarlo.",
         "askAgentAgain": "Cierra este diálogo y pide al agente que vuelva a enviar la solicitud.",
         "startAgain": "Cierra este diálogo e inténtalo de nuevo desde el principio.",
         "rollbackFailed": "No se pudo volver a esta versión.",
