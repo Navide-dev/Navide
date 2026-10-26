@@ -11485,7 +11485,7 @@
     "follow-wait": "Mover ao terminar",
     "follow-skip-running": "Ignorar panes em execução",
     "follow-switch-label": "Acompanhar a troca de conta",
-    "follow-switch-hint": "Ativado: este pane passa para a nova conta no próximo turno. Desativado: ele fica na pasta própria da conta dele. As duas mudanças o reabrem uma vez.",
+    "follow-switch-hint": "Ativado: escolher uma conta abaixo troca a conta padrão, e este pane passa para ela no próximo turno. Desativado: escolher uma conta move só este pane, reabrindo-o uma vez na pasta própria dessa conta; a padrão e os outros panes ficam como estão. Mudar esta chave também o reabre uma vez.",
     "pinned-indicator-label": "Fixado na conta",
     "pinned-indicator-tooltip": "Fixado: trocar de conta não move este pane. Abra o selo da conta para que ele volte a acompanhar.",
     "unpin-title": "{count} pane que vai passar a acompanhar está trabalhando | {count} panes que vão passar a acompanhar estão trabalhando",

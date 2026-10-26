@@ -11485,7 +11485,7 @@
     "follow-wait": "끝나면 옮기기",
     "follow-skip-running": "실행 중인 pane 건너뛰기",
     "follow-switch-label": "계정 전환 따라가기",
-    "follow-switch-hint": "켜면 이 pane은 다음 턴에 새 계정으로 옮겨요. 끄면 계정 전용 폴더에 머물러요. 어느 쪽이든 변경하면 한 번 다시 열려요.",
+    "follow-switch-hint": "켜면 아래에서 계정을 고를 때 기본 계정이 바뀌고, 이 pane은 다음 턴에 그 계정으로 옮겨요. 끄면 계정을 골라도 이 pane만 그 계정 전용 폴더로 옮겨지고 한 번 다시 열려요. 기본 계정과 다른 pane은 그대로예요. 이 스위치를 바꿀 때도 한 번 다시 열려요.",
     "pinned-indicator-label": "계정에 고정됨",
     "pinned-indicator-tooltip": "고정됨: 계정을 전환해도 이 pane은 옮겨지지 않아요. 다시 따라가게 하려면 계정 배지를 여세요.",
     "unpin-title": "따라가게 할 pane {count}개가 작업 중이에요",

@@ -9146,9 +9146,21 @@ async function unpinAllAccountPanes(): Promise<void> {
   await moveFollowPanes(ids, '', sessions)
 }
 
+/** The badge's list on a fixed pane: reopen only that pane in `profileId`'s
+ *  own dir, like fixing it (the rebuild asks before stopping a pane that is
+ *  working). It stays fixed; the live login and other panes are not
+ *  touched. */
+async function moveFixedAccountPane(paneId: string, profileId: string): Promise<void> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
+  if (!pane || pane.isLogin || !paneAccountFixed(pane) || !followDirSignedIn(profileId)) return
+  await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
+}
+
 provide(accountPinKey, {
   fixedCount: () => panes.value.filter((p) => paneAccountFixed(p)).length,
   unpinAll: unpinAllAccountPanes,
+  movePane: moveFixedAccountPane,
 })
 
 async function rebuildPanesViaResume(

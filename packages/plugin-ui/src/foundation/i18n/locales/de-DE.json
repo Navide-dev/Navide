@@ -11485,7 +11485,7 @@
     "follow-wait": "Nach Abschluss verschieben",
     "follow-skip-running": "Laufende panes überspringen",
     "follow-switch-label": "Kontowechsel folgen",
-    "follow-switch-hint": "An: Dieses pane wechselt bei seinem nächsten Turn zum neuen Konto. Aus: Es bleibt im eigenen Ordner seines Kontos. Jede Änderung öffnet es einmal neu.",
+    "follow-switch-hint": "An: Die Kontowahl unten wechselt das Standardkonto, und dieses pane wechselt bei seinem nächsten Turn dorthin. Aus: Die Kontowahl verschiebt nur dieses pane und öffnet es einmal im eigenen Ordner dieses Kontos neu; das Standardkonto und andere panes bleiben, wie sie sind. Auch das Umschalten öffnet es einmal neu.",
     "pinned-indicator-label": "An sein Konto gebunden",
     "pinned-indicator-tooltip": "Gebunden: Ein Kontowechsel verschiebt dieses pane nicht. Öffnen Sie das Konto-Badge, damit es wieder folgt.",
     "unpin-title": "{count} pane, das folgen soll, arbeitet gerade | {count} panes, die folgen sollen, arbeiten gerade",
