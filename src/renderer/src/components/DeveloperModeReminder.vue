@@ -2,8 +2,9 @@
 // Card K4: while Developer Mode is on, every launch says so (as Chrome does
 // for developer-mode extensions), so it is not left on and forgotten. The
 // notice can be closed for this launch only; the switch itself is changed in
-// Settings → Navide Plugins.
-import { onMounted, ref } from 'vue'
+// Settings → Navide Plugins. Closing it in one workspace window closes it in
+// every window: the main process keeps that for the launch.
+import { onMounted, onUnmounted, ref } from 'vue'
 
 const enabled = ref(false)
 const dismissed = ref(false)
@@ -12,7 +13,19 @@ const dismissed = ref(false)
 const externalChange = ref<string | null>(null)
 const reasonKey = ref('settings.extensions.developerMode.externalChange')
 
+let stopListening: (() => void) | undefined
+function dismiss(): void {
+  dismissed.value = true
+  void window.agentTeam?.plugins?.dismissDeveloperModeReminder?.()?.catch(() => {})
+}
+
 onMounted(async () => {
+  stopListening = window.agentTeam?.plugins?.onDeveloperModeReminderDismissed?.(() => { dismissed.value = true })
+  try {
+    if (await window.agentTeam?.plugins?.developerModeReminderDismissed?.()) dismissed.value = true
+  } catch {
+    // No answer: remind, as a launch would.
+  }
   try {
     const state = await window.agentTeam?.plugins?.developerMode?.()
     enabled.value = state?.enabled === true
@@ -25,6 +38,7 @@ onMounted(async () => {
     // No answer, no notice; the Settings banner still shows the state.
   }
 })
+onUnmounted(() => stopListening?.())
 </script>
 
 <template>
@@ -35,7 +49,7 @@ onMounted(async () => {
         {{ $t(reasonKey, { time: new Date(externalChange).toLocaleString() }) }}
       </p>
     </div>
-    <button type="button" class="nv-devmode-reminder-close nv-btn nv-btn--sm" @click="dismissed = true">
+    <button type="button" class="nv-devmode-reminder-close nv-btn nv-btn--sm" @click="dismiss">
       {{ $t('settings.extensions.developerMode.reminderClose') }}
     </button>
   </div>

@@ -17,14 +17,15 @@ import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { developerFolderBackendDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './pluginDeveloperModeStore'
 import { PluginDeveloperFolderMetaStore } from './pluginDeveloperFolderMeta'
 
-const { handlers, packaged } = vi.hoisted(() => ({
+const { handlers, packaged, windows } = vi.hoisted(() => ({
   handlers: new Map<string, (...a: unknown[]) => unknown>(),
   packaged: { value: false },
+  windows: { value: [] as Array<{ isDestroyed: () => boolean; webContents: { send: (...a: unknown[]) => void } }> },
 }))
 
 vi.mock('electron', () => ({
   app: { get isPackaged() { return packaged.value }, getVersion: () => '0.2.26' },
-  BrowserWindow: { fromWebContents: vi.fn() },
+  BrowserWindow: { fromWebContents: vi.fn(), getAllWindows: () => windows.value },
   ipcMain: {
     handle: (channel: string, fn: (...a: unknown[]) => unknown) => {
       handlers.set(channel, fn)
@@ -208,6 +209,34 @@ describe('the Developer Mode switch', () => {
     for (const enabled of ['true', 1, null, undefined]) {
       await expect(call('plugins:setDeveloperMode', { enabled })).rejects.toThrow(/invalid Developer Mode switch value/)
     }
+  })
+})
+
+describe('the Developer Mode launch reminder', () => {
+  it('closes for this launch in every window, in memory only', async () => {
+    const send = vi.fn()
+    const gone = vi.fn()
+    windows.value = [
+      { isDestroyed: () => false, webContents: { send } },
+      { isDestroyed: () => true, webContents: { send: gone } },
+    ]
+    register()
+    expect(call('plugins:developerModeReminderDismissed')).toBe(false)
+    call('plugins:dismissDeveloperModeReminder')
+    expect(call('plugins:developerModeReminderDismissed')).toBe(true)
+    expect(send).toHaveBeenCalledWith('plugins:developerModeReminderDismissed')
+    expect(gone).not.toHaveBeenCalled()
+    expect(readdirSync(pluginsRoot)).toEqual([])
+    // A new launch registers again and reminds again.
+    register()
+    expect(call('plugins:developerModeReminderDismissed')).toBe(false)
+    windows.value = []
+  })
+
+  it('answers only senders the Host trusts', () => {
+    register(() => false)
+    expect(() => call('plugins:developerModeReminderDismissed')).toThrow(/unauthorized/)
+    expect(() => call('plugins:dismissDeveloperModeReminder')).toThrow(/unauthorized/)
   })
 })
 
