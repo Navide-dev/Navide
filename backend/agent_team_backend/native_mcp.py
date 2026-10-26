@@ -87,6 +87,23 @@ _OURS_RE = re.compile(r"/plan-mcp\b")
 #: Query parameters are named like env vars, so the same secret test applies;
 #: this only has to spot that a string *is* a URL worth taking apart.
 _URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+#: Credentials recognisable by their shape alone, whatever they are named:
+#: a ``DATABASE_URL``-style name says nothing, ``ghp_…`` says everything.
+_TOKEN_SHAPE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:"
+    r"gh[pousr]_[A-Za-z0-9]{20,}"
+    r"|github_pat_[A-Za-z0-9_]{20,}"
+    r"|glpat-[A-Za-z0-9_-]{20,}"
+    r"|sk-[A-Za-z0-9_-]{20,}"
+    r"|[spr]k_(?:live|test)_[A-Za-z0-9]{16,}"
+    r"|xox[abposr]-[A-Za-z0-9-]{10,}"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|AIza[0-9A-Za-z_-]{35}"
+    r"|npm_[A-Za-z0-9]{36}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
+    r"|[Bb]earer\s+\S{8,}"
+    r")"
+)
 
 
 @dataclass(frozen=True)
@@ -425,8 +442,18 @@ def _mask_map(value: Any) -> tuple[tuple[str, str], ...]:
             text = ""
         else:
             text = json.dumps(raw, ensure_ascii=False)
-        masked.append((key, REDACTED_SECRET if text and _looks_secret(key) else text))
+        masked.append((key, REDACTED_SECRET if text and _looks_secret(key) else _mask_value(text)))
     return tuple(masked)
+
+
+def _mask_value(text: str) -> str:
+    """``text`` judged by what it holds rather than what it is called: a
+    token-shaped value becomes the sentinel, and any URL in it loses its
+    userinfo and secret query parameters (``postgres://u:p@h`` under a
+    harmless-looking ``DATABASE_URL``)."""
+    if _TOKEN_SHAPE_RE.search(text):
+        return REDACTED_SECRET
+    return mask_urls_in_text(text)
 
 
 def _mask_url(url: str) -> str:
@@ -501,7 +528,7 @@ def _mask_args(args: tuple[str, ...]) -> tuple[str, ...]:
         if named:
             masked.append(named)
             continue
-        masked.append(arg)
+        masked.append(_mask_value(arg))
         take_next = bool(_SECRET_FLAG_RE.match(arg))
     return tuple(masked)
 

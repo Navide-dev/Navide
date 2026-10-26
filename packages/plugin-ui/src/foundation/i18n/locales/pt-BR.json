@@ -1733,6 +1733,7 @@
       "export-failed": "Falha ao exportar",
       "import-dialog-title": "Importar JSON do pacote de configurações",
       "imported": "Importado: {items}",
+      "mcp-needs-secrets": "Segredos de MCP a preencher neste computador: {items}",
       "import-failed": "Falha ao importar"
     },
     "executionPolicy": {
@@ -6867,6 +6868,7 @@
       "status": "Status: {status}",
       "starting-note": "Ainda iniciando após {seconds} s. Se ele roda via npx ou uvx, a primeira execução pode estar baixando o pacote.",
       "error-reason": "Falha ao iniciar: {reason}",
+      "tools-error": "Não foi possível listar as ferramentas: {reason}",
       "stderr-tail": "Últimas linhas exibidas pelo servidor",
       "open-config-file": "Abrir arquivo de configuração",
       "native-readonly-hint": "O Navide lê esses arquivos e nunca grava neles. Só a configuração de usuário de cada CLI é verificada; o MCP de projeto não é mostrado. Altere um servidor onde a CLI dele espera e depois atualize.",

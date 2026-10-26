@@ -1733,6 +1733,7 @@
       "export-failed": "エクスポートに失敗しました",
       "import-dialog-title": "設定一式の JSON をインポート",
       "imported": "インポートしました：{items}",
+      "mcp-needs-secrets": "このマシンで入力が必要な MCP のシークレット：{items}",
       "import-failed": "インポートに失敗しました"
     },
     "executionPolicy": {
@@ -6867,6 +6868,7 @@
       "status": "状態：{status}",
       "starting-note": "起動中です（{seconds} 秒経過）。npx や uvx で実行している場合、初回はパッケージをダウンロードしている可能性があります。",
       "error-reason": "起動に失敗しました：{reason}",
+      "tools-error": "ツール一覧を取得できませんでした：{reason}",
       "stderr-tail": "サーバーが最後に出力した行",
       "open-config-file": "設定ファイルを開く",
       "native-readonly-hint": "Navide はこれらのファイルを読み取るだけで、書き込みません。各 CLI のユーザー設定のみをスキャンするため、プロジェクト単位の MCP は表示されません。CLI が使用する設定場所でサーバーを変更してから、再読み込みしてください。",

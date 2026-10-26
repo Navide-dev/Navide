@@ -1733,6 +1733,7 @@
       "export-failed": "No se pudo exportar",
       "import-dialog-title": "Importar JSON del paquete de ajustes",
       "imported": "Importado: {items}",
+      "mcp-needs-secrets": "Secretos de MCP que debes rellenar en este equipo: {items}",
       "import-failed": "No se pudo importar"
     },
     "executionPolicy": {
@@ -6867,6 +6868,7 @@
       "status": "Estado: {status}",
       "starting-note": "Sigue iniciándose tras {seconds} s. Si se ejecuta con npx o uvx, puede que la primera ejecución esté descargando el paquete.",
       "error-reason": "No se pudo iniciar: {reason}",
+      "tools-error": "No se pudo obtener la lista de herramientas: {reason}",
       "stderr-tail": "Últimas líneas que imprimió el servidor",
       "open-config-file": "Abrir archivo de configuración",
       "native-readonly-hint": "Navide lee estos archivos y nunca escribe en ellos. Solo se analiza la configuración de usuario de cada CLI; no se muestra el MCP de proyecto. Cambia un servidor donde lo espera su CLI y luego actualiza.",

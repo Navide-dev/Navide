@@ -136,6 +136,35 @@ class TestMCPClient:
             await client.call_tool("some-tool", {})
 
     @pytest.mark.asyncio
+    async def test_list_tools_failure_is_reported_not_zero_tools(self):
+        client = self._make_client()
+        client.ready = True
+        client._session = AsyncMock()
+        client._session.list_tools = AsyncMock(side_effect=RuntimeError("session closed"))
+
+        assert await client.list_tools() == []
+        assert client.tools_error == "session closed"
+
+        client._session.list_tools = AsyncMock(return_value=MagicMock(tools=[]))
+        assert await client.list_tools() == []
+        assert client.tools_error == ""
+
+    @pytest.mark.asyncio
+    async def test_list_status_carries_the_tools_error(self):
+        manager = MCPManager()
+        client = self._make_client("broken")
+        client.ready = True
+        client.status = "connected"
+        client._session = AsyncMock()
+        client._session.list_tools = AsyncMock(side_effect=RuntimeError("boom"))
+        manager._clients["broken"] = client
+
+        [entry] = await manager.list_status()
+
+        assert entry["tool_count"] == 0
+        assert entry["tools_error"] == "boom"
+
+    @pytest.mark.asyncio
     async def test_start_sets_ready_on_success(self):
         client = self._make_client()
 

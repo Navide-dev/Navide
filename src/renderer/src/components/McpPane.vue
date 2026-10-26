@@ -57,6 +57,8 @@ interface McpServer {
   error?: string
   /** The end of what a stdio server printed on stderr (logs/mcp-<name>.log). */
   stderr_tail?: string
+  /** Why its tool list could not be read; tool_count is then unknown, not 0. */
+  tools_error?: string
 }
 
 /** One row: a server name and everywhere on this machine it is configured. */
@@ -625,6 +627,11 @@ function entries(map: Record<string, string>): [string, string][] {
                 class="mcp-status-error"
                 data-testid="mcp-error-reason"
               >{{ t('settings.mcp.error-reason', { reason: selectedRow.navide.error }) }}</small>
+              <small
+                v-if="selectedRow.navide?.tools_error"
+                class="mcp-status-error"
+                data-testid="mcp-tools-error"
+              >{{ t('settings.mcp.tools-error', { reason: selectedRow.navide.tools_error }) }}</small>
             </span>
             <ToggleSwitch
               :model-value="draft.enabled"

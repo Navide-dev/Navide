@@ -85,7 +85,10 @@ pytestmark = pytest.mark.asyncio
 #: tool changed.
 #: Re-pinned for 0.2.32 Gemini CLI extensions (previous pin f4395697…): the
 #: cli_extensions_list description names Gemini CLI. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "ba95cc9af418bc462a6b76153a2ae6624a2ae8796981188ac184e2e78dcfdb21"
+#: Re-pinned for #659 on top of both (main pin ba95cc9a…): the mcp_list
+#: description documents `tools_error` and masking by value. No other tool
+#: changed.
+MAIN_TOOLS_LIST_SHA256 = "2dc3e75156ce9045c943244e85204a0c3a9ba8f6f6ceeea85b8a63ad325d8679"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

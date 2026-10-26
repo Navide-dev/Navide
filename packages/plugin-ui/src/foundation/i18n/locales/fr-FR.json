@@ -1733,6 +1733,7 @@
       "export-failed": "Échec de l’exportation",
       "import-dialog-title": "Importer un lot de paramètres JSON",
       "imported": "Importé : {items}",
+      "mcp-needs-secrets": "Secrets MCP à renseigner sur cet appareil : {items}",
       "import-failed": "Échec de l’importation"
     },
     "executionPolicy": {
@@ -6867,6 +6868,7 @@
       "status": "État : {status}",
       "starting-note": "Toujours en cours de démarrage après {seconds} s. S’il passe par npx ou uvx, le premier lancement télécharge peut-être le paquet.",
       "error-reason": "Échec du démarrage : {reason}",
+      "tools-error": "Impossible de lister ses outils : {reason}",
       "stderr-tail": "Dernières lignes affichées par le serveur",
       "open-config-file": "Ouvrir le fichier de configuration",
       "native-readonly-hint": "Navide lit ces fichiers et n’y écrit jamais. Seule la configuration au niveau utilisateur de chaque CLI est analysée – les MCP au niveau projet ne sont pas affichés. Modifiez un serveur là où sa CLI l’attend, puis actualisez.",

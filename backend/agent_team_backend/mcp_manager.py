@@ -182,6 +182,9 @@ class MCPClient:
         # ``error`` saying why). Shown in Settings -> MCP while it lasts.
         self.status = "starting"
         self.error = ""
+        # Why the last list_tools() came back empty because it failed, so a
+        # failure is not mistaken for a server that has no tools.
+        self.tools_error = ""
         self._started_at: float | None = None
         self._process: Any = None
         self._errlog: TextIO | None = None
@@ -548,17 +551,21 @@ class MCPClient:
             log.warning("MCP '%s' left %s running after stop; ended them", self.name, ended)
 
     async def list_tools(self) -> list[dict[str, str]]:
-        """Return the tools exposed by this server (best-effort, empty on failure)."""
+        """Return the tools exposed by this server (best-effort, empty on
+        failure -- ``tools_error`` then says why)."""
         if not self.ready or self._session is None:
             return []
         try:
             result = await asyncio.wait_for(self._session.list_tools(), timeout=10.0)
-            return [
-                {"name": t.name, "description": t.description or ""}
-                for t in result.tools
-            ]
-        except Exception:  # noqa: BLE001
+        except Exception as err:  # noqa: BLE001
+            self.tools_error = "listing tools timed out" if isinstance(err, TimeoutError) else _reason(err)
+            log.warning("MCP '%s' could not list its tools: %s", self.name, self.tools_error)
             return []
+        self.tools_error = ""
+        return [
+            {"name": t.name, "description": t.description or ""}
+            for t in result.tools
+        ]
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         if not self.ready or self._session is None:
@@ -661,6 +668,8 @@ class MCPManager:
                 entry["slow_start"] = seconds >= SLOW_START_NOTE_AFTER
             if client.status == "error":
                 entry["error"] = client.error
+            if client.tools_error:
+                entry["tools_error"] = client.tools_error
             if client.status != "connected":
                 tail = await asyncio.to_thread(client.stderr_tail)
                 if tail:

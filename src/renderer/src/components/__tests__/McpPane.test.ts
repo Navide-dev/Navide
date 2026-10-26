@@ -383,5 +383,17 @@ describe('McpPane', () => {
       )
       expect(wrapper.find('[data-testid="mcp-stderr-tail"] pre').text()).toBe('npm error 404 Not Found')
     })
+
+    it('says the tool list could not be read instead of showing zero tools', async () => {
+      wrapper = mountPane({
+        servers: withStatus({ status: 'connected', tool_count: 0, tools: [], tools_error: 'listing tools timed out' }),
+        selectName: 'context7',
+      })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="mcp-tools-error"]').text()).toBe(
+        'Could not list its tools: listing tools timed out',
+      )
+    })
   })
 })

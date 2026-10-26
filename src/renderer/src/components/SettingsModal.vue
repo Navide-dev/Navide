@@ -1782,7 +1782,7 @@ async function importSettingsBundle(): Promise<void> {
     const result = await window.agentTeam.openJson({ title: t('settings.management.import-dialog-title') })
     if (!result.ok || !result.content) return
     const bundle = JSON.parse(result.content) as Record<string, unknown>
-    const resp = await props.backend.send<{ applied: string[]; paths: SettingsPaths }>('settings.bundle.import', { bundle })
+    const resp = await props.backend.send<{ applied: string[]; mcp_needs_secrets?: string[]; paths: SettingsPaths }>('settings.bundle.import', { bundle })
     if (!resp.ok) {
       settingsBundleError.value = resp.error?.message ?? t('settings.management.import-failed')
       return
@@ -1810,6 +1810,10 @@ async function importSettingsBundle(): Promise<void> {
     const applied = resp.payload?.applied ?? []
     if (shouldReloadMcpAfterBundleImport(applied)) await mLoad(true)
     settingsBundleSummary.value = t('settings.management.imported', { items: applied.join(', ') || 'appearance' })
+    const needsSecrets = resp.payload?.mcp_needs_secrets ?? []
+    if (needsSecrets.length) {
+      settingsBundleSummary.value += ` ${t('settings.management.mcp-needs-secrets', { items: needsSecrets.join(', ') })}`
+    }
   } catch (err) {
     settingsBundleError.value = err instanceof Error ? err.message : t('settings.management.import-failed')
   } finally {
@@ -2254,6 +2258,7 @@ interface McpServer {
   // Live fields (returned by backend, not saved):
   status?: 'starting' | 'connected' | 'error' | 'disabled' | 'unknown'
   tool_count?: number; tools?: McpTool[]
+  starting_seconds?: number; slow_start?: boolean; error?: string; stderr_tail?: string; tools_error?: string
 }
 // CatalogEntry type alias (re-exported from mcpCatalog.ts)
 type CatalogEntry = McpCatalogEntry
@@ -2384,6 +2389,12 @@ async function mRefreshLive(): Promise<void> {
       server.status = live?.status ?? 'unknown'
       server.tool_count = live?.tool_count
       server.tools = live?.tools
+      // The reasons too, or the drawer keeps showing the previous failure.
+      server.starting_seconds = live?.starting_seconds
+      server.slow_start = live?.slow_start
+      server.error = live?.error
+      server.stderr_tail = live?.stderr_tail
+      server.tools_error = live?.tools_error
     }
     mConfigPath.value = resp.payload.path ?? mConfigPath.value
     mRevision.value = resp.payload.revision
@@ -2475,6 +2486,7 @@ async function mCreateCustom() {
     mCustomUrl.value = ''
     mSelectName.value = name
     mView.value = 'list'
+    mSummary.value = `Added ${name}`
   } else {
     mServers.value = mServers.value.filter((item) => item !== server)
   }
@@ -2486,7 +2498,7 @@ async function mReplaceServer(next: McpServer) {
   const idx = mServers.value.findIndex((server) => server.name === next.name)
   if (idx === -1) return
   mServers.value[idx] = mNormalizeServer(next)
-  await mSave(true)
+  await mSave()
 }
 
 async function mRemoveByName(name: string) {
@@ -2497,7 +2509,7 @@ async function mRemoveByName(name: string) {
 async function mRemoveServer(idx: number) {
   if (mServers.value[idx]?.name === mSelectName.value) mSelectName.value = ''
   mServers.value.splice(idx, 1)
-  await mSave(true)
+  await mSave()
 }
 
 
@@ -2928,6 +2940,7 @@ watch(activeTab, (tab) => {
             <div class="mcp-catalog-hint">
               💡 <span v-html="$t('settings.mcp.catalog-hint')"></span>
             </div>
+            <p v-if="mError" class="err-msg" style="margin:6px 22px 0">{{ mError }}</p>
 
             <div class="mcp-catalog-list">
               <div v-for="item in mFilteredCatalog" :key="item.name" class="mcp-catalog-card">
@@ -2952,6 +2965,7 @@ watch(activeTab, (tab) => {
             </div>
             <form class="mcp-custom-form" @submit.prevent="mCreateCustom">
               <p>{{ $t('settings.mcp.custom-hint') }}</p>
+              <p v-if="mError" class="err-msg">{{ mError }}</p>
               <div class="field">
                 <label class="lbl">{{ $t('settings.mcp.server-name') }}</label>
                 <input v-model="mCustomName" required pattern="[a-z0-9][a-z0-9_-]{0,63}" maxlength="64" spellcheck="false" autocomplete="off" placeholder="my-server" />

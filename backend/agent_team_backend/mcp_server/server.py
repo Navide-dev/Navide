@@ -8108,14 +8108,17 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
 
     Returns {servers, native, agents}. Each managed server is {name, enabled,
     transport, command, args, env} or {name, enabled, transport, url, headers},
-    plus `status` (disabled / connected / error / unknown) and `tool_count`.
+    plus `status` (disabled / connected / error / unknown) and `tool_count`;
+    `tools_error`, when present, says the tool list could not be read, so a
+    `tool_count` of 0 there is unknown rather than zero.
     Each native entry is {name, agent, transport, path, command, args, url,
     env, headers, enabled, valid, error}. `agents` is every vendor with what
     Navide can do with its MCP (wired / planned / unsupported) and whether its
     own config is reflected here.
 
     Every credential-shaped value — env and header values, `--api-key=` style
-    arguments, URL userinfo and secret query parameters — is already masked
+    arguments, URL userinfo and secret query parameters, and any value or
+    argument shaped like a known token whatever it is named — is already masked
     as `***` in both halves; names and hosts are kept so an entry stays
     recognisable. This is a global inventory: it does not vary by workspace.
     """
@@ -8138,10 +8141,11 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
             status = info.get("status", "unknown")
         # The tool list itself stays out: this is a summary, and a server with
         # dozens of tools would swamp the answer.
-        detail = {key: info[key] for key in ("starting_seconds", "error") if key in info}
-        if "error" in detail:
-            # Masked like the URL above: a library may quote the URL it failed on.
-            detail["error"] = native_mcp.mask_urls_in_text(str(detail["error"]))
+        detail = {key: info[key] for key in ("starting_seconds", "error", "tools_error") if key in info}
+        for key in ("error", "tools_error"):
+            if key in detail:
+                # Masked like the URL above: a library may quote the URL it failed on.
+                detail[key] = native_mcp.mask_urls_in_text(str(detail[key]))
         servers.append({**row, "status": status, "tool_count": info.get("tool_count", 0), **detail})
     reflected = await asyncio.to_thread(_native_mcp_inventory)
     return {"servers": servers, **reflected}

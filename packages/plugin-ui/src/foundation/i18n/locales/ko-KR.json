@@ -1733,6 +1733,7 @@
       "export-failed": "내보내지 못했어요",
       "import-dialog-title": "설정 번들 JSON 가져오기",
       "imported": "가져옴: {items}",
+      "mcp-needs-secrets": "이 컴퓨터에서 직접 입력해야 하는 MCP 비밀 값: {items}",
       "import-failed": "가져오지 못했어요"
     },
     "executionPolicy": {
@@ -6867,6 +6868,7 @@
       "status": "상태: {status}",
       "starting-note": "아직 시작 중입니다({seconds}초 경과). npx 또는 uvx로 실행하는 경우 처음에는 패키지를 내려받고 있을 수 있습니다.",
       "error-reason": "시작하지 못했습니다: {reason}",
+      "tools-error": "도구 목록을 읽지 못했습니다: {reason}",
       "stderr-tail": "서버가 마지막으로 출력한 줄",
       "open-config-file": "설정 파일 열기",
       "native-readonly-hint": "Navide는 이 파일을 읽기만 하고 절대 쓰지 않아요. 각 CLI의 사용자 수준 설정만 스캔하며 프로젝트 수준 MCP는 표시하지 않아요. 서버는 해당 CLI가 정한 위치에서 변경한 뒤 새로 고치세요.",

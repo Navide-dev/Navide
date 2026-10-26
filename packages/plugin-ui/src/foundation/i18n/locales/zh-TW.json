@@ -1733,6 +1733,7 @@
       "export-failed": "匯出失敗",
       "import-dialog-title": "匯入設定全集 JSON",
       "imported": "已匯入：{items}",
+      "mcp-needs-secrets": "這台電腦需要自行填入的 MCP 金鑰：{items}",
       "import-failed": "匯入失敗"
     },
     "executionPolicy": {
@@ -6867,6 +6868,7 @@
       "status": "狀態：{status}",
       "starting-note": "啟動中，已等 {seconds} 秒。若是透過 npx 或 uvx 執行，第一次可能正在下載套件。",
       "error-reason": "啟動失敗：{reason}",
+      "tools-error": "無法讀取工具清單：{reason}",
       "stderr-tail": "伺服器最後輸出的幾行",
       "open-config-file": "開啟設定檔",
       "native-readonly-hint": "Navide 只讀取這些檔案，不會寫入。只掃描各 CLI 的使用者層級設定，專案層級的 MCP 不會顯示。要修改請到該 CLI 自己的設定檔，改完回來重新整理。",
