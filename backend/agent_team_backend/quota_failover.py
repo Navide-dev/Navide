@@ -301,21 +301,15 @@ def auth_scope_for_scope(agent_key: str, scope: str | None) -> str:
 
 def credential_env_vars(agent_key: str) -> tuple[str, ...]:
     """Environment variables through which this CLI takes a credential that
-    outranks the file / Keychain the vault swaps: the vendor's portable
-    credential variable and whatever it declares as ranking above it, plus
-    any ``account_switch.credential_env_vars`` the adapter names."""
+    outranks the file / Keychain the vault swaps: the
+    ``account_switch.credential_env_vars`` the adapter names."""
     from .cli_vendors import registry
 
     spec = registry.vendor(agent_key)
     if spec is None:
         return ()
-    names: list[str] = []
-    portable = getattr(spec, "portable_credential", None)
-    if portable is not None:
-        names.append(portable.env)
-        names.extend(portable.env_remove)
     switch = getattr(spec, "account_switch", None)
-    names.extend(getattr(switch, "credential_env_vars", ()) or ())
+    names = getattr(switch, "credential_env_vars", ()) or ()
     return tuple(dict.fromkeys(n for n in names if n))
 
 

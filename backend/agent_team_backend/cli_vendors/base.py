@@ -700,6 +700,11 @@ class AccountSwitchSpec:
     # nothing is known — not that nothing overrides.
     uncertain_env: tuple[str, ...] = ()
     uncertain_env_by_scope: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # Every variable through which the CLI takes a credential that outranks
+    # the file / Keychain the vault swaps, in precedence order. A pane whose
+    # launch environment carries one records ``env-override`` provenance, and
+    # the CredentialLaunch helper is told to watch them. Names only.
+    credential_env_vars: tuple[str, ...] = ()
     # After a restart, can the conversation continue? "native": the CLI
     # resumes by id. "lossy": a best-effort restore (aider's chat history).
     # "none": the CLI starts a new conversation and the user must be told.
