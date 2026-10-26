@@ -301,35 +301,27 @@ def auth_scope_for_scope(agent_key: str, scope: str | None) -> str:
 
 def credential_env_vars(agent_key: str) -> tuple[str, ...]:
     """Environment variables through which this CLI takes a credential that
-    outranks the file / Keychain the vault swaps: the vendor's portable
-    credential variable and whatever it declares as ranking above it, plus
-    any ``account_switch.credential_env_vars`` the adapter names."""
+    outranks the file / Keychain the vault swaps: the
+    ``account_switch.credential_env_vars`` the adapter names."""
     from .cli_vendors import registry
 
     spec = registry.vendor(agent_key)
     if spec is None:
         return ()
-    names: list[str] = []
-    portable = getattr(spec, "portable_credential", None)
-    if portable is not None:
-        names.append(portable.env)
-        names.extend(portable.env_remove)
     switch = getattr(spec, "account_switch", None)
-    names.extend(getattr(switch, "credential_env_vars", ()) or ())
+    names = getattr(switch, "credential_env_vars", ()) or ()
     return tuple(dict.fromkeys(n for n in names if n))
 
 
 def pane_auth_scope(
     agent_key: str, profile: dict[str, Any] | None, *,
     env: dict[str, str] | None = None, env_remove: list[str] | tuple[str, ...] = (),
-    portable_slot_id: str | None = None,
     account_dir: bool = False,
 ) -> dict[str, Any]:
     """Launch provenance recorded on a pane's terminal metadata at spawn:
     which profile it started on, that profile's provider scope, the
     credential pool those resolve to, and where the CLI actually takes its
     credential from — ``vault`` (the file / Keychain a switch swaps),
-    ``portable`` (a pasted credential injected into the environment) or
     ``env-override`` (a credential variable the CLI ranks above the file
     reached the pane) or ``account-dir`` (a claude account's own config dir,
     whose login the CLI keeps itself). Only the variable's *name* is
@@ -344,9 +336,7 @@ def pane_auth_scope(
     removed = set(env_remove or ())
     env_names = [name for name in (env or {}) if name not in removed]
     preflight = switch_preflight(agent_key, env_names=env_names, scope=scope)
-    if portable_slot_id:
-        source = "portable"
-    elif account_dir:
+    if account_dir:
         source = "account-dir"
     else:
         for name in credential_env_vars(agent_key):

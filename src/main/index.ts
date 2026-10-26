@@ -171,6 +171,7 @@ import {
   type PermissionKey,
 } from './permissions'
 import { resolveBackendDataDir, readUiSettingsText, UI_SETTINGS_FILE } from './ui-settings-bootstrap'
+import { trashCreatedMemoryFile } from './memoryUndoCreate'
 import { PlanWindowRegistry } from './plan-windows'
 import { createTokenMonitorWindowOpener } from './token-monitor-window'
 import { errorMain, infoMain, logMain, logRendererConsole, warnMain } from './main-log'
@@ -5378,6 +5379,23 @@ ipcMain.handle('legal:open', async (_event, route: unknown) => {
   } catch (e) {
     return { ok: false, error: String(e) }
   }
+})
+
+// Memory page "Undo create": only a file the backend recorded creating, and
+// only ever to the Trash (memoryUndoCreate.ts).
+ipcMain.handle('memory:trashCreated', async (event, path: unknown, acceptChanged: unknown) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
+  if (typeof path !== 'string' || !path) return { ok: false, code: 'not-created', error: 'invalid path' }
+  const dataDir = resolveBackendDataDir({
+    envOverride: process.env.AGENT_TEAM_DATA_DIR,
+    isPackaged: app.isPackaged,
+    appDataPath: app.getPath('appData'),
+    platform: process.platform,
+    homeDir: app.getPath('home'),
+    xdgDataHome: process.env.XDG_DATA_HOME,
+    appData: process.env.APPDATA
+  })
+  return trashCreatedMemoryFile(dataDir, path, acceptChanged === true, (target) => shell.trashItem(target))
 })
 
 ipcMain.handle('shell:openExternal', async (event, url: string) => {

@@ -40,7 +40,7 @@ const activation: BackendPluginLaunchSpec = {
   entryFile: fixture,
   protocolVersion: 1,
   activation: 'startup',
-  approvedMethods: ['fixture.delay', 'fixture.echo', 'fixture.emit', 'fixture.exit', 'fixture.cancelcount', 'plans.resolve_root'],
+  approvedMethods: ['fixture.delay', 'fixture.echo', 'fixture.emit', 'fixture.exit', 'fixture.cancelcount', 'fixture.pendingdelays', 'plans.resolve_root'],
   approvedEvents: ['fixture.changed', 'plans.changed'],
   approvedBridgePorts: ['filesystem'],
 }
@@ -702,8 +702,12 @@ describe('PluginBackendHost', () => {
     host.bindView(runtime, activation.packageDir, process.cwd())
 
     const controller = new AbortController()
-    const pending = host.call('view-1', 'fixture.delay', { milliseconds: 1_500 }, { signal: controller.signal })
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    const pending = host.call('view-1', 'fixture.delay', { milliseconds: 30_000 }, { signal: controller.signal })
+    // Abort only once the child holds the call, not after a fixed sleep: a
+    // slow runner may not have delivered it yet.
+    await vi.waitFor(async () => {
+      expect(await host.call('view-1', 'fixture.pendingdelays', null)).toBe(1)
+    }, { timeout: 30_000, interval: 50 })
     controller.abort()
     await expect(pending).rejects.toMatchObject({ code: 'USER_CANCELLED' })
     await expect(host.call('view-1', 'fixture.cancelcount', null)).resolves.toBe(1)

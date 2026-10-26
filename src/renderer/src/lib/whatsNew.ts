@@ -121,6 +121,21 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.32',
+    title: {
+      'zh-TW': '移除「貼入憑證」：新的 Claude pane 改用 Claude 自己的登入',
+      'en-US': 'Paste Credential Removed: New Claude Panes Use Claude’s Own Sign-In',
+      'ja-JP': '「認証情報を貼り付け」を廃止：新しい Claude pane は Claude 自身のサインインを使用',
+    },
+    highlights: [
+      {
+        'zh-TW': '「設定 → 帳號」裡的「貼入憑證」已移除：Navide 不再把貼入的憑證（例如 claude setup-token 產生的）交給新開的 pane。用過這個功能的裝置，更新時會清除存在本機的憑證、加密它的金鑰，以及舊版從雲端拉下來的副本，並在第一次啟動時通知一次；沒用過的裝置什麼都不會動。新的 Claude pane 改用 Claude 自己的登入，可能是另一個帳號，並扣用那個帳號的額度。已經開著的 pane 會沿用原本的憑證，直到關閉或重新啟動。',
+        'en-US': 'Paste Credential is gone from Settings → Accounts: Navide no longer hands pasted credentials (such as one from claude setup-token) to new panes. On a device that used it, the update erases the stored credentials, the key that encrypted them and the copies older versions pulled from the cloud, and says so once at the first launch; a device that never used it is not touched. New Claude panes now use Claude’s own sign-in, which may be a different account and draws on that account’s quota. Panes already open keep their credential until they are closed or restarted.',
+        'ja-JP': '「設定 → アカウント」の「認証情報を貼り付け」を廃止しました。Navide は貼り付けた認証情報（claude setup-token で作ったものなど）を新しい pane に渡さなくなります。この機能を使ったデバイスでは、更新時に保存されていた認証情報、それを暗号化していた鍵、旧バージョンがクラウドから取得したコピーを消去し、初回起動時に一度だけお知らせします。使っていないデバイスには何もしません。新しい Claude pane は Claude 自身のサインインを使うため、別のアカウントになり、そのアカウントの使用量枠が消費されることがあります。すでに開いている pane は、閉じるか再起動するまで元の認証情報を使い続けます。',
+      },
+    ],
+  },
+  {
     version: '0.2.31',
     title: {
       'zh-TW': 'Linux 不再越用越慢：修正後端記憶體每分鐘增加約 90 MB',

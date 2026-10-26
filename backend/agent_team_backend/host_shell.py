@@ -811,6 +811,10 @@ async def _kill_tree_and_reap(process: asyncio.subprocess.Process) -> None:
     finally:
         # Also when the caller is cancelled mid-snapshot: the hung root must not
         # be left running because the read in front of its kill never finished.
+        # Each run leads its own group (POSIX): this also ends a grandchild
+        # forked after the snapshot, which it cannot see and which is init's
+        # child, out of any later snapshot's reach, once the root dies.
+        process_tree.end_own_group(pid)
         try:
             process.kill()
         except ProcessLookupError:
@@ -873,6 +877,7 @@ async def run_allowlisted(
             stdin=asyncio.subprocess.PIPE if input_bytes is not None else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **process_tree.own_group_spawn_kwargs(),
         )
         communication = process.communicate() if input_bytes is None else process.communicate(input_bytes)
         stdout, stderr = await asyncio.wait_for(communication, timeout=timeout)
@@ -962,6 +967,7 @@ async def run_allowlisted_capped(
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **process_tree.own_group_spawn_kwargs(),
         )
         return await asyncio.wait_for(
             _read_stdout_capped(process, max_stdout_bytes), timeout=timeout

@@ -78,16 +78,6 @@ async def test_a_switch_left_on_by_an_older_build_reads_as_off(monkeypatch):
     assert sync_scopes.scope_enabled("credentials") is False
 
 
-async def test_a_saved_credential_schedules_no_sync(monkeypatch):
-    from agent_team_backend import server_link
-
-    async def sync_now(**_kw):  # pragma: no cover - must not run
-        raise AssertionError("a credential save scheduled a sync")
-
-    monkeypatch.setattr(server_link, "sync_now", sync_now)
-    assert sync_scopes.credential_saved("claude", "default") is None
-
-
 async def test_a_published_bundle_carries_no_mcp_secret_and_no_credentials_scope(monkeypatch):
     server = ShareServer()
     server.install(monkeypatch)

@@ -34,23 +34,14 @@ token and the hook secret in 0600 files under the app data dir; the pane MCP
 token in each pane's command line (known exposure, see L1 in the audit
 reports).
 
-Portable CLI credentials (Settings → Accounts, `portable_credentials.py`) are
-the one secret the user hands Navide on purpose to carry elsewhere. Locally
-the value is AES-256-GCM ciphertext under a wrapping key in the credential
-vault (Keychain on macOS, DPAPI on Windows, a 0600 file on Linux — the
-platform's own protection, reported to the user as `keyStorage`); it reaches a
-CLI only as a variable in that pane's environment, never in a login file. When
-the `credentials` sync scope is on, the same value travels as a record sealed
-under the account key (`sync_keyring`) with the scope and item id as
-associated data, and lands on another device as ciphertext at rest
-(`sync_credential_items.sealed`, opened into memory on use) — the receiving
-device's vault and the CLI's files are never written. The scope is off by
-default, refuses to switch on while any paired device predates encryption-key
-pinning, never deletes by absence, fails a round rather than skip an
-unreadable record, and keeps conflict rows sealed with `{agentKey, slotId}` as
-the only readable part. Rotating the account key (Settings → Sync) re-seals
-every record and hands the new ring to paired devices; old keys stay
-readable so nothing goes dark.
+Portable CLI credentials (a pasted value Navide injected into a pane's
+environment) were removed in 0.2.32. A one-time cleanup
+(`portable_credentials_cleanup.py`) erases what a device that used them still
+held — the `navide-portable-credential-key` app secret, the
+`portable_credentials` kv document and the imported `sync_credential_items`
+rows — and makes no vault call on a device that never did. `credentials`
+stays in the sync protocol's scope list only so a switch an older build left
+on reads as off; there is no adapter for it.
 
 ## Attacker positions (who can go wrong)
 
