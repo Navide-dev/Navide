@@ -1,12 +1,13 @@
 import { watch } from 'vue'
 import { invokeCommand, listCommands } from '@navide/plugin-ui/shared'
 import { currentDiagnosticSeq, takeDiagnosticsSince } from '../lib/uiDiagnostics'
+import { WINDOW_INSTANCE_ID } from '../lib/windowInstanceId'
 
 /**
  * Bridges an external MCP client's `ui.invoke.request` broadcasts into this
  * window's command registry and replies with `ui.invoke.result`. Backend
  * contract (do not change without updating the backend side):
- *   request:  { request_id, workspace_path, op, action, args, global, addressed, caller_pane_id }
+ *   request:  { request_id, workspace_path, op, action, args, global, addressed, caller_pane_id, caller_workspace_path }
  *   response: backend.send('ui.invoke.result', { request_id, ok, result, error, warnings? })
  * `warnings` is a string array and is only present when uiDiagnostics recorded
  * something during the action (e.g. injectText resending content) — it lets
@@ -30,8 +31,11 @@ export interface UiInvokeRequest {
   addressed?: boolean
   /** The pane the credential behind this request belongs to — taken from the
    *  credential by the backend, never from args. Empty for host / external
-   *  callers. Read only for PANE_PRIVATE_ACTIONS. */
+   *  callers. Read for PANE_PRIVATE_ACTIONS and SELF_GUARDED_ACTIONS. */
   caller_pane_id?: string
+  /** The caller pane's workspace, from the backend's registry — never from
+   *  args. Empty for host / external callers. Read for SELF_GUARDED_ACTIONS. */
+  caller_workspace_path?: string
 }
 
 export interface UiActionBusBackend {
@@ -50,6 +54,24 @@ export interface UseUiActionBusOptions {
    *  trailing slash or a symlinked path defeats. Defaults to that narrow test
    *  for callers (tests, plugin hosts) that have nothing better. */
   ownsWorkspace?: (path: string) => boolean
+  /** Whether a pane with this id lives in this window. Used to refuse
+   *  ui.window.close from a pane this window hosts. Absent: only the
+   *  workspace half of that check applies. */
+  hostsPane?: (paneId: string) => boolean
+  /** The panes the "focused pane" commands act on right now
+   *  (workbench.action.closeActivePane, workbench.action.rebuildFocusedPane).
+   *  Used to refuse them when that is the caller itself. Absent: not checked. */
+  focusedPaneIds?: () => string[]
+  /** Whether this pane is a slot of the pipeline run in this window. Used to
+   *  refuse a slot restarting, resetting or aborting the run it belongs to,
+   *  which would end the caller. Absent: not checked. */
+  isPipelineSlot?: (paneId: string) => boolean
+  /** The workspaces this window holds, announced with ui.invoke.ready and
+   *  again whenever the list changes. The backend counts a window holding an
+   *  agent's workspace as that agent's own for the self-close checks. A
+   *  detached group window returns []: closing it does not close the
+   *  workspace. Absent: nothing is announced (older behaviour). */
+  heldWorkspaces?: () => string[]
   /** The backend connection's status. When given, this window announces
    *  `ui.invoke.ready` on every transition to 'connected' (each reconnect is
    *  a new backend session): the backend sends a global request such as
@@ -60,6 +82,18 @@ export interface UseUiActionBusOptions {
    *  one. A focus re-announces with focused true, so the backend prefers the
    *  window the user touched last. */
   focusTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>
+  /** The window's account actions (ui.accounts.*), reached from MCP through
+   *  their dedicated tools only. They are deliberately NOT in the command
+   *  registry: a keybinding or anything else that runs registered commands
+   *  must not start a sign-in. Each gets the request's args, the caller
+   *  pane from the credential, and a signal that aborts when the backend
+   *  withdraws the request (ui.invoke.cancel) or the window loses the
+   *  backend. Absent (tests, plugin hosts): refused. */
+  accountActions?: {
+    signIn: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
+    /** ui.accounts.switch (cli_account_switch). Absent: refused. */
+    switch?: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
+  }
 }
 
 function errorMessage(err: unknown): string {
@@ -87,7 +121,11 @@ const WORKSPACE_SCOPED_ACTIONS = new Set([
   'ui.pipeline.resume',
   'ui.pipeline.reset',
   'ui.pipeline.restart',
+  'ui.accounts.signIn',
 ])
+
+/** Prefix of the account actions: see UseUiActionBusOptions.accountActions. */
+const ACCOUNT_ACTION_PREFIX = 'ui.accounts.'
 
 /** Actions whose args.paneId names a pane's PRIVATE data — its inbox — rather
  *  than a window or a project. They run only when the caller IS that pane:
@@ -99,6 +137,75 @@ const WORKSPACE_SCOPED_ACTIONS = new Set([
  *  are cross-pane by design and must keep working across panes. */
 const PANE_PRIVATE_ACTIONS = new Set(['ui.messaging.readIncoming', 'ui.messaging.settleRead'])
 
+/** Pipeline actions that end the run's slot panes (restart / restart_from kill
+ *  the old panes, reset and abort tear the run down). */
+const PIPELINE_TEARDOWN_ACTIONS = ['ui.pipeline.abort', 'ui.pipeline.reset', 'ui.pipeline.restart', 'ui.pipeline.restart_from']
+
+/** Workspace paths compared for the self checks. Case-folded: on macOS and
+ *  Windows two spellings differing in case are one folder, and refusing a
+ *  same-but-for-case folder on a case-sensitive volume errs on the safe side.
+ *  The backend compares the folders themselves (device + inode). */
+const sameWorkspace = (a: string, b: string): boolean =>
+  !!a && !!b && normWs(a).toLowerCase() === normWs(b).toLowerCase()
+
+/** Actions that can close something: an agent may never aim them at its own
+ *  pane, its own workspace or its own window. The backend refuses these first
+ *  (_self_scope_refusal); this is the same rule again in the window, for any
+ *  route a request can take here. "Own" comes from caller_pane_id and
+ *  caller_workspace_path, which the backend fills from the credential. */
+const SELF_GUARDED_ACTIONS = new Set([
+  'ui.pane.close',
+  'ui.pane.reclaim',
+  'ui.workspace.close',
+  'ui.window.close',
+  // Keybinding commands are reachable through ui_invoke too (review #534).
+  'workbench.action.closeWindow',
+  'workbench.action.closeActivePane',
+  'workbench.action.rebuildFocusedPane',
+  ...PIPELINE_TEARDOWN_ACTIONS,
+])
+
+const SELF_RECLAIM_DETAIL = 'that is your own pane — reclaiming it would end the CLI making this call'
+
+/** Why this request would close the caller's own pane, workspace or window, or
+ *  null. ui.pane.reclaim is not refused here — the caller's own id is taken out
+ *  of its batch instead (see handleUiInvokeRequest). */
+function selfCloseRefusal(req: Partial<UiInvokeRequest>, opts: UseUiActionBusOptions): string | null {
+  const caller = req.caller_pane_id ?? ''
+  if (!caller || !req.action || !SELF_GUARDED_ACTIONS.has(req.action)) return null
+  const callerWs = req.caller_workspace_path ?? ''
+  if (req.action === 'ui.pane.close' && namedPaneId(req.args) === caller) {
+    return 'self-close: that is your own pane — an agent cannot close the pane it runs in'
+  }
+  if (req.action === 'ui.workspace.close') {
+    const path = typeof req.args?.path === 'string' ? req.args.path : ''
+    if (path && sameWorkspace(path, callerWs)) {
+      return 'self-workspace-close: that is your own workspace — an agent cannot close the workspace it runs in'
+    }
+  }
+  if (req.action === 'ui.window.close' || req.action === 'workbench.action.closeWindow') {
+    const owns = opts.ownsWorkspace ?? ((path: string) => path === opts.currentWorkspace.value)
+    if (opts.hostsPane?.(caller) || (callerWs && owns(callerWs))) {
+      return 'self-window-close: this window holds your own pane or workspace — an agent cannot close it'
+    }
+  }
+  if (
+    (req.action === 'workbench.action.closeActivePane' || req.action === 'workbench.action.rebuildFocusedPane') &&
+    (opts.focusedPaneIds?.() ?? []).includes(caller)
+  ) {
+    return `self-close: ${req.action} acts on the focused pane, which is your own pane right now`
+  }
+  // Reset ends EVERY pane in this window (onKillAll), manual ones included and
+  // with no run needed, so any caller this window hosts is refused.
+  if (req.action === 'ui.pipeline.reset' && opts.hostsPane?.(caller)) {
+    return 'self-close: ui.pipeline.reset ends every pane in this window, your own included'
+  }
+  if (PIPELINE_TEARDOWN_ACTIONS.includes(req.action) && opts.isPipelineSlot?.(caller)) {
+    return `self-close: ${req.action} would end the run your own pane is a slot of`
+  }
+  return null
+}
+
 const namedPaneId = (args: Record<string, unknown> | null | undefined): string => {
   const v = args?.paneId
   return typeof v === 'string' ? v : ''
@@ -106,11 +213,20 @@ const namedPaneId = (args: Record<string, unknown> | null | undefined): string =
 
 const normWs = (p: string): string => p.replace(/\/+$/, '')
 
+const reclaimIds = (args: Record<string, unknown> | null | undefined): string[] => {
+  const v = args?.paneId
+  return (Array.isArray(v) ? v : [v]).filter((id): id is string => typeof id === 'string' && !!id)
+}
+
+const reclaimNamesCaller = (req: Partial<UiInvokeRequest>): boolean =>
+  reclaimIds(req.args).includes(req.caller_pane_id ?? '')
+
 /** Handles a single ui.invoke.request payload; exported for direct unit testing
  *  without going through a fake backend.on subscription. */
 export async function handleUiInvokeRequest(
   raw: unknown,
   opts: UseUiActionBusOptions,
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<void> {
   const req = raw as Partial<UiInvokeRequest> | null | undefined
   if (!req || !req.request_id || !req.op) return
@@ -150,6 +266,8 @@ export async function handleUiInvokeRequest(
     PANE_PRIVATE_ACTIONS.has(req.action) &&
     (!req.caller_pane_id || req.caller_pane_id !== namedPaneId(req.args))
 
+  const selfRefusal = req.op === 'invoke' ? selfCloseRefusal(req, opts) : null
+
   const diagnosticSeq = currentDiagnosticSeq()
   let ok = true
   let result: unknown
@@ -167,10 +285,43 @@ export async function handleUiInvokeRequest(
         `${req.action} reads a pane's own inbox and can only be invoked by that pane ` +
         `for itself; the caller ${req.caller_pane_id ? `"${req.caller_pane_id}"` : 'has no pane'} ` +
         `and asked for "${namedPaneId(req.args)}".`
+    } else if (selfRefusal) {
+      ok = false
+      error = selfRefusal
     } else if (req.op === 'invoke') {
       if (!req.action) {
         ok = false
         error = 'action is required for op "invoke"'
+      } else if (req.action.startsWith(ACCOUNT_ACTION_PREFIX)) {
+        const handler = req.action === 'ui.accounts.signIn'
+          ? opts.accountActions?.signIn
+          : req.action === 'ui.accounts.switch' ? opts.accountActions?.switch : undefined
+        if (!req.caller_pane_id) {
+          ok = false
+          error = `${req.action} is reachable only from a CLI pane, through its own MCP tool`
+        } else if (!handler) {
+          ok = false
+          error = `unknown account action: ${req.action}`
+        } else {
+          result = await handler(req.args ?? {}, req.caller_pane_id, signal)
+        }
+      } else if (req.action === 'ui.pane.reclaim' && req.caller_pane_id && reclaimNamesCaller(req)) {
+        // A batch can half succeed: the caller's own pane becomes one more
+        // refused row and the rest are reclaimed as asked.
+        const caller = req.caller_pane_id
+        const rest = reclaimIds(req.args).filter((id) => id !== caller)
+        const own = { paneId: caller, reason: 'self', detail: SELF_RECLAIM_DETAIL }
+        if (!rest.length) {
+          result = { reclaimed: [], refused: [own] }
+        } else {
+          const outcome = await invokeCommand(req.action, { ...(req.args ?? {}), paneId: rest })
+          ok = outcome.ok
+          error = outcome.error
+          const answer = outcome.result as { reclaimed?: unknown[]; refused?: unknown[] } | undefined
+          // Kept on a failure too: the caller must still learn its own id was taken out.
+          const base = ok && answer ? answer : { reclaimed: [] }
+          result = { ...base, refused: [...(base.refused ?? []), own] }
+        }
       } else {
         const outcome = await invokeCommand(req.action, req.args ?? undefined)
         ok = outcome.ok
@@ -205,13 +356,54 @@ export async function handleUiInvokeRequest(
  *  unsubscribe function; App.vue does not call it (App.vue lives for the
  *  window's lifetime, same as its other backend.on registrations). */
 export function useUiActionBus(opts: UseUiActionBusOptions): () => void {
-  const off = opts.backend.on('ui.invoke.request', (raw) => { void handleUiInvokeRequest(raw, opts) })
+  // In-flight account requests, so a withdrawn one can be called off
+  // (review #438 LOW-1). Other actions finish on their own and are not kept.
+  const inFlight = new Map<string, AbortController>()
+  const off = opts.backend.on('ui.invoke.request', (raw) => {
+    const req = raw as Partial<UiInvokeRequest> | null | undefined
+    const id = req?.request_id
+    if (!id || !req?.action?.startsWith(ACCOUNT_ACTION_PREFIX)) {
+      void handleUiInvokeRequest(raw, opts)
+      return
+    }
+    const controller = new AbortController()
+    inFlight.set(id, controller)
+    void handleUiInvokeRequest(raw, opts, controller.signal).finally(() => inFlight.delete(id))
+  })
+  const offCancel = opts.backend.on('ui.invoke.cancel', (raw) => {
+    const id = (raw as { request_id?: unknown } | null | undefined)?.request_id
+    if (typeof id === 'string') inFlight.get(id)?.abort()
+  })
   const status = opts.connectionStatus
-  if (!status) return () => { off?.() }
+  if (!status) return () => { off?.(); offCancel?.() }
+  // The backend that asked is gone (restart, lost link): nobody waits for the
+  // answer any more.
+  const stopAbortWatch = watch(
+    () => status.value,
+    (s) => {
+      if (s === 'connected') return
+      for (const controller of inFlight.values()) controller.abort()
+    },
+  )
 
+  // The window may wire the bus before the state behind heldWorkspaces exists
+  // (App.vue declares its workspace list further down its setup), so a read
+  // that cannot be answered yet is left out rather than thrown; the watch
+  // below announces again once it can be.
+  const readHeld = (): string[] | undefined => {
+    if (!opts.heldWorkspaces) return undefined
+    try {
+      return [...opts.heldWorkspaces()]
+    } catch {
+      return undefined
+    }
+  }
   const announce = (focused: boolean) => {
     if (status.value !== 'connected') return
-    opts.backend.send('ui.invoke.ready', { focused })
+    const payload: Record<string, unknown> = { focused, window_id: WINDOW_INSTANCE_ID }
+    const held = readHeld()
+    if (held) payload.workspaces = held
+    opts.backend.send('ui.invoke.ready', payload)
       .catch(() => { /* best-effort — announced again on reconnect and focus */ })
   }
   const stopWatch = watch(
@@ -219,12 +411,27 @@ export function useUiActionBus(opts: UseUiActionBusOptions): () => void {
     (s) => { if (s === 'connected') announce(typeof document !== 'undefined' && document.hasFocus()) },
     { immediate: true },
   )
+  // Re-announced on change so the backend's view of what this window holds
+  // never lags an adopt or a close.
+  // Created after the current setup finishes, for the same reason as readHeld.
+  let stopHeldWatch: () => void = () => {}
+  let disposed = false
+  if (opts.heldWorkspaces) {
+    void Promise.resolve().then(() => {
+      if (disposed) return
+      stopHeldWatch = watch(() => (readHeld() ?? []).join('\n'), () => announce(false), { immediate: true })
+    })
+  }
   const focusTarget = opts.focusTarget ?? (typeof window !== 'undefined' ? window : undefined)
   const onFocus = () => announce(true)
   focusTarget?.addEventListener('focus', onFocus)
   return () => {
     off?.()
+    offCancel?.()
+    stopAbortWatch()
     stopWatch()
+    disposed = true
+    stopHeldWatch()
     focusTarget?.removeEventListener('focus', onFocus)
   }
 }

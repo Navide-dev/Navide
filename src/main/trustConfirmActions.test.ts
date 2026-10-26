@@ -32,6 +32,11 @@ describe('trust:confirm action list', () => {
     ]))
   })
 
+  it('mints confirmations for deciding an agent plugin request', () => {
+    expect(actions()).toContain('plugins.agent_request.decide')
+    expect(actions()).toContain('plugins.agent_request.finish')
+  })
+
   it('is only reachable from an app window', () => {
     const handler = source.slice(source.indexOf("ipcMain.handle('trust:confirm'"))
     const body = handler.slice(0, handler.indexOf('\n})'))

@@ -517,7 +517,7 @@ def test_wire_command_sets_the_shim_var_without_touching_the_command(
     assert plan_mcp_wiring.wire_command(agent, agent, 4567, "p1", env) == agent
     assert env[env_var] == str(home / ".navide-panes" / agent / "p1")
     config = _config(home, agent, "p1")
-    assert plan_mcp_wiring.caller_token() in config.read_text(encoding="utf-8")
+    assert plan_mcp_wiring.caller_token("p1") in config.read_text(encoding="utf-8")
 
 
 def test_wire_command_skips_the_shim_without_a_pane_id(home: Path) -> None:

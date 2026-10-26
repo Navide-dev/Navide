@@ -12,6 +12,8 @@ Navide 採用 **Local-first**，但不代表所有情況都完全離線。Electr
 - 應用程式資料目錄中的 Role、Pipeline、Recent Workspace、UI Setting、Analyzer Setting 與 AI Provider Setting
 - 應用程式資料目錄中的 Host 管理 Plugin Storage Partition；它們依驗證過的 Plugin／Package 及（Workspace Scope）驗證過的 Workspace 分隔，不會傳送給 Navide 或 Plugin Registry
 - 從本機 CLI Log 衍生的 Token Attribution 與 Deduplication Metadata
+- 本機 `navide.db` 裡的第三方 Navide 外掛活動紀錄（`plugin_activity`）：哪個外掛、哪個 `namespace.method`、時間、workspace、被允許／拒絕／失敗、workspace 內的相對路徑（workspace 外的路徑只記 `<outside-workspace>`，從不存檔案內容），shell 呼叫只記執行檔與子指令。明細保留 7 天，之後只留每日計數 90 天。內建的 Plans、Git、Mini-IDE 不記錄。這些資料不會離開這台電腦
+- 本機 `navide.db` 裡，pane 離線時聊天室訊息的預覽（`channels.wake_kept`，重啟後改存 `channels.wake_lost`）：綁定的聊天室在 pane 不在線上時傳來的每則訊息，前 40 個字，用來告訴聊天室哪幾則沒有送進去。照原樣存放、不做遮罩，所以訊息開頭若是機密也會一併存下。訊息送進 pane 或聊天室已被告知後刪除；聊天室解除綁定或 bot 被移除時也會刪除；bot 停用期間會保留到它再次啟動。這些資料不會離開這台電腦
 - 選用的 AI Provider API Key；它會儲存在受限制檔案權限保護的本機設定檔中（受支援系統上為 `0600`）
 
 Navide 不營運專案 Telemetry 服務，也不要求建立 Navide 帳號。
@@ -90,9 +92,9 @@ Building the expected-address snapshot performs forward DNS lookups for declared
 
 Agent CLI 憑證保留在各 CLI 自己的設定中。如果在 Navide 輸入 Cloud AI Key，Navide 會把它保存在本機，供 AI 功能（Inline 編輯、Code Review）使用。設定 Export 會遮蔽 API Key 與 Token。
 
-**可攜憑證**是你主動選擇的例外：各家官方為「帶到別台機器」設計的值（例如 `claude setup-token` 印出的 token），在設定 → 帳號貼入。Navide 在這台裝置上加密保存，只在啟動該 CLI 的新 pane 時以環境變數交給它，不會寫進 CLI 自己的登入檔。從一台裝置移除，就只從那台裝置移除。
+**可攜憑證**（貼入的值，例如 `claude setup-token` 印出的 token）已在 Navide 0.2.32 移除。用過的裝置在第一次啟動 0.2.32 時，會清除加密存著的值、加密它的金鑰，以及舊版從雲端同步拉下來的副本；沒用過的裝置什麼都不會動。
 
-若在設定 → 同步開啟 **憑證**（預設關閉），每一份貼入的憑證會先在你的裝置上以帳號同步金鑰加密再離開，Navide Cloud 只保存服務端無法打開的密文。登入同一帳號的另一台裝置會解開它、同樣以密文形式保存在磁碟上，並只交給 pane 使用。服務端能看到的只有不透明的項目 id、版本號、時間戳與寫入的裝置——看不出屬於哪個 CLI 或哪個帳號。在一台裝置移除不會刪掉雲端或其他裝置上的那一份；區段未開啟前不會上傳任何東西；在某台裝置切換帳號會清掉該裝置匯入的憑證並把區段重新關閉。
+帳號憑證與金鑰不會離開你的機器：設定 → 同步沒有「憑證與金鑰」區段，舊版留下開著的憑證開關一律視為關閉，Navide Cloud 也會拒收任何版本送來的憑證記錄。MCP 設定若你開啟同步，只同步裝了哪些 server（名稱、傳輸方式、指令、參數、網址、開關，以及環境變數與標頭的名稱）；環境變數與標頭的值，以及網址或參數裡的憑證（`user:password@` 部分、`api_key=` 查詢值、`ghp_…` 之類的 token、`--token` 後面的值）都不會離開你的機器，會以空值送出，每台機器各自填寫。會同步的部分先在你的機器加密才上傳，伺服器沒有解密金鑰。
 
 本機檔案權限可以降低同一部電腦其他使用者意外存取的機會，但無法防範 Malware、遭入侵的使用者帳號、無限制 Agent、Backup，或具有同等權限的 Process。
 
@@ -125,3 +127,11 @@ Successful observations from the existing Claude quota polling service are saved
 準備好的 bytes 保存在 backend 記憶體，15 分鐘後或重啟時失效，同時最多 8 份有效套件，另在記憶體保留最多 8 份輕量完成重試收據。安裝使用已檢視的快照，不重讀來源，寫入既有共用 Skills 根目錄，且不執行腳本或 plugin hooks。收據仍保留時，重試只回傳原結果而不再寫入；它沿用原 preview 到期時間，也可能提早被淘汰。到期或淘汰後重送回傳 missing/expired，不重新安裝。Inspect／prepare 會把 skill 文字、檔案資訊與來源路徑回傳給請求的 coding agent，其模型供應商可能依 CLI 自身資料政策接收這些結果；套件中應避免放入秘密資料。
 
 開啟 Skills sync 時，符合限制的安裝內容與投遞設定可透過既有流程傳到配對裝置。選定套件與 Skills 內容 export 使用相同限制：64 檔、每檔 256 KiB、總量 512 KiB；符合限制不保證同步已完成。後端產生的來源、digest 與時間紀錄存於本機 Navide marker，編輯與重啟後保留，但不進入 export／Skills sync。
+
+### 透過 MCP 查詢 Navide 市集
+
+`marketplace_search` 與 `marketplace_detail` 會讓 Navide App 向設定的 Registry 送出和 Navide 市集頁面相同的請求：搜尋文字、分類與頁數，或套件名稱。`plugins_list_installed` 不對外送出任何東西，只讀取本機的清單。三者都把結果（公開的上架資料，以及已安裝 Navide 外掛的 id、版本與狀態）回傳給發出請求的 coding agent，其設定的模型供應商可能依該 CLI 自己的資料政策收到這些內容。
+
+### 透過 MCP 對 Navide 市集提出請求
+
+使用 `marketplace_request_install`、`_update`、`_rollback` 時，Navide 應用程式會用和 `marketplace_detail` 相同的方式查詢套件；所有請求工具都會讀取本機的已安裝清單。請求連同提出請求的 pane 名稱、workspace 和 agent 寫的理由，會留在後端記憶體中，直到被決定或過期，並在 Navide 視窗顯示給使用者。`plugins_disable` 與 `plugins_enable` 不會對外送出任何資料。每一次請求、決定、停用和啟用都會記在本機的 navide.db（`plugin_agent_actions`：外掛、動作、呼叫端類型、pane id、pane 名稱、workspace、結果），保留 30 天，之後只留最新的 10,000 筆。

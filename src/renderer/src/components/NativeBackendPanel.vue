@@ -1,22 +1,51 @@
 <script setup lang="ts">
-// Third-party native backends: the global switch (off by default), and per
+// Third-party native backends: the global switch (on by default), and per
 // plugin the current state, consent, disable, and workspace write grants.
 // The Host owns every decision; this panel only shows it and forwards the
-// user's choices. First-time and changed-binary consent is asked by the Host
-// in a native dialog when the plugin's backend is first needed.
-import { onMounted, ref, watch } from 'vue'
+// user's choices. Installing is the first consent; changed-binary consent is
+// asked by the Host in a native dialog when the plugin's backend is next needed.
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ipcErrorMessage } from '../composables/usePluginInstallFlow'
 import { usePluginInventory } from '../composables/usePluginInventory'
 import MarketplaceIcon from './MarketplaceIcon.vue'
+import PluginAgentToolsList from './PluginAgentToolsList.vue'
+import SettingsCard from './settings/SettingsCard.vue'
+import SettingRow from './settings/SettingRow.vue'
+import ToggleSwitch from './settings/ToggleSwitch.vue'
+import { leadSentence } from '../lib/leadSentence'
 
 const { t } = useI18n()
+// The warning leads with its first sentence in bold; every word stays.
+const nativeWarning = computed(() => leadSentence(t('settings.extensions.nativeBackends.description')))
 const overview = ref<NativeBackendOverview | null>(null)
+// The switches that are on, by their titles, for the Settings sidebar's "On" mark.
+const emit = defineEmits<{ on: [switches: string[]] }>()
+const switchesOn = computed<string[]>(() => {
+  const o = overview.value
+  if (!o) return []
+  const out: string[] = []
+  if (o.enabled) out.push(t('settings.extensions.nativeBackends.enable'))
+  if (o.agentTools?.enabled) out.push(t('settings.extensions.nativeBackends.agentTools.enable'))
+  if (o.agentTools?.enabled && o.agentTools.externalCallers) out.push(t('settings.extensions.nativeBackends.agentTools.externalCallers'))
+  return out
+})
+watch(switchesOn, (switches) => emit('on', switches), { immediate: true })
 const busy = ref(false)
 const error = ref('')
 
 function api() {
   return window.agentTeam?.plugins?.nativeBackends
+}
+
+/** #642 review L2: a failed "off" save still holds "off" for this run, so
+ *  the page reloads the real state, which carries the unsaved notice. */
+async function setMasterSwitch(on: boolean): Promise<void> {
+  await run(() => api()!.setEnabled(on))
+  if (!error.value || on) return
+  const failure = error.value
+  await run(() => api()!.list())
+  error.value ||= failure
 }
 
 async function run(action: () => Promise<NativeBackendOverview>): Promise<void> {
@@ -58,30 +87,79 @@ watch(installed, refresh)
 </script>
 
 <template>
-  <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title">
+  <section v-if="overview" class="ext-section native-backends" aria-labelledby="native-backends-title" data-settings-section="extensions-native-backends">
     <h3 id="native-backends-title" class="native-backends-title">{{ $t('settings.extensions.nativeBackends.title') }}</h3>
-    <div class="native-backends-callout">
-      <svg class="native-backends-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M7.1 2.6 1.9 12a1 1 0 0 0 .9 1.5h10.4a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0Z" />
-        <path d="M8 6.2v3M8 11.3v.1" />
-      </svg>
-      <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.description') }}</p>
-    </div>
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
-    <label class="native-backends-switch">
-      <input
-        type="checkbox"
-        class="nv-check"
-        :checked="overview.enabled"
-        :disabled="busy"
-        @change="run(() => api()!.setEnabled(($event.target as HTMLInputElement).checked))"
-      />
-      {{ $t('settings.extensions.nativeBackends.enable') }}
-    </label>
+    <!-- One card: the warning about native code sits right above the switch it
+         governs, and the external-callers switch is indented under the switch
+         it depends on. -->
+    <SettingsCard class="native-backends-card">
+      <div class="native-backends-callout">
+        <svg class="native-backends-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7.1 2.6 1.9 12a1 1 0 0 0 .9 1.5h10.4a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0Z" />
+          <path d="M8 6.2v3M8 11.3v.1" />
+        </svg>
+        <p class="native-backends-description"><strong class="native-backends-lead">{{ nativeWarning.lead }}</strong>{{ nativeWarning.separator }}{{ nativeWarning.rest }}</p>
+      </div>
+      <SettingRow :title="$t('settings.extensions.nativeBackends.enable')">
+        <template #control>
+          <ToggleSwitch
+            data-native-backends-switch="enabled"
+            :model-value="overview.enabled"
+            :disabled="busy"
+            :aria-label="$t('settings.extensions.nativeBackends.enable')"
+            @update:model-value="setMasterSwitch"
+          />
+        </template>
+      </SettingRow>
+      <div v-if="overview.offUnsaved" class="native-backends-unsaved" role="status">
+        <p>{{ $t('settings.extensions.nativeBackends.offUnsaved') }}</p>
+        <button
+          type="button"
+          class="native-backends-unsaved-retry nv-btn nv-btn--sm"
+          :disabled="busy"
+          @click="setMasterSwitch(false)"
+        >
+          {{ $t('settings.extensions.nativeBackends.offUnsavedRetry') }}
+        </button>
+      </div>
+      <template v-if="overview.agentTools && api()?.setAgentTools">
+        <SettingRow
+          :title="$t('settings.extensions.nativeBackends.agentTools.enable')"
+          :description="$t('settings.extensions.nativeBackends.agentTools.description')"
+        >
+          <template #control>
+            <ToggleSwitch
+              data-agent-tools-switch="enabled"
+              :model-value="overview.agentTools.enabled"
+              :disabled="busy"
+              :aria-label="$t('settings.extensions.nativeBackends.agentTools.enable')"
+              @update:model-value="(on: boolean) => run(() => api()!.setAgentTools!({ enabled: on }))"
+            />
+          </template>
+        </SettingRow>
+        <SettingRow
+          class="native-backends-dependent"
+          :title="$t('settings.extensions.nativeBackends.agentTools.externalCallers')"
+          :description="$t('settings.extensions.nativeBackends.agentTools.externalCallersDisclosure')"
+        >
+          <template #control>
+            <ToggleSwitch
+              data-agent-tools-switch="externalCallers"
+              :model-value="overview.agentTools.externalCallers"
+              :disabled="busy || !overview.agentTools.enabled"
+              :aria-label="$t('settings.extensions.nativeBackends.agentTools.externalCallers')"
+              @update:model-value="(on: boolean) => run(() => api()!.setAgentTools!({ externalCallers: on }))"
+            />
+          </template>
+        </SettingRow>
+      </template>
+    </SettingsCard>
+    <!-- Below the switches: what they currently govern, not a precondition read before the warning. -->
     <p v-if="overview.plugins.length === 0" class="native-backends-empty">
       {{ $t('settings.extensions.nativeBackends.empty') }}
     </p>
-    <ul v-else class="ext-list">
+    <ul v-if="overview.plugins.length" class="ext-list">
       <li
         v-for="row in overview.plugins"
         :key="row.pluginId"
@@ -99,6 +177,11 @@ watch(installed, refresh)
           <span class="ext-requires">{{ row.pluginId }} · {{ row.packageVersion }}</span>
         </span>
         <span class="ext-badge native-backend-status" :class="`native-backend-status--${row.status}`" role="status">{{ statusText(row) }}</span>
+        <span
+          v-if="row.shell === 'allowlist'"
+          class="ext-badge native-backend-shell"
+          :title="$t('settings.extensions.nativeBackends.shellRiskDetail')"
+        >{{ $t('settings.extensions.nativeBackends.shellRisk') }}</span>
         <button
           v-if="row.status === 'needs-consent' || row.status === 'stopped-after-crashes'"
           class="nv-btn nv-btn--sm"
@@ -120,7 +203,16 @@ watch(installed, refresh)
           }}
         </button>
         <div class="ext-permission-details">
+          <span v-if="row.shell === 'allowlist'" class="native-backend-shell-detail">
+            {{ $t('settings.extensions.nativeBackends.shellRiskDetail') }}
+          </span>
           <span v-if="row.changedSinceConsent">{{ $t('settings.extensions.nativeBackends.changed') }}</span>
+          <span v-if="row.allowedBy === 'pre-0.2.31-install'" class="native-backend-pre-install">
+            {{ $t('settings.extensions.nativeBackends.allowedPreInstall') }}
+          </span>
+          <span v-if="row.declined" class="native-backend-declined">
+            {{ $t('settings.extensions.nativeBackends.declined') }}
+          </span>
           <span v-if="row.reason && row.status !== 'needs-consent'">{{ row.reason }}</span>
           <span v-if="row.lastViolation">
             {{
@@ -139,6 +231,7 @@ watch(installed, refresh)
               {{ $t('settings.extensions.nativeBackends.revoke') }}
             </button>
           </span>
+          <PluginAgentToolsList v-if="row.agentTools?.length" :tools="row.agentTools" />
         </div>
       </li>
     </ul>
@@ -157,28 +250,23 @@ watch(installed, refresh)
   gap: var(--space-2);
   margin: 0 0 var(--space-3);
   color: var(--text-bright);
-  font-size: var(--font-md);
+  font-size: var(--font-lg);
   font-weight: 650;
+  letter-spacing: -0.01em;
 }
-/* This panel lets third-party code run natively: the warning leads. */
-.native-backends-title::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 1.5px;
-  background: var(--risk-fg);
-  transform: rotate(45deg);
-}
+/* The warning is a row of the switch card, in the page's one warning style:
+   a 2px amber edge and the warning icon over the card's own surface. */
 .native-backends-callout {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--risk-muted);
-  border-left: 3px solid var(--risk-fg);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  background: var(--risk-subtle);
+  padding: var(--space-3) var(--space-row-x);
+  box-shadow: inset 2px 0 0 var(--risk-fg);
+  border-bottom: 1px solid var(--border-muted);
   color: var(--text-primary);
+}
+.native-backends-callout .native-backends-description {
+  max-width: 72ch;
 }
 .native-backends-icon {
   flex: none;
@@ -189,26 +277,32 @@ watch(installed, refresh)
 }
 .native-backends-description {
   margin: 0;
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
   line-height: var(--lh-base);
 }
-.native-backends-switch {
+/* External callers only apply once agent tools are on: indented under that switch. */
+.native-backends-dependent {
+  padding-left: calc(var(--space-row-x) + 24px);
+}
+.native-backends-card {
+  margin-bottom: var(--space-3);
+}
+/* Nothing installed has a native backend: said in a line, not a box. */
+.native-backends-empty {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+.native-backends-unsaved {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin: var(--space-3) 0;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
-  color: var(--text-bright);
-  font-weight: 600;
-  cursor: pointer;
+  margin: var(--space-2) 0;
+  color: var(--warning-fg);
 }
-.native-backends-empty {
+.native-backends-unsaved p {
   margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
+  flex: 1;
 }
 .ext-error {
   margin: var(--space-3) 0;
@@ -270,6 +364,10 @@ watch(installed, refresh)
 }
 .native-backend-status--needs-consent,
 .native-backend-status--sandbox-unavailable,
+.native-backend-shell {
+  background: var(--risk-subtle);
+  color: var(--risk-fg);
+}
 .native-backend-status--shell-not-allowed {
   background: var(--risk-subtle);
   color: var(--risk-fg);
@@ -293,5 +391,18 @@ watch(installed, refresh)
   align-items: center;
   gap: var(--space-2);
   overflow-wrap: anywhere;
+}
+/* Long setting descriptions keep a readable line length. */
+:deep(.setting-row-desc) {
+  max-width: 72ch;
+  line-height: var(--lh-base);
+}
+/* A switch that waits on the one above stays legible while unavailable. */
+:deep(.toggle-switch:disabled) {
+  opacity: 0.6;
+}
+.native-backends-lead {
+  color: var(--text-bright);
+  font-weight: 600;
 }
 </style>

@@ -162,6 +162,12 @@ class GuardStore:
     def enabled(self) -> bool:
         return self._cached("_enabled_cache", lambda: bool(self._db.kv_get(KV_ENABLED, True)))
 
+    def enabled_cached(self) -> bool | None:
+        """The switch as already held in memory, or None when it was never
+        read; never touches the database (safe on the event loop)."""
+        with self._cache_lock:
+            return self._enabled_cache
+
     def set_enabled(self, enabled: bool) -> None:
         self._db.kv_set(KV_ENABLED, bool(enabled), now=int(time.time()))
         self._invalidate(_enabled_cache=bool(enabled))

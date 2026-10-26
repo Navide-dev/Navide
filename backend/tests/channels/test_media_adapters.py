@@ -412,6 +412,45 @@ async def test_a_download_that_never_finishes_times_out_and_leaves_no_file(tmp_p
     assert not dest.exists()
 
 
+async def test_a_timeout_while_the_file_is_opening_still_closes_the_handle(tmp_path: Path, monkeypatch) -> None:
+    # The timeout can land while a worker thread is opening the file; that handle must still
+    # be closed, or Windows refuses to delete the file ([WinError 32]) and the handle leaks.
+    import asyncio
+    import builtins
+
+    from agent_team_backend.channels import adapter_runtime
+
+    dest = tmp_path / "f.bin"
+    real_open, real_to_thread = builtins.open, asyncio.to_thread
+    opened: list = []
+
+    def spy(file, *args, **kwargs):
+        fh = real_open(file, *args, **kwargs)
+        if str(file) == str(dest):
+            opened.append(fh)
+        return fh
+
+    async def slow_to_thread(func, /, *args, **kwargs):
+        result = await real_to_thread(func, *args, **kwargs)
+        if func is spy:
+            await asyncio.sleep(1)  # the cancellation arrives after the open, before the caller sees it
+        return result
+
+    async def body():
+        yield b"x"
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(builtins, "open", spy)
+    monkeypatch.setattr(asyncio, "to_thread", slow_to_thread)
+    monkeypatch.setattr(adapter_runtime, "DOWNLOAD_TOTAL_S", 0.2)
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _r: httpx.Response(200, content=body())))
+    with pytest.raises(ChannelSendError, match="timed out"):
+        await adapter_runtime.download_to(client, "https://cdn.test/f", dest, 1 << 20)
+    monkeypatch.undo()
+    assert opened and all(fh.closed for fh in opened)
+    assert not dest.exists()
+
+
 # --- Report cards ---------------------------------------------------------------------
 
 CARD = Caption("週報 <W41> *重點*", "三項完成 & 一項延遲", "PDF 3 頁 · 1.2 MB")

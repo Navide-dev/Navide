@@ -148,6 +148,12 @@
   --chrome-trafficlight: 80px;
 }
 
+/* Simplified Chinese takes Simplified glyph forms. <html lang> follows the UI
+ * locale (foundation/i18n), so every other locale keeps the stack above. */
+:root:lang(zh-CN) {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+}
+
 /* Zero out motion tokens when the OS asks for reduced motion; covers
  * every consumer of --motion-* in one place. */
 @media (prefers-reduced-motion: reduce) {
@@ -220,8 +226,10 @@
   --danger-subtle: var(--red-7);      /* #3d0d0d */
 
   /* ── Toast variants (useNotify `variant`) ─────────────────── */
-  --toast-external-bg: #b62324;       /* solid fill: another machine / chat channel */
+  --toast-external-bg: #b62324;       /* solid fill: another machine */
   --toast-external-fg: #ffffff;
+  --toast-channel-accent: #b62324;    /* chat channel: solid header band + 1px frame */
+  --toast-channel-fg: #ffffff;        /* header band text */
   --toast-security-border: #f85149;   /* Guard frame (= --danger-fg) */
   --toast-security-bg: #2a1d21;
   --toast-workspace-accent: #a371f7;  /* another local workspace */

@@ -40,11 +40,9 @@ from .base import (
     McpServerConfig,
     McpValue,
     McpWiring,
-    PortableCredential,
     PushChannel,
     ShutdownSpec,
     SkillsWiring,
-    SlotKind,
     VendorSpec,
     command_text,
 )
@@ -77,6 +75,15 @@ from ..log_readers.base import encode_claude_cwd  # noqa: F401
 def _assistant_text(msg: dict) -> str:
     """Join the text blocks of an assistant message ("" when none)."""
     return join_text_blocks(msg.get("content"), "text")
+
+
+def _has_pasted_images(content: object) -> bool:
+    """A prompt with pasted images: a content list of text and image blocks, as
+    opposed to tool results (which may hold images too) and injected text lists."""
+    if not isinstance(content, list):
+        return False
+    types = {b.get("type") for b in content if isinstance(b, dict)}
+    return "image" in types and "tool_result" not in types
 
 
 # Claude's tool for putting a multiple-choice question to the user. The turn
@@ -191,8 +198,8 @@ def first_user_prompts(path: Path, limit: int = 2) -> list[str]:
                 rec = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if rec.get("type") != "user":
-                continue
+            if rec.get("type") != "user" or rec.get("isMeta"):
+                continue  # isMeta: Claude Code's own notes (an image Read's size line)
             msg = rec.get("message")
             if not isinstance(msg, dict):
                 continue
@@ -619,11 +626,16 @@ class ClaudeLogReader(LogReader):
                         # record but nobody typed it, and an idle compaction has
                         # no turn after it: as prompt text it opened a chat run
                         # that never ended.
-                        if rtype == "user" and not rec.get("isCompactSummary"):
+                        # An isMeta record is Claude Code's own note, such as the
+                        # size line after the agent Reads an image; posted as the
+                        # user's prompt it read "你：[Image: original ...]".
+                        if rtype == "user" and not rec.get("isCompactSummary") and not rec.get("isMeta"):
                             msg = rec.get("message")
                             content = msg.get("content") if isinstance(msg, dict) else None
                             if isinstance(content, str):
                                 text = user_prompt_text(content)
+                            elif _has_pasted_images(content):
+                                text = user_prompt_text(join_text_blocks(content, "text"))
                         out.append(ActivityEvent(
                             vendor="claude",
                             event_type="agent_active",
@@ -1333,55 +1345,6 @@ def _install_hooks(port_file: str, *, skip: frozenset[str] = frozenset()) -> Any
     return install_hooks(port_file, skip=skip)
 
 
-def classify_secret(secret: str) -> SlotKind:
-    """A parked ``.credentials.json`` is a ``/login`` OAuth credential when it
-    carries ``claudeAiOauth.accessToken``. Nothing else is claimed: a
-    Console login keeps its API key elsewhere, and a shape this does not
-    recognise is left UNKNOWN for the shared side to refuse."""
-    try:
-        data = json.loads(secret)
-    except ValueError:
-        return SlotKind.UNKNOWN
-    oauth = data.get("claudeAiOauth") if isinstance(data, dict) else None
-    if isinstance(oauth, dict) and oauth.get("accessToken"):
-        return SlotKind.OAUTH
-    return SlotKind.UNKNOWN
-
-
-# Auth-precedence keys as documented (code.claude.com/docs/en/authentication,
-# "Authentication precedence", read 2026-09-16): cloud provider selection,
-# then ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY, apiKeyHelper all rank ABOVE
-# CLAUDE_CODE_OAUTH_TOKEN. A settings ``env`` block sets the same variables,
-# and ANTHROPIC_BASE_URL would send the token to another endpoint. Each is
-# checked in every settings file the CLI merges, and in the managed policy
-# — which is reported as blocking, never overridden.
-_PORTABLE_SHADOW_KEYS: tuple[tuple[str, ...], ...] = (
-    ("apiKeyHelper",),
-    ("env", "ANTHROPIC_AUTH_TOKEN"),
-    ("env", "ANTHROPIC_API_KEY"),
-    ("env", "ANTHROPIC_BASE_URL"),
-    ("env", "CLAUDE_CODE_USE_BEDROCK"),
-    ("env", "CLAUDE_CODE_USE_VERTEX"),
-    ("env", "CLAUDE_CODE_USE_FOUNDRY"),
-    ("env", "CLAUDE_CODE_USE_MANTLE"),
-)
-_PORTABLE_SETTINGS_FILES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("home", (".claude", "settings.json")),
-    ("cwd", (".claude", "settings.json")),
-    ("cwd", (".claude", "settings.local.json")),
-    ("managed", ("managed-settings.json",)),
-)
-_PORTABLE_SHADOWING_SETTINGS = tuple(
-    (root, parts, key)
-    for root, parts in _PORTABLE_SETTINGS_FILES
-    for key in _PORTABLE_SHADOW_KEYS
-) + (
-    # An administrator forcing a sign-in method decides the credential; a
-    # pasted token must not be the thing that quietly contradicts it.
-    ("managed", ("managed-settings.json",), ("forceLoginMethod",)),
-)
-
-
 # Where this CLI keeps the extensions it installed for itself (read-only
 # inventory, cli_extensions). Verified 2026-10-10 against the installed
 # binary's --help and the files on disk.
@@ -1480,37 +1443,6 @@ SPEC = VendorSpec(
     quota_exhausted_patterns=(
         r"hit your .{0,40}limit.{0,80}?resets\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*\([^)]+\)",
     ),
-    classify_secret=classify_secret,
-    # `claude setup-token` mints a one-year OAuth token that "authenticates
-    # with your Claude subscription" and is documented for exactly this use:
-    # copy it and set CLAUDE_CODE_OAUTH_TOKEN "wherever you want to
-    # authenticate" (docs/en/authentication, read 2026-09-16). env_remove is
-    # everything the precedence list ranks above it, plus the endpoint
-    # override; the managed root is the documented policy directory per
-    # platform (docs/en/managed-settings — Windows is Program Files, not the
-    # legacy ProgramData path).
-    portable_credential=PortableCredential(
-        env="CLAUDE_CODE_OAUTH_TOKEN",
-        kind="oauth",
-        env_remove=(
-            "CLAUDE_CODE_USE_BEDROCK",
-            "CLAUDE_CODE_USE_VERTEX",
-            "CLAUDE_CODE_USE_FOUNDRY",
-            "CLAUDE_CODE_USE_MANTLE",
-            "ANTHROPIC_AUTH_TOKEN",
-            "ANTHROPIC_API_KEY",
-            "ANTHROPIC_BASE_URL",
-        ),
-        shadowing_settings=_PORTABLE_SHADOWING_SETTINGS,
-        managed_roots=(
-            ("darwin", "/Library/Application Support/ClaudeCode"),
-            ("linux", "/etc/claude-code"),
-            ("win32", r"C:\Program Files\ClaudeCode"),
-        ),
-        obtain_command="claude setup-token",
-        docs_url="https://code.claude.com/docs/en/authentication",
-        quota_verified=True,
-    ),
     live_file=(".claude", ".credentials.json"),
     slot_file=".credentials.json",
     profile_home_secret_file=(".credentials.json",),
@@ -1529,9 +1461,21 @@ SPEC = VendorSpec(
         evidence="source",
         verified_version="2.1.278",
         keychain_items=(("Claude Code-credentials", ""),),
-        # An API key / auth token in the environment, or Navide's own
-        # portable long-lived token, replaces the OAuth login entirely.
+        # An API key, auth token or long-lived OAuth token in the
+        # environment replaces the OAuth login entirely.
         shadowing_env=("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"),
+        # The OAuth token variable, then everything the documented precedence
+        # list ranks above it, plus the endpoint override.
+        credential_env_vars=(
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_VERTEX",
+            "CLAUDE_CODE_USE_FOUNDRY",
+            "CLAUDE_CODE_USE_MANTLE",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL",
+        ),
         resume="native",
         todo="hot swap shipped and used on real accounts; record an A -> B -> A round-trip against 2.1.278",
     ),

@@ -1,0 +1,43 @@
+{
+  "$comment": "derivePrefix(pluginId) and validateAgentToolName(name, pluginId). expectedPrefix null means the id yields no usable prefix; expectedError null means the name is accepted.",
+  "prefixes": [
+    { "pluginId": "nerdtechnic.devmap", "expectedPrefix": "devmap" },
+    { "pluginId": "nerdtechnic.dev-map", "expectedPrefix": "devmap" },
+    { "pluginId": "acme.tools.devmap", "expectedPrefix": "devmap" },
+    { "pluginId": "acme.x-y", "expectedPrefix": "xy" },
+    { "pluginId": "acme.git2", "expectedPrefix": "git2" },
+    { "pluginId": "acme.abcdefghijklmnop", "expectedPrefix": "abcdefghijklmnop" },
+    { "pluginId": "acme.abcdefghijklmnopq", "expectedPrefix": null },
+    { "pluginId": "acme.1tool", "expectedPrefix": null },
+    { "pluginId": "acme.a", "expectedPrefix": null },
+    { "pluginId": "acme.-", "expectedPrefix": null },
+    { "pluginId": "", "expectedPrefix": null },
+    { "pluginId": 7, "expectedPrefix": null }
+  ],
+  "names": [
+    { "pluginId": "nerdtechnic.devmap", "name": "devmap_set_status", "expectedError": null },
+    { "pluginId": "nerdtechnic.devmap", "name": "devmap_read", "expectedError": null },
+    { "pluginId": "nerdtechnic.devmap", "name": "devmap_set__x9", "expectedError": null },
+    { "pluginId": "nerdtechnic.dev-map", "name": "devmap_read", "expectedError": null },
+    { "pluginId": "acme.x-y", "name": "xy_run", "expectedError": null },
+    { "pluginId": "nerdtechnic.devmap", "name": "devmap_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expectedError": null },
+    { "pluginId": "nerdtechnic.devmap", "name": "devmap_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expectedError": "AGENT_TOOL_NAME_INVALID" },
+    { "pluginId": "nerdtechnic.devmap", "name": "devmap_", "expectedError": "AGENT_TOOL_NAME_INVALID" },
+    { "pluginId": "nerdtechnic.devmap", "name": "Devmap_read", "expectedError": "AGENT_TOOL_NAME_INVALID" },
+    { "pluginId": "nerdtechnic.devmap", "name": "devmap-read", "expectedError": "AGENT_TOOL_NAME_INVALID" },
+    { "pluginId": "nerdtechnic.devmap", "name": "devmap_read\n", "expectedError": "AGENT_TOOL_NAME_INVALID" },
+    { "pluginId": "nerdtechnic.devmap", "name": "devmap_ré", "expectedError": "AGENT_TOOL_NAME_INVALID" },
+    { "pluginId": "nerdtechnic.devmap", "name": 123, "expectedError": "AGENT_TOOL_NAME_INVALID" },
+    { "pluginId": "nerdtechnic.devmap", "name": "other_read", "expectedError": "AGENT_TOOL_PREFIX_MISMATCH" },
+    { "pluginId": "nerdtechnic.devmap", "name": "devmapx_read", "expectedError": "AGENT_TOOL_PREFIX_MISMATCH" },
+    { "pluginId": "acme.plan", "name": "plan_create", "expectedError": "AGENT_TOOL_PREFIX_RESERVED" },
+    { "pluginId": "acme.cli", "name": "cli_send", "expectedError": "AGENT_TOOL_PREFIX_RESERVED" },
+    { "pluginId": "evil.git", "name": "git_commit", "expectedError": "AGENT_TOOL_PREFIX_RESERVED" },
+    { "pluginId": "x.plans", "name": "plans_create", "expectedError": "AGENT_TOOL_PREFIX_RESERVED" },
+    { "pluginId": "x.mini-ide", "name": "miniide_open", "expectedError": "AGENT_TOOL_PREFIX_RESERVED" },
+    { "pluginId": "acme.navide", "name": "navide_status", "expectedError": "AGENT_TOOL_PREFIX_RESERVED" },
+    { "pluginId": "acme.plugins", "name": "plugins_list", "expectedError": "AGENT_TOOL_PREFIX_RESERVED" },
+    { "pluginId": "acme.1tool", "name": "tool_run", "expectedError": "AGENT_TOOL_PREFIX_UNDERIVABLE" },
+    { "pluginId": "acme.abcdefghijklmnopq", "name": "abcdefghijklmnopq_x", "expectedError": "AGENT_TOOL_PREFIX_UNDERIVABLE" }
+  ]
+}

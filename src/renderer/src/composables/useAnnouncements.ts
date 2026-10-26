@@ -24,7 +24,8 @@ import { convenienceText } from '../lib/convenienceText'
  * popover read the same feed without prop drilling.
  */
 
-export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience'
+export type AnnouncementKind =
+  | 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience' | 'plugin-agent' | 'plugin-staged' | 'plugin-switch'
 /** The button an update row offers, when its status affords one. */
 export type AnnouncementAction = 'download' | 'install'
 
@@ -65,12 +66,24 @@ export type ConvenienceAnnouncementAction =
   | { kind: 'convenience-switch-back'; rowId: string; agentKey: string; slotId: string; label: string; liveFingerprint: string }
   | { kind: 'convenience-upgrade-ack' }
 
+/** The undo on a "an agent disabled / enabled a Navide plugin" row (B2-c):
+ *  the user's own Extensions switch, set back. On "an agent updated a Navide
+ *  plugin" (O1): back to the version it was updated from. */
+export type PluginAgentAnnouncementAction =
+  | { kind: 'plugin-agent-undo'; pluginId: string; disable: boolean }
+  | { kind: 'plugin-agent-downgrade'; pluginId: string; fromVersion: string; toVersion: string }
+  /** A package staged beside the active one: apply it, as Restart does. */
+  | { kind: 'plugin-staged-apply'; pluginId: string; activeVersion: string; stagedVersion: string }
+  /** L3: back to the version an approved update switched away from. */
+  | { kind: 'plugin-switch-back'; pluginId: string; fromVersion: string; toVersion: string }
+
 export type AnnouncementActionSpec =
   | { kind: AnnouncementAction }
   | QuotaAnnouncementAction
   | ReleaseTourAction
   | EvolveAnnouncementAction
   | ConvenienceAnnouncementAction
+  | PluginAgentAnnouncementAction
 
 export interface Announcement {
   /** Stable across renders: `release:<version>`, `update:<version>`,
@@ -529,6 +542,234 @@ function shareItems(): Announcement[] {
 function noteShareNotice(notice: ShareNotice, at: number = Date.now()): void {
   if (!notice?.linkId) return
   shareNotices.value = [{ notice, at }, ...shareNotices.value].slice(0, MAX_SHARE_NOTICES)
+}
+
+// ── Agent plugin actions (B2-c) ─────────────────────────────────────────────
+
+/** An agent disabled, enabled or updated a Navide plugin, as the Host reported it. */
+export interface PluginAgentNotice {
+  action: 'disable' | 'enable' | 'update'
+  pluginId: string
+  pluginVersion: string
+  /** `update` only: the version it was updated from. */
+  fromVersion?: string
+  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
+}
+
+/** Notices this window heard, newest first. Not persisted: the activity page
+ *  (plugin_agent_actions) is the record. */
+const pluginAgentNotices = ref<{ notice: PluginAgentNotice; at: number }[]>([])
+
+/** Who did it, for the row and the toast: the pane's name, or the kind of caller. */
+export function pluginAgentCaller(requester: PluginAgentNotice['requester']): string {
+  const t = i18n.global.t
+  if (requester.callerKind === 'external') return t('plugin-agent.caller.external')
+  if (requester.callerKind === 'host') return t('plugin-agent.caller.host')
+  return requester.paneName ? t('plugin-agent.caller.pane', { pane: requester.paneName }) : t('plugin-agent.caller.pane-unknown')
+}
+
+/** One line naming the caller, what it did and the plugin. */
+export function pluginAgentNoticeTitle(notice: PluginAgentNotice): string {
+  if (notice.action === 'update') {
+    return i18n.global.t('plugin-agent.notice.updated', {
+      caller: pluginAgentCaller(notice.requester),
+      plugin: notice.pluginId,
+      from: notice.fromVersion ?? '',
+      to: notice.pluginVersion,
+    })
+  }
+  return i18n.global.t(`plugin-agent.notice.${notice.action === 'disable' ? 'disabled' : 'enabled'}`, {
+    caller: pluginAgentCaller(notice.requester),
+    plugin: notice.pluginId,
+  })
+}
+
+function pluginAgentItems(): Announcement[] {
+  return pluginAgentNotices.value.map(({ notice, at }) => ({
+    id: `plugin-agent:${notice.action}:${notice.pluginId}:${at}`,
+    kind: 'plugin-agent' as const,
+    title: pluginAgentNoticeTitle(notice),
+    highlights: [
+      notice.action === 'update'
+        ? i18n.global.t('plugin-agent.notice.updated-detail', { from: notice.fromVersion ?? '', to: notice.pluginVersion })
+        : i18n.global.t('plugin-agent.notice.version', { version: notice.pluginVersion }),
+    ],
+    createdAt: at,
+    read: false,
+    actions: [
+      notice.action === 'update'
+        ? {
+            kind: 'plugin-agent-downgrade' as const,
+            pluginId: notice.pluginId,
+            fromVersion: notice.fromVersion ?? '',
+            toVersion: notice.pluginVersion,
+          }
+        : { kind: 'plugin-agent-undo' as const, pluginId: notice.pluginId, disable: notice.action === 'enable' },
+    ],
+  }))
+}
+
+/** Whether the undo still sets back what the agent did: the package is still
+ *  in the state the agent left it in (the user has not changed it since). */
+export function pluginAgentUndoApplies(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-agent-undo' }>,
+  installed: ReadonlyArray<{ id: string; disabled?: boolean }>,
+): boolean {
+  const current = installed.find((pkg) => pkg.id === action.pluginId)
+  // The undo enables when the agent disabled, and the other way round.
+  return current !== undefined && current.disabled === !action.disable
+}
+
+/** How the downgrade of an agent's update (O1) sets it back, or null when the
+ *  package was changed since: the update still waiting for a restart is
+ *  dropped, an update in use is rolled back to the version it replaced. */
+export function pluginAgentDowngradeStep(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-agent-downgrade' }>,
+  installed: ReadonlyArray<{ id: string; packageVersion?: string; pendingCandidateVersion?: string; rollbackToVersion?: string }>,
+): 'discard' | 'rollback' | null {
+  const current = installed.find((pkg) => pkg.id === action.pluginId)
+  if (!current) return null
+  if (current.pendingCandidateVersion === action.toVersion && current.packageVersion === action.fromVersion) return 'discard'
+  if (!current.pendingCandidateVersion && current.packageVersion === action.toVersion && current.rollbackToVersion === action.fromVersion) {
+    return 'rollback'
+  }
+  return null
+}
+
+/** Record that an agent disabled or enabled a Navide plugin. */
+function notePluginAgentNotice(notice: PluginAgentNotice, at: number = Date.now()): void {
+  if (!notice?.pluginId) return
+  pluginAgentNotices.value = [{ notice, at }, ...pluginAgentNotices.value]
+}
+
+// ── Staged plugin packages ──────────────────────────────────────────────────
+
+/** A package staged beside the active one, as the Host found it at launch. */
+export interface PluginStagedUpdate {
+  pluginId: string
+  activeVersion: string
+  stagedVersion: string
+  /** Set when switching to it failed (an agent's automatic update, O1). */
+  reason?: string
+}
+
+/** One row per staged package, kept until it is applied or found changed.
+ *  Not persisted: the Host reports them again on the next launch. */
+const pluginStagedUpdates = ref<PluginStagedUpdate[]>([])
+
+function pluginStagedItems(): Announcement[] {
+  const t = i18n.global.t
+  return pluginStagedUpdates.value.map((update) => ({
+    id: `plugin-staged:${update.pluginId}:${update.stagedVersion}`,
+    kind: 'plugin-staged' as const,
+    title: update.reason
+      ? t('plugin-staged.notice.failedTitle', {
+          plugin: update.pluginId,
+          staged: update.stagedVersion,
+          active: update.activeVersion,
+          reason: update.reason,
+        })
+      : t('plugin-staged.notice.title', {
+          plugin: update.pluginId,
+          staged: update.stagedVersion,
+          active: update.activeVersion,
+        }),
+    highlights: [t('plugin-staged.notice.detail')],
+    read: false,
+    actions: [{
+      kind: 'plugin-staged-apply' as const,
+      pluginId: update.pluginId,
+      activeVersion: update.activeVersion,
+      stagedVersion: update.stagedVersion,
+    }],
+  }))
+}
+
+/** Whether applying still means what the row says: the same version is still
+ *  staged beside the same active one. */
+export function pluginStagedApplyApplies(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-staged-apply' }>,
+  installed: ReadonlyArray<{ id: string; packageVersion?: string; pendingCandidateVersion?: string }>,
+): boolean {
+  const current = installed.find((pkg) => pkg.id === action.pluginId)
+  return current?.pendingCandidateVersion === action.stagedVersion && current.packageVersion === action.activeVersion
+}
+
+/** Add what the Host found (at launch, or a failed switch); a newer report
+ *  of the same plugin replaces its row. */
+function notePluginStagedUpdates(updates: PluginStagedUpdate[]): void {
+  const fresh = updates.filter((update) => update?.pluginId)
+  const ids = new Set(fresh.map((update) => update.pluginId))
+  pluginStagedUpdates.value = [...fresh, ...pluginStagedUpdates.value.filter((update) => !ids.has(update.pluginId))]
+}
+
+/** Drop the row of a package that was applied or changed since. */
+function dropPluginStagedUpdate(pluginId: string): void {
+  pluginStagedUpdates.value = pluginStagedUpdates.value.filter((update) => update.pluginId !== pluginId)
+}
+
+// ── Plugin version switches (L3) ────────────────────────────────────────────
+
+/** An update the user approved took effect at once, as the Host reported it. */
+export interface PluginSwitchNotice {
+  pluginId: string
+  fromVersion: string
+  toVersion: string
+  source: 'marketplace' | 'local-unsigned'
+  at: number
+  /** Set when an agent's automatic update (O1) drove the switch. */
+  agent?: PluginAgentNotice['requester']
+}
+
+/** Switches this window heard, newest first. Not persisted: the plugin
+ *  activity record and the installed list are the durable state. */
+const pluginSwitchNotices = ref<PluginSwitchNotice[]>([])
+
+function pluginSwitchItems(): Announcement[] {
+  const t = i18n.global.t
+  return pluginSwitchNotices.value.map((notice) => ({
+    id: `plugin-switch:${notice.pluginId}:${notice.toVersion}:${notice.at}`,
+    kind: 'plugin-switch' as const,
+    title: notice.agent
+      ? t('plugin-switch.notice.titleAgent', {
+          caller: pluginAgentCaller(notice.agent),
+          plugin: notice.pluginId,
+          from: notice.fromVersion,
+          to: notice.toVersion,
+        })
+      : t('plugin-switch.notice.title', { plugin: notice.pluginId, from: notice.fromVersion, to: notice.toVersion }),
+    highlights: [
+      t('plugin-switch.notice.detail', {
+        time: new Date(notice.at).toLocaleTimeString(),
+        source: t(notice.source === 'local-unsigned' ? 'plugin-switch.source.local' : 'plugin-switch.source.marketplace'),
+      }),
+    ],
+    createdAt: notice.at,
+    read: false,
+    actions: [{
+      kind: 'plugin-switch-back' as const,
+      pluginId: notice.pluginId,
+      fromVersion: notice.fromVersion,
+      toVersion: notice.toVersion,
+    }],
+  }))
+}
+
+/** Whether going back still means what the row says: the switched-to version
+ *  is the one running and the one it replaced is the rollback target. */
+export function pluginSwitchBackApplies(
+  action: Extract<PluginAgentAnnouncementAction, { kind: 'plugin-switch-back' }>,
+  installed: ReadonlyArray<{ id: string; packageVersion?: string; pendingCandidateVersion?: string; rollbackToVersion?: string }>,
+): boolean {
+  const current = installed.find((pkg) => pkg.id === action.pluginId)
+  return current?.packageVersion === action.toVersion && !current.pendingCandidateVersion &&
+    current.rollbackToVersion === action.fromVersion
+}
+
+/** Record that an approved update switched versions. */
+function notePluginSwitch(notice: PluginSwitchNotice): void {
+  if (!notice?.pluginId) return
+  pluginSwitchNotices.value = [notice, ...pluginSwitchNotices.value]
 }
 
 // ── Convenience features ────────────────────────────────────────────────────
@@ -993,6 +1234,9 @@ const items: ComputedRef<Announcement[]> = computed(() => {
   const seen = new Set(readIds.value)
   const merged = [
     ...convenienceItems(seen),
+    ...pluginAgentItems(),
+    ...pluginStagedItems(),
+    ...pluginSwitchItems(),
     ...shareItems(),
     ...evolveItems(),
     ...schedulerItems(),
@@ -1069,6 +1313,21 @@ export function __resetShareAnnouncementsForTest(): void {
   shareNotices.value = []
 }
 
+/** Test-only: forget every agent plugin notice (the module is a singleton). */
+export function __resetPluginAgentAnnouncementsForTest(): void {
+  pluginAgentNotices.value = []
+}
+
+/** Test-only: forget every staged package row (the module is a singleton). */
+export function __resetPluginStagedAnnouncementsForTest(): void {
+  pluginStagedUpdates.value = []
+}
+
+/** Test-only: forget every version switch row (the module is a singleton). */
+export function __resetPluginSwitchAnnouncementsForTest(): void {
+  pluginSwitchNotices.value = []
+}
+
 /** Test-only: forget the convenience snapshot (the module is a singleton). */
 export function __resetConvenienceAnnouncementsForTest(): void {
   convenienceState.value = null
@@ -1092,6 +1351,10 @@ export function useAnnouncements() {
     noteSchedulerDisabled,
     noteEvolveNotice,
     noteShareNotice,
+    notePluginAgentNotice,
+    notePluginStagedUpdates,
+    dropPluginStagedUpdate,
+    notePluginSwitch,
     noteConvenience,
     setConvenienceAgentLabel,
     noteQuotaIncident,

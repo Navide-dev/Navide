@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createMockBackend, withScope } from './mockBackend'
 
-// "Fit to pane width" is glue between useTerminal and the resize controller's
+// "Fit to Pane Width" is glue between useTerminal and the resize controller's
 // cols cap, so the controller (and xterm, which won't boot in happy-dom) are
 // mocked and only the delegation is asserted. The cap arithmetic itself lives
 // in createResizeController.
@@ -19,6 +19,9 @@ const ctrl = vi.hoisted(() => ({
   ackedRows: 0,
 }))
 
+// The buffer the mocked terminal is showing; 'alternate' has no scrollback.
+const bufferType = vi.hoisted(() => ({ value: 'normal' as 'normal' | 'alternate' }))
+
 vi.mock('../useTerminalResize', () => ({
   createResizeController: () => ctrl,
 }))
@@ -30,7 +33,9 @@ vi.mock('@xterm/xterm', () => {
     options: Record<string, unknown> = {}
     unicode = { activeVersion: '6' }
     buffer = {
-      active: { type: 'normal', viewportY: 0, baseY: 0, cursorX: 0, cursorY: 0, getLine: () => undefined },
+      get active() {
+        return { type: bufferType.value, viewportY: 0, baseY: 0, cursorX: 0, cursorY: 0, getLine: () => undefined }
+      },
     }
     loadAddon(): void {}
     open(): void {}
@@ -88,6 +93,7 @@ describe('useTerminal — fit to pane width', () => {
     vi.clearAllMocks()
     ctrl.capCols.mockImplementation((cols: number) => cols)
     fitDims.value = { cols: 160, rows: 24 }
+    bufferType.value = 'normal'
   })
 
   it('reads as capped only while the cap leaves part of the container blank', () => {
@@ -129,6 +135,19 @@ describe('useTerminal — fit to pane width', () => {
     expect(ctrl.setColsCap).toHaveBeenLastCalledWith(null)
     expect(ctrl.applyFit).not.toHaveBeenCalled()
     expect(ctrl.requestResizeRedraw).not.toHaveBeenCalled()
+    scope.stop()
+  })
+
+  // xterm 6.0 resizes (and reflows) the normal buffer even while the alternate
+  // one is active (BufferSet.resize). A pane that enters a stage mode on its
+  // alternate screen ($EDITOR from claude's Ctrl+G, less, vim) and leaves it
+  // mid-mode must still be at its grid cols, or claude repaints at the stage
+  // width and the return to grid is a narrowing reflow of those rows.
+  it('caps a pane that enters a stage mode on its alternate screen', () => {
+    bufferType.value = 'alternate'
+    const { result, scope } = mountedTerminal()
+    result.lockCols(true)
+    expect(ctrl.setColsCap).toHaveBeenLastCalledWith(80)
     scope.stop()
   })
 })

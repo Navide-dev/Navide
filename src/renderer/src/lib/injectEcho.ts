@@ -34,8 +34,11 @@ export type EchoEvidence = 'tail' | 'placeholder' | 'growth'
 
 /** How we concluded Enter took. `tail-left` watched our text leave the
  *  composer; `queued` saw the CLI's own "message queued" hint appear; `growth`
- *  only saw the terminal react. */
-export type SubmitEvidence = 'tail-left' | 'queued' | 'growth'
+ *  only saw the terminal react; `turn` is growth followed by the CLI starting
+ *  a new turn (submitTurnConfirm). `unconfirmed` is Enter gone out with
+ *  nothing able to say it took — a collapsed-paste summary on a screen with
+ *  no input box to locate, or growth no new turn followed — never a success. */
+export type SubmitEvidence = 'tail-left' | 'queued' | 'growth' | 'turn' | 'unconfirmed'
 
 /** Claude Code's footer hint once a mid-turn message is enqueued. Three
  *  wordings ship ("Press up to edit queued messages", "Press up to select a
@@ -130,7 +133,8 @@ export function injectionVerified(
   echo: EchoEvidence | null,
   submit: SubmitEvidence | null,
 ): boolean {
-  return echo !== null && echo !== 'growth' && submit !== null && submit !== 'growth'
+  return echo !== null && echo !== 'growth'
+    && submit !== null && submit !== 'growth' && submit !== 'unconfirmed'
 }
 
 /** Whether a spawn kickoff landed. Strict evidence (injectionVerified) is
@@ -149,14 +153,22 @@ export function injectionVerified(
  *  repaint the new pane's own layout reflow triggers. Accepting it would
  *  report `kickoff: "sent"` for a paste the CLI never took — the exact
  *  silence this verdict exists to end. Without the gate, growth stays what it
- *  was: a booting TUI repainting. */
+ *  was: a booting TUI repainting.
+ *
+ *  One case lets a growth echo through: the submit half saw the CLI start a
+ *  new turn after our Enter (`turn`, read off its own log). Past the gate
+ *  nothing else types into the pane, so that turn is our text being taken,
+ *  however the CLI drew it — Grok Build shows a multi-line paste as a chip
+ *  that is neither our tail nor "[Pasted text …]" (issue #402 point 1), and
+ *  reading that as unverified retyped a kickoff that was already running. */
 export function kickoffVerified(
   echo: EchoEvidence | null,
   submit: SubmitEvidence | null,
   promptReady: boolean,
 ): boolean {
   if (injectionVerified(echo, submit)) return true
-  return promptReady && echo !== null && echo !== 'growth' && submit !== null
+  if (promptReady && echo === 'growth' && submit === 'turn') return true
+  return promptReady && echo !== null && echo !== 'growth' && submit !== null && submit !== 'unconfirmed'
 }
 
 /** Growth that counts as "echoed" for a payload of this size.
@@ -304,6 +316,9 @@ export function submitEvidence(opts: {
   /** From submitBaseline(), sampled before Enter. Without it the hint alone
    *  decides — the caller has not been wired for the snapshot yet. */
   baseline?: SubmitBaseline
+  /** The whole visible screen, frame rows kept (useTerminal.readVisibleScreen).
+   *  Only the collapsed-paste check reads it; without it `screen` stands in. */
+  visibleScreen?: string
 }): SubmitEvidence | null {
   if (opts.tailWasOnScreen && opts.tail) {
     const screen = normalizeForMatch(opts.screen)
@@ -352,8 +367,22 @@ export function submitEvidence(opts: {
   // which happened: while it still shows the summary, nothing was submitted.
   // Framed box only — the bottom-rows guess a frameless vendor gets could hold
   // the summary a TUI echoes just above its box after a submit that took.
-  const framed = framedComposer(opts.screen)
-  if (framed !== null && PASTE_PLACEHOLDER_RE.test(framed)) return null
+  //
+  // Read off the whole visible screen, frame rows kept. The bottom few rows
+  // lose the box as soon as it, or the footer under it, outgrows them, and a
+  // screen read that drops trailing frame rows loses its closing edge; with
+  // no frame found the check was skipped and the next repaint read as
+  // 'growth' — a collapsed paste still in the box reported delivered.
+  //
+  // A summary on a screen where no box can be found is not a success either:
+  // it may be in the box or echoed above it, and nothing here can tell.
+  const visible = opts.visibleScreen ?? opts.screen
+  const framed = framedComposer(visible)
+  if (framed !== null) {
+    if (PASTE_PLACEHOLDER_RE.test(framed)) return null
+  } else if (opts.grownBy > 0 && PASTE_PLACEHOLDER_RE.test(visible)) {
+    return 'unconfirmed'
+  }
   return opts.grownBy > 0 ? 'growth' : null
 }
 

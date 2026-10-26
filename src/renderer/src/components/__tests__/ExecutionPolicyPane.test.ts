@@ -620,7 +620,7 @@ describe('ExecutionPolicyPane', () => {
     })
     await flushPromises()
 
-    expect(wrapper.get('.ep-reset-sources').text()).toBe('Reset all Policy Source selections')
+    expect(wrapper.get('.ep-reset-sources').text()).toBe('Reset All Policy Source Selections')
     await wrapper.get('.ep-reset-sources').trigger('click')
     expect(wrapper.get('.ep-source-reset-confirm').text()).toContain('does not modify or delete repository policy files')
     await wrapper.get('.ep-source-reset-confirm input').setValue(true)
@@ -646,7 +646,177 @@ describe('ExecutionPolicyPane', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Policy Source state is corrupt')
-    expect(wrapper.get('.ep-reset-sources').text()).toBe('Reset all Policy Source selections')
+    expect(wrapper.get('.ep-reset-sources').text()).toBe('Reset All Policy Source Selections')
     expect(api.resetSourceSelections).not.toHaveBeenCalled()
+  })
+})
+
+describe('ExecutionPolicyPane page', () => {
+  let wrapper: VueWrapper | undefined
+
+  beforeEach(() => {
+    i18n.global.locale.value = 'en-US'
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  /** The fixture's recommendation is a denylist, which is high risk; a plain allowlist is not. */
+  function quietSnapshot(): ExecutionPolicySettingsSnapshot {
+    const base = snapshot()
+    return snapshot({
+      workspace: {
+        ...base.workspace!,
+        recommendation: { ...base.workspace!.recommendation!, policy: { ...DEFAULT_POLICY, system: ['fs'], shell: ['git'] } },
+      },
+    })
+  }
+  async function mountPane(next: ExecutionPolicySettingsSnapshot) {
+    mockExecutionPolicy(next)
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+  }
+  const order = (w: VueWrapper) => w.findAll('section[data-section]').map((section) => section.attributes('data-section'))
+
+  it('leads with what is in effect for the workspace, then the user policy, the default and storage', async () => {
+    await mountPane(quietSnapshot())
+    expect(order(wrapper!)).toEqual(['effective-policy', 'policy-source', 'repository-recommendation', 'user-policy', 'host-default', 'recovery'])
+    expect(wrapper!.findAll('.ep-effective-policy .ep-v').map((value) => value.text())).toEqual(['fs, ui, aiCli', 'git, gh, glab'])
+    // The editor is the page: nothing to open first.
+    expect(wrapper!.find('#ep-editor').exists()).toBe(false)
+    expect(wrapper!.find('[data-mode="allowlist"] input').exists()).toBe(true)
+    expect(wrapper!.get('[data-section="repository-recommendation"]').text()).toContain('Untrusted')
+  })
+
+  it('shows a valid high-risk repository recommendation with its acknowledgement on the page', async () => {
+    await mountPane(snapshot())
+    const section = wrapper!.get('[data-section="repository-recommendation"]')
+    expect(section.find('.ep-repository-full-confirmation').exists()).toBe(true)
+    expect(section.text()).toContain('Untrusted')
+    expect(section.find('.ep-accept-row .ep-accept-recommendation').exists()).toBe(true)
+  })
+
+  it('shows the high-risk warning of a saved Full user policy on the page', async () => {
+    const quiet = quietSnapshot()
+    await mountPane({ ...quiet, userPolicy: { ...DEFAULT_POLICY, mode: 'full', system: [...DEFAULT_POLICY.system] } })
+    expect(wrapper!.find('.ep-full-warning').exists()).toBe(true)
+  })
+
+  it('shows the high-risk warning as soon as the draft becomes Full', async () => {
+    await mountPane(quietSnapshot())
+    expect(wrapper!.find('.ep-full-warning').exists()).toBe(false)
+    await wrapper!.get('[data-mode="full"] input').setValue(true)
+    expect(wrapper!.find('.ep-full-warning').exists()).toBe(true)
+  })
+
+  it("names a recommendation's mode even when it is not valid", async () => {
+    const quiet = quietSnapshot()
+    await mountPane({
+      ...quiet,
+      workspace: {
+        ...quiet.workspace!,
+        recommendation: { state: 'stale', policy: { ...DEFAULT_POLICY, mode: 'full', system: [], shell: [] }, fingerprint: 'b'.repeat(64) },
+      },
+    } as ExecutionPolicySettingsSnapshot)
+    expect(wrapper!.get('.ep-recommendation-policy').text()).toContain('Full')
+  })
+
+  it('shows a stale workspace policy and a corrupt store as warnings', async () => {
+    const quiet = quietSnapshot()
+    await mountPane({ ...quiet, workspace: { ...quiet.workspace!, status: 'stale' }, recovery: { state: 'corrupt', canRebuild: true, unsafePaths: [] } })
+    expect(wrapper!.get('[data-section="effective-policy"] .ep-warning').attributes('role')).toBe('alert')
+    expect(wrapper!.get('[data-section="recovery"]').text()).toContain('Rebuild')
+  })
+})
+
+// The sidebar marks the Execution Policy page with ⚠ while the page shows a
+// warning: one line per warning, on the same conditions the page renders them.
+describe('ExecutionPolicyPane attention', () => {
+  let wrapper: VueWrapper | undefined
+
+  beforeEach(() => {
+    i18n.global.locale.value = 'en-US'
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  const t = (key: string) => i18n.global.t(key)
+  const line = (section: string, state: string) => `${t(`settings.executionPolicy.${section}`)}: ${state}`
+  /** Nothing to warn about: an allowlist in effect and no repository recommendation. */
+  function calm(): ExecutionPolicySettingsSnapshot {
+    const base = snapshot()
+    return snapshot({ workspace: { ...base.workspace!, recommendation: { state: 'missing', policy: null, fingerprint: null } } })
+  }
+  async function attention(next: ExecutionPolicySettingsSnapshot): Promise<string[]> {
+    mockExecutionPolicy(next)
+    wrapper = mount(ExecutionPolicyPane, { props: { workspacePath: '/workspace' }, global: { plugins: [i18n] } })
+    await flushPromises()
+    return (wrapper.emitted('attention') as string[][][]).at(-1)![0]
+  }
+
+  it('reports nothing when the page shows no warning', async () => {
+    expect(await attention(calm())).toEqual([])
+  })
+
+  it('reports a workspace policy that is not active', async () => {
+    const base = calm()
+    expect(await attention({ ...base, workspace: { ...base.workspace!, status: 'stale' } })).toEqual([
+      line('effectiveTitle', t('settings.executionPolicy.status.stale')),
+    ])
+  })
+
+  it('reports a high-risk policy in effect', async () => {
+    const base = calm()
+    expect(await attention({ ...base, workspace: { ...base.workspace!, policy: { ...DEFAULT_POLICY, mode: 'full', system: [], shell: [] } } })).toEqual([
+      line('effectiveTitle', t('settings.executionPolicy.mode.full')),
+    ])
+  })
+
+  it('reports a corrupt source selection store', async () => {
+    expect(await attention({ ...calm(), sourceRecovery: { state: 'corrupt', canReset: true, unsafePaths: [] } })).toEqual([
+      line('sourceTitle', t('settings.executionPolicy.recoveryState.corrupt')),
+    ])
+  })
+
+  it('reports a valid repository recommendation as untrusted, and as high risk when it is', async () => {
+    const base = snapshot()
+    expect(await attention(base)).toEqual([
+      line('recommendationTitle', t('settings.executionPolicy.mode.denylist')),
+      line('recommendationTitle', t('settings.executionPolicy.untrusted')),
+    ])
+    wrapper!.unmount()
+    // Once accepted it is the policy in effect, and an allowlist one warns of nothing.
+    const accepted = snapshot({
+      workspace: {
+        ...base.workspace!,
+        selectedSource: 'repository',
+        recommendation: { ...base.workspace!.recommendation!, policy: { ...DEFAULT_POLICY, system: ['fs'], shell: [] } },
+      },
+    })
+    expect(await attention(accepted)).toEqual([])
+  })
+
+  it('reports the user policy draft as soon as it becomes high risk', async () => {
+    expect(await attention(calm())).toEqual([])
+    await wrapper!.get('[data-mode="full"] input').setValue(true)
+    expect((wrapper!.emitted('attention') as string[][][]).at(-1)![0]).toEqual([
+      line('userTitle', t('settings.executionPolicy.mode.full')),
+    ])
+  })
+
+  it('reports a corrupt policy store', async () => {
+    expect(await attention({ ...calm(), recovery: { state: 'corrupt', canRebuild: true, unsafePaths: [] } })).toEqual([
+      line('recoveryTitle', t('settings.executionPolicy.recoveryState.corrupt')),
+    ])
+  })
+
+  it('announces the high-risk repository warning', async () => {
+    await attention(snapshot())
+    expect(wrapper!.get('[data-section="repository-recommendation"] .ep-warning').attributes('role')).toBe('alert')
   })
 })

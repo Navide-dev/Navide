@@ -129,6 +129,24 @@ by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
    pnpm test:run
    uv --project backend run pytest backend/tests
    ```
+   While iterating, run only what your change can affect, then the full suites
+   above before you push (CI and the release gates always run them in full):
+   ```bash
+   pnpm vitest run --changed origin/main           # tests importing changed files
+   node scripts/changed-backend-tests.mjs           # backend tests for changed files
+   node scripts/changed-backend-tests.mjs --list    # just print the selection
+   scripts/isolated-pytest.sh backend/tests --lf    # re-run last failures
+   ```
+   `changed-backend-tests.mjs` compares against `origin/main` (pass another
+   base as its first argument; pytest arguments go after `--`) and runs
+   pytest through `scripts/isolated-pytest.sh`, the release gate's isolation:
+   a throwaway HOME, no reach to the real keychain, and `uv run --no-sync`
+   (macOS and Linux). It selects
+   changed test files, the tests that import or patch a changed backend
+   module directly, and the tests that name a changed non-backend file; a
+   change to conftest, test helpers, `pyproject.toml` or the lock runs the
+   whole suite. It does not follow indirect imports, so it can miss a
+   breakage the full suite catches.
 4. Run type checks:
    ```bash
    pnpm typecheck
@@ -154,12 +172,20 @@ CI retains complete frontend and backend suites on macOS, Linux and Windows.
 Static checks run once, while application builds and artifact integration tests
 run separately from ordinary frontend tests. The `Lint and test` status requires
 the test/build matrices, packaged Plans, marketplace contracts, deterministic
-speech sidecar tests and dependency audit to succeed. CI does not run Electron
+speech sidecar tests and dependency audit to succeed. On a pull request, a
+change confined to the renderer, preload or e2e (frontend-only) skips the backend
+jobs, and a change confined to `backend/tests/` skips the frontend and build
+jobs; `scripts/ci-changed-scopes.mjs` holds the rules, runs everything when
+unsure, and pushes to `main` always run everything. CI does not run Electron
 UI automation; test UI changes manually. To reproduce the build check locally,
 run `pnpm build`. See [CI and CLI regression infrastructure](docs/en-US/ci-and-cli-regression.md)
 for suite ownership, provider isolation, contract coverage and diagnostics.
 
+CI runs its install, typecheck and test jobs on Bun (`bun install --frozen-lockfile`, version pinned in `.bun-version`); releases and local development still use pnpm. When you change a dependency, run `pnpm install` and `bun install` so `bun.lock` and `pnpm-lock.yaml` resolve the same versions; CI fails on a stale `bun.lock` and, via `scripts/check-lockfile-parity.mjs`, whenever the two locks resolve different packages.
+
 > Fork 後建立 feature branch，跑測試與型別檢查無誤後，依照下方 commit 格式提交，並開 PR 至 `main`。
+>
+> CI 的安裝、型別檢查與測試 job 以 Bun 執行（`bun install --frozen-lockfile`，版本固定於 `.bun-version`）；發佈與本機開發仍使用 pnpm。變更依賴時請同時執行 `pnpm install` 與 `bun install`，讓 `bun.lock` 與 `pnpm-lock.yaml` 解析出相同版本；`bun.lock` 過期、或兩份 lock 解析出不同套件時（由 `scripts/check-lockfile-parity.mjs` 檢查）CI 會失敗。
 
 ---
 
@@ -176,8 +202,10 @@ for suite ownership, provider isolation, contract coverage and diagnostics.
 **UI text and docs**
 - Follow the [glossary](docs/en-US/glossary.md): "Navide plugin" and "Navide
   Marketplace" for Navide's own packages, "CLI extension" for an AI CLI's own,
-  "Agent Assets" for skills, MCP, prompts and memory. Never write plugin,
-  extension or marketplace bare; a locale test fails the build if you do.
+  "Agent Assets" for the Settings group of MCP, Skills, Prompts, Memory,
+  Credentials & Keys and Extensions. Page names follow the Settings sidebar.
+  Never write plugin, extension or marketplace bare; a locale test fails the
+  build if you do.
 
 **Adding a CLI agent**
 - Follow [`docs/adding-a-cli-vendor.md`](docs/adding-a-cli-vendor.md). An
@@ -323,5 +351,7 @@ By participating you agree to abide by its terms.
 ## Documentation
 
 User-facing behavior changes must update the relevant canonical document under [`docs/en-US/`](docs/en-US/README.md), synchronize an existing localized counterpart in the same change, and add an entry under `CHANGELOG.md`'s Unreleased section. Avoid describing configurable registries with fixed counts, document any new external data flow in `docs/en-US/privacy.md`, and keep future vision distinct from shipped capability claims.
+
+A PR that changes the plugin API (`packages/plugin-sdk`, `packages/plugin-contracts`), the manifest schema (`plugin-manifest-v2.schema.json`) or the capability catalog (`capabilities-v1.json`) must update `docs/en-US/plugin-development*.md` in the same PR. Two tests enforce part of this: `tests/infrastructure/pluginDocsExamples.test.ts` typechecks every TypeScript/JavaScript example in the plugin docs against the SDK source (mark a block that cannot compile with `<!-- docs-typecheck: skip (reason) -->` on the line before its fence) and rejects `definePlugin` as an activation path, and `tests/infrastructure/pluginDocsManifest.test.ts` compares the Spec v2 manifest field, view location, error code and capability tables with the schema and catalog. Prose they cannot parse is still yours to keep current.
 
 A release announces itself in the app: add the version's What's New entry — its highlights and, optionally, a guided tour — as described in [Release announcements](docs/en-US/release-announcements.md). `./release.sh` prints a warning when the version being released has no entry.

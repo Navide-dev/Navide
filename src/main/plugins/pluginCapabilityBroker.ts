@@ -7,6 +7,7 @@
 import { eventNamespace, resolveWsType } from './capabilityMap'
 import { EDITOR_AI_EVENTS, validateEditorAiEvent } from './editorAiCapability'
 import { isPreferenceJsonValue, validateEditorPreferencesEvent } from './editorPreferenceCapability'
+import { validateWebChangedEvent } from './webCapability'
 import {
   HOST_SHELL_EXECUTABLE_ALLOWLIST,
   publicCapabilityEntry,
@@ -111,7 +112,41 @@ export interface HostCapabilityContext {
  * never accepted from a Plugin request or exposed through the preload API. */
 export type AuthenticatedInitiator =
   | Readonly<{ kind: 'user'; id: string }>
-  | Readonly<{ kind: 'agent'; source: 'mcp'; id: string }>
+  | Readonly<{ kind: 'agent'; source: 'mcp'; id: string; caller?: AgentInitiatorCaller }>
+
+/** Who called a third-party agent tool, as the core MCP server resolved it
+ * from its credential (never from tool arguments). `verifiedTo` says how far
+ * that identity is proven: `pane` = the pane's own MCP token (nothing about
+ * the model or person behind it); `caller-kind` = only that it is an external
+ * client or the Host, which share one credential each. */
+export type AgentInitiatorCaller = Readonly<{
+  kind: 'pane' | 'external' | 'host'
+  paneId: string | null
+  workspace: string | null
+  verifiedTo: 'pane' | 'caller-kind'
+}>
+
+export function isAgentInitiatorCaller(value: unknown): value is AgentInitiatorCaller {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  const keys = Object.keys(record)
+  if (keys.length !== 4 || !keys.every((key) => ['kind', 'paneId', 'workspace', 'verifiedTo'].includes(key))) {
+    return false
+  }
+  if (record.kind === 'pane') {
+    return (
+      typeof record.paneId === 'string' && record.paneId.length > 0 &&
+      (record.workspace === null || (typeof record.workspace === 'string' && record.workspace.length > 0)) &&
+      record.verifiedTo === 'pane'
+    )
+  }
+  return (
+    (record.kind === 'external' || record.kind === 'host') &&
+    record.paneId === null &&
+    record.workspace === null &&
+    record.verifiedTo === 'caller-kind'
+  )
+}
 
 /** Stable Host identity used for direct user work when no account identity is
  * available at this internal boundary. It is not a credential. */
@@ -132,10 +167,11 @@ export function isAuthenticatedInitiator(value: unknown): value is Authenticated
       record.id.length > 0
     )
   }
+  const keys = Object.keys(record)
   return (
     record.kind === 'agent' &&
-    Object.keys(record).length === 3 &&
-    Object.keys(record).every((key) => key === 'kind' || key === 'source' || key === 'id') &&
+    (keys.length === 3 || (keys.length === 4 && isAgentInitiatorCaller(record.caller))) &&
+    keys.every((key) => key === 'kind' || key === 'source' || key === 'id' || key === 'caller') &&
     record.source === 'mcp' &&
     typeof record.id === 'string' &&
     record.id.length > 0
@@ -336,6 +372,55 @@ export const HOST_CAPABILITIES: Readonly<Record<string, string>> = {
 
 function publicDenied(reqId: string, code: CapabilityErrorCode, message: string): PublicCapabilityDecision {
   return { kind: 'deny', response: buildError(reqId, code, message) }
+}
+
+/** Refusals of a use the manifest did not declare (D3 "used but not declared").
+ *  Kept beside the response object, so the Plugin-facing envelope is unchanged;
+ *  the activity record reads it with {@link isUndeclaredDenial}. */
+const undeclaredDenials = new WeakSet<CapabilityResponse>()
+
+function undeclared(response: CapabilityResponse): CapabilityResponse {
+  undeclaredDenials.add(response)
+  return response
+}
+
+function undeclaredDenied(reqId: string, message: string): PublicCapabilityDecision {
+  return { kind: 'deny', response: undeclared(buildError(reqId, 'CAPABILITY_DENIED', message)) }
+}
+
+/** Whether `ns.method` is one capability address the broker knows (the
+ *  public catalog, a Host-implemented action or a backend-mapped call),
+ *  whether or not this plugin may call it. Three map lookups. The `ping`
+ *  built-in answers any method name, so it is no one address. */
+export function isKnownCapabilityAddress(ns: string, method: string): boolean {
+  const address = `${ns}.${method}`
+  return (
+    publicCapabilityEntry(address) !== null ||
+    Object.hasOwn(HOST_CAPABILITIES, address) ||
+    resolveWsType(ns, method) !== null
+  )
+}
+
+/** Answers the Host gave without handing the call to any handler (refused
+ *  or answered before dispatch): nothing could have run. Kept beside the
+ *  response object like undeclaredDenials, so the envelope is unchanged; the
+ *  activity record reads it with {@link isUndispatched}. */
+const undispatchedResponses = new WeakSet<CapabilityResponse>()
+
+/** Mark `response` as answered before any handler ran. */
+export function undispatched(response: CapabilityResponse): CapabilityResponse {
+  undispatchedResponses.add(response)
+  return response
+}
+
+/** Whether `response` was answered before the call reached any handler. */
+export function isUndispatched(response: CapabilityResponse): boolean {
+  return undispatchedResponses.has(response)
+}
+
+/** Whether `response` is the broker's refusal of an undeclared use. */
+export function isUndeclaredDenial(response: CapabilityResponse): boolean {
+  return undeclaredDenials.has(response)
 }
 
 function sameBinding(
@@ -694,6 +779,16 @@ export function executionPolicyAllows(
         HOST_SHELL_EXECUTABLE_ALLOWLIST.includes(executable) && !policy.shell.includes(executable),
     )
   }
+  // `web` reaches every page and sign-in the plugin's browser partition holds,
+  // and a denylist written before the namespace existed never mentions it. So
+  // it is never allowed by omission: only full mode or an allowlist naming it.
+  if (namespace === 'web') return policy.mode === 'allowlist' && policy.system.includes('web')
+  // Agent data and message text: like `web`, a denylist written before the
+  // namespace existed never mentions it, so an agent gets either only from an
+  // allowlist naming it.
+  if (namespace === 'agents' || namespace === 'agentMessages') {
+    return policy.mode === 'allowlist' && policy.system.includes(namespace)
+  }
   return policy.mode === 'allowlist'
     ? policy.system.includes(namespace)
     : !policy.system.includes(namespace)
@@ -734,9 +829,9 @@ export function planPublicCapabilityCall(
     // Storage is Host-granted and deliberately absent from Manifest v2's
     // `permissions.system` namespace array.
   } else if (entry.namespace === 'shell') {
-    if (!policy.shell) return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell access is not declared')
+    if (!policy.shell) return undeclaredDenied(call.reqId, 'shell access is not declared')
   } else if (!policy.system.includes(entry.namespace)) {
-    return publicDenied(call.reqId, 'CAPABILITY_DENIED', `system namespace '${entry.namespace}' is not declared`)
+    return undeclaredDenied(call.reqId, `system namespace '${entry.namespace}' is not declared`)
   }
 
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) {
@@ -1035,6 +1130,9 @@ export function isPublicCapabilityEventAllowed(
       typeof payload.key === 'string' && payload.key.length > 0 && typeof payload.deleted === 'boolean' &&
       isPreferenceJsonValue(payload.value))
   }
+  if (event === 'web.changed') {
+    return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && validateWebChangedEvent(payload))
+  }
   if ((EDITOR_AI_EVENTS as readonly string[]).includes(event)) {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) &&
       requiresAiCliBinding(binding) && validateEditorAiEvent(event, payload))
@@ -1095,13 +1193,13 @@ export function planCapabilityCall(
     if (!authorization) {
       return {
         kind: 'respond',
-        response: buildError(call.reqId, 'CAPABILITY_DENIED', 'Host authorization context is missing'),
+        response: undispatched(buildError(call.reqId, 'CAPABILITY_DENIED', 'Host authorization context is missing')),
       }
     }
     const decision = planPublicCapabilityCall(call, policy, authorization)
     return decision.kind === 'allow'
       ? decision.plan
-      : { kind: 'respond', response: decision.response }
+      : { kind: 'respond', response: undispatched(decision.response) }
   }
   if (!isCallAllowed(policy, call.ns, call.method)) {
     const label =
@@ -1110,11 +1208,11 @@ export function planCapabilityCall(
         : `${call.ns}.${call.method}`
     return {
       kind: 'respond',
-      response: buildError(
+      response: undispatched(undeclared(buildError(
         call.reqId,
         'CAP_DENIED',
         `capability '${label}' not granted`
-      ),
+      ))),
     }
   }
   if (call.ns === 'ping') {
@@ -1128,7 +1226,7 @@ export function planCapabilityCall(
   if (!wsType) {
     return {
       kind: 'respond',
-      response: buildError(call.reqId, 'UNKNOWN', `no handler for '${call.ns}.${call.method}'`),
+      response: undispatched(buildError(call.reqId, 'UNKNOWN', `no handler for '${call.ns}.${call.method}'`)),
     }
   }
   return { kind: 'backend', wsType }

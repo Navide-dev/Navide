@@ -9,6 +9,7 @@ import ToggleSwitch from './ToggleSwitch.vue'
 import VoiceShortcutRow from './VoiceShortcutRow.vue'
 import VoiceFnKeyRow from './VoiceFnKeyRow.vue'
 import { isMacPlatform } from '@navide/plugin-ui/shared'
+import { isMac, isWindows } from '../../../../shared/osplat'
 import {
   readbackSupported,
   readbackVoiceModel,
@@ -338,6 +339,13 @@ async function openVoiceDownload(): Promise<void> {
   await window.agentTeam?.openSpokenContentSettings?.()
 }
 
+// Where better voices come from, named per platform.
+const voiceHintKey = isMac()
+  ? 'settings.voice.readback-voice-hint'
+  : isWindows()
+    ? 'settings.voice.readback-voice-hint-windows'
+    : 'settings.voice.readback-voice-hint-other-os'
+
 function recheckVoices(): void {
   refreshVoices()
 }
@@ -503,7 +511,7 @@ function previewReadback(): void {
         v-if="voiceReadbackEnabled"
         data-settings-section="voice-readback-voice"
         :title="t('settings.voice.readback-voice')"
-        :description="voices.length === 0 ? t('settings.voice.readback-voice-none') : t('settings.voice.readback-voice-hint')"
+        :description="voices.length === 0 ? t('settings.voice.readback-voice-none') : t(voiceHintKey)"
       >
         <template #control>
           <select

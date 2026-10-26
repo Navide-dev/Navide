@@ -1,0 +1,817 @@
+{
+  "$comment": "Chunked transfer of agent tool results and arguments (contract section 4.4). Results and arguments have no size cap; their sizes are disclosed as resultBytes and args_bytes. splitAgentToolPayloadText cuts the compact JSON text of a value into pieces of at most maxBytes UTF-8 bytes without splitting a code point; reassembleAgentToolPayloadText joins the pieces received for one request and checks them against the {chunks, bytes} summary. Every hop in both directions uses the same pieces and the same summary. 'arguments' pins the compact spelling both languages cut arguments from; 'argumentsDigest' pins args_sha256 (canonical spelling; canonical: true means TypeScript canonicalContractJson spells it too) and args_bytes (UTF-8 bytes of the compact spelling, measured like resultBytes, so both languages count it).",
+  "constants": {
+    "chunkBytes": 131072,
+    "wireResultChunkMethod": "notifications/navide/resultChunk",
+    "wireResultChunksKey": "io.navide/resultChunks",
+    "wireArgumentChunkMethod": "notifications/navide/argumentChunk",
+    "wireArgumentChunksKey": "io.navide/argumentChunks",
+    "wsResultChunkMessage": "agent.capability.result_chunk",
+    "wsRequestChunkEvent": "agent.capability.request_chunk",
+    "invalidCode": "PLUGIN_TOOL_CHUNKS_INVALID",
+    "wsProgressMessage": "agent.capability.progress",
+    "chunkIdleMs": 30000,
+    "timeoutReasons": [
+      "execution",
+      "transfer-idle"
+    ],
+    "progressPhases": [
+      "arguments",
+      "execution",
+      "result"
+    ]
+  },
+  "splits": [
+    {
+      "name": "fits in one piece",
+      "text": "{\"a\":1}",
+      "maxBytes": 16,
+      "expected": [
+        "{\"a\":1}"
+      ]
+    },
+    {
+      "name": "exact multiple",
+      "text": "abcdefgh",
+      "maxBytes": 4,
+      "expected": [
+        "abcd",
+        "efgh"
+      ]
+    },
+    {
+      "name": "remainder piece",
+      "text": "abcdefghij",
+      "maxBytes": 4,
+      "expected": [
+        "abcd",
+        "efgh",
+        "ij"
+      ]
+    },
+    {
+      "name": "empty text is one empty piece",
+      "text": "",
+      "maxBytes": 4,
+      "expected": [
+        ""
+      ]
+    },
+    {
+      "name": "never splits a 3-byte code point",
+      "text": "ab中文",
+      "maxBytes": 4,
+      "expected": [
+        "ab",
+        "中",
+        "文"
+      ]
+    },
+    {
+      "name": "never splits a 4-byte code point",
+      "text": "a😀b",
+      "maxBytes": 4,
+      "expected": [
+        "a",
+        "😀",
+        "b"
+      ]
+    },
+    {
+      "name": "mixed widths fill each piece",
+      "text": "x中😀yz",
+      "maxBytes": 5,
+      "expected": [
+        "x中",
+        "😀y",
+        "z"
+      ]
+    },
+    {
+      "name": "a 2-byte code point that would cross the cut starts the next piece",
+      "text": "abcé",
+      "maxBytes": 4,
+      "expected": [
+        "abc",
+        "é"
+      ]
+    },
+    {
+      "name": "a 4-byte code point that would cross the cut starts the next piece",
+      "text": "abc😀d",
+      "maxBytes": 4,
+      "expected": [
+        "abc",
+        "😀",
+        "d"
+      ]
+    },
+    {
+      "name": "an ASCII run longer than a piece, then wide text",
+      "text": "abcdefgh中x",
+      "maxBytes": 4,
+      "expected": [
+        "abcd",
+        "efgh",
+        "中x"
+      ]
+    },
+    {
+      "name": "a lone surrogate counts 3 bytes and is kept as it is",
+      "text": "a\ud800bc",
+      "maxBytes": 4,
+      "expected": [
+        "a\ud800",
+        "bc"
+      ]
+    }
+  ],
+  "reassembly": [
+    {
+      "name": "in order",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "{\"a\":"
+        },
+        {
+          "seq": 1,
+          "data": "\"中\"}"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 11
+      },
+      "expected": {
+        "ok": true,
+        "text": "{\"a\":\"中\"}"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "arrival order does not matter, seq does",
+      "chunks": [
+        {
+          "seq": 1,
+          "data": "cd"
+        },
+        {
+          "seq": 0,
+          "data": "ab"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": true,
+        "text": "abcd"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "single empty piece",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": ""
+        }
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 0
+      },
+      "expected": {
+        "ok": true,
+        "text": ""
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "missing piece",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 2,
+          "data": "ef"
+        }
+      ],
+      "summary": {
+        "chunks": 3,
+        "bytes": 6
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "count"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "duplicate seq",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 0,
+          "data": "ab"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "seq outside the announced count",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 5,
+          "data": "cd"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "more pieces than announced",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 1,
+          "data": "cd"
+        }
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "count"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "byte total disagrees",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 1,
+          "data": "中"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "bytes"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "malformed summary",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        }
+      ],
+      "summary": {
+        "chunks": 0,
+        "bytes": 2
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "summary"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "malformed piece",
+      "chunks": [
+        {
+          "seq": "0",
+          "data": "ab"
+        }
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 2
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "a short piece before the last is refused",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 1,
+          "data": "cdefgh"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 8
+      },
+      "chunkBytes": 8,
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "short"
+      }
+    },
+    {
+      "name": "a full piece may end early by up to 3 bytes for a code point",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "abcde"
+        },
+        {
+          "seq": 1,
+          "data": "😀"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 9
+      },
+      "chunkBytes": 8,
+      "expected": {
+        "ok": true,
+        "text": "abcde😀"
+      }
+    },
+    {
+      "name": "the last piece may be short",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "abcdefgh"
+        },
+        {
+          "seq": 1,
+          "data": "i"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 9
+      },
+      "chunkBytes": 8,
+      "expected": {
+        "ok": true,
+        "text": "abcdefghi"
+      }
+    },
+    {
+      "name": "an integral float seq and summary are counts",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "abcd"
+        },
+        {
+          "seq": 1.0,
+          "data": "ef"
+        }
+      ],
+      "summary": {
+        "chunks": 2.0,
+        "bytes": 6
+      },
+      "chunkBytes": 4,
+      "expected": {
+        "ok": true,
+        "text": "abcdef"
+      }
+    },
+    {
+      "name": "a null piece is malformed, not a crash",
+      "chunks": [
+        null
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 0
+      },
+      "chunkBytes": 4,
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      }
+    },
+    {
+      "name": "a piece that is not an object",
+      "chunks": [
+        "abcd"
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 4
+      },
+      "chunkBytes": 4,
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      }
+    }
+  ],
+  "arguments": [
+    {
+      "name": "object with text and numbers",
+      "arguments": {
+        "block_id": "b1",
+        "status": "done",
+        "n": 3
+      },
+      "text": "{\"block_id\":\"b1\",\"status\":\"done\",\"n\":3}",
+      "maxBytes": 8,
+      "expected": [
+        "{\"block_",
+        "id\":\"b1\"",
+        ",\"status",
+        "\":\"done\"",
+        ",\"n\":3}"
+      ]
+    },
+    {
+      "name": "non-ASCII stays unescaped",
+      "arguments": {
+        "note": "中文 😀",
+        "k": [
+          1,
+          2
+        ]
+      },
+      "text": "{\"note\":\"中文 😀\",\"k\":[1,2]}",
+      "maxBytes": 6,
+      "expected": [
+        "{\"note",
+        "\":\"中",
+        "文 ",
+        "😀\",",
+        "\"k\":[1",
+        ",2]}"
+      ]
+    },
+    {
+      "name": "control characters are escaped",
+      "arguments": {
+        "s": "a\u0001b\nc"
+      },
+      "text": "{\"s\":\"a\\u0001b\\nc\"}",
+      "maxBytes": 5,
+      "expected": [
+        "{\"s\":",
+        "\"a\\u0",
+        "001b\\",
+        "nc\"}"
+      ]
+    },
+    {
+      "name": "fractional number",
+      "arguments": {
+        "ratio": 1.5,
+        "list": [
+          0.25,
+          -2
+        ]
+      },
+      "text": "{\"ratio\":1.5,\"list\":[0.25,-2]}",
+      "maxBytes": 7,
+      "expected": [
+        "{\"ratio",
+        "\":1.5,\"",
+        "list\":[",
+        "0.25,-2",
+        "]}"
+      ]
+    },
+    {
+      "name": "a lone surrogate is escaped like JSON.stringify",
+      "arguments": {
+        "s": "a\ud800b",
+        "t": "中"
+      },
+      "text": "{\"s\":\"a\\ud800b\",\"t\":\"中\"}",
+      "maxBytes": 8,
+      "expected": [
+        "{\"s\":\"a\\",
+        "ud800b\",",
+        "\"t\":\"中",
+        "\"}"
+      ]
+    }
+  ],
+  "argumentsDigest": [
+    {
+      "name": "integers and text",
+      "arguments": {
+        "status": "done",
+        "block_id": "b1",
+        "n": 3
+      },
+      "canonical": true,
+      "bytes": 39,
+      "sha256": "60fad2036b1e8fc7fa056ab3460b7b3d9e1a0016df3738b0917b3495de6d350a"
+    },
+    {
+      "name": "non-ASCII: hashed escaped, counted as sent",
+      "arguments": {
+        "note": "中文 😀"
+      },
+      "canonical": true,
+      "bytes": 22,
+      "sha256": "5d4f445760a46a7d0b8518e2dedc5ca39d780169d15ec23bb68b407f858b1147"
+    },
+    {
+      "name": "Chinese counts 3 bytes per character",
+      "arguments": {
+        "q": "中文"
+      },
+      "canonical": true,
+      "bytes": 14,
+      "sha256": "8f29ca97d1cd7971078bd43ffe6af2bc4a259e46e65097137c29a6da54199d24"
+    },
+    {
+      "name": "emoji counts 4 bytes",
+      "arguments": {
+        "q": "😀"
+      },
+      "canonical": true,
+      "bytes": 12,
+      "sha256": "f94aba3244d5714b72143b49c48965d38879d25882c33036cc25478dcc674a89"
+    },
+    {
+      "name": "empty object",
+      "arguments": {},
+      "canonical": true,
+      "bytes": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "fractional number: hash falls back to Python json",
+      "arguments": {
+        "ratio": 1.5,
+        "b": [
+          0.25
+        ]
+      },
+      "canonical": false,
+      "bytes": 24,
+      "sha256": "53a2c0da9090ae631e638bbf7eb5c3182ffdf7dee96b5307a7df79c2ccce7760"
+    }
+  ],
+  "arrival": [
+    {
+      "name": "full pieces then a short last one",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcde",
+        "ab"
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": true
+        }
+      ]
+    },
+    {
+      "name": "any piece after a short one fails at once",
+      "chunkBytes": 8,
+      "pieces": [
+        "a",
+        "bcdefghi",
+        "x"
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": true
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "short"
+        }
+      ]
+    },
+    {
+      "name": "a one-byte drip fails on the second byte",
+      "chunkBytes": 131072,
+      "pieces": [
+        "{",
+        "\""
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": true
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "short"
+        }
+      ]
+    },
+    {
+      "name": "a full piece may end early by up to 3 bytes for a code point",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcde",
+        "😀"
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": true
+        }
+      ]
+    },
+    {
+      "name": "a piece that is not a string",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        null
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "seq"
+        }
+      ]
+    },
+    {
+      "name": "a repeated seq fails at once",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcdefgh"
+      ],
+      "seqs": [
+        0,
+        0
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "seq"
+        }
+      ]
+    },
+    {
+      "name": "a seq that steps back fails at once",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcdefgh",
+        "abcdefgh"
+      ],
+      "seqs": [
+        0,
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "seq"
+        }
+      ]
+    },
+    {
+      "name": "a seq that skips ahead fails at once",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcdefgh"
+      ],
+      "seqs": [
+        0,
+        2
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "seq"
+        }
+      ]
+    },
+    {
+      "name": "seqs in order pass",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcdefgh",
+        "x"
+      ],
+      "seqs": [
+        0,
+        1,
+        2
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": true
+        }
+      ]
+    }
+  ]
+}

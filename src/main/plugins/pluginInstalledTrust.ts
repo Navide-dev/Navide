@@ -15,8 +15,10 @@ import {
 } from './pluginManifest'
 import { readManifestFromEntries, readZipEntries } from './pluginPackage'
 import {
+  RegistryTrustError,
   verifyRegistryPackageTrust,
   type RegistryAuthority,
+  type RegistryTrustErrorCode,
   type RegistryPackageEnvelope,
   type RegistryTrustMetadata,
 } from './pluginRegistryTrust'
@@ -32,6 +34,12 @@ import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginActivationSelector } from './pluginActivationSelector'
 import type { InstalledManifest } from './pluginManifest'
 import { PLUGIN_QUARANTINE_MARKER } from './pluginInstallPaths'
+import {
+  verifyLocalPackage,
+  type PluginLocalTrustContext,
+  type PluginLocalTrustDecision,
+} from './pluginLocalTrust'
+import type { LocalPluginSource } from '../../shared/pluginSource'
 
 export const REGISTRY_RECEIPT_NAME = '.navide-registry-receipt.json'
 export const REGISTRY_ARTIFACT_NAME = '.navide-package.zip'
@@ -64,11 +72,16 @@ export interface InstalledRegistryTrustContext {
   /** Host-derived target expected during every load/refresh revalidation. */
   expectedTarget?: string
   now?: Date
+  /** D3: true when the user chose to keep using this expired testplace artifact. */
+  keepsExpiredTestplace?: (packageId: string, artifactDigest: string) => boolean
+  /** S8 T-MED-1: true when the tester detail listed this test build as taken
+   *  back. It wins over keepsExpiredTestplace. */
+  withdrawnTestplace?: (packageId: string, version: string) => boolean
 }
 
 export type InstalledTrustDecision =
-  | { action: 'allow'; artifactDigest: string; target?: string }
-  | { action: 'quarantine'; reason: string }
+  | { action: 'allow'; artifactDigest: string; target?: string; expired?: true }
+  | { action: 'quarantine'; reason: string; code?: RegistryTrustErrorCode }
 
 export function assertRegistryTrustSnapshotDoesNotRollback(
   existingBytes: Uint8Array | null,
@@ -166,7 +179,12 @@ function installedManifest(pluginDir: string): InstalledManifest {
 function listExtractedFiles(root: string, hostPackageDirs: ReadonlySet<string>): string[] {
   const files: string[] = []
   const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    // Sorted by name: readdir order differs between filesystems and runtimes,
+    // and it decides which invalid entry is named when several are present.
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    )
+    for (const entry of entries) {
       const absolute = join(dir, entry.name)
       const rel = relative(root, absolute).split(sep).join('/')
       if (rel === REGISTRY_RECEIPT_NAME || rel === REGISTRY_ARTIFACT_NAME) continue
@@ -238,7 +256,16 @@ export function verifyInstalledRegistryPackage(
     ) {
       throw new Error('Registry receipt identity does not match the retained artifact')
     }
-    verifyRegistryPackageTrust({
+    if (
+      (receipt.envelope as { channel?: unknown }).channel === 'testplace' &&
+      trust.withdrawnTestplace?.(receipt.packageId, receipt.version) === true
+    ) {
+      throw new RegistryTrustError(
+        'TESTPLACE_WITHDRAWN',
+        `testplace version '${receipt.packageId}@${receipt.version}' was withdrawn`
+      )
+    }
+    const verified = verifyRegistryPackageTrust({
       envelope: receipt.envelope,
       envelopeSignature: receipt.envelopeSignature,
       trustMetadata: trust.snapshot.metadata,
@@ -253,17 +280,79 @@ export function verifyInstalledRegistryPackage(
       },
       expectedHostTarget: trust.expectedTarget ?? currentPluginHostTarget(),
       now: trust.now,
+      allowExpiredTestplace: trust.keepsExpiredTestplace?.(manifest.id, digest) === true,
     })
     if (receipt.registryAuthority !== (trust.registryAuthority ?? 'self-hosted')) {
       throw new Error('Registry authority does not match the current Host configuration')
     }
     assertExtractedContent(pluginDir, archiveBytes)
-    return { action: 'allow', artifactDigest: digest, target: receipt.target }
+    return verified.expired
+      ? { action: 'allow', artifactDigest: digest, target: receipt.target, expired: true }
+      : { action: 'allow', artifactDigest: digest, target: receipt.target }
   } catch (error) {
-    return {
-      action: 'quarantine',
-      reason: error instanceof Error ? error.message : String(error),
-    }
+    // The code tells an expired test build (D3) apart from a takedown.
+    return error instanceof RegistryTrustError
+      ? { action: 'quarantine', reason: error.message, code: error.code }
+      : { action: 'quarantine', reason: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+export type InstalledPackageTrustSource =
+  | { provenance: 'official-registry'; trust: InstalledRegistryTrustContext }
+  | { source: LocalPluginSource; recordPath: string; trust: PluginLocalTrustContext }
+
+/**
+ * Route an installed package to the verifier for its source. A Registry
+ * package goes through {@link verifyInstalledRegistryPackage} unchanged,
+ * including its Registry authority rule. A local package is checked against
+ * the user's consent record instead, so it is never quarantined for the
+ * Registry authority and never quarantines a Marketplace install.
+ */
+export function verifyInstalledPackage(
+  pluginDir: string,
+  expectedPackageId: string,
+  source: InstalledPackageTrustSource
+): InstalledTrustDecision | PluginLocalTrustDecision {
+  if ('provenance' in source) {
+    return verifyInstalledRegistryPackage(pluginDir, expectedPackageId, source.trust)
+  }
+  return verifyLocalPackage(pluginDir, expectedPackageId, source.recordPath, source.trust, source.source)
+}
+
+/** The release channel in an installed package's retained Registry envelope,
+ * for labelling only; trust decisions verify the envelope themselves. A
+ * receipt without one, or one that cannot be read, yields undefined, which
+ * keeps the version-number reading every receipt had before channels. */
+export function readRegistryReceiptChannel(pluginDir: string): string | undefined {
+  try {
+    const channel = (parseReceipt(pluginDir).envelope as { channel?: unknown }).channel
+    return typeof channel === 'string' ? channel : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** The testplace expiry in an installed package's retained Registry
+ * envelope, for display only, read the same way as the channel. */
+export function readRegistryReceiptExpiresAt(pluginDir: string): string | undefined {
+  try {
+    const expiresAt = (parseReceipt(pluginDir).envelope as { expiresAt?: unknown }).expiresAt
+    return typeof expiresAt === 'string' ? expiresAt : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** The artifact digest and version an installed package's Registry receipt
+ * names, read the same way as the channel: for the testplace-withdrawn lookup
+ * only, since load-time verification checks the receipt against the retained
+ * artifact. */
+export function readRegistryReceiptArtifact(pluginDir: string): { artifactDigest: string; version: string } | undefined {
+  try {
+    const receipt = parseReceipt(pluginDir)
+    return { artifactDigest: receipt.artifactDigest, version: receipt.version }
+  } catch {
+    return undefined
   }
 }
 

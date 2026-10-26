@@ -64,6 +64,7 @@ interface Stubs {
   onPipelineResume: ReturnType<typeof vi.fn>
   onPipelineReset: ReturnType<typeof vi.fn>
   onPipelineRestart: ReturnType<typeof vi.fn>
+  clearStoredPipelineRun: ReturnType<typeof vi.fn>
 }
 
 interface StubOverrides {
@@ -123,6 +124,7 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
       pipeline.task = payload.task
       pipeline.stageIndex = 0
     }),
+    clearStoredPipelineRun: vi.fn(async () => true),
   }
 }
 
@@ -147,6 +149,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     'pipelineDag',
     'onPipelineGateApprove',
     'onPipelineGateReject',
+    'clearStoredPipelineRun',
     code,
   )
   factory(
@@ -167,6 +170,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     { awaitingGate: { value: null } },
     vi.fn(async () => true),
     vi.fn(async () => true),
+    stubs.clearStoredPipelineRun,
   )
   return handlers
 }
@@ -297,6 +301,15 @@ describe('ui.pipeline.start', () => {
     const handlers = await loadActions(stubs)
     await expect(handlers['ui.pipeline.start']({ task: 'x' })).rejects.toThrow(/did not start/)
     expect(stubs.onPipelineStart).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the reason onPipelineStart refused with (#417)', async () => {
+    const stubs = makeStubs()
+    stubs.onPipelineStart.mockImplementation(async () => 'pipeline pl-active has no stages')
+    const handlers = await loadActions(stubs)
+    await expect(handlers['ui.pipeline.start']({ task: 'x' })).rejects.toThrow(
+      'ui.pipeline.start: the run did not start (state "idle"): pipeline pl-active has no stages',
+    )
   })
 })
 
@@ -436,6 +449,20 @@ describe('ui.pipeline.reset', () => {
     expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'idle', stageIndex: -1 })
   })
 
+  it('returns the stored run of this workspace to idle too (#417)', async () => {
+    const stubs = makeStubs({ state: 'aborted' })
+    const handlers = await loadActions(stubs)
+    await handlers['ui.pipeline.reset']()
+    expect(stubs.clearStoredPipelineRun.mock.calls).toEqual([['/tmp/ws']])
+  })
+
+  it('reports failure when the stored run could not be cleared', async () => {
+    const stubs = makeStubs({ state: 'aborted' })
+    stubs.clearStoredPipelineRun.mockImplementation(async () => false)
+    const handlers = await loadActions(stubs)
+    await expect(handlers['ui.pipeline.reset']()).rejects.toThrow(/stored run was not cleared/)
+  })
+
   it('refuses when the window has no open workspace', async () => {
     const stubs = makeStubs({ state: 'running', workspace: '' })
     const handlers = await loadActions(stubs)
@@ -449,6 +476,7 @@ describe('ui.pipeline.reset', () => {
     const handlers = await loadActions(stubs)
     await expect(handlers['ui.pipeline.reset']()).rejects.toThrow(/was not cleared/)
     expect(stubs.onPipelineReset).toHaveBeenCalledTimes(1)
+    expect(stubs.clearStoredPipelineRun).not.toHaveBeenCalled()
   })
 })
 

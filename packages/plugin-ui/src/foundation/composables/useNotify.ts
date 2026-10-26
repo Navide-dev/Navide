@@ -11,9 +11,9 @@ import { readonly, ref } from 'vue'
 export type ToastType = 'success' | 'error' | 'info'
 
 /** Opt-in emphasis on top of the type: `external` for content from another
- *  machine or a chat channel, `security` for Guard, `workspace` for another
- *  local workspace. Absent means the ordinary toast. */
-export type ToastVariant = 'external' | 'security' | 'workspace'
+ *  machine, `channel` for a chat channel, `security` for Guard, `workspace`
+ *  for another local workspace. Absent means the ordinary toast. */
+export type ToastVariant = 'external' | 'channel' | 'security' | 'workspace'
 
 export interface Toast {
   id: number
@@ -24,6 +24,14 @@ export interface Toast {
   title?: string
   /** Replaces the type's icon glyph. */
   icon?: string
+  /** One button on the toast (e.g. Undo). Clicking it runs `run` and
+   *  dismisses the toast. Absent means no button. */
+  action?: ToastAction
+}
+
+export interface ToastAction {
+  label: string
+  run: () => void
 }
 
 export interface DialogState {
@@ -67,7 +75,7 @@ const MAX_TOASTS = 6
 // ── Toast ─────────────────────────────────────────────────────────────────
 function toast(
   message: string,
-  opts: { type?: ToastType; duration?: number; variant?: ToastVariant; title?: string; icon?: string } = {}
+  opts: { type?: ToastType; duration?: number; variant?: ToastVariant; title?: string; icon?: string; action?: ToastAction } = {}
 ): void {
   const id = ++seq
   // Evict oldest toasts when the list is full to prevent unbounded growth.
@@ -86,6 +94,7 @@ function toast(
     ...(opts.variant ? { variant: opts.variant } : {}),
     ...(opts.title ? { title: opts.title } : {}),
     ...(opts.icon ? { icon: opts.icon } : {}),
+    ...(opts.action ? { action: opts.action } : {}),
   })
   const duration = opts.duration ?? 4000
   if (duration > 0) {

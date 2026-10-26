@@ -2,6 +2,7 @@
 import { computed, inject } from 'vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import { channelsKey } from '../composables/useChannels'
+import { formatChannelIdentity } from '../lib/channelIdentity'
 
 /** Sidebar-row marker for a pane bound to a chat channel. */
 const props = defineProps<{ paneId: string }>()
@@ -10,6 +11,10 @@ const props = defineProps<{ paneId: string }>()
 const t = i18n.global.t
 const store = inject(channelsKey, null)
 const binding = computed(() => store?.bindingFor(props.paneId) ?? null)
+const tip = computed(() => {
+  const b = binding.value
+  return b ? formatChannelIdentity(b, { t, state: store?.accountState(b.platform, b.account) }, 'short') : ''
+})
 </script>
 
 <template>
@@ -17,7 +22,7 @@ const binding = computed(() => store?.bindingFor(props.paneId) ?? null)
     v-if="binding"
     class="channel-tag"
     data-testid="channel-sidebar-icon"
-    :title="`${t(`channels.platform.${binding.platform}`)} · ${binding.title || binding.chat_id}`"
+    :title="tip"
   ><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.6 3.4h10.8v7.2H7l-3 2.4v-2.4H2.6Z" /><path d="M5.4 6.2h5.2M5.4 8.2h3.2" /></svg></span>
 </template>
 

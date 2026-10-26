@@ -427,6 +427,7 @@ export function expandHomePath(fp: string, home: string): string {
 // frame — there by its position rather than to skip it — so the two cannot
 // drift apart.
 import { BOX_ONLY_LINE_RE } from '../../../lib/injectEcho'
+import { keysAnswerPermissionBox } from '../../../lib/cliAwaitingInput'
 import { collapseHomePath } from '../lib/paths'
 export { collapseHomePath } from '../lib/paths'
 
@@ -473,6 +474,20 @@ export function serializeRenderedBuffer(
     lines.push(text)
   }
   lines.reverse()
+  return lines.join('\n')
+}
+
+/** Every row of the visible screen, top to bottom, frame and blank rows kept.
+ *  Unlike serializeRenderedBuffer it drops nothing off the bottom: the
+ *  collapsed-paste submit check locates the input box by its frame, closing
+ *  edge included, and a box taller than a fixed tail window must still be
+ *  found. READ-ONLY. */
+export function serializeVisibleScreen(term: import('@xterm/xterm').Terminal): string {
+  const buffer = term.buffer.active
+  const lines: string[] = []
+  for (let r = 0; r < term.rows; r++) {
+    lines.push(buffer.getLine(buffer.baseY + r)?.translateToString(true) ?? '')
+  }
   return lines.join('\n')
 }
 
@@ -824,6 +839,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // prompt paints once and then goes silent, so the hysteresis below would
   // call it idle. See markNeedsInput.
   const awaitingInputAt = ref<number>(0)
+  // When Claude's PermissionRequest hook raised a wait, 0 when none: the box
+  // stays open until answered, so output cannot end it. See holdNeedsInput.
+  const awaitingHeldAt = ref<number>(0)
+  // The tool that box is for, as the backend keyed it. Not reactive: only
+  // App.vue's release decision reads it.
+  let awaitingHeldKey = ''
   // The prompt box the hook announces is itself clean output, and it can land
   // on either side of the hook (one arrives over HTTP, the other over the PTY).
   // Clean output inside this window is read as the prompt painting itself;
@@ -958,10 +979,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // one case where the user has to act for anything to happen at all. The
     // settle window absorbs the prompt's own paint; real output past it, or an
     // authoritative turn end (which clears the flag), means it is over.
-    if (
-      awaitingInputAt.value > 0 &&
-      lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS
-    ) return 'awaiting'
+    if (permissionWaitLive()) return 'awaiting'
     // A question reports the same badge as a permission prompt — both mean the
     // pane will not move until the user answers. It is kept a separate signal
     // rather than folded into awaitingInputAt because the two are raised and
@@ -1025,10 +1043,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  them, so a pane with both flags lit reports the more restrictive one. */
   const awaitingKind = computed<'permission' | 'question' | null>(() => {
     if (displayStatus.value !== 'awaiting') return null
-    const permission =
-      awaitingInputAt.value > 0 &&
-      lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS
-    return permission ? 'permission' : 'question'
+    return permissionWaitLive() ? 'permission' : 'question'
   })
   const BUFFER_CAP = 128 * 1024
   const redrawGuard = createRedrawGuard()
@@ -1114,6 +1129,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // A turn that ended is not waiting on anyone: clear the flag so a stale
     // notification can't hold the badge on AWAITING past the turn.
     awaitingInputAt.value = 0
+    releaseNeedsInputHold()
   }
 
   /** The CLI is parked on the user. Two callers, both in App.vue: Claude's
@@ -1130,6 +1146,42 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  poll would drop AWAITING while Claude is still parked. */
   function clearNeedsInput(): void {
     awaitingInputAt.value = 0
+  }
+
+  /** A permission wait is on right now: held, or raised by the Notification hook
+   *  or the screen watcher and not yet settled. App.vue asks before raising one
+   *  so a box two signals report chimes once. Edge: a Notification wait older
+   *  than the settle window no longer counts, so a second signal that late chimes
+   *  again. */
+  function permissionWaitLive(): boolean {
+    return (
+      awaitingHeldAt.value > 0 ||
+      (awaitingInputAt.value > 0 &&
+        lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS)
+    )
+  }
+
+  /** Claude's PermissionRequest hook: hold the wait against output until the box
+   *  is answered. `toolKey` is the tool it is for. Leaves awaitingInputAt alone,
+   *  so a wait the Notification hook raised keeps its own settle behaviour. */
+  function holdNeedsInput(toolKey: string): void {
+    awaitingHeldAt.value = Date.now()
+    awaitingHeldKey = toolKey
+  }
+
+  /** End the hold, and only the hold. Every way a hold ends comes through here:
+   *  the matching tool result, an answering key, the turn end, a respawn, the
+   *  screen check. */
+  function releaseNeedsInputHold(): void {
+    awaitingHeldAt.value = 0
+    awaitingHeldKey = ''
+  }
+
+  /** Keys sent to this pane, typed (term.onData) or relayed (ui.pane.sendKeys
+   *  writes to the PTY without going through onData). An answering key ends a
+   *  held wait. */
+  function noteAnswerKeys(data: string): void {
+    if (awaitingHeldAt.value > 0 && keysAnswerPermissionBox(data)) releaseNeedsInputHold()
   }
 
   /** The agent put a question to the user. Called from App.vue on the reader's
@@ -1183,6 +1235,18 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     backgroundTaskIds.value = next
   }
 
+  /** Whether a background task still holds this pane, on the same fuse as the
+   *  RUNNING badge but read now and regardless of AWAITING — the pipeline asks
+   *  "is work still running", not "what badge to show". */
+  function hasLiveBackgroundTasks(): boolean {
+    const lastSignOfLife = Math.max(lastCleanBurstAt.value, turnCompleteAt.value)
+    const now = Date.now()
+    for (const startedAt of backgroundTaskIds.value.values()) {
+      if (now - Math.max(startedAt, lastSignOfLife) <= BACKGROUND_TASK_FUSE_MS) return true
+    }
+    return false
+  }
+
   function markBufferPosition(): number {
     flushPendingClean()
     return cleanBuffer.value.length
@@ -1209,6 +1273,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  wherever it happened to leave the cursor. */
   function readScreenTail(maxLines: number): string {
     return serializeRenderedBuffer(term, maxLines, 'viewport-bottom')
+  }
+
+  /** The whole visible screen with its frame rows — see serializeVisibleScreen. */
+  function readVisibleScreen(): string {
+    return serializeVisibleScreen(term)
   }
 
   /** Cursor-row text up to the cursor column. Used by the pane-drop handler
@@ -1962,6 +2031,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // unlike the old raw buffer there is nothing to clear — the content lives in
   // xterm itself, which is still on screen at that point.
   let snapshotDiscarded = false
+  // A CLI sign-in pane (spawned with isLogin / loginProfileId): its screen holds
+  // an authorization URL or a pasted code, and localStorage lands on disk in
+  // plain text where any agent with a shell can read it. Never snapshotted.
+  let isSignInPane = false
   // Set once this pane's xterm has had the snapshot written into it. Both entry
   // points (tryReattach on a live PTY, _doCreate on a fresh one) read the same
   // stored payload, and replaying it a second time into the same terminal would
@@ -2049,6 +2122,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   }
   function saveScrollSnapshot(): void {
     const key = scrollSnapKey()
+    if (isSignInPane) {
+      try { localStorage.removeItem(key) } catch { /* ignore */ }
+      return
+    }
     let lines = SCROLL_SNAP_LINES
     let payload = snapshotDiscarded ? '' : serializeSnapshot(lines)
     // Halve the line count (never the string) until it fits the byte cap.
@@ -2343,6 +2420,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       // overlay already blocks the pointer, but focus can still be in the
       // terminal when the socket drops mid-keystroke.
       if (!inputTransportReady()) return
+      noteAnswerKeys(data)
       if (data === '\r' || data === '\n' || data === '\r\n') {
         if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
         if (inputBuffer.trim() === '/clear' && opts?.onClear) {
@@ -2826,6 +2904,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         const duration = typeof probe.duration_ms === 'number' ? `, ${probe.duration_ms}ms` : ''
         term.writeln(`\x1b[2m[startup probe] ${probe.binary_path}${version}${duration}\x1b[0m`)
       }
+      if (probe?.warning) term.writeln(`\x1b[33m[startup probe] ${probe.warning}\x1b[0m`)
+      if (probe?.untested_version) term.writeln(`\x1b[2m[startup probe] ${probe.untested_version}\x1b[0m`)
       for (const warning of resp.payload.wiring_warnings ?? []) {
         term.writeln(`\x1b[33m[mcp] ${warning}\x1b[0m`)
       }
@@ -2975,6 +3055,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // timestamp here would show the fresh pane as parked on a question that
     // no longer exists.
     awaitingInputAt.value = 0
+    releaseNeedsInputHold()
     questionAt.value = 0
     deliveredPendingCount.value = 0
     // A new process has none of the old one's background tasks.
@@ -3005,6 +3086,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // Use the stable CLI session id as the reattach key when provided, so the
     // lookup below survives a reload (paneId does not).
     if (opts.resumeKey) persistKey = opts.resumeKey
+    isSignInPane = !!(opts.isLogin || opts.loginProfileId)
     // Snapshot the pane's previous PTY id NOW — tryReattach clears it when the
     // PTY is gone. Passed to terminal.create as replaces_terminal_id so the
     // backend reaps a still-live predecessor this spawn is replacing (resume-id
@@ -3286,9 +3368,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     return !!dims && Number.isFinite(dims.cols) && resizeCtrl.capCols(dims.cols) < dims.cols
   }
 
-  // The user's explicit opt-out of the cap: widen to the full container now.
-  // Widening reflows the scrollback, which is the cost the cap exists to avoid,
-  // so this only ever runs from a user action — never from a layout path.
+  // Lift the cap and widen to the full container now. Widening reflows the
+  // scrollback, which is the cost the cap exists to avoid, so this only runs
+  // when the user asks for width: the "Fit to pane width" item, or widening
+  // the window itself — never from a layout-mode switch.
   function unlockCols(): void {
     lockCols(false)
     fitTerminal({ redrawAfterSettle: true })
@@ -3455,16 +3538,23 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     markTurnComplete,
     markNeedsInput,
     clearNeedsInput,
+    holdNeedsInput,
+    releaseNeedsInputHold,
+    awaitingHeld: (): { since: number; key: string } => ({ since: awaitingHeldAt.value, key: awaitingHeldKey }),
+    noteAnswerKeys,
+    permissionWaitLive,
     markQuestion,
     clearQuestion,
     markDeliveredPending,
     clearDeliveredPending,
     noteBackgroundTasks,
+    hasLiveBackgroundTasks,
     markBufferPosition,
     recleanBuffer,
     flushPendingClean,
     readRenderedText,
     readScreenTail,
+    readVisibleScreen,
     readLineBeforeCursor,
     updateXtermTheme,
     isAltBuffer,

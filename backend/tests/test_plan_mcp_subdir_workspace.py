@@ -28,7 +28,7 @@ from agent_team_backend.projects import Project
 
 
 def _ctx(pane_id: str = "pa") -> Any:
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )
@@ -98,13 +98,15 @@ async def test_pipeline_window_requests_address_the_panes_own_workspace(
 
     await plan_mcp.pipeline_next(_ctx())
     await plan_mcp.pipeline_resume(_ctx())
-    await plan_mcp.pipeline_reset(_ctx())
+    # Reset ends every pane in the window it runs in, so from a pane of that
+    # window it is refused before anything is addressed (review #534 R2).
+    assert (await plan_mcp.pipeline_reset(_ctx()))["error_code"] == "self-close"
     await plan_mcp.pipeline_restart(_ctx())
     await plan_mcp.pipeline_abort(_ctx())
     await plan_mcp.pipeline_gate(_ctx(), "pass")
     await plan_mcp.pipeline_restart_from(_ctx(), "n-01-0")
 
-    assert addressed == [subdir_pane] * 7
+    assert addressed == [subdir_pane] * 6
 
 
 @pytest.mark.asyncio

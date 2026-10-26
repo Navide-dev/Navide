@@ -14,6 +14,7 @@ from agent_team_backend.agent_message_log import (
     _add_agent_keys,
     _add_kind,
     _add_seq,
+    _add_threading,
     _create_schema,
 )
 from agent_team_backend.db import Database
@@ -312,7 +313,7 @@ def test_clear_failure_is_swallowed_and_leaves_the_rows_in_place(log, monkeypatc
 def test_a_fresh_database_migrates_straight_to_the_current_schema(tmp_path):
     db = Database(tmp_path / "navide.db")
     AgentMessageLog(db=db)
-    assert db.schema_version("agent_message_log") == 5
+    assert db.schema_version("agent_message_log") == 6
     with db.transaction() as cur:
         columns = {
             r["name"] for r in cur.execute("PRAGMA table_info(agent_message_log)").fetchall()
@@ -340,7 +341,7 @@ def test_an_existing_v1_database_upgrades_and_backfills_seq(tmp_path):
             )
 
     store = AgentMessageLog(db=db)
-    assert db.schema_version("agent_message_log") == 5
+    assert db.schema_version("agent_message_log") == 6
     with db.transaction() as cur:
         seqs = {
             r["uid"]: r["seq"]
@@ -457,7 +458,7 @@ def test_a_live_v3_database_upgrades_in_place_without_losing_anything(tmp_path):
     store = AgentMessageLog(db=db)
     rows = store.tail()
 
-    assert db.schema_version("agent_message_log") == 5
+    assert db.schema_version("agent_message_log") == 6
     assert [r["uid"] for r in rows] == ["v3:1", "v3:2"]
     assert [r["content"] for r in rows] == ["kept v3:1", "kept v3:2"]
     assert [r["sender_agent"] for r in rows] == ["claude", "claude"]
@@ -476,7 +477,7 @@ def test_reopening_an_upgraded_database_does_not_rerun_the_column_step(tmp_path)
 
     reopened = AgentMessageLog(db=db)  # must not raise
 
-    assert db.schema_version("agent_message_log") == 5
+    assert db.schema_version("agent_message_log") == 6
     assert [r["kind"] for r in reopened.tail()] == ["notice"]
 
 
@@ -561,7 +562,7 @@ def test_rows_written_before_v5_have_no_threading(tmp_path):
     store = AgentMessageLog(db=db)
     rows = store.tail()
 
-    assert db.schema_version("agent_message_log") == 5
+    assert db.schema_version("agent_message_log") == 6
     assert [r["uid"] for r in rows] == ["v4:1"]
     assert rows[0]["content"] == "kept"
     assert rows[0]["kind"] == "notice"
@@ -793,3 +794,23 @@ def test_incoming_survives_a_broken_database(tmp_path):
         cur.execute("DROP TABLE agent_message_log")
 
     assert broken.incoming("me") == []
+
+
+def test_rows_written_before_v6_belong_to_no_workspace(tmp_path):
+    """Additive: a v5 row survives untouched and reads back unstamped (NULL),
+    which the workspace-scoped plugin API treats as nobody's."""
+    db = Database(tmp_path / "navide.db")
+    for version, step in enumerate((_create_schema, _add_seq, _add_agent_keys, _add_kind, _add_threading), start=1):
+        db.migrate("agent_message_log", version, step)
+    with db.transaction() as cur:
+        cur.execute(
+            "INSERT INTO agent_message_log"
+            " (uid, created_at, status, sender, recipient, content, seq)"
+            " VALUES ('v5:1', 100, 'delivered', 'alpha', 'beta', 'kept', 1)"
+        )
+
+    rows = AgentMessageLog(db=db).tail()
+
+    assert db.schema_version("agent_message_log") == 6
+    assert rows[0]["content"] == "kept"
+    assert rows[0]["sender_workspace"] is None and rows[0]["recipient_workspace"] is None

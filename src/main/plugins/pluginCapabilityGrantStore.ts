@@ -14,7 +14,7 @@ import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import type { HostCapabilityGrant } from './pluginCapabilityBroker'
 
 const GRANTS_FILE = '.navide-capability-grants.json'
-const SYSTEM_NAMESPACES = new Set(['fs', 'ui', 'aiCli'])
+const SYSTEM_NAMESPACES = new Set(['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages'])
 
 interface PersistedGrantState {
   schemaVersion: 1

@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from agent_team_backend import app, ws_handlers
+from agent_team_backend import app, quota_ledger, ws_handlers
 from agent_team_backend.db import Database
 from agent_team_backend.log_readers import ClaudeLogReader, TokenUsage
 from agent_team_backend.log_readers.attribution import Attribution
@@ -30,6 +30,16 @@ from .test_app_terminal_create import _session, _stub_agent_cli_probe  # noqa: F
 
 T0 = "2026-09-16T01:00:00Z"
 T0_EPOCH = 1789520400.0
+#: The ledger's clock for the quota tests. tokens.quota_cycles without a range
+#: reads the 30 days up to the ledger's now, so on the real clock these fixed
+#: T0 cycles fell out of it on 2026-10-16 06:00 UTC (T0 + 5h + 30d).
+LEDGER_NOW = T0_EPOCH + 86400
+
+
+@pytest.fixture
+def ledger_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pins the ledger's default now; an explicit `now` still wins."""
+    monkeypatch.setattr(quota_ledger, "_now", lambda now: LEDGER_NOW if now is None else float(now))
 
 
 class FakeWebSocket:
@@ -198,7 +208,7 @@ async def test_turns_carry_the_account_of_their_start_and_the_accounts_list(
 
 
 @pytest.mark.asyncio
-async def test_quota_cycles_handler_follows_the_contract(stores, tmp_path: Path) -> None:
+async def test_quota_cycles_handler_follows_the_contract(stores, ledger_clock, tmp_path: Path) -> None:
     store, _history, ledger, _attribution = stores
     workspace = str(tmp_path)
     resets = T0_EPOCH + 5 * 3600
@@ -306,7 +316,7 @@ async def test_account_periods_handler_rolls_days_into_months_and_years(stores, 
 
 
 @pytest.mark.asyncio
-async def test_quota_exhausted_handler_stamps_the_panes_account(stores, monkeypatch) -> None:
+async def test_quota_exhausted_handler_stamps_the_panes_account(stores, ledger_clock, monkeypatch) -> None:
     _store, history, ledger, _attribution = stores
     from datetime import datetime, timezone
 

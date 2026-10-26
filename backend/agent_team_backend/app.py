@@ -34,10 +34,11 @@ from . import guard_hooks
 from .guard import runtime as guard_runtime
 from . import ws_auth
 from . import error_ledger
+from . import launch_id
 from . import loop_watchdog
 from . import mem_probe
 from . import osplat
-from . import portable_credentials
+from . import portable_credentials_cleanup
 from . import push_delivery
 from . import resource_limits
 from . import subagent_tracker
@@ -132,6 +133,7 @@ from . import plan_history
 from .plugins import wiring as plugin_wiring
 from .plugins.host import PluginHost
 from . import ws_handlers
+from . import acp_ws  # registers the acp.* requests; ACP on disconnect, janitor and shutdown
 from .git_watcher import GitWatcher
 
 log = logging.getLogger("agent_team_backend")
@@ -212,6 +214,12 @@ stages_store = StagesStore(db=database)
 tokens_store = TokensStore(db=database)
 # Which account each pane was pinned to, and when — global like the pane ids.
 pane_account_history = PaneAccountHistory(db=database)
+# Navide plugin audit (plan B, B1-d): agent tool calls and plugin activity,
+# write-only. Creating the tables is the only work done here; writing and
+# pruning run in the background task started at startup.
+from .plugins.audit_log import PluginAuditLog  # noqa: E402
+
+plugin_audit_log = PluginAuditLog(db=database)
 # Quota cycles per account: the usage poller files samples here; an open
 # cycle's token side is summed from the store's per-account slices.
 quota_ledger = QuotaLedger(db=database, totals_provider=tokens_store.account_window_totals)
@@ -430,6 +438,69 @@ async def unicast_any(event: dict[str, Any]) -> bool:
     return False
 
 
+def is_main_window(session: "Session") -> bool:
+    """A proven Navide window that runs the UI action bus: a main window."""
+    return bool(getattr(session, "navide_window", False) and getattr(session, "ui_bus_ready", False))
+
+
+async def broadcast_main_windows(event: dict[str, Any]) -> None:
+    """Send *event* to every connected main window only (not plugin, editor
+    or other WS clients): for records naming a requester's pane and workspace."""
+    for session in list(_SESSIONS):
+        if session.dead or not is_main_window(session):
+            continue
+        try:
+            await session.send_json(event)
+        except Exception as err:  # noqa: BLE001
+            log.warning("main-window broadcast send failed: %s", err)
+            _SESSIONS.discard(session)
+
+
+async def nudge_plugin_request_recovery(session: "Session") -> None:
+    """A main window went away (review-370 R1): if it was carrying out approved
+    plugin requests, ask the main windows still open to settle them, instead of
+    leaving them ``applying`` until another window opens. Each window waits a
+    short grace before settling, so a window that is only reconnecting claims
+    its request back first (R2). Never raises."""
+    window_id = getattr(session, "window_id", "")
+    if not window_id or not is_main_window(session):
+        return
+    try:
+        from .ipc import make_event
+        from .plugins import agent_tools_contract as contract
+        from .skills_approvals import registry
+
+        held = [
+            r["approval_id"] for r in registry.plugin_requests()
+            if r["status"] == "applying" and registry.applying_by(r["approval_id"]) == window_id
+        ]
+        if held:
+            await broadcast_main_windows(make_event(contract.PLUGIN_APPROVAL_RECOVER_EVENT, {"approval_ids": held}))
+    except Exception as err:  # noqa: BLE001 - a closing socket must not fail on this
+        log.warning("plugin request recovery nudge failed: %s", err)
+
+
+def has_main_window() -> bool:
+    """Whether a main window is connected now (forms open there)."""
+    return any(not s.dead and is_main_window(s) for s in list(_SESSIONS))
+
+
+def main_window_sessions() -> list["Session"]:
+    """The main windows connected now that announced a page-load id."""
+    return [
+        s for s in list(_SESSIONS)
+        if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
+    ]
+
+
+def live_main_window_ids() -> set[str]:
+    """The page-load ids (``ui.invoke.ready`` window_id) of the main windows connected now."""
+    return {
+        s.window_id for s in list(_SESSIONS)
+        if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
+    }
+
+
 async def unicast_host(event: dict[str, Any]) -> bool:
     """Send one internal agent request to the authenticated Electron Host."""
     for session in list(_SESSIONS):
@@ -451,6 +522,52 @@ def host_supports_plans_backend() -> bool:
         not session.dead and session.host_authenticated and session.plans_backend_v2
         for session in list(_SESSIONS)
     )
+
+
+#: The Navide plugins whose Disabled switch the Host reports.
+DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide"})
+#: Set by main on every backend start: the built-ins disabled at that moment,
+#: comma-separated. Absent when none is.
+DISABLED_BUILTIN_PLUGINS_ENV = "NAVIDE_DISABLED_BUILTIN_PLUGINS"
+#: What the last authenticated Host registration reported, kept across a Host
+#: reconnect. None until a Host has registered in this process.
+_host_reported_disabled: frozenset[str] | None = None
+
+
+def note_host_disabled_plugins(disabled: frozenset[str]) -> None:
+    """Record a Host registration's disabled built-ins (see host.register)."""
+    global _host_reported_disabled
+    _host_reported_disabled = frozenset(disabled)
+
+
+def _disabled_at_spawn() -> frozenset[str]:
+    raw = os.environ.get(DISABLED_BUILTIN_PLUGINS_ENV, "")
+    return frozenset(item for item in raw.split(",") if item in DISABLEABLE_BUILTIN_PLUGINS)
+
+
+def host_disabled_plugins() -> frozenset[str]:
+    """Built-in Navide plugins the user disabled.
+
+    An authenticated Host session is authoritative. Without one (before the
+    Host registers, or while it reconnects) the last registration's answer
+    stands, and before any registration the set main passed at spawn. With
+    nothing disabled every source is empty, which is main's behaviour."""
+    disabled: set[str] = set()
+    hosted = False
+    for session in list(_SESSIONS):
+        if not session.dead and session.host_authenticated:
+            hosted = True
+            disabled |= session.disabled_plugins
+    if hosted:
+        return frozenset(disabled)
+    if _host_reported_disabled is not None:
+        return _host_reported_disabled
+    return _disabled_at_spawn()
+
+
+def plans_plugin_disabled() -> bool:
+    """Whether the user disabled the built-in Plans plugin."""
+    return "navide.plans" in host_disabled_plugins()
 
 
 def navide_window_proof_matches(challenge: str, proof: Any) -> bool:
@@ -539,12 +656,23 @@ class Session:
         # appears in renderer/backend-info payloads.
         self.host_authenticated = False
         self.plans_backend_v2 = False
+        # Built-in Navide plugins the user disabled, as the Host registered them.
+        self.disabled_plugins: frozenset[str] = frozenset()
         # Set by `ui.invoke.ready`: only a main window runs the UI action bus,
         # while plugin, editor and manager windows share this server and never
         # answer a ui.invoke.request. unicast_any picks among these alone, the
         # most recently focused first.
         self.ui_bus_ready = False
         self.ui_focused_at = 0.0
+        # A main window's page-load id (`ui.invoke.ready` window_id): stays the
+        # same across reconnects, changes when the window reloads (B2-c).
+        self.window_id = ""
+        # The workspaces a main window holds (`ui.invoke.ready` workspaces):
+        # the one it opened with plus the ones its sidebar adopted, re-announced
+        # whenever that list changes. Read by the MCP self-close checks, which
+        # count a window holding the caller's workspace as the caller's own
+        # even when none of that workspace's panes sit in it.
+        self.held_workspaces: tuple[str, ...] = ()
         # Set by `window.prove` answering this connection's challenge (see
         # navide_window_proof_matches): a Navide window, as opposed to any
         # other client holding the token. ui_bus_ready is self-declared.
@@ -772,7 +900,10 @@ async def _broadcast_plans_changed(ws_path: str) -> None:
     file directly). Record stage-transition snapshots first so subscribers
     refreshing on the event see up-to-date history, then notify."""
     try:
-        await asyncio.to_thread(plan_history.snapshot_plans, ws_path)
+        # Snapshots are plan-document writes (`.history/`); none while the user
+        # has Plans disabled. The change is still announced.
+        if not plans_plugin_disabled():
+            await asyncio.to_thread(plan_history.snapshot_plans, ws_path)
     except Exception as err:  # noqa: BLE001
         log.warning("plan snapshot scan failed for %s: %s", ws_path, err)
     await broadcast(make_event("plans.changed", {"workspace_path": ws_path}))
@@ -962,6 +1093,9 @@ async def _active_emit(event: dict[str, Any] | bytes) -> None:
         exit_pane_id = payload.get("pane_id")
         if exit_pane_id:
             _schedule_pane_unregister(exit_pane_id)
+            # The CLI holding the pane's /plan-mcp token is gone; the token
+            # goes too unless the pane is still on screen (see wiring).
+            mcp_server_wiring.release_pane_token(str(exit_pane_id))
             # A CLI that exits with subagents still running never reports their
             # stops, so the count would stay above zero for a pane id that no
             # longer has a CLI behind it.
@@ -1014,6 +1148,7 @@ _OWNERLESS_SINCE: dict[str, float] = {}
 _ownerless_sweeper_task: "asyncio.Task[None] | None" = None
 _mem_probe_task: "asyncio.Task[None] | None" = None
 _dev_time_sweeper_task: "asyncio.Task[None] | None" = None
+_plugin_audit_task: "asyncio.Task[None] | None" = None
 
 
 async def _sweep_ownerless_ptys_once(now: float | None = None) -> list[str]:
@@ -1052,6 +1187,7 @@ async def _ownerless_pty_janitor() -> None:
             await _sweep_ownerless_ptys_once()
         except Exception as err:  # noqa: BLE001 — the janitor must survive
             log.warning("ownerless-pty sweep failed: %s", err)
+        await acp_ws.sweep_ownerless()  # its own errors handled inside
 
 
 # SessionStart is run at the first turn in Codex 0.154, not at TUI startup.
@@ -1221,6 +1357,32 @@ pane_activity_listeners: list[Callable[[str, dict[str, Any] | None], None]] = []
 # else the naming snippet. Must not raise.
 pane_prompt_listeners: list[Callable[[str, str], None]] = []
 _USER_PROMPT_DETAILS = frozenset({"user", "prompt", "user_message"})
+# Per pane, wall-clock times that tell whose turn a log turn end is: when the
+# last Stop-hook turn end arrived, and the transcript's own time of the last real
+# prompt the conversation-log reader saw. Transcript time, not arrival time: a
+# lagging reader records an earlier turn's lines after the next hook, but their
+# stamps still say when they were written — before that turn's hook fired.
+_last_hook_turn_end: dict[str, float] = {}
+_last_log_turn_start: dict[str, float] = {}
+# When this backend began tracking each pane (its first activity record), and
+# when it began tracking at all: the lower bound for a pane's first hook turn
+# end, which has no previous one. A reader catching up replays log records
+# written before then, and those are never this turn's.
+_pane_tracked_since: dict[str, float] = {}
+_TRACKING_STARTED = time.time()
+# time.time() moves in whole ticks on some platforms (about 15.6 ms on
+# Windows): a hook turn end's wall time can read up to a tick earlier than it
+# happened, so the previous turn's log end — stamped by the transcript, to
+# the millisecond — could seem to come after it. The bound is pushed one tick
+# later: a turn end inside that tick is never taken as this turn's (better no
+# text than the wrong text).
+_WALL_TICK_S = time.get_clock_info("time").resolution
+# The first of a turn's two turn ends (hook, log) still waiting for the other:
+# (source, monotonic time). Only for the arrival-gap log line below.
+_turn_end_first: dict[str, tuple[str, float]] = {}
+_TURN_END_PAIR_MAX_S = 1800.0
+# A log turn end later than its hook by this much is worth a line in backend.log.
+_TURN_END_GAP_INFO_S = 2.0
 
 
 def _current_pane_id(pane_id: str) -> str:
@@ -1240,14 +1402,42 @@ def pane_activity(pane_id: str) -> dict[str, Any] | None:
     return _pane_activity.get(_current_pane_id(pane_id))
 
 
+def _note_turn_end_gap(key: str, source: str, now: float) -> None:
+    """Log how far apart a turn's hook and log turn ends arrived (time and pane only)."""
+    first = _turn_end_first.pop(key, None)
+    if first is not None and first[0] != source and now - first[1] <= _TURN_END_PAIR_MAX_S:
+        gap = now - first[1]
+        level = logging.INFO if source == "log" and gap >= _TURN_END_GAP_INFO_S else logging.DEBUG
+        log.log(level, "turn end for %s: %s first, %s %.2fs later", key, first[0], source, gap)
+        return
+    _turn_end_first[key] = (source, now)
+
+
 def _record_pane_activity(
-    pane_id: str, event_type: str, text: str, *, detail: str = ""
+    pane_id: str, event_type: str, text: str, *, detail: str = "",
+    source: str = "", turn_start: bool = False, event_wall: float | None = None,
+    hook_turn: dict[str, Any] | None = None,
 ) -> None:
     if not pane_id:
         return
     key = _current_pane_id(pane_id)
     now = time.monotonic()
+    # When it happened, for matching a hook's turn end to the log's: a hook's
+    # is its arrival; a log record's is the transcript's own stamp, and None
+    # when it has none (it then never matches: arrival time is exactly what a
+    # lagging reader gets wrong). Other writers read no wall clock at all.
+    wall = time.time() if source == "hook" else event_wall
+    if source in ("hook", "log") and key not in _pane_tracked_since:
+        _pane_tracked_since[key] = time.time()
     prior = _pane_activity.get(key)
+    if event_type == "turn_complete" and source in ("hook", "log"):
+        _note_turn_end_gap(key, source, now)
+        if source == "hook":
+            _last_hook_turn_end[key] = time.time()
+    if turn_start:
+        if wall is not None:
+            _last_log_turn_start[key] = wall
+        _turn_end_first.pop(key, None)
     # When the turn this event belongs to began: the first agent_active after
     # the previous turn ended opens a turn, later events of the same turn
     # carry that start forward, and the turn_complete closes it. The account
@@ -1271,19 +1461,80 @@ def _record_pane_activity(
         # The reader's structured detail (a stop reason such as droid's
         # ``model_usage_exhausted``) — kept only for turn ends, bounded.
         "detail": (detail or "")[:200] if event_type == "turn_complete" else "",
+        # Who wrote it: "hook" (a CLI hook; its turn end carries no text of its
+        # own) or "log" (the conversation-log reader, which has the text).
+        "source": source,
+        # The log reader saw a real prompt: a new turn began in the transcript.
+        "turn_start": turn_start,
+        # When it happened: the transcript's stamp for a log record, the
+        # arrival time otherwise.
+        "event_wall": wall,
+        # A hook turn end only: when the hook turn end before it arrived, and
+        # whether the log had already ended this turn (then its text, if any,
+        # is in "text" and none is still to come).
+        **(hook_turn or {}),
     }
     for listener in pane_activity_listeners:
         listener(key, _pane_activity[key])
 
 
+def log_turn_end_after(pane_id: str, previous_hook_end: float | None) -> dict[str, Any] | None:
+    """The pane's latest entry when it is the log's turn end of the turn that
+    followed ``previous_hook_end`` (a hook turn end's arrival time), else None.
+
+    Claude writes a turn's end line before its Stop hook fires, so a turn end
+    the transcript stamped after the previous hook turn end belongs to the turn
+    after it. That needs no prompt: a turn woken by a <task-notification>, a
+    slash command or a hook-delivered message has no typed prompt line. When the
+    transcript does have a typed prompt after the previous hook turn end, the
+    turn end must also come after it (an earlier turn's text half written late
+    is not this turn's). Under load the reader lags by whole turns, and taken by
+    arrival an earlier turn's end told a chat, or an agent waiting on
+    cli_send_and_wait, the previous reply. A record without a stamp never
+    matches.
+    """
+    key = _current_pane_id(pane_id)
+    entry = _pane_activity.get(key)
+    if entry is None or entry["event_type"] != "turn_complete" or entry.get("source") != "log":
+        return None
+    written = entry.get("event_wall")
+    if written is None:
+        return None
+    # The first hook turn end a pane has here has no previous one: then the
+    # turn began no earlier than when this backend started tracking the pane.
+    bound = previous_hook_end if previous_hook_end is not None else _pane_tracked_since.get(key, _TRACKING_STARTED)
+    bound += _WALL_TICK_S
+    if written <= bound:
+        return None
+    prompted = _last_log_turn_start.get(key)
+    if prompted is not None and prompted > bound:
+        return entry if written >= prompted else None
+    return entry
+
+
+def _hook_turn_end(pane_id: str) -> tuple[str, dict[str, Any]]:
+    """What a Stop hook's turn end records: the log's text for this same turn
+    when the reader got there first ("" otherwise, and when the turn wrote
+    none), and the facts a waiter needs to recognise this turn's log end later.
+    """
+    previous = _last_hook_turn_end.get(_current_pane_id(pane_id))
+    match = log_turn_end_after(pane_id, previous)
+    return (match["text"] if match else ""), {
+        "prev_hook_turn_end": previous, "log_ended": match is not None,
+    }
+
+
 def forget_pane_activity(pane_id: str) -> None:
     """Drop a closed pane's entry so the cache tracks live panes only."""
     _pane_activity.pop(pane_id, None)
+    _last_hook_turn_end.pop(pane_id, None)
+    _last_log_turn_start.pop(pane_id, None)
+    _turn_end_first.pop(pane_id, None)
+    _pane_tracked_since.pop(pane_id, None)
     for listener in pane_activity_listeners:
         listener(pane_id, None)
     hook_drain.forget_pane(pane_id)
     push_delivery.forget_pane(pane_id)
-    portable_credentials.forget_launch(pane_id)
     forget_pane_live_sessions(pane_id)
 
 
@@ -1308,6 +1559,20 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             # External session — skip; no pane to deliver to.
             return
         pane_id = attributed.pane_id or ""
+        if event.event_type == "subagent_turn_end":
+            # A Codex sub-agent's turn end is not its parent pane's: the pane's
+            # state, reply text and dev time ignore it. The per-account turn
+            # count is recorded exactly as it was when this arrived as a
+            # turn_complete (the record_turn call below); whether a sub-agent
+            # turn should count there is a separate decision.
+            tokens_store.record_turn(
+                event.vendor,
+                pane_account_history.profile_at(
+                    pane_id, parse_event_time(event.timestamp)
+                ),
+                event.timestamp,
+            )
+            return
         # A turn a Stop hook blocked is still written to the conversation log,
         # and its reader reports it as a turn end — after the hook already said
         # the agent is working on the message it was handed. Flagged rather than
@@ -1317,14 +1582,16 @@ async def _on_log_activity(event: ActivityEvent) -> None:
         superseded = event.event_type == "turn_complete" and hook_drain.turn_end_is_superseded(
             pane_id
         )
+        prompted = (
+            event.event_type == "agent_active" and bool(event.text) and bool(pane_id)
+            and event.detail in _USER_PROMPT_DETAILS
+        )
         _record_pane_activity(
             pane_id, "agent_active" if superseded else event.event_type, event.text,
-            detail=event.detail,
+            detail=event.detail, source="log", turn_start=prompted,
+            event_wall=parse_event_time(event.timestamp),
         )
-        if (
-            event.event_type == "agent_active" and event.text and pane_id
-            and event.detail in _USER_PROMPT_DETAILS
-        ):
+        if prompted:
             for prompt_listener in pane_prompt_listeners:
                 try:
                     prompt_listener(
@@ -2012,8 +2279,9 @@ def _register_workspace_and_backfill(workspace_path: str) -> None:
     attribution.register_workspace(workspace_path)
     # Provision plan-document infrastructure (_spec.md + _template.html) into
     # <workspace>/.agent-team/plans/. Idempotent, never overwrites, never
-    # raises — see plan_provisioning.
-    ensure_plan_assets(workspace_path)
+    # raises — see plan_provisioning. Not while the user has Plans disabled.
+    if not plans_plugin_disabled():
+        ensure_plan_assets(workspace_path)
     # Start watching for disk changes here rather than waiting for the GitPane's
     # first `git.status`: the watcher is the only catch-all writer of the
     # preview record, and until this call it never saw a workspace nobody had
@@ -2113,8 +2381,8 @@ def spawn_env_overridden_keys(
     """Requested keys that a later source in the spawn chain went on to win.
 
     Answerable only once the whole chain has run: vendor defaults, onboarding,
-    login profiles, CLI home management, MCP/plugin/push wiring and portable
-    credentials all write after the request, and ``env_remove`` — applied last
+    login profiles, CLI home management and MCP/plugin/push wiring all write
+    after the request, and ``env_remove`` — applied last
     of all, in ``terminals.spawn`` — can still delete a key that survived them.
     """
     removed = set(env_remove or ())
@@ -2159,6 +2427,9 @@ async def _reclaim_orphan_codex_homes() -> None:
 @app.on_event("startup")
 async def _start_log_watcher() -> None:
     _sanitize_inherited_cli_env()
+    # Before any client connects: every spawn record stamps this launch, and the
+    # renderer's 'auto' resume scope compares against the one before it.
+    launch_id.rotate(ui_settings_store)
     if tokens_store.has_quota_changes():
         _schedule_tokens_broadcast("")
 
@@ -2208,6 +2479,11 @@ async def _start_log_watcher() -> None:
         credential_vault.promote_profile_home_secrets(cli_profiles_store)
     )
 
+    # One-time: erase what the removed portable-credential feature left on a
+    # machine that used it. No vault call where it was never used.
+    # Background task — credential I/O must never block startup.
+    asyncio.create_task(_remove_portable_credential_leftovers())
+
     # Sweep leftover isolated login homes into their slots, independently of
     # the usage poller (which only harvests while usage polling is enabled).
     # Background task — credential I/O must never block startup.
@@ -2241,6 +2517,10 @@ async def _start_log_watcher() -> None:
     _dev_time_sweeper_task = asyncio.create_task(dev_time_store.stale_sweeper(
         lambda ws: broadcast(make_event("devtime.changed", {"workspace_path": ws}))
     ))
+
+    # Navide plugin audit: flush queued rows every second, prune hourly.
+    global _plugin_audit_task
+    _plugin_audit_task = asyncio.create_task(plugin_audit_log.run())
 
     # Navide's in-process scheduler (timed messages to CLI panes). Built off
     # the loop: its first use runs the schema migration.
@@ -2399,6 +2679,10 @@ async def _stop_log_watcher() -> None:
             _mem_probe_task.cancel()
         if _dev_time_sweeper_task is not None:
             _dev_time_sweeper_task.cancel()
+        if _plugin_audit_task is not None:
+            # Cancelling runs its final flush; wait for it so queued rows land.
+            _plugin_audit_task.cancel()
+            await asyncio.gather(_plugin_audit_task, return_exceptions=True)
         from . import scheduler
 
         await scheduler.shutdown()
@@ -2417,6 +2701,7 @@ async def _stop_log_watcher() -> None:
                 await _TERMINALS.kill_all()
             except Exception as err:  # noqa: BLE001
                 log.warning("pty shutdown sweep failed: %s", err)
+        await acp_ws.shutdown()  # ACP agents: never raises (see acp_ws.shutdown)
         if _log_watcher is not None:
             # Settle what the drain has read but not yet counted, BEFORE stop()
             # cancels the flush task that would have done it. See
@@ -2655,6 +2940,37 @@ _HOOK_VENDORS = frozenset(
 # vendor's hook file, not something the vendor spec exposes.
 _SUBAGENT_COUNTING_VENDORS = frozenset({"claude"})
 
+# Hook events that pair a permission box with the tool result that answers it.
+# PermissionRequest carries no tool_use_id, so the pairing is the tool name plus
+# a fingerprint of its input — both Post events repeat the same tool_input.
+_TOOL_KEYED_EVENTS = frozenset({"permission_request", "post_tool_use", "post_tool_use_failure"})
+
+# The two tool results. Both hooks are installed async, so the last tool's result
+# can land after Stop: they only release a permission hold and must never count
+# as the agent working, or a finished pane would read as mid-turn again.
+_TOOL_RESULT_EVENTS = frozenset({"post_tool_use", "post_tool_use_failure"})
+
+
+# Tools whose answer is written into their input (AskUserQuestion's `answers`,
+# ExitPlanMode's approved plan), so the input a Post event repeats differs from
+# the one the box was raised with. They are keyed by name alone, which is enough:
+# only one such box is ever open at a time.
+_INPUT_REWRITTEN_TOOLS = frozenset({"AskUserQuestion", "ExitPlanMode"})
+
+
+def _hook_tool_key(payload: dict) -> str:
+    """`<tool_name>:<hash of tool_input>`, or "" when the payload names no tool."""
+    name = str(payload.get("tool_name") or "")
+    if not name:
+        return ""
+    if name in _INPUT_REWRITTEN_TOOLS:
+        return name
+    try:
+        canonical = json.dumps(payload.get("tool_input"), sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return ""
+    return f"{name}:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:16]}"
+
 # Tools whose PreToolUse payload names a file the agent is about to write.
 # Read-only tools carry a file_path too, so the set — not the field — is what
 # decides whether a hook becomes a preview record.
@@ -2781,7 +3097,8 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     Hook commands installed by `claude_hooks` / `qwen_hooks` / `copilot_hooks`
     POST here with:
       - Header X-Agent-Team-Event: pre_tool_use | stop | notification |
-        subagent_stop
+        subagent_stop | permission_request | post_tool_use |
+        post_tool_use_failure
       - Body: the JSON payload the CLI pipes to the hook on stdin
 
     The three vendors disagree on where hooks are configured but agree on what
@@ -2819,7 +3136,10 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # a new event_type to keep working.
     if event_kind == "stop":
         event_type = "turn_complete"
-    elif event_kind in ("pre_tool_use", "notification", "subagent_stop"):
+    elif event_kind in (
+        "pre_tool_use", "notification", "subagent_stop",
+        "permission_request", "post_tool_use", "post_tool_use_failure",
+    ):
         event_type = "agent_active"
     else:
         return {"ok": False, "reason": f"unknown event kind: {event_kind!r}"}
@@ -2891,17 +3211,20 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # composer or not). It reports the pane waiting, not working, so recording
     # it as agent_active would replace the turn_complete entry for good —
     # cli_get_status would show a finished pane as active, with no turn text.
-    # The broadcast below still carries it for the renderer to judge.
-    if pane_id and notification_type != "idle_prompt":
+    # The broadcast below still carries it for the renderer to judge. A tool
+    # result is left out for the same reason: it can arrive after Stop.
+    if pane_id and notification_type != "idle_prompt" and event_kind not in _TOOL_RESULT_EVENTS:
         # The log-reader sink is not the only writer of _pane_activity any
         # more: for the hook vendors the Stop hook is the earliest and most
         # reliable end-of-turn signal there is, and cli_wait_idle could not see
         # it — it had to sit out the 10s quiet threshold instead. Hook payloads
         # carry no assistant text, so keep the text the sink already recorded
         # for this same turn rather than blanking it.
-        prior = pane_activity(pane_id)
-        prior_text = prior["text"] if prior and event_type == "turn_complete" else ""
-        _record_pane_activity(pane_id, event_type, prior_text)
+        if event_type == "turn_complete":
+            prior_text, hook_turn = _hook_turn_end(pane_id)
+            _record_pane_activity(pane_id, event_type, prior_text, source="hook", hook_turn=hook_turn)
+        else:
+            _record_pane_activity(pane_id, event_type, "", source="hook")
     await broadcast(make_event("agent.activity", {
         "vendor": vendor,
         "event_type": event_type,
@@ -2913,6 +3236,10 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         "timestamp": "",
         "detail": "hook:stop-blocked" if blocked_envelope else f"hook:{event_kind}",
         "notification_type": notification_type,
+        # Which tool a permission box is for, and which tool a result is of, so
+        # the frontend releases a held box only on its own tool finishing.
+        # Empty on every other event kind.
+        "tool_key": _hook_tool_key(payload) if event_kind in _TOOL_KEYED_EVENTS else "",
         # Background subagents this pane is still waiting on. Always present so
         # the frontend can trust a 0 as "none running" rather than "not
         # reported"; vendors without these hooks never send the field at all
@@ -2920,11 +3247,12 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         "pending_subagents": subagent_tracker.pending(pane_id),
     }))
     # Dev time: only real work signals. A notification (idle_prompt /
-    # permission_prompt) is mapped to agent_active above for the busy-state
-    # path, but it marks the agent WAITING — beating on it would open an agent
+    # permission_prompt) or a permission_request is mapped to agent_active above
+    # for the busy-state path, but it marks the agent WAITING — beating on it would open an agent
     # interval at exactly the moment nothing is running. Guarded like the
     # preview record: this endpoint's response must not depend on the store.
-    if event_kind != "notification":
+    # A late tool result is no work signal either: it can follow Stop.
+    if event_kind not in ("notification", "permission_request", *_TOOL_RESULT_EVENTS):
         try:
             if dev_time_store.agent_event(ws_path or cwd, pane_id or "", event_type, ""):
                 await broadcast(
@@ -3140,11 +3468,13 @@ async def ws(websocket: WebSocket) -> None:
         # Peer is gone: silence any in-flight sends before cancelling tasks.
         session.dead = True
         _SESSIONS.discard(session)
+        await nudge_plugin_request_recovery(session)
         await _kill_onboarding_runs(session)
         # Release PTY ownership so their output is dropped until reattached.
         orphaned = [tid for tid, owner in _PTY_OWNERS.items() if owner is session]
         for tid in orphaned:
             del _PTY_OWNERS[tid]
+        acp_ws.drop_owner(session)  # its ACP sessions: ownerless, as its PTYs
         # Flag the messaging handles this window mirrored as offline. They are
         # kept for a grace period rather than dropped: the window is usually
         # just reconnecting, and a deleted entry told callers the pane did not
@@ -3441,6 +3771,16 @@ def _login_spawn_command(agent_key: str, command: Any) -> Any:
     return replaced
 
 
+async def _remove_portable_credential_leftovers() -> None:
+    try:
+        await asyncio.to_thread(
+            lambda: portable_credentials_cleanup.run(
+                database, credential_vault, now=int(time.time()))
+        )
+    except Exception as err:  # noqa: BLE001 — retried on the next start
+        log.warning("portable-credential cleanup failed: %s", err)
+
+
 def _agent_signed_out(agent_key: str) -> bool:
     """True when this CLI is installed but its live credentials are absent.
 
@@ -3460,12 +3800,6 @@ def _agent_signed_out(agent_key: str) -> bool:
     if spec is None or spec.live_file is None:
         return False
     try:
-        # A selected portable credential that can be put in effect is what
-        # the pane will run on, whatever the live login says. One that is
-        # missing or shadowed does not count: the spawn refuses it with the
-        # reason, and the native answer below stays the honest one.
-        if portable_credentials.selection_usable(agent_key, home=Path.home()):
-            return False
         return not bool(credential_vault.identity(agent_key).get("signedIn"))
     except Exception:  # noqa: BLE001 — advisory only, never fails a spawn
         return False
@@ -3765,7 +4099,44 @@ def _probe_agent_cli_for_spawn(agent_key: str, requested_command: Any = None) ->
             message += f" — {hint}"
             error_details["hint"] = hint
         raise AgentCliProbeError(message, error_details)
+    if dep.official_regex and re.search(dep.official_regex, output) is None:
+        # A same-named CLI from someone else (issue #402: a community `grok`
+        # at ~/.grok/bin/grok). The spawn goes ahead — it may be what the user
+        # wants — but the pane says what it is running.
+        install = dep.install_for(osplat.platform_id).command or dep.docs_url
+        details["warning"] = (
+            f"{executable_display} does not identify as {dep.label} "
+            f"(--version printed {output.splitlines()[0][:60] if output else 'nothing'!r}); "
+            f"to use {dep.label}, install it with: {install}"
+        )
+    else:
+        untested = _untested_version_note(agent_key, dep.label, version)
+        if untested:
+            details["untested_version"] = untested
     return details
+
+
+def _leading_version(text: str) -> tuple[int, ...]:
+    # "2026.08.25-3e8eec8" -> (2026, 8, 25): a build suffix is not a version.
+    m = re.match(r"\d+(?:\.\d+)*", text.strip())
+    return tuple(int(p) for p in m.group(0).split(".")) if m else ()
+
+
+def _untested_version_note(agent_key: str, label: str, version: str | None) -> str:
+    """A line for the pane when the CLI is newer than the version Navide was
+    last verified against. Disclosure only: the spawn goes ahead either way."""
+    spec = cli_vendor(agent_key)
+    switch = spec.account_switch if spec is not None else None
+    verified = (spec.cli_verified_version if spec is not None else "") or (
+        switch.verified_version if switch is not None else ""
+    )
+    found, known = _leading_version(version or ""), _leading_version(verified)
+    if not found or not known or found <= known:
+        return ""
+    return (
+        f"{label} {version} is newer than the last version Navide verified "
+        f"({verified}); it should work, but this version has not been tested"
+    )
 
 
 _HOME_PREFIX = str(Path.home())

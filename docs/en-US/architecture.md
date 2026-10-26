@@ -120,6 +120,42 @@ way at least once:
 A detached window is one run group's view of a single workspace and does
 neither of these.
 
+Agents see windows through the MCP `window_*` tools. A window is named by its
+page-load id (the `window_id` it sends with `ui.invoke.ready`), which a reload
+replaces on purpose, so a stale id answers `unknown-window` instead of reaching
+the new page. `window_list` asks each main window to describe itself
+(`ui.window.describe`, addressed to that window alone; a window that does not
+answer in time is listed as `answered: false`). `window_focus` asks one window
+to switch to a project it already holds (through `ui.workspace.switch`) and to
+bring itself to the front; Electron main focuses the window that sent the IPC
+and takes no window argument. Each window action is recorded with the calling
+pane in `<app data>/logs/agent-window-actions.jsonl`, and the affected window
+says which pane did it. `cli_list_targets` and `cli_whoami` carry each pane's
+`window_id`.
+
+`window_close` and `workspace_close` are for CLI panes only and never act on
+the caller's own window or workspace (`_self_scope_refusal` in the backend and
+`selfCloseRefusal` in the window, both from the credential). Neither ends a CLI
+unless the user agrees: `window_close` lets go of each project the way the
+sidebar's plain "Close workspace" does and then closes the window
+(`window:closeSelf`, the sender's own window); `workspace_close` keeps the
+panes by default, and with `keep_panes: false` the window asks the user every
+time, naming the pane. A PTY outlives its window: the backend only drops the
+window's ownership on disconnect, so the CLI keeps running and re-attaches when
+the project is opened again. Until then its output is not read (a bare-line
+report written meanwhile reaches nobody) and it is out of the messaging roster.
+
+`window_move_pane` keeps the rule that a pane lives only in a window holding
+its project. A single pane moves only into a detached window of its own (its
+tab group, split off first when it shares one) or, from one, back into the main
+window holding its project (the detached group merges back); any other target
+is `pane-needs-workspace-move`. Mode `workspace` moves the project with every
+pane of it: the source window lets go of it the way the plain "Close
+workspace" does, then the destination adopts it (`ui.workspace.adopt`), or it
+goes back to the source. The two window commands behind it
+(`ui.pane.moveToWindow`, `ui.workspace.moveToWindow`) are refused on
+`ui_invoke`, since half of a move alone is a close.
+
 ## Runtime workflow
 
 ### Evolution session
@@ -211,8 +247,22 @@ Sessions should publish structured progress back to the Project Intelligence Lay
 - YOLO mode can remove external CLI approval or sandbox gates.
 - Cloud providers and MCP servers receive data according to the selected feature and configuration.
 - Cross-agent handoffs can propagate sensitive text.
+- A Navide plugin can read agent data of its own workspace through the
+  read-only `agents` namespace (panes, lineage, message delivery records,
+  session list) and, separately disclosed, message text through
+  `agentMessages`. Neither reads session transcripts, account or quota data,
+  other workspaces or other devices; the Host binds the workspace and the
+  backend (`agents_host_api.py`) returns fixed field lists only.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
+- A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is
+  checked against a token minted for that one pane at spawn and revoked when
+  the pane closes; panes no longer share a token. This is not a boundary
+  between processes of the same user: the token sits in the pane's spawn
+  environment, its 0600 file under `plan-mcp-panes/` in the app data
+  directory, or its per-pane home, and any process running as the user —
+  another pane's agent included — can read those and present itself as that
+  pane. Binding a caller to the pane's own process is a planned follow-up.
 
 See [Privacy and Data Flows](privacy.md) and [SECURITY.md](../../SECURITY.md).
 

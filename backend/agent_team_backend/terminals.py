@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import IO, Any, Awaitable, Callable
 from uuid import uuid4
 
-from . import osplat, pty_registry
+from . import login_panes, osplat, pty_registry
 from .applog import app_data_dir, in_data_dir
 from .cli_vendors.base import VendorRuntimeContext
 from .cli_vendors.registry import risk_runtime_context
@@ -437,6 +437,11 @@ _DESCENDANT_SNAPSHOT_FAST_S = 5.0
 # window, leaving nothing to kill.
 _EXIT_ORPHAN_GRACE_S = 1.0
 
+# On EOF, how long _close waits for a not-yet-reapable child so the exit
+# event carries its exit code (correctness, not a limit: a normal exit is
+# reaped within milliseconds and returns at once).
+_EXIT_CODE_REAP_WAIT_S = 1.0
+
 
 def _same_process(recorded: str, current: str) -> bool:
     """Whether two start-time identities name the same process. Empty on
@@ -680,6 +685,8 @@ class TerminalService:
                 risk_context=risk_context,
             )
             self._sessions[session.id] = session
+            # A sign-in pane stays one after its PTY exits (login_panes).
+            login_panes.note(pane_id, session.metadata)
             if log_fp is not None:
                 _register_live_log(session.id, output_log_file)
             handle.start_reading(self._loop, lambda: self._on_readable(session))
@@ -2020,8 +2027,47 @@ class TerminalService:
             session.proc.poll()
         except Exception:
             pass
-        exit_code = session.proc.returncode
         uptime_ms = max(0, round((time.monotonic() - session.started_monotonic) * 1000))
+        # EOF can arrive before the child is reapable (it closed its end of
+        # the PTY but has not finished exiting, seen under load); the exit
+        # event goes out once, so give the reap a moment off the loop or its
+        # exit code is lost. The session leaves the table now, as it would.
+        if reason == "exit" and session.proc.returncode is None:
+            self._sessions.pop(session.id, None)
+            task = self._loop.create_task(self._close_after_reap(session, uptime_ms))
+            self._exit_settles.add(task)
+            task.add_done_callback(self._exit_settles.discard)
+            return
+        if self._finish_close(session, reason=reason, uptime_ms=uptime_ms):
+            # EOF can arrive before the child is reapable: it has closed its
+            # end of the PTY but not finished exiting (seen under load). Both
+            # cleanups need it confirmed dead, so wait for that, bounded.
+            # kill_all's EOF arrives as "shutdown" (its pending close reason),
+            # and kill_all awaits these settles before it returns.
+            task = self._loop.create_task(self._settle_exit(session))
+            self._exit_settles.add(task)
+            task.add_done_callback(self._exit_settles.discard)
+
+    async def _close_after_reap(self, session: TerminalSession, uptime_ms: int) -> None:
+        """The rest of an EOF close whose child was not yet reapable: wait for
+        the reap, bounded by _EXIT_CODE_REAP_WAIT_S, without blocking the loop
+        every pane shares, then emit the exit event with whatever is known. A
+        child still alive then is settled inline, so kill_all's one snapshot
+        of _exit_settles still covers it."""
+        deadline = self._loop.time() + _EXIT_CODE_REAP_WAIT_S
+        # ASYNC110 suppressed: bounded poll with awaited sleeps, as in _settle_exit.
+        while (  # noqa: ASYNC110
+            session.proc.poll() is None and self._loop.time() < deadline
+        ):
+            await asyncio.sleep(0.01)
+        if self._finish_close(session, reason="exit", uptime_ms=uptime_ms):
+            await self._settle_exit(session)
+
+    def _finish_close(self, session: TerminalSession, *, reason: str, uptime_ms: int) -> bool:
+        """Read the exit code, emit terminal.exit and run the post-exit
+        cleanups. Returns True when the child is not yet confirmed dead on an
+        EOF / shutdown close, i.e. the caller must run _settle_exit."""
+        exit_code = session.proc.returncode
         exit_signal: str | None = None
         if exit_code is not None and exit_code < 0:
             try:
@@ -2045,6 +2091,7 @@ class TerminalService:
             {
                 "terminal_session_id": session.id,
                 "pane_id": session.pane_id,
+                "workspace_path": str(session.metadata.get("workspace_path") or ""),
                 "reason": reason,
                 "exit_code": exit_code,
                 "uptime_ms": uptime_ms,
@@ -2071,18 +2118,14 @@ class TerminalService:
         # Drop the crash-recovery record only once the child is confirmed
         # dead: a still-live child (e.g. a TERM-trapping CLI) must stay
         # visible to the next start's reap_stale. kill()'s escalation task
-        # and kill_all() unregister the survivors they put down.
+        # unregisters the survivors it puts down; kill_all() relies on the
+        # settle below for a child its close found not yet reapable.
         if child_gone:
             self._submit_lifecycle(
                 in_data_dir(self._data_dir, pty_registry.unregister, session.proc.pid),
             )
-        elif reason == "exit":
-            # EOF can arrive before the child is reapable: it has closed its
-            # end of the PTY but not finished exiting (seen under load). Both
-            # cleanups above need it confirmed dead, so wait for that, bounded.
-            task = self._loop.create_task(self._settle_exit(session))
-            self._exit_settles.add(task)
-            task.add_done_callback(self._exit_settles.discard)
+            return False
+        return reason in ("exit", "shutdown")
 
     def _queue_exit_reap(self, descendants: dict[int, str]) -> None:
         self._pending_reaps.update(descendants)

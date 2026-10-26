@@ -11,7 +11,7 @@
     "system": {
       "type": "array",
       "uniqueItems": true,
-      "items": { "enum": ["fs", "ui", "aiCli"] }
+      "items": { "enum": ["fs", "ui", "aiCli", "web", "agents", "agentMessages"] }
     },
     "shell": {
       "type": "array",

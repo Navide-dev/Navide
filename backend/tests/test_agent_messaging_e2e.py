@@ -291,7 +291,7 @@ async def test_registry_survives_a_rename_and_readdresses() -> None:
 
 def _ctx(pane_id: str) -> Any:
     """A Context carrying the query string the pane's MCP client sends."""
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )

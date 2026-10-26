@@ -151,7 +151,7 @@ async def test_mcp_ui_invoke_cannot_modify_terminal_protection(guard_store, monk
     monkeypatch.setattr(mcp, "_ui_request", fake_ui_request)
     agent_messaging.register("pa", "agent", "/ws/alpha", agent_key="claude")
     ctx = SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(
-        query_params={"pane": "pa", "t": mcp_wiring.caller_token()})))
+        query_params={"pane": "pa", "t": mcp_wiring.caller_token("pa")})))
     await mcp.ui_invoke("/ws/alpha", "guard.terminal.set_category", ctx, {"id": "power", "enabled": False})
     await mcp.ui_invoke("/ws/alpha", "guard.terminal.add_pattern", ctx, {"kind": "allow", "pattern": "sudo"})
     assert forwarded == ["guard.terminal.set_category", "guard.terminal.add_pattern"]  # only as UI actions

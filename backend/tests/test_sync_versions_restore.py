@@ -97,19 +97,19 @@ async def test_restoring_an_mcp_version_waits_for_approval(tmp_path, account_key
     await a.sync()
     store.replace_servers([{**_mcp("runner"), "command": "/usr/bin/second"}])
     await a.sync()
-    (old,) = await a.engine.versions("mcp", "runner")
+    (old,) = await a.engine.versions("mcp", "i:runner")
     pushes = server.pushes
-    result = await a.engine.restore("mcp", "runner", old["rev"])
+    result = await a.engine.restore("mcp", "i:runner", old["rev"])
     assert result["held"] is True
     assert {s["name"]: s["command"] for s in store.list_servers()} == {"runner": "/usr/bin/second"}
-    assert sync_approvals.entry("mcp", "runner")["status"] == "pending"
+    assert sync_approvals.entry("mcp", "i:runner")["status"] == "pending"
     # Nothing goes up while the restored version waits: the cloud keeps
     # what this machine still runs until the user says yes here.
     assert (await a.sync())["ok"] is True
     assert server.pushes == pushes
     assert {s["name"]: s["command"] for s in store.list_servers()} == {"runner": "/usr/bin/second"}
-    (row,) = [h for h in sync_approvals.listing() if h["itemId"] == "runner"]
-    assert sync_approvals.decide(a.adapter, "runner", True, row["digest"])["status"] == "applied"
+    (row,) = [h for h in sync_approvals.listing() if h["itemId"] in ("runner", "i:" + "runner")]
+    assert sync_approvals.decide(a.adapter, "i:runner", True, row["digest"])["status"] == "applied"
     assert {s["name"]: s["command"] for s in store.list_servers()} == {"runner": "/usr/bin/first"}
     # Approved and landed: an ordinary local edit, pushed once.
     await a.sync()
@@ -129,14 +129,14 @@ async def test_a_rejected_restore_changes_nothing_anywhere(tmp_path, account_key
     await a.sync()
     store.replace_servers([{**_mcp("runner"), "command": "/usr/bin/second"}])
     await a.sync()
-    (old,) = await a.engine.versions("mcp", "runner")
+    (old,) = await a.engine.versions("mcp", "i:runner")
     pushes = server.pushes
-    assert (await a.engine.restore("mcp", "runner", old["rev"]))["held"] is True
-    (row,) = [h for h in sync_approvals.listing() if h["itemId"] == "runner"]
-    assert sync_approvals.decide(a.adapter, "runner", False, row["digest"])["status"] == "rejected"
+    assert (await a.engine.restore("mcp", "i:runner", old["rev"]))["held"] is True
+    (row,) = [h for h in sync_approvals.listing() if h["itemId"] in ("runner", "i:" + "runner")]
+    assert sync_approvals.decide(a.adapter, "i:runner", False, row["digest"])["status"] == "rejected"
     # A "no" to a restore leaves nothing behind: no hold, nothing withheld,
     # nothing pushed, and the current version keeps running.
-    assert sync_approvals.entry("mcp", "runner") is None
+    assert sync_approvals.entry("mcp", "i:runner") is None
     assert (await a.sync())["ok"] is True
     assert server.pushes == pushes
     assert {s["name"]: s["command"] for s in store.list_servers()} == {"runner": "/usr/bin/second"}

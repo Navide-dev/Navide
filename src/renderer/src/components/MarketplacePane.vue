@@ -18,11 +18,16 @@ import { usePluginInventory } from '../composables/usePluginInventory'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import { ipcErrorMessage, usePluginInstallFlow } from '../composables/usePluginInstallFlow'
 import PluginTrustDialog from './PluginTrustDialog.vue'
+import PluginDisclosureCard from './PluginDisclosureCard.vue'
+import PluginDisclosureSummary from './PluginDisclosureSummary.vue'
+import PluginSourceBadge from './PluginSourceBadge.vue'
+import type { PluginSource } from '../../../shared/pluginSource'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import PackInstallDialog from './PackInstallDialog.vue'
 import { usePackInstallFlow } from '../composables/usePackInstallFlow'
 import { useConfirmedExternalLink } from '../composables/useConfirmedExternalLink'
 import { marketplaceDetailRequest, takeMarketplaceDetailRequest } from '../marketplaceDeepLink'
+import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
 
 type Sort = 'downloads' | 'updated' | 'rating'
 
@@ -183,7 +188,7 @@ function selectCategory(slug: string): void {
 
 function categoryLabel(item: Pick<MarketplaceCategory, 'slug' | 'label'>): string {
   const key = `settings.extensions.marketplace.category.${item.slug}`
-  return te(key) ? t(key) : item.label
+  return te(key) ? t(key) : reveal(item.label)
 }
 
 // The Registry's own featured flag, shown as a shelf above the list when the
@@ -268,6 +273,13 @@ const latestVersionInfo = computed(() => {
     null
   )
 })
+
+/** K2: only a Registry-signed version reads as reviewed; anything else gets no source badge. */
+const detailSource = computed<PluginSource | undefined>(() => {
+  const info = latestVersionInfo.value
+  if ((info?.trust_tier ?? detail.value?.trust_tier) !== 'signed-verified') return undefined
+  return info?.channel === 'pre-release' ? 'prerelease' : 'marketplace'
+})
 // The Registry's latest version has no artifact for this Host. A different
 // install candidate alone does not mean that: with "Get pre-releases" on, the
 // candidate is a newer pre-release while the latest stable is still installable.
@@ -341,6 +353,26 @@ async function setPrerelease(enabled: boolean, input?: HTMLInputElement): Promis
   } finally {
     prereleaseBusy.value = false
   }
+}
+
+// K5: a Navide plugin that is not installed can be installed as a pre-release
+// from its detail page. The offer is the Registry's newest pre-release when
+// this Host can install it and Install would not already take it.
+const prereleaseOffer = computed(() => {
+  const d = detail.value
+  const version = d?.latest_prerelease_version
+  if (!d || !version || installableVersionInfo.value?.version === version) return null
+  return d.versions.find((v) => v.version === version && v.installable && !v.yanked && v.compatible !== false) ?? null
+})
+// Turns on this Navide plugin's switch only (never another one's), then
+// installs the offered version through the normal flow.
+async function installPrereleaseOffer(): Promise<void> {
+  const d = detail.value
+  const offer = prereleaseOffer.value
+  if (!d || !offer) return
+  await setPrerelease(true)
+  if (detail.value?.gets_prereleases !== true || idOf(detail.value) !== idOf(d)) return
+  await installFrom(d.namespace, d.name, offer.version)
 }
 
 // Extension Pack detail: each member's name, version and permissions, shown
@@ -513,18 +545,23 @@ watch(
             />
             <div class="mkt-hero-text">
               <div class="mkt-detail-title">
-                <h3>{{ detail.display_name || detail.name }}</h3>
+                <h3>{{ reveal(detail.display_name || detail.name) }}</h3>
+                <PluginSourceBadge v-if="detailSource" :source="detailSource" />
+                <PluginSourceBadge
+                  v-if="detailSource === 'marketplace' && detail.latest_prerelease_version"
+                  source="prerelease"
+                />
                 <span v-if="isPack(detail)" class="mkt-badge mkt-badge--accent mkt-pack-badge">
                   {{ $t('settings.extensions.pack.badge') }}
                 </span>
               </div>
               <div class="mkt-detail-id">
-                <span class="mkt-muted">{{ idOf(detail) }}</span>
+                <span class="mkt-muted">{{ reveal(idOf(detail)) }}</span>
               </div>
               <div class="mkt-meta">
                 <i18n-t keypath="settings.extensionsPolicy.labeledValue" tag="span" scope="global">
                   <template #label>{{ $t('settings.extensions.marketplace.publisher') }}</template>
-                  <template #value><strong>{{ detail.publisher }}</strong></template>
+                  <template #value><strong>{{ reveal(detail.publisher) }}</strong></template>
                 </i18n-t>
                 <span v-if="detail.latest_version">{{ $t('settings.extensions.marketplace.versionLabel', { version: detail.latest_version }) }}</span>
                 <span v-if="prereleaseCandidate" class="mkt-badge mkt-badge--warn mkt-prerelease-note">
@@ -554,7 +591,7 @@ watch(
               </div>
             </div>
           </div>
-          <p v-if="detail.description" class="mkt-desc">{{ detail.description }}</p>
+          <p v-if="detail.description" class="mkt-desc">{{ reveal(detail.description) }}</p>
           <div class="mkt-actions">
             <button
               v-if="isPack(detail)"
@@ -584,7 +621,9 @@ watch(
                   })
                 }}
               </span>
+              <!-- Built-in Navide plugins are disabled in Extensions, never removed. -->
               <button
+                v-if="!idOf(detail).startsWith('navide.')"
                 class="ext-uninstall nv-btn nv-btn--ghost mkt-btn-danger-ghost"
                 :disabled="flow.busy.value"
                 @click="flow.uninstall(idOf(detail))"
@@ -611,6 +650,14 @@ watch(
                     ? $t('settings.extensions.install')
                     : $t('settings.extensions.marketplace.installVersion', { version: installableVersionInfo.version })
               }}</template>
+            </button>
+            <button
+              v-if="!isPack(detail) && !installedById.get(idOf(detail)) && prereleaseOffer"
+              class="mkt-install-prerelease nv-btn nv-btn--ghost"
+              :disabled="flow.busy.value || prereleaseBusy"
+              @click="installPrereleaseOffer"
+            >
+              {{ $t('settings.extensions.marketplace.installPrerelease', { version: prereleaseOffer.version }) }}
             </button>
             <label v-if="hasPrereleases" class="mkt-prerelease-toggle">
               <input
@@ -686,9 +733,9 @@ watch(
                 :size="32"
               />
               <div class="mkt-pack-member-main">
-                <span class="mkt-pack-member-name" v-truncate>{{ m.display_name || m.id }}</span>
+                <span class="mkt-pack-member-name" v-truncate>{{ reveal(m.display_name || m.id) }}</span>
                 <span class="mkt-muted mkt-pack-member-id" v-truncate>
-                  {{ m.version ? `${m.id} · ${m.version}` : m.id }}
+                  {{ reveal(m.version ? `${m.id} · ${m.version}` : m.id) }}
                 </span>
               </div>
               <div class="mkt-pack-member-caps">
@@ -895,6 +942,19 @@ watch(
               </p>
             </section>
 
+            <!-- Plan B D1: the disclosure card of the version install would pick.
+                 Raw Registry data here; prepareInstall verifies it. -->
+            <section v-if="latestVersionInfo && !isPack(detail)" class="mkt-side-card mkt-disclosure">
+              <h4>{{ $t('pluginDisclosure.title') }}</h4>
+              <PluginDisclosureCard
+                :disclosure="latestVersionInfo.disclosure"
+                :scan="latestVersionInfo.scan"
+                :registry="latestVersionInfo.registry"
+                :verified="false"
+                :source="detailSource"
+              />
+            </section>
+
             <section
               v-if="detail.repository || detail.homepage || detail.license || detail.categories.length"
               class="mkt-side-card"
@@ -908,7 +968,7 @@ watch(
                   {{ $t('settings.extensions.marketplace.homepage') }} ↗
                 </a>
                 <span v-if="detail.license" class="mkt-muted mkt-license">
-                  {{ $t('settings.extensions.marketplace.license', { license: detail.license }) }}
+                  {{ $t('settings.extensions.marketplace.license', { license: reveal(detail.license) }) }}
                 </span>
               </div>
               <div v-if="detail.categories.length" class="mkt-tags mkt-categories">
@@ -1062,8 +1122,8 @@ watch(
                   :path="ext.icon_path"
                   :size="index === 0 ? 56 : 40"
                 />
-                <span class="mkt-featured-name" v-truncate>{{ ext.display_name || ext.name }}</span>
-                <span class="mkt-featured-desc" v-truncate>{{ ext.description }}</span>
+                <span class="mkt-featured-name" v-truncate>{{ reveal(ext.display_name || ext.name) }}</span>
+                <span class="mkt-featured-desc" v-truncate>{{ reveal(ext.description) }}</span>
                 <span v-if="index === 0" class="mkt-featured-tags">
                   <span v-if="ext.trust_tier === 'signed-verified'" class="mkt-quiet mkt-quiet--ok">✓ {{ $t('settings.extensions.marketplace.signedShort') }}</span>
                   <span v-if="ext.compatible === true" class="mkt-quiet">{{ $t('settings.extensions.marketplace.compatibleWith', { version: ext.app_version ?? '' }) }}</span>
@@ -1098,8 +1158,12 @@ watch(
             />
             <div class="mkt-card-main">
               <div class="mkt-card-title">
-                <span class="ext-id">{{ ext.display_name || ext.name }}</span>
+                <span class="ext-id">{{ reveal(ext.display_name || ext.name) }}</span>
                 <span v-if="ext.latest_version" class="mkt-muted mkt-card-version">{{ ext.latest_version }}</span>
+                <template v-if="ext.trust_tier === 'signed-verified'">
+                  <PluginSourceBadge v-if="ext.latest_prerelease_version !== ext.latest_version" source="marketplace" />
+                  <PluginSourceBadge v-if="ext.latest_prerelease_version" source="prerelease" />
+                </template>
                 <span
                   v-if="updatesById.get(ext.identity)"
                   class="mkt-badge mkt-badge--accent ext-update-badge"
@@ -1119,12 +1183,22 @@ watch(
                   {{ $t('settings.extensions.marketplace.requiresNavide', { version: ext.min_navide_version ?? '' }) }}
                 </span>
               </div>
-              <p v-if="ext.description" class="mkt-card-desc" v-truncate>{{ ext.description }}</p>
+              <p v-if="ext.description" class="mkt-card-desc" v-truncate>{{ reveal(ext.description) }}</p>
+              <!-- Plan B D1: summary and risk level of the listed version;
+                   Registry data that nothing has verified yet. -->
+              <div v-if="ext.disclosure" class="mkt-card-disclosure" :title="$t('pluginDisclosure.provenance.unverified')">
+                <PluginDisclosureSummary
+                  :disclosure="ext.disclosure"
+                  :scan="ext.scan ?? null"
+                  :level="ext.listRisk?.level"
+                  :variesByPlatform="ext.listRisk?.variesByPlatform === true"
+                />
+              </div>
               <p v-if="isIncompatible(ext)" class="mkt-card-incompatible">
                 {{ $t('settings.extensions.marketplace.updateNavideToInstall', { current: ext.app_version ?? '' }) }}
               </p>
               <div class="mkt-card-sub">
-                <span class="ext-ns">{{ ext.namespace }}.{{ ext.name }}</span>
+                <span class="ext-ns">{{ reveal(idOf(ext)) }}</span>
                 <span class="mkt-muted">{{ $t('settings.extensions.marketplace.downloads', { count: formatCount(ext.download_count) }) }}</span>
                 <span v-if="ext.rating_average > 0" class="mkt-muted mkt-card-rating">★ {{ ext.rating_average.toFixed(1) }}</span>
                 <span v-if="ext.trust_tier === 'signed-verified'" class="mkt-quiet mkt-quiet--ok ext-signed-badge">
@@ -1140,7 +1214,7 @@ watch(
                   <a v-if="ext.repository" href="#" class="mkt-link" @click.stop.prevent="openLink(ext.repository)">
                     {{ $t('settings.extensions.marketplace.repository') }} ↗
                   </a>
-                  <span v-if="ext.license" class="mkt-muted">{{ ext.license }}</span>
+                  <span v-if="ext.license" class="mkt-muted">{{ reveal(ext.license) }}</span>
                 </span>
               </div>
             </div>
@@ -1196,6 +1270,7 @@ watch(
       v-if="flow.pendingConfirm.value"
       :pending="flow.pendingConfirm.value"
       :step="flow.pendingStep.value"
+      @confirm-replace="flow.confirmReplace"
       @confirm-publisher="flow.confirmPublisher"
       @confirm-risk="flow.confirmRisk"
       @cancel="flow.cancel"
@@ -1731,6 +1806,14 @@ watch(
   outline: none;
   border-color: var(--accent-focus);
   box-shadow: 0 0 0 2px var(--accent-focus);
+}
+.mkt-card-disclosure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-xs);
 }
 .mkt-card-main {
   flex: 1;

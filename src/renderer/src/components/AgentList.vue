@@ -83,14 +83,14 @@ function kickoffLabel(status?: ActivePaneView['kickoffStatus']): string {
         <div
           class="agent-line"
           role="button"
-          title="Focus pane"
+          :title="$t('label.focus-pane')"
           @click="emit('focus-pane', p.id, $event)"
           @contextmenu.prevent="emit('context-menu', p.id, $event)"
         >
           <span v-if="p.origin === 'pipeline'" class="pipe-tag">P{{ p.stageId }}</span>
           <span class="badge">{{ p.agentLabel }}</span>
-          <span v-if="p.isCommander" class="manager-inline" :title="$t('label.stage-manager-tooltip')">🎯 Mgr</span>
-          <span v-if="p.isMinimized" class="minimized-tag">▪ sidebar</span>
+          <span v-if="p.isCommander" class="manager-inline" :title="$t('label.stage-manager-tooltip')">{{ $t('label.manager-badge') }}</span>
+          <span v-if="p.isMinimized" class="minimized-tag">▪ {{ $t('label.minimized-sidebar') }}</span>
           <span
             v-else
             class="state"
@@ -101,19 +101,19 @@ function kickoffLabel(status?: ActivePaneView['kickoffStatus']): string {
             v-if="p.loopActive"
             class="loop-tag"
             :class="{ waiting: p.loopWaitUntil != null }"
-          >∞ Loop</span>
+          >{{ $t('label.loop-badge') }}</span>
           <button class="icon-btn agent-close-btn" :title="$t('action.remove')" @click.stop="emit('kill', p.id)">✕</button>
         </div>
         <div v-if="p.roleLabel" class="role-line" v-truncate>{{ p.roleLabel }}</div>
         <div v-if="!p.isMinimized && p.origin === 'pipeline'" class="stage-line">
-          stage {{ p.stageId }} · {{ preparationLabel(p.preparationStatus) }} · {{ injectionLabel(p.injectionStatus) }} {{ kickoffLabel(p.kickoffStatus) }}
+          {{ $t('label.pane-origin-stage', { id: p.stageId }) }} · {{ preparationLabel(p.preparationStatus) }} · {{ injectionLabel(p.injectionStatus) }} {{ kickoffLabel(p.kickoffStatus) }}
         </div>
         <div v-else-if="!p.isMinimized" class="stage-line">
-          manual · {{ preparationLabel(p.preparationStatus) }} · {{ injectionLabel(p.injectionStatus) }} {{ kickoffLabel(p.kickoffStatus) }}
+          {{ $t('label.pane-origin-manual') }} · {{ preparationLabel(p.preparationStatus) }} · {{ injectionLabel(p.injectionStatus) }} {{ kickoffLabel(p.kickoffStatus) }}
         </div>
         <div v-if="!p.isMinimized" class="agent-cmd"><code v-truncate>{{ p.command }}</code></div>
-        <div v-if="!p.isMinimized && p.sessionId" class="agent-session" title="CLI session id — used to resume this agent's memory on restart">
-          🔖 session: <code>{{ p.sessionId }}</code>
+        <div v-if="!p.isMinimized && p.sessionId" class="agent-session" :title="$t('label.session-id-tooltip')">
+          🔖 {{ $t('turn-stats.session') }}: <code>{{ p.sessionId }}</code>
         </div>
         <div v-if="p.error" class="err">{{ p.error }}</div>
         <div class="row tight">

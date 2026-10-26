@@ -32,10 +32,16 @@ NO_SANDBOX_FILES=(
   backend/tests/cli_regression/test_isolation.py
   backend/tests/test_osplat_darwin_pane_helper.py
   backend/tests/test_proc_rusage.py
+  backend/tests/test_host_shell_tree_kill.py
   backend/tests/test_pty_registry.py
   backend/tests/test_terminals_breakaway_kill.py
   backend/tests/test_terminals_exit_orphan_reap.py
 )
+
+# The main pass runs on four pytest-xdist workers, one file at a time each,
+# as CI does, then the tests marked `serial` (wall-clock timed) run alone.
+# The small no-sandbox pass (PTY, setuid ps, process reaping) stays serial.
+XDIST=(-n 4 --dist loadfile -m "not serial")
 
 isolated() {
   env -i HOME="$SCRATCH/home" USER="$USER" LANG=en_US.UTF-8 TMPDIR="$SCRATCH/tmp" \
@@ -53,10 +59,12 @@ if [[ "$(uname)" == "Darwin" ]]; then
   # collection, so these files must still be collected in this pass. Node ids
   # are relative to backend/, pytest's rootdir.
   for f in "${NO_SANDBOX_FILES[@]}"; do deselects+=("--deselect=${f#backend/}"); done
-  isolated /usr/bin/sandbox-exec -f "$SB" "$UV" --project backend run --no-sync pytest backend/tests "${deselects[@]}"
+  isolated /usr/bin/sandbox-exec -f "$SB" "$UV" --project backend run --no-sync pytest backend/tests "${XDIST[@]}" "${deselects[@]}"
+  isolated /usr/bin/sandbox-exec -f "$SB" "$UV" --project backend run --no-sync pytest backend/tests -m serial "${deselects[@]}"
   isolated "$UV" --project backend run --no-sync pytest "${NO_SANDBOX_FILES[@]}"
 else
-  isolated "$UV" --project backend run --no-sync pytest backend/tests
+  isolated "$UV" --project backend run --no-sync pytest backend/tests "${XDIST[@]}"
+  isolated "$UV" --project backend run --no-sync pytest backend/tests -m serial
 fi
 
 if [[ -s "$FAKE_LOG" ]]; then

@@ -18,7 +18,7 @@
  * matrix to compare where a server is set up. Clicking either opens the same
  * drawer.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
@@ -47,9 +47,18 @@ interface McpServer {
   headers?: Record<string, string>
   enabled: boolean
   // Live fields the backend reports; never saved.
-  status?: 'connected' | 'error' | 'disabled' | 'unknown'
+  status?: 'starting' | 'connected' | 'error' | 'disabled' | 'unknown'
   tool_count?: number
   tools?: McpTool[]
+  /** While starting: seconds so far, and whether it is past the slow mark. */
+  starting_seconds?: number
+  slow_start?: boolean
+  /** Why it failed to start. */
+  error?: string
+  /** The end of what a stdio server printed on stderr (logs/mcp-<name>.log). */
+  stderr_tail?: string
+  /** Why its tool list could not be read; tool_count is then unknown, not 0. */
+  tools_error?: string
 }
 
 /** One row: a server name and everywhere on this machine it is configured. */
@@ -94,6 +103,30 @@ const selectedKey = ref<string | null>(null)
 const draft = ref<McpServer | null>(null)
 const revealed = ref<Set<string>>(new Set())
 const toolsOpen = ref(false)
+
+// While a server is starting (a first npx/uvx run may be downloading the
+// package), ask the parent to refresh so the status follows it to connected
+// or to the reason it failed.
+const STARTING_REFRESH_MS = 3000
+const anyStarting = computed(() => props.servers.some((server) => server.status === 'starting'))
+let startingTimer: ReturnType<typeof setInterval> | null = null
+watch(
+  anyStarting,
+  (starting) => {
+    if (starting && startingTimer === null) {
+      startingTimer = setInterval(() => {
+        if (!props.loading) emit('refresh')
+      }, STARTING_REFRESH_MS)
+    } else if (!starting && startingTimer !== null) {
+      clearInterval(startingTimer)
+      startingTimer = null
+    }
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => {
+  if (startingTimer !== null) clearInterval(startingTimer)
+})
 
 const agentLabels = computed(() => {
   const map = new Map<string, string>()
@@ -205,6 +238,31 @@ function placeChips(row: McpRow): { key: string; label: string; off: boolean }[]
     chips.push({ key: native.agent, label: native.agent, off: !native.enabled })
   }
   return chips
+}
+
+/** How many env entries (stdio) or headers (http/sse) have no value. A synced
+ *  server arrives that way: values never leave the machine they were typed on. */
+function emptyFields(server: McpServer | null | undefined): number {
+  if (!server) return 0
+  const record = server.transport === 'stdio' ? server.env : server.headers
+  return Object.values(record ?? {}).filter((value) => value === '').length
+}
+
+/** Whether a URL has an emptied credential slot: `scheme://@host` userinfo or
+ *  a query parameter with no value. Sync leaves one where a credential was. */
+function emptyUrlSlot(url: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\/:?@/i.test(url) || /[?&][^=&#]+=(?=[&#]|$)/.test(url)
+}
+
+/** How many credentials in the URL (http/sse) or arguments (stdio) are empty:
+ *  an empty argument, a `--name=` / `Name:` one, or an emptied URL slot.
+ *  Sync empties them on the way out, as it does env and header values. */
+function emptyCredentials(server: McpServer | null | undefined): number {
+  if (!server) return 0
+  if (server.transport !== 'stdio') return server.url && emptyUrlSlot(server.url) ? 1 : 0
+  return (server.args ?? []).filter(
+    (arg) => arg === '' || /^[A-Za-z0-9_.-]+[=:]$/.test(arg) || emptyUrlSlot(arg),
+  ).length
 }
 
 function nativeFor(row: McpRow, agentKey: string): NativeMcpServer | undefined {
@@ -490,6 +548,12 @@ function entries(map: Record<string, string>): [string, string][] {
                   <span v-if="(row.navide?.tool_count ?? 0) > 0" class="pchip tools">
                     {{ t('settings.mcp.tool-count', { n: row.navide?.tool_count ?? 0 }) }}
                   </span>
+                  <span
+                    v-if="emptyFields(row.navide) + emptyCredentials(row.navide) > 0"
+                    class="pchip needs"
+                  >
+                    {{ t('settings.mcp.needs-setup') }}
+                  </span>
                 </span>
               </button>
             </div>
@@ -573,6 +637,21 @@ function entries(map: Record<string, string>): [string, string][] {
             <span>
               <strong>{{ t('settings.mcp.state-on') }}</strong>
               <small>{{ t('settings.mcp.status', { status: selectedRow.navide?.status ?? 'unknown' }) }}</small>
+              <small
+                v-if="selectedRow.navide?.status === 'starting' && selectedRow.navide.slow_start"
+                class="mcp-status-note"
+                data-testid="mcp-starting-note"
+              >{{ t('settings.mcp.starting-note', { seconds: selectedRow.navide.starting_seconds ?? 0 }) }}</small>
+              <small
+                v-if="selectedRow.navide?.status === 'error' && selectedRow.navide.error"
+                class="mcp-status-error"
+                data-testid="mcp-error-reason"
+              >{{ t('settings.mcp.error-reason', { reason: selectedRow.navide.error }) }}</small>
+              <small
+                v-if="selectedRow.navide?.tools_error"
+                class="mcp-status-error"
+                data-testid="mcp-tools-error"
+              >{{ t('settings.mcp.tools-error', { reason: selectedRow.navide.tools_error }) }}</small>
             </span>
             <ToggleSwitch
               :model-value="draft.enabled"
@@ -580,6 +659,11 @@ function entries(map: Record<string, string>): [string, string][] {
               @update:model-value="toggleEnabled"
             />
           </div>
+
+          <details v-if="selectedRow.navide?.stderr_tail" class="mcp-stderr" data-testid="mcp-stderr-tail">
+            <summary>{{ t('settings.mcp.stderr-tail') }}</summary>
+            <pre>{{ selectedRow.navide.stderr_tail }}</pre>
+          </details>
 
           <details v-if="selectedRow.navide?.tools?.length" class="mcp-tools" :open="toolsOpen">
             <summary @click.prevent="toolsOpen = !toolsOpen">
@@ -628,6 +712,9 @@ function entries(map: Record<string, string>): [string, string][] {
               <p v-if="!draft.args?.length" class="mcp-drawer-hint">
                 {{ t('settings.mcp.no-arguments') }}
               </p>
+              <p v-else-if="emptyCredentials(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-credentials-locally') }}
+              </p>
             </div>
             <div class="mcp-field">
               <span class="mcp-field-head">
@@ -649,7 +736,7 @@ function entries(map: Record<string, string>): [string, string][] {
                   :value="value"
                   :type="isSecretSettingKey(key) && !secretVisible('env', key) ? 'password' : 'text'"
                   spellcheck="false"
-                  placeholder="value"
+                  :placeholder="t('settings.cliLaunch.env-value-placeholder')"
                   @input="setRecordValue(draftEnv(), key, ($event.target as HTMLInputElement).value)"
                 />
                 <button
@@ -661,6 +748,9 @@ function entries(map: Record<string, string>): [string, string][] {
               </div>
               <p v-if="!Object.keys(draft.env ?? {}).length" class="mcp-drawer-hint">
                 {{ t('settings.mcp.no-env') }}
+              </p>
+              <p v-else-if="emptyFields(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-locally') }}
               </p>
             </div>
           </template>
@@ -674,6 +764,9 @@ function entries(map: Record<string, string>): [string, string][] {
                 spellcheck="false"
                 placeholder="https://example.com/mcp"
               />
+              <span v-if="emptyCredentials(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-credentials-locally') }}
+              </span>
             </label>
             <div class="mcp-field">
               <span class="mcp-field-head">
@@ -687,7 +780,7 @@ function entries(map: Record<string, string>): [string, string][] {
                   :value="key"
                   type="text"
                   spellcheck="false"
-                  placeholder="Header"
+                  :placeholder="t('settings.mcp.header-name-placeholder')"
                   class="mcp-kv-key"
                   @change="setRecordKey(draftHeaders(), key, ($event.target as HTMLInputElement).value)"
                 />
@@ -695,7 +788,7 @@ function entries(map: Record<string, string>): [string, string][] {
                   :value="value"
                   :type="isSecretSettingKey(key) && !secretVisible('header', key) ? 'password' : 'text'"
                   spellcheck="false"
-                  placeholder="value"
+                  :placeholder="t('settings.cliLaunch.env-value-placeholder')"
                   @input="setRecordValue(draftHeaders(), key, ($event.target as HTMLInputElement).value)"
                 />
                 <button
@@ -707,6 +800,9 @@ function entries(map: Record<string, string>): [string, string][] {
               </div>
               <p v-if="!Object.keys(draft.headers ?? {}).length" class="mcp-drawer-hint">
                 {{ t('settings.mcp.no-headers') }}
+              </p>
+              <p v-else-if="emptyFields(draft) > 0" class="mcp-drawer-hint warn">
+                {{ t('settings.mcp.fill-locally') }}
               </p>
             </div>
           </template>
@@ -861,6 +957,10 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-status-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
 .mcp-status-dot.connected { background: var(--success-fg); }
 .mcp-status-dot.error { background: var(--danger-fg); }
+.mcp-status-dot.starting { background: var(--warning-fg); }
+.mcp-status-note { display: block; color: var(--warning-fg); }
+.mcp-status-error { display: block; color: var(--danger-fg); }
+.mcp-stderr pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
 .mcp-status-dot.disabled { background: var(--border-default); }
 .mcp-card-detail {
   font-size: var(--font-2xs);
@@ -886,6 +986,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 }
 .pchip.off { color: var(--text-secondary); border-color: var(--border-muted); opacity: 0.75; }
 .pchip.tools { color: var(--text-secondary); border-color: var(--border-muted); font-weight: 500; }
+.pchip.needs { color: var(--warning-fg); border-color: var(--warning-fg); }
 .mcp-tag {
   display: inline-block;
   padding: 1px 6px;
@@ -992,6 +1093,7 @@ input:focus, select:focus { border-color: var(--accent-emphasis); }
 .mcp-drawer-section h4 { margin: 0; font-size: var(--font-3xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
 .mcp-drawer-hint { margin: 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; }
 .mcp-drawer-hint.danger { color: var(--danger-fg); }
+.mcp-drawer-hint.warn { color: var(--warning-fg); }
 .mcp-drawer-meta { font-size: 10.5px; color: var(--text-secondary); }
 .mcp-drawer-path {
   display: block;

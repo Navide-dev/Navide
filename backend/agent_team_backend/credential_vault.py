@@ -51,6 +51,7 @@ from pathlib import Path
 from typing import Callable
 
 from .applog import app_data_dir, default_app_data_dir
+from .cloud_secrets import SECURITY_LINE_MAX_BYTES
 from .osplat import secret_files
 from .cli_vendors.registry import vendor as _cli_vendor_spec
 from .profiles_store import (
@@ -558,23 +559,56 @@ class CredentialVault:
         # Interactive mode (-i) takes the command on stdin so the secret
         # never appears in the argv, which any local process can read via
         # the process table.
+        account = account or getpass.getuser()
         command = " ".join(
             [
                 "add-generic-password",
                 "-U",
-                "-a", _kc_quote(account or getpass.getuser()),
+                "-a", _kc_quote(account),
                 "-s", _kc_quote(service),
                 "-w", _kc_quote(secret),
             ]
         )
-        rc, out = self._security(["-i"], command + "\n")
+        if len(command.encode("utf-8")) <= SECURITY_LINE_MAX_BYTES:
+            rc, out = self._security(["-i"], command + "\n")
+        else:
+            # `security -i` reads 4096-byte lines: a longer command runs its
+            # first 4095 bytes as a whole one, storing a TRUNCATED secret, and
+            # only then fails. Claude Code's own credentials outgrow that once
+            # a few MCP logins sit in them (4.3 KB observed), so every switch
+            # away from such an account failed and left a broken slot behind.
+            # Claude Code itself takes the same way out for the same item: the
+            # value goes on the argv, hex-encoded, only when stdin cannot
+            # carry it.
+            log.warning(
+                "keychain write %s: %d-byte command exceeds the security -i "
+                "line limit; using argv",
+                service, len(command.encode("utf-8")),
+            )
+            try:
+                rc, out = self._security(
+                    [
+                        "add-generic-password", "-U", "-a", account, "-s", service,
+                        "-X", secret.encode("utf-8").hex(),
+                    ],
+                    None,
+                )
+            except Exception as err:  # noqa: BLE001
+                # Never let it propagate as is: a TimeoutExpired (locked
+                # keychain, an open access prompt) carries the full argv,
+                # hex secret included, and the swap error quotes err.args[0].
+                # `from None` keeps it out of any logged traceback too.
+                raise CredentialVaultError(
+                    f"keychain write failed for {service!r} "
+                    f"({type(err).__name__})"
+                ) from None
         if rc != 0:
-            # Last line only, truncated: enough for the security error message
-            # while guaranteeing the secret (a long JSON blob) is never logged.
+            # Only `security`'s own error line ("security: ..."): on a failed
+            # command it also echoes the command, and with it the secret.
             lines = out.strip().splitlines()
-            detail = lines[-1][:200] if lines else ""
+            detail = lines[-1][:200] if lines and lines[-1].startswith("security:") else ""
             raise CredentialVaultError(
-                f"keychain write failed for {service!r}"
+                f"keychain write failed for {service!r} (security exited {rc})"
                 + (f": {detail}" if detail else "")
             )
 

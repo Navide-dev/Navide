@@ -31,6 +31,18 @@ class VersionInfo(BaseModel):
     """Against the request's `navide_version`; None when either is unknown."""
     channel: str = "stable"
     """`pre-release` for a SemVer prerelease version, else `stable`."""
+    disclosure: dict | None = None
+    """Manifest disclosure (contract 3.1); None for versions without one."""
+    disclosure_envelope: dict | None = None
+    """Registry-signed disclosure envelope (contract 3.5); the package
+    `registry_envelope` above is unchanged."""
+    disclosure_signature: str | None = None
+    scan: dict | None = None
+    """Registry static scan report (contract 3.8), signed through the
+    disclosure envelope's `scanDigest`; None when the version has none."""
+    registry: dict | None = None
+    """Unsigned Registry facts (contract 3.4): publisher verification, review
+    and scan summary as counts and status only."""
 
 
 class ExtensionSummary(BaseModel):
@@ -66,6 +78,16 @@ class ExtensionSummary(BaseModel):
     """Member ids when `latest_version` is an Extension Pack, else None."""
     latest_prerelease_version: str | None = None
     """Newest pre-release when it is newer than `latest_version`, else None."""
+    disclosure: dict | None = None
+    """Manifest disclosure of `latest_version` (contract 3.1), display data for
+    the list card's summary and risk level; None for versions without one."""
+    scan: dict | None = None
+    """Static scan report of one `latest_version` artifact (contract 3.8),
+    display data for the list card's risk level; None when it has none."""
+    risk_by_target: dict[str, str] | None = None
+    """`cardRiskLevel` of each `latest_version` artifact by target (contract
+    3.3), so the list card can show the highest one; None without a
+    disclosure. Display data; readers that do not know it ignore it."""
     icon_path: str | None = None
     """Package-relative raster icon of `latest_version`, served by the website
     asset route; None when the package has no safe icon."""
@@ -118,6 +140,8 @@ class PublishResponse(BaseModel):
     yanked: bool
     review_status: str = "approved"
     """'pending' when the namespace is review-required (not public yet)."""
+    notices: list[str] = []
+    """What this acceptance does not cover (a local Registry's skipped gates)."""
 
 
 class YankResponse(BaseModel):
@@ -155,3 +179,30 @@ class FeaturedResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class TestplaceVersionInfo(VersionInfo):
+    """A testplace artifact as its tester sees it (testplace_api.py)."""
+
+    expires_at: datetime | None = None
+    promotion_status: str | None = None
+
+
+class TestplaceExtension(BaseModel):
+    namespace: str
+    name: str
+    identity: str
+    display_name: str | None
+    description: str | None
+    publisher: str
+    trust_metadata: dict
+    trust_metadata_signature: str
+    versions: list[TestplaceVersionInfo]
+    """Installable testplace artifacts, newest version first."""
+    withdrawn: list[dict[str, str]] = []
+    """`{version, target}` of every testplace artifact taken back (yanked or
+    revoked), so a tester's App never keeps one (T-MED-1). Testers only."""
+
+
+class TestplaceListResponse(BaseModel):
+    items: list[TestplaceExtension]

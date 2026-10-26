@@ -396,16 +396,23 @@ defineExpose({
   markTurnComplete: terminal.markTurnComplete,
   markNeedsInput: terminal.markNeedsInput,
   clearNeedsInput: terminal.clearNeedsInput,
+  holdNeedsInput: terminal.holdNeedsInput,
+  releaseNeedsInputHold: terminal.releaseNeedsInputHold,
+  awaitingHeld: terminal.awaitingHeld,
+  noteAnswerKeys: terminal.noteAnswerKeys,
+  permissionWaitLive: terminal.permissionWaitLive,
   markQuestion: terminal.markQuestion,
   clearQuestion: terminal.clearQuestion,
   markDeliveredPending: terminal.markDeliveredPending,
   clearDeliveredPending: terminal.clearDeliveredPending,
   noteBackgroundTasks: terminal.noteBackgroundTasks,
+  hasLiveBackgroundTasks: terminal.hasLiveBackgroundTasks,
   markBufferPosition: terminal.markBufferPosition,
   recleanBuffer: terminal.recleanBuffer,
   flushPendingClean: terminal.flushPendingClean,
   readRenderedText: terminal.readRenderedText,
   readScreenTail: terminal.readScreenTail,
+  readVisibleScreen: terminal.readVisibleScreen,
   // The pane's scrollback for a replacement pane to replay (quota-failover restart).
   serializeScrollback: terminal.serializeScrollback,
   readLineBeforeCursor: terminal.readLineBeforeCursor,
@@ -677,7 +684,7 @@ onMounted(() => {
           class="auto-name-mark"
           :title="$t('pane.terminal.auto-named-tooltip')"
         >◦</span>
-        <span v-if="isCommander" class="commander-inline" :title="$t('pane.terminal.commander-tooltip')">🎯 Mgr</span>
+        <span v-if="isCommander" class="commander-inline" :title="$t('pane.terminal.commander-tooltip')">{{ $t('label.manager-badge') }}</span>
         <span
           v-if="loopActive"
           class="loop-inline"

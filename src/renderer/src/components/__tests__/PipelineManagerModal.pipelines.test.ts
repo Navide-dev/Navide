@@ -69,14 +69,14 @@ const HARD_CODED_ENGLISH = [
   'Pipeline name',
   'stage(s)',
   'Back',
-  'Set as default',
+  'Set as Default',
   'Allow questions',
   'Pause for user answers',
   'parallel slots',
   'at least one required',
   'Designate as global manager',
   'Save slot',
-  'Reset to factory stages',
+  'Reset to Factory Stages',
   'unassigned',
 ]
 

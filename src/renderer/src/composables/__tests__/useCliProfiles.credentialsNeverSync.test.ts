@@ -3,37 +3,30 @@ import { describe, expect, it } from 'vitest'
 import { useCliProfiles } from '../useCliProfiles'
 import { createMockBackend, flush, withScope } from './mockBackend'
 
-// Review N1: a credentials switch an older build left on is shown as main
-// showed it. Offline, sync.status carries the stored switch (true) and the
-// inventory answers not-connected (the shapes test_sync_credentials_never_sync.py
-// pins), so the CLI accounts page says "not connected", never a blank error.
-// Connected, the inventory answers the same (decision B): main listed the
-// cloud's credentials there, which would take credential traffic.
-const SUPPORTED = ['claude']
-
+// Credentials never sync, and the pasted-credential feature that read the
+// cloud's credentials into the CLI accounts page is gone (0.2.32): loading the
+// accounts and following their broadcasts asks the cloud nothing, whatever a
+// switch an older build left on still says.
 describe('useCliProfiles with credentials that never sync', () => {
-  it.each(['connected', 'unreachable', 'connecting', 'unauthorized'] as const)(
-    'shows "not connected" as main did, never an error, when the link is %s',
-    async (state) => {
-      const mock = createMockBackend('connected')
-      mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
-      mock.setResponse('sync.status', {
-        available: ['prompts', 'mcp', 'skills', 'memory', 'credentials'],
-        scopes: { prompts: true, mcp: false, skills: false, memory: false, credentials: true },
-        neverSynced: ['memory', 'credentials'],
-        link: { state },
-      })
-      mock.setResponse('sync.inventory', {
-        status: 'not-connected',
-        scopes: { credentials: { scope: 'credentials', status: 'not-connected', items: [] } },
-      })
-      const { result, scope } = withScope(() => useCliProfiles(mock.backend))
-      await flush()
+  it('loads the accounts without asking for any sync state or credential inventory', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', {
+      profiles: [],
+      defaults: {},
+      supported_agents: ['claude'],
+      // An older backend still sends these; they are ignored.
+      portable_credentials: { 'claude/__default__': { agentKey: 'claude', slotId: '__default__' } },
+      portable_supported: ['claude'],
+    })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+    mock.emit('cli_profiles.changed', { portable_credentials: {}, reason: 'portable-set' })
+    mock.emit('ui.settings_changed', { settings: { 'sync-scopes': { credentials: true } } })
+    await flush()
 
-      await result.refreshCloud()
-      expect(result.cloudStatus.value).toBe('not-connected')
-      expect(result.cloudError.value).toBe('')
-      scope.stop()
-    },
-  )
+    expect(result.loaded.value).toBe(true)
+    expect(mock.sent.map((s) => s.type).filter((t) => t.startsWith('sync.'))).toEqual([])
+    expect(Object.keys(result)).not.toContain('portable')
+    scope.stop()
+  })
 })

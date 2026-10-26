@@ -132,6 +132,9 @@ class PreviewLog:
         # (db path, rel_path, change) -> when an attributed row claimed the
         # watcher's echo of that write; consumed by the first echo.
         self._claims: dict[tuple[str, str, str], int] = {}
+        # (workspace_path, db) of the open batch; only its thread, which holds
+        # self._lock, ever sees it set.
+        self._batch: tuple[str, Database] | None = None
 
     # ───────────────────────── Database plumbing ─────────────────────
     def _db(self, workspace_path: str, *, create: bool) -> Database | None:
@@ -166,7 +169,15 @@ class PreviewLog:
                 yield  # each append reports the unusable workspace itself
                 return
             with db.transaction():
-                yield
+                # The appends inside use this db, not a fresh registry lookup:
+                # shutdown's close_all may have dropped it from the registry,
+                # and a second connection would wait out SQLite's busy timeout
+                # on this transaction's lock.
+                self._batch = (workspace_path, db)
+                try:
+                    yield
+                finally:
+                    self._batch = None
 
     def append(
         self,
@@ -219,7 +230,10 @@ class PreviewLog:
             note = _clamp_note(note)
 
         with self._lock:
-            db = self._db(workspace_path, create=True)
+            if self._batch is not None and self._batch[0] == workspace_path:
+                db = self._batch[1]
+            else:
+                db = self._db(workspace_path, create=True)
             if db is None:
                 log.warning(
                     "preview log append failed: workspace %s is not a directory",

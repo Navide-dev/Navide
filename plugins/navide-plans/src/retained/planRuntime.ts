@@ -373,7 +373,12 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
     'border:1px solid var(--line,#DDE1E9);background:var(--surface,#FFFFFF);' +
     'color:var(--ink,#1D2530);font-size:12px;cursor:pointer;font-family:inherit}' +
     '.plan-rt-secbar button:hover{background:var(--surface-2,#EDEFF4)}' +
-    '.plan-rt-secdel{color:var(--danger,#C0392B) !important;border-color:var(--danger,#C0392B) !important}';
+    '.plan-rt-secdel{color:var(--danger,#C0392B) !important;border-color:var(--danger,#C0392B) !important}' +
+    // Layout overrides for template documents: long code wraps inside table
+    // cells instead of being clipped, and the column uses the frame width.
+    '.tablewrap td,.tablewrap td code{overflow-wrap:anywhere}' +
+    '.wrap{max-width:1180px}' +
+    '.wrap td ul,.wrap td p{max-width:none}';
   (document.head || document.documentElement).appendChild(style);
 
   // Leading text (up to the first child element), whitespace-collapsed —
@@ -491,6 +496,17 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
       ev.preventDefault();
       post({ type: 'todo-clicked', todoId: todoId, alt: true });
     });
+  });
+
+  // Same-document "#id" links (in-page jumps, CSS :target lightboxes). In an
+  // about:srcdoc frame "#id" resolves against the host's URL, so the default
+  // click is a cross-document navigation the sandbox blocks and nothing
+  // happens; set the hash on the frame's own URL instead.
+  document.addEventListener('click', function (ev) {
+    var link = ev.target && ev.target.closest ? ev.target.closest('a[href^="#"]') : null;
+    if (!link || ev.defaultPrevented) return;
+    ev.preventDefault();
+    location.hash = link.getAttribute('href').slice(1);
   });
 
   // file:line references in <code> elements become clickable and ask the
@@ -697,6 +713,10 @@ function buildPlanCspMeta(nonce: string): string {
  * document scripts, inject a nonce'd CSP meta (only the runtime may execute;
  * inline styles and data: images stay allowed for self-contained docs), and
  * append the runtime script before `</body>`.
+ *
+ * @deprecated Unused copy that predates the Plans CSP fix (#462). Plans
+ * renders through `preparePlanDocHtml` in `../planSecurity`; import that one,
+ * never this.
  */
 export function preparePlanDocHtml(
   content: string,

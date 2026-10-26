@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Developer applications — Navide Marketplace{% endblock %}
+{% block content %}
+<nav class="crumbs"><a href="{{ base }}/admin/review">← Review queue</a></nav>
+<section class="panel">
+  <h1>Developer applications</h1>
+  <p class="muted">Judge who is publishing and whether they can be held responsible —
+    never which permissions their plugins ask for. Fields marked <span class="chip">agent draft</span>
+    were pre-filled by an agent and submitted by the applicant. Revoking freezes every namespace
+    of the account, revokes all of its tokens and keys and yanks all of its versions.</p>
+  <h2>Waiting ({{ pending|length }})</h2>
+  {% for d in pending %}
+  <article class="panel">
+    <h3><code>{{ d.member_id }}</code> — {{ d.fields.display_name }}</h3>
+    <table class="version-table">
+      {% for key, value in d.fields.items() %}
+      <tr><th>{{ key }}</th><td>{{ value }}{% if d.field_sources.get(key) == 'agent-draft' %} <span class="chip">agent draft</span>{% endif %}</td></tr>
+      {% endfor %}
+      <tr><th>source</th><td>{{ d.source or '—' }}</td></tr>
+      <tr><th>submitted</th><td>{{ d.submitted_at[:16] }}</td></tr>
+    </table>
+    <div class="button-row">
+      <form class="inline-form" method="post" action="{{ base }}/admin/developers/{{ d.member_id }}/approve">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" class="install-button">Approve</button>
+      </form>
+      <form class="inline-form" method="post" action="{{ base }}/admin/developers/{{ d.member_id }}/reject">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input class="wide-input" name="reason" placeholder="Reason shown to the applicant" required maxlength="1000">
+        <button type="submit">Reject</button>
+      </form>
+    </div>
+  </article>
+  {% else %}
+  <p class="empty">No applications waiting.</p>
+  {% endfor %}
+  <h2>Approved ({{ approved|length }})</h2>
+  <table class="version-table">
+    <thead><tr><th>Account</th><th>Display name</th><th>Namespaces</th><th>Approved</th><th></th></tr></thead>
+    <tbody>
+    {% for d in approved %}
+      <tr>
+        <td><code>{{ d.member_id }}</code></td><td>{{ d.fields.display_name }}</td>
+        <td>{{ d.namespaces|join(', ') or '—' }}</td><td>{{ (d.decided_at or '')[:10] }}</td>
+        <td>
+          <details class="confirm-action">
+            <summary>Revoke…</summary>
+            <form class="inline-form" method="post" action="{{ base }}/admin/developers/{{ d.member_id }}/revoke">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input class="wide-input" name="reason" placeholder="Public reason" required maxlength="1000">
+              <button type="submit" class="danger-button">Revoke and take down</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">Nobody approved yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h2>Rejected and revoked ({{ closed|length }})</h2>
+  <table class="version-table">
+    <thead><tr><th>Account</th><th>Status</th><th>Reason</th><th>By</th><th>When</th></tr></thead>
+    <tbody>
+    {% for d in closed %}
+      <tr><td><code>{{ d.member_id }}</code></td><td>{{ d.status }}</td><td>{{ d.reason or '—' }}</td>
+        <td>{{ d.decided_by or '—' }}</td><td>{{ (d.decided_at or '')[:10] }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">None.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

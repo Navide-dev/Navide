@@ -172,7 +172,17 @@ describe.skipIf(isWindows())('production Plans CI fixture exclusion', () => {
 // other platform; the Host runs `<entry>.exe` there (backendEntryOnDisk). The
 // verifier reads process.platform, so a preloaded module makes it see win32.
 describe('production Plans verifier on a Windows build', () => {
-  const asWindows = `data:text/javascript,${encodeURIComponent("Object.defineProperty(process, 'platform', { value: 'win32' })")}`
+  const windowsPlatformSource = "Object.defineProperty(process, 'platform', { value: 'win32' })"
+  const asWindows = `data:text/javascript,${encodeURIComponent(windowsPlatformSource)}`
+
+  // Bun accepts Node's `--import` flag but never applies the preload, so the
+  // Windows simulation is handed to Bun as a real preload module; the payload
+  // and the spawned verifier are unchanged. Node keeps the `--import` route.
+  function windowsPlatformPreload(root: string): string[] {
+    if (!process.versions.bun) return ['--import', asWindows]
+    const preload = file(root, 'scripts/windows-platform.mjs', `${windowsPlatformSource}\n`)
+    return ['--preload', preload]
+  }
 
   function verifyWindowsBuild(entry: string, executable: string): ReturnType<typeof spawnSync> {
     const root = fixture()
@@ -182,7 +192,7 @@ describe('production Plans verifier on a Windows build', () => {
     file(root, 'dist-plugins/navide-plans/manifest.json', JSON.stringify({ backend: { entry } }))
     file(root, `dist-plugins/navide-plans/backend/${executable}`, 'MZproduction-binary')
     copyFileSync('scripts/verify-plans-production.mjs', join(root, 'scripts/verify-plans-production.mjs'))
-    return spawnSync(process.execPath, ['--import', asWindows, join(root, 'scripts/verify-plans-production.mjs')], {
+    return spawnSync(process.execPath, [...windowsPlatformPreload(root), join(root, 'scripts/verify-plans-production.mjs')], {
       cwd: root, encoding: 'utf8',
     })
   }
@@ -214,10 +224,11 @@ describe('release workflow verifies the Plans artifact it signs', () => {
 
   it('runs the production Plans verifier before signing', () => {
     expect(buildStep).toContain('node scripts/verify-plans-production.mjs')
+    expect(buildStep).toContain('bun run electron-builder')
     // Ahead of electron-builder: an empty backend must fail the release before
     // the notarization leg, not silently ship.
     expect(buildStep.indexOf('verify-plans-production.mjs'))
-      .toBeLessThan(buildStep.indexOf('pnpm exec electron-builder'))
+      .toBeLessThan(buildStep.indexOf('bun run electron-builder'))
   })
 
   it('asserts each release artifact carries its exact official Plans package backend', () => {

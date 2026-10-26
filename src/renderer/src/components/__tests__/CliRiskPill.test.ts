@@ -93,8 +93,8 @@ describe('CliRiskPill', () => {
     expect(pop.textContent).toContain(signal.lastObservedAt)
     expect(pop.textContent).toContain(signal.absentObservedAt)
     expect(pop.textContent).toContain('Applies to all codex panes')
-    expect(actionButton(pop, 'Reveal in folder')).toBeTruthy()
-    expect(actionButton(pop, 'Allow this IP for codex')).toBeUndefined()
+    expect(actionButton(pop, 'Reveal in Folder')).toBeTruthy()
+    expect(actionButton(pop, 'Allow This IP for codex')).toBeUndefined()
     if (severity === 'red') expect(pop.textContent).toContain('do not identify who changed it')
   })
 
@@ -119,7 +119,7 @@ describe('CliRiskPill', () => {
     expect(pop.textContent).toContain('Backend unavailable')
   })
 
-  it.each([['Ignore this IP', 'ignore'], ['Allow this IP for codex', 'allow']] as const)('forwards %s by signal identity only', async (button, action) => {
+  it.each([['Ignore This IP', 'ignore'], ['Allow This IP for codex', 'allow']] as const)('forwards %s by signal identity only', async (button, action) => {
     const signal = networkSignal()
     render(riskState([signal]))
     actionButton(await open(), button).click()
@@ -132,7 +132,7 @@ describe('CliRiskPill', () => {
     vi.stubGlobal('agentTeam', { revealPath })
     const signal = diskSignal()
     render(riskState([signal]))
-    actionButton(await open(), 'Reveal in folder').click()
+    actionButton(await open(), 'Reveal in Folder').click()
     await flushPromises()
     expect(revealPath).toHaveBeenCalledExactlyOnceWith(signal.path)
     expect(act).not.toHaveBeenCalled()
@@ -141,7 +141,7 @@ describe('CliRiskPill', () => {
   it('surfaces native reveal errors', async () => {
     vi.stubGlobal('agentTeam', { revealPath: vi.fn().mockResolvedValue({ ok: false, error: 'Path unavailable' }) })
     render(riskState([diskSignal()]))
-    actionButton(await open(), 'Reveal in folder').click()
+    actionButton(await open(), 'Reveal in Folder').click()
     await flushPromises()
     expect(document.querySelector('[role="alert"]')?.textContent).toBe('Path unavailable')
   })
@@ -151,16 +151,16 @@ describe('CliRiskPill', () => {
     act.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
     render(riskState())
     const pop = await open()
-    actionButton(pop, 'Ignore this IP').click()
+    actionButton(pop, 'Ignore This IP').click()
     await nextTick()
-    expect(actionButton(pop, 'Allow this IP for codex').disabled).toBe(true)
-    actionButton(pop, 'Allow this IP for codex').click()
+    expect(actionButton(pop, 'Allow This IP for codex').disabled).toBe(true)
+    actionButton(pop, 'Allow This IP for codex').click()
     expect(act).toHaveBeenCalledTimes(1)
     finish({ ok: false, payload: null, error: { code: 'FORBIDDEN', message: 'Pane is not owned locally' } })
     await flushPromises()
     expect(pop.querySelector('[role="alert"]')?.textContent).toBe('Pane is not owned locally')
     expect(wrapper.find('.cli-risk-inline').exists()).toBe(true)
-    expect(actionButton(pop, 'Allow this IP for codex').disabled).toBe(false)
+    expect(actionButton(pop, 'Allow This IP for codex').disabled).toBe(false)
   })
 
   it('renders backend strings as text and reports transport errors', async () => {
@@ -229,7 +229,7 @@ describe('CliRiskPill', () => {
       render(riskState(signals), { spawn, workspacePath: '/work/project', agentKey: 'claude' })
       const pop = await open()
       expect(pop.querySelectorAll('.cli-risk-analyze')).toHaveLength(2)
-      actionButton(pop, 'Analyze all with CLI').click()
+      actionButton(pop, 'Analyze All with CLI').click()
       await flushPromises()
       expect(spawn).toHaveBeenCalledTimes(1)
       const request = spawn.mock.calls[0][0]
@@ -260,7 +260,7 @@ describe('CliRiskPill', () => {
       let finish!: (value: unknown) => void
       spawn.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
       render(riskState(), { spawn, workspacePath: '/work/project', agentKey: 'codex' })
-      actionButton(await open(), 'Analyze all with CLI').click()
+      actionButton(await open(), 'Analyze All with CLI').click()
       await nextTick()
       document.querySelector<HTMLElement>('.cli-risk-pop')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
       await flushPromises()
@@ -276,17 +276,17 @@ describe('CliRiskPill', () => {
       spawn.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
       render(riskState(), { spawn, workspacePath: '/work/project', agentKey: 'codex' })
       const pop = await open()
-      actionButton(pop, 'Analyze all with CLI').click()
+      actionButton(pop, 'Analyze All with CLI').click()
       await nextTick()
-      expect(actionButton(pop, 'Analyze all with CLI').disabled).toBe(true)
+      expect(actionButton(pop, 'Analyze All with CLI').disabled).toBe(true)
       expect(actionButton(pop, 'Analyze with CLI').disabled).toBe(true)
-      expect(actionButton(pop, 'Ignore this IP').disabled).toBe(false)
+      expect(actionButton(pop, 'Ignore This IP').disabled).toBe(false)
       actionButton(pop, 'Analyze with CLI').click()
       expect(spawn).toHaveBeenCalledTimes(1)
       finish({ ok: false })
       await flushPromises()
       expect(pop.querySelector('[role="alert"]')?.textContent).toBe('Could not start the analysis CLI pane. Try again.')
-      expect(actionButton(pop, 'Analyze all with CLI').disabled).toBe(false)
+      expect(actionButton(pop, 'Analyze All with CLI').disabled).toBe(false)
     })
 
     it('reports the spawner error inside a localized sentence', async () => {

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { AgentToolsResultHelperState } from '../shared/pluginAgentTools'
 import { normalizePlatformId } from '../shared/osplat'
 import type {
   UpdateActionResult,
@@ -12,10 +13,19 @@ import type {
   PackageVersionGrantSummary,
 } from '../shared/executionPolicy'
 import type { LegacyPlansPreferenceProjection } from '../shared/plansPreferences'
+import type {
+  DisclosureDiff as PluginDisclosureDiff,
+  ManifestDisclosure as PluginManifestDisclosure,
+  RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
+} from '../shared/pluginDisclosure'
+import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
+import type { PluginActivityReport } from '../shared/pluginActivity'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
-import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
+import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
+import type { LocalInstallDetails, PluginSource } from '../shared/pluginSource'
+import type { DeveloperApi, DeveloperCallResult } from '../shared/marketplaceDeveloper'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
 export interface ClearElectronCachesOptions {
@@ -97,6 +107,87 @@ function isPlansBackendStopped(payload: unknown): payload is PlansBackendStopped
   )
 }
 
+/** An agent disabled, enabled (B2-c) or updated (O1) a Navide plugin, as the Host reports it. */
+export interface PluginAgentActionNotice {
+  action: 'disable' | 'enable' | 'update'
+  pluginId: string
+  pluginVersion: string
+  /** `update` only: the version it was updated from. */
+  fromVersion?: string
+  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
+}
+
+function isPluginAgentActionNotice(payload: unknown): payload is PluginAgentActionNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  const requester = record.requester as Record<string, unknown> | null
+  const nullableString = (value: unknown): boolean => value === null || typeof value === 'string'
+  return (
+    (record.action === 'disable' || record.action === 'enable' ||
+      (record.action === 'update' && typeof record.fromVersion === 'string')) &&
+    typeof record.pluginId === 'string' &&
+    typeof record.pluginVersion === 'string' &&
+    typeof requester === 'object' && requester !== null &&
+    ['pane', 'external', 'host'].includes(String(requester.callerKind)) &&
+    nullableString(requester.paneId) && nullableString(requester.paneName) && nullableString(requester.workspace)
+  )
+}
+
+/** A first install staged without Restart that the launch could not promote. */
+export interface PluginStagedCandidateNotice {
+  pluginId: string
+  version: string
+  reason: string
+}
+
+function isPluginStagedCandidateNotice(payload: unknown): payload is PluginStagedCandidateNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  return typeof record.pluginId === 'string' && typeof record.version === 'string' && typeof record.reason === 'string'
+}
+
+/** A package staged beside the active one, found at launch. */
+export interface PluginStagedUpdate {
+  pluginId: string
+  activeVersion: string
+  stagedVersion: string
+  /** Set when switching to it failed. */
+  reason?: string
+}
+
+/** L3: an approved update switched versions. */
+export interface PluginSwitchNotice {
+  pluginId: string
+  fromVersion: string
+  toVersion: string
+  source: 'marketplace' | 'local-unsigned'
+  at: number
+  /** Set when an agent's automatic update (O1) drove the switch. */
+  agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true }
+}
+
+function isPluginSwitchNotice(payload: unknown): payload is PluginSwitchNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  const agent = record.agent as Record<string, unknown> | undefined
+  const nullableString = (value: unknown): boolean => value === null || typeof value === 'string'
+  return typeof record.pluginId === 'string' && typeof record.fromVersion === 'string' &&
+    typeof record.toVersion === 'string' && (record.source === 'marketplace' || record.source === 'local-unsigned') &&
+    typeof record.at === 'number' &&
+    (agent === undefined || (typeof agent === 'object' && agent !== null &&
+      ['pane', 'external', 'host'].includes(String(agent.callerKind)) &&
+      nullableString(agent.paneId) && nullableString(agent.paneName) && nullableString(agent.workspace)))
+}
+
+function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[] {
+  return Array.isArray(payload) && payload.every((item) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return false
+    const record = item as Record<string, unknown>
+    return typeof record.pluginId === 'string' && typeof record.activeVersion === 'string' &&
+      typeof record.stagedVersion === 'string' && (record.reason === undefined || typeof record.reason === 'string')
+  })
+}
+
 function isPlansRecoveryChanged(payload: unknown): payload is PlansRecoveryChanged {
   return (
     typeof payload === 'object' &&
@@ -132,6 +223,20 @@ export interface InstalledPluginSummary {
   manifestPermissions?: ManifestPermissionsSummary
   packageVersionGrant?: PackageVersionGrantSummary | null
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  /** Source and review state; see `shared/pluginSource.ts`. */
+  source?: PluginSource
+  /** Registry-signed expiry; present only when `source` is `testplace`. */
+  expiresAt?: string
+  /** How the user joined that test, when recorded; `source` testplace only. */
+  testplaceVia?: 'invite' | 'code'
+  /** A3: a local file a vetted publisher signed, and whether that key is
+   *  still active (`verified`) or revoked since (`revoked`). */
+  localSignature?: 'verified' | 'revoked'
+  /** Decision d5: Navide blocked the `.vsix` this local install came from;
+   *  `reason` null when its list names none. */
+  digestBlock?: { reason: 'security' | 'admin' | 'qualification-revoked' | 'developer-withdrawn' | 'testplace-withdrawn' | null }
+  /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+  localInstall?: LocalInstallDetails
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -149,6 +254,56 @@ export interface FactoryPluginSummary {
   version: string | null
   active: boolean
   optedOut: boolean
+}
+
+interface BackendUsageCount {
+  current: number
+  peak: number
+}
+
+interface BackendQueueUsage {
+  frames: number
+  bytes: number
+  peakFrames: number
+  peakBytes: number
+}
+
+/** Backend resources the Host holds now and at the most (none capped): children, per-view subscriptions and child usage, per-plugin calls. */
+export interface BackendResourceUsage {
+  /** The core backend's agent tool result helper process. */
+  backend?: { resultHelper: AgentToolsResultHelperState }
+  children: BackendUsageCount & { retained: number }
+  views: Array<{
+    pluginId: string
+    instanceId: string
+    subscriptions: BackendUsageCount
+    child: {
+      subscriptions: BackendUsageCount
+      bridgeRequests: BackendUsageCount
+      outputQueue: { requests: BackendQueueUsage; notifications: BackendQueueUsage }
+      droppedNotifications: number
+      droppedResultPieces: number
+      stdoutPending: { bytes: number; peakBytes: number }
+    } | null
+  }>
+  plugins: BackendCallConcurrency[]
+}
+
+/** In-flight backend calls of one plugin: now, and the most at once since the Host started;
+ *  plus the Host event notifications its children dropped because their event backlog was full. */
+export interface BackendCallConcurrency {
+  pluginId: string
+  current: number
+  peak: number
+  droppedNotifications: number
+}
+
+/** A third-party AI CLI session that keeps running after its view closed. */
+export interface BackgroundAiSession {
+  sessionId: string
+  profileId: string
+  packageVersion: string
+  since: number
 }
 
 export interface MarketplaceExtension {
@@ -183,6 +338,15 @@ export interface MarketplaceExtension {
   extension_pack?: string[] | null
   /** Trust tier of the latest version ('signed-verified' or 'unsigned'). */
   trust_tier?: string | null
+  /** Newest pre-release newer than `latest_version` (Registry's view). */
+  latest_prerelease_version?: string | null
+  /** Plan B D1 list card: the latest version's manifest disclosure and scan
+   *  report as the Registry listed them, kept by the main process only when
+   *  well formed and naming this item; unverified display data. */
+  disclosure?: PluginManifestDisclosure | null
+  scan?: PluginScanReport | null
+  /** D-f: the highest risk level across the latest version's platforms. */
+  listRisk?: { level: 'low' | 'medium' | 'high' | 'highest'; variesByPlatform: boolean } | null
 }
 
 export interface PackMemberSummary {
@@ -219,15 +383,32 @@ export interface NativeBackendStatusRow {
     | 'stopped-after-crashes'
     | 'unavailable'
   reason?: string
+  /** Declared agent tools; absent when none. `collidesWith`: the plugin id
+   *  that holds the same name, so this tool stays offline. */
+  agentTools?: Array<{
+    name: string
+    title: string
+    description: string
+    risk: 'read' | 'write'
+    timeoutMs: number
+    method: string
+    inputSchema: Record<string, unknown>
+    collidesWith?: string
+    sharedWith?: string[]
+  }>
   changedSinceConsent: boolean
   canWriteWorkspace: boolean
   workspaceWrite: string[]
-  lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk'
+  lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+  shell?: 'allowlist' | 'full'
 }
 
 export interface NativeBackendOverview {
   enabled: boolean
   plugins: NativeBackendStatusRow[]
+  agentTools?: { enabled: boolean; externalCallers: boolean }
+  /** #642 review L2: off for this run, not saved; on again after a restart. */
+  offUnsaved?: true
 }
 
 export interface InstalledPackRecord {
@@ -269,6 +450,11 @@ export interface MarketplaceVersionInfo {
   compatible?: boolean | null
   min_navide_version?: string | null
   channel?: 'stable' | 'pre-release'
+  /** Contract 3.4/3.8, as the Registry sent them: display data that nothing
+   *  has verified yet (prepareInstall verifies the signed disclosure). */
+  disclosure?: PluginManifestDisclosure | null
+  scan?: PluginScanReport | null
+  registry?: PluginRegistryDisclosureFacts | null
 }
 
 export interface MarketplaceExtensionDetail extends MarketplaceExtension {
@@ -291,12 +477,43 @@ export interface MarketplaceExtensionDetail extends MarketplaceExtension {
   readme: string | null
 }
 
+export interface BackendResourceNoticeView {
+  id: string
+  pluginId: string
+  name: string
+  packageVersion: string
+  item: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+  usage: number
+  threshold: number
+  at: number
+}
+
+type ResourceItemValues = Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+
+export interface BackendResourceStatusView {
+  pluginId: string
+  name: string
+  packageVersion: string
+  usage: ResourceItemValues
+  thresholds: ResourceItemValues
+  levels: ResourceItemValues
+  waiting: Array<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'>
+}
+
+export interface PluginRescanNotice {
+  id: string
+  version: string
+  added: Array<{ kind: string; key: string }>
+}
+
 export interface PluginUpdateInfo {
   id: string
   namespace: string
   name: string
   installedVersion: string
   latestVersion: string
+  /** Plan B D2 badge, from the Registry's unverified listing. */
+  permissionChange?: 'more' | 'same'
 }
 
 export interface MarketplaceListResponse {
@@ -306,16 +523,95 @@ export interface MarketplaceListResponse {
   limit: number
 }
 
+/** Card K4: the Developer Mode switch and the developer folders consented to. */
+/** One test the user joined (Testplace, W5b). */
+export interface TestplaceListing {
+  id: string
+  namespace: string
+  name: string
+  displayName: string | null
+  description: string | null
+  publisher: string
+  via: 'invite' | 'code' | null
+  versions: Array<{ version: string; target: string; expiresAt: string | null; installable: boolean; compatible: boolean | null }>
+}
+
+/** D3: an installed Testplace build stopped because it expired; its data is kept. */
+export interface ExpiredTestplaceBuild {
+  id: string
+  version: string | null
+  expiresAt: string | null
+  artifactDigest?: string
+  canKeep: boolean
+  withdrawn?: true
+  keepRefusal?: 'withdrawn' | 'signed-out' | 'not-a-tester' | 'registry-outdated' | 'unreachable'
+}
+
+export interface DeveloperModeState {
+  enabled: boolean
+  /** A2-5 (G5): when Navide first saw settings another program wrote, while any is left. */
+  externalChange?: { detectedAt: string; modifiedAt: string | null; reason?: 'signing-unavailable' | 'signature-missing' }
+  folders: Array<{ pluginId: string; path: string; consentedAt: string; loaded: boolean; unavailable?: string; externallyChanged?: true }>
+}
+
 export interface PreparedInstallSummary {
   id: string
   version: string
   trustTier: 'signed-verified' | 'unsigned'
   sensitive: string[]
   containsBackendExecutable: boolean
+  /** R2 MED-6 on #436: the manifest declares views (`contributes.views`); the
+   *  disclosure card says views can reach the network only then. */
+  hasViews?: boolean
+  /** Declared agent tools (sorted, timeouts defaulted); absent when none. */
+  agentTools?: Array<{
+    name: string
+    method: string
+    risk: 'read' | 'write'
+    title: string
+    description: string
+    timeoutMs: number
+    inputSchema: Record<string, unknown>
+  }>
   requiresConfirmation: boolean
   publisherId: string
   requiresPublisherTrust: boolean
   requiresRiskConfirmation: boolean
+  /** Plan B D2: what this update changes, computed by the Host from the
+   *  installed and the downloaded manifests; null for a first install. */
+  disclosureDiff?: PluginDisclosureDiff | null
+  /** Verified against the package and the Registry signature; null when the
+   *  version carries no disclosure. */
+  disclosure?: PluginManifestDisclosure | null
+  /** Registry-signed scan report (digest verified); null when none. */
+  scan?: PluginScanReport | null
+  /** Unsigned Registry facts, never verified. */
+  registry?: PluginRegistryDisclosureFacts | null
+  /** Source and review state from the verified Registry envelope; absent for
+   *  a channel this App does not know. */
+  source?: PluginSource
+  /** A Testplace build: its signed expiry and how the user joined the test. */
+  expiresAt?: string
+  testplaceVia?: 'invite' | 'code'
+  /** Card K3: sha256 of the picked file, shown in the consent dialog. */
+  digest?: string
+  /** Card K3 (D7): the installed package of the same id a file install replaces. */
+  replaces?: { version: string | null; source: 'marketplace' | 'local-unsigned' }
+  /** Card K3 (D7): the local file install a Marketplace install replaces. */
+  replacesLocal?: { version: string | null }
+  /** Card K4: the developer folder this summary was read from. */
+  folder?: string
+  /** W1: whether the shared static scan ran on a local file (`scan` holds it). */
+  localScan?: 'ran' | 'unavailable'
+  /** D7: the replaced package's native backend data will be set aside. */
+  backendDataSetAside?: boolean
+  /** D7: data set aside earlier from the incoming source, which the user may take back. */
+  reattachableBackendData?: true
+  /** MED-1 on #425: false when the takedown list could not be checked. */
+  takedownChecked?: boolean
+  /** A3: what the `<file>.sig` beside a local file shows against the
+   *  Navide-vetted publisher keys; `none` when there is no signature. */
+  localSignature?: { state: 'none' } | { state: 'verified' | 'revoked' | 'unverifiable'; publisherId: string; keyId?: string }
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []
@@ -396,6 +692,38 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.on('plans:backendStopped', listener)
     return () => ipcRenderer.removeListener('plans:backendStopped', listener)
   },
+  // An agent disabled or enabled a Navide plugin (B2-c): who, and the undo.
+  onPluginAgentAction: (cb: (notice: PluginAgentActionNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginAgentActionNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:agentAction', listener)
+    return () => ipcRenderer.removeListener('plugins:agentAction', listener)
+  },
+  // A plugin installed without Restart could not be activated at launch.
+  onPluginStagedCandidateNotActivated: (cb: (notice: PluginStagedCandidateNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginStagedCandidateNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:stagedCandidateNotActivated', listener)
+    return () => ipcRenderer.removeListener('plugins:stagedCandidateNotActivated', listener)
+  },
+  // Packages staged beside an active one, found at launch.
+  onPluginStagedUpdates: (cb: (updates: PluginStagedUpdate[]) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginStagedUpdates(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:stagedUpdates', listener)
+    return () => ipcRenderer.removeListener('plugins:stagedUpdates', listener)
+  },
+  // L3: an approved update switched versions.
+  onPluginSwitched: (cb: (notice: PluginSwitchNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginSwitchNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:switched', listener)
+    return () => ipcRenderer.removeListener('plugins:switched', listener)
+  },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))
   },
@@ -416,6 +744,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
   listOpenWorkspaces: (): Promise<string[]> => ipcRenderer.invoke('workspace:listOpen'),
   focusWorkspaceWindow: (workspacePath: string): Promise<boolean> =>
     ipcRenderer.invoke('workspace:focusExisting', workspacePath),
+  workspaceHolder: (workspacePath: string): Promise<string> =>
+    ipcRenderer.invoke('workspace:holder', workspacePath),
   reportAdoptedWorkspaces: (paths: string[]): void =>
     ipcRenderer.send('window:reportAdoptedWorkspaces', paths),
   takeRestoredAdoptedWorkspaces: (): Promise<string[]> =>
@@ -435,13 +765,21 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('shell:openTerminal', command),
   openTempFile: (filename: string, content: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('shell:openTempFile', filename, content),
-  openMainWindow: (args?: { workspace_path?: string }): Promise<{ ok: boolean }> =>
+  openMainWindow: (args?: { workspace_path?: string; background?: boolean }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('window:openMain', args ?? {}),
   detachGroup: (args: { groupId: string; workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('window:detachGroup', args),
   detachWorkspace: (args: { workspacePath: string; bounds?: { x: number; y: number; width: number; height: number } }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('window:detachWorkspace', args),
   getDetachedGroups: (): Promise<string[]> => ipcRenderer.invoke('window:getDetachedGroups'),
+  /** Bring the calling window itself to the front (MCP window_focus). Main
+   *  resolves the window from the sender; no other window can be named. */
+  focusSelf: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:focusSelf'),
+  /** Close the calling window itself (MCP window_close). Main resolves the
+   *  window from the sender; no other window can be named. */
+  closeSelf: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('window:closeSelf'),
+  /** Whether closeSelf would close this window ('last-window' off macOS). */
+  canCloseSelf: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('window:canCloseSelf'),
   /** Merge a detached group back. Omit groupId from the detached window itself
    *  — main resolves it from the sender. */
   reattachGroup: (args?: { groupId?: string }): Promise<{ ok: boolean }> =>
@@ -639,6 +977,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('dialog:pickFiles', args),
   openExternal: (url: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:openExternal', url),
+  /** Move an instruction file the Memory page created to the Trash; main
+   *  accepts only a path the backend recorded creating (memoryUndoCreate.ts). */
+  trashCreatedMemoryFile: (
+    path: string,
+    acceptChanged = false,
+  ): Promise<{ ok: boolean; code?: string; error?: string; created?: string; current?: string }> =>
+    ipcRenderer.invoke('memory:trashCreated', path, acceptChanged),
   /** The legal pages on navide.dev, by route; the same table main's Help menu uses. */
   legalLinks: { ...LEGAL_LINKS } as Readonly<Record<LegalRoute, string>>,
   /**
@@ -968,13 +1313,18 @@ contextBridge.exposeInMainWorld('agentTeam', {
       return () => ipcRenderer.removeListener(FN_KEY_STATUS_CHANNEL, listener)
     },
   } satisfies FnKeyApi,
-  // navide://extension/<id> links routed by src/main/deep-link.ts.
+  // navide://extension/<id> and navide://publish links routed by src/main/deep-link.ts.
   deepLink: {
     ready: () => ipcRenderer.invoke(DEEP_LINK_READY_CHANNEL),
     onOpenExtension: (handler) => {
       const listener = (_e: unknown, target: Parameters<typeof handler>[0]): void => handler(target)
       ipcRenderer.on(DEEP_LINK_OPEN_CHANNEL, listener)
       return () => ipcRenderer.removeListener(DEEP_LINK_OPEN_CHANNEL, listener)
+    },
+    onOpenPublish: (handler) => {
+      const listener = (_e: unknown, target: Parameters<typeof handler>[0]): void => handler(target)
+      ipcRenderer.on(DEEP_LINK_PUBLISH_CHANNEL, listener)
+      return () => ipcRenderer.removeListener(DEEP_LINK_PUBLISH_CHANNEL, listener)
     },
   } satisfies DeepLinkApi,
   executionPolicy: {
@@ -1002,11 +1352,56 @@ contextBridge.exposeInMainWorld('agentTeam', {
       return () => ipcRenderer.removeListener('execution-policy:changed', listener)
     },
   },
+  /** Navide Marketplace developer (W3): the Host keeps the token and key; this sees states only. */
+  developer: {
+    state: () => ipcRenderer.invoke('developer:state'),
+    signIn: (scope) => ipcRenderer.invoke('developer:signIn', scope),
+    signOut: () => ipcRenderer.invoke('developer:signOut'),
+    registerKey: () => ipcRenderer.invoke('developer:registerKey'),
+    application: () => ipcRenderer.invoke('developer:application'),
+    submitApplication: (input) => ipcRenderer.invoke('developer:submitApplication', input),
+    versions: () => ipcRenderer.invoke('developer:versions'),
+    stagePackage: (path) => ipcRenderer.invoke('developer:stagePackage', path ?? null),
+    publish: (input) => ipcRenderer.invoke('developer:publish', input),
+    yank: (input) => ipcRenderer.invoke('developer:yank', input),
+  } satisfies DeveloperApi,
   plugins: {
     listInstalled: (): Promise<InstalledPluginSummary[]> =>
       ipcRenderer.invoke('plugins:listInstalled'),
     listFactoryPackages: (): Promise<FactoryPluginSummary[]> =>
       ipcRenderer.invoke('plugins:listFactoryPackages'),
+    backendCallConcurrency: (): Promise<BackendCallConcurrency[]> =>
+      ipcRenderer.invoke('plugins:backendCallConcurrency'),
+    /** One package's AI CLI sessions that keep running with no view. */
+    backgroundAiSessions: (id: string): Promise<BackgroundAiSession[]> =>
+      ipcRenderer.invoke('plugins:backgroundAiSessions', { id }),
+    /** Ends one session backgroundAiSessions listed; ok is false once it is no longer listed. */
+    endBackgroundAiSession: (id: string, sessionId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('plugins:endBackgroundAiSession', { id, sessionId }),
+    /** D-f: one installed plugin's activity report (read only). */
+    activityReport: (id: string): Promise<
+      { ok: true; report: PluginActivityReport } | { ok: false; error: string }
+    > => ipcRenderer.invoke('plugins:activityReport', { id }),
+    /** D-f: installed Registry packages' disclosures and install-time scans. */
+    installedDisclosures: (): Promise<Array<{
+      id: string
+      version: string
+      disclosure: PluginManifestDisclosure | null
+      scan: PluginScanReport | null
+      /** Source and review state; see `shared/pluginSource.ts`. */
+      source?: PluginSource
+      /** Registry-signed expiry; present only when `source` is `testplace`. */
+      expiresAt?: string
+      /** Whether the active package declares views (R2 MED-6 on #436). */
+      hasViews?: boolean
+    }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
+    backendResourceUsage: (): Promise<BackendResourceUsage> =>
+      ipcRenderer.invoke('plugins:backendResourceUsage'),
+    disabledBuiltins: (): Promise<string[]> => ipcRenderer.invoke('plugins:disabledBuiltins'),
+    disabledStoreStatus: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
+      ipcRenderer.invoke('plugins:disabledStoreStatus'),
+    resetDisabledStore: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
+      ipcRenderer.invoke('plugins:resetDisabledStore'),
     listContributions: (): Promise<Array<{
       pluginId: string
       packageVersion: string | null
@@ -1017,8 +1412,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
        *  current text colour rather than the shade baked into the artwork. */
       iconMonochrome: boolean
       kind: 'custom'
-      location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
+      location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window' | 'detail'
       manifestOrder: number
+      /** Source and review state of the package that contributes this view. */
+      source?: PluginSource
+      /** A test build: its signed expiry and how the user joined the test. */
+      expiresAt?: string
+      testplaceVia?: 'invite' | 'code'
     }>> => ipcRenderer.invoke('plugins:listContributions'),
     hostThemeChanged: (theme: string): void =>
       ipcRenderer.send('plugins:hostThemeChanged', theme),
@@ -1031,7 +1431,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
     openContributionWindow: (args: {
       contributionKey: string
       workspace_path: string
-    }): Promise<{ ok: boolean; error?: string }> =>
+    }): Promise<{
+      ok: boolean
+      error?: string
+      backendUnavailable?: string
+      backendUnavailableStatus?: NativeBackendStatusRow['status']
+    }> =>
       ipcRenderer.invoke('plugins:openContributionWindow', args),
     closeContribution: (args: { contributionKey: string }): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('plugins:closeContribution', args),
@@ -1065,32 +1470,129 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.on('plugins:updatesChanged', listener)
       return () => ipcRenderer.removeListener('plugins:updatesChanged', listener)
     },
+    /** The core backend's agent tool result helper changed state. */
+    onResultHelperState: (handler: (state: AgentToolsResultHelperState) => void): (() => void) => {
+      const listener = (_event: unknown, state: AgentToolsResultHelperState): void => handler(state)
+      ipcRenderer.on('plugins:resultHelperState', listener)
+      return () => ipcRenderer.removeListener('plugins:resultHelperState', listener)
+    },
+    /** D-f: rescans of installed versions that found new items (notice only). */
+    onRescanNotices: (handler: (notices: PluginRescanNotice[]) => void): (() => void) => {
+      const listener = (_event: unknown, notices: PluginRescanNotice[]): void => handler(notices)
+      ipcRenderer.on('plugins:rescanNotices', listener)
+      return () => ipcRenderer.removeListener('plugins:rescanNotices', listener)
+    },
     prepareInstall: (args: {
       namespace: string
       name: string
       version?: string
+      /** A Testplace build, fetched with the user's Navide Cloud account. */
+      testplace?: boolean
     }): Promise<PreparedInstallSummary> => ipcRenderer.invoke('plugins:prepareInstall', args),
     commitInstall: (
       id: string,
-      approval: { publisherConfirmed?: boolean; riskConfirmed?: boolean } = {}
-    ): Promise<{ id: string; requires: string[]; restartRequired: true }> =>
+      approval: { publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean } = {}
+    ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
       ipcRenderer.invoke('plugins:commitInstall', { id, ...approval }),
+    /** Card K3: the main process opens its own file dialog; nothing names a path. */
+    installFromFile: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:installFromFile'),
+    commitLocalInstall: (
+      id: string,
+      approval: { riskConfirmed: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean; expectedDigest?: string }
+    ): Promise<{ id: string; requires: string[]; restartRequired: boolean; activatedVersion?: string; activationError?: string }> =>
+      ipcRenderer.invoke('plugins:commitLocalInstall', { id, ...approval }),
+    /** #643 review L1: whether the file copy with this digest is still held
+     *  after a failed approval, so approving again can work. */
+    preparedLocalInstall: (id: string, digest: string): Promise<{ present: boolean }> =>
+      ipcRenderer.invoke('plugins:preparedLocalInstall', { id, digest }),
+    /** W1 (S2): the copy the Host staged for an agent's file request, named
+     *  by its stagingId; never a path. Installs nothing. */
+    prepareAgentFileInstall: (
+      stagingId: string,
+      requester?: { callerKind: string; paneName?: string },
+    ): Promise<PreparedInstallSummary> =>
+      ipcRenderer.invoke('plugins:prepareAgentFileInstall', requester ? { stagingId, requester } : { stagingId }),
+    /** L4: the disclosure of a kept file version, for consenting to go back to it. */
+    prepareLocalRollback: (id: string): Promise<PreparedInstallSummary & { rollbackFrom: string }> =>
+      ipcRenderer.invoke('plugins:prepareLocalRollback', { id }),
+    /** The user rejected an agent's file request: drop its staged copy. */
+    discardAgentStaged: (stagingId: string): Promise<void> =>
+      ipcRenderer.invoke('plugins:discardAgentStaged', { stagingId }),
+    /** Card K4: the Developer Mode switch and the developer folders. The main
+     *  process owns the switch; it opens its own folder dialog. */
+    developerMode: (): Promise<DeveloperModeState> => ipcRenderer.invoke('plugins:developerMode'),
+    /** The launch reminder was closed in some window during this launch. */
+    developerModeReminderDismissed: (): Promise<boolean> => ipcRenderer.invoke('plugins:developerModeReminderDismissed'),
+    dismissDeveloperModeReminder: (): Promise<void> => ipcRenderer.invoke('plugins:dismissDeveloperModeReminder'),
+    onDeveloperModeReminderDismissed: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('plugins:developerModeReminderDismissed', listener)
+      return () => ipcRenderer.removeListener('plugins:developerModeReminderDismissed', listener)
+    },
+    setDeveloperMode: (enabled: boolean): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:setDeveloperMode', { enabled }),
+    loadFromFolder: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:loadFromFolder'),
+    commitFolderLoad: (id: string, approval: { riskConfirmed: boolean; expectedFolder?: string }): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:commitFolderLoad', { id, ...approval }),
+    reloadDeveloperPlugin: (id: string): Promise<
+      { reloaded: true; requiresConsent: false } | { reloaded: false; requiresConsent: true; prepared: PreparedInstallSummary }
+    > => ipcRenderer.invoke('plugins:reloadDeveloperPlugin', { id }),
+    removeDeveloperFolder: (id: string): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:removeDeveloperFolder', { id }),
+    /** DESIGN-A2 G1: reload a developer folder when its files change (on by default). */
+    setDeveloperFolderAutoReload: (id: string, enabled: boolean): Promise<DeveloperModeState> =>
+      ipcRenderer.invoke('plugins:setDeveloperFolderAutoReload', { id, enabled }),
+    onDeveloperFolderEvent: (
+      handler: (event: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string; running?: boolean }) => void,
+    ): (() => void) => {
+      const listener = (
+        _event: unknown,
+        folderEvent: { pluginId: string; kind: 'reloaded' | 'needs-consent' | 'reload-failed'; error?: string; running?: boolean },
+      ): void => handler(folderEvent)
+      ipcRenderer.on('plugins:developerFolderEvent', listener)
+      return () => ipcRenderer.removeListener('plugins:developerFolderEvent', listener)
+    },
+    selfHostedQuarantine: (): Promise<Array<{ id: string; version: string | null }>> =>
+      ipcRenderer.invoke('plugins:selfHostedQuarantine'),
+    /** Testplace (W5b): the tests the user joined, join by invite or test code, leave. */
+    testplaceList: (): Promise<TestplaceListing[]> => ipcRenderer.invoke('plugins:testplaceList'),
+    testplaceJoin: (code: string): Promise<{ id: string }> => ipcRenderer.invoke('plugins:testplaceJoin', { code }),
+    testplaceLeave: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugins:testplaceLeave', { id }),
+    /** The invite form's Send: the join tokens come back to that form only. */
+    testplaceInvite: (id: string, labels: string[]): Promise<DeveloperCallResult> =>
+      ipcRenderer.invoke('plugins:testplaceInvite', { id, labels }),
+    /** D3: expired Testplace builds, stopped with their data kept, and "keep using". */
+    expiredTestplace: (): Promise<ExpiredTestplaceBuild[]> => ipcRenderer.invoke('plugins:expiredTestplace'),
+    /** Installed Registry packages stopped because trust data fails against this computer's clock. */
+    clockQuarantine: (): Promise<Array<{ id: string; version: string | null; clock: 'behind' | 'ahead' }>> =>
+      ipcRenderer.invoke('plugins:clockQuarantine'),
+    keepExpiredTestplace: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('plugins:keepExpiredTestplace', { id }),
+    /** A promoted test build of the same digest takes the Marketplace receipt in place (no reinstall). */
+    adoptTestplaceRelease: (id: string): Promise<{ adopted: boolean }> => ipcRenderer.invoke('plugins:adoptTestplaceRelease', { id }),
     restart: (id: string): Promise<{
       id: string
       packageVersion: string
       restoredInstances: number
       skippedDestroyedHostWindows: number
     }> => ipcRenderer.invoke('plugins:restart', { id }),
-    rollback: (id: string): Promise<{
+    // L4: going back to a kept file version carries the user's renewed consent.
+    rollback: (id: string, options: { consentConfirmed?: boolean } = {}): Promise<{
       id: string
       packageVersion: string
       restoredInstances: number
       skippedDestroyedHostWindows: number
-    }> => ipcRenderer.invoke('plugins:rollback', { id }),
-    remove: (id: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('plugins:remove', { id }),
+    }> => ipcRenderer.invoke('plugins:rollback', { id, ...(options.consentConfirmed === true ? { consentConfirmed: true } : {}) }),
+    /** Drop the version staged for the next restart (the downgrade of an agent's O1 update). */
+    discardCandidate: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:discardCandidate', { id }),
+    remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('plugins:remove', nativeBackendData === undefined ? { id } : { id, nativeBackendData }),
+    nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
+      ipcRenderer.invoke('plugins:nativeBackendData', { id }),
+    installedDisclosure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:installedDisclosure', { id }),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
+    setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
+      ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
     marketplacePackMembers: (members: string[]): Promise<PackMemberSummary[]> =>
       ipcRenderer.invoke('plugins:marketplacePackMembers', { members }),
     preparePack: (args: { namespace: string; name: string }): Promise<PreparedPackSummary> =>
@@ -1112,6 +1614,21 @@ contextBridge.exposeInMainWorld('agentTeam', {
         ipcRenderer.invoke('plugins:nativeBackends:setDisabled', { id, disabled }),
       revokeWorkspaceWrite: (id: string, workspacePath: string): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:revokeWorkspaceWrite', { id, workspacePath }),
+      setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean }): Promise<NativeBackendOverview> =>
+        ipcRenderer.invoke('plugins:nativeBackends:setAgentTools', change),
+      /** Watchdog option C: unanswered resource notices (contract 5.2). */
+      resourceNotices: (): Promise<BackendResourceNoticeView[]> =>
+        ipcRenderer.invoke('plugins:nativeBackends:resourceNotices'),
+      /** Each running third-party backend's usage against its thresholds. */
+      resourceStatus: (): Promise<BackendResourceStatusView[]> =>
+        ipcRenderer.invoke('plugins:nativeBackends:resourceStatus'),
+      answerResourceNotice: (id: string, choice: 'terminate' | 'continue'): Promise<boolean> =>
+        ipcRenderer.invoke('plugins:nativeBackends:answerResourceNotice', { id, choice }),
+      onResourceNoticesChanged: (handler: () => void): (() => void) => {
+        const listener = (): void => handler()
+        ipcRenderer.on('plugins:nativeBackends:resourceNoticesChanged', listener)
+        return () => ipcRenderer.removeListener('plugins:nativeBackends:resourceNoticesChanged', listener)
+      },
     },
   },
 })

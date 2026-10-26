@@ -148,6 +148,42 @@ class PosixProcessTree:
     def kill_group(self, gid: int, *, force: bool) -> None:
         os.killpg(gid, _signal_for(force))
 
+    def own_group_spawn_kwargs(self) -> dict[str, int]:
+        return {"process_group": 0}
+
+    def end_own_group(self, pid: int) -> None:
+        try:
+            group = os.getpgid(pid)
+            if group != pid or group == os.getpgrp():
+                return
+            self.kill_group(group, force=True)
+        except OSError:
+            pass
+
+    def start_own_group(self, pid: int) -> None:
+        return None
+
+    def release_contained(self, pid: int, job: int) -> None:
+        return None
+
+    def contain(self, pid: int) -> None:
+        # Started with start_new_session: its session is the tree.
+        return None
+
+    def end_contained(self, pid: int, job: int | None = None) -> None:
+        try:
+            os.killpg(pid, _signal_for(True))
+        except (ProcessLookupError, PermissionError):
+            pass
+
+    def isolate_stdin_from_children(self) -> bool:
+        # Main closes the backend's stdin after the handover line here, and a
+        # POSIX pipe has no per-file I/O lock to block a child on anyway.
+        return False
+
+    def stderr_handle_info(self) -> str:
+        return ""
+
     def kill_tree(self, pid: int, *, force: bool) -> None:
         """Group kill plus each descendant individually: the descendants are
         snapshotted first because a dead root's grandchildren reparent and

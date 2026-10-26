@@ -17,7 +17,7 @@
 //
 // Mirrors the registry's own chain: `signing.py` signs/verifies a base64
 // Ed25519 signature over the ascii-encoded sha256 *hex* digest; `trust.py`
-// flags `fs`/`aiCli`/`shell` as sensitive for v2; `terminal` remains sensitive
+// flags `fs`/`aiCli`/`web`/`agentMessages`/`shell` as sensitive for v2; `terminal` remains sensitive
 // only for the legacy compatibility path. Kept in sync deliberately.
 
 import { createHash, createPublicKey, timingSafeEqual, verify as cryptoVerify } from 'node:crypto'
@@ -32,6 +32,9 @@ export const KNOWN_CAPABILITIES: readonly string[] = [
   'fs',
   'ui',
   'aiCli',
+  'web',
+  'agents',
+  'agentMessages',
   'shell',
   // Legacy v1 namespaces remain parseable only through the compatibility path.
   'git',
@@ -44,7 +47,7 @@ export const KNOWN_CAPABILITIES: readonly string[] = [
 
 /** Capabilities that grant filesystem / brokered process / shell reach and
  *  warrant a second confirmation before install. Mirror of the registry. */
-export const SENSITIVE_CAPABILITIES: readonly string[] = ['fs', 'aiCli', 'shell', 'terminal']
+export const SENSITIVE_CAPABILITIES: readonly string[] = ['fs', 'aiCli', 'web', 'agentMessages', 'shell', 'terminal']
 
 export const TRUST_SIGNED = 'signed-verified'
 export const TRUST_UNSIGNED = 'unsigned'
@@ -137,12 +140,21 @@ export function isOfficialPluginId(id: string): boolean {
   return id.startsWith(OFFICIAL_PLUGIN_PREFIX)
 }
 
+/** Card K4 (D6): a packaged build never takes the official key from the
+ * environment, Developer Mode or not; the Host turns the override off at
+ * startup. A key that signs `navide.` packages is not a developer setting. */
+let officialKeyOverrideAllowed = true
+
+export function disableOfficialKeyOverride(): void {
+  officialKeyOverrideAllowed = false
+}
+
 /** Resolve the effective pinned official key (env override → build constant),
  *  or null when neither is configured. */
 export function resolveOfficialPublisherKey(
   env: Record<string, string | undefined> = process.env
 ): string | null {
-  const override = env['AGENT_TEAM_OFFICIAL_PLUGIN_KEY']?.trim()
+  const override = officialKeyOverrideAllowed ? env['AGENT_TEAM_OFFICIAL_PLUGIN_KEY']?.trim() : undefined
   const pem = override || OFFICIAL_PUBLISHER_KEY_PEM
   return pem ? pem : null
 }

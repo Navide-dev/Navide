@@ -32,7 +32,7 @@ def _clean() -> Any:
 
 
 def _ctx() -> Any:
-    params = {"pane": "pa", "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": "pa", "t": plan_mcp_wiring.caller_token("pa")}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )

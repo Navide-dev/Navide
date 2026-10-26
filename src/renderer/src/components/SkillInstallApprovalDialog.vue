@@ -4,6 +4,8 @@
  * pending request; nothing is written to the shared skills library until the
  * user approves it here. Requests queue and are shown one at a time; a request
  * decided in another window (or expired) is dropped via the resolved event.
+ * A skills_set_delivery change that widens delivery comes through here too
+ * (`action: 'delivery'`) and shows the delivery before and after instead.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -11,6 +13,7 @@ import type { useBackend } from '../composables/useBackend'
 
 interface SkillSource {
   kind?: string
+  name?: string
   path?: string
   repository?: string
   commit?: string
@@ -31,20 +34,41 @@ export interface SkillInstallApproval {
   status: string
 }
 
+export interface SkillDeliveryApproval {
+  approval_id: string
+  action: 'delivery'
+  owner: string
+  name: string
+  skill_id: string
+  /** Set for a native skill; "" for a shared one. */
+  real_path: string
+  targets: string[] | null
+  enabled: boolean | null
+  current: { targets: string[] | null; enabled: boolean | null }
+  expires_at: number
+  status: string
+}
+
+type SkillApproval = SkillInstallApproval | SkillDeliveryApproval
+
 const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
 const { t } = useI18n()
 
-const queue = ref<SkillInstallApproval[]>([])
+const queue = ref<SkillApproval[]>([])
 const busy = ref(false)
 const error = ref('')
 const showSkillMd = ref(false)
 const failed = ref(false)
 const now = ref(Date.now())
 const current = computed(() => queue.value[0] ?? null)
+const install = computed(() => (current.value && !('action' in current.value) ? current.value : null))
+const delivery = computed(() =>
+  current.value && 'action' in current.value && current.value.action === 'delivery' ? current.value : null,
+)
 // The backend expires requests lazily without an event, so the dialog checks the clock itself.
 const expired = computed(() => !!current.value && current.value.expires_at * 1000 <= now.value)
 
-function enqueue(approval: SkillInstallApproval): void {
+function enqueue(approval: SkillApproval): void {
   if (!approval?.approval_id || queue.value.some((a) => a.approval_id === approval.approval_id)) return
   queue.value.push(approval)
 }
@@ -55,7 +79,7 @@ function drop(approvalId: string): void {
 
 async function refresh(): Promise<void> {
   try {
-    const res = await props.backend.send<{ approvals: SkillInstallApproval[] }>('skills.install_approvals.list')
+    const res = await props.backend.send<{ approvals: SkillApproval[] }>('skills.install_approvals.list')
     if (!res.ok || !res.payload) return
     const pending = new Set(res.payload.approvals.map((a) => a.approval_id))
     queue.value = queue.value.filter((a) => pending.has(a.approval_id))
@@ -66,19 +90,25 @@ async function refresh(): Promise<void> {
 }
 
 const sourceLabel = computed(() => {
-  const source = current.value?.source
+  const source = install.value?.source
   if (!source) return ''
   if (source.kind === 'local') return source.path ?? ''
+  if (source.kind === 'bundled') return t('skill-approval.source-bundled', { name: `navide:${source.name ?? ''}` })
   const commit = source.commit ? `@${source.commit.slice(0, 12)}` : ''
   const subdir = source.subdir && source.subdir !== '.' ? `/${source.subdir}` : ''
   return `${source.repository ?? ''}${commit}${subdir}`
 })
 
-const targetsLabel = computed(() => {
-  const targets = current.value?.targets
-  if (targets === null || targets === undefined) return t('skill-approval.targets-all')
-  return targets.length ? targets.join(', ') : t('skill-approval.targets-none')
-})
+function labelFor(targets: string[] | null | undefined, native = false): string {
+  if (targets === null || targets === undefined) return t(native ? 'skill-approval.delivery-none' : 'skill-approval.targets-all')
+  if (targets.length) return targets.join(', ')
+  return t(native ? 'skill-approval.delivery-none' : 'skill-approval.targets-none')
+}
+
+const targetsLabel = computed(() => labelFor(current.value?.targets))
+const deliveryBefore = computed(() => (delivery.value ? labelFor(delivery.value.current.targets, !!delivery.value.real_path) : ''))
+const deliveryAfter = computed(() => (delivery.value ? labelFor(delivery.value.targets, !!delivery.value.real_path) : ''))
+const turnsOn = computed(() => delivery.value?.enabled === true && delivery.value.current.enabled === false)
 
 const expiresLabel = computed(() =>
   current.value ? new Date(current.value.expires_at * 1000).toLocaleTimeString() : '',
@@ -89,6 +119,10 @@ watch(() => current.value?.approval_id, () => {
   failed.value = false
   showSkillMd.value = false
 })
+
+function failedText(): string {
+  return t(delivery.value ? 'skill-approval.delivery-failed' : 'skill-approval.failed')
+}
 
 async function decide(approve: boolean): Promise<void> {
   const approval = current.value
@@ -105,14 +139,14 @@ async function decide(approve: boolean): Promise<void> {
       120_000,
     )
     if (!res.ok) {
-      error.value = res.error?.message ?? t('skill-approval.failed')
+      error.value = res.error?.message ?? failedText()
       // Already decided elsewhere or expired: nothing left to decide here.
       if (res.error?.code === 'SKILL_APPROVAL_NOT_PENDING' || res.error?.code === 'SKILL_APPROVAL_NOT_FOUND') {
         drop(approval.approval_id)
       }
     } else if (res.payload?.approval.status === 'failed') {
       failed.value = true
-      error.value = res.payload.approval.error || t('skill-approval.failed')
+      error.value = res.payload.approval.error || failedText()
     } else {
       drop(approval.approval_id)
     }
@@ -127,7 +161,7 @@ const offs: (() => void)[] = []
 let clock: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   clock = setInterval(() => { now.value = Date.now() }, 5_000)
-  offs.push(props.backend.on('skills.install_approval_request', (raw) => enqueue(raw as SkillInstallApproval)))
+  offs.push(props.backend.on('skills.install_approval_request', (raw) => enqueue(raw as SkillApproval)))
   offs.push(props.backend.on('skills.install_approval_resolved', (raw) => {
     const { approval_id: approvalId, status, error: reason } = raw as {
       approval_id: string
@@ -139,7 +173,7 @@ onMounted(() => {
     else if (!busy.value && !failed.value) {
       // Approved in another window: this one has nothing left to decide.
       failed.value = true
-      error.value = reason || t('skill-approval.failed')
+      error.value = reason || failedText()
     }
   }))
   void refresh()
@@ -156,29 +190,53 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
     <section class="sa-dialog">
       <header class="sa-top">
         <div>
-          <div class="sa-kicker">{{ $t('skill-approval.kicker') }}</div>
-          <h1>{{ $t('skill-approval.title', { name: current.name }) }}</h1>
-          <p class="sa-desc">{{ $t('skill-approval.desc') }}</p>
+          <template v-if="delivery">
+            <div class="sa-kicker">{{ $t('skill-approval.delivery-kicker') }}</div>
+            <h1>{{ $t('skill-approval.delivery-title', { name: delivery.name }) }}</h1>
+            <p class="sa-desc">{{ $t('skill-approval.delivery-desc') }}</p>
+          </template>
+          <template v-else>
+            <div class="sa-kicker">{{ $t('skill-approval.kicker') }}</div>
+            <h1>{{ $t('skill-approval.title', { name: current.name }) }}</h1>
+            <p class="sa-desc">{{ $t('skill-approval.desc') }}</p>
+          </template>
         </div>
         <span v-if="queue.length > 1" class="sa-badge">{{ $t('skill-approval.queue', { count: queue.length }) }}</span>
       </header>
 
-      <main class="sa-main">
+      <main v-if="delivery" class="sa-main">
+        <dl class="sa-facts">
+          <dt>{{ $t('skill-approval.requester') }}</dt><dd>{{ delivery.owner }}</dd>
+          <dt>{{ $t('skill-approval.source') }}</dt>
+          <dd class="sa-mono">{{ delivery.real_path || $t('skill-approval.delivery-shared') }}</dd>
+          <dt>{{ $t('skill-approval.delivery-current') }}</dt><dd class="sa-before">{{ deliveryBefore }}</dd>
+          <dt>{{ $t('skill-approval.delivery-next') }}</dt><dd class="sa-after">{{ deliveryAfter }}</dd>
+          <template v-if="turnsOn">
+            <dt>{{ $t('skill-approval.delivery-state') }}</dt><dd class="sa-turns-on">{{ $t('skill-approval.delivery-turns-on') }}</dd>
+          </template>
+          <dt>{{ $t('skill-approval.expires') }}</dt><dd>{{ expiresLabel }}</dd>
+        </dl>
+        <p class="sa-note">{{ $t('skill-approval.delivery-note') }}</p>
+        <pre v-if="expired" class="sa-error">{{ $t('skill-approval.delivery-expired') }}</pre>
+        <pre v-else-if="error" class="sa-error">{{ error }}</pre>
+      </main>
+
+      <main v-else-if="install" class="sa-main">
         <dl class="sa-facts">
           <dt>{{ $t('skill-approval.requester') }}</dt><dd>{{ current.owner }}</dd>
           <dt>{{ $t('skill-approval.source') }}</dt><dd class="sa-mono">{{ sourceLabel }}</dd>
-          <dt>{{ $t('skill-approval.digest') }}</dt><dd class="sa-mono">{{ current.digest.slice(0, 12) }}</dd>
+          <dt>{{ $t('skill-approval.digest') }}</dt><dd class="sa-mono">{{ install.digest.slice(0, 12) }}</dd>
           <dt>{{ $t('skill-approval.targets') }}</dt><dd>{{ targetsLabel }}</dd>
           <dt>{{ $t('skill-approval.expires') }}</dt><dd>{{ expiresLabel }}</dd>
         </dl>
 
-        <ul v-if="current.warnings.length" class="sa-warnings">
-          <li v-for="warning in current.warnings" :key="warning">{{ warning }}</li>
+        <ul v-if="install.warnings.length" class="sa-warnings">
+          <li v-for="warning in install.warnings" :key="warning">{{ warning }}</li>
         </ul>
 
-        <div class="sa-card-label">{{ $t('skill-approval.files', { count: current.files.length }) }}</div>
+        <div class="sa-card-label">{{ $t('skill-approval.files', { count: install.files.length }) }}</div>
         <ul class="sa-files">
-          <li v-for="file in current.files" :key="file.path">
+          <li v-for="file in install.files" :key="file.path">
             <span class="sa-mono">{{ file.path }}</span>
             <span v-if="file.script || file.executable" class="sa-flag">{{ $t('skill-approval.script') }}</span>
             <span class="sa-size">{{ file.size }} B</span>
@@ -188,7 +246,7 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
         <button class="sa-toggle" type="button" @click="showSkillMd = !showSkillMd">
           {{ showSkillMd ? $t('skill-approval.hide-skill-md') : $t('skill-approval.show-skill-md') }}
         </button>
-        <pre v-if="showSkillMd" class="sa-skill-md">{{ current.skill_md }}</pre>
+        <pre v-if="showSkillMd" class="sa-skill-md">{{ install.skill_md }}</pre>
 
         <p class="sa-note">{{ $t('skill-approval.write-note') }}</p>
         <pre v-if="expired" class="sa-error">{{ $t('skill-approval.expired') }}</pre>
@@ -205,7 +263,8 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
             {{ $t('skill-approval.reject') }}
           </button>
           <button class="sa-btn primary sa-approve nv-btn nv-btn--primary" :disabled="busy" @click="decide(true)">
-            {{ busy ? $t('skill-approval.installing') : $t('skill-approval.approve') }}
+            <template v-if="delivery">{{ busy ? $t('skill-approval.delivery-applying') : $t('skill-approval.delivery-approve') }}</template>
+            <template v-else>{{ busy ? $t('skill-approval.installing') : $t('skill-approval.approve') }}</template>
           </button>
         </template>
       </footer>
@@ -263,6 +322,7 @@ h1 { margin: 6px 0 0; color: var(--text-bright); font-size: 20px; overflow-wrap:
   font-size: 11.5px; line-height: var(--lh-base); white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .sa-error { color: var(--danger-fg); max-height: 120px; }
+.sa-turns-on { color: var(--attention-fg); }
 .sa-note { margin: 12px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .sa-footer { display: flex; align-items: center; gap: 10px; padding: 14px 28px; border-top: 1px solid var(--border-muted); }
 .sa-footer span { flex: 1; }

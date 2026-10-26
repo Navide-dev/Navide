@@ -1,0 +1,402 @@
+{
+  "description": "Backend -> Host agent tool call requests (contract 4.2). Shared by the Host parser (B1-b, frontendPluginManager.parseAgentToolCallRequest) and the core proxy (B1-c). `caller.verifiedTo` is optional on the wire; when present it must match the caller kind. The Host always derives its own label (`hostVerifiedTo`) and never trusts the sent one.",
+  "valid": [
+    {
+      "name": "pane-without-label",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": "/Users/me/project"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      },
+      "hostVerifiedTo": "pane"
+    },
+    {
+      "name": "pane-with-label",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": "/Users/me/project",
+          "verifiedTo": "pane"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      },
+      "hostVerifiedTo": "pane"
+    },
+    {
+      "name": "pane-without-workspace",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": null
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      },
+      "hostVerifiedTo": "pane"
+    },
+    {
+      "name": "external-with-label",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "external",
+          "paneId": null,
+          "workspace": null,
+          "verifiedTo": "caller-kind"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      },
+      "hostVerifiedTo": "caller-kind"
+    },
+    {
+      "name": "host-without-label",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "host",
+          "paneId": null,
+          "workspace": null
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      },
+      "hostVerifiedTo": "caller-kind"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "pane-claims-caller-kind",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": "/Users/me/project",
+          "verifiedTo": "caller-kind"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
+    },
+    {
+      "name": "external-claims-pane",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "external",
+          "paneId": null,
+          "workspace": null,
+          "verifiedTo": "pane"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
+    },
+    {
+      "name": "external-names-a-pane",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "external",
+          "paneId": "p-41",
+          "workspace": null
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
+    },
+    {
+      "name": "unknown-label",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": "/Users/me/project",
+          "verifiedTo": "model"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
+    },
+    {
+      "name": "extra-caller-field",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": "/Users/me/project",
+          "verifiedTo": "pane",
+          "model": "x"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
+    },
+    {
+      "name": "pane-without-id",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": null,
+          "workspace": "/Users/me/project"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
+    },
+    {
+      "name": "top-level-caller-identity",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": "/Users/me/project"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        },
+        "caller_identity": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "verifiedTo": "pane"
+        }
+      }
+    },
+    {
+      "name": "unknown-caller-kind",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "user",
+          "paneId": null,
+          "workspace": null
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
+    },
+    {
+      "name": "pane-relative-workspace",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": "relative/project"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
+    }
+  ]
+}

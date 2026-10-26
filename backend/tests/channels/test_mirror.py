@@ -63,7 +63,7 @@ def test_store_v4_gives_old_bindings_the_pre_mirror_replies_level(tmp_path) -> N
     with db.transaction() as cur:
         cur.execute("INSERT INTO channel_bindings VALUES ('p1','telegram','default','-1','5','t',9)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 5
+    assert db.schema_version("channels") == 6
     assert s.bindings()[0].public() == {
         "pane_id": "p1", "platform": "telegram", "account": "default", "chat_id": "-1", "thread_id": "5",
         "title": "t", "verbosity": "replies", "parent_pane_id": "", "auto": False}
@@ -201,6 +201,17 @@ async def test_full_verbosity_mirrors_local_prompt_text_and_labels_the_result(en
     env.turn_complete("pane-1", "註冊頁已同步修正。")
     await _until(lambda: "✅ 完成 · 🖥 本機\n註冊頁已同步修正。" in env.tg.texts())
     assert any(t.startswith("✅ 完成") for _, t in env.tg.edits)  # the status message closed in place
+
+
+async def test_pasted_image_markers_become_one_clean_label(env: Env) -> None:
+    env.m.mirror.on_local_prompt("pane-1", "[Image #5] [Image #6] 為什麼看不到圖片")
+    await _until(lambda: "🖥 你：為什麼看不到圖片 🖼 圖片 ×2" in env.tg.texts())
+    assert not _said(env, "[Image #")
+
+
+async def test_a_prompt_of_images_alone_still_says_what_came_in(env: Env) -> None:
+    env.m.mirror.on_local_prompt("pane-1", "[Image #1]")
+    await _until(lambda: "🖥 你：🖼 圖片 ×1" in env.tg.texts())
 
 
 async def test_standard_verbosity_only_says_a_local_command_happened(env: Env) -> None:
@@ -596,6 +607,8 @@ async def test_stop_with_a_name_interrupts_only_that_child(env: Env) -> None:
     _use_directory(env, [_pane("pane-1", "main"), _pane("pane-2", "tester", "pane-1")])
     await env.inbound("/stop tester")
     assert env.fake.interrupts == ["pane-2"] and "⏹ 已送出中斷（tester）" in env.tg.texts()
+    # The resume button resumes the bound pane, so a child's stop does not offer it.
+    assert "⏹ 已送出中斷（tester）" not in env.tg.buttons
     await env.inbound("/stop ghost")
     assert env.fake.interrupts == ["pane-2"] and "⚠️ 找不到子視窗「ghost」" in env.tg.texts()
     await env.inbound("/stop")
@@ -744,3 +757,16 @@ async def test_a_chat_without_topics_is_told_once_how_to_get_them(env: Env) -> N
     await _until(lambda: _said(env, "主題"))
     await env.m.wait_idle()
     assert sum(mirror_mod.MSG_NO_TOPICS in t for t in env.tg.texts()) == 1
+
+
+async def test_outbox_passes_a_reply_target_only_when_given() -> None:
+    calls: list[tuple[str, dict]] = []
+
+    async def send(text: str, buttons=None, **kw) -> list[str]:
+        calls.append((text, kw))
+        return ["1"]
+
+    box = Outbox(send, per_min=6000, burst=10)
+    await box.submit("plain", "o")
+    await box.submit("quoted", "o", reply_to="42")
+    assert calls == [("plain", {}), ("quoted", {"reply_to": "42"})]

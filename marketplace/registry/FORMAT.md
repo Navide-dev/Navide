@@ -97,7 +97,7 @@ Extension Pack and declares neither.
 
 | Field | Type | Notes |
 |---|---|---|
-| `system` | string[] | 1-3 unique namespaces from `fs`, `ui`, `aiCli`. |
+| `system` | string[] | 1-6 unique namespaces from `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages`; `agentMessages` requires `agents`. |
 | `shell` | string | `allowlist` or `full`. |
 | `scopes` | object | Optional. `{"fs": {"root": ..., "read": [...], "write": [...]}}`: path patterns the package declares it reads or writes. `root` is `workspace` (default) or `repository` (the nearest enclosing Git root). At least one of `read`/`write`, each 1-16 unique safe relative patterns; `*` matches within one segment, a whole-segment `**` matches zero or more segments, and a pattern covers only what it matches. Shown to the user as a disclosure; it grants and restricts nothing. |
 
@@ -135,6 +135,7 @@ Extension Pack and declares neither.
 | `activation` | `"startup"` | yes | |
 | `methods` | string[] | no | 1-64 unique package-local method names, dotted lowerCamel segments such as `files.list` (at most 128 characters). The Host forwards only declared methods. |
 | `events` | string[] | no | 1-32 unique package-local event names, same form as `methods`. The Host forwards only declared events. |
+| `agentTools` | object[] | no | 1 or more tools agents may call through the core navide MCP server, each forwarded to one of `methods`. Every rule (name prefix derived from the id, reserved names, plain-text title and description, integer-only `inputSchema`, `timeoutMs` 1-120000, the 1 MiB cap) is in `docs/en-US/plugin-agent-tools-contract.md` section 2; a package that breaks any of them is refused at publish. |
 
 ## Targets and backend entry
 

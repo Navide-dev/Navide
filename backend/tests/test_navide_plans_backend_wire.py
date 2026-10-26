@@ -635,6 +635,78 @@ def _load_backend(name: str) -> Any:
     return module
 
 
+def test_a_follower_waking_after_the_follow_up_scan_ended_takes_its_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Two followers wake from the leader's flight; the first runs the follow-up
+    # scan and finishes it before the second gets to look. The second arrived
+    # before that scan started, so it takes its result instead of a third scan.
+    backend = _load_backend("plans_backend_late_follower")
+    scans: list[str] = []
+    leader_scanning = threading.Event()
+    release_leader = threading.Event()
+    real_list_plans = backend._list_plans
+
+    def list_plans(origin: dict[str, Any]) -> list[dict[str, Any]]:
+        scans.append(origin["requestId"])
+        if origin["requestId"] == "list-leader":
+            leader_scanning.set()
+            assert release_leader.wait(5)
+        return real_list_plans(origin)
+
+    monkeypatch.setattr(backend, "_list_plans", list_plans)
+    results: dict[str, Any] = {}
+
+    def call(request_id: str) -> None:
+        origin = {"kind": "call", "requestId": request_id, "instance": "instance-1", "root": str(tmp_path.resolve())}
+        results[request_id] = backend._list_plans_single_flight(origin)
+
+    leader = threading.Thread(target=call, args=("list-leader",), daemon=True)
+    leader.start()
+    assert leader_scanning.wait(5)
+    flight = backend._list_flights["instance-1"]
+    done = flight["done"]
+    waiting: list[str] = []
+    both_waiting = threading.Event()
+    followers: list[threading.Thread] = []
+
+    class _LateSecondFollower:
+        """The leader's flight event; list-follower-2 wakes only after list-follower-1 returned."""
+
+        def wait(self, timeout: float | None = None) -> bool:
+            waiting.append(threading.current_thread().name)
+            if len(waiting) == 2:
+                both_waiting.set()
+            woke = done.wait(timeout)
+            if threading.current_thread().name == "list-follower-2":
+                followers[0].join(5)
+                assert not followers[0].is_alive()
+            return woke
+
+        def set(self) -> None:
+            done.set()
+
+    flight["done"] = _LateSecondFollower()
+    followers.extend(
+        threading.Thread(target=call, args=(name,), name=name, daemon=True)
+        for name in ("list-follower-1", "list-follower-2")
+    )
+    for follower in followers:
+        follower.start()
+    assert both_waiting.wait(5)
+    release_leader.set()
+    for thread in (leader, *followers):
+        thread.join(5)
+        assert not thread.is_alive()
+
+    assert scans == ["list-leader", "list-follower-1"]
+    assert all(value == [] for value in results.values())
+    assert sorted(results) == ["list-follower-1", "list-follower-2", "list-leader"]
+    # Once every caller has its result, no finished scan is kept around.
+    assert "instance-1" not in getattr(backend, "_list_finished", {})
+    assert "instance-1" not in getattr(backend, "_list_callers", {})
+
+
 def test_list_caller_arriving_mid_scan_sees_the_write_the_scan_missed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -769,6 +841,8 @@ def test_cancelled_leader_does_not_cancel_the_followers_list_call(
     # The follower takes the next flight instead of inheriting the cancellation.
     assert outcomes["list-follower"] == ("result", [])
     assert scans == ["list-leader", "list-follower"]
+    # A failed scan is never kept for a later caller to take.
+    assert "instance-1" not in getattr(backend, "_list_finished", {})
 
 
 def test_host_bridge_cancellation_settles_the_child_call(

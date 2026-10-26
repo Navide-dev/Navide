@@ -1,7 +1,9 @@
-import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
+import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { assertExactTrustFields, requireTrustObject } from './pluginTrustJson'
 import { assertPluginTargetCompatible, currentPluginHostTarget } from './pluginTarget'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
+import { canonicalContractJson, type ManifestDisclosure } from '../../shared/pluginDisclosure'
+import { DISCLOSURE_ENVELOPE_FIELDS, type ScanReport } from '../../shared/pluginDisclosureScan'
 
 export type RegistryAuthority = 'official' | 'self-hosted'
 
@@ -16,6 +18,30 @@ export interface RegistryPackageEnvelope {
   publisherId: string
   keyId: string
   signedAt: string
+  /** Present only on a testplace version, together with expiresAt; stable
+   * and pre-release envelopes keep the 8 fields above. */
+  channel?: string
+  expiresAt?: string
+}
+
+/** Release channels this App can install. Anything else is refused. */
+const REGISTRY_RELEASE_CHANNELS: ReadonlySet<string> = new Set(['stable', 'pre-release', 'testplace'])
+
+/** The Registry-signed disclosure envelope (contract section 3.5). It is
+ * separate from the 8-field package envelope, which stays unchanged so that
+ * released Apps keep verifying new versions. */
+export interface RegistryDisclosureEnvelope {
+  schemaVersion: 1
+  artifactDigest: string
+  packageId: string
+  version: string
+  target: string
+  keyId: string
+  signedAt: string
+  disclosureDigest: string
+  /** SHA-256 of the Registry's scan report (contract 3.8), or null when the
+   * version has none. */
+  scanDigest: string | null
 }
 
 export interface RegistrySignerTrust {
@@ -54,6 +80,13 @@ export type RegistryTrustErrorCode =
   | 'SIGNER_INVALID'
   | 'PUBLISHER_BLOCKED'
   | 'PACKAGE_BLOCKED'
+  | 'DISCLOSURE_INVALID'
+  | 'DISCLOSURE_MISMATCH'
+  | 'CHANNEL_UNSUPPORTED'
+  | 'TESTPLACE_EXPIRED'
+  /** Its developer (or Navide) took a test build back; its testers learn it
+   *  from the tester detail, never from public metadata (S8 T-MED-1). */
+  | 'TESTPLACE_WITHDRAWN'
 
 export class RegistryTrustError extends Error {
   constructor(
@@ -77,16 +110,21 @@ export function assertRegistryPackageEnvelopeShape(
   label = 'registry envelope'
 ): asserts value is RegistryPackageEnvelope {
   const envelope = requireTrustObject(value, label)
-  assertExactTrustFields(envelope, label, [
-    'schemaVersion',
-    'artifactDigest',
-    'packageId',
-    'version',
-    'target',
-    'publisherId',
-    'keyId',
-    'signedAt',
-  ])
+  assertExactTrustFields(
+    envelope,
+    label,
+    [
+      'schemaVersion',
+      'artifactDigest',
+      'packageId',
+      'version',
+      'target',
+      'publisherId',
+      'keyId',
+      'signedAt',
+    ],
+    ['channel', 'expiresAt']
+  )
   if (envelope.schemaVersion !== 1) throw new Error(`${label} schemaVersion is unsupported`)
   for (const field of [
     'artifactDigest',
@@ -98,6 +136,9 @@ export function assertRegistryPackageEnvelopeShape(
     'signedAt',
   ]) {
     requiredString(envelope[field], `${label}.${field}`)
+  }
+  for (const field of ['channel', 'expiresAt']) {
+    if (envelope[field] !== undefined) requiredString(envelope[field], `${label}.${field}`)
   }
   if (!isValidManifestV2PluginId(envelope.packageId)) {
     throw new Error(`${label}.packageId is invalid`)
@@ -239,12 +280,25 @@ export interface VerifyRegistryPackageTrustInput {
   /** Host-derived target; the Registry response cannot choose this value. */
   expectedHostTarget?: string
   now?: Date
+  /** D3: the user chose to keep using this expired testplace artifact. Only
+   * the expiry check is skipped; it runs after every other check, so a
+   * blocked package or a bad signature is still refused. */
+  allowExpiredTestplace?: boolean
 }
 
 export interface VerifiedRegistryPackageTrust {
   publisherId: string
   keyId: string
+  /** Set when an expired testplace artifact was allowed (allowExpiredTestplace). */
+  expired?: true
 }
+
+/** How far after this computer's clock trust metadata may say it was
+ *  generated. The Registry signs it fresh for each request, so a clock even a
+ *  little behind the server's refused every install and update. The expiry
+ *  side gets no such allowance: a slow clock never trips it, and widening it
+ *  would only let a stale document live longer. */
+export const TRUST_METADATA_CLOCK_SKEW_MS = 5 * 60 * 1000
 
 export function verifyRegistryTrustMetadata(
   metadata: RegistryTrustMetadata,
@@ -278,8 +332,24 @@ export function verifyRegistryTrustMetadata(
   const now = nowValue.getTime()
   const generatedAt = timestamp(metadata.generatedAt, 'trust metadata generatedAt')
   const expiresAt = timestamp(metadata.expiresAt, 'trust metadata expiresAt')
-  if (generatedAt > now || expiresAt < now || expiresAt <= generatedAt) {
-    throw new RegistryTrustError('TRUST_METADATA_INVALID', 'registry trust metadata is expired')
+  if (expiresAt <= generatedAt) {
+    throw new RegistryTrustError('TRUST_METADATA_INVALID', 'registry trust metadata has an empty validity window')
+  }
+  // Coded (`CODE: detail`) so the renderer can say it in the user's language
+  // (developerModeErrors.ts); both point at the computer's clock.
+  if (generatedAt - TRUST_METADATA_CLOCK_SKEW_MS > now) {
+    throw new RegistryTrustError(
+      'TRUST_METADATA_INVALID',
+      `TRUST_METADATA_NOT_YET_VALID: registry trust metadata was generated at ${metadata.generatedAt}, ` +
+        `later than this computer's clock (${nowValue.toISOString()}); check the computer's date and time`
+    )
+  }
+  if (expiresAt < now) {
+    throw new RegistryTrustError(
+      'TRUST_METADATA_INVALID',
+      `TRUST_METADATA_EXPIRED: registry trust metadata expired at ${metadata.expiresAt} ` +
+        `by this computer's clock (${nowValue.toISOString()}); check the computer's date and time`
+    )
   }
   if (
     metadata.schemaVersion !== 1 ||
@@ -305,11 +375,12 @@ export function verifyRegistryPackageTrust(
     )
   }
   const now = (input.now ?? new Date()).getTime()
+  // One clock read for every time check here: metadata and envelope agree on "now".
   verifyRegistryTrustMetadata(
     input.trustMetadata,
     input.trustMetadataSignature,
     input.pinnedRootKey,
-    input.now
+    new Date(now)
   )
 
   for (const field of [
@@ -330,6 +401,20 @@ export function verifyRegistryPackageTrust(
   if (input.envelope.schemaVersion !== 1) {
     throw new RegistryTrustError('TRUST_METADATA_INVALID', 'unsupported registry trust schema')
   }
+  const channel = input.envelope.channel
+  if (channel !== undefined && !REGISTRY_RELEASE_CHANNELS.has(channel)) {
+    throw new RegistryTrustError('CHANNEL_UNSUPPORTED', `unknown release channel '${channel}'`)
+  }
+  if ((channel === 'testplace') !== (input.envelope.expiresAt !== undefined)) {
+    throw new RegistryTrustError(
+      'CHANNEL_UNSUPPORTED',
+      'a registry envelope carries expiresAt exactly when its channel is testplace'
+    )
+  }
+  const expiresAt =
+    input.envelope.expiresAt === undefined
+      ? null
+      : timestamp(input.envelope.expiresAt, 'registry envelope expiresAt')
   assertPluginTargetCompatible(
     input.envelope.target,
     input.expectedHostTarget ?? currentPluginHostTarget()
@@ -363,13 +448,12 @@ export function verifyRegistryPackageTrust(
       `expired signer '${signer.keyId}' cannot sign a new artifact`
     )
   }
-  if (signedAt < notBefore || signedAt > notAfter || signedAt > now) {
+  if (signedAt < notBefore || signedAt > notAfter) {
     throw new RegistryTrustError(
       'SIGNER_INVALID',
       `registry signer '${signer.keyId}' signature is outside its validity window`
     )
   }
-
   if (input.trustMetadata.blockedPublishers.includes(input.envelope.publisherId)) {
     throw new RegistryTrustError(
       'PUBLISHER_BLOCKED',
@@ -395,6 +479,134 @@ export function verifyRegistryPackageTrust(
       'registry signature failed verification against the authorized signer'
     )
   }
+  // A version published or approved moments ago carries the server's clock;
+  // the same allowance as the trust metadata's generatedAt, future side only.
+  // Checked after the signature, so a forged signedAt reads as a bad signature,
+  // not as a wrong computer clock.
+  if (signedAt - TRUST_METADATA_CLOCK_SKEW_MS > now) {
+    throw new RegistryTrustError(
+      'SIGNER_INVALID',
+      `REGISTRY_SIGNATURE_NOT_YET_VALID: registry signature was made at ${input.envelope.signedAt}, ` +
+        `later than this computer's clock (${new Date(now).toISOString()}); check the computer's date and time`
+    )
+  }
+  // Checked after the signature, so only a Registry-signed expiry counts.
+  if (expiresAt !== null && expiresAt <= now) {
+    if (input.allowExpiredTestplace === true) {
+      return { publisherId: input.envelope.publisherId, keyId: signer.keyId, expired: true }
+    }
+    throw new RegistryTrustError(
+      'TESTPLACE_EXPIRED',
+      `testplace version '${input.envelope.packageId}@${input.envelope.version}' expired at ${input.envelope.expiresAt}`
+    )
+  }
 
   return { publisherId: input.envelope.publisherId, keyId: signer.keyId }
+}
+
+export interface VerifyRegistryDisclosureInput {
+  /** Wire values from the Registry version row; all three or none. */
+  disclosure: unknown
+  disclosureEnvelope: unknown
+  disclosureSignature: unknown
+  /** The version row's `scan`: bound by the envelope's `scanDigest`. */
+  scan: unknown
+  /** The package envelope and trust metadata, both already verified by
+   * verifyRegistryPackageTrust. */
+  packageEnvelope: RegistryPackageEnvelope
+  trustMetadata: RegistryTrustMetadata
+}
+
+export interface VerifiedRegistryDisclosure {
+  disclosure: ManifestDisclosure
+  /** The signed scan report, or null when the envelope's scanDigest is null. */
+  scan: ScanReport | null
+}
+
+const HEX_DIGEST = /^[0-9a-f]{64}$/
+
+const sha256Canonical = (value: unknown): string =>
+  createHash('sha256').update(canonicalContractJson(value), 'utf8').digest('hex')
+
+/** Verify the disclosure envelope of an already verified package envelope
+ * (contract 3.5, D-b step 2). Returns the signed disclosure and scan report,
+ * or null when the version carries no disclosure envelope at all (published
+ * before D-a). The caller still compares the disclosure with the one
+ * recomputed from the package; the scan cannot be recomputed and is trusted
+ * only through the Registry signature over its digest. */
+export function verifyRegistryDisclosure(
+  input: VerifyRegistryDisclosureInput
+): VerifiedRegistryDisclosure | null {
+  const present = [input.disclosure, input.disclosureEnvelope, input.disclosureSignature].filter(
+    (value) => value !== null && value !== undefined
+  ).length
+  if (present === 0) return null
+  const invalid = (reason: string): RegistryTrustError =>
+    new RegistryTrustError('DISCLOSURE_INVALID', `registry disclosure ${reason}; the install was refused`)
+  if (present !== 3) throw invalid('is incomplete (disclosure, envelope and signature must come together)')
+
+  let envelope: RegistryDisclosureEnvelope
+  try {
+    const value = requireTrustObject(input.disclosureEnvelope, 'registry disclosure envelope')
+    assertExactTrustFields(value, 'registry disclosure envelope', DISCLOSURE_ENVELOPE_FIELDS)
+    if (value.schemaVersion !== 1) throw new Error('registry disclosure envelope schemaVersion is unsupported')
+    for (const field of DISCLOSURE_ENVELOPE_FIELDS.slice(1)) {
+      if (field === 'scanDigest' && value[field] === null) continue
+      requiredString(value[field], `registry disclosure envelope.${field}`)
+    }
+    if (!HEX_DIGEST.test(value.disclosureDigest as string)) {
+      throw new Error('registry disclosure envelope.disclosureDigest is invalid')
+    }
+    if (value.scanDigest !== null && !HEX_DIGEST.test(value.scanDigest as string)) {
+      throw new Error('registry disclosure envelope.scanDigest is invalid')
+    }
+    envelope = value as unknown as RegistryDisclosureEnvelope
+  } catch (error) {
+    throw invalid(`envelope is malformed (${error instanceof Error ? error.message : String(error)})`)
+  }
+  for (const field of ['artifactDigest', 'packageId', 'version', 'target', 'keyId'] as const) {
+    if (envelope[field] !== input.packageEnvelope[field]) {
+      throw invalid(`envelope ${field} does not match the package envelope`)
+    }
+  }
+  const signer = input.trustMetadata.signers.find((candidate) => candidate.keyId === envelope.keyId)
+  if (
+    !signer ||
+    typeof input.disclosureSignature !== 'string' ||
+    !verifyCanonicalSignature(envelope, input.disclosureSignature, signer.publicKey)
+  ) {
+    throw invalid('signature failed verification against the package signer')
+  }
+  if (typeof input.disclosure !== 'object' || Array.isArray(input.disclosure)) {
+    throw invalid('is not an object')
+  }
+  let spelling: string
+  try {
+    spelling = canonicalContractJson(input.disclosure)
+  } catch {
+    throw invalid('has no canonical spelling')
+  }
+  if (createHash('sha256').update(spelling, 'utf8').digest('hex') !== envelope.disclosureDigest) {
+    throw invalid('does not match its signed digest')
+  }
+  const scan = input.scan ?? null
+  if (envelope.scanDigest === null) {
+    if (scan !== null) throw invalid('carries a scan report its envelope does not sign')
+    return { disclosure: input.disclosure as ManifestDisclosure, scan: null }
+  }
+  if (typeof scan !== 'object' || scan === null || Array.isArray(scan)) {
+    throw invalid('envelope signs a scan report that is missing')
+  }
+  let scanSpelling: string
+  try {
+    scanSpelling = sha256Canonical(scan)
+  } catch {
+    throw invalid('scan report has no canonical spelling')
+  }
+  if (scanSpelling !== envelope.scanDigest) throw invalid('scan report does not match its signed digest')
+  const report = scan as Record<string, unknown>
+  if (report.artifactDigest !== envelope.artifactDigest || report.target !== envelope.target) {
+    throw invalid('scan report describes another artifact')
+  }
+  return { disclosure: input.disclosure as ManifestDisclosure, scan: scan as ScanReport }
 }

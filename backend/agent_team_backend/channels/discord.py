@@ -251,6 +251,7 @@ class DiscordAdapter:
             self._app_id = str((d.get("application") or {}).get("id") or "")
             self._session_id = str(d.get("session_id") or "")
             self._resume_url = str(d.get("resume_gateway_url") or "")
+            self.status.display_name = str(user.get("global_name") or "")
             self._loop.mark_ready(f"@{user.get('username', '')}" if user.get("username") else "")
         elif event == "RESUMED":
             self._loop.mark_ready()

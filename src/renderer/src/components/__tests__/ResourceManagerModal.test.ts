@@ -481,4 +481,18 @@ describe('ResourceManagerModal', () => {
     }
     i18n.global.locale.value = 'en-US'
   })
+
+  // Final review part 2 MED-1: the helper's error can carry text from a plugin.
+  it('spells out invisible characters in the helper error; ordinary text is unchanged', async () => {
+    for (const [lastError, shown] of [['bad​ result‮', 'bad\\u{200b} result\\u{202e}'], ['plain error', 'plain error']]) {
+      ;(window as unknown as { agentTeam: Record<string, unknown> }).agentTeam.plugins = {
+        backendResourceUsage: vi.fn(async () => ({ backend: { resultHelper: { state: 'unavailable', lastError, since: 1 } } })),
+      }
+      const { w } = await mountModal()
+      const detail = w.get('[data-part="detail"]').text()
+      expect(detail).toContain(shown)
+      expect(detail).not.toMatch(/[​‮]/)
+      w.unmount()
+    }
+  })
 })

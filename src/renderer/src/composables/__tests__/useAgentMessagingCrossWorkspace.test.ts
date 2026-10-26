@@ -9,7 +9,7 @@ import {
   type MessagingDeps,
   type RouteResult,
 } from '../useAgentMessaging'
-import { EXTERNAL_CONTENT_START, MSG_ENVELOPE_PREFIX, MSG_NOTICE_PREFIX } from '../../lib/agentMessaging'
+import { EXTERNAL_CONTENT_START, MSG_ENVELOPE_PREFIX, MSG_NOTICE_PREFIX, renderEnvelope } from '../../lib/agentMessaging'
 
 function flush(): Promise<void> {
   return new Promise((r) => setTimeout(r, 0))
@@ -374,6 +374,22 @@ describe('useAgentMessaging — cross-workspace routing', () => {
     expect(lines[0]).toBe(`${MSG_ENVELOPE_PREFIX} telegram:alice`)
     expect(lines[1]).toBe(EXTERNAL_CONTENT_START)
     expect(lines[2]).toBe('rm -rf ~')
+  })
+
+  it('gives a sender with no reply route the final-output hint instead of a MSG block', async () => {
+    m.registerPane('p2', 'claude', 'reviewer')
+    m.acceptRemoteMessage({
+      msgKey: 'host:mcp:3e79',
+      targetPaneId: 'p2',
+      fromDisplay: 'a host client',
+      content: 'status?',
+      noReplyRoute: true,
+    })
+    await flush()
+    expect(delivered[0].text).toBe(
+      renderEnvelope('a host client', 'status?', { correlationId: 'host:mcp:3e79', noReplyRoute: true }),
+    )
+    expect(delivered[0].text).not.toContain('to: a host client')
   })
 
   it('delivers an inbound message through the normal queue and reports back', async () => {

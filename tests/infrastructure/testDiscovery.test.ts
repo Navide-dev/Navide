@@ -6,7 +6,7 @@ describe('test project ownership', () => {
   it('collects every repository test in exactly one required project', async () => {
     const runner = await createVitest('test', { watch: false, config: 'vitest.config.ts' })
     try {
-      expect(runner.projects.map((project) => project.name).sort()).toEqual(['artifacts', 'cli', 'unit'])
+      expect(runner.projects.map((project) => project.name).sort()).toEqual(['artifacts', 'artifacts-heavy', 'cli', 'unit'])
       const specifications = await runner.globTestSpecifications()
       const owned = specifications.map((specification) => ({
         file: specification.moduleId,
@@ -15,13 +15,15 @@ describe('test project ownership', () => {
       expect(() => assertTestOwnership(repositoryTestFiles(process.cwd()), owned)).not.toThrow()
       expect(owned.filter(({ file }) => file.endsWith('/plugins/navide-mini-ide/tests/manifest.test.ts')))
         .toEqual([{ file: expect.any(String), project: 'artifacts' }])
+      expect(owned.find((entry) => entry.file.endsWith('/packages/plugin-sdk/bin/navide-plugin.test.ts'))?.project)
+        .toBe('artifacts')
       for (const file of [
+        'plugins/navide-mini-ide/tests/packageBoundary.test.ts',
         'plugins/navide-plans/tests/packageBoundary.test.ts',
         'plugins/navide-git/tests/compositionBoundary.test.ts',
         'src/main/plugins/pluginExternalWorkspace.test.ts',
-        'packages/plugin-sdk/bin/navide-plugin.test.ts',
       ]) {
-        expect(owned.find((entry) => entry.file.endsWith(`/${file}`))?.project).toBe('artifacts')
+        expect(owned.find((entry) => entry.file.endsWith(`/${file}`))?.project).toBe('artifacts-heavy')
       }
     } finally {
       await runner.close()

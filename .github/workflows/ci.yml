@@ -11,9 +11,32 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push supersedes a pull request's run, but every main run finishes:
+  # each one is the only verdict for its commit.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Which job groups this pull request needs; pushes always run everything.
+  # scripts/ci-changed-scopes.mjs holds the rules and runs everything whenever
+  # it is unsure. A job group whose output is empty (this job failed) still
+  # runs, and the gate below fails on this job's own result.
+  changes:
+    name: Changed scopes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.scopes.outputs.backend }}
+      frontend: ${{ steps.scopes.outputs.frontend }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The merge commit and its first parent (the base branch).
+          fetch-depth: 2
+      - name: Classify changed files
+        id: scopes
+        run: node scripts/ci-changed-scopes.mjs
+
   dependency-audit:
     # Known-vulnerability scan of the locked dependency trees (SCA). This gate
     # blocks: the backlog it was provisionally exempted for is cleared (see
@@ -25,29 +48,23 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # The Bun version is pinned in .bun-version.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 22
-          cache: pnpm
+          bun-version-file: .bun-version
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
       # Both scans always run: a finding in one must not hide the other half of
       # the tree. Each records its outcome and the gate below re-raises it, so
       # the job still turns red when either scan finds something.
-      # package.json ignores exactly one advisory, GHSA-ch52-4w7c-c8xp
-      # (http-cache-semantics <=4.2.0, no patched release exists). It only
-      # reaches us through electron-builder's build-time Electron download
-      # (@electron/get > got > cacheable-request), which is a single-user
-      # client cache on the build machine, not the shared cache the advisory
-      # is about, and none of it ships in the app. Drop the entry once a
-      # patched http-cache-semantics is published.
-      - name: npm audit (high and above)
-        id: npm-audit
+      # package.json's pnpm.auditConfig still ignores GHSA-ch52-4w7c-c8xp
+      # (http-cache-semantics <=4.2.0) for pnpm users; both lockfiles now
+      # resolve the patched 4.3.0, so bun audit needs no ignore entry.
+      - name: Bun audit (high and above)
+        id: bun-audit
         continue-on-error: true
-        run: pnpm audit --audit-level=high
+        run: bun audit --audit-level=high
       - name: Set up uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
       - name: pip-audit (backend lock)
@@ -91,11 +108,11 @@ jobs:
           uv --project backend run --with pip-audit pip-audit --no-deps --disable-pip -r /tmp/backend-requirements-win-arm64.txt
       - name: Audit gate
         env:
-          NPM_AUDIT: ${{ steps.npm-audit.outcome }}
+          BUN_AUDIT: ${{ steps.bun-audit.outcome }}
           PIP_AUDIT: ${{ steps.pip-audit.outcome }}
           PIP_AUDIT_WIN_ARM64: ${{ steps.pip-audit-win-arm64.outcome }}
         run: |
-          echo "npm audit:                $NPM_AUDIT"
+          echo "bun audit:                $BUN_AUDIT"
           echo "pip-audit:                $PIP_AUDIT"
           echo "pip-audit (win arm64):    $PIP_AUDIT_WIN_ARM64"
           if [ "$PIP_AUDIT_WIN_ARM64" != success ]; then
@@ -104,7 +121,7 @@ jobs:
             # visible as a warning on every run so it is lifted, not forgotten.
             echo "::warning title=Windows on Arm dependency audit::pip-audit found advisories in the win_arm64 resolution of backend/uv.lock (expected while cryptography is pinned to 46.0.3 there; see backend/pyproject.toml)"
           fi
-          if [ "$NPM_AUDIT" != success ] || [ "$PIP_AUDIT" != success ]; then
+          if [ "$BUN_AUDIT" != success ] || [ "$PIP_AUDIT" != success ]; then
             exit 1
           fi
 
@@ -115,13 +132,11 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # The Bun version is pinned in .bun-version.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 22
-          cache: pnpm
+          bun-version-file: .bun-version
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -133,16 +148,20 @@ jobs:
           cache-dependency-glob: backend/uv.lock
       - name: Install locked dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
+      # CI and releases install from bun.lock, pnpm users from pnpm-lock.yaml;
+      # both must resolve the same packages (see CONTRIBUTING.md).
+      - name: Verify pnpm-lock.yaml and bun.lock resolve the same packages
+        run: bun scripts/check-lockfile-parity.mjs
       - name: Typecheck every application and plugin surface
-        run: pnpm typecheck
+        run: bun run typecheck
       - name: Backend correctness lint
         run: uv --project backend run --locked ruff check backend
       - name: Verify collection ownership and required gate
         env:
           NAVIDE_REQUIRE_CI_SHELL: '1'
-        run: pnpm test:infrastructure --reporter=default --reporter=junit --outputFile.junit=test-results/ci/infrastructure.xml
+        run: bun run test:infrastructure --reporter=default --reporter=junit --outputFile.junit=test-results/ci/infrastructure.xml
       - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -156,6 +175,8 @@ jobs:
   # of the contract. Ubuntu 22.04 retains the supported glibc floor.
   frontend:
     name: Frontend tests (${{ matrix.platform }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.frontend != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -171,13 +192,11 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # The Bun version is pinned in .bun-version.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 22
-          cache: pnpm
+          bun-version-file: .bun-version
       # backend-ws-token-parity.test.ts deliberately checks the Python seam.
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -190,12 +209,19 @@ jobs:
           cache-dependency-glob: backend/uv.lock
       - name: Install locked dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
+      # pluginRegistry.e2e.test.ts starts the real Registry from this env. The
+      # Registry cannot host on Windows, where that suite is skipped.
+      - name: Install Registry dependencies
+        if: runner.os != 'Windows'
+        run: uv --project marketplace/registry sync --locked
       - name: Complete unit and CLI suites
         env:
           NAVIDE_CLI_COVERAGE_REQUIRED: '1'
-        run: pnpm test:frontend --reporter=default --reporter=./tests/cli/contractReporter.ts --reporter=junit --reporter=json --outputFile.junit=test-results/ci/frontend.xml --outputFile.json=test-results/ci/frontend.json
+          # The step above installs the Registry env everywhere but Windows.
+          NAVIDE_REGISTRY_E2E_REQUIRED: ${{ runner.os != 'Windows' && '1' || '' }}
+        run: bun run test:frontend --reporter=default --reporter=./tests/cli/contractReporter.ts --reporter=junit --reporter=json --outputFile.junit=test-results/ci/frontend.xml --outputFile.json=test-results/ci/frontend.json
       - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -207,6 +233,8 @@ jobs:
 
   build-artifacts:
     name: Build and artifact contracts (${{ matrix.platform }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.frontend != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -225,13 +253,39 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # This job installs and builds the way releases do (release.yml): on Bun,
+      # frozen bun.lock. The Bun version is pinned in .bun-version.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      # Not for installing or building: pluginExternalWorkspace.test.ts in the
+      # artifacts-heavy project drives a plugin workspace with pnpm-specific
+      # flags and needs the binary. pnpm comes from packageManager.
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      # Only for the plain `node scripts/...` step below, as in release.yml.
+      # Everything started through `bun run` runs on Bun itself (bunfig.toml
+      # [run] bun).
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
+      # The exact command mirror.yml runs to publish whats-new.json: plain Node
+      # with type stripping, before any dependency install.
+      - name: Export What's New on plain Node.js (the mirror path)
+        shell: bash
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          node --experimental-strip-types scripts/export-whats-new.mjs --version "$version" --out "$RUNNER_TEMP/whats-new.json"
+          node -e '
+            const d = require(process.argv[1])
+            const bad = d.schemaVersion !== 1 || !Array.isArray(d.entries) || d.entries.length === 0
+              ? "the document"
+              : d.entries.find((e) => typeof e.version !== "string" || !e.title || typeof e.title["en-US"] !== "string" || !Array.isArray(e.highlights))
+            if (bad) { console.error("unexpected whats-new.json:", JSON.stringify(bad === "the document" ? d : bad).slice(0, 300)); process.exit(1) }
+            console.log("whats-new.json schemaVersion", d.schemaVersion, "entries", d.entries.length)
+          ' "$RUNNER_TEMP/whats-new.json"
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -249,14 +303,14 @@ jobs:
           cache: false
       - name: Install locked dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
       - name: Build application and all bundled plugins once
-        run: pnpm build
+        run: bun run build
       # Consumes this job's output. The macOS invocation additionally builds
       # the test-only Plans fixtures and exercises the production backend.
       - name: Complete artifact suite and packaged Plans contracts
-        run: pnpm test:artifacts:ci --reporter=default --reporter=junit --reporter=json --outputFile.junit=test-results/ci/artifacts.xml --outputFile.json=test-results/ci/artifacts.json
+        run: bun run test:artifacts:ci --reporter=default --reporter=junit --reporter=json --outputFile.junit=test-results/ci/artifacts.xml --outputFile.json=test-results/ci/artifacts.json
       - name: Verify production Plans excludes fixtures
         run: node scripts/verify-plans-production.mjs
       - name: Upload diagnostic artifacts
@@ -268,10 +322,38 @@ jobs:
           path: test-results/ci/
           retention-days: 7
 
+  # Releases build on Bun, but pnpm-lock.yaml stays the lock for pnpm users
+  # until it is retired. This is the only PR job that fails when package.json
+  # and pnpm-lock.yaml disagree, and the only one that typechecks under Node.js.
+  pnpm-lockfile:
+    name: pnpm lockfile and Node.js typecheck
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.frontend != 'false' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # pnpm comes from packageManager.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck under Node.js
+        run: pnpm typecheck
+
   # macOS exercises native PTY/zsh behavior; Linux and Windows retain their
-  # complete suites. Only Windows is split across four collection-based shards.
+  # complete suites. Only Windows is split across five collection-based shards.
   backend:
     name: Backend tests (${{ matrix.platform }}, ${{ matrix.shard }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.backend != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -288,23 +370,28 @@ jobs:
             timeout: 25
           - platform: Windows
             runner: windows-latest
-            shard: 1/4
+            shard: 1/5
             artifact: windows-1
             timeout: 45
           - platform: Windows
             runner: windows-latest
-            shard: 2/4
+            shard: 2/5
             artifact: windows-2
             timeout: 45
           - platform: Windows
             runner: windows-latest
-            shard: 3/4
+            shard: 3/5
             artifact: windows-3
             timeout: 45
           - platform: Windows
             runner: windows-latest
-            shard: 4/4
+            shard: 4/5
             artifact: windows-4
+            timeout: 45
+          - platform: Windows
+            runner: windows-latest
+            shard: 5/5
+            artifact: windows-5
             timeout: 45
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.timeout }}
@@ -328,9 +415,17 @@ jobs:
       # being cancelled at the job timeout with no word of where it stopped.
       # The slowest tests take ~35 s; faulthandler dumps every thread if a
       # hang sits where the signal cannot reach.
+      # Four pytest-xdist workers, one test file at a time each (loadfile), so
+      # a file's tests keep sharing their module state and fixtures in order.
+      # Tests marked `serial` (wall-clock timed, seen failing beside the
+      # workers) run alone afterwards; both passes always run.
       - name: Complete backend suite
         if: runner.os != 'Windows'
-        run: uv --project backend run --locked pytest backend/tests --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --collection-report=test-results/ci/backend-collection.json --durations=30
+        run: |
+          status=0
+          uv --project backend run --locked pytest backend/tests -n 4 --dist loadfile -m "not serial" --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --collection-report=test-results/ci/backend-collection.json --durations=30 || status=$?
+          uv --project backend run --locked pytest backend/tests -m serial --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend-serial.xml --durations=10 || status=$?
+          exit $status
       - name: Linux runtime capabilities
         if: runner.os == 'Linux'
         run: uv --project backend run --locked python backend/linux_smoke.py
@@ -372,7 +467,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "--- processes still around:"
-          Get-Process | Where-Object { $_.ProcessName -match 'python|node|winpty|conhost|OpenConsole|git|uv|pytest|cmd|powershell|pwsh|claude|codex' } | ForEach-Object { Write-Host ("{0} ({1})" -f $_.ProcessName, $_.Id) }
+          Get-Process | Where-Object { $_.ProcessName -match 'python|node|bun|winpty|conhost|OpenConsole|git|uv|pytest|cmd|powershell|pwsh|claude|codex' } | ForEach-Object { Write-Host ("{0} ({1})" -f $_.ProcessName, $_.Id) }
           if (Test-Path pytest.log) {
             $lines = @(Get-Content pytest.log)
             Write-Host ("--- results so far: {0}" -f @($lines | Where-Object { $_ -match ' (PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)' }).Count)
@@ -446,28 +541,42 @@ jobs:
           retention-days: 7
 
   lint-and-test:
-    # Stable required-check name; missing, cancelled and skipped checks fail.
+    # Stable required-check name; missing, cancelled and skipped checks fail,
+    # except a group the path filter (the changes job) chose not to run.
     name: Lint and test
     if: ${{ always() }}
-    needs: [static, frontend, build-artifacts, backend, registry, dependency-audit, stt-sidecar]
+    needs: [changes, static, frontend, build-artifacts, pnpm-lockfile, backend, registry, dependency-audit, stt-sidecar]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every check to succeed
         shell: bash
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
           STATIC_RESULT: ${{ needs.static.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           BUILD_ARTIFACTS_RESULT: ${{ needs['build-artifacts'].result }}
+          PNPM_LOCKFILE_RESULT: ${{ needs['pnpm-lockfile'].result }}
           BACKEND_RESULT: ${{ needs.backend.result }}
           REGISTRY_RESULT: ${{ needs.registry.result }}
           AUDIT_RESULT: ${{ needs['dependency-audit'].result }}
           STT_RESULT: ${{ needs['stt-sidecar'].result }}
+          RUN_FRONTEND: ${{ needs.changes.outputs.frontend }}
+          RUN_BACKEND: ${{ needs.changes.outputs.backend }}
         run: |
-          for check in "static=$STATIC_RESULT" "frontend=$FRONTEND_RESULT" \
-            "build-artifacts=$BUILD_ARTIFACTS_RESULT" "backend=$BACKEND_RESULT" \
-            "registry=$REGISTRY_RESULT" "dependency-audit=$AUDIT_RESULT" \
-            "stt-sidecar=$STT_RESULT"; do
-            echo "$check"
-            test "${check#*=}" = success || exit 1
-          done
+          # "skipped" passes only when the filter said exactly "false"; a job
+          # that ran must succeed whatever the filter said.
+          check() {
+            echo "$1=$2${3:+ (filter: run=$3)}"
+            if [ "$2" = skipped ] && [ "${3:-}" = false ]; then return 0; fi
+            test "$2" = success || exit 1
+          }
+          check changes "$CHANGES_RESULT"
+          check static "$STATIC_RESULT"
+          check frontend "$FRONTEND_RESULT" "$RUN_FRONTEND"
+          check build-artifacts "$BUILD_ARTIFACTS_RESULT" "$RUN_FRONTEND"
+          check pnpm-lockfile "$PNPM_LOCKFILE_RESULT" "$RUN_FRONTEND"
+          check backend "$BACKEND_RESULT" "$RUN_BACKEND"
+          check registry "$REGISTRY_RESULT"
+          check dependency-audit "$AUDIT_RESULT"
+          check stt-sidecar "$STT_RESULT"

@@ -3,9 +3,9 @@
 // `var(--bg-default)` is not in the design system — semantic.css defines
 // --bg-base / --bg-inset / --bg-subtle / --bg-muted / --bg-elevated — so a
 // declaration reading it falls back to `transparent`, silently, and only on
-// the one surface that used it. That is how the "Paste credential" field in
-// PortableCredentialBlock.vue and the pane-title rename box in
-// TerminalPane.vue both ended up with no background.
+// the one surface that used it. That is how the "Paste Credential" field (a
+// feature since removed) and the pane-title rename box in TerminalPane.vue
+// both ended up with no background.
 //
 // AccountModal.vue and SettingsModal.vue each grew a local guard after the
 // same token bit them there. A per-component guard only covers the component

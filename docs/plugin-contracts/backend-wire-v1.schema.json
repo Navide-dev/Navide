@@ -4,27 +4,58 @@
   "title": "Navide Backend Wire v1 frame",
   "description": "One JSON-RPC 2.0 frame in the Navide MCP 2026-07-28-aligned child-process profile. Navide requires serverInfo on every result response; JSON-RPC error responses retain the standard error envelope.",
   "oneOf": [
-    { "$ref": "#/$defs/healthRequest" },
-    { "$ref": "#/$defs/callRequest" },
-    { "$ref": "#/$defs/listenRequest" },
-    { "$ref": "#/$defs/listenAcknowledgedNotification" },
-    { "$ref": "#/$defs/eventNotification" },
-    { "$ref": "#/$defs/cancelNotification" },
-    { "$ref": "#/$defs/progressNotification" },
-    { "$ref": "#/$defs/successResponse" },
-    { "$ref": "#/$defs/errorResponse" }
+    {
+      "$ref": "#/$defs/healthRequest"
+    },
+    {
+      "$ref": "#/$defs/callRequest"
+    },
+    {
+      "$ref": "#/$defs/listenRequest"
+    },
+    {
+      "$ref": "#/$defs/listenAcknowledgedNotification"
+    },
+    {
+      "$ref": "#/$defs/eventNotification"
+    },
+    {
+      "$ref": "#/$defs/cancelNotification"
+    },
+    {
+      "$ref": "#/$defs/progressNotification"
+    },
+    {
+      "$ref": "#/$defs/resultChunkNotification"
+    },
+    {
+      "$ref": "#/$defs/argumentChunkNotification"
+    },
+    {
+      "$ref": "#/$defs/successResponse"
+    },
+    {
+      "$ref": "#/$defs/errorResponse"
+    }
   ],
   "$defs": {
     "requestId": {
       "oneOf": [
-        { "type": "string", "minLength": 1 },
-        { "type": "integer" }
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "integer"
+        }
       ]
     },
     "subscriptionMeta": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["io.modelcontextprotocol/subscriptionId"],
+      "required": [
+        "io.modelcontextprotocol/subscriptionId"
+      ],
       "properties": {
         "io.modelcontextprotocol/subscriptionId": {
           "$ref": "#/$defs/requestId"
@@ -33,19 +64,34 @@
     },
     "serverInfo": {
       "type": "object",
-      "required": ["name", "version"],
+      "required": [
+        "name",
+        "version"
+      ],
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "version": { "type": "string", "minLength": 1 }
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
       },
       "additionalProperties": true
     },
     "serverMeta": {
       "type": "object",
-      "required": ["io.modelcontextprotocol/serverInfo"],
+      "required": [
+        "io.modelcontextprotocol/serverInfo"
+      ],
       "properties": {
-        "io.modelcontextprotocol/serverInfo": { "$ref": "#/$defs/serverInfo" },
-        "io.modelcontextprotocol/subscriptionId": { "$ref": "#/$defs/requestId" }
+        "io.modelcontextprotocol/serverInfo": {
+          "$ref": "#/$defs/serverInfo"
+        },
+        "io.modelcontextprotocol/subscriptionId": {
+          "$ref": "#/$defs/requestId"
+        }
       },
       "additionalProperties": true
     },
@@ -56,21 +102,40 @@
         "io.modelcontextprotocol/subscriptionId"
       ],
       "properties": {
-        "io.modelcontextprotocol/serverInfo": { "$ref": "#/$defs/serverInfo" },
-        "io.modelcontextprotocol/subscriptionId": { "$ref": "#/$defs/requestId" }
+        "io.modelcontextprotocol/serverInfo": {
+          "$ref": "#/$defs/serverInfo"
+        },
+        "io.modelcontextprotocol/subscriptionId": {
+          "$ref": "#/$defs/requestId"
+        }
       },
       "additionalProperties": true
     },
     "jsonValue": {
       "oneOf": [
-        { "type": "null" },
-        { "type": "boolean" },
-        { "type": "number" },
-        { "type": "string" },
-        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
         {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+          "additionalProperties": {
+            "$ref": "#/$defs/jsonValue"
+          }
         }
       ]
     },
@@ -81,18 +146,33 @@
         "io.modelcontextprotocol/clientCapabilities"
       ],
       "properties": {
-        "io.modelcontextprotocol/protocolVersion": { "const": "2026-07-28" },
-        "io.modelcontextprotocol/clientCapabilities": { "type": "object" },
+        "io.modelcontextprotocol/protocolVersion": {
+          "const": "2026-07-28"
+        },
+        "io.modelcontextprotocol/clientCapabilities": {
+          "type": "object"
+        },
         "io.modelcontextprotocol/clientInfo": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["name", "version"],
+          "required": [
+            "name",
+            "version"
+          ],
           "properties": {
-            "name": { "type": "string", "minLength": 1 },
-            "version": { "type": "string", "minLength": 1 }
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
-        "progressToken": { "$ref": "#/$defs/requestId" }
+        "progressToken": {
+          "$ref": "#/$defs/requestId"
+        }
       },
       "additionalProperties": true
     },
@@ -109,13 +189,41 @@
         "hostWindowId"
       ],
       "properties": {
-        "pluginId": { "type": "string", "minLength": 1 },
-        "packageVersion": { "type": "string", "minLength": 1 },
-        "workspaceId": { "type": ["string", "null"] },
-        "instanceId": { "type": ["string", "null"] },
-        "contributionKey": { "type": ["string", "null"] },
-        "hostWindowId": { "type": ["string", "null"] },
-        "initiator": { "$ref": "#/$defs/initiator" }
+        "pluginId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instanceId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contributionKey": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hostWindowId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "initiator": {
+          "$ref": "#/$defs/initiator"
+        }
       }
     },
     "initiator": {
@@ -123,20 +231,103 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "id"],
+          "required": [
+            "kind",
+            "id"
+          ],
           "properties": {
-            "kind": { "const": "user" },
-            "id": { "type": "string", "minLength": 1 }
+            "kind": {
+              "const": "user"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "source", "id"],
+          "required": [
+            "kind",
+            "source",
+            "id"
+          ],
           "properties": {
-            "kind": { "const": "agent" },
-            "source": { "const": "mcp" },
-            "id": { "type": "string", "minLength": 1 }
+            "kind": {
+              "const": "agent"
+            },
+            "source": {
+              "const": "mcp"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "caller": {
+              "$ref": "#/$defs/agentCaller"
+            }
+          }
+        }
+      ]
+    },
+    "agentCaller": {
+      "description": "Who called a third-party agent tool, as the core MCP server resolved it from its credential. Present only on calls made through a consented agent tool (backend.agentTools); additive and optional. verifiedTo says how far the identity is proven: `pane` = the pane's own MCP token, `caller-kind` = only that the caller is an external client or the Host.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "paneId",
+            "workspace",
+            "verifiedTo"
+          ],
+          "properties": {
+            "kind": {
+              "const": "pane"
+            },
+            "paneId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "workspace": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "verifiedTo": {
+              "const": "pane"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "paneId",
+            "workspace",
+            "verifiedTo"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "external",
+                "host"
+              ]
+            },
+            "paneId": {
+              "const": null
+            },
+            "workspace": {
+              "const": null
+            },
+            "verifiedTo": {
+              "const": "caller-kind"
+            }
           }
         }
       ]
@@ -144,39 +335,122 @@
     "healthRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jsonrpc", "id", "method", "params"],
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
       "properties": {
-        "jsonrpc": { "const": "2.0" },
-        "id": { "$ref": "#/$defs/requestId" },
-        "method": { "const": "navide/health" },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "const": "navide/health"
+        },
         "params": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["_meta"],
-          "properties": { "_meta": { "$ref": "#/$defs/clientMeta" } }
+          "required": [
+            "_meta"
+          ],
+          "properties": {
+            "_meta": {
+              "$ref": "#/$defs/clientMeta"
+            }
+          }
         }
       }
     },
     "callRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jsonrpc", "id", "method", "params"],
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
       "properties": {
-        "jsonrpc": { "const": "2.0" },
-        "id": { "$ref": "#/$defs/requestId" },
-        "method": { "const": "navide/call" },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "const": "navide/call"
+        },
         "params": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["_meta", "name", "arguments", "runtime"],
+          "required": [
+            "_meta",
+            "name",
+            "runtime"
+          ],
           "properties": {
-            "_meta": { "$ref": "#/$defs/clientMeta" },
+            "_meta": {
+              "$ref": "#/$defs/clientMeta"
+            },
             "name": {
               "type": "string",
               "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)*$"
             },
-            "arguments": { "$ref": "#/$defs/jsonValue" },
-            "runtime": { "$ref": "#/$defs/runtime" }
+            "arguments": {
+              "$ref": "#/$defs/jsonValue"
+            },
+            "runtime": {
+              "$ref": "#/$defs/runtime"
+            }
+          },
+          "anyOf": [
+            {
+              "required": [
+                "arguments"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "arguments"
+                ]
+              },
+              "properties": {
+                "_meta": {
+                  "required": [
+                    "io.navide/argumentChunks"
+                  ],
+                  "properties": {
+                    "io.navide/argumentChunks": {
+                      "$ref": "#/$defs/chunksSummary"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "if": {
+            "properties": {
+              "_meta": {
+                "required": [
+                  "io.navide/argumentChunks"
+                ]
+              }
+            },
+            "required": [
+              "_meta"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "arguments"
+              ]
+            }
           }
         }
       }
@@ -184,21 +458,40 @@
     "listenRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jsonrpc", "id", "method", "params"],
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
       "properties": {
-        "jsonrpc": { "const": "2.0" },
-        "id": { "$ref": "#/$defs/requestId" },
-        "method": { "const": "subscriptions/listen" },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "const": "subscriptions/listen"
+        },
         "params": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["_meta", "notifications", "runtime"],
+          "required": [
+            "_meta",
+            "notifications",
+            "runtime"
+          ],
           "properties": {
-            "_meta": { "$ref": "#/$defs/clientMeta" },
+            "_meta": {
+              "$ref": "#/$defs/clientMeta"
+            },
             "notifications": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["dev.navide/pluginEvents"],
+              "required": [
+                "dev.navide/pluginEvents"
+              ],
               "properties": {
                 "dev.navide/pluginEvents": {
                   "type": "array",
@@ -211,7 +504,9 @@
                 }
               }
             },
-            "runtime": { "$ref": "#/$defs/runtime" }
+            "runtime": {
+              "$ref": "#/$defs/runtime"
+            }
           }
         }
       }
@@ -219,20 +514,35 @@
     "listenAcknowledgedNotification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jsonrpc", "method", "params"],
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
       "properties": {
-        "jsonrpc": { "const": "2.0" },
-        "method": { "const": "notifications/subscriptions/acknowledged" },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "notifications/subscriptions/acknowledged"
+        },
         "params": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["_meta", "notifications"],
+          "required": [
+            "_meta",
+            "notifications"
+          ],
           "properties": {
-            "_meta": { "$ref": "#/$defs/subscriptionMeta" },
+            "_meta": {
+              "$ref": "#/$defs/subscriptionMeta"
+            },
             "notifications": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["dev.navide/pluginEvents"],
+              "required": [
+                "dev.navide/pluginEvents"
+              ],
               "properties": {
                 "dev.navide/pluginEvents": {
                   "type": "array",
@@ -252,21 +562,37 @@
     "eventNotification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jsonrpc", "method", "params"],
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
       "properties": {
-        "jsonrpc": { "const": "2.0" },
-        "method": { "const": "notifications/navide/event" },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "notifications/navide/event"
+        },
         "params": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["_meta", "event", "payload"],
+          "required": [
+            "_meta",
+            "event",
+            "payload"
+          ],
           "properties": {
-            "_meta": { "$ref": "#/$defs/subscriptionMeta" },
+            "_meta": {
+              "$ref": "#/$defs/subscriptionMeta"
+            },
             "event": {
               "type": "string",
               "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)*$"
             },
-            "payload": { "$ref": "#/$defs/jsonValue" }
+            "payload": {
+              "$ref": "#/$defs/jsonValue"
+            }
           }
         }
       }
@@ -274,17 +600,31 @@
     "cancelNotification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jsonrpc", "method", "params"],
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
       "properties": {
-        "jsonrpc": { "const": "2.0" },
-        "method": { "const": "notifications/cancelled" },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "notifications/cancelled"
+        },
         "params": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["requestId"],
+          "required": [
+            "requestId"
+          ],
           "properties": {
-            "requestId": { "$ref": "#/$defs/requestId" },
-            "reason": { "type": "string" }
+            "requestId": {
+              "$ref": "#/$defs/requestId"
+            },
+            "reason": {
+              "type": "string"
+            }
           }
         }
       }
@@ -292,19 +632,38 @@
     "progressNotification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jsonrpc", "method", "params"],
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
       "properties": {
-        "jsonrpc": { "const": "2.0" },
-        "method": { "const": "notifications/progress" },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "notifications/progress"
+        },
         "params": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["progressToken", "progress"],
+          "required": [
+            "progressToken",
+            "progress"
+          ],
           "properties": {
-            "progressToken": { "$ref": "#/$defs/requestId" },
-            "progress": { "type": "number" },
-            "total": { "type": "number" },
-            "message": { "type": "string" }
+            "progressToken": {
+              "$ref": "#/$defs/requestId"
+            },
+            "progress": {
+              "type": "number"
+            },
+            "total": {
+              "type": "number"
+            },
+            "message": {
+              "type": "string"
+            }
           }
         }
       }
@@ -312,58 +671,246 @@
     "successResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jsonrpc", "id", "result"],
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
       "properties": {
-        "jsonrpc": { "const": "2.0" },
-        "id": { "$ref": "#/$defs/requestId" },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
         "result": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["resultType", "_meta"],
+          "required": [
+            "resultType",
+            "_meta"
+          ],
           "properties": {
-            "resultType": { "const": "complete" },
-            "value": { "$ref": "#/$defs/jsonValue" },
-            "_meta": { "$ref": "#/$defs/serverMeta" }
+            "resultType": {
+              "const": "complete"
+            },
+            "value": {
+              "$ref": "#/$defs/jsonValue"
+            },
+            "_meta": {
+              "$ref": "#/$defs/serverMeta"
+            }
           },
           "anyOf": [
-            { "required": ["value"] },
             {
-              "required": ["_meta"],
+              "required": [
+                "value"
+              ]
+            },
+            {
+              "required": [
+                "_meta"
+              ],
               "properties": {
-                "_meta": { "$ref": "#/$defs/serverSubscriptionMeta" }
+                "_meta": {
+                  "$ref": "#/$defs/serverSubscriptionMeta"
+                }
+              }
+            },
+            {
+              "not": {
+                "required": [
+                  "value"
+                ]
+              },
+              "required": [
+                "_meta"
+              ],
+              "properties": {
+                "_meta": {
+                  "required": [
+                    "io.navide/resultChunks"
+                  ],
+                  "properties": {
+                    "io.navide/resultChunks": {
+                      "$ref": "#/$defs/chunksSummary"
+                    }
+                  }
+                }
               }
             }
-          ]
+          ],
+          "if": {
+            "properties": {
+              "_meta": {
+                "required": [
+                  "io.navide/resultChunks"
+                ]
+              }
+            },
+            "required": [
+              "_meta"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "value"
+              ]
+            }
+          }
         }
       }
     },
     "errorResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jsonrpc", "error"],
+      "required": [
+        "jsonrpc",
+        "error"
+      ],
       "properties": {
-        "jsonrpc": { "const": "2.0" },
-        "id": { "$ref": "#/$defs/requestId" },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "$ref": "#/$defs/requestId"
+        },
         "error": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["code", "message"],
+          "required": [
+            "code",
+            "message"
+          ],
           "properties": {
-            "code": { "type": "integer" },
-            "message": { "type": "string" },
-            "data": { "$ref": "#/$defs/jsonValue" }
+            "code": {
+              "type": "integer"
+            },
+            "message": {
+              "type": "string"
+            },
+            "data": {
+              "$ref": "#/$defs/jsonValue"
+            }
           }
         }
       },
       "if": {
         "properties": {
           "error": {
-            "properties": { "code": { "const": 1000 } },
-            "required": ["code"]
+            "properties": {
+              "code": {
+                "const": 1000
+              }
+            },
+            "required": [
+              "code"
+            ]
           }
         }
       },
-      "then": { "required": ["id"] }
+      "then": {
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "chunksSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chunks",
+        "bytes"
+      ],
+      "properties": {
+        "chunks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "resultChunkNotification": {
+      "description": "Child to Host: one piece of a result (plugin agent-tools contract 4.4, R1).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "notifications/navide/resultChunk"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requestId",
+            "seq",
+            "data"
+          ],
+          "properties": {
+            "requestId": {
+              "$ref": "#/$defs/requestId"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "data": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "argumentChunkNotification": {
+      "description": "Host to child: one piece of the arguments of a navide/call (contract 4.4, A3).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "notifications/navide/argumentChunk"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requestId",
+            "seq",
+            "data"
+          ],
+          "properties": {
+            "requestId": {
+              "$ref": "#/$defs/requestId"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "data": {
+              "type": "string"
+            }
+          }
+        }
+      }
     }
   }
 }

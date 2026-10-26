@@ -3,31 +3,30 @@ import {
   createAuthenticatedBackendRuntime,
   PluginBackendSupervisor,
   type AuthenticatedBackendRuntime,
+  type BackendChildResourceUsage,
   type BackendPluginCallOptions,
   type BackendPluginEvent,
   type BackendPluginLaunchSpec,
   type BackendPluginSubscription,
+  type BackendResultText,
   type BackendPluginSubscriptionOptions,
   type BackendRuntimeContext,
   type JsonValue,
   type PluginBackendSupervisorOptions,
 } from './pluginBackendSupervisor'
+import type { AgentToolsResultHelperState } from '../../shared/pluginAgentTools'
 import {
   isAuthenticatedInitiator,
   type AuthenticatedInitiator,
 } from './pluginCapabilityBroker'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
-import {
-  isAllowedBackendTimeout,
-  MAX_BACKEND_CALLS_PER_INSTANCE,
-  MAX_BACKEND_CHILDREN,
-  MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE,
-} from './pluginBackendLimits'
+import { isAllowedBackendTimeout } from './pluginBackendLimits'
 import {
   createProductionPlansBridgeDispatcher,
   type BackendBridgeDispatcher,
 } from './plansBridge'
 import { noteBackendFailure, type ThirdPartyAdmission } from './pluginThirdPartyBackends'
+import { isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import {
   canonicalExistingDirectory,
   isWorkspaceContainedPath,
@@ -43,6 +42,31 @@ export interface PlanRootResolverInput {
 }
 
 export type PlanRootResolver = (input: PlanRootResolverInput) => Promise<string>
+
+/** How one backend call ended, for the activity record (D-e). */
+export type BackendCallOutcome = 'allowed' | 'denied' | 'cancelled' | 'error'
+
+/** One settled backend call: which plugin's backend ran which method, and how it ended. */
+export interface BackendCallSettled {
+  pluginId: string
+  packageVersion: string
+  workspacePath: string | undefined
+  method: string
+  /** False for a name the package's backend does not declare: the Host refused
+   *  it before any child ran, and the name itself is the caller's free text. */
+  declared: boolean
+  outcome: BackendCallOutcome
+}
+
+const DENIED_BACKEND_CODES: ReadonlySet<string> = new Set(['CAPABILITY_DENIED', 'WORKSPACE_SCOPE_VIOLATION'])
+
+/** A call the Host refused is denied; one the caller cancelled (abort, cancel
+ *  message) is cancelled, not a refusal; anything else that failed is an error. */
+export function backendCallOutcome(error: unknown): BackendCallOutcome {
+  const code = error instanceof BackendPluginError ? error.code : ''
+  if (code === 'USER_CANCELLED') return 'cancelled'
+  return DENIED_BACKEND_CODES.has(code) ? 'denied' : 'error'
+}
 
 export interface PluginBackendHostOptions {
   environment?: Readonly<Record<string, string>>
@@ -75,11 +99,19 @@ export interface PluginBackendHostOptions {
   admitThirdParty?: ThirdPartyAdmitter
   /** Idle stop delay for third-party children (default THIRD_PARTY_BACKEND_IDLE_MS). */
   thirdPartyIdleMs?: number
+  /** Observe every settled call, whichever path made it (a plugin's own
+   *  frontend, an agent tool, an agent capability request). Called once per
+   *  call after it settles; it must be cheap and never throw into the call. */
+  onCallSettled?: (call: BackendCallSettled) => void
+  /** Whether calls of this plugin are observed at all (the bundled packages
+   *  are not); a skipped plugin's call goes straight through. */
+  observesCallsOf?: (pluginId: string) => boolean
 }
 
 export type ThirdPartyAdmitter = (
   activation: BackendPluginLaunchSpec,
   workspacePath: string | undefined,
+  instanceId?: string,
 ) => Promise<ThirdPartyAdmission>
 
 interface RegisteredBackend {
@@ -101,8 +133,13 @@ interface BoundView {
   calls: Set<AbortController>
   subscriptions: Set<BackendPluginSubscription>
   pendingSubscriptions: number
+  /** Most subscriptions (held + pending) this view had at once. */
+  subscriptionPeak: number
   /** Third-party only: idle auto-shutdown state. */
   idle?: ThirdPartyIdleState
+  /** A headless binding made for agent-tool calls (plan B1-b): the only kind
+   * of third-party binding an agent initiator may call into. */
+  agentToolBinding?: true
 }
 
 interface ThirdPartyIdleState {
@@ -116,6 +153,12 @@ interface ThirdPartyIdleState {
 /** A third-party child with no call, subscription or bridge traffic for this
  * long is closed; the next call starts it again through the admission gate. */
 export const THIRD_PARTY_BACKEND_IDLE_MS = 10 * 60_000
+
+/** Whether agent-tool bindings may be made on this activation: a third-party
+ *  backend, or a first-party one that is not Plans (Plans keeps its own route). */
+function servesAgentTools(activation: BackendPluginLaunchSpec): boolean {
+  return activation.thirdParty !== undefined || isFirstPartyAgentToolPlugin(activation.pluginId)
+}
 
 function backendKey(pluginId: string, packageVersion: string): string {
   return `${pluginId}\u0000${packageVersion}`
@@ -203,6 +246,40 @@ export const BACKEND_RESTART_BUDGET_SPENT_MESSAGE =
   'Backend plugin failed repeatedly and will not be restarted.'
 
 /**
+ * In-flight backend calls of one plugin across all its bound views: how many
+ * run now and the most that ran at once since the Host started. Calls are
+ * never capped (user ruling L3); this is what discloses the load instead.
+ * `droppedNotifications` counts Host event notifications its children dropped
+ * because their event backlog was full, since the Host started.
+ */
+export interface BackendCallConcurrency {
+  pluginId: string
+  current: number
+  peak: number
+  droppedNotifications: number
+}
+
+/**
+ * Backend resources the Host holds now and at the most, none of them capped
+ * (user ruling): child processes Host-wide (`retained` = children whose close
+ * failed and that may still be running), each bound view's subscriptions and
+ * its child's own usage, and the per-plugin call counts. Read by the activity
+ * page (D-f) through plugins:backendResourceUsage.
+ */
+export interface BackendResourceUsage {
+  /** The core backend's own resources: its agent tool result helper process (agent-tools contract 4.4, R2). */
+  backend?: { resultHelper: AgentToolsResultHelperState }
+  children: { current: number; peak: number; retained: number }
+  views: Array<{
+    pluginId: string
+    instanceId: string
+    subscriptions: { current: number; peak: number }
+    child: BackendChildResourceUsage | null
+  }>
+  plugins: BackendCallConcurrency[]
+}
+
+/**
  * Host-owned router for one package's Backend Wire child processes.
  *
  * A registered package is only metadata. Each bound view gets its own
@@ -224,9 +301,15 @@ export class PluginBackendHost {
   private readonly onStderr?: PluginBackendHostOptions['onStderr']
   private reverifyBeforeSpawn?: PluginBackendHostOptions['reverifyBeforeSpawn']
   private admitThirdParty?: ThirdPartyAdmitter
+  private readonly onCallSettled?: (call: BackendCallSettled) => void
+  private readonly observesCallsOf?: (pluginId: string) => boolean
   private readonly thirdPartyIdleMs: number
   private readonly backends = new Map<string, RegisteredBackend>()
   private readonly views = new Map<string, BoundView>()
+  /** Plan B1-b: per third-party package version, the methods its served agent
+   * tools may reach. Applies to agent-tool bindings only; views and the
+   * registered activation keep `agentMethods: []`. */
+  private readonly agentToolMethods = new Map<string, readonly string[]>()
   /** First-party child failure times per bound view, for restart backoff. */
   private readonly firstPartyFailures = new Map<string, number[]>()
   /** Package-version revocations are serialized and also act as an admission
@@ -237,8 +320,11 @@ export class PluginBackendHost {
     { packageKey: string; task: Promise<void> }
   >()
   private reservedChildSlots = 0
+  private childSlotPeak = 0
   /** Slots consumed by children whose close failed; never reclaimed. */
   private retainedChildSlots = 0
+  /** In-flight calls and dropped notifications per plugin id; see {@link backendCallConcurrency}. */
+  private readonly callConcurrency = new Map<string, { current: number; peak: number; droppedNotifications: number }>()
 
   constructor(options: PluginBackendHostOptions = {}) {
     this.environment = Object.freeze({ ...(options.environment ?? {}) })
@@ -252,7 +338,39 @@ export class PluginBackendHost {
     this.reverifyBeforeSpawn = options.reverifyBeforeSpawn
     this.admitThirdParty = options.admitThirdParty
     this.thirdPartyIdleMs = options.thirdPartyIdleMs ?? THIRD_PARTY_BACKEND_IDLE_MS
+    this.onCallSettled = options.onCallSettled
+    this.observesCallsOf = options.observesCallsOf
     this.createSupervisor = options.createSupervisor ?? defaultSupervisor
+  }
+
+  /** Current and peak in-flight calls and dropped notifications of every plugin that has had any, by plugin id. */
+  backendCallConcurrency(): BackendCallConcurrency[] {
+    return [...this.callConcurrency]
+      .map(([pluginId, { current, peak, droppedNotifications }]) => ({ pluginId, current, peak, droppedNotifications }))
+      .sort((a, b) => a.pluginId.localeCompare(b.pluginId))
+  }
+
+  /** Everything {@link BackendResourceUsage} discloses, as of now. */
+  backendResourceUsage(): BackendResourceUsage {
+    return {
+      children: { current: this.reservedChildSlots, peak: this.childSlotPeak, retained: this.retainedChildSlots },
+      views: [...this.views].map(([instanceId, view]) => ({
+        pluginId: view.runtime.pluginId,
+        instanceId,
+        subscriptions: { current: view.subscriptions.size + view.pendingSubscriptions, peak: view.subscriptionPeak },
+        child: view.supervisor?.resourceUsage() ?? null,
+      })),
+      plugins: this.backendCallConcurrency(),
+    }
+  }
+
+  private concurrencyFor(pluginId: string): { current: number; peak: number; droppedNotifications: number } {
+    let entry = this.callConcurrency.get(pluginId)
+    if (!entry) {
+      entry = { current: 0, peak: 0, droppedNotifications: 0 }
+      this.callConcurrency.set(pluginId, entry)
+    }
+    return entry
   }
 
   /** Install the third-party admission gate before views are bound. */
@@ -319,6 +437,65 @@ export class PluginBackendHost {
       ? activation
       : { ...activation, packageDir }
     this.backends.set(key, { activation: normalizedActivation })
+  }
+
+  /**
+   * Set the methods an agent may reach on one registered third-party package
+   * version, or first-party agent-tool package version (navide.browser,
+   * pluginFirstPartyBackends.ts), through its agent-tool bindings
+   * ({@link bindAgentToolWorkspace}). The set must be a subset of the
+   * package's approved methods. Views and the registered activation are not
+   * changed, and Plans is never touched. Returns false when no such
+   * activation is registered.
+   */
+  setAgentMethods(pluginId: string, packageVersion: string, methods: readonly string[]): boolean {
+    const key = backendKey(pluginId, packageVersion)
+    const backend = this.backends.get(key)
+    if (!backend || !servesAgentTools(backend.activation)) return false
+    if (!methods.every((method) => backend.activation.approvedMethods.includes(method))) {
+      throw new BackendPluginError('INVALID_ACTIVATION', 'Agent methods must be approved backend methods.')
+    }
+    const next = Object.freeze([...new Set(methods)].sort())
+    if (next.length === 0) this.agentToolMethods.delete(key)
+    else this.agentToolMethods.set(key, next)
+    return true
+  }
+
+  /** The methods agent-tool bindings of this package version may reach. */
+  agentToolMethodsFor(pluginId: string, packageVersion: string): readonly string[] {
+    return this.agentToolMethods.get(backendKey(pluginId, packageVersion)) ?? []
+  }
+
+  /** Bind a third-party (or first-party agent-tool) package backend headlessly for agent-tool calls. Like
+   * {@link bindWorkspace}, but the binding is marked so that agent calls on it
+   * are checked against {@link agentToolMethodsFor} instead of `agentMethods`. */
+  async bindAgentToolWorkspace(
+    runtime: BackendRuntimeContext,
+    packageDir: string,
+    workspacePath: string,
+  ): Promise<string> {
+    if (!nonEmptyString(workspacePath)) throw new BackendPluginError('INVALID_RUNTIME')
+    const backend = this.backends.get(backendKey(runtime.pluginId, runtime.packageVersion))
+    if (!backend || !servesAgentTools(backend.activation)) throw new BackendPluginError('INVALID_RUNTIME')
+    let instanceId = randomUUID()
+    while (this.views.has(instanceId)) instanceId = randomUUID()
+    const task = this.bindView({
+      ...runtime,
+      instanceId,
+      contributionKey: runtime.contributionKey ?? `${runtime.pluginId}.agent-tools`,
+      hostWindowId: runtime.hostWindowId ?? null,
+    }, packageDir, workspacePath)
+    // bindView reserves the view synchronously.
+    const view = this.views.get(instanceId)
+    if (view) view.agentToolBinding = true
+    await task
+    return instanceId
+  }
+
+  /** True while `instanceId` names a bound (or binding) view. */
+  isBound(instanceId: string): boolean {
+    const view = this.views.get(instanceId)
+    return view !== undefined && !view.closing
   }
 
   hasActivation(pluginId: string, packageVersion: string): boolean {
@@ -411,10 +588,6 @@ export class PluginBackendHost {
     if (workspacePath !== undefined && !nonEmptyString(workspacePath)) {
       throw new BackendPluginError('INVALID_RUNTIME')
     }
-    if (this.reservedChildSlots >= MAX_BACKEND_CHILDREN) {
-      throw new BackendPluginError('RESOURCE_LIMIT', this.childLimitMessage())
-    }
-
     const view: BoundView = {
       runtime: createAuthenticatedBackendRuntime(runtime),
       ...(workspacePath === undefined ? {} : { workspacePath: resolve(workspacePath) }),
@@ -428,10 +601,12 @@ export class PluginBackendHost {
       calls: new Set(),
       subscriptions: new Set(),
       pendingSubscriptions: 0,
+      subscriptionPeak: 0,
       ...(backend.activation.thirdParty !== undefined ? { idle: { stopped: false, inFlight: 0 } } : {}),
     }
     this.views.set(instanceId, view)
     this.reservedChildSlots++
+    this.childSlotPeak = Math.max(this.childSlotPeak, this.reservedChildSlots)
     view.bindingTask = this.finishBinding(view).catch((error: unknown) => {
       if (this.views.get(instanceId) === view) this.views.delete(instanceId)
       view.closing = true
@@ -472,6 +647,7 @@ export class PluginBackendHost {
         environment: this.environment,
         clientInfo: { name: 'navide-host', version: view.activation.packageVersion },
         bridgeDispatcher: this.bridgeDispatcher,
+        onNotificationDropped: () => { this.concurrencyFor(view.runtime.pluginId).droppedNotifications++ },
         authorizedPlanRoot: view.authorizedPlanRoot,
         ...(this.reverifyBeforeSpawn
           ? { beforeSpawn: () => this.reverifyBeforeSpawn?.(view.activation) }
@@ -551,7 +727,7 @@ export class PluginBackendHost {
       if (!this.admitThirdParty) {
         throw new BackendPluginError('BACKEND_UNAVAILABLE', 'Third-party backends are not available.')
       }
-      const admission = await this.admitThirdParty(view.activation, view.workspacePath)
+      const admission = await this.admitThirdParty(view.activation, view.workspacePath, view.runtime.instanceId ?? undefined)
       if (view.bindingController.signal.aborted || view.closing) {
         throw new BackendPluginError('USER_CANCELLED')
       }
@@ -566,6 +742,7 @@ export class PluginBackendHost {
       const supervisor: PluginBackendSupervisor = this.createSupervisor(view.activation, {
         environment: this.environment,
         clientInfo: { name: 'navide-host', version: view.activation.packageVersion },
+        onNotificationDropped: () => { this.concurrencyFor(view.runtime.pluginId).droppedNotifications++ },
         spawnProcess: admission.spawnProcess,
         bridgeDispatcher: admission.bridgeDispatcher,
         authorizedPlanRoot: view.authorizedPlanRoot,
@@ -628,23 +805,22 @@ export class PluginBackendHost {
    * it: the view is already unregistered and the Host has no exit signal to
    * reclaim on. Releasing the slot would let a new child start while that one
    * may still be running, which is the same reason a failed drain keeps its
-   * package admission barrier. Keep the slot for the life of the process and
-   * report it, so the limit it will eventually hit is explained. */
+   * package admission barrier. Keep it counted for the life of the process and
+   * report it; it never stops another child from starting (no child cap). */
   private retainChildSlot(view: BoundView): void {
     if (view.slotReleased || view.slotRetained) return
     view.slotRetained = true
     this.retainedChildSlots++
     console.warn(
       `[plugin-backend] backend child slot retained after a failed close for ` +
-      `${view.activation.pluginId}@${view.activation.packageVersion}: ` +
-      `${this.retainedChildSlots} of ${MAX_BACKEND_CHILDREN} slots are held by children that may still be running.`,
+      `${view.activation.pluginId}@${view.activation.packageVersion}: ${this.childLimitMessage()}`,
     )
   }
 
+  /** How many children whose close failed may still be running (there is no child cap to report against). */
   private childLimitMessage(): string {
-    if (this.retainedChildSlots === 0) return 'Backend child process limit reached.'
-    return 'Backend child process limit reached. ' +
-      `${this.retainedChildSlots} of ${MAX_BACKEND_CHILDREN} slots are retained by backend children whose close failed.`
+    const retained = this.retainedChildSlots
+    return `${retained} backend ${retained === 1 ? 'child' : 'children'} whose close failed may still be running.`
   }
 
   async unbindView(
@@ -726,6 +902,7 @@ export class PluginBackendHost {
         ...draining,
       ])
       this.backends.delete(key)
+      this.agentToolMethods.delete(key)
     })
     this.packageRevocations.set(key, task)
     let completed = false
@@ -745,6 +922,40 @@ export class PluginBackendHost {
     args: JsonValue,
     options?: BackendPluginCallOptions,
   ): Promise<Result> {
+    const view = this.views.get(instanceId)
+    if (!this.onCallSettled || !view || this.observesCallsOf?.(view.activation.pluginId) === false) {
+      return this.callWithIdle<Result>(instanceId, name, args, options)
+    }
+    const settled = (outcome: BackendCallOutcome): void => {
+      try {
+        this.onCallSettled?.({
+          pluginId: view.activation.pluginId,
+          packageVersion: view.activation.packageVersion,
+          workspacePath: view.workspacePath,
+          method: name,
+          declared: view.activation.approvedMethods.includes(name),
+          outcome,
+        })
+      } catch {
+        // The activity record never fails the call it records.
+      }
+    }
+    try {
+      const result = await this.callWithIdle<Result>(instanceId, name, args, options)
+      settled('allowed')
+      return result
+    } catch (error) {
+      settled(backendCallOutcome(error))
+      throw error
+    }
+  }
+
+  private async callWithIdle<Result extends JsonValue>(
+    instanceId: string,
+    name: string,
+    args: JsonValue,
+    options?: BackendPluginCallOptions,
+  ): Promise<Result> {
     const thirdPartyView = this.views.get(instanceId)
     if (thirdPartyView?.idle === undefined) return this.callBound<Result>(instanceId, name, args, options)
     // Bridge requests only exist inside a call or subscription origin, so the
@@ -758,6 +969,17 @@ export class PluginBackendHost {
       idle.inFlight--
       this.scheduleIdleStop(thirdPartyView)
     }
+  }
+
+  /** {@link call} for an agent tool: the result as text in pieces, never
+   *  parsed by the Host when it is longer than one piece (contract 4.4). */
+  async callForResultText(
+    instanceId: string,
+    name: string,
+    args: JsonValue,
+    options?: BackendPluginCallOptions,
+  ): Promise<BackendResultText> {
+    return await this.call(instanceId, name, args, { ...options, resultText: true }) as unknown as BackendResultText
   }
 
   private async callBound<Result extends JsonValue>(
@@ -779,20 +1001,23 @@ export class PluginBackendHost {
       throw new BackendPluginError('INVALID_ARGUMENT')
     }
     const initiator = options?.initiator ?? view.runtime.initiator
-    if (initiator.kind === 'agent' && !view.activation.agentMethods?.includes(name)) {
+    const agentMethods = view.agentToolBinding
+      ? this.agentToolMethodsFor(view.activation.pluginId, view.activation.packageVersion)
+      : view.activation.agentMethods
+    if (initiator.kind === 'agent' && !agentMethods?.includes(name)) {
       throw new BackendPluginError('CAPABILITY_DENIED')
     }
     if (options?.timeoutMs !== undefined && !isAllowedBackendTimeout(options.timeoutMs)) {
       throw new BackendPluginError('INVALID_ARGUMENT')
-    }
-    if (view.calls.size >= MAX_BACKEND_CALLS_PER_INSTANCE) {
-      throw new BackendPluginError('RESOURCE_LIMIT')
     }
     const controller = new AbortController()
     const abort = (): void => controller.abort()
     if (options?.signal?.aborted) controller.abort()
     else options?.signal?.addEventListener('abort', abort, { once: true })
     view.calls.add(controller)
+    const concurrency = this.concurrencyFor(view.runtime.pluginId)
+    concurrency.current++
+    concurrency.peak = Math.max(concurrency.peak, concurrency.current)
     try {
       const runtime = runtimeWithInitiator(view.runtime, options?.initiator)
       const supervisorOptions: BackendPluginCallOptions = { ...options }
@@ -822,7 +1047,9 @@ export class PluginBackendHost {
           controller.signal.reason === 'plugin-stopping' ? 'PLUGIN_STOPPING' : 'USER_CANCELLED',
         )
       }
-      return view.supervisor.clientFor(runtime, {
+      // Awaited so the finally below runs when the call settles: the in-flight
+      // count, the caller's abort listener and view.calls all span the call.
+      return await view.supervisor.clientFor(runtime, {
         workspacePath: view.workspacePath,
         authorizedPlanRoot: view.authorizedPlanRoot.value ?? undefined,
       }).call<Result>(name, args, {
@@ -832,6 +1059,7 @@ export class PluginBackendHost {
     } finally {
       options?.signal?.removeEventListener('abort', abort)
       view.calls.delete(controller)
+      concurrency.current--
     }
   }
 
@@ -856,10 +1084,8 @@ export class PluginBackendHost {
     if (options?.timeoutMs !== undefined && !isAllowedBackendTimeout(options.timeoutMs)) {
       throw new BackendPluginError('INVALID_ARGUMENT')
     }
-    if (view.subscriptions.size + view.pendingSubscriptions >= MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE) {
-      throw new BackendPluginError('RESOURCE_LIMIT')
-    }
     view.pendingSubscriptions++
+    view.subscriptionPeak = Math.max(view.subscriptionPeak, view.subscriptions.size + view.pendingSubscriptions)
     try {
       const runtime = runtimeWithInitiator(view.runtime, options?.initiator)
       const supervisorOptions: BackendPluginSubscriptionOptions = { ...options }

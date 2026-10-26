@@ -468,6 +468,7 @@ def _best_of(runs: int, text: str) -> float:
     return best
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("name", sorted(_BACKSLASH_RUNS))
 def test_a_run_of_backslashes_scans_in_linear_time(name: str) -> None:
     """B7-1: the doubled-backslash quote branches (B5-1) could start at every
@@ -486,6 +487,7 @@ _ISLAND_RUNS = {
 }
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("name", sorted(_ISLAND_RUNS))
 def test_many_plan_meta_islands_scan_in_linear_time(name: str) -> None:
     """B8-1/B8-2: finding the plan-meta islands rescanned to the end of the

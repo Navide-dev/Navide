@@ -215,7 +215,7 @@ else:
     assert refusal["boundary"] == ("real CLI" if boundary == "popen" else "real native CLI")
 
 
-@pytest.mark.parametrize("n", [2, 3, 4])
+@pytest.mark.parametrize("n", [2, 3, 4, 5])
 def test_shards_partition_real_collection_without_omission(tmp_path, n):
     backend_root = Path(__file__).resolve().parents[2]
     reports = []
@@ -223,7 +223,7 @@ def test_shards_partition_real_collection_without_omission(tmp_path, n):
         report = tmp_path / f"collection-{k}.json"
         env = isolated_environment(tmp_path / f"collector-{k}")
         subprocess.run(
-            # Two files, so every one of four shards gets at least one test.
+            # Two files, so every one of five shards gets at least one test.
             [sys.executable, "-m", "pytest", "tests/cli_regression/test_shared.py",
              "tests/cli_regression/test_catalog.py", "--collect-only", "-q", "--shard", f"{k}/{n}", "--collection-report", str(report)],
             cwd=backend_root, env=env, capture_output=True, text=True, check=True,

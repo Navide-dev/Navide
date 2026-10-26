@@ -11,6 +11,7 @@ import VoiceSettingsSection from '../settings/VoiceSettingsSection.vue'
 import KeyboardShortcutsEditor from '../KeyboardShortcutsEditor.vue'
 import { createMockBackend } from '../../composables/__tests__/mockBackend'
 import { useVoiceSettings } from '../../voice/voiceSettings'
+import { platformId, setPlatformId } from '../../../../shared/osplat'
 
 type ModalProps = InstanceType<typeof SettingsModal>['$props']
 
@@ -471,5 +472,36 @@ describe('VoiceSettingsSection read aloud — voice model and engine rows', () =
     const row = w.get('[data-settings-section="voice-readback-model"]')
     expect(row.find('[data-testid="readback-model-download"]').exists()).toBe(false)
     expect(row.text()).toContain("operating system's speech settings")
+  })
+
+  describe('voice row hint names the right settings', () => {
+    const BASELINE = platformId()
+    afterEach(() => setPlatformId(BASELINE))
+
+    const voiceRow = (w: VueWrapper) => w.get('[data-settings-section="voice-readback-voice"]').text()
+
+    it('macOS points at Spoken Content', async () => {
+      setPlatformId('darwin')
+      useVoiceSettings().setVoiceReadbackEnabled(true)
+      expect(voiceRow(await mountSection())).toContain('System Settings › Accessibility › Spoken Content')
+    })
+
+    it('Windows points at the Windows speech settings, not the macOS path', async () => {
+      vi.stubGlobal('navigator', { ...navigator, platform: 'Win32', userAgent: 'Windows NT 10.0' })
+      setPlatformId('win32')
+      useVoiceSettings().setVoiceReadbackEnabled(true)
+      const text = voiceRow(await mountSection())
+      expect(text).toContain('Settings › Time & language › Speech')
+      expect(text).not.toContain('Spoken Content')
+    })
+
+    it('Linux names no macOS path', async () => {
+      vi.stubGlobal('navigator', { ...navigator, platform: 'Linux aarch64', userAgent: 'X11; Linux' })
+      setPlatformId('linux')
+      useVoiceSettings().setVoiceReadbackEnabled(true)
+      const text = voiceRow(await mountSection())
+      expect(text).toContain("operating system's speech settings")
+      expect(text).not.toContain('Spoken Content')
+    })
   })
 })

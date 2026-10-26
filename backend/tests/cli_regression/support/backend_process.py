@@ -197,6 +197,13 @@ class BackendProcess:
                 source = self.root / name
                 if source.exists():
                     shutil.copyfile(source, destination / name)
+            # The backend's own log file, timestamped where backend.log (its
+            # stdout) is not. At this harness's warning level it holds the
+            # warnings only, the loop watchdog's stall/recover lines among
+            # them. One file by name: the data dir also holds the token.
+            applog = self.root / "data" / "logs" / "backend.log"
+            if applog.exists():
+                shutil.copyfile(applog, destination / "backend-applog.log")
         assert exit_error is None, exit_error
         assert not registry_reaped, (
             f"PTY children survived backend shutdown (registry cleanup reaped them): "

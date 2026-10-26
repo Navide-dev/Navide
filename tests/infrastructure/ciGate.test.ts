@@ -15,7 +15,9 @@ const workflow = parse(readFileSync('.github/workflows/ci.yml', 'utf8')) as {
 }
 const gate = workflow.jobs['lint-and-test']
 const verdict = gate.steps.find((step) => step.name === 'Require every check to succeed')!
-const results = Object.keys(verdict.env ?? {})
+const results = Object.keys(verdict.env ?? {}).filter((key) => key.endsWith('_RESULT'))
+// The path filter's verdicts: which job groups the changes job asked for.
+const filters = Object.keys(verdict.env ?? {}).filter((key) => !key.endsWith('_RESULT'))
 const shellEnvironment = { ...process.env }
 delete shellEnvironment.BASH_ENV
 delete shellEnvironment.ENV
@@ -28,7 +30,11 @@ describe('required CI gate', () => {
     expect(gate.needs?.slice().sort())
       .toEqual(Object.keys(workflow.jobs).filter((name) => name !== 'lint-and-test').sort())
     expect(gate.if).toContain('always()')
-    const mapped = Object.values(verdict.env ?? {}).map((value) => {
+    expect(filters.sort()).toEqual(['RUN_BACKEND', 'RUN_FRONTEND'])
+    for (const key of filters) {
+      expect(verdict.env?.[key]).toBe(`\${{ needs.changes.outputs.${key.slice(4).toLowerCase()} }}`)
+    }
+    const mapped = results.map((key) => verdict.env![key]).map((value) => {
       const match = value.match(/needs(?:\.([\w-]+)|\['([\w-]+)'\])\.result/)
       expect(match, `unrecognized result mapping: ${value}`).not.toBeNull()
       return match?.[1] ?? match?.[2]
@@ -39,7 +45,7 @@ describe('required CI gate', () => {
   })
 
   it('requires executable shell validation in the Linux static job', () => {
-    const step = workflow.jobs.static.steps.find((entry) => entry.run?.startsWith('pnpm test:infrastructure'))
+    const step = workflow.jobs.static.steps.find((entry) => entry.run?.startsWith('bun run test:infrastructure'))
     expect(step?.env?.NAVIDE_REQUIRE_CI_SHELL).toBe('1')
     if (process.env.NAVIDE_REQUIRE_CI_SHELL === '1') expect(bashAvailable).toBe(true)
   })
@@ -48,7 +54,11 @@ describe('required CI gate', () => {
   // The required Linux static job fails above if this executable check cannot run.
   describe.skipIf(!bashAvailable)('actual workflow shell verdict', () => {
     function run(overrides: Record<string, string | undefined>) {
-      const env: NodeJS.ProcessEnv = { ...shellEnvironment, ...Object.fromEntries(results.map((key) => [key, 'success'])) }
+      const env: NodeJS.ProcessEnv = {
+        ...shellEnvironment,
+        ...Object.fromEntries(results.map((key) => [key, 'success'])),
+        ...Object.fromEntries(filters.map((key) => [key, 'true'])),
+      }
       for (const [key, value] of Object.entries(overrides)) {
         if (value === undefined) delete env[key]
         else env[key] = value
@@ -70,6 +80,39 @@ describe('required CI gate', () => {
     it('rejects an entirely missing set of results', () => {
       expect(run(Object.fromEntries(results.map((key) => [key, undefined]))).status).toBe(1)
     })
+
+    const groups = [
+      { filter: 'RUN_FRONTEND', jobs: ['FRONTEND_RESULT', 'BUILD_ARTIFACTS_RESULT', 'PNPM_LOCKFILE_RESULT'] },
+      { filter: 'RUN_BACKEND', jobs: ['BACKEND_RESULT'] },
+    ]
+
+    it('accepts a job group the path filter chose not to run', () => {
+      for (const { filter, jobs } of groups) {
+        const result = run({ [filter]: 'false', ...Object.fromEntries(jobs.map((key) => [key, 'skipped'])) })
+        expect(result.status, `${filter}: ${result.stdout}${result.stderr}`).toBe(0)
+      }
+    })
+
+    it.each(['failure', 'cancelled', ''])('still rejects a filtered-out job whose result is %s', (value) => {
+      for (const { filter, jobs } of groups) {
+        for (const key of jobs) expect(run({ [filter]: 'false', [key]: value }).status, key).toBe(1)
+      }
+    })
+
+    it.each(['true', '', undefined])('rejects a skipped job the filter asked for (filter %s)', (value) => {
+      for (const { filter, jobs } of groups) {
+        for (const key of jobs) expect(run({ [filter]: value, [key]: 'skipped' }).status, key).toBe(1)
+      }
+    })
+
+    it('excuses only the group the filter skipped', () => {
+      const others = results.filter((key) => !groups.some((group) => group.jobs.includes(key)))
+      for (const key of others) {
+        expect(run({ RUN_FRONTEND: 'false', RUN_BACKEND: 'false', [key]: 'skipped' }).status, key).toBe(1)
+      }
+      expect(run({ RUN_BACKEND: 'false', FRONTEND_RESULT: 'skipped' }).status).toBe(1)
+      expect(run({ RUN_FRONTEND: 'false', BACKEND_RESULT: 'skipped' }).status).toBe(1)
+    })
   })
 
   it('retains complete source and artifact suites on every supported desktop platform', () => {
@@ -80,14 +123,14 @@ describe('required CI gate', () => {
       expect(job.steps.some((step) => step.uses?.startsWith('actions/upload-artifact@') && step.if === 'always()')).toBe(true)
     }
     expect(workflow.jobs.backend.strategy?.matrix.include.filter((entry) => entry.platform === 'Windows')
-      .map((entry) => entry.shard)).toEqual(['1/4', '2/4', '3/4', '4/4'])
+      .map((entry) => entry.shard)).toEqual(['1/5', '2/5', '3/5', '4/5', '5/5'])
   })
 
   it('preserves platform time budgets and best-effort Windows diagnostics', () => {
     const backend = workflow.jobs.backend
     expect(backend['timeout-minutes']).toBe('${{ matrix.timeout }}')
     expect(backend.strategy?.matrix.include.map(({ platform, timeout }) => [platform, timeout]))
-      .toEqual([['macOS', 25], ['Linux', 25], ['Windows', 45], ['Windows', 45], ['Windows', 45], ['Windows', 45]])
+      .toEqual([['macOS', 25], ['Linux', 25], ['Windows', 45], ['Windows', 45], ['Windows', 45], ['Windows', 45], ['Windows', 45]])
     const diagnostic = backend.steps.find((step) => step.name === 'Report the backend test log')!
     expect(diagnostic.if).toContain('always()')
     expect(diagnostic.if).toContain("runner.os == 'Windows'")

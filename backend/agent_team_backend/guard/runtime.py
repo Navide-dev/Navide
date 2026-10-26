@@ -25,6 +25,12 @@ def store() -> GuardStore:
     return _store
 
 
+def enabled_cached() -> bool | None:
+    """The Guard switch if a store is open and has read it, else None. Opens
+    nothing and reads no database, so the event loop may call it."""
+    return _store.enabled_cached() if _store is not None else None
+
+
 def flush() -> None:
     """Write the queued audit rows, if a store was ever opened."""
     if _store is not None:

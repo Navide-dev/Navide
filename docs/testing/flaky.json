@@ -2,11 +2,13 @@
   "schema": 1,
   "tests": [
     {
-      "test": "backend/tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[kilo]",
-      "category": "test-race",
-      "count": 1,
+      "test": "backend/tests/cli_regression/test_vendor_contracts.py::test_vendor_launch",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#295",
+      "count": 2,
       "firstSeen": "2026-10-15T04:18:03Z",
-      "lastSeen": "2026-10-15T04:18:03Z",
+      "lastSeen": "2026-10-15T16:52:27Z",
       "runs": [
         {
           "run": 38679265730,
@@ -14,6 +16,307 @@
           "pr": 266,
           "at": "2026-10-15T04:18:03Z",
           "evidence": "FAILED backend/tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[kilo] - AssertionError: backend shutdown timed out; see /private/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/pytest-of-runner/pytest-0/test_vendor_launch_kilo_0/backend.log"
+        },
+        {
+          "run": 38771531089,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 293,
+          "at": "2026-10-15T16:52:27Z",
+          "evidence": "FAILED backend/tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[grok] - AssertionError: backend shutdown timed out; see /tmp/pytest-of-runner/pytest-0/popen-gw3/test_vendor_launch_grok_0/backend.log"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#303",
+      "count": 2,
+      "firstSeen": "2026-10-15T18:46:40Z",
+      "lastSeen": "2026-10-15T19:11:17Z",
+      "runs": [
+        {
+          "run": 38787642744,
+          "job": "Backend tests (macOS, 1/1)",
+          "pr": 300,
+          "at": "2026-10-15T18:46:40Z",
+          "evidence": "FAILED backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst - AssertionError: close_all deadlocked with the burst"
+        },
+        {
+          "run": 38790727272,
+          "job": "Backend tests (macOS, 1/1)",
+          "pr": 300,
+          "at": "2026-10-15T19:11:17Z",
+          "evidence": "FAILED backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst - AssertionError: close_all deadlocked with the burst"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_terminals_registry_data_dir.py::test_kill_all_waits_for_registry_cleanup_before_returning",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#317",
+      "count": 2,
+      "firstSeen": "2026-10-15T22:02:38Z",
+      "lastSeen": "2026-10-16T06:57:33Z",
+      "runs": [
+        {
+          "run": 38813392252,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 308,
+          "at": "2026-10-15T22:02:38Z",
+          "evidence": "FAILED backend/tests/test_terminals_registry_data_dir.py::test_kill_all_waits_for_registry_cleanup_before_returning - assert False"
+        },
+        {
+          "run": 38862563872,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 315,
+          "at": "2026-10-16T06:57:33Z",
+          "evidence": "FAILED backend/tests/test_terminals_registry_data_dir.py::test_kill_all_waits_for_registry_cleanup_before_returning - Failed: kill_all never reached pty_registry.unregister"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/channels/test_manager.py::test_a_turn_that_ends_without_text_still_says_so_after_the_grace",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#319",
+      "count": 1,
+      "firstSeen": "2026-10-16T05:56:37Z",
+      "lastSeen": "2026-10-16T05:56:37Z",
+      "runs": [
+        {
+          "run": 38857934119,
+          "job": "Backend tests (macOS, 1/1)",
+          "pr": 311,
+          "at": "2026-10-16T05:56:37Z",
+          "evidence": "FAILED backend/tests/channels/test_manager.py::test_a_turn_that_ends_without_text_still_says_so_after_the_grace - assert False"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/channels/test_manager.py::test_outbound_after_turn_complete_only",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#319",
+      "count": 1,
+      "firstSeen": "2026-10-16T07:30:30Z",
+      "lastSeen": "2026-10-16T07:30:30Z",
+      "runs": [
+        {
+          "run": 38866282207,
+          "job": "Backend tests (macOS, 1/1)",
+          "pr": 317,
+          "at": "2026-10-16T07:30:30Z",
+          "evidence": "FAILED backend/tests/channels/test_manager.py::test_outbound_after_turn_complete_only - assert False"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/channels/test_media_adapters.py::test_a_download_that_never_finishes_times_out_and_leaves_no_file",
+      "category": "product-defect",
+      "count": 1,
+      "firstSeen": "2026-10-17T00:27:25Z",
+      "lastSeen": "2026-10-17T00:27:25Z",
+      "runs": [
+        {
+          "run": 38983916856,
+          "job": "Backend tests (Windows, 2/4)",
+          "pr": 355,
+          "at": "2026-10-17T00:27:25Z",
+          "evidence": "FAILED backend\\tests\\channels\\test_media_adapters.py::test_a_download_that_never_finishes_times_out_and_leaves_no_file - PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\\\Users\\\\runneradmin\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-runneradmin\\\\pytest-0\\\\test_a_download_that_never_fin0\\\\f.bin'"
+        }
+      ],
+      "status": "fixed",
+      "fixedBy": "#357"
+    },
+    {
+      "test": "backend/tests/channels/test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#329",
+      "count": 1,
+      "firstSeen": "2026-10-16T12:35:26Z",
+      "lastSeen": "2026-10-16T12:35:26Z",
+      "runs": [
+        {
+          "run": 38899029640,
+          "job": "Backend tests (Windows, 3/4)",
+          "pr": null,
+          "at": "2026-10-16T12:35:26Z",
+          "evidence": "FAILED backend\\tests\\channels\\test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt - AssertionError: assert [] == [('pane-1', {...'option': 1})]"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/cli_regression/test_vendor_transport.py::test_managed_login_rejects_unverifiable_command[opencode]",
+      "category": "needs-review",
+      "count": 1,
+      "firstSeen": "2026-10-16T04:46:48Z",
+      "lastSeen": "2026-10-16T04:46:48Z",
+      "runs": [
+        {
+          "run": 38850198431,
+          "job": "Backend tests (Windows, 2/4)",
+          "pr": 296,
+          "at": "2026-10-16T04:46:48Z",
+          "evidence": "FAILED backend\\tests\\cli_regression\\test_vendor_transport.py::test_managed_login_rejects_unverifiable_command[opencode] - TimeoutError"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal",
+      "category": "needs-review",
+      "count": 1,
+      "firstSeen": "2026-10-15T21:15:23Z",
+      "lastSeen": "2026-10-15T21:15:23Z",
+      "runs": [
+        {
+          "run": 38807333845,
+          "job": "Backend tests (Windows, 3/4)",
+          "pr": 305,
+          "at": "2026-10-15T21:15:23Z",
+          "evidence": "--- 480s: 852 results; last: backend\\tests\\test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal +++++++++++++++++++++++++++++++++++ Timeout +++++++++"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_git_service.py::TestDiscoverRepositories::test_timeout_preserves_workspace_validation[False-expected1]",
+      "category": "needs-review",
+      "count": 1,
+      "firstSeen": "2026-10-16T07:41:01Z",
+      "lastSeen": "2026-10-16T07:41:01Z",
+      "runs": [
+        {
+          "run": 38866282207,
+          "job": "Backend tests (Windows, 1/4)",
+          "pr": 317,
+          "at": "2026-10-16T07:41:01Z",
+          "evidence": "FAILED backend\\tests\\test_git_service.py::TestDiscoverRepositories::test_timeout_preserves_workspace_validation[False-expected1] - AssertionError: assert {'ok': True, ...ncated': True} == {'ok': False,...sitories': []}"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_onboarding_run.py::test_the_commands_exit_code_reaches_the_window",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#357",
+      "count": 1,
+      "firstSeen": "2026-10-17T00:31:16Z",
+      "lastSeen": "2026-10-17T00:31:16Z",
+      "runs": [
+        {
+          "run": 38984784655,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 353,
+          "at": "2026-10-17T00:31:16Z",
+          "evidence": "FAILED backend/tests/test_onboarding_run.py::test_the_commands_exit_code_reaches_the_window - assert None == 3"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_plan_mcp_cli_read.py::test_wait_idle_returns_immediately_on_turn_complete",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#324",
+      "count": 1,
+      "firstSeen": "2026-10-16T10:10:14Z",
+      "lastSeen": "2026-10-16T10:10:14Z",
+      "runs": [
+        {
+          "run": 38882596771,
+          "job": "Backend tests (Windows, 4/4)",
+          "pr": 321,
+          "at": "2026-10-16T10:10:14Z",
+          "evidence": "FAILED backend\\tests\\test_plan_mcp_cli_read.py::test_wait_idle_returns_immediately_on_turn_complete - assert 0.1 == 0.0"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_server_link_pin_audit.py::test_refused_confirms_never_fill_the_record[keychain]",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#293",
+      "count": 1,
+      "firstSeen": "2026-10-15T15:53:06Z",
+      "lastSeen": "2026-10-15T15:53:06Z",
+      "runs": [
+        {
+          "run": 38763082739,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 285,
+          "at": "2026-10-15T15:53:06Z",
+          "evidence": "FAILED backend/tests/test_server_link_pin_audit.py::test_refused_confirms_never_fill_the_record[keychain] - IndexError: list index out of range"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_server_link_rotation_d1.py::test_a_full_record_recovers_by_unpairing_and_not_by_starting_over[keychain]",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#337",
+      "count": 1,
+      "firstSeen": "2026-10-16T17:49:31Z",
+      "lastSeen": "2026-10-16T17:49:31Z",
+      "runs": [
+        {
+          "run": 38941866472,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 332,
+          "at": "2026-10-16T17:49:31Z",
+          "evidence": "FAILED backend/tests/test_server_link_rotation_d1.py::test_a_full_record_recovers_by_unpairing_and_not_by_starting_over[keychain] - AssertionError: assert ('')"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#306",
+      "count": 1,
+      "firstSeen": "2026-10-15T19:29:02Z",
+      "lastSeen": "2026-10-15T19:29:02Z",
+      "runs": [
+        {
+          "run": 38790727272,
+          "job": "Backend tests (Windows, 4/4)",
+          "pr": 300,
+          "at": "2026-10-15T19:29:02Z",
+          "evidence": "FAILED backend\\tests\\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is - AssertionError: condition never became true"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#322",
+      "count": 1,
+      "firstSeen": "2026-10-16T08:45:40Z",
+      "lastSeen": "2026-10-16T08:45:40Z",
+      "runs": [
+        {
+          "run": 38871697083,
+          "job": "Backend tests (Windows, 2/4)",
+          "pr": null,
+          "at": "2026-10-16T08:45:40Z",
+          "evidence": "FAILED backend\\tests\\test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token - AssertionError: condition never became true"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on",
+      "category": "test-race",
+      "count": 1,
+      "firstSeen": "2026-10-15T05:37:34Z",
+      "lastSeen": "2026-10-15T05:37:34Z",
+      "runs": [
+        {
+          "run": 38686424014,
+          "job": "Backend tests (Windows, 3/4)",
+          "pr": 276,
+          "at": "2026-10-15T05:37:34Z",
+          "evidence": "FAILED backend\\tests\\test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on - AssertionError: ({'bytes': 88000, 'segments': True, 'cancelled': True, 'prompt': None, ...}, {'bytes': 320000, 'segments': True, 'cancelled': False, 'prompt': None, ...})"
         }
       ]
     }

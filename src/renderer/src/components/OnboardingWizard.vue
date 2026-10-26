@@ -9,6 +9,7 @@ import OnboardingStepCard from './OnboardingStepCard.vue'
 import OnboardingPreview from './OnboardingPreview.vue'
 import InstallTerminal from './InstallTerminal.vue'
 import { useSettings } from '../composables/useSettings'
+import { AVAILABLE_UI_LOCALES, isBetaUiLocale } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
 const emit = defineEmits<{ (e: 'complete'): void; (e: 'close'): void }>()
@@ -308,9 +309,9 @@ async function saveComplete(): Promise<boolean> {
         </li>
       </ol>
       <select class="ob-lang-btn" :value="settings.language.value" :aria-label="$t('settings.appearance.language')" @change="selectLanguage">
-        <option value="zh-TW">{{ $t('settings.appearance.language-zh-TW') }}</option>
-        <option value="en-US">{{ $t('settings.appearance.language-en-US') }}</option>
-        <option value="ja-JP">{{ $t('settings.appearance.language-ja-JP') }}</option>
+        <option v-for="code in AVAILABLE_UI_LOCALES" :key="code" :value="code">
+          {{ $t(`settings.appearance.language-${code}`) }}{{ isBetaUiLocale(code) ? ` (${$t('settings.appearance.language-beta')})` : '' }}
+        </option>
       </select>
       <div class="ob-progress"><span :style="{ width: `${progress}%` }" /></div>
     </header>
@@ -466,7 +467,7 @@ async function saveComplete(): Promise<boolean> {
                   <input
                     v-model="customModel"
                     class="ob-input"
-                    placeholder="e.g. codellama:7b, gemma3:4b"
+                    :placeholder="t('onboard.custom-model-placeholder')"
                     spellcheck="false"
                   />
                 </label>

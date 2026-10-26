@@ -250,6 +250,18 @@ class Prepared:
     sha256: str  # of the masked text, i.e. of what was published
 
 
+#: ``ShareRefused.code`` while the user has the built-in Navide plugin Plans
+#: disabled: no plan document is published or re-published.
+PLANS_DISABLED_CODE = "plugin-disabled"
+PLANS_DISABLED_MESSAGE = "Navide plugin Plans is disabled. Enable it in Settings → Navide Plugins."
+
+
+def _is_plans_document(real: Path, kind: str) -> bool:
+    """A plan, or any file in a workspace's ``.agent-team/plans/``."""
+    parent = tuple(real.parent.parts)
+    return kind == "plan" or parent[-2:] == (".agent-team", "plans")
+
+
 def _source_ok(real: Path, spec: KindSpec) -> bool:
     if not real.name.lower().endswith(spec.suffixes):
         return False
@@ -283,6 +295,11 @@ def prepare(raw_path: str, kind: str) -> Prepared:
         if not _source_ok(real, spec):
             where = " or ".join("/".join(folder) + "/" for folder in spec.folders)
             raise ShareRefused("kind_source", f"Only files in {where} can be shared as a {kind}.")
+        if _is_plans_document(real, kind):
+            from . import app
+
+            if app.plans_plugin_disabled():
+                raise ShareRefused(PLANS_DISABLED_CODE, PLANS_DISABLED_MESSAGE)
         if out.size > MAX_PLAINTEXT:
             raise ShareRefused("too_large", f"Files over {MAX_PLAINTEXT // (1024 * 1024)} MiB cannot be shared.")
         try:

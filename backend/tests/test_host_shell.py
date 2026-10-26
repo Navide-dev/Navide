@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from agent_team_backend import host_shell, osplat
+from agent_team_backend import git_service, host_shell, osplat
 from agent_team_backend.host_shell import (
     HOST_SHELL_EXECUTABLE_ALLOWLIST,
     parse_allowlisted_command,
@@ -989,6 +989,7 @@ async def test_an_allowlisted_name_resolves_to_a_windows_shim(monkeypatch) -> No
 
     class VersionProc:
         returncode = 0
+        pid = 4_194_305  # only the stubbed process tree ever sees it
 
         async def communicate(self, *_a):
             return b"gh version 2.0.0\n", b""
@@ -1002,6 +1003,7 @@ async def test_an_allowlisted_name_resolves_to_a_windows_shim(monkeypatch) -> No
         _windows.paths, "resolve_program", lambda name, *, path=None: rf"C:\scoop\{name}.cmd"
     )
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
 
     rc, stdout, _ = await run_allowlisted_text(["gh", "--version"])
 
@@ -1138,3 +1140,241 @@ async def test_capped_read_drains_stderr_while_stdout_is_still_coming() -> None:
     assert (rc, stdout, stderr, truncated) == (0, b"x" * 30, b"warning", False)
     assert "stderr" in order
     assert order.index("stderr") < len(order) - 1
+
+
+# ── timeouts ──────────────────────────────────────────────────────────────────
+# Windows Git view (0.2.27/0.2.28): every git.exe the backend started hung at
+# launch, and each timed-out run then waited forever on `process.wait()` --
+# the real git.exe under Git for Windows' launcher outlived the kill and held
+# the pipes -- so all four git slots leaked and the view never loaded again.
+
+
+@pytest.mark.asyncio
+async def test_a_run_never_hands_the_child_the_backends_own_stdin(monkeypatch) -> None:
+    """On Windows the backend's stdin is main's `shutdown` pipe, with a thread
+    parked in a synchronous read on it; a child given that same pipe blocks
+    on its first query of the handle. Only a run that feeds input gets a pipe."""
+    seen: list[object] = []
+
+    class DoneProc:
+        returncode = 0
+        pid = 4_194_305  # only the stubbed process tree ever sees it
+
+        async def communicate(self, *_a):
+            return b"", b""
+
+        async def read(self, *_a):
+            return b""
+
+    async def fake_exec(*_a, **kwargs):
+        seen.append(kwargs["stdin"])
+        proc = DoneProc()
+        proc.stdout = proc.stderr = proc
+        return proc
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
+
+    await run_allowlisted_text(["git", "status"])
+    await run_allowlisted_capped(["git", "diff"], max_stdout_bytes=10)
+    await run_allowlisted_text(["git", "apply"], input_text="patch")
+
+    assert seen == [
+        asyncio.subprocess.DEVNULL,
+        asyncio.subprocess.DEVNULL,
+        asyncio.subprocess.PIPE,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_hung_git_does_not_hold_its_slot_forever(monkeypatch, caplog) -> None:
+    """A child whose pipes never close (Windows: held by the orphaned real
+    git.exe) must still give its git slot back, every time, so a call made
+    after the slots were all spent by hung runs still gets one. The give-up is
+    logged, and the process-table read stays off the event loop."""
+    import threading
+
+    killed: list[int] = []
+    snapshot_threads: list[threading.Thread] = []
+
+    def descendants(pid: int) -> list[int]:
+        snapshot_threads.append(threading.current_thread())
+        return [pid + 1]
+
+    class HungProc:
+        pid = 4242
+        returncode = None
+
+        async def communicate(self, *_a):
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            await asyncio.Event().wait()
+
+        def kill(self):
+            killed.append(self.pid)
+
+    async def fake_exec(*_a, **_k):
+        return HungProc()
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "descendants", descendants)
+    # 4242 is a made-up pid: never signal, contain or resume what it may name here.
+    monkeypatch.setattr(host_shell.process_tree, "end_own_group", lambda pid: None)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
+    monkeypatch.setattr(host_shell.process_tree, "identity", lambda pid: f"id-{pid}")
+    monkeypatch.setattr(
+        host_shell.process_tree, "kill", lambda pid, *, force: killed.append(pid)
+    )
+    monkeypatch.setattr(host_shell, "_KILL_REAP_TIMEOUT_S", 0.05)
+    caplog.set_level("WARNING", logger="agent_team_backend.host_shell")
+    real_run = host_shell.run_allowlisted_text
+    monkeypatch.setattr(
+        git_service,
+        "run_allowlisted_text",
+        lambda args, cwd, **kw: real_run(args, cwd, **{**kw, "timeout": 0.05}),
+    )
+
+    runs = git_service._GIT_PROC_LIMIT * 2 + 1
+    results = await asyncio.wait_for(
+        asyncio.gather(*(git_service._run(["git", "status"], ".") for _ in range(runs))),
+        timeout=5,
+    )
+
+    assert [rc for rc, _, _ in results] == [128] * runs
+    # The launcher and what it started, not the launcher alone.
+    assert killed.count(4242) == runs and killed.count(4243) == runs
+    assert snapshot_threads and threading.main_thread() not in snapshot_threads
+    gave_up = [r.getMessage() for r in caplog.records if "stopped waiting" in r.getMessage()]
+    assert len(gave_up) == runs and "pid 4242" in gave_up[0] and "[4243]" in gave_up[0]
+
+
+@pytest.mark.asyncio
+async def test_a_descendant_whose_pid_was_reused_is_not_killed(monkeypatch) -> None:
+    """Between the snapshot and the kill the descendant can exit and its pid
+    go to an unrelated process (Windows reuses pids fast): only a pid whose
+    identity (pid + start time) still matches the snapshot is killed."""
+    killed: list[int] = []
+    identities = {4243: "git-start", 4244: "sh-start"}
+
+    class HungProc:
+        pid = 4242
+        returncode = None
+
+        async def communicate(self, *_a):
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            return -9
+
+        def kill(self):
+            # The root dies; 4244 exits and its pid now belongs to another process.
+            killed.append(self.pid)
+            identities[4244] = "someone-else"
+
+    async def fake_exec(*_a, **_k):
+        return HungProc()
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "descendants", lambda pid: [4243, 4244])
+    # 4242 is a made-up pid: never signal, contain or resume what it may name here.
+    monkeypatch.setattr(host_shell.process_tree, "end_own_group", lambda pid: None)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
+    monkeypatch.setattr(host_shell.process_tree, "identity", lambda pid: identities.get(pid, ""))
+    monkeypatch.setattr(
+        host_shell.process_tree, "kill", lambda pid, *, force: killed.append(pid)
+    )
+
+    rc, _, _ = await run_allowlisted_text(["git", "status"], timeout=0.05)
+
+    assert rc == 128
+    assert killed == [4242, 4243]
+
+
+def _hung_process(killed: list[int]):
+    class HungProc:
+        pid = 4242
+        returncode = None
+
+        async def communicate(self, *_a):
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            return -9
+
+        def kill(self):
+            killed.append(self.pid)
+
+    return HungProc()
+
+
+@pytest.mark.asyncio
+async def test_a_run_cancelled_during_the_tree_read_still_kills_the_root(monkeypatch) -> None:
+    """The snapshot is awaited in front of the kill; a caller cancelled while
+    it runs must not leave the hung root alive."""
+    import threading
+
+    killed: list[int] = []
+    reading = threading.Event()
+    release = threading.Event()
+
+    def slow_descendants(pid: int) -> list[int]:
+        reading.set()
+        release.wait(5)
+        return []
+
+    async def fake_exec(*_a, **_k):
+        return _hung_process(killed)
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "descendants", slow_descendants)
+    # 4242 is a made-up pid: never signal, contain or resume what it may name here.
+    monkeypatch.setattr(host_shell.process_tree, "end_own_group", lambda pid: None)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
+
+    task = asyncio.ensure_future(run_allowlisted_text(["git", "status"], timeout=0.05))
+    try:
+        for _ in range(500):
+            if reading.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert reading.is_set()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert killed == [4242]
+    finally:
+        release.set()
+
+
+@pytest.mark.asyncio
+async def test_a_tree_read_that_raises_still_kills_the_root_and_returns_the_envelope(
+    monkeypatch, caplog
+) -> None:
+    """Not only OSError: during shutdown `to_thread` itself raises RuntimeError.
+    The root is still killed, the failure is logged, and the caller gets the
+    timeout envelope rather than an exception."""
+    killed: list[int] = []
+
+    def broken_descendants(pid: int) -> list[int]:
+        raise RuntimeError("cannot schedule new futures after shutdown")
+
+    async def fake_exec(*_a, **_k):
+        return _hung_process(killed)
+
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "descendants", broken_descendants)
+    # 4242 is a made-up pid: never signal, contain or resume what it may name here.
+    monkeypatch.setattr(host_shell.process_tree, "end_own_group", lambda pid: None)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
+    caplog.set_level("WARNING", logger="agent_team_backend.host_shell")
+
+    rc, _, stderr = await run_allowlisted_text(["git", "status"], timeout=0.05)
+
+    assert (rc, killed) == (128, [4242]) and "timed out" in stderr
+    assert any("could not read the process tree of pid 4242" in r.getMessage() for r in caplog.records)

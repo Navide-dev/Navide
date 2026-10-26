@@ -34,10 +34,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from watchdog.events import FileSystemEvent, FileSystemEventHandler
+from watchdog.events import (
+    EVENT_TYPE_CREATED,
+    EVENT_TYPE_DELETED,
+    EVENT_TYPE_MODIFIED,
+    EVENT_TYPE_MOVED,
+    FileSystemEvent,
+    FileSystemEventHandler,
+)
 
 from .fs_observer import Observer
 from .gitignore import GitIgnore
@@ -76,6 +84,13 @@ _IGNORE_GIT_FIRST_LEVEL = frozenset({"objects", "logs", "hooks", "lfs"})
 # still reports changes normally.
 _IGNORE_STORAGE_SUBDIRS = frozenset({"framework", "logs"})
 
+# The watchdog event types that mean something on disk changed. `closed`
+# (close after write) is left out: it always follows a `modified` for the same
+# write, and inotify queues a directory `modified` beside it.
+_CHANGE_EVENT_TYPES = frozenset({
+    EVENT_TYPE_CREATED, EVENT_TYPE_DELETED, EVENT_TYPE_MODIFIED, EVENT_TYPE_MOVED,
+})
+
 # Directories monitored for plan and report documents.
 PLAN_DOC_DIRS = frozenset({
     (".agent-team", "plans"),
@@ -108,9 +123,13 @@ class _RepoHandler(FileSystemEventHandler):
         self._ignores = ignores
 
     def on_any_event(self, event: FileSystemEvent) -> None:
-        # `closed`/`opened` events carry no state change; only react to actual
-        # create/delete/modify/move.
-        if event.event_type in ("opened", "closed"):
+        # Only react to actual create/delete/modify/move. An allowlist, not a
+        # list of what to skip: on Linux, inotify also reports reads (`opened`,
+        # `closed_no_write`), and reading .gitignore to judge one of those
+        # produced two more, so the handler fed itself and the queue grew with
+        # every file any process read (#622). A type added by a later watchdog
+        # must not reopen that.
+        if event.event_type not in _CHANGE_EVENT_TYPES:
             return
         src = str(event.src_path)
         dest = str(event.dest_path) if getattr(event, "dest_path", "") else ""
@@ -119,8 +138,9 @@ class _RepoHandler(FileSystemEventHandler):
         # first write after someone ignores a directory is still let through,
         # and so is every write until something else evicted the entry.
         # Resolved once and passed down: `Path.resolve()` walks the path on
-        # disk, and both the ignore-rule check and the relevance check need it.
-        # Calling it in each doubled the syscalls this handler makes per event.
+        # disk, and the ignore-rule, plan-document, relevance and changed-path
+        # checks all need it. Resolving in each multiplied the syscalls this
+        # handler makes per event on watchdog's single dispatch thread.
         src_parts = self._parts(src)
         dest_parts = self._parts(dest) if dest else ()
         self._refresh_ignore_rules(src_parts)
@@ -129,21 +149,22 @@ class _RepoHandler(FileSystemEventHandler):
         # Plan documents live under .agent-team/, which the git filter ignores
         # wholesale — check them on a separate channel before that filter.
         if self._on_plans_dirty is not None and (
-            self._is_plan_doc(src) or (dest and self._is_plan_doc(dest))
+            self._is_plan_doc(src_parts) or (dest and self._is_plan_doc(dest_parts))
         ):
             self._on_plans_dirty(self._ws_path)
         src_ok = self._is_relevant(src_parts, event.is_directory)
         dest_ok = bool(dest) and self._is_relevant(dest_parts, event.is_directory)
         if src_ok or dest_ok:
             self._on_dirty(
-                self._ws_path, self._changed_paths(event, src, dest, src_ok, dest_ok)
+                self._ws_path,
+                self._changed_paths(event, src_parts, dest_parts, src_ok, dest_ok),
             )
 
     def _changed_paths(
         self,
         event: FileSystemEvent,
-        src: str,
-        dest: str,
+        src: str | tuple[str, ...],
+        dest: str | tuple[str, ...],
         src_ok: bool,
         dest_ok: bool,
     ) -> list[tuple[str, str]]:
@@ -174,18 +195,17 @@ class _RepoHandler(FileSystemEventHandler):
                 out.append((rel, change))
         return out
 
-    def _rel(self, src: str) -> str:
+    def _rel(self, src: str | tuple[str, ...]) -> str:
         """`src` as a path relative to the repo root, or "" if it is outside.
 
         Posix form: it goes on the wire as a preview `rel_path`, which the
         other writers (`preview.record`, the transcript ingest) already emit
         with forward slashes, and the renderer matches on the string."""
-        try:
-            return Path(src).resolve().relative_to(self._root).as_posix()
-        except (ValueError, OSError):
-            return ""
+        # Accepts the `parts` tuple `on_any_event` already resolved, or a raw path.
+        parts = src if isinstance(src, tuple) else self._parts(src)
+        return "/".join(parts)
 
-    def _is_plan_doc(self, src: str) -> bool:
+    def _is_plan_doc(self, src: str | tuple[str, ...]) -> bool:
         """True for a user-facing plan or report document (HTML or markdown) directly
         under one of the supported plan/report directories — infra files (`_` prefix),
         hidden files and `.history/` snapshots are excluded, so snapshot writes
@@ -196,11 +216,8 @@ class _RepoHandler(FileSystemEventHandler):
         push `plans.changed` too, or the list silently stops refreshing for them.
         Noise segments are still pruned — a plan-shaped path inside
         `node_modules` is a dependency's document, not the user's."""
-        try:
-            rel = Path(src).resolve().relative_to(self._root)
-        except (ValueError, OSError):
-            return False
-        parts = rel.parts
+        # Accepts the `parts` tuple `on_any_event` already resolved, or a raw path.
+        parts = src if isinstance(src, tuple) else self._parts(src)
         if len(parts) < 3:
             return False
         if (parts[-3], parts[-2]) not in PLAN_DOC_DIRS:
@@ -297,6 +314,12 @@ class GitWatcher:
         # so their failures reach the log.
         self._change_tasks: set[asyncio.Task] = set()
         self._pending_plans: dict[str, asyncio.TimerHandle] = {}
+        # Dirty marks from the observer thread waiting for the loop: ws_path ->
+        # the pairs those events touched. One drain is queued per burst, not
+        # one loop callback per event.
+        self._inbox: dict[str, list[tuple[str, str]]] = {}
+        self._inbox_lock = threading.Lock()
+        self._drain_queued = False
         self._started = False
 
     def start(self) -> None:
@@ -304,6 +327,11 @@ class GitWatcher:
             return
         self._started = True
         self._loop = asyncio.get_event_loop()
+        # A drain queued on a loop that closed before running it would leave
+        # the flag set, and a restarted watcher would then never drain again.
+        with self._inbox_lock:
+            self._inbox = {}
+            self._drain_queued = False
         self._observer = Observer()
         self._observer.start()
         log.info("GitWatcher started (debounce %.0fms)", self._debounce_s * 1000)
@@ -361,14 +389,32 @@ class GitWatcher:
     def _mark_dirty_threadsafe(
         self, ws_path: str, paths: list[tuple[str, str]]
     ) -> None:
-        """Called from the watchdog observer thread → hop to the loop thread."""
+        """Called from the watchdog observer thread → hop to the loop thread.
+
+        Coalesced: a burst (a checkout, a build) used to queue one loop
+        callback per event, each cancelling and re-arming the debounce timer.
+        Now the marks collect here and the loop is woken once per burst."""
         loop = self._loop
         if loop is None or loop.is_closed():
             return
+        with self._inbox_lock:
+            self._inbox.setdefault(ws_path, []).extend(paths)
+            if self._drain_queued:
+                return
+            self._drain_queued = True
         try:
-            loop.call_soon_threadsafe(self._schedule_fire, ws_path, paths)
+            loop.call_soon_threadsafe(self._drain_inbox)
         except RuntimeError:
-            pass  # loop closed mid-flight
+            # Loop closed mid-flight.
+            with self._inbox_lock:
+                self._drain_queued = False
+
+    def _drain_inbox(self) -> None:
+        with self._inbox_lock:
+            inbox, self._inbox = self._inbox, {}
+            self._drain_queued = False
+        for ws_path, paths in inbox.items():
+            self._schedule_fire(ws_path, paths)
 
     def _schedule_fire(self, ws_path: str, paths: list[tuple[str, str]]) -> None:
         loop = self._loop

@@ -218,4 +218,34 @@ describe('useStages', () => {
     expect(seen).toEqual([''])
     scope.stop()
   })
+
+  it('drops a load made under an active id that has since changed (#417)', async () => {
+    // The first load goes out under the 'default' placeholder before
+    // pipelines.list answers; if it lands after the reload for the real id,
+    // it must not overwrite that with another pipeline's stages.
+    const mock = createMockBackend('connected')
+    let activeId = 'default'
+    const pending: Array<(v: unknown) => void> = []
+    mock.backend.send = vi.fn(
+      (_type: string, payload: Record<string, unknown> = {}) =>
+        new Promise((resolve) => {
+          const pid = String(payload.pipeline_id)
+          pending.push(() =>
+            resolve({
+              ok: true,
+              payload: { stages: [rawStage('01', pid)], pipeline_id: pid, path: '' },
+            }),
+          )
+        }),
+    ) as unknown as typeof mock.backend.send
+    const { result, scope } = withScope(() => useStages(mock.backend, () => activeId))
+    activeId = 'pl-2'
+    const reload = result.refresh('pl-2')
+    pending[1](null)
+    await reload
+    pending[0](null)
+    await flush()
+    expect(result.stages.value.map((s) => s.shortTitle)).toEqual(['pl-2'])
+    scope.stop()
+  })
 })

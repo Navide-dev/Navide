@@ -12,7 +12,7 @@
 //     pipeline id, so "restore the builtin pipelines" cannot exist here);
 //  4. the row is reachable and operable from the keyboard.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, effectScope, nextTick, type EffectScope } from 'vue'
@@ -292,7 +292,7 @@ describe('PipelineManagerModal — list view redesign', () => {
 
   // ── i18n bookkeeping for the keys this redesign added ──────────────────────
 
-  it('ships every new key in both locales with matching placeholders', () => {
+  it('ships every new key in every locale with matching placeholders', () => {
     const dir = 'packages/plugin-ui/src/foundation/i18n/locales'
     const read = (f: string) =>
       JSON.parse(readFileSync(resolve(process.cwd(), dir, f), 'utf8')) as Record<
@@ -300,7 +300,8 @@ describe('PipelineManagerModal — list view redesign', () => {
         Record<string, string>
       >
     const en = read('en-US.json')
-    const zh = read('zh-TW.json')
+    const others = readdirSync(resolve(process.cwd(), dir))
+      .filter((f) => f.endsWith('.json') && f !== 'en-US.json')
     const ADDED = [
       'action.open-pipeline',
       'action.open-pipeline-named',
@@ -318,14 +319,18 @@ describe('PipelineManagerModal — list view redesign', () => {
       'hint.pipelines-unreadable',
       'hint.pipelines-empty',
     ]
-    const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort()
+    // A set, not a list: en-US plurals repeat {count} in every case.
+    const placeholders = (s: string) => [...new Set([...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].sort()
     for (const key of ADDED) {
       const [group, leaf] = key.split('.') as [string, string]
       expect(en[group]?.[leaf], `en-US is missing ${key}`).toBeTypeOf('string')
-      expect(zh[group]?.[leaf], `zh-TW is missing ${key}`).toBeTypeOf('string')
-      expect(placeholders(zh[group][leaf]), `${key} placeholders`).toEqual(
-        placeholders(en[group][leaf])
-      )
+      for (const file of others) {
+        const other = read(file)
+        expect(other[group]?.[leaf], `${file} is missing ${key}`).toBeTypeOf('string')
+        expect(placeholders(other[group][leaf]), `${file} ${key} placeholders`).toEqual(
+          placeholders(en[group][leaf])
+        )
+      }
     }
     // The old empty-state key is still used by ControlPane, so its copy is
     // untouched — the redesign added keys rather than repurposing that one.

@@ -148,6 +148,17 @@
   tr:last-child td { border-bottom: none; }
 
   .note { color: var(--muted); font-size: 13.5px; }
+
+  /* Click-to-enlarge image: a CSS :target lightbox, no JS. Markup:
+     <div class="zoom" id="z-shot1"><a href="#z-shot1"><img src="data:..." alt="..."></a><a class="zoom-close" href="#_">×</a></div>
+     No ancestor may set transform / filter / contain / will-change: they
+     re-anchor position:fixed to that ancestor and push the image off-screen.
+     The enlarged image is width-led; a tall screenshot scrolls in the overlay. */
+  .zoom img { max-width: 100%; cursor: zoom-in; }
+  .zoom .zoom-close { display: none; }
+  .zoom:target { position: fixed; inset: 0; z-index: 50; overflow: auto; padding: 24px 2vw; text-align: center; background: rgba(0, 0, 0, 0.85); }
+  .zoom:target img { max-width: min(96vw, 1600px); height: auto; max-height: none; cursor: default; }
+  .zoom:target .zoom-close { display: block; position: fixed; top: 12px; right: 18px; color: #fff; font-size: 28px; text-decoration: none; }
 </style>
 </head>
 <body>

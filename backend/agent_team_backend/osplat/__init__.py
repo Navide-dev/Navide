@@ -122,3 +122,10 @@ folder_birth_time = {
     "win32": folder_birth.from_stat,
 }[platform_id]
 __all__ += ["folder_birth_time"]
+
+#: Whether this platform's default volumes treat two spellings differing only
+#: in case as one path (APFS/HFS+ and NTFS do, Linux file systems do not). For
+#: comparing paths that can no longer be stat'ed; a path that exists is better
+#: compared by its (device, inode).
+paths_ignore_case: bool = {"darwin": True, "linux": False, "win32": True}[platform_id]
+__all__ += ["paths_ignore_case"]

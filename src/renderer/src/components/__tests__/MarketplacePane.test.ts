@@ -10,6 +10,7 @@ import { usePluginUpdates } from '../../composables/usePluginUpdates'
 import MarketplacePane from '../MarketplacePane.vue'
 import MarketplaceIcon from '../MarketplaceIcon.vue'
 import ExtensionsPane from '../ExtensionsPane.vue'
+import { computeDisclosure } from '../../../../shared/pluginDisclosure'
 
 function mountMarketplace() {
   return mount(MarketplacePane, { global: { plugins: [i18n] } })
@@ -372,7 +373,9 @@ describe('MarketplacePane', () => {
     await flushPromises()
 
     const dialog = wrapper.get('.ext-trust-dialog')
-    expect(dialog.get('.ext-backend-risk').text()).toContain('native backend executable')
+    // 0.2.31: confirming is the backend consent, so the warning says so.
+    expect(dialog.get('.ext-backend-risk').text()).toContain('native backend program')
+    expect(dialog.get('.ext-backend-risk').text()).toContain('Navide will not ask again')
     expect(dialog.text()).not.toContain('requests sensitive capabilities')
     expect(api.commitInstall).not.toHaveBeenCalled()
 
@@ -564,6 +567,102 @@ describe('MarketplacePane', () => {
     useNotify().resolveDialog(true)
     await flushPromises()
     expect(api.remove).toHaveBeenCalledWith('acme.demo')
+  })
+
+  it('asks whether to keep native backend data, defaulting to delete, only when data exists', async () => {
+    const nativeBackendData = vi
+      .fn()
+      .mockResolvedValue({ exists: true, bytes: 2048, path: '/userData/plugin-native-backends/data/acme.demo' })
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      nativeBackendData,
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    const view = wrapper.get('[data-detail-id="acme.demo"]')
+
+    // Data exists: the dialog discloses size and location and offers "keep",
+    // unchecked, so confirming deletes the data.
+    await view.get('.ext-uninstall').trigger('click')
+    await flushPromises()
+    expect(nativeBackendData).toHaveBeenCalledWith('acme.demo')
+    const dialog = useNotify().dialog.value
+    expect(dialog?.kind).toBe('confirm')
+    expect(dialog?.message).toContain('2.0 KB')
+    expect(dialog?.detail).toBe('/userData/plugin-native-backends/data/acme.demo')
+    expect(dialog?.checkboxLabel).toBeTruthy()
+    expect(useNotify().dialogCheckbox.value).toBe(false)
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenLastCalledWith('acme.demo', 'delete')
+  })
+
+  it('keeps native backend data when the user ticks keep in the remove dialog', async () => {
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      nativeBackendData: vi.fn().mockResolvedValue({ exists: true, bytes: 10, path: '/d/acme.demo' }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-detail-id="acme.demo"] .ext-uninstall').trigger('click')
+    await flushPromises()
+    useNotify().dialogCheckbox.value = true
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenCalledWith('acme.demo', 'keep')
+  })
+
+  it('offers no Uninstall on the detail page of an installed built-in Navide plugin', async () => {
+    const item = {
+      namespace: 'navide', name: 'git', identity: 'navide.git', display_name: 'Git', description: null,
+      categories: [], latest_version: '2.0.0', download_count: 0, rating_average: 0, featured: false,
+    }
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'navide.git', requires: [], sensitive: [], packageVersion: '2.0.0', provenance: 'official-registry' },
+      ]),
+      marketplaceSearch: vi.fn().mockResolvedValue({ items: [item], total: 1, offset: 0, limit: 20 }),
+      marketplaceDetail: vi.fn().mockResolvedValue(
+        demoDetail({ namespace: 'navide', name: 'git', identity: 'navide.git', publisher: 'navide' }),
+      ),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="navide.git"]').trigger('click')
+    await flushPromises()
+    const detail = wrapper.get('[data-detail-id="navide.git"]')
+    expect(detail.find('.mkt-installed').exists()).toBe(true)
+    expect(detail.find('.ext-uninstall').exists()).toBe(false)
+    expect(api.remove).not.toHaveBeenCalled()
+  })
+
+  it('removes without a data choice when the plugin has no native backend data', async () => {
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      nativeBackendData: vi.fn().mockResolvedValue({ exists: false, bytes: 0, path: '/x' }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-detail-id="acme.demo"] .ext-uninstall').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.checkboxLabel).toBeUndefined()
+    expect(useNotify().dialog.value?.detail).toBeUndefined()
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenCalledWith('acme.demo')
+    expect(api.remove.mock.calls[0]).toHaveLength(1)
   })
 
   it('shows the detail error and a README fallback', async () => {
@@ -1166,7 +1265,7 @@ describe('MarketplacePane', () => {
     // The stable latest is still installable here: no platform warning, and
     // the button says the candidate is a pre-release (review #15).
     expect(wrapper.find('.mkt-unavailable').exists()).toBe(false)
-    expect(wrapper.get('.mkt-actions .ext-install').text()).toBe('Install 2.5.0-beta.1 (pre-release)')
+    expect(wrapper.get('.mkt-actions .ext-install').text()).toBe('Install 2.5.0-beta.1 (Pre-release)')
     // The header keeps the stable version and notes the pre-release beside it.
     expect(wrapper.get('.mkt-meta').text()).toContain('Version 2.4.0')
     expect(wrapper.get('.mkt-prerelease-note').text()).toBe('pre-release 2.5.0-beta.1 available')
@@ -1340,7 +1439,7 @@ describe('MarketplacePane', () => {
       expect(members.map((m) => m.classes().includes('mkt-pack-member--skipped'))).toEqual([false, false, false, true])
       // The pack itself grants nothing; it does not say "declares no permissions".
       expect(wrapper!.get('.mkt-no-permissions').text()).toContain('This pack grants no permissions itself')
-      expect(wrapper!.get('.mkt-actions .mkt-pack-install').text()).toBe('Install pack (4)')
+      expect(wrapper!.get('.mkt-actions .mkt-pack-install').text()).toBe('Install Pack (4)')
       // A pack has no Install of its own.
       expect(wrapper!.find('.mkt-actions .ext-install').exists()).toBe(false)
     })
@@ -1361,7 +1460,7 @@ describe('MarketplacePane', () => {
       }
       expect(wrapper!.get('.pack-member--summary[data-member="acme.lint"] .pack-member-caps').findAll('.pack-cap--sensitive').map((c) => c.text())).toEqual(['fs · sensitive', 'shell · sensitive'])
       // Summary: no member has been prepared or installed yet, and there is no accept-all.
-      expect(wrapper!.find('.pack-review').text()).toBe('Review 3 Navide plugins')
+      expect(wrapper!.find('.pack-review').text()).toBe('Review 3 Navide Plugins')
       // The title counts every member and the ones to review, like the detail page.
       const total = wrapper!.findAll('.pack-member--summary').length
       expect(wrapper!.get('#pack-dialog-title').text()).toBe(`Install “Demo Pack”: ${total} Navide plugins, 3 to review`)
@@ -1947,5 +2046,393 @@ describe('MarketplacePane', () => {
       await flushPromises()
       expect(wrapper.find('.mkt-empty .mkt-sigil').exists()).toBe(true)
     })
+  })
+})
+
+// Plan B D1 (review L4 on #360): the list card shows the template summary and
+// the risk level, from listing data the Host has kept for that item, and says
+// the data is unverified.
+describe('MarketplacePane list card disclosure', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('shows the summary and risk level when the item carries a disclosure, unverified', async () => {
+    const row = (name: string, extra: Record<string, unknown>) => ({
+      namespace: 'acme', name, identity: `acme.${name}`, display_name: name, description: null, categories: [],
+      latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false, ...extra,
+    })
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [
+          row('shell', {
+            disclosure: computeDisclosure({ schemaVersion: 2, id: 'acme.shell', version: '1.0.0', publisher: 'acme', permissions: { shell: 'allowlist' } } as never),
+            scan: null,
+          }),
+          row('plain', { disclosure: null, scan: null }),
+        ],
+        total: 2, offset: 0, limit: 20,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+
+    const card = wrapper.get('[data-id="acme.shell"] .mkt-card-disclosure')
+    expect(card.get('.nv-disclosure-summary').text()).toBe('Runs commands: gh, git, glab; Can reach remote hosts through those commands')
+    expect(card.get('.nv-disclosure-level').classes()).toContain('nv-disclosure-level--high')
+    expect(card.attributes('title')).toContain('not yet verified')
+    expect(wrapper.find('[data-id="acme.plain"] .mkt-card-disclosure').exists()).toBe(false)
+  })
+})
+
+// D-f: the list card never reads lower than what some platform installs.
+describe('MarketplacePane list card risk across platforms', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('shows the highest platform level and says it varies by platform', async () => {
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [{
+          namespace: 'acme', name: 'multi', identity: 'acme.multi', display_name: 'multi', description: null, categories: [],
+          latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false,
+          disclosure: computeDisclosure({ schemaVersion: 2, id: 'acme.multi', version: '1.0.0', publisher: 'acme', permissions: { system: ['ui'] } } as never),
+          scan: null,
+          listRisk: { level: 'high', variesByPlatform: true },
+        }],
+        total: 1, offset: 0, limit: 20,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+
+    const level = wrapper.get('[data-id="acme.multi"] .nv-disclosure-level')
+    expect(level.classes()).toContain('nv-disclosure-level--high')
+    expect(level.text()).toContain('High')
+    expect(level.text()).toContain('varies by platform')
+  })
+})
+
+// Review MED-2 on #396: Registry text (from the publisher's manifest) cannot
+// pass for another plugin with a bidi override or a zero-width character.
+describe('MarketplacePane invisible characters', () => {
+  let wrapper: VueWrapper | undefined
+
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  const listItem = {
+    namespace: 'acme', name: 'demo', identity: 'acme.demo', display_name: 'Navide\u202e Git', description: 'De\u200bmo',
+    categories: ['to\u200bols'], latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: true, license: 'MI\u202eT',
+  }
+
+  it('spells them out on the list cards and the featured shelf', async () => {
+    const card = { ...listItem, name: 'card', identity: 'acme.card', featured: false }
+    mockPlugins({ marketplaceSearch: vi.fn().mockResolvedValue({ items: [listItem, card], total: 2, offset: 0, limit: 20 }) })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    expect(wrapper.get('.mkt-featured-name').text()).toBe('Navide\\u{202e} Git')
+    expect(wrapper.get('.mkt-featured-desc').text()).toBe('De\\u{200b}mo')
+    const row = wrapper.get('[data-id="acme.card"]')
+    expect(row.get('.ext-id').text()).toBe('Navide\\u{202e} Git')
+    expect(row.get('.mkt-card-desc').text()).toBe('De\\u{200b}mo')
+    expect(row.text()).toContain('MI\\u{202e}T')
+    expect(row.text()).toContain('acme.card')
+    expect(wrapper.text()).toContain('to\\u{200b}ols')
+    expect(wrapper.text()).not.toMatch(/[\u200b\u202e]/)
+  })
+
+  it('spells them out on the detail page: name, publisher, description, license, categories', async () => {
+    mockPlugins({
+      marketplaceDetail: vi.fn().mockResolvedValue(demoDetail({
+        display_name: 'Navide\u202e Git', publisher: 'ac\u200bme', description: 'De\u200bmo', license: 'MI\u202eT', categories: ['to\u200bols'],
+        readme: 'Hello',
+      })),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    const view = wrapper.get('[data-detail-id="acme.demo"]')
+    expect(view.get('h3').text()).toBe('Navide\\u{202e} Git')
+    expect(view.text()).toContain('ac\\u{200b}me')
+    expect(view.get('.mkt-desc').text()).toBe('De\\u{200b}mo')
+    expect(view.text()).toContain('MI\\u{202e}T')
+    expect(view.text()).toContain('to\\u{200b}ols')
+    expect(view.text()).not.toMatch(/[\u200b\u202e]/)
+  })
+
+  it('spells them out in the install consent: id, version and publisher', async () => {
+    mockPlugins({
+      prepareInstall: vi.fn().mockResolvedValue({
+        id: 'acme.demo', version: '1.0.0\u200b', publisherId: 'ac\u202eme', trustTier: 'signed-verified', sensitive: ['fs'],
+        containsBackendExecutable: false, requiresConfirmation: true, requiresPublisherTrust: true, requiresRiskConfirmation: true,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('.ext-search button').trigger('click')
+    await flushPromises()
+    await wrapper.get('.ext-install').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.get('.ext-trust-dialog')
+    expect(dialog.get('.nv-dialog-subtitle').text()).toBe('acme.demo · 1.0.0\\u{200b}')
+    expect(dialog.get('.ext-publisher-risk').text()).toContain('ac\\u{202e}me')
+    expect(dialog.text()).not.toMatch(/[\u200b\u202e]/)
+  })
+
+  it('spells them out for pack members on the detail page and in the pack dialog', async () => {
+    const member = (id: string, extra: Record<string, unknown> = {}) => ({
+      id, status: 'ready', display_name: null, version: '1.0.0', capabilities: [], sensitive_capabilities: [], min_navide_version: null, ...extra,
+    })
+    mockPlugins({
+      marketplaceDetail: vi.fn().mockResolvedValue(demoDetail({
+        extension_pack: ['acme.hello'], versions: [{ ...demoDetail().versions[0], capabilities: [], sensitive_capabilities: [] }],
+      })),
+      marketplacePackMembers: vi.fn().mockResolvedValue([member('acme.hello', { display_name: 'He\u200bllo' })]),
+      preparePack: vi.fn().mockResolvedValue({
+        id: 'acme.demo', version: '1.0.0', display_name: 'Demo\u202e Pack', trustTier: 'signed-verified', publisherId: 'acme',
+        members: [member('acme.hello', { display_name: 'He\u200bllo' })],
+      }),
+      prepareInstall: vi.fn().mockResolvedValue({
+        id: 'acme.hello', version: '1.0.0', trustTier: 'signed-verified', sensitive: [], containsBackendExecutable: false,
+        requiresConfirmation: false, publisherId: 'hello\u202e-co', requiresPublisherTrust: true, requiresRiskConfirmation: false,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.mkt-pack-member-name').text()).toBe('He\\u{200b}llo')
+    await wrapper.get('.mkt-pack-install').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('#pack-dialog-title').text()).toContain('Demo\\u{202e} Pack')
+    expect(wrapper.get('.pack-member--summary .pack-member-name').text()).toBe('He\\u{200b}llo')
+    await wrapper.get('.pack-review').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.pack-publisher-risk').text()).toContain('hello\\u{202e}-co')
+    expect(wrapper.get('.pack-dialog').text()).not.toMatch(/[\u200b\u202e]/)
+  })
+})
+
+// Card K2: the source badge on signed search results and the detail page, and
+// the fixed source row on the detail page's disclosure card.
+describe('MarketplacePane source badge (K2)', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('marks only Registry-signed results as reviewed', async () => {
+    const row = (name: string, extra: Record<string, unknown>) => ({
+      namespace: 'acme', name, identity: `acme.${name}`, display_name: name, description: null, categories: [],
+      latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false, ...extra,
+    })
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [row('signed', { trust_tier: 'signed-verified' }), row('unsigned', { trust_tier: 'unsigned' })],
+        total: 2, offset: 0, limit: 20,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.signed"] .nv-source-badge').attributes('data-source')).toBe('marketplace')
+    expect(wrapper.find('[data-id="acme.unsigned"] .nv-source-badge').exists()).toBe(false)
+  })
+
+  it('shows the source badge and the source row on the detail page, pre-release included', async () => {
+    mockPlugins()
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.mkt-detail-title .nv-source-badge').attributes('data-source')).toBe('marketplace')
+    expect(wrapper.get('.mkt-disclosure .nv-source-row').attributes('data-source')).toBe('marketplace')
+    wrapper.unmount()
+
+    const versions = demoDetail().versions.map((v) => ({ ...v, channel: 'pre-release' }))
+    mockPlugins({ marketplaceDetail: vi.fn().mockResolvedValue(demoDetail({ versions })) })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.mkt-detail-title .nv-source-badge').attributes('data-source')).toBe('prerelease')
+  })
+})
+
+// Card K5: install a pre-release from the detail page of a Navide plugin that
+// is not installed yet, and mark pre-releases on results and the detail page.
+describe('MarketplacePane pre-release install (K5)', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  const versionRows = (rows: Array<{ version: string; channel: 'stable' | 'pre-release' }>) =>
+    rows.map((row) => ({
+      published_at: '2026-10-01T00:00:00Z',
+      target: 'universal',
+      yanked: false,
+      trust_tier: 'signed-verified',
+      capabilities: [],
+      sensitive_capabilities: [],
+      download_count: 0,
+      installable: true,
+      ...row,
+    }))
+
+  it('installs a Navide plugin that only has a pre-release from its detail page', async () => {
+    const versions = versionRows([{ version: '0.1.0-alpha.1', channel: 'pre-release' }])
+    const offDetail = { latest_version: '0.1.0-alpha.1', latest_prerelease_version: '0.1.0-alpha.1', latest_installable_version: null, gets_prereleases: false, versions }
+    const api = mockPlugins({
+      marketplaceDetail: vi
+        .fn()
+        .mockResolvedValueOnce(demoDetail(offDetail))
+        .mockResolvedValue(demoDetail({ ...offDetail, latest_installable_version: '0.1.0-alpha.1', gets_prereleases: true })),
+      setPrerelease: vi.fn().mockResolvedValue({ id: 'acme.demo', enabled: true }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    const button = wrapper.get('.mkt-actions .mkt-install-prerelease')
+    expect(button.text()).toBe('Install 0.1.0-alpha.1 (Pre-release)')
+    await button.trigger('click')
+    await flushPromises()
+    expect(api.setPrerelease).toHaveBeenCalledTimes(1)
+    expect(api.setPrerelease).toHaveBeenCalledWith('acme.demo', true)
+    expect(api.prepareInstall).toHaveBeenCalledWith({ namespace: 'acme', name: 'demo', version: '0.1.0-alpha.1' })
+  })
+
+  it('installs the stable version by default and the pre-release only on request, turning on only this switch', async () => {
+    const versions = versionRows([
+      { version: '2.5.0-beta.1', channel: 'pre-release' },
+      { version: '2.4.0', channel: 'stable' },
+    ])
+    const offDetail = { latest_version: '2.4.0', latest_prerelease_version: '2.5.0-beta.1', latest_installable_version: '2.4.0', gets_prereleases: false, versions }
+    const api = mockPlugins({ marketplaceDetail: vi.fn().mockResolvedValue(demoDetail(offDetail)) })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    // Default: Install takes the stable version and leaves the switch alone.
+    expect(wrapper.get('.mkt-actions .ext-install').text()).toBe('Install')
+    await wrapper.get('.mkt-actions .ext-install').trigger('click')
+    await flushPromises()
+    expect(api.prepareInstall).toHaveBeenLastCalledWith({ namespace: 'acme', name: 'demo', version: '2.4.0' })
+    expect(api.setPrerelease).not.toHaveBeenCalled()
+    wrapper.unmount()
+
+    const onRequest = mockPlugins({
+      marketplaceDetail: vi
+        .fn()
+        .mockResolvedValueOnce(demoDetail(offDetail))
+        .mockResolvedValue(demoDetail({ ...offDetail, latest_installable_version: '2.5.0-beta.1', gets_prereleases: true })),
+      setPrerelease: vi.fn().mockResolvedValue({ id: 'acme.demo', enabled: true }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.mkt-actions .mkt-install-prerelease').trigger('click')
+    await flushPromises()
+    // Only this Navide plugin's switch is turned on, and only on.
+    expect(onRequest.setPrerelease.mock.calls).toEqual([['acme.demo', true]])
+    expect(onRequest.prepareInstall).toHaveBeenCalledWith({ namespace: 'acme', name: 'demo', version: '2.5.0-beta.1' })
+    expect((wrapper.get('.mkt-prerelease-toggle input').element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('shows the Host source of a pre-release install in the trust dialog', async () => {
+    const versions = versionRows([{ version: '0.1.0-alpha.1', channel: 'pre-release' }])
+    const offDetail = { latest_version: '0.1.0-alpha.1', latest_prerelease_version: '0.1.0-alpha.1', latest_installable_version: null, gets_prereleases: false, versions }
+    mockPlugins({
+      marketplaceDetail: vi
+        .fn()
+        .mockResolvedValueOnce(demoDetail(offDetail))
+        .mockResolvedValue(demoDetail({ ...offDetail, latest_installable_version: '0.1.0-alpha.1', gets_prereleases: true })),
+      setPrerelease: vi.fn().mockResolvedValue({ id: 'acme.demo', enabled: true }),
+      // The source K1's prepareInstall derives from the signed envelope channel.
+      prepareInstall: vi.fn().mockResolvedValue({
+        id: 'acme.demo', version: '0.1.0-alpha.1', trustTier: 'signed-verified', sensitive: [], containsBackendExecutable: false,
+        requiresConfirmation: true, requiresRiskConfirmation: true, publisherId: 'acme', source: 'prerelease',
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.mkt-actions .mkt-install-prerelease').trigger('click')
+    await flushPromises()
+    const row = wrapper.get('.ext-trust-source')
+    expect(row.attributes('data-source')).toBe('prerelease')
+    expect(row.text()).toBe('Source and review Pre-release (reviewed)')
+  })
+
+  it('does not install when turning the switch on fails', async () => {
+    const versions = versionRows([{ version: '0.1.0-alpha.1', channel: 'pre-release' }])
+    const api = mockPlugins({
+      marketplaceDetail: vi.fn().mockResolvedValue(
+        demoDetail({ latest_version: '0.1.0-alpha.1', latest_prerelease_version: '0.1.0-alpha.1', latest_installable_version: null, gets_prereleases: false, versions })
+      ),
+      setPrerelease: vi.fn().mockRejectedValue(new Error('store locked')),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.mkt-actions .mkt-install-prerelease').trigger('click')
+    await flushPromises()
+    expect(api.prepareInstall).not.toHaveBeenCalled()
+  })
+
+  it('marks results and the detail page that have a pre-release', async () => {
+    const row = (name: string, extra: Record<string, unknown>) => ({
+      namespace: 'acme', name, identity: `acme.${name}`, display_name: name, description: null, categories: [],
+      download_count: 0, rating_average: 0, featured: false, trust_tier: 'signed-verified', ...extra,
+    })
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [
+          row('stable', { latest_version: '1.0.0', latest_prerelease_version: null }),
+          row('both', { latest_version: '1.0.0', latest_prerelease_version: '1.1.0-beta.1' }),
+          row('preonly', { latest_version: '0.1.0-alpha.1', latest_prerelease_version: '0.1.0-alpha.1' }),
+          row('unsigned', { trust_tier: 'unsigned', latest_version: '1.0.0', latest_prerelease_version: '1.1.0-beta.1' }),
+        ],
+        total: 4, offset: 0, limit: 20,
+      }),
+      marketplaceDetail: vi.fn().mockResolvedValue(
+        demoDetail({
+          latest_version: '2.4.0',
+          latest_prerelease_version: '2.5.0-beta.1',
+          latest_installable_version: '2.4.0',
+          versions: versionRows([
+            { version: '2.5.0-beta.1', channel: 'pre-release' },
+            { version: '2.4.0', channel: 'stable' },
+          ]),
+        })
+      ),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    const sources = (id: string) =>
+      wrapper!.findAll(`[data-id="${id}"] .nv-source-badge`).map((badge) => badge.attributes('data-source'))
+    expect(sources('acme.stable')).toEqual(['marketplace'])
+    expect(sources('acme.both')).toEqual(['marketplace', 'prerelease'])
+    expect(sources('acme.preonly')).toEqual(['prerelease'])
+    expect(sources('acme.unsigned')).toEqual([])
+    await wrapper.get('[data-id="acme.both"]').trigger('click')
+    await flushPromises()
+    expect(
+      wrapper.findAll('.mkt-detail-title .nv-source-badge').map((badge) => badge.attributes('data-source'))
+    ).toEqual(['marketplace', 'prerelease'])
   })
 })

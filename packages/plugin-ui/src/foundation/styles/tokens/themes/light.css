@@ -54,6 +54,8 @@
   /* Toast variants */
   --toast-external-bg: #a40e26;
   --toast-external-fg: #ffffff;
+  --toast-channel-accent: #a40e26;
+  --toast-channel-fg: #ffffff;
   --toast-security-border: #cf222e;
   --toast-security-bg: #fff1f0;
   --toast-workspace-accent: #8250df;

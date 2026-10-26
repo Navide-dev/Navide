@@ -10,6 +10,10 @@ const props = defineProps<{ paneId: string }>()
 const t = i18n.global.t
 const store = inject(guardKey, null)
 const tainted = computed(() => !!store?.available.value && !!store.taintFor(props.paneId))
+// With the Guard switch off the mark is kept, but nothing is asked for.
+const title = computed(() =>
+  store?.enabled.value === false ? `${t('guard.pane.badge')} — ${t('guard.pane.explain-off')}` : t('guard.pane.badge')
+)
 </script>
 
 <template>
@@ -17,7 +21,7 @@ const tainted = computed(() => !!store?.available.value && !!store.taintFor(prop
     v-if="tainted"
     class="guard-tag"
     data-testid="guard-sidebar-icon"
-    :title="t('guard.pane.badge')"
+    :title="title"
   ><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.8 13 3.6v4c0 3.1-2.1 5.4-5 6.6-2.9-1.2-5-3.5-5-6.6v-4Z" /><path d="M8 5.2v3.2M8 10.6v0.01" /></svg></span>
 </template>
 

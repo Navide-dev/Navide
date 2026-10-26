@@ -19,26 +19,27 @@ if sys.argv[1].endswith(".vue"):
     src = "\n".join(re.findall(r"<script\b[^>]*>(.*?)</script>", src, re.S))
 code = []  # the source with every string/comment body blanked out
 lits = {}  # offset in `code` of a blanked string -> its text
+off = 0  # len("".join(code)), kept as a running total so the scan stays linear
 i, n = 0, len(src)
 while i < n:
     c = src[i]
     if src.startswith("//", i):
         j = src.find("\n", i)
         j = n if j < 0 else j
-        code.append(" " * (j - i)); i = j
+        code.append(" " * (j - i)); off += len(code[-1]); i = j
     elif src.startswith("/*", i):
         j = src.find("*/", i + 2)
         j = n if j < 0 else j + 2
-        code.append(re.sub(r"[^\n]", " ", src[i:j])); i = j
+        code.append(re.sub(r"[^\n]", " ", src[i:j])); off += len(code[-1]); i = j
     elif c in "'\"`":
         j = i + 1
         while j < n and src[j] != c and not (c != "`" and src[j] == "\n"):
             j += 2 if src[j] == "\\" else 1
         j = min(j + 1, n)
-        lits[sum(map(len, code))] = src[i + 1:j - 1]
-        code.append("'" + re.sub(r"[^\n]", " ", src[i + 1:j - 1]) + "'"); i = j
+        lits[off] = src[i + 1:j - 1]
+        code.append("'" + re.sub(r"[^\n]", " ", src[i + 1:j - 1]) + "'"); off += len(code[-1]); i = j
     else:
-        code.append(c); i += 1
+        code.append(c); off += 1; i += 1
 code = "".join(code)
 pats = [
     r"(?m)^[ \t]*(?:import|export)\b[^;'`\"]*?\bfrom[ \t]*(?=')",
@@ -59,10 +60,17 @@ while IFS= read -r file; do
       # import statements only, never text inside a string or comment (a test
       # asserting on source with toContain("… from '../lib/y'") imports nothing).
       specs=$(git show ":$file" | python3 -c "$RELATIVE_IMPORTS_PY" "$file" | sort -u)
+      # Normalise ./ and ../ so the index lookup sees the same path git stores;
+      # one interpreter for every spec of the file, not one per spec.
+      norms=()
+      while IFS= read -r norm; do norms+=("$norm"); done < <(
+        for spec in $specs; do printf '%s\n' "$dir/$spec"; done |
+          python3 -c 'import os,sys; [print(os.path.normpath(b)) for b in sys.stdin.read().splitlines()]' 2>/dev/null
+      )
+      k=0
       for spec in $specs; do
         base="$dir/$spec"
-        # Normalise ./ and ../ so the index lookup sees the same path git stores.
-        norm=$(python3 -c 'import os,sys; print(os.path.normpath(sys.argv[1]))' "$base" 2>/dev/null || echo "$base")
+        norm="${norms[$k]:-$base}"; k=$((k+1))
         found=0
         # ESM-style specifiers name the emitted file: './x.js' is './x.ts' in source.
         case "$norm" in

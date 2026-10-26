@@ -230,6 +230,29 @@ export function guardStdioStreams(): void {
   process.stderr.on('error', () => {})
 }
 
+/** The env var that tells a starting backend which built-in Navide plugins
+ *  the user disabled, so it knows before the Host session registers. */
+export const DISABLED_BUILTIN_PLUGINS_ENV = 'NAVIDE_DISABLED_BUILTIN_PLUGINS'
+
+let disabledBuiltinPluginsAtSpawn: () => readonly string[] = () => []
+
+/** Main installs this before the first backend start. */
+export function setBackendDisabledBuiltinsProvider(provider: () => readonly string[]): void {
+  disabledBuiltinPluginsAtSpawn = provider
+}
+
+/** Set (or, with nothing disabled, remove) the disabled built-ins in a spawn
+ *  env. With nothing disabled the env is exactly main's. */
+export function bindBackendDisabledBuiltins(
+  base: NodeJS.ProcessEnv,
+  disabled: readonly string[],
+): NodeJS.ProcessEnv {
+  const env = { ...base }
+  if (disabled.length > 0) env[DISABLED_BUILTIN_PLUGINS_ENV] = [...disabled].sort().join(',')
+  else delete env[DISABLED_BUILTIN_PLUGINS_ENV]
+  return env
+}
+
 export function bindBackendPluginActivationCatalog(
   base: NodeJS.ProcessEnv,
   catalog: BackendPluginActivationCatalogFile
@@ -306,7 +329,10 @@ export async function startBackend(
       join(app.getPath('userData'), 'plugins', '.navide-backend-activation.json'),
       { schemaVersion: 1, packages: [] }
     )
-  const env = bindBackendPluginActivationCatalog(process.env, catalog)
+  const env = bindBackendDisabledBuiltins(
+    bindBackendPluginActivationCatalog(process.env, catalog),
+    disabledBuiltinPluginsAtSpawn(),
+  )
   // The host token goes over stdin (handConfirmKey), never here: `ps -E` reads
   // a spawn env. Dropped too in case a launcher left one in ours.
   delete env.NAVIDE_BACKEND_HOST_TOKEN
@@ -423,7 +449,7 @@ export async function startBackend(
     // by macOS Gatekeeper scanning the bundled binary on first launch after
     // download — 15s was too tight and surfaced as "backend failed to start"
     // even though the process would have come up given more time. Now
-    // configurable via Settings (default 45s, 120s on Linux) — see src/main/health-timeout.ts.
+    // configurable via Settings (default 45s on macOS, 120s on Linux and Windows) — see src/main/health-timeout.ts.
     await waitForHealth(host, port, healthCheckTimeoutMs)
   } catch (err) {
     // Health never came up — kill the orphaned child so it can't linger and

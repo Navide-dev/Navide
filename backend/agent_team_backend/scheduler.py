@@ -48,7 +48,7 @@ import logging
 import re
 import time
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -178,11 +178,19 @@ def next_run_after(schedule: dict[str, Any], after_ms: int) -> int | None:
 
 
 def _day_start_ms(schedule: dict[str, Any], now_ms: int) -> int:
-    """Local midnight of ``now_ms`` in the job's zone (system zone for every)."""
+    """Local midnight of ``now_ms`` in the job's zone (system zone for every).
+
+    Built from the calendar date of ``now_ms`` with that day's own UTC offset,
+    so a DST switch later in the day does not move the day's start. Without a
+    zone the naive local datetime resolves through the system zone rules.
+    """
     tz = schedule.get("tz")
-    zone = _zone(str(tz)) if tz else datetime.now().astimezone().tzinfo or timezone.utc
-    local = datetime.fromtimestamp(now_ms / 1000, zone)
-    return int(local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
+    if tz:
+        zone = _zone(str(tz))
+        day = datetime.fromtimestamp(now_ms / 1000, zone).date()
+        return int(datetime(day.year, day.month, day.day, tzinfo=zone).timestamp() * 1000)
+    day = datetime.fromtimestamp(now_ms / 1000).date()
+    return int(datetime(day.year, day.month, day.day).timestamp() * 1000)
 
 
 # ── the one validator (WS scheduler.upsert and MCP scheduler_upsert) ────────
@@ -707,6 +715,15 @@ def outcome_of_send(answer: dict[str, Any]) -> dict[str, Any]:
     if status == "queued":
         hold = (answer.get("hold") or {}).get("key") or "pending"
         return {"status": "ok", "detail": f"queued ({hold})", "msg_key": msg_key}
+    if status == "unconfirmed":
+        # The text and its Enter went out, but nothing confirmed the CLI took
+        # it. Not a run that happened: an error the owner sees, and a warning.
+        log.warning("scheduler: delivery %s unconfirmed — the target may not have taken it", msg_key)
+        return {
+            "status": "error", "reason": "unconfirmed", "msg_key": msg_key,
+            "detail": "delivery unconfirmed: sent, but the target was not seen taking it — "
+            "check the pane before resending",
+        }
     return {"status": "ok", "detail": str(status or "sent"), "msg_key": msg_key}
 
 
@@ -923,6 +940,11 @@ class SchedulerService:
         if status in ("failed", "rejected"):
             await self.store.resolve_queued_run(
                 job["id"], "error", status, f"then {status}: {(outcome or {}).get('reason') or status}"
+            )
+        elif status == "unconfirmed":
+            log.warning("scheduler: queued delivery %s ended unconfirmed", key)
+            await self.store.resolve_queued_run(
+                job["id"], "error", status, "then unconfirmed: the target was not seen taking it"
             )
         elif outcome is None:
             await self.store.resolve_queued_run(job["id"], "ok", None, "outcome no longer tracked")
@@ -1325,10 +1347,11 @@ class SchedulerService:
         Only along the session lineage: the rebuild must have resumed exactly
         the session the old pane held. A different or unknown session is a
         different conversation, and a pane name is never evidence at all — the
-        same rule outcome_of_send keeps for a gone id. The job's owner and
-        updated_by stay as they were (this is not an edit by anyone, and must
-        not mark a user's job as agent-written); ``state.rebound_from`` records
-        the hop. Returns the ids of the jobs moved.
+        same rule outcome_of_send keeps for a gone id. ``updated_by`` stays as
+        it was (this is not an edit by anyone, and must not mark a user's job
+        as agent-written); ``state.rebound_from`` records the hop. A job the
+        old pane owned is re-owned by the new one along the same lineage (see
+        :meth:`_move_owners`). Returns the ids of the jobs whose target moved.
         """
         if not (previous_pane_id and pane_id and session_id) or previous_pane_id == pane_id:
             return []
@@ -1352,8 +1375,56 @@ class SchedulerService:
                 moved.append(job["id"])
         if moved:
             log.info("scheduler: rebound %s from pane %s to %s", moved, previous_pane_id, pane_id)
+        inherited = await self._move_owners({previous_pane_id}, pane_id, session_id, live_ok=True)
+        if moved or inherited:
             await self._changed()
             self.wake()
+        return moved
+
+    async def inherit_owner(
+        self, lineage: set[str], pane_id: str, session_id: str
+    ) -> list[str]:
+        """Hand jobs owned by a closed pane to the pane resuming its session.
+
+        ``lineage`` holds the ids of closed panes whose record held exactly
+        ``session_id``; the caller derives it from the project store, never
+        from a pane name. A job whose owner is still live keeps its owner: an
+        owner the registry does not know yet (a backend restart) was never
+        closed, so it is not in ``lineage`` either. Returns the ids moved.
+        """
+        moved = await self._move_owners(lineage, pane_id, session_id, live_ok=False)
+        if moved:
+            await self._changed()
+        return moved
+
+    async def _move_owners(
+        self, lineage: set[str], pane_id: str, session_id: str, *, live_ok: bool
+    ) -> list[str]:
+        """Re-own pane-owned jobs from a pane in ``lineage`` onto ``pane_id``.
+
+        ``state.owner_inherited`` and the log record each hop. ``updated_by``
+        stays as it was: nobody edited the job. ``live_ok`` is for a rebuild,
+        whose old id was just retired by the same session it resumed.
+        """
+        if not (lineage and pane_id and session_id) or pane_id in lineage:
+            return []
+        moved: list[str] = []
+        async with self._lock:
+            for job in await self.store.list_jobs():
+                owner = job.get("owner") or USER
+                if owner.get("kind") != "pane" or owner.get("pane_id") not in lineage:
+                    continue
+                if not live_ok and _owner_pane(owner) is not None:
+                    continue
+                job["owner"] = {**owner, "pane_id": pane_id}
+                job["state"]["owner_inherited"] = {
+                    "from": owner.get("pane_id"), "to": pane_id,
+                    "session_id": session_id, "at": self.now_ms(),
+                }
+                await self.store.put_job(job)
+                moved.append(job["id"])
+                log.info("scheduler: job %s owner %s inherited by pane %s (session %s)",
+                         job["id"], owner.get("pane_id"), pane_id, session_id)
         return moved
 
     async def runs(self, job_id: str, limit: int = 20) -> dict[str, Any]:

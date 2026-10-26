@@ -43,6 +43,20 @@ describe('NotificationHost toast variants', () => {
     wrapper.unmount()
   })
 
+  it('renders a channel toast with its header band, framed but without the external fill', async () => {
+    const wrapper = mount(NotificationHost, { attachTo: document.body })
+    useNotify().toast('Message from telegram:alice delivered to “notify”', {
+      variant: 'channel', title: 'External channel · Telegram · alice', icon: '✉', duration: 8000,
+    })
+    await flushPromises()
+    const el = document.querySelector('.toast')!
+    expect(el.className).toBe('toast info channel titled')
+    expect(el.querySelector('.toast-band')?.textContent?.trim()).toBe('✉ External channel · Telegram · alice')
+    expect(el.querySelector('.toast-icon')?.textContent).toBe('✉')
+    expect(el.querySelector('.toast-msg')?.textContent).toBe('Message from telegram:alice delivered to “notify”')
+    wrapper.unmount()
+  })
+
   it('renders a workspace toast with its source header', async () => {
     const wrapper = mount(NotificationHost, { attachTo: document.body })
     useNotify().toast('Instruction from another workspace', { variant: 'workspace', title: 'Other workspace · navide-web', icon: '⇆' })

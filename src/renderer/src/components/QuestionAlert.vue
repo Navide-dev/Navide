@@ -104,13 +104,13 @@ const queueBadge = computed(() =>
           <div class="who">
             <span class="dot"></span>
             <span class="title">
-              <strong>{{ headerLabel }}</strong> is asking
+              <strong>{{ headerLabel }}</strong> {{ $t('label.question-is-asking') }}
               <span v-if="counter" class="count">· {{ counter }}</span>
               <span v-if="queueBadge" class="queue-badge">{{ queueBadge }}</span>
             </span>
             <span v-if="stageTitle" class="stage">{{ stageTitle }}</span>
           </div>
-          <button class="x" @click="emit('cancel')" title="Dismiss without answering">✕</button>
+          <button class="x" @click="emit('cancel')" :title="$t('label.question-dismiss-tooltip')">✕</button>
         </header>
 
         <div class="questions">
@@ -168,18 +168,18 @@ const queueBadge = computed(() =>
 
         <!-- Auto-answer status bar -->
         <div v-if="autoMode" class="auto-bar">
-          <span v-if="!autoText" class="auto-spinner">🤖 Auto-answering via LLM…</span>
-          <span v-else class="auto-answer-preview" v-truncate="`🤖 Auto-answer: ${autoText}`">🤖 Auto-answer: {{ autoText.slice(0, 120) }}{{ autoText.length > 120 ? '…' : '' }}</span>
+          <span v-if="!autoText" class="auto-spinner">{{ $t('label.question-auto-answering') }}</span>
+          <span v-else class="auto-answer-preview" v-truncate="$t('label.question-auto-answer', { text: autoText })">{{ $t('label.question-auto-answer', { text: autoText.slice(0, 120) + (autoText.length > 120 ? '…' : '') }) }}</span>
         </div>
 
         <footer>
-          <span v-if="autoMode" class="hint ok">🤖 Auto mode — submitting automatically</span>
-          <span v-else-if="!allAnswered" class="hint">Answer all {{ questions.length }} question(s) to send.</span>
-          <span v-else class="hint ok">⌘+Enter to send</span>
+          <span v-if="autoMode" class="hint ok">{{ $t('label.question-auto-mode') }}</span>
+          <span v-else-if="!allAnswered" class="hint">{{ $t('label.question-answer-all', { count: questions.length }) }}</span>
+          <span v-else class="hint ok">{{ $t('label.question-send-hint', { key: '⌘+Enter' }) }}</span>
           <div class="actions">
-            <button class="ghost nv-btn" @click="emit('cancel')" :disabled="autoMode">Cancel</button>
+            <button class="ghost nv-btn" @click="emit('cancel')" :disabled="autoMode">{{ $t('action.cancel') }}</button>
             <button class="primary nv-btn nv-btn--primary" :disabled="autoMode || !allAnswered" @click="submit">
-              {{ questions.length > 1 ? `Send all ${questions.length} answers` : 'Send answer' }}
+              {{ questions.length > 1 ? $t('label.question-send-all', { count: questions.length }) : $t('label.question-send-one') }}
             </button>
           </div>
         </footer>

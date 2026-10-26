@@ -12,6 +12,8 @@ import { backendErrorMessage, KNOWN_BACKEND_ERROR_KEYS } from './backend'
 import enUS from './locales/en-US.json'
 import zhTW from './locales/zh-TW.json'
 import jaJP from './locales/ja-JP.json'
+import koKR from './locales/ko-KR.json'
+import zhCN from './locales/zh-CN.json'
 
 function collectLeafKeys(obj: Record<string, unknown>, prefix = ''): string[] {
   const keys: string[] = []
@@ -106,7 +108,10 @@ describe('Plans i18n bootstrap', () => {
       expect(i18n.global.locale.value).toBe('en-US')
 
       // Invalid or missing query fails closed to zh-TW
-      expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=fr-FR')).toBe('zh-TW')
+      expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=it-IT')).toBe('zh-TW')
+      // A UI locale without a Plans catalog renders in en-US
+      expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=vi-VN')).toBe('vi-VN')
+      expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace&locale=ja-JP')).toBe('ja-JP')
       expect(parsePlansLocaleFromQuery('?workspace_path=%2Fworkspace')).toBe('zh-TW')
       expect(parsePlansLocaleFromQuery('')).toBe('zh-TW')
 
@@ -212,8 +217,25 @@ describe('Plans i18n bootstrap', () => {
 
     expect(extractLocaleFromSettingsEvent({
       source: 'host',
-      settings: { 'agent-team:language': 'fr-FR' },
+      settings: { 'agent-team:language': 'it-IT' },
     })).toBeNull()
+
+    expect(extractLocaleFromSettingsEvent({
+      source: 'host',
+      settings: { 'agent-team:language': 'ko-KR' },
+    })).toBe('ko-KR')
+
+    expect(extractLocaleFromSettingsEvent({
+      source: 'host',
+      settings: { 'agent-team:language': 'de-DE' },
+    })).toBe('de-DE')
+
+    // Every UI language now has a Plans catalog, so a recognized language
+    // always resolves to itself here (the en-US fallback has no case left).
+    expect(extractLocaleFromSettingsEvent({
+      source: 'host',
+      settings: { 'agent-team:language': 'vi-VN' },
+    })).toBe('vi-VN')
 
     expect(extractLocaleFromSettingsEvent(null)).toBeNull()
     expect(extractLocaleFromSettingsEvent({})).toBeNull()
@@ -226,6 +248,8 @@ describe('Plans i18n bootstrap', () => {
 
     expect(enKeys).toEqual(zhKeys)
     expect(collectLeafKeys(jaJP).sort()).toEqual(enKeys)
+    expect(collectLeafKeys(koKR).sort()).toEqual(enKeys)
+    expect(collectLeafKeys(zhCN).sort()).toEqual(enKeys)
     expect(enKeys.length).toBeGreaterThan(0)
   })
 

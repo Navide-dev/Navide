@@ -21,6 +21,12 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import {
+  isDigestBlocked,
+  localSignatureDecision,
+  type LocalInstallTrustMetadata,
+  type LocalSignatureDecision,
+} from './pluginLocalInstallTrust'
 import { dirname, extname, join } from 'node:path'
 import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import { isWindows } from '../../shared/osplat'
@@ -31,12 +37,16 @@ import {
   assertOfficialPublisher,
   isOfficialPluginId,
   resolveOfficialPublisherKey,
+  sha256Hex,
   PluginVerifyError,
   TRUST_SIGNED,
   type TrustTier,
 } from './pluginVerify'
 import {
+  RegistryTrustError,
+  verifyRegistryDisclosure,
   verifyRegistryPackageTrust,
+  verifyRegistryTrustMetadata,
   type RegistryAuthority,
   type RegistryPackageEnvelope,
   type RegistryTrustMetadata,
@@ -64,6 +74,14 @@ import {
   type OfficialReceipt,
 } from './installedPlugins'
 import { compareSemver } from './pluginManifestV2'
+import {
+  canonicalContractJson,
+  computeDisclosure,
+  type DisclosureManifestInput,
+  type ManifestDisclosure,
+} from '../../shared/pluginDisclosure'
+import type { ScanReport } from '../../shared/pluginDisclosureScan'
+import type { LocalPluginSource } from '../../shared/pluginSource'
 import type { PluginLaunchDescriptor } from './frontendPluginManager'
 import { UNIVERSAL_PLUGIN_TARGET, currentPluginHostTarget } from './pluginTarget'
 import {
@@ -96,6 +114,15 @@ export interface InstallRequest {
   registrySignature?: string | null
   trustMetadata?: RegistryTrustMetadata | null
   trustMetadataSignature?: string | null
+  /** Registry-signed disclosure (contract 3.5): the version row's
+   * `disclosure`, `disclosure_envelope` and `disclosure_signature`, as
+   * received. All absent for a version published before the Registry signed
+   * disclosures; that version installs as before. */
+  disclosure?: unknown
+  disclosureEnvelope?: unknown
+  disclosureSignature?: unknown
+  /** The version row's `scan` (contract 3.8), bound by `scanDigest`. */
+  scan?: unknown
   /** Install provenance selected by the Host, never inferred from schemaVersion. */
   provenance: 'official-registry' | 'developer-local-unpacked'
 }
@@ -158,6 +185,24 @@ export interface PreparedInstall {
     trustSnapshot: RegistryTrustSnapshot
   }
   provenance: 'official-registry' | 'developer-local-unpacked'
+  /** The Registry-signed disclosure, verified against the package's own
+   * manifest; null when the version carries none. */
+  disclosure?: ManifestDisclosure | null
+  /** The Registry-signed scan report (contract 3.8); null when the version
+   * has none. Informational: it never decides the install. */
+  scan?: ScanReport | null
+  /** Set only by prepareLocalInstall: a package the user picked from a file,
+   * trusted by the user's consent to its content and never by the Registry. */
+  source?: LocalPluginSource
+  /** The Host target a local package is staged under; Registry packages take
+   * theirs from the signed receipt instead. */
+  localTarget?: string
+  /** False when no root-signed takedown list was available, so the package
+   * could not be checked against it (MED-1 on #425). */
+  takedownChecked?: boolean
+  /** Set only by prepareLocalInstall: what the `<file>.sig` beside the file
+   * shows against the vetted publisher keys (A3). */
+  localSignature?: LocalSignatureDecision
 }
 
 export class InstallError extends Error {
@@ -357,6 +402,8 @@ export async function prepareInstall(
   let trustTier = packageVerification.trustTier
   let registryEvidence: PreparedInstall['registryEvidence']
   let official = false
+  let disclosure: ManifestDisclosure | null = null
+  let scan: ScanReport | null = null
 
   if (provenance === 'official-registry') {
     if (!req.registryEnvelope || !req.trustMetadata || !req.target) {
@@ -389,6 +436,39 @@ export async function prepareInstall(
       expectedHostTarget: trust.expectedTarget ?? currentPluginHostTarget(),
       now: trust.now,
     })
+    // Contract 3.5: the signed disclosure must be what this package's own
+    // manifest discloses. A version without one installs as before.
+    const signed = verifyRegistryDisclosure({
+      disclosure: req.disclosure,
+      disclosureEnvelope: req.disclosureEnvelope,
+      disclosureSignature: req.disclosureSignature,
+      scan: req.scan,
+      packageEnvelope: req.registryEnvelope,
+      trustMetadata: req.trustMetadata,
+    })
+    if (signed !== null) {
+      const signedDisclosure = signed.disclosure
+      if (!v2) {
+        throw new RegistryTrustError(
+          'DISCLOSURE_INVALID',
+          `plugin '${manifest.id}' is a Manifest v1 package but the Registry sent a disclosure; the install was refused`
+        )
+      }
+      let recomputed: string | null
+      try {
+        recomputed = canonicalContractJson(computeDisclosure(manifest as unknown as DisclosureManifestInput))
+      } catch {
+        recomputed = null
+      }
+      if (recomputed !== canonicalContractJson(signedDisclosure)) {
+        throw new RegistryTrustError(
+          'DISCLOSURE_MISMATCH',
+          `plugin '${manifest.id}' ${manifest.version}: what the Marketplace disclosed about this package does not match the permissions in the package itself; the install was refused`
+        )
+      }
+      disclosure = signedDisclosure
+      scan = signed.scan
+    }
     const requestedRegistryUrl = new URL(req.registryUrl).toString().replace(/\/+$/, '')
     const officialRegistryUrl = trust.officialRegistryUrl
       ? new URL(trust.officialRegistryUrl).toString().replace(/\/+$/, '')
@@ -456,6 +536,127 @@ export async function prepareInstall(
     signature: v2 ? req.registrySignature ?? null : req.signature ?? null,
     registryEvidence,
     provenance,
+    disclosure,
+    scan,
+  }
+}
+
+export interface LocalInstallTrust {
+  /** The Host-owned root pin the takedown list must be signed by. */
+  pinnedRegistryRootKey: string | null
+  /** The last Registry trust metadata this Host stored, if any. */
+  trustSnapshot: RegistryTrustSnapshot | null
+  /** Host-derived exact target a native backend must have been built for. */
+  expectedTarget?: string
+  /** The root-verified local install trust (blocked digests, vetted
+   * publisher keys), or null when none was available. */
+  localInstallTrust?: LocalInstallTrustMetadata | null
+  /** The `<file>.sig` read beside the file, or null when there is none. */
+  signature?: string | null
+}
+
+/** The takedown list, when the pinned root signed it. An expired list still
+ * applies: a takedown does not lapse because the Host went offline. */
+function signedTakedownList(trust: LocalInstallTrust): RegistryTrustMetadata | null {
+  const snapshot = trust.trustSnapshot
+  if (!snapshot) return null
+  try {
+    // Checked as of its own generation time, so expiry is not a reason to
+    // ignore it; shape and the root signature are still verified.
+    verifyRegistryTrustMetadata(
+      snapshot.metadata,
+      snapshot.metadataSignature,
+      trust.pinnedRegistryRootKey,
+      new Date(snapshot.metadata.generatedAt),
+    )
+    return snapshot.metadata
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Verify a `.vsix` the user picked from a file (DX report A1, card K3)
+ * WITHOUT writing anything. `bytes` is the one copy read right after the file
+ * dialog; every later step uses it, never the path. The archive goes through
+ * the same zip checks, manifest schema and backend executable rules as a
+ * Registry install. What it does not get is Registry evidence: there is no
+ * review, so the user's consent is always required. It is labelled
+ * `local-signed` only when a vetted publisher's active key signed exactly
+ * these bytes (A3, `localSignature`); a file on the root-signed
+ * blocked-digest list is refused.
+ */
+export function prepareLocalInstall(bytes: Uint8Array, trust: LocalInstallTrust): PreparedInstall {
+  const entries = readZipEntries(bytes)
+  assertSafeArchiveEntries(entries)
+  const manifest = parseInstalledManifest(readManifestFromEntries(entries))
+  assertManifestFiles(
+    manifest,
+    entries
+      .filter((entry) => entry.type === 'regular')
+      .map((entry) => canonicalEntryPath(entry))
+  )
+  if (!isManifestV2(manifest)) {
+    throw new InstallError(`plugin '${manifest.id}' is a Manifest v1 package; only Manifest v2 installs from a file`)
+  }
+  if (isOfficialPluginId(manifest.id)) {
+    throw new PluginVerifyError(
+      'NOT_OFFICIAL',
+      `plugin '${manifest.id}' claims the official 'navide.' namespace; it cannot be installed from a file`
+    )
+  }
+  // The same identity rule a Registry package meets, so the publisher a
+  // takedown names cannot be dodged by a mismatched namespace.
+  if (manifest.publisher !== manifest.id.split('.')[0]) {
+    throw new InstallError(`plugin '${manifest.id}' has no valid publisher identity`)
+  }
+  const backendEntry = assertBackendExecutable(manifest, entries)
+  const takedown = signedTakedownList(trust)
+  if (takedown?.blockedPublishers.includes(manifest.publisher)) {
+    throw new InstallError(`publisher '${manifest.publisher}' was taken down by Navide; '${manifest.id}' cannot be installed`)
+  }
+  if (takedown?.blockedPackages.some((blocked) =>
+    blocked.packageId === manifest.id && (blocked.version === undefined || blocked.version === manifest.version))) {
+    throw new InstallError(`plugin '${manifest.id}' ${manifest.version} was taken down by Navide and cannot be installed`)
+  }
+  const digest = sha256Hex(bytes)
+  if (isDigestBlocked(trust.localInstallTrust ?? null, digest)) {
+    throw new InstallError(`DIGEST_BLOCKED [${manifest.id}]: this file of '${manifest.id}' was taken down by Navide and cannot be installed`)
+  }
+  const localSignature = localSignatureDecision(trust.localInstallTrust ?? null, manifest.id, digest, trust.signature ?? null)
+  const packageVerification = verifyPackage({
+    bytes,
+    expectedDigest: digest,
+    signature: null,
+    publicKey: null,
+    requires: manifestCapabilities(manifest),
+  })
+  return {
+    id: manifest.id,
+    version: manifest.version,
+    publisherId: manifest.publisher,
+    manifest,
+    entries,
+    trustTier: packageVerification.trustTier,
+    sensitive: packageVerification.sensitive,
+    containsBackendExecutable: backendEntry !== undefined,
+    // Unreviewed code always asks, whatever it declares.
+    requiresConfirmation: true,
+    official: false,
+    digest,
+    signature: null,
+    provenance: 'developer-local-unpacked',
+    disclosure: computeDisclosure(manifest as unknown as DisclosureManifestInput),
+    scan: null,
+    // The storage class stays `local-unsigned` (data hand-over, set-aside and
+    // replacement rules are those of any local file); `localSignature` is
+    // what decides the `local-signed` label.
+    source: 'local-unsigned',
+    localSignature,
+    // A native executable is built for one platform; without a backend the
+    // package is the same everywhere.
+    localTarget: backendEntry !== undefined ? trust.expectedTarget ?? currentPluginHostTarget() : UNIVERSAL_PLUGIN_TARGET,
+    takedownChecked: takedown !== null,
   }
 }
 
@@ -521,6 +722,25 @@ export interface StagedInstall {
   descriptor: PluginLaunchDescriptor | undefined
 }
 
+/** True when staging this local package would be refused because its id,
+ *  version and target are already installed and referenced: the version has
+ *  to be bumped. The same test {@link stageInstallCandidate} makes, asked at
+ *  prepare so the refusal comes before consent and reaches an agent's request
+ *  too. An unreadable lifecycle record is left to staging, which refuses it
+ *  with its own reason. */
+export function localVersionAlreadyInstalled(prepared: PreparedInstall, pluginsRoot: string): boolean {
+  const target = prepared.localTarget
+  if (!target || !existsSync(immutablePluginPackageDir(pluginsRoot, prepared.id, prepared.version, target))) return false
+  try {
+    const record = new PluginActivationSelector(pluginsRoot).read(prepared.id)
+    return [record?.active, record?.previous, record?.candidate].some((selection) =>
+      selection?.packageVersion === prepared.version && selection.target === target,
+    )
+  } catch {
+    return false
+  }
+}
+
 /** Write a verified package beside, never over, the current active package.
  * Candidate discovery/activation is intentionally a separate Host lifecycle
  * decision: staging does not revoke instances, change grants, or expose routes. */
@@ -543,7 +763,10 @@ export function stageInstallCandidate(
   })
   if (smuggledHostFile) throw new InstallError(`package must not contain ${smuggledHostFile.path}`)
   const backendEntry = assertBackendExecutable(prepared.manifest, prepared.entries)
-  const target = prepared.registryEvidence?.receipt.target
+  // Only a local package may stage without Registry target evidence; it has
+  // no receipt, and its trust is the user's consent recorded after staging.
+  const target = prepared.registryEvidence?.receipt.target ??
+    (prepared.source !== undefined && prepared.registryEvidence === undefined ? prepared.localTarget : undefined)
   if (!target) {
     throw new InstallError('immutable candidate staging requires Registry target evidence')
   }

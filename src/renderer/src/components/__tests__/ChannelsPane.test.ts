@@ -299,6 +299,23 @@ describe('ChannelsPane', () => {
       })
     })
 
+    it("names an unnamed bot by the platform's display name, as every channel label does", async () => {
+      seedTwoBots()
+      mock.setResponse('channels.list', {
+        ok: true,
+        enabled: true,
+        platforms: [{
+          platform: 'telegram', configured: true, enabled: true, status: { ...ready, identity: '@main_bot' }, config: {}, capabilities: null,
+          accounts: [
+            { account: 'default', name: '', configured: true, enabled: true, status: { ...ready, identity: '@main_bot', display_name: 'Neil M4' }, config: {}, capabilities: null },
+          ],
+        }],
+      })
+      const w = await render()
+      expect(bot(w, 'default').get('[data-testid="channel-bot-name"]').text()).toBe('Neil M4')
+      expect(bot(w, 'default').get('[data-testid="channel-status"]').text()).toBe('Connected @main_bot')
+    })
+
     it('adds a bot with its own id, name (under Advanced) and token', async () => {
       seedTwoBots()
       mock.setResponse('channels.quick_add', { ok: false, error: 'nope', reason: 'invalid' })
@@ -341,7 +358,7 @@ describe('ChannelsPane', () => {
       await bot(w, 'bot-b1').get('[data-testid="channel-manage"]').trigger('click')
       await bot(w, 'bot-b1').get('[data-testid="channel-remove"]').trigger('click')
       expect(mock.sent.some((s) => s.type === 'channels.remove')).toBe(false)
-      expect(bot(w, 'bot-b1').get('[data-testid="channel-remove-ask"]').text()).toContain('2 pane(s)')
+      expect(bot(w, 'bot-b1').get('[data-testid="channel-remove-ask"]').text()).toContain('2 panes')
       await bot(w, 'bot-b1').get('[data-testid="channel-remove-confirm"]').trigger('click')
       await flushPromises()
       expect(mock.sent.find((s) => s.type === 'channels.remove')?.payload).toEqual({ platform: 'telegram', account: 'bot-b1' })
@@ -400,7 +417,7 @@ describe('ChannelsPane', () => {
       const w = await render()
       const tg = w.get('[data-platform="telegram"]')
       expect(tg.get('[data-testid="channel-next-step"]').text()).toBe('Next: link your chat account')
-      expect(tg.findAll('[data-testid="channel-link-action"]').map((a) => a.text())).toEqual(['Open in Telegram (DM)', 'Add to a group'])
+      expect(tg.findAll('[data-testid="channel-link-action"]').map((a) => a.text())).toEqual(['Open in Telegram (DM)', 'Add to a Group'])
       // Platforms that are not connected get no guide.
       expect(w.get('[data-platform="slack"]').find('[data-testid="channel-link-block"]').exists()).toBe(false)
     })
@@ -492,7 +509,7 @@ describe('ChannelsPane', () => {
       expect(clip.reads).toBe(1)
       expect((tg.get('input[name="token"]').element as HTMLInputElement).value).toBe(TG_TOKEN)
       expect(tg.find('[data-testid="channel-save"]').exists()).toBe(false)
-      expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick add')
+      expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick Add')
 
       const release = holdQuickAdd()
       mock.setResponse('channels.quick_add', {
@@ -664,7 +681,7 @@ describe('ChannelsPane', () => {
       await flushPromises()
       expect(tg.get('form [role="alert"]').text()).toBe('Telegram rejected the credential: Unauthorized')
       expect(tg.find('[data-testid="channel-quick-steps"]').exists()).toBe(false)
-      expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick add')
+      expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick Add')
       expect(openExternal).not.toHaveBeenCalled()
 
       mock.setResponse('channels.quick_add', { ok: false, reason: 'timeout', error: 'no answer' })
@@ -785,7 +802,7 @@ describe('ChannelsPane', () => {
     it('offers the button only on a connected bot that can manage bots', async () => {
       seedManager(true)
       const w = await render()
-      expect(managerRow(w).get('[data-testid="channel-managed-create"]').text()).toBe('Create a new bot')
+      expect(managerRow(w).get('[data-testid="channel-managed-create"]').text()).toBe('Create a New Bot')
       expect(managerRow(w).find('[data-testid="channel-managed-enable"]').exists()).toBe(false)
     })
 
@@ -819,9 +836,16 @@ describe('ChannelsPane', () => {
       seedManager(true)
       const w = await render()
       await managerRow(w).get('[data-testid="channel-managed-create"]').trigger('click')
-      expect(managerRow(w).get('[data-testid="channel-managed-disclose"]').text()).toContain(
+      expect(managerRow(w).get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @navide_bot')
+      const disclose = managerRow(w).get('[data-testid="channel-managed-disclose"]')
+      expect(disclose.text()).toContain(
         "@navide_bot can read and replace the new bot's token at any time. Whoever holds @navide_bot's token controls every bot it creates."
       )
+      expect(disclose.text()).toContain("If @navide_bot's token leaks, every bot it created leaks with it.")
+      // A warning in body text, not a muted hint that reads like a note about this bot.
+      expect(disclose.classes()).toContain('ch-managed-warn')
+      expect(disclose.classes()).not.toContain('ch-form-hint')
+      expect(managerRow(w).get('[data-testid="channel-managed-confirm"]').text()).toBe('Continue in Telegram')
       expect(mock.sent.some((m) => m.type === 'channels.managed_create')).toBe(false)
       expect(openExternal).not.toHaveBeenCalled()
       await managerRow(w).get('[data-testid="channel-managed-cancel"]').trigger('click')
@@ -976,7 +1000,7 @@ describe('ChannelsPane', () => {
       const w = await render()
       expect(w.find('[data-testid="channel-linked-summary"]').exists()).toBe(false)
       expect(w.get('[data-platform="telegram"] [data-testid="channel-platform-summary"]').text())
-        .toBe('3 bot(s) · 5 chat(s) · 4 pane(s) bound') // an auto child topic's pane is bound too
+        .toBe('Bots: 3 · Chats: 5 · Bound panes: 4') // an auto child topic's pane is bound too
       const main = bot(w, 'default')
       expect(main.findAll('[data-testid="channel-chat-title"]').map((c) => c.text())).toEqual(['neil', 'Dev group'])
       expect(row(w, 'p1').get('[data-testid="channel-binding-pane"]').text()).toBe('Navide指揮')
@@ -996,7 +1020,7 @@ describe('ChannelsPane', () => {
       expect(w.find('[data-testid="channel-binding"][data-pane-id="kid"]').exists()).toBe(false)
       expect(w.find('[data-testid="channel-binding-child"]').exists()).toBe(false)
       const toggle = row(w, 'p2').get('[data-testid="channel-binding-children-toggle"]')
-      expect(toggle.text()).toContain('1 sub-agent topic(s)')
+      expect(toggle.text()).toContain('1 sub-agent topic')
       await toggle.trigger('click')
       expect(row(w, 'p2').get('[data-testid="channel-binding-child"]').text()).toContain('reviewer')
       expect(row(w, 'p2').get('[data-testid="channel-binding-child"]').text()).toContain('Released with its parent')
@@ -1056,21 +1080,21 @@ describe('ChannelsPane', () => {
       expect(main.find('[data-testid="channel-batch"]').exists()).toBe(false)
       await row(w, 'p1').get('[data-testid="channel-binding-select"]').setValue(true)
       await row(w, 'p2').get('[data-testid="channel-binding-select"]').setValue(true)
-      expect(main.get('[data-testid="channel-batch"]').text()).toContain('2 binding(s) selected')
+      expect(main.get('[data-testid="channel-batch"]').text()).toContain('2 bindings selected')
       await main.get('[data-testid="channel-batch-unbind"]').trigger('click')
       expect(mock.sent.some((s) => s.type === 'channels.unbind_many')).toBe(false)
       const ask = main.get('[data-testid="channel-batch-ask"]')
-      expect(ask.text()).toContain('Unbind 2 binding(s)?')
+      expect(ask.text()).toContain('Unbind 2 bindings?')
       expect(ask.text()).toContain('Navide指揮 — neil')
       expect(ask.text()).toContain('evolve-scout — Dev group')
-      expect(ask.text()).toContain('Each of the 2 chat(s) will be told it was disconnected.')
+      expect(ask.text()).toContain('Each of the 2 chats will be told it was disconnected.')
       await main.get('[data-testid="channel-batch-confirm"]').trigger('click')
       await flushPromises()
       expect(mock.sent.find((s) => s.type === 'channels.unbind_many')?.payload).toEqual({ pane_ids: ['p1', 'p2'] })
       expect(main.get('[data-testid="channel-batch-error"]').text()).toContain('1 could not be unbound')
       expect(main.get('[data-testid="channel-batch-error"]').text()).toContain('evolve-scout: RuntimeError: db locked')
       // The failed one stays ticked for a retry; the unbound one is cleared.
-      expect(main.get('[data-testid="channel-batch"]').text()).toContain('1 binding(s) selected')
+      expect(main.get('[data-testid="channel-batch"]').text()).toContain('1 binding selected')
     })
 
     it('keeps the bot\'s less used actions in its ⋯ menu', async () => {
@@ -1088,7 +1112,7 @@ describe('ChannelsPane', () => {
       expect(menu().get('[data-testid="channel-managed-create"]').text()).toContain('Turn on Bot Management Mode in BotFather first')
       await menu().get('[data-testid="channel-remove-bot"]').trigger('click')
       expect(shown()).toBe(false)
-      expect(main.get('[data-testid="channel-remove-ask"]').text()).toContain('pane(s)')
+      expect(main.get('[data-testid="channel-remove-ask"]').text()).toContain('connected through it will be disconnected')
       expect(mock.sent.some((s) => s.type === 'channels.remove')).toBe(false)
       // Esc closes an open menu.
       await main.get('[data-testid="channel-bot-menu"]').trigger('click')

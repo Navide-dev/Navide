@@ -8,9 +8,11 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from agent_team_backend import dev_time_store
 from agent_team_backend.db import DB_FILENAME, WorkspaceDatabases
 from agent_team_backend.dev_time_store import (
     AGENT_GAP_S,
@@ -58,6 +60,14 @@ def claude_home(tmp_path, monkeypatch, ws):
     project_dir.mkdir(parents=True)
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(home))
     return project_dir
+
+
+@pytest.fixture
+def clock_at_t0(monkeypatch):
+    """start_backfill and the snapshot handler pass no ``now``: the store reads
+    its module clock. Pin that clock to T0, as the other tests pass now=T0, so
+    the 90-day cutoff stays relative to T0 and not to the real date."""
+    monkeypatch.setattr(dev_time_store, "time", SimpleNamespace(time=lambda: T0))
 
 
 @pytest.fixture
@@ -198,7 +208,7 @@ def test_corrupt_lines_and_missing_project_dir_are_tolerated(store, ws, claude_h
 
 
 @pytest.mark.asyncio
-async def test_start_backfill_runs_once_off_loop_and_broadcasts(store, ws, claude_home):
+async def test_start_backfill_runs_once_off_loop_and_broadcasts(store, ws, claude_home, clock_at_t0):
     _write(claude_home, "sess-g", [_assistant(T0 - 100), _assistant(T0 - 40, "end_turn")])
     seen: list[str] = []
 
@@ -215,7 +225,7 @@ async def test_start_backfill_runs_once_off_loop_and_broadcasts(store, ws, claud
 
 
 @pytest.mark.asyncio
-async def test_devtime_snapshot_handler_triggers_backfill(ws, claude_home, monkeypatch):
+async def test_devtime_snapshot_handler_triggers_backfill(ws, claude_home, monkeypatch, clock_at_t0):
     import uuid
 
     from agent_team_backend import app

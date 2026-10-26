@@ -88,6 +88,17 @@ shows one. Every file the package contains must be listed in
 `artifact-files.json` — the packager never zips a directory recursively, so
 source files, keys and `node_modules` cannot slip in.
 
+> **Every view must report that it has mounted.** Navide waits 10 seconds
+> after a view's HTML loads; at install and update time a view that has not
+> reported ready fails the package. The scaffold's `main.js` reports ready
+> itself with `window.nav.ready()`, the call
+> `createPluginViewRuntimeClient().ready()` makes, so it installs as written.
+> Once a view has a build step, bundle it with `@navide/plugin-sdk` and call
+> `createPluginViewRuntimeClient().ready()` after mounting instead; the SDK
+> factories are described under
+> [SDK interface](plugin-development-v2.md#sdk-interface). Navide never calls a
+> `definePlugin` activation function.
+
 ## 2. Validate and package
 
 ```bash
@@ -123,8 +134,11 @@ See FORMAT.md, "Targets and backend entry".
 A backend runs in Navide only inside the OS sandbox, after the user allows it,
 and only answers the methods and events it declares. Publishing one also needs
 an administrator to allow your namespace for native backends, a verified
-publisher domain, `engines.navide` of at least `>=0.2.14`, a non-empty
-`backend.methods`, and no `shell` permission. See
+publisher domain, `engines.navide` of at least `>=0.2.14`, and a non-empty
+`backend.methods`. A backend package may also declare `shell: "allowlist"`
+(shown to users as high risk, including that git/gh/glab can contact network
+hosts and send workspace data); it then needs `engines.navide` of at least
+`>=0.2.25`. `shell: "full"` is not available with a backend. See
 [plugin-development-v2.md](plugin-development-v2.md), "Third-party backends".
 
 `dev-backend` runs your built backend the same way, so what works here works
@@ -144,16 +158,19 @@ navide-plugin dev-backend dist/package
 - It uses the exact sandbox profile Navide uses: `sandbox-exec` on macOS;
   `bwrap` on Linux, and a clear refusal when bubblewrap or unprivileged user
   namespaces are unavailable; Windows is not supported yet.
-- The backend's `HOME` and `TMPDIR` are a private data directory
-  (`<directory>/.navide-dev/data`, or `--data <directory>`), which is also the
-  only writable place. It has no network access and cannot read your home
-  folder.
+- The backend's `HOME` and `TMPDIR` are a private data directory, by default
+  `.navide-dev/<package directory name>/data` beside the package directory
+  (`dist/.navide-dev/package/data` for `dist/package`), or `--data <directory>`.
+  It is never inside the package directory, so a build cannot package it, and
+  `validate` refuses any `.navide-dev` entry. It is also the only writable
+  place. The backend has no network access and cannot read your home folder.
 - Calls to methods, and subscriptions to events, that `manifest.json` does not
   declare are refused before they reach the backend, as in Navide.
 - The Host bridge is not emulated: each `navide/host/call` the backend makes
   is printed and answered with `CAPABILITY_DENIED`.
 - Results print as `← result`, events as `← event`, and the backend's stderr
-  as `[backend]` lines.
+  as `[backend]` lines. When the backend ends, `• backend exited` means exit
+  code 0 and `× backend exited` means it failed or was killed.
 
 ## 3. Test against a local registry
 
@@ -191,20 +208,81 @@ the same reason.
 
 A publisher created with the admin token is trusted, so its versions are
 listed at once; a namespace claimed on the Marketplace is reviewed first
-(section 5). To install from the local Registry in a development build of
+(section 5). A package with a native backend still meets the Marketplace's
+package rules here (`backend.methods`, no `shell: "full"`, the minimum
+`engines.navide`), so a refusal shows up locally rather than on the
+Marketplace. The two publisher gates a local Registry cannot run, the admin
+allowlist and a verified domain, are named in the `notices` of the publish
+response. To install from the local Registry in a development build of
 Navide, point the app at it as described under **Registry endpoints** in the
-[Plugin development guide](plugin-development.md#packaging-and-publishing).
+[Plugin development guide](plugin-development.md#packaging-and-publishing). A
+packaged build honors those settings only while Developer Mode is on
+(Settings → Navide Plugins); with it off it uses the Navide Marketplace.
+
+This is one way to try a package inside Navide before publishing; the others are
+Settings → Navide Plugins → **Install from .vsix file…**, which works in any
+build and installs the file you pick as an unreviewed local package (it never
+updates automatically), and Developer Mode → **Load from folder…**, which runs
+your working folder with its view and backend and reloads it as you edit. There
+is no `navide-plugin dev` command, and the development-build variable
+`AGENT_TEAM_PLUGIN_DEV_PATH` writes no capability grant, so it cannot open a
+Manifest v2 view and refuses a backend. A Registry or file install
+grants the declared permissions and storage for that exact version as soon as
+you approve it; it takes effect without **Restart Plugin** or relaunching Navide.
 
 ## 4. Publish to the Marketplace
+
+### Apply for developer qualification
+
+Only an approved developer can claim a namespace or get a publish token.
+Apply once per Navide account, at **Developer application**
+(`/developer/apply`) or from Navide. The application is real-name (legal
+name, contact email, country, the namespace you intend to claim, what you
+will publish); reviewers and you see those details, the Marketplace shows
+only your display name. Review checks who is publishing and that you can be
+reached, never which permissions your plugins ask for. A rejection comes with
+a reason and you can apply again.
+
+Revoking a qualification freezes every namespace of the account, revokes all
+of its tokens and signing keys, takes every version down and blocks their
+package digests as `qualification-revoked`. The reason is shown on each
+namespace's dashboard. A frozen namespace keeps its name: it stays in your
+account and no other account can claim it. It does not count toward the three
+namespaces an account can hold, and a later approval does not unfreeze it, so
+to publish again you claim a new namespace.
+
+#### Namespaces claimed before developer qualification existed
+
+A namespace you claimed before qualification existed keeps publishing for a
+30-day grace period while you apply. Your namespace's dashboard shows the
+deadline and warns in the last seven days.
+
+- Your **first** application, submitted **before** the deadline, pauses the
+  period until it is decided. If it is approved, the grace period no longer
+  applies. If it is rejected, the period resumes with the days it had left.
+- Nothing else pauses it. An application submitted after the deadline, or a
+  new application after a rejection, leaves the clock running. This includes
+  an account whose application was rejected before the grace period began:
+  its next application is a re-application and does not pause the period.
+- When the period runs out with no approved qualification and no paused
+  application, publishing is refused at once and the namespace is reclaimed
+  within minutes: it is frozen, its tokens and signing key are revoked, every
+  version is taken down and their digests are blocked as
+  `qualification-revoked`. The dashboard shows when and why.
+- A reclaimed namespace is **not** released and is **not** unfrozen by a later
+  approval. It stays in your account and no other account can claim its name,
+  but it no longer counts toward the three namespaces an account can hold.
+  After approval, claim a new namespace.
 
 ### Sign in and claim a namespace
 
 1. Open <https://server.navide.dev/registry/publish> and sign in with your
-   Navide account.
+   Navide account, and make sure your developer qualification is approved
+   (above).
 2. Open **Claim a namespace** (`/publisher/claim`), check a name and claim it.
    Namespaces are first come, first served; reserved words (`navide`,
    `official`, …) and look-alikes of an existing namespace are refused, and an
-   account holds at most three. The namespace must equal the first segment of
+   account holds at most three, not counting frozen ones. The namespace must equal the first segment of
    your plugin id and its `publisher` field.
 
 ### Create and register your signing key
@@ -240,6 +318,11 @@ navide-plugin whoami     # namespace and token expiry
 navide-plugin logout     # forget the stored token
 ```
 
+`whoami` reads the token `publish` would send: `NAVIDE_PLUGIN_TOKEN` first,
+then the stored login. For `NAVIDE_PLUGIN_TOKEN` it asks the Registry
+(`GET /api/publisher/me`) whose token it is; for a stored login it answers
+offline, as before.
+
 `logout` only deletes the local copy. To invalidate a token on the Registry,
 revoke it under **Publisher tokens** on the dashboard. For CI, create a token
 there and pass it as `NAVIDE_PLUGIN_TOKEN` instead of logging in.
@@ -264,6 +347,36 @@ Registry checks it against the key you registered and refuses the upload with
 token from `NAVIDE_PLUGIN_TOKEN`, then `login`. A `--token` argument still
 works, but it is visible to other processes and kept in shell history, so
 `publish` warns when you use it.
+
+To publish from Navide instead, where you are already signed in, hand the
+package to its publish form. The CLI reads and stores no token; you review and
+submit in the Navide window:
+
+```bash
+navide-plugin publish acme.hello-0.1.0-universal.vsix --via-navide
+```
+
+It opens `navide://publish?path=<absolute path>[&target=<target>]` and prints
+the link; `--no-browser` only prints it. `--registry`, `--token`,
+`--signature` and `--insecure-http` do not apply: the form chooses them.
+
+### Check the scan and the review
+
+`navide-plugin scan` runs the Registry's publish-time static scan locally, on
+a `.vsix` or on a staging directory (scanned exactly as `package` would build
+it), and compares what it finds with what the manifest declares, the same way
+users see it on the disclosure card. `--json` prints the report.
+
+```bash
+navide-plugin scan acme.hello-0.1.0-universal.vsix
+```
+
+After publishing, `navide-plugin status` lists your namespace's versions with
+their review state (pending, approved, rejected with the reviewer's reason, or
+yanked) and, once a version is approved, its risk level and anything the scan
+found that the manifest does not declare. Name one plugin or version to narrow
+it: `navide-plugin status acme.hello@0.1.0`. It reads the token like
+`whoami`.
 
 For a backend plugin, sign and publish each target's package with its target:
 
@@ -301,6 +414,18 @@ version number, once used, cannot be reused).
 All targets of one version are decided together. If you upload another target
 while a version waits, the reviewer reloads and decides on the full set.
 
+### How Navide labels the source
+
+Navide shows where every installed Navide plugin came from, as a badge in the
+installed list and on Marketplace results and detail pages, and as a fixed
+**Source and review** row on every disclosure card. Only a Registry-signed
+version reads as reviewed (**Reviewed**, or **Pre-release (reviewed)**). A
+package installed from a local file or a developer folder is labelled as
+such, its scan line reads "Not scanned (only Navide plugins installed from the
+Navide Marketplace are scanned by Navide)", and an unsigned one shows its
+publisher as **Self-declared**. No source is ever called verified or safe on
+these labels.
+
 ## 6. Pre-releases
 
 A version with a SemVer pre-release suffix is a pre-release:
@@ -315,6 +440,104 @@ newest one as `latest_prerelease_version` until a newer stable version is
 published, and Navide installs it only for users who turn on **Get
 pre-releases** for your extension. Build metadata (`1.0.0+build.7`) does not make a
 version a pre-release.
+
+A publish may name its channel with `?channel=stable` or
+`?channel=pre-release`; it must match the version (`400` otherwise). Leaving
+it out derives the channel from the version as above. `?channel=testplace`
+publishes an invite-only test build that expires after 90 days (see
+[Testplace](#testplace) below); it needs a publisher token of a namespace
+whose developer qualification is approved. Public listings, details and
+downloads never include a testplace version. Its
+Registry envelope carries `channel` and `expiresAt` inside the signature, so
+an App released before Testplace refuses it, and a current App refuses it
+after it expires (`TESTPLACE_EXPIRED`) or when the channel is one it does not
+know (`CHANNEL_UNSUPPORTED`).
+
+A user who has not installed your Navide plugin yet can pick **Install *version*
+(pre-release)** on its Marketplace page. That installs the newest pre-release and
+turns on **Get pre-releases** for your Navide plugin only; Install keeps taking
+the stable version. A Navide plugin with only pre-releases is installed this
+way. Navide labels a pre-release **Pre-release (reviewed)**, never unreviewed.
+`navide-plugin publish` says so when the Registry records a pre-release.
+
+### Pre-release, Testplace or a local install
+
+Pick by who should get the build and whether it must be reviewed first.
+Testplace needs Navide 0.2.27 or later on the tester's side.
+
+| | Pre-release | Testplace | Local install |
+|---|---|---|---|
+| Who can install it | Everyone who turns on **Get pre-releases** for your Navide plugin, or picks **Install *version* (pre-release)** | Only the testers you invite (no limit on how many) | Anyone you send the `.vsix` file to |
+| Review | Same review as a stable version | Automated scan only for invited testers; a public test code adds a light human review | None; Navide does not scan it |
+| Signed by the Navide Marketplace | Yes | Yes | No (your publisher signature at most) |
+| Label in Navide | **Pre-release (reviewed)** | **Test build, no human review, expires *date*** | **Local file**, with "not reviewed by Navide" |
+| Expires | No | After 90 days; the Navide plugin is turned off and its data kept | No |
+| How users get it | The Navide Marketplace, as an update or with **Install *version* (pre-release)** | The Navide Marketplace, after accepting the invitation | **Install from file**, after a separate consent |
+
+繁體中文：
+
+| | 預覽版 | Testplace | 本機安裝 |
+|---|---|---|---|
+| 誰能安裝 | 對你的 Navide 外掛打開「接收預覽版」，或選「安裝 *版本*（預覽版）」的所有人 | 只有你邀請的測試者（每個 Navide 外掛最多 100 位） | 你把 `.vsix` 檔案寄給的任何人 |
+| 審核 | 和正式版相同的審核 | 受邀測試者只跑自動掃描；公開測試碼另有輕量人工審核 | 沒有；Navide 不會掃描 |
+| Navide 市集簽章 | 有 | 有 | 沒有（最多只有發佈者自己的簽章） |
+| Navide 裡的標記 | 「預覽版（已審核）」 | 「測試版，沒有人工審核，*日期* 到期」 | 「本機檔案」，並註明未經 Navide 審核 |
+| 到期 | 不會 | 90 天後到期；Navide 外掛會停用、資料保留 | 不會 |
+| 使用者怎麼取得 | 從 Navide 市集更新，或選「安裝 *版本*（預覽版）」 | 接受邀請後從 Navide 市集安裝 | 另外同意後「從檔案安裝」 |
+
+日本語：
+
+| | プレリリース版 | Testplace | ローカルインストール |
+|---|---|---|---|
+| インストールできる人 | その Navide プラグインで「プレリリースを受け取る」をオンにした人、または「*バージョン* をインストール（プレリリース）」を選んだ人全員 | 招待したテスターのみ（Navide プラグインごとに最大 100 人） | `.vsix` ファイルを受け取った人なら誰でも |
+| 審査 | 正式版と同じ審査 | 招待テスターは自動スキャンのみ。公開テストコードには簡易な人による審査が加わります | なし。Navide はスキャンしません |
+| Navide マーケットプレイスの署名 | あり | あり | なし（あっても発行者自身の署名のみ） |
+| Navide での表示 | 「プレリリース版（審査済み）」 | 「テスト版。人による審査なし。*日付* に期限切れ」 | 「ローカルファイル」、Navide の審査を受けていない旨を表示 |
+| 有効期限 | なし | 90 日後。Navide プラグインは無効になり、データは残ります | なし |
+| 入手方法 | Navide マーケットプレイスからの更新、または「*バージョン* をインストール（プレリリース）」 | 招待を受け入れたあと Navide マーケットプレイスから | 別途同意したうえで「ファイルからインストール」 |
+
+### Testplace
+
+Testplace hands a build to the testers you pick before it is reviewed for
+the Marketplace. Only a namespace whose developer qualification is approved
+can use it, and testers sign in to Navide Cloud: nobody else can see or
+download the build, and it never appears in search or listings.
+
+```sh
+navide-plugin publish acme.files-1.3.0.vsix --channel testplace
+navide-plugin testplace invite add acme.files alice@example.com "Bob (QA)"
+navide-plugin testplace invite list acme.files
+```
+
+- `publish --channel testplace` runs the automatic checks only (a likely
+  credential or a name too close to another Navide plugin refuses the build)
+  and signs it with an expiry 90 days out.
+- `invite add` creates one single-use join token per label and prints each
+  once. A label is your own note (for example the address you send it to); it
+  is never shown to the tester. Send the token yourself; the tester pastes it
+  in Navide while signed in to Navide Cloud. There is no limit on the number
+  of invites or testers; revoking one (`invite revoke`) removes that tester's
+  access.
+- `code create --max-testers <n>` opens a public test code for up to `n`
+  testers, any positive number you choose. The first code of a Navide plugin waits for a light review by
+  Navide; later ones open at once. `code revoke` stops new joins; testers who
+  already joined keep their access.
+- `revoke <id> <version>` withdraws a test build early. A yank does the same.
+  Only the build's testers are told, never the public:
+  - a tester who is online and signed in to Navide Cloud has it turned off
+    within 15 minutes, and is never offered to keep it after it expires;
+  - a tester who is offline or not signed in can keep running it until it
+    expires, at most 90 days after it was published.
+
+  A build that is actually malicious is handled by Navide's existing takedown
+  and blocklist, not by a revoke.
+- Two things still expire. A test build expires 90 days after it is published;
+  its testers lose it then unless you publish a newer one or promote it.
+  Testers sign in with a Navide Cloud account token that lasts 30 days, after
+  which they sign in again in Navide.
+- `promote <id> <version>` sends the same package to Marketplace review. When
+  it is approved it becomes an ordinary stable or pre-release version (by its
+  SemVer), and testers keep it without reinstalling.
 
 ## 7. Extension packs
 
@@ -380,7 +603,10 @@ publisher. Removals, and why, are listed publicly at
 |---|---|
 | `navide-plugin: ... is not a safe package-relative path` / `is outside the frontend/assets/backend package boundary` | A path in `artifact-files.json` escapes the package layout. Keep files under `frontend/`, `assets/` or `backend/`, plus `manifest.json` and `README.md`. |
 | `... is source-only or secret material` | A `.ts`, `.vue`, `.map`, `package.json`, lock file, `node_modules`, `tests`, `.env` or key file is listed. Ship build output only. |
-| `manifest references '...', but that file does not exist` | A view `entry`, icon or the backend entry is missing from the staging directory or from `artifact-files.json`. |
+| `manifest references '...', but that file does not exist` | A view `entry`, icon or the backend entry is missing from the staging directory. |
+| `manifest references '...', but artifact-files.json does not list it` | The file is there but not in the `files` array; add it. |
+| `package entry '...' is listed in artifact-files.json but does not exist` | The `files` array names a file the staging directory does not have; build it or remove it from the list. |
+| `package entry '...' is dev-backend data (.navide-dev)` | `navide-plugin dev-backend` data was listed; remove it from `artifact-files.json`. |
 | `backend package target '...' must match the build host target '...'` | Package each backend target on a machine of that platform and architecture. |
 | `frontend-only package target must be 'universal'` | Drop `--target` for a plugin without a backend. |
 | `private key must have owner-only permissions` | `chmod 600 keys/acme.key`. |
@@ -400,13 +626,19 @@ publisher. Removals, and why, are listed publicly at
 ```text
 navide-plugin init <directory> --id <namespace.name> [--name <display name>]
 navide-plugin validate <directory> [--target <target>]
+navide-plugin scan <package.vsix | directory> [--target <target>] [--json]
 navide-plugin package <directory> [--target <target>] [--out <file>]
 navide-plugin keygen [--out-dir <directory>] [--name <name>]
 navide-plugin sign <package> --key <private-key> [--out <signature>]
 navide-plugin verify <package> --key <public-key> --signature <signature>
 navide-plugin login [--registry <url>] [--label <label>] [--no-browser] [--insecure-http]
 navide-plugin whoami [--registry <url>]
+navide-plugin status [<namespace.name>[@<version>]] [--registry <url>] [--json]
 navide-plugin logout [--registry <url>]
-navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--insecure-http]
+navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]
+navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]
+navide-plugin testplace invite add <namespace.name> <label>... | invite list <namespace.name> | invite revoke <namespace.name> <invite-id>
+navide-plugin testplace code create <namespace.name> --max-testers <n> | code list <namespace.name> | code revoke <namespace.name> <code-id>
+navide-plugin testplace versions <namespace.name> | revoke <namespace.name> <version> [--reason <text>] | promote <namespace.name> <version>
 navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]
 ```

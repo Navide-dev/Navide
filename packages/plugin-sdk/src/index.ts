@@ -777,6 +777,42 @@ export function createPluginViewRuntimeClient(): PluginViewRuntimeClient {
   })
 }
 
+// Standalone forms of the stateless PluginViewRuntimeClient methods. A bundler
+// keeps only the ones a view imports; the client object keeps every method.
+
+/** Same as `createPluginViewRuntimeClient().ready()`. */
+export function viewReady(): void {
+  runtimeViewBridge().ready()
+}
+
+/** Same as `createPluginViewRuntimeClient().hide()`. */
+export function hideView(): void {
+  runtimeViewBridge().hideSelf()
+}
+
+/** Same as `createPluginViewRuntimeClient().openContributionWindow()`. */
+export function openContributionWindow(params: Params<'ui.openPluginWindow'>): Promise<Result<'ui.openPluginWindow'>> {
+  return createPluginCapabilityClient().capabilities.invoke('ui.openPluginWindow', params)
+}
+
+/** Same as `createPluginViewRuntimeClient().onOpenTarget()`. */
+export function onOpenTarget(listener: (target: Record<string, string>) => void): Disposable {
+  if (typeof listener !== 'function') {
+    throw new PluginError('INVALID_ARGUMENT', 'Plugin target listener is invalid.')
+  }
+  return Object.freeze({ dispose: runtimeViewBridge().onOpenTarget(listener) })
+}
+
+/** Same as `createPluginViewRuntimeClient().onBackendStatus()`. */
+export function onBackendStatus(listener: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void): Disposable {
+  return Object.freeze({ dispose: runtimeCapabilityBridge().on('nav.backend_status', payload => {
+    const status = (payload as { status?: unknown } | null)?.status
+    if (status === 'connecting' || status === 'connected' || status === 'disconnected' || status === 'error') {
+      listener(status)
+    }
+  }) })
+}
+
 function publicMethodAddress(method: PublicMethod): { namespace: string; name: string } {
   const separator = method.indexOf('.')
   if (separator < 1 || separator === method.length - 1) {
@@ -999,6 +1035,66 @@ export function createPluginSettingsStore(
     },
     delete(key: string) {
       return context.capabilities.invoke('storage.delete', { scope, key })
+    },
+  })
+}
+
+export interface PluginViewState<T extends JsonValue> {
+  /** The last saved value, or the fallback when there is none or it cannot be read. Never rejects. */
+  restore(): Promise<T>
+  /** Remember `value`. Writes run one at a time; only the newest pending value is written. */
+  save(value: T): void
+  /** Resolves once every saved value has been written (or failed to). */
+  flush(): Promise<void>
+}
+
+/** View state that survives a reload of the view: a Developer Mode reload, an
+ *  update, or Restart Plugin. It lives in Host-managed storage under
+ *  `view-state:<key>`, so it needs no permission. Call `ready()` without
+ *  waiting for `restore()`; a reload is prepared in a view with no storage
+ *  access, where `restore()` returns the fallback. */
+export function createPluginViewState<T extends JsonValue>(
+  key: string,
+  fallback: T,
+  options: {
+    scope?: StoragePartitionScope
+    context?: Pick<PluginContext, 'capabilities'>
+  } = {},
+): PluginViewState<T> {
+  if (typeof key !== 'string' || key.length === 0) throw new TypeError('view state key must be a non-empty string')
+  const scope = options.scope ?? 'plugin'
+  const storageKey = `view-state:${key}`
+  let context = options.context
+  const capabilities = () => (context ??= createPluginCapabilityClient()).capabilities
+  let pending: { value: T } | null = null
+  let writing: Promise<void> | null = null
+  const drain = async (): Promise<void> => {
+    while (pending) {
+      const { value } = pending
+      pending = null
+      try {
+        await capabilities().invoke('storage.set', { scope, key: storageKey, value })
+      } catch {
+        // State is a convenience: a failed write leaves the previous value.
+      }
+    }
+    writing = null
+  }
+  return Object.freeze({
+    async restore() {
+      try {
+        const result = await capabilities().invoke('storage.get', { scope, key: storageKey })
+        return result.found ? (result.value as T) : fallback
+      } catch {
+        return fallback
+      }
+    },
+    save(value: T) {
+      pending = { value }
+      writing ??= drain()
+    },
+    async flush() {
+      await writing
     },
   })
 }

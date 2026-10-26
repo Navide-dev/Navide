@@ -66,6 +66,7 @@ interface Overrides {
   list?: Record<string, unknown>
   get?: Record<string, unknown>
   save?: Record<string, unknown>
+  restore?: Record<string, unknown>
 }
 
 function mockBackend(overrides: Overrides = {}) {
@@ -80,6 +81,9 @@ function mockBackend(overrides: Overrides = {}) {
     }
     if (type === 'memory.save') {
       return overrides.save ?? { ok: true, payload: { path: '', size: 7, modified: 1756339999 } }
+    }
+    if (type === 'memory.restore') {
+      return overrides.restore ?? { ok: true, payload: { path: '', size: 5, modified: 1756340500 } }
     }
     return (
       overrides.list ?? {
@@ -276,7 +280,7 @@ describe('MemoryPane', () => {
     await wrapper.find('.memory-editor-text').setValue('# mine')
     await clickEditorButton(wrapper, 'Save')
 
-    await clickEditorButton(wrapper, 'Reload from disk (discards your draft)')
+    await clickEditorButton(wrapper, 'Reload from Disk (Discards Your Draft)')
     expect(send.mock.calls.filter((call) => call[0] === 'memory.get')).toHaveLength(2)
     expect((wrapper.find('.memory-editor-text').element as HTMLTextAreaElement).value).toBe('# hello')
     expect(wrapper.find('.memory-conflict').exists()).toBe(false)
@@ -297,6 +301,7 @@ describe('MemoryPane', () => {
   })
 
   it('cancelling closes the editor without saving', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const { backend, send } = mockBackend()
     wrapper = await mountPane(backend)
     await openRow(wrapper, 'AGENTS.md')
@@ -304,8 +309,190 @@ describe('MemoryPane', () => {
 
     await clickEditorButton(wrapper, 'Cancel')
 
+    expect(confirm).toHaveBeenCalledWith('Discard your unsaved changes to AGENTS.md?')
     expect(wrapper.find('.memory-editor').exists()).toBe(false)
     expect(send.mock.calls.some((call) => call[0] === 'memory.save')).toBe(false)
+  })
+
+  it('closes a clean editor without asking', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { backend } = mockBackend()
+    wrapper = await mountPane(backend)
+    await openRow(wrapper, 'AGENTS.md')
+
+    await clickEditorButton(wrapper, 'Cancel')
+
+    expect(confirm).not.toHaveBeenCalled()
+    expect(wrapper.find('.memory-editor').exists()).toBe(false)
+  })
+
+  it('keeps the draft when the user declines to discard it', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { backend, send } = mockBackend()
+    wrapper = await mountPane(backend)
+    await openRow(wrapper, 'AGENTS.md')
+    await wrapper.find('.memory-editor-text').setValue('# keep me')
+
+    await clickEditorButton(wrapper, 'Cancel')
+    await wrapper.find('.memory-editor-close').trigger('click')
+    await openRow(wrapper, '.claude/CLAUDE.md')
+
+    expect(confirm).toHaveBeenCalledTimes(3)
+    expect(send.mock.calls.filter((call) => call[0] === 'memory.get')).toHaveLength(1)
+    expect((wrapper.find('.memory-editor-text').element as HTMLTextAreaElement).value).toBe('# keep me')
+    // Settings asks the same question before it closes.
+    expect((wrapper.vm as unknown as { confirmDiscard(): boolean }).confirmDiscard()).toBe(false)
+  })
+
+  it('offers the kept previous version and restores it in one click', async () => {
+    const { backend, send } = mockBackend({
+      get: {
+        ok: true,
+        payload: {
+          path: '',
+          text: '# hello',
+          exists: true,
+          modified: 1756339200,
+          previous: { saved_at: 1756339100, size: 5 },
+        },
+      },
+    })
+    wrapper = await mountPane(backend)
+    await openRow(wrapper, 'AGENTS.md')
+
+    const kept = wrapper.find('.memory-previous')
+    expect(kept.exists()).toBe(true)
+    expect(kept.text()).toContain("in Navide's own folder")
+    await clickEditorButton(wrapper, 'Restore Previous Version')
+
+    expect(send).toHaveBeenCalledWith('memory.restore', {
+      path: '/Users/x/proj/AGENTS.md',
+      expected_modified: 1756339200,
+      workspace_path: WORKSPACE,
+    })
+    // The editor re-reads the restored file and the list is refreshed.
+    expect(send.mock.calls.filter((call) => call[0] === 'memory.get')).toHaveLength(2)
+    expect(send).toHaveBeenLastCalledWith('memory.list', { workspace_path: WORKSPACE })
+  })
+
+  describe('undo create', () => {
+    const createdGet = {
+      ok: true,
+      payload: {
+        path: '',
+        text: '# new',
+        exists: true,
+        modified: 1756339200,
+        created: { created_at: 1756339100, size: 5 },
+      },
+    }
+
+    function stubTrash(...results: Array<Record<string, unknown>>) {
+      const trash = vi.fn(async () => results.shift() ?? { ok: true })
+      ;(window as unknown as Record<string, unknown>).agentTeam = { trashCreatedMemoryFile: trash }
+      return trash
+    }
+
+    afterEach(() => {
+      delete (window as unknown as Record<string, unknown>).agentTeam
+    })
+
+    it('moves a file Navide created to the Trash in one click', async () => {
+      const trash = stubTrash({ ok: true })
+      const { backend, send } = mockBackend({ get: createdGet })
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+
+      expect(wrapper.find('.memory-created').text()).toContain('Navide created this file')
+      await clickEditorButton(wrapper, 'Undo Create (Move to Trash)')
+
+      expect(trash).toHaveBeenCalledWith('/Users/x/proj/AGENTS.md', false)
+      // The editor re-reads the (now missing) file and the list is refreshed.
+      expect(send.mock.calls.filter((call) => call[0] === 'memory.get')).toHaveLength(2)
+      expect(send).toHaveBeenLastCalledWith('memory.list', { workspace_path: WORKSPACE })
+    })
+
+    it('shows the difference and asks before trashing a file that changed since', async () => {
+      const trash = stubTrash(
+        { ok: false, code: 'changed', created: '# new', current: '# new\nclaude wrote' },
+        { ok: true },
+      )
+      const { backend } = mockBackend({ get: createdGet })
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+      await clickEditorButton(wrapper, 'Undo Create (Move to Trash)')
+
+      expect(trash).toHaveBeenCalledTimes(1)
+      expect(wrapper.find('.memory-created').text()).toContain('changed after Navide created it')
+      expect(wrapper.find('.memory-diff-add').text()).toBe('+ claude wrote')
+      await clickEditorButton(wrapper, 'Move to Trash Anyway')
+
+      expect(trash).toHaveBeenLastCalledWith('/Users/x/proj/AGENTS.md', true)
+    })
+
+    it('keeps the file when the user declines after seeing the difference', async () => {
+      const trash = stubTrash({ ok: false, code: 'changed', created: 'a', current: 'b' })
+      const { backend } = mockBackend({ get: createdGet })
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+      await clickEditorButton(wrapper, 'Undo Create (Move to Trash)')
+      await clickEditorButton(wrapper, 'Keep File')
+
+      expect(trash).toHaveBeenCalledTimes(1)
+      expect(wrapper.find('.memory-diff').exists()).toBe(false)
+    })
+
+    it('reports a Trash that refused instead of deleting', async () => {
+      stubTrash({ ok: false, code: 'trash-failed', error: 'no trash' })
+      const { backend } = mockBackend({ get: createdGet })
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+      await clickEditorButton(wrapper, 'Undo Create (Move to Trash)')
+
+      expect(wrapper.find('.memory-error').text()).toContain('no trash')
+    })
+
+    it('offers no undo for a file Navide did not create', async () => {
+      stubTrash()
+      const { backend } = mockBackend()
+      wrapper = await mountPane(backend)
+      await openRow(wrapper, 'AGENTS.md')
+
+      expect(wrapper.find('.memory-created').exists()).toBe(false)
+    })
+  })
+
+  it('shows no restore offer when nothing was kept', async () => {
+    const { backend } = mockBackend()
+    wrapper = await mountPane(backend)
+    await openRow(wrapper, 'AGENTS.md')
+
+    expect(wrapper.find('.memory-previous').exists()).toBe(false)
+  })
+
+  it('keeps the draft and explains the clash when a restore meets a changed file', async () => {
+    const { backend } = mockBackend({
+      get: {
+        ok: true,
+        payload: {
+          path: '',
+          text: '# hello',
+          exists: true,
+          modified: 1756339200,
+          previous: { saved_at: 1756339100, size: 5 },
+        },
+      },
+      restore: {
+        ok: false,
+        error: { code: 'MEMORY_FILE_CONFLICT', message: 'the file changed on disk' },
+      },
+    })
+    wrapper = await mountPane(backend)
+    await openRow(wrapper, 'AGENTS.md')
+
+    await clickEditorButton(wrapper, 'Restore Previous Version')
+
+    expect(wrapper.find('.memory-conflict').exists()).toBe(true)
   })
 
   it('keeps a mapped CLI apart from one whose files its own config names', async () => {
@@ -355,5 +542,67 @@ describe('MemoryPane', () => {
     wrapper = await mountPane(backend)
 
     expect(wrapper.find('.memory-error').text()).toBe('backend down')
+  })
+
+  describe('Claude auto-memory', () => {
+    const FOLDER = '/Users/x/.claude/projects/-Users-x-proj/memory'
+    const autoFile = {
+      scope: 'project',
+      path: `${FOLDER}/MEMORY.md`,
+      relative: 'MEMORY.md',
+      readers: ['claude'],
+      canonical: false,
+      exists: true,
+      size: 300,
+      modified: 1756339200,
+      error: '',
+      auto_memory: true,
+    }
+    const listWith = (extra: unknown[]) => ({
+      ok: true,
+      payload: { files: [...files, ...extra], agents, workspace_path: WORKSPACE, auto_memory_dir: FOLDER },
+    })
+
+    it('lists auto-memory on its own, marked as written by Claude', async () => {
+      const { backend } = mockBackend({ list: listWith([autoFile]) })
+      wrapper = await mountPane(backend)
+
+      const project = wrapper.findAll('.memory-group')[1]
+      expect(project.findAll('.memory-relative').map((el) => el.text())).toEqual(['AGENTS.md'])
+      const auto = wrapper.find('.memory-auto')
+      expect(auto.find('.memory-group-title').text()).toContain('Claude auto-memory')
+      expect(auto.text()).toContain('Notes Claude Code writes about this project by itself')
+      expect(auto.find('.memory-auto-dir').text()).toBe(FOLDER)
+      expect(auto.findAll('.memory-relative').map((el) => el.text())).toEqual(['MEMORY.md'])
+      expect(auto.find('.memory-tag').text()).toBe('Written by Claude')
+    })
+
+    it('edits an auto-memory file through the same save path', async () => {
+      const { backend, send } = mockBackend({ list: listWith([autoFile]) })
+      wrapper = await mountPane(backend)
+      await wrapper.find('.memory-auto .memory-open').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.memory-editor-hint').text()).toContain('Claude Code wrote this file itself')
+      await wrapper.find('.memory-editor-text').setValue('- edited')
+      await clickEditorButton(wrapper, 'Save')
+      expect(send).toHaveBeenCalledWith('memory.save', {
+        path: autoFile.path,
+        text: '- edited',
+        expected_modified: 1756339200,
+        workspace_path: WORKSPACE,
+      })
+    })
+
+    it('says so when Claude has written nothing, and hides the group without a workspace', async () => {
+      const { backend } = mockBackend({ list: listWith([]) })
+      wrapper = await mountPane(backend)
+      expect(wrapper.find('.memory-auto').text()).toContain('has not saved any notes')
+      wrapper.unmount()
+
+      const second = mockBackend({ list: listWith([]) })
+      wrapper = await mountPane(second.backend, '')
+      expect(wrapper.find('.memory-auto').exists()).toBe(false)
+    })
   })
 })

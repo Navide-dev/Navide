@@ -9,6 +9,7 @@ import type { EditorNativeParams, EditorNativeResults, EditorNativeEvents } from
 import type { GitCapabilityParams, GitCapabilityResults } from './gitCapabilities.js'
 import type { GitAccountParams, GitAccountResults, GitCredentialEvents } from './gitAccounts.js'
 import type { IssueParams, IssueResults } from './issues.js'
+import type { AgentsParams, AgentsResults } from './agents.js'
 import type { EditorPreferenceParams, EditorPreferenceResults, EditorPreferenceEvents } from './editorPreferences.js'
 import type { FilePickerRequest } from './filePicker.js'
 export { validFilePickerRequest } from './filePicker.js'
@@ -21,7 +22,11 @@ export type { EditorAiParams, EditorAiResults, EditorAiEvents, EditorReviewResul
 export type { EditorNativeParams, EditorNativeResults, EditorNativeEvents, EditorFileSelection } from './editorNative.js'
 export * from './gitCapabilities.js'
 export * from './issues.js'
+export * from './agents.js'
 export * from './editorPreferences.js'
+export * from './staticScan.js'
+export { deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
+export type { AgentToolErrorCode, AgentToolValidationError } from './agentToolsValidation.js'
 export type { GitAccountParams, GitAccountResults, GitAccountSummary } from './gitAccounts.js'
 
 export type JsonPrimitive = string | number | boolean | null
@@ -33,7 +38,7 @@ export type StorageGetResult =
 
 export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'window', 'detail'] as const
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
-export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli'] as const
+export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
 /** Most members one Extension Pack may list. */
 export const MAX_EXTENSION_PACK_MEMBERS = 20
@@ -121,6 +126,13 @@ export type PluginManifestV2 = {
     methods?: string[]
     /** Package-local events this backend may publish. */
     events?: string[]
+    /** Tools an agent may call through the core navide MCP server once the
+     *  user consents. This parser applies what the manifest schema expresses;
+     *  the rules it cannot (name prefix derived from the id, reserved names,
+     *  method listed in `methods`, unique names, integers only in
+     *  `inputSchema`, the 1 MiB cap) are applied by the Host and the Registry
+     *  (docs/en-US/plugin-agent-tools-contract.md section 2). */
+    agentTools?: PluginManifestV2AgentTool[]
   }
   /** Extension Pack members (package ids). A pack carries no runtime surface
    *  and no permissions of its own: every member is installed, verified and
@@ -129,6 +141,17 @@ export type PluginManifestV2 = {
   /** Legacy fields are intentionally unavailable on a v2 manifest. */
   requires?: never
   entry?: never
+}
+
+/** One `backend.agentTools` entry (contract section 2.1). */
+export type PluginManifestV2AgentTool = {
+  name: string
+  method: string
+  risk: 'read' | 'write'
+  title: string
+  description: string
+  inputSchema: Record<string, unknown>
+  timeoutMs?: number
 }
 
 export type PluginContractErrorCode =
@@ -345,6 +368,7 @@ const VERSION_RANGE = /^[~^]?[0-9]+\.[0-9]+\.[0-9]+$/
 const PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
 const PUBLISHER = /^[a-z0-9][a-z0-9-]*$/
 const VIEW_ID = /^[a-z][a-z0-9-]*$/
+const VIEW_ID_RULE = 'a view id is a lower-case letter followed by a-z, 0-9 and -'
 const LICENSE = /^[A-Za-z0-9][A-Za-z0-9.()+ -]*$/
 const SCRIPT_EXTENSIONS = new Set([
   '.py',
@@ -450,7 +474,7 @@ function parseScopes(value: unknown): PluginManifestV2Scopes {
   )
   assertOnlyKeys(fs, ['root', 'read', 'write'], 'manifest permissions.scopes.fs')
   if (fs.root !== undefined && !V2_FS_SCOPE_ROOTS.includes(fs.root as PluginFsScopeRoot)) {
-    fail('manifest permissions.scopes.fs.root must be workspace or repository')
+    fail(`manifest permissions.scopes.fs.root must be workspace or repository, got ${JSON.stringify(fs.root)}`)
   }
   if (fs.read === undefined && fs.write === undefined) {
     fail('manifest permissions.scopes.fs must declare read or write')
@@ -469,16 +493,21 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
   assertOnlyKeys(permissions, ['system', 'shell', 'scopes'], 'manifest permissions')
   let system: PluginSystemNamespace[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'system')) {
-    const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, 3)
-    if (values.some((item) => !V2_SYSTEM_NAMESPACES.includes(item as PluginSystemNamespace))) {
-      fail('manifest permissions.system contains an unknown namespace')
+    const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, V2_SYSTEM_NAMESPACES.length)
+    const unknown = values.find((item) => !V2_SYSTEM_NAMESPACES.includes(item as PluginSystemNamespace))
+    if (unknown !== undefined) {
+      fail(`manifest permissions.system contains an unknown namespace ${JSON.stringify(unknown)}; allowed: ${V2_SYSTEM_NAMESPACES.join(', ')}`)
+    }
+    // Message text is disclosed on top of the agent metadata it belongs to.
+    if (values.includes('agentMessages') && !values.includes('agents')) {
+      fail('manifest permissions.system declares agentMessages without agents')
     }
     system = values as PluginSystemNamespace[]
   }
   let shell: PluginShellMode | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'shell')) {
     if (!V2_SHELL_MODES.includes(permissions.shell as PluginShellMode)) {
-      fail('manifest permissions.shell contains an unknown mode')
+      fail(`manifest permissions.shell contains an unknown mode ${JSON.stringify(permissions.shell)}; allowed: ${V2_SHELL_MODES.join(', ')}`)
     }
     shell = permissions.shell as PluginShellMode
   }
@@ -497,14 +526,17 @@ function parseMarketplace(value: unknown): PluginManifestV2['marketplace'] {
   )
   const description = displayText(required(marketplace, 'description', 'manifest marketplace'), 'manifest marketplace.description', 280)
   const license = stringValue(required(marketplace, 'license', 'manifest marketplace'), 'manifest marketplace.license', 1, 100)
-  if (!LICENSE.test(license)) fail('manifest marketplace.license contains invalid characters')
+  if (!LICENSE.test(license)) {
+    fail(`manifest marketplace.license ${JSON.stringify(license)} contains invalid characters; allowed: letters, digits, spaces and . ( ) + -`)
+  }
   const result: PluginManifestV2['marketplace'] = { description, license }
   if (marketplace.repository !== undefined) result.repository = httpsUri(marketplace.repository, 'manifest marketplace.repository')
   if (marketplace.homepage !== undefined) result.homepage = httpsUri(marketplace.homepage, 'manifest marketplace.homepage')
   if (marketplace.categories !== undefined) {
     const categories = uniqueStringArray(marketplace.categories, 'manifest marketplace.categories', 0, 5)
-    if (categories.some((category) => !/^[a-z0-9][a-z0-9-]{0,39}$/.test(category))) {
-      fail('manifest marketplace.categories contains an invalid category')
+    const invalid = categories.find((category) => !/^[a-z0-9][a-z0-9-]{0,39}$/.test(category))
+    if (invalid !== undefined) {
+      fail(`manifest marketplace.categories contains an invalid category ${JSON.stringify(invalid)}; a category is 1-40 of a-z, 0-9 and -, starting with a letter or digit`)
     }
     result.categories = categories
   }
@@ -522,10 +554,10 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
     const view = assertObject(raw, `manifest contributes.views[${index}]`)
     assertOnlyKeys(view, ['id', 'kind', 'location', 'title', 'icon', 'entry', 'detailView', 'targetSchema', 'receives'], `manifest contributes.views[${index}]`)
     const id = stringValue(required(view, 'id', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].id`)
-    if (!VIEW_ID.test(id)) fail(`manifest contributes.views[${index}].id is invalid`)
+    if (!VIEW_ID.test(id)) fail(`manifest contributes.views[${index}].id ${JSON.stringify(id)} is invalid; ${VIEW_ID_RULE}`)
     if (view.kind !== 'custom') fail(`manifest contributes.views[${index}].kind must be 'custom'`)
     if (!V2_VIEW_LOCATIONS.includes(view.location as (typeof V2_VIEW_LOCATIONS)[number])) {
-      fail(`manifest contributes.views[${index}].location is invalid`)
+      fail(`manifest contributes.views[${index}].location ${JSON.stringify(view.location)} is invalid; allowed: ${V2_VIEW_LOCATIONS.join(', ')}`)
     }
     const title = displayText(required(view, 'title', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].title`)
     const entry = htmlPath(required(view, 'entry', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].entry`)
@@ -539,7 +571,9 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
     if (view.icon !== undefined) parsed.icon = safePath(view.icon, `manifest contributes.views[${index}].icon`)
     if (view.detailView !== undefined) {
       parsed.detailView = stringValue(view.detailView, `manifest contributes.views[${index}].detailView`)
-      if (!VIEW_ID.test(parsed.detailView)) fail(`manifest contributes.views[${index}].detailView is invalid`)
+      if (!VIEW_ID.test(parsed.detailView)) {
+        fail(`manifest contributes.views[${index}].detailView ${JSON.stringify(parsed.detailView)} is invalid; ${VIEW_ID_RULE}`)
+      }
     }
     if (view.targetSchema !== undefined) {
       parsed.targetSchema = safePath(view.targetSchema, `manifest contributes.views[${index}].targetSchema`)
@@ -550,8 +584,9 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
       assertOnlyKeys(receives, ['protocolVersion', 'locations', 'editorTargets', 'closeGuard'], `manifest contributes.views[${index}].receives`)
       if (receives.protocolVersion !== 1) fail(`manifest contributes.views[${index}].receives.protocolVersion must be 1`)
       const locations = uniqueStringArray(receives.locations, `manifest contributes.views[${index}].receives.locations`, 1, 2)
-      if (locations.some((location) => !V2_RECEIVER_LOCATIONS.includes(location as (typeof V2_RECEIVER_LOCATIONS)[number]))) {
-        fail(`manifest contributes.views[${index}].receives.locations contains an invalid location`)
+      const invalidLocation = locations.find((location) => !V2_RECEIVER_LOCATIONS.includes(location as (typeof V2_RECEIVER_LOCATIONS)[number]))
+      if (invalidLocation !== undefined) {
+        fail(`manifest contributes.views[${index}].receives.locations contains an invalid location ${JSON.stringify(invalidLocation)}; allowed: ${V2_RECEIVER_LOCATIONS.join(', ')}`)
       }
       const receiver: PluginManifestV2Receiver = {
         protocolVersion: 1,
@@ -591,7 +626,7 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
 
 function parseBackend(value: unknown): PluginManifestV2['backend'] {
   const backend = assertObject(value, 'manifest backend')
-  assertOnlyKeys(backend, ['entry', 'protocolVersion', 'activation', 'methods', 'events'], 'manifest backend')
+  assertOnlyKeys(backend, ['entry', 'protocolVersion', 'activation', 'methods', 'events', 'agentTools'], 'manifest backend')
   const entry = safePath(required(backend, 'entry', 'manifest backend'), 'manifest backend.entry')
   const filename = entry.slice(entry.lastIndexOf('/') + 1).toLowerCase()
   const extension = filename.slice(filename.lastIndexOf('.'))
@@ -606,25 +641,70 @@ function parseBackend(value: unknown): PluginManifestV2['backend'] {
   const events = backend.events === undefined
     ? undefined
     : backendNameList(backend.events, 'manifest backend.events', MAX_BACKEND_EVENTS)
+  const agentTools = backend.agentTools === undefined ? undefined : agentToolList(backend.agentTools)
   return {
     entry,
     protocolVersion: 1,
     activation: 'startup',
     ...(methods ? { methods } : {}),
     ...(events ? { events } : {}),
+    ...(agentTools ? { agentTools } : {}),
   }
+}
+
+const AGENT_TOOL_KEYS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema', 'timeoutMs'] as const
+const AGENT_TOOL_NAME_PATTERN = /^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$/
+// The Host backend supervisor's method-name rule (isMethodName in
+// src/main/plugins/pluginBackendSupervisor.ts): stricter than the manifest
+// schema's backend name pattern, and what activation enforces.
+const AGENT_TOOL_METHOD_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/
+// eslint-disable-next-line no-control-regex
+const AGENT_TOOL_TEXT_PATTERN = /^[^\u0000-\u001f\u007f-\u009f\u2028\u2029<>]+$/
+
+/** The `agentTool` definition of plugin-manifest-v2.schema.json; returns copies. */
+function agentToolList(value: unknown): PluginManifestV2AgentTool[] {
+  if (!Array.isArray(value) || value.length === 0) fail('manifest backend.agentTools must be a non-empty array')
+  return value.map((raw, index) => {
+    const label = `manifest backend.agentTools[${index}]`
+    const tool = assertObject(raw, label)
+    assertOnlyKeys(tool, AGENT_TOOL_KEYS, label)
+    for (const key of AGENT_TOOL_KEYS.slice(0, 6)) required(tool, key, label)
+    if (typeof tool.name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(tool.name)) fail(`${label}.name is invalid`)
+    if (typeof tool.method !== 'string' || tool.method.length > 128 || !AGENT_TOOL_METHOD_PATTERN.test(tool.method)) {
+      fail(`${label}.method must be a lower-case backend method name (a-z, 0-9, _ and dots), as the Host accepts`)
+    }
+    if (tool.risk !== 'read' && tool.risk !== 'write') fail(`${label}.risk must be 'read' or 'write'`)
+    for (const key of ['title', 'description'] as const) {
+      const text = tool[key]
+      if (typeof text !== 'string' || !AGENT_TOOL_TEXT_PATTERN.test(text)) {
+        fail(`${label}.${key} must be non-empty plain text without control characters or < >`)
+      }
+    }
+    const schema = tool.inputSchema
+    if (!isRecord(schema) || schema.type !== 'object') fail(`${label}.inputSchema must be a JSON Schema of type 'object'`)
+    if (tool.timeoutMs !== undefined) {
+      const timeout = tool.timeoutMs
+      if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 1 || timeout > 120_000) {
+        fail(`${label}.timeoutMs must be an integer from 1 to 120000`)
+      }
+    }
+    return structuredClone(tool) as PluginManifestV2AgentTool
+  })
 }
 
 /** Most package-local methods / events one backend may declare. */
 export const MAX_BACKEND_METHODS = 64
 export const MAX_BACKEND_EVENTS = 32
+// Main's rule, unchanged: an installed package without agent tools loads as
+// before. agentTools[].method has the stricter AGENT_TOOL_METHOD_PATTERN.
+// Pinned by pluginBackendNameRule.test.ts.
 const BACKEND_NAME_PATTERN = /^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/
 
 function backendNameList(value: unknown, label: string, maxItems: number): string[] {
   const names = uniqueStringArray(value, label, 1, maxItems)
   for (const name of names) {
     if (name.length > 128 || !BACKEND_NAME_PATTERN.test(name)) {
-      fail(`${label} contains an invalid name`)
+      fail(`${label} contains an invalid name ${JSON.stringify(name)}; a name is dot-separated segments that each start with a lower-case letter followed by letters or digits, for example files.search`)
     }
   }
   return names
@@ -640,7 +720,7 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   if (manifest.schemaVersion !== 2) fail('manifest schemaVersion must be 2')
   const apiVersion = stringValue(required(manifest, 'apiVersion', 'manifest'), 'manifest apiVersion')
   if (!VERSION_RANGE.test(apiVersion)) {
-    fail('manifest apiVersion must be a simple semver range')
+    fail(`manifest apiVersion must be a simple semver range such as ^1.0.0, got ${JSON.stringify(apiVersion)}`)
   }
   const id = stringValue(required(manifest, 'id', 'manifest'), 'manifest id')
   if (!PLUGIN_ID.test(id)) {
@@ -650,9 +730,11 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   const version = stringValue(required(manifest, 'version', 'manifest'), 'manifest version')
   if (!SEMVER.test(version)) fail(`manifest version must be semver, got ${version}`)
   const publisher = stringValue(required(manifest, 'publisher', 'manifest'), 'manifest publisher')
-  if (!PUBLISHER.test(publisher)) fail('manifest publisher must be lowercase')
+  if (!PUBLISHER.test(publisher)) {
+    fail(`manifest publisher must be lowercase (a-z, 0-9 and -, starting with a letter or digit), got ${JSON.stringify(publisher)}`)
+  }
   if (id.split('.', 1)[0] !== publisher) {
-    fail('manifest publisher must match id namespace')
+    fail(`manifest publisher must match id namespace: publisher ${JSON.stringify(publisher)}, id namespace ${JSON.stringify(id.split('.', 1)[0])}`)
   }
   let engines: PluginManifestV2['engines'] | undefined
   if (manifest.engines !== undefined) {
@@ -665,7 +747,10 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   let extensionPack: string[] | undefined
   if (manifest.extensionPack !== undefined) {
     extensionPack = uniqueStringArray(manifest.extensionPack, 'manifest extensionPack', 1, MAX_EXTENSION_PACK_MEMBERS)
-    if (extensionPack.some((member) => !PLUGIN_ID.test(member))) fail('manifest extensionPack contains an invalid package id')
+    const invalidMember = extensionPack.find((member) => !PLUGIN_ID.test(member))
+    if (invalidMember !== undefined) {
+      fail(`manifest extensionPack contains an invalid package id ${JSON.stringify(invalidMember)}; a package id is lowercase dot-separated segments, for example acme.tool`)
+    }
     if (extensionPack.includes(id)) fail('manifest extensionPack must not list the pack itself')
     if (manifest.contributes !== undefined || manifest.backend !== undefined) {
       fail('an extension pack must not declare contributes or backend')
@@ -861,7 +946,7 @@ export class PluginError extends Error {
   }
 }
 
-export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams {
+export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams {
   'ui.openFilePicker': FilePickerRequest
   'fs.readFile': { path: string; encoding?: string; selectionGrant?: string }
   'fs.writeFile': { path: string; content: string; encoding?: string; expectedMtime?: number; selectionGrant?: string }
@@ -893,7 +978,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'storage.delete': { scope: StoragePartitionScope; key: string }
 }
 
-export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults {
+export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults {
   'ui.openFilePicker': { opened: boolean }
   'fs.readFile': {
     content: string
@@ -939,7 +1024,12 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
   'aiCli.redrawSession': Record<string, never>
   'aiCli.interruptSession': Record<string, never>
   'aiCli.stopSession': Record<string, never>
-  'shell.run': { exitCode: number; stdout: string; stderr: string }
+  /** stdout and stderr are cut at 8000 characters each; `truncated` and the
+   *  full UTF-8 sizes say so (`stderrBytes` only when stderr was cut). */
+  'shell.run': {
+    exitCode: number; stdout: string; stderr: string
+    truncated?: boolean; stdoutBytes?: number; stderrBytes?: number
+  }
   'storage.get': StorageGetResult
   'storage.set': null
   'storage.delete': boolean

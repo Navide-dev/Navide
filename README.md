@@ -10,7 +10,7 @@ It is not another chat panel inside the traditional IDE. Navide is being built a
 
 English | [繁體中文](README.zh-TW.md) | [日本語](README.ja-JP.md)
 
-[Download v0.2.22](https://github.com/Navide-dev/Navide/releases/tag/v0.2.22) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
+[Download v0.2.32](https://github.com/Navide-dev/Navide/releases/tag/v0.2.32) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Navide-dev/Navide/total?label=downloads&logo=github&color=2ea043)](https://github.com/Navide-dev/Navide/releases)
@@ -121,7 +121,7 @@ Counts as of 2026-10-15. The badges at the top track the live numbers.
 
 ## Available today
 
-- **Multi-agent workspaces:** run any of 14 supported coding CLIs — Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Droid, Grok CLI, Kilo Code, Kimi Code, Muse Code, OpenCode, Pi, Qwen Code — or a plain terminal, each in its own pane.
+- **Multi-agent workspaces:** run any of 16 supported coding CLIs — Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Droid, Goose, Grok CLI, Kilo Code, Kimi Code, MiniMax Code, Muse Code, OpenCode, Pi, Qwen Code — or a plain terminal, each in its own pane.
 - **CLI management:** detect installed coding CLIs, their versions and install methods, and run each CLI's own official update and diagnostic commands.
 - **Session lifecycle:** detect, persist, rebuild, and resume supported CLI sessions.
 - **Configurable pipelines:** define stages, parallel slots, agents, roles, kickoff prompts, questions, documentation queries, and completion sentinels.
@@ -155,13 +155,13 @@ Read [Privacy and Data Flows](docs/en-US/privacy.md) and the [Security Policy](S
 
 ## Try Navide
 
-Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.22 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
+Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.32 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
 
-- [Download DMG](https://dl.navide.dev/releases/v0.2.22/Navide-0.2.22-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.22/Navide-0.2.22-arm64.dmg))
-- [Download ZIP](https://dl.navide.dev/releases/v0.2.22/Navide-0.2.22-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.22/Navide-0.2.22-arm64.zip))
-- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.22/Navide-0.2.22-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.22/Navide-0.2.22-win-x64.exe))
-- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.22/Navide-0.2.22-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.22/Navide-0.2.22-win-arm64.exe))
-- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.22/Navide-0.2.22-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.22/Navide-0.2.22-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.22/Navide-0.2.22-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.22/Navide-0.2.22-amd64.deb))
+- [Download DMG](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.dmg))
+- [Download ZIP](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.zip))
+- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-x64.exe))
+- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-arm64.exe))
+- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-amd64.deb))
 
 Links go to dl.navide.dev, the same host the app updates itself from; the *GitHub* link beside each one is the same file, byte for byte, on the GitHub Release (the release workflow publishes both and checks their checksums match).
 

@@ -64,7 +64,8 @@ const tabs: TabRow[] = [
   { key: 'cliExtensions', navKey: 'settings.nav.cliExtensions' },
   // Navide Cloud, Navide Plugins and Navide Marketplace are the fourth
   // `.s-nav-group` in SettingsModal.vue, System the fifth. The execution policy
-  // is not a page of its own: it is the editable block at the top of Navide Plugins.
+  // is not a page of its own: it is the editable block at the top of Navide Plugins,
+  // and the disclosure overview is the block at its bottom.
   { key: 'cloud', groupKey: 'settings.nav.group.navidePlugins', groupSpan: 3, navKey: 'settings.nav.crossDevice' },
   { key: 'extensions', navKey: 'settings.nav.extensions' },
   { key: 'marketplace', navKey: 'settings.nav.marketplace' },
@@ -775,7 +776,7 @@ const resourceRows = computed(() => [
       <p class="syh-note" v-html="$t('settings.help.settingsSystem.s6.note1')"></p>
 
       <div class="syh-card">
-        <div class="syh-card-title">Pipeline Manager</div>
+        <div class="syh-card-title">{{ $t('label.pipeline-manager') }}</div>
         <p class="syh-p" v-html="$t('settings.help.settingsSystem.s6.pipeline.p1')"></p>
         <p class="syh-p" v-html="$t('settings.help.settingsSystem.s6.pipeline.p2')"></p>
       </div>

@@ -19,6 +19,8 @@ from .models import (
     ExtensionVersion,
     Publisher,
 )
+from .qualification import record_key
+from .versions import TESTPLACE_CHANNEL, version_channel
 
 APPROVED = "approved"
 """Only approved versions are public (review.py owns the state machine)."""
@@ -32,6 +34,10 @@ def hash_token(token: str) -> str:
     """Stable sha256 hash of a bearer token (we never store it in the clear)."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+
+
+class VersionConflictError(Exception):
+    """A publish lost a race for its version (RegistryRepository.add_version)."""
 
 class RegistryRepository:
     def __init__(self, session: Session) -> None:
@@ -74,6 +80,12 @@ class RegistryRepository:
             publisher.display_name = display_name
         if public_key is not None:
             publisher.public_key = public_key
+            self.session.add(publisher)
+            self.session.flush()
+            try:
+                record_key(self.session, publisher, public_key)
+            except Exception:  # noqa: BLE001 - an unparsable key keeps no history (as before)
+                pass
         if token is not None:
             publisher.token_hash = hash_token(token)
         self.session.add(publisher)
@@ -92,11 +104,12 @@ class RegistryRepository:
 
     def _public_filter(self):
         """Predicate for extensions public reads may show: at least one
-        approved version, and not removed through the blocklist."""
+        approved non-testplace version, and not removed through the blocklist."""
         approved = set(
             self.session.exec(
                 select(ExtensionVersion.extension_id).where(
-                    ExtensionVersion.review_status == APPROVED
+                    ExtensionVersion.review_status == APPROVED,
+                    ExtensionVersion.channel != TESTPLACE_CHANNEL,
                 )
             ).all()
         )
@@ -251,13 +264,17 @@ class RegistryRepository:
         self, extension_id: int, version: str, *, public_only: bool = True
     ) -> list[ExtensionVersion]:
         """Every target's artifact of one version, ordered by target; only
-        approved ones unless `public_only` is False (publish conflicts, yank)."""
+        approved non-testplace ones unless `public_only` is False (publish
+        conflicts, yank)."""
         statement = select(ExtensionVersion).where(
             ExtensionVersion.extension_id == extension_id,
             ExtensionVersion.version == version,
         )
         if public_only:
-            statement = statement.where(ExtensionVersion.review_status == APPROVED)
+            statement = statement.where(
+                ExtensionVersion.review_status == APPROVED,
+                ExtensionVersion.channel != TESTPLACE_CHANNEL,
+            )
         return list(
             self.session.exec(statement.order_by(ExtensionVersion.target)).all()
         )
@@ -269,7 +286,10 @@ class RegistryRepository:
             ExtensionVersion.extension_id == extension_id
         )
         if public_only:
-            statement = statement.where(ExtensionVersion.review_status == APPROVED)
+            statement = statement.where(
+                ExtensionVersion.review_status == APPROVED,
+                ExtensionVersion.channel != TESTPLACE_CHANNEL,
+            )
         return list(self.session.exec(statement).all())
 
     def add_version(
@@ -288,7 +308,21 @@ class RegistryRepository:
         assets: list[tuple[str, int, str]],
         review_status: str = APPROVED,
         review_report: dict | None = None,
+        disclosure: dict | None = None,
+        disclosure_envelope: dict | None = None,
+        disclosure_signature: str | None = None,
+        scan: dict | None = None,
+        channel: str | None = None,
+        expires_at: datetime | None = None,
+        recheck: Callable[[Session], str | None] | None = None,
     ) -> ExtensionVersion:
+        """`channel` defaults to the one the SemVer implies; only a testplace
+        publish passes it, together with `expires_at`.
+
+        `recheck` runs after the row is written and before it commits, while
+        SQLite holds the write lock: a reason it returns rolls the row back
+        and raises VersionConflictError, so two racing publishes cannot both
+        pass a check made before either wrote (S8 R4-L3)."""
         record = ExtensionVersion(
             extension_id=extension.id,
             version=version,
@@ -300,10 +334,22 @@ class RegistryRepository:
             registry_envelope=registry_envelope,
             registry_signature=registry_signature,
             trust_tier=trust_tier,
+            channel=channel or version_channel(version),
+            expires_at=expires_at,
             review_status=review_status,
             review_report=review_report or {},
+            disclosure=disclosure,
+            disclosure_envelope=disclosure_envelope,
+            disclosure_signature=disclosure_signature,
+            scan=scan,
         )
         self.session.add(record)
+        if recheck is not None:
+            self.session.flush()
+            problem = recheck(self.session)
+            if problem is not None:
+                self.session.rollback()
+                raise VersionConflictError(problem)
         self.session.commit()
         self.session.refresh(record)
         for path, size, content_type in assets:

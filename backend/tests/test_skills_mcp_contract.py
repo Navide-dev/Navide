@@ -15,7 +15,7 @@ from agent_team_backend.skills_store import SkillsStore
 
 
 def _context(token: str | None = None):
-    query = {"pane": "skill-contract", "t": wiring.caller_token() if token is None else token}
+    query = {"pane": "skill-contract", "t": wiring.caller_token("skill-contract") if token is None else token}
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=query)))
 
 

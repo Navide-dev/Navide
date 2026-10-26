@@ -14,6 +14,22 @@ Depending on enabled features, Navide stores:
   these are keyed by authenticated plugin/package and, for workspace scope, by
   authenticated workspace, and are not sent to Navide or plugin registries
 - Token-attribution and deduplication metadata derived from local CLI logs
+- An activity log of what third-party Navide plugins asked the Host for, in the
+  local `navide.db` (`plugin_activity`): the plugin, the `namespace.method`, the
+  time, the workspace, whether it was allowed, refused or failed, a
+  workspace-relative file path (a path outside the workspace is only
+  `<outside-workspace>`; file contents are never stored) and, for shell calls,
+  the executable and subcommand only. Detail rows are kept 7 days, then only
+  per-day counts for 90 days. The bundled Plans, Git and Mini-IDE are not
+  logged. It never leaves this machine
+- Previews of chat messages kept for an offline pane, in the local `navide.db`
+  (`channels.wake_kept`, then `channels.wake_lost` across a restart): the first
+  40 characters of each message a bound chat sent while its pane was not
+  online, so the chat can be told which ones were not sent. They are stored as
+  typed, without masking, so a secret at the start of a message is stored too.
+  They are deleted once the message is sent in or the chat has been told, when
+  the chat is unbound, or when its bot is removed; while that bot stays
+  disabled they wait for it. They never leave this machine
 - Optional AI provider API keys in a local settings file protected with restrictive file permissions (`0600` on supported systems)
 
 Navide does not operate a project telemetry service and does not require a Navide account.
@@ -123,9 +139,9 @@ Building the expected-address snapshot performs forward DNS lookups for declared
 
 Agent CLI credentials remain in each CLI's own configuration. If you enter cloud AI keys in Navide, Navide stores them locally so AI features (inline editing, code review) can use them. Settings export redacts API keys and tokens.
 
-**Portable CLI credentials** are the exception you opt into: a value a vendor documents for carrying between machines (for example the token `claude setup-token` prints) that you paste in Settings → Accounts. Navide stores it encrypted on this device and hands it to new panes of that CLI in their environment only; it never writes it into the CLI's own login files. Removing it from a device removes it from that device.
+**Portable CLI credentials** (a pasted value such as the token `claude setup-token` prints) were removed in Navide 0.2.32. On a device that used them, the first start of 0.2.32 erased the encrypted values, the key that encrypted them and any copies older versions pulled from Cloud sync; a device that never used them is not touched.
 
-If you switch on **Credentials** under Settings → Sync (off by default), each pasted credential is encrypted on your device with your account's sync key before it leaves and stored by Navide Cloud as ciphertext the service cannot open. Another device signed in to the same account decrypts it and keeps it encrypted at rest, again handing it to panes only. What the service can see is an opaque item id, a revision number, a timestamp and which device wrote the record — not which CLI or account the credential belongs to. Removing a credential on one device does not remove it from the cloud or your other devices, and nothing is uploaded until you switch the section on; switching accounts on a device drops what that device imported and switches the section off again.
+Account credentials and keys never leave your machine: Settings → Sync has no Credentials & Keys section, a Credentials & Keys switch an older build left on is treated as off, and Navide Cloud refuses credential records from any version. MCP settings, if you turn their sync on, sync only which servers are installed (name, transport, command, arguments, URL, on/off and the names of their environment variables and headers); the values of environment variables and headers never leave your machine, and neither does a credential inside a URL or an argument (a `user:password@` part, an `api_key=` query value, a token such as `ghp_…`, or the value after `--token`): it is sent empty, and each machine fills in its own. What does sync is encrypted on your machine before it is uploaded, and the server has no key to decrypt it.
 
 Local file permissions reduce accidental access by other users on the same machine but do not protect against malware, a compromised user account, unrestricted agents, backups, or processes with equivalent permissions.
 
@@ -170,3 +186,11 @@ Preparing a public GitHub skill sends its repository and ref, plus normal connec
 Prepared bytes stay in backend memory and become unusable after 15 minutes or backend restart. At most eight packages may be active, with up to eight lightweight completed retry receipts held separately in memory. Installation uses the reviewed snapshot without rereading its source, writes to the existing shared Skills root, and never executes scripts or plugin hooks. A retained receipt lets a retry return the original result without another write; it expires at the original preview deadline or may be evicted earlier. Retry after expiry or eviction returns missing/expired without reinstalling. Inspection and preparation return skill text, file information and source paths to the requesting coding agent; its configured model provider may receive those results under the CLI's own data policy. Avoid secrets in skill packages.
 
 Skills sync, when enabled, can carry eligible installed content and delivery settings to paired devices through the existing flow. The selected package uses the same limits as Skills content export: 64 files, 256 KiB per file and 512 KiB total. These limits do not guarantee that synchronization completed. Backend-generated source, digest and timestamp records are stored in a local Navide marker, survive local edits and restart, and are excluded from export and Skills sync.
+
+### Navide Marketplace queries through MCP
+
+`marketplace_search` and `marketplace_detail` make the Navide app send the same request the Navide Marketplace page sends to the configured Registry: the search text, category and page, or the package name. `plugins_list_installed` sends nothing out; it reads the local inventory. All three return their answer (public listing data, and the ids, versions and states of the installed Navide plugins) to the requesting coding agent, and its configured model provider may receive it under the CLI's own data policy.
+
+### Navide Marketplace requests through MCP
+
+`marketplace_request_install`, `_update` and `_rollback` make the Navide app look the package up the same way `marketplace_detail` does, and all request tools read the local inventory. The request, with the requesting pane's name and workspace and the agent's reason, stays in backend memory until it is decided or expires, and is shown to the user in a Navide window. `plugins_disable` and `plugins_enable` send nothing out. Every request, decision, disable and enable is recorded locally in navide.db (`plugin_agent_actions`: the plugin, the action, the caller's kind, pane id, pane name and workspace, the outcome) and kept 30 days, then the newest 10,000 rows.

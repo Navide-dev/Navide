@@ -11,6 +11,20 @@ afterEach(async () => {
 })
 
 describe('packaged Plans runtime', () => {
+  it('injects layout overrides so wide tables wrap and the document uses the frame width', () => {
+    const window = new Window()
+    windows.push(window)
+    window.document.body.innerHTML = '<div class="wrap"><div class="tablewrap"><table><tr><td>x</td></tr></table></div></div>'
+    window.eval(buildPlanRuntimeScript({
+      documentToken: 'current', anchors: {}, scrollY: 0,
+      commentLabel: 'Comment', editLabel: 'Edit', deleteLabel: 'Delete', saveLabel: 'Save', cancelLabel: 'Cancel',
+    }))
+    const css = [...window.document.querySelectorAll('style')].map(s => s.textContent).join('')
+    expect(css).toContain('.tablewrap td,.tablewrap td code{overflow-wrap:anywhere}')
+    expect(css).toContain('.wrap{max-width:1180px}')
+    expect(css).toContain('.wrap td ul,.wrap td p{max-width:none}')
+  })
+
   it('updates and removes note badges only for the authenticated current preview', () => {
     const window = new Window()
     windows.push(window)
@@ -73,6 +87,30 @@ describe('packaged Plans runtime', () => {
     expect(replaceSectionBody(source, 'Risks', '<p>New</p>')).toBe(
       '<html><body><main><h2>Risks</h2>\n<p>New</p>\n</main><h1>Appendix</h1></body></html>',
     )
+  })
+
+  // In the about:srcdoc frame "#id" resolves against the host URL, so the
+  // default click never reaches :target (a CSS lightbox stays shut).
+  it('keeps "#id" link clicks inside the frame so :target lightboxes open and close', () => {
+    const window = new Window({ url: 'about:srcdoc' })
+    windows.push(window)
+    window.document.body.innerHTML =
+      '<div class="rp-z" id="z1"><a id="open" href="#z1"><img alt=""></a><a id="close" href="#_">x</a></div>' +
+      '<a id="external" href="https://example.com/">out</a>'
+    window.eval(buildPlanRuntimeScript({
+      documentToken: 'current', anchors: {}, scrollY: 0,
+      commentLabel: 'Comment', editLabel: 'Edit', deleteLabel: 'Delete', saveLabel: 'Save', cancelLabel: 'Cancel',
+    }))
+    const click = (selector: string) => {
+      const event = new window.MouseEvent('click', { bubbles: true, cancelable: true })
+      window.document.querySelector(selector)!.dispatchEvent(event)
+      return event
+    }
+    expect(click('#open img').defaultPrevented).toBe(true)
+    expect(window.location.hash).toBe('#z1')
+    expect(click('#close').defaultPrevented).toBe(true)
+    expect(window.location.hash).toBe('#_')
+    expect(click('#external').defaultPrevented).toBe(false)
   })
 
   it('embeds todo IDs containing a script close safely while preserving their values', () => {

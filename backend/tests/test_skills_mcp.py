@@ -21,7 +21,7 @@ from agent_team_backend.skills_store import SkillsStore
 
 def _ctx(pane_id: str = "pa", *, token: str | None = None, client: str = "") -> Any:
     params = {"client": client, "t": token or ""} if client else {
-        "pane": pane_id, "t": wiring.caller_token() if token is None else token,
+        "pane": pane_id, "t": wiring.caller_token(pane_id) if token is None else token,
     }
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
 
@@ -215,10 +215,90 @@ async def test_native_delivery_never_modifies_native_files(library) -> None:
     refused = await skills_tools.skills_set_delivery(identity, ["codex"], revision, _ctx(), enabled=False)
     assert refused["error"]["code"] == "SKILL_VALIDATION_ERROR"
     result = await skills_tools.skills_set_delivery(identity, ["codex"], revision, _ctx())
-    assert result["ok"] is True
+    assert result["ok"] is True and result["status"] == "pending_approval"
+    assert store.native_targets_for("codex") == []
+    approval = await skills_approvals.decide(result["approval_id"], True, skills_tools._installer())
+    assert approval["status"] == "installed"
     assert store.native_targets_for("codex") == [str(native)]
     assert (native / "SKILL.md").read_bytes() == before
     assert notifications == [("native-check", "delivery_changed")]
+
+
+async def test_widening_delivery_waits_for_the_window_and_writes_nothing(library, monkeypatch) -> None:
+    store, _, notifications = library
+    events: list[tuple[str, dict]] = []
+
+    async def broadcast(event: dict) -> None:
+        events.append((event["type"], event["payload"]))
+
+    monkeypatch.setattr(backend_app, "broadcast", broadcast)
+    store.set_targets("verify", [])
+    before = store.state_path.read_bytes()
+    revision = store.get_delivery_revision(name="verify")
+    result = await skills_tools.skills_set_delivery("shared:verify", ["claude"], revision, _ctx())
+    assert result["ok"] is True and result["status"] == "pending_approval" and result["changed"] is False
+    assert store.state_path.read_bytes() == before and notifications == []
+    [(kind, card)] = events
+    assert kind == "skills.install_approval_request"
+    assert card["action"] == "delivery" and card["targets"] == ["claude"]
+    assert card["current"] == {"targets": [], "enabled": True} and "expected_revision" not in card
+    again = await skills_tools.skills_set_delivery("shared:verify", ["claude"], revision, _ctx())
+    assert again["approval_id"] == result["approval_id"]
+    status = await skills_tools.skills_install_status(result["approval_id"], _ctx())
+    assert status["status"] == "pending"
+    hidden = await skills_tools.skills_install_status(result["approval_id"], _ctx("pb"))
+    assert hidden["error"]["code"] == "SKILL_APPROVAL_NOT_FOUND"
+    approval = await skills_approvals.decide(result["approval_id"], True, skills_tools._installer())
+    assert approval["status"] == "installed" and approval["result"]["targets"] == ["claude"]
+    assert store.get_skill("verify")["skill"]["targets"] == ["claude"]
+    assert notifications == [("verify", "delivery_changed")]
+
+
+async def test_rejected_delivery_is_not_applied_or_refiled(library) -> None:
+    store, _, notifications = library
+    store.set_targets("verify", ["claude"])
+    revision = store.get_delivery_revision(name="verify")
+    result = await skills_tools.skills_set_delivery("shared:verify", None, revision, _ctx())
+    assert result["status"] == "pending_approval"
+    rejected = await skills_approvals.decide(result["approval_id"], False, skills_tools._installer())
+    assert rejected["status"] == "rejected"
+    assert store.get_skill("verify")["skill"]["targets"] == ["claude"]
+    again = await skills_tools.skills_set_delivery("shared:verify", None, revision, _ctx())
+    assert again["error"]["code"] == "SKILL_APPROVAL_REJECTED"
+    assert notifications == []
+
+
+async def test_turning_a_disabled_skill_on_waits_but_turning_it_off_does_not(library) -> None:
+    store, _, _ = library
+    revision = store.get_delivery_revision(name="verify")
+    off = await skills_tools.skills_set_delivery("shared:verify", None, revision, _ctx(), enabled=False)
+    assert off["status"] == "applied" and store.get_skill("verify")["skill"]["enabled"] is False
+    on = await skills_tools.skills_set_delivery("shared:verify", None, off["revision"], _ctx(), enabled=True)
+    assert on["status"] == "pending_approval"
+    assert store.get_skill("verify")["skill"]["enabled"] is False
+
+
+async def test_delivery_changed_after_the_request_fails_instead_of_overwriting(library) -> None:
+    store, _, notifications = library
+    store.set_targets("verify", [])
+    revision = store.get_delivery_revision(name="verify")
+    result = await skills_tools.skills_set_delivery("shared:verify", ["claude"], revision, _ctx())
+    store.set_targets("verify", ["codex"])
+    approval = await skills_approvals.decide(result["approval_id"], True, skills_tools._installer())
+    assert approval["status"] == "failed" and approval["error"]
+    assert store.get_skill("verify")["skill"]["targets"] == ["codex"]
+    assert notifications == []
+
+
+async def test_invalid_widening_fails_before_filing_a_request(library) -> None:
+    store, _, _ = library
+    store.set_targets("verify", [])
+    revision = store.get_delivery_revision(name="verify")
+    result = await skills_tools.skills_set_delivery("shared:verify", ["unknown-vendor"], revision, _ctx())
+    assert result["error"]["code"] == "SKILL_VALIDATION_ERROR"
+    stale = await skills_tools.skills_set_delivery("shared:verify", ["claude"], "old", _ctx())
+    assert stale["error"]["code"] == "SKILL_CONFLICT"
+    assert skills_approvals.registry.pending() == []
 
 
 async def test_native_skill_removed_since_list_cannot_be_written(library) -> None:

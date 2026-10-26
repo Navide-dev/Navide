@@ -102,8 +102,20 @@ def evaluate(
         log.warning("guard: evaluate failed (%s): %s", source, err, exc_info=True)
         action = "deny" if source == "relay" else "allow"
         reason = f"Navide Guard error, {'denied' if action == 'deny' else 'allowed'}: {err}"
-        _emit_failure(pane_id, reason, action="deny" if action == "deny" else "error")
+        if source == "relay" or not switched_off():
+            _emit_failure(pane_id, reason, action="deny" if action == "deny" else "error")
         return Decision(action, "normal", ("guard-error",), reason, False)
+
+
+def switched_off() -> bool:
+    """Whether the user turned Guard off. A failure that let an action through
+    is then not announced: the switch is off, so the notice would read as Guard
+    still checking. A switch that cannot be read, or was never read, counts
+    as on: this runs on the event loop, so it reads only the in-memory value."""
+    try:
+        return runtime.enabled_cached() is False
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _emit_failure(pane_id: str, reason: str, *, action: str = "error") -> None:

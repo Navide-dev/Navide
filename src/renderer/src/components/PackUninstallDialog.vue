@@ -4,6 +4,7 @@
 // unchecked, so the user chooses whether any of them go too.
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useDialogFocus } from '../composables/useDialogFocus'
+import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
 
 const props = defineProps<{ pack: InstalledPackRecord; busy: boolean }>()
 const emit = defineEmits<{ confirm: [members: string[]]; cancel: [] }>()
@@ -47,8 +48,8 @@ function confirm(): void {
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" /></svg>
         </span>
         <div class="nv-dialog-heading">
-          <h4 id="pack-uninstall-title" class="nv-dialog-title">{{ $t('settings.extensions.pack.uninstallTitle', { name: pack.displayName || pack.id }) }}</h4>
-          <p v-if="pack.displayName" class="pack-uninstall-id nv-dialog-subtitle"><code>{{ pack.id }}</code></p>
+          <h4 id="pack-uninstall-title" class="nv-dialog-title">{{ $t('settings.extensions.pack.uninstallTitle', { name: reveal(pack.displayName || pack.id) }) }}</h4>
+          <p v-if="pack.displayName" class="pack-uninstall-id nv-dialog-subtitle"><code>{{ reveal(pack.id) }}</code></p>
         </div>
       </div>
       <div id="pack-uninstall-desc" class="nv-dialog-body">
@@ -58,7 +59,7 @@ function confirm(): void {
           <div class="pack-uninstall-members">
             <label v-for="id in pack.installedByPack" :key="id" class="pack-uninstall-member" :data-member="id">
               <input v-model="chosen" type="checkbox" class="nv-check" :value="id" />
-              <code>{{ id }}</code>
+              <code>{{ reveal(id) }}</code>
             </label>
           </div>
         </template>

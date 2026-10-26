@@ -92,6 +92,15 @@ describe('lib/planDispatch pickReusablePane', () => {
     expect(pickReusablePane(panes, 'claude', WS)).toBeNull()
   })
 
+  // A CLI sign-in pane sits at the CLI's sign-in wizard: a plan prompt typed
+  // into it would land in the wizard. Only the user types into one.
+  it('never picks a CLI sign-in pane, and picks the next idle pane instead', () => {
+    const login = pane({ id: 'login', isLogin: true })
+    const idle = pane({ id: 'b' })
+    expect(pickReusablePane([login, idle], 'claude', WS)?.id).toBe('b')
+    expect(pickReusablePane([login], 'claude', WS)).toBeNull()
+  })
+
   it('matches pane workspace despite a trailing slash', () => {
     const idle = pane({ id: 'slash', workspacePath: `${WS}/` })
     expect(pickReusablePane([idle], 'claude', WS)?.id).toBe('slash')

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// The titlebar "Sign in" button and the account modal it opens.
+// The titlebar "Sign In" button and the account modal it opens.
 //
 // Source-scanned, like the other App.*.test.ts files: App.vue mounts the
 // backend, terminal and onboarding lifecycles and is not practical to mount.

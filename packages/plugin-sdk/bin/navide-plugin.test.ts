@@ -4,7 +4,9 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createServer, request as httpRequest, type IncomingMessage, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createPluginViewRuntimeClient } from '../src/index'
 import { readZipEntries } from '../../../src/main/plugins/pluginPackage'
 
 const roots: string[] = []
@@ -163,6 +165,29 @@ describe('navide-plugin canonical artifacts', { timeout: 30_000 }, () => {
     expect(run(['validate', directory], directory).status).not.toBe(0)
   })
 
+  it('refuses dev-backend data in a package and says what it is', () => {
+    const directory = root()
+    packageDirectory(directory, frontendManifest(), {
+      'frontend/main/index.html': '<!doctype html>',
+      'frontend/.navide-dev/data/state.json': '{}',
+    })
+    const validated = run(['validate', directory], directory)
+    expect(validated.status).not.toBe(0)
+    expect(validated.stderr).toContain("package entry 'frontend/.navide-dev/data/state.json' is dev-backend data")
+  })
+
+  it('names artifact-files.json when a listed file is missing', () => {
+    const directory = root()
+    packageDirectory(directory, frontendManifest(), { 'frontend/main/index.html': '<!doctype html>' })
+    writeFileSync(
+      join(directory, 'artifact-files.json'),
+      `${JSON.stringify({ files: ['manifest.json', 'frontend/main/index.html', 'frontend/main/app.js'] })}\n`,
+    )
+    const validated = run(['validate', directory], directory)
+    expect(validated.status).not.toBe(0)
+    expect(validated.stderr).toContain("package entry 'frontend/main/app.js' is listed in artifact-files.json but does not exist")
+  })
+
   it('admits a manifest-declared detail target schema outside the frontend/assets/backend roots', () => {
     const manifest = frontendManifest() as {
       contributes: { views: Array<{ id: string; kind: string; location: string; title: string; entry: string; targetSchema?: string }> }
@@ -209,7 +234,7 @@ function body(request: IncomingMessage): Promise<Buffer> {
 
 /** A stand-in Registry: /api/cli/token checks the PKCE pair the CLI sent to
  *  /cli/authorize, /api/publish records the upload. */
-async function fakeRegistry() {
+async function fakeRegistry(publishResponse = '{"review_status":"pending"}') {
   const uploads: Array<{ url: URL; authorization?: string; body: Buffer }> = []
   let challenge = ''
   const server: Server = createServer(async (request, response) => {
@@ -225,7 +250,7 @@ async function fakeRegistry() {
     if (url.pathname === '/api/publish') {
       uploads.push({ url, authorization: request.headers.authorization, body: raw })
       response.writeHead(201, { 'Content-Type': 'application/json' })
-      response.end('{"review_status":"pending"}')
+      response.end(publishResponse)
       return
     }
     response.writeHead(404).end()
@@ -253,23 +278,36 @@ async function loginThroughBrowser(
   beforeCallback?: (port: string | null, query: URLSearchParams) => Promise<void>,
 ) {
   const child = spawn(process.execPath, [cli, 'login', '--registry', registry.url, '--no-browser'], { cwd, env })
+  // Listen before the callback: on a refused callback the CLI exits as soon as it
+  // has answered, and a 'close' emitted before the fetch settles would be lost.
+  const closed = new Promise<number | null>((resolve) => child.on('close', resolve))
   let stdout = ''
   let stderr = ''
   child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString('utf8')
   })
-  const authorize = await new Promise<URL>((resolve) => {
+  // A CLI that exits before printing the URL fails the test now, not at its timeout.
+  const authorize = await new Promise<URL>((resolve, reject) => {
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8')
       const match = /Opening (\S+)/.exec(stdout)
       if (match) resolve(new URL(match[1]))
     })
+    void closed.then((code) => reject(new Error(`login exited (${code}) before printing the authorize URL: ${stderr}`)))
   })
   registry.setChallenge(authorize.searchParams.get('code_challenge') ?? '')
   const port = authorize.searchParams.get('port')
   if (beforeCallback) await beforeCallback(port, new URLSearchParams(callback(authorize)))
-  await fetch(`http://127.0.0.1:${port}/callback?${new URLSearchParams(callback(authorize))}`)
-  const status = await new Promise<number | null>((resolve) => child.on('close', resolve))
+  // The CLI may exit as soon as it has answered, so its exit also ends this wait;
+  // a failed request while it is still running fails the test with its stderr.
+  await new Promise<void>((resolve, reject) => {
+    fetch(`http://127.0.0.1:${port}/callback?${new URLSearchParams(callback(authorize))}`).then(
+      () => resolve(),
+      (error: unknown) => reject(new Error(`login callback request failed (${String(error)}): ${stderr}`)),
+    )
+    void closed.then(() => resolve())
+  })
+  const status = await closed
   return { status, stdout, stderr }
 }
 
@@ -289,6 +327,39 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     ])
     expect(run(['init', 'hello', '--id', 'acme.other'], directory).status).not.toBe(0)
     expect(run(['init', 'bad', '--id', 'NoNamespace'], directory).status).not.toBe(0)
+  })
+
+  it('scaffolds a view that sends the same readiness handshake as the SDK', () => {
+    // A stub of the preload bridge the SDK's runtime client requires; every call is recorded.
+    const bridge = (calls: string[]) => ({
+      ready: () => calls.push('ready'),
+      onOpenTarget: () => () => undefined,
+    })
+    const sdkCalls: string[] = []
+    const previous = (globalThis as { nav?: unknown }).nav
+    ;(globalThis as { nav?: unknown }).nav = bridge(sdkCalls)
+    try {
+      createPluginViewRuntimeClient().ready()
+    } finally {
+      ;(globalThis as { nav?: unknown }).nav = previous
+    }
+
+    const directory = root()
+    expect(run(['init', 'hello', '--id', 'acme.hello-world'], directory).status).toBe(0)
+    const html = readFileSync(join(directory, 'hello', 'frontend/main/index.html'), 'utf8')
+    expect(html).toContain('<script src="./main.js"></script>')
+    const scaffoldCalls: string[] = []
+    const status = { textContent: '' }
+    const context: Record<string, unknown> = {
+      nav: bridge(scaffoldCalls),
+      document: { getElementById: (id: string) => (id === 'status' ? status : null) },
+    }
+    context.window = context
+    context.globalThis = context
+    runInNewContext(readFileSync(join(directory, 'hello', 'frontend/main/main.js'), 'utf8'), context)
+    expect(status.textContent).not.toBe('')
+    expect(scaffoldCalls).toEqual(['ready'])
+    expect(scaffoldCalls).toEqual(sdkCalls)
   })
 
   it('generates an owner-only keypair that signs, and never overwrites a key', () => {
@@ -372,6 +443,29 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     const expired = run(['whoami', '--registry', registry], directory, env)
     expect(expired.status).not.toBe(0)
     expect(expired.stdout).toContain('token expired')
+  })
+
+  it('says what a pre-release publish means (K5)', async () => {
+    const directory = root()
+    const env = { ...process.env, NAVIDE_PLUGIN_CONFIG_DIR: join(directory, 'config'), NAVIDE_PLUGIN_TOKEN: 'nvp_env' }
+    packageDirectory(directory, frontendManifest(), { 'frontend/main/index.html': '<!doctype html>' })
+    expect(run(['package', directory, '--out', 'f.vsix'], directory).status).toBe(0)
+    const hint = 'public to everyone who turns on Get pre-releases'
+    for (const [version, shown] of [['1.1.0-beta.1', true], ['1.1.0', false], ['1.1.0+build.7', false]] as const) {
+      const registry = await fakeRegistry(JSON.stringify({ version, review_status: 'pending' }))
+      try {
+        const child = spawn(process.execPath, [cli, 'publish', 'f.vsix', '--registry', registry.url], { cwd: directory, env })
+        let stdout = ''
+        child.stdout.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString('utf8')
+        })
+        expect(await new Promise((resolve) => child.on('close', resolve))).toBe(0)
+        expect(stdout.includes(hint), `${version}: ${stdout}`).toBe(shown)
+        if (shown) expect(stdout).toContain('publish with --channel testplace instead')
+      } finally {
+        await registry.close()
+      }
+    }
   })
 
   it('warns that --token is visible to other processes', async () => {

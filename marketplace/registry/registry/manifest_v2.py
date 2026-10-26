@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .agent_tools_contract import derive_agent_tool_prefix, validate_agent_tools
 from .path_policy import canonical_html_path, canonical_package_path
 from .versions import _V2_VERSION_RE
 
@@ -15,8 +16,14 @@ _V2_CATEGORY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 PACKAGE_ID_BODY_PATTERN = r"[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+"
 PACKAGE_ID_RE = re.compile(rf"^{PACKAGE_ID_BODY_PATTERN}$")
 _V2_DISPLAY_TEXT_RE = r"^[^\r\n<>]+$"
+# Main's rule, unchanged (the App loads installed packages with it);
+# agentTools[].method has the stricter supervisor rule. Pinned by test_backend_name_rule.py.
 _V2_BACKEND_NAME_RE = re.compile(r"^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$")
-V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli"})
+# The App's backend supervisor accepts only these method names (isMethodName,
+# src/main/plugins/pluginBackendSupervisor.ts); an agent tool forwarded to any
+# other name could never be served, so publish refuses it.
+_AGENT_TOOL_METHOD_RE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
+V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli", "web", "agents", "agentMessages"})
 V2_SHELL_MODES: frozenset[str] = frozenset({"allowlist", "full"})
 MAX_EXTENSION_PACK_MEMBERS = 20
 # Manifest-level guard for recognizable source/script filenames. Proving that
@@ -188,6 +195,9 @@ class ManifestV2Backend(ManifestV2Model):
     activation: Literal["startup"]
     methods: list[str] | None = Field(default=None, min_length=1, max_length=64)
     events: list[str] | None = Field(default=None, min_length=1, max_length=32)
+    # Kept as plain JSON: every field rule is validate_agent_tools' (the
+    # contract module, checked on the whole manifest in ManifestV2).
+    agentTools: list[dict[str, Any]] | None = Field(default=None, min_length=1)
 
     @field_validator("methods", "events")
     @classmethod
@@ -260,8 +270,8 @@ class ManifestV2Scopes(ManifestV2Model):
 class ManifestV2Permissions(ManifestV2Model):
     """Coarse Manifest v2 grants; method access remains Host-catalog-owned."""
 
-    system: list[Literal["fs", "ui", "aiCli"]] | None = Field(
-        default=None, min_length=1, max_length=3
+    system: list[Literal["fs", "ui", "aiCli", "web", "agents", "agentMessages"]] | None = Field(
+        default=None, min_length=1, max_length=6
     )
     shell: Literal["allowlist", "full"] | None = None
     scopes: ManifestV2Scopes | None = None
@@ -273,6 +283,9 @@ class ManifestV2Permissions(ManifestV2Model):
     ) -> list[str] | None:
         if value is not None and len(set(value)) != len(value):
             raise ValueError("permissions.system must contain unique namespaces")
+        # Message text is disclosed on top of the agent metadata it belongs to.
+        if value is not None and "agentMessages" in value and "agents" not in value:
+            raise ValueError("permissions.system declares agentMessages without agents")
         return value
 
 
@@ -304,6 +317,39 @@ class ManifestV2(ManifestV2Model):
         bad = [member for member in value if not PACKAGE_ID_RE.fullmatch(member)]
         if bad:
             raise ValueError(f"contains invalid package ids {bad}")
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def _check_agent_tools(cls, value: Any) -> Any:
+        # The contract's own rules (docs/en-US/plugin-agent-tools-contract.md
+        # section 2.5) on the raw manifest: they need the id and the declared
+        # methods, and refuse a package exactly like a schema error.
+        if isinstance(value, Mapping):
+            errors = validate_agent_tools(dict(value))
+            if errors:
+                first = errors[0]
+                where = "" if first["index"] is None else f"[{first['index']}]"
+                field = f".{first['field']}" if first["index"] is not None and first["field"] else ""
+                detail = ""
+                if first["code"] == "AGENT_TOOL_PREFIX_MISMATCH":
+                    # Name the prefix that would pass, as `navide-plugin validate` does.
+                    name = value["backend"]["agentTools"][first["index"]].get("name")
+                    prefix = derive_agent_tool_prefix(value.get("id"))
+                    detail = (
+                        f" ({name!r} must start with '{prefix}_', the prefix Navide derives "
+                        f"from id {value.get('id')!r}: its last segment without hyphens)"
+                    )
+                raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}{detail}")
+            backend = value.get("backend")
+            declared = backend.get("agentTools") if isinstance(backend, Mapping) else None
+            for index, tool in enumerate(declared if isinstance(declared, list) else []):
+                method = tool.get("method") if isinstance(tool, Mapping) else None
+                if not isinstance(method, str) or _AGENT_TOOL_METHOD_RE.fullmatch(method) is None:
+                    raise ValueError(
+                        f"backend.agentTools[{index}].method {method!r} is not a backend method name the "
+                        "App accepts (lower-case dotted segments of a-z, 0-9 and _)"
+                    )
         return value
 
     @model_validator(mode="after")

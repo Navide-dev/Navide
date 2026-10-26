@@ -28,7 +28,7 @@ if (packaged) {
   env.NAVIDE_TEST_PRODUCTION_PLANS_BACKEND = '1'
 }
 run(process.execPath, [
-  'node_modules/vitest/vitest.mjs', 'run', '--project', 'artifacts',
+  'node_modules/vitest/vitest.mjs', 'run', '--project', 'artifacts', '--project', 'artifacts-heavy',
   ...(packagedOnly ? [
     'tests/integration/plansPackagedRoundtrip.test.ts',
     'src/main/plugins/pluginBackendHost.test.ts',

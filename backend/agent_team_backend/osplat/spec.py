@@ -476,6 +476,76 @@ class ProcessTree(Protocol):
         """Kill `pid` and every descendant, including ones that left its group."""
         ...
 
+    def own_group_spawn_kwargs(self) -> dict[str, int]:
+        """Spawn keyword arguments that make the child lead a group of its own.
+
+        POSIX: a new process group (not a new session: the controlling
+        terminal stays), so `end_own_group` also reaches a grandchild forked
+        after any snapshot. Windows has no process groups: the child starts
+        suspended instead, and `start_own_group` must follow the spawn."""
+        ...
+
+    def start_own_group(self, pid: int) -> int | None:
+        """Finish a spawn made with `own_group_spawn_kwargs`.
+
+        Windows: put the suspended child in a kill-on-close job (`contain`),
+        then let it run, so nothing it starts can be outside the job. The job
+        handle is returned for `end_contained` (a timed-out run) or
+        `release_contained` (any other end); None when the job could not be
+        made, and the child runs uncontained. Raises OSError, with the child
+        killed, only when it cannot be resumed. POSIX: None, nothing done."""
+        ...
+
+    def release_contained(self, pid: int, job: int) -> None:
+        """Let go of a job from `start_own_group` without ending what is left
+        in it: whatever the child left running keeps running, as it would
+        without the job. Never raises. A no-op on POSIX."""
+        ...
+
+    def end_own_group(self, pid: int) -> None:
+        """SIGKILL the group a child spawned with `own_group_spawn_kwargs` leads,
+        only while `pid` still leads it and never the caller's own group.
+        Never raises. A no-op on Windows."""
+        ...
+
+    def contain(self, pid: int) -> int | None:
+        """Make a child the root of a tree `end_contained` can end whole.
+
+        On Windows the child joins a Job Object that kills its processes when
+        closed (processes it starts afterwards join too); its handle is
+        returned, so the caller can end that job and no other. On POSIX it
+        must have been started in a session of its own (`start_new_session`);
+        that is already the tree, so nothing is done and None is returned.
+        """
+        ...
+
+    def end_contained(self, pid: int, job: int | None = None) -> None:
+        """Kill the tree `contain` made for `pid`, everything in it, even when
+        the root itself has exited: killpg on POSIX, closing the job on Windows.
+
+        With `job` (what `contain` returned) only that job is closed, and the
+        table entry for `pid` is dropped only while it is still that job's."""
+        ...
+
+    def isolate_stdin_from_children(self) -> bool:
+        """Stop children that are not given a stdin from inheriting this one.
+
+        On Windows the app keeps the backend's stdin open for the `shutdown`
+        line and a thread waits in a synchronous read on it. A child handed
+        that same pipe blocks on its first query of the handle until the read
+        returns, which is at shutdown (git.exe and node.exe hung at launch).
+        This points the process's standard input handle -- what a spawn
+        without its own stdin hands down -- at NUL, while the already-open
+        `sys.stdin` keeps reading the pipe. True when it did; POSIX has
+        nothing to do and returns False."""
+        ...
+
+    def stderr_handle_info(self) -> str:
+        """For a child that could not be started: this process's standard
+        error handle as the OS reports it (Windows), "" elsewhere. Diagnostics
+        only."""
+        ...
+
 
 class ChildProcess(Protocol):
     """The slice of `subprocess.Popen` a terminal session relies on."""

@@ -1,4 +1,4 @@
-import { clampUiScale, DEFAULT_UI_SCALE } from '../shared/uiScale'
+import { clampUiScale, DEFAULT_UI_SCALE, UI_SCALE_SETTING_KEY } from '../shared/uiScale'
 
 // Single owner of the interface scale in the main process.
 //
@@ -26,6 +26,22 @@ export interface UiZoomStore {
   set(next: unknown): number
   /** Number of live tracked WebContents — for diagnostics and tests. */
   size(): number
+}
+
+/**
+ * The scale to start at, read from the ui_settings document. The renderer
+ * stores it as a raw number, while other keys (and older values) use the
+ * legacy JSON-encoded string, so accept both: a string is decoded the way
+ * index.ts uiSetting() decodes it, falling back to the raw string.
+ */
+export function initialUiScaleFrom(settings: Record<string, unknown>): number {
+  const raw = settings[UI_SCALE_SETTING_KEY]
+  if (typeof raw !== 'string') return clampUiScale(raw)
+  try {
+    return clampUiScale(JSON.parse(raw))
+  } catch {
+    return clampUiScale(raw)
+  }
 }
 
 export function createUiZoomStore(initial: unknown = DEFAULT_UI_SCALE): UiZoomStore {

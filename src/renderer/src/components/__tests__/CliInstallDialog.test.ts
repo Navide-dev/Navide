@@ -397,7 +397,7 @@ describe('CliInstallDialog', () => {
 
   // A pane or spawn prompt is only ever about an agent CLI, so the box need not
   // wait for status to learn the dep's group. Waiting is what made the opt-out
-  // unreachable: "Not now" pressed before status arrived saved nothing, and the
+  // unreachable: "Not Now" pressed before status arrived saved nothing, and the
   // next 127 asked again.
   it('offers the opt-out before status arrives for a pane prompt', async () => {
     const mock = createMockBackend('connected')

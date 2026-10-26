@@ -23,6 +23,9 @@ export interface ChannelStatus {
   last_connected_at: number | null
   last_inbound_at: number | null
   identity: string
+  /** The bot's own display name, where the platform reports one (Telegram getMe
+   *  first_name, Discord global_name, Feishu app_name); absent on older backends. */
+  display_name?: string
   /** Telegram only: Bot Management Mode is on, so this bot can create bots (getMe). */
   can_manage_bots?: boolean
 }

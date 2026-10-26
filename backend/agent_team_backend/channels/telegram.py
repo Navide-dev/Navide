@@ -70,6 +70,51 @@ SEND_CONNECT_RETRIES = 2
 # A 409 means another getUpdates consumer holds the bot; retrying at the first
 # step would only fight it for messages. Attempt 4 is base x 8 (~40s).
 CONFLICT_MIN_ATTEMPT = 4
+# Added to the bot's "/" menu when missing (never replacing the user's own); every one
+# is handled by the channel manager.
+BOT_COMMANDS = [
+    {"command": "pending", "description": "列出等待確認的 pane"},
+    {"command": "prompts", "description": "Prompt 清單"},
+    {"command": "skills", "description": "技能清單"},
+    {"command": "mcp", "description": "MCP server 清單"},
+    {"command": "status", "description": "pane 狀態"},
+    {"command": "stop", "description": "中斷 pane"},
+    {"command": "cancel", "description": "撤回還沒送進 pane 的訊息"},
+    {"command": "resume", "description": "恢復被中斷的 pane"},
+]
+# BOT_COMMANDS's descriptions in each Navide language (zh-TW is BOT_COMMANDS itself).
+BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
+    "zh-TW": {c["command"]: c["description"] for c in BOT_COMMANDS},
+    "en-US": {
+        "pending": "List panes waiting for confirmation",
+        "prompts": "Prompt list",
+        "skills": "Skill list",
+        "mcp": "MCP server list",
+        "status": "Pane status",
+        "stop": "Interrupt the pane",
+        "cancel": "Withdraw messages not yet sent to the pane",
+        "resume": "Resume an interrupted pane",
+    },
+    "ja-JP": {
+        "pending": "確認待ちの pane を一覧表示",
+        "prompts": "プロンプト一覧",
+        "skills": "スキル一覧",
+        "mcp": "MCP server 一覧",
+        "status": "pane の状態",
+        "stop": "pane を中断",
+        "cancel": "まだ pane に送っていないメッセージを取り消す",
+        "resume": "中断した pane を再開",
+    },
+}
+# Descriptions earlier builds registered: a command still carrying one is ours to update.
+_OLD_COMMAND_DESCRIPTIONS = {"menu": {"快速選單", "Prompt 與技能選單", "Prompts and skills menu", "プロンプトとスキルのメニュー"}}
+# Commands earlier builds registered and this one no longer offers: one still carrying a
+# description of ours is removed; worded otherwise it is the user's and stays.
+_RETIRED_COMMANDS = {"menu"}
+# A flat button list (prompt options, the busy buttons) is laid out a few to a row, so
+# labels show whole on a phone; a label too long for a shared row gets its own.
+ROW_MAX_BUTTONS = 3
+ROW_MAX_CHARS = 24
 
 
 class OffsetStore(Protocol):
@@ -100,7 +145,7 @@ class TelegramAdapter:
     platform = "telegram"
     capabilities = Capabilities(
         threads=True, create_location=True, edit=True, typing=True, buttons=True,
-        text_limit=TEXT_LIMITS["telegram"],
+        text_limit=TEXT_LIMITS["telegram"], reply_to=True,
     )
     # Groups allow about 20 messages a minute; the mirror outbox paces to this.
     rate_per_min = 20.0
@@ -135,6 +180,9 @@ class TelegramAdapter:
         # Receives each ManagedBotUpdated (a bot this one manages was created, re-tokened
         # or changed owner); the manager decides what it means. None: such updates are skipped.
         self.on_managed_bot: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+        # Returns the Navide language ("zh-TW", "en-US", "ja-JP") the "/" menu is described
+        # in, read at each session; set by the manager. None: zh-TW.
+        self.command_language: Callable[[], str] | None = None
         self.bot_id = self._token.split(":", 1)[0]
         self._client: httpx.AsyncClient | None = None
         self._task: asyncio.Task[None] | None = None
@@ -193,14 +241,52 @@ class TelegramAdapter:
                 log.info("telegram: poll failed (%s); retry in %.1fs", self.status.last_error, delay)
                 await asyncio.sleep(delay)
 
+    async def _add_commands(self) -> None:
+        """Add ours to the bot's "/" menu without touching the user's own commands: theirs
+        keep their place and wording, and a list that cannot be read is not written. One of
+        ours already there (a description this or an earlier build wrote) is reworded in
+        place to the Navide language, and a retired one of ours is dropped; a same-named
+        command worded otherwise is the user's and is left as is. A failure only loses the
+        menu."""
+        try:
+            current = await self._call("getMyCommands")
+            if not isinstance(current, list):
+                return
+            lang = ""
+            if self.command_language is not None:
+                try:
+                    lang = await asyncio.to_thread(self.command_language)
+                except Exception as exc:  # noqa: BLE001 — the default wording still works
+                    log.info("telegram: reading the Navide language failed: %s", exc)
+            ours = {c["command"]: c["description"] for c in bot_commands(lang)}
+            updated = [
+                {**c, "description": ours[name]}
+                if isinstance(c, dict) and (name := str(c.get("command") or "").lower()) in ours
+                and c.get("description") in _known_descriptions(name) else c
+                for c in current
+                if not (isinstance(c, dict) and (name := str(c.get("command") or "").lower()) in _RETIRED_COMMANDS
+                        and c.get("description") in _known_descriptions(name))
+            ]
+            have = {str(c.get("command") or "").lower() for c in current if isinstance(c, dict)}
+            missing = [{"command": k, "description": v} for k, v in ours.items() if k not in have]
+            if not missing and updated == current:
+                return
+            await self._call("setMyCommands", {"commands": [*updated, *missing]})
+            log.info("telegram: bot commands set (%s); added: %s", lang or "default",
+                     ", ".join(c["command"] for c in missing) or "none")
+        except Exception as exc:  # noqa: BLE001
+            log.info("telegram: updating the bot's commands failed: %s", exc)
+
     async def _session(self) -> None:
         me = await self._call("getMe")
         username = me.get("username") or ""
         self.status.identity = f"@{username}" if username else str(me.get("id", ""))
+        self.status.display_name = str(me.get("first_name") or "")
         self.status.can_manage_bots = me.get("can_manage_bots") is True
         if me.get("id"):
             self.bot_id = str(me["id"])
         await self._call("deleteWebhook", {"drop_pending_updates": False})
+        await self._add_commands()
         if self._offsets is not None:
             self._offset = self._offsets.get_offset(self.platform, self.account, self.bot_id)
         self.status.lifecycle = "ready"
@@ -335,16 +421,18 @@ class TelegramAdapter:
         return params
 
     async def send_text(
-        self, loc: Location, text: str, *, buttons: list[tuple[str, str]] | None = None
+        self, loc: Location, text: str, *, buttons: list[tuple[str, str]] | None = None,
+        reply_to: str = "",
     ) -> list[str]:
         ids: list[str] = []
         chunks = chunk_text(text, self.capabilities.text_limit) or [text or "…"]
         for i, chunk in enumerate(chunks):
             params = self._target(loc)
+            if reply_to and i == 0:
+                # Quote the message; still send if it was deleted meanwhile.
+                params["reply_parameters"] = {"message_id": int(reply_to), "allow_sending_without_reply": True}
             if buttons and i == len(chunks) - 1:
-                params["reply_markup"] = {
-                    "inline_keyboard": [[{"text": label, "callback_data": data} for label, data in buttons]]
-                }
+                params["reply_markup"] = self._keyboard(self._button_rows(buttons))
             result = await self._send_rich("sendMessage", params, chunk)
             ids.append(str(result.get("message_id", "")))
         return ids
@@ -360,8 +448,31 @@ class TelegramAdapter:
             raise
 
     @staticmethod
+    def _button_rows(buttons: list[tuple[str, str]]) -> list[list[tuple[str, str]]]:
+        rows: list[list[tuple[str, str]]] = []
+        for label, data in buttons:
+            row = rows[-1] if rows else None
+            if (row is not None and len(row) < ROW_MAX_BUTTONS
+                    and sum(len(lb) for lb, _ in row) + len(label) <= ROW_MAX_CHARS):
+                row.append((label, data))
+            else:
+                rows.append([(label, data)])
+        return rows
+
+    @staticmethod
     def _keyboard(rows: list[list[tuple[str, str]]]) -> dict[str, Any]:
         return {"inline_keyboard": [[{"text": label, "callback_data": data} for label, data in row] for row in rows]}
+
+    async def edit_buttons(self, loc: Location, message_id: str, buttons: list[tuple[str, str]]) -> None:
+        """Replace the message's buttons only (a multi-select question's ticks)."""
+        params = {"chat_id": loc.chat_id, "message_id": int(message_id),
+                  "reply_markup": self._keyboard(self._button_rows(buttons))}
+        try:
+            await self._call("editMessageReplyMarkup", params)
+        except TelegramApiError as exc:
+            if "message is not modified" in exc.description.lower():
+                return
+            raise
 
     async def send_menu(self, loc: Location, text: str, rows: list[list[tuple[str, str]]]) -> str:
         """One message carrying ``rows`` of buttons (the quick menu); its id."""
@@ -507,6 +618,18 @@ class TelegramAdapter:
             await asyncio.sleep(min(err.retry_after or 1.0, RETRY_AFTER_CAP_S))
             return []
         raise err
+
+
+def bot_commands(lang: str) -> list[dict[str, str]]:
+    """BOT_COMMANDS described in ``lang``; an unknown language falls back to zh-TW."""
+    texts = BOT_COMMAND_DESCRIPTIONS.get(lang) or BOT_COMMAND_DESCRIPTIONS["zh-TW"]
+    return [{"command": c["command"], "description": texts[c["command"]]} for c in BOT_COMMANDS]
+
+
+def _known_descriptions(command: str) -> set[str]:
+    """Every description Navide has given ``command``, in any language or earlier build."""
+    return ({t[command] for t in BOT_COMMAND_DESCRIPTIONS.values() if command in t}
+            | _OLD_COMMAND_DESCRIPTIONS.get(command, set()))
 
 
 def create_adapter(config: dict[str, Any], secret: dict[str, Any], *, store: OffsetStore | None = None) -> TelegramAdapter:

@@ -6,9 +6,15 @@ import sys
 
 from .git_askpass_helper import ASKPASS_FLAG, main as askpass_main
 from .credential_path_helper import HELPER_FLAG, main as credential_path_main
+from .agent_tool_result_worker import WORKER_FLAG as RESULT_WORKER_FLAG, main as result_worker_main
 
 if len(sys.argv) > 1 and sys.argv[1] == HELPER_FLAG:
     raise SystemExit(credential_path_main(sys.argv[2:]))
+
+# The helper process that parses and wraps large agent tool results
+# (agent_tool_result_worker): its frames own stdout.
+if len(sys.argv) > 1 and sys.argv[1] == RESULT_WORKER_FLAG:
+    raise SystemExit(result_worker_main())
 
 # This process was started by git as GIT_ASKPASS (through the launcher
 # `osplat.paths.askpass_launcher` wrote), not to serve: answer the one prompt
@@ -60,7 +66,7 @@ import uvicorn  # noqa: E402
 from . import __version__, osplat  # noqa: E402
 from .app import app as _fastapi_app, cli_risk_service  # noqa: E402
 from . import app as _app_module  # noqa: E402
-from . import confirm_token, ws_auth  # noqa: E402
+from . import confirm_token, log_redaction, ws_auth  # noqa: E402
 from .applog import backend_port_file, setup_file_logging  # noqa: E402
 
 
@@ -258,6 +264,12 @@ def main() -> int:
     else:
         log.info("no host token on stdin; host.register will be refused on this backend")
 
+    # From here on stdin carries only the `shutdown` line, read by the thread
+    # below. Before anything spawns: a child that inherits this pipe on Windows
+    # hangs at launch behind that thread's read (osplat for the mechanism).
+    if osplat.process_tree.isolate_stdin_from_children():
+        log.info("children no longer inherit stdin; it is NUL for them")
+
     # Use the already-imported app object so PyInstaller can detect this
     # dependency statically (string-based import is invisible to the bundler).
     config = uvicorn.Config(
@@ -285,6 +297,9 @@ def main() -> int:
         # lifespan teardown runs.
         timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_S,
     )
+    # After Config, whose dictConfig replaces the uvicorn handlers: uvicorn logs
+    # every ws handshake at INFO with its query, and the query is the token.
+    log_redaction.install()
     server = uvicorn.Server(config)
     threading.Thread(
         target=_watch_stdin_for_shutdown, args=(server,), name="stdin-shutdown", daemon=True

@@ -146,11 +146,14 @@ class WindowsResourceProbe:
 # ---------------------------------------------------------------------------
 
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+CREATE_SUSPENDED = 0x00000004
 JobObjectExtendedLimitInformation = 9
 PROCESS_TERMINATE = 0x0001
 PROCESS_SET_QUOTA = 0x0100
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 SYNCHRONIZE = 0x00100000
+STD_INPUT_HANDLE = 0xFFFFFFF6  # (DWORD)-10
+STD_ERROR_HANDLE = 0xFFFFFFF4  # (DWORD)-12
 WAIT_OBJECT_0 = 0x00000000
 WAIT_TIMEOUT = 0x00000102
 INFINITE = 0xFFFFFFFF
@@ -197,6 +200,8 @@ class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
 
 
 _k32: Any = None
+#: The NUL descriptor `isolate_stdin_from_children` made the stdin handle.
+_stdin_nul_fd: int | None = None
 _sh32: Any = None
 
 
@@ -227,6 +232,12 @@ def _kernel32() -> Any:
         k.GetExitCodeProcess.restype = wintypes.BOOL
         k.LocalFree.argtypes = [ctypes.c_void_p]
         k.LocalFree.restype = ctypes.c_void_p
+        k.GetStdHandle.argtypes = [wintypes.DWORD]
+        k.GetStdHandle.restype = wintypes.HANDLE
+        k.GetHandleInformation.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        k.GetHandleInformation.restype = wintypes.BOOL
+        k.SetStdHandle.argtypes = [wintypes.DWORD, wintypes.HANDLE]
+        k.SetStdHandle.restype = wintypes.BOOL
         _k32 = k
     return _k32
 
@@ -473,6 +484,121 @@ class WindowsProcessTree:
     def kill_group(self, gid: int, *, force: bool) -> None:
         # No process groups: the "group" is the subtree rooted at gid.
         self.kill_tree(gid, force=force)
+
+    def own_group_spawn_kwargs(self) -> dict[str, int]:
+        # Suspended until `start_own_group` has put it in its job: a child
+        # that ran first could start a process (cmd\git.exe starts the real
+        # git.exe at once) before the assignment, and that one and everything
+        # it starts would be outside the job.
+        return {"creationflags": CREATE_SUSPENDED}
+
+    def end_own_group(self, pid: int) -> None:
+        return None
+
+    def start_own_group(self, pid: int) -> int | None:
+        job: int | None = None
+        try:
+            job = self.contain(pid)
+        except OSError as exc:
+            # Degraded, not fatal: the run works, and a timeout falls back to
+            # killing the snapshot of its tree.
+            log.warning("job object unavailable for pid %s: %s", pid, exc)
+        try:
+            # NtResumeProcess: Popen has already closed the thread handle.
+            psutil.Process(pid).resume()
+        except psutil.Error as exc:
+            if job is not None:
+                self.end_contained(pid, job)
+            else:
+                try:
+                    self.kill(pid, force=True)
+                except OSError:
+                    pass
+            raise _translate(exc) from None
+        return job
+
+    def release_contained(self, pid: int, job: int) -> None:
+        with _jobs_lock:
+            entry = _jobs.get(pid)
+            if entry is not None and entry[0] == job:
+                del _jobs[pid]
+        k = _kernel32()
+        # Zeroed limits: no KILL_ON_JOB_CLOSE, so the close below ends nothing.
+        info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        if k.SetInformationJobObject(
+            job, JobObjectExtendedLimitInformation, ctypes.byref(info), ctypes.sizeof(info)
+        ):
+            k.CloseHandle(job)
+            return
+        # Closing it now would end what the run left running: keep the handle.
+        log.warning(
+            "could not clear kill-on-close for pid %s (error %s); keeping its job open",
+            pid,
+            ctypes.get_last_error(),  # type: ignore[attr-defined]
+        )
+
+    def contain(self, pid: int) -> int | None:
+        job = _create_kill_on_close_job()
+        try:
+            _assign_to_job(job, pid)
+        except OSError:
+            _kernel32().CloseHandle(job)
+            raise
+        _register_job(pid, job)
+        return job
+
+    def end_contained(self, pid: int, job: int | None = None) -> None:
+        if job is not None:
+            # The caller's own job only, as `_release_job`: a pane spawned
+            # onto this pid after the root exited owns the entry by then, and
+            # closing that pane's job would end its whole tree.
+            with _jobs_lock:
+                entry = _jobs.get(pid)
+                if entry is not None and entry[0] == job:
+                    del _jobs[pid]
+            _kernel32().CloseHandle(job)
+            return
+        with _jobs_lock:
+            entry = _jobs.pop(pid, None)
+        if entry is not None:
+            # KILL_ON_JOB_CLOSE: closing the last handle ends every process
+            # in the job, the root's or not, the root alive or not.
+            _kernel32().CloseHandle(entry[0])
+            return
+        try:
+            self.kill_tree(pid, force=True)
+        except OSError:
+            pass
+
+    def isolate_stdin_from_children(self) -> bool:
+        global _stdin_nul_fd
+        try:
+            import msvcrt
+
+            if _stdin_nul_fd is None:
+                # Held for the life of the process: it is the std handle now.
+                _stdin_nul_fd = os.open(os.devnull, os.O_RDONLY)
+            handle = msvcrt.get_osfhandle(_stdin_nul_fd)
+            if _kernel32().SetStdHandle(STD_INPUT_HANDLE, handle):
+                return True
+            error = ctypes.get_last_error()  # type: ignore[attr-defined]
+            log.warning("SetStdHandle(NUL) failed (error %s); children still inherit stdin", error)
+        except OSError as exc:
+            log.warning("could not point stdin at NUL (%s); children still inherit stdin", exc)
+        return False
+
+    def stderr_handle_info(self) -> str:
+        try:
+            from ctypes import wintypes
+
+            k = _kernel32()
+            handle = k.GetStdHandle(STD_ERROR_HANDLE)
+            flags = wintypes.DWORD(0)
+            ok = k.GetHandleInformation(handle, ctypes.byref(flags))
+            error = 0 if ok else ctypes.get_last_error()  # type: ignore[attr-defined]
+            return f"stderr handle={handle!r} GetHandleInformation ok={bool(ok)} flags={flags.value:#x} error={error}"
+        except Exception as exc:  # noqa: BLE001 - diagnostics never raise
+            return f"stderr handle not readable: {exc}"
 
     def kill_tree(self, pid: int, *, force: bool) -> None:
         if _terminate_job(pid):

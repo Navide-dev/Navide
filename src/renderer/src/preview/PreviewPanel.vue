@@ -19,6 +19,7 @@ import FilePreviewPane from '../editor/FilePreviewPane.vue'
 import InlineHtmlPreview from './InlineHtmlPreview.vue'
 import MarkdownPreview from './MarkdownPreview.vue'
 import SnippetPreview from './SnippetPreview.vue'
+import { isMiniIdeOnlyOpenBlocked, useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 import { previewSubtitle, previewTitle, type PreviewTarget } from './previewTarget'
 import { usePreview } from './usePreview'
 import { usePreviewLog, type PreviewLogEntry, type PreviewLogSource } from './usePreviewLog'
@@ -60,6 +61,14 @@ const isForeignWorkspace = computed(() => {
   if (!t || (t.kind !== 'file' && t.kind !== 'diff')) return false
   return t.workspacePath !== props.workspacePath
 })
+
+// With the Mini-IDE disabled and it as the default editor, Open has nowhere to
+// go: shown disabled with the reason instead of failing on click.
+const disabledBuiltins = useDisabledBuiltins()
+// Not cached: the default editor is a setting, read again on every render.
+function openBlockedByMiniIde(): boolean {
+  return disabledBuiltins.disabled.value.has('navide.mini-ide') && isMiniIdeOnlyOpenBlocked()
+}
 
 const canOpenInEditor = computed(() => {
   const t = target.value
@@ -212,7 +221,10 @@ function clearTrack(): void {
           <button
             v-if="canOpenInEditor"
             class="pv-btn"
-            :title="$t('preview.open-in-editor')"
+            :disabled="openBlockedByMiniIde()"
+            :title="openBlockedByMiniIde()
+              ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' })
+              : $t('preview.open-in-editor')"
             @click="openInEditor()"
           >
             {{ $t('preview.open') }}

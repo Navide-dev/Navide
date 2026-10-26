@@ -166,6 +166,10 @@ _round_generation: contextvars.ContextVar[tuple[Any, int] | None] = contextvars.
 _V1_CAPS: dict[str, Any] = {"version": 1, "storage": "inline", "itemIds": "legacy"}
 #: Scopes that never go up on the v3 path, whatever the server lists.
 RETIRED_SCOPES: tuple[str, ...] = ("memory", "credentials")
+#: Scopes that hold credentials or keys. Those are only ever stored on the
+#: user's own machine (policy of 2026-10-21): no engine registers an adapter
+#: for one, and no push names one, whatever a switch or a caller says.
+LOCAL_ONLY_SCOPES: frozenset[str] = frozenset({"credentials"})
 #: Top-level refusals that mean the negotiated capabilities no longer hold.
 _RENEGOTIATE = frozenset({"OBJECTS_DISABLED", "SYNC_PROTOCOL_REQUIRED"})
 #: Objects per ``blobs.*`` request, the contract's ceiling.
@@ -318,6 +322,28 @@ def _describe(adapter: Any, payload: Any) -> dict[str, Any] | None:
         log.warning("%s could not describe an item: %s", getattr(adapter, "scope", "?"), _why(err))
         return None
     return out if isinstance(out, dict) else None
+
+
+def _inbound(adapter: Any, payload: Any) -> Any:
+    """*payload* as *adapter* compares a remote copy, when it reads one in a
+    narrower form than the record (``McpScope.inbound``: no env or header
+    values), so a field it never sends cannot make two copies differ."""
+    fn = getattr(adapter, "inbound", None)
+    return payload if fn is None or payload is None else fn(payload)
+
+
+def _pushes(adapter: Any, item_id: str) -> bool:
+    """Whether a push may write or delete *item_id* (``McpScope.pushes``):
+    an adapter may keep reading rows it must leave exactly as they are."""
+    fn = getattr(adapter, "pushes", None)
+    return True if fn is None else bool(fn(item_id))
+
+
+def _seal_scope(adapter: Any, scope: str, wire_id: str) -> str:
+    """The scope a body under *wire_id* is sealed with (``McpScope.seal_scope``),
+    *scope* itself unless the adapter seals some ids apart."""
+    fn = getattr(adapter, "seal_scope", None)
+    return scope if fn is None else str(fn(wire_id))
 
 
 def now_iso() -> str:
@@ -1122,6 +1148,8 @@ class SyncEngine:
     def register(self, adapter: ScopeAdapter) -> None:
         if adapter.scope not in SCOPES + INTERNAL_SCOPES:
             raise SyncError(f"{adapter.scope!r} is not a protocol scope")
+        if adapter.scope in LOCAL_ONLY_SCOPES or _sensitive(adapter):
+            raise SyncError(f"{adapter.scope!r} holds credentials or keys, which never leave this machine")
         self._adapters[adapter.scope] = adapter
         if _sensitive(adapter):
             self._store.set_redactor(adapter.scope, lambda payload: _describe(adapter, payload))
@@ -1156,6 +1184,8 @@ class SyncEngine:
         # while the account changed must find out, not run for the next one.
         token = _round_generation.set((self._store, self._store.generation))
         try:
+            if scope in LOCAL_ONLY_SCOPES:
+                return {"skipped": "local-only"}
             adapter = self._adapters.get(scope)
             if adapter is None:
                 raise SyncError(f"no adapter registered for {scope!r}")
@@ -1562,7 +1592,9 @@ class SyncEngine:
         try:
             remote = None if deleted else (
                 opened if opened is not _UNOPENED
-                else json.loads(sync_keyring.decrypt(body, scope=scope, item_id=wire_id))
+                else json.loads(sync_keyring.decrypt(
+                    body, scope=_seal_scope(adapter, scope, wire_id), item_id=wire_id
+                ))
             )
         except sync_keyring.UnknownKeyId:
             raise _HoldPull(rev, item_id)
@@ -1574,11 +1606,32 @@ class SyncEngine:
                 raise SyncError(f"{scope}/{item_id} could not be opened ({type(err).__name__})") from err
             log.warning("dropping %s/%s: %s", scope, item_id, _why(err))
             return False
+        remote = _inbound(adapter, remote)
+        superseded_by = getattr(adapter, "superseded_by", None)
+        newer_id = superseded_by(item_id) if superseded_by is not None else ""
+        if newer_id and self._store.state(scope, newer_id) is not None:
+            # An older build's row of an item this machine now knows by its
+            # newer id: noted, so it is not read again, and never applied.
+            self._store.set_state(
+                scope,
+                item_id,
+                rev=rev,
+                synced_hash="" if remote is None else digest(remote),
+                deleted=remote is None,
+                sealed_kid="" if deleted else _kid_of(body),
+                synced_updated_at=stamp,
+                wire_id=hashed_wire,
+            )
+            return False
 
         state = self._store.state(scope, item_id)
         local = snapshot.get(item_id)
         local_hash = digest(local) if item_id in snapshot else ""
         agreed_hash = state.synced_hash if state else ""
+        if not _pushes(adapter, item_id):
+            # A row this machine reads but never writes: it holds no edit of
+            # it that applying could lose, so the row is applied as it stands.
+            agreed_hash = local_hash
         remote_hash = "" if remote is None else digest(remote)
         # Applying over an edit this machine has not pushed yet would lose it.
         # That is the one thing this engine must never do, so it becomes a
@@ -1731,10 +1784,11 @@ class SyncEngine:
     def _open_payload(self, scope: str, wire_id: str, body: str) -> Any:
         """A record's payload, opened under the id it travels by (and, for a
         hashed id, unwrapped). On a legacy id exactly what v1 always did."""
-        text = sync_keyring.decrypt(body, scope=scope, item_id=wire_id)
+        adapter = self._adapters.get(scope)
+        text = sync_keyring.decrypt(body, scope=_seal_scope(adapter, scope, wire_id), item_id=wire_id)
         if not sync_keyring.is_hashed_item_id(wire_id):
-            return json.loads(text)
-        return self._unwrap(scope, wire_id, text)[1]
+            return _inbound(adapter, json.loads(text))
+        return _inbound(adapter, self._unwrap(scope, wire_id, text)[1])
 
     def _reverse(self, scope: str, snapshot: dict[str, Any]) -> dict[str, str]:
         """Hashed id → name for every item this machine knows of: what it
@@ -1995,7 +2049,7 @@ class SyncEngine:
         rotated = held_ring is not None and len(held_ring.get("keys") or {}) > 1
         id_kid = _hmac_kid(_caps_now())
         for item_id, payload in snapshot.items():
-            if item_id in blocked or item_id in withheld:
+            if item_id in blocked or item_id in withheld or not _pushes(adapter, item_id):
                 continue
             if item_id in oversized:
                 self._note(scope, "tooLarge", item_id)
@@ -2037,7 +2091,7 @@ class SyncEngine:
             waiting = self._reset_deletes.get(scope, set())
             for item_id, state in states.items():
                 if item_id in snapshot or item_id in blocked or state.deleted or item_id in oversized \
-                        or item_id in withheld:
+                        or item_id in withheld or not _pushes(adapter, item_id):
                     continue
                 if item_id in waiting and state.rev == 0:
                     # A delete carried across a reset whose row the re-read
@@ -2056,7 +2110,8 @@ class SyncEngine:
             # still owes the server that tombstone, on its own — the hashed
             # copy is never sent again from rev 0.
             for name, state in sorted(states.items()):
-                if state.legacy_rev <= 0 or not state.wire_id or name in blocked or name in withheld:
+                if state.legacy_rev <= 0 or not state.wire_id or name in blocked or name in withheld \
+                        or not _pushes(adapter, name):
                     continue
                 owed = self._wire_item(scope, name, name, state.legacy_rev, updated_at, None, "")
                 owed[0][_OWED_KEY] = True
@@ -2087,7 +2142,9 @@ class SyncEngine:
         deleted = payload is None
         body = ""
         if not deleted:
-            body = sync_keyring.encrypt(canonical(payload), scope=scope, item_id=item_id)
+            body = sync_keyring.encrypt(
+                canonical(payload), scope=_seal_scope(self._adapters.get(scope), scope, item_id), item_id=item_id
+            )
             if len(body.encode("utf-8")) > MAX_BODY_BYTES:
                 log.warning(
                     "skipping %s/%s: %d bytes is over the %d byte record limit",
@@ -2192,6 +2249,8 @@ class SyncEngine:
             wire = [
                 {k: v for k, v in item.items() if k not in (_NAME_KEY, _PAIR_KEY, _OWED_KEY)} for item in wire
             ]
+        if scope in LOCAL_ONLY_SCOPES:
+            raise SyncError(f"{scope} never leaves this machine")
         caps = _caps_now()
         if _is_v3(caps) and caps.get("storage") == "s3":
             wire = await self._objectify(scope, wire, caps)

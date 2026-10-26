@@ -27,7 +27,7 @@ def _ctx(params: dict[str, str]) -> Any:
 
 
 def pane(pane_id: str) -> Any:
-    return _ctx({"pane": pane_id, "t": plan_mcp_wiring.caller_token()})
+    return _ctx({"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)})
 
 
 def host() -> Any:

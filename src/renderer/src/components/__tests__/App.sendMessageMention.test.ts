@@ -11,7 +11,7 @@ import {
 
 // Mounting App starts backend/terminal/settings lifecycles, so — like the other
 // App.*.test.ts files — these assert against the source text. They lock the
-// wiring of the pane context menu's "Send message" item: it must insert the
+// wiring of the pane context menu's "Send Message" item: it must insert the
 // right-clicked pane's messaging handle into the focused pane's prompt WITHOUT
 // submitting. Source assertions cannot prove the insert reaches a PTY; the
 // insert string itself is covered by cliContext's buildMentionInsert tests.
@@ -85,7 +85,7 @@ describe('pane context menu — Send message', () => {
   })
 
   it('is labelled in both locales', () => {
-    expect(enLocale.action['send-message']).toBe('Send message')
+    expect(enLocale.action['send-message']).toBe('Send Message')
     expect(zhLocale.action['send-message']).toBe('傳送訊息')
     expect(enLocale.action['send-message-title']).toBeTruthy()
     expect(zhLocale.action['send-message-title']).toBeTruthy()

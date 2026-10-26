@@ -15,8 +15,8 @@ from agent_team_backend import app, cloud_secrets, server_link, trust_store
 from agent_team_backend.server_link import ServerLink
 from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
 from tests.test_server_link_pin_bounds import (  # noqa: F401 - kc is a fixture
-    FILE_ONLY, KEYCHAIN_ONLY, URL, _call, core_cmd_len, kc, next_connection, owners, pair_max,
-    real_link, store_mode,
+    FILE_ONLY, KEYCHAIN_ONLY, URL, _call, confirm_refused, core_cmd_len, kc, next_connection, owners,
+    pair_max, real_link, store_mode,
 )
 from tests.test_trust_store_capacity import KEY, _device
 
@@ -56,8 +56,21 @@ def another_pairing_fits() -> bool:
 # Each rotation is a reconnect (about a second), and the bound shows from the
 # first one on: the audit ran 200 per case, which no CI per-test limit takes.
 ROTATIONS = 6
+# A rotation's own writes (.next, its read back, the member pin, the promote)
+# each end in an fsync, slow on a loaded Windows runner; confirm_refused
+# allows the same.
+WRITE_CHAIN_S = 10.0
 
 
+def round_s() -> float:
+    """One round's deadline: the reconnect (the link had authenticated, so its
+    backoff starts over at RECONNECT_BASE_S) and the rotation's write chain,
+    with the reconnect's length again as margin. Not a fixed few seconds: those
+    lost to a slow Windows round (0.2.22 release gate, #628 CI)."""
+    return 2 * server_link.RECONNECT_BASE_S + WRITE_CHAIN_S
+
+
+@pytest.mark.serial
 @pytest.mark.parametrize("paired", [0, 3, 8])
 async def test_real_rotations_keep_own_members_bounded(kc, paired):
     """ROTATIONS rotations through the real ServerLink and the real Keychain chain
@@ -73,7 +86,7 @@ async def test_real_rotations_keep_own_members_bounded(kc, paired):
     try:
         prev = CONFIG.token
         for r in range(ROTATIONS):
-            await _until(lambda: server_link.access_token() != prev and server_link.next_access_token() == "", timeout=5)
+            await _until(lambda: server_link.access_token() != prev and server_link.next_access_token() == "", timeout=round_s())
             prev = server_link.access_token()
             await asyncio.sleep(0)
             counts.append(len(owners()))
@@ -81,7 +94,7 @@ async def test_real_rotations_keep_own_members_bounded(kc, paired):
             if r < ROTATIONS - 1:
                 n = len(server.opened)
                 await server.opened[-1].close()
-                await next_connection(server, n)
+                await next_connection(server, n, timeout=round_s())
         assert link._trust_locked == ""
     finally:
         await link.stop()
@@ -254,12 +267,12 @@ async def test_refused_confirms_never_fill_the_record(kc):
     assert await link.start()
     try:
         for _ in range(10):
-            await asyncio.sleep(0.03)
+            await confirm_refused(server)
             n = len(server.opened)
             await server.opened[-1].close()
             await next_connection(server, n)
-        await asyncio.sleep(0.05)
-        assert link._trust_locked == ""
+        await confirm_refused(server)
+        await _until(lambda: link._trust_locked == "")
     finally:
         await link.stop()
     print(f"\nrefused-confirm at max pairing: paired={paired} ownMembers={len(owners())} cmd bytes={core_cmd_len()}")

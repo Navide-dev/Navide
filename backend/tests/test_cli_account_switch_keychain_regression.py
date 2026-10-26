@@ -1,14 +1,11 @@
-"""CLI account switching behaves exactly as it did at v0.2.19.
-
-The device-trust fix added a length bound for `security -i`, and by the user's
-ruling it lives only on Navide Cloud's own writer (`cloud_secrets.write`). These
-pin the CLI side: switching real-shaped credentials sends `security` the same
-command as before and reads back the same bytes — including a credential long
-enough that the Cloud writer would refuse it.
+"""CLI account switching: what fits `security -i` is written as at v0.2.19;
+what does not goes through a hex-encoded argv write instead.
 
 Sizes measured on the reporting machine (2026-10-11, lengths only): Claude
 slots 504-2361 B of secret (624-2624 B of command); the larger ones carry
-`mcpOAuth`, which grows with every MCP server signed into.
+`mcpOAuth`, which grows with every MCP server signed into. A second machine
+(2026-10-16) held 4335 B with five MCP logins — past the 4095-byte line, so
+`-i` stored a truncated slot and every switch away from it failed.
 """
 
 from __future__ import annotations
@@ -159,10 +156,14 @@ def test_an_antigravity_switch_round_trips_a_real_sized_item(tmp_path, with_id_t
     assert sec.items[("gemini", "antigravity")] == blob_a
 
 
-def test_the_cli_path_has_no_new_length_bound(tmp_path):
-    """A credential past the Cloud writer's bound still goes to `security`
-    unchanged, exactly as at v0.2.19 — this fix does not decide for CLI
-    accounts (user ruling, 2026-10-11)."""
+def _argv_hex_writes(sec: RecordingSecurity, service: str) -> list[str]:
+    return [c[c.index("-X") + 1] for c in sec.calls
+            if c and c[0] == "add-generic-password" and c[c.index("-s") + 1] == service]
+
+
+def test_a_credential_past_the_line_switches_through_argv(tmp_path):
+    """Past the 4095-byte line `security -i` would store a truncated head, so
+    the write moves to argv, hex-encoded — what Claude Code itself does."""
     vault, sec = _vault(tmp_path)
     huge = _claude_secret(14)
     assert len(_pre_change_command(CLAUDE_LIVE_KEYCHAIN_SERVICE, huge).encode()) > SECURITY_LINE_MAX_BYTES
@@ -171,16 +172,17 @@ def test_the_cli_path_has_no_new_length_bound(tmp_path):
 
     vault.switch("claude", DEFAULT_SLOT_ID, "huge")
 
-    assert _pre_change_command(CLAUDE_LIVE_KEYCHAIN_SERVICE, huge) in sec.commands
+    assert _pre_change_command(CLAUDE_LIVE_KEYCHAIN_SERVICE, huge) not in sec.commands
+    assert _argv_hex_writes(sec, CLAUDE_LIVE_KEYCHAIN_SERVICE) == [huge.encode().hex()]
     assert sec.items[(CLAUDE_LIVE_KEYCHAIN_SERVICE, getpass.getuser())] == huge
 
 
-def test_a_very_long_claude_credential_is_written_as_before(tmp_path):
-    """Review KC-7: 10-20 KB, far past any bound — the CLI path still hands it
-    to `security` verbatim, as v0.2.19 did, and does not refuse it itself."""
+def test_a_very_long_claude_credential_is_written_whole(tmp_path):
+    """Review KC-7: 10-20 KB, far past the line — still stored whole, never
+    refused and never cut to its first 4095 bytes."""
     vault, sec = _vault(tmp_path)
     huge = _claude_secret(40)
     assert 10_000 <= len(huge.encode()) <= 20_000
     vault.write_slot("claude", "huge", LiveCredentials(secret=huge))
-    assert _pre_change_command("Navide CLI account claude-huge", huge) in sec.commands
+    assert sec.commands == []
     assert vault.read_slot("claude", "huge").secret == huge

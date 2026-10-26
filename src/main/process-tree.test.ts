@@ -147,6 +147,22 @@ describe('killProcessTree', () => {
       expect(kill).not.toHaveBeenCalled()
     })
 
+    it('logs a taskkill failure instead of dropping it', () => {
+      // 0.2.26 packaged check: leftovers after quit with nothing in the log to
+      // say whether the tree kill ran or failed.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      execFileSync.mockImplementation(() => {
+        throw new Error('ERROR: Access is denied.')
+      })
+
+      killProcessTree(4102, 'SIGKILL')
+
+      expect(warn).toHaveBeenCalledWith(
+        '[process-tree] taskkill /PID 4102 /T /F did not succeed: ERROR: Access is denied.'
+      )
+      warn.mockRestore()
+    })
+
     it('still refuses to touch pid 1 or an unspawned child', () => {
       killProcessTree(undefined, 'SIGKILL')
       expect(execFileSync).not.toHaveBeenCalled()

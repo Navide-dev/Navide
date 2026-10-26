@@ -1,0 +1,53 @@
+{
+  "$comment": "isValidAgentToolText (title and description), sanitizeAgentToolResultText (tool results) and utf8ByteLength (the DB9 stability cap is counted in UTF-8 bytes).",
+  "texts": [
+    { "value": "Set one block's status (done|wip|plan) in this workspace's dev map.", "valid": true },
+    { "value": "中文說明 ✓ 😀", "valid": true },
+    { "value": "", "valid": false },
+    { "value": "line\nbreak", "valid": false },
+    { "value": "carriage\rreturn", "valid": false },
+    { "value": "tab\there", "valid": false },
+    { "value": "<b>bold</b>", "valid": false },
+    { "value": "a > b", "valid": false },
+    { "value": "next\u0085line", "valid": false },
+    { "value": "del\u007f", "valid": false },
+    { "value": "esc\u001b[31m", "valid": false },
+    { "value": "line separator", "valid": false },
+    { "value": "para separator", "valid": false },
+    { "value": 42, "valid": false },
+    { "value": null, "valid": false },
+    { "value": "\u202eetirw safe", "valid": false },
+    { "value": "zero\u200bwidth", "valid": false },
+    { "value": "joiner\u200d", "valid": false },
+    { "value": "\ufeffbom", "valid": false },
+    { "value": "mark\u200e", "valid": false },
+    { "value": "isolate\u2066x\u2069", "valid": false },
+    { "value": "word\u2060joiner", "valid": false },
+    { "value": "arabic\u061cmark", "valid": false },
+    { "value": "tag\udb40\udc41smuggled", "valid": false },
+    { "value": "tag end\udb40\udc7f", "valid": false },
+    { "value": "select\ufe0for", "valid": false },
+    { "value": "select\ufe00or", "valid": false },
+    { "value": "soft\u00adhyphen", "valid": false },
+    { "value": "mongolian\u180evowel", "valid": false },
+    { "value": "grapheme\u034fjoiner", "valid": false },
+    { "value": "filler\u115f here", "valid": false },
+    { "value": "filler\u1160 here", "valid": false },
+    { "value": "filler\u3164 here", "valid": false },
+    { "value": "filler\uffa0 here", "valid": false },
+    { "value": "filler\u2800 here", "valid": false }
+  ],
+  "results": [
+    { "value": "plain text", "expected": "plain text" },
+    { "value": "a\u001b[31mred\u001b[0m", "expected": "a[31mred[0m" },
+    { "value": "x\r\ny", "expected": "x\ny" },
+    { "value": "tab\tkept\nnewline kept\n", "expected": "tab\tkept\nnewline kept\n" },
+    { "value": "\u0000\u0007\u0008\u000b\u000c\u007f\u0085\u009f", "expected": "" },
+    { "value": "keeps and 中文 😀", "expected": "keeps and 中文 😀" }
+  ],
+  "byteLengths": [
+    { "value": "", "expected": 0 },
+    { "value": "abc", "expected": 3 },
+    { "value": "aé中😀", "expected": 10 }
+  ]
+}

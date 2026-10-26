@@ -24,7 +24,18 @@ const repositoryRoot = resolve(import.meta.dirname, '../..')
 const builtPackages = ['packages/plugin-contracts', 'packages/plugin-sdk', 'packages/plugin-ui']
 const packedPackages = [...builtPackages, 'plugins/navide-git']
 
+// Under Bun the build scripts run through Bun itself, so a Bun-only machine
+// needs no pnpm. On Windows process.execPath can be Bun's generated `node`
+// shim, which parses argv with Node semantics; resolve the real Bun CLI.
+function bunExecutable(): string | undefined {
+  if (!process.versions.bun) return undefined
+  const bunGlobal = (globalThis as { Bun?: { which(command: string): string | null } }).Bun
+  return bunGlobal?.which('bun') ?? process.execPath
+}
+
 function packageManager(): { command: string; prefix: string[] } {
+  const bun = bunExecutable()
+  if (bun) return { command: bun, prefix: [] }
   // `pnpm` alone is a .cmd shim on Windows that execFile cannot start; under
   // `pnpm test:run` npm_execpath is pnpm's own script.
   const inherited = process.env.npm_execpath ?? ''
@@ -45,7 +56,7 @@ function pnpm(args: string[], cwd: string): string {
     // A newer pnpm re-verifies the workspace before `run` and can replace
     // node_modules on a config mismatch.
     npm_config_verify_deps_before_run: 'false',
-    PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH ?? ''}`,
+    PATH: `${dirname(bunExecutable() ?? process.execPath)}${delimiter}${process.env.PATH ?? ''}`,
   }
   // Vitest sets NODE_ENV=test in this process. Inherited, it makes Vite and
   // @vitejs/plugin-vue emit a development build of plugin-ui that differs from
@@ -117,7 +128,7 @@ export function prepareArtifactInputs(root: string, build: () => void, prepared 
   const stamp = join(root, 'node_modules/.cache/navide-artifact-inputs.json')
   const inputs = artifactDigest(root, [
     ...builtPackages, 'plugins/navide-mini-ide', 'tests/support/publicPackagesSetup.ts',
-    'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc',
+    'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'bun.lock', 'bunfig.toml', 'scripts/bun/vue-tsc.cjs',
     ...readdirSync(root).filter((file) => /^tsconfig.*\.json$/.test(file) || /^\.env(?:\.|$)/.test(file)),
     ...['typescript', 'vue-tsc', 'vite', '@vitejs/plugin-vue'].map((name) => `node_modules/${name}/package.json`),
   ], true)
@@ -157,7 +168,7 @@ export default function setup(project: TestProject): () => void {
     // than by parsing pack output, which differs between pnpm and npm.
     const destination = join(artifacts, packageDirectory.replaceAll('/', '_'))
     mkdirSync(destination)
-    pnpm(['pack', '--pack-destination', destination], source)
+    pnpm(process.versions.bun ? ['pm', 'pack', '--destination', destination] : ['pack', '--pack-destination', destination], source)
     const packed = readdirSync(destination).filter((file) => file.endsWith('.tgz'))
     if (packed.length !== 1) throw new Error(`pnpm pack wrote ${packed.length} tarballs for ${name}`)
     tarballs[name] = join(destination, packed[0])

@@ -8,6 +8,7 @@ the contract checks used during documentation review:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 from collections.abc import Iterator
@@ -19,6 +20,20 @@ from jsonschema.exceptions import ValidationError
 
 
 ROOT = Path(__file__).resolve().parent
+
+
+def _load_agent_tools_contract() -> Any:
+    """The contract's own validator (section 2.5), loaded by path: this script
+    runs in the registry environment, which does not install the backend."""
+    path = ROOT.parents[1] / "backend" / "agent_team_backend" / "plugins" / "agent_tools_contract.py"
+    spec = importlib.util.spec_from_file_location("agent_tools_contract", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_AGENT_TOOLS = _load_agent_tools_contract()
 
 
 def _validate_pattern(
@@ -76,6 +91,14 @@ def _validate_manifest_semantics(manifest: Any) -> None:
     """
     if not isinstance(manifest, dict):
         return
+    agent_tool_errors = _AGENT_TOOLS.validate_agent_tools(manifest)
+    if agent_tool_errors:
+        raise ValueError(f"backend.agentTools: {agent_tool_errors[0]['code']}")
+    backend = manifest.get("backend")
+    for tool in (backend.get("agentTools") or []) if isinstance(backend, dict) else []:
+        # The Host supervisor's method-name rule (isMethodName).
+        if not re.fullmatch(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*", str(tool.get("method"))):
+            raise ValueError("backend.agentTools method is not a name the Host accepts")
     pack = manifest.get("extensionPack")
     if isinstance(pack, list) and manifest.get("id") in pack:
         raise ValueError("extensionPack must not list the pack itself")
@@ -106,7 +129,7 @@ def _catalog_permissions(catalog: dict[str, Any]) -> tuple[set[str], int]:
     system_namespaces: set[str] = set()
     shell_entries = 0
     shell_addresses: set[str] = set()
-    allowed_system = {"fs", "ui", "aiCli"}
+    allowed_system = {"fs", "ui", "aiCli", "web", "agents", "agentMessages"}
     for item in [*catalog["methods"], *catalog["events"]]:
         if item["visibility"] != "public":
             continue

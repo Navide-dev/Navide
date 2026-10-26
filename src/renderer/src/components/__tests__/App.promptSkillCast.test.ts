@@ -86,4 +86,13 @@ describe('togglePaneLoop – one-shot skills', () => {
     expect(loopPath).toContain('startLoopLimitWatcher(paneId)')
     expect(loopPath).toContain('armLoopTurn(paneId)')
   })
+
+  it('tells the user when the loop start does not land', () => {
+    const body = togglePaneLoopBody()
+    const loopPath = body.slice(body.indexOf('pane.loopActive = true'))
+    const failed = loopPath.slice(loopPath.indexOf('if (!ok)'), loopPath.indexOf('armLoopTurn(paneId)'))
+    expect(failed).toContain("notifyRestore.toast(i18n.global.t('pane.terminal.loop-start-failed'")
+    expect(failed).toContain("{ type: 'error' }")
+    expect(failed).toContain('pane.loopActive = false')
+  })
 })

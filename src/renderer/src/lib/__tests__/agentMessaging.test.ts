@@ -19,6 +19,8 @@ import {
   sanitizeMessageContent,
   renderEnvelope,
   isExternalDelivery,
+  hasReplyRoute,
+  LAST_OUTPUT_REPLY_HINT,
   EXTERNAL_CONTENT_START,
   EXTERNAL_CONTENT_END,
   renderFailureNotice,
@@ -408,6 +410,43 @@ describe('renderEnvelope', () => {
     expect(parseMessages(reply)).toEqual([
       { target: 'claude-1', content: 'ack', replyTo: 'abc123:7' },
     ])
+  })
+})
+
+describe('hasReplyRoute', () => {
+  it('is true for every sender a MSG block can reach', () => {
+    expect(hasReplyRoute({ from_pane_id: 'p1', from_display: 'Agent-Team/coordinator' })).toBe(true)
+    expect(hasReplyRoute({ from_pane_id: '', from_display: 'telegram:alice' })).toBe(true)
+    expect(hasReplyRoute({ from_pane_id: '', from_display: 'x', origin: 'channel' })).toBe(true)
+    expect(hasReplyRoute({ from_pane_id: '', from_display: 'dev-2/api/pane', origin: 'remote' })).toBe(true)
+  })
+
+  it('is false for an MCP caller with no pane behind it', () => {
+    expect(hasReplyRoute({ from_pane_id: '', from_display: 'a host client' })).toBe(false)
+    expect(hasReplyRoute({ from_pane_id: '', from_display: 'an external client' })).toBe(false)
+    expect(hasReplyRoute({ from_display: 'a host client' })).toBe(false)
+  })
+})
+
+describe('renderEnvelope for a sender with no reply route', () => {
+  it('asks for the answer in the final output instead of a MSG block nobody can receive', () => {
+    const env = renderEnvelope('a host client', 'status?', { correlationId: 'host:mcp:3e79', noReplyRoute: true })
+    expect(env).toBe(`${MSG_ENVELOPE_PREFIX} a host client\nstatus?\n${LAST_OUTPUT_REPLY_HINT}`)
+    expect(env).not.toContain(MSG_START)
+    expect(env).not.toContain('to: a host client')
+  })
+
+  it('leaves every other envelope byte-identical', () => {
+    for (const sender of ['claude-1', 'Agent-Team/coordinator', 'telegram:alice']) {
+      for (const opts of [{}, { correlationId: 'k-1' }, { correlationId: 'k-1', external: true }]) {
+        expect(renderEnvelope(sender, 'hi', { ...opts, noReplyRoute: false })).toBe(renderEnvelope(sender, 'hi', opts))
+      }
+    }
+  })
+
+  it('still honours includeReplyHint: false', () => {
+    expect(renderEnvelope('a host client', 'hi', { includeReplyHint: false, noReplyRoute: true }))
+      .toBe(`${MSG_ENVELOPE_PREFIX} a host client\nhi`)
   })
 })
 

@@ -37,6 +37,7 @@ from agent_team_backend import (
 
 from .test_server_link import (  # noqa: F401 - broadcasts is a fixture
     ALLOW_ALL_POLICY,
+    CONNECT_TIMEOUT_S,
     _CONFIRM_KEY,
     _confirmation,
     _ws_session,
@@ -751,6 +752,10 @@ async def test_a_key_change_is_announced_to_the_windows(broadcasts, monkeypatch)
         seen.append(event)
 
     monkeypatch.setattr(app, "broadcast", capture)
+    # The pane the message is for: without it the message is refused before
+    # any notice goes out, and the test passed only after an earlier one left
+    # a "p1" registered in this process.
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
     _already_paired()
     server = FakeServer()
     link = await _connected(server)
@@ -3268,7 +3273,9 @@ async def test_the_replacement_is_tried_once_and_not_in_a_loop(tmp_path, monkeyp
     )
     task = asyncio.create_task(link._run())
     try:
-        await _until(lambda: bool(server.opened and len(server.opened[0].hellos) >= 2))
+        # The hellos wait on the first key writes, which go through DPAPI on
+        # Windows: see CONNECT_TIMEOUT_S.
+        await _until(lambda: bool(server.opened and len(server.opened[0].hellos) >= 2), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.05)
 
         assert len(server.opened[0].hellos) == 2, "one retry, not a loop"
@@ -3305,7 +3312,8 @@ async def test_a_conflict_that_survives_the_retry_says_what_it_is(tmp_path, monk
     )
     task = asyncio.create_task(link._run())
     try:
-        await _until(lambda: bool(link.terminated_reason))
+        # Reached through the hello: see CONNECT_TIMEOUT_S.
+        await _until(lambda: bool(link.terminated_reason), timeout=CONNECT_TIMEOUT_S)
 
         assert "already registered to another account" in link.terminated_reason
         # It used to read as a credential problem, which is where people looked.
@@ -3348,7 +3356,8 @@ async def test_an_id_the_server_refused_is_never_recorded(tmp_path, monkeypatch)
     )
     task = asyncio.create_task(link._run())
     try:
-        await _until(lambda: bool(link.terminated_reason))
+        # Reached through the hello: see CONNECT_TIMEOUT_S.
+        await _until(lambda: bool(link.terminated_reason), timeout=CONNECT_TIMEOUT_S)
 
         doc = json.loads(device_identity.device_identity_path().read_text(encoding="utf-8"))
         assert "m1" not in doc.get("nodes", {}), doc

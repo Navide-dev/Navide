@@ -4,7 +4,7 @@
 // host-side postMessage validation — non-whitelisted events are ignored and
 // malformed payloads never reach the write hooks.
 // @vitest-environment happy-dom
-import { afterEach, describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, onTestFinished, vi } from 'vitest'
 import { Window as HappyWindow } from 'happy-dom'
 import {
   MAX_ANCHOR_LENGTH,
@@ -95,6 +95,34 @@ describe('buildPlanRuntimeScript', () => {
     expect(script).toContain('CODE_REF_RE')
     expect(script).toContain('\\d{1,7}')
   })
+
+  // In the about:srcdoc frame "#id" resolves against the host URL, so the
+  // default click never reaches :target (a CSS lightbox stays shut).
+  it('keeps "#id" link clicks inside the frame so :target lightboxes open and close', () => {
+    const window = new HappyWindow({ url: 'about:srcdoc' })
+    onTestFinished(() => window.happyDOM.abort())
+    window.document.body.innerHTML =
+      '<div class="zoom" id="z1"><a id="open" href="#z1"><img alt=""></a><a id="close" href="#_">x</a></div>' +
+      '<a id="external" href="https://example.com/">out</a>'
+    window.eval(buildPlanRuntimeScript(initOf()))
+    const click = (selector: string) => {
+      const event = new window.MouseEvent('click', { bubbles: true, cancelable: true })
+      window.document.querySelector(selector)!.dispatchEvent(event)
+      return event
+    }
+    expect(click('#open img').defaultPrevented).toBe(true)
+    expect(window.location.hash).toBe('#z1')
+    expect(click('#close').defaultPrevented).toBe(true)
+    expect(window.location.hash).toBe('#_')
+    expect(click('#external').defaultPrevented).toBe(false)
+  })
+
+  it('injects layout overrides so wide tables wrap and the document uses the frame width', () => {
+    const script = buildPlanRuntimeScript(initOf())
+    expect(script).toContain('.tablewrap td,.tablewrap td code{overflow-wrap:anywhere}')
+    expect(script).toContain('.wrap{max-width:1180px}')
+    expect(script).toContain('.wrap td ul,.wrap td p{max-width:none}')
+  })
 })
 
 describe('preparePlanDocHtml', () => {
@@ -115,10 +143,11 @@ describe('preparePlanDocHtml', () => {
     expect(documentToken).toMatch(/^[0-9a-f]{32}$/)
   })
 
-  it('prepends a nonce-restricted CSP meta at the very start and the runtime before </body>', () => {
+  it('puts a nonce-restricted CSP meta right after the doctype and the runtime before </body>', () => {
     const nonce = '0123456789abcdef0123456789abcdef'
     const { html: out } = preparePlanDocHtml(DOC, config, { nonce })
-    expect(out.startsWith('<meta http-equiv="Content-Security-Policy"')).toBe(true)
+    // The doctype stays the first token so the frame renders in standards mode.
+    expect(out.startsWith('<!doctype html><meta http-equiv="Content-Security-Policy"')).toBe(true)
     expect(out).toContain(`script-src 'nonce-${nonce}'`)
     expect(out).toContain("default-src 'none'")
     const runtimeAt = out.indexOf(`<script nonce="${nonce}">`)
@@ -126,6 +155,106 @@ describe('preparePlanDocHtml', () => {
     expect(runtimeAt).toBeLessThan(out.indexOf('</body>'))
     // The plan-meta data island survives assembly.
     expect(out).toContain('id="plan-meta"')
+  })
+
+  // Only HTML whitespace and a doctype may precede the CSP meta: any other
+  // character starts <body>, and a CSP meta outside <head> is ignored.
+  it.each([
+    ['NO-BREAK SPACE', ' '],
+    ['LINE TABULATION', '\u000b'],
+    ['LINE SEPARATOR', ' '],
+    ['PARAGRAPH SEPARATOR', ' '],
+    ['OGHAM SPACE MARK', ' '],
+    ['IDEOGRAPHIC SPACE', '　'],
+  ])('keeps the CSP ahead of body content when a doctype is preceded by %s', (_name, lead) => {
+    const nonce = '0123456789abcdef0123456789abcdef'
+    const { html: out } = preparePlanDocHtml(`${lead}${DOC}`, config, { nonce })
+    const before = out.slice(0, out.indexOf('<meta http-equiv="Content-Security-Policy"'))
+    expect(before).toMatch(/^[\t\n\f\r ]*(?:<!doctype[^>]*>)?$/i)
+  })
+
+  it('keeps a doctype led by HTML whitespace first', () => {
+    const nonce = '0123456789abcdef0123456789abcdef'
+    const { html: out } = preparePlanDocHtml(` \t\r\n\f${DOC}`, config, { nonce })
+    expect(out.startsWith(' \t\r\n\f<!doctype html><meta http-equiv="Content-Security-Policy"')).toBe(true)
+  })
+
+  const prepare = (content: string): string =>
+    preparePlanDocHtml(content, config, { nonce: '0123456789abcdef0123456789abcdef' }).html
+
+  // A meta refresh navigates the frame to a page the CSP above never reaches.
+  it.each([
+    ['double-quoted', '<meta http-equiv="refresh" content="0;url=https://attacker.invalid/">'],
+    ['in upper case, unquoted', '<META HTTP-EQUIV=REFRESH CONTENT="0;url=https://attacker.invalid/">'],
+    ['single-quoted with padding', "<meta http-equiv=' Refresh ' content='0;url=https://attacker.invalid/'>"],
+    ['with spaces around =', '<meta http-equiv = "refresh" content="0;url=https://attacker.invalid/">'],
+    ['slash-separated', '<meta/http-equiv=refresh/content="0;url=https://attacker.invalid/">'],
+    ['after a value holding >', '<meta content="0;url=https://attacker.invalid/?a>b" http-equiv="refresh">'],
+    ['as a character reference', '<meta http-equiv="&#x72;efresh" content="0;url=https://attacker.invalid/">'],
+  ])('drops a meta refresh written %s', (_name, meta) => {
+    const html = prepare(`<!doctype html><html><head>${meta}</head><body>Hi</body></html>`)
+    expect(html).not.toContain('attacker.invalid')
+    expect(html).toContain('<body>Hi')
+  })
+
+  it('keeps every other meta as written', () => {
+    const metas = '<meta charset="utf-8"><meta name="refresh" content="x"><meta http-equiv="Content-Type" content="text/html">'
+    expect(prepare(`<!doctype html><html><head>${metas}</head><body>Hi</body></html>`)).toContain(metas)
+  })
+
+  // `=` where an attribute name belongs starts that name, not a value, so a
+  // quote after it opens nothing and the tag ends at the next `>`.
+  it.each([
+    ['a leading =', "<meta =' >"],
+    ['= right after a quoted value', '<meta a="x"=" >'],
+    ['an unterminated quoted value', '<meta a="x >'],
+  ])('still drops a meta refresh after a tag with %s', (_name, tag) => {
+    const html = prepare(`<head>${tag}<meta http-equiv=refresh content=0;url=https://attacker.invalid/r></head>`)
+    expect(html).not.toContain('attacker.invalid')
+  })
+
+  // A `<meta` that is only text (a comment, an attribute value, a textarea)
+  // may never close its quote; everything after it is still the document.
+  it.each([
+    ['a comment', '<!-- <meta x=" --><p>after</p>'],
+    ['an attribute value', '<p title=\'<meta x="\'>after</p>'],
+    ['a textarea', '<textarea><meta a="</textarea><p>after</p>'],
+  ])('keeps what follows a never-ending <meta in %s', (_name, body) => {
+    const html = prepare(`<body>${body}<meta http-equiv=refresh content=0;url=https://attacker.invalid/r></body>`)
+    expect(html).toContain(body.replace('<meta', '&lt;meta'))
+    expect(html).not.toContain('attacker.invalid')
+  })
+
+  // Catches quadratic time, not speed: when each `<meta` read its unquoted
+  // value to the end of input again, this took minutes; a linear read takes
+  // milliseconds, so one second is a generous bound.
+  it('reads 1 MB of never-ending unquoted values in linear time', () => {
+    const html = '<meta/a='.repeat(131072)
+    const start = performance.now()
+    prepare(html)
+    expect(performance.now() - start).toBeLessThan(1000)
+  }, 600_000)
+
+  // Markup injected after the strip (the runtime script) must not be able to
+  // close a `<meta` the plan left open into a meta refresh.
+  it('turns a <meta that never ends into text', () => {
+    const html = prepare("<body><p>a</p><meta http-equiv=refresh content='0;url=https://attacker.invalid/")
+    expect(html).toContain("<p>a</p>&lt;meta http-equiv=refresh content='0;url=https://attacker.invalid/")
+  })
+
+  // The browser reads `<me<meta>` as one unknown tag, so what surrounds a
+  // removed meta refresh never becomes a meta refresh or a script of its own.
+  it('leaves a bare meta where a refresh was, so its neighbours cannot join', () => {
+    expect(prepare('<p>a</p><me<meta http-equiv=refresh>ta http-equiv=refresh>')).toContain('<p>a</p><me<meta>ta http-equiv=refresh>')
+    expect(prepare('<p>a</p><scr<meta http-equiv=refresh>ipt>x()</script>')).toContain('<p>a</p><scr<meta>ipt>x()</script>')
+  })
+
+  // The JSON exemption is for the type attribute itself, not a name ending in it.
+  it.each([
+    ['data-type', '<script data-type="application/json">x()</script>'],
+    ['a:type', '<script a:type="application/json">x()</script>'],
+  ])('strips a script whose %s merely says application/json', (_name, script) => {
+    expect(prepare(`<p>a</p>${script}`)).not.toContain('x()')
   })
 
   it('appends the runtime and prepends the CSP when head/body tags are missing', () => {

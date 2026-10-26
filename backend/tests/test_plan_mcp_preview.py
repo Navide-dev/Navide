@@ -69,7 +69,7 @@ def _host_ctx() -> Any:
 
 
 def _pane_ctx(pane_id: str) -> Any:
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )

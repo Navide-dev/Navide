@@ -10,7 +10,7 @@ import type { useStages } from '../composables/useStages'
 import type { useAnalyzer } from '../composables/useAnalyzer'
 import type { usePipelines } from '../composables/usePipelines'
 import { MCP_CATALOG, isMcpInstalled, type McpCatalogEntry } from '../data/mcpCatalog'
-import { useTheme, vTruncate } from '@navide/plugin-ui/foundation'
+import { AVAILABLE_UI_LOCALES, isBetaUiLocale, useTheme, vTruncate } from '@navide/plugin-ui/foundation'
 import { useSettings } from '../composables/useSettings'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import {
@@ -59,6 +59,7 @@ import {
   formatCustomCommand,
   type DetectedEditor,
 } from '../lib/defaultEditor'
+import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 import { useCliAgentPrefs } from '../composables/useCliAgentPrefs'
 import { useOnboarding } from '../composables/useOnboarding'
 import {
@@ -125,6 +126,10 @@ import CrossPlatformHelp from './CrossPlatformHelp.vue'
 import ExtensionsPane from './ExtensionsPane.vue'
 import ExecutionPolicyPane from './ExecutionPolicyPane.vue'
 import MarketplacePane from './MarketplacePane.vue'
+import MarketplaceDeveloperPanel from './MarketplaceDeveloperPanel.vue'
+import TestplacePane from './TestplacePane.vue'
+import { marketplaceView, setMarketplaceView } from '../composables/useMarketplaceForms'
+import PluginDisclosureOverview from './PluginDisclosureOverview.vue'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import LayoutSettingsPane from '../layout/LayoutSettingsPane.vue'
 import McpPane from './McpPane.vue'
@@ -144,6 +149,7 @@ import ChannelsPane from './settings/ChannelsPane.vue'
 import SecurityPane from './settings/SecurityPane.vue'
 import NavideCloudMark from './NavideCloudMark.vue'
 import SettingsNavItem from './settings/SettingsNavItem.vue'
+import SettingsNavSubItem from './settings/SettingsNavSubItem.vue'
 import SettingsSection from './settings/SettingsSection.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingRow from './settings/SettingRow.vue'
@@ -243,7 +249,7 @@ const reclaimNowSize = computed(() => formatBytes(props.reclaimableNowBytes ?? 0
 /** Active high-risk credential findings, shown as the nav badge. */
 const credentialsHighCount = ref(0)
 
-type Tab = 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'accounts' | 'extensions' | 'marketplace' | 'keybindings' | 'channels' | 'security' | 'help'
+type Tab = 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help'
 
 /** Topics inside the Help tab — read-only reference material, no settings. */
 type HelpTopic =
@@ -284,7 +290,82 @@ const activeTab = ref<Tab>(props.initialTab ?? 'general')
 // The CLI Extensions page scans every CLI's files, so it mounts on first visit
 // and stays mounted after that.
 const visitedCliExtensions = ref(activeTab.value === 'cliExtensions')
+// Navide Plugins is four pages under its sidebar entry: the plugins, the
+// execution policy, developer and native settings, and the disclosure records.
+type PluginsPage = 'plugins' | 'policy' | 'developer' | 'disclosure'
+const pluginsPages = [
+  { id: 'plugins', label: 'settings.extensions.listTitle' },
+  { id: 'policy', label: 'settings.nav.executionPolicy' },
+  { id: 'developer', label: 'settings.extensions.developerNative' },
+  { id: 'disclosure', label: 'settings.nav.disclosureOverview' },
+] as const satisfies ReadonlyArray<{ id: PluginsPage; label: string }>
+const pluginsPage = ref<PluginsPage>('plugins')
+const pluginsPageLabel = computed(() => pluginsPages.find((page) => page.id === pluginsPage.value)!.label)
+// The pages split what used to be one scrolling page, so each page's state shows
+// on its row before it is opened: ⚠ on Execution Policy while that page shows a
+// warning, "On" on Developer while Developer Mode or a native-backend switch is on.
+const policyAttention = ref<string[]>([])
+const developerSwitchesOn = ref<string[]>([])
+function pluginsPageMarker(page: PluginsPage): { text: string; tone: 'risk' | 'on'; label: string } | null {
+  if (page === 'policy' && policyAttention.value.length) {
+    return { text: '⚠', tone: 'risk', label: policyAttention.value.join('\n') }
+  }
+  if (page === 'developer' && developerSwitchesOn.value.length) {
+    const on = t('settings.extensions.pageOn')
+    return { text: on, tone: 'on', label: t('settings.extensionsPolicy.labeledValue', { label: on, value: developerSwitchesOn.value.join(', ') }) }
+  }
+  return null
+}
+/** The page each section of the former single Navide Plugins page lives on. */
+const PLUGINS_SECTION_PAGE: Readonly<Record<string, PluginsPage>> = {
+  'extensions-bundled': 'plugins',
+  'extensions-install-from-file': 'plugins',
+  'execution-policy': 'policy',
+  'extensions-developer-mode': 'developer',
+  'extensions-native-backends': 'developer',
+  disclosureOverview: 'disclosure',
+}
+function openPluginsPage(page: PluginsPage): void {
+  activeTab.value = 'extensions'
+  pluginsPage.value = page
+}
+// Coming to Navide Plugins from another tab starts on its plugins page. The old
+// `disclosureOverview` tab id stays accepted (initialTab, setTab, setSection,
+// links) and opens the Disclosure page. Synchronous, so a caller that sets the
+// tab and then a page in one go keeps its page.
+watch(activeTab, (tab, previous) => {
+  if (tab === 'disclosureOverview') {
+    pluginsPage.value = 'disclosure'
+    activeTab.value = 'extensions'
+    return
+  }
+  if (tab === 'extensions' && previous !== 'extensions' && previous !== 'disclosureOverview') pluginsPage.value = 'plugins'
+}, { immediate: true, flush: 'sync' })
 watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.value = true })
+// D-f: the disclosure overview reads every plugin's activity, so it mounts the
+// first time its page is shown (opening Settings, or another page, reads
+// nothing), and it polls only while that page is shown.
+const disclosurePageShown = computed(() => activeTab.value === 'extensions' && pluginsPage.value === 'disclosure')
+const visitedDisclosureOverview = ref(false)
+watch(disclosurePageShown, (shown) => { if (shown) visitedDisclosureOverview.value = true }, { immediate: true })
+// A plugin card's link: the Disclosure page, then that plugin's entry once the
+// overview (loaded on first view) has rendered it.
+function openDisclosureOverview(id?: string): void {
+  openPluginsPage('disclosure')
+  if (!id) return
+  let tries = 0
+  const seek = (): void => {
+    const entry = document.querySelector<HTMLElement>(
+      `[data-settings-section="disclosureOverview"] [data-id="${CSS.escape(id)}"]`,
+    )
+    if (entry) {
+      entry.querySelector<HTMLDetailsElement>('details.nv-overview-record')?.setAttribute('open', '')
+      entry.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+    else if (++tries < 20) setTimeout(seek, 100)
+  }
+  setTimeout(seek, 50)
+}
 // initialTab is only read once at mount by the ref initializer above; when the
 // modal is already open and a new tab is requested (e.g. the ui.settings.open
 // action), react to the prop changing too.
@@ -313,6 +394,7 @@ defineExpose({
   setSection: async (tab: Tab, section: string): Promise<void> => {
     activeTab.value = tab
     if (tab === 'cross-device') cloudSubtab.value = 'sync'
+    if (tab === 'extensions' && PLUGINS_SECTION_PAGE[section]) pluginsPage.value = PLUGINS_SECTION_PAGE[section]
     if (tab === 'cliAgents') await openCliSection(section)
     await nextTick()
     requestAnimationFrame(() => {
@@ -588,6 +670,14 @@ const lastManagedCliKey = ref('')
 const cliDrawerRef = ref<HTMLElement | null>(null)
 const cliGridRef = ref<HTMLElement | null>(null)
 const cliPanelRef = ref<InstanceType<typeof CliManagementPanel> | null>(null)
+const memoryPaneRef = ref<InstanceType<typeof MemoryPane> | null>(null)
+
+/** Close Settings, unless the Memory editor holds a draft the user keeps. */
+function requestCloseSettings(): void {
+  // Optional call: a shallow-mounted pane is a stub without the method.
+  if (memoryPaneRef.value?.confirmDiscard?.() === false) return
+  emit('close')
+}
 const cliInstallOpen = ref(false)
 let cliDrawerTrigger: HTMLElement | null = null
 const selectedCli = computed(() => cliAgentRows.value.find((row) => row.agentKey === selectedCliKey.value))
@@ -644,7 +734,7 @@ async function closeCliDrawer(restoreFocus = true): Promise<void> {
 function closeSettingsLayer(): void {
   if (cliInstallOpen.value) { cliPanelRef.value?.closeInstallDialog(); return }
   if (selectedCliKey.value) { void closeCliDrawer(); return }
-  emit('close')
+  requestCloseSettings()
 }
 
 async function openCliSection(section: string, query = ''): Promise<void> {
@@ -929,7 +1019,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     title: t('settings.search.item.appearance-language.title'),
     group: t('settings.nav.language'),
     summary: t('settings.search.item.appearance-language.summary'),
-    keywords: 'language locale 語言 繁體中文 english 日本語 japanese en-us zh-tw ja-jp',
+    keywords: 'language locale 語言 繁體中文 english 日本語 japanese en-us zh-tw ja-jp 简体中文 한국어 español français deutsch português русский tiếng việt zh-cn ko-kr es-es fr-fr de-de pt-br ru-ru vi-vn',
   },
   {
     id: 'appearance-ui-scale',
@@ -1109,6 +1199,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     keywords: 'marketplace extension extensions plugin plugins registry search browse install publisher signed unsigned trust 市集 擴充 擴充功能 外掛 搜尋 瀏覽 安裝 發佈者 簽章 信任 Navide 市集 拡張機能 プラグイン マーケットプレイス',
   },
   {
+    id: 'disclosure-overview',
+    tab: 'extensions',
+    section: 'disclosureOverview',
+    title: t('settings.search.item.disclosureOverview.title'),
+    group: t('settings.nav.group.navidePlugins'),
+    summary: t('settings.search.item.disclosureOverview.summary'),
+    keywords: 'disclosure overview activity risk permission permissions undeclared anomaly audit plugin plugins 揭露 總覽 活動 風險 權限 沒宣告 異常 稽核 外掛 Navide 外掛 開示 一覧 アクティビティ リスク 権限 プラグイン',
+  },
+  {
     id: 'help-mcp',
     tab: 'help',
     section: 'help',
@@ -1217,6 +1316,7 @@ async function openSettingsSearchResult(item: SettingsSearchItem): Promise<void>
   if (item.tab === 'mcp' && item.mcpView) mView.value = item.mcpView
   if (item.tab === 'help' && item.helpTopic) helpTopic.value = item.helpTopic
   if (item.tab === 'cross-device') cloudSubtab.value = 'sync'
+  if (item.tab === 'extensions' && PLUGINS_SECTION_PAGE[item.section]) pluginsPage.value = PLUGINS_SECTION_PAGE[item.section]
   settingsSearchQuery.value = ''
   await nextTick()
   requestAnimationFrame(() => {
@@ -1286,12 +1386,15 @@ function onUiScaleChange(value: string): void {
 }
 
 // Locale catalogs keep language names in their native form, so the labels
-// come from those keys rather than a second hardcoded copy.
-const SUPPORTED_LANGUAGES = [
-  { value: 'zh-TW', labelKey: 'settings.appearance.language-zh-TW' },
-  { value: 'en-US', labelKey: 'settings.appearance.language-en-US' },
-  { value: 'ja-JP', labelKey: 'settings.appearance.language-ja-JP' },
-]
+// come from those keys rather than a second hardcoded copy. Every language
+// with a registered catalog is listed, in registration order; a language added
+// later appears here (with a Beta tag while it is machine-translated) without
+// touching this file.
+const SUPPORTED_LANGUAGES = AVAILABLE_UI_LOCALES.map((value) => ({
+  value,
+  labelKey: `settings.appearance.language-${value}`,
+  beta: isBetaUiLocale(value),
+}))
 
 function onHealthTimeoutChange(raw: string): void {
   const n = Number(raw)
@@ -1472,6 +1575,10 @@ async function loadDetectedEditors(refresh = false): Promise<void> {
   }
 }
 
+// A disabled Mini-IDE cannot be the default editor; the option says why.
+const disabledBuiltins = useDisabledBuiltins()
+const miniIdeDisabled = computed(() => disabledBuiltins.disabled.value.has('navide.mini-ide'))
+
 function isEditorAvailable(id: string): boolean {
   return detectedEditors.value.some((editor) => editor.id === id && editor.available)
 }
@@ -1537,8 +1644,9 @@ const settingsBundleSummary = ref('')
 const settingsBundleError = ref('')
 
 /** Tabs that actually hold settings. `help` is read-only reference material, so
- *  it has no scope badge and no settings file to reveal. */
-type SettingsTab = Exclude<Tab, 'help'>
+ *  it has no scope badge and no settings file to reveal. `disclosureOverview`
+ *  is only an alias that lands on the Navide Plugins page. */
+type SettingsTab = Exclude<Tab, 'help' | 'disclosureOverview'>
 
 // The scope is stored as a key, not as prose: the badge is resolved through
 // `scopeLabel()` at render time so it follows a language switch.
@@ -1674,7 +1782,7 @@ async function importSettingsBundle(): Promise<void> {
     const result = await window.agentTeam.openJson({ title: t('settings.management.import-dialog-title') })
     if (!result.ok || !result.content) return
     const bundle = JSON.parse(result.content) as Record<string, unknown>
-    const resp = await props.backend.send<{ applied: string[]; paths: SettingsPaths }>('settings.bundle.import', { bundle })
+    const resp = await props.backend.send<{ applied: string[]; mcp_needs_secrets?: string[]; paths: SettingsPaths }>('settings.bundle.import', { bundle })
     if (!resp.ok) {
       settingsBundleError.value = resp.error?.message ?? t('settings.management.import-failed')
       return
@@ -1702,6 +1810,10 @@ async function importSettingsBundle(): Promise<void> {
     const applied = resp.payload?.applied ?? []
     if (shouldReloadMcpAfterBundleImport(applied)) await mLoad(true)
     settingsBundleSummary.value = t('settings.management.imported', { items: applied.join(', ') || 'appearance' })
+    const needsSecrets = resp.payload?.mcp_needs_secrets ?? []
+    if (needsSecrets.length) {
+      settingsBundleSummary.value += ` ${t('settings.management.mcp-needs-secrets', { items: needsSecrets.join(', ') })}`
+    }
   } catch (err) {
     settingsBundleError.value = err instanceof Error ? err.message : t('settings.management.import-failed')
   } finally {
@@ -2042,7 +2154,7 @@ function onKeyDown(e: KeyboardEvent) {
   }
   if (e.key !== 'Escape') return
   if (e.defaultPrevented) return
-  emit('close')
+  requestCloseSettings()
 }
 // Pending Registry plugin updates (pushed by the main process's periodic
 // check) badge the Extensions nav item.
@@ -2144,8 +2256,9 @@ interface McpServer {
   headers?: Record<string, string>
   enabled: boolean
   // Live fields (returned by backend, not saved):
-  status?: 'connected' | 'error' | 'disabled' | 'unknown'
+  status?: 'starting' | 'connected' | 'error' | 'disabled' | 'unknown'
   tool_count?: number; tools?: McpTool[]
+  starting_seconds?: number; slow_start?: boolean; error?: string; stderr_tail?: string; tools_error?: string
 }
 // CatalogEntry type alias (re-exported from mcpCatalog.ts)
 type CatalogEntry = McpCatalogEntry
@@ -2276,6 +2389,12 @@ async function mRefreshLive(): Promise<void> {
       server.status = live?.status ?? 'unknown'
       server.tool_count = live?.tool_count
       server.tools = live?.tools
+      // The reasons too, or the drawer keeps showing the previous failure.
+      server.starting_seconds = live?.starting_seconds
+      server.slow_start = live?.slow_start
+      server.error = live?.error
+      server.stderr_tail = live?.stderr_tail
+      server.tools_error = live?.tools_error
     }
     mConfigPath.value = resp.payload.path ?? mConfigPath.value
     mRevision.value = resp.payload.revision
@@ -2367,6 +2486,7 @@ async function mCreateCustom() {
     mCustomUrl.value = ''
     mSelectName.value = name
     mView.value = 'list'
+    mSummary.value = `Added ${name}`
   } else {
     mServers.value = mServers.value.filter((item) => item !== server)
   }
@@ -2378,7 +2498,7 @@ async function mReplaceServer(next: McpServer) {
   const idx = mServers.value.findIndex((server) => server.name === next.name)
   if (idx === -1) return
   mServers.value[idx] = mNormalizeServer(next)
-  await mSave(true)
+  await mSave()
 }
 
 async function mRemoveByName(name: string) {
@@ -2389,7 +2509,7 @@ async function mRemoveByName(name: string) {
 async function mRemoveServer(idx: number) {
   if (mServers.value[idx]?.name === mSelectName.value) mSelectName.value = ''
   mServers.value.splice(idx, 1)
-  await mSave(true)
+  await mSave()
 }
 
 
@@ -2672,6 +2792,14 @@ watch(activeTab, (tab) => {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
                 </template>
               </SettingsNavItem>
+              <SettingsNavSubItem
+                v-for="page in pluginsPages"
+                :key="page.id"
+                :label="$t(page.label)"
+                :active="activeTab === 'extensions' && pluginsPage === page.id"
+                :marker="pluginsPageMarker(page.id)"
+                @select="openPluginsPage(page.id)"
+              />
               <SettingsNavItem :label="$t('settings.nav.marketplace')" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.4h10.8l-.8 7.1a1.2 1.2 0 0 1-1.2 1.1H4.6a1.2 1.2 0 0 1-1.2-1.1L2.6 5.4Z"/><path d="M5.8 7.2V4.6a2.2 2.2 0 0 1 4.4 0v2.6"/></svg>
@@ -2702,7 +2830,7 @@ watch(activeTab, (tab) => {
 
         <!-- ── Content (close button + all tab bodies) ───────────────────── -->
         <div class="s-content">
-          <button class="s-close" :inert="!!selectedCliKey" @click="emit('close')" :title="$t('action.close-esc')">✕</button>
+          <button class="s-close" :inert="!!selectedCliKey" @click="requestCloseSettings" :title="$t('action.close-esc')">✕</button>
 
         <!-- ── MCP TAB ───────────────────────────────────────────────────── -->
         <div v-show="activeTab === 'mcp'" class="s-body s-body--bleed mcp-body">
@@ -2812,6 +2940,7 @@ watch(activeTab, (tab) => {
             <div class="mcp-catalog-hint">
               💡 <span v-html="$t('settings.mcp.catalog-hint')"></span>
             </div>
+            <p v-if="mError" class="err-msg" style="margin:6px 22px 0">{{ mError }}</p>
 
             <div class="mcp-catalog-list">
               <div v-for="item in mFilteredCatalog" :key="item.name" class="mcp-catalog-card">
@@ -2836,6 +2965,7 @@ watch(activeTab, (tab) => {
             </div>
             <form class="mcp-custom-form" @submit.prevent="mCreateCustom">
               <p>{{ $t('settings.mcp.custom-hint') }}</p>
+              <p v-if="mError" class="err-msg">{{ mError }}</p>
               <div class="field">
                 <label class="lbl">{{ $t('settings.mcp.server-name') }}</label>
                 <input v-model="mCustomName" required pattern="[a-z0-9][a-z0-9_-]{0,63}" maxlength="64" spellcheck="false" autocomplete="off" placeholder="my-server" />
@@ -2911,6 +3041,7 @@ watch(activeTab, (tab) => {
           <!-- Project files belong to the folder that is actually open; the
                first known workspace is the current one whenever there is one. -->
           <MemoryPane
+            ref="memoryPaneRef"
             :backend="props.backend"
             :workspace-path="props.workspacePath ?? ''"
           />
@@ -3151,7 +3282,7 @@ watch(activeTab, (tab) => {
                 <strong>{{ props.analyzerApi.benchmarkResults.value.filter(r => r.passed).length }}</strong>
                 /
                 {{ props.analyzerApi.benchmarkResults.value.length }}
-                {{ $t('settings.analyzer.models') }}
+                {{ $t('settings.analyzer.models', props.analyzerApi.benchmarkResults.value.length) }}
               </div>
               <table class="az-table">
                 <thead>
@@ -3616,6 +3747,7 @@ watch(activeTab, (tab) => {
                     <option value="page">{{ $t('settings.appearance.restore-scope-page') }}</option>
                     <option value="tab">{{ $t('settings.appearance.restore-scope-tab') }}</option>
                     <option value="all">{{ $t('settings.appearance.restore-scope-all') }}</option>
+                    <option value="auto">{{ $t('settings.appearance.restore-scope-auto') }}</option>
                   </select>
                 </template>
               </SettingRow>
@@ -3675,7 +3807,11 @@ watch(activeTab, (tab) => {
                   <div class="row-g gap">
                     <span v-if="selectedEditorCommand" class="s-ctrl-label">{{ selectedEditorCommand }}</span>
                     <select :value="defaultEditorModel" @change="onDefaultEditorChange(($event.target as HTMLSelectElement).value)">
-                      <option value="mini-ide">{{ $t('label.editor-mini-ide') }}</option>
+                      <option
+                        value="mini-ide"
+                        :disabled="miniIdeDisabled"
+                        :title="miniIdeDisabled ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' }) : undefined"
+                      >{{ $t('label.editor-mini-ide') }}</option>
                       <option value="system">{{ $t('label.editor-system') }}</option>
                       <option
                         v-for="id in DETECTABLE_EDITOR_IDS"
@@ -4427,6 +4563,11 @@ watch(activeTab, (tab) => {
                       @click="setLanguage(lang.value)"
                     >
                       {{ $t(lang.labelKey) }}
+                      <span
+                        v-if="lang.beta"
+                        class="scope-badge"
+                        :title="$t('settings.appearance.language-beta-hint')"
+                      >{{ $t('settings.appearance.language-beta') }}</span>
                       <span v-if="currentLanguage === lang.value" class="ap-check">✓</span>
                     </button>
                   </div>
@@ -4475,33 +4616,87 @@ watch(activeTab, (tab) => {
           <component :is="helpTopicComponents[helpTopic]" v-if="activeTab === 'help'" />
         </div>
 
-        <!-- ── EXTENSIONS TAB (flag-gated) ───────────────────────────────── -->
-        <!-- One page, two things that belong together: the policy that decides
-             what an extension may execute, then the extensions it applies to.
-             The scope badge sits on the policy block rather than the page,
-             because the policy is the part that is per user and per workspace —
-             the inventory below it is not. -->
+        <!-- ── NAVIDE PLUGINS TAB ────────────────────────────────────────── -->
+        <!-- Four pages under one sidebar entry: the plugins, the policy that
+             decides what they may execute, developer and native settings, and
+             the disclosure records. The scope badge sits on the policy page,
+             because the policy is the part that is per user and per workspace. -->
         <div v-show="activeTab === 'extensions'" class="s-body s-body--bleed extensions-body" data-settings-section="extensions">
-          <h1 class="s-page-title">{{ $t('settings.nav.extensions') }}</h1>
+          <h1 class="s-page-title">{{ $t(pluginsPageLabel) }}</h1>
+          <!-- In the icon-only sidebar the pages have no rows of their own there. -->
+          <div class="ext-pages" role="tablist" :aria-label="$t('settings.nav.extensions')">
+            <button
+              v-for="page in pluginsPages"
+              :key="page.id"
+              type="button"
+              role="tab"
+              class="ext-pages-tab"
+              :aria-selected="pluginsPage === page.id"
+              @click="pluginsPage = page.id"
+            >
+              {{ $t(page.label) }}
+              <span
+                v-if="pluginsPageMarker(page.id)"
+                class="ext-pages-marker"
+                :class="`ext-pages-marker--${pluginsPageMarker(page.id)!.tone}`"
+                role="img"
+                :aria-label="pluginsPageMarker(page.id)!.label"
+                :title="pluginsPageMarker(page.id)!.label"
+              >{{ pluginsPageMarker(page.id)!.text }}</span>
+            </button>
+          </div>
           <div class="extensions-scroll">
-            <section class="ext-policy-block" data-settings-section="execution-policy">
-              <h2 class="ext-policy-block-title">{{ $t('settings.nav.executionPolicy') }}</h2>
+            <section v-show="pluginsPage === 'policy'" class="ext-policy-block" data-settings-section="execution-policy">
               <div class="settings-meta-row inline">
                 <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
                 <span class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
                 <span class="settings-path" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
               </div>
-              <ExecutionPolicyPane :workspace-path="props.workspacePath" />
+              <ExecutionPolicyPane :workspace-path="props.workspacePath" @attention="(reasons) => (policyAttention = reasons)" />
             </section>
-            <ExtensionsPane />
+            <ExtensionsPane
+              v-show="pluginsPage === 'plugins' || pluginsPage === 'developer'"
+              :page="pluginsPage === 'developer' ? 'developer' : 'plugins'"
+              @open-disclosure-overview="openDisclosureOverview"
+              @developer-on="(switches) => (developerSwitchesOn = switches)"
+            />
+            <!-- Plan B D5, D-f: records only, it changes nothing a Navide plugin may do. -->
+            <section v-show="pluginsPage === 'disclosure'" class="ext-policy-block" data-settings-section="disclosureOverview">
+              <PluginDisclosureOverview v-if="visitedDisclosureOverview" :paused="!disclosurePageShown" />
+            </section>
           </div>
         </div>
 
         <!-- ── MARKETPLACE TAB ───────────────────────────────────────────── -->
         <div v-show="activeTab === 'marketplace'" class="s-body s-body--bleed marketplace-body" data-settings-section="marketplace">
           <h1 class="s-page-title">{{ $t('settings.nav.marketplace') }}</h1>
+          <div class="marketplace-view-switch" role="tablist" :aria-label="$t('marketplace-developer.view.label')">
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'browse' }"
+              :aria-selected="marketplaceView === 'browse'"
+              @click="setMarketplaceView('browse')"
+            >{{ $t('marketplace-developer.view.browse') }}</button>
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'developer' }"
+              :aria-selected="marketplaceView === 'developer'"
+              @click="setMarketplaceView('developer')"
+            >{{ $t('marketplace-developer.view.developer') }}</button>
+            <button
+              role="tab"
+              class="marketplace-view-tab"
+              :class="{ 'marketplace-view-tab--active': marketplaceView === 'testplace' }"
+              :aria-selected="marketplaceView === 'testplace'"
+              @click="setMarketplaceView('testplace')"
+            >{{ $t('testplace.view') }}</button>
+          </div>
           <div class="marketplace-scroll">
-            <MarketplacePane />
+            <MarketplacePane v-show="marketplaceView === 'browse'" />
+            <MarketplaceDeveloperPanel v-if="marketplaceView === 'developer'" :backend="backend" />
+            <TestplacePane v-if="marketplaceView === 'testplace'" />
           </div>
         </div>
 
@@ -5111,16 +5306,75 @@ watch(activeTab, (tab) => {
   min-height: 0;
   overflow-y: auto;
 }
-.ext-policy-block { margin-bottom: var(--space-group); }
-.ext-policy-block-title {
-  /* Side margins, not padding or a width: these panels have no border-box, so
-     a width here would push the block past its grid track. */
-  margin: 0 22px;
-  font-size: var(--font-md);
-  font-weight: 600;
-  color: var(--text-bright);
+.marketplace-view-switch {
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-5) var(--space-2);
 }
-.ext-policy-block > .settings-meta-row.inline { margin: 8px 22px 14px; }
+.marketplace-view-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--space-1, 4px) var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+.marketplace-view-tab--active {
+  color: var(--text-bright);
+  border-bottom-color: var(--accent-fg);
+}
+/* With one of its pages selected under it, the Navide Plugins row is the
+   group's heading: the selected page carries the fill, not both rows. */
+.s-nav-group :deep(.settings-nav-item.active:has(+ .settings-nav-subitem)) {
+  background: transparent;
+}
+/* The Navide Plugins pages as a tab row, only where the sidebar is the
+   icon-only rail and has no rows for them. */
+.ext-pages {
+  display: none;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 2px;
+  padding: var(--space-2) 22px 0;
+  border-bottom: 1px solid var(--border-muted);
+  flex-shrink: 0;
+}
+@media (max-width: 720px) {
+  .ext-pages { display: flex; }
+}
+.ext-pages-tab {
+  flex: 0 0 auto;
+  min-height: var(--control-h-lg);
+  padding: 0 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.ext-pages-tab[aria-selected='true'] {
+  border-bottom-color: var(--accent-emphasis);
+  color: var(--text-bright);
+  font-weight: 600;
+}
+.ext-pages-marker {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-xs);
+  font-weight: 600;
+}
+.ext-pages-marker--risk { background: var(--risk-subtle); color: var(--risk-fg); }
+.ext-pages-marker--on { background: var(--bg-muted); color: var(--text-primary); }
+.ext-pages-tab:focus-visible {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: -2px;
+}
+.extensions-scroll { padding-top: var(--space-2); }
+.ext-policy-block > .settings-meta-row.inline { margin: 0 22px 14px; background: var(--bg-subtle); }
 .settings-meta-row {
   display: flex;
   align-items: center;

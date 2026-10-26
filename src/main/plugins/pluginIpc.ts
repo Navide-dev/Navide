@@ -12,61 +12,111 @@
 // main-side, keyed by id, until commit.
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { backendCallAddress } from './pluginActivity'
+import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import {
   prepareInstall,
+  prepareLocalInstall,
   stageInstallCandidate,
   commitInstallTransaction,
   removePlugin,
   isUpdateAvailable,
+  defaultInstallerDeps,
+  InstallError,
+  localVersionAlreadyInstalled,
   type PreparedInstall,
   type InstallerTrustConfig,
 } from './pluginInstaller'
+import { developerRegistryDownload, developerRegistryFetch, registryError } from './developerAccount'
+import type { DeveloperCallResult } from '../../shared/marketplaceDeveloper'
+import { registryClockRefusal, type RegistryClockRefusal } from '../../shared/registryClock'
 import {
   sensitiveCapabilities,
   assertRegistryUrlAllowed,
   sha256Hex,
 } from './pluginVerify'
 import type { RegistryPackageEnvelope, RegistryTrustMetadata } from './pluginRegistryTrust'
-import { verifyRegistryTrustMetadata } from './pluginRegistryTrust'
+import { verifyRegistryPackageTrust, verifyRegistryTrustMetadata } from './pluginRegistryTrust'
 import {
   loadOfficialRegistryRootKey,
   resolveMarketplaceRegistryRoot,
 } from './pluginRegistryRootApproval'
 import {
   loadPluginDir,
+  manifestCapabilities,
   manifestToInstalledPackageSummary,
   type PluginActivationCatalogEntry,
 } from './installedPlugins'
-import { isManifestV2 } from './pluginManifest'
+import { isManifestV2, manifestHasViews, parseInstalledManifest } from './pluginManifest'
+import { parseManifestJson } from './pluginManifestJson'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import {
+  readRegistryReceiptArtifact,
+  readRegistryReceiptChannel,
+  readRegistryReceiptExpiresAt,
   readRegistryTrustSnapshot,
   discoverInstalledRegistryPackageIds,
   verifyInstalledRegistryPackage,
   writeRegistryTrustSnapshot,
   REGISTRY_ARTIFACT_NAME,
+  REGISTRY_RECEIPT_NAME,
+  REGISTRY_TRUST_SNAPSHOT_NAME,
+  assertRegistryTrustSnapshotDoesNotRollback,
+  registryReceiptFromEvidence,
   type InstalledTrustDecision,
+  type RegistryInstallReceipt,
 } from './pluginInstalledTrust'
+import { swapRegistryReceipt } from './pluginReceiptPromotion'
+import { pluginDeveloperModeEnabled } from './pluginDeveloperMode'
+import { developerPermissionsDigest, PluginDeveloperModeStore, type DeveloperModeIntegrity } from './pluginDeveloperModeStore'
+import { folderFingerprint } from './pluginFolderFingerprint'
+import {
+  PluginDeveloperFolderMetaStore,
+  type DeveloperFolderLoadedBy,
+  type DeveloperFolderLoadTrigger,
+} from './pluginDeveloperFolderMeta'
+import { watchDeveloperFolder, type FolderWatch, type WatchDeveloperFolder } from './pluginDeveloperWatch'
 import {
   currentPluginHostTarget,
   isPluginTargetCompatible,
   selectPluginArtifact,
+  UNIVERSAL_PLUGIN_TARGET,
 } from './pluginTarget'
 import { assertEngineCompatible, isEngineCompatible, minNavideVersion } from './pluginEngineCompat'
 import { compareSemver } from './pluginManifestV2'
 import { MAX_EXTENSION_PACK_MEMBERS } from '../../../packages/plugin-contracts/src/index'
 import { PluginPrereleaseStore } from './pluginPrereleaseStore'
+import { PluginTestplaceStore, testplaceJoinVia, type TestplaceJoinVia } from './pluginTestplaceStore'
+import {
+  forgetKeptNativeBackendDataSource,
+  inspectNativeBackendData,
+  keptNativeBackendDataSource,
+  latestSetAsideNativeBackendData,
+  recordedNativeBackendDataSource,
+  recordKeptNativeBackendDataSource,
+  reattachNativeBackendData,
+  removeNativeBackendData,
+  returnReattachedNativeBackendData,
+  setAsideNativeBackendData,
+} from './pluginNativeBackendData'
 import { packOnlyMembers, PluginPackStore, type InstalledPackRecord } from './pluginPackStore'
 import type {
+  BackgroundAiSession,
   FrontendPluginManager,
   PluginLaunchDescriptor,
   PluginPackageRestartTransaction,
 } from './frontendPluginManager'
+import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManager'
+import { answerPluginAgentAction, type PluginAgentActionNotice, type PluginAgentRequester } from './pluginAgentAction'
 import type { ContributionIcon } from './pluginContributionIcon'
+import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
+import { PluginDisabledStore } from './pluginDisabledStore'
+import { PluginDisableSourceStore, type DisableSource } from './pluginDisableSource'
+import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
+import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
 import type { HostCapabilityGrant } from './pluginCapabilityBroker'
 import {
@@ -74,6 +124,63 @@ import {
   type ManifestPermissionsSummary,
   type PackageVersionGrantSummary,
 } from '../../shared/executionPolicy'
+import {
+  parsePluginActivityReport,
+  type PluginActivityReport,
+  type PluginActivityReportRequest,
+} from '../../shared/pluginActivity'
+import {
+  computeDisclosure,
+  diffDisclosure,
+  disclosureItems,
+  type DisclosureDiff,
+  type DisclosureManifestInput,
+  type DisclosureRiskLevel,
+  type ManifestDisclosure,
+} from '../../shared/pluginDisclosure'
+import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
+import type { LocalPackageQueryReport } from '../../shared/pluginAgentTools'
+import { pluginSourceFromLegacyProvenance, type LocalInstallDetails, type PluginSource } from '../../shared/pluginSource'
+import { PluginInstallScanStore } from './pluginInstallScanStore'
+import { pluginStorageDirName } from './pluginStorage'
+import { rescanFinding } from './pluginRescanNotice'
+import { createLocalTrustRecord, localTakedownDecision, readLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import { PackageStagingStore } from './pluginStagingStore'
+import {
+  agentPackagePath,
+  packageLocalFolder,
+  validateLocalBytes,
+  validateLocalPackage,
+  type LocalPackageToolDeps,
+} from './pluginLocalPackageTools'
+import {
+  LOCAL_INSTALL_TRUST_PATH,
+  LOCAL_SIGNATURE_SUFFIX,
+  digestBlock,
+  readLocalInstallTrust,
+  recordedSignatureState,
+  writeLocalInstallTrust,
+} from './pluginLocalInstallTrust'
+import { canonicalArchivePath } from './pluginPathPolicy'
+import {
+  DigestBlockNoticeStore,
+  digestBlockAction,
+  recordDigestBlock,
+  type DigestBlockChoice,
+  type DigestBlockPrompt,
+  type LocalDigestBlock,
+} from './pluginDigestBlock'
+import type { LocalBlockReason } from './pluginLocalInstallTrust'
+import {
+  forgetLocalTrustRecords,
+  isLocalInstalledPackage,
+  localTrustRecordFor,
+  localTrustRecordPath,
+  promoteLocalCandidateRecord,
+  retainActiveLocalRecordAsPrevious,
+  swapLocalRecordsForRollback,
+  verifyLocalInstalledPackage,
+} from './pluginLocalInstall'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -90,6 +197,22 @@ function defaultMarketplaceUrl(): string {
   return app.isPackaged ? OFFICIAL_MARKETPLACE_URL : DEV_MARKETPLACE_URL
 }
 
+/** Card K4 (D6): whether this Host honors `AGENT_TEAM_MARKETPLACE_URL` and
+ * `AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE`. A development build always does;
+ * a packaged build only while the user's Developer Mode switch is on, which
+ * the Host supplies at startup. Until it does, a packaged build ignores both. */
+let marketplaceOverridesAllowed: () => boolean = () => !app.isPackaged
+
+export function setMarketplaceOverridesAllowed(allowed: () => boolean): void {
+  marketplaceOverridesAllowed = allowed
+}
+
+function marketplaceOverride(
+  name: 'AGENT_TEAM_MARKETPLACE_URL' | 'AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE',
+): string | undefined {
+  return marketplaceOverridesAllowed() ? process.env[name] : undefined
+}
+
 /** Resolve the marketplace registry URL, enforcing the transport policy
  *  (production forbids plaintext http except loopback). Throws before any
  *  fetch when the configured URL is disallowed. */
@@ -97,7 +220,7 @@ export function resolveConfiguredMarketplace(
   explicitTrust?: InstallerTrustConfig
 ): { registryUrl: string; trust: InstallerTrustConfig } {
   if (explicitTrust) {
-    const registryUrl = process.env['AGENT_TEAM_MARKETPLACE_URL'] ?? defaultMarketplaceUrl()
+    const registryUrl = marketplaceOverride('AGENT_TEAM_MARKETPLACE_URL') ?? defaultMarketplaceUrl()
     assertRegistryUrlAllowed(registryUrl, app.isPackaged)
     return {
       registryUrl,
@@ -110,11 +233,11 @@ export function resolveConfiguredMarketplace(
     }
   }
   const resolved = resolveMarketplaceRegistryRoot({
-    registryUrlOverride: process.env['AGENT_TEAM_MARKETPLACE_URL'],
+    registryUrlOverride: marketplaceOverride('AGENT_TEAM_MARKETPLACE_URL'),
     defaultRegistryUrl: defaultMarketplaceUrl(),
     officialRegistryUrl: OFFICIAL_MARKETPLACE_URL,
     officialRootPublicKey: loadOfficialRegistryRootKey(process.resourcesPath),
-    approvalFile: process.env['AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE'],
+    approvalFile: marketplaceOverride('AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE'),
   })
   assertRegistryUrlAllowed(resolved.registryUrl, app.isPackaged)
   return {
@@ -136,10 +259,26 @@ interface InstalledSummary {
   manifestPermissions?: ManifestPermissionsSummary
   packageVersionGrant?: PackageVersionGrantSummary | null
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  /** Source and review state; see `shared/pluginSource.ts`. */
+  source?: PluginSource
+  /** Registry-signed expiry; present only when `source` is `testplace`. */
+  expiresAt?: string
+  /** How the user joined that test, when recorded; `source` testplace only. */
+  testplaceVia?: TestplaceJoinVia
+  /** A3, a local file only: `verified` while the vetted publisher key that
+   * signed it is active, `revoked` once the Registry revoked it. */
+  localSignature?: 'verified' | 'revoked'
+  /** Decision d5, a local file only: Navide blocked the `.vsix` it was
+   * installed from since; `reason` null when the list names none. */
+  digestBlock?: { reason: LocalBlockReason | null }
+  /** DX 9.4 A1, a local file only: its SHA-256 and install time. */
+  localInstall?: LocalInstallDetails
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
   rollbackToVersion?: string
+  /** L4: the rollback target is a kept file version; going back asks again. */
+  rollbackNeedsConsent?: true
   /** Lowest Navide release the installed version needs (label only). */
   minNavideVersion?: string
   /** False when this Navide release is older than that; the Host still runs
@@ -147,13 +286,55 @@ interface InstalledSummary {
   engineCompatible?: boolean
   /** The user's per-extension "Get pre-releases" switch (default off). */
   getsPrereleases?: boolean
+  /** The user's "Disabled" switch; present only on rows it applies to. */
+  disabled?: boolean
 }
+
+/** S8 LOW-R3-1: a stuck Registry delays no trust refresh longer than this. */
+export const TESTPLACE_WITHDRAWAL_TIMEOUT_MS = 10_000
+
+/** One test the user joined (plugins:testplaceList). */
+export interface TestplaceListing {
+  id: string
+  namespace: string
+  name: string
+  displayName: string | null
+  description: string | null
+  publisher: string
+  /** How the user joined, when this App recorded it. */
+  via: TestplaceJoinVia | null
+  versions: Array<{ version: string; target: string; expiresAt: string | null; installable: boolean; compatible: boolean | null }>
+}
+
+/** D3: an installed Testplace build stopped because it expired. */
+export interface ExpiredTestplaceBuild {
+  id: string
+  version: string | null
+  expiresAt: string | null
+  /** Present when it can be kept: it fails on its expiry alone. */
+  artifactDigest?: string
+  canKeep: boolean
+  /** Its developer or Navide took it back (S8 T-MED-1); never kept. */
+  withdrawn?: true
+  /** Why "keep using" is not offered: taken back, or why the Registry could
+   *  not confirm it was not (S8 LOW-R3-2). */
+  keepRefusal?: TestplaceKeepRefusal
+}
+
+/** Why an expired test build cannot be kept (each has its own advice). */
+export type TestplaceKeepRefusal = 'withdrawn' | 'signed-out' | 'not-a-tester' | 'registry-outdated' | 'unreachable'
+type TestplaceWithdrawalState = 'live' | TestplaceKeepRefusal
 
 export interface FactoryPackageSummary {
   id: string
   version: string | null
   active: boolean
   optedOut: boolean
+  /** The user's Disabled switch for this built-in. */
+  disabled?: boolean
+  /** Removed by an earlier Navide version, which deleted its stored data; the
+   *  upgrade turned that removal into Disabled. */
+  dataDeletedByEarlierRemoval?: boolean
 }
 
 const MARKETPLACE_SORTS = new Set(['updated', 'downloads', 'rating'])
@@ -192,6 +373,86 @@ function newestInstallableVersion(
 /** SemVer prerelease suffix ⇒ pre-release channel (build metadata is not one). */
 export function isPrereleaseVersion(version: string): boolean {
   return version.split('+', 1)[0].includes('-')
+}
+
+/** Source and review state of an installed package: its own `source` when a
+ * loader set one, else read from the legacy provenance it carries and, for a
+ * Registry install, the channel in its signed envelope. */
+function installedSource(
+  summary: {
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+    source?: PluginSource
+    packageVersion?: string
+  },
+  registryChannel?: string
+): PluginSource | undefined {
+  return summary.source ?? pluginSourceFromLegacyProvenance(
+    summary.provenance,
+    summary.packageVersion !== undefined && isPrereleaseVersion(summary.packageVersion),
+    registryChannel
+  )
+}
+
+/** The list card's disclosure and scan (plan B D1) from a Registry listing
+ * item: display data, kept only when well formed and naming that item's
+ * package and latest version (the MCP card's rule), else both null. */
+function listingDisclosure(item: Record<string, unknown>): {
+  disclosure: ManifestDisclosure | null
+  scan: ScanReport | null
+  listRisk: ListRisk | null
+} {
+  const id = `${String(item.namespace)}.${String(item.name)}`
+  const card = rowCard(item, id, typeof item.latest_version === 'string' ? item.latest_version : '')
+  return {
+    disclosure: card?.manifest ?? null,
+    scan: card?.scan ?? null,
+    listRisk: card ? listRisk(cardRiskLevel(card.manifest, card.scan), item.risk_by_target) : null,
+  }
+}
+
+const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'highest']
+
+/** What the installed manifest declares, for `declaredUnused` (contract 5.1).
+ *  A backend method is keyed `backend.<method>`: a frontend's calls to its own
+ *  backend (plugin:backend:call) are recorded under that address (#374). */
+export function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
+  const out: NonNullable<PluginActivityReportRequest['declared']> = []
+  for (const item of disclosureItems(disclosure)) {
+    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool') {
+      out.push({ kind: item.kind, key: item.key })
+    } else if (item.kind === 'backendMethod') {
+      out.push({ kind: 'backendMethod', key: backendCallAddress(item.key) })
+    }
+  }
+  return out
+}
+
+/** The level a list card shows (D-f): the highest of this App's own
+ * `cardRiskLevel` and every platform's level the Registry lists, so the card
+ * never reads lower than what some platform installs; `variesByPlatform` when
+ * the platforms differ. The detail page and the consent dialog keep this
+ * platform's own level. A malformed `risk_by_target` is ignored whole. */
+export interface ListRisk {
+  level: DisclosureRiskLevel
+  variesByPlatform: boolean
+}
+
+function listRisk(own: DisclosureRiskLevel, byTarget: unknown): ListRisk {
+  const listed = jsonObjectOrNull(byTarget)
+  const levels = listed ? Object.values(listed) : []
+  const valid = levels.length > 0 && levels.every((level) => RISK_ORDER.includes(level as DisclosureRiskLevel))
+  const platform = valid ? (levels as DisclosureRiskLevel[]) : []
+  const highest = [own, ...platform].reduce((a, b) => (RISK_ORDER.indexOf(b) > RISK_ORDER.indexOf(a) ? b : a))
+  return { level: highest, variesByPlatform: new Set(platform).size > 1 }
+}
+
+/** A Registry-supplied JSON object (disclosure data), or null for anything
+ * else. Display data only: install re-verifies the signed disclosure in
+ * prepareInstall. */
+function jsonObjectOrNull(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
 }
 
 /** A Registry-supplied link, kept only when it is an https URL. */
@@ -278,7 +539,18 @@ export interface PluginUpdateInfo {
   name: string
   installedVersion: string
   latestVersion: string
+  /** Plan B D2 badge: whether the latest version adds permissions, from the
+   *  Registry's listing (unverified; prepareInstall computes the binding diff
+   *  from the package itself). Absent when the listing carries no disclosure. */
+  permissionChange?: 'more' | 'same'
 }
+
+export type DeveloperFolderEvent =
+  | { pluginId: string; kind: 'reloaded' }
+  | { pluginId: string; kind: 'needs-consent' }
+  /** `running`: whether a version of the folder still runs (the previous one
+   *  when the new one did not load), so the card says what runs. */
+  | { pluginId: string; kind: 'reload-failed'; error: string; running: boolean }
 
 export interface PluginTrustRefreshController {
   refreshRegistryTrust(): Promise<{
@@ -290,9 +562,38 @@ export interface PluginTrustRefreshController {
    *  Rejects when the Registry did not answer for some package, after
    *  remembering the merged answer (those packages keep their last update). */
   checkUpdates(): Promise<PluginUpdateInfo[]>
+  /** D-f: rescans of installed versions that found new items since the last
+   *  call, each reported once. Notice only. */
+  takeRescanNotices(): PluginRescanNotice[]
+  /** Card K4: at startup, load the developer folders the user consented to,
+   *  when Developer Mode is on. A folder whose permissions or backend changed
+   *  since is left unloaded until the user consents again. */
+  loadDeveloperFolders(): Promise<void>
+  /** At startup, promote each first install staged without Restart, exactly
+   *  as Restart would; returns those that could not be (they stay staged). */
+  activateStagedFirstInstalls(): Promise<Array<{ pluginId: string; version: string; reason: string }>>
+  /** Packages staged beside the active one (an update waiting for Restart, or
+   *  one a rollback displaced). Disclosure only. */
+  stagedUpdates(): Array<{ pluginId: string; activeVersion: string; stagedVersion: string }>
+  /** Put back notices no window received, to be sent after the next check. */
+  restoreRescanNotices(notices: PluginRescanNotice[]): void
+  /** Decision d5: refresh the local-install trust and check every local
+   *  install's `.vsix` digest against it; returns the ids a security block
+   *  quarantined. The one-time dialogs run after it returns. */
+  revalidateLocalInstalls(): Promise<{ quarantined: string[] }>
+}
+
+/** A rescan of an installed version found these new scan items (D-f). */
+export interface PluginRescanNotice {
+  id: string
+  version: string
+  added: ScanItem[]
 }
 
 export interface PluginIpcOptions {
+  /** How long a Testplace withdrawal check may take before it counts as
+   *  unreachable (S8 LOW-R3-1); tests shorten it. */
+  testplaceWithdrawalTimeoutMs?: number
   /** Convert a Host-verified icon file into renderer-safe image bytes. */
   resolveContributionIcon?: (iconFile: string) => ContributionIcon | null
   verifyCommittedInstall?: (
@@ -306,13 +607,52 @@ export interface PluginIpcOptions {
   }) => void
   /** Actual uninstall boundary; rollback/quarantine paths deliberately do not call this. */
   cleanupPluginStorage?: (pluginId: string) => Promise<void>
+  /** `<userData>/plugin-native-backends/data`: third-party native backends keep
+   *  their private data in `<root>/<pluginId>/`. Removal deletes that directory
+   *  only when the caller passes `nativeBackendData: 'delete'`. */
+  nativeBackendDataRoot?: string
+  /** L3: a restart switched an installed plugin from one version to another
+   *  (an approved update taking effect, or Restart). The main window records
+   *  every switch with a one-click way back. */
+  onPackageSwitched?: (notice: {
+    pluginId: string
+    fromVersion: string
+    toVersion: string
+    source: 'marketplace' | 'local-unsigned'
+    at: number
+    /** Set when an agent's automatic update (O1) drove the switch. */
+    agent?: PluginAgentRequester
+  }) => void
+  /** O1: an agent's automatic update was staged but its switch failed; the
+   *  old version runs again and the main window keeps a row to apply it. */
+  onPackageSwitchFailed?: (notice: {
+    pluginId: string
+    activeVersion: string
+    stagedVersion: string
+    reason: string
+  }) => void
   factoryPackageIds?: readonly string[]
   /** Why rolling this id back to its factory package is refused right now, or
    *  undefined when it is allowed. Checked before a rollback is offered or its
    *  views are drained. */
   factoryRollbackRefusal?: (pluginId: string) => string | undefined
   listFactoryPackages?: () => FactoryPackageSummary[]
+  /** Current and peak in-flight backend calls and dropped Host event notifications per plugin; calls are never capped. */
+  backendCallConcurrency?: () => BackendCallConcurrency[]
+  /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most; none are capped. */
+  backendResourceUsage?: () => BackendResourceUsage
   restoreFactoryPackage?: (pluginId: string) => Promise<void> | void
+  /** Host side of the Disabled switch for the built-in Plans, Git and
+   *  Mini-IDE, called after the switch is recorded: drain on disable, reload
+   *  on enable. Its storage, grant and package stay either way. */
+  setBuiltinDisabled?: (pluginId: string, disabled: boolean) => Promise<void> | void
+  /** Called after the user reset an unreadable Disabled store: the built-ins
+   *  it held off are enabled again. `resumed` names them, so the Host can
+   *  finish enabling each one as the Enable switch does. */
+  onBuiltinSwitchReset?: (resumed: string[]) => void
+  /** Runs the built-in switch and the reset, so the Host's own check of the
+   *  Disabled store never interleaves with them. */
+  holdBuiltinSwitch?: <T>(task: () => Promise<T>) => Promise<T>
   onFactoryPackageRemoved?: (pluginId: string) => void
   /** Load the App-bundled package and its grant after an installed package
    *  that replaced it was unregistered; the rollback path back to the factory. */
@@ -324,8 +664,81 @@ export interface PluginIpcOptions {
   preflightCandidateFrontend?: (descriptor: PluginLaunchDescriptor) => Promise<void>
   /** Host-only standalone backend health check with no production bridge route. */
   preflightCandidateBackend?: (activation: PluginActivationCatalogEntry) => Promise<void>
+  /** Card K3: the Host's own file dialog, parented to the window that asked.
+   * The path it returns is the only path a local install ever reads; nothing
+   * the renderer sends is used as a path. Absent, installing from a file is
+   * unavailable. */
+  pickLocalPackageFile?: (event: IpcMainInvokeEvent) => Promise<string | null>
+  /** Card K3 (D7): drop the native backend consent and the agent tool write
+   * answers of a package whose source changed, so nothing carries over. */
+  forgetBackendConsent?: (pluginId: string, keepInstallConsentFor?: string) => void
+  /** 0.2.31: the user confirmed this version's install dialog, which
+   *  discloses its native backend; its first start counts that as consent. */
+  noteInstallConsent?: (pluginId: string, packageVersion: string) => void
+  /** `<userData>/plugin-storage-v2`: view storage, set aside with the native
+   * backend data when a package's source changes (card K3, D7). */
+  pluginStorageRoot?: string
+  /** Card K4: the Host's own folder dialog, parented to the window that
+   * asked. Absent, loading from a folder is unavailable. */
+  pickDeveloperFolder?: (event: IpcMainInvokeEvent) => Promise<string | null>
+  /** DESIGN-A2 G1: watch a loaded developer folder for automatic reload.
+   *  Defaults to a recursive file system watch. */
+  watchDeveloperFolder?: WatchDeveloperFolder
+  /** DESIGN-A2 G1: an automatic reload ran (`reloaded`), stopped because the
+   *  permissions or backend changed (`needs-consent`; nothing is loaded until
+   *  the user consents again), or could not read the folder and kept the
+   *  running version (`reload-failed`). */
+  onDeveloperFolderEvent?: (event: DeveloperFolderEvent) => void
+  /** A2-5 (G5): wraps the HMAC key of the Developer Mode settings (Electron
+   * safeStorage in the app). Absent, the settings are not checked, as on 0.2.27. */
+  developerModeIntegrity?: DeveloperModeIntegrity
+  /** The static scan run on a package installed from a file (the scanner the
+   * Registry and `navide-plugin scan` share). Absent, the consent dialog says
+   * the scan is not available. Never decides the install. */
+  scanLocalPackage?: LocalPackageScanner
   /** The running Navide release that `engines.navide` is checked against. */
   appVersion?: () => string
+  /** An agent disabled or enabled an installed Marketplace package (B2-c):
+   *  tell the user who, with a one-click undo. */
+  onPluginAgentAction?: (notice: PluginAgentActionNotice) => void
+  /** Decision d5: the one-time dialog about a local install whose `.vsix`
+   *  Navide blocked since; resolves to the user's choice. Absent, nobody is
+   *  asked and only the list labels it. */
+  promptDigestBlock?: (prompt: DigestBlockPrompt) => Promise<DigestBlockChoice>
+}
+
+/** Input of the shared static scanner: the package's files by archive path,
+ * manifest.json included. Null result: the scanner does not cover it. */
+export type LocalPackageScanner = (input: {
+  files: ReadonlyMap<string, Uint8Array>
+  artifactDigest: string
+  target: string
+  manifest: unknown
+}) => ScanReport | null | Promise<ScanReport | null>
+
+/** What an agent's file request staged besides the bytes (W1, S2). */
+type AgentStagedMeta = { kind: 'file'; signature: string | null } | { kind: 'folder'; path: string }
+/** A staged copy outlives its request (15 minutes, PLUGIN_APPROVAL_TTL_S)
+ * by a minute, so a card the user can still approve always finds its copy.
+ * The copies are files (PackageStagingStore), so there is no count limit
+ * (review MED-5 on W1): a copy goes when the user decides or its request
+ * expires, never because other requests came after it. */
+const AGENT_STAGED_TTL_MS = 16 * 60 * 1000
+
+/** The largest `<file>.sig` read: a base64 Ed25519 signature is 88 bytes. */
+const MAX_SIGNATURE_BYTES = 4096
+
+/** The `navide-plugin sign` sidecar beside a local package, or null. Only a
+ * small regular file is read; a symlink or anything else is ignored. */
+function readSidecarSignature(packagePath: string): string | null {
+  const path = `${packagePath}${LOCAL_SIGNATURE_SUFFIX}`
+  try {
+    const stat = lstatSync(path)
+    if (!stat.isFile() || stat.size > MAX_SIGNATURE_BYTES) return null
+    return readFileSync(path, 'utf8').trim() || null
+  } catch {
+    return null
+  }
 }
 
 function errorText(error: unknown): string {
@@ -418,12 +831,284 @@ export function registerPluginIpc(
 ): PluginTrustRefreshController {
   // Packages verified by prepareInstall, awaiting a commit, keyed by plugin id.
   const prepared = new Map<string, { pkg: PreparedInstall }>()
+  // Local packages awaiting consent (card K3). Kept apart from Registry
+  // prepares so commitInstall can never commit one, nor the reverse.
+  const preparedLocal = new Map<string, PreparedInstall>()
+  // D7: a set-aside native backend data directory the user chose to take back
+  // when this id returns to that source; applied at its restart, never assumed.
+  const pendingReattach = new Set<string>()
+  /** Review LOW-11: whose data an installed package's data is. Only a
+   * Registry-verified id (Marketplace, pre-release, or a Registry install
+   * that carries no source) may hand its data on; every other source, a
+   * developer folder and any unknown value included, is treated as local. */
+  const dataSourceOf = (pkg: { source?: PluginSource; provenance?: string } | undefined): 'marketplace' | 'local-unsigned' =>
+    pkg !== undefined && (
+      pkg.source === 'marketplace' ||
+      pkg.source === 'prerelease' ||
+      (pkg.source === undefined && pkg.provenance === 'official-registry')
+    )
+      ? 'marketplace'
+      : 'local-unsigned'
+  /** D7: every per-plugin data location a change of source sets aside: the
+   * native backend's private folder and the view storage (all versions, so a
+   * package of the same version but another target never shares it). */
+  const dataPlaces = (id: string): Array<{ root: string; name: string }> => [
+    ...(options.nativeBackendDataRoot ? [{ root: options.nativeBackendDataRoot, name: id }] : []),
+    ...(options.pluginStorageRoot ? [{ root: options.pluginStorageRoot, name: pluginStorageDirName(id) }] : []),
+  ]
+  /** D7: what replacing `id` with `incoming` does to its data: whether some is
+   * set aside (only when the source changes) and whether data set aside from
+   * `incoming` earlier may be taken back. */
+  const backendDataOnReplace = (id: string, incoming: 'marketplace' | 'local-unsigned') => {
+    const installed = manager.listInstalledPackages().find((pkg) => pkg.id === id)
+    if (!installed) {
+      // HIGH-3: data a removal kept from another source is set aside, too.
+      const root = options.nativeBackendDataRoot
+      const kept = root ? keptNativeBackendDataSource(root, id) : null
+      // MED-4: data a local file kept is never handed on, even to another
+      // local file: its id is only what each file claims.
+      return kept !== null && (kept === 'local-unsigned' || kept !== incoming) ? { backendDataSetAside: true } : {}
+    }
+    const current = dataSourceOf(installed)
+    if (current === incoming && current !== 'local-unsigned') return {}
+    const places = dataPlaces(id)
+    // Only data of a Marketplace package can be taken back: its id is the
+    // Registry's, while a local file's id is only what the file claims.
+    const reattachable = incoming === 'marketplace' &&
+      places.some((place) => latestSetAsideNativeBackendData(place.root, place.name, 'marketplace') !== null)
+    return {
+      ...(places.some((place) => existsSync(join(place.root, place.name))) ? { backendDataSetAside: true } : {}),
+      ...(reattachable ? { reattachableBackendData: true } : {}),
+    }
+  }
+  const rememberReattach = (id: string, incoming: 'marketplace' | 'local-unsigned', wanted: unknown): void => {
+    pendingReattach.delete(id)
+    if (wanted !== true) return
+    if (backendDataOnReplace(id, incoming).reattachableBackendData !== true) {
+      throw new Error(`there is no set-aside data of ${id} to take back`)
+    }
+    pendingReattach.add(id)
+  }
   const activeTransactions = new Set<string>()
   const capabilityGrants = new PluginCapabilityGrantStore(pluginsRoot)
   const lifecycleSelector = new PluginActivationSelector(pluginsRoot)
+  /** The signed envelope channel of the active Registry package, read from
+   * the receipt beside the package that load-time verification checked. */
+  const activeRegistryPackageDir = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): string | undefined => {
+    if (summary.provenance !== 'official-registry') return undefined
+    try {
+      const active = lifecycleSelector.read(summary.id)?.active
+      return active ? lifecycleSelector.packageDir(summary.id, active) : join(pluginsRoot, summary.id)
+    } catch {
+      return undefined
+    }
+  }
+  const activeRegistryChannel = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): string | undefined => {
+    const dir = activeRegistryPackageDir(summary)
+    return dir === undefined ? undefined : readRegistryReceiptChannel(dir)
+  }
+  /** `source`, plus the signed testplace expiry when the source is testplace. */
+  // A3: a file a vetted publisher signed is labelled signed while that key
+  // stays active, and "signature no longer valid" once the Registry revokes it.
+  const recordedLocalSignature = (summary: { id: string; packageVersion?: string }): 'verified' | 'revoked' | undefined => {
+    if (!summary.packageVersion) return undefined
+    const path = localTrustRecordFor(pluginsRoot, summary.id, summary.packageVersion)
+    if (!path) return undefined
+    try {
+      const signer = readLocalTrustRecord(path).signer
+      if (!signer) return undefined
+      const pinned = resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey
+      return recordedSignatureState(readLocalInstallTrust(pluginsRoot, pinned), summary.id, signer)
+    } catch {
+      return undefined
+    }
+  }
+  // Decision d5 (W6): the block on the `.vsix` a local install came from.
+  const localDigestBlockFor = (summary: { id: string; packageVersion?: string }): LocalDigestBlock | null => {
+    if (!summary.packageVersion) return null
+    const path = localTrustRecordFor(pluginsRoot, summary.id, summary.packageVersion)
+    if (!path) return null
+    try {
+      const pinned = resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey
+      return recordDigestBlock(readLocalTrustRecord(path), readLocalInstallTrust(pluginsRoot, pinned))
+    } catch {
+      return null
+    }
+  }
+  // DX 9.4 A1: what the user consented to for a local file, and when.
+  const localInstallFor = (summary: { id: string; packageVersion?: string }): LocalInstallDetails | null => {
+    if (!summary.packageVersion) return null
+    const path = localTrustRecordFor(pluginsRoot, summary.id, summary.packageVersion)
+    if (!path) return null
+    try {
+      const record = readLocalTrustRecord(path)
+      return {
+        ...(record.artifactDigest ? { fileDigest: record.artifactDigest } : {}),
+        contentDigest: record.contentDigest,
+        installedAt: record.consentedAt,
+      }
+    } catch {
+      return null
+    }
+  }
+  // 0.2.28: a Registry install whose receipt digest the root-signed
+  // local-install document lists as `testplace-withdrawn` (a Testplace build
+  // taken back), or whose version the signed-in tester detail last listed as
+  // withdrawn (the 15-minute fast path). Either way it is the same block on
+  // the same digest, so the notice is shown once across both. Only that
+  // reason applies to Registry installs; the others keep applying to local
+  // installs alone.
+  const registryWithdrawnBlockFor = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+  }): (LocalDigestBlock & { version: string }) | null => {
+    const dir = activeRegistryPackageDir(summary)
+    const artifact = dir === undefined ? undefined : readRegistryReceiptArtifact(dir)
+    if (!artifact || dir === undefined) return null
+    try {
+      const pinned = resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey
+      const block = digestBlock(readLocalInstallTrust(pluginsRoot, pinned), artifact.artifactDigest)
+      const listed = block?.reason === 'testplace-withdrawn'
+      const told = readRegistryReceiptChannel(dir) === 'testplace' && testplaceStore.isWithdrawn(summary.id, artifact.version)
+      if (!listed && !told) return null
+      const reason = 'testplace-withdrawn' as const
+      return { digest: artifact.artifactDigest, reason, action: digestBlockAction(reason), version: artifact.version }
+    } catch {
+      return null
+    }
+  }
+  const sourceFields = (summary: {
+    id: string
+    provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+    source?: PluginSource
+    packageVersion?: string
+  }): {
+    source?: PluginSource
+    expiresAt?: string
+    testplaceVia?: TestplaceJoinVia
+    localSignature?: 'verified' | 'revoked'
+    digestBlock?: { reason: LocalBlockReason | null }
+    localInstall?: LocalInstallDetails
+  } => {
+    const source = installedSource(summary, activeRegistryChannel(summary))
+    if (!source) return {}
+    if (source === 'local-unsigned') {
+      const signature = recordedLocalSignature(summary)
+      const block = localDigestBlockFor(summary)
+      const install = localInstallFor(summary)
+      return {
+        source,
+        ...(signature ? { localSignature: signature } : {}),
+        ...(block ? { digestBlock: { reason: block.reason } } : {}),
+        ...(install ? { localInstall: install } : {}),
+      }
+    }
+    const dir = source === 'testplace' ? activeRegistryPackageDir(summary) : undefined
+    const expiresAt = dir === undefined ? undefined : readRegistryReceiptExpiresAt(dir)
+    const via = source === 'testplace' ? testplaceStore.joinVia(summary.id) : null
+    const withdrawn = registryWithdrawnBlockFor(summary)
+    return {
+      source,
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
+      ...(via ? { testplaceVia: via } : {}),
+      ...(withdrawn ? { digestBlock: { reason: withdrawn.reason } } : {}),
+    }
+  }
+  // Plan B D2 (D-d): what an update changes, computed by the Host from the
+  // active version's installed manifest and the verified package's own
+  // manifest, never from Registry data. Null when there is nothing to
+  // compare: a first install, a Manifest v1 package on either side, or an
+  // active version whose manifest cannot be read (that update asks as before).
+  const activeDisclosure = (id: string): ManifestDisclosure | null => {
+    const active = lifecycleSelector.read(id)?.active
+    if (!active) return null
+    try {
+      const dir = lifecycleSelector.packageDir(id, active)
+      const installed = parseInstalledManifest(parseManifestJson(readFileSync(join(dir, 'manifest.json'), 'utf8')))
+      return isManifestV2(installed) ? computeDisclosure(installed as unknown as DisclosureManifestInput) : null
+    } catch {
+      return null
+    }
+  }
+  /** R2 MED-6 on #436: whether the active package has views, for the
+   *  disclosure card; absent when its manifest cannot be read. */
+  const activeHasViews = (id: string): { hasViews?: boolean } => {
+    const active = lifecycleSelector.read(id)?.active
+    if (!active) return {}
+    try {
+      const dir = lifecycleSelector.packageDir(id, active)
+      return { hasViews: manifestHasViews(parseInstalledManifest(parseManifestJson(readFileSync(join(dir, 'manifest.json'), 'utf8')))) }
+    } catch {
+      return {}
+    }
+  }
+  const updateDisclosureDiff = (pkg: PreparedInstall): DisclosureDiff | null => {
+    if (!isManifestV2(pkg.manifest)) return null
+    const from = activeDisclosure(pkg.id)
+    if (!from) return null
+    try {
+      return diffDisclosure(from, computeDisclosure(pkg.manifest as unknown as DisclosureManifestInput))
+    } catch {
+      return null
+    }
+  }
   const hostAppVersion = options.appVersion ?? ((): string => app.getVersion())
   const prereleases = new PluginPrereleaseStore(pluginsRoot)
+  // Testplace joins and kept expired builds (D3).
+  const testplaceStore = new PluginTestplaceStore(pluginsRoot)
+  const keepsExpiredTestplace = (packageId: string, artifactDigest: string): boolean =>
+    testplaceStore.keepsExpired(packageId, artifactDigest)
+  const withdrawnTestplace = (packageId: string, version: string): boolean =>
+    testplaceStore.isWithdrawn(packageId, version)
+  // D-f: the scan verified at install, per version; a record for the rescan
+  // notice only. Its failures never fail an install or a removal.
+  const installScans = new PluginInstallScanStore(pluginsRoot)
+  let rescanNotices: PluginRescanNotice[] = []
+  // #373 follow-up: installedAt is recorded when a fresh install becomes
+  // active: the restart found no version of the id in place (no registered
+  // descriptor, no selector active, no legacy backend-only install), so an
+  // update over any layout, a rollback, or a staged-then-discarded candidate
+  // never records one (review MED-1, LOW1 on #380). Record only.
+  const recordFreshInstall = (id: string): void => {
+    try {
+      installScans.markInstalled(id, Date.now())
+    } catch (error) {
+      console.warn(`[plugins] installedAt for ${id} not recorded: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   const packs = new PluginPackStore(pluginsRoot)
+  // The manager reads the same file through the resolver the Host installs
+  // before the first package load; this handle only records the user's switch.
+  const disabledPlugins = new PluginDisabledStore(pluginsRoot)
+  // Who disabled each Marketplace package (B2-c option B). A write that fails
+  // leaves an older entry behind, but the Disabled list changed since, so an
+  // agent's entry then reads as the user: the conservative side.
+  const disableSources = new PluginDisableSourceStore(pluginsRoot)
+  const recordDisableSource = (id: string, disabled: boolean | null, source?: DisableSource): void => {
+    try {
+      if (disabled && source) disableSources.set(id, source)
+      else disableSources.remove(id)
+    } catch (error) {
+      console.warn(`[plugins] who disabled ${id} was not recorded: ${errorText(error)}`)
+    }
+  }
+  // Update, rollback and restart re-register a package. While it is disabled
+  // they may change which version is selected, but they never hand the Host an
+  // activation to start.
+  const activationChange = options.onActivationChange
+  if (activationChange) {
+    options = {
+      ...options,
+      onActivationChange: (change) =>
+        activationChange(manager.isPluginDisabled(change.pluginId) ? { pluginId: change.pluginId } : change),
+    }
+  }
   // Pack installs in progress, keyed by pack id: the verified member list and
   // which members were installed before the pack flow started.
   const packSessions = new Map<
@@ -438,6 +1123,14 @@ export function registerPluginIpc(
     pluginId: string,
     trustConfig: InstallerTrustConfig
   ): InstalledTrustDecision =>
+    // A local install (no Registry receipt, a consent record for this exact
+    // id and version) is verified against that record; everything else takes
+    // the Registry path exactly as before.
+    verifyLocalInstalledPackage(pluginsRoot, pluginDir, pluginId, {
+      pinnedRootKey: trustConfig.pinnedRegistryRootKey,
+      snapshot: readRegistryTrustSnapshot(pluginsRoot),
+      now: trustConfig.now,
+    }) ??
     (
       options.verifyCommittedInstall ??
       ((dir: string, id: string, config: InstallerTrustConfig) =>
@@ -461,7 +1154,7 @@ export function registerPluginIpc(
   // id to the App bundle, which keeps no selector record of its own.
   function rollbackTargetFor(
     id: string,
-  ): { kind: 'factory' } | { kind: 'previous'; version: string } | null {
+  ): { kind: 'factory' } | { kind: 'previous'; version: string; local: boolean } | null {
     const selected = lifecycleSelector.read(id)
     if (!selected?.active || selected.candidate || selected.activation) return null
     if (!selected.previous) {
@@ -475,11 +1168,46 @@ export function registerPluginIpc(
     // can change after the row is drawn, so a refusal is still reachable and its
     // message is shown to the user rather than swallowed.
     if (!selected.previousGrant) return null
-    return { kind: 'previous', version: selected.previous.packageVersion }
+    return {
+      kind: 'previous',
+      version: selected.previous.packageVersion,
+      local: isLocalInstalledPackage(pluginsRoot, lifecycleSelector.packageDir(id, selected.previous), id),
+    }
   }
 
-  ipcMain.handle('plugins:listInstalled', (event): InstalledSummary[] => {
-    assertAuthorized(event)
+  // The installed package when it came from a local file (card K3).
+  const installedLocalPackage = (id: unknown) =>
+    typeof id === 'string'
+      ? manager.listInstalledPackages().find((pkg) => pkg.id === id && pkg.source === 'local-unsigned')
+      : undefined
+  // Card K4: a developer folder holding an id is removed before anything else
+  // installs that id, so no install replaces it without the D7 rules.
+  const assertNoDeveloperFolder = (id: string): void => {
+    // A consented folder counts while Developer Mode is off and it is unloaded:
+    // its backend data is the developer's and goes to no other install.
+    if (developerMode.anyFolder(id) ||
+        manager.listInstalledPackages().some((pkg) => pkg.id === id && pkg.provenance === 'developer-local-unpacked')) {
+      throw new Error(`DEVELOPER_FOLDER_HOLDS_ID [${id}]: ${id} is loaded from a developer folder; remove that folder in Developer Mode first`)
+    }
+  }
+  /** Review MED-2 on #428: a package registered again after a failed restart
+   * or by a rollback keeps the source its own evidence shows: a directory a
+   * local consent record covers is local, anything else is a Registry package
+   * as on main. */
+  const evidenceSource = (dir: string, id: string) =>
+    isLocalInstalledPackage(pluginsRoot, dir, id)
+      ? { fields: { source: 'local-unsigned' as const }, registration: {} }
+      : { fields: { provenance: 'official-registry' as const }, registration: { official: true } }
+
+  // A file install committed but not restarted yet (review LOW-6).
+  const stagedLocalCandidate = (id: string): boolean => {
+    const candidate = lifecycleSelector.read(id)?.candidate
+    return candidate !== undefined && isLocalInstalledPackage(pluginsRoot, lifecycleSelector.packageDir(id, candidate), id)
+  }
+
+  // The installed inventory, shared by the Extensions page and the agent's
+  // read-only `plugins_list_installed` (marketplace.query, B2-a).
+  const listInstalledSummaries = (): InstalledSummary[] => {
     const summaries = new Map<
       string,
       {
@@ -488,6 +1216,7 @@ export function registerPluginIpc(
         packageVersion?: string
         manifestPermissions?: ManifestPermissionsSummary
         provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
+        source?: PluginSource
         warning?: string
         enginesNavide?: string
       }
@@ -551,6 +1280,7 @@ export function registerPluginIpc(
           }
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
+      ...sourceFields(summary),
       ...(summary.warning ? { warning: summary.warning } : {}),
       ...(candidate ? { pendingCandidateVersion: candidate.packageVersion } : {}),
       ...(() => {
@@ -563,27 +1293,50 @@ export function registerPluginIpc(
       ...(summary.provenance === 'official-registry'
         ? { getsPrereleases: optedIn.has(summary.id) }
         : {}),
+      // d5: a blocked local install gets the switch too, so a user who chose
+      // "Disable" in its warning can enable it again.
+      ...((summary.provenance === 'official-registry' || localDigestBlockFor(summary) !== null) &&
+        manager.canDisablePlugin(summary.id)
+        ? { disabled: disabledPlugins.has(summary.id) }
+        : {}),
       ...(() => {
         const rollback = rollbackTargetFor(summary.id)
         if (!rollback) return {}
         return rollback.kind === 'factory'
           ? { rollbackKind: 'factory' as const }
-          : { rollbackKind: 'previous' as const, rollbackToVersion: rollback.version }
+          : {
+              rollbackKind: 'previous' as const,
+              rollbackToVersion: rollback.version,
+              ...(rollback.local ? { rollbackNeedsConsent: true as const } : {}),
+            }
       })(),
     }
     })
+  }
+
+  ipcMain.handle('plugins:listInstalled', (event): InstalledSummary[] => {
+    assertAuthorized(event)
+    return listInstalledSummaries()
   })
 
   ipcMain.handle('plugins:listContributions', (event) => {
     assertAuthorized(event)
+    const installed = new Map(manager.listInstalledPackages().map((pkg) => [pkg.id, pkg] as const))
     return manager.listContributionCatalog().map(({ iconFile, ...entry }) => {
       const icon = iconFile ? options.resolveContributionIcon?.(iconFile) ?? null : null
+      const pkg = installed.get(entry.pluginId)
+      // Only the selected package's own record may label its views. A test
+      // build also carries its signed expiry and how the user joined (W5b).
+      const fields = pkg && pkg.packageVersion === (entry.packageVersion ?? undefined)
+        ? sourceFields(pkg)
+        : {}
       return {
         ...entry,
         icon: icon?.url ?? null,
         // A silhouette is painted in the current text colour by the renderer,
         // so it follows the theme the way the built-in SVG icons do.
         iconMonochrome: icon?.monochrome ?? false,
+        ...fields,
       }
     })
   })
@@ -593,26 +1346,106 @@ export function registerPluginIpc(
     return options.listFactoryPackages?.() ?? []
   })
 
+  ipcMain.handle('plugins:backendCallConcurrency', (event): BackendCallConcurrency[] => {
+    assertAuthorized(event)
+    return options.backendCallConcurrency?.() ?? []
+  })
+
+  // A third-party package's AI CLI sessions that keep running after their view
+  // closed, and ending one of them. Disclosure, not a limit: nothing is ended
+  // unless the user asks.
+  ipcMain.handle('plugins:backgroundAiSessions', (event, args: { id?: unknown } | null): BackgroundAiSession[] => {
+    assertAuthorized(event)
+    return typeof args?.id === 'string' ? manager.backgroundAiSessions(args.id) : []
+  })
+
+  ipcMain.handle('plugins:endBackgroundAiSession', (
+    event,
+    args: { id?: unknown; sessionId?: unknown } | null,
+  ): { ok: boolean } => {
+    assertAuthorized(event)
+    if (typeof args?.id !== 'string' || typeof args.sessionId !== 'string') return { ok: false }
+    return { ok: manager.endBackgroundAiSession(args.id, args.sessionId) }
+  })
+
+  // Plan B D-f: one installed plugin's activity report. The Host fills
+  // `declared` from the installed manifest (the backend has none) and asks the
+  // backend over its authenticated session; the answer is rebuilt from
+  // validated fields before it reaches the page. Read only.
+  ipcMain.handle('plugins:activityReport', async (event, args: { id?: unknown } | null): Promise<
+    { ok: true; report: PluginActivityReport } | { ok: false; error: string }
+  > => {
+    assertAuthorized(event)
+    const id = typeof args?.id === 'string' ? args.id : ''
+    if (!manager.listInstalledPackages().some((pkg) => pkg.id === id)) {
+      return { ok: false, error: `${id || '(none)'} is not an installed Navide plugin` }
+    }
+    const disclosure = activeDisclosure(id)
+    const declared = disclosure ? declaredForActivity(disclosure) : []
+    try {
+      // Sent only when known: an id installed before this was recorded has
+      // none, and the backend then keeps its earlier behaviour (#373).
+      const installedAt = installScans.installedAt(id)
+      const report = parsePluginActivityReport(await manager.requestPluginActivityReport({
+        plugin_id: id,
+        declared,
+        ...(installedAt !== null ? { installedAt } : {}),
+      }))
+      return report ? { ok: true, report } : { ok: false, error: 'the activity report was malformed' }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  // D-f disclosure overview: each installed Registry package's disclosure,
+  // computed from its installed manifest, and the scan verified at install.
+  ipcMain.handle('plugins:installedDisclosures', (event): Array<{
+    id: string
+    version: string
+    disclosure: ManifestDisclosure | null
+    scan: ScanReport | null
+    source?: PluginSource
+    expiresAt?: string
+    hasViews?: boolean
+  }> => {
+    assertAuthorized(event)
+    return manager.listInstalledPackages()
+      .filter((pkg) => pkg.provenance === 'official-registry' && pkg.packageVersion)
+      .map((pkg) => ({
+        id: pkg.id,
+        version: pkg.packageVersion!,
+        disclosure: activeDisclosure(pkg.id),
+        ...activeHasViews(pkg.id),
+        scan: installScans.get(pkg.id, pkg.packageVersion!),
+        ...sourceFields(pkg),
+      }))
+  })
+
+  ipcMain.handle('plugins:backendResourceUsage', (event): BackendResourceUsage => {
+    assertAuthorized(event)
+    return options.backendResourceUsage?.() ?? { children: { current: 0, peak: 0, retained: 0 }, views: [], plugins: [] }
+  })
+
   ipcMain.handle(
     'plugins:restoreFactoryPackage',
     async (event, args: { id?: unknown } | null) => {
       assertAuthorized(event)
       const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+      // Built-ins are never removed any more, so there is nothing to restore.
+      if (isReservedPluginId(id)) throw new Error(`first-party plugin ${id} cannot be removed or restored`)
       if (!options.restoreFactoryPackage) throw new Error('factory package restore is unavailable')
       await options.restoreFactoryPackage(id)
       return { ok: true }
     }
   )
 
-  ipcMain.handle(
-    'plugins:marketplaceSearch',
-    async (
-      event,
+  // The Marketplace search, shared by the Marketplace page and the agent's
+  // read-only `marketplace_search` (marketplace.query, B2-a).
+  const marketplaceSearch = async (
       query?: string,
       sort?: string,
       options?: { category?: unknown; offset?: unknown; limit?: unknown; hideIncompatible?: unknown } | null
     ) => {
-      assertAuthorized(event)
       const marketplace = resolveConfiguredMarketplace(trust)
       const appVersion = hostAppVersion()
       // Resolve relative to the base path: the Registry may be served under a
@@ -636,7 +1469,7 @@ export function registerPluginIpc(
         url.searchParams.set('compatible_only', 'true')
       }
       const res = await fetch(url)
-      if (!res.ok) throw new Error(`marketplace search failed: HTTP ${res.status}`)
+      if (!res.ok) throw new MarketplaceHttpError(`marketplace search failed: HTTP ${res.status}`, res.status)
       const body = (await res.json()) as { items?: Array<Record<string, unknown>> }
       // Target and engine compatibility are decided here, with the same rules
       // install uses, so the renderer never re-derives them. A Registry that
@@ -658,8 +1491,23 @@ export function registerPluginIpc(
           repository: httpsLink(item.repository),
           homepage: httpsLink(item.homepage),
           icon_path: typeof item.icon_path === 'string' ? item.icon_path : null,
+          // Plan B D1 list card: display data, kept only when well formed and
+          // naming this item's package and latest version (as for the MCP card).
+          ...listingDisclosure(item),
         })),
       }
+    }
+
+  ipcMain.handle(
+    'plugins:marketplaceSearch',
+    async (
+      event,
+      query?: string,
+      sort?: string,
+      options?: { category?: unknown; offset?: unknown; limit?: unknown; hideIncompatible?: unknown } | null
+    ) => {
+      assertAuthorized(event)
+      return marketplaceSearch(query, sort, options)
     }
   )
 
@@ -743,10 +1591,8 @@ export function registerPluginIpc(
   // Read-only detail for the Marketplace detail view. Trust metadata and
   // signed envelopes stay main-side: the renderer only needs display fields,
   // and install still re-fetches and verifies through prepareInstall.
-  ipcMain.handle(
-    'plugins:marketplaceDetail',
-    async (event, args: { namespace?: unknown; name?: unknown } | null) => {
-      assertAuthorized(event)
+  // Shared with the agent's read-only `marketplace_detail` (marketplace.query, B2-a).
+  const marketplaceDetail = async (args: { namespace?: unknown; name?: unknown } | null) => {
       const namespace = marketplacePathSegment(args?.namespace)
       const name = marketplacePathSegment(args?.name)
       const marketplace = resolveConfiguredMarketplace(trust)
@@ -757,7 +1603,7 @@ export function registerPluginIpc(
       // Compatibility is computed here from each row's `engines_navide`, so
       // the Registry's own verdict (and its `navide_version` input) is unused.
       const res = await fetch(base)
-      if (!res.ok) throw new Error(`marketplace detail failed: HTTP ${res.status}`)
+      if (!res.ok) throw new MarketplaceHttpError(`marketplace detail failed: HTTP ${res.status}`, res.status)
       const detail = (await res.json()) as Record<string, unknown> & {
         versions?: Array<Record<string, unknown>>
       }
@@ -823,17 +1669,137 @@ export function registerPluginIpc(
           compatible: isEngineCompatible(v.engines_navide, appVersion),
           min_navide_version: minNavideVersion(v.engines_navide),
           channel: typeof v.version === 'string' && isPrereleaseVersion(v.version) ? 'pre-release' : 'stable',
+          // Contract 3.4/3.5: shown before download, verified at prepareInstall.
+          disclosure: jsonObjectOrNull(v.disclosure),
+          scan: jsonObjectOrNull(v.scan),
+          registry: jsonObjectOrNull(v.registry),
         })),
         readme,
       }
     }
+
+  ipcMain.handle(
+    'plugins:marketplaceDetail',
+    async (event, args: { namespace?: unknown; name?: unknown } | null) => {
+      assertAuthorized(event)
+      return marketplaceDetail(args)
+    }
   )
+
+  // B2-a: the backend's read-only Marketplace MCP tools ask through the
+  // authenticated Host session; the answer comes from the functions above.
+  manager.setMarketplaceQueryHandler?.((query) =>
+    answerMarketplaceQuery(query, {
+      search: (text, searchOptions) => marketplaceSearch(text, undefined, searchOptions),
+      detail: (namespace, name) => marketplaceDetail({ namespace, name }),
+      installed: () =>
+        listInstalledSummaries().map((summary) => ({
+          id: summary.id,
+          packageVersion: summary.packageVersion,
+          disabled: summary.disabled,
+          hasBackend: manager.installedPackageHasBackend(summary.id),
+          ...(summary.source
+            ? { source: summary.localSignature === 'verified' ? 'local-signed' : summary.source }
+            : {}),
+          ...(summary.localSignature === 'revoked' ? { signatureRevoked: true } : {}),
+        })),
+      // W1 (S1, S1b): plugins_validate_package and plugins_package. The same
+      // checks a local install applies, with the lists refreshed first.
+      localValidate: async (path) => {
+        await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
+        return validateLocalPackage(path, localPackageToolDeps())
+      },
+      localPackage: async (path, packageOptions) => {
+        await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
+        return packageLocalFolder(path, packageOptions, localPackageToolDeps())
+      },
+      localStage: (path) => stageAgentPackage(path),
+    })
+  )
+  // Staged copies of agent file requests, on disk under Navide's data folder
+  // (never the plugins root). Made when the Host starts, which removes what an
+  // earlier run left: its requests did not survive the restart.
+  const agentStagingStore = new PackageStagingStore<AgentStagedMeta>(
+    join(dirname(pluginsRoot), 'plugin-staging', 'agent-file'),
+    AGENT_STAGED_TTL_MS,
+    'AGENT_STAGING_EXPIRED',
+  )
+  const agentStaging = (): PackageStagingStore<AgentStagedMeta> => agentStagingStore
+  const takeAgentStaged = (stagingId: string) => agentStaging().take(stagingId)
+  const stageAgentPackage = async (requested: string): Promise<LocalPackageQueryReport & { stagingId?: string }> => {
+    await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
+    const deps = localPackageToolDeps()
+    const { path, folder } = agentPackagePath(requested, deps.protectedRoots)
+    if (folder && !developerModeOn()) {
+      throw new Error('DEVELOPER_MODE_OFF: a folder loads only with Developer Mode on, which the user turns on in Settings')
+    }
+    // One read: the report, the approval card and the install all use these bytes.
+    const bytes = folder ? null : new Uint8Array(readFileSync(path))
+    const signature = folder ? null : readSidecarSignature(path)
+    // A folder is checked as Developer Mode loads it (K4), in place.
+    const report = folder ? developerFolderReport(path) : await validateLocalBytes(path, bytes!, signature, deps)
+    if (!report.valid) return report
+    const { id: stagingId } = agentStaging().stage(
+      folder ? null : bytes,
+      folder ? { kind: 'folder', path } : { kind: 'file', signature },
+    )
+    return { ...report, stagingId }
+  }
+  const developerFolderReport = (path: string): LocalPackageQueryReport => {
+    const base: LocalPackageQueryReport = {
+      path, packageKind: 'folder', valid: false, errors: [], id: null, version: null, target: null,
+      digest: null, signature: 'none', disclosure: null, risk: null, scan: null,
+    }
+    try {
+      const described = describeFolder(path)
+      assertFolderIdFree(described.pluginId, path)
+      const disclosure = described.summary.disclosure as ManifestDisclosure
+      return {
+        ...base, valid: true, id: described.pluginId, version: String(described.summary.version),
+        disclosure, risk: cardRiskLevel(disclosure, null),
+      }
+    } catch (error) {
+      return { ...base, errors: [errorText(error)] }
+    }
+  }
+  const localPackageToolDeps = (): LocalPackageToolDeps => ({
+    trust: () => {
+      const marketplace = resolveConfiguredMarketplace(trust)
+      return {
+        pinnedRegistryRootKey: marketplace.trust.pinnedRegistryRootKey,
+        trustSnapshot: readRegistryTrustSnapshot(pluginsRoot),
+        expectedTarget: marketplace.trust.expectedTarget,
+        localInstallTrust: readLocalInstallTrust(pluginsRoot, marketplace.trust.pinnedRegistryRootKey),
+      }
+    },
+    readSignature: readSidecarSignature,
+    ...(options.scanLocalPackage ? { scan: options.scanLocalPackage } : {}),
+    // Navide's data folder: plugins, consent records, stores.
+    protectedRoots: [dirname(pluginsRoot)],
+    assertInstallable: (pkg) => {
+      const manifest = pkg.manifest as Parameters<typeof assertEngineCompatible>[2]
+      if (isManifestV2(manifest as never) && (manifest as { extensionPack?: unknown }).extensionPack) {
+        throw new Error(`${pkg.id} is an extension pack; packs install only from the Marketplace`)
+      }
+      assertEngineCompatible(pkg.id, pkg.version, manifest, hostAppVersion())
+    },
+  })
 
   // Update detection for installed Registry packages: compares each installed
   // version against the newest version this Host can install. Detection only —
   // installing the update goes through the normal prepareInstall/commitInstall
   // consent path. The last answer is kept for windows that open later.
   let pendingUpdates: PluginUpdateInfo[] = []
+  // The update badge only: a malformed listing disclosure means no badge.
+  const listedPermissionChange = (id: string, listed: unknown): 'more' | 'same' | undefined => {
+    const from = activeDisclosure(id)
+    if (!from || !jsonObjectOrNull(listed)) return undefined
+    try {
+      return diffDisclosure(from, listed as ManifestDisclosure).widened ? 'more' : 'same'
+    } catch {
+      return undefined
+    }
+  }
   const checkInstalledUpdates = async (): Promise<PluginUpdateInfo[]> => {
     const candidates = manager
       .listInstalledPackages()
@@ -857,6 +1823,8 @@ export function registerPluginIpc(
           const res = await fetch(
             `${base}/api/extensions/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
           )
+          // A Testplace build is not listed publicly until it is promoted.
+          if (res.status === 404 && activeRegistryChannel(pkg) === 'testplace') return null
           if (!res.ok) return { failed: pkg.id, reason: `HTTP ${res.status}` }
           const detail = (await res.json()) as {
             versions?: Array<{
@@ -864,7 +1832,21 @@ export function registerPluginIpc(
               target?: unknown
               yanked?: unknown
               engines_navide?: unknown
+              disclosure?: unknown
+              scan?: unknown
             }>
+          }
+          // D-f: a rescan of the installed version that found new items is
+          // noticed once, from this same answer (no request of its own).
+          try {
+            const finding = rescanFinding(
+              installScans.get(pkg.id, pkg.packageVersion!), detail.versions ?? [], pkg.packageVersion!, hostTarget
+            )
+            if (finding && installScans.noticeOnce(pkg.id, pkg.packageVersion!, finding.digest)) {
+              rescanNotices.push({ id: pkg.id, version: pkg.packageVersion!, added: finding.added })
+            }
+          } catch (error) {
+            console.warn(`[plugins] rescan check for ${pkg.id} failed: ${error instanceof Error ? error.message : String(error)}`)
           }
           // A stable user is never offered a pre-release. Switching the opt-in
           // off again never downgrades: a newer stable release is offered
@@ -876,12 +1858,18 @@ export function registerPluginIpc(
             optedIn.has(pkg.id)
           )
           if (!latestVersion || !isUpdateAvailable(pkg.packageVersion!, latestVersion)) return null
+          const permissionChange = listedPermissionChange(
+            pkg.id,
+            (detail.versions ?? []).find((row) => row.version === latestVersion && jsonObjectOrNull(row.disclosure))
+              ?.disclosure
+          )
           return {
             id: pkg.id,
             namespace,
             name,
             installedVersion: pkg.packageVersion!,
             latestVersion,
+            ...(permissionChange ? { permissionChange } : {}),
           }
         } catch (error) {
           // One unreachable package must not hide updates for the others.
@@ -1140,17 +2128,138 @@ export function registerPluginIpc(
 
   /** Download and verify one Registry package (digest, Registry signature,
    *  trust metadata, target and engine) without writing anything. */
+  // Testplace (DX report §9.5, plan mcp-navide-0-2-27 W5b). A tester's calls
+  // carry the user's Navide Cloud account, which the Host keeps
+  // (developerAccount.ts): the renderer never holds the token. Registry
+  // refusals reach the window as `TESTPLACE_ERROR [code]: message`.
+  const testplaceRegistryCall = async <T = unknown>(
+    path: string,
+    init: { method?: string; json?: unknown } = {},
+  ): Promise<T> => {
+    const res = await developerRegistryFetch<T>(path, init, 'account')
+    if (res.status >= 200 && res.status < 300) return res.body
+    const { code, message } = registryError(res.body)
+    throw new Error(`TESTPLACE_ERROR [${code ?? `HTTP_${res.status}`}]: ${message}`)
+  }
+  const testplaceInstallerDeps = (namespace: string, name: string, version: string, target: string) => ({
+    ...defaultInstallerDeps,
+    async download() {
+      const query = target && target !== 'universal' ? `?target=${encodeURIComponent(target)}` : ''
+      const res = await developerRegistryDownload(
+        `/api/testplace/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/${encodeURIComponent(version)}/download${query}`,
+        'account',
+      )
+      if (res.status !== 200) throw new InstallError(`download failed: HTTP ${res.status}`)
+      return { bytes: new Uint8Array(res.body), digestHeader: res.digest }
+    },
+  })
+
+  /** The tests the user joined, newest version first, as the Testplace page shows them. */
+  ipcMain.handle('plugins:testplaceList', async (event): Promise<TestplaceListing[]> => {
+    assertAuthorized(event)
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const hostTarget = marketplace.trust.expectedTarget ?? currentPluginHostTarget()
+    const appVersion = hostAppVersion()
+    const body = await testplaceRegistryCall<{ items?: Array<Record<string, unknown>> }>('/api/testplace')
+    return (body.items ?? []).flatMap((item) => {
+      if (typeof item.namespace !== 'string' || typeof item.name !== 'string') return []
+      const id = `${item.namespace}.${item.name}`
+      const versions = Array.isArray(item.versions) ? (item.versions as Array<Record<string, unknown>>) : []
+      return [{
+        id,
+        namespace: item.namespace,
+        name: item.name,
+        displayName: typeof item.display_name === 'string' ? item.display_name : null,
+        description: typeof item.description === 'string' ? item.description : null,
+        publisher: typeof item.publisher === 'string' ? item.publisher : item.namespace,
+        via: testplaceStore.joinVia(id),
+        versions: versions.flatMap((v) => typeof v.version === 'string' ? [{
+          version: v.version,
+          target: typeof v.target === 'string' ? v.target : 'universal',
+          expiresAt: typeof v.expires_at === 'string' ? v.expires_at : null,
+          installable: isPluginTargetCompatible(v.target, hostTarget),
+          compatible: isEngineCompatible(v.engines_navide, appVersion),
+        }] : []),
+      }]
+    })
+  })
+
+  /** Join with what the user pasted: a personal invite (`tpi_`) or a public test code (`tpc_`). */
+  ipcMain.handle('plugins:testplaceJoin', async (event, args: { code?: unknown } | null): Promise<{ id: string }> => {
+    assertAuthorized(event)
+    const token = typeof args?.code === 'string' ? /\btp[ic]_[A-Za-z0-9_-]+/.exec(args.code)?.[0] : undefined
+    const via = token ? testplaceJoinVia(token) : null
+    if (!token || !via) throw new Error('TESTPLACE_ERROR [BAD_CODE]: not a Testplace invite or test code')
+    const joined = await testplaceRegistryCall<{ namespace?: unknown; name?: unknown }>(
+      '/api/testplace/join',
+      { method: 'POST', json: { token } },
+    )
+    const id = `${joined.namespace}.${joined.name}`
+    if (!isValidManifestV2PluginId(id)) throw new Error('TESTPLACE_ERROR [BAD_RESPONSE]: the Registry did not name a Navide plugin')
+    testplaceStore.recordJoin(id, via)
+    return { id }
+  })
+
+  /** Leave a test. An installed build stays installed; it just stops getting new test builds. */
+  ipcMain.handle('plugins:testplaceLeave', async (event, args: { id?: unknown } | null): Promise<{ ok: true }> => {
+    assertAuthorized(event)
+    if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+    const dot = args.id.indexOf('.')
+    await testplaceRegistryCall(
+      `/api/testplace/${encodeURIComponent(args.id.slice(0, dot))}/${encodeURIComponent(args.id.slice(dot + 1))}/leave`,
+      { method: 'POST' },
+    )
+    testplaceStore.forgetJoin(args.id)
+    return { ok: true }
+  })
+
+  /** The invite form's Send (the user's, never an agent's): one invitation per
+   *  label. The join tokens go back to that form only; nothing here logs them. */
+  ipcMain.handle(
+    'plugins:testplaceInvite',
+    async (event, args: { id?: unknown; labels?: unknown } | null): Promise<DeveloperCallResult> => {
+      assertAuthorized(event)
+      if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+      const labels = args?.labels
+      if (
+        !Array.isArray(labels) ||
+        labels.length < 1 ||
+        labels.length > 100 ||
+        labels.some((label) => typeof label !== 'string' || !label.trim() || label.length > 120)
+      ) {
+        throw new Error('invitees must be 1-100 non-empty labels of up to 120 characters')
+      }
+      const dot = args.id.indexOf('.')
+      const res = await developerRegistryFetch(
+        `/api/testplace/${encodeURIComponent(args.id.slice(0, dot))}/${encodeURIComponent(args.id.slice(dot + 1))}/invites`,
+        { method: 'POST', json: { labels: labels.map((label: string) => label.trim()) } },
+        'account',
+      )
+      if (res.status === 201 || res.status === 200) return { ok: true, status: res.status, body: res.body }
+      const { code, message } = registryError(res.body)
+      return { ok: false, status: res.status, code, message }
+    }
+  )
+
   const verifyRegistryPackage = async (args: {
     namespace: string
     name: string
     version?: string
-  }): Promise<PreparedInstall> => {
+    /** A Testplace build: detail and download use the user's Navide Cloud
+     *  account (held by the Host), and only an invited tester gets either. */
+    testplace?: boolean
+  }): Promise<PreparedInstall & { registryFacts: Record<string, unknown> | null }> => {
     const marketplace = resolveConfiguredMarketplace(trust)
     const base = marketplace.registryUrl.replace(/\/+$/, '')
-    const detailRes = await fetch(`${base}/api/extensions/${args.namespace}/${args.name}`)
-    if (!detailRes.ok) throw new Error(`extension not found: HTTP ${detailRes.status}`)
-    const detail = (await detailRes.json()) as {
-      latest_version: string | null
+    const detail = (args.testplace
+      ? await testplaceRegistryCall(`/api/testplace/${args.namespace}/${args.name}`)
+      : await (async () => {
+          const detailRes = await fetch(`${base}/api/extensions/${args.namespace}/${args.name}`)
+          if (!detailRes.ok) throw new Error(`extension not found: HTTP ${detailRes.status}`)
+          return detailRes.json()
+        })()) as {
+      /** Absent on a Testplace detail, whose versions come newest first. */
+      latest_version?: string | null
       trust_metadata: RegistryTrustMetadata
       trust_metadata_signature: string
       versions: Array<{
@@ -1162,9 +2271,14 @@ export function registerPluginIpc(
         trust_tier: string
         yanked: boolean
         engines_navide?: string | null
+        disclosure?: unknown
+        disclosure_envelope?: unknown
+        disclosure_signature?: unknown
+        scan?: unknown
+        registry?: unknown
       }>
     }
-    const wanted = args.version ?? detail.latest_version
+    const wanted = args.version ?? (args.testplace ? detail.versions[0]?.version : detail.latest_version)
     const artifacts = detail.versions.filter((v) => v.version === wanted && !v.yanked)
     if (artifacts.length === 0) throw new Error(`no installable version ${wanted ?? '(latest)'} found`)
     // One row per target artifact: take this Host's platform build, else the
@@ -1197,37 +2311,90 @@ export function registerPluginIpc(
       trustMetadata: detail.trust_metadata,
       trustMetadataSignature: detail.trust_metadata_signature,
       claimedTrustTier: versionRow.trust_tier,
+      disclosure: versionRow.disclosure,
+      disclosureEnvelope: versionRow.disclosure_envelope,
+      disclosureSignature: versionRow.disclosure_signature,
+      scan: versionRow.scan,
       provenance: 'official-registry',
-    }, undefined, marketplace.trust)
+    }, args.testplace ? testplaceInstallerDeps(args.namespace, args.name, versionRow.version, versionRow.target) : undefined, marketplace.trust)
     assertEngineCompatible(result.id, result.version, result.manifest, appVersion)
-    return result
+    // The `registry` facts are unsigned Registry information (contract 3.4).
+    return { ...result, registryFacts: jsonObjectOrNull(versionRow.registry) }
   }
 
-  ipcMain.handle(
-    'plugins:prepareInstall',
-    async (event, args: { namespace: string; name: string; version?: string }) => {
-      assertAuthorized(event)
-      const result = await verifyRegistryPackage(args)
+  // Shared by the window's install flow and an agent's update whose
+  // disclosure is unchanged (O1, setPluginAgentActionHandler below).
+  const prepareRegistryInstall = async (args: { namespace: string; name: string; version?: string; testplace?: boolean }) => {
+      const result = await verifyRegistryPackage({
+        namespace: args.namespace,
+        name: args.name,
+        ...(args.version !== undefined ? { version: args.version } : {}),
+        ...(args.testplace === true ? { testplace: true } : {}),
+      })
+      assertNoDeveloperFolder(result.id)
       // A pack is never installed as a package: its members are installed one
       // by one through plugins:preparePack and the ordinary install flow.
       if (isManifestV2(result.manifest) && result.manifest.extensionPack) {
         throw new Error(`${result.id} is an extension pack; install it from its Marketplace page`)
       }
       prepared.set(result.id, { pkg: result })
+      const disclosureDiff = updateDisclosureDiff(result)
+      // Declared agent tools, for the trust dialog; absent when there are none.
+      const agentTools = isManifestV2(result.manifest) ? computeDisclosure(result.manifest).agentTools : []
+      // From the envelope verifyRegistryPackageTrust just verified, never a file.
+      const source = result.registryEvidence
+        ? pluginSourceFromLegacyProvenance(
+            'official-registry',
+            isPrereleaseVersion(result.version),
+            result.registryEvidence.receipt.envelope.channel
+          )
+        : undefined
       return {
         id: result.id,
         version: result.version,
         trustTier: result.trustTier,
         sensitive: result.sensitive,
         containsBackendExecutable: result.containsBackendExecutable,
+        hasViews: manifestHasViews(result.manifest),
+        ...(agentTools.length > 0 ? { agentTools } : {}),
         requiresConfirmation: result.requiresConfirmation,
         publisherId: result.publisherId,
         requiresPublisherTrust:
           result.registryEvidence !== undefined &&
           !result.official &&
           !publisherTrust.isTrusted(result.publisherId, result.id),
+        // Asked exactly as before D-d (user ruling 2026-10-17, option B): the
+        // diff is shown in the dialog, never used to skip the confirmation.
         requiresRiskConfirmation: result.requiresConfirmation,
+        disclosureDiff,
+        disclosure: result.disclosure ?? null,
+        scan: result.scan ?? null,
+        registry: result.registryFacts,
+        ...(source ? { source } : {}),
+        ...(source === 'testplace' && result.registryEvidence?.receipt.envelope.expiresAt
+          ? { expiresAt: result.registryEvidence.receipt.envelope.expiresAt }
+          : {}),
+        ...(source === 'testplace' && testplaceStore.joinVia(result.id)
+          ? { testplaceVia: testplaceStore.joinVia(result.id)! }
+          : {}),
+        // D7: a Marketplace install over a local one asks first.
+        ...(() => {
+          const local = installedLocalPackage(result.id)
+          return local
+            ? { replacesLocal: { version: local.packageVersion ?? null }, ...backendDataOnReplace(result.id, 'marketplace') }
+            : stagedLocalCandidate(result.id)
+              ? { replacesLocal: { version: lifecycleSelector.read(result.id)?.candidate?.packageVersion ?? null } }
+              : manager.listInstalledPackages().some((pkg) => pkg.id === result.id)
+                ? {}
+                : backendDataOnReplace(result.id, 'marketplace')
+        })(),
       }
+  }
+  ipcMain.handle(
+    'plugins:prepareInstall',
+    async (event, args: { namespace: string; name: string; version?: string; testplace?: boolean }) => {
+      assertAuthorized(event)
+      return prepareRegistryInstall(args)
     }
   )
 
@@ -1376,13 +2543,25 @@ export function registerPluginIpc(
     }
   }
 
-  ipcMain.handle(
-    'plugins:commitInstall',
-    async (
-      event,
-      args: { id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean }
-    ) => {
-      assertAuthorized(event)
+  type CommitInstallArgs = {
+    id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean
+  }
+  // Bookkeeping only: a failed save means the first start asks instead.
+  const noteInstallConsent = (pluginId: string, packageVersion: string): void => {
+    try {
+      options.noteInstallConsent?.(pluginId, packageVersion)
+    } catch (error) {
+      console.warn(`[plugins] install consent for ${pluginId} not recorded: ${errorText(error)}`)
+    }
+  }
+  // Shared by the window's install flow and an agent's unchanged update (O1).
+  const commitRegistryInstall = async (args: CommitInstallArgs) => {
+      assertNoDeveloperFolder(args.id)
+      // D7: never replace a local install with the Marketplace version unasked.
+      if (installedLocalPackage(args.id) && args.replaceConfirmed !== true) {
+        throw new Error(`replacing the local file version of ${args.id} requires confirmation`)
+      }
+      if (installedLocalPackage(args.id)) rememberReattach(args.id, 'marketplace', args.reattachBackendData)
       if (activeTransactions.has(args.id)) {
         throw new Error(`plugin transaction already in progress for ${args.id}`)
       }
@@ -1466,6 +2645,15 @@ export function registerPluginIpc(
         lifecycleSelector.stageCandidate(pkg.id, candidate, {
           candidateGrant: { selection: candidate, grant: candidateGrant },
         })
+        try {
+          if (pkg.scan) installScans.record(pkg.id, pkg.version, pkg.scan)
+          const kept = lifecycleSelector.read(pkg.id)
+          installScans.keepVersions(pkg.id, [kept?.active, kept?.previous, kept?.candidate]
+            .filter((selection) => selection !== undefined && selection !== null)
+            .map((selection) => selection!.packageVersion))
+        } catch (error) {
+          console.warn(`[plugins] install scan record for ${pkg.id} failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
         if (publisherRequiresTrust) {
           publisherTrust.trust(pkg.publisherId, pkg.id)
         }
@@ -1477,12 +2665,1245 @@ export function registerPluginIpc(
       } finally {
         activeTransactions.delete(pkg.id)
       }
+  }
+  ipcMain.handle('plugins:commitInstall', async (event, args: CommitInstallArgs) => {
+    assertAuthorized(event)
+    const version = prepared.get(args.id)?.pkg.version
+    const committed = await commitRegistryInstall(args)
+    if (version !== undefined) noteInstallConsent(committed.id, version)
+    return activateIfFirstInstall(committed)
+  })
+
+  // DX report A1 (card K3): install a `.vsix` the user picked in this window.
+  // The file comes only from the Host's own dialog; the call takes no
+  // arguments, so neither a plugin, an agent nor the environment can name
+  // one. The file is read once, here; every later step uses those bytes.
+  // MED-1 on #425: fetch the root-signed takedown list before a file install,
+  // so a Host that never stored one still checks it. Any failure leaves the
+  // stored list as it was; the dialog then says the check could not be done.
+  const refreshTakedownList = async (): Promise<void> => {
+    try {
+      const marketplace = resolveConfiguredMarketplace(trust)
+      const base = marketplace.registryUrl.replace(/\/+$/, '')
+      const listing = await fetch(`${base}/api/extensions?limit=1`)
+      if (!listing.ok) return
+      const item = ((await listing.json()) as { items?: Array<Record<string, unknown>> }).items?.[0]
+      if (typeof item?.namespace !== 'string' || typeof item.name !== 'string') return
+      const res = await fetch(`${base}/api/extensions/${encodeURIComponent(item.namespace)}/${encodeURIComponent(item.name)}`)
+      if (!res.ok) return
+      const detail = (await res.json()) as { trust_metadata: RegistryTrustMetadata; trust_metadata_signature: string }
+      verifyRegistryTrustMetadata(
+        detail.trust_metadata,
+        detail.trust_metadata_signature,
+        marketplace.trust.pinnedRegistryRootKey,
+        marketplace.trust.now,
+      )
+      const snapshot = {
+        schemaVersion: 1 as const,
+        metadata: detail.trust_metadata,
+        metadataSignature: detail.trust_metadata_signature,
+      }
+      let stored: Uint8Array | null = null
+      try {
+        stored = new Uint8Array(readFileSync(join(pluginsRoot, REGISTRY_TRUST_SNAPSHOT_NAME)))
+      } catch {
+        stored = null
+      }
+      assertRegistryTrustSnapshotDoesNotRollback(stored, snapshot)
+      writeRegistryTrustSnapshot(pluginsRoot, snapshot)
+    } catch (error) {
+      console.warn(`[plugins] takedown list not refreshed before a file install: ${errorText(error)}`)
+    }
+  }
+
+  // W1 (A3, digest takedown): the root-signed document a local install checks
+  // its file against. Refreshed before every file install like the takedown
+  // list; any failure keeps the stored one, and without one the file is shown
+  // as unsigned-or-unverifiable and no digest is refused.
+  const refreshLocalInstallTrust = async (): Promise<void> => {
+    try {
+      const marketplace = resolveConfiguredMarketplace(trust)
+      const base = marketplace.registryUrl.replace(/\/+$/, '')
+      const res = await fetch(`${base}${LOCAL_INSTALL_TRUST_PATH}`)
+      if (!res.ok) return
+      const body = (await res.json()) as { local_trust_metadata?: unknown; local_trust_metadata_signature?: unknown }
+      writeLocalInstallTrust(
+        pluginsRoot,
+        body.local_trust_metadata,
+        body.local_trust_metadata_signature,
+        marketplace.trust.pinnedRegistryRootKey,
+      )
+    } catch (error) {
+      console.warn(`[plugins] local install trust not refreshed: ${errorText(error)}`)
+    }
+  }
+
+  /** Verify one local `.vsix` already read into memory and hold it for the
+   * consent dialog. Shared by the user's own file dialog (K3) and an agent's
+   * prefilled request (plugins_install_file_fill); both commit through
+   * plugins:commitLocalInstall, so what is installed is these bytes. */
+  const prepareLocalFile = async (bytes: Uint8Array, signature: string | null) => {
+    await Promise.all([refreshTakedownList(), refreshLocalInstallTrust()])
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const pkg = prepareLocalInstall(bytes, {
+      pinnedRegistryRootKey: marketplace.trust.pinnedRegistryRootKey,
+      trustSnapshot: readRegistryTrustSnapshot(pluginsRoot),
+      expectedTarget: marketplace.trust.expectedTarget,
+      localInstallTrust: readLocalInstallTrust(pluginsRoot, marketplace.trust.pinnedRegistryRootKey),
+      signature,
+    })
+    const localSignature = pkg.localSignature ?? { state: 'none' as const }
+    let scan: ScanReport | null = null
+    if (options.scanLocalPackage) {
+      try {
+        scan = await options.scanLocalPackage({
+          files: new Map(pkg.entries.flatMap((entry) => {
+            const path = entry.type === 'regular' ? canonicalArchivePath(entry.path, 'regular') : null
+            return path === null ? [] : [[path, new Uint8Array(entry.data)] as const]
+          })),
+          artifactDigest: pkg.digest,
+          target: pkg.localTarget ?? UNIVERSAL_PLUGIN_TARGET,
+          manifest: pkg.manifest,
+        })
+      } catch (error) {
+        // The scan informs the dialog; it never decides the install.
+        console.warn(`[plugins] local scan of ${pkg.id} failed: ${errorText(error)}`)
+      }
+    }
+    if (isManifestV2(pkg.manifest) && pkg.manifest.extensionPack) {
+      throw new Error(`${pkg.id} is an extension pack; packs install only from the Marketplace`)
+    }
+    assertNoDeveloperFolder(pkg.id)
+    assertEngineCompatible(pkg.id, pkg.version, pkg.manifest, hostAppVersion())
+    // Said now, before the consent dialog, in the words staging would use.
+    if (localVersionAlreadyInstalled(pkg, pluginsRoot)) {
+      throw new InstallError(`immutable candidate already exists for ${pkg.id}@${pkg.version}`)
+    }
+    preparedLocal.set(pkg.id, pkg)
+    const replaced = manager.listInstalledPackages().find((item) => item.id === pkg.id)
+    const agentTools = isManifestV2(pkg.manifest) ? computeDisclosure(pkg.manifest).agentTools : []
+    return {
+      id: pkg.id,
+      version: pkg.version,
+      trustTier: pkg.trustTier,
+      sensitive: pkg.sensitive,
+      containsBackendExecutable: pkg.containsBackendExecutable,
+      hasViews: manifestHasViews(pkg.manifest),
+      ...(agentTools.length > 0 ? { agentTools } : {}),
+      requiresConfirmation: true,
+      publisherId: pkg.publisherId,
+      requiresPublisherTrust: false,
+      requiresRiskConfirmation: true,
+      disclosureDiff: updateDisclosureDiff(pkg),
+      disclosure: pkg.disclosure ?? null,
+      scan,
+      localScan: options.scanLocalPackage ? 'ran' : 'unavailable',
+      registry: null,
+      source: pkg.source,
+      localSignature: localSignature.state === 'none'
+        ? { state: 'none' }
+        : {
+            state: localSignature.state,
+            publisherId: localSignature.publisherId,
+            ...('keyId' in localSignature ? { keyId: localSignature.keyId } : {}),
+          },
+      digest: pkg.digest,
+      takedownChecked: pkg.takedownChecked === true,
+      ...(replaced
+        ? {
+            replaces: {
+              version: replaced.packageVersion ?? null,
+              source: replaced.source === 'local-unsigned' ? 'local-unsigned' : 'marketplace',
+            },
+            ...backendDataOnReplace(pkg.id, 'local-unsigned'),
+          }
+        : backendDataOnReplace(pkg.id, 'local-unsigned')),
+    }
+  }
+
+  // #643 review L1: after a failed approval of a file install, whether the
+  // copy the dialog showed (its digest) is still held here, refused before it
+  // was used, so the dialog asks for the file again only once it is gone.
+  ipcMain.handle('plugins:preparedLocalInstall', (event, args: { id?: unknown; digest?: unknown } | null) => {
+    assertAuthorized(event)
+    const pkg = typeof args?.id === 'string' ? preparedLocal.get(args.id) : undefined
+    return { present: pkg !== undefined && typeof args?.digest === 'string' && pkg.digest === args.digest }
+  })
+
+  ipcMain.handle('plugins:installFromFile', async (event) => {
+    assertAuthorized(event)
+    const pickFile = options.pickLocalPackageFile
+    if (!pickFile) throw new Error('installing from a file is unavailable')
+    const path = await pickFile(event)
+    if (!path) return null
+    // Review LOW-1: only a regular file is read (never a FIFO or a device).
+    if (!statSync(path).isFile()) throw new Error('the chosen path is not a regular file')
+    const bytes = new Uint8Array(readFileSync(path))
+    return prepareLocalFile(bytes, readSidecarSignature(path))
+  })
+
+  ipcMain.handle(
+    'plugins:commitLocalInstall',
+    async (
+      event,
+      args: { id?: unknown; riskConfirmed?: unknown; replaceConfirmed?: unknown; reattachBackendData?: unknown; expectedDigest?: unknown } | null,
+    ) => {
+      assertAuthorized(event)
+      const id = typeof args?.id === 'string' ? args.id : ''
+      const pkg = preparedLocal.get(id)
+      if (!pkg) throw new Error(`no prepared local install for ${id}; choose the file again`)
+      // An agent's request was approved for the digest its card showed; a file
+      // of the same id prepared since (another request, the user's own pick)
+      // is not what was approved.
+      if (args?.expectedDigest !== undefined && args.expectedDigest !== pkg.digest) {
+        throw new Error(`the prepared file of ${id} is not the one that was approved; ask again`)
+      }
+      assertNoDeveloperFolder(id)
+      if (activeTransactions.has(id)) {
+        throw new Error(`plugin transaction already in progress for ${id}`)
+      }
+      // Unreviewed code: consent is always required, whatever it declares.
+      if (args?.riskConfirmed !== true) {
+        throw new Error(`consent is required to install ${id} from a file`)
+      }
+      // D7: replacing an installed package of the same id is asked first.
+      const installedNow = manager.listInstalledPackages().some((item) => item.id === id) ||
+        lifecycleSelector.read(id)?.active !== undefined
+      if (installedNow && args?.replaceConfirmed !== true) {
+        throw new Error(`replacing the installed ${id} with the file version requires confirmation`)
+      }
+      rememberReattach(id, 'local-unsigned', args?.reattachBackendData)
+      const commitTrust = resolveConfiguredMarketplace(trust).trust
+      activeTransactions.add(id)
+      preparedLocal.delete(id)
+      const candidateRecord = localTrustRecordPath(pluginsRoot, id, 'candidate')
+      let committed: { id: string; requires: string[]; restartRequired: true }
+      try {
+        const staged = stageInstallCandidate(pkg, pluginsRoot)
+        const scanned = loadPluginDir(staged.candidateDir)
+        if (scanned.error) throw new Error(`staged candidate is invalid: ${scanned.error}`)
+        if (!scanned.activation || !scanned.packageSummary) {
+          throw new Error('immutable activation requires a Manifest v2 candidate')
+        }
+        // The consent covers exactly the copy just written under the plugins
+        // root, never the file the user picked (which may change later).
+        const record = createLocalTrustRecord(staged.candidateDir, {
+          source: 'file',
+          consentedAt: new Date().toISOString(),
+          signer: pkg.localSignature?.state === 'verified' ? pkg.localSignature.signer : null,
+          // d5: checked again against the blocked digests at every load.
+          artifactDigest: pkg.digest,
+        })
+        // Review LOW-2: the record must cover exactly the bytes read from the
+        // chosen file, not whatever the staged directory holds by now.
+        const expected = new Map(pkg.entries
+          .filter((entry) => entry.type === 'regular')
+          .map((entry) => [canonicalArchivePath(entry.path, 'regular'), sha256Hex(entry.data)] as const))
+        const recorded = Object.entries(record.fileDigests)
+        if (recorded.length !== expected.size || recorded.some(([path, digest]) => expected.get(path) !== digest)) {
+          throw new Error(`the staged copy of ${id} does not match the chosen file`)
+        }
+        writeLocalTrustRecord(candidateRecord, record)
+        const decision = verifyCommittedInstall(staged.candidateDir, id, commitTrust)
+        if (decision.action === 'quarantine') {
+          throw new Error(`staged candidate refused: ${decision.reason}`)
+        }
+        const activation: PluginActivationCatalogEntry = {
+          ...scanned.activation,
+          source: 'local-unsigned',
+          artifactDigest: decision.artifactDigest,
+        }
+        if (scanned.descriptor) {
+          if (!options.preflightCandidateFrontend) {
+            throw new Error('candidate frontend preflight is unavailable')
+          }
+          await options.preflightCandidateFrontend(scanned.descriptor)
+        }
+        if (activation.backend) {
+          if (!options.preflightCandidateBackend) {
+            throw new Error('candidate backend preflight is unavailable')
+          }
+          await options.preflightCandidateBackend(activation)
+        }
+        const candidate: PluginPackageSelection = {
+          packageVersion: pkg.version,
+          target: staged.target,
+          artifactDigest: decision.artifactDigest,
+        }
+        // The same version-bound grant a Registry candidate gets; it only
+        // takes effect when the user restarts the package.
+        let candidateGrant: HostCapabilityGrant
+        if (scanned.descriptor) {
+          const policy = scanned.descriptor.capabilityPolicy
+          if (!policy || policy.kind !== 'manifest-v2') {
+            throw new Error('invalid Manifest v2 capability policy')
+          }
+          candidateGrant = {
+            packageVersion: candidate.packageVersion,
+            system: [...policy.system],
+            ...(policy.shell ? { shell: policy.shell } : {}),
+            ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
+            storage: true,
+          }
+        } else {
+          candidateGrant = { packageVersion: candidate.packageVersion, system: [], storage: true }
+        }
+        lifecycleSelector.stageCandidate(id, candidate, {
+          candidateGrant: { selection: candidate, grant: candidateGrant },
+        })
+        committed = { id, requires: scanned.packageSummary.requires, restartRequired: true }
+      } catch (error) {
+        try {
+          forgetLocalTrustRecords(pluginsRoot, id, ['candidate'])
+        } catch {
+          // The install failure stays the reported error.
+        }
+        throw error
+      } finally {
+        activeTransactions.delete(id)
+      }
+      noteInstallConsent(id, pkg.version)
+      return activateIfFirstInstall(committed)
     }
   )
+
+  // ---- Card K4 (DX report A2): Developer Mode and developer folders ----
+  // The switch lives in a main-process file; only this window's settings page
+  // changes it, and every change is audited in the plugin activity log. With
+  // it on, the user may load a folder they pick in the Host dialog: it is not
+  // reviewed, its content may change at any time, and its consent is bound to
+  // the folder and its declared permissions and backend.
+  const developerMode = new PluginDeveloperModeStore(pluginsRoot, options.developerModeIntegrity)
+  const developerModeOn = (): boolean =>
+    pluginDeveloperModeEnabled(process.env, app.isPackaged, developerMode.isEnabled())
+  // DESIGN-A2 G3: who asked for each prepared folder travels with it to the
+  // consent, and the record beside the store keeps it after the load.
+  const preparedFolders = new Map<string, { dir: string; permissionsDigest: string; loadedBy: DeveloperFolderLoadedBy }>()
+  const folderMeta = new PluginDeveloperFolderMetaStore(pluginsRoot, developerMode)
+
+  /** What the consent dialog shows for a developer folder, from its manifest. */
+  const describeFolder = (dir: string): {
+    pluginId: string
+    permissionsDigest: string
+    summary: Record<string, unknown>
+  } => {
+    const scanned = loadPluginDir(dir)
+    if (scanned.error) throw new Error(scanned.error)
+    const manifest = parseInstalledManifest(parseManifestJson(readFileSync(join(dir, 'manifest.json'), 'utf8')))
+    if (!isManifestV2(manifest) || !scanned.activation) {
+      throw new Error('DEVELOPER_FOLDER_V2_ONLY: Developer Mode loads Manifest v2 folders only')
+    }
+    if (isReservedPluginId(manifest.id)) {
+      throw new Error(`DEVELOPER_FOLDER_RESERVED_ID [${manifest.id}]: Developer Mode cannot claim reserved plugin id '${manifest.id}'`)
+    }
+    // Review MED-1 on #428: the root-signed takedown list applies to a
+    // folder as to a file, on every load, reload and start.
+    const takedown = localTakedownDecision(manifest, {
+      pinnedRootKey: resolveConfiguredMarketplace(trust).trust.pinnedRegistryRootKey,
+      snapshot: readRegistryTrustSnapshot(pluginsRoot),
+    })
+    if (takedown.action === 'blocked') {
+      throw new Error(`DEVELOPER_FOLDER_TAKEN_DOWN [${manifest.id}]: ${takedown.reason}`)
+    }
+    const disclosure = computeDisclosure(manifest as unknown as DisclosureManifestInput)
+    const permissionsDigest = developerPermissionsDigest(manifest)
+    return {
+      pluginId: manifest.id,
+      permissionsDigest,
+      summary: {
+        id: manifest.id,
+        version: manifest.version,
+        trustTier: 'unsigned',
+        sensitive: sensitiveCapabilities(manifestCapabilities(manifest)),
+        containsBackendExecutable: manifest.backend !== undefined,
+        hasViews: manifestHasViews(manifest),
+        ...(disclosure.agentTools.length > 0 ? { agentTools: disclosure.agentTools } : {}),
+        requiresConfirmation: true,
+        publisherId: manifest.publisher,
+        requiresPublisherTrust: false,
+        requiresRiskConfirmation: true,
+        disclosureDiff: null,
+        disclosure,
+        scan: null,
+        registry: null,
+        source: 'developer-unpacked',
+        folder: dir,
+        takedownChecked: takedown.blocklistChecked,
+      },
+    }
+  }
+
+  /** A developer folder may not take an id something else installed holds:
+   * the grant and the package registration are per id. */
+  const assertFolderIdFree = (pluginId: string, dir?: string): void => {
+    // A2-5: an entry another program wrote holds its id too, until the user
+    // consents to it again or removes it.
+    const prior = developerMode.anyFolder(pluginId)
+    if (dir !== undefined && prior && resolve(prior.path) !== resolve(dir)) {
+      throw new Error(`ANOTHER_DEVELOPER_FOLDER [${pluginId}]: ${pluginId} is loaded from another developer folder (${prior.path}); remove that folder first`)
+    }
+    const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+    if ((installed && installed.provenance !== 'developer-local-unpacked') || lifecycleSelector.read(pluginId)) {
+      throw new Error(`DEVELOPER_FOLDER_ID_INSTALLED [${pluginId}]: ${pluginId} is installed; remove it before loading a developer folder with the same id`)
+    }
+  }
+
+  // ---- DESIGN-A2 G1: automatic reload on file change ----
+  // A loaded folder whose record says autoReload (on unless the user turned
+  // it off) is watched while Developer Mode is on. A change runs the same
+  // checks as the Reload button: same permissions and backend reload it with
+  // no consent; anything else unloads it and waits for the user's consent in
+  // the main window, however often files change. A folder that cannot be read
+  // mid-edit keeps its running version. One reload runs at a time per folder,
+  // and changes made during it run one more.
+  const folderWatches = new Map<string, FolderWatch>()
+  // Review MED-2 on #543: one queue per folder for every reload, manual and
+  // automatic, so an unload and a load of the same id never interleave.
+  const folderQueues = new Map<string, Promise<void>>()
+  const autoReloadQueued = new Set<string>()
+  const autoReloading = new Set<string>()
+  const reloadErrors = new Map<string, string>()
+  const startFolderWatch = options.watchDeveloperFolder ?? watchDeveloperFolder
+  const enqueueFolderTask = <T>(pluginId: string, task: () => Promise<T>): Promise<T> => {
+    const prior = folderQueues.get(pluginId)
+    const run = prior ? prior.then(task) : task()
+    const tail = run.then(() => undefined, () => undefined)
+    folderQueues.set(pluginId, tail)
+    void tail.then(() => {
+      if (folderQueues.get(pluginId) === tail) folderQueues.delete(pluginId)
+    })
+    return run
+  }
+  const stopWatchingFolder = (pluginId: string): void => {
+    folderWatches.get(pluginId)?.close()
+    folderWatches.delete(pluginId)
+  }
+  const syncFolderWatch = (pluginId: string): void => {
+    const consent = developerMode.folder(pluginId)
+    const loaded = manager.listInstalledPackages().some(
+      (pkg) => pkg.id === pluginId && pkg.provenance === 'developer-local-unpacked',
+    )
+    if (!consent || !loaded || !developerModeOn() || !folderMeta.get(pluginId, consent.path).autoReload) {
+      stopWatchingFolder(pluginId)
+      return
+    }
+    if (folderWatches.has(pluginId)) return
+    try {
+      const watched = startFolderWatch(
+        consent.path,
+        () => scheduleAutoReload(pluginId),
+        // Review LOW-3 on #543: a watch that fails is dropped and said on the
+        // card; the next load of the folder starts a new one.
+        (error) => {
+          if (folderWatches.get(pluginId) !== watched) return
+          stopWatchingFolder(pluginId)
+          reloadErrors.set(pluginId, `automatic reload stopped: ${errorText(error)}`)
+          options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: reloadErrors.get(pluginId)!, running: true })
+        },
+      )
+      folderWatches.set(pluginId, watched)
+    } catch (error) {
+      reloadErrors.set(pluginId, `automatic reload unavailable: ${errorText(error)}`)
+    }
+  }
+  const developerFolderLoaded = (pluginId: string): boolean => manager.listInstalledPackages().some(
+    (pkg) => pkg.id === pluginId && pkg.provenance === 'developer-local-unpacked',
+  )
+  const autoReloadDeveloperFolder = async (pluginId: string): Promise<void> => {
+    const consent = developerMode.folder(pluginId)
+    if (!consent || !developerModeOn() || !folderWatches.has(pluginId)) return
+    const failed = (error: unknown): void => {
+      const running = developerFolderLoaded(pluginId)
+      reloadErrors.set(pluginId, errorText(error))
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: errorText(error), running })
+    }
+    // Review MED-3 on #543: the whole folder is checked (manifest, entries,
+    // backend executable) before the running version is touched; a folder
+    // that fails keeps it.
+    let described: ReturnType<typeof describeFolder>
+    try {
+      described = describeFolder(consent.path)
+    } catch (error) {
+      failed(error)
+      return
+    }
+    // Review LOW-2 on #543: a file change has no proposer; whoever proposed
+    // the folder stays named on the consent it now needs again.
+    // Review R2 LOW-1 on #543: every failure on the way to consent is
+    // reported like any other (card + event), never only logged.
+    const needsConsent = async (permissionsDigest?: string): Promise<void> => {
+      stopWatchingFolder(pluginId)
+      await unloadDeveloperFolder(pluginId)
+      preparedFolders.set(pluginId, {
+        dir: consent.path,
+        permissionsDigest: permissionsDigest ?? describeFolder(consent.path).permissionsDigest,
+        loadedBy: folderMeta.get(pluginId, consent.path).loadedBy,
+      })
+      reloadErrors.delete(pluginId)
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'needs-consent' })
+    }
+    if (described.pluginId !== pluginId || described.permissionsDigest !== consent.permissionsDigest) {
+      try {
+        await needsConsent(described.pluginId === pluginId ? described.permissionsDigest : undefined)
+      } catch (error) {
+        failed(error)
+      }
+      return
+    }
+    try {
+      await preflightDeveloperFolder(consent.path)
+    } catch (error) {
+      failed(error)
+      return
+    }
+    autoReloading.add(pluginId)
+    let loaded = false
+    try {
+      await unloadDeveloperFolder(pluginId)
+      loaded = activateDeveloperFolder(pluginId, 'auto-reload')
+    } catch (error) {
+      failed(error)
+      return
+    } finally {
+      autoReloading.delete(pluginId)
+    }
+    if (loaded) {
+      reloadErrors.delete(pluginId)
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reloaded' })
+      return
+    }
+    // Review MED-1/MED-3 on #543: activate refused. Say why, honestly: the
+    // switch went off, the consent went, or the declaration changed after
+    // the check (consent needed); nothing claims "reloaded".
+    stopWatchingFolder(pluginId)
+    if (!developerModeOn()) {
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: 'DEVELOPER_MODE_OFF: Developer Mode was turned off during the reload', running: false })
+      return
+    }
+    if (!developerMode.folder(pluginId)) {
+      options.onDeveloperFolderEvent?.({ pluginId, kind: 'reload-failed', error: `${pluginId} is no longer a developer folder`, running: false })
+      return
+    }
+    try {
+      await needsConsent()
+    } catch (error) {
+      failed(error)
+    }
+  }
+  const scheduleAutoReload = (pluginId: string): void => {
+    // Changes before a queued run starts are covered by it; changes during a
+    // run queue exactly one more.
+    if (autoReloadQueued.has(pluginId)) return
+    autoReloadQueued.add(pluginId)
+    void enqueueFolderTask(pluginId, async () => {
+      autoReloadQueued.delete(pluginId)
+      await autoReloadDeveloperFolder(pluginId)
+    }).catch((error: unknown) => {
+      console.warn(`[plugins] automatic reload of ${pluginId} failed: ${errorText(error)}`)
+    })
+  }
+
+  /** Plan 4a05af P1: before the running version is unloaded, the folder's
+   * views are opened hidden and must report ready(), the check an install or
+   * update preflight makes; one that does not keeps the running version. The
+   * backend is not started here, so two versions of it never run at once: it
+   * still stops and starts with the switch. */
+  const preflightDeveloperFolder = async (dir: string): Promise<void> => {
+    const descriptor = loadPluginDir(dir).descriptor
+    if (descriptor?.views?.length && options.preflightCandidateFrontend) {
+      await options.preflightCandidateFrontend(descriptor)
+    }
+  }
+
+  const unloadDeveloperFolder = async (pluginId: string): Promise<void> => {
+    if (!autoReloading.has(pluginId)) stopWatchingFolder(pluginId)
+    const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+    if (installed?.provenance !== 'developer-local-unpacked') return
+    await revokeInstalledPackageRuntime(manager, pluginsRoot, pluginId)
+    manager.removeInstalledPlugin(pluginId)
+    capabilityGrants.remove(pluginId)
+    options.onActivationChange?.({ pluginId })
+  }
+
+  /** Load one consented folder: the view's grant and the backend activation.
+   * Returns false, loading nothing, when its permissions or backend changed. */
+  const activateDeveloperFolder = (pluginId: string, trigger: DeveloperFolderLoadTrigger = 'startup'): boolean => {
+    // Review MED-1 on #543: callers await an unload first, during which the
+    // user may turn Developer Mode off or remove the folder; nothing loads then.
+    if (!developerModeOn()) return false
+    const consent = developerMode.folder(pluginId)
+    if (!consent) return false
+    const described = describeFolder(consent.path)
+    if (described.pluginId !== pluginId || described.permissionsDigest !== consent.permissionsDigest) return false
+    assertFolderIdFree(pluginId)
+    const result = manager.loadExplicitDeveloperPlugin(consent.path, true, { allowBackend: true })
+    if (!result.loaded) throw new Error(result.error)
+    const scanned = loadPluginDir(consent.path)
+    const policy = scanned.descriptor?.capabilityPolicy
+    if (scanned.descriptor && policy?.kind === 'manifest-v2' && scanned.descriptor.packageVersion) {
+      capabilityGrants.set(pluginId, {
+        packageVersion: scanned.descriptor.packageVersion,
+        system: [...policy.system],
+        ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
+        storage: true,
+      })
+    }
+    if (scanned.activation) {
+      options.onActivationChange?.({
+        pluginId,
+        activation: { ...scanned.activation, provenance: 'developer-local-unpacked' },
+      })
+    }
+    const lastLoad = { at: new Date().toISOString(), trigger }
+    folderMeta.recordLoad(pluginId, consent.path, lastLoad)
+    syncFolderWatch(pluginId)
+    // A2-3 (G2): the content fingerprint of this load, taken off the load's
+    // path and added only while it is still the last load. Disclosed in the
+    // "Local folder" info card; never compared, never blocks a load.
+    void folderFingerprint(consent.path).then((taken) => {
+      if (!existsSync(pluginsRoot) || folderMeta.get(pluginId, consent.path).lastLoad?.at !== lastLoad.at) return
+      folderMeta.recordLoad(pluginId, consent.path, { ...lastLoad, ...taken })
+    }).catch((error: unknown) => {
+      console.warn(`[plugins] fingerprint of developer folder ${pluginId} was not taken: ${errorText(error)}`)
+    })
+    return true
+  }
+
+  const developerModeState = () => ({
+    enabled: developerMode.isEnabled(),
+    // A2-5 (G5): entries another program wrote, listed until the user consents
+    // to them again or removes them; never loaded.
+    ...(() => {
+      const change = developerMode.externalChange()
+      return change ? { externalChange: change } : {}
+    })(),
+    folders: [
+      ...developerMode.folders().map((folder) => ({ ...folder, externallyChanged: false })),
+      ...developerMode.untrustedFolders().map((folder) => ({ ...folder, externallyChanged: true })),
+    ].map((folder) => ({
+      pluginId: folder.pluginId,
+      path: folder.path,
+      consentedAt: folder.consentedAt,
+      ...(({ loadedBy, loadedByUnverified, loadedByUnsigned, autoReload, lastLoad }) => ({
+        loadedBy,
+        ...(loadedByUnverified ? { loadedByUnverified } : {}),
+        ...(loadedByUnsigned ? { loadedByUnsigned } : {}),
+        autoReload,
+        ...(lastLoad ? { lastLoad } : {}),
+      }))(
+        folderMeta.get(folder.pluginId, folder.path),
+      ),
+      ...(reloadErrors.has(folder.pluginId) ? { reloadError: reloadErrors.get(folder.pluginId) } : {}),
+      loaded: manager.listInstalledPackages().some(
+        (pkg) => pkg.id === folder.pluginId && pkg.provenance === 'developer-local-unpacked',
+      ),
+      ...(folder.externallyChanged ? { externallyChanged: true } : {}),
+      ...(() => {
+        try {
+          describeFolder(folder.path)
+          return {}
+        } catch (error) {
+          return { unavailable: errorText(error) }
+        }
+      })(),
+    })),
+  })
+
+  ipcMain.handle('plugins:developerMode', (event) => {
+    assertAuthorized(event)
+    return developerModeState()
+  })
+
+  // Card K4: the launch reminder closes for this launch in every window, since
+  // each workspace window mounts its own copy. Memory only, so the next launch
+  // reminds again.
+  let developerModeReminderDismissed = false
+  ipcMain.handle('plugins:developerModeReminderDismissed', (event) => {
+    assertAuthorized(event)
+    return developerModeReminderDismissed
+  })
+  ipcMain.handle('plugins:dismissDeveloperModeReminder', (event) => {
+    assertAuthorized(event)
+    developerModeReminderDismissed = true
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('plugins:developerModeReminderDismissed')
+    }
+  })
+
+  ipcMain.handle('plugins:setDeveloperMode', async (event, args: { enabled?: unknown } | null) => {
+    assertAuthorized(event)
+    if (typeof args?.enabled !== 'boolean') throw new Error('invalid Developer Mode switch value')
+    const enabled = args.enabled
+    if (developerMode.isEnabled() !== enabled) {
+      developerMode.setEnabled(enabled)
+      manager.recordDeveloperModeChange(enabled, hostAppVersion())
+      if (!developerModeOn()) {
+        try {
+          // Review MED-1 on #543: each unload waits behind that folder's
+          // reload, which sees the switch off and loads nothing. A2-5: the
+          // entries another program wrote are unloaded too.
+          for (const folder of [...developerMode.folders(), ...developerMode.untrustedFolders()]) {
+            await enqueueFolderTask(folder.pluginId, () => unloadDeveloperFolder(folder.pluginId))
+          }
+        } finally {
+          // G4: a folder chosen but not yet consented to does not outlive the
+          // switch, even when an unload fails; turning it on again means
+          // choosing the folder again. Review R2 LOW-2 on #543: the watches
+          // stop and the reload errors go in the same case.
+          preparedFolders.clear()
+          for (const pluginId of [...folderWatches.keys()]) stopWatchingFolder(pluginId)
+          reloadErrors.clear()
+        }
+      } else {
+        await loadDeveloperFolders('developer-mode-on')
+      }
+    } else if (!enabled) {
+      // A2-5: off already, but another program's "on" may still be in the
+      // file; the user's "off" replaces it and its notice goes.
+      developerMode.setEnabled(false)
+    }
+    return developerModeState()
+  })
+
+  ipcMain.handle('plugins:loadFromFolder', async (event) => {
+    assertAuthorized(event)
+    if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
+    const pickFolder = options.pickDeveloperFolder
+    if (!pickFolder) throw new Error('loading from a folder is unavailable')
+    const dir = await pickFolder(event)
+    if (!dir) return null
+    const described = describeFolder(dir)
+    assertFolderIdFree(described.pluginId, dir)
+    preparedFolders.set(described.pluginId, { dir, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
+    return described.summary
+  })
+
+  ipcMain.handle('plugins:commitFolderLoad', async (event, args: { id?: unknown; riskConfirmed?: unknown; expectedFolder?: unknown } | null) => {
+    assertAuthorized(event)
+    if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
+    const id = typeof args?.id === 'string' ? args.id : ''
+    const pending = preparedFolders.get(id)
+    if (!pending) throw new Error(`no prepared developer folder for ${id}; choose the folder again`)
+    // The folder the consent dialog showed; another prepare of the same id
+    // since then (an agent's request, the user's own pick) is not it.
+    if (args?.expectedFolder !== undefined && args.expectedFolder !== pending.dir) {
+      throw new Error(`DEVELOPER_FOLDER_CHANGED [${id}]: the prepared folder of ${id} is not the one that was approved; choose the folder again`)
+    }
+    if (args?.riskConfirmed !== true) throw new Error(`consent is required to load ${id} from a folder`)
+    preparedFolders.delete(id)
+    // What the user saw is what they consent to: a permissions or backend
+    // change while the dialog was open asks again.
+    const described = describeFolder(pending.dir)
+    if (described.pluginId !== id || described.permissionsDigest !== pending.permissionsDigest) {
+      throw new Error(`DEVELOPER_FOLDER_CHANGED [${id}]: the permissions or backend of ${id} changed; choose the folder again`)
+    }
+    assertFolderIdFree(id, pending.dir)
+    // No install prepared for this id before the folder took it may commit.
+    prepared.delete(id)
+    preparedLocal.delete(id)
+    await unloadDeveloperFolder(id)
+    // The first load of an id takes no data an earlier package of it kept
+    // (review HIGH-3 / MED-4 on #425): a developer folder's id is only what
+    // its manifest claims. A reload of the same folder keeps its own data.
+    const dataRoot = options.nativeBackendDataRoot
+    if (!developerMode.folder(id) && dataRoot) {
+      const kept = keptNativeBackendDataSource(dataRoot, id)
+      if (kept !== null) {
+        setAsideNativeBackendData(dataRoot, id, kept)
+        forgetKeptNativeBackendDataSource(dataRoot, id)
+      }
+    }
+    developerMode.consent({
+      path: pending.dir,
+      pluginId: id,
+      permissionsDigest: pending.permissionsDigest,
+      consentedAt: new Date().toISOString(),
+    })
+    folderMeta.setLoadedBy(id, pending.dir, pending.loadedBy)
+    if (typeof described.summary.version === 'string') noteInstallConsent(id, described.summary.version)
+    activateDeveloperFolder(id, 'user-load')
+    return developerModeState()
+  })
+
+  // W1 (S2): an agent's plugins_install_file_fill. The backend asks the Host
+  // to stage the path the agent named (localStage): a `.vsix` is read once,
+  // checked and its bytes held here; a folder (Developer Mode on) is checked
+  // and its path held. The approval card and the consent dialog show that
+  // staged copy, and the main window names it only by its stagingId, never by
+  // a path. Nothing is installed here: the same consent dialog and commit as
+  // the user's own pick (plugins:commitLocalInstall / plugins:commitFolderLoad)
+  // install it, after the user presses. Developer Mode stays the user's switch.
+  ipcMain.handle('plugins:prepareAgentFileInstall', async (event, args: { stagingId?: unknown; requester?: unknown } | null) => {
+    assertAuthorized(event)
+    const stagingId = typeof args?.stagingId === 'string' ? args.stagingId : ''
+    const staged = takeAgentStaged(stagingId)
+    if (!staged) throw new Error('the staged package of this request is gone; ask the agent to send it again')
+    // The user approved: the copy is used now (its bytes are held for the
+    // consent dialog like the user's own pick) and its file goes.
+    agentStaging().discard(stagingId)
+    const meta = staged.meta
+    if (meta.kind === 'folder') {
+      if (!developerModeOn()) {
+        throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to load a Navide plugin from a folder')
+      }
+      const described = describeFolder(meta.path)
+      assertFolderIdFree(described.pluginId, meta.path)
+      // G3: the caller the approval card named; the main window approved it now.
+      const requester = args?.requester !== null && typeof args?.requester === 'object'
+        ? args.requester as { callerKind?: unknown; paneName?: unknown }
+        : {}
+      preparedFolders.set(described.pluginId, {
+        dir: meta.path,
+        permissionsDigest: described.permissionsDigest,
+        loadedBy: {
+          kind: 'agent',
+          callerKind: typeof requester.callerKind === 'string' ? requester.callerKind : 'unknown',
+          ...(typeof requester.paneName === 'string' ? { paneName: requester.paneName } : {}),
+          approvedAt: new Date().toISOString(),
+        },
+      })
+      return described.summary
+    }
+    return prepareLocalFile(staged.bytes!, meta.signature)
+  })
+
+  // The user rejected an agent's file request: its staged copy goes now.
+  ipcMain.handle('plugins:discardAgentStaged', (event, args: { stagingId?: unknown } | null) => {
+    assertAuthorized(event)
+    if (typeof args?.stagingId === 'string') agentStaging().discard(args.stagingId)
+  })
+
+  ipcMain.handle('plugins:reloadDeveloperPlugin', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to reload a developer folder')
+    const id = typeof args?.id === 'string' ? args.id : ''
+    // A2-5 (G5): an entry another program wrote is consented to again, from
+    // the folder it names, in the same dialog as a changed permission set.
+    // Review MED-2 on #543: behind any automatic reload of the same folder.
+    const untrusted = developerMode.folder(id) ? undefined : developerMode.untrustedFolders().find((folder) => folder.pluginId === id)
+    if (untrusted) {
+      return await enqueueFolderTask(id, async () => {
+        const described = describeFolder(untrusted.path)
+        if (described.pluginId !== id) throw new Error(`DEVELOPER_FOLDER_CHANGED [${id}]: the permissions or backend of ${id} changed; choose the folder again`)
+        await unloadDeveloperFolder(id)
+        preparedFolders.set(id, { dir: untrusted.path, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
+        return { reloaded: false as const, requiresConsent: true as const, prepared: described.summary }
+      })
+    }
+    if (!developerMode.folder(id)) throw new Error(`${id} is not a developer folder`)
+    // Review MED-2 on #543: behind any automatic reload of the same folder.
+    return await enqueueFolderTask(id, async () => {
+      const consent = developerMode.folder(id)
+      if (!consent) throw new Error(`${id} is not a developer folder`)
+      if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: turn on Developer Mode to reload a developer folder')
+      const described = describeFolder(consent.path)
+      if (described.pluginId !== id || described.permissionsDigest !== consent.permissionsDigest) {
+        // Changed permissions or backend: unload and ask again. File content
+        // alone never asks; it is expected to change during development.
+        await unloadDeveloperFolder(id)
+        preparedFolders.set(described.pluginId, { dir: consent.path, permissionsDigest: described.permissionsDigest, loadedBy: { kind: 'user' } })
+        return { reloaded: false as const, requiresConsent: true as const, prepared: described.summary }
+      }
+      await preflightDeveloperFolder(consent.path)
+      await unloadDeveloperFolder(id)
+      if (activateDeveloperFolder(id, 'manual-reload')) {
+        reloadErrors.delete(id)
+        return { reloaded: true as const, requiresConsent: false as const }
+      }
+      // Review MED-3 on #543: activate refused after the unload; say why.
+      if (!developerModeOn()) throw new Error('DEVELOPER_MODE_OFF: Developer Mode was turned off during the reload')
+      if (!developerMode.folder(id)) throw new Error(`${id} is no longer a developer folder`)
+      const changed = describeFolder(consent.path)
+      preparedFolders.set(changed.pluginId, { dir: consent.path, permissionsDigest: changed.permissionsDigest, loadedBy: { kind: 'user' } })
+      return { reloaded: false as const, requiresConsent: true as const, prepared: changed.summary }
+    })
+  })
+
+  // G1: the per-folder automatic reload switch, on by default.
+  ipcMain.handle('plugins:setDeveloperFolderAutoReload', async (event, args: { id?: unknown; enabled?: unknown } | null) => {
+    assertAuthorized(event)
+    const id = typeof args?.id === 'string' ? args.id : ''
+    if (typeof args?.enabled !== 'boolean') throw new Error('invalid automatic reload switch value')
+    const consent = developerMode.folder(id)
+    if (!consent) throw new Error(`${id} is not a developer folder`)
+    folderMeta.setAutoReload(id, consent.path, args.enabled)
+    syncFolderWatch(id)
+    return developerModeState()
+  })
+
+  ipcMain.handle('plugins:removeDeveloperFolder', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    const id = typeof args?.id === 'string' ? args.id : ''
+    await unloadDeveloperFolder(id)
+    // Its backend data stays, recorded as local, so no later install of the
+    // id takes it over. Review LOW-3 on #552: also for an entry another
+    // program wrote.
+    if (developerMode.anyFolder(id) && options.nativeBackendDataRoot) {
+      recordKeptNativeBackendDataSource(options.nativeBackendDataRoot, id, 'local-unsigned')
+    }
+    developerMode.forget(id)
+    folderMeta.forget(id)
+    stopWatchingFolder(id)
+    reloadErrors.delete(id)
+    return developerModeState()
+  })
+
+  // D6: a package installed from a self-hosted Registry is quarantined in a
+  // packaged build while Developer Mode is off. Say so instead of letting it
+  // disappear: the Extensions page lists these with that reason.
+  ipcMain.handle('plugins:selfHostedQuarantine', (event): Array<{ id: string; version: string | null }> => {
+    assertAuthorized(event)
+    if (marketplaceOverridesAllowed()) return []
+    const loaded = new Set(manager.listInstalledPackages().map((pkg) => pkg.id))
+    return discoverInstalledRegistryPackageIds(pluginsRoot).flatMap((id) => {
+      if (loaded.has(id)) return []
+      try {
+        const active = lifecycleSelector.read(id)?.active
+        const dir = active ? lifecycleSelector.packageDir(id, active) : join(pluginsRoot, id)
+        const receipt = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as Record<string, unknown>
+        return receipt.registryAuthority === 'self-hosted'
+          ? [{ id, version: typeof receipt.version === 'string' ? receipt.version : null }]
+          : []
+      } catch {
+        return []
+      }
+    })
+  })
+
+  // D3 (DX report §9.5): an expired Testplace build is stopped, never
+  // silently dropped. Its files, storage and grants stay; the Extensions page
+  // lists it with three choices: install the Marketplace version, keep using
+  // it (marked expired), or remove it. Keeping is offered only when the build
+  // fails on its expiry alone, so a takedown is never kept.
+  const currentRegistryTrustContext = (keepAnyExpired = false) => {
+    const marketplace = resolveConfiguredMarketplace(trust)
+    return {
+      pinnedRootKey: marketplace.trust.pinnedRegistryRootKey,
+      snapshot: readRegistryTrustSnapshot(pluginsRoot),
+      registryAuthority: marketplace.trust.registryAuthority,
+      officialRegistryUrl: marketplace.trust.officialRegistryUrl,
+      expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
+      now: marketplace.trust.now,
+      keepsExpiredTestplace: keepAnyExpired ? () => true : keepsExpiredTestplace,
+      withdrawnTestplace,
+    }
+  }
+  const expiredTestplaceBuilds = (): ExpiredTestplaceBuild[] => {
+    const loaded = new Set(manager.listInstalledPackages().map((pkg) => pkg.id))
+    return discoverInstalledRegistryPackageIds(pluginsRoot).flatMap((id): ExpiredTestplaceBuild[] => {
+      if (loaded.has(id)) return []
+      try {
+        const active = lifecycleSelector.read(id)?.active
+        const dir = active ? lifecycleSelector.packageDir(id, active) : join(pluginsRoot, id)
+        const decision = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext())
+        if (decision.action !== 'quarantine') return []
+        if (decision.code !== 'TESTPLACE_EXPIRED' && decision.code !== 'TESTPLACE_WITHDRAWN') return []
+        const expiresAt = readRegistryReceiptExpiresAt(dir)
+        const receipt = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as Record<string, unknown>
+        const version = typeof receipt.version === 'string' ? receipt.version : null
+        if (decision.code === 'TESTPLACE_WITHDRAWN') {
+          // 0.2.28 (review #551 LOW): a withdrawn build the tester disabled is
+          // not loaded but has not expired; only expired ones are listed here.
+          const now = resolveConfiguredMarketplace(trust).trust.now ?? new Date()
+          if (expiresAt !== undefined && Date.parse(expiresAt) > now.getTime()) return []
+          return [{ id, version, expiresAt: expiresAt ?? null, canKeep: false, withdrawn: true as const, keepRefusal: 'withdrawn' as const }]
+        }
+        const kept = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext(true))
+        return [{
+          id,
+          version,
+          expiresAt: expiresAt ?? null,
+          ...(kept.action === 'allow' ? { artifactDigest: kept.artifactDigest } : {}),
+          canKeep: kept.action === 'allow',
+        }]
+      } catch {
+        return []
+      }
+    })
+  }
+
+  // S8 T-MED-1 / R-MED-3: whether a test build was taken back, from the
+  // Registry's withdrawal list for this tester (never public metadata). The
+  // answer is recorded, so every load and spawn refuses a withdrawn build.
+  // `unconfirmed` (not signed in, offline, no longer a tester) records nothing.
+  const checkTestplaceWithdrawn = async (id: string, version: string): Promise<TestplaceWithdrawalState> => {
+    const dot = id.indexOf('.')
+    let res: { status: number; body: { withdrawn?: unknown } | null }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const call = developerRegistryFetch<{ withdrawn?: unknown } | null>(
+        `/api/testplace/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}/withdrawn`,
+        {},
+        'account',
+      )
+      const timeout = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), options.testplaceWithdrawalTimeoutMs ?? TESTPLACE_WITHDRAWAL_TIMEOUT_MS)
+      })
+      const answer = await Promise.race([call, timeout])
+      if (answer === 'timeout') return 'unreachable'
+      res = answer
+    } catch (error) {
+      // No developer account in this Host means nobody is signed in.
+      return /account is not available/.test(errorText(error)) ? 'signed-out' : 'unreachable'
+    } finally {
+      clearTimeout(timer)
+    }
+    if (res.status === 401) return 'signed-out'
+    // The Registry's own 404 carries a code: this account is not (or no longer)
+    // a tester. A Registry without the route answers 404/405 without one.
+    if (res.status === 404 && registryError(res.body).code === 'NOT_FOUND') return 'not-a-tester'
+    if (res.status === 404 || res.status === 405) return 'registry-outdated'
+    if (res.status !== 200) return 'unreachable'
+    if (!Array.isArray(res.body?.withdrawn)) return 'registry-outdated'
+    const versions = (res.body.withdrawn as Array<{ version?: unknown }>).flatMap((row) =>
+      typeof row?.version === 'string' ? [row.version] : [])
+    testplaceStore.setWithdrawn(id, versions)
+    return versions.includes(version) ? 'withdrawn' : 'live'
+  }
+  /** The D3 list, with "keep using" offered only when the Registry confirms
+   *  this tester's build was not taken back (fail closed). */
+  const checkedExpiredTestplaceBuilds = async (): Promise<ExpiredTestplaceBuild[]> =>
+    Promise.all(expiredTestplaceBuilds().map(async (build) => {
+      if (!build.canKeep || !build.version) return build
+      const state = await checkTestplaceWithdrawn(build.id, build.version)
+      if (state === 'live') return build
+      const { artifactDigest: _digest, ...rest } = build
+      return state === 'withdrawn'
+        ? { ...rest, canKeep: false, withdrawn: true as const, keepRefusal: 'withdrawn' as const }
+        : { ...rest, canKeep: false, keepRefusal: state }
+    }))
+
+  // DX report §9.5: a Testplace build the Registry promoted keeps its bytes,
+  // so testers do not reinstall. When the public listing has this exact
+  // version, target and digest under a non-testplace envelope that verifies,
+  // only the receipt is swapped (pluginReceiptPromotion.ts): a staged copy
+  // with the new receipt, verified, then renamed into place. The selection,
+  // grant and stored data stay; the source reads marketplace from then on.
+  // Answers whether it adopted the release; never installs anything else.
+  const adoptTestplaceRelease = async (id: string, reload: boolean): Promise<boolean> => {
+    const active = lifecycleSelector.read(id)?.active
+    if (!active || active.layout === 'legacy-mutable') return false
+    const dir = lifecycleSelector.packageDir(id, active)
+    if (readRegistryReceiptChannel(dir) !== 'testplace') return false
+    const current = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as RegistryInstallReceipt
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const base = marketplace.registryUrl.replace(/\/+$/, '')
+    const dot = id.indexOf('.')
+    const res = await fetch(`${base}/api/extensions/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}`)
+    if (!res.ok) return false
+    const detail = (await res.json()) as {
+      trust_metadata: RegistryTrustMetadata
+      trust_metadata_signature: string
+      versions?: Array<{ version?: unknown; target?: unknown; package_digest?: unknown; yanked?: unknown; registry_envelope?: RegistryPackageEnvelope; registry_signature?: string }>
+    }
+    const row = (detail.versions ?? []).find((v) =>
+      v.version === current.version && v.target === current.target && v.package_digest === current.artifactDigest && v.yanked !== true)
+    const envelope = row?.registry_envelope
+    if (!row || !envelope || !row.registry_signature || envelope.channel === 'testplace') return false
+    verifyRegistryPackageTrust({
+      envelope,
+      envelopeSignature: row.registry_signature,
+      trustMetadata: detail.trust_metadata,
+      trustMetadataSignature: detail.trust_metadata_signature,
+      pinnedRootKey: marketplace.trust.pinnedRegistryRootKey,
+      expected: {
+        artifactDigest: current.artifactDigest,
+        packageId: current.packageId,
+        version: current.version,
+        target: current.target,
+        publisherId: current.publisherId,
+      },
+      expectedHostTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
+      now: marketplace.trust.now,
+    })
+    const snapshot = { schemaVersion: 1 as const, metadata: detail.trust_metadata, metadataSignature: detail.trust_metadata_signature }
+    let stored: Uint8Array | null = null
+    try {
+      stored = new Uint8Array(readFileSync(join(pluginsRoot, REGISTRY_TRUST_SNAPSHOT_NAME)))
+    } catch {
+      stored = null
+    }
+    assertRegistryTrustSnapshotDoesNotRollback(stored, snapshot)
+    writeRegistryTrustSnapshot(pluginsRoot, snapshot)
+    swapRegistryReceipt(
+      pluginsRoot,
+      dir,
+      id,
+      registryReceiptFromEvidence({
+        packageId: current.packageId,
+        version: current.version,
+        publisherId: current.publisherId,
+        target: current.target,
+        artifactDigest: current.artifactDigest,
+        envelope,
+        envelopeSignature: row.registry_signature,
+        registryAuthority: current.registryAuthority,
+      }),
+      (staged) => verifyInstalledRegistryPackage(staged, id, currentRegistryTrustContext()),
+    )
+    testplaceStore.forget(id)
+    if (reload && !manager.listInstalledPackages().some((pkg) => pkg.id === id)) {
+      const reloaded = manager.loadInstalledPlugins(
+        pluginsRoot,
+        { provenance: 'official-registry', trust: currentRegistryTrustContext() },
+        new Set([id])
+      )
+      for (const activation of reloaded.activationCatalog) {
+        options.onActivationChange?.({ pluginId: activation.pluginId, activation })
+      }
+    }
+    return true
+  }
+
+  /** "Install the Navide Marketplace version" first tries this: no download, no new consent. */
+  ipcMain.handle('plugins:adoptTestplaceRelease', async (event, args: { id?: unknown } | null): Promise<{ adopted: boolean }> => {
+    assertAuthorized(event)
+    if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+    if (activeTransactions.has(args.id)) throw new Error(`plugin transaction already in progress for ${args.id}`)
+    activeTransactions.add(args.id)
+    try {
+      return { adopted: await adoptTestplaceRelease(args.id, true) }
+    } finally {
+      activeTransactions.delete(args.id)
+    }
+  })
+
+  ipcMain.handle('plugins:expiredTestplace', async (event): Promise<ExpiredTestplaceBuild[]> => {
+    assertAuthorized(event)
+    return checkedExpiredTestplaceBuilds()
+  })
+
+  // Disclose, don't restrict: an installed Registry package that is stopped
+  // because its trust data fails against this computer's clock. Only the
+  // console said so before; the Extensions page lists these and points at the
+  // clock. The check itself is the unchanged startup / refresh check.
+  ipcMain.handle('plugins:clockQuarantine', (event): Array<{ id: string; version: string | null; clock: RegistryClockRefusal }> => {
+    assertAuthorized(event)
+    const loaded = new Set(manager.listInstalledPackages().map((pkg) => pkg.id))
+    return discoverInstalledRegistryPackageIds(pluginsRoot).flatMap((id) => {
+      if (loaded.has(id)) return []
+      try {
+        const active = lifecycleSelector.read(id)?.active
+        const dir = active ? lifecycleSelector.packageDir(id, active) : join(pluginsRoot, id)
+        const decision = verifyInstalledRegistryPackage(dir, id, currentRegistryTrustContext())
+        if (decision.action !== 'quarantine') return []
+        const clock = registryClockRefusal(decision.reason)
+        if (!clock) return []
+        const receipt = JSON.parse(readFileSync(join(dir, REGISTRY_RECEIPT_NAME), 'utf8')) as Record<string, unknown>
+        return [{ id, version: typeof receipt.version === 'string' ? receipt.version : null, clock }]
+      } catch {
+        return []
+      }
+    })
+  })
+
+  // "Keep using (expired)": the user's choice for this exact artifact. It is
+  // loaded again at once; an update or a new install of the id asks again.
+  ipcMain.handle('plugins:keepExpiredTestplace', async (event, args: { id?: unknown } | null): Promise<{ ok: true }> => {
+    assertAuthorized(event)
+    if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+    const id = args.id
+    const build = (await checkedExpiredTestplaceBuilds()).find((item) => item.id === id)
+    if (!build) throw new Error(`${id} is not an expired Testplace build`)
+    if (build.keepRefusal === 'withdrawn') throw new Error(`${id} cannot be kept: its developer or Navide withdrew it`)
+    if (build.keepRefusal) {
+      throw new Error(`${id} cannot be kept: the Navide Marketplace could not confirm it was not withdrawn (${build.keepRefusal})`)
+    }
+    if (!build.canKeep || !build.artifactDigest) {
+      throw new Error(`${id} cannot be kept: it was taken down or no longer verifies`)
+    }
+    testplaceStore.keepExpired(id, build.artifactDigest, build.expiresAt ?? '')
+    const reloaded = manager.loadInstalledPlugins(
+      pluginsRoot,
+      { provenance: 'official-registry', trust: currentRegistryTrustContext() },
+      new Set([id])
+    )
+    for (const activation of reloaded.activationCatalog) {
+      options.onActivationChange?.({ pluginId: activation.pluginId, activation })
+    }
+    return { ok: true }
+  })
+
+  async function loadDeveloperFolders(trigger: DeveloperFolderLoadTrigger = 'startup'): Promise<void> {
+    if (!developerModeOn()) return
+    for (const folder of developerMode.folders()) {
+      try {
+        activateDeveloperFolder(folder.pluginId, trigger)
+      } catch (error) {
+        console.warn(`[plugins] developer folder ${folder.pluginId} was not loaded: ${errorText(error)}`)
+      }
+    }
+  }
 
   ipcMain.handle('plugins:restart', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    // L1: a first install is active once approved, so a Restart that still
+    // follows the commit (an older flow, a second click) has nothing to do.
+    const selected = lifecycleSelector.read(id)
+    if (selected?.active && !selected.candidate && !selected.activation && !activeTransactions.has(id)) {
+      return { id, packageVersion: selected.active.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
+    }
+    return restartStagedCandidate(id)
+  })
+
+  /** A first install staged and not yet promoted: a candidate with no active
+   * package, no activation in progress and nothing loaded under its id (a
+   * factory rollback also leaves only a candidate; the bundled package runs). */
+  function isStagedFirstInstall(
+    record: ReturnType<PluginActivationSelector['read']>,
+  ): record is NonNullable<ReturnType<PluginActivationSelector['read']>> & { candidate: PluginPackageSelection } {
+    if (!record?.candidate || record.active || record.activation) return false
+    return !manager.getDescriptor(record.pluginId) &&
+      !manager.listInstalledPackages().some((pkg) => pkg.id === record.pluginId)
+  }
+
+  /** L1: a first install takes effect when the user approves it, through the
+   * same cutover Restart runs; nothing runs under the id yet, so nothing is
+   * drained. A native backend still asks for its own consent before it
+   * starts. One that cannot be activated stays staged (Restart and Discard
+   * remain) and the answer says why. An update is left for Restart. */
+  async function activateIfFirstInstall<T extends { id: string }>(
+    committed: T,
+  ): Promise<T | (T & { restartRequired: false; activatedVersion: string }) | (T & { activationError: string })> {
+    if (!isStagedFirstInstall(lifecycleSelector.read(committed.id))) return committed
+    try {
+      const activated = await restartStagedCandidate(committed.id)
+      return { ...committed, restartRequired: false, activatedVersion: activated.packageVersion }
+    } catch (error) {
+      return { ...committed, activationError: errorText(error) }
+    }
+  }
+
+  /** L3: record a version switch for the main window. A first install is not
+   * a switch, and a failure to report never undoes the switch. */
+  function reportSwitch(
+    id: string,
+    fromVersion: string | undefined,
+    toVersion: string,
+    local: boolean,
+    agent?: PluginAgentRequester,
+  ): void {
+    if (!fromVersion || fromVersion === toVersion) return
+    try {
+      options.onPackageSwitched?.({
+        pluginId: id,
+        fromVersion,
+        toVersion,
+        source: local ? 'local-unsigned' : 'marketplace',
+        at: Date.now(),
+        ...(agent ? { agent } : {}),
+      })
+    } catch (error) {
+      console.warn(`[plugins] version switch of ${id} was not reported: ${errorText(error)}`)
+    }
+  }
+
+  /** Promote the staged candidate of `id`: what the Restart button does, and
+   * what a launch does for a first install the user never restarted. */
+  async function restartStagedCandidate(id: string, trigger: { agent?: PluginAgentRequester } = {}) {
+    assertNoDeveloperFolder(id)
     if (activeTransactions.has(id)) {
       throw new Error(`plugin transaction already in progress for ${id}`)
     }
@@ -1503,14 +3924,70 @@ export function registerPluginIpc(
     if (scanned.error || !scanned.activation || !scanned.packageSummary) {
       throw new Error(`staged candidate is invalid${scanned.error ? `: ${scanned.error}` : ''}`)
     }
+    // Card K3: a candidate installed from a file carries its local source,
+    // never the Registry provenance or the official registration.
+    const localCandidate = isLocalInstalledPackage(pluginsRoot, candidateDir, id)
+    const candidateSource = localCandidate
+      ? { source: 'local-unsigned' as const }
+      : { provenance: 'official-registry' as const }
     const activation: PluginActivationCatalogEntry = {
       ...scanned.activation,
-      provenance: 'official-registry',
+      ...candidateSource,
       artifactDigest: currentTrust.artifactDigest,
     }
     const previousDescriptor = manager.getDescriptor(id)
     const installedSummary = manager.listInstalledPackages().find((item) => item.id === id)
     const isFactory = installedSummary?.provenance === 'factory-bundled'
+    // D7: a change to or from a local source keeps nothing of the replaced
+    // package's consent: grant, rollback grant, backend and agent tool answers.
+    const sourceReplaced = localCandidate || installedSummary?.source === 'local-unsigned'
+    // L4 (D7 decided 2026-10-20): a file update over a file install keeps the
+    // replaced version as the rollback target; going back to it asks again.
+    const localToLocal = localCandidate && installedSummary?.source === 'local-unsigned'
+    // D7: the native backend data moves aside only when the source changes
+    // (Marketplace ↔ local file); an update within one source keeps it as on main.
+    const replacedSource = dataSourceOf(installedSummary)
+    const sourceChanged = installedSummary !== undefined && !isFactory &&
+      (replacedSource === 'local-unsigned') !== localCandidate
+    // MED-4: one local file replacing another hands over no data either.
+    const dataMoves = sourceChanged ||
+      (installedSummary !== undefined && localCandidate && replacedSource === 'local-unsigned')
+    const incomingSource = localCandidate ? 'local-unsigned' as const : 'marketplace' as const
+    const moved: Array<{ root: string; name: string; setAside: string | null; reattached: string | null }> = []
+    /** Put every data location back as it was before this restart. Never
+     * throws: each failure is returned, and whatever is then at a live path
+     * is set aside so the package rolled back to never gets the new source's
+     * data (review of cd04b987d). */
+    const undoDataMove = (): unknown[] => {
+      const errors: unknown[] = []
+      for (const place of moved.splice(0).reverse()) {
+        try {
+          if (place.reattached) returnReattachedNativeBackendData(place.root, place.name, place.reattached)
+          if (place.setAside) {
+            // A backend of the new source that already started may have made
+            // a folder of its own: that one is set aside too, never merged.
+            if (existsSync(join(place.root, place.name))) setAsideNativeBackendData(place.root, place.name, incomingSource)
+            reattachNativeBackendData(place.root, place.name, place.setAside)
+          }
+        } catch (error) {
+          errors.push(error)
+          try {
+            if (existsSync(join(place.root, place.name))) setAsideNativeBackendData(place.root, place.name, incomingSource)
+          } catch (isolationError) {
+            errors.push(isolationError)
+          }
+        }
+      }
+      return errors
+    }
+    const finishSourceReplacement = (): void => {
+      if (!sourceReplaced) return
+      if (!localToLocal) lifecycleSelector.forgetPrevious(id)
+      // The candidate's own install dialog (0.2.31) is not the replaced
+      // package's consent, so it stays.
+      options.forgetBackendConsent?.(id, selectedBeforeRestart.candidate?.packageVersion)
+      if (!localCandidate) forgetLocalTrustRecords(pluginsRoot, id)
+    }
     const legacyDir = join(pluginsRoot, id)
     // A v0.2.9 backend-only install has neither a descriptor nor a selector
     // record; its installed summary still names the version living at the
@@ -1594,6 +4071,33 @@ export function registerPluginIpc(
           drainedBackendOnly = true
         }
       }
+      // D7: with the old backend stopped, set its data aside before cutover.
+      // A failed move stops the restart here; nothing has been promoted yet.
+      // HIGH-3: a fresh install never takes data a removal kept from another
+      // source; data kept from its own source is reused exactly as on main.
+      // A recorded source applies whatever is installed now: an install path
+      // that does not restart (a Manifest v1 package) leaves the record in place.
+      const keptRoot = options.nativeBackendDataRoot
+      const recordedSource = keptRoot ? recordedNativeBackendDataSource(keptRoot, id) : null
+      const keptSource = recordedSource ?? (!installedSummary && keptRoot ? keptNativeBackendDataSource(keptRoot, id) : null)
+      if (keptRoot && keptSource !== null && (keptSource === 'local-unsigned' || keptSource !== incomingSource)) {
+        const entry: (typeof moved)[number] = { root: keptRoot, name: id, setAside: null, reattached: null }
+        moved.push(entry)
+        entry.setAside = setAsideNativeBackendData(keptRoot, id, keptSource)
+      }
+      if (dataMoves) {
+        const reattach = pendingReattach.delete(id)
+        for (const place of dataPlaces(id)) {
+          const entry: (typeof moved)[number] = { ...place, setAside: null, reattached: null }
+          moved.push(entry)
+          entry.setAside = setAsideNativeBackendData(place.root, place.name, replacedSource)
+          const back = reattach ? latestSetAsideNativeBackendData(place.root, place.name, 'marketplace') : null
+          if (back) {
+            reattachNativeBackendData(place.root, place.name, back)
+            entry.reattached = back
+          }
+        }
+      }
       // The old runtime may take time to drain. Re-check the exact candidate
       // bytes and current Registry authority at the cutover seam, not only
       // before the drain started.
@@ -1615,22 +4119,27 @@ export function registerPluginIpc(
       }
       const selected = lifecycleSelector.activateCandidate(id)
       promoted = true
-      const summary = { ...scanned.packageSummary, provenance: 'official-registry' as const }
+      if (localToLocal) retainActiveLocalRecordAsPrevious(pluginsRoot, id)
+      if (localCandidate) promoteLocalCandidateRecord(pluginsRoot, id)
+      const summary = { ...scanned.packageSummary, ...candidateSource }
+      const registration = localCandidate ? {} : { official: true }
       if (scanned.descriptor) {
-        manager.registerInstalledPackage(summary, scanned.descriptor, { official: true })
+        manager.registerInstalledPackage(summary, scanned.descriptor, registration)
         capabilityGrants.set(id, promotedGrant)
         manager.setPluginStorageSnapshotSelection(id, {
           activeVersion: selected.active!.packageVersion,
-          ...(selected.previous ? { previousVersion: selected.previous.packageVersion } : {}),
+          // D7: the replacing source never reads the replaced one's storage.
+          ...(selected.previous && !sourceReplaced ? { previousVersion: selected.previous.packageVersion } : {}),
         })
       } else {
         // Backend-only packages have no frontend descriptor, but they still
         // need a version-bound grant for their next update or rollback.
-        manager.registerInstalledPackage(summary, undefined, { official: true }, candidateDir)
+        manager.registerInstalledPackage(summary, undefined, registration, candidateDir)
         capabilityGrants.set(id, promotedGrant)
         manager.setPluginStorageSnapshotSelection(id, {
           activeVersion: selected.active!.packageVersion,
-          ...(selected.previous ? { previousVersion: selected.previous.packageVersion } : {}),
+          // D7: the replacing source never reads the replaced one's storage.
+          ...(selected.previous && !sourceReplaced ? { previousVersion: selected.previous.packageVersion } : {}),
         })
       }
       options.onActivationChange?.({ pluginId: id, activation })
@@ -1645,7 +4154,11 @@ export function registerPluginIpc(
         )
         manager.completePackageRestart(restartTransaction)
         lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+        finishSourceReplacement()
+        if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
+        if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
+        reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate, trigger.agent)
         return {
           id,
           packageVersion: selected.active!.packageVersion,
@@ -1654,9 +4167,41 @@ export function registerPluginIpc(
         }
       }
       lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+      finishSourceReplacement()
+      if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
+      if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
+      reportSwitch(id, previousVersion, selected.active!.packageVersion, localCandidate, trigger.agent)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
+      // A failed data move back is reported with the restart's own error,
+      // after the package rollback below has run, never instead of it.
+      // The data move back and the package rollback below never depend on
+      // each other: both run, and every failure is reported (LOW-7).
+      const moveErrors = undoDataMove()
+      // Only a move this restart made can fail to come back.
+      if (moveErrors.length > 0) {
+        // Fail closed until the user sorts the data out: no backend of this
+        // id runs again on an earlier consent.
+        try {
+          options.forgetBackendConsent?.(id)
+        } catch (forgetError) {
+          moveErrors.push(forgetError)
+        }
+      }
+      // L4 (review M1): a file-over-file switch renamed the consent records at
+      // promotion; put them back (the kept version's active again, the
+      // candidate's candidate again), so a retry neither overwrites the kept
+      // version's record nor loses the one-click way back.
+      if (promoted && localToLocal) {
+        try {
+          swapLocalRecordsForRollback(pluginsRoot, id)
+        } catch (recordError) {
+          // Fail-closed: a version without its record verifies as a Registry
+          // package, which it is not, so it cannot load or be rolled back to.
+          console.warn(`[plugins] consent records of ${id} were not restored: ${errorText(recordError)}`)
+        }
+      }
       if (promoted) {
         try {
           const promotedSelection = lifecycleSelector.read(id)
@@ -1689,10 +4234,11 @@ export function registerPluginIpc(
             const retainedGrant = promotedSelection.previousGrant
             if (!retainedGrant) throw new Error('previous package grant is unavailable for rollback')
             capabilityGrants.set(id, retainedGrant)
+            const previousSource = evidenceSource(previousDir, id)
             manager.registerInstalledPackage(
-              { ...previousScanned.packageSummary, provenance: 'official-registry' },
+              { ...previousScanned.packageSummary, ...previousSource.fields },
               previousScanned.descriptor,
-              { official: true },
+              previousSource.registration,
               previousDir,
             )
             manager.setPluginStorageSnapshotSelection(id, { activeVersion: previous.packageVersion })
@@ -1700,7 +4246,7 @@ export function registerPluginIpc(
               pluginId: id,
               activation: {
                 ...previousScanned.activation,
-                provenance: 'official-registry',
+                ...previousSource.fields,
                 artifactDigest: previousTrust.artifactDigest,
               },
             })
@@ -1733,7 +4279,19 @@ export function registerPluginIpc(
           }
         } catch (rollbackError) {
           if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-          throw new AggregateError([error, rollbackError], 'Plugin restart and rollback failed.')
+          // Fail closed: a source-changing candidate left promoted keeps none
+          // of the replaced package's native backend permissions.
+          if (sourceReplaced) {
+            try {
+              options.forgetBackendConsent?.(id)
+            } catch {
+              // The rollback failure stays the reported error.
+            }
+          }
+          throw new AggregateError(
+            [error, rollbackError, ...moveErrors],
+            'Plugin restart and rollback failed.',
+          )
         }
       }
       if (!promoted) {
@@ -1745,15 +4303,14 @@ export function registerPluginIpc(
             restartTransaction = undefined
           }
           if (drainedBackendOnly && selectedBeforeRestart.active) {
-            const priorScanned = loadPluginDir(
-              lifecycleSelector.packageDir(id, selectedBeforeRestart.active),
-            )
+            const priorDir = lifecycleSelector.packageDir(id, selectedBeforeRestart.active)
+            const priorScanned = loadPluginDir(priorDir)
             if (priorScanned.activation) {
               options.onActivationChange?.({
                 pluginId: id,
                 activation: {
                   ...priorScanned.activation,
-                  provenance: 'official-registry',
+                  ...evidenceSource(priorDir, id).fields,
                   artifactDigest: selectedBeforeRestart.active.artifactDigest,
                 },
               })
@@ -1761,15 +4318,52 @@ export function registerPluginIpc(
           }
         } catch (recoveryError) {
           if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-          throw new AggregateError([error, recoveryError], 'Plugin restart recovery failed.')
+          throw new AggregateError([error, recoveryError, ...moveErrors], 'Plugin restart recovery failed.')
         }
       }
       if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
+      if (moveErrors.length > 0) {
+        throw new AggregateError([error, ...moveErrors], 'Plugin restart failed and its data could not be put back.')
+      }
       throw error
     } finally {
       activeTransactions.delete(id)
     }
-  })
+  }
+
+  /** A first install staged without Restart has nothing running and nothing
+   * selected, so a launch promotes it the way Restart would. An update or a
+   * package displaced by a rollback stays staged beside its active package:
+   * the selector does not tell the two apart, and the user decides. Returns
+   * every candidate that could not be promoted, which stays staged. */
+  async function activateStagedFirstInstalls(): Promise<Array<{ pluginId: string; version: string; reason: string }>> {
+    const failures: Array<{ pluginId: string; version: string; reason: string }> = []
+    for (const record of lifecycleSelector.list()) {
+      if (!isStagedFirstInstall(record)) continue
+      try {
+        await restartStagedCandidate(record.pluginId)
+      } catch (error) {
+        failures.push({ pluginId: record.pluginId, version: record.candidate.packageVersion, reason: errorText(error) })
+      }
+    }
+    return failures
+  }
+
+  /** Every package staged beside the one that runs: an update waiting for
+   * Restart, or a package a rollback displaced (the selector does not tell
+   * them apart). Disclosure only; applying one is plugins:restart. */
+  function stagedUpdates(): Array<{ pluginId: string; activeVersion: string; stagedVersion: string }> {
+    const staged: Array<{ pluginId: string; activeVersion: string; stagedVersion: string }> = []
+    for (const record of lifecycleSelector.list()) {
+      if (!record.candidate || !record.active || record.activation) continue
+      staged.push({
+        pluginId: record.pluginId,
+        activeVersion: record.active.packageVersion,
+        stagedVersion: record.candidate.packageVersion,
+      })
+    }
+    return staged
+  }
 
   // Leaves the selected package running; the only exit from a candidate that
   // cannot be activated (for example over an unverifiable legacy install).
@@ -1780,6 +4374,7 @@ export function registerPluginIpc(
       throw new Error(`plugin transaction already in progress for ${id}`)
     }
     lifecycleSelector.discardCandidate(id)
+    forgetLocalTrustRecords(pluginsRoot, id, ['candidate'])
     return { ok: true }
   })
 
@@ -1844,10 +4439,11 @@ export function registerPluginIpc(
           `displaced package is no longer readable${activeScanned.error ? `: ${activeScanned.error}` : ''}`,
         )
       }
+      const activeSource = evidenceSource(activeDir, id)
       manager.registerInstalledPackage(
-        { ...activeScanned.packageSummary, provenance: 'official-registry' },
+        { ...activeScanned.packageSummary, ...activeSource.fields },
         activeScanned.descriptor,
-        { official: true },
+        activeSource.registration,
         activeDir,
       )
       manager.setPluginStorageSnapshotSelection(id, { activeVersion: active.packageVersion })
@@ -1856,7 +4452,7 @@ export function registerPluginIpc(
           pluginId: id,
           activation: {
             ...activeScanned.activation,
-            provenance: 'official-registry',
+            ...activeSource.fields,
             artifactDigest: active.artifactDigest,
           },
         })
@@ -1915,7 +4511,73 @@ export function registerPluginIpc(
     }
   }
 
-  ipcMain.handle('plugins:rollback', async (event, args: { id?: unknown } | null) => {
+  /** The grant a consent to a file package writes for exactly this version:
+   * its declared policy plus Host storage (the dialog asked the risk
+   * acknowledgement, which covers a declared full shell). */
+  function localConsentGrant(scanned: ReturnType<typeof loadPluginDir>, packageVersion: string): HostCapabilityGrant {
+    const policy = scanned.descriptor?.capabilityPolicy
+    if (scanned.descriptor && policy?.kind === 'manifest-v2') {
+      return {
+        packageVersion,
+        system: [...policy.system],
+        ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
+        storage: true,
+      }
+    }
+    return { packageVersion, system: [], storage: true }
+  }
+
+  /** L4 (review M3, D7): going back to a kept file version is consented to
+   * again with that version's own disclosure, in the dialog a file install
+   * shows: permissions, backend, agent tools, source and digest. Read only. */
+  ipcMain.handle('plugins:prepareLocalRollback', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    const selected = lifecycleSelector.read(id)
+    const previous = selected?.previous
+    if (!selected?.active || !previous || selected.candidate || selected.activation) {
+      throw new Error(`plugin ${id} has no completed activation to roll back`)
+    }
+    const previousDir = lifecycleSelector.packageDir(id, previous)
+    const recordPath = localTrustRecordFor(pluginsRoot, id, previous.packageVersion)
+    if (!recordPath || !isLocalInstalledPackage(pluginsRoot, previousDir, id)) {
+      throw new Error(`${id} ${previous.packageVersion} is not a kept file version`)
+    }
+    const scanned = loadPluginDir(previousDir)
+    if (scanned.error || !scanned.packageSummary) {
+      throw new Error(`previous package is unavailable for rollback${scanned.error ? `: ${scanned.error}` : ''}`)
+    }
+    const manifest = parseInstalledManifest(parseManifestJson(readFileSync(join(previousDir, 'manifest.json'), 'utf8')))
+    const disclosure = isManifestV2(manifest) ? computeDisclosure(manifest as unknown as DisclosureManifestInput) : null
+    const record = readLocalTrustRecord(recordPath)
+    const signature = recordedLocalSignature({ id, packageVersion: previous.packageVersion })
+    return {
+      id,
+      version: previous.packageVersion,
+      trustTier: 'unsigned' as const,
+      sensitive: sensitiveCapabilities(scanned.packageSummary.requires),
+      containsBackendExecutable: Boolean(scanned.activation?.backend),
+      hasViews: manifestHasViews(manifest),
+      ...(disclosure && disclosure.agentTools.length > 0 ? { agentTools: disclosure.agentTools } : {}),
+      requiresConfirmation: true,
+      publisherId: record.signer?.publisherId ?? id.split('.')[0],
+      requiresPublisherTrust: false,
+      requiresRiskConfirmation: true,
+      disclosure,
+      scan: null,
+      localScan: 'unavailable' as const,
+      registry: null,
+      source: 'local-unsigned' as const,
+      localSignature: signature && record.signer
+        ? { state: signature, publisherId: record.signer.publisherId, keyId: record.signer.keyId }
+        : { state: 'none' as const },
+      ...(record.artifactDigest ? { digest: record.artifactDigest } : {}),
+      rollbackFrom: selected.active.packageVersion,
+    }
+  })
+
+  ipcMain.handle('plugins:rollback', async (event, args: { id?: unknown; consentConfirmed?: unknown } | null) => {
     assertAuthorized(event)
     const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
     if (activeTransactions.has(id)) {
@@ -1963,6 +4625,14 @@ export function registerPluginIpc(
         `previous package is unavailable for rollback${previousScanned.error ? `: ${previousScanned.error}` : ''}`,
       )
     }
+    // L4: the kept file version is unreviewed code the user replaced; going
+    // back to it is consented to again, and its native backend asks again.
+    const previousIsLocal = isLocalInstalledPackage(pluginsRoot, previousDir, id)
+    if (previousIsLocal && args?.consentConfirmed !== true) {
+      throw new Error(
+        `ROLLBACK_CONSENT_REQUIRED [${id}]: going back to the file version ${previous.packageVersion} of ${id} needs your consent again`,
+      )
+    }
     const currentDescriptor = manager.getDescriptor(id)
     // A backend-only activation has no descriptor, but its exact active
     // selector identity still owns a live runtime that must drain first.
@@ -1982,11 +4652,21 @@ export function registerPluginIpc(
       const currentPreviousTrust = verifyPrevious()
       const selected = lifecycleSelector.activatePrevious(id)
       promoted = true
-      capabilityGrants.set(id, selectedBeforeRollback.previousGrant!)
+      if (previousIsLocal) {
+        swapLocalRecordsForRollback(pluginsRoot, id)
+        options.forgetBackendConsent?.(id)
+      }
+      // L4 (review M3): the renewed consent writes the grant of what the kept
+      // version declares, as a file install's consent does; the grant it had
+      // before is not carried back.
+      capabilityGrants.set(id, previousIsLocal
+        ? localConsentGrant(previousScanned, previous.packageVersion)
+        : selectedBeforeRollback.previousGrant!)
+      const previousSource = evidenceSource(previousDir, id)
       manager.registerInstalledPackage(
-        { ...previousScanned.packageSummary, provenance: 'official-registry' },
+        { ...previousScanned.packageSummary, ...previousSource.fields },
         previousScanned.descriptor,
-        { official: true },
+        previousSource.registration,
         previousDir,
       )
       manager.setPluginStorageSnapshotSelection(id, { activeVersion: selected.active!.packageVersion })
@@ -1994,7 +4674,7 @@ export function registerPluginIpc(
         pluginId: id,
         activation: {
           ...previousScanned.activation,
-          provenance: 'official-registry',
+          ...previousSource.fields,
           artifactDigest: currentPreviousTrust.artifactDigest,
         },
       })
@@ -2033,7 +4713,7 @@ export function registerPluginIpc(
                 pluginId: id,
                 activation: {
                   ...currentScanned.activation,
-                  provenance: 'official-registry',
+                  ...evidenceSource(currentDir, id).fields,
                   artifactDigest: selectedBeforeRollback.active.artifactDigest,
                 },
               })
@@ -2055,8 +4735,25 @@ export function registerPluginIpc(
     }
   })
 
-  const uninstallPlugin = async (rawId: unknown): Promise<{ ok: true }> => {
+  const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown): Promise<{ ok: true }> => {
     const id = assertPluginRemovalTarget(pluginsRoot, rawId)
+    // Plans, Git and Mini-IDE ship with Navide and can only be disabled; no
+    // other `navide.` package is removable, so its storage and grant always
+    // stay. A Marketplace first-party package (navide.browser) is the one
+    // exception: it installs from the Official Registry and is removed like
+    // any Marketplace package.
+    if (isReservedPluginId(id) && !manager.isMarketplaceFirstPartyPackage(id)) {
+      throw new Error(`first-party plugin ${id} cannot be removed or restored`)
+    }
+    // No choice means keep, exactly as before this option existed.
+    if (rawDataChoice !== undefined && rawDataChoice !== 'keep' && rawDataChoice !== 'delete') {
+      throw new Error('invalid native backend data choice')
+    }
+    const deleteNativeBackendData = rawDataChoice === 'delete'
+    const nativeBackendDataRoot = options.nativeBackendDataRoot
+    if (deleteNativeBackendData && !nativeBackendDataRoot) {
+      throw new Error('native backend data cleanup is unavailable')
+    }
     if (activeTransactions.has(id)) {
       throw new Error(`plugin transaction already in progress for ${id}`)
     }
@@ -2069,6 +4766,7 @@ export function registerPluginIpc(
     // new renderer calls from being admitted while cleanup is in progress.
     const previousVersion = installedPackageVersion(manager, pluginsRoot, id)
     const previousBackend = previousVersion ? manager.getBackendActivation(id, previousVersion) : undefined
+    const removedSource = dataSourceOf(manager.listInstalledPackages().find((pkg) => pkg.id === id))
     const pending = prepared.get(id)
     activeTransactions.add(id)
     try {
@@ -2077,6 +4775,14 @@ export function registerPluginIpc(
       // the package and restore its approved backend tuple for this session.
       try {
         await cleanupPluginStorage(id)
+        // Its browser partition (sign-ins, cookies, cache) goes with it.
+        await manager.clearPluginWebData(id)
+        // Storage a source change set aside goes with the plugin's storage.
+        if (options.pluginStorageRoot) removeNativeBackendData(options.pluginStorageRoot, pluginStorageDirName(id))
+        // The backend child was stopped with the runtime above. Deleting its
+        // data here keeps a refused deletion on the same fail-closed path:
+        // the package stays installed and its backend registration returns.
+        if (deleteNativeBackendData) removeNativeBackendData(nativeBackendDataRoot!, id)
       } catch (error) {
         if (previousBackend) {
           try {
@@ -2094,6 +4800,35 @@ export function registerPluginIpc(
       capabilityGrants.remove(id)
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
+      forgetLocalTrustRecords(pluginsRoot, id)
+      testplaceStore.forget(id)
+      // Review LOW-1 on #428: removing a developer folder's plugin (also by an
+      // agent's request) forgets its consent, so the next start does not load
+      // it again. The folder itself is never touched.
+      developerMode.forget(id)
+      folderMeta.forget(id)
+      stopWatchingFolder(id)
+      // HIGH-3: kept data remembers whose it is, so only an install of the
+      // same source takes it over. If that cannot be recorded, the data is
+      // set aside instead of being left for any later install of the id.
+      if (!deleteNativeBackendData && nativeBackendDataRoot) {
+        try {
+          recordKeptNativeBackendDataSource(nativeBackendDataRoot, id, removedSource)
+        } catch (error) {
+          console.warn(`[plugins] source of the kept data of ${id} not recorded: ${errorText(error)}; setting it aside`)
+          setAsideNativeBackendData(nativeBackendDataRoot, id, removedSource)
+        }
+      }
+      disabledPlugins.remove(id)
+      // A reinstalled package starts with no record of who disabled it.
+      recordDisableSource(id, null)
+      try {
+        installScans.removePlugin(id)
+      } catch (error) {
+        console.warn(`[plugins] install scan record for ${id} not removed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      // Its activity "first write in a workspace" rows go with it (D-e).
+      manager.forgetPluginActivity(id)
       if (options.factoryPackageIds?.includes(id)) {
         if (!options.onFactoryPackageRemoved) {
           throw new Error('factory package removal is unavailable')
@@ -2111,13 +4846,358 @@ export function registerPluginIpc(
     }
   }
 
-  ipcMain.handle('plugins:remove', async (event, args: { id?: unknown } | null) => {
+  ipcMain.handle(
+    'plugins:remove',
+    async (event, args: { id?: unknown; nativeBackendData?: unknown } | null) => {
+      assertAuthorized(event)
+      return uninstallPlugin(args?.id, args?.nativeBackendData)
+    },
+  )
+
+  // What the remove dialog discloses: whether this plugin's native backend left
+  // private data on this device, how large it is and where.
+  ipcMain.handle('plugins:nativeBackendData', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
-    return uninstallPlugin(args?.id)
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    const root = options.nativeBackendDataRoot
+    if (!root) return { exists: false, bytes: 0, path: '' }
+    return inspectNativeBackendData(root, id)
   })
+
+  // The installed (active) version's disclosure, for the agent request card's
+  // permission diff (B2): from the installed manifest, never Registry data.
+  // Null when nothing is installed or the package is Manifest v1.
+  ipcMain.handle('plugins:installedDisclosure', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
+  })
+
+  // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as
+  // the Marketplace switch below; the package stays loaded and the Host stops
+  // offering, mounting and serving it (FrontendPluginManager.isBuiltinPluginDisabled).
+  // Nothing here touches its storage, grant or lifecycle selection.
+  const holdBuiltinSwitch = options.holdBuiltinSwitch ?? (<T>(task: () => Promise<T>) => task())
+  async function setBuiltinDisabled(id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> {
+    return holdBuiltinSwitch(() => switchBuiltin(id, disabled))
+  }
+  async function switchBuiltin(id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> {
+    const hostSwitch = options.setBuiltinDisabled
+    if (!hostSwitch) throw new Error('built-in plugin disable is unavailable')
+    if (activeTransactions.has(id)) {
+      throw new Error(`plugin transaction already in progress for ${id}`)
+    }
+    if (disabledPlugins.has(id) === disabled) return { id, disabled }
+    activeTransactions.add(id)
+    try {
+      if (disabled) {
+        // Recorded first, so nothing can mount it again while it drains.
+        disabledPlugins.add(id)
+        await hostSwitch(id, true)
+      } else {
+        disabledPlugins.remove(id)
+        try {
+          await hostSwitch(id, false)
+        } catch (error) {
+          disabledPlugins.add(id)
+          throw error
+        }
+      }
+      return { id, disabled }
+    } finally {
+      activeTransactions.delete(id)
+    }
+  }
+
+  // Which built-ins are disabled, for the main window's tabs, commands and
+  // "open in editor" entries.
+  ipcMain.handle('plugins:disabledBuiltins', (event): string[] => {
+    assertAuthorized(event)
+    return manager.listDisabledBuiltinPlugins()
+  })
+
+  // Whether the Disabled store read normally, was rebuilt from its backup, or
+  // cannot be read (the built-ins then count as disabled until a reset).
+  ipcMain.handle('plugins:disabledStoreStatus', (event): { status: PluginIdStoreStatus } => {
+    assertAuthorized(event)
+    return { status: disabledPlugins.status() }
+  })
+
+  // The user's one-click reset of an unreadable Disabled store. Both damaged
+  // copies are kept aside; every switch starts from enabled.
+  ipcMain.handle('plugins:resetDisabledStore', async (event): Promise<{ status: PluginIdStoreStatus }> => {
+    assertAuthorized(event)
+    return holdBuiltinSwitch(async () => {
+      if (disabledPlugins.status() !== 'unreadable') return { status: disabledPlugins.status() }
+      disabledPlugins.resetUnreadable()
+      const resumed: string[] = []
+      for (const id of BUILTIN_PLUGIN_NAMES.keys()) {
+        if (!manager.isBuiltinPluginDisabled(id)) {
+          manager.resumeBuiltinPlugin(id)
+          resumed.push(id)
+        }
+      }
+      options.onBuiltinSwitchReset?.(resumed)
+      return { status: disabledPlugins.status() }
+    })
+  })
+
+  // The user's "Disabled" switch for an installed Marketplace package. Disable
+  // stops the package and unregisters its views and backend; its files, grant,
+  // storage and lifecycle selection stay. Enable re-verifies the selected
+  // package and registers it again under the grant it already holds.
+  ipcMain.handle(
+    'plugins:setDisabled',
+    async (event, args: { id?: unknown; disabled?: unknown } | null) => {
+      assertAuthorized(event)
+      const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+      const disabled = args?.disabled
+      if (typeof disabled !== 'boolean') throw new Error('invalid plugin disabled setting')
+      if (BUILTIN_PLUGIN_NAMES.has(id)) return setBuiltinDisabled(id, disabled)
+      const result = await setInstalledPackageDisabled(id, disabled)
+      // The user's own switch (and the undo on an agent notice).
+      if (result.changed) recordDisableSource(id, disabled, { by: 'user', at: Date.now(), agent: null })
+      return { id: result.id, disabled: result.disabled }
+    }
+  )
+
+  // The Disabled switch for an installed Marketplace package, shared by the
+  // user's Extensions page (above) and an agent's plugins_disable /
+  // plugins_enable (B2-c, below).
+  const setInstalledPackageDisabled = async (
+    id: string,
+    disabled: boolean,
+  ): Promise<{ id: string; disabled: boolean; changed: boolean }> => {
+      if (!manager.canDisablePlugin(id)) throw new Error(`first-party plugin ${id} cannot be disabled`)
+      if (activeTransactions.has(id)) {
+        throw new Error(`plugin transaction already in progress for ${id}`)
+      }
+      const installed = manager.listInstalledPackages().find((pkg) => pkg.id === id)
+      // d5: a local install Navide blocked since can be disabled too.
+      if (!installed || (installed.provenance !== 'official-registry' && localDigestBlockFor(installed) === null)) {
+        throw new Error(`plugin ${id} is not an installed Marketplace package`)
+      }
+      if (disabledPlugins.has(id) === disabled) return { id, disabled, changed: false }
+      activeTransactions.add(id)
+      try {
+        if (disabled) {
+          // Recorded first so that nothing re-registered during the drain can
+          // start again.
+          disabledPlugins.add(id)
+          await revokeInstalledPackageRuntime(manager, pluginsRoot, id)
+          manager.suspendDisabledPlugin(id)
+          options.onActivationChange?.({ pluginId: id })
+          return { id, disabled, changed: true }
+        }
+        const selected = lifecycleSelector.read(id)
+        const packageDir = selected?.active
+          ? lifecycleSelector.packageDir(id, selected.active)
+          : join(pluginsRoot, id)
+        const decision = verifyCommittedInstall(packageDir, id, resolveConfiguredMarketplace(trust).trust)
+        if (decision.action === 'quarantine') {
+          throw new Error(`plugin ${id} cannot be enabled: ${decision.reason}`)
+        }
+        if (selected?.active && decision.artifactDigest !== selected.active.artifactDigest) {
+          throw new Error(`plugin ${id} cannot be enabled: artifact identity changed`)
+        }
+        const scanned = loadPluginDir(packageDir)
+        if (scanned.error || !scanned.packageSummary) {
+          throw new Error(`plugin ${id} cannot be enabled${scanned.error ? `: ${scanned.error}` : ''}`)
+        }
+        disabledPlugins.remove(id)
+        const enabledSource = evidenceSource(packageDir, id)
+        try {
+          manager.registerInstalledPackage(
+            { ...scanned.packageSummary, ...enabledSource.fields },
+            scanned.descriptor,
+            // A Marketplace first-party package claims its reserved id again
+            // on the Official Registry evidence just verified.
+            isReservedPluginId(id) ? enabledSource.registration : {},
+            packageDir,
+          )
+        } catch (error) {
+          disabledPlugins.add(id)
+          throw error
+        }
+        if (scanned.activation) {
+          options.onActivationChange?.({
+            pluginId: id,
+            activation: {
+              ...scanned.activation,
+              ...enabledSource.fields,
+              artifactDigest: decision.artifactDigest,
+            },
+          })
+        }
+        return { id, disabled, changed: true }
+      } finally {
+        activeTransactions.delete(id)
+      }
+  }
+
+  manager.setPluginAgentActionHandler?.((request) =>
+    answerPluginAgentAction(request, {
+      isBuiltin: (pluginId) => BUILTIN_PLUGIN_NAMES.has(pluginId) || isReservedPluginId(pluginId),
+      installedVersion: (pluginId) => {
+        const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+        return installed?.provenance === 'official-registry' ? installed.packageVersion ?? null : null
+      },
+      setDisabled: async (pluginId, disabled, source) => {
+        const result = await setInstalledPackageDisabled(pluginId, disabled)
+        if (result.changed) {
+          recordDisableSource(pluginId, disabled, source ?? { by: 'agent', at: Date.now(), agent: null })
+        }
+        return result
+      },
+      notify: (notice) => options.onPluginAgentAction?.(notice),
+      isDisabled: (pluginId) => disabledPlugins.has(pluginId),
+      disableSource: (pluginId) => disableSources.get(pluginId),
+      now: () => Date.now(),
+      // O1: the same verification, disclosure diff and commit as the window's
+      // own update; only the confirmation is skipped, and only when
+      // agentUpdateNeedsApproval finds nothing that changed.
+      prepareUpdate: async (pluginId, version) => {
+        // A user's install of the same id in progress is theirs to finish.
+        if (prepared.has(pluginId) || activeTransactions.has(pluginId)) {
+          throw new Error(`an install of ${pluginId} is in progress`)
+        }
+        const dot = pluginId.indexOf('.')
+        const summary = await prepareRegistryInstall({
+          namespace: pluginId.slice(0, dot),
+          name: pluginId.slice(dot + 1),
+          version,
+        })
+        const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+        return {
+          installedSource: installed ? sourceFields(installed).source : undefined,
+          installedHasViews: activeHasViews(pluginId).hasViews,
+          candidatePending: Boolean(lifecycleSelector.read(pluginId)?.candidate),
+          prepared: summary,
+        }
+      },
+      commitUpdate: async (pluginId, requester) => {
+        await commitRegistryInstall({ id: pluginId, riskConfirmed: true })
+        // User decision A (2026-10-21): an agent's update that discloses
+        // exactly what the running version does switches at once, recorded
+        // with the agent and a way back. A failed switch restores the old
+        // version, keeps the update staged and says so in the main window.
+        try {
+          await restartStagedCandidate(pluginId, requester ? { agent: requester } : {})
+        } catch (error) {
+          const record = lifecycleSelector.read(pluginId)
+          if (record?.active && record.candidate) {
+            try {
+              options.onPackageSwitchFailed?.({
+                pluginId,
+                activeVersion: record.active.packageVersion,
+                stagedVersion: record.candidate.packageVersion,
+                reason: errorText(error),
+              })
+            } catch {
+              // The update stays staged; #505's launch notice lists it again.
+            }
+          }
+          // Review M2: the agent is told the switch failed, not that it is updated.
+          return { switchError: errorText(error) }
+        }
+        return { switched: true as const }
+      },
+      discardUpdate: (pluginId) => {
+        prepared.delete(pluginId)
+      },
+    })
+  )
+
+  // Decision d5 (W6), at startup and after every trust refresh: refresh the
+  // local-install trust, then check every local install's `.vsix` digest
+  // against it. A security block quarantines the running copy through the
+  // same re-verification a Registry takedown uses; the others are told once.
+  const digestBlockNotices = new DigestBlockNoticeStore(pluginsRoot)
+  let revalidatingLocalInstalls: Promise<{ quarantined: string[] }> | null = null
+  const askAboutDigestBlocks = async (
+    prompt: (ask: DigestBlockPrompt) => Promise<DigestBlockChoice>,
+    asks: DigestBlockPrompt[],
+  ): Promise<void> => {
+    for (const ask of asks) {
+      const choice = await prompt(ask)
+      try {
+        if (choice === 'remove') {
+          await uninstallPlugin(ask.pluginId)
+        } else if (choice === 'disable') {
+          const result = await setInstalledPackageDisabled(ask.pluginId, true)
+          if (result.changed) recordDisableSource(ask.pluginId, true, { by: 'user', at: Date.now(), agent: null })
+        }
+      } catch (error) {
+        console.warn(`[plugins] ${choice} of blocked ${ask.pluginId} failed: ${errorText(error)}`)
+      }
+    }
+  }
+  const revalidateLocalInstalls = async (): Promise<{ quarantined: string[] }> => {
+    await refreshLocalInstallTrust()
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const prompt = options.promptDigestBlock
+    const quarantined: string[] = []
+    const asks: DigestBlockPrompt[] = []
+    // The selector, not the loaded list: a copy the load already
+    // quarantined for a security block is told about too.
+    for (const record of lifecycleSelector.list()) {
+      if (!record.active) continue
+      const summary = { id: record.pluginId, packageVersion: record.active.packageVersion }
+      const block = localDigestBlockFor(summary)
+      if (!block || block.action === 'label') continue
+      if (block.action === 'disable' && manager.listInstalledPackages().some((pkg) => pkg.id === summary.id)) {
+        const decisions = manager.refreshInstalledPluginTrust(pluginsRoot, {
+          pinnedRootKey: marketplace.trust.pinnedRegistryRootKey,
+          snapshot: readRegistryTrustSnapshot(pluginsRoot),
+          registryAuthority: marketplace.trust.registryAuthority,
+          officialRegistryUrl: marketplace.trust.officialRegistryUrl,
+          expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
+          now: marketplace.trust.now,
+        }, new Set([summary.id]))
+        for (const decision of decisions) {
+          if (decision.action !== 'quarantine') continue
+          options.onActivationChange?.({ pluginId: decision.pluginId })
+          quarantined.push(decision.pluginId)
+        }
+      }
+      if (!prompt || digestBlockNotices.shown(summary.id, block)) continue
+      // Recorded before asking, so a second refresh during the dialog does not ask again.
+      digestBlockNotices.record(summary.id, block)
+      asks.push({ pluginId: summary.id, version: summary.packageVersion, reason: block.reason, action: block.action })
+    }
+    // 0.2.28: a withdrawn Testplace build is told once, by digest, and keeps
+    // running until the tester chooses; nothing is disabled for it.
+    for (const pkg of manager.listInstalledPackages()) {
+      if (pkg.provenance !== 'official-registry') continue
+      const block = registryWithdrawnBlockFor(pkg)
+      if (!block || !prompt || digestBlockNotices.shown(pkg.id, block)) continue
+      digestBlockNotices.record(pkg.id, block)
+      asks.push({ pluginId: pkg.id, version: block.version, reason: block.reason, action: 'warn', testBuild: true })
+    }
+    // The dialogs do not hold up the refresh (or the update check after it).
+    if (prompt && asks.length > 0) void askAboutDigestBlocks(prompt, asks)
+    return { quarantined }
+  }
 
   return {
     checkUpdates: checkInstalledUpdates,
+    loadDeveloperFolders,
+    activateStagedFirstInstalls,
+    stagedUpdates,
+    /** Decision d5: one run at a time; a call during a run joins it. */
+    revalidateLocalInstalls(): Promise<{ quarantined: string[] }> {
+      revalidatingLocalInstalls ??= revalidateLocalInstalls().finally(() => {
+        revalidatingLocalInstalls = null
+      })
+      return revalidatingLocalInstalls
+    },
+    takeRescanNotices() {
+      const taken = rescanNotices
+      rescanNotices = []
+      return taken
+    },
+    restoreRescanNotices(notices) {
+      rescanNotices = [...notices, ...rescanNotices]
+    },
     async refreshRegistryTrust() {
       const packageIds = discoverInstalledRegistryPackageIds(pluginsRoot)
       const activeRegistryPackages = new Set(
@@ -2148,10 +5228,36 @@ export function registerPluginIpc(
         })
       }
       if (packageIds.length === 0) return { decisions, activationCatalog: [] }
+      // S8 T-MED-1: learn which installed test builds were taken back, so the
+      // trust check below stops them. The checks run alongside the public
+      // trust fetch, each bounded by a timeout (LOW-R3-1); every trust
+      // decision below waits for them. A check that fails records nothing.
+      const withdrawalsChecked = Promise.all(packageIds.map(async (packageId) => {
+        try {
+          const active = lifecycleSelector.read(packageId)?.active
+          if (!active || active.layout === 'legacy-mutable') return
+          const dir = lifecycleSelector.packageDir(packageId, active)
+          if (readRegistryReceiptChannel(dir) !== 'testplace') return
+          await checkTestplaceWithdrawn(packageId, active.packageVersion)
+        } catch (error) {
+          console.warn(`[plugins] withdrawal of the Testplace build ${packageId} not checked: ${errorText(error)}`)
+        }
+      }))
+      // A promoted Testplace build takes its new receipt before the trust
+      // check, which then loads it again if it had expired (W5b).
+      for (const packageId of packageIds) {
+        if (activeTransactions.has(packageId)) continue
+        try {
+          await adoptTestplaceRelease(packageId, false)
+        } catch (error) {
+          console.warn(`[plugins] promoted Testplace build of ${packageId} not adopted: ${errorText(error)}`)
+        }
+      }
 
       const marketplace = resolveConfiguredMarketplace(trust)
       const base = marketplace.registryUrl.replace(/\/+$/, '')
-      const fallbackToCachedTrust = () => {
+      const fallbackToCachedTrust = async () => {
+        await withdrawalsChecked
         const snapshot = readRegistryTrustSnapshot(pluginsRoot)
         const refreshed = manager.refreshInstalledPluginTrust(pluginsRoot, {
           pinnedRootKey: marketplace.trust.pinnedRegistryRootKey,
@@ -2160,6 +5266,9 @@ export function registerPluginIpc(
           officialRegistryUrl: marketplace.trust.officialRegistryUrl,
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
+          keepsExpiredTestplace,
+          // 0.2.28 (user, 10-21): a withdrawal never stops a running build;
+          // registryWithdrawnBlockFor labels it and asks once instead.
         }, new Set([...packageIds, ...activeRegistryPackages]))
         for (const decision of refreshed) {
           if (decision.action === 'quarantine') {
@@ -2204,7 +5313,7 @@ export function registerPluginIpc(
         }
       }
       if (!detail) {
-        fallbackToCachedTrust()
+        await fallbackToCachedTrust()
         throw lastRefreshError ?? new Error('trust metadata refresh failed')
       }
 
@@ -2222,6 +5331,9 @@ export function registerPluginIpc(
           officialRegistryUrl: marketplace.trust.officialRegistryUrl,
           expectedTarget: marketplace.trust.expectedTarget ?? currentPluginHostTarget(),
           now: marketplace.trust.now,
+          keepsExpiredTestplace,
+          // 0.2.28 (user, 10-21): a withdrawal never stops a running build;
+          // registryWithdrawnBlockFor labels it and asks once instead.
         }
         const activeBeforeRefresh = new Set(
           manager
@@ -2229,6 +5341,7 @@ export function registerPluginIpc(
             .filter((pkg) => pkg.provenance === 'official-registry')
             .map((pkg) => pkg.id)
         )
+        await withdrawalsChecked
         const refreshedDecisions = manager.refreshInstalledPluginTrust(
           pluginsRoot,
           currentTrust,
@@ -2257,7 +5370,7 @@ export function registerPluginIpc(
             : { activationCatalog: [] }
         return { decisions, activationCatalog: reloaded.activationCatalog }
       } catch (error) {
-        fallbackToCachedTrust()
+        await fallbackToCachedTrust()
         throw error
       }
     },

@@ -47,7 +47,15 @@ function files(id, name) {
       '</html>',
       '',
     ].join('\n'),
-    'frontend/main/main.js': "document.getElementById('status').textContent = 'Loaded at ' + new Date().toLocaleTimeString()\n",
+    'frontend/main/main.js': [
+      "document.getElementById('status').textContent = 'Loaded at ' + new Date().toLocaleTimeString()",
+      '',
+      '// Tell Navide the view has mounted; without this the Host rejects the package at install.',
+      '// This is the call createPluginViewRuntimeClient().ready() makes. Once the view has a build',
+      '// step, import @navide/plugin-sdk and use that instead.',
+      'window.nav.ready()',
+      '',
+    ].join('\n'),
     'README.md': `# ${name}\n\n${manifest.marketplace.description}\n`,
     'artifact-files.json': `${JSON.stringify(
       { files: ['manifest.json', 'README.md', 'frontend/main/index.html', 'frontend/main/main.js'] },

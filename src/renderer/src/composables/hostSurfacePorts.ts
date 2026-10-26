@@ -25,7 +25,7 @@ import type {
 import type { KeybindingsPort } from '@navide/plugin-ui/shared'
 import { useGitAccounts } from './useGitAccounts'
 import { encodeReason } from './useAgentMessaging'
-import { isExternalDelivery, renderEnvelope } from '../lib/agentMessaging'
+import { hasReplyRoute, isExternalDelivery, renderEnvelope } from '../lib/agentMessaging'
 import { pinFreshSessionAtLaunch } from '../lib/sessionHeal'
 import { dockRestoreFromResponse } from '../lib/dockWindow'
 import type {
@@ -351,6 +351,7 @@ export function createHostTerminalDockPort(backend: HostBackend): TerminalDockPo
           text: renderEnvelope(fromDisplay, ev.content, {
             correlationId: ev.msg_key,
             external: isExternalDelivery(ev),
+            noReplyRoute: !hasReplyRoute(ev),
           }),
           ...(ev.kind === 'ack' ? { kind: 'ack' as const } : {}),
         })

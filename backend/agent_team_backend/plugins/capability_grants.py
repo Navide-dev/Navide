@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-SYSTEM_NAMESPACES = frozenset({"fs", "ui", "aiCli"})
+SYSTEM_NAMESPACES = frozenset({"fs", "ui", "aiCli", "web", "agents", "agentMessages"})
 SHELL_MODES = frozenset({"allowlist", "full"})
 FORBIDDEN_PLUGIN_FIELDS = frozenset(
     {

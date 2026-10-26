@@ -111,6 +111,16 @@ Field rules:
   (`prefers-color-scheme` + `:root[data-theme=…]` overrides).
 - Wide content (tables, code, diagrams) sits in its own `overflow-x: auto`
   container.
+- Click-to-enlarge images: use the template's `.zoom` CSS `:target` lightbox
+  (no JavaScript). The open overlay must be `position: fixed; inset: 0;
+  overflow: auto`, and no ancestor of it may set `transform`, `filter`,
+  `contain` or `will-change` — any of them makes that ancestor the containing
+  block for `fixed`, so the overlay covers the ancestor instead of the
+  viewport and the image lands off-screen. Center a wide block with margins,
+  not `translateX(-50%)`. Size the enlarged image by width
+  (`max-width: min(96vw, 1600px); height: auto; max-height: none`) so a tall
+  screenshot stays readable and scrolls inside the overlay instead of being
+  shrunk to the viewport height; the × close link is `position: fixed`.
 - Standard sections, in order: header (name / overview / stage badge), Goals,
   Phases (with todos), Risks, Validation, Review Notes.
 - Content language follows the user's working language (currently 繁體中文);

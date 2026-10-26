@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from agent_team_backend import app as app_module
-from agent_team_backend import git_service, osplat
+from agent_team_backend import git_service, host_shell, osplat
 
 # Every test here drives a real `git`, found through the seam
 # (`host_shell` resolves argv[0] with `osplat.paths.resolve_program`). Gate
@@ -3204,6 +3204,7 @@ class TestGitProcLimit:
 
         class FakeProc:
             returncode = 0
+            pid = 4_194_305  # only the stubbed process tree ever sees it
 
             async def communicate(self):
                 nonlocal in_flight, peak
@@ -3223,6 +3224,7 @@ class TestGitProcLimit:
             return FakeProc()
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
 
         tasks = [
             asyncio.create_task(git_service._run(["git", "status"], "."))
@@ -3246,6 +3248,7 @@ class TestGitProcLimit:
 
         class FakeProc:
             returncode = None
+            pid = 4_194_305  # only the stubbed process tree ever sees it
 
             def __init__(self):
                 self.killed = False
@@ -3272,12 +3275,20 @@ class TestGitProcLimit:
             return await real_wait_for(awaitable, timeout=0.01)
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
         monkeypatch.setattr(asyncio, "wait_for", fast_wait_for)
+        # The tree kill reads the fake's pid: keep it off the real process table.
+        tree_reads: list = []
+        kills: list = []
+        monkeypatch.setattr(host_shell.process_tree, "descendants", lambda pid: tree_reads.append(pid) or [])
+        monkeypatch.setattr(host_shell.process_tree, "identity", lambda pid: "")
+        monkeypatch.setattr(host_shell.process_tree, "kill", lambda pid, *, force: kills.append(pid))
 
         result = await git_service._run(["git", "status"], ".")
         assert result == (128, "", "git timed out")
         assert procs[0].killed is True
         assert procs[0].waited is True  # zombie reaped, not just killed
+        assert (tree_reads, kills) == ([procs[0].pid], [])
 
     @pytest.mark.asyncio
     async def test_run_with_input_timeout_kills_and_reaps(self, monkeypatch):
@@ -3285,6 +3296,7 @@ class TestGitProcLimit:
 
         class FakeProc:
             returncode = None
+            pid = 4_194_305  # only the stubbed process tree ever sees it
 
             def __init__(self):
                 self.killed = False
@@ -3311,12 +3323,20 @@ class TestGitProcLimit:
             return await real_wait_for(awaitable, timeout=0.01)
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
         monkeypatch.setattr(asyncio, "wait_for", fast_wait_for)
+        # The tree kill reads the fake's pid: keep it off the real process table.
+        tree_reads: list = []
+        kills: list = []
+        monkeypatch.setattr(host_shell.process_tree, "descendants", lambda pid: tree_reads.append(pid) or [])
+        monkeypatch.setattr(host_shell.process_tree, "identity", lambda pid: "")
+        monkeypatch.setattr(host_shell.process_tree, "kill", lambda pid, *, force: kills.append(pid))
 
         result = await git_service._run_with_input(["git", "apply"], ".", "diff")
         assert result == (128, "", "git timed out")
         assert procs[0].killed is True
         assert procs[0].waited is True
+        assert (tree_reads, kills) == ([procs[0].pid], [])
 
     @pytest.mark.asyncio
     async def test_fetch_serialized_per_repo(self, monkeypatch):
@@ -3441,3 +3461,96 @@ async def test_anthropic_client_is_closed_when_the_api_fails(
     assert result["ok"] is False
     assert "429 overloaded" in result["error"]
     assert closed == ["entered", "closed"], "an API error must still release the client"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_request_carries_no_temperature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Current Claude models reject `temperature` with a 400; the request must
+    not send it, retries (attempt_count) included."""
+    import sys
+
+    sent: list[dict[str, Any]] = []
+    module = _fake_anthropic([])
+    real_init = module.AsyncAnthropic.__init__
+
+    def init(self: Any, **kw: Any) -> None:
+        real_init(self, **kw)
+        create = self.messages.create
+
+        async def strict_create(**params: Any) -> Any:
+            sent.append(params)
+            if "temperature" in params:
+                raise RuntimeError("400 invalid_request_error: temperature is not supported for this model")
+            return await create(**params)
+
+        self.messages.create = strict_create
+
+    monkeypatch.setattr(module.AsyncAnthropic, "__init__", init)
+    monkeypatch.setitem(sys.modules, "anthropic", module)
+    _dirty_repo(tmp_path)
+
+    for attempt in (0, 2):
+        result = await git_service.generate_commit_message(
+            str(tmp_path), "http://unused", attempt_count=attempt, settings=ANTHROPIC_SETTINGS
+        )
+        assert result == {"ok": True, "message": "fix: tidy the widget"}
+    assert len(sent) == 2 and all("temperature" not in p for p in sent)
+
+
+# The fakes above pin what generate_commit_message does; this one pins what the
+# installed SDK accepts. It drives the call through the real anthropic package
+# (client construction, async with, messages.create's signature, the Message
+# and TextBlock models) and only replaces the network round trip, so an SDK
+# upgrade that renames a parameter, drops one we send, or reshapes the
+# response turns this red instead of failing for users at runtime.
+
+
+@pytest.mark.asyncio
+async def test_anthropic_call_matches_the_installed_sdk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import inspect
+
+    import anthropic
+    from anthropic.types import Message
+
+    probe = anthropic.AsyncAnthropic(api_key=ANTHROPIC_SETTINGS["anthropic_api_key"])
+    messages_cls = type(probe.messages)
+    await probe.close()
+    real_create = messages_cls.create
+    sent: list[dict[str, Any]] = []
+
+    async def offline_create(self: Any, **params: Any) -> Any:
+        # Raises TypeError, like the real call would, on any kwarg the SDK
+        # does not accept or any required one we stop sending.
+        inspect.signature(real_create).bind(self, **params)
+        sent.append(params)
+        return Message.model_validate(
+            {
+                "id": "msg_offline",
+                "type": "message",
+                "role": "assistant",
+                "model": params["model"],
+                "content": [
+                    {"type": "thinking", "thinking": "considering", "signature": "sig"},
+                    {"type": "text", "text": "fix: tidy the widget"},
+                ],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            }
+        )
+
+    monkeypatch.setattr(messages_cls, "create", offline_create)
+    _dirty_repo(tmp_path)
+
+    result = await git_service.generate_commit_message(
+        str(tmp_path), "http://unused", settings=ANTHROPIC_SETTINGS
+    )
+
+    assert result == {"ok": True, "message": "fix: tidy the widget"}, result
+    assert len(sent) == 1
+    assert set(sent[0]) == {"model", "max_tokens", "system", "messages", "timeout"}
+    assert sent[0]["model"] == ANTHROPIC_SETTINGS["anthropic_model"]

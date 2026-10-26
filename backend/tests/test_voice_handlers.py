@@ -912,7 +912,8 @@ async def test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on(
 ) -> None:
     # One decode stalls (whisper decoding a hallucinated repetition): it is
     # cancelled once over its budget instead of holding every later partial.
-    monkeypatch.setenv("FAKE_STT_DELAY_S", "10")
+    stall = 10.0
+    monkeypatch.setenv("FAKE_STT_DELAY_S", str(stall))
     monkeypatch.setenv("FAKE_STT_DELAY_ONLY", "3")
     session = _Session()
     sid = (await _send(session, "voice.start", {}))["sessionId"]
@@ -931,15 +932,21 @@ async def test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on(
     stalled, after = logged()[2:4]
     budget = voice_handlers._PARTIAL_BUDGET_MIN_S
     assert stalled["cancelled"] and stalled["end"] - stalled["start"] < budget + 1, stalled
-    # Streaming resumed at once (timed by the sidecar's own clock).
-    assert not after["cancelled"] and after["start"] - stalled["end"] < 0.5, (stalled, after)
+    # Streaming resumed: the next request did not queue behind the stalled
+    # decode, which left alone holds the sidecar until its start + stall
+    # (timed by the sidecar's own clock). How soon after the cancel it came is
+    # this machine's pace, not the product's: that gap is the next window's
+    # temp write, the pipe and the sidecar's read of up to 10 s of audio, and
+    # CI's Windows runner took 0.656 s against the 0.5 s once asserted here.
+    assert not after["cancelled"] and after["start"] < stalled["start"] + stall, (stalled, after)
     await _settle(session)
     stop = await _send(session, "voice.stop", {"sessionId": sid})
     assert stop["text"] == _text(40)
 
 
+@pytest.mark.serial
 async def test_the_budget_grows_when_every_partial_is_slow(
-    stream: Path, monkeypatch: pytest.MonkeyPatch,
+    stream: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
 ) -> None:
     # Every decode takes 0.5 s (a loaded machine): the first partial overruns
     # the 0.3 s floor, and counting it as having taken that long lets the
@@ -948,11 +955,24 @@ async def test_the_budget_grows_when_every_partial_is_slow(
     monkeypatch.setenv("FAKE_STT_DELAY_S", "0.5")
     session = _Session()
     sid = (await _send(session, "voice.start", {}))["sessionId"]
-    await _speak(session, sid, range(24))
-    await _settle(session)
-    requests = [r for r in _requests(stream) if r["segments"]]
-    assert requests[0]["cancelled"]
-    assert any(not r["cancelled"] for r in requests[1:]), requests
+    with caplog.at_level("INFO", logger=voice_handlers.__name__):
+        await _speak(session, sid, range(24))
+        await _settle(session)
+    # Which partials ran over is the backend's call, so it is read from the
+    # backend's log, not from the sidecar's record of the first request: the
+    # budget starts before the temp write, so on CI's Windows runner the first
+    # one could time out still in the pool (the sidecar never heard it) or the
+    # loop could be starved until its decode had ended (the cancel came late),
+    # and requests[0] was then not "cancelled" although the backend cut it.
+    floor = int(voice_handlers._PARTIAL_BUDGET_MIN_S * 1000)
+    budgets = [
+        r.args[1] for r in caplog.records
+        if r.getMessage().startswith("voice.partial over budget") and isinstance(r.args, tuple)
+    ]
+    assert budgets and budgets[0] == floor, budgets
+    assert all(b > floor for b in budgets[1:]), budgets
+    # A decode takes longer than the floor, so a partial reached the owner
+    # only under a budget that grew.
     assert _partials(session)
     await _send(session, "voice.cancel", {"sessionId": sid})
 

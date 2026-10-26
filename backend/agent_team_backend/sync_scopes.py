@@ -14,17 +14,13 @@ itself on would upload a user's MCP secrets because they installed an update.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import re
-import secrets
-import threading
 import time
-from datetime import datetime, timezone
 from typing import Any, Callable
 
-from . import sync_approvals, sync_engine, sync_keyring
+from . import native_mcp, sync_approvals, sync_engine, sync_keyring
 
 log = logging.getLogger("agent_team_backend.sync_scopes")
 
@@ -47,7 +43,12 @@ def _settings():
 def enabled_scopes() -> dict[str, bool]:
     raw = _settings().get().get(SCOPES_SETTING)
     stored = raw if isinstance(raw, dict) else {}
-    return {scope: bool(stored.get(scope, False)) for scope in sync_engine.SCOPES}
+    # A credentials switch an older build left on reads as off, and is written
+    # back as off by the next set_scope_enabled.
+    return {
+        scope: bool(stored.get(scope, False)) and scope not in sync_engine.LOCAL_ONLY_SCOPES
+        for scope in sync_engine.SCOPES
+    }
 
 
 #: Internal scopes and the switch each one rides with.
@@ -58,8 +59,8 @@ _EXEC_BITS = os.name != "nt"
 
 #: Scopes no sync round ever runs, whatever their stored switch says and on
 #: any protocol: memory (retired) and credentials (10-09: credentials never
-#: sync). The block is here, in the sync layer; CredentialsScope itself and
-#: the credential vault are left exactly as they are.
+#: sync). The block is here, in the sync layer; the credential vault is left
+#: exactly as it is.
 NEVER_SYNCED = frozenset(sync_approvals.RETIRED_SCOPES | {"credentials"})
 
 
@@ -373,17 +374,44 @@ class McpScope:
     and syncing them would mean this feature rewriting ``~/.codex`` and
     ``~/.cursor`` on a machine nobody was looking at.
 
-    Secrets ride along inside the encrypted body, which is the decision the
-    plan records: url, args and env go up sealed, and the server has no key.
+    Sync is install-only (0.2.32): what travels is the server's definition —
+    transport, command, args, url, cwd, enabled and the *names* of its env
+    entries and headers. Their values never leave this machine: every copy
+    goes up with them empty (``_install_only``), and a record that arrives
+    keeps the values this machine already has (``_with_local_values``). A
+    name new here lands empty, which the MCP page shows as a field to fill
+    in. Records an older build pushed with values in them still open; the
+    values in them are read as empty, so the two forms compare as one.
+
+    Install-only records travel under their own item ids, ``i:<name>``
+    (``INSTALL_PREFIX``), and the rows older builds keep under ``<name>``
+    are never written or deleted from here (``pushes``): an older build
+    applies a record as it comes, so a definition without values would empty
+    its own. A ``<name>`` row is read as a definition until this machine has
+    seen the server's ``i:`` row (``superseded_by``). Older builds cannot use
+    an ``i:`` row: no server name may hold ":" (``mcp_settings._NAME_RE``),
+    and on legacy item ids the row is sealed apart (``seal_scope``) so the
+    builds before 0.2.18, which record a refused row as held and later push
+    a delete for it, cannot open it at all.
     """
 
     scope = "mcp"
 
-    def __init__(self, on_change: Callable[[], Any] | None = None, *, gate: bool = True) -> None:
+    def __init__(
+        self,
+        on_change: Callable[[], Any] | None = None,
+        *,
+        gate: bool = True,
+        keep_local_values: bool = True,
+    ) -> None:
         #: False for a caller that already asked the user about this very
         #: record (a settings-bundle import the user picked items from):
         #: then nothing is held for approval.
         self._gate = gate
+        #: False for a caller that filled the env and header values itself
+        #: by its own rules (a settings-bundle import: ``restore_secrets``):
+        #: then the values it hands ``apply`` are written as they are.
+        self._keep_local_values = keep_local_values
         #: Coroutine function run on the loop after a synced write, so the
         #: running servers and the open windows follow it the way they follow
         #: a save in Settings. One run covers every write before it starts.
@@ -423,7 +451,38 @@ class McpScope:
     def snapshot(self) -> dict[str, Any]:
         # A record waiting for approval stands in for the local one, so the
         # engine pushes nothing over it (see ``sync_approvals``).
-        return sync_approvals.overlay(self.scope, self.local_snapshot())
+        # Each server is listed under both its ids: ``<name>`` only so an
+        # older build's row of it compares with something (``pushes``).
+        local = self.local_snapshot()
+        by_id = {INSTALL_PREFIX + name: server for name, server in local.items()}
+        by_id.update(local)
+        return {item_id: _install_only(server) for item_id, server in sync_approvals.overlay(self.scope, by_id).items()}
+
+    def inbound(self, payload: Any) -> Any:
+        """A record from elsewhere as this machine compares it: its env and
+        header values dropped, as the ones it sends are."""
+        return _install_only(payload)
+
+    def pushes(self, item_id: str) -> bool:
+        """Whether the engine may write or delete this item: only ``i:`` rows.
+        A ``<name>`` row is an older build's, values and all, and stays as it
+        is, so older builds keep syncing it among themselves."""
+        return item_id.startswith(INSTALL_PREFIX)
+
+    def superseded_by(self, item_id: str) -> str:
+        """The ``i:`` id that replaces a ``<name>`` row, or "" for an ``i:``
+        row. Once this machine has seen it, the older row is not read."""
+        return "" if item_id.startswith(INSTALL_PREFIX) else INSTALL_PREFIX + item_id
+
+    def seal_scope(self, wire_id: str) -> str:
+        """The scope an item is sealed under. An ``i:`` row on legacy item ids
+        is sealed apart, so a build before 0.2.32 cannot open it (see the
+        class docstring); a hashed id names no prefix and keeps ``mcp``."""
+        return INSTALL_SEAL_SCOPE if wire_id.startswith(INSTALL_PREFIX) else self.scope
+
+    def approval_local(self, item_id: str) -> Any:
+        """The local server a hold under *item_id* was filed against."""
+        return self.local_snapshot().get(_server_name(item_id))
 
     def withheld(self) -> list[str]:
         """Rejected records whose held copy no longer opens: nothing goes up
@@ -444,7 +503,12 @@ class McpScope:
         it would run here otherwise. A record held that way counts as taken."""
         store = self._store()
         servers = [s for s in store.list_servers() if isinstance(s, dict)]
-        index = next((i for i, s in enumerate(servers) if s.get("name") == item_id), -1)
+        name = _server_name(item_id)
+        if name != item_id:
+            # The server's install-only row answers for it now: a change held
+            # from its older row is not asked about as well.
+            sync_approvals.drop(self.scope, name)
+        index = next((i for i, s in enumerate(servers) if s.get("name") == name), -1)
         if payload is None:
             sync_approvals.drop(self.scope, item_id)
             if index < 0:
@@ -455,9 +519,11 @@ class McpScope:
                 log.warning("MCP record %s arrived as %s", item_id, type(payload).__name__)
                 return False
             local = servers[index] if index >= 0 else None
-            if self._gate and _mcp_needs_approval(local, {**payload, "name": item_id}) \
+            if self._keep_local_values:
+                payload = _with_local_values(payload, local)
+            if self._gate and _mcp_needs_approval(local, {**payload, "name": name}) \
                     and not sync_approvals.is_approved(self.scope, item_id, payload):
-                if not _mcp_valid(servers, index, {**payload, "name": item_id}):
+                if not _mcp_valid(servers, index, {**payload, "name": name}):
                     # The store would refuse it on approval anyway; holding it
                     # would only let one device fill this machine's disk.
                     log.warning("MCP record %s is not a valid server here; refused", item_id)
@@ -467,13 +533,13 @@ class McpScope:
                 return sync_approvals.hold(
                     self.scope, item_id, payload, local=local,
                     kind=sync_approvals.KIND_NEW if local is None else sync_approvals.KIND_CHANGED,
-                    summary=_mcp_summary(item_id, payload),
+                    summary=_mcp_summary(name, payload),
                 )
             if self._gate and _mcp_hides(payload):
                 # Checked again when an approved record lands.
                 raise sync_engine.SyncError(f"MCP record {item_id} hides characters in what it runs; refused")
             incoming = dict(payload)
-            incoming["name"] = item_id
+            incoming["name"] = name
             if index < 0:
                 servers.append(incoming)
             else:
@@ -636,6 +702,112 @@ MASKED_VALUE = "••••••"
 #: The MCP record fields whose values are secrets (settings_bundle blanks the
 #: same two on export).
 _MCP_SECRET_FIELDS = ("env", "headers")
+
+
+#: The item id prefix of an install-only MCP record (see ``McpScope``).
+INSTALL_PREFIX = "i:"
+#: What an install-only record is sealed under on legacy item ids.
+INSTALL_SEAL_SCOPE = "mcp-install"
+
+
+def _server_name(item_id: str) -> str:
+    return item_id[len(INSTALL_PREFIX):] if item_id.startswith(INSTALL_PREFIX) else item_id
+
+
+def _install_only(server: Any) -> Any:
+    """An MCP record as it travels: every env and header value empty, the
+    names kept, so the far side can tell which fields it has to fill in; and
+    a credential inside the url or the args emptied where it stands
+    (``_stripped_url``, ``_stripped_args``)."""
+    if not isinstance(server, dict):
+        return server
+    out = dict(server)
+    for field_name in _MCP_SECRET_FIELDS:
+        values = out.get(field_name)
+        if isinstance(values, dict):
+            out[field_name] = {str(k): "" for k in values}
+    if isinstance(out.get("url"), str):
+        out["url"] = _stripped_url(out["url"])
+    if _string_list(out.get("args")):
+        out["args"] = _stripped_args(out["args"])
+    return out
+
+
+def _with_local_values(incoming: dict[str, Any], local: Any) -> dict[str, Any]:
+    """*incoming* with whatever values it carried replaced by this machine's
+    own for the same names; a name this machine has no value for is empty.
+    A credential emptied in the url or args is filled back from this
+    machine's own copy where everything else there reads the same.
+
+    Only while the endpoint is this machine's (``_same_endpoint``): a record
+    that changed the transport, command, args or url gets no value of this
+    machine's at all, so approving it never hands them to what it runs now."""
+    out = _install_only(incoming)
+    if not isinstance(local, dict) or not _same_endpoint(out, local):
+        return out
+    for field_name in _MCP_SECRET_FIELDS:
+        values = out.get(field_name)
+        have = local.get(field_name) if isinstance(local, dict) else None
+        if not isinstance(values, dict) or not isinstance(have, dict):
+            continue
+        out[field_name] = {k: have[k] if isinstance(have.get(k), str) else "" for k in values}
+    mine = local.get("url")
+    if isinstance(out.get("url"), str) and isinstance(mine, str) and out["url"] == _stripped_url(mine):
+        out["url"] = mine
+    mine = local.get("args")
+    if _string_list(out.get("args")) and _string_list(mine):
+        out["args"] = _args_with_local_values(out["args"], mine)
+    return out
+
+
+def _same_endpoint(incoming: dict[str, Any], local: dict[str, Any]) -> bool:
+    """Whether *incoming* (stripped) runs what *local* runs: the same
+    transport, and the same command and args, or the same url, both compared
+    stripped (``_install_only``). The rule a settings-bundle import restores
+    secrets by (``mcp_settings._same_endpoint``), without its env and header
+    check: a synced record carries no values, and a name it adds lands empty."""
+    from .mcp_settings import _same_endpoint as same_endpoint
+
+    def endpoint(server: dict[str, Any]) -> dict[str, Any]:
+        stripped = _install_only(server)
+        return {key: stripped.get(key) for key in ("transport", "command", "args", "url") if key in stripped}
+
+    return same_endpoint(endpoint(incoming), endpoint(local))
+
+
+def _string_list(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _stripped_url(url: str) -> str:
+    """*url* with its userinfo and secret query values emptied, by the rules
+    the MCP page masks with (``native_mcp._mask_url``); as written when it
+    holds none."""
+    return native_mcp._mask_url(url, placeholder="")
+
+
+def _stripped_args(args: list[str]) -> list[str]:
+    """*args* with every credential ``native_mcp._mask_args`` finds emptied
+    in place (``--token ""``, ``--api-key=``, a ``ghp_…`` argument as ``""``),
+    so each argument keeps its position; the rest as written."""
+    return list(native_mcp._mask_args(tuple(args), placeholder=""))
+
+
+def _args_with_local_values(incoming: list[str], mine: list[str]) -> list[str]:
+    """*incoming* (stripped) with each emptied argument filled from this
+    machine's own *mine* at the same position, when that argument and the one
+    before it (the ``--token`` of ``--token X``) strip to the same text there.
+    One whose surroundings differ stays empty: this machine's credential is
+    not handed to a different flag or endpoint."""
+    stripped = _stripped_args(mine)
+    out = list(incoming)
+    for index, arg in enumerate(incoming):
+        if index >= len(mine) or stripped[index] == mine[index] or arg != stripped[index]:
+            continue
+        if index and (index - 1 >= len(stripped) or incoming[index - 1] != stripped[index - 1]):
+            continue
+        out[index] = mine[index]
+    return out
 
 
 def _mask_mcp(payload: Any) -> Any:
@@ -1558,6 +1730,11 @@ class SkillFilesScope:
         """Start downloading a held record's files for review. Loop only."""
         if self._layout is None or self._request is None:
             return
+        running = self._tasks.get(f"review:{item_id}")
+        if running is not None and not running.done():
+            # Its files are on disk and its summary is landing: the space
+            # check would count them against it and mark it waiting.
+            return
         layout, request = self._layout, self._request
         payload_digest = sync_engine.digest(payload)
         try:
@@ -1997,586 +2174,12 @@ def _declared(readers: Any) -> bool:
     return bool(set(readers) - {"aider"})
 
 
-# ── credentials ─────────────────────────────────────────────────────────────
-
-#: Schema component for the adapter's own table, versioned apart from the
-#: engine's bookkeeping so either can move without the other.
-_CREDENTIALS_COMPONENT = "sync-credentials"
-CREDENTIAL_ORIGIN_LOCAL = "local"
-CREDENTIAL_ORIGIN_IMPORTED = "imported"
-_CREDENTIAL_PAYLOAD_VERSION = 1
-_ITEM_ID_RE = re.compile(r"^c-[0-9a-f]{32}$")
-_SLOT_RE = re.compile(r"^(__default__|[A-Za-z0-9][A-Za-z0-9._-]{0,63})$")
-_MAX_CREDENTIAL_LEN = 8192
-
-
-def _credentials_schema(cur: Any) -> None:
-    # One row per credential this machine knows about, by the opaque id it
-    # travels under. ``sealed`` holds the payload ciphertext for an imported
-    # row and NULL for a local one (whose value lives in the vault, under the
-    # portable-credentials module). Plaintext never reaches this table.
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS sync_credential_items (
-            item_id    TEXT    PRIMARY KEY,
-            agent_key  TEXT    NOT NULL,
-            slot_id    TEXT    NOT NULL,
-            origin     TEXT    NOT NULL,
-            sealed     TEXT,
-            disabled   INTEGER NOT NULL DEFAULT 0,
-            updated_at INTEGER NOT NULL
-        )
-        """
-    )
-    cur.execute(
-        "CREATE INDEX IF NOT EXISTS sync_credential_items_slot"
-        " ON sync_credential_items (agent_key, slot_id)"
-    )
-
-
-def _new_item_id() -> str:
-    # Random, not derived: a name computed from ``<vendor>/<slot>`` would let
-    # anyone holding the server's rows guess which CLIs an account uses, and a
-    # name computed from the account key would change when that key rotates.
-    return "c-" + secrets.token_hex(16)
-
-
-class CredentialsScope:
-    """Portable CLI credentials — the values Settings → Accounts lets a user
-    paste so a pane can be handed them in its environment.
-
-    The payload of one item is ``{"v": 1, "agentKey", "slotId", "value"}`` and
-    nothing else, so two devices that pasted the same token agree it is the
-    same item; the time it was pasted stays local, and the cloud side's
-    ``updatedAt`` says when it last changed up there.
-
-    Two origins. A *local* item is one this machine's user pasted: its value
-    is in the vault under ``portable_credentials`` and only its id is kept
-    here. An *imported* item arrived through a pull: its payload is kept
-    sealed under the account key (the same associated data as on the wire),
-    opened into memory on first use, and never written anywhere in the clear
-    — not the vault, not a CLI's login file. ``imported_value`` is the one
-    reader, for the spawn path.
-
-    The ``sensitive`` flag asks the engine for what the rest of this design
-    needs: no tombstone for an item that is merely not here, sealed conflict
-    rows, and a failed round rather than a skipped record when a body will
-    not open.
-
-    Removal is local. A local item whose vault value is gone, or an imported
-    one the user turned off here, is marked *disabled* — a secret-free row
-    that survives restarts and re-enabling the scope, so a later pull cannot
-    quietly put the credential back. A disabled item leaves the snapshot and,
-    because of ``sensitive``, is not deleted from the cloud: other devices
-    keep working, and this one is one explicit pull away from rejoining.
-    """
-
-    scope = "credentials"
-    sensitive = True
-
-    def __init__(
-        self,
-        db: Any,
-        *,
-        entries: Callable[[], list[tuple[str, str]]] | None = None,
-        read_secret: Callable[[str, str], str | None] | None = None,
-        forget_local: Callable[[str, str], None] | None = None,
-        accepts: Callable[[str, str], bool] | None = None,
-    ) -> None:
-        self._db = db
-        self._db.migrate(_CREDENTIALS_COMPONENT, 1, _credentials_schema)
-        self._entries = entries or _portable_entries
-        self._read_secret = read_secret or _portable_read_secret
-        self._forget_local = forget_local or _portable_forget
-        self._accepts = accepts or _portable_accepts
-        #: Opened imported payloads, by item id. Memory only.
-        self._values: dict[str, dict[str, Any]] = {}
-        self._lock = threading.Lock()
-
-    # ── rows ────────────────────────────────────────────────────────────
-    def _rows(self, where: str = "", args: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
-        sql = (
-            "SELECT item_id, agent_key, slot_id, origin, sealed, disabled, updated_at"
-            " FROM sync_credential_items"
-        )
-        if where:
-            sql += " WHERE " + where
-        with self._db.transaction() as cur:
-            rows = cur.execute(sql, args).fetchall()
-        return [
-            {
-                "itemId": str(r[0]),
-                "agentKey": str(r[1]),
-                "slotId": str(r[2]),
-                "origin": str(r[3]),
-                "sealed": r[4],
-                "disabled": bool(r[5]),
-                "updatedAt": int(r[6]),
-            }
-            for r in rows
-        ]
-
-    def _row(self, item_id: str) -> dict[str, Any] | None:
-        rows = self._rows("item_id = ?", (item_id,))
-        return rows[0] if rows else None
-
-    def _write(
-        self,
-        item_id: str,
-        *,
-        agent_key: str,
-        slot_id: str,
-        origin: str,
-        sealed: str | None,
-        disabled: bool,
-    ) -> None:
-        with self._db.transaction() as cur:
-            cur.execute(
-                """
-                INSERT INTO sync_credential_items
-                    (item_id, agent_key, slot_id, origin, sealed, disabled, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(item_id) DO UPDATE SET
-                    agent_key = excluded.agent_key,
-                    slot_id = excluded.slot_id,
-                    origin = excluded.origin,
-                    sealed = excluded.sealed,
-                    disabled = excluded.disabled,
-                    updated_at = excluded.updated_at
-                """,
-                (item_id, agent_key, slot_id, origin, sealed, 1 if disabled else 0, int(time.time())),
-            )
-
-    def _delete(self, item_id: str) -> None:
-        with self._db.transaction() as cur:
-            cur.execute("DELETE FROM sync_credential_items WHERE item_id = ?", (item_id,))
-        with self._lock:
-            self._values.pop(item_id, None)
-
-    def _row_for_local(self, agent_key: str, slot_id: str) -> dict[str, Any]:
-        """The row a locally pasted value travels under, minting one if needed.
-
-        A local row wins. Failing that, the newest imported row for the same
-        slot is taken over: pasting a value where an imported one was in use
-        is the user replacing that credential, and the replacement should
-        reach the other devices as an update of the same item rather than as
-        a second one beside it.
-        """
-        rows = self._rows("agent_key = ? AND slot_id = ?", (agent_key, slot_id))
-        local = [r for r in rows if r["origin"] == CREDENTIAL_ORIGIN_LOCAL]
-        if local:
-            return local[0]
-        imported = sorted(
-            (r for r in rows if r["origin"] == CREDENTIAL_ORIGIN_IMPORTED),
-            key=lambda r: r["updatedAt"],
-            reverse=True,
-        )
-        if imported:
-            return imported[0]
-        item_id = _new_item_id()
-        self._write(
-            item_id,
-            agent_key=agent_key,
-            slot_id=slot_id,
-            origin=CREDENTIAL_ORIGIN_LOCAL,
-            sealed=None,
-            disabled=False,
-        )
-        return self._row(item_id) or {
-            "itemId": item_id,
-            "agentKey": agent_key,
-            "slotId": slot_id,
-            "origin": CREDENTIAL_ORIGIN_LOCAL,
-            "sealed": None,
-            "disabled": False,
-            "updatedAt": int(time.time()),
-        }
-
-    # ── payloads ────────────────────────────────────────────────────────
-    @staticmethod
-    def _payload(agent_key: str, slot_id: str, value: str) -> dict[str, Any]:
-        return {
-            "v": _CREDENTIAL_PAYLOAD_VERSION,
-            "agentKey": agent_key,
-            "slotId": slot_id,
-            "value": value,
-        }
-
-    @staticmethod
-    def _valid(payload: Any) -> dict[str, Any] | None:
-        """The payload if it has exactly the expected shape, else None.
-
-        Whitelisted field by field: what arrives here came out of a body
-        another device sealed, and a body is trusted to be *from the account*,
-        not to be well-formed.
-        """
-        if not isinstance(payload, dict) or payload.get("v") != _CREDENTIAL_PAYLOAD_VERSION:
-            return None
-        agent_key = payload.get("agentKey")
-        slot_id = payload.get("slotId")
-        value = payload.get("value")
-        if not (isinstance(agent_key, str) and _SLOT_RE.match(agent_key)):
-            return None
-        if not (isinstance(slot_id, str) and _SLOT_RE.match(slot_id)):
-            return None
-        if not (isinstance(value, str) and value and len(value) <= _MAX_CREDENTIAL_LEN):
-            return None
-        if any(ord(ch) < 0x20 or ch == "\x7f" for ch in value):
-            return None
-        return {"v": _CREDENTIAL_PAYLOAD_VERSION, "agentKey": agent_key, "slotId": slot_id, "value": value}
-
-    @staticmethod
-    def describe(payload: Any) -> dict[str, Any] | None:
-        """What may be said about a payload to anyone: which slot, never what."""
-        valid = CredentialsScope._valid(payload)
-        if valid is None:
-            return None
-        return {"agentKey": valid["agentKey"], "slotId": valid["slotId"]}
-
-    def _open(self, row: dict[str, Any]) -> dict[str, Any]:
-        """The payload of an imported row, from memory or the sealed column.
-
-        The payload is returned as it was sealed — its own ``agentKey`` and
-        ``slotId`` — rather than rebuilt from the row, so what this machine
-        holds is byte-for-byte what syncs.
-
-        Raises ``SyncError`` when it will not open: a snapshot with a hole in
-        it is how a credential gets tombstoned, so the round fails instead.
-        """
-        item_id = row["itemId"]
-        with self._lock:
-            cached = self._values.get(item_id)
-        if cached is not None:
-            return dict(cached)
-        try:
-            opened = self._valid(
-                json.loads(
-                    sync_keyring.decrypt(str(row["sealed"] or ""), scope=self.scope, item_id=item_id)
-                )
-            )
-        except Exception as err:  # noqa: BLE001 - see docstring
-            raise sync_engine.SyncError(
-                f"the imported credential {item_id} could not be opened: {err}"
-            ) from err
-        if opened is None:
-            raise sync_engine.SyncError(f"the imported credential {item_id} is malformed")
-        with self._lock:
-            self._values[item_id] = opened
-        return dict(opened)
-
-    # ── ScopeAdapter ────────────────────────────────────────────────────
-    def snapshot(self) -> dict[str, Any]:
-        out: dict[str, Any] = {}
-        seen_local: set[str] = set()
-        for agent_key, slot_id in self._entries():
-            value = self._read_secret(agent_key, slot_id)
-            if not (isinstance(value, str) and value):
-                continue
-            if not self._accepts(agent_key, value):
-                log.info("credential for %s/%s is not eligible for sync", agent_key, slot_id)
-                continue
-            row = self._row_for_local(agent_key, slot_id)
-            if row["origin"] != CREDENTIAL_ORIGIN_LOCAL or row["disabled"]:
-                # Pasting is explicit: it takes the item over and switches it
-                # back on. The imported copy, if any, is superseded.
-                self._write(
-                    row["itemId"],
-                    agent_key=agent_key,
-                    slot_id=slot_id,
-                    origin=CREDENTIAL_ORIGIN_LOCAL,
-                    sealed=None,
-                    disabled=False,
-                )
-                with self._lock:
-                    self._values.pop(row["itemId"], None)
-            out[row["itemId"]] = self._payload(agent_key, slot_id, value)
-            seen_local.add(row["itemId"])
-        for row in self._rows():
-            item_id = row["itemId"]
-            if item_id in seen_local or row["disabled"]:
-                continue
-            if row["origin"] == CREDENTIAL_ORIGIN_IMPORTED and not row["sealed"]:
-                continue  # switched back on, waiting for the pull that fills it
-            if row["origin"] == CREDENTIAL_ORIGIN_LOCAL:
-                # The vault no longer has it: the user removed it here. Say so
-                # durably, so a pull cannot bring it back unasked.
-                self._write(
-                    item_id,
-                    agent_key=row["agentKey"],
-                    slot_id=row["slotId"],
-                    origin=CREDENTIAL_ORIGIN_LOCAL,
-                    sealed=None,
-                    disabled=True,
-                )
-                continue
-            out[item_id] = self._open(row)
-        return out
-
-    def apply(self, item_id: str, payload: Any | None) -> bool:
-        """Take one record in. False means it was declined and is not held
-        here, which the engine records as "nothing agreed for this item"."""
-        row = self._row(item_id)
-        if payload is None:
-            # A tombstone. Never carried through to a local value — that is
-            # the user's own paste on this machine — and an imported copy is
-            # simply let go of.
-            if row is not None and row["origin"] == CREDENTIAL_ORIGIN_IMPORTED:
-                self._delete(item_id)
-            return True
-        valid = self._valid(payload)
-        if valid is None:
-            log.warning("credential %s arrived malformed and was not imported", item_id)
-            return False
-        if row is not None and row["disabled"]:
-            return False  # turned off on this device; the cloud copy stays where it is
-        if row is not None and row["origin"] == CREDENTIAL_ORIGIN_LOCAL:
-            # Another device replaced the value this machine's user pasted.
-            # The item is the same item, so the local copy gives way: the
-            # vault entry goes, and the new value is held like any import.
-            try:
-                self._forget_local(row["agentKey"], row["slotId"])
-            except Exception as err:  # noqa: BLE001 - a stuck vault must not block the import
-                log.warning("the local copy of %s could not be cleared: %s", item_id, err)
-        sealed = sync_keyring.encrypt(
-            sync_engine.canonical(valid), scope=self.scope, item_id=item_id
-        )
-        self._write(
-            item_id,
-            agent_key=valid["agentKey"],
-            slot_id=valid["slotId"],
-            origin=CREDENTIAL_ORIGIN_IMPORTED,
-            sealed=sealed,
-            disabled=False,
-        )
-        with self._lock:
-            self._values[item_id] = valid
-        return True
-
-    def request_items(self, item_ids: list[str]) -> None:
-        """An explicit pull of these items is the user asking to have them
-        here: a disabled row is switched back on so ``apply`` will take it.
-
-        The row becomes an *imported* one waiting for its payload, whatever
-        it was before. A removed local paste has no vault value to come back
-        to, and a local row without one reads as "removed here" on the very
-        next snapshot — which would switch it off again before the pull
-        could fill it.
-        """
-        for item_id in item_ids:
-            row = self._row(item_id)
-            if row is not None and row["disabled"]:
-                self._write(
-                    item_id,
-                    agent_key=row["agentKey"],
-                    slot_id=row["slotId"],
-                    origin=CREDENTIAL_ORIGIN_IMPORTED,
-                    sealed=None,
-                    disabled=False,
-                )
-
-    # ── what the rest of the backend may ask ────────────────────────────
-    def imported_value(self, agent_key: str, slot_id: str) -> str | None:
-        """The imported value in use for a slot, for the spawn path only.
-
-        The newest enabled imported row wins when there are several. None
-        when nothing is imported, or when it cannot be opened here — a spawn
-        must never fail because the sync key is away; it just goes without.
-        """
-        rows = [
-            r
-            for r in self._rows("agent_key = ? AND slot_id = ?", (agent_key, slot_id))
-            if r["origin"] == CREDENTIAL_ORIGIN_IMPORTED and not r["disabled"] and r["sealed"]
-        ]
-        for row in sorted(rows, key=lambda r: r["updatedAt"], reverse=True):
-            try:
-                return str(self._open(row)["value"])
-            except sync_engine.SyncError as err:
-                log.warning("%s", err)
-        return None
-
-    def disable(self, agent_key: str, slot_id: str) -> int:
-        """Stop using every imported copy of a slot on this machine.
-
-        The value is dropped from memory and the sealed column; the row stays
-        as a disabled marker. The cloud is not told. Returns how many rows
-        were switched off.
-        """
-        count = 0
-        for row in self._rows("agent_key = ? AND slot_id = ?", (agent_key, slot_id)):
-            if row["disabled"]:
-                continue
-            self._write(
-                row["itemId"],
-                agent_key=agent_key,
-                slot_id=slot_id,
-                origin=row["origin"],
-                sealed=None,
-                disabled=True,
-            )
-            with self._lock:
-                self._values.pop(row["itemId"], None)
-            count += 1
-        return count
-
-    def imported_listing(self) -> list[dict[str, Any]]:
-        """Every imported credential in use here, for the accounts listing.
-
-        ``available`` says whether ``imported_value`` would answer right now:
-        a sealed row this machine's key will not open lists as unavailable
-        rather than vanishing, so the pane can say why a slot does not work.
-        Metadata only.
-        """
-        out: list[dict[str, Any]] = []
-        for row in self._rows("origin = ?", (CREDENTIAL_ORIGIN_IMPORTED,)):
-            if row["disabled"] or not row["sealed"]:
-                continue
-            try:
-                self._open(row)
-                available = True
-            except sync_engine.SyncError:
-                available = False
-            out.append(
-                {
-                    "agentKey": row["agentKey"],
-                    "slotId": row["slotId"],
-                    "available": available,
-                    "updatedAt": datetime.fromtimestamp(row["updatedAt"], tz=timezone.utc).isoformat(
-                        timespec="seconds"
-                    ),
-                }
-            )
-        return out
-
-    def listing(self) -> list[dict[str, Any]]:
-        """Every row as metadata: id, slot, origin, disabled, when. No values."""
-        return [
-            {k: v for k, v in row.items() if k != "sealed"}
-            for row in self._rows()
-        ]
-
-    def clear_imported(self) -> None:
-        """Forget everything that came from the cloud — on signing out or
-        switching accounts. Local rows keep their ids; their disabled marks
-        stay too, so a removal survives the switch."""
-        with self._db.transaction() as cur:
-            cur.execute(
-                "DELETE FROM sync_credential_items WHERE origin = ?",
-                (CREDENTIAL_ORIGIN_IMPORTED,),
-            )
-        with self._lock:
-            self._values.clear()
-
-
-# Default seams onto the portable-credentials module. Kept as functions so a
-# test can hand the adapter synthetic ones and never touch a vault.
-
-def _portable_entries() -> list[tuple[str, str]]:
-    from . import portable_credentials
-
-    lister = getattr(portable_credentials, "list_stored", None)
-    if lister is None:
-        return []
-    try:
-        return [(str(a), str(s)) for a, s in lister()]
-    except Exception as err:  # noqa: BLE001 - an unreadable vault syncs nothing
-        log.warning("the portable credentials could not be listed: %s", err)
-        return []
-
-
-def _portable_read_secret(agent_key: str, slot_id: str) -> str | None:
-    from . import portable_credentials
-
-    reader = getattr(portable_credentials, "read_secret", None)
-    return reader(agent_key, slot_id) if reader is not None else None
-
-
-def _portable_forget(agent_key: str, slot_id: str) -> None:
-    from . import portable_credentials
-
-    # ``notify_sync=False``: the default would call ``forget_credential`` and
-    # retire the imported copy that is about to be served in its place.
-    portable_credentials.forget(agent_key, slot_id, notify_sync=False)
-
-
-def _portable_accepts(agent_key: str, value: str) -> bool:
-    """Only a value the vendor declares portable and still validates goes up."""
-    from . import portable_credentials
-
-    if portable_credentials.portable_spec(agent_key) is None:
-        return False
-    try:
-        portable_credentials.validate_value(agent_key, value)
-    except Exception:  # noqa: BLE001 - whatever the reason, it does not travel
-        return False
-    return True
-
-
-_credentials_scope: CredentialsScope | None = None
-_credentials_lock = threading.Lock()
-
-
-def credentials_scope() -> CredentialsScope:
-    """The one adapter instance — registered with the engine and consulted by
-    the spawn and account-lifecycle paths, which must see the same rows."""
-    global _credentials_scope
-    with _credentials_lock:
-        if _credentials_scope is None:
-            from . import app
-
-            _credentials_scope = CredentialsScope(app.database)
-        return _credentials_scope
-
-
-def imported_credential(agent_key: str, slot_id: str) -> str | None:
-    """For the spawn path: the value pulled from the cloud for this slot, if
-    any. Blocking (may open the vault for the account key); call off the
-    event loop."""
-    return credentials_scope().imported_value(agent_key, slot_id)
-
-
-def imported_credentials() -> list[dict[str, Any]]:
-    """For the accounts listing: the imported credentials this machine can
-    use, as ``{agentKey, slotId, available, updatedAt}``. Blocking; call off
-    the event loop. Never a value."""
-    return credentials_scope().imported_listing()
-
-
-def forget_credential(agent_key: str, slot_id: str) -> int:
-    """For the remove path: stop using this slot's imported copies here."""
-    return credentials_scope().disable(agent_key, slot_id)
-
-
-def credential_saved(agent_key: str, slot_id: str) -> None:
-    """For the save path: a paste is an edit worth carrying up now, not on
-    the next round that happens by. Nothing happens unless the scope is on
-    and the link is up; ``sync_now`` says so itself.
-
-    Must be called on the event loop (the WS handler, after its blocking
-    store returns) — a worker thread has no loop to schedule on, and that is
-    said out loud rather than dropped. Rounds on one scope are serialised by
-    the engine, so a save landing mid-round simply runs after it.
-    """
-    from . import server_link
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        log.warning(
-            "credential_saved for %s/%s was called off the event loop; no sync scheduled",
-            agent_key, slot_id,
-        )
-        return
-    log.info("portable credential for %s/%s changed; scheduling a sync", agent_key, slot_id)
-    loop.create_task(server_link.sync_now(scope="credentials"))
-
-
 def on_account_changed() -> None:
     """Signing out or switching the cloud account.
 
-    Everything imported is let go of and the engine's record of every scope is
-    dropped, then every scope is switched off: what this machine's user wrote
-    stays here, and goes up to the new account only once they turn a section
-    on again. Sync is opt-in per account, not per install.
+    The engine's record of every scope is dropped, then every scope is
+    switched off: what this machine's user wrote stays here, and goes up to
+    the new account only once they turn a section on again. Sync is opt-in per account, not per install.
 
     All scopes, not only credentials: the agreed state, cursor and conflicts
     are not keyed by account, so the previous account's revs would otherwise
@@ -2604,7 +2207,6 @@ def on_account_changed() -> None:
     )
     # Rounds still running for the previous account write nothing from here on.
     attempt("retire the running rounds", app.sync_store.new_generation)
-    attempt("let go of imported credentials", lambda: credentials_scope().clear_imported())
     for scope in sync_engine.SCOPES + sync_engine.INTERNAL_SCOPES:
         attempt(f"forget {scope}", lambda scope=scope: app.sync_store.forget(scope))
     attempt("forget detached marks", forget_detached)
@@ -2808,9 +2410,3 @@ def forget_approvals(scope: str | None = None) -> None:
     or of every scope; on_account_changed calls it, since they are sealed
     under the previous account's key."""
     sync_approvals.forget_approvals(scope)
-
-
-def _reset_credentials_for_test() -> None:
-    global _credentials_scope
-    with _credentials_lock:
-        _credentials_scope = None

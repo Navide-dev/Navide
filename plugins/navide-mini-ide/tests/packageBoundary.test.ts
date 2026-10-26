@@ -11,6 +11,7 @@ import {
   rmSync,
   symlinkSync,
 } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
@@ -115,6 +116,14 @@ function resolveInstalledPackageBin(
   return join(packageDirectory, bin)
 }
 
+function vueTscEntry(consumerEntry: string): string {
+  // Bun's loader cannot apply Volar's `tsc` bootstrap, so a direct vue-tsc
+  // entry reports TS2307 for every .vue import. Under Bun the same typecheck
+  // runs through the repository's explicit adapter; the consumer's vue-tsc is
+  // the same installed package. Node keeps the consumer entry unchanged.
+  return process.versions.bun ? join(repositoryRoot, 'scripts/bun/vue-tsc.cjs') : consumerEntry
+}
+
 async function extractPackageTarball(tarball: string, packageDirectory: string, cwd: string): Promise<void> {
   mkdirSync(packageDirectory, { recursive: true })
   await runCommandOrThrow(
@@ -149,6 +158,8 @@ function writeConsumerProject(project: string, packageRoot: string): void {
     cpSync(join(packageRoot, file), join(project, file))
   }
   cpSync(join(packageRoot, 'frontend'), join(project, 'frontend'), { recursive: true })
+  // The manifest's icon: part of the package source, as in navide-git.
+  cpSync(join(packageRoot, 'assets'), join(project, 'assets'), { recursive: true })
   // Test sources are not part of the shipped package and would demand test-only
   // dev dependencies in the external consumer typecheck.
   cpSync(join(packageRoot, 'src'), join(project, 'src'), {
@@ -216,7 +227,7 @@ describe('navide Mini-IDE public package boundary', () => {
         // wall time at load average ~280 and outran the test timeout. Both
         // settle before the finally block removes the project they read.
         const [typecheck, build] = await Promise.allSettled([
-          runNodeEntryOrThrow(vueTscCli, ['--noEmit', '--project', join(externalProject, 'tsconfig.json')], externalProject),
+          runNodeEntryOrThrow(vueTscEntry(vueTscCli), ['--noEmit', '--project', join(externalProject, 'tsconfig.json')], externalProject),
           runNodeEntryOrThrow(viteCli, ['build', '--config', join(externalProject, 'vite.config.ts')], externalProject, {
             NAVIDE_MINI_IDE_DIST_DIR: join(externalProject, 'dist'),
           }),
@@ -238,17 +249,20 @@ describe('navide Mini-IDE public package boundary', () => {
           expect(workerFiles.filter((path) => basename(path).startsWith(workerPrefix)), workerPrefix).toHaveLength(1)
         }
         const javaScriptFiles = distFiles.filter((path) => path.endsWith('.js'))
+        // Read the dist once and asynchronously: rereading every bundle per
+        // Monaco worker kept this test worker's event loop busy on a loaded runner.
+        const javaScriptSources = new Map(await Promise.all(
+          javaScriptFiles.map(async (path) => [path, await readFile(path, 'utf8')] as const),
+        ))
         for (const workerFile of workerFiles) {
           const workerName = basename(workerFile)
           expect(
-            javaScriptFiles.some((path) => path !== workerFile && readFileSync(path, 'utf8').includes(workerName)),
+            [...javaScriptSources].some(([path, source]) => path !== workerFile && source.includes(workerName)),
             workerName,
           ).toBe(true)
         }
 
-        const builtJavaScript = javaScriptFiles
-          .map((path) => readFileSync(path, 'utf8'))
-          .join('\n')
+        const builtJavaScript = [...javaScriptSources.values()].join('\n')
         expect(builtJavaScript.length).toBeGreaterThan(0)
         expect(builtJavaScript).not.toContain('src/renderer')
         expect(builtJavaScript).not.toContain('capabilityBackend')

@@ -16,12 +16,7 @@ import type {
 } from './pluginBackendSupervisor'
 import { BackendPluginError, PluginBackendSupervisor } from './pluginBackendSupervisor'
 import { createProductionPlansBridgeDispatcher, createTestPlansFilesystemPort } from './plansBridge'
-import {
-  MAX_BACKEND_CALLS_PER_INSTANCE,
-  MAX_BACKEND_CHILDREN,
-  MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE,
-  MAX_BACKEND_TIMEOUT_MS,
-} from './pluginBackendLimits'
+import { MAX_BACKEND_TIMEOUT_MS } from './pluginBackendLimits'
 import { BACKEND_CRASH_WINDOW_MS, BACKEND_RESTART_DELAYS_MS } from './pluginThirdPartyBackends'
 
 const fixture = fileURLToPath(new URL('./test-fixtures/backend-wire-child.mjs', import.meta.url))
@@ -45,7 +40,7 @@ const activation: BackendPluginLaunchSpec = {
   entryFile: fixture,
   protocolVersion: 1,
   activation: 'startup',
-  approvedMethods: ['fixture.delay', 'fixture.echo', 'fixture.emit', 'fixture.exit', 'plans.resolve_root'],
+  approvedMethods: ['fixture.delay', 'fixture.echo', 'fixture.emit', 'fixture.exit', 'fixture.cancelcount', 'fixture.pendingdelays', 'plans.resolve_root'],
   approvedEvents: ['fixture.changed', 'plans.changed'],
   approvedBridgePorts: ['filesystem'],
 }
@@ -60,7 +55,7 @@ const runtime = {
   initiator: { kind: 'user', id: 'user-1' },
 } as const
 
-function makeHost(entryFile = fixture): PluginBackendHost {
+function makeHost(entryFile = fixture, extra: Partial<PluginBackendHostOptions> = {}): PluginBackendHost {
   const options: PluginBackendSupervisorOptions = {
     // PyInstaller --onefile needs a writable temp directory for extraction;
     // keep the test launcher aligned with the Host's minimal environment.
@@ -77,6 +72,7 @@ function makeHost(entryFile = fixture): PluginBackendHost {
       return new PluginBackendSupervisor({ ...nextActivation, entryFile }, options)
     },
     resolvePlanRoot: async ({ workspacePath }) => workspacePath,
+    ...extra,
   }
   return new PluginBackendHost(hostOptions)
 }
@@ -87,6 +83,53 @@ describe('PluginBackendHost', () => {
   afterEach(async () => {
     delete (globalThis as unknown as { nav?: unknown }).nav
     await Promise.all(hosts.splice(0).map((host) => host.close()))
+  })
+
+  // D-e: every settled call is reported once, whichever path made it, so the
+  // activity record sees agent-tool calls as well as a frontend's own.
+  it('reports each settled call with its method and outcome', async () => {
+    const settled: unknown[] = []
+    const host = makeHost(fixture, { onCallSettled: (call) => settled.push(call) })
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+
+    await expect(host.call('view-1', 'fixture.echo', { value: 1 })).resolves.toBeTruthy()
+    await expect(host.call('view-1', 'fixture.undeclared', null)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(host.call('view-1', 'fixture.echo', null, {
+      initiator: { kind: 'agent', source: 'mcp', id: 'a-1' } as never,
+    })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    const controller = new AbortController()
+    const delayed = host.call('view-1', 'fixture.delay', { ms: 5_000 }, { signal: controller.signal })
+    setTimeout(() => controller.abort(), 50)
+    await expect(delayed).rejects.toMatchObject({ code: 'USER_CANCELLED' })
+
+    const base = { pluginId: 'navide.plans', packageVersion: '0.1.92', workspacePath: process.cwd() }
+    expect(settled).toEqual([
+      { ...base, method: 'fixture.echo', declared: true, outcome: 'allowed' },
+      { ...base, method: 'fixture.undeclared', declared: false, outcome: 'error' },
+      { ...base, method: 'fixture.echo', declared: true, outcome: 'denied' },
+      { ...base, method: 'fixture.delay', declared: true, outcome: 'cancelled' },
+    ])
+  })
+
+  it('lets a plugin whose calls are not observed call straight through', async () => {
+    const settled: unknown[] = []
+    const host = makeHost(fixture, { onCallSettled: (call) => settled.push(call), observesCallsOf: () => false })
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+    await expect(host.call('view-1', 'fixture.echo', { value: 3 })).resolves.toBeTruthy()
+    await expect(host.call('view-1', 'fixture.undeclared', null)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    expect(settled).toEqual([])
+  })
+
+  it('never lets the observer fail the call it reports', async () => {
+    const host = makeHost(fixture, { onCallSettled: () => { throw new Error('observer broke') } })
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+    await expect(host.call('view-1', 'fixture.echo', { value: 2 })).resolves.toBeTruthy()
   })
 
   it('routes a bound view through the matching package version', async () => {
@@ -229,13 +272,14 @@ describe('PluginBackendHost', () => {
     )
   })
 
-  it('caps bound child process slots and releases a failed root binding', async () => {
+  it('binds any number of child processes, discloses them and releases a failed root binding', async () => {
     const createSupervisor = vi.fn(() => ({
       start: vi.fn(async () => ({
         value: null,
         serverInfo: { name: 'controlled', version: '1.0.0' },
       })),
       clientFor: vi.fn(() => ({ call: vi.fn(async () => null as never), subscribe: vi.fn() })),
+      resourceUsage: vi.fn(() => null),
       close: vi.fn(async () => undefined),
     }) as unknown as PluginBackendSupervisor)
     const resolvePlanRoot = vi.fn(async () => tmpdir())
@@ -245,26 +289,22 @@ describe('PluginBackendHost', () => {
     await expect(host.bindView(runtime, activation.packageDir, process.cwd()))
       .rejects.toMatchObject({ code: 'INVALID_RUNTIME' })
 
-    const cappedHost = new PluginBackendHost({
+    const uncappedHost = new PluginBackendHost({
       createSupervisor,
       resolvePlanRoot: async ({ workspacePath }) => workspacePath,
     })
-    hosts.push(cappedHost)
-    cappedHost.register(activation)
-    for (let index = 0; index < MAX_BACKEND_CHILDREN; index += 1) {
-      cappedHost.bindView({
-        ...runtime,
-        instanceId: `view-${index}`,
-        hostWindowId: `window-${index}`,
-      }, activation.packageDir, process.cwd())
-    }
-    expect(() => cappedHost.bindView({
+    hosts.push(uncappedHost)
+    uncappedHost.register(activation)
+    // User ruling: no cap on child processes; the 17th used to get RESOURCE_LIMIT.
+    const bindings = Array.from({ length: 24 }, (_, index) => uncappedHost.bindView({
       ...runtime,
-      instanceId: 'view-over-cap',
-      hostWindowId: 'window-over-cap',
-    }, activation.packageDir, process.cwd())).toThrowError(
-      expect.objectContaining({ code: 'RESOURCE_LIMIT' }),
-    )
+      instanceId: `view-${index}`,
+      hostWindowId: `window-${index}`,
+    }, activation.packageDir, process.cwd()))
+    await Promise.all(bindings)
+    expect(uncappedHost.backendResourceUsage().children).toEqual({ current: 24, peak: 24, retained: 0 })
+    await uncappedHost.unbindView('view-0')
+    expect(uncappedHost.backendResourceUsage().children).toEqual({ current: 23, peak: 24, retained: 0 })
   })
 
   it('reports the child slot it can no longer reclaim after a failed close', async () => {
@@ -297,25 +337,17 @@ describe('PluginBackendHost', () => {
       expect.stringContaining('backend child slot retained after a failed close'),
     )
 
-    // A failed close cannot prove the child exited, so its slot stays consumed
-    // and the limit it costs says so.
-    for (let index = 1; index < MAX_BACKEND_CHILDREN; index += 1) {
+    // A failed close cannot prove the child exited: it stays counted and is
+    // disclosed as retained, and it never stops another child from starting.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('1 backend child whose close failed may still be running'))
+    for (let index = 1; index <= 20; index += 1) {
       host.bindView({
         ...runtime,
         instanceId: `view-${index}`,
         hostWindowId: `window-${index}`,
       }, activation.packageDir, process.cwd())
     }
-    expect(() => host.bindView({
-      ...runtime,
-      instanceId: 'view-over-cap',
-      hostWindowId: 'window-over-cap',
-    }, activation.packageDir, process.cwd())).toThrowError(expect.objectContaining({
-      code: 'RESOURCE_LIMIT',
-      message: expect.stringContaining(
-        `1 of ${MAX_BACKEND_CHILDREN} slots are retained by backend children whose close failed`,
-      ),
-    }))
+    expect(host.backendResourceUsage().children).toEqual({ current: 21, peak: 21, retained: 1 })
   })
 
   it('rejects a filesystem binding without a Host root resolver', async () => {
@@ -552,7 +584,7 @@ describe('PluginBackendHost', () => {
     })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
   })
 
-  it('enforces per-view call and subscription limits', async () => {
+  it('never caps in-flight calls or per-view subscriptions and discloses both', async () => {
     const settledSubscriptions: Array<() => void> = []
     const controlledSupervisor = {
       start: vi.fn(async () => ({
@@ -574,6 +606,7 @@ describe('PluginBackendHost', () => {
           }
         }),
       })),
+      resourceUsage: vi.fn(() => null),
       close: vi.fn(async () => undefined),
     } as unknown as PluginBackendSupervisor
     const host = new PluginBackendHost({
@@ -584,23 +617,120 @@ describe('PluginBackendHost', () => {
     host.register(activation)
     host.bindView(runtime, activation.packageDir, process.cwd())
 
-    const calls = Array.from({ length: MAX_BACKEND_CALLS_PER_INSTANCE }, () =>
+    // User ruling L3: no concurrency cap; the 65th call used to get RESOURCE_LIMIT.
+    const calls = Array.from({ length: 100 }, () =>
       host.call('view-1', 'fixture.delay', { milliseconds: 10_000 })
     )
-    await expect(host.call('view-1', 'fixture.delay', { milliseconds: 10_000 }))
-      .rejects.toMatchObject({ code: 'RESOURCE_LIMIT' })
+    const subscriptions: Array<{ dispose: () => void }> = []
+    try {
+      const settledCalls = Promise.allSettled(calls)
+      // User ruling: no cap; the 33rd subscription of a view used to get RESOURCE_LIMIT.
+      subscriptions.push(...await Promise.all(
+        Array.from({ length: 100 }, () =>
+          host.subscribe('view-1', 'fixture.changed', () => undefined)
+        )
+      ))
+      expect(host.backendResourceUsage().views).toEqual([expect.objectContaining({
+        pluginId: 'navide.plans',
+        instanceId: 'view-1',
+        subscriptions: { current: 100, peak: 100 },
+      })])
 
-    const subscriptions = await Promise.all(
-      Array.from({ length: MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE }, () =>
-        host.subscribe('view-1', 'fixture.changed', () => undefined)
-      )
+      const outcomes = await settledCalls
+      expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toEqual([])
+    } finally {
+      for (const subscription of subscriptions) subscription.dispose()
+      for (const settle of settledSubscriptions) settle()
+    }
+  })
+
+  it('runs 200 concurrent calls on one real child over stdio', async () => {
+    const host = makeHost()
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 200 }, () => host.call('view-1', 'fixture.delay', { milliseconds: 50 })),
     )
-    await expect(host.subscribe('view-1', 'fixture.changed', () => undefined))
-      .rejects.toMatchObject({ code: 'RESOURCE_LIMIT' })
+    expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toEqual([])
+    expect(outcomes.every((outcome) =>
+      outcome.status === 'fulfilled' && (outcome.value as { delayed?: boolean }).delayed === true
+    )).toBe(true)
+  }, 60_000)
 
-    for (const subscription of subscriptions) subscription.dispose()
+  it('discloses current and peak in-flight calls per plugin', async () => {
+    const host = makeHost()
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+    expect(host.backendCallConcurrency()).toEqual([])
+
+    const calls = Array.from({ length: 70 }, () =>
+      host.call('view-1', 'fixture.delay', { milliseconds: 50 })
+    )
+    expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 70, peak: 70, droppedNotifications: 0 }])
     await Promise.all(calls)
-    for (const settle of settledSubscriptions) settle()
+    expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 0, peak: 70, droppedNotifications: 0 }])
+    await host.call('view-1', 'fixture.echo', null)
+    expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 0, peak: 70, droppedNotifications: 0 }])
+  }, 60_000)
+
+  it('counts a call as in flight until it settles, not only until it reaches the child', async () => {
+    const host = makeHost()
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+    const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+    const calls = Array.from({ length: 10 }, () =>
+      host.call('view-1', 'fixture.delay', { milliseconds: 1_500 })
+    )
+    await wait(300)
+    expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 10, peak: 10, droppedNotifications: 0 }])
+    const late = host.call('view-1', 'fixture.delay', { milliseconds: 1_500 })
+    await wait(100)
+    expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 11, peak: 11, droppedNotifications: 0 }])
+    await Promise.all([...calls, late])
+    expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 0, peak: 11, droppedNotifications: 0 }])
+  }, 60_000)
+
+  it('delivers a cancellation that arrives after the call reached the child', async () => {
+    const host = makeHost()
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+
+    const controller = new AbortController()
+    const pending = host.call('view-1', 'fixture.delay', { milliseconds: 30_000 }, { signal: controller.signal })
+    // Abort only once the child holds the call, not after a fixed sleep: a
+    // slow runner may not have delivered it yet.
+    await vi.waitFor(async () => {
+      expect(await host.call('view-1', 'fixture.pendingdelays', null)).toBe(1)
+    }, { timeout: 30_000, interval: 50 })
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ code: 'USER_CANCELLED' })
+    await expect(host.call('view-1', 'fixture.cancelcount', null)).resolves.toBe(1)
+  }, 60_000)
+
+  it('discloses every Host event notification a child had dropped, per plugin', () => {
+    let supervisorOptions: PluginBackendSupervisorOptions | undefined
+    const host = new PluginBackendHost({
+      createSupervisor: (_activation, options) => {
+        supervisorOptions = options
+        return { close: vi.fn(async () => undefined) } as unknown as PluginBackendSupervisor
+      },
+      resolvePlanRoot: async ({ workspacePath }) => workspacePath,
+    })
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+    return vi.waitFor(() => expect(supervisorOptions?.onNotificationDropped).toBeTypeOf('function')).then(() => {
+      supervisorOptions?.onNotificationDropped?.()
+      supervisorOptions?.onNotificationDropped?.()
+      supervisorOptions?.onNotificationDropped?.()
+      expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 0, peak: 0, droppedNotifications: 3 }])
+    })
   })
 
   it('cancels an in-flight call when the view is destroyed', async () => {

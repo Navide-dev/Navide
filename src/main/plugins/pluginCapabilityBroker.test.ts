@@ -17,6 +17,7 @@ import {
   HOST_EVENT_SOURCE_PLUGIN_ID,
   shellTopLevelExecutables,
   executionPolicyAllows,
+  isAuthenticatedInitiator,
   type PublicCapabilityDecision,
   type HostCapabilityContext,
   type CapabilityCall,
@@ -251,6 +252,27 @@ describe('Issue 03/04 public Host planner', () => {
     args: { profileId: 'codex', cols: 100, rows: 30 },
     reqId: 'req-1',
     ...overrides,
+  })
+
+  // Review M2 on #648: a session is owned by one package and one version, not
+  // just one instance id. A binding that differs only there is refused.
+  it.each([
+    ['another package', { pluginId: 'other.plugin' }],
+    ['another version of the package', { packageVersion: '0.9.0' }],
+  ])('refuses a session bound to %s for input, stop and resize', (_case, differs) => {
+    const calls: Array<Partial<CapabilityCall>> = [
+      { method: 'sendInput', args: { sessionId: 'session-1', data: 'x' } },
+      { method: 'stopSession', args: { sessionId: 'session-1', force: true } },
+      { method: 'resizeSession', args: { sessionId: 'session-1', cols: 80, rows: 24 } },
+    ]
+    for (const overrides of calls) {
+      expect(planPublicCapabilityCall(call(overrides), policy, context({
+        sessionBindings: new Map([['session-1', binding]]),
+      }))).toMatchObject({ kind: 'allow' })
+      expect(planPublicCapabilityCall(call(overrides), policy, context({
+        sessionBindings: new Map([['session-1', { ...binding, ...differs }]]),
+      }))).toMatchObject({ kind: 'deny', response: { error: { message: 'AI CLI session ownership mismatch' } } })
+    }
   })
 
   it('returns a Host-owned plan only after grant, binding, and schema checks', () => {
@@ -1261,5 +1283,35 @@ describe('Issue 16 broker Host-managed storage partitions', () => {
       kind: 'deny',
       response: { error: { code: 'INVALID_ARGUMENT' } },
     })
+  })
+})
+
+describe('agent initiator caller (plan B1-b)', () => {
+  const base = { kind: 'agent', source: 'mcp', id: 'a-1' }
+  it('keeps the three-key agent and the user initiators exactly as before', () => {
+    expect(isAuthenticatedInitiator(base)).toBe(true)
+    expect(isAuthenticatedInitiator({ kind: 'user', id: 'u' })).toBe(true)
+    expect(isAuthenticatedInitiator({ kind: 'user', id: 'u', caller: null })).toBe(false)
+  })
+
+  it('accepts a pane caller verified to the pane, and external or host callers verified to their kind', () => {
+    expect(isAuthenticatedInitiator({ ...base, caller: { kind: 'pane', paneId: 'p-1', workspace: '/w', verifiedTo: 'pane' } })).toBe(true)
+    expect(isAuthenticatedInitiator({ ...base, caller: { kind: 'pane', paneId: 'p-1', workspace: null, verifiedTo: 'pane' } })).toBe(true)
+    expect(isAuthenticatedInitiator({ ...base, caller: { kind: 'external', paneId: null, workspace: null, verifiedTo: 'caller-kind' } })).toBe(true)
+    expect(isAuthenticatedInitiator({ ...base, caller: { kind: 'host', paneId: null, workspace: null, verifiedTo: 'caller-kind' } })).toBe(true)
+  })
+
+  it('refuses a caller that claims more than it can prove', () => {
+    for (const caller of [
+      { kind: 'external', paneId: 'p-1', workspace: null, verifiedTo: 'caller-kind' },
+      { kind: 'external', paneId: null, workspace: null, verifiedTo: 'pane' },
+      { kind: 'pane', paneId: '', workspace: null, verifiedTo: 'pane' },
+      { kind: 'pane', paneId: 'p-1', workspace: null, verifiedTo: 'caller-kind' },
+      { kind: 'pane', paneId: 'p-1', workspace: null, verifiedTo: 'pane', model: 'x' },
+      { kind: 'user', paneId: null, workspace: null, verifiedTo: 'caller-kind' },
+      null,
+    ]) {
+      expect(isAuthenticatedInitiator({ ...base, caller })).toBe(false)
+    }
   })
 })

@@ -1,6 +1,6 @@
 [project]
 name = "agent-team-backend"
-version = "0.2.22"
+version = "0.2.32"
 description = "Python backend for the Navide AI-native engineering environment"
 requires-python = ">=3.12"
 dependencies = [
@@ -69,6 +69,8 @@ dev = [
     # Per-test deadline for the Windows CI job: a hang there must fail with a
     # traceback instead of eating the whole job timeout in silence.
     "pytest-timeout>=2.3",
+    # Parallel backend runs (`-n 4 --dist loadfile`) for CI and the release gate.
+    "pytest-xdist>=3.6",
     "ruff>=0.9",
 ]
 
@@ -87,6 +89,8 @@ markers = [
     "cli_regression: deterministic CLI infrastructure and vendor contracts",
     "cli_shared: shared CLI process, transport, lifecycle and session contracts",
     "cli_vendor: vendor-specific integration contracts",
+    "serial: wall-clock-timed; seen failing beside parallel workers, so it runs in the serial pass after the -n pass",
+    "slow: minutes long; skipped unless --run-slow is given (locally or in a dedicated job), never in the default shards",
 ]
 
 [tool.ruff]

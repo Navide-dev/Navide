@@ -49,7 +49,7 @@ def _clean_registry() -> Any:
 
 
 def _ctx(pane_id: str = "pa") -> Any:
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )
@@ -489,8 +489,10 @@ async def test_close_asks_the_window_holding_the_target_pane_to_close_it(
     assert calls[0]["workspace_path"] == "/ws/alpha"
     assert calls[0]["action"] == "ui.pane.close"
     assert calls[0]["args"] == {"paneId": "pw"}
-    # Addressed at the target, not at the caller: _pane_caller("pw"), not "pa".
-    assert calls[0]["caller"].pane_id == "pw"
+    # Addressed at the target's window, but the window is told the real
+    # caller: its self-close guard reads caller_pane_id.
+    assert calls[0]["route_pane_id"] == "pw"
+    assert calls[0]["caller"].pane_id == "pa"
     assert "advisories" not in result
 
 
@@ -758,6 +760,28 @@ async def test_mcp_list_merges_live_status_and_keeps_the_answer_a_summary(
 
 
 @pytest.mark.asyncio
+async def test_mcp_list_says_when_the_tool_count_is_unknown(
+    mcp_sources: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed tool listing must not read as a server with no tools."""
+    monkeypatch.setattr(
+        backend_app,
+        "mcp_manager",
+        _FakeMcpManager([{
+            "name": "ctx", "status": "connected", "tool_count": 0, "tools": [],
+            "tools_error": "cannot reach https://u:p@host/mcp",
+        }]),
+    )
+    agent_messaging.register("pa", "caller", "/ws")
+
+    result = await plan_mcp.mcp_list(_ctx())
+
+    row = {r["name"]: r for r in result["servers"]}["ctx"]
+    assert row["tool_count"] == 0
+    assert row["tools_error"] == "cannot reach https://***@host/mcp"
+
+
+@pytest.mark.asyncio
 async def test_mcp_list_answers_an_unreadable_settings_file_with_ok_false(
     mcp_sources: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -933,3 +957,27 @@ async def test_the_round_two_tools_are_registered_with_their_declared_arguments(
     }
     assert set(tools["mcp_list"].inputSchema.get("properties") or {}) == set()
     assert set(tools["prompt_list"].inputSchema.get("properties") or {}) == {"id"}
+
+
+@pytest.mark.asyncio
+async def test_mcp_list_masks_a_start_error_that_quotes_a_url(
+    mcp_sources: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A start error goes to the agent too, and a library may quote the URL it
+    failed on: it is masked like the configured URL."""
+    secret = "sk-" + "live-1"
+    monkeypatch.setattr(
+        backend_app,
+        "mcp_manager",
+        _FakeMcpManager([{
+            "name": "ctx", "status": "error", "tool_count": 0, "tools": [],
+            "error": f"401 from https://u:p@host/mcp?api_key={secret}&x=1 while connecting",
+        }]),
+    )
+    agent_messaging.register("pa", "caller", "/ws")
+
+    result = await plan_mcp.mcp_list(_ctx())
+
+    error = {row["name"]: row for row in result["servers"]}["ctx"]["error"]
+    assert secret not in error and "u:p@" not in error
+    assert error == "401 from https://***@host/mcp?api_key=***&x=1 while connecting"

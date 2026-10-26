@@ -31,9 +31,11 @@
         "system": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 3,
+          "maxItems": 6,
           "uniqueItems": true,
-          "items": { "enum": ["fs", "ui", "aiCli"] }
+          "items": { "enum": ["fs", "ui", "aiCli", "web", "agents", "agentMessages"] },
+          "if": { "contains": { "const": "agentMessages" } },
+          "then": { "contains": { "const": "agents" } }
         },
         "shell": { "enum": ["allowlist", "full"] },
         "scopes": {
@@ -182,8 +184,37 @@
         },
         "activation": { "const": "startup" },
         "methods": { "$ref": "#/$defs/backendNames", "maxItems": 64 },
-        "events": { "$ref": "#/$defs/backendNames", "maxItems": 32 }
+        "events": { "$ref": "#/$defs/backendNames", "maxItems": 32 },
+        "agentTools": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/agentTool" },
+          "description": "Tools an agent may call through the core navide MCP server once the user consents. Rules this schema cannot express (name prefix derived from the id, reserved names, method listed in methods, unique names, integers only in inputSchema, the 1 MiB stability cap) are checked by validateAgentTools; see docs/en-US/plugin-agent-tools-contract.md."
+        }
       }
+    },
+    "agentTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "method", "risk", "title", "description", "inputSchema"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$" },
+        "method": { "type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$" },
+        "risk": { "enum": ["read", "write"] },
+        "title": { "$ref": "#/$defs/agentToolText" },
+        "description": { "$ref": "#/$defs/agentToolText" },
+        "inputSchema": {
+          "type": "object",
+          "required": ["type"],
+          "properties": { "type": { "const": "object" } }
+        },
+        "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 120000, "default": 30000 }
+      }
+    },
+    "agentToolText": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029<>]+$"
     },
     "backendNames": {
       "type": "array",

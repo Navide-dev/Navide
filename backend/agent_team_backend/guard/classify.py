@@ -39,6 +39,11 @@ WRITE_TOOLS = {
     "replace", "apply_patch", "str_replace_editor", "create",
 }
 READ_TOOLS = {"read", "read_file", "view", "cat", "notebookread"}
+#: Search tools: grep reads the contents under its path (like a read), glob
+#: lists names (like ls). Grep's pattern is the text searched for, not a path.
+#: Qwen Code calls its grep `grep_search`; Copilot CLI offers `grep` or `rg`.
+GREP_TOOLS = {"grep", "grep_search", "rg"}
+GLOB_TOOLS = {"glob"}
 
 WRAPPERS_NO_ARG = {"nohup", "time", "command", "builtin", "exec", "caffeinate", "stdbuf"}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"}
@@ -238,11 +243,146 @@ def _credential_kind(path: str, ctx: _Ctx) -> str | None:
         base = posixpath.basename(path)
         if rel.startswith(".claude/") and base.startswith(".credentials"):
             return "credential"
+        if rel == ".claude/secrets" or rel.startswith(".claude/secrets/"):
+            return "credential"
         if rel.startswith(".codex/") and base.startswith("auth"):
             return "credential"
     if path.startswith(_fold("/Library/Keychains")) or path.endswith(".keychain") or path.endswith(".keychain-db"):
         return "credential"
     return None
+
+
+#: Home-relative stand-ins for the stores _credential_kind names, as
+#: (path, directory). A directory reaches every name below it; a file only itself.
+_STORE_PATHS = tuple((_fold(p), d) for p, d in (
+    (".ssh", True), (".aws", True), (".gnupg", True), (".netrc", False), (".kube/config", False),
+    (".docker/config.json", False), (".azure", True), (".gcloud", True), ("Library/Keychains", True),
+    (".config/gcloud", True), (".config/gh/hosts.yml", False), (".claude/.credentials.json", False),
+    (".claude/secrets", True), (".codex/auth.json", False),
+))
+
+
+def _expand_braces(text: str) -> list[str]:
+    """``a{b,c}d`` -> ['abd', 'acd'] (nested too). Past 64 variants the rest
+    of the pattern from the first brace becomes ``*/**``: a superset, so a
+    huge expansion is graded more strictly, never skipped."""
+    start = text.find("{")
+    while start >= 0:
+        depth, parts, last = 0, [], start + 1
+        for i in range(start, len(text)):
+            c = text[i]
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            elif c == "," and depth == 1:
+                parts.append(text[last:i])
+                last = i + 1
+        else:
+            return [text]  # unclosed: a literal brace
+        if parts:
+            parts.append(text[last:i])
+            out: list[str] = []
+            for alt in parts:
+                out += _expand_braces(text[:start] + alt + text[i + 1:])
+                if len(out) > 64:
+                    return [text[:start] + "*/**"]
+            return out
+        start = text.find("{", start + 1)
+    return [text]
+
+
+#: File names that hold secrets inside a store directory (e.g. ~/.ssh/id_rsa).
+_SECRET_NAMES = tuple(_fold(n) for n in (
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials", "config", ".netrc", "auth.json",
+    "hosts.yml", ".credentials.json", "login.keychain-db",
+))
+
+
+_EXTENSION_FILTER = re.compile(r"\*\.[^*?\[\]]+")
+
+
+def _names(seg: str, name: str, *, file: bool) -> bool:
+    """A glob segment that matches ``name`` beyond a bare sweep: '.s?h',
+    '*ssh' and '*_rsa' name their store or file; '*' only sweeps, and so does
+    an extension filter ('*.json') on a file with a stem before it (auth.json)."""
+    if not fnmatch.fnmatchcase(name, seg) or not set(seg) - set("*?"):
+        return False
+    # '*.netrc' matches all of .netrc, so it names it rather than filtering.
+    return not (file and _EXTENSION_FILTER.fullmatch(seg) and len(name) > len(seg) - 1)
+
+
+def _glob_reaches(globs: list[str], store: list[str], directory: bool) -> int:
+    """Whether glob segments can match ``store`` (a file) or a name below it
+    (a directory): 2 when a segment names the store or a secret file in it,
+    1 when it is only reached through ``**`` or a ``*`` sweep, 0 when not."""
+    memo: dict[tuple[int, int], int] = {}
+
+    def reach(i: int, j: int) -> int:
+        if (i, j) not in memo:
+            if j == len(store):
+                if not directory:
+                    memo[i, j] = int(all(g == "**" for g in globs[i:]))
+                elif i == len(globs):
+                    memo[i, j] = 0
+                else:
+                    memo[i, j] = 2 if any(_names(globs[-1], n, file=True) for n in _SECRET_NAMES) else 1
+            elif i == len(globs):
+                memo[i, j] = 0
+            elif globs[i] == "**":
+                memo[i, j] = max(reach(i + 1, j), reach(i, j + 1))
+            elif not fnmatch.fnmatchcase(store[j], globs[i]):
+                memo[i, j] = 0
+            else:
+                r = reach(i + 1, j + 1)
+                memo[i, j] = 2 if r and j == len(store) - 1 and _names(globs[i], store[j], file=not directory) else r
+        return memo[i, j]
+
+    return reach(0, 0)
+
+
+def _stores_reached(path: str, ctx: _Ctx) -> list[tuple[str, bool]]:
+    """Secret stores below a glob's literal base that its wildcards can expand
+    into, as (store, named): see _glob_reaches."""
+    base = _glob_base(path)
+    if base == path:
+        return []
+    globs = [g for g in path[len(base):].split("/") if g]
+    # Consecutive `**` match the same paths as one.
+    globs = [g for i, g in enumerate(globs) if not (g == "**" and i and globs[i - 1] == "**")]
+    out = []
+    for h in _homes(ctx):
+        for store, directory in _STORE_PATHS:
+            full = h + "/" + store
+            if full != base and _inside(base, full):
+                r = _glob_reaches(globs, [s for s in full[len(base):].split("/") if s], directory)
+                if r:
+                    out.append((full, r == 2))
+    return out
+
+
+def _glob_dialect(pattern: str) -> str:
+    """The ripgrep / picomatch glob as fnmatch reads it: ``[^x]`` negates like
+    ``[!x]`` and a backslash escapes the next character (POSIX only: on
+    Windows it is the path separator)."""
+    out = []
+    i = 0
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\" and not _WINDOWS and i + 1 < len(pattern):
+            n = pattern[i + 1]
+            out.append(f"[{n}]" if n in "*?[{},!^" else n)
+            i += 2
+            continue
+        if c == "[" and pattern[i + 1:i + 2] == "^":
+            out.append("[!")
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
 
 
 def _is_dotenv(path: str) -> bool:
@@ -260,7 +400,112 @@ def _agent_config(path: str, ctx: _Ctx) -> bool:
     )
 
 
-def _check_path(acc: _Acc, path: str, ctx: _Ctx, *, write: bool, list_only: bool = False) -> None:
+#: Navide's Electron userData folder names: package.json `name`, and the dev
+#: instance's suffixes from src/main/devUserData.ts.
+_APP_NAMES = ("agent-team", "agent-team-dev")
+_APP_DEV_PLANS = "agent-team-dev-plans-"
+#: Below userData, the plugin install root (Developer Mode folders, activation
+#: and grants included) and the local trust records are protected whole; the
+#: native backend folder only for its consent store and the kept-source
+#: markers and set-aside folders beside plugin data, never a plugin's own data.
+_STORE_DIRS = ("plugins", "plugin-local-trust")
+_NATIVE_DIR = "plugin-native-backends"
+_NATIVE_CONSENT = "native-backends.json"
+_NATIVE_DATA = "data"
+#: A write naming userData itself or a native backend folder can swap the
+#: stores below it in one step, so those count too.
+_STORE_ACCEPT = {"u", "native", "data", "in"}
+
+
+def _app_data_roots(ctx: _Ctx) -> list[tuple[tuple[str, ...], bool]]:
+    """Electron's appData folders on every platform's layout, as path
+    segments with named=False (a userData name follows), plus an explicit
+    absolute dev userData (named=True). Checking every layout everywhere costs
+    nothing and covers a home shared across systems."""
+    cands = []
+    for h in _homes(ctx):
+        cands += [posixpath.join(h, "Library/Application Support"), posixpath.join(h, ".config"),
+                  posixpath.join(h, "AppData/Roaming")]
+    cands += [os.environ.get(v, "") for v in ("XDG_CONFIG_HOME", "APPDATA")]
+    out = [(tuple(n.split("/")), False) for n in (_norm(c) for c in cands if c) if _isabs(n)]
+    dev = _norm(os.environ.get("NAVIDE_DEV_USER_DATA_DIR", ""))
+    if dev and _isabs(dev):
+        out.append((tuple(dev.split("/")), True))
+    return out
+
+
+def _seg_match(g: str, name: str) -> bool:
+    return fnmatch.fnmatchcase(name, g) if _GLOB_CHARS & set(g) else g == name
+
+
+def _store_step(state: tuple, g: str) -> list[tuple]:
+    """Where one path segment ``g`` (literal or glob) leads from ``state``."""
+    kind = state[0]
+    if kind == "root":
+        _, segs, k, named = state
+        if not _seg_match(g, segs[k]):
+            return []
+        if k + 1 < len(segs):
+            return [("root", segs, k + 1, named)]
+        return [("u",)] if named else [("name",)]
+    if kind == "name":
+        prefix = _fold(_APP_DEV_PLANS)
+        names = [_fold(n) for n in _APP_NAMES] + [prefix + "x"]
+        dev = g.startswith(prefix) and (len(g) > len(prefix) or bool(_GLOB_CHARS & set(g)))
+        return [("u",)] if dev or any(_seg_match(g, n) for n in names) else []
+    out: list[tuple] = []
+    if kind == "u":
+        if any(_seg_match(g, _fold(d)) for d in _STORE_DIRS):
+            out.append(("in",))
+        if _seg_match(g, _fold(_NATIVE_DIR)):
+            out.append(("native",))
+    elif kind == "native":
+        if _seg_match(g, _fold(_NATIVE_CONSENT)):
+            out.append(("in",))
+        if _seg_match(g, _fold(_NATIVE_DATA)):
+            out.append(("data",))
+    elif kind == "data":
+        # `<id>@kept-source.json` and `<id>@set-aside-<source>-<ms>` (pluginNativeBackendData.ts);
+        # a glob here may reach them, so it counts.
+        if _GLOB_CHARS & set(g) or g.endswith(_fold("@kept-source.json")) or _fold("@set-aside-") in g:
+            out.append(("in",))
+    elif kind == "in":
+        out.append(("in",))
+    return out
+
+
+def _reaches_store(path: str, ctx: _Ctx) -> bool:
+    segs = path.split("/")
+    for root, named in _app_data_roots(ctx):
+        states: set[tuple] = {("root", root, 0, named)}
+        for g in segs:
+            if g == "**":
+                # Zero or more segments: every state any segment can lead to.
+                while True:
+                    more = {n for s in states for n in _store_step(s, "*")} - states
+                    if not more:
+                        break
+                    states |= more
+                continue
+            states = {n for s in states for n in _store_step(s, g)}
+            if not states:
+                break
+        if any(s[0] in _STORE_ACCEPT for s in states):
+            return True
+    return False
+
+
+def _store_write(acc: _Acc, path: str, ctx: _Ctx) -> None:
+    """A write to Navide's plugin install root or trust stores: a same-user
+    writer there can make Navide load code without the consent dialog."""
+    if any(_reaches_store(p, ctx) for p in _expand_braces(path)):
+        acc.hit("critical", "plugin-store-write", f"writes Navide's plugin install root or trust store: {path}")
+
+
+def _check_path(
+    acc: _Acc, path: str, ctx: _Ctx, *, write: bool, list_only: bool = False, store: bool = True,
+) -> None:
+    """``store=False``: the caller grades plugin store writes itself (a copy's source is only read)."""
     ws = ctx.workspace
     if _credential_kind(path, ctx):
         if list_only:
@@ -273,6 +518,8 @@ def _check_path(acc: _Acc, path: str, ctx: _Ctx, *, write: bool, list_only: bool
         return
     if not write:
         return
+    if store:
+        _store_write(acc, path, ctx)
     if "/.git/hooks/" in path + "/" and path.rstrip("/").split("/.git/hooks", 1)[1:] != [""]:
         acc.hit("high", "git-hooks-write", f"writes a git hook: {path}")
     elif "/.github/workflows/" in path:
@@ -538,7 +785,8 @@ def _split(text: str) -> list[list[_Cmd]]:
                 pipelines.append(pipeline)
             pipeline = []
             continue
-        if tok and set(tok) <= set("<>&") and ("<" in tok or ">" in tok):
+        # `>|` (noclobber override) is one punctuation token that holds a `|`.
+        if tok == ">|" or (tok and set(tok) <= set("<>&") and ("<" in tok or ">" in tok)):
             if tok.endswith("&"):
                 continue  # >&2 style fd dup; the next token is an fd
             pending_redirect = tok
@@ -1006,6 +1254,9 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
             acc.hit("critical", "disk-write", "dd writes directly to a device")
         else:
             acc.hit("high", "dd", "dd copies raw data")
+        for a in args:
+            if a.startswith("of="):
+                _store_arg(acc, a[3:], ctx)
         return
     if word.startswith("mkfs") or word.startswith("newfs") or word in {"fdisk", "sfdisk", "gpt", "wipefs"}:
         acc.hit("critical", "disk-format", f"{word} formats or repartitions a disk")
@@ -1045,6 +1296,12 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
         acc.hit("critical", "cloud-destroy", f"{word} deletes cloud resources")
         return
     if word in DOWNLOADERS:
+        # A download's output file is graded exactly like `>` into it.
+        for a in _download_outputs(word, args):
+            for cand in _arg_paths(a) or ([a] if not a.startswith("-") else []):
+                path = _resolve(cand, ctx)
+                if path:
+                    _check_path(acc, path, ctx, write=True)
         _classify_upload(word, args, ctx, acc)
         return
     # Generic: any path-like argument that names a credential store or a
@@ -1055,7 +1312,87 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
         for cand in _arg_paths(a):
             path = _resolve(cand, ctx)
             if path:
-                _check_path(acc, path, ctx, write=writes, list_only=list_only)
+                _check_path(acc, path, ctx, write=writes, list_only=list_only, store=False)
+    if writes or word in _STORE_ONLY_WRITES:
+        for a in _store_targets(word, args):
+            _store_arg(acc, a, ctx)
+
+
+#: Commands that change files but grade normal elsewhere: only the plugin
+#: store check reads them, so their grading outside the stores stays as it was.
+_STORE_ONLY_WRITES = {"unlink", "rmdir", "mkdir", "chown", "chgrp", "xattr", "ditto"}
+
+
+def _store_arg(acc: _Acc, arg: str, ctx: _Ctx) -> None:
+    """Plugin store check for one argument. A bare word (``acme.json``) is a
+    path relative to the working directory here too, unlike _arg_paths:
+    after ``cd plugin-local-trust`` it names a trust record, and anywhere
+    outside the stores it changes nothing."""
+    for cand in _arg_paths(arg) or ([arg] if arg and not arg.startswith("-") else []):
+        path = _resolve(cand, ctx)
+        if path:
+            _store_write(acc, path, ctx)
+
+
+def _url_file_name(url: str) -> str:
+    path = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://[^/]*", "", url).split("?", 1)[0].split("#", 1)[0]
+    return posixpath.basename(path) or "index.html"
+
+
+def _download_outputs(word: str, args: list[str]) -> list[str]:
+    """Files a download writes: curl -o/--output, wget -O/--output-document,
+    and otherwise (curl -O, a plain wget) the URL's file name in --output-dir
+    / -P or the working directory. ``-`` is stdout."""
+    curl = word != "wget"
+    files: list[str] = []
+    dirs: list[str] = []
+    remote = not curl
+    i = 0
+    while i < len(args):
+        a, nxt = args[i], (args[i + 1] if i + 1 < len(args) else "")
+        i += 1
+        if a.startswith("--"):
+            key, eq, val = a.partition("=")
+            if key in ("--output", "--output-document", "--output-dir", "--directory-prefix"):
+                if not eq:
+                    val, i = nxt, i + 1
+                (dirs if key in ("--output-dir", "--directory-prefix") else files).append(val)
+            elif key in ("--remote-name", "--remote-name-all"):
+                remote = True
+            continue
+        if not a.startswith("-") or a == "-":
+            continue
+        for j, ch in enumerate(a[1:], 1):
+            if curl and ch == "O":
+                remote = True
+            elif ch == ("o" if curl else "O") or (not curl and ch == "P"):
+                val = a[j + 1:]
+                if not val:
+                    val, i = nxt, i + 1
+                (dirs if ch == "P" else files).append(val)
+                break
+    if files or not remote:
+        return [f for f in files if f and f != "-"]
+    names = [_url_file_name(a) for a in args if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a)]
+    return [posixpath.join(d, n) for n in names for d in dirs] if dirs else names
+
+
+def _store_targets(word: str, args: list[str]) -> list[str]:
+    """The arguments a write command changes: every one (mv, ln and chmod
+    change their sources too), but only a copy's destination, and sed's files
+    only with -i."""
+    if word == "sed":
+        return args if _flags(args) & {"-i", "--in-place"} else []
+    if word == "xattr":
+        return args if _flags(args) & {"-w", "-d", "-c"} else []
+    if word in {"cp", "install", "rsync", "scp", "ditto"}:
+        for i, a in enumerate(args):
+            if a == "-t" and i + 1 < len(args):
+                return [args[i + 1]]
+            if a.startswith("--target-directory="):
+                return [a.split("=", 1)[1]]
+        return _positionals(args)[-1:]
+    return args
 
 
 def _arg_paths(arg: str) -> list[str]:
@@ -1098,6 +1435,7 @@ def _classify_rm(
         if _credential_kind(base, ctx) or _credential_kind(path, ctx):
             acc.hit("critical", "credential-access", f"deletes a credential store: {path}")
             continue
+        _store_write(acc, path, ctx)
         if base == "/" or base in _homes(ctx) or (_WINDOWS and _DRIVE_RE.fullmatch(base.rstrip("/"))) or (ws and _inside(base, ws) and base != ws):
             acc.hit("critical", "rm-root-or-home", f"deletes the root, home, or a parent of the workspace: {path}")
             continue
@@ -1128,6 +1466,15 @@ def _classify_git(args: list[str], ctx: _Ctx, acc: _Acc) -> None:
         return
     sub, rest = args[i], args[i + 1:]
     fl = _flags(rest)
+    if sub == "clone":
+        # The clone's destination (the repository's name when none is given).
+        pos = _positionals(rest)
+        urls = [k for k, p in enumerate(pos) if "://" in p or ":" in p or p.endswith(".git")]
+        if urls:
+            k = urls[0]
+            dest = pos[k + 1] if k + 1 < len(pos) else posixpath.basename(pos[k].rstrip("/")).removesuffix(".git")
+            _store_arg(acc, dest, ctx)
+        return
     if sub == "push":
         pos = _positionals(rest)
         refspecs = pos[1:]
@@ -1203,10 +1550,10 @@ def _tool_command(tool_input: dict) -> str | None:
 
 def _tool_paths(tool_input: dict) -> list[str]:
     out = []
-    for key in ("file_path", "path", "notebook_path", "filename", "target_file", "absolute_path"):
+    # Every path field is read, and a field may hold a list of paths.
+    for key in ("file_path", "path", "paths", "notebook_path", "filename", "target_file", "absolute_path"):
         v = tool_input.get(key)
-        if isinstance(v, str) and v:
-            out.append(v)
+        out += [p for p in (v if isinstance(v, list) else [v]) if isinstance(p, str) and p]
     return out
 
 
@@ -1244,7 +1591,41 @@ def classify(
                 acc.opaque("dynamic-path", f"path is not static: {raw}")
                 continue
             _check_path(acc, path, ctx, write=name in WRITE_TOOLS)
+    elif name in GREP_TOOLS or name in GLOB_TOOLS:
+        _check_search(acc, name, tool_input, ctx)
     return acc.verdict()
+
+
+def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:
+    """Grep / Glob: the locations they reach, against the same credential
+    rules as Read (grep) and ls (glob). These tools expand nothing, so a path
+    that does not resolve statically is skipped rather than made opaque."""
+    # Copilot CLI names the root `paths`: one directory, or a list of them.
+    # Both keys are read: a call carrying both reaches every root it names.
+    roots = []
+    for root in (tool_input.get("path"), tool_input.get("paths")):
+        roots += [r for r in (root if isinstance(root, list) else [root]) if isinstance(r, str) and r]
+    # Glob's pattern and Grep's glob filter are paths under root (or absolute).
+    sub = tool_input.get("pattern" if name in GLOB_TOOLS else "glob")
+    sub = _glob_dialect(sub) if isinstance(sub, str) and sub else None
+    raws = list(roots)
+    if sub:
+        absolute = sub.startswith(("/", "~")) or _isabs(sub) or any(sub.startswith(t) for t in _HOME_TOKENS)
+        if name in GREP_TOOLS and not absolute and "/" not in sub:
+            # ripgrep matches a glob without '/' against the file name at any depth.
+            sub = "**/" + sub
+        raws += [sub] if absolute or not roots else [posixpath.join(r, sub) for r in roots]
+    # A {a,b} brace is checked as each path it expands to; wildcards that can
+    # expand into a store below the literal base count as naming that store.
+    for raw in [v for r in raws for v in _expand_braces(r)]:
+        path = _resolve(raw, ctx)
+        if path is not None:
+            _check_path(acc, path, ctx, write=False, list_only=name in GLOB_TOOLS)
+            for store, named in _stores_reached(path, ctx):
+                # A grep that only sweeps a store in (naming no store or secret
+                # file) counts as no more than grepping the bare root: normal.
+                if named or name in GLOB_TOOLS:
+                    _check_path(acc, store, ctx, write=False, list_only=name in GLOB_TOOLS)
 
 
 _TOOL_CALL_RE = re.compile(r"\b[A-Z][A-Za-z]*\((.+)\)\s*$")

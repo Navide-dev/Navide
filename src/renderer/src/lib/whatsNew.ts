@@ -13,15 +13,25 @@
 // appears. How to write one: docs/en-US/release-announcements.md.
 //
 // Content lives here (not in the i18n JSON) so an announcement is one self
-// contained edit. Each field carries zh-TW and en-US, and may carry ja-JP;
-// pickText falls back to the default locale (zh-TW) for anything missing.
+// contained edit. Each field carries zh-TW and en-US, and may carry ja-JP or
+// any later UI language; pickText falls back to en-US for a later language
+// and to the default locale (zh-TW) for anything else missing.
 
+import { isBetaUiLocale } from '@navide/plugin-ui/foundation'
 import type { TourStep } from './tours'
 
 export type WhatsNewText = {
   'zh-TW': string
   'en-US': string
   'ja-JP'?: string
+  'zh-CN'?: string
+  'ko-KR'?: string
+  'es-ES'?: string
+  'fr-FR'?: string
+  'de-DE'?: string
+  'pt-BR'?: string
+  'ru-RU'?: string
+  'vi-VN'?: string
 }
 
 /**
@@ -88,7 +98,7 @@ export interface WhatsNewFeature {
 // is editable in one place without touching the i18n JSON.
 export const WHATS_NEW_CHROME = {
   header: { 'zh-TW': '新版更新', 'en-US': 'What’s New', 'ja-JP': '新機能' } as WhatsNewText,
-  dismiss: { 'zh-TW': '知道了', 'en-US': 'Got it', 'ja-JP': 'OK' } as WhatsNewText,
+  dismiss: { 'zh-TW': '知道了', 'en-US': 'Got It', 'ja-JP': 'OK' } as WhatsNewText,
   /** Replaces `header` on a release marked `major`. */
   majorHeader: { 'zh-TW': '重大更新', 'en-US': 'Major Update', 'ja-JP': 'メジャーアップデート' } as WhatsNewText,
   /** Heading over the bullet list once a spotlight sits above it. */
@@ -98,9 +108,9 @@ export const WHATS_NEW_CHROME = {
   /** Heading over the bullet list once feature cards sit above it. */
   details: { 'zh-TW': '細節', 'en-US': 'The details', 'ja-JP': '詳細' } as WhatsNewText,
   /** Buttons on an entry that carries a tour. */
-  takeTour: { 'zh-TW': '帶我看一遍', 'en-US': 'Take the tour', 'ja-JP': 'ツアーを見る' } as WhatsNewText,
-  retakeTour: { 'zh-TW': '再看一次導覽', 'en-US': 'Replay the tour', 'ja-JP': 'ツアーをもう一度' } as WhatsNewText,
-  notNow: { 'zh-TW': '先不用', 'en-US': 'Not now', 'ja-JP': '今はしない' } as WhatsNewText,
+  takeTour: { 'zh-TW': '帶我看一遍', 'en-US': 'Take the Tour', 'ja-JP': 'ツアーを見る' } as WhatsNewText,
+  retakeTour: { 'zh-TW': '再看一次導覽', 'en-US': 'Replay the Tour', 'ja-JP': 'ツアーをもう一度' } as WhatsNewText,
+  notNow: { 'zh-TW': '先不用', 'en-US': 'Not Now', 'ja-JP': '今はしない' } as WhatsNewText,
   /** Footer hint beside the buttons: where "Not now" leaves the way back. */
   reopenHint: {
     'zh-TW': '之後可從選單列「輔助說明（Help）→ 新版更新…」再打開',
@@ -110,6 +120,524 @@ export const WHATS_NEW_CHROME = {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    version: '0.2.32',
+    title: {
+      'zh-TW': '金鑰只留在本機：MCP 同步只同步安裝，Agent 資產的修改都能復原',
+      'en-US': 'Secrets Stay on This Machine: MCP Sync Carries Only What Is Installed, and Agent Asset Edits Can Be Undone',
+      'ja-JP': 'シークレットはこのマシンだけに：MCP の同期はインストール内容だけ、エージェント資産の変更は元に戻せます',
+    },
+    highlights: [
+      {
+        'zh-TW': 'MCP 同步只同步「裝了哪些伺服器」：名稱、連線方式、指令與參數、網址、開關，以及環境變數和 header 的名稱。它們的值不會離開這台電腦，網址和參數裡的帳密與 token（例如 user:password@、?api_key=、ghp_…、--token 後面的值）也一樣。從別台裝置同步過來的伺服器，只有在指令與參數或網址都沒變時，才會沿用這台電腦自己填過的值；改了要執行的東西，或這台電腦還沒有的值，都會留空，即使你核准了這個變更也一樣，「設定 → MCP」會標「需要設定」並提醒你在這台電腦填入，你的 token 不會被交給另一個程式或網址。只改值不再觸發同步，其他裝置也不會再為此要你核准。舊版已上傳的值仍留在伺服器上，這一版不會刪除；還沒更新的裝置照舊同步，不會收到被清空的設定。',
+        'en-US': 'MCP sync now carries only which servers are installed: name, transport, command and arguments, URL, on/off, and the names of environment variables and headers. Their values never leave this machine, and neither do credentials inside a URL or the arguments (such as user:password@, ?api_key=, ghp_… or the value after --token). A server that arrives from another device keeps the values this machine already has only if it still runs the same command and arguments, or the same URL; if it changed what it runs, or this machine has no value yet, the field is left empty, even after you approve the change, and Settings → MCP marks the server Needs setup and asks you to fill it in here, so your token is never handed to a different program or address. Changing only a value no longer syncs or asks for approval on your other devices. Values older versions uploaded stay on the server and are not deleted by this release, and devices not yet updated keep syncing as before, without being sent servers with their values emptied.',
+        'ja-JP': 'MCP の同期は「どのサーバーをインストールしているか」だけになりました：名前、接続方式、コマンドと引数、URL、オン／オフ、環境変数とヘッダーの名前です。それらの値はこのマシンから出ません。URL や引数に含まれる認証情報やトークン（user:password@、?api_key=、ghp_…、--token の後の値など）も同じです。ほかのデバイスから届いたサーバーがこのマシンにすでにある値を使うのは、コマンドと引数、または URL が変わっていない場合だけです。実行するものが変わった場合や、このマシンにまだ値がない場合は、変更を承認しても空欄のままで、「設定 → MCP」に「要設定」と表示され、このマシンで入力するよう案内します。トークンが別のプログラムやアドレスに渡されることはありません。値だけを変えても同期されず、ほかのデバイスで承認を求められることもなくなりました。旧バージョンがアップロードした値はサーバーに残り、このリリースでは削除しません。まだ更新していないデバイスはこれまでどおり同期し、値が空になったサーバーを受け取ることはありません。',
+      },
+      {
+        'zh-TW': '「設定 → 帳號」裡的「貼入憑證」已移除：Navide 不再把貼入的憑證（例如 claude setup-token 產生的）交給新開的 pane。用過這個功能的裝置，更新時會清除存在本機的憑證、加密它的金鑰，以及舊版從雲端拉下來的副本，並在第一次啟動時通知一次；沒用過的裝置什麼都不會動。新的 Claude pane 改用 Claude 自己的登入，可能是另一個帳號，並扣用那個帳號的額度。已經開著的 pane 會沿用原本的憑證，直到關閉或重新啟動。',
+        'en-US': 'Paste Credential is gone from Settings → Accounts: Navide no longer hands pasted credentials (such as one from claude setup-token) to new panes. On a device that used it, the update erases the stored credentials, the key that encrypted them and the copies older versions pulled from the cloud, and says so once at the first launch; a device that never used it is not touched. New Claude panes now use Claude’s own sign-in, which may be a different account and draws on that account’s quota. Panes already open keep their credential until they are closed or restarted.',
+        'ja-JP': '「設定 → アカウント」の「認証情報を貼り付け」を廃止しました。Navide は貼り付けた認証情報（claude setup-token で作ったものなど）を新しい pane に渡さなくなります。この機能を使ったデバイスでは、更新時に保存されていた認証情報、それを暗号化していた鍵、旧バージョンがクラウドから取得したコピーを消去し、初回起動時に一度だけお知らせします。使っていないデバイスには何もしません。新しい Claude pane は Claude 自身のサインインを使うため、別のアカウントになり、そのアカウントの使用量枠が消費されることがあります。すでに開いている pane は、閉じるか再起動するまで元の認証情報を使い続けます。',
+      },
+      {
+        'zh-TW': '「設定 → Agent 資產 → 記憶」：沒存的草稿不會再被默默丟掉，取消、關閉、切到別的檔案或關掉設定之前都會先問你。每次存檔都會把被取代的版本留一份在 Navide 自己的資料夾，按「還原上一版」就能救回來；編輯器新建的檔案也能「復原建立」，移到系統垃圾桶，不會直接刪除。這一頁也開始列出 Claude Code 自己寫的專案自動記憶（MEMORY.md 和各主題檔），可以打開、編輯和還原，並標明是 Claude 寫的、之後可能被它改寫。',
+        'en-US': 'Settings → Agent Assets → Memory: an unsaved draft is no longer thrown away without asking; Cancel, closing, opening another file and closing Settings ask first. Each save keeps the version it replaced in Navide’s own folder, and Restore Previous Version brings it back; a file the editor created can be undone with Undo Create, which moves it to the system Trash instead of deleting it. The page now also lists the auto-memory Claude Code writes about the project by itself (MEMORY.md and one file per topic), which you can open, edit and restore; it is marked as written by Claude, which may rewrite it later.',
+        'ja-JP': '「設定 → エージェント資産 → メモリ」：保存していない下書きが確認なしに破棄されることはなくなりました。キャンセル、閉じる、別のファイルを開く、設定を閉じる前に確認します。保存するたびに置き換えられた版を Navide 自身のフォルダーに 1 つ残し、「前のバージョンに戻す」で元に戻せます。エディターで新しく作ったファイルは「作成を取り消す」でシステムのゴミ箱に移せ、直接削除はしません。このページには、Claude Code がプロジェクトについて自分で書く自動メモリ（MEMORY.md とトピックごとのファイル）も表示されるようになり、開く・編集する・元に戻すことができます。Claude が書いたもので、後で Claude が書き換えることがあると表示されます。',
+      },
+      {
+        'zh-TW': '「設定 → Agent 資產 → Prompt 技能」：把內容清空不會再把整個 Prompt 技能刪掉（以前連同步的其他電腦也會跟著刪），原本的文字會保留，並提示要刪除請按「刪除」；按「刪除」也會先確認，並說明同步的電腦也會一起移除。Prompt 技能在 pane 裡啟動循環失敗時，會跳出錯誤通知。',
+        'en-US': 'Settings → Agent Assets → Prompts: clearing a prompt’s text no longer deletes the prompt (on your synced machines too); the previous text is kept, with a note to use Delete to remove it. Delete now asks first and says your synced machines will remove it too. When a prompt’s loop fails to start in a pane, an error notice says so.',
+        'ja-JP': '「設定 → エージェント資産 → プロンプト」：内容を空にしてもプロンプト自体が削除されることはなくなりました（以前は同期しているほかのマシンでも削除されていました）。元のテキストは残り、削除するには「削除」を使うよう案内します。「削除」も先に確認し、同期しているマシンからも削除されることを伝えます。pane でプロンプトのループを開始できなかったときは、エラーの通知が表示されます。',
+      },
+      {
+        'zh-TW': '「設定 → Agent 資產 → MCP」遮蔽得更完整：除了看名稱，也會看值，網址裡的帳密、token 樣式的值和參數都會遮起來，agent 用 mcp_list 讀到的也一樣。匯入舊版設定包時，只有名稱和連線位置（指令與參數，或網址）都相同的伺服器，才會補回這台電腦的金鑰；同名但指向別處的不會拿到，沒有可補的就留空並列在匯入結果裡。列不出工具的伺服器會顯示原因，不再看起來像是沒有工具。',
+        'en-US': 'Settings → Agent Assets → MCP masks more: values are checked as well as names, so a user:password@ in a URL and token-shaped values and arguments are masked, including what agents read through mcp_list. Importing an older settings bundle puts this machine’s secret back only for a server whose name and endpoint (command and arguments, or URL) both match; a same-named server pointing elsewhere no longer gets it, and anything left empty is listed in the import summary. A server whose tools cannot be listed says why instead of looking like it has none.',
+        'ja-JP': '「設定 → エージェント資産 → MCP」のマスクがより確実になりました。名前だけでなく値も確認し、URL 内のユーザー名とパスワード、トークンの形をした値や引数をマスクします。agent が mcp_list で読む内容も同じです。古い設定バンドルをインポートしたとき、このマシンのシークレットを戻すのは、名前と接続先（コマンドと引数、または URL）の両方が一致するサーバーだけです。同じ名前でも別の場所を指すサーバーには戻さず、空欄のままのものはインポート結果に一覧表示します。ツールを一覧できないサーバーは、ツールがないように見えるのではなく、その理由を表示します。',
+      },
+      {
+        'zh-TW': 'Skills：agent 想把技能送到更多 CLI，或打開停用中的共用技能時，要先在主視窗經你核准，和安裝一樣；縮小範圍則照舊直接生效。Navide 也內建了一個教 agent 寫 Navide 外掛的技能（navide:plugin-authoring），同樣要你核准才會安裝。技能接到 pane 失敗時，pane 啟動時會印出來，不再只寫進紀錄。',
+        'en-US': 'Skills: when an agent asks to deliver a skill to more CLIs, or to turn a disabled shared skill on, you now approve it in the main window, as with an install; narrowing still applies at once. Navide also ships a skill that teaches an agent to write Navide plugins (navide:plugin-authoring), installed only once you approve it. When wiring skills into a pane fails, the pane prints it at startup instead of only logging it.',
+        'ja-JP': 'Skills：agent がスキルを配信する CLI を増やしたり、無効になっている共有スキルをオンにしたりするときは、インストールと同じようにメインウィンドウでの承認が必要になりました。範囲を狭める変更はこれまでどおりすぐに反映されます。agent に Navide プラグインの作り方を教えるスキル（navide:plugin-authoring）も同梱しました。承認したときだけインストールされます。pane へのスキルの接続に失敗したときは、ログに書くだけでなく pane の起動時に表示します。',
+      },
+      {
+        'zh-TW': '「設定 → Agent 資產 → 擴充」開始列出 Gemini CLI 的擴充和 hooks。讀不到某個 CLI 的開關設定檔時，會顯示「狀態不明」和原因，不再一律顯示成已啟用。Agent 資產各頁的名稱也統一成設定側欄上的名字；以前指向「擴充」的 Navide 外掛提示，改成指向「設定 → Navide 外掛」。',
+        'en-US': 'Settings → Agent Assets → Extensions now lists Gemini CLI’s extensions and hooks. When a CLI’s on/off settings file cannot be read, its entries show State unknown with the reason instead of all showing as on. Agent Assets pages are now named everywhere as in the Settings sidebar, and messages about Navide plugins that pointed to Extensions now point to Settings → Navide Plugins.',
+        'ja-JP': '「設定 → エージェント資産 → 拡張機能」に Gemini CLI の拡張機能と hooks が表示されるようになりました。CLI のオン／オフの設定ファイルを読めないときは、すべてオンと表示するのではなく、「状態不明」と理由を表示します。エージェント資産の各ページの名前は、どこでも設定のサイドバーと同じになりました。Navide プラグインについて「拡張機能」を案内していたメッセージは、「設定 → Navide プラグイン」を案内します。',
+      },
+      {
+        'zh-TW': 'Navide 外掛：在開發者模式重新載入資料夾時，新版本要先準備好才會換下正在跑的版本；新版本有問題就保留舊版本，卡片上會說明原因。第三方外掛在視窗關掉後仍在背景執行的 AI CLI，會列在「設定 → Navide 外掛」該外掛的卡片上，每一個都可以按「結束」；這些 session 也改成依外掛版本分開保存。',
+        'en-US': 'Navide plugins: reloading a Developer Mode folder now readies the new version before the running one is unloaded; if the new version is broken, the running one stays and its card says why. AI CLI sessions a third-party plugin keeps running in the background after its window closes are listed on that plugin’s card in Settings → Navide Plugins, each with an End button, and they are now stored separately for each plugin version.',
+        'ja-JP': 'Navide プラグイン：開発者モードでフォルダーを再読み込みするとき、新しいバージョンの準備ができてから実行中のバージョンを入れ替えるようになりました。新しいバージョンに問題があれば実行中のバージョンを残し、カードに理由を表示します。サードパーティ製プラグインがウィンドウを閉じた後もバックグラウンドで動かしている AI CLI は、「設定 → Navide プラグイン」のそのプラグインのカードに一覧表示され、それぞれ「終了」できます。これらの session はプラグインのバージョンごとに分けて保存されるようになりました。',
+      },
+      {
+        'zh-TW': 'Navide 外掛：0.2.31 以前安裝的第三方外掛，原生後端啟動前不會再每次都問；在詢問對話框按「不允許」會記住，不再每次啟動都跳出來。工具很多的外掛，詢問對話框不會再高過螢幕、按不到按鈕。開發者模式提醒按「知道了」之後，所有工作區視窗都會關掉。關閉第三方原生後端時如果設定存不下來，會自動重試，仍失敗就在開關下方一直顯示提示和「再試一次」。開發者資料夾的卡片會說明：改資料夾裡的檔案（包括原生後端程式）不會再問你，改宣告的權限或後端才會。從檔案安裝核准失敗時，如果檔案仍然備妥，可以直接再核准一次，不必重選檔案。視窗少了原生後端、安裝核准失敗、更新時宣告的檔案範圍，這些提示都改得更清楚。',
+        'en-US': 'Navide plugins: a third-party plugin installed before 0.2.31 no longer asks at every start before its native backend runs, and answering Don’t allow in that dialog is remembered instead of coming back at every launch. For a plugin with many tools, the dialog no longer grows taller than the screen and hides its buttons. Got It on the Developer Mode reminder closes it in every workspace window. If turning third-party native backends off cannot be saved, Navide retries, and if it still fails, a notice stays under the switch with Try Again. A developer folder’s card says that changing the folder’s files, its native backend program included, does not ask again, while changing its declared permissions or backend does. When approving an install from a file fails and the file is still ready, you can approve it again without choosing the file again. The messages for a window without its native backend, a failed install approval and a declared file scope in an update are clearer.',
+        'ja-JP': 'Navide プラグイン：0.2.31 より前にインストールしたサードパーティ製プラグインが、ネイティブバックエンドの起動前に毎回確認することはなくなりました。確認のダイアログで「許可しない」を選ぶと記憶され、起動のたびに表示されることもなくなりました。ツールが多いプラグインでも、ダイアログが画面より高くなってボタンが押せなくなることはありません。開発者モードのお知らせで「了解」を押すと、すべてのワークスペースのウィンドウで閉じます。サードパーティのネイティブバックエンドをオフにした設定を保存できなかったときは自動で再試行し、それでも失敗した場合はスイッチの下にお知らせと「もう一度試す」を表示し続けます。開発者フォルダーのカードには、フォルダー内のファイル（ネイティブバックエンドのプログラムを含む）を変更しても再確認されず、宣言した権限やバックエンドを変更したときは再確認されることが表示されます。ファイルからのインストールの承認に失敗しても、ファイルがまだ準備できていれば、ファイルを選び直さずにもう一度承認できます。ネイティブバックエンドなしで開いたウィンドウ、インストールの承認の失敗、更新で宣言されたファイルの範囲についてのメッセージがわかりやすくなりました。',
+      },
+      {
+        'zh-TW': 'Plans 視窗：計畫文件不會再被擠成一條窄欄、旁邊空出一大塊。收起來的 AI CLI 側欄現在只佔它自己的寬度，寬度也和 Git 視窗分開記。',
+        'en-US': 'Plans window: plan documents are no longer squeezed into a narrow column beside a blank strip. The AI CLI side panel now takes only its own width when collapsed, and its width is remembered separately from the Git window’s.',
+        'ja-JP': 'Plans ウィンドウ：プランのドキュメントが細い列に押し込まれ、横に大きな空白ができることはなくなりました。折りたたんだ AI CLI のサイドパネルは自分の幅だけを使い、幅は Git ウィンドウとは別に記憶します。',
+      },
+      {
+        'zh-TW': '帳號：在關閉「跟隨帳號切換」的 Claude pane 上選別的帳號，現在只會移動這個 pane：它會在那個帳號裡重新開啟並接續原本的對話，預設帳號和其他 pane 都不受影響。開著「跟隨」時照舊。',
+        'en-US': 'Accounts: on a Claude pane with Follow account switch off, choosing another account in its menu now moves only that pane: it reopens in that account with its conversation resumed, and the default account and every other pane stay as they are. With Follow on, nothing changes.',
+        'ja-JP': 'アカウント：「アカウント切り替えに追従」をオフにした Claude pane でメニューから別のアカウントを選ぶと、その pane だけが移るようになりました。そのアカウントで開き直し、会話を再開します。既定のアカウントとほかの pane はそのままです。「追従」がオンのときは変わりません。',
+      },
+      {
+        'zh-TW': '更穩定：Git 面板和 issue 檢視執行的指令逾時時，連同它啟動的所有程式都會一起結束（macOS、Linux 和 Windows），不再留下佔住 Git 的程式。同步過來、等待核准的大型技能，不會再一直卡在「等待空間下載檔案」。',
+        'en-US': 'Steadier: when a command the Git panel or the issue views run times out, everything it started ends with it, on macOS, Linux and Windows, instead of leaving a program behind that keeps Git busy. A synced large skill waiting for approval no longer stays stuck at waiting for space to download its files.',
+        'ja-JP': '安定性の向上：Git パネルや issue の表示が実行したコマンドがタイムアウトしたとき、そのコマンドが起動したプログラムもすべて一緒に終了するようになりました（macOS、Linux、Windows）。Git を使ったまま残るプログラムはなくなります。同期された大きなスキルが承認を待っている間、「ファイルをダウンロードする空き容量を待っています」のまま止まることもなくなりました。',
+      },
+    ],
+  },
+  {
+    version: '0.2.31',
+    title: {
+      'zh-TW': 'Linux 不再越用越慢：修正後端記憶體每分鐘增加約 90 MB',
+      'en-US': 'Linux No Longer Slows Down Over Time: Backend Memory Growth of About 90 MB a Minute Fixed',
+      'ja-JP': 'Linux で使うほど重くなる問題を修正：バックエンドのメモリが毎分約 90 MB 増える不具合',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Linux：開啟 pane 之後，後端記憶體不再每分鐘增加約 90 MB，event loop 不再越卡越久，pane 的輸入和捲動也不再延遲。原因是 Git 監看器連 inotify 的「讀取」事件也會反應，agent 在工作區每讀一個檔案就多排一批事件；現在只對檔案新增、刪除、修改和搬移反應，一連串變更也只喚醒 event loop 一次。macOS 和 Windows 不受影響。感謝 @emissionspectrum-creator 在 #622 回報。',
+        'en-US': 'Linux: once a pane is open, the backend\'s memory no longer grows by about 90 MB a minute, the event loop no longer stalls for longer and longer, and pane input and scrolling no longer lag. The Git watcher reacted to inotify\'s read events, so every file an agent read in the workspace queued more events; it now reacts only to files being created, deleted, modified or moved, and a burst of changes wakes the event loop once. macOS and Windows were not affected. Thanks to @emissionspectrum-creator for reporting it in #622.',
+        'ja-JP': 'Linux：pane を開いた後、バックエンドのメモリが毎分約 90 MB ずつ増えることはなくなり、event loop の停止がだんだん長くなることも、pane の入力やスクロールが遅れることもなくなりました。原因は Git の監視が inotify の「読み取り」イベントにも反応していたことで、agent がワークスペースのファイルを読むたびにイベントが溜まっていました。現在はファイルの作成・削除・変更・移動にだけ反応し、まとまった変更でも event loop を起こすのは 1 回だけです。macOS と Windows には影響ありません。#622 で報告してくださった @emissionspectrum-creator さんに感謝します。',
+      },
+      {
+        'zh-TW': '「設定 → Navide 外掛」分成四個子頁，列在側欄的「Navide 外掛」底下：Navide 外掛、執行政策、開發者與原生程式碼、揭露總覽。不用打開子頁也看得到狀態：執行政策頁有警告時，側欄那一列會顯示 ⚠；開發者模式或任何原生後端開關開著時，「開發者與原生程式碼」會顯示「已開啟」。視窗寬度在 720px 以下時，改用頁面上方的分頁列切換。每個外掛的列不用點開就看得到風險等級和「⚠ N」。揭露的文字沒有更動。',
+        'en-US': 'Settings → Navide Plugins is split into four pages, listed in the sidebar under Navide Plugins: Navide plugins, Execution Policy, Developer and native code, and Disclosure overview. You can see their state without opening them: Execution Policy shows ⚠ in the sidebar while that page shows a warning, and Developer and native code shows On while Developer Mode or any native-backend switch is on. At 720px wide or less, a tab strip at the top of the page switches between them. Each plugin row shows its risk level and ⚠ N without a click. Disclosure text is unchanged.',
+        'ja-JP': '「設定 → Navide プラグイン」を 4 つのページに分け、サイドバーの「Navide プラグイン」の下に並べました：Navide プラグイン、実行ポリシー、開発者とネイティブコード、開示の一覧。ページを開かなくても状態がわかります：実行ポリシーのページに警告があるときはサイドバーの行に ⚠ が、開発者モードやネイティブバックエンドのスイッチがどれかオンのときは「開発者とネイティブコード」に「オン」が表示されます。ウィンドウの幅が 720px 以下のときは、ページ上部のタブで切り替えます。各プラグインの行には、クリックしなくてもリスクレベルと「⚠ N」が表示されます。開示の文言は変わっていません。',
+      },
+      {
+        'zh-TW': '安裝了會在主畫面加入 view 的外掛之後，主畫面不會再被整個蓋住，點擊也不會穿透到底下的終端機：外掛的畫面變成舞台上的一個分頁，排在既有分頁後面，標籤是 view 的標題，前面有 Navide 畫的 ◇ 標記；滑鼠移上去會顯示外掛 ID、發行者和來源。安裝時不會自動切過去，點回其他分頁、按「+」或從側欄打開 pane，就會回到 pane 格線。這是 0.1.93 起就有的問題，內建外掛都沒有用到這個位置。',
+        'en-US': 'Installing a plugin that adds a view to the main area no longer covers the whole stage, and clicks no longer fall through to the terminals underneath: the plugin\'s view is now a stage tab after the existing tabs, labelled with the view\'s title and marked ◇ by Navide; hover it for the plugin\'s id, publisher and source. Installing it does not switch to it, and picking another tab, pressing + or opening a pane from the sidebar brings the pane grid back. This had been the case since 0.1.93; no bundled plugin uses that area.',
+        'ja-JP': 'メイン領域に view を追加するプラグインをインストールしても、ステージ全体が覆われることはなくなり、クリックが下のターミナルに抜けることもなくなりました：プラグインの画面はステージのタブの 1 つになり、既存のタブの後ろに view のタイトルで表示され、Navide が付ける ◇ マークが付きます。ポインターを合わせるとプラグインの ID、発行者、ソースが表示されます。インストールしても自動では切り替わらず、ほかのタブを選ぶか、「+」を押すか、サイドバーから pane を開くと pane のグリッドに戻ります。0.1.93 から続いていた問題で、同梱のプラグインはこの領域を使っていません。',
+      },
+      {
+        'zh-TW': '外掛的原生後端被拒絕或無法啟動時，外掛的視窗仍然會開啟，只是需要後端的功能不能用。開啟時會跳出通知說明原因，並指向「設定 → Navide 外掛 → 開發者與原生程式碼」；在那裡允許之後，要把已經開著的視窗關掉再開，才會接上後端。',
+        'en-US': 'A plugin window now opens even when its native backend is refused or cannot start; the parts that need the backend do not work. A notice says why and points to Settings → Navide Plugins → Developer and native code. After you allow the backend there, close the open window and open it again to connect it.',
+        'ja-JP': 'プラグインのネイティブバックエンドが拒否されたり起動できなかったりしても、プラグインのウィンドウは開くようになりました。バックエンドが必要な機能は使えません。開くときに理由を示す通知が表示され、「設定 → Navide プラグイン → 開発者とネイティブコード」へ案内します。そこで許可した後は、開いているウィンドウを閉じて開き直すとバックエンドにつながります。',
+      },
+      {
+        'zh-TW': '安裝第三方外掛就等於允許它的原生後端執行：安裝對話框會說明這一點，之後只有程式或權限改變時才會再問你。0.2.30 以前裝的套件，以及沒有經過安裝對話框的版本（例如 agent 發起的更新或回滾），第一次執行前會先問一次。這個開關現在預設開啟：如果你在 0.2.30 從沒改過原生後端的設定（例如切換這個開關，或允許、停用原生後端），開關現在是開著的；你之前儲存過的值會保留，存成關閉的就維持關閉。原生後端只在作業系統的沙盒裡執行，本身不能連網（macOS 用 Seatbelt、Linux 用 bubblewrap）；沒有沙盒的地方一律不執行，目前包括 Windows。你可以在「設定 → Navide 外掛 → 開發者與原生程式碼」關閉。',
+        'en-US': 'Installing a third-party plugin now allows its native backend to run: the install dialog says so, and Navide asks again only when the program or its permissions change. Packages installed before 0.2.31, and versions no install dialog showed (such as an update or rollback an agent started), are asked once before they first run. The switch is now on by default: if you never changed native-backend settings in 0.2.30 (for example the switch itself, or allowing or disabling a native backend), the switch is now on; a value you saved earlier is kept, so a switch you saved as off stays off. Native backends run only inside an operating-system sandbox with no network of their own (Seatbelt on macOS, bubblewrap on Linux), and do not run where there is no sandbox, including Windows for now. You can turn them off in Settings → Navide Plugins → Developer and native code.',
+        'ja-JP': 'サードパーティ製プラグインをインストールすると、そのネイティブバックエンドの実行を許可したことになります。インストールのダイアログにそう表示され、その後はプログラムや権限が変わったときだけ改めて確認します。0.2.30 以前にインストールしたパッケージと、インストールのダイアログを通っていないバージョン（agent が始めた更新やロールバックなど）は、初めて実行する前に一度確認します。このスイッチは既定でオンになりました。0.2.30 でネイティブバックエンドの設定（このスイッチの切り替えや、ネイティブバックエンドの許可・無効化など）を一度も変更していない場合、スイッチは現在オンです。以前に保存した値は保たれ、オフで保存したものはオフのままです。ネイティブバックエンドは OS のサンドボックス内でだけ動き、それ自体はネットワークに接続できません（macOS は Seatbelt、Linux は bubblewrap）。サンドボックスがない環境では動かず、現在は Windows も含まれます。「設定 → Navide プラグイン → 開発者とネイティブコード」でオフにできます。',
+      },
+      {
+        'zh-TW': '外掛現在可以申請讀取同一個工作區的 agent 資訊（pane 清單、哪個 pane 開了哪個、不含內容的訊息傳送紀錄、session 清單），這是中風險權限；訊息內容要另外申請高風險權限，安裝時會再確認一次，而且 agent 要讀到訊息內容，執行政策必須明確寫入。對話紀錄、帳號和額度資料都不開放。內建外掛都沒有申請這兩種權限。',
+        'en-US': 'Plugins can now ask to read agent information in their own workspace (the pane list, which pane opened which, message delivery records without their text, and the session list), a medium-risk permission. Message text needs a separate high-risk permission, confirmed a second time at install, and an agent gets it only from an Execution Policy that names it. Conversation transcripts, account and quota data are never available. None of the bundled plugins asks for either.',
+        'ja-JP': 'プラグインが、同じワークスペースの agent の情報（pane の一覧、どの pane がどの pane を開いたか、本文を含まないメッセージの配信記録、session の一覧）の読み取りを申請できるようになりました。これは中リスクの権限です。メッセージの本文には別の高リスクの権限が必要で、インストール時にもう一度確認され、agent が本文を読めるのは実行ポリシーに明記されている場合だけです。会話の記録、アカウントや使用量のデータは公開されません。同梱のプラグインはどちらも申請していません。',
+      },
+      {
+        'zh-TW': '因為電腦時鐘不準而無法檢查 Registry 外掛時，訊息會說明時鐘似乎慢了或快了，請你改正日期與時間後再試。已安裝的外掛因此停止時，「設定 → Navide 外掛」的「Navide 外掛」頁會顯示橫幅說明，Navide 會在 15 分鐘內及啟動時再檢查一次。',
+        'en-US': 'When a Registry plugin cannot be checked because this computer\'s clock is off, the message now says the clock appears to be behind or ahead, and to correct the date and time and try again. An installed plugin stopped for this reason shows a banner on the Navide plugins page of Settings → Navide Plugins; Navide checks again within 15 minutes and when it starts.',
+        'ja-JP': 'コンピューターの時計がずれているために Registry のプラグインを確認できないとき、時計が遅れているか進んでいるようだと伝え、日付と時刻を直してからやり直すよう案内するようになりました。インストール済みのプラグインがこの理由で停止した場合は「設定 → Navide プラグイン」の「Navide プラグイン」ページにバナーが表示され、Navide は 15 分以内と起動時にもう一度確認します。',
+      },
+      {
+        'zh-TW': '標題列和側欄裡沒有圖示的外掛按鈕，不再全都顯示同一個 ◇，而是顯示外掛標題的第一個字；Mini-IDE 也有了自己的圖示。這些按鈕的提示會寫出是哪個外掛：它的 id、發佈者（或「自稱」）和來源。',
+        'en-US': 'Plugin buttons without an icon in the title bar and the sidebar no longer all show the same ◇; they show the first character of the plugin\'s title, and Mini-IDE has its own icon. Their tooltip says which plugin it is: its id, its publisher (or "Self-declared") and its source.',
+        'ja-JP': 'タイトルバーとサイドバーにあるアイコンのないプラグインのボタンは、すべて同じ ◇ ではなく、プラグインのタイトルの最初の 1 文字を表示するようになりました。Mini-IDE には専用のアイコンが付きました。これらのボタンのツールチップには、どのプラグインか（id、発行者または「自称」、ソース）が表示されます。',
+      },
+      {
+        'zh-TW': '用 Anthropic 自動產生 commit 訊息不再每次都失敗。',
+        'en-US': 'Generating a commit message with Anthropic no longer fails every time.',
+        'ja-JP': 'Anthropic での commit メッセージの自動生成が、毎回失敗することはなくなりました。',
+      },
+      {
+        'zh-TW': 'Navide 不會把你 CLI 帳號的憑證與金鑰集中保存在雲端，以後也不會：CLI 帳號的憑證與金鑰只存在你的電腦上。0.2.28 起，同步設定已移除「Credentials 與金鑰」選項；這個選項在介面上一直是停用的，從來無法開啟。MCP 設定裡的 token 會先在你的裝置上加密才同步；伺服器無法解密。MCP 同步可隨時在「設定 → Navide Cloud → 同步 → MCP」關閉。',
+        'en-US': 'Navide does not store your CLI account credentials and keys centrally in the cloud, and it never will: your CLI account credentials and keys live only on your own machine. Since 0.2.28 the "Credentials & keys" option is gone from the sync settings; it was always disabled in the interface and could never be turned on. Tokens in your MCP settings are encrypted on your device before they sync; the server cannot decrypt them. You can turn MCP sync off at any time in Settings → Navide Cloud → Sync → MCP.',
+        'ja-JP': 'Navide は CLI アカウントの認証情報やキーをクラウドにまとめて保存せず、今後も保存しません。CLI アカウントの認証情報とキーは、お使いのコンピューターにのみ保存されます。0.2.28 以降、同期設定から「認証情報とキー」の項目は削除されています。この項目は画面上で常に無効になっていて、オンにすることはできませんでした。MCP 設定内のトークンは、同期の前にお使いのデバイス上で暗号化され、サーバーは復号できません。MCP の同期は「設定 → Navide Cloud → 同期 → MCP」でいつでもオフにできます。',
+      },
+    ],
+    note: {
+      'zh-TW': '完整說明：https://navide.dev/posts/credentials-stay-on-your-machine-zh-hant/',
+      'en-US': 'Full announcement: https://navide.dev/posts/credentials-stay-on-your-machine/',
+      'ja-JP': '詳しいお知らせ：https://navide.dev/posts/credentials-stay-on-your-machine-ja/',
+    },
+  },
+  {
+    version: '0.2.30',
+    title: {
+      'zh-TW': '「Navide 外掛」設定頁改版：風險和警告直接標在清單上，Pipeline 也不再默默卡住',
+      'en-US': 'A Reworked Navide Plugins Page With Risk and Warnings Marked in the List, and Pipelines That No Longer Stall Silently',
+      'ja-JP': '「Navide プラグイン」設定ページを刷新：リスクと警告を一覧に表示し、Pipeline も黙って止まらなくなりました',
+    },
+    highlights: [
+      {
+        'zh-TW': '「設定 → Navide 外掛」改版。頁面先顯示目前生效的執行政策摘要（來源和模式），按「編輯政策」展開編輯器；有 Repository 建議時，摘要會標「不受信任」並列出它的模式。有需要你處理的事時，編輯器會自動展開而且收不起來，包括兩種高風險警告：你正在設定的政策是高風險，或有效的 Repository 建議是高風險。內建和已安裝的外掛合成一份清單，旁邊顯示選中外掛的詳細資料。已安裝外掛的列會同時顯示「已停用」和風險等級（中以上），不是從 Navide Marketplace 安裝的（Testplace 或預先發行版、本機檔案、開發者資料夾）會有來源圖示；每一列有警告時都會顯示「⚠ N」，N 是詳細資料裡的警告數。滑鼠移到標記、圖示或被截斷的名稱上會顯示完整文字；警告的完整內容要選中外掛後在詳細資料裡看。揭露總覽裡，每個外掛的風險等級、來源和「掃描到但未宣告」標示一直顯示，完整的揭露卡在下方展開，內容沒有刪減。',
+        'en-US': 'Settings → Navide Plugins is reworked. The page opens on a summary of the execution policy in effect (its source and Mode), and Edit Policy opens the editor; a repository recommendation is shown there as Untrusted, with its mode. While something needs your attention, the editor opens by itself and cannot be collapsed; that includes both high-risk warnings, for a high-risk policy you are setting and for a valid high-risk repository recommendation. Bundled and installed plugins share one list, with the selected plugin\'s details beside it. An installed plugin\'s row shows Disabled together with its risk level (Medium and above), and an icon when it did not come from the Navide Marketplace (Testplace or pre-release, a local file, a developer folder). Any row with warnings shows ⚠ N, N being the number of warnings in its details. Hover a marker, an icon or a cut-off name to read it in full; the warnings themselves are in the details once you select the plugin. In the Disclosure overview, each plugin\'s risk level, source and any "Found by the scan but not declared" flag stay in view, and the full Disclosure opens below them, unshortened.',
+        'ja-JP': '「設定 → Navide プラグイン」を刷新しました。ページの最初に現在有効な実行ポリシーの概要（ソースとモード）を表示し、「ポリシーを編集」でエディターを開きます。リポジトリの推奨設定がある場合は、概要に「未信頼」と表示し、そのモードも示します。対応が必要なことがあるときは、エディターが自動で開き、閉じることはできません。2 つの高リスク警告（設定中のポリシーが高リスクの場合と、有効なリポジトリの推奨設定が高リスクの場合）もこれに含まれます。同梱とインストール済みのプラグインは 1 つの一覧にまとまり、その横に選択したプラグインの詳細を表示します。インストール済みのプラグインの行には「無効」とリスクレベル（中以上）が並んで表示され、Navide Marketplace 以外から入れたもの（Testplace またはプレリリース、ローカルファイル、開発者フォルダー）にはソースのアイコンが付きます。警告がある行には「⚠ N」が表示され、N は詳細にある警告の数です。マークやアイコン、途中で切れた名前にポインターを合わせると全文が表示されます。警告の全文は、プラグインを選択して詳細で確認できます。開示の一覧では、各プラグインのリスクレベル、ソース、「スキャンで見つかったが宣言されていないもの」の表示が常に見え、完全な開示はその下で開けます。内容は省略していません。',
+      },
+      {
+        'zh-TW': '「設定 → Navide 外掛」又可以捲動了，執行政策、外掛清單和揭露總覽也不會再被擠成三欄窄條。這是 0.2.27 起的問題。',
+        'en-US': 'Settings → Navide Plugins scrolls again, and its execution policy, plugin list and Disclosure overview are no longer squeezed into three narrow columns. This had been broken since 0.2.27.',
+        'ja-JP': '「設定 → Navide プラグイン」が再びスクロールできるようになり、実行ポリシー、プラグイン一覧、開示の一覧が 3 列の細い枠に押し込まれることもなくなりました。0.2.27 から続いていた問題です。',
+      },
+      {
+        'zh-TW': 'Pipeline 的 Manager 模式不會再因為 Manager 沒有印出 ---MANAGER-READY--- 而默默卡住：Navide 會先提醒它一次；如果它閒置 180 秒、而且有 worker 的訊息在等它，Navide 會告訴它這是逾時後的替代處理，並把等著的訊息交給它。執行紀錄會記下這件事。',
+        'en-US': 'A Manager-mode pipeline stage no longer stalls silently when its Manager never prints ---MANAGER-READY---: Navide reminds it once, and if it then sits idle for 180 seconds while workers\' messages wait for it, tells it this is a timeout fallback and hands it those messages. The run log records the fallback.',
+        'ja-JP': 'Pipeline の Manager モードで、Manager が ---MANAGER-READY--- を出力しないまま黙って止まることはなくなりました：Navide はまず一度だけ促し、その後 180 秒アイドルのままで worker のメッセージが待っている場合は、タイムアウト時の代替処理であることを伝えて、待っていたメッセージを渡します。実行ログにも記録されます。',
+      },
+      {
+        'zh-TW': 'Pipeline 某個 slot 的 role 提示沒有送到 agent 時，run 會明確失敗，不再在沒有 role 的情況下照樣開工：節點會顯示「role prompt never reached the agent」，錯誤通知會指出是哪個階段和 slot，pane 會保留，之後可以接續執行。',
+        'en-US': 'When a pipeline slot\'s role prompt never reaches its agent, the run now fails with the reason instead of starting the slot without its role: the node shows "role prompt never reached the agent", an error toast names the stage and slot, and the panes stay open so the run can be resumed.',
+        'ja-JP': 'Pipeline の slot の role プロンプトが agent に届かなかった場合、role なしのまま作業を始めることはなくなり、run は理由を示して失敗します：ノードに「role prompt never reached the agent」と表示され、エラー通知がどのステージのどの slot かを示し、pane はそのまま残るので run を再開できます。',
+      },
+      {
+        'zh-TW': '本機（stdio）MCP 伺服器在啟動途中結束或連線出錯時，「設定 → MCP」會說出真正的原因（例如伺服器的結束代碼，或連線失敗的錯誤），不再當成啟動被取消，也不會顯示錯誤的結束代碼。',
+        'en-US': 'When a local (stdio) MCP server exits or its connection fails partway through starting, Settings → MCP gives the real reason (the server\'s exit code, or the connection error) instead of calling it a cancelled start or showing the wrong exit code.',
+        'ja-JP': 'ローカル（stdio）の MCP サーバーが起動の途中で終了したり接続に失敗したりした場合、「設定 → MCP」は本当の理由（サーバーの終了コードや接続エラー）を表示し、起動がキャンセルされたと扱ったり、誤った終了コードを表示したりすることはなくなりました。',
+      },
+      {
+        'zh-TW': '更穩定：關掉的 pane 不會在下次還原專案時又冒出來；Navide 內建的 Plan MCP 服務在內部中斷後會正常重新開始；同時更改版面、主題或語言時，不會蓋掉剛存好的其他變更。',
+        'en-US': 'Steadier: a closed pane no longer comes back the next time the project is restored, Navide\'s built-in Plan MCP service starts again cleanly after an internal interruption, and changing the layout, theme or language no longer overwrites another change saved at the same moment.',
+        'ja-JP': '安定性の向上：閉じた pane が次にプロジェクトを復元したときに戻ってくることはなくなりました。Navide 内蔵の Plan MCP サービスは内部で中断しても正常に再開し、レイアウト・テーマ・言語の変更が同じタイミングで保存された別の変更を上書きすることもなくなりました。',
+      },
+      {
+        'zh-TW': '安全更新：Electron 升級到 44.9.1，修補安全公告 GHSA-jr5w-w6x2-84p9，不再信任已遭入侵的 eMudhra 中繼憑證。這個版本內建的 Node.js 仍是 24.22.0，還不含 Node.js 官方 10 月 21 日的安全修補（24.x 線修補在 24.22.1）；Electron 推出內含這批修補的版本後，我們會在新版跟上。',
+        'en-US': 'Security: Electron is updated to 44.9.1 for advisory GHSA-jr5w-w6x2-84p9; it stops trusting the compromised eMudhra intermediate certificates. Its built-in Node.js is still 24.22.0, without the Node.js security fixes of October 21 (24.22.1 on the 24 line); we will follow in a new Navide release once Electron ships a version that includes them.',
+        'ja-JP': 'セキュリティ更新：Electron を 44.9.1 に更新し、アドバイザリ GHSA-jr5w-w6x2-84p9 に対応しました。侵害された eMudhra の中間証明書を信頼しなくなります。内蔵の Node.js は 24.22.0 のままで、Node.js が 10 月 21 日に公開したセキュリティ修正（24 系では 24.22.1）はまだ含まれていません。Electron がこの修正を含むバージョンを公開したら、Navide の新しいバージョンで対応します。',
+      },
+    ],
+  },
+  {
+    version: '0.2.29',
+    title: {
+      'zh-TW': 'Navide 會說六種新語言：德、西、法、葡、俄、越文介面（Beta）',
+      'en-US': 'Navide Speaks Six More Languages: German, Spanish, French, Brazilian Portuguese, Russian and Vietnamese (Beta)',
+      'ja-JP': 'Navide が 6 つの新しい言語に対応：ドイツ語・スペイン語・フランス語・ポルトガル語（ブラジル）・ロシア語・ベトナム語（ベータ）',
+    },
+    highlights: [
+      {
+        'zh-TW': '10 月 22 日我們把 Navide 伺服器（server.navide.dev）的 Node.js 從 22.23.3 升到 22.23.4。Node.js 官方 10 月 21 日的安全更新修補了 10 個漏洞，其中 7 個影響伺服器使用的 Node.js 22，包括 3 個高風險：TLS 憑證主機名稱驗證可被繞過（CVE-2026-106069）、Brotli 解碼越界寫入可能導致遠端執行程式碼（CVE-2026-111497），以及 dns.resolve 處理含 NUL 字元的名稱時會截斷（CVE-2026-105482）。伺服器的程式碼與資料都沒有變動，你不需要做任何事。',
+        'en-US': 'On October 22 we upgraded Node.js on the Navide server (server.navide.dev) from 22.23.3 to 22.23.4. The Node.js security release of October 21 fixes 10 vulnerabilities, 7 of which affect Node.js 22, the line the server runs. Three are rated high: a bypass of TLS certificate hostname verification (CVE-2026-106069), an out-of-bounds write in Brotli decoding that could allow remote code execution (CVE-2026-111497), and truncation in dns.resolve of names containing a NUL character (CVE-2026-105482). The server\'s code and data are unchanged, and you do not need to do anything.',
+        'ja-JP': '10 月 22 日、Navide サーバー（server.navide.dev）の Node.js を 22.23.3 から 22.23.4 に更新しました。Node.js が 10 月 21 日に公開したセキュリティリリースは 10 件の脆弱性を修正しており、そのうち 7 件がサーバーで使っている Node.js 22 に影響します。高リスクは 3 件です：TLS 証明書のホスト名検証の回避（CVE-2026-106069）、Brotli のデコードでの範囲外書き込みによるリモートコード実行の可能性（CVE-2026-111497）、NUL 文字を含む名前を dns.resolve が切り詰める問題（CVE-2026-105482）。サーバーのコードとデータは変わっておらず、お客様の操作は必要ありません。',
+      },
+      {
+        'zh-TW': '桌面版內建的 Node.js 來自 Electron。Electron 官方還沒推出含這次修補的版本，推出後我們會在新版跟上。',
+        'en-US': 'The Node.js built into the desktop app comes from Electron. Electron has not yet released a version with these fixes; we will follow in a new Navide release once it does.',
+        'ja-JP': 'デスクトップ版に組み込まれている Node.js は Electron に由来します。Electron はまだ今回の修正を含むバージョンを公開していません。公開され次第、Navide の新しいバージョンで対応します。',
+      },
+      {
+        'zh-TW': '介面多了六種語言（Beta）：德文、西班牙文、法文、巴西葡萄牙文、俄文和越南文。翻譯由 AI pane 完成、另一個 AI pane 審稿，還沒有母語者校對；法文介面把 AI 寫成 IA。到「設定 → 外觀」或第一次啟動時選擇。',
+        'en-US': 'Six more interface languages (Beta): German, Spanish, French, Brazilian Portuguese, Russian and Vietnamese. AI panes translated them and a separate AI pane reviewed them; no native speaker has checked them yet. The French interface writes AI as IA. Pick one in Settings → Appearance, or at the first start.',
+        'ja-JP': '表示言語が 6 つ増えました（ベータ）：ドイツ語、スペイン語、フランス語、ポルトガル語（ブラジル）、ロシア語、ベトナム語。AI pane が翻訳し、別の AI pane がレビューしましたが、ネイティブスピーカーによる確認はまだです。フランス語の表示では AI を IA と書きます。「設定 → 外観」または初回起動時に選べます。',
+      },
+      {
+        'zh-TW': '聊天頻道（Telegram 等）不會再在電腦忙的時候收到「沒有文字輸出」或上一回合的回覆：Navide 會等讀到這一回合的文字再回。10 秒後狀態會顯示「正在讀取回覆」，超過 120 秒會先告訴你回覆稍後補送，讀到後就補上。',
+        'en-US': 'Chat channels (Telegram and others) no longer get "no text output" or the previous turn\'s reply when the computer is busy: Navide waits until it has read this turn\'s text. After 10 seconds the status says the reply is being read; after 120 seconds the chat is told the reply will follow, and it does once read.',
+        'ja-JP': 'チャンネル（Telegram など）で、コンピューターが混んでいるときに「テキスト出力なし」や前のターンの返信が届くことはなくなりました：Navide はこのターンのテキストを読み取ってから返信します。10 秒たつと「返信を読み取り中」と表示し、120 秒を過ぎると返信は後から届くと伝え、読み取れた時点で送ります。',
+      },
+      {
+        'zh-TW': '本機（stdio）MCP 伺服器第一次啟動、npx 或 uvx 還在下載套件時，不會在 15 秒後就失敗：Navide 會一直等到它啟動完成或程序結束（最多 300 秒）。「設定 → MCP」會顯示啟動中，15 秒後說明第一次可能正在下載，失敗時顯示原因。',
+        'en-US': 'A local (stdio) MCP server no longer fails after 15 seconds while npx or uvx downloads its package on the first start: Navide waits until it is up or its process exits (up to 300 seconds). Settings → MCP shows it as starting, explains after 15 seconds that a first run may be downloading, and shows why if it fails.',
+        'ja-JP': 'ローカル（stdio）の MCP サーバーが初回起動で npx や uvx がパッケージをダウンロードしている間に、15 秒で失敗することはなくなりました：Navide は起動が完了するかプロセスが終了するまで（最大 300 秒）待ちます。「設定 → MCP」には起動中と表示され、15 秒後に初回はダウンロード中の可能性があると説明し、失敗した場合は理由を表示します。',
+      },
+      {
+        'zh-TW': 'Windows 上的 Git 檢視不會再一直停在「git.status 逾時」：背景啟動的 git 和其他工具不會再在啟動時卡住，萬一某次 git 真的逾時，也會在兩秒內結束，不會拖住後面的操作。',
+        'en-US': 'On Windows, the Git view no longer stays stuck on a git.status timeout: git and the other tools Navide starts in the background no longer hang at launch, and a git run that does time out ends within two seconds instead of holding up the ones after it.',
+        'ja-JP': 'Windows で Git ビューが「git.status のタイムアウト」のまま止まることはなくなりました：Navide がバックグラウンドで起動する git などのツールは起動時に止まらなくなり、git が本当にタイムアウトした場合も 2 秒以内に終了し、後続の処理を妨げません。',
+      },
+      {
+        'zh-TW': '每個版本的新版說明，現在也會同步發布到 Navide 官網的公告頁（navide.dev/news）。',
+        'en-US': 'Each release\'s What\'s New is now also published on the Navide website\'s announcements page (navide.dev/news).',
+        'ja-JP': '各バージョンの新機能のお知らせは、Navide のウェブサイトのお知らせページ（navide.dev/news）にも掲載されるようになりました。',
+      },
+      {
+        'zh-TW': '電腦時鐘比 Registry 慢 5 分鐘以內時，Registry 的安裝和更新不會再全部被拒絕；差距更大時，會請你檢查電腦的日期和時間。',
+        'en-US': 'A computer clock up to 5 minutes behind the Registry\'s no longer refuses every Registry install and update; a larger gap asks you to check the computer\'s date and time.',
+        'ja-JP': 'コンピューターの時計が Registry より 5 分以内の遅れであれば、Registry からのインストールと更新がすべて拒否されることはなくなりました。それ以上ずれている場合は、コンピューターの日付と時刻を確認するよう案内します。',
+      },
+      {
+        'zh-TW': 'Windows 新安裝後第一次啟動時，等待後端的時間從 45 秒延長到 120 秒（和 Linux 一樣），Microsoft Defender 掃描新檔案時，還在啟動的後端不會再被判定為啟動失敗；啟動畫面也會一直顯示到等待結束。',
+        'en-US': 'On Windows, the first launch after a fresh install waits up to 120 seconds for the backend (was 45), as on Linux, so a backend still starting while Microsoft Defender scans the new files is no longer reported as failed to start; the startup screen stays up for the whole wait.',
+        'ja-JP': 'Windows で新しくインストールした後の初回起動では、バックエンドを待つ時間が 45 秒から 120 秒に延びました（Linux と同じ）。Microsoft Defender が新しいファイルをスキャンしている間に、まだ起動中のバックエンドが起動失敗と判定されることはなくなり、起動画面も待っている間ずっと表示されます。',
+      },
+      {
+        'zh-TW': '開很多 CLI pane 時，資源面板的風險檢查不會再讓後端凍結好幾秒，檢查結果不變。',
+        'en-US': 'With many CLI panes open, the resource panel\'s risk check no longer freezes the backend for seconds at a time; its results are unchanged.',
+        'ja-JP': 'CLI pane をたくさん開いていても、リソースパネルのリスクチェックでバックエンドが数秒止まることはなくなりました。チェックの結果は変わりません。',
+      },
+      {
+        'zh-TW': 'Codex pane 的子 agent 結束時，不會再連帶結束父 pane 的這一回合；子 agent 的回覆不會被當成 pane 的回覆，也不會拿它的任務來為 pane 命名。',
+        'en-US': 'In a Codex pane, a sub-agent finishing no longer ends the parent pane\'s turn; its reply is not taken as the pane\'s, and its task is not used to name the pane.',
+        'ja-JP': 'Codex pane でサブ agent が終了しても、親 pane のターンが一緒に終わることはなくなりました。サブ agent の返信は pane の返信として扱われず、そのタスクで pane に名前が付くこともありません。',
+      },
+      {
+        'zh-TW': '安全更新：Mermaid 圖表和 Monaco 編輯器用來清理 HTML 的 DOMPurify 升級到 3.4.17，修補已公開的安全公告（GHSA-cg2g-xh64-v4q7、GHSA-mrv2-3pqr-j5jr、GHSA-c6gr-qvv4-5v3f）。',
+        'en-US': 'Security: DOMPurify, which Mermaid diagrams and the Monaco editor use to sanitize HTML, is updated to 3.4.17 for the published advisories GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and GHSA-c6gr-qvv4-5v3f.',
+        'ja-JP': 'セキュリティ更新：Mermaid の図と Monaco エディターが HTML のサニタイズに使う DOMPurify を 3.4.17 に更新し、公開されたアドバイザリ（GHSA-cg2g-xh64-v4q7、GHSA-mrv2-3pqr-j5jr、GHSA-c6gr-qvv4-5v3f）に対応しました。',
+      },
+    ],
+    note: {
+      'zh-TW': 'Node.js 官方公告：https://nodejs.org/en/blog/vulnerability/october-2026-security-releases',
+      'en-US': 'Node.js announcement: https://nodejs.org/en/blog/vulnerability/october-2026-security-releases',
+      'ja-JP': 'Node.js の公式発表：https://nodejs.org/en/blog/vulnerability/october-2026-security-releases',
+    },
+  },
+  {
+    version: '0.2.28',
+    title: {
+      'zh-TW': '核准就生效：Navide 外掛不用重新啟動，agent 也能幫你整理視窗',
+      'en-US': 'Approve and It Is Live: No Restart for Navide Plugins, and Agents Can Arrange Your Windows',
+      'ja-JP': '承認すればすぐ有効：Navide プラグインは再起動不要、agent はウィンドウも整理できます',
+    },
+    highlights: [
+      {
+        'zh-TW': '核准的 Navide 外掛安裝和更新會立即生效，不用按「重新啟動」或重開 Navide。核准前對話框會說明這個外掛開著的畫面會重新載入；每次切換都記在公告中心，附「退回」上一版的按鈕。從檔案更新時會保留被取代的版本，退回它需要重新同意。',
+        'en-US': 'Navide plugin installs and updates you approve take effect at once, without Restart or relaunching Navide. The dialog says beforehand that the plugin\'s open views reload; every switch is recorded in the announcements with Back to the previous version. A file update keeps the version it replaced, and going back to it asks for your consent again.',
+        'ja-JP': '承認した Navide プラグインのインストールと更新はすぐに有効になり、再起動も Navide の再起動も不要です。承認の前に、そのプラグインの開いている画面が再読み込みされることをダイアログが説明します。切り替えはすべてお知らせに記録され、前のバージョンに戻すボタンが付きます。ファイルから更新した場合は置き換えたバージョンを保持し、そこへ戻すには改めて同意が必要です。',
+      },
+      {
+        'zh-TW': 'agent 可以管理 Navide 視窗：列出所有視窗並切到前景、把某個 pane 或整個專案移到另一個視窗，以及關掉別的視窗或專案（不會關自己的，也不會結束 CLI）。每個動作都會顯示是哪個 pane 做的，並留下紀錄。',
+        'en-US': 'Agents can arrange Navide windows: list them and bring one to the front, move a pane or a whole project to another window, and close another window or project (never their own, and no CLI ends). Every action shows which pane did it and is recorded.',
+        'ja-JP': 'agent が Navide のウィンドウを整理できます：ウィンドウの一覧と前面への切り替え、pane やプロジェクト全体の別ウィンドウへの移動、ほかのウィンドウやプロジェクトのクローズ（自分自身は閉じず、CLI も終了しません）。どの操作も、どの pane が行ったかが表示され、記録されます。',
+      },
+      {
+        'zh-TW': 'agent 用 cli_open_agent 開子 pane 時可以開在另一個專案裡，子 pane 仍然向開它的 pane 回報。',
+        'en-US': 'An agent can open a child pane in another project with cli_open_agent; the child still reports back to the pane that opened it.',
+        'ja-JP': 'agent は cli_open_agent で別のプロジェクトに子 pane を開けます。子 pane は開いた pane に引き続き報告します。',
+      },
+      {
+        'zh-TW': '從本機資料夾載入的 Navide 外掛標示為「本機資料夾」，點開可以看到資料夾路徑、上次載入的時間和方式、是誰載入的，以及當時內容的指紋。',
+        'en-US': 'A Navide plugin loaded from a folder is labelled Local folder; open it to see the folder path, when and how it last loaded, who loaded it and a fingerprint of its content at that load.',
+        'ja-JP': 'フォルダーから読み込んだ Navide プラグインには「ローカルフォルダー」と表示されます。開くと、フォルダーのパス、前回の読み込み日時と方法、誰が読み込んだか、そのときの内容のフィンガープリントを確認できます。',
+      },
+      {
+        'zh-TW': '行為改變：開發者模式設定被 Navide 以外的程式改過時不再算數，開關維持關閉、資料夾不會載入，直到你重新開啟或重新同意。0.2.27 有在用開發者模式的人，升級後要重新開啟一次，每個本機資料夾也要再同意一次。',
+        'en-US': 'Behaviour change: Developer Mode settings changed by a program other than Navide no longer count; the switch stays off and the folder is not loaded until you turn it on or consent again. If you used Developer Mode in 0.2.27, turn it on once more after upgrading and consent to each local folder again.',
+        'ja-JP': '動作の変更：Navide 以外のプログラムが変更した開発者モードの設定は無効になり、もう一度オンにするか同意し直すまで、スイッチはオフのまま、フォルダーも読み込まれません。0.2.27 で開発者モードを使っていた場合は、アップグレード後にもう一度オンにし、ローカルフォルダーごとに同意し直してください。',
+      },
+      {
+        'zh-TW': '行為改變：被開發者或 Navide 撤回的 Testplace 測試版不再自動停用，而是標示「測試版已撤回」並問你一次要怎麼處理；離線或沒登入 Navide Cloud 的測試者也會收到通知。',
+        'en-US': 'Behaviour change: a Testplace build withdrawn by its developer or by Navide is no longer disabled automatically; it is labelled Test build withdrawn and you are asked once what to do. Testers who are offline or signed out of Navide Cloud are told too.',
+        'ja-JP': '動作の変更：開発者または Navide が取り下げた Testplace のテストビルドは自動で無効にならなくなり、「テストビルドは取り下げ済み」と表示して、どうするかを一度だけ尋ねます。オフラインの、または Navide Cloud にログインしていないテスターにも通知されます。',
+      },
+      {
+        'zh-TW': '介面語言的預設值改了：系統語言不在 Navide 支援的清單裡時，介面改用英文（以前是繁體中文）。你在設定裡自己選過的語言不受影響。',
+        'en-US': 'The default UI language has changed: when your system language is not one Navide supports, the interface now uses English (it used to be Traditional Chinese). A language you picked in Settings is not affected.',
+        'ja-JP': '既定の表示言語が変わりました：システムの言語が Navide の対応言語にない場合、表示は英語になります（以前は繁体字中国語でした）。設定で選んだ言語はそのままです。',
+      },
+    ],
+  },
+  {
+    version: '0.2.27',
+    title: {
+      'zh-TW': 'Navide 瀏覽器：agent 在自己的 Space 上網，你的分頁不會被搶走',
+      'en-US': 'Navide Browser: Agents Browse in Their Own Spaces, Yours Stay Yours',
+      'ja-JP': 'Navide ブラウザー：agent は自分の Space でブラウズし、あなたのタブは奪われません',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Navide 瀏覽器：在 Navide 裡開真正的網頁，從 Navide 市集安裝（不隨 App 內建）。每個 agent pane 在自己的背景 Space 工作，你的 Space 有釘選標記，agent 預設碰不到；總覽卡片顯示縮圖和狀態（執行中、需要你處理、完成）。',
+        'en-US': 'Navide Browser opens real web pages inside Navide. Install it from the Navide Marketplace; it does not ship with the App. Each agent pane works in its own background Space; your own Spaces are pinned and off limits to agents unless you let them in. The overview shows every Space with a thumbnail and its state (Running, Need your action, Done).',
+        'ja-JP': 'Navide ブラウザーで Navide の中に本物の Web ページを開けます。Navide マーケットプレイスからインストールします（App には同梱されません）。agent の pane はそれぞれ自分のバックグラウンド Space で作業し、あなたの Space はピン留めされ、許可しない限り agent は使えません。一覧では各 Space のサムネイルと状態（実行中・対応が必要・完了）が表示されます。',
+      },
+      {
+        'zh-TW': '人機交接：agent 需要你登入、過驗證碼或付款時會把 Space 交給你；你也可以隨時按「接手」。交還前 agent 的操作一律被擋下。',
+        'en-US': 'Hand-offs: an agent hands you its Space when it needs you to sign in, solve a captcha or pay, and you can take over any time; its commands are refused until you hand the Space back.',
+        'ja-JP': '受け渡し：ログインや CAPTCHA、支払いが必要になると agent が Space をあなたに渡します。いつでも操作を引き継ぐこともでき、戻すまで agent の操作はすべて拒否されます。',
+      },
+      {
+        'zh-TW': '所有 Space 共用同一份登入資料，保存在這台電腦上；可在 Navide 瀏覽器的設定裡一鍵清除。',
+        'en-US': 'All Spaces share one set of sign-ins kept on this computer; clear them from the Navide Browser settings.',
+        'ja-JP': 'すべての Space は同じログイン情報を共有し、このコンピューターに保存されます。Navide ブラウザーの設定から消去できます。',
+      },
+      {
+        'zh-TW': '從 .vsix 檔案安裝的 Navide 外掛，每次啟動和每次更新信任清單時都會再檢查一次。Navide 因安全問題下架的會被停用，只能移除；因其他原因被封鎖的會問你一次要繼續使用、停用或移除；開發者撤回的只會標示。「設定 → Navide 外掛」會一直標示它被封鎖的原因。',
+        'en-US': 'A Navide plugin installed from a .vsix file is checked again at every start and every trust refresh. One Navide took down for a security reason is disabled and can only be removed; one blocked for another reason asks you once whether to keep using, disable or remove it; one its developer withdrew is only labelled. Settings → Navide Plugins keeps showing why it is blocked.',
+        'ja-JP': '.vsix ファイルからインストールした Navide プラグインは、起動するたびと信頼リストを更新するたびに再確認されます。Navide がセキュリティ上の理由で取り下げたものは無効になり、削除だけができます。ほかの理由でブロックされたものは、使い続けるか、無効にするか、削除するかを一度だけ尋ねます。開発者が取り下げたものは表示だけです。「設定 → Navide プラグイン」には、ブロックされた理由が表示され続けます。',
+      },
+      {
+        'zh-TW': '行為改變：從檔案安裝的 Navide 外掛現在會記下安裝檔的 digest。降回 0.2.26 時，記有 digest 或開發者簽章的本機安裝會被隔離，不會載入；回到 0.2.27 或之後的版本就會恢復。',
+        'en-US': 'Behaviour change: a Navide plugin installed from a file now records the digest of its file. If you go back to 0.2.26, local installs that carry a digest or a developer signature are quarantined and not loaded; they come back on 0.2.27 or later.',
+        'ja-JP': '動作の変更：ファイルからインストールした Navide プラグインは、インストール元ファイルのダイジェストを記録するようになりました。0.2.26 に戻すと、ダイジェストや開発者の署名が記録されたローカルインストールは隔離され、読み込まれません。0.2.27 以降に戻すと元に戻ります。',
+      },
+    ],
+  },
+  {
+    version: '0.2.26',
+    title: {
+      'zh-TW': '從聊天室喚醒 pane、只接回上次開著的 pane、從檔案或資料夾安裝 Navide 外掛（清楚標示來源）',
+      'en-US': 'Wake a Pane From Its Chat, Resume Only What Was Running, and Install Navide Plugins From a File or Folder — With Their Source Shown',
+      'ja-JP': 'チャットから pane を起動、前回動いていた pane だけを再開、ファイルやフォルダーから Navide プラグインをインストール（提供元を明示）',
+    },
+    features: [
+      {
+        icon: '▶️',
+        name: { 'zh-TW': '從聊天室喚醒', 'en-US': 'Wake from chat', 'ja-JP': 'チャットから起動' },
+        tagline: {
+          'zh-TW': 'pane 不在線上時，按「▶️ 喚醒」把它接回原本的對話；離線時傳的訊息會依序送進去。',
+          'en-US': 'When a pane is offline, press ▶️ 喚醒 to bring it back on its own conversation; what you sent meanwhile goes in, in order.',
+          'ja-JP': 'pane がオフラインのとき「▶️ 喚醒」を押すと元の会話に戻り、その間に送ったメッセージが順番に届きます。',
+        },
+        where: { 'zh-TW': '聊天室 → pane 離線時的回覆', 'en-US': 'Chat → the offline reply', 'ja-JP': 'チャット → オフライン時の返信' },
+      },
+      {
+        icon: '🔁',
+        name: { 'zh-TW': '接續範圍「自動」', 'en-US': 'Resume scope Auto', 'ja-JP': '再開する範囲「自動」' },
+        tagline: {
+          'zh-TW': '只接回上次關閉 Navide 時還在執行的 pane。',
+          'en-US': 'Bring back only the panes still running when Navide last closed.',
+          'ja-JP': '前回 Navide を閉じたときに動いていた pane だけを再開します。',
+        },
+        where: { 'zh-TW': '設定 → 一般 → 恢復範圍', 'en-US': 'Settings → General → Resume scope', 'ja-JP': '設定 → 一般 → 再開する範囲' },
+      },
+      {
+        icon: '📦',
+        name: { 'zh-TW': '從檔案或資料夾安裝', 'en-US': 'Install from a file or folder', 'ja-JP': 'ファイルやフォルダーからインストール' },
+        tagline: {
+          'zh-TW': '從 .vsix 檔案安裝 Navide 外掛，或在開發者模式從資料夾載入；兩者都未經 Navide 審核，畫面會標明。',
+          'en-US': 'Install a Navide plugin from a .vsix file, or load one from a folder in Developer Mode; neither is reviewed by Navide, and it says so.',
+          'ja-JP': '.vsix ファイルから Navide プラグインをインストール、または開発者モードでフォルダーから読み込めます。どちらも Navide の審査を受けておらず、画面に明示されます。',
+        },
+        where: { 'zh-TW': '設定 → Navide 外掛', 'en-US': 'Settings → Navide Plugins', 'ja-JP': '設定 → Navide プラグイン' },
+      },
+    ],
+    highlights: [
+      {
+        'zh-TW': '喚醒：pane 不在線上時，聊天室可以按「▶️ 喚醒」接回原本的對話；離線期間的訊息最多暫存 20 則、30 分鐘，喚醒後依序送進去。絕不會開新對話。',
+        'en-US': 'Wake: a chat can wake an offline pane back onto its own conversation; up to 20 messages from the last 30 minutes are kept and sent in order. It never starts a new conversation.',
+        'ja-JP': '起動：pane がオフラインのとき、チャットから「▶️ 喚醒」で元の会話に戻せます。オフラインの間のメッセージは最大 20 件・30 分まで保留され、起動後に順番に送られます。新しい会話は決して始めません。',
+      },
+      {
+        'zh-TW': '接續範圍「自動」：只接回上次關閉 Navide 時還在執行的 pane。',
+        'en-US': 'Resume scope Auto brings back only the panes still running when Navide last closed.',
+        'ja-JP': '再開する範囲「自動」：前回 Navide を閉じたときにまだ動いていた pane だけを再開します。',
+      },
+      {
+        'zh-TW': '從 .vsix 檔案安裝、開發者模式從資料夾載入；兩者都未經 Navide 審核，對話框會標明，必須勾選了解風險才能同意。自架 Registry 只在開發者模式開著時使用。',
+        'en-US': 'Install a Navide plugin from a .vsix file, or load one from a folder in Developer Mode; neither is reviewed by Navide, the dialog says so, and you must acknowledge the risk. A self-hosted Registry is used only in Developer Mode.',
+        'ja-JP': '.vsix ファイルからのインストールと、開発者モードでのフォルダーからの読み込み。どちらも Navide の審査を受けておらず、ダイアログに明示され、リスクを理解したことを確認しないと同意できません。自前の Registry は開発者モードがオンのときだけ使われます。',
+      },
+      {
+        'zh-TW': '來源標記：每個 Navide 外掛都標示來源與審核狀態；本機或測試套件在 Navide 自己的介面上也有標記。揭露卡也會寫明 Navide 外掛的畫面可以連網。',
+        'en-US': 'Every Navide plugin shows its source and review; local and test packages are also marked in Navide’s own chrome. The disclosure card also says that a Navide plugin’s views can reach the network.',
+        'ja-JP': '提供元の表示：すべての Navide プラグインに提供元と審査の状態が表示され、ローカルやテスト用のパッケージは Navide 自身の画面にも印が付きます。開示カードには、Navide プラグインのビューがネットワークに接続できることも記載されます。',
+      },
+      {
+        'zh-TW': '行為改變：送出後無法確認 CLI 有收到的訊息，會標成「未確認」，不再當成已送達；排程把它記成錯誤。',
+        'en-US': 'Behaviour change: a message Navide cannot confirm the CLI took is reported as unconfirmed, not delivered; a scheduled run records it as an error.',
+        'ja-JP': '動作の変更：CLI が受け取ったことを確認できないメッセージは「未確認」と表示され、送信済みとして扱われなくなりました。スケジュール実行ではエラーとして記録されます。',
+      },
+      {
+        'zh-TW': '揭露總覽移到 設定 → Navide 外掛 頁面最下方。',
+        'en-US': 'The Disclosure overview moved to the bottom of Settings → Navide Plugins.',
+        'ja-JP': '開示の一覧は「設定 → Navide プラグイン」ページの一番下に移りました。',
+      },
+      {
+        'zh-TW': '修正：大結果處理完後 helper 不再一直佔用約 339 MiB；pipeline 中止後可以重新開始；Linux 正式版的 `LD_LIBRARY_PATH` 不再傳給子程序。',
+        'en-US': 'Fixed: the result helper no longer holds ~339 MiB when idle; a pipeline can start again after an abort; the Linux build’s `LD_LIBRARY_PATH` no longer leaks into spawned processes.',
+        'ja-JP': '修正：大きな結果の処理後、helper が約 339 MiB を使い続けなくなりました。中断した pipeline を再び開始できます。Linux 製品版の `LD_LIBRARY_PATH` が子プロセスに渡らなくなりました。',
+      },
+    ],
+  },
+  {
+    version: '0.2.25',
+    major: true,
+    title: {
+      'zh-TW': 'Agent 可以使用 Navide 外掛的工具（每一步都由你同意）、Guard 更周全也更安靜、Telegram 選單改版、介面縮放重開後會保留',
+      'en-US': 'Agents Can Use Navide Plugin Tools (With Your Consent), a More Thorough and Quieter Guard, a New Telegram Menu, and Interface Scale That Survives a Restart',
+      'ja-JP': 'エージェントが Navide プラグインのツールを使えるように（すべてあなたの同意のうえで）、Guard がより確実に、より静かに、Telegram のメニューを刷新、表示倍率が再起動後も保たれるように',
+    },
+    features: [
+      {
+        icon: '🧩',
+        name: { 'zh-TW': 'Agent 使用外掛工具', 'en-US': 'Plugin tools for agents', 'ja-JP': 'エージェント向けプラグインツール' },
+        tagline: {
+          'zh-TW': '第三方 Navide 外掛可以提供工具給 agent 呼叫。預設關閉，打開後也只有你同意過的外掛和工具才會出現。',
+          'en-US': 'Third-party Navide plugins can offer tools for agents to call. Off by default, and once on, only plugins and tools you agreed to appear.',
+          'ja-JP': 'サードパーティ製 Navide プラグインがエージェント向けのツールを提供できます。初期設定はオフで、オンにしても同意したプラグインとツールだけが使われます。',
+        },
+        where: {
+          'zh-TW': '設定 → Navide 外掛 → 原生後端',
+          'en-US': 'Settings → Navide Plugins → Native backends',
+          'ja-JP': '設定 → Navide プラグイン → ネイティブバックエンド',
+        },
+      },
+      {
+        icon: '✅',
+        name: { 'zh-TW': '核准卡', 'en-US': 'Approval card', 'ja-JP': '承認カード' },
+        tagline: {
+          'zh-TW': 'Agent 申請安裝、更新、移除 Navide 外掛，或重新啟用你停用的外掛時，一定要你在核准卡上按下核准才會執行。',
+          'en-US': 'When an agent asks to install, update or remove a Navide plugin, or to re-enable one you disabled, nothing happens until you approve it on the card.',
+          'ja-JP': 'エージェントが Navide プラグインのインストール、更新、削除、またはあなたが無効にしたプラグインの再有効化を求めたときは、承認カードであなたが承認するまで何も実行されません。',
+        },
+        where: { 'zh-TW': '主視窗會跳出', 'en-US': 'Pops up in the main window', 'ja-JP': 'メインウィンドウに表示されます' },
+      },
+      {
+        icon: '🔍',
+        name: { 'zh-TW': '活動與揭露', 'en-US': 'Activity and disclosure', 'ja-JP': 'アクティビティと開示' },
+        tagline: {
+          'zh-TW': '安裝前先看外掛會做什麼、風險多高；安裝後看它實際做了什麼，包括沒宣告就使用的部分。',
+          'en-US': 'Before installing, see what a plugin does and how risky it is; afterwards, see what it actually did, including anything it did not declare.',
+          'ja-JP': 'インストール前にプラグインが何をするか、リスクがどれくらいかを確認でき、インストール後は宣言していない操作も含めて実際に何をしたかを確認できます。',
+        },
+        where: {
+          'zh-TW': '設定 → Navide 外掛 → 揭露總覽',
+          'en-US': 'Settings → Navide Plugins → Disclosure overview',
+          'ja-JP': '設定 → Navide プラグイン → 開示の一覧',
+        },
+      },
+    ],
+    highlights: [
+      {
+        'zh-TW': 'Navide 外掛平台：在「設定 → Navide 外掛 → 原生後端」打開開關後，agent 就能呼叫第三方 Navide 外掛提供的工具；只有你同意過的外掛和工具才會出現，外掛一更新、工具一改變，就會再問你一次。Agent 也可以申請安裝、更新、移除 Navide 外掛，或重新啟用你停用的外掛，但一定要你在主視窗的核准卡上按下核准才會執行，按拒絕就什麼都不變。每個外掛在 Navide 市集都有揭露卡，安裝前就看得到風險等級、宣告的權限，以及掃描發現但沒有宣告的項目。安裝後，「權限、授予與活動」會列出外掛實際讀了哪些檔案、跑了哪些指令、agent 對它做了什麼，沒宣告就使用的部分會用紅字標出。外掛的背景程式用太多資源時，Navide 會通知你，由你決定「停止」或「繼續執行」，不再自動關掉。',
+        'en-US': 'The Navide plugin platform: turn on the switch in Settings → Navide Plugins → Native backends and agents can call tools that third-party Navide plugins provide. Only plugins and tools you agreed to appear, and you are asked again whenever a plugin updates or a tool changes. Agents can also ask to install, update or remove a Navide plugin, or to re-enable one you disabled, but nothing happens until you press Approve on the card in the main window; Reject changes nothing. Every plugin in the Navide Marketplace has a disclosure card, so before installing you can see its risk level, its declared permissions and anything the scan found that it did not declare. After installing, “Permissions, grants and activity” lists which files the plugin read, which commands it ran and what agents did to it, with anything used without being declared marked in red. When a plugin’s background process uses too many resources, Navide tells you and you choose Stop or Keep running, instead of it being shut down on its own.',
+        'ja-JP': 'Navide プラグインのプラットフォーム：「設定 → Navide プラグイン → ネイティブバックエンド」でスイッチをオンにすると、エージェントがサードパーティ製 Navide プラグインのツールを呼び出せるようになります。同意したプラグインとツールだけが使われ、プラグインが更新されたりツールが変わったりすると、もう一度確認します。エージェントは Navide プラグインのインストール、更新、削除、またはあなたが無効にしたプラグインの再有効化を求めることもできますが、メインウィンドウの承認カードであなたが承認するまで何も実行されず、拒否すれば何も変わりません。Navide マーケットプレイスの各プラグインには開示カードがあり、インストール前にリスクの度合い、宣言された権限、スキャンで見つかったのに宣言されていない項目を確認できます。インストール後は「権限・付与・アクティビティ」に、プラグインが実際に読んだファイル、実行したコマンド、エージェントがそのプラグインに行った操作が表示され、宣言せずに使ったものは赤で示されます。プラグインのバックグラウンドプロセスがリソースを使いすぎたときは、自動で止めずに通知し、「停止」か「実行を続ける」かをあなたが選べます。',
+      },
+      {
+        'zh-TW': 'Navide Guard：搜尋碰到憑證位置（例如 ~/.ssh、~/.aws）也會被檢查，Claude 的 Grep、Glob，以及 Qwen Code、Copilot CLI 的搜尋都算在內，同時給了好幾個搜尋路徑時每一個都會檢查。在設定把 Guard 關掉後，就不會再跳出 Guard 的通知或要你確認，不再打擾你。',
+        'en-US': 'Navide Guard: searches that touch a credential location (such as ~/.ssh or ~/.aws) are checked too, including Claude’s Grep and Glob and the searches of Qwen Code and Copilot CLI, and every search path is checked when several are given. With Guard switched off in Settings, Guard no longer shows notices or asks you to confirm, so it stays out of your way.',
+        'ja-JP': 'Navide Guard：認証情報の場所（~/.ssh や ~/.aws など）に触れる検索もチェックするようになりました。Claude の Grep と Glob、Qwen Code と Copilot CLI の検索も対象で、検索パスが複数あるときはすべてをチェックします。設定で Guard をオフにすると、Guard の通知や確認は表示されなくなり、作業の邪魔をしません。',
+      },
+      {
+        'zh-TW': 'Telegram：原本的 /menu 改成三個指令，/prompts 開 Prompt、/skills 開技能、/mcp 列出 MCP 伺服器（只能查看）。傳 /menu 會提示你改用這三個指令，並附上對應的按鈕。',
+        'en-US': 'Telegram: the old /menu becomes three commands: /prompts opens your Prompts, /skills your skills, and /mcp lists your MCP servers (view only). Sending /menu points you to these three, with a button for each.',
+        'ja-JP': 'Telegram：これまでの /menu は 3 つのコマンドに分かれました。/prompts でプロンプト、/skills でスキルを開き、/mcp で MCP サーバーを一覧します（閲覧のみ）。/menu を送ると、この 3 つを使うよう案内し、それぞれのボタンを表示します。',
+      },
+      {
+        'zh-TW': '介面縮放：在「設定 → 外觀」調好的介面縮放，重開 Navide 後會保留，不會再回到 100%。',
+        'en-US': 'Interface scale: the scale you set in Settings → Appearance is kept when you restart Navide, instead of going back to 100%.',
+        'ja-JP': '表示倍率：「設定 → 外観」で設定した表示倍率が、Navide を再起動しても 100% に戻らず保たれるようになりました。',
+      },
+      {
+        'zh-TW': '其他修正與注意：Loop：evolve 超過預算時會自動中斷，Loop 也會停下來。~/.claude/secrets 的保護不只用在搜尋，直接讀取時也會要求確認。在 Telegram 送出 stop 之後，按「繼續」不會重開 Loop，要回到桌面重開。另外，明確中斷 pane 時 Loop 也會一起停；存了好幾個 MCP 登入的 Claude 帳號現在可以正常切換；在 Windows 上，外掛工具可以用 C:\\ 這類磁碟代號的工作區路徑；外掛名稱和路徑裡看不見的字元會被顯示出來，避免被偽裝成別的外掛。',
+        'en-US': 'Other fixes and notes: Loop: when an evolve run goes over its budget it is interrupted automatically, and its Loop stops too. The protection for ~/.claude/secrets covers reading it directly, not just searching it, so a direct read also asks you to confirm. After sending stop from Telegram, pressing Continue does not restart the Loop; restart it on the desktop. Also, explicitly interrupting a pane stops its Loop as well; Claude accounts holding several MCP logins can now be switched; on Windows, Navide plugin tools accept a drive-letter workspace path such as C:\\…; and invisible characters in Navide plugin names and paths are spelled out, so one plugin cannot pass itself off as another.',
+        'ja-JP': 'そのほかの修正と注意：Loop：evolve が予算を超えると自動で中断され、Loop も止まります。~/.claude/secrets の保護は検索だけでなく直接の読み取りにも及び、直接読み取るときも確認を求めます。Telegram から stop を送ったあとに「続行」を押しても Loop は再開しないため、デスクトップで再開してください。また、ペインを明示的に中断すると Loop も止まります。複数の MCP ログインを保存した Claude アカウントも切り替えられるようになりました。Windows では、Navide プラグインのツールが C:\\… のようなドライブ文字のワークスペースパスを受け付けます。Navide プラグインの名前やパスに含まれる見えない文字は表示されるようになり、別のプラグインになりすませなくなりました。',
+      },
+    ],
+  },
+  {
+    version: '0.2.24',
+    title: {
+      'zh-TW': 'Telegram 待確認提示更好回覆、聊天訊息不再被誤擋、Linux 語音朗讀會出聲',
+      'en-US': 'Telegram Prompts That Are Easier to Answer, Chat Messages No Longer Refused, and Read Aloud on Linux',
+      'ja-JP': 'Telegram の確認待ちに答えやすく、チャットのメッセージが誤って拒否されなくなり、Linux で読み上げが鳴るようになりました',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Telegram 待確認提示：在聊天輸入 /pending，就會把這個聊天裡所有還在等確認的提示重新列出，附上 pane 名稱、等了幾分鐘、選項和按鈕。pane 在等確認時你傳訊息過去，收到的警告現在也會附上提示內容、選項和按鈕，並引用原本那則提示。畫面上的確認如果已經換了，你的回覆不會送出，聊天會收到最新的確認讓你重新選。Navide 只會補上 bot 指令選單缺少的項目，不會覆蓋你原本的指令。傳錯訊息時，/cancel 會撤回還沒送進 pane 的訊息；「已收到，等 pane 空檔」的回覆也附上「撤回」和「中斷」按鈕。用 stop 中斷後，回覆會寫出 pane 名稱和還在排隊的則數，按「▶️ 繼續」、傳 /resume，或直接傳下一則訊息，就能讓 pane 繼續。',
+        'en-US': 'Telegram prompts waiting for an answer: type /pending in a chat to list every prompt still waiting there again, with the pane name, how long it has waited, its options and buttons. The warning you get when you write to a waiting pane now carries the prompt, its options and buttons, and quotes the original prompt. If the prompt on screen has changed, your answer is not sent, and the chat gets the current prompt to choose again. Navide only adds the bot commands it needs that are missing; your own commands are never replaced. Sent something by mistake? /cancel withdraws messages that have not reached the pane yet, and the “received, waiting for the pane” reply has Withdraw and Interrupt buttons. After stop, the reply names the pane and how many messages are still queued, and ▶️ Continue, /resume or simply your next message lets the pane carry on.',
+        'ja-JP': 'Telegram の確認待ち：チャットで /pending と送ると、そのチャットでまだ回答を待っている確認がすべて、ペイン名、待ち時間、選択肢、ボタン付きで改めて表示されます。確認待ちのペインにメッセージを送ったときの警告にも、確認の内容、選択肢、ボタンが付き、元の確認メッセージを引用するようになりました。画面の確認が変わっていた場合、回答は送られず、最新の確認がチャットに届くので選び直せます。Navide は bot のコマンド一覧に足りない項目だけを追加し、既存のコマンドを上書きしません。間違えて送ったときは、/cancel でまだペインに届いていないメッセージを取り消せます。「受け取りました、ペインの空きを待っています」の返信にも「取り消し」と「中断」のボタンが付きます。stop で中断すると、返信にペイン名とまだ待っている件数が表示され、「▶️ 続行」、/resume、または次のメッセージを送るだけでペインが再開します。',
+      },
+      {
+        'zh-TW': '頻道聊天訊息不再被當成 agent 而擋下：之前一分鐘內傳第六則就會收到「訊息沒有送進 pane（rate-limit）」，連重送也被擋。現在人傳的聊天訊息上限是每個 pane 每分鐘 30 則，超過時會告訴你幾秒後可以重送。從聊天頻道送進來的訊息也有專屬的通知樣式：紅色標題列寫著「外部頻道 · 平台 · 傳送者」。頻道標籤現在一律顯示 bot 的名字（平台 · bot），不再顯示聊天對象，完整資訊放在提示框。Claude 讀取圖片時的說明不會再以「你：[Image: …]」轉到聊天；貼了圖片的訊息會轉送你打的文字加上「🖼 圖片 ×N」。「工作中」的狀態也不會再卡住、等不到 ✅。',
+        'en-US': 'Chat messages are no longer limited like an agent’s: a sixth message within a minute used to get “message not delivered to pane (rate-limit)”, and resends were refused too. A person’s chat messages now have a cap of 30 per minute per pane, and past it the chat is told how many seconds to wait before resending. Deliveries from a chat channel also get their own toast, with a red header reading “External channel · platform · sender”. Channel labels now name the bot (platform · bot) instead of the person you chat with, with the full detail in the tooltip. Claude’s notes about an image it read are no longer forwarded as “You: [Image: …]”; a message with pasted images forwards your typed text plus “🖼 Image ×N”. The “working” status no longer gets stuck before ✅.',
+        'ja-JP': 'チャンネルのチャットのメッセージが、エージェントと同じ制限で拒否されなくなりました。以前は 1 分間に 6 通目を送ると「メッセージがペインに届きませんでした（rate-limit）」となり、再送も拒否されていました。人が送るチャットのメッセージは、ペインごとに 1 分間 30 通までになり、超えたときは何秒後に再送できるかを伝えます。チャットのチャンネルから届いたメッセージには専用の通知も加わり、赤い見出しに「外部チャンネル · プラットフォーム · 送信者」と表示されます。チャンネルのラベルは、チャットの相手ではなく bot の名前（プラットフォーム · bot）を表示するようになり、詳しい情報はツールチップに出ます。Claude が画像を読んだときのメモは「あなた：[Image: …]」としてチャットに転送されなくなり、画像を貼り付けたメッセージは入力した文字に「🖼 画像 ×N」を添えて転送します。「作業中」の表示が ✅ にならないまま残ることもなくなりました。',
+      },
+      {
+        'zh-TW': 'Linux 上的語音朗讀現在真的會出聲。Windows 的語音設定提示改成指向「設定 › 時間與語言 › 語音」，不再是 macOS 的路徑。',
+        'en-US': 'Read aloud now speaks on Linux. On Windows, the voice settings hint points at Settings › Time & language › Speech instead of a macOS path.',
+        'ja-JP': 'Linux でも読み上げの音声が出るようになりました。Windows の音声設定の案内は、macOS のパスではなく「設定 › 時刻と言語 › 音声認識」を示すようになりました。',
+      },
+      {
+        'zh-TW': '其他修正：Git 監看剛好大量寫入時結束 Navide，後端不會再卡住或多等。排程工作的擁有者會跟著續接的對話走，原本的 pane 關掉或重建後，接手同一段對話的 pane 仍能修改它。用 navide-plugin init 建立的外掛現在可以安裝。外掛開發文件已更正，並會在與 SDK 不一致時讓 CI 失敗；外掛後端的錯誤訊息也會完整保留。',
+        'en-US': 'Also fixed: quitting Navide while the Git watcher is recording a burst no longer hangs or delays the backend. A scheduled job’s owner follows a resumed conversation, so the pane that takes over the conversation can still change the job after the original pane is closed or rebuilt. A plugin created with navide-plugin init now installs. The plugin developer docs are corrected, and CI now fails when they drift from the SDK; plugin backend error messages are kept in full.',
+        'ja-JP': 'そのほかの修正：Git の監視が大量に記録している最中に Navide を終了しても、バックエンドが止まったり待たされたりしなくなりました。スケジュールしたジョブの所有者は再開した会話に引き継がれるため、元のペインを閉じたり作り直したりしても、その会話を引き継いだペインからジョブを変更できます。navide-plugin init で作成したプラグインがインストールできるようになりました。プラグイン開発者向けドキュメントを修正し、SDK と食い違うと CI が失敗するようにしました。プラグインのバックエンドのエラーメッセージも省かれずに残ります。',
+      },
+    ],
+  },
   {
     version: '0.2.23',
     title: {
@@ -2014,9 +2542,11 @@ export function pickWhatsNewOnDemand(currentVersion: string, dev: boolean): What
   return pickWhatsNew(currentVersion, '')
 }
 
-/** Resolve localized text, falling back to the default locale then en-US. */
+/** Resolve localized text. A later UI language falls back to en-US; every
+ *  other locale falls back to the default locale (zh-TW) then en-US. */
 export function pickText(text: WhatsNewText, locale: string): string {
-  return (
-    (text as Record<string, string>)[locale] ?? text['zh-TW'] ?? text['en-US'] ?? ''
-  )
+  const own = (text as Record<string, string | undefined>)[locale]
+  if (own !== undefined) return own
+  if (isBetaUiLocale(locale)) return text['en-US'] ?? text['zh-TW'] ?? ''
+  return text['zh-TW'] ?? text['en-US'] ?? ''
 }

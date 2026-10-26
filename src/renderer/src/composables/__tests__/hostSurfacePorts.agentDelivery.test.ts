@@ -42,6 +42,17 @@ describe('Host terminal dock adapter — agent message delivery', () => {
     )
   })
 
+  it('asks a host caller with no reply route for its answer in the final output', () => {
+    const { terminalPort, emit } = createMockBackend()
+    const got: Array<{ text: string }> = []
+    terminalPort.onAgentMessage!((m) => got.push(m))
+    emit('agent_msg.deliver', { ...deliver, from_pane_id: '', from_display: 'a host client' })
+    expect(got[0].text).toBe(
+      renderEnvelope('a host client', 'please look at the plan', { correlationId: 'k-1', external: false, noReplyRoute: true }),
+    )
+    expect(got[0].text).not.toContain('to: a host client')
+  })
+
   it('marks an ack so it is reported, never typed', () => {
     const { terminalPort, emit } = createMockBackend()
     const got: Array<{ kind?: string }> = []

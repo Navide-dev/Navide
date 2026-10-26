@@ -9,7 +9,12 @@ import ChannelMonitorModal from '../ChannelMonitorModal.vue'
 let wrapper: VueWrapper | undefined
 let mock: ReturnType<typeof createMockBackend>
 
-function seed(bindings: Record<string, unknown>[], lifecycle = 'ready', chats: Record<string, unknown>[] = []): void {
+function seed(
+  bindings: Record<string, unknown>[],
+  lifecycle = 'ready',
+  chats: Record<string, unknown>[] = [],
+  status: Record<string, unknown> = {},
+): void {
   mock.setResponse('channels.list', {
     ok: true,
     enabled: true,
@@ -17,7 +22,7 @@ function seed(bindings: Record<string, unknown>[], lifecycle = 'ready', chats: R
       platform: 'telegram',
       configured: true,
       enabled: true,
-      status: { lifecycle, connected: lifecycle === 'ready', identity: '@navide_bot' },
+      status: { lifecycle, connected: lifecycle === 'ready', identity: '@navide_bot', ...status },
       config: {},
       capabilities: null,
     }],
@@ -129,6 +134,12 @@ describe('ChannelMonitorModal', () => {
     seed([binding], 'ready', [chat('Team room', [{ ...binding, created_at: 1, pane: pane('Claude 1') }])])
     await render()
     expect(q('.cmon-channel')!.textContent).toBe('Telegram · @navide_bot · Team room · api-refactor')
+  })
+
+  it("names the bot by the platform's display name, as every channel label does", async () => {
+    seed([binding], 'ready', [chat('Team room', [{ ...binding, created_at: 1, pane: pane('Claude 1') }])], { display_name: 'Navide Bot' })
+    await render()
+    expect(q('.cmon-channel')!.textContent).toBe('Telegram · Navide Bot · Team room · api-refactor')
   })
 
   it('leaves the bind-time pane name off a binding without a topic', async () => {

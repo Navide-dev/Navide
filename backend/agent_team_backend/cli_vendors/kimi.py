@@ -6,7 +6,9 @@ Files: <KIMI_CODE_HOME|~/.kimi-code>/sessions/wd_<ws>/session_<uuid>/agents/main
 Event filter: type=usage.record. Token fields are PER-TURN deltas (usageScope
 "turn"), so they are summed as they arrive — NOT cumulative totals like Codex.
 
-cwd: read from the session's state.json (workDir); wire.jsonl carries no cwd.
+cwd: read from the session's state.json — `cwd` in its version-2 shape (written
+by 0.39.0 and 2.2.0, recorded live), `workDir` in older ones; wire.jsonl
+carries no cwd.
 session_id: the `session_<uuid>` directory name — the exact id accepted by
 `kimi --session <id>` / `-S`.
 """
@@ -38,11 +40,12 @@ from ..log_readers.base import (
 
 log = logging.getLogger("agent_team_backend.log_readers.kimi")
 
-# A Kimi user-facing turn spans MANY usage.record lines (one per agentic step),
-# and wire.jsonl carries NO turn-end record — a turn is only implicitly closed
-# by the next `turn.prompt`. So turn_complete is emitted at the turn *boundary*:
-# the next turn.prompt (or turn.cancel) flushes the previous turn; the latest
-# turn, having no following prompt, is flushed once the file goes quiet for
+# A Kimi user-facing turn spans MANY usage.record lines (one per agentic step).
+# 0.39.0 and 2.2.0 close each turn with an explicit `turn.ended` record
+# (recorded live), which emits turn_complete at once. Older wire files have no
+# turn-end record, so a turn is also closed at its *boundary*: the next
+# turn.prompt (or turn.cancel) flushes the previous turn, and the latest turn,
+# having no following prompt, is flushed once the file goes quiet for
 # _TURN_IDLE_MS (wall-clock silence = the turn is done).
 _TURN_IDLE_MS = 8_000
 _STATE_PREFIX = "kimi_turn::"
@@ -181,13 +184,16 @@ class KimiLogReader(LogReader):
         return self._session_dir(path).name
 
     def _workdir_from_state(self, path: Path) -> str:
-        """Read workDir from the session's state.json (wire.jsonl has no cwd)."""
+        """Read the cwd from the session's state.json (wire.jsonl has none):
+        `cwd` in the version-2 shape, `workDir` in older files."""
         state = self._session_dir(path) / "state.json"
         try:
             rec = json.loads(state.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return ""
-        return str(rec.get("workDir") or "") if isinstance(rec, dict) else ""
+        if not isinstance(rec, dict):
+            return ""
+        return str(rec.get("cwd") or rec.get("workDir") or "")
 
     def cwd_from_file(self, path: Path) -> str:
         return self._workdir_from_state(path)
@@ -202,7 +208,7 @@ class KimiLogReader(LogReader):
         return self._session_id(path)
 
     def session_files_for_workspace(self, workspace_path: str) -> list[Path]:
-        """Only sessions whose state.json workDir matches this workspace."""
+        """Only sessions whose state.json cwd matches this workspace."""
         return [
             p for p in self.session_files()
             if self._workdir_from_state(p) == workspace_path
@@ -310,10 +316,11 @@ class KimiLogReader(LogReader):
         """Emit `agent_active` for every prompt/usage line, and `turn_complete`
         once per user-facing turn — at the turn *boundary*, not per usage.record.
 
-        A turn is closed (turn_complete emitted) when the next `turn.prompt`
-        arrives or `turn.cancel` aborts it. The latest turn has no following
-        prompt, so it is flushed once the file has been quiet for _TURN_IDLE_MS
-        (wall-clock silence stands in for the turn-end record Kimi never writes).
+        A turn is closed (turn_complete emitted) by its `turn.ended` record,
+        or — for wire files that predate it — when the next `turn.prompt`
+        arrives or `turn.cancel` aborts it. A turn with neither is flushed
+        once the file has been quiet for _TURN_IDLE_MS (wall-clock silence
+        stands in for the turn-end record older Kimi versions never wrote).
         `dedup_key` is the turn index, so each turn notifies exactly once.
 
         turn_complete carries the assistant's closing reply, which is what lets
@@ -426,6 +433,16 @@ class KimiLogReader(LogReader):
                                         state = {"idx": idx, "last_ms": tms, "flushed": False}
                                     if part.get("type") == "text":
                                         last_text = _cap_text(text)
+                    elif rtype == "turn.ended":
+                        # The turn's own end record (0.39.0+). A turn already
+                        # flushed — by turn.cancel — is not completed twice.
+                        if state is not None and not state.get("flushed"):
+                            out.append(_complete(
+                                int(state["idx"]),
+                                max(int(state.get("last_ms") or 0), tms), "turn-ended",
+                            ))
+                            state["flushed"] = True
+                            last_text = ""
                     elif rtype == "turn.cancel":
                         if state is not None and not state.get("flushed"):
                             out.append(_complete(
@@ -458,7 +475,7 @@ class KimiLogReader(LogReader):
 # ---- attribution/watch hooks ----------------------------------------------
 
 def _workspace_match(self, usage, ws_path, owner_workspace=None):
-    # Reader emits cwd = the session state.json workDir.
+    # Reader emits cwd = the session state.json cwd (workDir in older files).
     return bool(usage.cwd and usage.cwd == ws_path)
 
 
@@ -655,6 +672,9 @@ SPEC = VendorSpec(
         resume="native",
         todo="A -> B -> A round-trip on two real accounts not yet recorded",
     ),
+    # The account-switch evidence above is from 0.39.0; launch, logs (wire.jsonl
+    # turn records), --help and --version were checked live on 2.2.0.
+    cli_verified_version="2.2.0",
     # Late-bound (module global at call time) so tests can monkeypatch.
     fetch_usage=lambda home: fetch_kimi(home),
     resume_id_from_command=_resume_id_from_command,
@@ -666,9 +686,15 @@ SPEC = VendorSpec(
     home_env_vars=("KIMI_CODE_HOME",),
     make_log_reader=KimiLogReader,
     # Kimi Code ships `kimi doctor` and `kimi upgrade` (aliased `update`);
-    # verified with `kimi --help` on 1.x.
+    # verified with `kimi --help` on 2.2.0 (Kimi Code never had a 1.x — the
+    # 1.x line is the archived Python kimi-cli).
     install_dep=Dep("kimi", "Kimi Code CLI (Moonshot AI)", "Moonshot AI Kimi Code CLI", "agent_cli",
         ["kimi", "--version"], r"(\d+\.\d+\.\d+)",
+        # Kimi Code prints a bare version (0.39.0 and 2.2.0, verified). The
+        # archived Python MoonshotAI/kimi-cli also installs `kimi` and prints
+        # `kimi, version 1.52.0`; the pane's startup probe names the mismatch
+        # and points at the Kimi Code installer, and the launch goes ahead.
+        official_regex=r"^\d+\.\d+\.\d+",
         install_cmd="curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash",
         needs_terminal=True, requires_binaries=("curl",), optional=True,
         # kimi-cli's docs site is being wound down in favour of kimi-code.

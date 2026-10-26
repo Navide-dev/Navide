@@ -63,6 +63,14 @@ _NO_HOST_SESSION_HINTS = {
 }
 
 
+#: The agent-tools contract's PLUGIN_TOOL_UNAVAILABLE / plugin-disabled refusal,
+#: worded like the Host's.
+PLANS_DISABLED_MESSAGE = (
+    "PLUGIN_TOOL_UNAVAILABLE (plugin-disabled): Navide plugin Plans is disabled. "
+    "Enable it in Settings → Navide Plugins."
+)
+
+
 async def _host_agent_plan_call(
     caller: Caller,
     workspace_path: str,
@@ -75,8 +83,13 @@ async def _host_agent_plan_call(
     mutations: a generic availability response cannot prove the current agent
     Execution Policy still permits the filesystem operation.
     """
+    from agent_team_backend import app
     from agent_team_backend.mcp_server.server import request_host_agent_workspace_backend
 
+    if app.plans_plugin_disabled():
+        # A CLI that cached tools/list still reaches here. The Host refuses the
+        # same way; nothing below may serve the call locally instead.
+        raise FsError(PLANS_DISABLED_MESSAGE, code="PLUGIN_TOOL_UNAVAILABLE")
     response = await request_host_agent_workspace_backend(
         "navide.plans",
         workspace_path,
@@ -938,5 +951,8 @@ def install(server: Any) -> None:
     a tool added after that point is missing from the list clients see, with no
     error anywhere.
     """
+    from agent_team_backend.mcp_server.server import hide_tools_while_plugin_disabled
+
     for tool in PLAN_TOOLS:
         server.tool()(tool)
+    hide_tools_while_plugin_disabled("navide.plans", [tool.__name__ for tool in PLAN_TOOLS])

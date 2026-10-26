@@ -34,6 +34,10 @@ export function useStages(
         path: string
         pipeline_id: string
       }>('stages.list', pid ? { pipeline_id: pid } : {})
+      // A load made under the active id is stale once that id has moved on:
+      // the first load goes out under the 'default' placeholder before
+      // pipelines.list answers, and could land after the real id's (#417).
+      if (pipelineId === undefined && getActivePipelineId && getActivePipelineId() !== pid) return
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'failed to load stages'
         return

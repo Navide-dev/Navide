@@ -1,5 +1,14 @@
+import { createHash } from 'node:crypto'
+
 const PROTOCOL_REVISION = '2026-07-28'
 const SERVER_INFO_KEY = 'io.modelcontextprotocol/serverInfo'
+// Chunked transfer (plugin agent-tools contract 4.4).
+const CHUNK_BYTES = 131_072
+const RESULT_CHUNK_METHOD = 'notifications/navide/resultChunk'
+const RESULT_CHUNKS_KEY = 'io.navide/resultChunks'
+const ARGUMENT_CHUNK_METHOD = 'notifications/navide/argumentChunk'
+const ARGUMENT_CHUNKS_KEY = 'io.navide/argumentChunks'
+const argumentPieces = new Map()
 
 const pendingDelays = new Map()
 const subscriptions = new Map()
@@ -45,9 +54,23 @@ function isInitiator(value) {
     (exactKeys(value, ['kind', 'id']) &&
       value.kind === 'user' &&
       typeof value.id === 'string' && value.id.length > 0 ||
-      exactKeys(value, ['kind', 'source', 'id']) &&
+      (exactKeys(value, ['kind', 'source', 'id']) ||
+        exactKeys(value, ['kind', 'source', 'id', 'caller']) && isAgentCaller(value.caller)) &&
       value.kind === 'agent' && value.source === 'mcp' &&
       typeof value.id === 'string' && value.id.length > 0)
+}
+
+// The agent-tool caller (plan B1-b) is an additive optional field of the
+// agent initiator.
+function isAgentCaller(value) {
+  if (!isRecord(value) || !exactKeys(value, ['kind', 'paneId', 'workspace', 'verifiedTo'])) return false
+  if (value.kind === 'pane') {
+    return typeof value.paneId === 'string' && value.paneId.length > 0 &&
+      (value.workspace === null || typeof value.workspace === 'string' && value.workspace.length > 0) &&
+      value.verifiedTo === 'pane'
+  }
+  return (value.kind === 'external' || value.kind === 'host') &&
+    value.paneId === null && value.workspace === null && value.verifiedTo === 'caller-kind'
 }
 
 function isRuntime(value) {
@@ -167,12 +190,44 @@ function isHealthRequest(frame) {
     isClientMeta(frame.params._meta)
 }
 
+function utf8Pieces(text, maxBytes) {
+  const pieces = []
+  let current = ''
+  let bytes = 0
+  for (const char of text) {
+    const size = Buffer.byteLength(char, 'utf8')
+    if (bytes + size > maxBytes) {
+      pieces.push(current)
+      current = ''
+      bytes = 0
+    }
+    current += char
+    bytes += size
+  }
+  pieces.push(current)
+  return pieces
+}
+
+function sendResultPieces(id, pieces, bytes) {
+  pieces.forEach((data, seq) => writeFrame({ jsonrpc: '2.0', method: RESULT_CHUNK_METHOD, params: { requestId: id, seq, data } }))
+  writeFrame({
+    jsonrpc: '2.0',
+    id,
+    result: {
+      resultType: 'complete',
+      _meta: { [SERVER_INFO_KEY]: { name: 'fixture.backend', version: '1.0.0' }, [RESULT_CHUNKS_KEY]: { chunks: pieces.length, bytes } },
+    },
+  })
+}
+
 function isCallRequest(frame) {
+  // Arguments sent in pieces leave `arguments` out and carry their summary in _meta.
+  const chunked = isRecord(frame?.params?._meta?.[ARGUMENT_CHUNKS_KEY])
   return exactKeys(frame, ['jsonrpc', 'id', 'method', 'params']) &&
     frame.jsonrpc === '2.0' &&
     isRequestId(frame.id) &&
     frame.method === 'navide/call' &&
-    exactKeys(frame.params, ['_meta', 'name', 'arguments', 'runtime']) &&
+    exactKeys(frame.params, chunked ? ['_meta', 'name', 'runtime'] : ['_meta', 'name', 'arguments', 'runtime']) &&
     isClientMeta(frame.params._meta) &&
     typeof frame.params.name === 'string' &&
     /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/.test(frame.params.name) &&
@@ -233,6 +288,17 @@ function closeSubscription(id) {
 }
 
 function handle(frame) {
+  if (frame?.jsonrpc === '2.0' && frame.method === ARGUMENT_CHUNK_METHOD) {
+    const { requestId, seq, data } = frame.params ?? {}
+    const pieces = argumentPieces.get(String(requestId)) ?? []
+    if (seq !== pieces.length || typeof data !== 'string') {
+      writeProtocolError(undefined)
+      return
+    }
+    pieces.push(data)
+    argumentPieces.set(String(requestId), pieces)
+    return
+  }
   if (frame?.jsonrpc === '2.0' && frame.method === 'notifications/cancelled') {
     if (!exactKeys(frame, ['jsonrpc', 'method', 'params']) ||
       !isRecord(frame.params) ||
@@ -260,6 +326,7 @@ function handle(frame) {
       closeSubscription(subscription.id)
     }
     if (subscriptions.delete(String(frame.params.requestId))) cancelledCount += 1
+    argumentPieces.delete(String(frame.params.requestId))
     return
   }
 
@@ -269,11 +336,24 @@ function handle(frame) {
   }
 
   if (frame.method === 'navide/health') {
-    response(frame.id, {
+    const value = {
       method: frame.method,
       protocolVersion: frame.params._meta['io.modelcontextprotocol/protocolVersion'],
       requestIdIsNonNull: frame.id !== null,
       clientCapabilities: frame.params._meta['io.modelcontextprotocol/clientCapabilities'],
+    }
+    if (process.env.NAVIDE_FIXTURE_ARGUMENT_CHUNKS !== '1') {
+      response(frame.id, value)
+      return
+    }
+    writeFrame({
+      jsonrpc: '2.0',
+      id: frame.id,
+      result: {
+        resultType: 'complete',
+        value,
+        _meta: { [SERVER_INFO_KEY]: { name: 'fixture.backend', version: '1.0.0' }, [ARGUMENT_CHUNKS_KEY]: {} },
+      },
     })
     return
   }
@@ -291,7 +371,99 @@ function handle(frame) {
     return
   }
 
-  const { name, arguments: args } = frame.params
+  const { name } = frame.params
+  let args = frame.params.arguments
+  const argumentSummary = frame.params._meta[ARGUMENT_CHUNKS_KEY]
+  if (isRecord(argumentSummary)) {
+    const pieces = argumentPieces.get(String(frame.id)) ?? []
+    argumentPieces.delete(String(frame.id))
+    const text = pieces.join('')
+    if (pieces.length !== argumentSummary.chunks || Buffer.byteLength(text, 'utf8') !== argumentSummary.bytes) {
+      writeFrame({ jsonrpc: '2.0', id: frame.id, error: { code: 1000, message: 'pieces', data: { code: 'PLUGIN_TOOL_CHUNKS_INVALID' } } })
+      return
+    }
+    args = JSON.parse(text)
+  }
+  if (name === 'fixture.hash') {
+    const text = JSON.stringify(args)
+    response(frame.id, {
+      sha256: createHash('sha256').update(text, 'utf8').digest('hex'),
+      bytes: Buffer.byteLength(text, 'utf8'),
+      pieces: isRecord(argumentSummary) ? argumentSummary.chunks : 0,
+    })
+    return
+  }
+  if (name === 'fixture.pid') {
+    response(frame.id, process.pid)
+    return
+  }
+  if (name === 'fixture.bigresult') {
+    // {bytes, mode}: a result of about `bytes` UTF-8 bytes (ASCII, CJK and emoji).
+    // mode 'pieces' (default) sends pieces when the Host advertises them;
+    // 'single' always sends one frame; 'drip' sends a short piece then another;
+    // 'repeat' sends the same full piece twice; 'duplicate-key' sends one frame
+    // whose value repeats a key.
+    const unit = 'abc中文😀'
+    const data = unit.repeat(Math.ceil((args?.bytes ?? 0) / Buffer.byteLength(unit, 'utf8')))
+    const value = { data }
+    const text = JSON.stringify(value)
+    const bytes = Buffer.byteLength(text, 'utf8')
+    const mode = args?.mode ?? 'pieces'
+    const advertised = isRecord(frame.params._meta['io.modelcontextprotocol/clientCapabilities'][RESULT_CHUNKS_KEY])
+    if (mode === 'drip') {
+      writeFrame({ jsonrpc: '2.0', method: RESULT_CHUNK_METHOD, params: { requestId: frame.id, seq: 0, data: '{' } })
+      writeFrame({ jsonrpc: '2.0', method: RESULT_CHUNK_METHOD, params: { requestId: frame.id, seq: 1, data: '"' } })
+      return
+    }
+    const pieces = utf8Pieces(text, CHUNK_BYTES)
+    if (mode === 'repeat') {
+      writeFrame({ jsonrpc: '2.0', method: RESULT_CHUNK_METHOD, params: { requestId: frame.id, seq: 0, data: pieces[0] } })
+      writeFrame({ jsonrpc: '2.0', method: RESULT_CHUNK_METHOD, params: { requestId: frame.id, seq: 0, data: pieces[0] } })
+      return
+    }
+    if (mode === 'duplicate-key') {
+      // One frame over the off-thread threshold whose value repeats a key.
+      const frameText = JSON.stringify({
+        jsonrpc: '2.0', id: frame.id,
+        result: { resultType: 'complete', value, _meta: { [SERVER_INFO_KEY]: { name: 'fixture.backend', version: '1.0.0' } } },
+      }).replace('{"data":', '{"a":1,"a":2,"data":')
+      process.stdout.write(`${frameText}\n`)
+      return
+    }
+    if (mode === 'single' || !advertised || pieces.length === 1) {
+      response(frame.id, value)
+      return
+    }
+    sendResultPieces(frame.id, pieces, bytes)
+    return
+  }
+  if (name === 'fixture.bigexit') {
+    // {bytes}: answers with one frame of about `bytes`, then exits as soon as
+    // the frame is written.
+    const unit = 'abc中文😀'
+    const value = { data: unit.repeat(Math.ceil((args?.bytes ?? 0) / Buffer.byteLength(unit, 'utf8'))) }
+    process.stdout.write(`${JSON.stringify({
+      jsonrpc: '2.0', id: frame.id,
+      result: { resultType: 'complete', value, _meta: { [SERVER_INFO_KEY]: { name: 'fixture.backend', version: '1.0.0' } } },
+    })}\n`, () => process.exit(0))
+    return
+  }
+  if (name === 'fixture.nonewline') {
+    // {bytes}: writes `bytes` of a frame that never ends (no newline), in
+    // 64 KiB writes, and never answers.
+    const block = Buffer.alloc(65_536, 0x61)
+    let left = args?.bytes ?? 0
+    process.stdout.write('{"jsonrpc":"2.0","method":"notifications/navide/never","params":{"data":"')
+    const next = () => {
+      if (left <= 0) return
+      const size = Math.min(left, block.length)
+      left -= size
+      if (process.stdout.write(block.subarray(0, size))) setImmediate(next)
+      else process.stdout.once('drain', next)
+    }
+    next()
+    return
+  }
   if (name === 'plans.resolve_root') {
     const workspacePath = isRecord(args) && typeof args.workspace_path === 'string'
       ? args.workspace_path
@@ -345,6 +517,10 @@ function handle(frame) {
   }
   if (name === 'fixture.cancelcount') {
     response(frame.id, cancelledCount)
+    return
+  }
+  if (name === 'fixture.pendingdelays') {
+    response(frame.id, pendingDelays.size)
     return
   }
   if (name === 'fixture.emit') {

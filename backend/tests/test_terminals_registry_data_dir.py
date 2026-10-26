@@ -14,6 +14,8 @@ import asyncio
 import os
 import sys
 import threading
+import time
+from pathlib import Path
 
 import pytest
 
@@ -72,6 +74,26 @@ async def test_a_late_register_writes_to_the_data_dir_it_was_queued_under(tmp_pa
         await service.kill_all(grace=0.2)
 
 
+def _child_report(proc, kills, began) -> str:
+    """What the child and kill_all's group kills looked like when the
+    unregister never came. /proc is read before poll(), which would reap."""
+    lines = [f"{time.perf_counter() - began:.3f}s since kill_all started; pid={proc.pid}"]
+    stat = Path(f"/proc/{proc.pid}/stat")
+    if not sys.platform.startswith("linux"):
+        lines.append("/proc: unavailable (not Linux)")
+    else:
+        try:
+            state = stat.read_text().rsplit(")", 1)[1].split()[0]
+            wchan = Path(f"/proc/{proc.pid}/wchan").read_text().strip() or "-"
+            lines.append(f"/proc: state={state} wchan={wchan}")
+        except OSError as err:
+            lines.append(f"/proc: unavailable ({err})")
+    lines.append(f"proc.poll()={proc.poll()}")
+    lines.append(f"kill_group calls: {len(kills)}")
+    lines += [f"  +{at:.3f}s kill_group({gid}, force={force}) -> {outcome}" for at, gid, force, outcome in kills]
+    return "\n".join(lines)
+
+
 @pytest.mark.asyncio
 async def test_kill_all_waits_for_registry_cleanup_before_returning(tmp_path, monkeypatch):
     registered = threading.Event()
@@ -96,6 +118,21 @@ async def test_kill_all_waits_for_registry_cleanup_before_returning(tmp_path, mo
     monkeypatch.setattr(
         terminals_module, "_kill_breakaway", lambda _pids: final_sweep_started.set()
     )
+    # CI once saw this test's unregister never come (exit=None at close):
+    # recorded so a recurrence says whether kill_all's SIGKILL was sent and
+    # what the child was doing. kill_all swallows these exceptions.
+    kills: list[tuple[float, int, bool, str]] = []
+    real_kill_group = osplat.process_tree.kill_group
+
+    def kill_group(gid: int, *, force: bool) -> None:
+        try:
+            real_kill_group(gid, force=force)
+        except BaseException as err:
+            kills.append((time.perf_counter() - began, gid, force, repr(err)))
+            raise
+        kills.append((time.perf_counter() - began, gid, force, "sent"))
+
+    monkeypatch.setattr(osplat.process_tree, "kill_group", kill_group)
     service = TerminalService(_emit)
     session = service.create(
         pane_id="shutdown-registry",
@@ -106,8 +143,10 @@ async def test_kill_all_waits_for_registry_cleanup_before_returning(tmp_path, mo
     shutdown = None
     try:
         assert await asyncio.to_thread(registered.wait, 5)
+        began = time.perf_counter()
         shutdown = asyncio.create_task(service.kill_all(grace=0.2))
-        assert await asyncio.to_thread(unregister_started.wait, 5)
+        if not await asyncio.to_thread(unregister_started.wait, 5):
+            pytest.fail("kill_all never reached pty_registry.unregister\n" + _child_report(session.proc, kills, began))
         assert await asyncio.to_thread(final_sweep_started.wait, 5)
         await asyncio.sleep(0.05)
         assert not shutdown.done(), "kill_all returned while registry cleanup still used the database"
@@ -118,6 +157,48 @@ async def test_kill_all_waits_for_registry_cleanup_before_returning(tmp_path, mo
         release_unregister.set()
         if shutdown is not None and not shutdown.done():
             await asyncio.wait_for(shutdown, 5)
+
+
+@pytest.mark.asyncio
+async def test_kill_all_unregisters_a_child_closed_before_it_was_reapable(tmp_path, monkeypatch):
+    """The PTY's EOF can close a shutdown session before its child is
+    reapable: _close then sees exit=None (CI run 38862563872). That close
+    used to skip the unregister for reason="shutdown", and kill_all's own
+    _close found the session already closed, so the record stayed behind.
+    Here every child still looks alive to that first close."""
+    unregistered: list[int] = []
+    real_unregister = pty_registry.unregister
+
+    def unregister(pid: int) -> None:
+        unregistered.append(pid)
+        real_unregister(pid)
+
+    monkeypatch.setattr(pty_registry, "unregister", unregister)
+    monkeypatch.setattr(terminals_module, "_ps_snapshot", lambda: {})
+    service = TerminalService(_emit)
+    session = service.create(
+        pane_id="eof-first",
+        agent_key=None,
+        command=[sys.executable, "-c", "import time; time.sleep(30)"],
+        cwd=str(tmp_path),
+    )
+    real_poll = session.proc.poll
+    hidden = True
+    session.proc.poll = lambda: None if hidden else real_poll()
+    real_close = service._close
+
+    def close(target: TerminalSession, *, reason: str) -> None:
+        nonlocal hidden
+        real_close(target, reason=reason)
+        hidden = False
+
+    monkeypatch.setattr(service, "_close", close)
+
+    await asyncio.wait_for(service.kill_all(grace=0.2), 10)
+
+    assert session.closed and session.exit_code is None, "the close saw an unreapable child"
+    assert real_poll() is not None
+    assert session.proc.pid in unregistered, "kill_all returned with the child's registry record left behind"
 
 
 @pytest.mark.asyncio

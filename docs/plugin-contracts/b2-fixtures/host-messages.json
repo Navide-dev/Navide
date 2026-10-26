@@ -1,0 +1,224 @@
+{
+  "description": "B2 messages between the core backend and the Navide Host (contract 4.3, 4.3.1, 5.1, 6), one example of each shape. Shared by the Host e2e (tests/plugins/pluginB2Registry.e2e.test.ts) and the backend (backend/tests/test_b2_wire_contract.py): every message either side sends, and every answer either side accepts, must have exactly these keys at every level. A message may leave out the paths its entry lists in `optional` (contract: optional fields), and may carry null at the paths it lists in `nullable`. `opaque` names values whose inner shape another contract owns (a listing's disclosure summary and the disclosure card, contract 3; a window trust confirmation); only their type is checked.",
+  "opaque": [
+    "result.items[].summary",
+    "result.item.summary",
+    "result.card",
+    "confirmation"
+  ],
+  "messages": {
+    "marketplace.query.request": [
+      {
+        "name": "search",
+        "message": {
+          "request_id": "mq:91c0",
+          "query": {
+            "kind": "search",
+            "text": "dev map",
+            "category": null,
+            "cursor": null,
+            "limit": 20
+          }
+        },
+        "optional": [
+          "query.category",
+          "query.cursor"
+        ]
+      },
+      {
+        "name": "detail",
+        "message": {
+          "request_id": "mq:91c1",
+          "query": {
+            "kind": "detail",
+            "id": "nerdtechnic.devmap",
+            "version": "0.2.0"
+          }
+        },
+        "optional": [
+          "query.version"
+        ]
+      },
+      {
+        "name": "installed",
+        "message": {
+          "request_id": "mq:91c2",
+          "query": {
+            "kind": "installed"
+          }
+        }
+      }
+    ],
+    "marketplace.query.result": [
+      {
+        "name": "search",
+        "message": {
+          "request_id": "mq:91c0",
+          "ok": true,
+          "result": {
+            "kind": "search",
+            "items": [
+              {
+                "id": "nerdtechnic.devmap",
+                "version": "0.2.0",
+                "name": "Dev map",
+                "description": "A dev map.",
+                "publisher": {
+                  "name": "nerdtechnic",
+                  "verifiedDomain": null
+                },
+                "signed": true,
+                "downloads": 3,
+                "risk": "high",
+                "summary": {}
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      },
+      {
+        "name": "detail",
+        "message": {
+          "request_id": "mq:91c1",
+          "ok": true,
+          "result": {
+            "kind": "detail",
+            "item": {
+              "id": "nerdtechnic.devmap",
+              "version": "0.2.0",
+              "name": "Dev map",
+              "description": "A dev map.",
+              "publisher": {
+                "name": "nerdtechnic",
+                "verifiedDomain": null
+              },
+              "signed": true,
+              "downloads": 3,
+              "risk": "high",
+              "summary": {}
+            },
+            "versions": [
+              "0.1.0",
+              "0.2.0"
+            ],
+            "card": {}
+          }
+        }
+      },
+      {
+        "name": "installed",
+        "message": {
+          "request_id": "mq:91c2",
+          "ok": true,
+          "result": {
+            "kind": "installed",
+            "items": [
+              {
+                "id": "nerdtechnic.devmap",
+                "version": "0.2.0",
+                "enabled": true,
+                "quarantined": false,
+                "hasBackend": true,
+                "agentTools": [
+                  {
+                    "name": "devmap_read",
+                    "state": "available"
+                  }
+                ],
+                "source": "marketplace"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "error",
+        "message": {
+          "request_id": "mq:91c3",
+          "ok": false,
+          "error": "the Navide Marketplace does not list nerdtechnic.devmap",
+          "error_code": "NOT_FOUND"
+        }
+      }
+    ],
+    "plugins.agent_action.request": [
+      {
+        "name": "disable",
+        "message": {
+          "request_id": "pa:5d1e",
+          "action": "disable",
+          "plugin_id": "nerdtechnic.devmap",
+          "requester": {
+            "paneId": "p-41",
+            "paneName": "dev",
+            "workspace": "/Users/me/project",
+            "callerKind": "pane",
+            "tainted": true
+          }
+        },
+        "optional": ["requester.tainted"]
+      }
+    ],
+    "plugins.agent_action.result": [
+      {
+        "name": "changed",
+        "message": {
+          "request_id": "pa:5d1e",
+          "ok": true,
+          "pluginId": "nerdtechnic.devmap",
+          "pluginVersion": "0.2.0",
+          "disabled": true,
+          "changed": true
+        }
+      },
+      {
+        "name": "refused",
+        "message": {
+          "request_id": "pa:5d1f",
+          "ok": false,
+          "error": "the bundled Navide plugins are disabled and enabled by the user in Extensions",
+          "error_code": "BUILTIN_PLUGIN"
+        }
+      },
+      {
+        "name": "approval-required",
+        "message": {
+          "request_id": "pa:5d20",
+          "ok": false,
+          "error": "the user disabled nerdtechnic.devmap; enabling it needs the user's approval in Navide",
+          "error_code": "APPROVAL_REQUIRED",
+          "pluginId": "nerdtechnic.devmap",
+          "pluginVersion": "0.2.0",
+          "disabled": {
+            "by": "user",
+            "at": 1760000000000,
+            "agent": null
+          }
+        },
+        "nullable": [
+          "disabled.at"
+        ]
+      }
+    ],
+    "plugins.agent_request.finish": [
+      {
+        "name": "completed",
+        "message": {
+          "approval_id": "0f3a",
+          "status": "completed",
+          "error": null,
+          "confirmation": {}
+        }
+      }
+    ],
+    "plugin.activity.forget": [
+      {
+        "name": "removed",
+        "message": {
+          "plugin_id": "nerdtechnic.devmap"
+        }
+      }
+    ]
+  }
+}

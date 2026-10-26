@@ -50,6 +50,10 @@ const cliTools = [
   'cli_place_pane',
   'cli_message_log',
   'cli_usage',
+  'cli_failover_state',
+  'cli_accounts_list',
+  'cli_account_sign_in',
+  'cli_account_switch',
   'cli_token_stats',
 ] as const
 

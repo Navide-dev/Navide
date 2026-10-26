@@ -32,7 +32,7 @@ class _Bridge(sched_mod.LiveBridge):
 
 
 def _pane_ctx(pane_id: str) -> Any:
-    params = {"pane": pane_id, "t": mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
 
 
@@ -66,8 +66,14 @@ def _job(ws: str) -> dict[str, Any]:
 async def _fire(env, job_id: str) -> None:
     result = await env.service.run_now(job_id)
     assert result.get("ok") is not False, result
-    task, _manual = env.service._runs[job_id]  # noqa: SLF001
-    await asyncio.wait_for(task, 5)
+
+    # With DELIVERY_WAIT_S at 0 the run can be over, and gone from the
+    # scheduler's in-flight map, before run_now returns: wait on the run log.
+    async def finished() -> None:
+        while not (await env.service.runs(job_id))["runs"]:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(finished(), 5)
 
 
 @pytest.mark.asyncio

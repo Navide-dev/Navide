@@ -49,6 +49,12 @@ watch(dialog, async (d) => {
             </span>
             <span class="toast-msg">{{ t.message }}</span>
           </template>
+          <button
+            v-if="t.action"
+            type="button"
+            class="toast-action"
+            @click.stop="t.action.run(); dismissToast(t.id)"
+          >{{ t.action.label }}</button>
         </div>
       </transition-group>
     </div>
@@ -167,14 +173,27 @@ watch(dialog, async (d) => {
 .toast.info .toast-icon {
   color: var(--accent-fg);
 }
+.toast-action {
+  flex: none;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
 .toast-msg {
   flex: 1;
   word-break: break-word;
   white-space: pre-wrap;
 }
 /* Opt-in variants (useNotify `variant`). Each red carries its own shape so
-   they stay apart without the color: solid fill = from outside this machine,
-   full frame = Guard, left bar = an ordinary error. */
+   they stay apart without the color: solid fill = another machine, solid
+   header band = a chat channel, full frame = Guard, left bar = an ordinary
+   error. */
 .toast.titled {
   flex-direction: column;
   gap: 2px;
@@ -201,6 +220,25 @@ watch(dialog, async (d) => {
 }
 .toast.external .toast-band {
   opacity: 0.92;
+}
+.toast.channel,
+.toast.channel:hover {
+  padding-top: 0;
+  border: 1px solid var(--toast-channel-accent);
+  overflow: hidden;
+}
+.toast.channel .toast-band {
+  margin: 0 -14px;
+  padding: 5px 14px;
+  background: var(--toast-channel-accent);
+  color: var(--toast-channel-fg);
+  font-weight: 700;
+}
+.toast.channel .toast-row {
+  padding-top: 6px;
+}
+.toast.channel .toast-icon {
+  color: var(--toast-channel-accent);
 }
 .toast.security,
 .toast.security:hover {

@@ -10,6 +10,7 @@ import {
   type SetDefaultResult,
 } from '../useCliProfiles'
 import { createMockBackend, withScope, flush } from './mockBackend'
+import { restoreSpawnPin } from '../../lib/accountFollowPanes'
 import { i18n } from '@navide/plugin-ui/foundation'
 
 function profile(id: string, agentKey: string, name: string): CliProfile {
@@ -34,6 +35,46 @@ describe('useCliProfiles', () => {
     expect(result.supportedAgents.value).toEqual(SUPPORTED)
     expect(result.loaded.value).toBe(true)
     scope.stop()
+  })
+
+  it('ensureLoaded shares the initial load and does not re-fetch once loaded', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await result.ensureLoaded()
+    await flush()
+    expect(result.loaded.value).toBe(true)
+    await result.ensureLoaded()
+    expect(mock.sent.filter((s) => s.type === 'cli_profiles.list')).toHaveLength(1)
+    scope.stop()
+  })
+
+  it('a failed first load is waited on once: later restores take the main pin without re-sending the list', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const mock = createMockBackend('connected')
+    mock.setRejection('cli_profiles.list', 'request cli_profiles.list timeout')
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    const disclose = vi.fn()
+    const gate = { loaded: () => result.loaded.value, load: () => result.ensureLoaded(), disclose }
+    const lists = () => mock.sent.filter((s) => s.type === 'cli_profiles.list').length
+    for (let i = 0; i < 4; i++) {
+      expect(await restoreSpawnPin('old', true, () => false, gate)).toBe('old')
+    }
+    expect(lists()).toBe(1)
+    expect(disclose).toHaveBeenCalledTimes(4)
+
+    // A reconnect starts a new round: the list is asked for again.
+    mock.clearRejection('cli_profiles.list')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    mock.status.value = 'disconnected'
+    vi.advanceTimersByTime(500)
+    mock.status.value = 'connected'
+    vi.advanceTimersByTime(500)
+    await flush()
+    expect(lists()).toBe(2)
+    expect(result.loaded.value).toBe(true)
+    scope.stop()
+    vi.useRealTimers()
   })
 
   it('create sends snake_case payload and adopts the returned lists', async () => {
@@ -913,254 +954,6 @@ describe('runAccountRestartBatch', () => {
     expect(log).toHaveBeenCalledTimes(2)
     expect(log.mock.calls[0][0]).toContain('no-session')
     expect(log.mock.calls[1][0]).toContain('boom')
-  })
-
-  // ── portable credentials ───────────────────────────────────────────────────
-
-  const PORTABLE = {
-    'claude/__default__': {
-      agentKey: 'claude',
-      slotId: '__default__',
-      configured: true,
-      enabled: true,
-      env: 'CLAUDE_CODE_OAUTH_TOKEN',
-    },
-  }
-
-  it('takes portable metadata and the supported list off the profile list', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('cli_profiles.list', {
-      profiles: [],
-      defaults: {},
-      supported_agents: SUPPORTED,
-      portable_credentials: PORTABLE,
-      portable_supported: ['claude'],
-    })
-    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
-    await flush()
-
-    expect(result.portableSupportedFor('claude')).toBe(true)
-    expect(result.portableSupportedFor('codex')).toBe(false)
-    expect(result.portableFor('claude', null)?.env).toBe('CLAUDE_CODE_OAUTH_TOKEN')
-    expect(result.portableFor('claude', 'p9')).toBeNull()
-    scope.stop()
-  })
-
-  it('portableSet sends the secret once, snake_case, and keeps only the metadata', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
-    mock.setResponse('cli_profiles.portable_set', { portable: PORTABLE['claude/__default__'] })
-    mock.setResponse('sync.status', { scopes: { credentials: false } })
-    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
-    await flush()
-
-    const out = await result.portableSet('claude', null, 'sk-ant-oat01-SYNTHETIC')
-    await flush()
-    expect(out).toEqual({ ok: true })
-    const call = mock.sent.find((s) => s.type === 'cli_profiles.portable_set')
-    expect(call?.payload).toEqual({
-      agent_key: 'claude',
-      profile_id: '__default__',
-      secret: 'sk-ant-oat01-SYNTHETIC',
-    })
-    expect(result.portableFor('claude', null)?.configured).toBe(true)
-    // Nothing the composable holds afterwards contains the value.
-    expect(JSON.stringify(result.portable.value)).not.toContain('sk-ant-oat01')
-    expect(JSON.stringify(result.cloud.value)).not.toContain('sk-ant-oat01')
-    // A save re-reads the cloud state (the backend schedules the push itself).
-    expect(mock.sent.some((s) => s.type === 'sync.status')).toBe(true)
-    scope.stop()
-  })
-
-  it('portableClear names the row and never says anything about the cloud', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('cli_profiles.list', {
-      profiles: [profile('p1', 'claude', 'Work')],
-      defaults: {},
-      supported_agents: SUPPORTED,
-      portable_credentials: { 'claude/p1': { ...PORTABLE['claude/__default__'], slotId: 'p1' } },
-    })
-    mock.setResponse('cli_profiles.portable_clear', {})
-    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
-    await flush()
-
-    expect(await result.portableClear('claude', 'p1')).toBe(true)
-    const call = mock.sent.find((s) => s.type === 'cli_profiles.portable_clear')
-    expect(call?.payload).toEqual({ agent_key: 'claude', profile_id: 'p1' })
-    expect(result.portableFor('claude', 'p1')).toBeNull()
-    expect(mock.sent.some((s) => s.type.startsWith('sync.push') || s.type === 'sync.pull_items')).toBe(false)
-    scope.stop()
-  })
-
-  it('the changed broadcast replaces the portable map and re-reads the cloud', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
-    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
-    await flush()
-    mock.sent.length = 0
-
-    mock.emit('cli_profiles.changed', { portable_credentials: PORTABLE, reason: 'portable-set' })
-    await flush()
-    expect(result.portableFor('claude', null)?.configured).toBe(true)
-    expect(mock.sent.some((s) => s.type === 'sync.status')).toBe(true)
-    scope.stop()
-  })
-
-  // ── cloud state ────────────────────────────────────────────────────────────
-
-  it('reports the credentials section as off without asking for the inventory', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
-    mock.setResponse('sync.status', { scopes: { credentials: false, prompts: true } })
-    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
-    await flush()
-
-    await result.refreshCloud()
-    expect(result.cloudStatus.value).toBe('off')
-    expect(mock.sent.some((s) => s.type === 'sync.inventory')).toBe(false)
-    scope.stop()
-  })
-
-  it('groups the inventory by the slot named in each side\'s metadata', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
-    mock.setResponse('sync.status', { scopes: { credentials: true } })
-    mock.setResponse('sync.inventory', {
-      status: 'connected',
-      scopes: {
-        credentials: {
-          scope: 'credentials',
-          status: 'ok',
-          items: [
-            {
-              itemId: 'c-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-              state: 'in-sync',
-              local: { present: true, fingerprint: 'f1', meta: { agentKey: 'claude', slotId: '__default__' } },
-              remote: {
-                present: true,
-                rev: 3,
-                updatedAt: '2026-09-16T05:06:19Z',
-                deviceId: 'Studio',
-                deleted: false,
-                fingerprint: 'f1',
-                readable: true,
-                meta: { agentKey: 'claude', slotId: '__default__' },
-              },
-            },
-            {
-              itemId: 'c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-              state: 'remote-only',
-              local: null,
-              remote: {
-                present: true,
-                rev: 4,
-                updatedAt: '2026-09-16T06:00:00Z',
-                deviceId: 'Laptop',
-                deleted: false,
-                fingerprint: 'f2',
-                readable: true,
-                meta: { agentKey: 'claude', slotId: 'p1' },
-              },
-            },
-            {
-              // Unreadable on both sides: nothing says which slot it is, so it
-              // has no home in the pane.
-              itemId: 'c-cccccccccccccccccccccccccccccccc',
-              state: 'remote-only',
-              local: null,
-              remote: { present: true, rev: 5, updatedAt: '', deviceId: 'x', deleted: false, fingerprint: null, readable: false },
-            },
-          ],
-        },
-      },
-    })
-    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
-    await flush()
-
-    await result.refreshCloud()
-    expect(result.cloudStatus.value).toBe('ok')
-    const call = mock.sent.find((s) => s.type === 'sync.inventory')
-    expect(call?.payload).toEqual({ scope: 'credentials' })
-    expect(result.cloudFor('claude', null)).toEqual([
-      {
-        itemId: 'c-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        state: 'in-sync',
-        localPresent: true,
-        remotePresent: true,
-        updatedAt: '2026-09-16T05:06:19Z',
-        deviceId: 'Studio',
-        readable: true,
-      },
-    ])
-    expect(result.cloudFor('claude', 'p1').map((c) => c.state)).toEqual(['remote-only'])
-    expect(result.cloudFor('codex', null)).toEqual([])
-    scope.stop()
-  })
-
-  it('useFromCloud pulls exactly that item and re-reads the cloud', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
-    mock.setResponse('sync.status', { scopes: { credentials: true } })
-    mock.setResponse('sync.inventory', { scopes: { credentials: { scope: 'credentials', status: 'ok', items: [] } } })
-    mock.setResponse('sync.pull_items', {
-      scope: 'credentials',
-      results: [{ itemId: 'c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', result: 'pulled', rev: 4 }],
-    })
-    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
-    await flush()
-
-    expect(await result.useFromCloud('c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')).toEqual({ ok: true })
-    const call = mock.sent.find((s) => s.type === 'sync.pull_items')
-    expect(call?.payload).toEqual({ scope: 'credentials', itemIds: ['c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'] })
-    expect(mock.sent.filter((s) => s.type === 'sync.inventory')).toHaveLength(1)
-
-    mock.setResponse('sync.pull_items', {
-      scope: 'credentials',
-      results: [{ itemId: 'c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', result: 'conflict' }],
-    })
-    expect(await result.useFromCloud('c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')).toEqual({ ok: false, message: 'conflict' })
-    scope.stop()
-  })
-
-  it('importedSlotsFor joins listed imports with cloud-only slots this install has no profile for', async () => {
-    const mock = createMockBackend('connected')
-    mock.setResponse('cli_profiles.list', {
-      profiles: [profile('p-local', 'claude', 'Work')],
-      defaults: {},
-      supported_agents: SUPPORTED,
-      portable_credentials: {
-        'claude/p-listed': { agentKey: 'claude', slotId: 'p-listed', configured: true, enabled: false, source: 'imported' },
-        'claude/__default__': { agentKey: 'claude', slotId: '__default__', configured: true, enabled: true, source: 'local' },
-      },
-    })
-    mock.setResponse('sync.status', { scopes: { credentials: true } })
-    const row = (slotId: string, state: string) => ({
-      itemId: `c-${slotId.padEnd(32, '0')}`,
-      state,
-      local: null,
-      remote: { present: true, rev: 1, updatedAt: '', deviceId: 'x', deleted: false, fingerprint: 'f', readable: true, meta: { agentKey: 'claude', slotId } },
-    })
-    mock.setResponse('sync.inventory', {
-      scopes: {
-        credentials: {
-          scope: 'credentials',
-          status: 'ok',
-          items: [row('p-listed', 'in-sync'), row('p-removed', 'remote-only'), row('p-local', 'remote-only'), row('__default__', 'in-sync')],
-        },
-      },
-    })
-    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
-    await flush()
-    await result.refreshCloud()
-
-    const slots = result.importedSlotsFor('claude').map((m) => [m.slotId, m.source ?? 'none'])
-    // p-listed: the listed import; p-removed: cloud-only placeholder; p-local
-    // and __default__ have cards of their own and are left out.
-    expect(slots).toEqual([
-      ['p-listed', 'imported'],
-      ['p-removed', 'none'],
-    ])
-    scope.stop()
   })
 })
 

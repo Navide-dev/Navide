@@ -8,6 +8,8 @@ import { PUBLIC_GIT_METHODS, validatePublicGitRequest } from './gitPublicCapabil
 import { PUBLIC_ISSUE_METHODS, validateIssueRequest } from './issueCapability'
 import { EDITOR_PREFERENCE_METHODS, validateEditorPreferenceRequest } from './editorPreferenceCapability'
 import { GIT_ACCOUNT_PUBLIC_METHODS, validateGitAccountRequest } from './gitAccountCapability'
+import { WEB_EVENTS, WEB_GESTURE_METHODS, WEB_METHODS, validateWebRequest } from './webCapability'
+import { AGENTS_METHODS, validateAgentsRequest } from './agentsCapability'
 
 /** Public Manifest v2 capability catalog used by the Host broker.
  *
@@ -54,9 +56,9 @@ export interface PublicStorageCapabilityCatalogEntry extends PublicCapabilityCat
 }
 
 export interface PublicSystemCapabilityCatalogEntry extends PublicCapabilityCatalogBase {
-  namespace: 'fs' | 'ui' | 'aiCli' | 'shell'
-  /** Host-pinned scope for declared namespaces (only `ui.openExternal` is
-   *  `plugin`; storage has its own discriminated entry). */
+  namespace: 'fs' | 'ui' | 'aiCli' | 'web' | 'agents' | 'agentMessages' | 'shell'
+  /** Host-pinned scope for declared namespaces (`ui.openExternal` and every
+   *  `web.*` address are `plugin`; storage has its own discriminated entry). */
   scope: PublicCapabilityScope
   storage?: false
   /** Fixed executable of a typed Host operation; never supplied by a Plugin. */
@@ -427,6 +429,24 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
     scope: 'workspace',
     eligibility: 'public',
   },
+  // Plugin-owned browser views: the partition belongs to the plugin, not to a
+  // workspace, so every web address is plugin-scoped.
+  ...Object.fromEntries(WEB_METHODS.map(address => [address, {
+    address, kind: 'method', namespace: 'web', scope: 'plugin', eligibility: 'public',
+    validateRequest: (value: unknown): value is Record<string, unknown> => validateWebRequest(address, value),
+    ...(WEB_GESTURE_METHODS.has(address) ? { requiresUserGesture: true } : {}),
+  } satisfies PublicSystemCapabilityCatalogEntry])),
+  ...Object.fromEntries(WEB_EVENTS.map(address => [address, {
+    address, kind: 'event', namespace: 'web', scope: 'plugin', eligibility: 'public',
+  } satisfies PublicSystemCapabilityCatalogEntry])),
+  // Read-only agent data of the bound workspace. The address prefix is the
+  // namespace the grant must hold: message text (`agentMessages.read`) is its
+  // own namespace so it is declared, disclosed and policed separately.
+  ...Object.fromEntries(AGENTS_METHODS.map(address => [address, {
+    address, kind: 'method', namespace: address.startsWith('agentMessages.') ? 'agentMessages' : 'agents',
+    scope: 'workspace', eligibility: 'public',
+    validateRequest: (value: unknown): value is Record<string, unknown> => validateAgentsRequest(address, value),
+  } satisfies PublicSystemCapabilityCatalogEntry])),
 }
 
 export const PUBLIC_CAPABILITY_EVENT_ADDRESSES: readonly string[] = [

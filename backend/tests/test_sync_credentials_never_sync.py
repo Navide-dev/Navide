@@ -3,8 +3,8 @@
 Review D-M2: credentials were only retired on the v3 wire, so a v1 fallback
 (sync.caps timing out once) pushed them. The block now sits in the sync layer
 — the switch, the link's engine wiring, the item-level and listing entries —
-and a switch left on by an older build counts as off. CredentialsScope and
-the credential vault are untouched.
+and a switch left on by an older build counts as off. The credential vault
+is untouched.
 """
 
 from __future__ import annotations
@@ -90,7 +90,9 @@ def test_the_switch_cannot_be_turned_on(wired, monkeypatch) -> None:
 
 async def test_no_round_entry_moves_a_credential(wired) -> None:
     link, engine, recorder, _settings = wired
-    assert (await engine.sync("credentials")).get("skipped")
+    # No engine holds a credentials adapter at all (sync_engine.LOCAL_ONLY_SCOPES).
+    assert "credentials" not in engine.scopes
+    assert (await engine.sync("credentials")).get("skipped") == "local-only"
     await engine.sync_all()
     await server_link.sync_now()
     await server_link.sync_now("credentials")
@@ -168,23 +170,23 @@ async def _status(scopes_on_disk: dict) -> dict:
     return reply["payload"]
 
 
-async def test_status_reports_the_stored_switches_as_main_did(wired, monkeypatch) -> None:
-    """The switch shown is the one stored (main's answer); whether a scope
-    actually syncs is said separately, under a key of its own."""
+async def test_status_reports_a_credentials_switch_left_on_as_off(wired, monkeypatch) -> None:
+    """Credentials and keys never leave this machine (2026-10-21): a switch an
+    older build left on reads as off everywhere, the status included."""
     monkeypatch.setattr(server_link, "_link", None)
     payload = await _status({})
-    assert payload["scopes"]["credentials"] is True
+    assert payload["scopes"]["credentials"] is False
     assert payload["scopes"]["prompts"] is True
     assert set(payload["neverSynced"]) == {"memory", "credentials"}
     # The engine still never runs it.
     assert sync_scopes.scope_enabled("credentials") is False
 
 
-def test_switching_another_scope_leaves_the_stored_credentials_switch_alone(wired) -> None:
+def test_switching_another_scope_writes_the_credentials_switch_off(wired) -> None:
     _link, _engine, _recorder, settings = wired
     sync_scopes.set_scope_enabled("mcp", True)
     sync_scopes.set_scope_enabled("mcp", False)
-    assert settings.values[sync_scopes.SCOPES_SETTING]["credentials"] is True
+    assert settings.values[sync_scopes.SCOPES_SETTING]["credentials"] is False
 
 
 async def test_offline_inventory_answers_credentials_as_main_did(wired, monkeypatch) -> None:

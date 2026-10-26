@@ -482,11 +482,12 @@ def test_mcp_scope_round_trips_a_server(monkeypatch):
     monkeypatch.setattr(app, "mcp_settings_store", store)
     scope = sync_scopes.McpScope(gate=False)  # the approval hold has its own tests
 
-    assert set(scope.snapshot()) == {"one"}
-    scope.apply("two", {"name": "two", "url": "https://other.test"})
-    assert set(scope.snapshot()) == {"one", "two"}
-    scope.apply("one", None)
-    assert set(scope.snapshot()) == {"two"}
+    # Each server under its install-only id and its older one (0.2.32).
+    assert set(scope.snapshot()) == {"i:one", "one"}
+    scope.apply("i:two", {"name": "two", "url": "https://other.test"})
+    assert set(scope.snapshot()) == {"i:one", "one", "i:two", "two"}
+    scope.apply("i:one", None)
+    assert set(scope.snapshot()) == {"i:two", "two"}
 
 
 def test_mcp_scope_never_reads_the_native_reflection(monkeypatch):

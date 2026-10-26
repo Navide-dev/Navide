@@ -136,8 +136,15 @@ def real_link(server):
     return ServerLink(connect=server.connect, device_name="test-box")
 
 
-async def next_connection(server, n_before):
-    await _until(lambda: len(server.opened) > n_before and bool(server.opened[-1].syncs), timeout=5)
+async def next_connection(server, n_before, timeout=5):
+    await _until(lambda: len(server.opened) > n_before and bool(server.opened[-1].syncs), timeout=timeout)
+
+
+async def confirm_refused(server):
+    """The latest connection sent its confirm and the refusal cleared .next.
+    The forget before it writes the record (a slow fsync on Windows)."""
+    await _until(lambda: bool(server.opened) and any(m.get("type") == "auth.token.confirm" for m in server.opened[-1].sent)
+                 and server_link.next_access_token() == "", timeout=10)
 
 
 class FixedTokenServer(TokenServer):
@@ -174,15 +181,12 @@ async def test_refused_confirm_does_not_grow_own_members(kc):
     assert await link.start()
     try:
         for _ in range(12):
-            await asyncio.sleep(0.03)
+            await confirm_refused(server)
             counts.append(len(owners()))
             n = len(server.opened)
             await server.opened[-1].close()
             await next_connection(server, n)
-        # The last connection's refused confirm, through to .next cleared: the
-        # forget before it writes the record (a slow fsync on Windows).
-        await _until(lambda: any(m.get("type") == "auth.token.confirm" for m in server.opened[-1].sent)
-                     and server_link.next_access_token() == "", timeout=10)
+        await confirm_refused(server)
         counts.append(len(owners()))
     finally:
         await link.stop()

@@ -86,7 +86,7 @@ describe('Settings CLI agent cards and drawer', { timeout: 15000 }, () => {
     return mock
   }
 
-  it('keeps three native language choices on their own page and routes Japanese search there', async () => {
+  it('keeps the native language choices on their own page and routes Japanese search there', async () => {
     const settings = useSettings()
     const previous = settings.language.value
     settings.setLanguage('en-US', { broadcast: false })
@@ -94,8 +94,12 @@ describe('Settings CLI agent cards and drawer', { timeout: 15000 }, () => {
       await mountModal('appearance', true)
       const languageRow = wrapper!.get('[data-settings-section="appearance-language"]')
       expect(languageRow.isVisible()).toBe(false)
-      expect(wrapper!.findAll('.ap-lang-btn').map(button => button.text().replace('✓', '').trim()))
-        .toEqual(['繁體中文', 'English', '日本語'])
+      const languageButtons = wrapper!.findAll('.ap-lang-btn')
+      expect(languageButtons.map(button => button.text().replace('✓', '').trim()))
+        .toEqual(['繁體中文', 'English', '日本語', '한국어 Beta', '简体中文 Beta', 'Deutsch Beta', 'Español (España) Beta', 'Français Beta', 'Português (Brasil) Beta', 'Русский Beta', 'Tiếng Việt Beta'])
+      // Only the new languages carry the Beta badge.
+      expect(languageButtons.map(button => button.find('.scope-badge').exists()))
+        .toEqual([false, false, false, true, true, true, true, true, true, true, true])
       await wrapper!.get('.s-search-input').setValue('Japanese')
       const result = wrapper!.findAll('.s-search-result').find(item => item.text().includes('Language'))!
       expect(result).toBeDefined()

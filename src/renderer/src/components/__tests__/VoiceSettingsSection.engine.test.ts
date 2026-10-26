@@ -45,7 +45,7 @@ describe('VoiceSettingsSection — model and engine rows', () => {
     expect(model()).not.toContain('GPU')
     expect(engine()).toContain('Not running')
     expect(engine()).toContain('starts automatically when you press the shortcut')
-    expect(engine()).toContain('Start now')
+    expect(engine()).toContain('Start Now')
   })
 
   it('engine states: starting, running on GPU / CPU, failed with the backend reason and Retry', async () => {
@@ -71,10 +71,10 @@ describe('VoiceSettingsSection — model and engine rows', () => {
     mock.emit('voice.model.progress', { bytes: 0, total: 0, done: true, error: 'HTTP 403' })
     await flushPromises()
     expect(model()).toContain('Download failed: HTTP 403')
-    expect(wrapper!.get('[data-settings-section="voice-model"]').text()).toContain('Retry download')
+    expect(wrapper!.get('[data-settings-section="voice-model"]').text()).toContain('Retry Download')
   })
 
-  it('"Start now" sends voice.prewarm and re-reads the status', async () => {
+  it('"Start Now" sends voice.prewarm and re-reads the status', async () => {
     const mock = await mountWith({})
     mock.setResponse('voice.prewarm', { ok: true })
     await wrapper!.get('[data-settings-section="voice-engine"] button').trigger('click')

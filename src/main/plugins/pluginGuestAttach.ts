@@ -31,9 +31,12 @@ export interface GuestWebContents {
 
 /** Tag-sourced webPreferences Electron merges in *before* `will-attach-webview`
  *  runs, which our own assignments below do not cover. `partition` matters most:
- *  it would put a guest on a session other than the default one, outside the
- *  request filtering the Host installs there. Dropped rather than overridden —
- *  a plugin surface has no reason to ask for any of them. */
+ *  it would put a guest on a session of its own, with its own storage, instead
+ *  of the default one every other plugin surface shares. The Host installs no
+ *  request filtering on the default session either: a plugin view can reach the
+ *  network and embed external sites (disclosed, R2 MED-3 on 0.2.26). Dropped
+ *  rather than overridden — a plugin surface has no reason to ask for any of
+ *  them. */
 const TAG_SOURCED_KEYS = [
   'partition',
   'plugins',

@@ -292,6 +292,12 @@ function safeKey(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex')
 }
 
+/** The directory under the storage root that holds every snapshot of one
+ * plugin id (card K3: a source change sets it aside as a whole). */
+export function pluginStorageDirName(pluginId: string): string {
+  return safeKey(pluginId)
+}
+
 function snapshotDirectory(root: string, identity: HostStorageSnapshotIdentity): string {
   return join(root, safeKey(identity.pluginId), safeKey(identity.packageVersion), identity.tier)
 }

@@ -140,7 +140,8 @@ function validateGrant(value: unknown, selection: PluginPackageSelection | undef
     keys.some((key) => !['packageVersion', 'system', 'shell', 'highRiskShellConfirmed', 'storage'].includes(key)) ||
     value.packageVersion !== selection.packageVersion ||
     !Array.isArray(value.system) ||
-    value.system.some((item) => item !== 'fs' && item !== 'ui' && item !== 'aiCli') ||
+    value.system.some((item) => item !== 'fs' && item !== 'ui' && item !== 'aiCli' && item !== 'web' &&
+      item !== 'agents' && item !== 'agentMessages') ||
     new Set(value.system).size !== value.system.length ||
     (value.shell !== undefined && value.shell !== 'allowlist' && value.shell !== 'full') ||
     (value.highRiskShellConfirmed !== undefined && value.highRiskShellConfirmed !== true) ||
@@ -248,7 +249,8 @@ export class PluginActivationSelector {
     const directory = join(this.root, PLUGIN_ACTIVATION_DIR)
     let names: string[]
     try {
-      names = readdirSync(directory)
+      // Sorted: readdir order differs between filesystems and runtimes.
+      names = readdirSync(directory).sort()
     } catch {
       return []
     }
@@ -599,6 +601,21 @@ export class PluginActivationSelector {
       ...(current.previous ? { previous: current.previous } : {}),
       ...(current.previousGrant ? { previousGrant: current.previousGrant } : {}),
     }
+    writeAtomic(selectorPath(this.root, pluginId), next)
+    return next
+  }
+
+  /** Stop retaining the previous package and its grant. A package that
+   * changed between a Marketplace and a local source must not offer a
+   * rollback that restores the other source's consent (card K3, D7). */
+  forgetPrevious(pluginId: string): PluginActivationSelectorRecord | null {
+    const current = this.read(pluginId)
+    if (!current) return null
+    if (current.activation) throw new Error(`plugin ${pluginId} activation is in progress`)
+    if (!current.previous && !current.previousGrant) return current
+    const next: PluginActivationSelectorRecord = { ...current }
+    delete next.previous
+    delete next.previousGrant
     writeAtomic(selectorPath(this.root, pluginId), next)
     return next
   }

@@ -176,6 +176,23 @@ def _no_real_claude_cli():
 
 
 @pytest.fixture(autouse=True)
+def _no_claude_version_probe():
+    """Installing the Claude hooks into the real settings file starts a
+    once-per-process ``claude --version`` probe in a daemon thread. Where Claude
+    Code is installed that resolves the developer's real CLI, the guard above
+    refuses the spawn, and whichever test installed first fails at teardown.
+    Mark the probe as already started; the probe's own tests reset the flag or
+    call ``_refresh_claude_version`` with ``_probe_claude_version`` stubbed."""
+    # Its own MonkeyPatch, undone at this fixture's teardown: a test calling
+    # ``monkeypatch.undo()`` must not undo the isolation along with its own.
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        from agent_team_backend import claude_hooks
+
+        monkeypatch.setattr(claude_hooks, "_version_refresh_started", True)
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _isolated_data_dir(tmp_path):
     """Keep app-data side effects (e.g. pty-registry.json written on every
     TerminalService.create) out of the real app-data dir during tests."""
@@ -308,7 +325,7 @@ def _isolated_trust_store():
     ask for it would find a marker with no state — which is exactly the locked
     state the module exists to enforce — and every later test would be refused
     for a reason belonging to an earlier one."""
-    from agent_team_backend import device_signing, sync_keyring, trust_store
+    from agent_team_backend import device_signing, remote_roster, sync_keyring, trust_store
 
     # Reset on the way in only. On the way out a test's own monkeypatching may
     # still be in force (one of them swaps pathlib.Path for the Windows flavour
@@ -320,6 +337,9 @@ def _isolated_trust_store():
     # The sync key is cached in-process for the same reason the others are
     # singletons, and it outlives the per-test vault above.
     sync_keyring._reset_for_test()
+    # Every connected link fills the remote roster from its directory, and a
+    # roster left behind adds remote_targets to a later test's cli_list_targets.
+    remote_roster._reset_for_test()
     yield
     # The one thing stopped on the way out: the delivered-message timer is a
     # thread, and one left running fires after this test's vault and data dir
@@ -458,10 +478,16 @@ def pytest_addoption(parser):
         help="run only every Nth collected test, starting at the Kth (1-based); CI splits the Windows suite this way",
     )
     parser.addoption("--collection-report", default=None, help="write collected and selected node IDs as JSON")
+    parser.addoption("--run-slow", action="store_true", help="also run tests marked slow (skipped by default)")
 
 
 @pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(config, items):
+    if not config.getoption("--run-slow"):
+        skip_slow = pytest.mark.skip(reason="slow: run with --run-slow")
+        for item in items:
+            if item.get_closest_marker("slow") is not None:
+                item.add_marker(skip_slow)
     # Round-robin over the collected order, not whole files: the slow files
     # (real git, PTY and subprocess spawns) then land on every shard evenly
     # instead of on whichever shard drew them.

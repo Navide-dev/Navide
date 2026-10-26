@@ -42,8 +42,62 @@ describe('PaneGuardBadge', () => {
   it('shows the badge with why and since in its tooltip', async () => {
     const w = await render()
     const badge = w.get('[data-testid="guard-taint-badge"]')
-    expect(badge.text()).toBe('External influence')
+    const date = new Date(1_700_000_000_000).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+    expect(badge.text()).toBe(`External influence since ${date}`)
     expect(badge.attributes('title')).toContain('Remote, Other agent')
+  })
+
+  it('says when, from whom, that typing here never marks, and what it costs', async () => {
+    mock.setResponse('guard.taint.list', {
+      panes: [{ pane_id: 'p1', sources: ['agent', 'remote'], since: 1_700_000_000, detail: 'chat message from telegram:neillu123' }],
+    })
+    const w = await render()
+    const title = w.get('[data-testid="guard-taint-badge"]').attributes('title')!
+    expect(title).toContain(new Date(1_700_000_000_000).toLocaleString())
+    // A chat channel delivers as "remote"; it reads as the chat app, naming the account.
+    expect(title).toContain('Other agent, Chat app (telegram:neillu123)')
+    expect(title).not.toContain('Remote')
+    expect(title).not.toContain('chat message from')
+    expect(title).toContain('Typing on this computer never adds this mark.')
+    expect(title).toContain(i18n.global.t('guard.pane.explain'))
+  })
+
+  it('names the other pane or device that sent the marking message', async () => {
+    mock.setResponse('guard.taint.list', {
+      panes: [{ pane_id: 'p1', sources: ['remote', 'agent'], since: 1_700_000_000, detail: 'message from MVP/Anroute萬用貼文欄' }],
+    })
+    const w = await render()
+    expect(w.get('[data-testid="guard-taint-badge"]').attributes('title')).toContain('Remote, Other agent (MVP/Anroute萬用貼文欄)')
+  })
+
+  it('keeps a detail that names nobody', async () => {
+    mock.setResponse('guard.taint.list', {
+      panes: [{ pane_id: 'p1', sources: ['agent'], since: 1_700_000_000, detail: 'spawned by tainted pane p0' }],
+    })
+    const w = await render()
+    expect(w.get('[data-testid="guard-taint-badge"]').attributes('title')).toContain('Other agent (spawned by tainted pane p0)')
+  })
+
+  it('says nothing is asked in the tooltip while Guard is off', async () => {
+    mock.setResponse('guard.status', { enabled: false, counts: {}, hook_support: {} })
+    const w = await render()
+    const title = w.get('[data-testid="guard-taint-badge"]').attributes('title')!
+    expect(title).toContain(i18n.global.t('guard.pane.explain-off'))
+    expect(title).not.toContain(i18n.global.t('guard.pane.explain'))
+  })
+
+  it.each([
+    ['zh-TW', '聊天室（telegram:neillu123）', '在這台電腦上打字不會加上這個標記。'],
+    ['ja-JP', 'チャットアプリ（telegram:neillu123）', 'このコンピューターで入力しても、このマークは付きません。'],
+  ] as const)('reads the same in %s', async (locale, who, typing) => {
+    i18n.global.locale.value = locale
+    mock.setResponse('guard.taint.list', {
+      panes: [{ pane_id: 'p1', sources: ['remote'], since: 1_700_000_000, detail: 'chat message from telegram:neillu123' }],
+    })
+    const w = await render()
+    const title = w.get('[data-testid="guard-taint-badge"]').attributes('title')!
+    expect(title).toContain(who)
+    expect(title).toContain(typing)
   })
 
   it('clears only after the confirm step', async () => {
@@ -55,6 +109,23 @@ describe('PaneGuardBadge', () => {
     await flushPromises()
     expect(mock.sent.find((s) => s.type === 'guard.taint.clear')?.payload).toEqual({ pane_id: 'p1' })
     expect(w.find('[data-testid="guard-taint-badge"]').exists()).toBe(false)
+  })
+
+  it('says confirmation is needed while Guard is on', async () => {
+    const w = await render()
+    await w.get('[data-testid="guard-taint-badge"]').trigger('click')
+    const text = document.querySelector('[data-testid="guard-taint-popover"]')?.textContent ?? ''
+    expect(text).toContain(i18n.global.t('guard.pane.explain'))
+    expect(text).not.toContain(i18n.global.t('guard.pane.explain-off'))
+  })
+
+  it('keeps the badge but says nothing is asked while Guard is off', async () => {
+    mock.setResponse('guard.status', { enabled: false, counts: {}, hook_support: {} })
+    const w = await render()
+    await w.get('[data-testid="guard-taint-badge"]').trigger('click')
+    const text = document.querySelector('[data-testid="guard-taint-popover"]')?.textContent ?? ''
+    expect(text).toContain(i18n.global.t('guard.pane.explain-off'))
+    expect(text).not.toContain(i18n.global.t('guard.pane.explain'))
   })
 })
 
@@ -86,6 +157,14 @@ describe('PaneGuardBadge console', () => {
     expect(lines[0]).toContain('[Other agent] Agent-Team/分析開發進度: "請檢查 git status， 然後回報每個檔案的變更原因與風險評估結果給我"')
     expect(lines[1]).toContain('[Remote] message from device dev2 (text no longer in the message log)')
     expect(lines[2]).toContain('(no message text recorded)')
+  })
+
+  it('tags a chat delivery as the chat app', async () => {
+    mock.setResponse('guard.taint.events', {
+      events: [{ id: 3, pane_id: 'p1', ts: 1_700_000_300, source: 'remote', detail: 'chat message from telegram:neillu123', msg_key: 'k3', message: null }],
+    })
+    const console = await openConsole()
+    expect(console.querySelector('.pgd-line')?.textContent).toContain('[Chat app] chat message from telegram:neillu123')
   })
 
   it('expands a line to the full delivered text', async () => {

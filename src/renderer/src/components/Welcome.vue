@@ -8,6 +8,7 @@ import { useEditorTargets } from '../composables/useEditorTargets'
 import { useRecentWorkspaces, type RecentWorkspace } from '../composables/useRecentWorkspaces'
 import { relativeTime } from '../lib/relativeTime'
 import navideMark from '../assets/navide-mark.png'
+import { isMiniIdeOnlyOpenBlocked, useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 
 const props = defineProps<{
   backend: ReturnType<typeof useBackend>
@@ -194,6 +195,8 @@ async function removeItem(item: RecentWorkspace, ev: Event): Promise<void> {
 // ── Context menu ─────────────────────────────────────────────────────────────
 // Backdrop + fixed menu, following the PlansPane convention.
 const { editorTargets, loadEditorTargets } = useEditorTargets()
+// Read for its subscription: keeps the disabled-Mini-IDE state current.
+useDisabledBuiltins()
 const ctxMenu = ref<{ show: boolean; x: number; y: number; path: string }>({
   show: false,
   x: 0,
@@ -359,7 +362,12 @@ function ctxCopyPath(): void {
     <template v-if="ctxMenu.show">
       <div class="ctx-backdrop" @click="closeCtxMenu" @contextmenu.prevent="closeCtxMenu" />
       <div ref="ctxMenuEl" class="ctx-menu" :style="{ top: ctxMenu.y + 'px', left: ctxMenu.x + 'px' }" @click.stop>
-        <button class="menu-item" @click="ctxOpenInEditor()">{{ $t('action.open-in-default-editor') }}</button>
+        <button
+          class="menu-item"
+          :disabled="isMiniIdeOnlyOpenBlocked()"
+          :title="isMiniIdeOnlyOpenBlocked() ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' }) : undefined"
+          @click="ctxOpenInEditor()"
+        >{{ $t('action.open-in-default-editor') }}</button>
         <div class="menu-item has-sub">
           <span>{{ $t('action.open-with') }}</span><span class="sub-caret">▸</span>
           <div class="ctx-submenu">
@@ -367,6 +375,8 @@ function ctxCopyPath(): void {
               v-for="target in editorTargets"
               :key="target.id"
               class="menu-item"
+              :disabled="isMiniIdeOnlyOpenBlocked(target.id)"
+              :title="isMiniIdeOnlyOpenBlocked(target.id) ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' }) : undefined"
               @click="ctxOpenInEditor(target.id)"
             >{{ $t(target.labelKey) }}</button>
           </div>

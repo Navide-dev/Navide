@@ -1690,6 +1690,7 @@ onUnmounted(() => {
               <iframe
                 ref="planDocFrame"
                 class="plan-doc-frame"
+                name="navide-plan-doc"
                 sandbox="allow-scripts"
                 :key="currentDocumentToken ?? selected?.rel_path ?? ''"
                 :srcdoc="iframeSrcdoc"
@@ -1745,7 +1746,7 @@ onUnmounted(() => {
       </main>
 
       <aside v-if="!isLeftContribution()" class="ai-sidebar">
-        <SafeAiCliPanel :controller="aiCliController" :build-context="buildAiCliContext" />
+        <SafeAiCliPanel :controller="aiCliController" :build-context="buildAiCliContext" width-key="plans-ai-panel-width" />
       </aside>
     <div v-if="contextMenu" class="context-menu" :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
       <button type="button" @click="void openInEditor(contextMenu.relPath); closeContextMenu()">{{ t('action.open-in-editor') }}</button>
@@ -2233,9 +2234,9 @@ onUnmounted(() => {
 .plan-summary li.complete { color: var(--success-fg, #5aba75); }
 .empty-state { margin: auto; padding: 40px; color: var(--text-muted); text-align: center; }
 
+/* No width of its own: the panel sets it (resizable, 42px when collapsed). */
 .ai-sidebar {
   flex: 0 0 auto;
-  width: 360px;
   height: 100%;
   border-left: 1px solid var(--border-subtle);
   display: flex;
@@ -2266,6 +2267,5 @@ button:hover, .quick-open button.active { background: var(--bg-hover); }
 
 @media (max-width: 900px) {
   .plans-sidebar { width: 240px; min-width: 200px; }
-  .ai-sidebar { width: 280px; }
 }
 </style>

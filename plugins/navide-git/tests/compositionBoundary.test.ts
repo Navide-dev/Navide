@@ -108,6 +108,14 @@ async function runNodeEntryOrThrow(entry: string, args: string[], cwd: string): 
   return result
 }
 
+function vueTscEntry(consumerEntry: string): string {
+  // Bun's loader cannot apply Volar's `tsc` bootstrap, so a direct vue-tsc
+  // entry reports TS2307 for every .vue import. Under Bun the same typecheck
+  // runs through the repository's explicit adapter; the consumer's vue-tsc is
+  // the same installed package. Node keeps the consumer entry unchanged.
+  return process.versions.bun ? join(repositoryRoot, 'scripts/bun/vue-tsc.cjs') : consumerEntry
+}
+
 async function runCommandOrThrow(command: string, args: string[], cwd: string): Promise<CommandResult> {
   const result = await run(command, args, cwd)
   if (result.status !== 0) {
@@ -340,7 +348,7 @@ describe('navide.git public composition', () => {
           'vue-i18n': installedVersion(repositoryRoot, 'vue-i18n'),
           'vue-tsc': installedVersionOrUndefined(repositoryRoot, 'vue-tsc'),
         }
-        expect(versions.vite).toBe('6.4.3')
+        expect(versions.vite).toBe('6.4.4')
         writeConsumerProject(externalProject, packageTarballs, versions)
 
         for (const packageName of Object.keys(packageTarballs)) {
@@ -365,7 +373,7 @@ describe('navide.git public composition', () => {
         const externalRequire = createRequire(join(externalProject, 'package.json'))
         if (versions['vue-tsc']) {
           const vueTscCli = resolveInstalledPackageBin(externalProject, 'vue-tsc', 'vue-tsc', externalRequire)
-          await runNodeEntryOrThrow(vueTscCli, ['--noEmit', '--project', join(externalProject, 'tsconfig.json')], externalProject)
+          await runNodeEntryOrThrow(vueTscEntry(vueTscCli), ['--noEmit', '--project', join(externalProject, 'tsconfig.json')], externalProject)
         }
 
         const viteCli = resolveInstalledPackageBin(externalProject, 'vite', 'vite', externalRequire)

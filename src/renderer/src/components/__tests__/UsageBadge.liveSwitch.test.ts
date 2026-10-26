@@ -155,8 +155,8 @@ function follow(): AccountFollowActions & { plan: ReturnType<typeof vi.fn>; move
   return { followingCount: () => 0, plan: vi.fn(async () => []), move: vi.fn(async () => {}) }
 }
 
-function pins(fixed = 0): AccountPinActions & { unpinAll: ReturnType<typeof vi.fn> } {
-  return { fixedCount: () => fixed, unpinAll: vi.fn(async () => {}) }
+function pins(fixed = 0): AccountPinActions & { unpinAll: ReturnType<typeof vi.fn>; movePane: ReturnType<typeof vi.fn> } {
+  return { fixedCount: () => fixed, unpinAll: vi.fn(async () => {}), movePane: vi.fn(async () => {}) }
 }
 
 // a = live credential; b signed in inside its own dir; c did not.
@@ -221,7 +221,7 @@ describe('UsageBadge – scheme A: a row swaps the live credential', () => {
     expect(w.find('.usage-pop-switch-title').text()).toBe(i18n.global.t('usage.switch-title'))
   })
 
-  it('shows no "Continue", no separate "Sign in" and no "needs sign-in" chip', async () => {
+  it('shows no "Continue", no separate "Sign In" and no "needs sign-in" chip', async () => {
     const { w } = mountA()
     await open(w)
     expect(w.find('.usage-acct-continue').exists()).toBe(false)
@@ -339,5 +339,90 @@ describe('UsageBadge – this pane\'s "follow account switch" toggle', () => {
     expect(profiles.setDefault).not.toHaveBeenCalled()
     expect(pin.unpinAll).not.toHaveBeenCalled()
     expect(fol.move).not.toHaveBeenCalled()
+  })
+})
+
+describe('UsageBadge – follow off: a row moves only this pane', () => {
+  // A fixed pane running in b's own dir; a is the live credential with no
+  // dir login; b and c are both signed in inside their own dirs.
+  function mountFixed(opts: { paneFollow?: 'follow' | 'fixed'; paneProfileId?: string; pins?: boolean } = {}) {
+    const profiles = makeProfiles({
+      liveDefault: 'aaaa',
+      dirs: { bbbb: { signedIn: true, email: 'b@x.com' }, cccc: { signedIn: true, email: 'c@x.com' } },
+    })
+    const switchHandler = vi.fn(async () => ({ ok: true }))
+    const act = actions()
+    const fol = follow()
+    const pin = pins(1)
+    const w = mountBadge(
+      profiles.fake,
+      { paneId: 'p1', paneProfileId: opts.paneProfileId ?? 'bbbb', paneFollow: opts.paneFollow ?? 'fixed' },
+      { actions: act, switchHandler, follow: fol, ...(opts.pins === false ? {} : { pins: pin }) },
+    )
+    return { w, act, fol, pin, switchHandler, ...profiles }
+  }
+
+  it('a dir account moves only this pane: no live switch, default unchanged, no follow batch', async () => {
+    const { w, pin, switchHandler, setDefault, setPaneDefault, fol } = mountFixed()
+    await open(w)
+    await row(w, 'c@x.com').find('.usage-acct').trigger('click')
+    await vi.runAllTimersAsync()
+    expect(pin.movePane).toHaveBeenCalledWith('p1', 'cccc')
+    expect(switchHandler).not.toHaveBeenCalled()
+    expect(setDefault).not.toHaveBeenCalled()
+    expect(setPaneDefault).not.toHaveBeenCalled()
+    expect(fol.plan).not.toHaveBeenCalled()
+    expect(fol.move).not.toHaveBeenCalled()
+  })
+
+  it('the account this pane already runs on does nothing', async () => {
+    const { w, pin, switchHandler } = mountFixed()
+    await open(w)
+    await row(w, 'b@x.com').find('.usage-acct').trigger('click')
+    await vi.runAllTimersAsync()
+    expect(pin.movePane).not.toHaveBeenCalled()
+    expect(switchHandler).not.toHaveBeenCalled()
+  })
+
+  it('an account with no dir login starts that sign-in, and nothing else', async () => {
+    const { w, pin, act, switchHandler } = mountFixed()
+    await open(w)
+    await row(w, 'a@x.com').find('.usage-acct').trigger('click')
+    await vi.runAllTimersAsync()
+    expect(act.signIn).toHaveBeenCalledWith('claude', 'aaaa')
+    expect(pin.movePane).not.toHaveBeenCalled()
+    expect(switchHandler).not.toHaveBeenCalled()
+  })
+
+  it('the built-in Default is refused: it has no folder of its own', async () => {
+    const { w, pin, switchHandler, setPaneDefault } = mountFixed()
+    await open(w)
+    const def = w.findAll('.usage-acct-row')[0]
+    await def.find('.usage-acct').trigger('click')
+    await vi.runAllTimersAsync()
+    expect(notify.alert).toHaveBeenCalledWith(i18n.global.t('account-follow.pin-default-refused'), expect.anything())
+    expect(pin.movePane).not.toHaveBeenCalled()
+    expect(switchHandler).not.toHaveBeenCalled()
+    expect(setPaneDefault).not.toHaveBeenCalled()
+  })
+
+  it('follow on: unchanged — the row switches the live account, this pane is not moved alone', async () => {
+    const { w, pin, switchHandler } = mountFixed({ paneFollow: 'follow', paneProfileId: 'aaaa' })
+    await open(w)
+    await row(w, 'b@x.com').find('.usage-acct').trigger('click')
+    await vi.runAllTimersAsync()
+    expect(switchHandler).toHaveBeenCalledWith('claude', 'bbbb')
+    expect(pin.movePane).not.toHaveBeenCalled()
+  })
+
+  it('without the pin actions (scheme A not in effect), a fixed pane keeps the old list', async () => {
+    const { w, switchHandler, setPaneDefault, fol } = mountFixed({ pins: false })
+    await open(w)
+    await row(w, 'c@x.com').find('.usage-acct').trigger('click')
+    await vi.runAllTimersAsync()
+    // Scheme B (follow actions, no pins): the row chooses the default.
+    expect(fol.plan).toHaveBeenCalledWith('cccc')
+    expect(setPaneDefault).toHaveBeenCalledWith('claude', 'cccc')
+    expect(switchHandler).not.toHaveBeenCalled()
   })
 })

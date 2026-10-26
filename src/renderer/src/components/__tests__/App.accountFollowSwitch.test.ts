@@ -169,11 +169,15 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     expect(body).toContain('if (explicitPin) accountFollow.remove(paneId)')
   })
 
-  it('both restore paths send the pin through the same rule', () => {
+  it('both restore paths send the pin through the same rule, once the account dirs are known', () => {
     const uses = appSource.split(
-      'profileId: accountSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn),'
+      'const restorePin = await restoreSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn, restorePinGate(saved.pane_id))'
     ).length - 1
     expect(uses).toBe(2)
+    expect(appSource.split('profileId: restorePin,').length - 1).toBe(2)
+    const gate = functionBody('restorePinGate')
+    expect(gate).toContain('loaded: () => cliProfilesApi.loaded.value,')
+    expect(gate).toContain('load: () => cliProfilesApi.ensureLoaded(),')
   })
 
   it('the account badge reads the account the pane really runs on', () => {
@@ -184,8 +188,9 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
   it('fixing and unfixing a pane reuse the ordinary rebuild', () => {
     expect(appSource).toContain('@toggle-account-follow="toggleAccountPin(p.id)"')
     const body = functionBody('toggleAccountPin')
-    expect(body).toContain('rebuildPaneViaResume(paneId)')
-    expect(body).toContain('rebuildPaneViaResume(paneId, { profileId: live })')
+    // A pane with no transcript yet reopens fresh rather than failing resume.
+    expect(body).toContain('rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })')
+    expect(body).toContain('rebuildPaneViaResume(paneId, { profileId: live, freshWhenNoTranscript: true })')
     // Fixing on an account without a dir login sends the user to sign in.
     expect(body).toContain('if (!followDirSignedIn(live))')
     expect(body).toContain('onCliLoginSpawn(FOLLOW_SWITCH_AGENT, undefined, { accountDirProfileId: live })')
@@ -206,6 +211,31 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     // The flag goes on the pane as it is now, not on an id a rebuild retired.
     expect(body).toContain('const now = followPaneNow(id, sessions)')
     expect(body).toContain('if (now) accountFollow.add(now)')
+  })
+
+  it('reopens fresh only on the single-pane account moves, never in a batch', () => {
+    // Fixing, unfixing, "continue on this account" and moving a fixed pane
+    // from its own list: the move is the point
+    // and a pane with no transcript has nothing to lose. The follow batch and
+    // every other rebuild keep the plain resume preflight.
+    const optIns = appSource.split('freshWhenNoTranscript: true').length - 1
+    expect(optIns).toBe(4)
+    expect(functionBody('toggleAccountPin').split('freshWhenNoTranscript: true').length - 1).toBe(2)
+    expect(appSource).toContain(
+      'await rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true })'
+    )
+    expect(functionBody('moveFollowPanes')).not.toContain('freshWhenNoTranscript')
+  })
+
+  it('reopens one fixed pane on its own, not through the live switch or the default', () => {
+    const start = appSource.indexOf('provide(accountPinKey, {')
+    expect(appSource.slice(start, appSource.indexOf('\n})\n', start))).toContain('movePane: moveFixedAccountPane,')
+    const body = functionBody('moveFixedAccountPane')
+    expect(body).toContain('if (!pane || pane.isLogin || !paneAccountFixed(pane) || !followDirSignedIn(profileId)) return')
+    expect(body).toContain('await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })')
+    for (const banned of ['setPaneDefault', 'setDefault', 'cliAccountSwitch', 'accountFollow.add', 'continueWith']) {
+      expect(body).not.toContain(banned)
+    }
   })
 
   it("keeps #194's follow flow wired but no longer offered in this window", () => {

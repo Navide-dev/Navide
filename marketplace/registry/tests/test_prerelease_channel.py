@@ -99,3 +99,103 @@ def test_format_md_matches_the_manifest_models() -> None:
     manifest = copy.deepcopy(contract_manifest())
     manifest["version"] = "2.5.0-beta.1"
     assert parse_manifest(manifest).version == "2.5.0-beta.1"
+
+
+def test_anonymous_testplace_publish_is_refused(client: TestClient) -> None:
+    manifest = copy.deepcopy(contract_manifest())
+    manifest.update(id="acme.files", publisher="acme", version="1.0.0")
+    resp = client.post(
+        "/api/publish",
+        params={"channel": "testplace"},
+        files={"package": ("pkg.vsix", build_v2_package(manifest), "application/zip")},
+    )
+    # Testplace opened in 0.2.27 for authenticated, vetted publishers only
+    # (test_testplace.py); an anonymous dev publish still gets nothing stored.
+    assert resp.status_code == 401, resp.text
+    assert client.get("/api/extensions/acme/files").status_code == 404
+
+
+@pytest.mark.parametrize("channel", ["nightly", "pre-release"])
+def test_publish_channel_must_be_known_and_match_the_version(
+    client: TestClient, channel: str
+) -> None:
+    manifest = copy.deepcopy(contract_manifest())
+    manifest.update(id="acme.files", publisher="acme", version="1.0.0")
+    resp = client.post(
+        "/api/publish",
+        params={"channel": channel},
+        files={"package": ("pkg.vsix", build_v2_package(manifest), "application/zip")},
+    )
+    assert resp.status_code == 400, resp.text
+
+
+def test_publish_with_the_matching_channel_is_unchanged(client: TestClient) -> None:
+    manifest = copy.deepcopy(contract_manifest())
+    manifest.update(id="acme.files", publisher="acme", version="1.0.0-beta.1")
+    resp = client.post(
+        "/api/publish",
+        params={"channel": "pre-release"},
+        files={"package": ("pkg.vsix", build_v2_package(manifest), "application/zip")},
+    )
+    assert resp.status_code == 201, resp.text
+    detail = client.get("/api/extensions/acme/files").json()
+    assert [v["channel"] for v in detail["versions"]] == ["pre-release"]
+
+
+def _insert_testplace_copy(client: TestClient, version: str) -> None:
+    """Store an approved testplace row the way a later Registry would: copy an
+    approved row and change only its version and channel."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlmodel import Session, select
+
+    from registry.models import ExtensionVersion
+
+    with Session(client.app.state.registry.engine) as session:
+        source = session.exec(select(ExtensionVersion)).first()
+        assert source is not None
+        data = source.model_dump(exclude={"id"})
+        data.update(
+            version=version,
+            channel="testplace",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+        )
+        session.add(ExtensionVersion(**data))
+        session.commit()
+
+
+def test_public_reads_never_show_a_testplace_version(client: TestClient) -> None:
+    _publish(client, "1.0.0")
+    _insert_testplace_copy(client, "1.2.0")
+    _insert_testplace_copy(client, "1.3.0-beta.1")
+
+    item = client.get("/api/extensions").json()["items"][0]
+    assert item["latest_version"] == "1.0.0"
+    assert item["latest_prerelease_version"] is None
+    detail = client.get("/api/extensions/acme/files").json()
+    assert detail["latest_version"] == "1.0.0"
+    assert [v["version"] for v in detail["versions"]] == ["1.0.0"]
+    for version in ("1.2.0", "1.3.0-beta.1"):
+        assert (
+            client.get(f"/api/extensions/acme/files/{version}/download").status_code
+            == 404
+        )
+    assert client.get("/api/extensions/acme/files/1.0.0/download").status_code == 200
+
+
+def test_a_testplace_only_extension_is_not_listed(client: TestClient) -> None:
+    _publish(client, "1.0.0")
+    _insert_testplace_copy(client, "2.0.0")
+    from sqlmodel import Session, select
+
+    from registry.models import ExtensionVersion
+
+    with Session(client.app.state.registry.engine) as session:
+        stable = session.exec(
+            select(ExtensionVersion).where(ExtensionVersion.version == "1.0.0")
+        ).one()
+        session.delete(stable)
+        session.commit()
+
+    assert client.get("/api/extensions").json()["items"] == []
+    assert client.get("/api/extensions/acme/files").status_code == 404

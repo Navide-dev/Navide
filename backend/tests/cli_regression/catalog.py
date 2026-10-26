@@ -163,21 +163,60 @@ def pytest_collection_finish(session):
     }
 
 
+def _record_outcome(outcomes, nodeid, report):
+    if report.skipped or getattr(report, "wasxfail", False):
+        outcomes[nodeid] = "xfailed" if getattr(report, "wasxfail", False) else "skipped"
+    elif report.failed:
+        outcomes[nodeid] = "failed"
+    elif report.when == "call" and nodeid not in outcomes:
+        outcomes[nodeid] = "passed"
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     result = yield
     report = result.get_result()
-    outcomes = getattr(item.config, "_cli_contract_outcomes", {})
-    if report.skipped or getattr(report, "wasxfail", False):
-        outcomes[item.nodeid] = "xfailed" if getattr(report, "wasxfail", False) else "skipped"
-    elif report.failed:
-        outcomes[item.nodeid] = "failed"
-    elif report.when == "call" and item.nodeid not in outcomes:
-        outcomes[item.nodeid] = "passed"
+    _record_outcome(getattr(item.config, "_cli_contract_outcomes", {}), item.nodeid, report)
+
+
+def _is_xdist_worker(config) -> bool:
+    return hasattr(config, "workerinput")
+
+
+def _is_xdist_controller(config) -> bool:
+    # The condition pytest-xdist itself uses to start a distributed session.
+    return (not _is_xdist_worker(config) and config.getoption("dist", "no") != "no"
+            and bool(config.getoption("tx", None)))
+
+
+class _XdistControllerCoverage:
+    """Under pytest-xdist the controller collects and runs nothing, and each
+    worker runs only part of the suite, so the coverage check moves here and
+    is rebuilt from what the workers report."""
+
+    def __init__(self, config):
+        self.config = config
+        config._cli_contract_outcomes = {}
+
+    @pytest.hookimpl(optionalhook=True)
+    def pytest_xdist_node_collection_finished(self, node, ids):
+        # Every worker collects the same selection.
+        required = _required_cases() | _historical_cases()
+        self.config._cli_contract_selected = {
+            nodeid for nodeid in ids if any(matches(nodeid, node_id) for node_id in required)
+        }
+
+    def pytest_runtest_logreport(self, report):
+        _record_outcome(self.config._cli_contract_outcomes, report.nodeid, report)
+
+
+def pytest_configure(config):
+    if _is_xdist_controller(config) and not config.option.collectonly:
+        config.pluginmanager.register(_XdistControllerCoverage(config), "cli-contract-xdist-coverage")
 
 
 def pytest_sessionfinish(session, exitstatus):
-    if session.config.option.collectonly:
+    if session.config.option.collectonly or _is_xdist_worker(session.config):
         return
     errors = validate_outcomes(getattr(session.config, "_cli_contract_selected", set()),
                                getattr(session.config, "_cli_contract_outcomes", {}))

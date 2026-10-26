@@ -103,7 +103,7 @@ describe('PluginBackendHost third-party branch', () => {
     hosts.push(host)
     host.register(thirdParty())
     await host.bindView(runtime('acme.indexer'), workspace, workspace)
-    expect(admitThirdParty).toHaveBeenCalledWith(expect.objectContaining({ pluginId: 'acme.indexer' }), workspace)
+    expect(admitThirdParty).toHaveBeenCalledWith(expect.objectContaining({ pluginId: 'acme.indexer' }), workspace, expect.any(String))
     expect(resolvePlanRoot).not.toHaveBeenCalled()
     expect(options?.spawnProcess).toBe(granted.spawnProcess)
     expect(options?.bridgeDispatcher).toBe(granted.bridgeDispatcher)
@@ -322,4 +322,145 @@ describe.runIf(canRunLive)('third-party backend end to end in the macOS sandbox 
       rmSync(root, { recursive: true, force: true })
     }
   }, 60_000)
+})
+
+describe('agent methods of a third-party backend (plan B1-b)', () => {
+  const agent = { kind: 'agent', source: 'mcp', id: 'agent-1' } as const
+  function callingSupervisor() {
+    const call = vi.fn(async () => 'ok')
+    const supervisor = {
+      ...fakeSupervisor(),
+      clientFor: vi.fn(() => ({ call })),
+    } as unknown as PluginBackendSupervisor
+    return { supervisor, call }
+  }
+
+  it('opens exactly the given set on agent-tool bindings only, never on views or the activation', async () => {
+    const { supervisor, call } = callingSupervisor()
+    const host = new PluginBackendHost({ admitThirdParty: async () => admission(), createSupervisor: () => supervisor })
+    hosts.push(host)
+    host.register(thirdParty())
+    await host.bindView(runtime('acme.indexer'), workspace, workspace)
+    const headless = await host.bindAgentToolWorkspace(
+      { ...runtime('acme.indexer'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )
+    await expect(host.call(headless, 'fixture.echo', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+
+    expect(host.setAgentMethods('acme.indexer', '1.0.0', ['fixture.echo'])).toBe(true)
+    await expect(host.call(headless, 'fixture.echo', null, { initiator: agent })).resolves.toBe('ok')
+    await expect(host.call(headless, 'fixture.exit', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    // The view the user opened stays closed to agents, and so does the activation.
+    await expect(host.call('view-1', 'fixture.echo', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    expect(host.activationForPlugin('acme.indexer')?.agentMethods).toEqual([])
+    expect(host.agentToolMethodsFor('acme.indexer', '1.0.0')).toEqual(['fixture.echo'])
+
+    host.setAgentMethods('acme.indexer', '1.0.0', [])
+    await expect(host.call(headless, 'fixture.echo', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    expect(call).toHaveBeenCalledTimes(1)
+  })
+
+  it('binds agent-tool workspaces for third-party packages only', async () => {
+    const host = new PluginBackendHost({
+      admitThirdParty: async () => admission(),
+      resolvePlanRoot: async ({ workspacePath }) => workspacePath,
+      createSupervisor: () => fakeSupervisor(),
+    })
+    hosts.push(host)
+    host.register(plans)
+    await expect(host.bindAgentToolWorkspace(
+      { ...runtime('navide.plans'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )).rejects.toMatchObject({ code: 'INVALID_RUNTIME' })
+  })
+
+  it('refuses a method the package did not declare, and never touches Plans', () => {
+    const host = new PluginBackendHost({ createSupervisor: () => fakeSupervisor() })
+    hosts.push(host)
+    host.register(thirdParty())
+    host.register({ ...plans, agentMethods: ['fixture.echo'] })
+    expect(() => host.setAgentMethods('acme.indexer', '1.0.0', ['not.declared'])).toThrow(BackendPluginError)
+    expect(host.agentToolMethodsFor('acme.indexer', '1.0.0')).toEqual([])
+    expect(host.setAgentMethods('navide.plans', '1.0.0', [])).toBe(false)
+    expect(host.activationForPlugin('navide.plans')?.agentMethods).toEqual(['fixture.echo'])
+    expect(host.setAgentMethods('acme.missing', '1.0.0', [])).toBe(false)
+  })
+
+  it('reports whether an instance is still bound', async () => {
+    const host = new PluginBackendHost({ admitThirdParty: async () => admission(), createSupervisor: () => fakeSupervisor() })
+    hosts.push(host)
+    host.register(thirdParty())
+    await host.bindView(runtime('acme.indexer'), workspace, workspace)
+    expect(host.isBound('view-1')).toBe(true)
+    await host.stopThirdPartyBackends('acme.indexer')
+    expect(host.isBound('view-1')).toBe(false)
+    expect(host.isBound('never')).toBe(false)
+  })
+})
+
+describe('agent-tool caller on the runtime the child receives (plan B1-b)', () => {
+  it('passes the Host-resolved caller through, frozen', async () => {
+    const clientFor = vi.fn(() => ({ call: vi.fn(async () => 'ok') }))
+    const supervisor = { ...fakeSupervisor(), clientFor } as unknown as PluginBackendSupervisor
+    const host = new PluginBackendHost({ admitThirdParty: async () => admission(), createSupervisor: () => supervisor })
+    hosts.push(host)
+    host.register(thirdParty())
+    host.setAgentMethods('acme.indexer', '1.0.0', ['fixture.echo'])
+    const headless = await host.bindAgentToolWorkspace(
+      { ...runtime('acme.indexer'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )
+    const caller = { kind: 'pane', paneId: 'p-1', workspace, verifiedTo: 'pane' } as const
+    await host.call(headless, 'fixture.echo', null, { initiator: { kind: 'agent', source: 'mcp', id: 'a-2', caller } })
+    const [childRuntime] = clientFor.mock.calls[0] as unknown as [{ initiator: { caller?: unknown } }]
+    expect(childRuntime.initiator).toEqual({ kind: 'agent', source: 'mcp', id: 'a-2', caller })
+    expect(Object.isFrozen(childRuntime.initiator.caller)).toBe(true)
+  })
+})
+
+describe('agent methods of a first-party backend (navide.browser)', () => {
+  const agent = { kind: 'agent', source: 'mcp', id: 'agent-1' } as const
+  const browser: BackendPluginLaunchSpec = {
+    ...thirdParty(),
+    pluginId: 'navide.browser',
+    approvedMethods: ['browser.list', 'browser.act'],
+    approvedBridgePorts: ['web'],
+    thirdParty: undefined,
+  }
+
+  it('opens agent-tool methods and a headless binding outside the third-party gate', async () => {
+    const call = vi.fn(async () => 'ok')
+    const createSupervisor = vi.fn(() => ({ ...fakeSupervisor(), clientFor: vi.fn(() => ({ call })) }) as unknown as PluginBackendSupervisor)
+    const admitThirdParty = vi.fn(async () => admission())
+    const host = new PluginBackendHost({ admitThirdParty, createSupervisor })
+    hosts.push(host)
+    host.register(browser)
+    expect(host.setAgentMethods('navide.browser', '1.0.0', ['browser.list'])).toBe(true)
+    const headless = await host.bindAgentToolWorkspace(
+      { ...runtime('navide.browser'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )
+    expect(admitThirdParty).not.toHaveBeenCalled()
+    await expect(host.call(headless, 'browser.list', null, { initiator: agent })).resolves.toBe('ok')
+    await expect(host.call(headless, 'browser.act', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    expect(host.activationForPlugin('navide.browser')?.agentMethods).toEqual([])
+  })
+
+  it('does not widen to other non-third-party activations: Plans and look-alike ids stay refused', async () => {
+    const host = new PluginBackendHost({ createSupervisor: () => fakeSupervisor() })
+    hosts.push(host)
+    host.register(plans)
+    host.register({ ...browser, pluginId: 'acme.browser' })
+    expect(host.setAgentMethods('navide.plans', '1.0.0', [])).toBe(false)
+    expect(host.setAgentMethods('acme.browser', '1.0.0', ['browser.list'])).toBe(false)
+    await expect(host.bindAgentToolWorkspace(
+      { ...runtime('acme.browser'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )).rejects.toMatchObject({ code: 'INVALID_RUNTIME' })
+  })
 })

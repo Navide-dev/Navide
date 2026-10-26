@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { i18n } from '@navide/plugin-ui/foundation'
 import PluginRegionHost from '../PluginRegionHost.vue'
 
 type PluginRegionContribution = {
@@ -155,11 +156,55 @@ describe('PluginRegionHost', () => {
     wrapper.unmount()
   })
 
+  it('prepares a fresh guest in place when the package version changes (L2)', async () => {
+    const prepare = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, url: URL_A })
+      .mockResolvedValueOnce({ ok: true, url: URL_B })
+    const { closeContribution } = stubPlugins(prepare)
+    const wrapper = mount(PluginRegionHost, {
+      props: { contribution, workspacePath: '/ws', visible: true },
+    })
+    await flushPromises()
+
+    // Restart, an update taking effect or a rollback: the Host drained the old guest.
+    await wrapper.setProps({ contribution: { ...contribution, packageVersion: '1.1.0' } })
+    await flushPromises()
+
+    expect(prepare).toHaveBeenCalledTimes(2)
+    expect(prepare).toHaveBeenLastCalledWith({
+      contributionKey: 'acme.files.left',
+      workspace_path: '/ws',
+      theme: 'dark-github',
+    })
+    // The old instance is released before the new guest replaces it.
+    expect(closeContribution).toHaveBeenCalledWith({ contributionKey: 'acme.files.left' })
+    expect(wrapper.find('webview').attributes('src')).toBe(URL_B)
+    wrapper.unmount()
+  })
+
+  it('keeps the guest when the contribution list refreshes without a version change', async () => {
+    const prepare = vi.fn(async () => ({ ok: true, url: URL_A }))
+    stubPlugins(prepare)
+    const wrapper = mount(PluginRegionHost, {
+      props: { contribution, workspacePath: '/ws', visible: true },
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ contribution: { ...contribution, title: 'Files (renamed)' } })
+    await flushPromises()
+
+    expect(prepare).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('shows the unavailable state when the Host refuses to prepare', async () => {
+    i18n.global.locale.value = 'en-US'
     const prepare = vi.fn(async () => ({ ok: false, error: 'grant is missing' }))
     stubPlugins(prepare)
     const wrapper = mount(PluginRegionHost, {
       props: { contribution, workspacePath: '/ws', visible: true },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 
@@ -272,6 +317,7 @@ describe('PluginRegionHost', () => {
     stubPlugins(prepare)
     const wrapper = mount(PluginRegionHost, {
       props: { contribution, workspacePath: '/ws', visible: false },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
     expect(wrapper.find('webview').exists()).toBe(false)
@@ -329,5 +375,83 @@ describe('PluginRegionHost', () => {
     expect(closeContribution).toHaveBeenCalledWith({ contributionKey: 'acme.files.left' })
     expect(prepare).toHaveBeenCalledTimes(1)
     wrapper.unmount()
+  })
+})
+
+// Card K2: the source strip sits in Navide's chrome above the guest, so the
+// plugin's content cannot cover it. Marketplace and built-in views are unchanged.
+describe('PluginRegionHost source strip (K2)', () => {
+  let originalAgentTeam: typeof window.agentTeam
+  beforeEach(() => {
+    originalAgentTeam = window.agentTeam
+  })
+  afterEach(() => {
+    window.agentTeam = originalAgentTeam
+  })
+
+  async function render(source?: string) {
+    stubPlugins(vi.fn(async () => ({ ok: true, url: URL_A })))
+    const wrapper = mount(PluginRegionHost, {
+      props: { contribution: { ...contribution, ...(source ? { source } : {}) } as never, workspacePath: '/ws', visible: true },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('A2-3: a developer folder badge opens the Local folder card in the Host chrome, not in the guest', async () => {
+    i18n.global.locale.value = 'en-US'
+    const wrapper = await render('developer-unpacked')
+    const developerMode = vi.fn(async () => ({
+      enabled: true,
+      folders: [{ pluginId: 'acme.files', path: '/Users/me/files', consentedAt: '', loaded: true, lastLoad: { at: '2026-10-21T01:00:00.000Z', trigger: 'startup' } }],
+    }))
+    ;(window.agentTeam!.plugins as unknown as Record<string, unknown>).developerMode = developerMode
+    await wrapper.get('.plugin-region-host__folder-toggle').trigger('click')
+    await flushPromises()
+    const folderCard = wrapper.get('.plugin-region-host__folder-card')
+    expect(folderCard.get('.nv-folder-card-path').text()).toBe('/Users/me/files')
+    expect(wrapper.get('webview').find('.nv-folder-card').exists()).toBe(false)
+    await wrapper.get('.plugin-region-host__folder-toggle').trigger('click')
+    expect(wrapper.find('.plugin-region-host__folder-card').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows a local source above the webview, outside it', async () => {
+    i18n.global.locale.value = 'en-US'
+    const wrapper = await render('developer-unpacked')
+    const strip = wrapper.get('.plugin-region-host__source')
+    expect(strip.get('.plugin-region-host__title').text()).toBe('Files')
+    expect(strip.get('.nv-source-badge').text()).toBe('Local folder')
+    expect(strip.element.nextElementSibling?.tagName).toBe('WEBVIEW')
+    expect(wrapper.get('webview').find('.plugin-region-host__source').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it("shows a test build's expiry, read from its signed envelope, instead of \"expiry unknown\" (W5b)", async () => {
+    i18n.global.locale.value = 'en-US'
+    stubPlugins(vi.fn(async () => ({ ok: true, url: URL_A })))
+    const wrapper = mount(PluginRegionHost, {
+      props: {
+        contribution: { ...contribution, source: 'testplace', expiresAt: '2099-01-31T00:00:00Z', testplaceVia: 'invite' } as never,
+        workspacePath: '/ws',
+        visible: true,
+      },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    expect(wrapper.get('.plugin-region-host__source .nv-source-badge').text()).toBe('Test build: automated scan only, expires 2099-01-31')
+    wrapper.unmount()
+  })
+
+  it('renders a Marketplace, built-in or unknown source exactly as before', async () => {
+    const plain = await render()
+    const html = plain.html()
+    plain.unmount()
+    for (const source of ['marketplace', 'factory-bundled']) {
+      const wrapper = await render(source)
+      expect(wrapper.html()).toBe(html)
+      wrapper.unmount()
+    }
   })
 })

@@ -21,7 +21,7 @@ function block(startMarker: string, endMarker: string): string {
 
 describe('onInterrupt', () => {
   const fn = block(
-    'async function onInterrupt(paneId: string): Promise<boolean> {',
+    'async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): Promise<boolean> {',
     '\nasync function onKillAll(',
   )
 

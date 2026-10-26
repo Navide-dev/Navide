@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import functools
@@ -33,11 +34,11 @@ from . import (
     confirm_token,
     device_trust,
     executions_service,
+    launch_id,
     native_mcp,
     native_memory,
     osplat,
     pane_policy,
-    portable_credentials,
     quota_failover,
     remote_roster,
     server_link,
@@ -56,6 +57,7 @@ from .mcp_settings import (
     MCPSettingsConflictError,
     MCPSettingsError,
     restore_mcp_server_secrets,
+    unfilled_mcp_secrets,
 )
 from .plan_index import resolve_plan_root
 from .stages_store import GraphNonLinearError
@@ -161,6 +163,19 @@ def lookup(msg_type: str) -> Handler | None:
 
 
 # ── Editor AI (editor.*) ────────────────────────────────────────────────────
+#: The Navide plugins whose Disabled switch the Host reports (sent only while
+#: one is disabled).
+_DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide"})
+
+
+def _valid_disabled_plugins(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) <= len(_DISABLEABLE_BUILTIN_PLUGINS)
+        and all(isinstance(item, str) and item in _DISABLEABLE_BUILTIN_PLUGINS for item in value)
+    )
+
+
 @handler("host.register")
 async def host_register(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Authenticate Electron's private Host WebSocket session."""
@@ -174,13 +189,15 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
             "features" in payload
             and (
                 not isinstance(payload["features"], dict)
-                or set(payload["features"]) - {"plans_backend_v2"}
+                or set(payload["features"]) - {"plans_backend_v2", "disabled_plugins"}
                 or not isinstance(payload["features"].get("plans_backend_v2", False), bool)
+                or not _valid_disabled_plugins(payload["features"].get("disabled_plugins", []))
             )
         )
     ):
         session.host_authenticated = False
         session.plans_backend_v2 = False
+        session.disabled_plugins = frozenset()
         await session.send_json(
             make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session authentication failed")
         )
@@ -188,7 +205,16 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
     session.host_authenticated = True
     features = payload.get("features", {})
     session.plans_backend_v2 = isinstance(features, dict) and features.get("plans_backend_v2") is True
+    session.disabled_plugins = frozenset(features.get("disabled_plugins", []) if isinstance(features, dict) else [])
+    app.note_host_disabled_plugins(session.disabled_plugins)
     await session.send_json(make_response(msg_id, msg_type, {"registered": True}))
+    # A Host that connects again (its session dropped, this backend did not)
+    # starts from idle: tell it the result helper's state when there is one.
+    from .mcp_server.plugin_agent_tools import _result_worker
+    from .plugins.agent_tools_contract import AGENT_TOOLS_RESULT_HELPER_EVENT
+
+    if _result_worker.state != "idle":
+        await session.send_json(make_event(AGENT_TOOLS_RESULT_HELPER_EVENT, _result_worker.snapshot()))
 
 
 @handler("window.prove")
@@ -263,6 +289,439 @@ async def agent_capability_result(
         return
     delivered = plan_mcp.resolve_agent_capability(request_id, response)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
+@handler("agent.capability.result_chunk")
+async def agent_capability_result_chunk(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """One piece of a Host agent tool result (agent-tools contract 4.4, R2)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    if not isinstance(payload, dict) or set(payload) != {"request_id", "seq", "data"} or not isinstance(
+        payload.get("request_id"), str
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "agent.capability.result_chunk is malformed")
+        )
+        return
+    accepted = plan_mcp.accept_agent_result_piece(payload["request_id"], payload["seq"], payload["data"])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
+
+
+@handler("agent.capability.progress")
+async def agent_capability_progress(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """The Host says a pending agent tool call is alive (contract 4.4, Timing)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"request_id", "phase"}
+        or not isinstance(payload.get("request_id"), str)
+        or payload.get("phase") not in ("arguments", "execution", "result")
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "agent.capability.progress is malformed")
+        )
+        return
+    accepted = plan_mcp.note_agent_capability_activity(payload["request_id"])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
+
+
+@handler("plugins.agentTools.sync")
+async def plugins_agent_tools_sync(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """The Host's full catalog of third-party agent tools (contract 4.1).
+
+    Only the authenticated Host session may send it. A snapshot replaces the
+    previous one; one from a new Host session starts again from its revision.
+    """
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import plugin_agent_tools
+
+    result = plugin_agent_tools.apply_sync(payload, plugin_agent_tools.session_key(session))
+    if not result["applied"] and result["error"] == "malformed snapshot":
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.agentTools.sync is malformed")
+        )
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
+@handler("marketplace.query.result")
+async def marketplace_query_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``marketplace.query.request`` (plan B, B2-a)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "marketplace.query.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plan_mcp.resolve_marketplace_query(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
+@handler("marketplace.developer.result")
+async def marketplace_developer_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``marketplace.developer.request`` (W3 status tools)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import marketplace_forms
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "marketplace.developer.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = marketplace_forms.resolve_developer_query(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
+@handler("plugins.agent_action.result")
+async def plugins_agent_action_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``plugins.agent_action.request`` (plan B, B2-c)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.agent_action.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plan_mcp.resolve_plugin_agent_action(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
+_ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
+_ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at", "count"}
+#: The Host records broker and shell-broker calls; agent tool calls are the
+#: backend's own rows (B1).
+_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
+#: Calls into a plugin's own backend, counted by the Host per batch.
+_BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
+#: Card K4: the Host events a row may report, the Developer Mode switch and
+#: (A2-5) its settings changed outside Navide. They are filed under the Host's
+#: own event identity, which no plugin can hold.
+_HOST_EVENT_PLUGIN_ID = "host"
+_HOST_EVENT_ADDRESSES = frozenset(("developerMode.on", "developerMode.off", "developerMode.externalChange"))
+
+
+def _host_event_row(app: Any, row: dict) -> str | None:
+    """Record one Host event row; the skip reason when it is not recorded.
+
+    Exact fields (``at`` optional, Unix ms), the Host's own identity, no
+    workspace, a known address, ``allowed`` and a count of one.
+    """
+    if set(row) - {"at"} != _BACKEND_CALL_ROW_FIELDS:
+        return "malformed"
+    if (
+        row["plugin_id"] != _HOST_EVENT_PLUGIN_ID
+        or not isinstance(row["plugin_version"], str)
+        or row["workspace"] != ""
+        or row["address"] not in _HOST_EVENT_ADDRESSES
+        or row["outcome"] != "allowed"
+        or row["count"] != 1
+        or isinstance(row["count"], bool)
+    ):
+        return "malformed"
+    at = row.get("at")
+    if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
+        return "bad at"
+    recorded = app.plugin_audit_log.record_activity(
+        plugin_id=_HOST_EVENT_PLUGIN_ID, plugin_version=row["plugin_version"], source="host",
+        address=row["address"], outcome="allowed", at_ms=at,
+    )
+    return None if recorded else "refused"
+
+
+def _backend_call_row(app: Any, row: dict) -> str | None:
+    """Record one counted backend-call row; the skip reason when it is not recorded.
+
+    Exact fields (``at`` optional: the minute the calls fell in, Unix ms), a
+    ``backend.`` address and a positive count.
+    """
+    from .plugins import agent_tools_contract as contract
+
+    if set(row) - {"at"} != _BACKEND_CALL_ROW_FIELDS:
+        return "malformed"
+    if not all(isinstance(row[key], str) for key in _BACKEND_CALL_ROW_FIELDS - {"count"}):
+        return "malformed"
+    if not row["address"].startswith(contract.PLUGIN_BACKEND_CALL_ADDRESS_PREFIX):
+        return "malformed"
+    at = row.get("at")
+    if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
+        return "bad at"
+    recorded = app.plugin_audit_log.record_backend_calls(
+        plugin_id=row["plugin_id"], plugin_version=row["plugin_version"], workspace=row["workspace"],
+        address=row["address"], outcome=row["outcome"], count=row["count"], at_ms=at,
+    )
+    return None if recorded else "refused"
+
+
+@handler("plugin.activity.record")
+async def plugin_activity_record(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Store the Host's batch of broker and shell-broker calls (plan B, D-e).
+
+    Write-only: each row (calls the Host counted per key and minute, with
+    ``count``) is redacted and counted by ``record_activity``; a row
+    it refuses is skipped, and nothing here can fail the calls it records.
+    Rows with source ``backend`` (calls into a plugin's own backend, counted)
+    go to the per-minute counts instead. The ``backend.`` address prefix and
+    the source must agree: a backend row with another address, or another row
+    with a ``backend.`` address, is skipped. A ``host`` row (card K4: the
+    Developer Mode switch) must be exactly the Host's own event shape.
+    """
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    rows = payload.get("rows") if isinstance(payload, dict) and set(payload) == {"rows"} else None
+    if not isinstance(rows, list):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.activity.record is malformed")
+        )
+        return
+    accepted = 0
+    # Skipped rows are counted by reason and logged, never their content (#373 F3).
+    skipped = {"malformed": 0, "bad at": 0, "refused": 0}
+    for row in rows:
+        if isinstance(row, dict) and row.get("source") == "backend":
+            reason = _backend_call_row(app, row)
+            if reason is None:
+                accepted += 1
+            else:
+                skipped[reason] += 1
+            continue
+        if isinstance(row, dict) and row.get("source") == "host":
+            reason = _host_event_row(app, row)
+            if reason is None:
+                accepted += 1
+            else:
+                skipped[reason] += 1
+            continue
+        if (
+            not isinstance(row, dict)
+            or not _ACTIVITY_ROW_REQUIRED <= set(row) <= _ACTIVITY_ROW_FIELDS
+            or row.get("source") not in _HOST_ACTIVITY_SOURCES
+            or (isinstance(row.get("address"), str) and row["address"].startswith("backend."))
+        ):
+            skipped["malformed"] += 1
+            continue
+        # `at`: when the call happened on the Host (Unix ms); record_activity
+        # clamps it to now. Without it, the row is dated when it arrives.
+        at = row.get("at")
+        if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
+            skipped["bad at"] += 1
+            continue
+        # `count`: calls the Host counted under this key in that minute (1 when absent).
+        count = row.get("count", 1)
+        if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+            skipped["malformed"] += 1
+            continue
+        fields = {key: value for key, value in row.items() if key not in ("at", "count") and isinstance(value, str)}
+        if len(fields) != len(row) - ("at" in row) - ("count" in row):
+            skipped["malformed"] += 1
+            continue
+        if app.plugin_audit_log.record_activity(**fields, at_ms=at, count=count):
+            accepted += 1
+        else:
+            skipped["refused"] += 1
+    if accepted < len(rows):
+        reasons = ", ".join(f"{reason}: {n}" for reason, n in skipped.items() if n)
+        log.warning("plugin activity: %d of %d rows skipped (%s)", len(rows) - accepted, len(rows), reasons)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
+
+
+_DECLARED_KINDS = frozenset(("system", "shell", "backendMethod", "agentTool"))
+
+
+def _declared_items(value: Any) -> list[dict[str, str]] | None:
+    """``declared`` of a report request: ``[{kind, key}]``, None when malformed."""
+    if not isinstance(value, list):
+        return None
+    items = []
+    for item in value:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"kind", "key"}
+            or item["kind"] not in _DECLARED_KINDS
+            or not isinstance(item["key"], str)
+        ):
+            return None
+        items.append({"kind": item["kind"], "key": item["key"]})
+    return items
+
+
+_RESOURCE_DECISION_FIELDS = frozenset(
+    ("plugin_id", "plugin_version", "item", "usage", "threshold", "decision", "at")
+)
+_MAX_SAFE_INTEGER = 2**53 - 1
+
+
+def _resource_decision_row(row: Any) -> dict[str, Any] | None:
+    """A ``plugin.resource.decision`` row with exactly the contract's fields
+    and types (``parsePluginResourceDecisionRow``'s rules), or None."""
+    from .plugins import agent_tools_contract as contract
+
+    if not isinstance(row, dict) or set(row) != _RESOURCE_DECISION_FIELDS:
+        return None
+
+    def number(value: Any) -> bool:
+        return (
+            not isinstance(value, bool) and isinstance(value, (int, float))
+            and math.isfinite(value) and value >= 0
+        )
+
+    at = row["at"]
+    if (
+        not isinstance(row["plugin_id"], str) or not row["plugin_id"]
+        or not isinstance(row["plugin_version"], str)
+        or row["item"] not in contract.PLUGIN_RESOURCE_ITEMS
+        or row["decision"] not in contract.PLUGIN_RESOURCE_DECISIONS
+        or not number(row["usage"]) or not number(row["threshold"])
+        or isinstance(at, bool) or not isinstance(at, int) or not 0 <= at <= _MAX_SAFE_INTEGER
+    ):
+        return None
+    return dict(row)
+
+
+@handler("plugin.resource.decision")
+async def plugin_resource_decision(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Store the Host's watchdog notices and the user's decisions (contract 5.2).
+
+    Write-only: rows are queued for the audit's batched flush. A row that is
+    not exactly the contract's shape is skipped and only counted in the log.
+    """
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    rows = payload.get("rows") if isinstance(payload, dict) and set(payload) == {"rows"} else None
+    if not isinstance(rows, list):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.resource.decision is malformed")
+        )
+        return
+    accepted = 0
+    for raw in rows:
+        row = _resource_decision_row(raw)
+        if row is not None and app.plugin_audit_log.record_resource_decision(**row):
+            accepted += 1
+    if accepted < len(rows):
+        log.warning("plugin resource decision: %d of %d rows skipped", len(rows) - accepted, len(rows))
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
+
+
+@handler("plugin.activity.forget")
+async def plugin_activity_forget(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """A plugin was removed: forget its first-seen rows (Host-authenticated)."""
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    plugin_id = payload.get("plugin_id") if isinstance(payload, dict) else None
+    if not isinstance(plugin_id, str) or not plugin_id or set(payload) != {"plugin_id"}:
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.activity.forget is malformed")
+        )
+        return
+    await asyncio.to_thread(app.plugin_audit_log.forget_plugin, plugin_id)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
+@handler("plugins.activity.report")
+async def plugins_activity_report(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """One plugin's ``PluginActivityReport`` for the activity page (contract 5.1, D-f).
+
+    Host-authenticated: the main window asks the Host over IPC and the Host
+    forwards, adding the ``declared`` items from the installed manifest.
+    """
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    plugin_id = payload.get("plugin_id") if isinstance(payload, dict) else None
+    declared = _declared_items(payload.get("declared", [])) if isinstance(payload, dict) else None
+    # When the Host installed this package (Unix ms), optional (#373 F1).
+    installed_at = payload.get("installedAt") if isinstance(payload, dict) else None
+    if installed_at is not None and (isinstance(installed_at, bool) or not isinstance(installed_at, int) or installed_at < 0):
+        declared = None
+    if (
+        not isinstance(plugin_id, str)
+        or not plugin_id
+        or not set(payload) <= {"plugin_id", "declared", "installedAt"}
+        or declared is None
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.activity.report is malformed")
+        )
+        return
+    report = await asyncio.to_thread(
+        app.plugin_audit_log.activity_report, plugin_id, declared=declared, installed_at=installed_at
+    )
+    await session.send_json(make_response(msg_id, msg_type, report))
 
 
 @handler("editor.rewrite")
@@ -603,6 +1062,13 @@ async def plans_ensure_assets(session: "Session", msg_id: str, msg_type: str, pa
             make_error(msg_id, msg_type, "BAD_REQUEST", "Plans asset request is malformed")
         )
         return
+    from . import app
+
+    if app.plans_plugin_disabled():
+        await session.send_json(
+            make_error(msg_id, msg_type, "PLUGIN_TOOL_UNAVAILABLE", "Navide plugin Plans is disabled")
+        )
+        return
     workspace_path = payload["workspace_path"]
     root = await asyncio.to_thread(resolve_plan_root, workspace_path)
     await asyncio.to_thread(ensure_plan_assets, workspace_path)
@@ -621,6 +1087,12 @@ async def plans_ensure_assets(session: "Session", msg_id: str, msg_type: str, pa
 @handler("plans.list_docs")
 async def plans_list_docs(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+
+    if app.plans_plugin_disabled():
+        await session.send_json(
+            make_error(msg_id, msg_type, "PLUGIN_TOOL_UNAVAILABLE", "Navide plugin Plans is disabled")
+        )
+        return
 
     # Plans live in the project root (plan_provisioning writes the spec there,
     # and every writer resolves to it), so a workspace opened on a
@@ -655,6 +1127,12 @@ async def plans_resolve_root(session: "Session", msg_id: str, msg_type: str, pay
 @handler("plans.cache_put")
 async def plans_cache_put(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+
+    if app.plans_plugin_disabled():
+        await session.send_json(
+            make_error(msg_id, msg_type, "PLUGIN_TOOL_UNAVAILABLE", "Navide plugin Plans is disabled")
+        )
+        return
 
     # Same root as the scan that produced these entries, or the cache keys
     # would never match on the next list.
@@ -765,7 +1243,10 @@ async def git_log(session: "Session", msg_id: str, msg_type: str, payload: dict)
     all_branches = bool(payload.get("all", False))
     query = payload.get("query") or None
     order = payload.get("order") or "ancestor"
-    result = await app.git_service.get_log(ws_path, n, all_branches, query, order)
+    result = await app.git_service.coalesced(
+        ("log", ws_path, n, all_branches, query, order),
+        lambda: app.git_service.get_log(ws_path, n, all_branches, query, order),
+    )
     await session.send_json(make_response(msg_id, msg_type, {"commits": result}))
 
 
@@ -951,7 +1432,9 @@ async def git_branches(session: "Session", msg_id: str, msg_type: str, payload: 
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    result = await app.git_service.list_branches(ws_path)
+    result = await app.git_service.coalesced(
+        ("branches", ws_path), lambda: app.git_service.list_branches(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
@@ -1038,7 +1521,9 @@ async def git_stash_list(session: "Session", msg_id: str, msg_type: str, payload
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    entries = await app.git_service.stash_list(ws_path)
+    entries = await app.git_service.coalesced(
+        ("stash_list", ws_path), lambda: app.git_service.stash_list(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, {"stashes": entries}))
 
 
@@ -1187,7 +1672,9 @@ async def git_remotes(session: "Session", msg_id: str, msg_type: str, payload: d
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    remotes = await app.git_service.list_remotes(ws_path)
+    remotes = await app.git_service.coalesced(
+        ("remotes", ws_path), lambda: app.git_service.list_remotes(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, {"remotes": remotes}))
 
 
@@ -1241,7 +1728,7 @@ async def git_tags(session: "Session", msg_id: str, msg_type: str, payload: dict
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    tags = await app.git_service.list_tags(ws_path)
+    tags = await app.git_service.coalesced(("tags", ws_path), lambda: app.git_service.list_tags(ws_path))
     await session.send_json(make_response(msg_id, msg_type, {"tags": tags}))
 
 
@@ -1371,7 +1858,9 @@ async def git_worktrees(session: "Session", msg_id: str, msg_type: str, payload:
     from . import app
 
     ws_path = payload.get("workspace_path") or ""
-    entries = await app.git_service.list_worktrees(ws_path)
+    entries = await app.git_service.coalesced(
+        ("worktrees", ws_path), lambda: app.git_service.list_worktrees(ws_path)
+    )
     await session.send_json(make_response(msg_id, msg_type, {"worktrees": entries}))
 
 
@@ -1875,35 +2364,10 @@ def _account_dir_for_spawn(
     return slot
 
 
-#: Terminal metadata key carrying the portable slot a launch was injected
-#: with. Non-secret. Written once at spawn; read by the bookkeeping messages
-#: that follow (pipeline.slot_spawn, manual_pane.spawn) so they record the
-#: launch's identity rather than whatever slot is selected by then.
-PORTABLE_SLOT_METADATA_KEY = "portable_slot_id"
-
-
-def _launch_portable_slot(pane_id: str) -> str:
-    """The portable slot the pane's most recent launch ran on, or "".
-
-    The fact was fixed at terminal.create (``portable_credentials.note_launch``
-    plus the terminal's own metadata) — never the current selection, which
-    can have moved on between the launch and this message. It outlives the
-    terminal: a CLI that exits before the bookkeeping arrives has already
-    been reaped from _PTY_OWNERS, and reading only live terminals would
-    record it as native. A login or native relaunch of the same pane writes
-    "" over it, so a stale portable fact cannot resurface on a respawn."""
-    return portable_credentials.launch_slot(pane_id)
-
-
 def _profile_pin_for_bookkeeping(
     agent_key: str, pane_id: object, payload_profile_id: object
 ) -> str:
-    """``_profile_pin_for_spawn`` for the bookkeeping messages: the launch's
-    own portable slot when the pane has one, else the native rule."""
-    if agent_key in PROFILE_AGENT_KEYS:
-        launched = _launch_portable_slot(str(pane_id or ""))
-        if launched:
-            return launched
+    """``_profile_pin_for_spawn`` for the bookkeeping messages."""
     return _profile_pin_for_spawn(agent_key, payload_profile_id)
 
 
@@ -1926,7 +2390,6 @@ async def _broadcast_profiles_changed(
     from . import app
 
     view = await asyncio.to_thread(_profile_account_view)
-    portable = await asyncio.to_thread(_portable_credentials_view)
     doc = app.cli_profiles_store.list()
     payload = {
         "profiles": doc["profiles"],
@@ -1940,9 +2403,6 @@ async def _broadcast_profiles_changed(
         # {signedIn, email}}}, and the account new panes start on.
         "accountDirs": view["accountDirs"],
         "paneDefaults": doc["paneDefaults"],
-        # Pasted portable credentials, metadata only (never the value):
-        # {"<agentKey>/<slotId>": {configured, enabled, kind, updatedAt, ...}}.
-        "portable_credentials": portable,
         "reason": reason,
     }
     if harvested_profile_ids:
@@ -1972,7 +2432,6 @@ async def cli_profiles_list(session: "Session", msg_id: str, msg_type: str, payl
 
     doc = app.cli_profiles_store.list()
     view = await asyncio.to_thread(_profile_account_view)
-    portable = await asyncio.to_thread(_portable_credentials_view)
     await session.send_json(
         make_response(
             msg_id,
@@ -1986,8 +2445,6 @@ async def cli_profiles_list(session: "Session", msg_id: str, msg_type: str, payl
                 "accountDirs": view["accountDirs"],
                 "paneDefaults": doc["paneDefaults"],
                 "supported_agents": list(PROFILE_AGENT_KEYS),
-                "portable_credentials": portable,
-                "portable_supported": portable_credentials.supported_agent_keys(),
                 # Per vendor: hot/restart/manual, the credential pool, the
                 # provider scopes a new profile may bind to, resume ability.
                 "account_capabilities": quota_failover.capabilities(),
@@ -1996,92 +2453,15 @@ async def cli_profiles_list(session: "Session", msg_id: str, msg_type: str, payl
     )
 
 
-def _portable_credentials_view() -> dict[str, dict]:
-    """Metadata for every pasted portable credential, keyed
-    "<agentKey>/<slotId>" — the value itself is never part of it. Shadowing
-    is checked against the real home only; a pane's cwd is only known at
-    spawn. Blocking; call off the loop."""
-    try:
-        return portable_credentials.describe_all(home=Path.home())
-    except Exception as err:  # noqa: BLE001 - a locked vault must not break the accounts list
-        log.warning("portable credentials could not be listed: %s", err)
-        return {}
+@handler("cli_profiles.portable_removal_notice")
+async def cli_profiles_portable_removal_notice(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """``{"show": true}`` exactly once on a machine whose pasted credentials the
+    0.2.32 upgrade erased (portable_credentials_cleanup); false everywhere else."""
+    from . import app, portable_credentials_cleanup
 
-
-def _portable_address(payload: dict) -> tuple[str, str]:
-    """(agent_key, slot_id) from a cli_profiles.portable_* payload. The
-    built-in Default row sends "__default__" (or nothing) as its profile id."""
-    agent_key = str(payload.get("agent_key") or "")
-    slot_id = str(payload.get("profile_id") or DEFAULT_SLOT_ID)
-    return agent_key, slot_id
-
-
-async def _reply_portable(
-    session: "Session", msg_id: str, msg_type: str, reason: str, portable: dict | None
-) -> None:
-    body: dict[str, Any] = {"ok": True}
-    if portable is not None:
-        body["portable"] = portable
-    await session.send_json(make_response(msg_id, msg_type, body))
-    await _broadcast_profiles_changed(reason)
-
-
-@handler("cli_profiles.portable_get")
-async def cli_profiles_portable_get(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    agent_key, slot_id = _portable_address(payload)
-    try:
-        portable = await asyncio.to_thread(
-            portable_credentials.describe, agent_key, slot_id, home=Path.home()
-        )
-    except portable_credentials.PortableCredentialError as err:
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err)))
-        return
-    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "portable": portable}))
-
-
-@handler("cli_profiles.portable_set")
-async def cli_profiles_portable_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    """Store a pasted credential. The reply and the broadcast carry metadata
-    only; the secret is consumed here and never echoed."""
-    agent_key, slot_id = _portable_address(payload)
-    secret = payload.get("secret")
-    if not isinstance(secret, str):
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "secret must be a string"))
-        return
-    try:
-        portable = await asyncio.to_thread(portable_credentials.store, agent_key, slot_id, secret)
-    except portable_credentials.PortableCredentialError as err:
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err)))
-        return
-    # On the loop, after the store: sync schedules its push as a task here.
-    portable_credentials.notify_saved(agent_key, slot_id)
-    await _reply_portable(session, msg_id, msg_type, "portable-set", portable)
-
-
-@handler("cli_profiles.portable_enable")
-async def cli_profiles_portable_enable(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    agent_key, slot_id = _portable_address(payload)
-    try:
-        portable = await asyncio.to_thread(
-            portable_credentials.set_enabled, agent_key, slot_id, bool(payload.get("enabled"))
-        )
-    except portable_credentials.PortableCredentialError as err:
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err)))
-        return
-    await _reply_portable(session, msg_id, msg_type, "portable-enable", portable)
-
-
-@handler("cli_profiles.portable_clear")
-async def cli_profiles_portable_clear(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    """Local removal only: the entry on this machine goes away; nothing is
-    deleted anywhere else (the plan's chosen deletion semantics)."""
-    agent_key, slot_id = _portable_address(payload)
-    try:
-        await asyncio.to_thread(portable_credentials.forget, agent_key, slot_id)
-    except portable_credentials.PortableCredentialError as err:
-        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err)))
-        return
-    await _reply_portable(session, msg_id, msg_type, "portable-clear", None)
+    show = await asyncio.to_thread(
+        portable_credentials_cleanup.take_notice, app.database, now=int(time.time()))
+    await session.send_json(make_response(msg_id, msg_type, {"show": show}))
 
 
 @handler("cli_profiles.create")
@@ -3194,6 +3574,10 @@ async def agent_reap_orphans(session: "Session", msg_id: str, msg_type: str, pay
 
 
 # ── MCP servers (mcp.*) ─────────────────────────────────────────────────────
+# Live MCP status fields passed through to Settings -> MCP as they are.
+_MCP_LIVE_DETAIL = ("starting_seconds", "slow_start", "error", "stderr_tail", "tools_error")
+
+
 @handler("mcp.list_servers")
 async def mcp_list_servers(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -3230,6 +3614,8 @@ async def mcp_list_servers(session: "Session", msg_id: str, msg_type: str, paylo
             "status": live_status,
             "tool_count": info.get("tool_count", 0),
             "tools": info.get("tools", []),
+            # Why it is still starting or why it failed (mcp_manager.list_status).
+            **{key: info[key] for key in _MCP_LIVE_DETAIL if key in info},
         })
     await session.send_json(
         make_response(
@@ -3615,6 +4001,115 @@ async def skills_install_approval_decide(session: "Session", msg_id: str, msg_ty
     await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
 
 
+@handler("plugins.agent_request.decide")
+async def plugins_agent_request_decide(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The user's decision on an agent's plugin request (contract section 6).
+
+    Only the main window can mint the confirmation, bound to this approval_id
+    and to the decision, so an agent cannot approve its own request and a
+    reject confirmation cannot be spent as an approval; no other field grants
+    anything.
+    """
+    from .skills_approvals import SkillApprovalError, decide_plugin
+
+    approval_id = str(payload.get("approval_id") or "")
+    approve = payload.get("approve") is True
+    subject = f"{approval_id}:{'approve' if approve else 'reject'}"
+    if not await _confirmed(
+        session, msg_id, msg_type, {"confirm": payload.get("confirmation")}, subject=subject
+    ):
+        return
+    from . import app
+
+    try:
+        approval = await decide_plugin(
+            approval_id, approve, window_id=session.window_id if app.is_main_window(session) else "",
+        )
+    except SkillApprovalError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, str(err), {"approval_id": approval_id}))
+        return
+    _audit_user_decision(approval, "decide-approve" if approve else "decide-reject")
+    await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
+
+
+def _audit_user_decision(approval: dict, action: str, error_code: str = "") -> None:
+    """A person's decision or result on a plugin request, in plugin_agent_actions (B2-c)."""
+    from . import app
+
+    target = approval.get("target") if isinstance(approval.get("target"), dict) else {}
+    app.plugin_audit_log.record_agent_action(
+        plugin_id=str(target.get("id") or ""), plugin_version=str(target.get("version") or ""),
+        action=action, caller_kind="user", approval_id=str(approval.get("approval_id") or ""),
+        outcome="allowed" if not error_code else "error", error_code=error_code,
+    )
+
+
+@handler("plugins.agent_requests.list")
+async def plugins_agent_requests_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The plugin requests still open (pending and applying), e.g. to recover after a window restart.
+
+    Main windows only: a record names the requester's pane and workspace.
+    ``applyingInLiveWindow`` lists the applying requests a connected main
+    window approved and is still carrying out; recovery leaves those alone.
+    """
+    from . import app
+    from .skills_approvals import registry
+
+    if not app.is_main_window(session):
+        await session.send_json(make_error(msg_id, msg_type, "FORBIDDEN", "only a Navide main window may list plugin requests"))
+        return
+    requests = registry.plugin_requests()
+    live = app.live_main_window_ids()
+    in_live_window = [
+        r["approval_id"] for r in requests
+        if r["status"] == "applying" and registry.applying_by(r["approval_id"]) in live
+    ]
+    await session.send_json(make_response(msg_id, msg_type, {"requests": requests, "applyingInLiveWindow": in_live_window}))
+
+
+@handler("plugins.agent_request.finish")
+async def plugins_agent_request_finish(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The window carried out an approved plugin request: applying -> completed | failed.
+
+    Only a window can mint the confirmation, bound to the approval_id and the
+    status (``<approval_id>:completed|failed``), so an agent cannot report a
+    change that never happened and a "failed" confirmation cannot report success.
+    """
+    from . import app
+    from .ipc import make_event
+    from .plugins import agent_tools_contract as contract
+    from .skills_approvals import SkillApprovalError, registry
+
+    approval_id = str(payload.get("approval_id") or "")
+    status = payload.get("status")
+    error = payload.get("error")
+    if status not in {"completed", "failed"} or (error is not None and not isinstance(error, str)):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "status must be completed or failed"))
+        return
+    if not await _confirmed(
+        session, msg_id, msg_type, {"confirm": payload.get("confirmation")}, subject=f"{approval_id}:{status}"
+    ):
+        return
+    try:
+        approval = registry.finish_plugin(
+            approval_id, status, error=error if status == "failed" else None,
+            window_id=session.window_id if app.is_main_window(session) else "",
+        )
+    except SkillApprovalError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, str(err), {"approval_id": approval_id}))
+        return
+    late = approval.get("finished_late") is True
+    _audit_user_decision(
+        approval, f"finish-late-{status}" if late else f"finish-{status}",
+        "" if status == "completed" else ("INTERRUPTED" if error == "interrupted" else "ACTION_FAILED"),
+    )
+    resolved = {"approval_id": approval_id, "status": approval["status"], "error": approval["error"]}
+    if late:
+        resolved.update(finished_late=True, settled=approval.get("settled"))
+    await app.broadcast(make_event(contract.PLUGIN_APPROVAL_RESOLVED_EVENT, resolved))
+    await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
+
+
 # ── CLI instruction files (memory.*) ────────────────────────────────────────
 def _memory_workspace(payload: dict) -> Path | None:
     """The workspace root a memory request is scoped to, or None.
@@ -3637,6 +4132,9 @@ async def memory_list(session: "Session", msg_id: str, msg_type: str, payload: d
     # The scan stats every candidate in the home and the workspace; a thread
     # keeps that file I/O off the loop, as the native MCP scan does.
     files = await asyncio.to_thread(native_memory.scan, None, workspace)
+    # Shown even before Claude has written anything, so the page can say where
+    # its notes for this project will appear.
+    memory_dir = await asyncio.to_thread(native_memory.auto_memory_dir, None, workspace)
     await session.send_json(
         make_response(
             msg_id,
@@ -3645,6 +4143,7 @@ async def memory_list(session: "Session", msg_id: str, msg_type: str, payload: d
                 "files": [f.as_dict() for f in files],
                 "agents": native_memory.agent_targets(),
                 "workspace_path": str(workspace) if workspace else "",
+                "auto_memory_dir": str(memory_dir) if memory_dir else "",
             },
         )
     )
@@ -3702,6 +4201,35 @@ async def memory_save(session: "Session", msg_id: str, msg_type: str, payload: d
         return
     await session.send_json(make_response(msg_id, msg_type, result))
     server_link.sync_soon("memory")
+
+
+@handler("memory.restore")
+async def memory_restore(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Write back the version the last save replaced, kept in Navide's data dir."""
+    workspace = _memory_workspace(payload)
+    path = str(payload.get("path") or "")
+    expected_raw = payload.get("expected_modified")
+    expected = float(expected_raw) if isinstance(expected_raw, (int, float)) else None
+    try:
+        result = await asyncio.to_thread(
+            native_memory.restore_previous, path, None, workspace, expected
+        )
+    except native_memory.MemoryConflictError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_FILE_CONFLICT", str(err), {"path": path})
+        )
+        return
+    except ValueError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_FILE_REJECTED", str(err), {"path": path})
+        )
+        return
+    except OSError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_WRITE_FAILED", str(err), {"path": path})
+        )
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
 
 
 # ── Cross-device sync (sync.*) ──────────────────────────────────────────────
@@ -5423,7 +5951,7 @@ async def _add_local_pane_git(snapshot: dict) -> None:
     Local panes only: another machine's checkout is not readable from here, and
     nothing about git is uploaded to the server.
     """
-    from .mcp_server.server import pane_git
+    from .mcp_server.server import pane_git_cached
 
     panes = [
         pane
@@ -5433,9 +5961,10 @@ async def _add_local_pane_git(snapshot: dict) -> None:
         if isinstance(pane, dict) and pane.get("paneId")
     ]
     workspaces = {entry.pane_id: entry.workspace_path for entry in agent_messaging.list_panes()}
-    snapshots = await asyncio.gather(
-        *(pane_git(pane["paneId"], workspaces.get(pane["paneId"], "")) for pane in panes)
-    )
+    # Polled every 3 s by each main window: answered from the last snapshot,
+    # refreshed in the background once it is older than the cache's TTL, so a
+    # stream of git.changed no longer re-runs git on every poll.
+    snapshots = [pane_git_cached(pane["paneId"], workspaces.get(pane["paneId"], "")) for pane in panes]
     for pane, git in zip(panes, snapshots):
         if git is not None:
             pane["git"] = git
@@ -5505,6 +6034,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
         # stages still name, and an imported document can name a key this
         # machine has never had.
         await _clear_dangling_role_refs("bundle_import")
+    mcp_needs_secrets: list[str] = []
     if isinstance(bundle.get("mcp_servers"), list):
         incoming_servers = bundle["mcp_servers"]
         if not all(isinstance(server, dict) for server in incoming_servers):
@@ -5523,6 +6053,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
                 incoming_servers,
                 existing_servers,
             )
+            mcp_needs_secrets = unfilled_mcp_secrets(incoming_servers, restored_servers)
             app.mcp_settings_store.replace_servers(restored_servers)
         except ValidationError as err:
             await session.send_json(
@@ -5557,6 +6088,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
     await session.send_json(make_response(msg_id, msg_type, {
         "ok": True,
         "applied": applied,
+        "mcp_needs_secrets": mcp_needs_secrets,
         "paths": app._settings_paths(),
     }))
 
@@ -5736,13 +6268,18 @@ async def share_publish(session: "Session", msg_id: str, msg_type: str, payload:
     as a disconnect and nothing else. The error minted here names the file
     export as the way out instead.
     """
-    from . import share_codes
+    from . import settings_bundle, share_codes
 
     bundle = payload.get("bundle")
     if not isinstance(bundle, dict):
         await session.send_json(
             make_error(msg_id, msg_type, "INVALID_BUNDLE", "bundle must be an object")
         )
+        return
+    try:
+        bundle = settings_bundle.without_secrets(bundle)
+    except settings_bundle.BundleError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, err.message, err.details))
         return
     ttl = payload.get("ttlSeconds")
     if not isinstance(ttl, int) or isinstance(ttl, bool) or ttl <= 0:
@@ -7097,6 +7634,21 @@ async def issues_public(session: "Session", msg_id: str, msg_type: str, payload:
 # - This is a local-only Electron app; the WebSocket server binds to
 #   localhost only, reducing (but not eliminating) external attack surface.
 _SHELL_RUN_TIMEOUT_S = 30
+# Each text field of a shell.run response carries at most this many characters
+# (unchanged). What was cut is disclosed with ``truncated`` and the full UTF-8
+# size (``stdoutBytes``; ``stderrBytes`` when stderr was cut too).
+_SHELL_RUN_OUTPUT_CHARS = 8000
+
+
+def _shell_run_truncation(stdout: str, stderr: str = "") -> dict:
+    """``truncated`` plus the full sizes of what shell.run cut at 8000 characters."""
+    fields: dict = {
+        "truncated": len(stdout) > _SHELL_RUN_OUTPUT_CHARS or len(stderr) > _SHELL_RUN_OUTPUT_CHARS,
+        "stdoutBytes": len(stdout.encode("utf-8", "replace")),
+    }
+    if len(stderr) > _SHELL_RUN_OUTPUT_CHARS:
+        fields["stderrBytes"] = len(stderr.encode("utf-8", "replace"))
+    return fields
 
 
 @handler("shell.run")
@@ -7142,6 +7694,7 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
             "stdout": stdout[:8000],
             "stderr": stderr[:8000],
             "exit_code": rc,
+            **_shell_run_truncation(stdout, stderr),
         }))
         return
     if not cmd:
@@ -7177,6 +7730,7 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
                     output = stdout.decode("utf-8", errors="replace")
                     await session.send_json(make_response(msg_id, msg_type, {
                         "ok": True, "output": output[:8000], "exit_code": proc.returncode,
+                        **_shell_run_truncation(output),
                     }))
                 except asyncio.TimeoutError:
                     from .ai_chat_cli_engine import _terminate_proc_tree
@@ -7728,6 +8282,9 @@ def note_terminal_exit(payload: dict) -> None:
     entry = _dock_record_to_retire(payload)
     if entry is not None:
         _retire_dock_record(*entry)
+    target = _live_stamp_to_clear(payload)
+    if target is not None:
+        _clear_live_stamp(*target)
 
 
 async def note_terminal_exit_async(payload: dict) -> None:
@@ -7736,6 +8293,41 @@ async def note_terminal_exit_async(payload: dict) -> None:
     entry = _dock_record_to_retire(payload)
     if entry is not None:
         await asyncio.to_thread(_retire_dock_record, *entry)
+    target = _live_stamp_to_clear(payload)
+    if target is not None:
+        await asyncio.to_thread(_clear_live_stamp, *target)
+
+
+def _live_stamp_to_clear(payload: dict) -> tuple[str, str] | None:
+    """The (workspace, pane) whose last_live_launch an exit clears, or None.
+
+    The 'auto' resume scope restores the panes whose CLI was still running when
+    the app ended. A CLI that stops while the app runs — on its own ("exit",
+    "error") or through a requested kill ("killed": Kill All, closing a
+    workspace, a pipeline restart, an idle reclaim) — is not one of them. The
+    app ending is "shutdown" (kill_all at backend shutdown) and keeps the stamp.
+    A rebuild's kill names the OLD pane id, which the replacement's spawn
+    re-keys away, so the rebuilt pane stays stamped."""
+    if payload.get("reason") not in ("exit", "error", "killed"):
+        return None
+    workspace_path = str(payload.get("workspace_path") or "")
+    pane_id = str(payload.get("pane_id") or "")
+    if not workspace_path or not pane_id:
+        return None
+    return workspace_path, pane_id
+
+
+def _clear_live_stamp(workspace_path: str, pane_id: str) -> None:
+    from . import app
+
+    try:
+        # peek, not load_or_create: an exit must never create a project.
+        project = app.project_store.peek(workspace_path)
+        if project is None or not any(p.pane_id == pane_id for p in project.panes):
+            return
+        app.project_store.set_pane_resume_state(workspace_path, pane_id=pane_id, last_live_launch="")
+    except Exception:  # noqa: BLE001 — the PTY is already gone; a lost stamp clear must not fail its caller
+        log.exception("clearing live stamp of %s in %s failed", pane_id, workspace_path)
 
 
 def _dock_record_to_retire(payload: dict) -> tuple[str, str, str, str] | None:
@@ -7797,6 +8389,7 @@ def _record_dock_spawn(payload: dict, metadata: dict, agent_key: str, term_id: s
             origin=origin,
             surface=surface,
             window_kind=window_kind,
+            launch_id=launch_id.current(),
         )
         # The store leaves a window pane's record alone when a panel's create
         # names its id; its Agent History entry must be left alone with it.
@@ -7848,7 +8441,7 @@ async def _terminal_create_impl(
     agent_key = payload.get("agent_key") or ""
     # The window's per-vendor env settings, first in the chain on purpose: the
     # vendor defaults below use setdefault, while onboarding, login profiles,
-    # home management, wiring and portable credentials all update over the top,
+    # home management and wiring all update over the top,
     # so a user value can never displace something the backend must control.
     # It is also the only untrusted source in the chain — filter it here, and
     # keep what survived so the window can be told which of its settings a
@@ -8195,6 +8788,10 @@ async def _terminal_create_impl(
             env,
             str(payload.get("cwd") or ""),
         )
+        # The builtin skills transformer cannot return lines; it keeps them.
+        from .plugins.builtin.navide_skills import skills_wiring
+
+        wiring_warnings.extend(skills_wiring.take_spawn_warnings(str(payload.get("pane_id") or "")))
     # Give the pane whatever its push channel needs (a port to serve on, a file
     # to watch) so a message can later reach it without being typed in. Last,
     # so the flags it adds cannot be displaced by MCP or skills wiring; a CLI
@@ -8396,54 +8993,6 @@ async def _terminal_create_impl(
                 ))
                 await _reclaim_codex_home(str(transaction.get("codex_home_id") or ""))
                 return
-            # The portable credential this agent's panes are set to run on,
-            # if any — read here, under the same lock, so a switch racing
-            # this spawn cannot pair one account's live files with another's
-            # token. The selection is its own record: it does not follow the
-            # native default profile or the payload's pin (bookkeeping, see
-            # _profile_pin_for_spawn), so a credential synced from another
-            # machine is usable without that account ever signing in here.
-            try:
-                # A login pane — isolated (login_profile_id, which does not
-                # reach this branch) or live (is_login alone) — exists to
-                # sign in; the token would make the CLI skip exactly that.
-                # An account-dir pane already runs on its account's own
-                # login; a portable token would outrank it and switch the
-                # identity silently.
-                injection = None if is_login or account_dir_slot else await vault_to_thread(
-                    functools.partial(
-                        portable_credentials.spawn_env, agent_key,
-                        home=Path.home(), cwd=Path(str(payload.get("cwd") or "")),
-                    )
-                )
-            except portable_credentials.PortableCredentialUnavailable as unavailable:
-                # Selected but unusable: refuse rather than start the pane on
-                # whatever login the CLI would fall back to — that would be a
-                # silent switch of identity. The data names what to fix.
-                app.log.warning("terminal.create refused: %s", unavailable)
-                await session.send_json(
-                    make_error(
-                        msg_id, msg_type, "PORTABLE_CREDENTIAL_UNAVAILABLE",
-                        str(unavailable),
-                        {
-                            "agent_key": agent_key,
-                            "profile_id": unavailable.slot_id,
-                            "reason": unavailable.reason,
-                            "shadowedBy": list(unavailable.shadowed_by),
-                        },
-                    )
-                )
-                await _reclaim_codex_home(str(transaction.get("codex_home_id") or ""))
-                return
-            if injection is not None:
-                env.update(injection.env)
-                env_remove = list(env_remove or []) + list(injection.env_remove)
-                metadata[PORTABLE_SLOT_METADATA_KEY] = injection.slot_id
-            # The launch's identity, fixed here for the bookkeeping that
-            # follows in separate messages (see _launch_portable_slot). A
-            # login or native launch writes "" and retires any earlier fact.
-            portable_credentials.note_launch(
-                str(payload["pane_id"]), injection.slot_id if injection else "")
             # Launch provenance for the account-switch authority: the profile
             # this pane starts on and the credential pool it resolves to,
             # decided under the same lock as the credentials themselves. The
@@ -8458,7 +9007,6 @@ async def _terminal_create_impl(
             )
             provenance = quota_failover.pane_auth_scope(
                 agent_key, launch_profile, env=env, env_remove=env_remove or (),
-                portable_slot_id=injection.slot_id if injection else None,
                 account_dir=bool(account_dir_slot),
             )
             metadata["launch_profile_id"] = provenance["profileId"]
@@ -8583,7 +9131,6 @@ async def _terminal_create_impl(
             finally:
                 switch_lock.release()
     else:
-        portable_credentials.note_launch(str(payload["pane_id"]), "")
         term = _spawn_and_claim()
     # What became of the window's own env settings. Only now is the answer
     # final: `env` is written by six later sources and `env_remove` (applied
@@ -8962,13 +9509,20 @@ async def terminal_resource_usage(session: "Session", msg_id: str, msg_type: str
         now = time.monotonic()
         cached = _resource_sweep_cache["payload"]
         if cached is not None and now - float(_resource_sweep_cache["at"]) < _RESOURCE_SWEEP_TTL_S:
-            risks = app.cli_risk_service.current(active_panes(session.terminals, app._PTY_OWNERS))
+            # Projection is CPU work over every recorded signal: off the loop.
+            risks = await asyncio.to_thread(
+                app.cli_risk_service.current, active_panes(session.terminals, app._PTY_OWNERS)
+            )
             await session.send_json(make_response(msg_id, msg_type, {**cached, "cliRisks": risks}))
             return
         result = await _collect_resource_usage(session)
+        from . import acp_ws
+        result = await acp_ws.with_resource_rows(result)
         _resource_sweep_cache["at"] = now
         _resource_sweep_cache["payload"] = result
-    risks = app.cli_risk_service.current(active_panes(session.terminals, app._PTY_OWNERS))
+    risks = await asyncio.to_thread(
+        app.cli_risk_service.current, active_panes(session.terminals, app._PTY_OWNERS)
+    )
     await session.send_json(make_response(msg_id, msg_type, {**result, "cliRisks": risks}))
 
 
@@ -9260,7 +9814,6 @@ async def terminal_kill_surface(session: "Session", msg_id: str, msg_type: str, 
         app.attribution.unregister_pane(pane_id)
         ended.setdefault(pane_id, workspace_path)
     for pane_id, workspace_path in ended.items():
-        portable_credentials.forget_launch(pane_id)
         for ws in app.dev_time_store.pane_removed(pane_id):
             await app.broadcast(make_event("devtime.changed", {"workspace_path": ws}))
         entry = agent_messaging.get(pane_id)
@@ -9527,10 +10080,7 @@ async def project_set_layout_mode(session: "Session", msg_id: str, msg_type: str
     mode = payload.get("layout_mode", "grid")
     if mode not in ("auto", "grid", "spotlight", "fullscreen"):
         mode = "grid"
-    project = app.project_store.peek(ws_raw)
-    if project:
-        project.layout_mode = mode
-        app.project_store.save(project)
+    app.project_store.set_layout_mode(ws_raw, mode)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -9608,6 +10158,8 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
     turn_state = payload.get("last_turn_state")
     report_to = payload.get("report_to")
     report_pending = payload.get("report_pending")
+    report_cross = payload.get("report_cross")
+    live_launch = payload.get("last_live_launch")
     applied = False
     if ws_raw and pane_id:
         project = app.project_store.set_pane_resume_state(
@@ -9616,6 +10168,8 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
             last_turn_state=turn_state if isinstance(turn_state, str) else None,
             report_to=report_to if isinstance(report_to, str) else None,
             report_pending=report_pending if isinstance(report_pending, bool) else None,
+            last_live_launch=live_launch if isinstance(live_launch, str) else None,
+            report_cross=report_cross if isinstance(report_cross, bool) else None,
         )
         # Not an error, but say so: a write that matched no record is lost.
         applied = any(p.pane_id == pane_id for p in project.panes)
@@ -10232,15 +10786,13 @@ async def project_set_theme(session: "Session", msg_id: str, msg_type: str, payl
     # of truth. We just stash the latest theme + custom overrides so they
     # can sync across devices. Unknown workspace → silently no-op.
     ws_raw = payload.get("workspace_path", "") or ""
-    project = app.project_store.peek(ws_raw)
-    if project:
-        theme = payload.get("theme")
-        if isinstance(theme, str) and theme:
-            project.theme = theme
-        custom = payload.get("theme_custom")
-        if isinstance(custom, dict):
-            project.theme_custom = custom
-        app.project_store.save(project)
+    theme = payload.get("theme")
+    custom = payload.get("theme_custom")
+    app.project_store.set_theme(
+        ws_raw,
+        theme=theme if isinstance(theme, str) and theme else None,
+        theme_custom=custom if isinstance(custom, dict) else None,
+    )
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -10251,12 +10803,8 @@ async def project_set_language(session: "Session", msg_id: str, msg_type: str, p
     # Backup-only persistence: localStorage in the renderer is the source
     # of truth. Unknown workspace → silently no-op.
     ws_raw = payload.get("workspace_path", "") or ""
-    project = app.project_store.peek(ws_raw)
-    if project:
-        lang = payload.get("language")
-        if isinstance(lang, str) and lang:
-            project.language = lang
-        app.project_store.save(project)
+    lang = payload.get("language")
+    app.project_store.set_language(ws_raw, lang if isinstance(lang, str) and lang else None)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -10430,6 +10978,7 @@ async def pipeline_slot_spawn(session: "Session", msg_id: str, msg_type: str, pa
         session_home_id=payload.get("session_home_id", ""),
         profile_id=slot_pin,
         run_group_id=payload.get("run_group_id", ""),
+        launch_id=launch_id.current(),
     )
     app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(slot_pin))
     from .guard.taint import pipeline_pane_spawned
@@ -10518,7 +11067,6 @@ async def pipeline_slot_unspawn(session: "Session", msg_id: str, msg_type: str, 
         "",
     )
     await _sweep_pane_ptys(session, pane_id)
-    portable_credentials.forget_launch(str(pane_id or ""))
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )
@@ -10574,6 +11122,40 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )
+
+
+@handler("pipeline.reset")
+async def pipeline_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The backend leg of pipeline_reset: the renderer kills the panes, this
+    returns the stored run to idle so it stops answering pipeline_status and
+    survives no restart (#417). Run history (log, run directory) is kept."""
+    from . import app
+
+    project = app.project_store.reset_pipeline(payload["workspace_path"])
+    if project is not None:
+        log.info("pipeline reset: %s is idle again", project.workspace_path)
+        _mirror_pipeline_state(project)
+    await session.send_json(
+        make_response(msg_id, msg_type, app._project_payload(project) if project is not None else {"project": None})
+    )
+
+
+@handler("pipeline.start_refused")
+async def pipeline_start_refused(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The renderer refused a start before it reached pipeline.start. Recorded
+    in the backend log and the workspace's pipeline.log (outside any run, so
+    not the last run's file), since a refusal used to leave no trace (#417)."""
+    from . import app
+
+    ws_path = payload["workspace_path"]
+    reason = str(payload.get("reason", ""))
+    pipeline_id = str(payload.get("pipeline_id", ""))
+    log.warning("pipeline start refused in %s (pipeline %s): %s", ws_path, pipeline_id or "?", reason)
+    app.project_store.append_event(
+        ws_path,
+        {"event": "pipeline_start_refused", "pipeline_id": pipeline_id, "reason": reason},
+    )
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
 @handler("pipeline.node_states")
@@ -10673,6 +11255,16 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         previous = next((p for p in before.panes
                          if p.origin != "pipeline" and p.pane_id == previous_pane_id), None)
         previous_session_id = previous.session_id if previous is not None else ""
+    # Closed panes that held exactly the session this spawn resumes: the jobs
+    # one of them owned pass to this pane. Only a closed record counts, so an
+    # owner merely not registered yet (after a restart) keeps its jobs.
+    session_id = str(payload.get("session_id") or "")
+    closed_lineage: set[str] = set()
+    if session_id:
+        known = app.project_store.load_or_create(payload["workspace_path"])
+        closed_lineage = {p.pane_id for p in known.panes
+                          if p.origin != "pipeline" and p.spawn_status == "removed"
+                          and p.session_id == session_id}
     project = app.project_store.record_manual_pane_spawn(
         payload["workspace_path"],
         pane_id=payload["pane_id"],
@@ -10689,6 +11281,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         output_log_file=payload.get("output_log_file", ""),
         origin=payload.get("origin", ""),
         spawned_by=payload.get("spawned_by", ""),
+        launch_id=launch_id.current(),
     )
     app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(manual_pin))
     await session.send_json(
@@ -10704,6 +11297,14 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
             )
         except Exception:  # noqa: BLE001 — the spawn is recorded either way
             log.exception("manual_pane.spawn: scheduler rebind failed")
+    if closed_lineage:
+        from . import scheduler
+
+        try:
+            await scheduler.get_service().inherit_owner(
+                closed_lineage, str(payload["pane_id"]), session_id)
+        except Exception:  # noqa: BLE001 — the spawn is recorded either way
+            log.exception("manual_pane.spawn: scheduler owner inheritance failed")
 
 
 @handler("manual_pane.unspawn")
@@ -10723,7 +11324,6 @@ async def manual_pane_unspawn(session: "Session", msg_id: str, msg_type: str, pa
     )
     for swept_id in dict.fromkeys([pane_id, *removed_pane_ids]):
         await _sweep_pane_ptys(session, swept_id)
-        portable_credentials.forget_launch(str(swept_id))
     # A Codex pane's home is named after its pane id, or after the id a
     # restored pane kept using (session_home_id). Its PTY is down by now.
     for home_id in dict.fromkeys([
@@ -11439,6 +12039,10 @@ async def ui_invoke_result(session: "Session", msg_id: str, msg_type: str, paylo
 _UI_FOCUS_SEQ = itertools.count(1)
 
 
+#: A main window's page-load id (B2-c): what renderer code generates (a UUID).
+_WINDOW_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
+
+
 @handler("ui.invoke.ready")
 async def ui_invoke_ready(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """A main window announcing that it answers ui.invoke.request — sent on
@@ -11446,6 +12050,12 @@ async def ui_invoke_ready(session: "Session", msg_id: str, msg_type: str, payloa
     so app.unicast_any can hand a global UI action to a window that will
     answer it, preferring the one the user touched last."""
     session.ui_bus_ready = True
+    window_id = payload.get("window_id")
+    if isinstance(window_id, str) and _WINDOW_ID.fullmatch(window_id):
+        session.window_id = window_id
+    held = payload.get("workspaces")
+    if isinstance(held, list):
+        session.held_workspaces = tuple(p for p in held if isinstance(p, str) and p)
     if payload.get("focused"):
         session.ui_focused_at = next(_UI_FOCUS_SEQ)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
@@ -11500,6 +12110,43 @@ async def agent_msg_list(session: "Session", msg_id: str, msg_type: str, payload
                 entry["workspace_display_name"] = display
 
     await session.send_json(make_response(msg_id, msg_type, {"panes": entries}))
+
+
+@handler("agents.public")
+async def agents_public(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """One read-only plugin `agents.*` query, Host-authenticated. The Host has
+    already checked Manifest, Grant and Execution Policy and binds the
+    workspace; see agents_host_api for what each answer may contain."""
+    from . import agents_host_api
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"workspace_path", "operation", "arguments"}
+        or not isinstance(payload.get("workspace_path"), str)
+        or not payload["workspace_path"].strip()
+        or payload.get("operation") not in agents_host_api.OPERATIONS
+        or not isinstance(payload.get("arguments"), dict)
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "agents.public is malformed")
+        )
+        return
+    try:
+        result = await asyncio.to_thread(
+            agents_host_api.run,
+            payload["workspace_path"],
+            payload["operation"],
+            payload["arguments"],
+        )
+    except agents_host_api.AgentsApiError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, str(err)))
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
 
 
 @handler("agent_msg.route")
@@ -11889,6 +12536,12 @@ async def agent_msg_log_append(session: "Session", msg_id: str, msg_type: str, p
             make_error(msg_id, msg_type, "BAD_REQUEST", "agent_msg.log_append needs a rows list")
         )
         return
+    # Which workspace each side is, resolved here while those panes are still
+    # registered; the renderer's own word for it is never taken.
+    for row in rows:
+        if isinstance(row, dict):
+            row["sender_workspace"] = agent_messaging.workspace_of_name(str(row.get("sender") or ""), session)
+            row["recipient_workspace"] = agent_messaging.workspace_of_name(str(row.get("recipient") or ""), session)
     written = app.agent_message_log.append(rows)
     agent_messaging.notify_message_rows(rows)
     await session.send_json(make_response(msg_id, msg_type, {"written": written}))
@@ -12256,7 +12909,7 @@ async def evolve_badges(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 # ── CLI extensions (cli_extensions.*) ──────────────────────────────────────
-# The read-only inventory behind Settings → CLI Extensions. Scanning reads
+# The read-only inventory behind Settings → Extensions. Scanning reads
 # files and at most a declared listing command with a timeout, so a thread
 # keeps it off the loop.
 @handler("cli_extensions.list")

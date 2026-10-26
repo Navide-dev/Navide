@@ -156,7 +156,7 @@ describe('CliManagementPanel', () => {
       return mock
     }
 
-    const useThis = () => wrapper!.findAll('button').find((button) => button.text() === 'Use this one')!
+    const useThis = () => wrapper!.findAll('button').find((button) => button.text() === 'Use This One')!
 
     it('saves just the choice — no fingerprint needed — and says so', async () => {
       const mock = await mountWithDuplicates('')
@@ -351,7 +351,7 @@ describe('CliManagementPanel', () => {
   it('links to vendor docs for a CLI with no update subcommand', async () => {
     await mountPanel()
 
-    const link = wrapper!.findAll('a').find((anchor) => anchor.text().includes('vendor docs'))
+    const link = wrapper!.findAll('a').find((anchor) => anchor.text().includes('Vendor Docs'))
     expect(link?.attributes('href')).toBe('https://moonshotai.github.io/kimi-cli/en/')
   })
 

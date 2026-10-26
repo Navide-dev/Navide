@@ -68,6 +68,13 @@ You never need to read or modify the shared orchestration code.
      it is never a reason to refuse a switch, and it must not be raised without
      the round-trip. Keep `platforms` to the tuple you actually established;
      `todo` names what is still open.
+   - `verified_version` — the CLI version that evidence came from. The
+     pane's startup probe says a newer installed CLI "has not been tested"
+     against `VendorSpec.cli_verified_version` first (the version the
+     integration as a whole — launch, logs, resume — was last checked on) and
+     falls back to this one. Set `cli_verified_version` when it is newer than
+     the account-switch evidence; a vendor without account switching sets only
+     `cli_verified_version`.
    - `shadowing_env` — variable names the CLI ranks above the stored
      credential. A pane launched with one of them present is reported as not
      switchable rather than swapped.
@@ -88,7 +95,7 @@ You never need to read or modify the shared orchestration code.
    when you declare `account_switch`.
 10. Set `extensions` to say where the CLI keeps the CLI extensions it installs
     for itself (plugins, extensions, hooks; see the [glossary](en-US/glossary.md)),
-    for the read-only inventory on Settings → CLI Extensions. Declare an
+    for the read-only inventory on Settings → Extensions. Declare an
     `ExtensionsSpec` of `ExtensionsSource` rows, each naming a reader in
     `backend/agent_team_backend/cli_extensions.py`, a path under the user's
     home and the vendor's own type label ("Codex hook"). A CLI with an
@@ -96,7 +103,10 @@ You never need to read or modify the shared orchestration code.
     `ExtensionsSpec(supported=False, note=...)` rather than a guess; only a CLI
     with no extension system at all leaves it `None`, which hides it from the
     page. `backend/tests/test_cli_extensions.py` fails for a vendor that
-    declares nothing.
+    declares nothing. A CLI Navide lists without running it in a pane (Gemini
+    CLI) is declared in `_UNMANAGED_CLIS` in `cli_extensions.py`; when it
+    becomes a vendor, move that declaration onto its spec (the vendor spec
+    wins while both exist).
 
 ## Frontend
 

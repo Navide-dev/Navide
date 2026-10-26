@@ -103,6 +103,24 @@ describe.skipIf(!bashAvailable)('pre-commit relative import check', () => {
     expect(r.stderr).not.toContain("-> ./x")
   })
 
+  it('normalises each spec against its own file, ./ and ../ alike', () => {
+    const r = commit({
+      'src/a/b/c.ts': [
+        "import { y } from '../../lib/y'",
+        "import { gone } from '../gone'",
+        "import { z } from './../b/./z'",
+        "export const lazy = () => import('../../lib/../lib/dyn')",
+        '',
+      ].join('\n'),
+      'src/lib/y.ts': 'export const y = 1\n',
+      'src/a/b/z.ts': 'export const z = 1\n',
+      'src/lib/dyn.ts': 'export const d = 1\n',
+    })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('src/a/b/c.ts -> ../gone')
+    for (const spec of ['../../lib/y', './../b/./z', '../../lib/../lib/dyn']) expect(r.stderr).not.toContain(`-> ${spec}`)
+  })
+
   it('passes when every imported module is staged', () => {
     const r = commit({
       'src/a.ts': "import { y } from './lib/y'\nimport type { T } from './types'\nexport const a: T = y\n",

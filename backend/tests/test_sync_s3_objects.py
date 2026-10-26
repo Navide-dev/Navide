@@ -707,6 +707,12 @@ async def test_a_retired_scope_never_reaches_objects_or_push(tmp_path, account_k
     # holds on the client's own rule, not on a refusal from the fake.
     server = V3Server(s3)
     assert server.caps_payload()["retiredScopes"] == []
+    if scope in sync_engine.LOCAL_ONLY_SCOPES:
+        # Stronger still: no engine takes an adapter for it at all.
+        with pytest.raises(sync_engine.SyncError):
+            V3Device(tmp_path, server, "A", adapter=DictScope(scope, {"x": {"secret": 1}}))
+        assert [t for t in server.types() if t != "sync.caps"] == [] and s3.puts == []
+        return
     d = V3Device(tmp_path, server, "A", adapter=DictScope(scope, {"x": {"secret": 1}}))
     result = await d.sync()
     assert result["skipped"] == "retired"
@@ -733,7 +739,7 @@ async def test_an_incoming_mcp_server_is_held_for_approval(tmp_path, account_key
     assert (await b.sync())["ok"] is True
     assert "runner" not in {s["name"] for s in b_store.list_servers()}
     b.use()
-    assert sync_approvals.entry("mcp", "runner")["status"] == "pending"
-    (row,) = [h for h in sync_approvals.listing() if h["itemId"] == "runner"]
-    assert sync_approvals.decide(b.adapter, "runner", True, row["digest"])["status"] == "applied"
+    assert sync_approvals.entry("mcp", "i:runner")["status"] == "pending"
+    (row,) = [h for h in sync_approvals.listing() if h["itemId"] in ("runner", "i:" + "runner")]
+    assert sync_approvals.decide(b.adapter, row["itemId"], True, row["digest"])["status"] == "applied"
     assert "runner" in {s["name"] for s in b_store.list_servers()}

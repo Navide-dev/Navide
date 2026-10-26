@@ -366,13 +366,64 @@ describe('submitEvidence', () => {
     ).toBe('growth')
   })
 
-  // Frameless: the bottom-rows guess could hold an echoed summary, so the
-  // check does not apply and the growth fallback stays exactly as it was.
-  it('leaves the growth fallback alone when there is no frame to locate the box by', () => {
+  // Frameless: the summary may be in the box or echoed above it, and nothing
+  // on screen can tell — unconfirmed, never 'growth' (a success).
+  it('answers unconfirmed for a summary on a screen with no box to locate', () => {
     const frameless = '> [Pasted text #3 +12 lines]\nworking…'
     expect(
       submitEvidence({ tailWasOnScreen: false, tail: 'x', screen: frameless, grownBy: 40 }),
+    ).toBe('unconfirmed')
+  })
+
+  it('keeps plain growth when no summary is on screen at all', () => {
+    expect(
+      submitEvidence({ tailWasOnScreen: false, tail: 'x', screen: 'working…', grownBy: 40 }),
     ).toBe('growth')
+  })
+
+  // The 8-row tail read loses the box's top edge once the composer and the
+  // footer under it outgrow it; the frame was then never found, the check was
+  // skipped and a repaint read as 'growth'. The whole visible screen keeps it.
+  it('finds the box on the whole visible screen when the tail read cut it off', () => {
+    const rule = '────────────────────────────────────────────'
+    const visible = [
+      '✻ Churned for 31s',
+      rule,
+      '❯ [Pasted text #65 +33 lines] and a note',
+      '  typed after the paste that wrapped',
+      '  onto several rows',
+      '  of the composer',
+      rule,
+      '  ⏵⏵ accept edits on (shift+tab to cycle)',
+      '  ? for shortcuts',
+      '  current: 2.1.278 · latest: 2.1.278',
+      '  Context left until auto-compact: 9%',
+    ].join('\n')
+    const tail8 = visible.split('\n').slice(-8).join('\n')
+    expect(
+      submitEvidence({ tailWasOnScreen: false, tail: 'x', screen: tail8, grownBy: 4_000, visibleScreen: visible }),
+    ).toBeNull()
+  })
+
+  // A box with nothing under it ends on its closing rule; the visible-screen
+  // read keeps that row, so the summary still reads as held.
+  it('reads a box whose closing frame is the last row of the screen', () => {
+    const rule = '────────────────────────────────────────────'
+    const visible = ['> earlier', rule, '❯ [Pasted text #2 +9 lines]', rule].join('\n')
+    expect(
+      submitEvidence({ tailWasOnScreen: false, tail: 'x', screen: '❯ [Pasted text #2 +9 lines]', grownBy: 99, visibleScreen: visible }),
+    ).toBeNull()
+  })
+
+  // Only the collapsed-paste branch reads the visible screen: the tail-left
+  // verdict is still judged on the narrow read.
+  it('leaves tail-left judged on the narrow read', () => {
+    expect(
+      submitEvidence({
+        tailWasOnScreen: true, tail: 'runthetests', screen: '> ', grownBy: 0,
+        visibleScreen: '> run the tests\n> ',
+      }),
+    ).toBe('tail-left')
   })
 
   it('agrees with submitLanded', () => {
@@ -406,6 +457,11 @@ describe('injectionVerified', () => {
     expect(injectionVerified('growth', 'tail-left')).toBe(false)
     expect(injectionVerified('tail', 'growth')).toBe(false)
     expect(injectionVerified('growth', 'growth')).toBe(false)
+  })
+
+  it('never treats an unconfirmed submit as verified', () => {
+    expect(injectionVerified('placeholder', 'unconfirmed')).toBe(false)
+    expect(kickoffVerified('placeholder', 'unconfirmed', true)).toBe(false)
   })
 
   it('is false when either half found nothing', () => {
@@ -470,6 +526,22 @@ describe('kickoffVerified', () => {
   it('keeps growth-only evidence unverified when the gate never opened', () => {
     expect(kickoffVerified('growth', 'growth', false)).toBe(false)
     expect(kickoffVerified('placeholder', 'growth', false)).toBe(false)
+  })
+
+  // Issue #402 point 1: Grok Build shows a multi-line paste as a chip in its
+  // composer, not as text, and not as Claude's "[Pasted text …]" either, so
+  // the echo half can only ever be growth. A new turn starting after our Enter
+  // (submitTurnConfirm, read off the CLI's own log) is the CLI taking the
+  // text: nothing else types into a fresh pane past the prompt-ready gate.
+  it('accepts a growth-only echo when the CLI started a turn after the Enter', () => {
+    expect(kickoffVerified('growth', 'turn', true)).toBe(true)
+  })
+
+  it('still wants the gate open for a turn-confirmed growth echo', () => {
+    // A pane still painting its first screen (a session-marker turn, a resume
+    // replay) can start a turn of its own.
+    expect(kickoffVerified('growth', 'turn', false)).toBe(false)
+    expect(kickoffVerified(null, 'turn', true)).toBe(false)
   })
 
   it('never vouches for a missing half, gate or not', () => {

@@ -85,7 +85,7 @@ def test_resolve_caller_rejects_no_request() -> None:
 def test_resolve_caller_accepts_a_valid_pane_credential() -> None:
     agent_messaging.register("pa", "sender", "/ws/alpha")
     caller = plan_mcp._resolve_caller(
-        _ctx(pane="pa", t=plan_mcp_wiring.caller_token())
+        _ctx(pane="pa", t=plan_mcp_wiring.caller_token("pa"))
     )
     assert caller.kind == "pane"
     assert caller.pane_id == "pa"
@@ -93,7 +93,7 @@ def test_resolve_caller_accepts_a_valid_pane_credential() -> None:
 
 def test_resolve_caller_rejects_a_missing_pane_id() -> None:
     with pytest.raises(plan_mcp.CallerUnknown, match="could not identify your pane"):
-        plan_mcp._resolve_caller(_ctx(t=plan_mcp_wiring.caller_token()))
+        plan_mcp._resolve_caller(_ctx(t=plan_mcp_wiring.caller_token("pa")))
 
 
 def test_resolve_caller_rejects_a_bad_pane_token() -> None:
@@ -104,7 +104,7 @@ def test_resolve_caller_rejects_a_bad_pane_token() -> None:
 
 def test_resolve_caller_rejects_a_stale_pane_id() -> None:
     with pytest.raises(plan_mcp.CallerUnknown, match="stale"):
-        plan_mcp._resolve_caller(_ctx(pane="long-gone", t=plan_mcp_wiring.caller_token()))
+        plan_mcp._resolve_caller(_ctx(pane="long-gone", t=plan_mcp_wiring.caller_token("long-gone")))
 
 
 def test_resolve_caller_accepts_a_valid_host_credential() -> None:
@@ -195,6 +195,67 @@ def test_a_file_left_world_readable_by_an_older_version_is_tightened() -> None:
     assert path.stat().st_mode & 0o077 == 0
 
 
+def _count_hardening(monkeypatch) -> list[Any]:
+    calls: list[Any] = []
+    harden = plan_mcp_auth.secret_files.harden_file
+
+    def counting(path: Any) -> None:
+        calls.append(path)
+        harden(path)
+
+    monkeypatch.setattr(plan_mcp_auth.secret_files, "harden_file", counting)
+    return calls
+
+
+def test_the_file_is_hardened_once_however_often_it_is_read(monkeypatch) -> None:
+    """Review MED-1 on #399: every credential check reads this file, and on
+    Windows each hardening is an icacls process."""
+    plan_mcp_auth.internal_token()
+    calls = _count_hardening(monkeypatch)
+    plan_mcp_auth._hardened = None  # noqa: SLF001 - as in a fresh process
+    for _ in range(20):
+        plan_mcp_auth.internal_token()
+        plan_mcp_auth.external_token()
+        plan_mcp_auth.external_enabled()
+    assert len(calls) == 1
+
+
+def test_a_rewritten_file_is_hardened_again(monkeypatch) -> None:
+    plan_mcp_auth.internal_token()
+    calls = _count_hardening(monkeypatch)
+    plan_mcp_auth._hardened = None  # noqa: SLF001
+    plan_mcp_auth.internal_token()
+    assert len(calls) == 1
+    plan_mcp_auth.regenerate_external_token()
+    plan_mcp_auth.internal_token()
+    plan_mcp_auth.internal_token()
+    assert len(calls) == 2
+    # Recreated the way the cache exists for: by another writer, left at the
+    # default mode. Not by this module: its own recreate is 0600, the same
+    # size, and on Linux often the freed inode with mtime/ctime from the same
+    # coarse clock tick, so its identity can equal the old file's and nothing
+    # is done -- correctly, since a 0600 file has nothing to tighten.
+    path = plan_mcp_auth.auth_path()
+    content = path.read_bytes()
+    path.unlink()
+    path.write_bytes(content)
+    path.chmod(0o644)
+    plan_mcp_auth.internal_token()
+    plan_mcp_auth.internal_token()
+    assert len(calls) == 3
+
+
+@pytest.mark.skipif(not osplat.paths.enforces_posix_modes(), reason="POSIX mode bits")
+def test_a_file_loosened_after_it_was_hardened_is_tightened_on_the_next_read() -> None:
+    """POSIX as on main: a read after anything widened the mode tightens it."""
+    path = plan_mcp_auth.auth_path()
+    for _ in range(3):
+        plan_mcp_auth.internal_token()
+        path.chmod(0o644)
+        plan_mcp_auth.internal_token()
+        assert path.stat().st_mode & 0o077 == 0
+
+
 def test_no_temp_file_survives_a_failed_write(monkeypatch) -> None:
     plan_mcp_auth.internal_token()
     path = plan_mcp_auth.auth_path()
@@ -215,15 +276,14 @@ def test_no_temp_file_survives_a_failed_write(monkeypatch) -> None:
 def test_resolve_caller_tells_a_forgotten_pane_from_a_never_registered_one(caplog: Any) -> None:
     agent_messaging.register("pa", "sender", "/ws/alpha")
     agent_messaging.unregister("pa")
-    token = plan_mcp_wiring.caller_token()
     with pytest.raises(plan_mcp.CallerUnknown) as forgotten:
-        plan_mcp._resolve_caller(_ctx(pane="pa", t=token))
+        plan_mcp._resolve_caller(_ctx(pane="pa", t=plan_mcp_wiring.caller_token("pa")))
     # A closed main-window pane hears exactly what it heard before.
     assert str(forgotten.value) == plan_mcp._STALE
 
     with caplog.at_level("WARNING", logger="agent_team_backend.mcp_server"):
         with pytest.raises(plan_mcp.CallerUnknown) as never:
-            plan_mcp._resolve_caller(_ctx(pane="never-registered", t=token))
+            plan_mcp._resolve_caller(_ctx(pane="never-registered", t=plan_mcp_wiring.caller_token("never-registered")))
     assert "never registered" in str(never.value)
     assert "stale" in str(never.value)
     assert any("never-registered" in r.getMessage() for r in caplog.records)

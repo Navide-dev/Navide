@@ -32,7 +32,7 @@ CLI_AGENTS_HELP = (
 
 EXPECTED_KEYS = {
     "aider", "antigravity", "claude", "codex", "copilot", "cursor",
-    "droid", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi",
+    "droid", "goose", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi",
     "qwen",
 }
 
@@ -95,6 +95,27 @@ def test_registry_matches_frontend_agent_specs() -> None:
         source = path.read_text(encoding="utf-8")
         frontend_keys |= set(re.findall(r"agentKey: '([a-z]+)'", source))
     assert frontend_keys - NON_VENDOR_AGENT_KEYS == set(registry.VENDORS)
+
+
+# The supported-CLI sentence of each README: (file, the sentence's count and
+# list, the list separator). The names are display names, which no code maps
+# to vendor keys, so the guard checks the count and the list's length.
+_README_VENDOR_LINES = (
+    ("README.md", r"run any of (\d+) supported coding CLIs — (.+?) — or a plain terminal", ", "),
+    ("README.zh-TW.md", r"執行 (\d+) 種支援的 coding CLI（(.+?)）", "、"),
+    ("README.ja-JP.md", r"対応する (\d+) 種類のコーディング CLI（(.+?)）", "、"),
+)
+
+
+def test_readmes_list_every_registered_vendor() -> None:
+    for name, pattern, separator in _README_VENDOR_LINES:
+        match = re.search(pattern, (REPO_ROOT / name).read_text(encoding="utf-8"))
+        assert match, f"{name}: the supported-CLI sentence is gone or reworded"
+        listed = match.group(2).split(separator)
+        assert int(match.group(1)) == len(listed) == len(registry.VENDORS), (
+            f"{name} says {match.group(1)} and lists {len(listed)} CLIs; "
+            f"the registry has {len(registry.VENDORS)}"
+        )
 
 
 # --- turn-end inference cross-check ----------------------------------------
@@ -418,6 +439,120 @@ def _assert_absolute_import_allowed(filename: str, root: str) -> None:
         f"{filename} imports {root!r} — vendor modules are limited to the "
         f"standard library and {sorted(ALLOWED_THIRD_PARTY)}; app modules "
         "must depend on vendors, never the reverse"
+    )
+
+
+# Function-level local imports in vendor modules that reach outside
+# ALLOWED_LOCAL_IMPORTS: the reviewed, pre-existing vendor→app backrefs.
+# Keyed by (vendor stem, module, imported name), so one entry covers every
+# call site importing that name; the ratchet only lets this set shrink.
+# Existing debt, tracked in plan 61b423 n16.
+LAZY_BACKREFS: dict[tuple[str, str, str], str] = {
+    ("claude", "ws_handlers", "_running_regular_terminals"): (
+        "running-pane check before a token refresh probe; debt: see plan "
+        "61b423 n16 B/C (vendor reaches into the ws layer)"
+    ),
+    ("claude", "ai_chat_cli_engine", "resolve_cli_binary"): (
+        "binary lookup for the usage/refresh probes; lazy to avoid the cycle "
+        "ai_chat_cli_engine → onboarding_deps → cli_vendors.registry"
+    ),
+    ("claude", "ai_chat_cli_engine", "_terminate_proc_tree"): (
+        "kills a timed-out probe; same cycle as resolve_cli_binary; debt: "
+        "private name, see plan 61b423 n16 B/C"
+    ),
+    ("claude", "claude_hooks", "install_hooks"): (
+        "spec.install_hooks delegates to the app-side hook installer; "
+        "vendor→app edge kept lazy"
+    ),
+    ("codex", "convenience_wiring", "note"): (
+        "records per-pane CODEX_HOME dirs in the convenience ledger; "
+        "vendor→app edge kept lazy"
+    ),
+    ("codex", "convenience_wiring", "gate"): (
+        "convenience gate for shared-login promotion; vendor→app edge kept lazy"
+    ),
+    ("codex", "credential_vault", "_link_target"): (
+        "symlink target normalisation; lazy because credential_vault imports "
+        "the vendor registry; debt: private name, see plan 61b423 n16 B/C"
+    ),
+    ("copilot", "copilot_hooks", "install_hooks"): (
+        "spec.install_hooks delegates to the app-side hook installer; "
+        "vendor→app edge kept lazy"
+    ),
+    ("qwen", "qwen_hooks", "install_hooks"): (
+        "spec.install_hooks delegates to the app-side hook installer; "
+        "vendor→app edge kept lazy"
+    ),
+}
+
+
+def _lazy_local_imports(
+    path: Path, allowed_local: set[str]
+) -> list[tuple[tuple[str, str, str], int]]:
+    """Non-module-level imports of app modules outside ``allowed_local``, as
+    ((stem, module, name), line). Absolute ``agent_team_backend.*`` imports
+    count as local; any other absolute import must still pass the
+    standard-library/third-party rule."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    module_level = {id(node) for node in tree.body}
+    found: list[tuple[tuple[str, str, str], int]] = []
+    for node in ast.walk(tree):
+        if id(node) in module_level:
+            continue
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if not node.level:
+                root, _, rest = module.partition(".")
+                if root != "agent_team_backend":
+                    _assert_absolute_import_allowed(path.name, root)
+                    continue
+                module = rest.removeprefix("cli_vendors.")
+            if module == "":  # from .. import osplat
+                pairs = [(alias.name, alias.name) for alias in node.names]
+            else:
+                pairs = [(module, alias.name) for alias in node.names]
+            for target, name in pairs:
+                if target not in allowed_local:
+                    found.append(((path.stem, module or target, name), node.lineno))
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                root, _, rest = alias.name.partition(".")
+                if root != "agent_team_backend":
+                    _assert_absolute_import_allowed(path.name, root)
+                    continue
+                target = rest.removeprefix("cli_vendors.")
+                if target not in allowed_local:
+                    found.append(((path.stem, target, ""), node.lineno))
+    return found
+
+
+def test_vendor_modules_add_no_new_function_level_app_imports() -> None:
+    """Ratchet on the lazy backrefs the module-level import check tolerates:
+    a new function-level import of an app module fails here, and an entry in
+    LAZY_BACKREFS whose import is gone must be deleted."""
+    seen: set[tuple[str, str, str]] = set()
+    unlisted: list[str] = []
+    for path in sorted(VENDORS_DIR.glob("*.py")):
+        if path.stem.startswith("_") or path.stem in {"base", "registry"}:
+            continue
+        allowed_local = (
+            ALLOWED_LOCAL_IMPORTS | VENDOR_IMPORT_EXEMPTIONS.get(path.stem, set())
+        )
+        for key, line in _lazy_local_imports(path, allowed_local):
+            seen.add(key)
+            if key not in LAZY_BACKREFS:
+                unlisted.append(
+                    f"{path.name}:{line} lazily imports {key[2]} from {key[1]}"
+                )
+    assert not unlisted, (
+        "new function-level app imports in vendor modules — vendors must stay "
+        "self-contained; avoid the import (pass it in, or move the code app-"
+        "side), or add a reviewed LAZY_BACKREFS entry with its reason:\n"
+        + "\n".join(unlisted)
+    )
+    stale = sorted(set(LAZY_BACKREFS) - seen)
+    assert not stale, (
+        f"LAZY_BACKREFS entries no longer imported anywhere — delete them: {stale}"
     )
 
 

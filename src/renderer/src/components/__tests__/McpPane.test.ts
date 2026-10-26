@@ -199,6 +199,35 @@ describe('McpPane', () => {
     expect(secretRow!.findAll('input')[1].attributes('type')).toBe('text')
   })
 
+  it('says which servers still need a value filled in on this machine', async () => {
+    const synced = { ...navideServers()[0], env: { API_KEY: '', LOG_LEVEL: 'debug' } }
+    wrapper = mountPane({ servers: [synced] })
+    expect(wrapper.find('.mcp-card .pchip.needs').text()).toBe('Needs setup')
+    await openCard(wrapper, 'context7')
+    expect(wrapper.find('.mcp-drawer-hint.warn').text()).toContain('never sync between devices')
+
+    await wrapper.setProps({ servers: navideServers() })
+    await flushPromises()
+    expect(wrapper.find('.pchip.needs').exists()).toBe(false)
+  })
+
+  it('says a server needs setup when a credential in its arguments or URL arrived empty', async () => {
+    const synced = { ...navideServers()[0], args: ['-y', 'srv', '--token', ''] }
+    wrapper = mountPane({ servers: [synced] })
+    expect(wrapper.find('.mcp-card .pchip.needs').text()).toBe('Needs setup')
+    await openCard(wrapper, 'context7')
+    expect(wrapper.find('.mcp-drawer-hint.warn').text()).toContain('credentials in the URL and arguments')
+
+    const remote = { name: 'remote', transport: 'http', url: 'https://@mcp.example.test/v1?api_key=', headers: {}, enabled: true }
+    await wrapper.setProps({ servers: [remote] })
+    await flushPromises()
+    expect(wrapper.find('.mcp-card .pchip.needs').exists()).toBe(true)
+
+    await wrapper.setProps({ servers: [{ ...remote, url: 'https://mcp.example.test/v1?region=eu' }, navideServers()[0]] })
+    await flushPromises()
+    expect(wrapper.find('.pchip.needs').exists()).toBe(false)
+  })
+
   it('asks the parent to remove a server rather than deleting it itself', async () => {
     wrapper = mountPane()
     await openCard(wrapper, 'context7')
@@ -227,7 +256,7 @@ describe('McpPane', () => {
     expect(drawer.findAll('input')).toHaveLength(0)
     expect(drawer.text()).toContain('/Users/x/.codex/config.toml')
 
-    await drawer.findAll('button').find((b) => b.text() === 'Open config file')!.trigger('click')
+    await drawer.findAll('button').find((b) => b.text() === 'Open Config File')!.trigger('click')
     await flushPromises()
     expect(openPath).toHaveBeenCalledWith('/Users/x/.codex/config.toml')
   })
@@ -310,5 +339,78 @@ describe('McpPane', () => {
     await wrapper.find('.mcp-pane-head button').trigger('click')
 
     expect(wrapper.emitted('refresh')).toHaveLength(1)
+  })
+
+  describe('a server that is starting or failed to start', () => {
+    function withStatus(fields: Record<string, unknown>) {
+      return [{ ...navideServers()[0], tool_count: 0, tools: [], ...fields }]
+    }
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('says a slow start may be a first download, and refreshes until it settles', async () => {
+      vi.useFakeTimers()
+      wrapper = mountPane({
+        servers: withStatus({
+          status: 'starting', starting_seconds: 22, slow_start: true,
+          stderr_tail: 'npm warn exec The following package was not found and will be installed',
+        }),
+        selectName: 'context7',
+      })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="mcp-starting-note"]').text()).toContain('22 s')
+      expect(wrapper.find('[data-testid="mcp-starting-note"]').text()).toContain('npx')
+      expect(wrapper.find('[data-testid="mcp-stderr-tail"] pre').text()).toContain('will be installed')
+      expect(wrapper.find('.mcp-status-dot.starting').exists()).toBe(true)
+
+      vi.advanceTimersByTime(3000)
+      expect(wrapper.emitted('refresh')).toHaveLength(1)
+
+      await wrapper.setProps({ servers: withStatus({ status: 'connected' }) })
+      vi.advanceTimersByTime(9000)
+      expect(wrapper.emitted('refresh')).toHaveLength(1)
+    })
+
+    it('shows no note while a start is still quick', async () => {
+      wrapper = mountPane({
+        servers: withStatus({ status: 'starting', starting_seconds: 3, slow_start: false }),
+        selectName: 'context7',
+      })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="mcp-starting-note"]').exists()).toBe(false)
+    })
+
+    it('shows why a server failed to start', async () => {
+      wrapper = mountPane({
+        servers: withStatus({
+          status: 'error',
+          error: 'the server exited with code 1 before answering initialize',
+          stderr_tail: 'npm error 404 Not Found',
+        }),
+        selectName: 'context7',
+      })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="mcp-error-reason"]').text()).toBe(
+        'Failed to start: the server exited with code 1 before answering initialize',
+      )
+      expect(wrapper.find('[data-testid="mcp-stderr-tail"] pre').text()).toBe('npm error 404 Not Found')
+    })
+
+    it('says the tool list could not be read instead of showing zero tools', async () => {
+      wrapper = mountPane({
+        servers: withStatus({ status: 'connected', tool_count: 0, tools: [], tools_error: 'listing tools timed out' }),
+        selectName: 'context7',
+      })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="mcp-tools-error"]').text()).toBe(
+        'Could not list its tools: listing tools timed out',
+      )
+    })
   })
 })

@@ -110,9 +110,22 @@ describe('PlanWindowApp locale propagation', () => {
 
     expect(i18n.global.locale.value).toBe('en-US')
 
+    languageCallback!('ja-JP')
+    expect(i18n.global.locale.value).toBe('ja-JP')
+
     // Ignores unsupported runtime locales
+    languageCallback!('it-IT')
+    expect(i18n.global.locale.value).toBe('ja-JP')
+
+    // A Beta locale with a catalog renders in itself
+    languageCallback!('ko-KR')
+    expect(i18n.global.locale.value).toBe('ko-KR')
+
+    // Every UI locale ships a catalog now, so a newly added one renders in
+    // itself; the en-US fallback for a missing catalog is covered with a
+    // synthetic catalog list in uiLocales.test.
     languageCallback!('fr-FR')
-    expect(i18n.global.locale.value).toBe('en-US')
+    expect(i18n.global.locale.value).toBe('fr-FR')
 
     wrapper.unmount()
   })

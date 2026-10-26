@@ -97,6 +97,7 @@ class AdapterStatus:
     last_connected_at: float | None = None
     last_inbound_at: float | None = None
     identity: str = ""  # e.g. "@navide_bot"
+    display_name: str = ""  # the bot's own name where the platform reports one, e.g. "Navide"
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,8 @@ class Capabilities:
     typing: bool
     buttons: bool
     text_limit: int
+    # send_text takes ``reply_to`` (a message id the new message quotes)
+    reply_to: bool = False
 
 
 Emit = Callable[[InboundMessage], Awaitable[None]]

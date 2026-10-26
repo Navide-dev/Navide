@@ -1,0 +1,70 @@
+{
+  "browser": {
+    "app": {
+      "title": "Navide Browser"
+    },
+    "overview": {
+      "title": "Navide Browser 스페이스",
+      "new": "새 스페이스",
+      "pending": "{count}개 확인 필요",
+      "open-count": "{count}개 열림, 각각 메모리 사용",
+      "empty": "아직 스페이스가 없어요. ＋로 만들거나, agent가 처음 탐색할 때 자체 스페이스를 열어요. agent는 Navide Browser에서 내 로그인 정보를 사용해요(나 대신 웹사이트에 요청을 보낼 수 있어요)."
+    },
+    "state": {
+      "idle": "유휴",
+      "running": "실행 중",
+      "need-action": "확인 필요",
+      "done": "완료"
+    },
+    "owner": {
+      "agent": "Agent",
+      "user": "나"
+    },
+    "space": {
+      "all": "모든 스페이스",
+      "yours": "내 스페이스: 허용하지 않으면 agent가 사용할 수 없어요",
+      "default-name": "내 스페이스 {n}"
+    },
+    "nav": {
+      "back": "뒤로",
+      "forward": "앞으로",
+      "reload": "새로 고침",
+      "stop": "중지",
+      "address": "URL 입력"
+    },
+    "control": {
+      "agent": "agent가 조작 중",
+      "user": "내가 조작 중",
+      "yours": "내 스페이스"
+    },
+    "action": {
+      "take-over": "넘겨받기",
+      "hand-back": "agent에게 돌려주기",
+      "delegate": "agent가 이 스페이스를 사용하도록 허용",
+      "reclaim": "이 스페이스 되찾기",
+      "close": "스페이스 닫기",
+      "delegate-note": "모든 pane과 작업 영역의 agent가 사용할 수 있어요"
+    },
+    "agent-script": {
+      "warning": "이 페이지에서 agent 스크립트가 아직 실행 중일 수 있어요. 비밀번호나 인증 코드를 입력하기 전에 새로 고치세요.",
+      "reload": "새로 고침",
+      "keep": "페이지 유지"
+    },
+    "settings": {
+      "title": "설정",
+      "shared-sign-in": "모든 스페이스는 이 컴퓨터에 보관된 같은 로그인 정보를 공유해요. agent는 Navide Browser에서 내 로그인 정보를 사용해요(나 대신 웹사이트에 요청을 보낼 수 있어요). 넘겨받은 뒤에도 페이지에서 이미 실행 중인 agent 스크립트는 페이지를 새로 고쳐야 멈춰요.",
+      "clear-data": "모든 로그인 데이터 지우기",
+      "clear-data-confirm": "한 번 더 클릭하면 Navide Browser의 모든 사이트에서 로그아웃돼요",
+      "clear-data-done": "로그인 데이터를 지웠어요.",
+      "cancel": "취소"
+    },
+    "left": {
+      "open": "Navide Browser 열기",
+      "empty": "아직 스페이스가 없어요."
+    },
+    "errors": {
+      "generic": "문제가 발생했어요({code}).",
+      "invalid-address": "http 또는 https 주소를 입력하세요."
+    }
+  }
+}

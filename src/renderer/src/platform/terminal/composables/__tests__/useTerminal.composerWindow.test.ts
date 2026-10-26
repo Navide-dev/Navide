@@ -20,7 +20,7 @@ import type { Terminal } from '@xterm/xterm'
 import {
   composerFromScreen, normalizeForMatch, submitBaseline, submitEvidence, SUBMIT_SCREEN_LINES,
 } from '../../../../lib/injectEcho'
-import { serializeRenderedBuffer } from '../useTerminal'
+import { serializeRenderedBuffer, serializeVisibleScreen } from '../useTerminal'
 
 /** What readScreenTail(n) does: read the viewport bottom, not the cursor. */
 function readScreenTail(rows: string[], maxLines: number = SUBMIT_SCREEN_LINES): string {
@@ -113,6 +113,36 @@ describe('the queued verdict over a pre-existing hint', () => {
     const baseline = submitBaseline({ screen: before, tail: TAIL })
     expect(
       submitEvidence({ tailWasOnScreen: true, tail: TAIL, screen: before, grownBy: 9_000, baseline }),
+    ).toBeNull()
+  })
+})
+
+/** What readVisibleScreen() does: every viewport row, frames kept. */
+function readVisibleScreen(rows: string[]): string {
+  const term = {
+    rows: rows.length,
+    buffer: { active: { baseY: 0, cursorY: 0, getLine: (r: number) => ({ translateToString: () => rows[r] ?? '' }) } },
+  } as unknown as Terminal
+  return serializeVisibleScreen(term)
+}
+
+describe('the collapsed-paste check reads the whole visible screen', () => {
+  const rule = '────────────────────────────────────────'
+  // No footer under the box: its closing rule is the bottom row, which the
+  // tail read drops as a trailing frame row.
+  const HELD = ['⏺ Done.', '', rule, '❯ [Pasted text #4 +31 lines]', rule, '', '']
+
+  it('keeps the closing frame row the tail read drops', () => {
+    expect(readScreenTail(HELD).split('\n').pop()).toBe('❯ [Pasted text #4 +31 lines]')
+    expect(readVisibleScreen(HELD).split('\n')).toEqual(HELD)
+  })
+
+  it('refuses growth while the summary is still in that box', () => {
+    expect(
+      submitEvidence({
+        tailWasOnScreen: false, tail: TAIL, screen: readScreenTail(HELD), grownBy: 900,
+        visibleScreen: readVisibleScreen(HELD),
+      }),
     ).toBeNull()
   })
 })
