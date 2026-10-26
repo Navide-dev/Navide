@@ -670,6 +670,14 @@ const lastManagedCliKey = ref('')
 const cliDrawerRef = ref<HTMLElement | null>(null)
 const cliGridRef = ref<HTMLElement | null>(null)
 const cliPanelRef = ref<InstanceType<typeof CliManagementPanel> | null>(null)
+const memoryPaneRef = ref<InstanceType<typeof MemoryPane> | null>(null)
+
+/** Close Settings, unless the Memory editor holds a draft the user keeps. */
+function requestCloseSettings(): void {
+  // Optional call: a shallow-mounted pane is a stub without the method.
+  if (memoryPaneRef.value?.confirmDiscard?.() === false) return
+  emit('close')
+}
 const cliInstallOpen = ref(false)
 let cliDrawerTrigger: HTMLElement | null = null
 const selectedCli = computed(() => cliAgentRows.value.find((row) => row.agentKey === selectedCliKey.value))
@@ -726,7 +734,7 @@ async function closeCliDrawer(restoreFocus = true): Promise<void> {
 function closeSettingsLayer(): void {
   if (cliInstallOpen.value) { cliPanelRef.value?.closeInstallDialog(); return }
   if (selectedCliKey.value) { void closeCliDrawer(); return }
-  emit('close')
+  requestCloseSettings()
 }
 
 async function openCliSection(section: string, query = ''): Promise<void> {
@@ -2142,7 +2150,7 @@ function onKeyDown(e: KeyboardEvent) {
   }
   if (e.key !== 'Escape') return
   if (e.defaultPrevented) return
-  emit('close')
+  requestCloseSettings()
 }
 // Pending Registry plugin updates (pushed by the main process's periodic
 // check) badge the Extensions nav item.
@@ -2810,7 +2818,7 @@ watch(activeTab, (tab) => {
 
         <!-- ── Content (close button + all tab bodies) ───────────────────── -->
         <div class="s-content">
-          <button class="s-close" :inert="!!selectedCliKey" @click="emit('close')" :title="$t('action.close-esc')">✕</button>
+          <button class="s-close" :inert="!!selectedCliKey" @click="requestCloseSettings" :title="$t('action.close-esc')">✕</button>
 
         <!-- ── MCP TAB ───────────────────────────────────────────────────── -->
         <div v-show="activeTab === 'mcp'" class="s-body s-body--bleed mcp-body">
@@ -3019,6 +3027,7 @@ watch(activeTab, (tab) => {
           <!-- Project files belong to the folder that is actually open; the
                first known workspace is the current one whenever there is one. -->
           <MemoryPane
+            ref="memoryPaneRef"
             :backend="props.backend"
             :workspace-path="props.workspacePath ?? ''"
           />

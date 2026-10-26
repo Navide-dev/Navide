@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from agent_team_backend import app, native_memory
+from agent_team_backend import app, applog, native_memory
 from agent_team_backend.cli_vendors.registry import VENDORS
 
 
@@ -445,3 +445,104 @@ async def test_memory_save_without_text_is_rejected(tmp_path: Path) -> None:
     assert reply["ok"] is False
     assert reply["error"]["code"] == "MEMORY_FILE_REJECTED"
     assert not target.exists()
+
+
+# ---- previous version -------------------------------------------------------
+
+
+def test_a_save_keeps_the_replaced_text_in_navides_own_folder(tmp_path: Path) -> None:
+    """The file is the CLI's, so the version a save replaces is kept aside --
+    in the app data dir, never next to the file -- and can be written back."""
+    home = _home(tmp_path)
+    target = _write(home, (".codex", "AGENTS.md"), "original\n")
+
+    assert "previous" not in native_memory.read(str(target), home)
+    saved = native_memory.save(str(target), "mine\n", home)
+
+    assert saved["previous"]["size"] == len("original\n")
+    kept = list((applog.app_data_dir() / native_memory.BACKUP_DIR_NAME).glob("*.txt"))
+    assert [p.read_text(encoding="utf-8") for p in kept] == ["original\n"]
+    assert [p.name for p in target.parent.iterdir()] == ["AGENTS.md"]
+    assert native_memory.read(str(target), home)["previous"]["size"] == len("original\n")
+
+    restored = native_memory.restore_previous(
+        str(target), home, expected_modified=saved["modified"]
+    )
+
+    assert target.read_text(encoding="utf-8") == "original\n"
+    # Restoring kept what it replaced, so the restore is undone the same way.
+    assert restored["previous"]["size"] == len("mine\n")
+    native_memory.restore_previous(str(target), home)
+    assert target.read_text(encoding="utf-8") == "mine\n"
+
+
+def test_creating_a_file_keeps_nothing_and_offers_no_restore(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = home / ".codex" / "AGENTS.md"
+
+    saved = native_memory.save(str(target), "new\n", home)
+
+    assert "previous" not in saved
+    with pytest.raises(ValueError):
+        native_memory.restore_previous(str(target), home)
+
+
+def test_an_unchanged_save_keeps_the_older_previous_version(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = _write(home, (".codex", "AGENTS.md"), "one\n")
+    native_memory.save(str(target), "two\n", home)
+
+    native_memory.save(str(target), "two\n", home)
+
+    native_memory.restore_previous(str(target), home)
+    assert target.read_text(encoding="utf-8") == "one\n"
+
+
+def test_restore_refuses_a_file_that_moved_on_and_unlisted_paths(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = _write(home, (".codex", "AGENTS.md"), "one\n")
+    saved = native_memory.save(str(target), "two\n", home)
+    os.utime(target, (saved["modified"] + 10, saved["modified"] + 10))
+
+    with pytest.raises(native_memory.MemoryConflictError):
+        native_memory.restore_previous(str(target), home, expected_modified=saved["modified"])
+    assert target.read_text(encoding="utf-8") == "two\n"
+    with pytest.raises(ValueError):
+        native_memory.restore_previous(str(home / "stray.md"), home)
+
+
+@pytest.mark.asyncio
+async def test_memory_restore_writes_back_the_previous_version(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    target = _write(workspace, ("AGENTS.md",), "original\n")
+    saved = await _request(
+        "memory.save",
+        {"workspace_path": str(workspace), "path": str(target), "text": "mine\n"},
+    )
+    assert saved["payload"]["previous"]["size"] == len("original\n")
+
+    reply = await _request(
+        "memory.restore",
+        {
+            "workspace_path": str(workspace),
+            "path": str(target),
+            "expected_modified": saved["payload"]["modified"],
+        },
+    )
+
+    assert reply["ok"] is True
+    assert target.read_text(encoding="utf-8") == "original\n"
+
+
+@pytest.mark.asyncio
+async def test_memory_restore_without_a_previous_version_is_rejected(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    target = _write(workspace, ("AGENTS.md",), "original\n")
+
+    reply = await _request(
+        "memory.restore", {"workspace_path": str(workspace), "path": str(target)}
+    )
+
+    assert reply["ok"] is False
+    assert reply["error"]["code"] == "MEMORY_FILE_REJECTED"
+    assert target.read_text(encoding="utf-8") == "original\n"
