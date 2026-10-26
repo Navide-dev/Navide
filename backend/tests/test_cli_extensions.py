@@ -225,6 +225,52 @@ def test_qwen_extensions_follow_the_enablement_file(tmp_path: Path) -> None:
     assert "mcp" in items["docs"].components
 
 
+# ── gemini (no vendor spec: Navide does not run it in a pane) ────────────────
+
+
+def test_gemini_cli_is_listed_though_it_is_not_a_navide_vendor(tmp_path: Path) -> None:
+    assert "gemini" not in VENDORS
+    inventory = cli_extensions.scan(tmp_path, runner=_no_cli)
+    keys = [vendor["cli"] for vendor in inventory.vendors]
+    assert keys == sorted(keys), "one list in key order, vendors and the rest alike"
+    gemini = next(v for v in inventory.vendors if v["cli"] == "gemini")
+    assert gemini == {"cli": "gemini", "label": "Gemini CLI (Google)", "supported": True, "note": "", "count": 0, "unreadable": 0}
+
+
+def test_gemini_extensions_follow_their_manifest_and_the_enablement_file(tmp_path: Path) -> None:
+    ext = tmp_path / ".gemini" / "extensions"
+    _json(ext / "docs" / "gemini-extension.json", {"name": "docs", "version": "1.2.0", "mcpServers": {"d": {}}, "contextFileName": "GEMINI.md"})
+    _json(ext / "guard" / "gemini-extension.json", {"name": "guard", "version": "0.1.0"})
+    _json(ext / "guard" / "hooks" / "hooks.json", {"hooks": {"BeforeTool": [{"hooks": [{"type": "command", "command": "x"}]}]}})
+    _json(ext / "extension-enablement.json", {"docs": {"overrides": ["!/*"]}, "guard": {"overrides": ["/work/*"]}})
+    items = _by(cli_extensions.scan(tmp_path, runner=_no_cli).items, "gemini")
+    docs, guard = items["docs"], items["guard"]
+    assert (docs.type_label, docs.version, docs.enabled) == ("Gemini extension", "1.2.0", False)
+    assert {"mcp", "context"} <= set(docs.components)
+    assert guard.enabled is True and guard.enabled_error == ""
+    assert guard.exec_tier == "L2" and "intercept-tools" in guard.capabilities
+
+
+def test_gemini_settings_hooks_are_listed_with_what_their_events_can_do(tmp_path: Path) -> None:
+    _json(tmp_path / ".gemini" / "settings.json", {"hooks": {
+        "BeforeTool": [{"matcher": "run_shell_command", "hooks": [{"type": "command", "command": USER_HOOK}]}],
+        "BeforeModel": [{"hooks": [{"type": "command", "command": "x"}]}],
+    }})
+    hooks = {item.name: item for item in cli_extensions.scan(tmp_path, runner=_no_cli).items if item.cli == "gemini"}
+    assert {item.type_label for item in hooks.values()} == {"Gemini hook"}
+    assert "intercept-tools" in hooks["BeforeTool"].capabilities
+    assert "rewrite-prompt" in hooks["BeforeModel"].capabilities
+
+
+def test_a_broken_gemini_enablement_file_leaves_the_state_unknown(tmp_path: Path) -> None:
+    ext = tmp_path / ".gemini" / "extensions"
+    _json(ext / "docs" / "gemini-extension.json", {"name": "docs"})
+    _write(ext / "extension-enablement.json", "{not json")
+    items = _by(cli_extensions.scan(tmp_path, runner=_no_cli).items, "gemini")
+    assert items["docs"].valid
+    assert items["docs"].enabled_error.startswith("cannot parse extension-enablement.json")
+
+
 # ── failure and safety ───────────────────────────────────────────────────────
 
 

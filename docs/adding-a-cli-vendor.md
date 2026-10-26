@@ -103,7 +103,10 @@ You never need to read or modify the shared orchestration code.
     `ExtensionsSpec(supported=False, note=...)` rather than a guess; only a CLI
     with no extension system at all leaves it `None`, which hides it from the
     page. `backend/tests/test_cli_extensions.py` fails for a vendor that
-    declares nothing.
+    declares nothing. A CLI Navide lists without running it in a pane (Gemini
+    CLI) is declared in `_UNMANAGED_CLIS` in `cli_extensions.py`; when it
+    becomes a vendor, move that declaration onto its spec (the vendor spec
+    wins while both exist).
 
 ## Frontend
 

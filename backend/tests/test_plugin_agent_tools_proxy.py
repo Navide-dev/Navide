@@ -83,7 +83,9 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.32 C8 (previous pin 11c38bd5…): the cli_extensions_list
 #: description documents `enabled_error` and the `unreadable` list. No other
 #: tool changed.
-MAIN_TOOLS_LIST_SHA256 = "f43956973ded3bc30177c40d14f75cc700b6494e7ba2d7bc6d412bea4229b31f"
+#: Re-pinned for 0.2.32 Gemini CLI extensions (previous pin f4395697…): the
+#: cli_extensions_list description names Gemini CLI. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "ba95cc9af418bc462a6b76153a2ae6624a2ae8796981188ac184e2e78dcfdb21"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
