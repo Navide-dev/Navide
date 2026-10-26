@@ -323,7 +323,6 @@ async def test_a_real_sign_out_at_boot_still_lets_go(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "broadcast", broadcast)
     monkeypatch.setattr(server_link, "_settled_account", server_link._UNREAD)
     monkeypatch.setattr(server_link, "_link", None)
-    monkeypatch.setattr(sync_scopes, "credentials_scope", lambda: type("C", (), {"clear_imported": lambda self: None})())
     await server_link.start()
     assert not any(sync_scopes.enabled_scopes().values())
     assert store.cursor("prompts") == 0
@@ -340,18 +339,15 @@ async def test_a_switch_that_fails_halfway_stays_closed_and_is_retried(tmp_path,
     store = _seeded(tmp_path, monkeypatch, settings)
     failing = True
 
-    class Creds:
-        scope = "credentials"
-
-        def clear_imported(self):
-            if failing:
-                raise RuntimeError("database is locked")
+    def forget_detached(*_args):
+        if failing:
+            raise RuntimeError("database is locked")
 
     async def broadcast(event, exclude=None):
         return None
 
     monkeypatch.setattr(app, "broadcast", broadcast)
-    monkeypatch.setattr(sync_scopes, "credentials_scope", lambda: Creds())
+    monkeypatch.setattr(sync_scopes, "forget_detached", forget_detached)
     monkeypatch.setattr(server_link, "_settled_account", server_link._UNREAD)
     await server_link._note_account("ns-b")
     assert sync_scopes.enabled_scopes()["prompts"] is False      # closed
@@ -449,13 +445,10 @@ async def test_switching_back_after_a_failed_switch_reopens_sync(tmp_path, monke
     settings = _Settings({server_link.SYNC_ACCOUNT_SETTING: "ns-a"})
     _seeded(tmp_path, monkeypatch, settings)
 
-    class Creds:
-        scope = "credentials"
+    def forget_detached(*_args):
+        raise RuntimeError("database is locked")
 
-        def clear_imported(self):
-            raise RuntimeError("database is locked")
-
-    monkeypatch.setattr(sync_scopes, "credentials_scope", lambda: Creds())
+    monkeypatch.setattr(sync_scopes, "forget_detached", forget_detached)
     monkeypatch.setattr(server_link, "_settled_account", server_link._UNREAD)
     await server_link._note_account("ns-b")
     assert server_link._switch_pending is True

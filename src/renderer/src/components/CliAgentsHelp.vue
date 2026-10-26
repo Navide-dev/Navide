@@ -598,11 +598,6 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
         <div class="cah-callout-text" v-html="$t('settings.help.cliAgents.s5.callout1.text')"></div>
       </div>
 
-      <h3 class="cah-h3">{{ $t('settings.help.cliAgents.s5.hPortable') }}</h3>
-      <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.portable1')"></p>
-      <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.portable2')"></p>
-      <p class="cah-note" v-html="$t('settings.help.cliAgents.s5.portableNote')"></p>
-
       <h3 class="cah-h3">{{ $t('settings.help.cliAgents.s5.h2') }}</h3>
       <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.p8')"></p>
       <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.p9')"></p>

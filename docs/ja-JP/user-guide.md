@@ -158,7 +158,7 @@ Skills 画面は backend の変更成功と再接続で更新されます。未�
 
 Settings は Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider、Appearance、Keyboard Shortcut を扱います。Navide が MCP Server を停止するとき（Navide の終了、再読み込み、Server の起動失敗）は、その Server が起動してまだ動いているすべてのプロセスも終了します。Server があなたのために開いたプログラム（起動したブラウザーなど）も含みます。CLI Agents では Install 済みの Coding CLI も管理します。バージョン、Install 方法、重複 Install、その CLI 自身の最後の更新結果を表示し、その CLI 公式の更新コマンドと診断コマンドを Terminal で実行できます。Navide はベンダーのコマンドを提示して実行するだけで、CLI 自体を更新することはありません。Export された Settings は API Key と Token を Redact します。Third-party Server を有効化する前に、MCP Command と Environment Variable を確認してください。
 
-**Accounts** では CLI Account ごとに 1 枚のカードを扱います。CLI 自身のサインインに加えて、カードには **Portable Credential** を保持できます。これは各ベンダーが「どの Machine でも使う」ために公式に用意した値（例：Claude Code の `claude setup-token`）です。一度貼り付けると、その CLI の新しい Pane が環境変数として受け取り、CLI 自身の Login File には触れません。CLI ごとに*使用中*の Credential は 1 つで、カードがどれかを示し、ローカルの Login File が優先されてしまう場合には警告します。削除はこの Device にのみ影響します。
+**Accounts** では CLI Account ごとに 1 枚のカードを扱い、CLI 自身のサインインを使います。Navide 0.2.32 でカードの Portable Credential（`claude setup-token` が出力する値などを貼り付けるもの）は廃止されました。使っていた Device では更新時に保存済みの値が消去され、新しい Claude Pane は Claude 自身のサインインを使います。別の Account になり、Quota もその Account のものが使われる場合があります。
 
 **アカウントに名前を付ける。**内蔵の Default を含め、すべての Account に好きな名前を付けられます。Accounts でカードにカーソルを合わせて鉛筆を押すか、Quota Badge の Account 一覧の行にある鉛筆を使います。その名前は Account が表示されるあらゆる場所——Pane ヘッダー、Account 一覧、カード、切り替え通知、Turn Stats——で主表示になり、サインイン中の識別情報はその隣に残ります。欄を空にすると自動生成の名前（Account 1、Account 2…）に戻ります。Credential が識別情報を持たない CLI では、付けた名前だけが 2 つの Account を見分ける手段です。名前はログインではなく Account のスロットに属します。そのスロットに後から別の email でサインインしても、名前はそのまま残ります。
 

@@ -238,8 +238,6 @@ Notes on the cells that are easy to misread:
   reader (`make_log_reader`); `mcode` carries the empty `log_readers/`
   placeholder the contract allows, pending authenticated session fixtures to
   validate a reader for its SQLite message payloads.
-- **`portable_credential` is `claude`-only.** No other vendor declares a
-  portable credential today.
 
 ---
 
