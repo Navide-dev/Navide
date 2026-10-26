@@ -207,6 +207,17 @@ def test_diff_disclosure(case: dict[str, Any]) -> None:
     assert disclosure.diff_disclosure(a, b) == case["expected"]
 
 
+def test_diff_disclosure_counts_a_risk_rise_alone_as_widened() -> None:
+    # #647 review I2: risk follows the items, so a manifest cannot raise it
+    # without adding one; the rule still holds for any disclosure handed in.
+    before = disclosure.compute_disclosure(_BY_NAME["scope-fs-docs-read"]["manifest"])
+    after = {**before, "risk": {**before["risk"], "level": "high"}}
+    diff = disclosure.diff_disclosure(before, after)
+    assert diff["added"] == [] and diff["removed"] == []
+    assert diff["widened"] is True
+    assert disclosure.diff_disclosure(before, before)["widened"] is False
+
+
 # ── storage and approval contract ───────────────────────────────────────────
 
 

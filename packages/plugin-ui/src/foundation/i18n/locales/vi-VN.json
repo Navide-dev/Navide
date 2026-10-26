@@ -11685,6 +11685,7 @@
       "added": "Mới",
       "removed": "Đã gỡ",
       "declaredScope": "Phạm vi đã khai báo (chỉ để tham khảo)",
+      "declaredScopeNote": "Navide không áp đặt phạm vi đã khai báo. Plugin Navide có quyền truy cập tệp vẫn có thể đọc và sửa tệp nằm ngoài phạm vi đó.",
       "unchanged": "Không đổi ({count})",
       "fullCard": "Thẻ công khai thông tin đầy đủ",
       "badgeMore": "Thêm quyền",

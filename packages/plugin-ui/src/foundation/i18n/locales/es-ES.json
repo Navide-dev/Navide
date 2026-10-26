@@ -11685,6 +11685,7 @@
       "added": "Nuevo",
       "removed": "Quitado",
       "declaredScope": "Ámbito declarado (informativo)",
+      "declaredScopeNote": "Navide no hace cumplir un ámbito declarado. Un complemento de Navide con acceso a archivos puede seguir leyendo y cambiando archivos fuera de él.",
       "unchanged": "Sin cambios ({count})",
       "fullCard": "Ficha de declaración completa",
       "badgeMore": "Más permisos",

@@ -11685,6 +11685,7 @@
       "added": "新增",
       "removed": "已移除",
       "declaredScope": "宣告的範圍（僅供參考）",
+      "declaredScopeNote": "Navide 不會強制宣告的範圍。有檔案權限的 Navide 外掛仍然可以讀取和修改範圍外的檔案。",
       "unchanged": "沒有變動（{count} 項）",
       "fullCard": "完整揭露卡",
       "badgeMore": "權限變多",

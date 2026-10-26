@@ -11685,6 +11685,7 @@
       "added": "Nouveau",
       "removed": "Retiré",
       "declaredScope": "Portée déclarée (à titre informatif)",
+      "declaredScopeNote": "Navide n’impose pas une portée déclarée. Un plugin Navide qui a accès aux fichiers peut toujours lire et modifier des fichiers en dehors.",
       "unchanged": "Inchangé ({count})",
       "fullCard": "Fiche de déclaration complète",
       "badgeMore": "Plus d’autorisations",

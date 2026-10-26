@@ -65,6 +65,18 @@ describe('diffDisclosure', () => {
     const b = computeDisclosure(byName.get(to)!.manifest as never)
     expect(diffDisclosure(a, b)).toEqual(expected)
   })
+  // #647 review I2: risk is derived from the items, so a manifest cannot raise
+  // it without adding one; the rule still holds on its own for any
+  // disclosure handed in (a Registry listing, a stored one).
+  it('counts a risk rise alone as widened', () => {
+    const before = computeDisclosure(byName.get('scope-fs-docs-read')!.manifest as never)
+    const after = { ...before, risk: { ...before.risk, level: 'high' as const } }
+    const diff = diffDisclosure(before, after)
+    expect(diff.added).toEqual([])
+    expect(diff.removed).toEqual([])
+    expect(diff.widened).toBe(true)
+    expect(diffDisclosure(before, before).widened).toBe(false)
+  })
 })
 
 describe('aiCli in an update', () => {

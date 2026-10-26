@@ -11685,6 +11685,7 @@
       "added": "追加",
       "removed": "削除",
       "declaredScope": "宣言された範囲（参考情報）",
+      "declaredScopeNote": "Navide は宣言された範囲を強制しません。ファイルへのアクセス権を持つ Navide プラグインは、範囲外のファイルも読み取り・変更できます。",
       "unchanged": "変更なし（{count} 件）",
       "fullCard": "開示カード全体",
       "badgeMore": "権限が増える",

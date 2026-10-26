@@ -11685,6 +11685,7 @@
       "added": "Neu",
       "removed": "Entfernt",
       "declaredScope": "Angegebener Bereich (nur zur Information)",
+      "declaredScopeNote": "Navide erzwingt einen angegebenen Bereich nicht. Ein Navide-Plug-in mit Dateizugriff kann weiterhin Dateien außerhalb davon lesen und ändern.",
       "unchanged": "Unverändert ({count})",
       "fullCard": "Vollständige Offenlegungskarte",
       "badgeMore": "Mehr Berechtigungen",

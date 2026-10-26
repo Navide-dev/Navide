@@ -29,6 +29,8 @@ const scopeIsInformational = computed(() => !fsScopeChangeWidens(
   [...props.diff.added, ...props.diff.unchanged],
 ))
 const informational = (item: DisclosureItem): boolean => scopeIsInformational.value && isFsScopeItem(item)
+/** #647 review L1: the tag alone does not say what "informational" means. */
+const showsDeclaredScope = computed(() => [...props.diff.added, ...props.diff.removed].some(informational))
 </script>
 
 <template>
@@ -49,6 +51,7 @@ const informational = (item: DisclosureItem): boolean => scopeIsInformational.va
         <span class="nv-diff-tag">{{ $t('pluginDisclosure.diff.removed') }}</span> <template v-if="informational(item)"><span class="nv-diff-tag nv-diff-tag--info">{{ $t('pluginDisclosure.diff.declaredScope') }}</span>{{ ' ' }}</template>{{ itemText(item) }}
       </li>
     </ul>
+    <p v-if="showsDeclaredScope" class="nv-diff-scope-note">{{ $t('pluginDisclosure.diff.declaredScopeNote') }}</p>
     <details v-if="diff.unchanged.length" class="nv-diff-unchanged">
       <summary>{{ $t('pluginDisclosure.diff.unchanged', { count: diff.unchanged.length }) }}</summary>
       <ul>
@@ -72,11 +75,13 @@ const informational = (item: DisclosureItem): boolean => scopeIsInformational.va
 .nv-diff-heading,
 .nv-diff-versions,
 .nv-diff-risk,
-.nv-diff-none {
+.nv-diff-none,
+.nv-diff-scope-note {
   margin: 0;
 }
 .nv-diff-versions,
 .nv-diff-none,
+.nv-diff-scope-note,
 .nv-diff-unchanged {
   color: var(--text-secondary);
 }

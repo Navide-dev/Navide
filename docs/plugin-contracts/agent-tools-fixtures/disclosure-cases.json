@@ -2482,6 +2482,123 @@
           "projectWrites": "none"
         }
       }
+    },
+    {
+      "name": "scope-fs-docs-read-shell",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.scoped",
+        "name": "Example",
+        "version": "1.7.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": "allowlist",
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "docs/*"
+              ],
+              "write": []
+            }
+          }
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.scoped",
+          "version": "1.7.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "read"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab"
+                ]
+              }
+            },
+            {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab"
+            ]
+          },
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "docs/*"
+              ],
+              "write": []
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "via-shell",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
     }
   ]
 }

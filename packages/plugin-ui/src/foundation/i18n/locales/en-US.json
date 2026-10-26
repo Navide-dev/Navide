@@ -11685,6 +11685,7 @@
       "added": "New",
       "removed": "Removed",
       "declaredScope": "Declared scope (informational)",
+      "declaredScopeNote": "Navide does not enforce a declared scope. A Navide plugin with file access can still read and change files outside it.",
       "unchanged": "Unchanged ({count})",
       "fullCard": "Full disclosure card",
       "badgeMore": "More permissions",
