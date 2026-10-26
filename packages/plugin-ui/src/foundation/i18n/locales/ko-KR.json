@@ -1893,7 +1893,9 @@
           "externalCallersDisclosure": "외부 프로그램은 token 하나를 공유하므로 호출 기록에는 어떤 프로그램인지가 아니라 \"외부 클라이언트\"라고만 남아요. Host 자격 증명도 같은 방식으로 처리돼요."
         },
         "empty": "설치된 Navide 플러그인 중 네이티브 백엔드가 있는 것이 없어요.",
-        "windowWithout": "{name}이(가) 네이티브 백엔드 없이 열렸어요: {reason}. 백엔드가 필요한 기능은 작동하지 않아요. 백엔드를 허용하려면 설정 → Navide 플러그인 → {page}(으)로 가세요.",
+        "windowWithout": "{name}이(가) 네이티브 백엔드 없이 열렸어요: {reason}. 백엔드가 필요한 기능은 작동하지 않아요. {next}",
+        "windowWithoutAllow": "백엔드를 허용하려면 설정 → Navide 플러그인 → {page}(으)로 가서 허용한 뒤 창을 다시 여세요.",
+        "windowWithoutDetails": "이유는 설정 → Navide 플러그인 → {page}에서 볼 수 있어요.",
         "allow": "허용",
         "disable": "사용 안 함",
         "enable_plugin": "사용",

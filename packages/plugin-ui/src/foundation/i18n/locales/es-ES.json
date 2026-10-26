@@ -1893,7 +1893,9 @@
           "externalCallersDisclosure": "Los programas externos comparten un único token, así que el registro de una llamada solo puede indicar «un cliente externo», no qué programa fue. La credencial del host se trata de la misma forma."
         },
         "empty": "Ningún complemento de Navide instalado tiene un backend nativo.",
-        "windowWithout": "{name} se abrió sin su backend nativo: {reason}. Las funciones que necesitan el backend no funcionarán. Para permitir el backend, ve a «Ajustes → Complementos de Navide → {page}».",
+        "windowWithout": "{name} se abrió sin su backend nativo: {reason}. Las funciones que necesitan el backend no funcionarán. {next}",
+        "windowWithoutAllow": "Para permitir el backend, ve a «Ajustes → Complementos de Navide → {page}» y vuelve a abrir la ventana.",
+        "windowWithoutDetails": "En «Ajustes → Complementos de Navide → {page}» se explica el motivo.",
         "allow": "Permitir",
         "disable": "Desactivar",
         "enable_plugin": "Activar",

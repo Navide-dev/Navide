@@ -131,7 +131,12 @@ import {
   type PlansFilesystemPort,
   type PlansFilesystemServiceOperation,
 } from './plansBridge'
-import type { PackageAgentsPort, PackageShellPort } from './pluginThirdPartyBackends'
+import {
+  NativeBackendRefusal,
+  type NativeBackendStatus,
+  type PackageAgentsPort,
+  type PackageShellPort,
+} from './pluginThirdPartyBackends'
 import {
   BackendPluginError,
   type BackendPluginLaunchSpec,
@@ -624,6 +629,9 @@ interface RunningPlugin {
   /** Why a third-party view's backend bind was refused or failed, once it
    *  has been; the view runs on with every backend call failing closed. */
   backendUnavailable?: string
+  /** Which admission gate refused it, as the Settings rows name it;
+   *  'unavailable' for any other failure. */
+  backendUnavailableStatus?: NativeBackendStatus
   /** Query string the entry was last loaded with (drives reload-on-change). */
   query: string
   /** webContents.id captured at creation (not readable after destroy). */
@@ -11006,12 +11014,13 @@ export class FrontendPluginManager {
             }`,
           )
           // Not fatal: the view (a window too) opens and stays unbound. Only an
-          // admission refusal's own message is passed on; anything else is
-          // reported generically, since it may carry paths or stack text.
-          record.backendUnavailable =
-            error instanceof BackendPluginError && error.code === 'BACKEND_UNAVAILABLE'
-              ? error.message
-              : 'the native backend could not start'
+          // admission gate's own refusal, whose message is a fixed string, is
+          // passed on; anything else, BACKEND_UNAVAILABLE from elsewhere
+          // included, is reported generically, since it may carry paths or
+          // stack text.
+          const refusal = error instanceof NativeBackendRefusal ? error : null
+          record.backendUnavailable = refusal ? refusal.message : 'the native backend could not start'
+          record.backendUnavailableStatus = refusal ? refusal.status : 'unavailable'
         })
         void record.backendBindingTask.catch(() => undefined)
       }
@@ -12856,7 +12865,7 @@ export class FrontendPluginManager {
     hostWindow: BrowserWindow,
     contributionKey: string,
     options: Omit<PluginViewOpenOptions, 'hostWindow' | 'bounds'>,
-  ): Promise<{ ok: boolean; error?: string; backendUnavailable?: string }> {
+  ): Promise<{ ok: boolean; error?: string; backendUnavailable?: string; backendUnavailableStatus?: NativeBackendStatus }> {
     const canDispatch = options.canDispatch ?? (() => true)
     if (!canDispatch()) return { ok: false, error: 'request is no longer active' }
     const descriptor = this.enabledDescriptors().find((candidate) =>
@@ -12930,8 +12939,11 @@ export class FrontendPluginManager {
         capabilityContext,
       })
       this.contributionInstances.set(key, handle)
-      const backendUnavailable = this.running.get(handle.instanceId)?.backendUnavailable
-      return backendUnavailable ? { ok: true, backendUnavailable } : { ok: true }
+      const running = this.running.get(handle.instanceId)
+      const backendUnavailable = running?.backendUnavailable
+      return backendUnavailable
+        ? { ok: true, backendUnavailable, backendUnavailableStatus: running.backendUnavailableStatus ?? 'unavailable' }
+        : { ok: true }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }

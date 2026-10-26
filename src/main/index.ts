@@ -220,6 +220,7 @@ import {
   type AgentToolWritePrompt,
   type NativeBackendConsentPrompt,
   type NativeBackendWritePrompt,
+  type NativeBackendStatus,
   stdoutPendingOf,
 } from './plugins/pluginThirdPartyBackends'
 
@@ -4175,7 +4176,7 @@ async function openCatalogContributionWindow(
   extraParams: Record<string, string> = {},
   trustedEditorFileTarget?: TrustedEditorFileTarget,
   canDispatch: () => boolean = () => true,
-): Promise<{ ok: boolean; error?: string; backendUnavailable?: string }> {
+): Promise<{ ok: boolean; error?: string; backendUnavailable?: string; backendUnavailableStatus?: NativeBackendStatus }> {
   if (!canDispatch()) return { ok: false, error: 'request is no longer active' }
   if (!(await prepareCatalogContribution(contributionKey))) {
     return {
@@ -4275,7 +4276,13 @@ async function openCatalogContributionWindow(
     hostWindow.focus()
   }
   // The window opened without its native backend: the main window says why.
-  return result.backendUnavailable ? { ok: true, backendUnavailable: result.backendUnavailable } : { ok: true }
+  return result.backendUnavailable
+    ? {
+        ok: true,
+        backendUnavailable: result.backendUnavailable,
+        ...(result.backendUnavailableStatus ? { backendUnavailableStatus: result.backendUnavailableStatus } : {}),
+      }
+    : { ok: true }
 }
 
 const plansWindowRouter = createPlansWindowRouter({

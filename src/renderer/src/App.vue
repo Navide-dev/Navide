@@ -26,6 +26,7 @@ import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
 import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
 import { buildPaneLineage, effectiveParents, withDescendants } from './lib/paneLineage'
+import { pluginWindowWithoutBackendText } from './lib/pluginWindowWithoutBackend'
 import { resolveLineageDrop, resolveRootDrop, type LineageDropDecision } from './lib/lineageDrop'
 import { ancestorTrail } from './lib/paneListView'
 import { chromeSourceMark, pluginDisclosureTitle, pluginIconFallback } from './lib/pluginSourceMark'
@@ -1256,7 +1257,9 @@ async function openPluginContributionWindow(contribution: PluginRegionContributi
     console.warn(`[renderer] plugin window '${contribution.contributionKey}' could not be opened: ${result?.error ?? 'unknown error'}`)
     return
   }
-  if (result.backendUnavailable) notePluginWindowWithoutBackend(contribution, result.backendUnavailable)
+  if (result.backendUnavailable) {
+    notePluginWindowWithoutBackend(contribution, result.backendUnavailable, result.backendUnavailableStatus)
+  }
 }
 
 /** Window views whose missing native backend was already explained this
@@ -1264,16 +1267,20 @@ async function openPluginContributionWindow(contribution: PluginRegionContributi
 const pluginWindowsWithoutBackend = new Set<string>()
 
 /** A window view opens even when its native backend was refused or failed;
- *  say so once, with where the backend is allowed. Nothing here changes it. */
-function notePluginWindowWithoutBackend(contribution: PluginRegionContribution, reason: string): void {
+ *  say so once, with where to look (or allow it). Nothing here changes it. */
+function notePluginWindowWithoutBackend(
+  contribution: PluginRegionContribution,
+  reason: string,
+  status: string | undefined,
+): void {
   const key = `${contribution.contributionKey}\n${reason}`
   if (pluginWindowsWithoutBackend.has(key)) return
   pluginWindowsWithoutBackend.add(key)
   notifyRestore.toast(
-    i18n.global.t('settings.extensions.nativeBackends.windowWithout', {
+    pluginWindowWithoutBackendText(i18n.global.t, {
       name: revealInvisibleText(contribution.title),
       reason,
-      page: i18n.global.t('settings.extensions.developerNative'),
+      ...(status ? { status } : {}),
     }),
     { type: 'info' },
   )

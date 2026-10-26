@@ -17,6 +17,7 @@ import {
   readInstalledManifestV2,
   nativeBackendConsentText,
   preInstallConsentCandidates,
+  NativeBackendRefusal,
   ThirdPartyBackendController,
   thirdPartyBackendLaunchSpec,
   type NativeBackendConsentPrompt,
@@ -431,6 +432,27 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     expect((await refusal(instance.admit(spec))).message).toContain('full shell')
     expect(allow).not.toHaveBeenCalled()
     expect((await instance.status(spec)).status).toBe('shell-not-allowed')
+  })
+
+  it('names the refusing gate on the error, as the status row does (#641 L2/L3)', async () => {
+    // Only a NativeBackendRefusal's fixed message reaches the user; its
+    // status picks the localized wording and whether "allow" is offered.
+    const shell = writePackage({ shell: 'full' })
+    const { instance } = controller({ promptConsent: deny })
+    const full = await refusal(instance.admit(shell))
+    expect(full).toBeInstanceOf(NativeBackendRefusal)
+    expect((full as NativeBackendRefusal).status).toBe('shell-not-allowed')
+
+    const spec = writePackage({}, 'binary-v1')
+    await instance.admit(spec)
+    const declined = await refusal(instance.admit(writePackage({}, 'binary-v2')))
+    expect(declined.message).toBe('the user did not allow the native backend')
+    expect((declined as NativeBackendRefusal).status).toBe('needs-consent')
+
+    store.setEnabled(false)
+    const off = await refusal(instance.admit(spec))
+    expect((off as NativeBackendRefusal).status).toBe('disabled-globally')
+    expect((await instance.status(spec)).status).toBe('disabled-globally')
   })
 
   it('admits a freshly installed backend with shell: allowlist without a prompt (the install disclosed it)', async () => {

@@ -197,3 +197,78 @@ describe('Host Mini-IDE locale authority', () => {
     expect(second.get('locale')).toBe('en-US')
   })
 })
+
+// #641 M1: a window that opened without its native backend says so in the main
+// window, and openCatalogContributionWindow is the only way that reason (and
+// the gate that refused) gets from the manager to the renderer. The field is
+// optional, so dropping it here would type-check and fail silently.
+describe('openCatalogContributionWindow forwards a missing native backend', () => {
+  const extract = (name: string): string => {
+    const source = createSourceFile('index.ts', readFileSync(resolve('src/main/index.ts'), 'utf8'), ScriptTarget.Latest, true)
+    const statement = source.statements.find(item => isFunctionDeclaration(item) && item.name?.text === name)
+    expect(statement).toBeDefined()
+    return transpileModule(statement!.getText(source), { compilerOptions: { target: ScriptTarget.ES2022 } }).outputText
+  }
+
+  const open = (managerResult: Record<string, unknown>) => {
+    class FakeWindow {
+      id = 1
+      isDestroyed(): boolean { return false }
+      once(): void {}
+      isMinimized(): boolean { return false }
+      restore(): void {}
+      show(): void {}
+      focus(): void {}
+      close(): void {}
+    }
+    const manager = {
+      listContributionCatalog: () => [{ contributionKey: 'acme.map.main', location: 'window', title: 'Map' }],
+      peekWorkspaceDisplayName: async () => 'ws',
+      openContributionWindow: vi.fn(async () => managerResult),
+      closeContribution: () => undefined,
+    }
+    const create = new Function(
+      'prepareCatalogContribution',
+      'MINI_IDE_CONTRIBUTION',
+      'frontendPluginManager',
+      'getContributionWindowKey',
+      'normalizeWorkspacePath',
+      'contributionWindows',
+      'BrowserWindow',
+      'getContributionWindowConfig',
+      'windowCloseCoordinator',
+      'catalogContributionQuery',
+      'warnMain',
+      'AUX_KIND_BY_CONTRIBUTION',
+      'trackAuxWindow',
+      'windowRegistry',
+      `${extract('openCatalogContributionWindow')}\nreturn openCatalogContributionWindow`,
+    )
+    const fn = create(
+      async () => true,
+      'navide.mini-ide.window',
+      manager,
+      (key: string, workspace: string) => `${key}\n${workspace}`,
+      (path: string) => path,
+      new Map(),
+      FakeWindow,
+      () => ({}),
+      { watch: () => undefined },
+      () => '',
+      () => undefined,
+      {},
+      () => undefined,
+      { setAuxWorkspace: () => undefined },
+    )
+    return fn('acme.map.main', '/ws') as Promise<Record<string, unknown>>
+  }
+
+  it('passes the reason and the refusing gate on', async () => {
+    await expect(open({ ok: true, backendUnavailable: 'the user did not allow the native backend', backendUnavailableStatus: 'needs-consent' }))
+      .resolves.toEqual({ ok: true, backendUnavailable: 'the user did not allow the native backend', backendUnavailableStatus: 'needs-consent' })
+  })
+
+  it('adds nothing when the backend bound', async () => {
+    await expect(open({ ok: true })).resolves.toEqual({ ok: true })
+  })
+})
