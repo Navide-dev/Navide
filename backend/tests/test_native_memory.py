@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -509,6 +511,69 @@ def test_restore_refuses_a_file_that_moved_on_and_unlisted_paths(tmp_path: Path)
     assert target.read_text(encoding="utf-8") == "two\n"
     with pytest.raises(ValueError):
         native_memory.restore_previous(str(home / "stray.md"), home)
+
+
+def test_creating_a_file_records_that_navide_created_it(tmp_path: Path) -> None:
+    """The record the main process trashes by: the exact text, in Navide's
+    own folder, keyed like the previous version."""
+    home = _home(tmp_path)
+    target = home / ".codex" / "AGENTS.md"
+
+    saved = native_memory.save(str(target), "new\n", home)
+
+    assert saved["created"]["size"] == len("new\n")
+    record_path = native_memory._created_path(target)
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert record_path.parent == applog.app_data_dir() / native_memory.BACKUP_DIR_NAME
+    assert record["path"] == str(target)
+    assert record["text"] == "new\n"
+    assert record["sha256"] == hashlib.sha256(b"new\n").hexdigest()
+    assert native_memory.read(str(target), home)["created"]["size"] == len("new\n")
+
+
+def test_a_file_navide_did_not_create_has_no_create_record(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = _write(home, (".codex", "AGENTS.md"), "theirs\n")
+
+    native_memory.save(str(target), "mine\n", home)
+
+    assert "created" not in native_memory.read(str(target), home)
+    assert not native_memory._created_path(target).exists()
+
+
+def test_a_later_save_drops_the_create_record_for_the_previous_version(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = home / ".codex" / "AGENTS.md"
+    native_memory.save(str(target), "new\n", home)
+
+    # Saving the same text changes nothing, so the creation can still be undone.
+    native_memory.save(str(target), "new\n", home)
+    assert "created" in native_memory.read(str(target), home)
+
+    saved = native_memory.save(str(target), "edited\n", home)
+
+    assert "created" not in native_memory.read(str(target), home)
+    assert saved["previous"]["size"] == len("new\n")
+
+
+def test_a_create_record_is_not_shown_once_the_file_is_gone(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    target = home / ".codex" / "AGENTS.md"
+    native_memory.save(str(target), "new\n", home)
+    target.unlink()
+
+    assert "created" not in native_memory.read(str(target), home)
+
+
+def test_an_unlisted_path_is_neither_created_nor_recorded(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    stray = home / "stray.md"
+
+    with pytest.raises(ValueError):
+        native_memory.save(str(stray), "x\n", home)
+
+    assert not stray.exists()
+    assert not native_memory._created_path(stray).exists()
 
 
 @pytest.mark.asyncio
