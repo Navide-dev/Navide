@@ -4308,6 +4308,35 @@ async def memory_save(session: "Session", msg_id: str, msg_type: str, payload: d
     server_link.sync_soon("memory")
 
 
+@handler("memory.restore")
+async def memory_restore(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Write back the version the last save replaced, kept in Navide's data dir."""
+    workspace = _memory_workspace(payload)
+    path = str(payload.get("path") or "")
+    expected_raw = payload.get("expected_modified")
+    expected = float(expected_raw) if isinstance(expected_raw, (int, float)) else None
+    try:
+        result = await asyncio.to_thread(
+            native_memory.restore_previous, path, None, workspace, expected
+        )
+    except native_memory.MemoryConflictError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_FILE_CONFLICT", str(err), {"path": path})
+        )
+        return
+    except ValueError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_FILE_REJECTED", str(err), {"path": path})
+        )
+        return
+    except OSError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "MEMORY_WRITE_FAILED", str(err), {"path": path})
+        )
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 # ── Cross-device sync (sync.*) ──────────────────────────────────────────────
 #
 # The engine lives on the server link, because a round is a conversation with
