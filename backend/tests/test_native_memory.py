@@ -546,3 +546,121 @@ async def test_memory_restore_without_a_previous_version_is_rejected(tmp_path: P
     assert reply["ok"] is False
     assert reply["error"]["code"] == "MEMORY_FILE_REJECTED"
     assert target.read_text(encoding="utf-8") == "original\n"
+
+
+# ---- Claude auto-memory -------------------------------------------------------
+
+
+def _auto_memory(home: Path, workspace: Path) -> Path:
+    folder = native_memory.auto_memory_dir(home, workspace)
+    assert folder is not None
+    folder.mkdir(parents=True)
+    return folder
+
+
+def test_the_project_slug_matches_claude_code() -> None:
+    """Every non-alphanumeric UTF-16 unit becomes "-", and a name past 200
+    characters is cut and suffixed with Claude's hash (values from
+    Claude Code 2.1.310, computed in JavaScript)."""
+    assert native_memory._claude_project_slug("/Users/x/my.proj_1") == "-Users-x-my-proj-1"
+    assert native_memory._claude_project_slug("/Users/x/客戶") == "-Users-x---"
+    assert native_memory._claude_project_slug("/x/\U0001F600") == "-x---"
+    long = native_memory._claude_project_slug("/x/" + "a" * 300)
+    assert long == "-x-" + "a" * 197 + "-rtseee"
+
+
+def test_a_worktree_shares_the_main_checkouts_auto_memory(tmp_path: Path) -> None:
+    """Claude keys auto-memory by repository: a linked worktree and a
+    subdirectory both resolve to the main working tree."""
+    home = _home(tmp_path)
+    main = tmp_path / "repo"
+    (main / ".git" / "worktrees" / "wt").mkdir(parents=True)
+    (main / ".git" / "worktrees" / "wt" / "commondir").write_text("../..\n", encoding="utf-8")
+    (main / "src").mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    (worktree / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'wt'}\n", encoding="utf-8")
+
+    expected = native_memory.auto_memory_dir(home, main)
+
+    assert expected == (
+        home / ".claude" / "projects" / native_memory._claude_project_slug(str(main.resolve())) / "memory"
+    )
+    assert native_memory.auto_memory_dir(home, worktree) == expected
+    assert native_memory.auto_memory_dir(home, main / "src") == expected
+    assert native_memory.auto_memory_dir(home, None) is None
+
+
+def test_auto_memory_files_are_listed_as_claude_written_project_rows(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    folder = _auto_memory(home, workspace)
+    _write(folder, ("MEMORY.md",), "- [Topic](topic.md)\n")
+    _write(folder, ("topic.md",), "a fact\n")
+    _write(folder, ("notes.txt",), "not markdown\n")
+    _write(folder, ("proposals", "draft.md"), "nested\n")
+
+    rows = [f for f in native_memory.scan(home, workspace) if f.auto_memory]
+
+    assert [(f.relative, f.scope, f.readers, f.canonical) for f in rows] == [
+        ("MEMORY.md", native_memory.PROJECT_SCOPE, ("claude",), False),
+        ("topic.md", native_memory.PROJECT_SCOPE, ("claude",), False),
+    ]
+    assert rows[0].as_dict()["auto_memory"] is True
+    # Nothing is offered for creation, and nothing is listed without a workspace.
+    assert not [f for f in native_memory.scan(home, None) if f.auto_memory]
+    assert all(
+        f.as_dict()["auto_memory"] is False
+        for f in native_memory.scan(home, workspace)
+        if not f.auto_memory
+    )
+
+
+def test_an_auto_memory_link_out_of_its_folder_is_not_offered(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    folder = _auto_memory(home, workspace)
+    secret = _write(home, (".ssh", "notes.md"), "private\n")
+    (folder / "linked.md").symlink_to(secret)
+
+    assert not [f for f in native_memory.scan(home, workspace) if f.auto_memory]
+    with pytest.raises(ValueError):
+        native_memory.read(str(folder / "linked.md"), home, workspace)
+
+
+def test_an_auto_memory_file_saves_and_restores_like_any_other(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    target = _write(_auto_memory(home, workspace), ("MEMORY.md",), "claude wrote\n")
+
+    read = native_memory.read(str(target), home, workspace)
+    saved = native_memory.save(
+        str(target), "user edit\n", home, workspace, expected_modified=read["modified"]
+    )
+
+    assert target.read_text(encoding="utf-8") == "user edit\n"
+    assert saved["previous"]["size"] == len("claude wrote\n")
+    native_memory.restore_previous(str(target), home, workspace, saved["modified"])
+    assert target.read_text(encoding="utf-8") == "claude wrote\n"
+    # Another project's memory folder is not reachable from this workspace.
+    other = tmp_path / "other"
+    other.mkdir()
+    with pytest.raises(ValueError):
+        native_memory.save(str(target), "x\n", home, other)
+
+
+@pytest.mark.asyncio
+async def test_memory_list_names_the_auto_memory_folder(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+
+    listed = await _request("memory.list", {"workspace_path": str(workspace)})
+    without = await _request("memory.list", {})
+
+    assert listed["payload"]["auto_memory_dir"] == str(
+        native_memory.auto_memory_dir(None, workspace)
+    )
+    assert without["payload"]["auto_memory_dir"] == ""

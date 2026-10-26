@@ -456,4 +456,66 @@ describe('MemoryPane', () => {
 
     expect(wrapper.find('.memory-error').text()).toBe('backend down')
   })
+
+  describe('Claude auto-memory', () => {
+    const FOLDER = '/Users/x/.claude/projects/-Users-x-proj/memory'
+    const autoFile = {
+      scope: 'project',
+      path: `${FOLDER}/MEMORY.md`,
+      relative: 'MEMORY.md',
+      readers: ['claude'],
+      canonical: false,
+      exists: true,
+      size: 300,
+      modified: 1756339200,
+      error: '',
+      auto_memory: true,
+    }
+    const listWith = (extra: unknown[]) => ({
+      ok: true,
+      payload: { files: [...files, ...extra], agents, workspace_path: WORKSPACE, auto_memory_dir: FOLDER },
+    })
+
+    it('lists auto-memory on its own, marked as written by Claude', async () => {
+      const { backend } = mockBackend({ list: listWith([autoFile]) })
+      wrapper = await mountPane(backend)
+
+      const project = wrapper.findAll('.memory-group')[1]
+      expect(project.findAll('.memory-relative').map((el) => el.text())).toEqual(['AGENTS.md'])
+      const auto = wrapper.find('.memory-auto')
+      expect(auto.find('.memory-group-title').text()).toContain('Claude auto-memory')
+      expect(auto.text()).toContain('Notes Claude Code writes about this project by itself')
+      expect(auto.find('.memory-auto-dir').text()).toBe(FOLDER)
+      expect(auto.findAll('.memory-relative').map((el) => el.text())).toEqual(['MEMORY.md'])
+      expect(auto.find('.memory-tag').text()).toBe('Written by Claude')
+    })
+
+    it('edits an auto-memory file through the same save path', async () => {
+      const { backend, send } = mockBackend({ list: listWith([autoFile]) })
+      wrapper = await mountPane(backend)
+      await wrapper.find('.memory-auto .memory-open').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.memory-editor-hint').text()).toContain('Claude Code wrote this file itself')
+      await wrapper.find('.memory-editor-text').setValue('- edited')
+      await clickEditorButton(wrapper, 'Save')
+      expect(send).toHaveBeenCalledWith('memory.save', {
+        path: autoFile.path,
+        text: '- edited',
+        expected_modified: 1756339200,
+        workspace_path: WORKSPACE,
+      })
+    })
+
+    it('says so when Claude has written nothing, and hides the group without a workspace', async () => {
+      const { backend } = mockBackend({ list: listWith([]) })
+      wrapper = await mountPane(backend)
+      expect(wrapper.find('.memory-auto').text()).toContain('has not saved any notes')
+      wrapper.unmount()
+
+      const second = mockBackend({ list: listWith([]) })
+      wrapper = await mountPane(second.backend, '')
+      expect(wrapper.find('.memory-auto').exists()).toBe(false)
+    })
+  })
 })

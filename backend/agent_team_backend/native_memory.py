@@ -43,6 +43,21 @@ user-scope loader at all -- its ancestor walk simply reaches ``$HOME`` while
 the workspace lives under it -- and aider has no filename of its own, so its
 rows come from whatever ``read:`` in the user's ``.aider.conf.yml`` names.
 
+Claude Code's auto-memory is listed too, as project rows: the notes Claude
+writes about a project by itself while it works -- ``MEMORY.md``, the index it
+loads at the start of every session, plus one ``.md`` per topic -- kept in
+``~/.claude/projects/<slug>/memory/``. Verified 2026-10-26 against Claude Code
+2.1.310: ``<slug>`` is the project root with every non-alphanumeric UTF-16
+unit replaced by ``-`` (past 200 characters, cut and suffixed with a hash), and
+the project root is the main working tree of the git repository, so every
+worktree and subdirectory of one repo shares a folder. Navide's per-account
+config dirs (``CLAUDE_CONFIG_DIR``) always link their ``projects`` back to the
+real ``~/.claude`` (``credential_vault.CLAUDE_SHARED_ENTRIES``), and the backend
+drops an inherited ``CLAUDE_CONFIG_DIR`` at startup, so the real home is the
+one location for every account. Not modelled: the ``autoMemoryDirectory``
+setting, which moves the folder elsewhere -- the page then shows the default
+folder's files, which Claude no longer updates.
+
 One limit the table does not model: several CLIs let an environment variable
 move their config root -- ``XDG_CONFIG_HOME`` (muse, opencode, kilo),
 ``FACTORY_HOME_OVERRIDE`` (droid), ``KIMI_CODE_HOME``, ``KILO_CONFIG_DIR``,
@@ -79,6 +94,11 @@ BACKUP_DIR_NAME = "memory-backups"
 
 USER_SCOPE = "user"
 PROJECT_SCOPE = "project"
+
+#: The reader of auto-memory rows: Claude writes and loads them itself.
+AUTO_MEMORY_AGENT = "claude"
+#: Claude Code cuts a longer project folder name and appends a hash.
+_CLAUDE_SLUG_LIMIT = 200
 
 
 class MemoryConflictError(RuntimeError):
@@ -248,6 +268,9 @@ class MemoryFile:
     modified: float = 0.0
     #: Non-empty when the file exists but could not be stat'ed or read.
     error: str = ""
+    #: True for a Claude Code auto-memory file: written by Claude itself, and
+    #: ``relative`` is then relative to the memory folder, not the workspace.
+    auto_memory: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -260,6 +283,7 @@ class MemoryFile:
             "size": self.size,
             "modified": self.modified,
             "error": self.error,
+            "auto_memory": self.auto_memory,
         }
 
 
@@ -339,6 +363,89 @@ def _aider_reads(home: Path, workspace: Path | None) -> list[tuple[Path, str]]:
     return found
 
 
+def auto_memory_dir(home: Path | None = None, workspace: Path | None = None) -> Path | None:
+    """Claude Code's auto-memory folder for the workspace, or None without one.
+
+    The folder need not exist: Claude creates it the first time it saves a
+    note for the project.
+    """
+    if workspace is None:
+        return None
+    root = _git_project_root(workspace)
+    return (home or _home()) / ".claude" / "projects" / _claude_project_slug(str(root)) / "memory"
+
+
+def _git_project_root(workspace: Path) -> Path:
+    """The main working tree of the repository holding ``workspace``.
+
+    Claude keys auto-memory by the repository, so a linked worktree resolves
+    to the main checkout through its ``commondir``. Outside a repository (or
+    in a bare or unreadable one) the workspace itself is the project.
+    """
+    try:
+        start = workspace.resolve()
+    except OSError:
+        return workspace
+    for folder in (start, *start.parents):
+        marker = folder / ".git"
+        if marker.is_dir():
+            return folder
+        if not marker.is_file():
+            continue
+        try:
+            line = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            return folder
+        if not line.startswith("gitdir:"):
+            return folder
+        gitdir = Path(line[len("gitdir:"):].strip())
+        if not gitdir.is_absolute():
+            gitdir = folder / gitdir
+        try:
+            common = (gitdir / "commondir").read_text(encoding="utf-8").strip()
+        except OSError:
+            # A submodule: its own gitdir, no shared one, so it is its own project.
+            return folder
+        common_dir = Path(common) if Path(common).is_absolute() else gitdir / common
+        try:
+            common_dir = common_dir.resolve()
+        except OSError:
+            return folder
+        return common_dir.parent if common_dir.name == ".git" else folder
+    return start
+
+
+def _claude_project_slug(root: str) -> str:
+    """Claude Code's folder name for a project root under ``~/.claude/projects``.
+
+    Claude works on JavaScript strings, so the replacement and the hash run
+    over UTF-16 code units: a character outside the BMP becomes two dashes.
+    """
+    data = root.encode("utf-16-le")
+    units = [int.from_bytes(data[i:i + 2], "little") for i in range(0, len(data), 2)]
+    slug = "".join(
+        chr(unit) if unit < 128 and chr(unit).isalnum() else "-" for unit in units
+    )
+    if len(slug) <= _CLAUDE_SLUG_LIMIT:
+        return slug
+    value = 0
+    for unit in units:
+        value = (value * 31 + unit) & 0xFFFFFFFF
+    if value >= 0x80000000:
+        value -= 0x100000000
+    return f"{slug[:_CLAUDE_SLUG_LIMIT]}-{_base36(abs(value))}"
+
+
+def _base36(value: int) -> str:
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    while True:
+        value, rest = divmod(value, 36)
+        out = digits[rest] + out
+        if value == 0:
+            return out
+
+
 def _within(path: Path, root: Path) -> bool:
     """True when ``path`` is ``root`` or sits under it, both fully resolved."""
     try:
@@ -391,6 +498,13 @@ def candidates(
     for path, scope in _aider_reads(home, workspace):
         root = workspace if scope == PROJECT_SCOPE and workspace else home
         add(path, scope, _relative(path, root), "aider", False)
+    # Claude's auto-memory: only the files it has written, never offered for
+    # creation, and only those that really sit in the folder.
+    memory_dir = auto_memory_dir(home, workspace)
+    if memory_dir is not None and memory_dir.is_dir():
+        for path in sorted(memory_dir.glob("*.md")):
+            if path.is_file() and _within(path, memory_dir):
+                add(path, PROJECT_SCOPE, path.name, AUTO_MEMORY_AGENT, False)
     # Readers are merged first, then the rows are filtered: a canonical file
     # that does not exist yet is still read by every CLI naming it, so
     # dropping the non-canonical rows earlier would make ~/.claude/CLAUDE.md
@@ -403,9 +517,17 @@ def candidates(
 def scan(home: Path | None = None, workspace: Path | None = None) -> list[MemoryFile]:
     """Every instruction file the table reaches, existing files first."""
     files: list[MemoryFile] = []
+    memory_dir = auto_memory_dir(home, workspace)
     for path, (scope, relative, readers, canonical) in candidates(home, workspace).items():
         files.append(
-            _describe(path, scope, relative, tuple(sorted(readers)), canonical)
+            _describe(
+                path,
+                scope,
+                relative,
+                tuple(sorted(readers)),
+                canonical,
+                auto_memory=memory_dir is not None and path.parent == memory_dir,
+            )
         )
     files.sort(key=lambda f: (not f.exists, f.scope != USER_SCOPE, f.relative))
     return files
@@ -604,25 +726,44 @@ def _allowed(
     """``path`` with its scope and root, or ``ValueError`` if unlisted."""
     target = Path(path).expanduser()
     home = home or _home()
+    memory_dir = auto_memory_dir(home, workspace)
     for candidate, (scope, _relative_path, _readers, _canonical) in candidates(
         home, workspace
     ).items():
         if candidate == target:
             root = workspace if scope == PROJECT_SCOPE and workspace else home
+            # An auto-memory file lives outside the workspace: its folder is
+            # the root the save re-checks containment against.
+            if memory_dir is not None and candidate.parent == memory_dir:
+                root = memory_dir
             return candidate, scope, root
     raise ValueError("not a known instruction file")
 
 
 def _describe(
-    path: Path, scope: str, relative: str, readers: tuple[str, ...], canonical: bool
+    path: Path,
+    scope: str,
+    relative: str,
+    readers: tuple[str, ...],
+    canonical: bool,
+    auto_memory: bool = False,
 ) -> MemoryFile:
     try:
         stat = path.stat()
     except FileNotFoundError:
-        return MemoryFile(scope, str(path), relative, readers, canonical, exists=False)
+        return MemoryFile(
+            scope, str(path), relative, readers, canonical, exists=False, auto_memory=auto_memory
+        )
     except OSError as exc:
         return MemoryFile(
-            scope, str(path), relative, readers, canonical, exists=True, error=str(exc)
+            scope,
+            str(path),
+            relative,
+            readers,
+            canonical,
+            exists=True,
+            error=str(exc),
+            auto_memory=auto_memory,
         )
     return MemoryFile(
         scope,
@@ -633,6 +774,7 @@ def _describe(
         exists=True,
         size=stat.st_size,
         modified=stat.st_mtime,
+        auto_memory=auto_memory,
     )
 
 
