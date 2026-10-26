@@ -9,6 +9,10 @@ The same registry carries agent requests to install, update, roll back or
 remove a Navide plugin (contract section 6): records with a `plugin-*` kind,
 decided only through `plugins.agent_request.decide` with a window-minted
 confirmation. Skill records are `kind: "skill"` and behave as before.
+
+A skills_set_delivery change that reaches a CLI the skill does not reach yet
+is a skill record too, with `action: "delivery"`; narrowing never
+files one.
 """
 from __future__ import annotations
 
@@ -26,6 +30,8 @@ from .plugins.external_content import neutralize_external_text
 from .skills_store import SkillsStoreError, SkillValidationError
 
 MAX_FINISHED = 32
+# A delivery request has no preview to expire with; it lasts as long as one would.
+DELIVERY_APPROVAL_TTL_S = 15 * 60
 TERMINAL = frozenset({"installed", "rejected", "failed", "expired"})
 PLUGIN_KINDS = frozenset(APPROVAL_KINDS) - {"skill"} - frozenset(FORM_APPROVAL_KINDS)
 _REQUESTER_KEYS = frozenset({"paneId", "paneName", "workspace", "callerKind"})
@@ -152,6 +158,58 @@ class ApprovalRegistry:
                 "result": None,
                 "error": None,
                 "created_at": time.time(),
+            }
+            return copy.deepcopy(self._records[approval_id])
+
+    def request_delivery(
+        self,
+        *,
+        owner: str,
+        skill_id: str,
+        name: str,
+        real_path: str,
+        targets: list[str] | None,
+        enabled: bool | None,
+        expected_revision: str,
+        current: dict[str, Any],
+    ) -> dict[str, Any]:
+        """File an agent's skills_set_delivery change that widens delivery.
+
+        A skill record with ``action: "delivery"``; install records carry no
+        action. ``current`` is the delivery before the change, for the card.
+        """
+        with self._lock:
+            self._expire()
+            for record in self._records.values():
+                if (record.get("action") != "delivery" or record["owner"] != owner
+                        or record["skill_id"] != skill_id or record["expected_revision"] != expected_revision
+                        or record["targets"] != targets or record["enabled"] != enabled):
+                    continue
+                if record["status"] == "rejected":
+                    raise SkillApprovalError(
+                        "SKILL_APPROVAL_REJECTED", "the user rejected this delivery change"
+                    )
+                if record["status"] == "pending":
+                    return copy.deepcopy(record)
+            approval_id = uuid.uuid4().hex
+            created_at = time.time()
+            self._records[approval_id] = {
+                "approval_id": approval_id,
+                "kind": "skill",
+                "action": "delivery",
+                "owner": owner,
+                "skill_id": skill_id,
+                "name": name,
+                "real_path": real_path,
+                "targets": copy.deepcopy(targets),
+                "enabled": enabled,
+                "expected_revision": expected_revision,
+                "current": copy.deepcopy(current),
+                "expires_at": created_at + DELIVERY_APPROVAL_TTL_S,
+                "status": "pending",
+                "result": None,
+                "error": None,
+                "created_at": created_at,
             }
             return copy.deepcopy(self._records[approval_id])
 
@@ -376,7 +434,8 @@ registry = ApprovalRegistry()
 
 def public(record: dict[str, Any]) -> dict[str, Any]:
     """What the approval dialog shows; the preview token stays in the backend."""
-    return {key: value for key, value in record.items() if key not in {"preview_id", "expected_digest"}}
+    return {key: value for key, value in record.items()
+            if key not in {"preview_id", "expected_digest", "expected_revision"}}
 
 
 async def wait(approval_id: str, timeout: float) -> dict[str, Any] | None:
@@ -391,12 +450,30 @@ async def wait(approval_id: str, timeout: float) -> dict[str, Any] | None:
 
 
 async def decide(approval_id: str, approve: bool, installer: Any) -> dict[str, Any]:
-    """Apply the user's decision; approval counts as shared-root write consent."""
+    """Apply the user's decision; approving an install counts as shared-root write consent.
+
+    A delivery request is applied with the revision the agent saw, so a change
+    made since then fails instead of overwriting it.
+    """
     from . import app, skills_events
     from .ipc import make_event
 
     record = registry.claim(approval_id, "installing" if approve else "rejected")
-    if approve:
+    if approve and record.get("action") == "delivery":
+        try:
+            result = await asyncio.to_thread(
+                app.skills_store.set_delivery,
+                name="" if record["real_path"] else record["name"], real_path=record["real_path"],
+                targets=record["targets"], expected_revision=record["expected_revision"],
+                enabled=record["enabled"],
+            )
+        except Exception as err:  # noqa: BLE001 - never leave a claimed request stuck in "installing"
+            registry.finish(approval_id, "failed", error=str(err))
+        else:
+            registry.finish(approval_id, "installed", result=result)
+            if result["changed"]:
+                await skills_events.notify_skills_changed(result["name"], "delivery_changed")
+    elif approve:
         try:
             result = await asyncio.to_thread(
                 installer.install, record["preview_id"], record["expected_digest"],

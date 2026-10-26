@@ -9695,7 +9695,21 @@
     "installing": "설치하는 중…",
     "failed": "설치 실패",
     "dismiss": "닫기",
-    "expired": "승인되기 전에 이 요청이 만료되었어요. agent에게 스킬을 다시 준비해 달라고 요청하세요."
+    "expired": "승인되기 전에 이 요청이 만료되었어요. agent에게 스킬을 다시 준비해 달라고 요청하세요.",
+    "delivery-kicker": "스킬 전달 요청",
+    "delivery-title": "스킬 “{name}”을(를) 더 많은 CLI에 전달할까요?",
+    "delivery-desc": "에이전트가 이 스킬의 전달 범위 변경을 요청했습니다. 여기서 승인하기 전에는 아무것도 바뀌지 않으며, 에이전트가 대신 승인할 수 없습니다.",
+    "delivery-shared": "공유 스킬 라이브러리",
+    "delivery-current": "현재 전달 대상",
+    "delivery-next": "변경 후",
+    "delivery-none": "다른 CLI에는 전달 안 함",
+    "delivery-state": "상태",
+    "delivery-turns-on": "스킬을 켭니다(현재 꺼짐)",
+    "delivery-note": "승인하면 위의 CLI가 새 세션에서 이 스킬을 불러옵니다. 스킬 파일은 바뀌지 않습니다. 나중에 CLI를 빼는 것은 승인이 필요 없습니다.",
+    "delivery-approve": "변경 승인",
+    "delivery-applying": "적용 중…",
+    "delivery-failed": "전달 변경을 적용하지 못했습니다",
+    "delivery-expired": "이 요청은 승인 전에 만료되었습니다. 에이전트에게 스킬을 다시 확인한 뒤 재시도하도록 요청하세요."
   },
   "cli-manage": {
     "title": "설치 및 업데이트",

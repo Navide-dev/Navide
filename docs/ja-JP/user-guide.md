@@ -140,7 +140,7 @@ Editor は Monaco を使用し、File Editing、Diagnostics、Plan Rendering、D
 1. `skills_list` の ID を `skills_inspect` に渡し、指示、ファイル、所有者、出所の記録と現在の `delivery_revision` を確認します。
 2. `skills_prepare_install` には `owner/repo`、HTTPS の `github.com/owner/repo` URL、またはローカル skill フォルダの絶対パス（`~` 展開対応）を指定します。GitHub の `ref` と `subdir` は別引数です。`subdir: "."` は repository のルートを選びます。候補が複数なら `selection_required` と `candidates` を返し、インストール用 preview ID は発行しません。パスを選んで再度 prepare してください。Private repository、任意の URL、GitHub tree URL は対象外です。
 3. 指示全文、ファイル一覧、スクリプト警告、出所と digest を確認し、preview ID、同じ digest、明示的な targets で `skills_install` を呼びます。これは要求を送るだけです。ユーザーが Navide のウィンドウで承認または拒否し（承認は共有ルートへの初回書き込みへの同意も兼ねます）、結果は `skills_install_status` で確認します。Agent がユーザーの代わりに承認することはできません。同名の管理対象、ユーザー所有、native skill は拒否します。宛先を排他的に作成し、添付ファイルと metadata の後に `SKILL.md` を公開するため、不完全なパッケージが検出されません。ディレクトリ全体の atomic rename ではありません。
-4. 配信設定の変更には ID と最新の `delivery_revision` を `skills_set_delivery` に渡します。古い revision は失敗し、別の呼び出し元の判断を上書きしません。このフローは追加専用で、既存インストールの更新や再取得は行いません。
+4. 配信設定の変更には ID と最新の `delivery_revision` を `skills_set_delivery` に渡します。古い revision は失敗し、別の呼び出し元の判断を上書きしません。CLI を外す、またはスキルを無効にするだけの変更はすぐに適用されます。別の CLI に配信する、またはスキルを有効にする変更は、インストールと同じく Navide ウィンドウでの承認を待ちます。このフローは追加専用で、既存インストールの更新や再取得は行いません。
 
 準備した bytes は認証済み呼び出し元に結び付けられ、15 分後または backend 再起動時に失効します。インストール時にローカルの再読込や再ダウンロードは行いません。許可の再試行には有効な preview を再利用でき、再試行用の記録が残っている間だけ、成功後の再送は元の結果を返し、再書き込みしません。有効な準備は最大 8 パッケージで、内容を持たない軽量な完了記録を別に最大 8 件保持します。インストールが成功すると、パッケージ bytes と有効な準備枠を解放します。記録は元の preview の期限で失効し、上限に達するとインストール成功が最も古い記録から破棄します。失効または破棄後の再送は missing/expired を返し、再インストールしません。GitHub archive は圧縮 10 MiB、展開 32 MiB、4,096 entries が上限で、選んだ skill は 64 ファイル、各 256 KiB、合計 512 KiB までです。危険なパス、リンク、特殊ファイル、予約 metadata、不正な manifest は黙って除外せず拒否します。
 

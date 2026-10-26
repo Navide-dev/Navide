@@ -9695,7 +9695,21 @@
     "installing": "Đang cài…",
     "failed": "Không cài đặt được",
     "dismiss": "Đóng",
-    "expired": "Yêu cầu này đã hết hạn trước khi được phê duyệt. Hãy nhờ agent chuẩn bị lại skill."
+    "expired": "Yêu cầu này đã hết hạn trước khi được phê duyệt. Hãy nhờ agent chuẩn bị lại skill.",
+    "delivery-kicker": "Yêu cầu phân phối skill",
+    "delivery-title": "Phân phối skill “{name}” cho thêm CLI?",
+    "delivery-desc": "Một agent yêu cầu thay đổi các CLI nhận skill này. Không có gì thay đổi cho đến khi bạn phê duyệt tại đây; agent không thể phê duyệt thay bạn.",
+    "delivery-shared": "Thư viện skill dùng chung",
+    "delivery-current": "Đang phân phối cho",
+    "delivery-next": "Sau khi thay đổi",
+    "delivery-none": "Không CLI nào khác",
+    "delivery-state": "Trạng thái",
+    "delivery-turns-on": "Bật skill (hiện đang tắt)",
+    "delivery-note": "Khi phê duyệt, các CLI ở trên sẽ tải skill này trong các phiên mới. Tệp của skill không bị thay đổi. Gỡ một CLI sau này không bao giờ cần phê duyệt.",
+    "delivery-approve": "Phê duyệt thay đổi",
+    "delivery-applying": "Đang áp dụng…",
+    "delivery-failed": "Không thể áp dụng thay đổi phân phối",
+    "delivery-expired": "Yêu cầu này đã hết hạn trước khi được phê duyệt. Hãy nhờ agent xem lại skill rồi thử lại."
   },
   "cli-manage": {
     "title": "Cài đặt và cập nhật",

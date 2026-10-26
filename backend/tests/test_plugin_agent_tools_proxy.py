@@ -112,8 +112,9 @@ W1_CORE_TOOLS = frozenset({
 #: Core tools added after that digest by DESIGN-C S3 (mcp_server/window_tools.py).
 DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", "workspace_close", "window_move_pane"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
-#: packages install (computed on a probe server).
-MAIN_PLAN_SKILLS_TOOLS_SHA256 = "ea364efb2386fbbfb1b46ef5899b921ec97798b24ef82a21a0e8db92b3a8d954"
+#: packages install (computed on a probe server). Re-pinned in 0.2.32 when
+#: skills_set_delivery's description gained the approval for widening.
+MAIN_PLAN_SKILLS_TOOLS_SHA256 = "4c9bc609cad55f1e17c5a93f5d5f9a568c625fffa459307d13c6232849e05db9"
 
 PERMISSIONS = {
     "system": ["fs", "ui"],

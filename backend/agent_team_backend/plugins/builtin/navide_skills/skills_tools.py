@@ -311,21 +311,40 @@ def _delivery_context() -> dict[str, Any]:
 
 
 def _set_delivery(
-    identity: str, targets: list[str] | None, expected_revision: str, enabled: bool | None
+    identity: str, targets: list[str] | None, expected_revision: str, enabled: bool | None,
+    owner: str,
 ) -> dict[str, Any]:
+    from agent_team_backend.skills_approvals import registry
+
     store = _store()
     with store._lock:
         row, native, listing = _entry(store, identity)
         context = delivery_context(listing.get("agents", []))
+        if native:
+            context["automatic_agents"] = [row["owner_agent"]]
+            context["skills_sync_enabled"] = False
+        where = {"name": "" if native else row["name"], "real_path": row["real_path"] if native else ""}
+        if store.delivery_widens(
+            **where, targets=targets, expected_revision=expected_revision, enabled=enabled,
+        ):
+            # Reaching another CLI waits for the user, like an install does.
+            current = (
+                {"targets": listing.get("native_targets", {}).get(row["real_path"], []), "enabled": None}
+                if native else {"targets": row.get("targets"), "enabled": row.get("enabled", True)}
+            )
+            record = registry.request_delivery(
+                owner=owner, skill_id=identity, name=row["name"], real_path=where["real_path"],
+                targets=None if targets is None else list(targets), enabled=enabled,
+                expected_revision=expected_revision, current=current,
+            )
+            return {**context, "id": identity, "name": record["name"], "changed": False,
+                    "status": "pending_approval", "approval": record}
         result = store.set_delivery(
             name="" if native else row["name"],
             real_path=row["real_path"] if native else "",
             targets=targets, expected_revision=expected_revision, enabled=enabled,
         )
-        if native:
-            context["automatic_agents"] = [row["owner_agent"]]
-            context["skills_sync_enabled"] = False
-        return {**result, **context, "id": identity}
+        return {**result, **context, "id": identity, "status": "applied"}
 
 
 async def skills_set_delivery(
@@ -335,20 +354,37 @@ async def skills_set_delivery(
     ctx: Context,
     enabled: bool | None = None,
 ) -> dict[str, Any]:
-    """Change a listed skill's delivery after the user authorizes the change.
+    """Change a listed skill's delivery; widening it waits for the user.
 
     Inspect first and pass its delivery_revision as expected_revision; stale
     changes fail without writing. For shared skills targets=null means all
     wired vendors, [] means none, and enabled is optional. Shared-root readers
     still discover the original files automatically. For native skills null or
     [] clears extra delivery, enabled is forbidden, and source files are never
-    changed. This configures future sessions; current-session loading is unknown.
+    changed. A change that only removes CLIs or disables the skill applies at
+    once (status "applied"). One that reaches a CLI the skill does not reach
+    now, or turns a disabled skill on, writes nothing: it files a request the
+    user approves or rejects in the Navide window and returns status
+    "pending_approval" with an approval_id. You cannot consent on the user's
+    behalf; poll skills_install_status with that id ("installed" there means
+    the change was applied). Repeating the call returns the same pending
+    request; one the user rejected returns SKILL_APPROVAL_REJECTED. This
+    configures future sessions; current-session loading is unknown.
     """
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.skills_approvals import public
+
     try:
-        _owner(ctx)
+        owner = _owner(ctx)
         result = await asyncio.to_thread(
-            _set_delivery, skill_id, targets, expected_revision, enabled
+            _set_delivery, skill_id, targets, expected_revision, enabled, owner
         )
+        if result["status"] == "pending_approval":
+            record = result.pop("approval")
+            await app.broadcast(make_event("skills.install_approval_request", public(record)))
+            return {**result, "ok": True, "approval_id": record["approval_id"],
+                    "expires_at": record["expires_at"], "warnings": []}
         warnings = await _notify(result["name"], "delivery_changed") if result["changed"] else []
         return {**result, "ok": True, "warnings": warnings}
     except (CallerUnknown, SkillsStoreError, OSError, UnicodeError) as err:
