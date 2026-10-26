@@ -80,3 +80,43 @@ describe('NativeBackendPanel saved decline', () => {
     expect(item.findAll('button').some((button) => button.text() === 'Allow')).toBe(true)
   })
 })
+
+describe('NativeBackendPanel: an "off" that could not be saved (#642 L2)', () => {
+  async function mountWith(nativeBackends: Record<string, unknown>): Promise<VueWrapper> {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: { list: vi.fn(async () => []), listInstalled: vi.fn(async () => []), nativeBackends },
+    }
+    wrapper = mount(NativeBackendPanel, { global: { plugins: [i18n] } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('shows the real state after a failed save, says it will be on after a restart, and retries', async () => {
+    const state = { enabled: true, plugins: [] as unknown[], offUnsaved: undefined as true | undefined }
+    const setEnabled = vi.fn(async (on: boolean) => {
+      state.enabled = on
+      if (!on && setEnabled.mock.calls.length === 1) {
+        state.offUnsaved = true
+        throw new Error("Error invoking remote method 'plugins:nativeBackends:setEnabled': Error: ENOSPC")
+      }
+      state.offUnsaved = undefined
+      return { ...state }
+    })
+    const panel = await mountWith({ list: vi.fn(async () => ({ ...state })), setEnabled })
+    expect(panel.find('.native-backends-unsaved').exists()).toBe(false)
+    await panel.get('[data-native-backends-switch="enabled"]').trigger('click')
+    await flushPromises()
+    const notice = panel.get('.native-backends-unsaved')
+    expect(notice.text()).toContain(i18n.global.t('settings.extensions.nativeBackends.offUnsaved'))
+    expect(panel.get('.ext-error').text()).toContain('ENOSPC')
+    await panel.get('.native-backends-unsaved-retry').trigger('click')
+    await flushPromises()
+    expect(setEnabled).toHaveBeenLastCalledWith(false)
+    expect(panel.find('.native-backends-unsaved').exists()).toBe(false)
+  })
+
+  it('shows nothing extra when the overview carries no flag, as on main', async () => {
+    const panel = await mountWith({ list: vi.fn(async () => ({ enabled: false, plugins: [] })) })
+    expect(panel.find('.native-backends-unsaved').exists()).toBe(false)
+  })
+})

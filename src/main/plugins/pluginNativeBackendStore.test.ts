@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { NativeBackendStore } from './pluginNativeBackendStore'
+import { OwnerOnlyJsonPersistence } from './ownerOnlyJsonPersistence'
 import { isWindows } from '../../shared/osplat'
 
 // The global third-party native backend switch (0.2.31): on for a profile
@@ -48,6 +49,27 @@ describe('NativeBackendStore: the global switch', () => {
     store.grantConsent('acme.indexer', consent)
     expect(readMain().enabled).toBe(true)
     expect(new NativeBackendStore(dir).isEnabled()).toBe(true)
+  })
+
+  it('marks an "off" it could not save, and only that, until a save lands (#642 L2)', () => {
+    const store = new NativeBackendStore(dir)
+    const write = vi.spyOn(OwnerOnlyJsonPersistence.prototype, 'write').mockImplementation(() => {
+      throw new Error('ENOSPC: no space left on device')
+    })
+    try {
+      expect(() => store.setEnabled(false)).toThrow('ENOSPC')
+      expect(store.isEnabled()).toBe(false)
+      expect(store.offUnsaved()).toBe(true)
+      // The file never said off: a restart reads a fresh profile, on.
+      expect(new NativeBackendStore(dir).isEnabled()).toBe(true)
+      expect(() => store.setEnabled(true)).toThrow('ENOSPC')
+      expect(store.offUnsaved()).toBe(true)
+    } finally {
+      write.mockRestore()
+    }
+    store.setEnabled(false)
+    expect(store.offUnsaved()).toBe(false)
+    expect(new NativeBackendStore(dir).offUnsaved()).toBe(false)
   })
 
   it('keeps a value the user set across restarts and later saves', () => {

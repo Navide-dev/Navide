@@ -768,6 +768,8 @@ declare global {
     plugins: NativeBackendStatusRow[]
     /** Plan B: agent-tool switches (DB8, DB4); absent on an older Host. */
     agentTools?: { enabled: boolean; externalCallers: boolean }
+    /** #642 review L2: off for this run, not saved; on again after a restart. */
+    offUnsaved?: true
   }
 
   interface InstalledPackRecord {

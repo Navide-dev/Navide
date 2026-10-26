@@ -1886,6 +1886,8 @@
         "title": "Native backends",
         "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. While the switch below is on, installing a Navide plugin that has native code allows it to run; turning the switch off stops all of them.",
         "enable": "Allow third-party Navide plugins to run native backends",
+        "offUnsaved": "Third-party native backends are off for now, but Navide could not save that, so they will be on again after Navide restarts.",
+        "offUnsavedRetry": "Try Again",
         "agentTools": {
           "enable": "Let agents call tools from third-party Navide plugins",
           "description": "Off by default. When on, agents in your panes can call the tools a third-party Navide plugin declares, once you have allowed that Navide plugin. A tool that changes files asks you once per workspace. With this off, Navide behaves as if no Navide plugin had tools.",
@@ -2168,7 +2170,8 @@
           "computing": "Computing…",
           "loadedBy": "Loaded by",
           "notReviewed": "Not reviewed by Navide, not signed, not scanned.",
-          "mayChange": "Its contents can change at any time. The fingerprint only records what the folder held when it was loaded; Navide does not use it to refuse a load."
+          "mayChange": "Its contents can change at any time. The fingerprint only records what the folder held when it was loaded; Navide does not use it to refuse a load.",
+          "consentScope": "Changing the folder's files, its native backend program included, does not ask you again. Changing its declared permissions or backend does: it is unloaded until you consent again."
         },
         "selfHostedQuarantine": "{id} {version} came from a self-hosted Registry and is not loaded. Turn on Developer Mode, or install it from the Navide Marketplace."
       },
