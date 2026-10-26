@@ -3270,6 +3270,22 @@ export function registerPluginIpc(
     return developerModeState()
   })
 
+  // Card K4: the launch reminder closes for this launch in every window, since
+  // each workspace window mounts its own copy. Memory only, so the next launch
+  // reminds again.
+  let developerModeReminderDismissed = false
+  ipcMain.handle('plugins:developerModeReminderDismissed', (event) => {
+    assertAuthorized(event)
+    return developerModeReminderDismissed
+  })
+  ipcMain.handle('plugins:dismissDeveloperModeReminder', (event) => {
+    assertAuthorized(event)
+    developerModeReminderDismissed = true
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('plugins:developerModeReminderDismissed')
+    }
+  })
+
   ipcMain.handle('plugins:setDeveloperMode', async (event, args: { enabled?: unknown } | null) => {
     assertAuthorized(event)
     if (typeof args?.enabled !== 'boolean') throw new Error('invalid Developer Mode switch value')

@@ -1489,6 +1489,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     /** Card K4: the Developer Mode switch and the developer folders. The main
      *  process owns the switch; it opens its own folder dialog. */
     developerMode: (): Promise<DeveloperModeState> => ipcRenderer.invoke('plugins:developerMode'),
+    /** The launch reminder was closed in some window during this launch. */
+    developerModeReminderDismissed: (): Promise<boolean> => ipcRenderer.invoke('plugins:developerModeReminderDismissed'),
+    dismissDeveloperModeReminder: (): Promise<void> => ipcRenderer.invoke('plugins:dismissDeveloperModeReminder'),
+    onDeveloperModeReminderDismissed: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('plugins:developerModeReminderDismissed', listener)
+      return () => ipcRenderer.removeListener('plugins:developerModeReminderDismissed', listener)
+    },
     setDeveloperMode: (enabled: boolean): Promise<DeveloperModeState> =>
       ipcRenderer.invoke('plugins:setDeveloperMode', { enabled }),
     loadFromFolder: (): Promise<PreparedInstallSummary | null> => ipcRenderer.invoke('plugins:loadFromFolder'),

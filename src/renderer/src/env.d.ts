@@ -515,6 +515,9 @@ declare global {
         prepareLocalRollback?: (id: string) => Promise<PreparedInstallSummary & { rollbackFrom: string }>
         discardAgentStaged?: (stagingId: string) => Promise<void>
         developerMode?: () => Promise<DeveloperModeState>
+        developerModeReminderDismissed?: () => Promise<boolean>
+        dismissDeveloperModeReminder?: () => Promise<void>
+        onDeveloperModeReminderDismissed?: (cb: () => void) => () => void
         setDeveloperMode?: (enabled: boolean) => Promise<DeveloperModeState>
         loadFromFolder?: () => Promise<PreparedInstallSummary | null>
         commitFolderLoad?: (id: string, approval: { riskConfirmed: boolean; expectedFolder?: string }) => Promise<DeveloperModeState>
